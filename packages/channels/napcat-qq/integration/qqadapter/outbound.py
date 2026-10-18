@@ -1,9 +1,9 @@
 """Host outbox -> OneBot send_private_msg / send_group_msg -> receipt.
 
-The outbox target decides the platform action: `dm` keeps the 0.1.0 private
-shape (one text segment, unchanged), `group` must pass the configured group
-allowlist, may carry one leading `reply` segment when the host supplied
-`reply_to`, and encodes the host text into text/at segments.
+The outbox target decides the platform action: `dm` sends text (faces encoded), `group` must pass the
+configured group allowlist and encodes the host text into text/at segments. Either may carry one leading
+`reply` segment when the host supplied `quote`, the line she chose to quote; the item's `reply_to` (the line her
+words answer) is not shown here.
 
 Group encoding: an explicit `@qq:<digits>` marker written in the character's own
 public text becomes a real OneBot `at` segment at the position it was written,
@@ -94,8 +94,8 @@ MAX_MUTE_SECONDS = 30 * 86400
 # one `image` before the words when the host attached a picture to this publication
 ALLOWED_OUT_SEGMENTS = ("reply", "text", "at", "face")
 GROUP_IMAGE_SEGMENTS = ("reply", "image", "text", "at", "face")
-PRIVATE_OUT_SEGMENTS = ("text", "face")
-PRIVATE_IMAGE_SEGMENTS = ("image", "text", "face")
+PRIVATE_OUT_SEGMENTS = ("reply", "text", "face")
+PRIVATE_IMAGE_SEGMENTS = ("reply", "image", "text", "face")
 # 0.6: a sticker goes out alone -- her own or one she kept, as a picture QQ shows as a sticker
 # (image + sub_type 1), or a store sticker as itself (mface, no bytes)
 STICKER_KEY = "sticker"
@@ -194,17 +194,14 @@ def sticker_plan(item):
     return out, None
 
 
-def build_send_params(target_type, target_id, text, reply_to=None, image_b64=None, sticker=None):
+def build_send_params(target_type, target_id, text, quote=None, image_b64=None, sticker=None):
     """Return (action, params) for a host outbox target, or None if unusable.
 
-    Group sends get a `reply` segment only when the host actually provided
-    `reply_to`, and their text goes through encode_group_text; private sends are
-    byte-for-byte the 0.1.0 shape (one text segment, markers included).  With
-    `image_b64` the picture goes before her words: [image, text] in private,
-    [reply?, image, text/at...] in a group -- her words are never dropped to
-    make room for the picture.  The image uses the OneBot `base64://` data URI,
-    which NapCat documents but which has not been verified against a real
-    client yet.
+    A send quotes a message (a `reply` segment first) only when the host gave `quote`, the platform id of the line
+    she chose (ADR-079), in a group or a private chat. Group text goes through encode_group_text; private text keeps
+    its faces. With `image_b64` the picture goes before her words: [reply?, image, text...] -- her words are never
+    dropped to make room for the picture.  The image uses the OneBot `base64://` data URI, which NapCat documents but
+    which has not been verified against a real client yet.
     """
     action = SEND_ACTIONS.get(target_type)
     if action is None:
@@ -220,21 +217,18 @@ def build_send_params(target_type, target_id, text, reply_to=None, image_b64=Non
         else:
             return None
         return action, {key: int(target_id), "message": [segment]}
+    rid = str(quote).strip() if quote is not None else ""
+    segments = [{"type": "reply", "data": {"id": rid}}] if rid else []
     if target_type == "group":
-        segments = []
-        rid = str(reply_to).strip() if reply_to is not None else ""
-        if rid:
-            segments.append({"type": "reply", "data": {"id": rid}})
         if image_b64:
             segments.append({"type": "image", "data": {"file": "base64://" + image_b64}})
         segments.extend(encode_group_text(text))
         allowed = GROUP_IMAGE_SEGMENTS if image_b64 else ALLOWED_OUT_SEGMENTS
     else:
-        segments = encode_faces(text)
-        allowed = PRIVATE_OUT_SEGMENTS
         if image_b64:
-            segments.insert(0, {"type": "image", "data": {"file": "base64://" + image_b64}})
-            allowed = PRIVATE_IMAGE_SEGMENTS
+            segments.append({"type": "image", "data": {"file": "base64://" + image_b64}})
+        segments.extend(encode_faces(text))
+        allowed = PRIVATE_IMAGE_SEGMENTS if image_b64 else PRIVATE_OUT_SEGMENTS
     if not segments:
         return None
     for seg in segments:
@@ -558,8 +552,8 @@ class Outbound:
         tid = str(target.get("id") or "")
         text = item.get("text")
         self.counters.inc("outbox_claims")
-        self.log("OUTBOX_CLAIMED pub=%s attempt=%s target=%s:%s chars=%s reply_to=%s"
-                 % (pub, attempt, ttype, tid, len(text) if isinstance(text, str) else "-", item.get("reply_to")))
+        self.log("OUTBOX_CLAIMED pub=%s attempt=%s target=%s:%s chars=%s quote=%s"
+                 % (pub, attempt, ttype, tid, len(text) if isinstance(text, str) else "-", item.get("quote")))
         if stopping:
             self.report(pub, receipt_payload("unknown", attempt, {"reason": "adapter_stopping_before_send"}), "stopping")
             return
@@ -610,7 +604,7 @@ class Outbound:
                 return
             self.log("ATTACHMENT pub=%s attempt=%s fetched=%s bytes=%s sha256=%s"
                      % (pub, attempt, plan["media_type"], attachment.get("bytes"), plan["sha256"][:12]))
-        built = build_send_params(ttype, tid, text, item.get("reply_to"), image_b64=image_b64, sticker=sticker)
+        built = build_send_params(ttype, tid, text, item.get("quote"), image_b64=image_b64, sticker=sticker)
         if built is None:
             self.counters.inc("outbox_shape_reject")
             self.report(pub, receipt_payload("failed", attempt,

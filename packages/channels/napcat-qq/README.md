@@ -28,6 +28,8 @@ with Core (`registerChannel`).
 - A group or private-chat message that quotes another carries the quoted message's ID as `reply_to`; one that only
   quotes, with no words, also carries `raw.asuna_reply_only`. On every outbox claim the adapter declares what it
   carries: `image`, `sticker`, `react`, `poke`, `quote`, `quote_in`, `react_in`, `recall`.
+- A message she sends quotes a line (a leading `reply` segment) only when the outbox item carries `quote`, in a group
+  or a private chat; the item's `reply_to`, the line her words answer, is not shown.
 - Duplicate detection binds the route, platform message ID and original send time in whole seconds. A pushed message and its catch-up copy use the same key; an ID reused at a later time is a new message. Reply attribution selects the newest matching line at or before the reply's send time.
 - Each admitted group's member list (`get_group_list`, then `get_group_member_list` for the groups the admission
   policy admits) is fetched when the adapter starts and every 6 hours, reduced to id, names, role and activity times,

@@ -475,6 +475,29 @@ class People:
         return '%s%s：%s' % (number, self.speaker(scene, row.get('author'), me='你'),
                             words if len(words) <= limit else words[:limit] + '…')
 
+    # A line she can point at: anyone's in this conversation, hers once delivered; a program notice is not one.
+    POINTABLE = {'$or': [{'direction': 'inbound', 'event.raw.asuna_notice': {'$exists': False}},
+                         {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}
+    RECENT_LINES = 6
+
+    def line_of(self, scene, episode_id, value):
+        """The line she names by its number in this conversation (as shown, brackets or not) or by 这条 (the line that
+        called her): (row, None), or (None, why, in words she can act on) (ADR-079 §9.4)."""
+        text = str(value or '').strip().strip('〔〕[]「」 ')
+        if text == '这条':
+            row = self.db.messages.find_one({'_id': 'in-' + episode_id, 'scene_id': scene['_id'], **self.POINTABLE})
+            return (row, None) if row else (None, '这一回合没有叫你的那条，要引就写编号')
+        row = self.db.messages.find_one({'scene_id': scene['_id'], 'scene_seq': int(text), **self.POINTABLE}) \
+            if text.isdigit() else None
+        if row:
+            return row, None
+        recent = list(self.db.messages.find({'scene_id': scene['_id'], **self.POINTABLE},
+                                            {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1})
+                      .sort('scene_seq', -1).limit(self.RECENT_LINES))
+        listed = '；'.join(self.pointed(scene, row, 20) for row in reversed(recent)) or '还没有'
+        lead = '〔%s〕 不是这里的一行' % text if text.isdigit() else '写编号（只写数字，在每行末尾的〔〕里）或「这条」'
+        return None, '%s；这里最近几行：%s' % (lead, listed)
+
     def transcript(self, scene, row):
         """One platform message as it enters her conversation: the speaker's label line, then the message, indented."""
         event = row.get('event') or {}

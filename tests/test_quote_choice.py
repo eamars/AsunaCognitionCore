@@ -1,10 +1,8 @@
-"""Whether her group line quotes the line that called her (publish._quote, owner 2026-10-06)."""
+"""Her line quotes only the line she chose (ADR-079 §9.4, publish._quote): the program never chooses a quote."""
 from types import SimpleNamespace
 
 from asuna.publish import PublishService
 
-GROUP = {'target': {'type': 'group', 'id': 'g'}}
-DM = {'target': {'type': 'dm', 'id': 'p'}}
 SCENE = {'_id': 'g1'}
 
 
@@ -14,19 +12,16 @@ def row(store, _id, direction, seq, **extra):
     return store.db.messages.find_one({'_id': _id})
 
 
-def quote(store, ep, msg, route=GROUP, source=None):
-    me = SimpleNamespace(store=store)
-    return PublishService._quote(me, ep, msg, SCENE, route, source or {'scene_seq': 10}, {'platform_event_id': 'called-me'})
+def quote(store, msg):
+    return PublishService._quote(SimpleNamespace(store=store), msg, SCENE)
 
 
-def test_she_quotes_like_people_do_and_her_choice_wins(store):
-    ep = {'_id': 'ep-1'}
-    first = row(store, 'ep-1:speak:0', 'outbound', 11, episode_id='ep-1')
-    second = row(store, 'ep-1:speak:1', 'outbound', 12, episode_id='ep-1')
-    assert quote(store, ep, first) is None                       # nobody spoke since: a plain line
-    assert quote(store, ep, first, route=DM) == 'called-me'      # direct chats as before
-    assert quote(store, {**ep, 'quote': 'source'}, first) == 'called-me'
-    assert quote(store, {**ep, 'quote': 'source'}, second) is None   # only her first message may quote
-    row(store, 'in-other', 'inbound', 10.5, author='qq:9')
-    assert quote(store, ep, first) == 'called-me'               # others spoke since: quote so it is clear
-    assert quote(store, {**ep, 'quote': 'none'}, first) is None # a bot command goes out bare
+def test_she_quotes_only_the_line_she_chose(store):
+    row(store, 'in-a', 'inbound', 10, event={'channel': {'platform_event_id': 'pe-a'}})
+    row(store, 'out-b', 'outbound', 11, platform_message_id='pm-b', delivery_state='DELIVERED')
+    row(store, 'in-other', 'inbound', 12, author='qq:9')
+    plain = row(store, 'ep-1:speak:0', 'outbound', 13, episode_id='ep-1')
+    assert quote(store, plain) is None, 'others spoke since, and still nothing is quoted unless she chose'
+    assert quote(store, {**plain, 'quote_line': 'in-a'}) == 'pe-a'
+    assert quote(store, {**plain, 'quote_line': 'out-b'}) == 'pm-b', 'her own line, to amend it'
+    assert quote(store, {**plain, 'quote_line': 'gone'}) is None

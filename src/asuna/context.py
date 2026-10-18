@@ -49,6 +49,9 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
 REPLY_SENT=('这里只有 speak 发得出去：正文不发。一回合的 text 加起来最多 %d 行：每一行都算，不管分成几条消息；'
             '空行不算，一个代码块算一行；贴纸、图、戳、点表情不算。不想说出口的放进 think。')
 ONE_SELF = '你是一个人，同时在好几个对话里；在这里说的话，就是你说的。'
+# ADR-079 §9.5: the one line of a turn where others spoke after the line that called her.
+AMBIGUOUS = '叫你那条之后有 %d 条新话：%s。要引哪条就在 quote 写它的编号（只写数字），不写就不引用；一句话回好几条就不用引。'
+AMBIGUOUS_MAX = 8
 
 
 # Per-turn budget (ADR-009 revision): long text is cut with a marker; the full record stays readable.
@@ -1161,6 +1164,16 @@ class ContextBuilder:
                                '要回就在这回合一起回，它们不会再单独叫你一次。'}
             if session_class!=visibility.OWNER_PRIVATE:
                 speak['one_self']=ONE_SELF          # ADR-018 §5.7: words only, nothing from elsewhere
+            if replying and source and source.get('direction')=='inbound' and source.get('scene_seq') is not None:
+                # ADR-079 §9.5: only in a turn where others spoke after the line that called her, their numbers to copy.
+                from .capabilities import numbered
+                later=[row['scene_seq'] for row in self.store.db.messages.find({'scene_id':scene['_id'],
+                       'direction':'inbound','event.raw.asuna_notice':{'$exists':False},
+                       'scene_seq':{'$gt':source['scene_seq']}},{'scene_seq':1}).sort('scene_seq',1)] \
+                    if numbered(self.store,scene) else []
+                if later:
+                    shown='、'.join('〔%d〕'%n for n in later[:AMBIGUOUS_MAX])+('等' if len(later)>AMBIGUOUS_MAX else '')
+                    speak['quote']=AMBIGUOUS%(len(later),shown)
             context['speak_from_program']=speak
             unsent=(scene.get('unsent') or {}) if replying else {}
             if unsent.get('text'):

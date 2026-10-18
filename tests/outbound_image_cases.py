@@ -716,7 +716,7 @@ def claim_returns_metadata_only_when_image_declared():
         server.close()
     assert code == 200, (code, body[:200])
     item = json.loads(body)['items'][0]
-    assert set(item) == {'publication_id', 'attempt_id', 'target', 'text', 'reply_to', 'attachment'}, sorted(item)
+    assert set(item) == {'publication_id', 'attempt_id', 'target', 'text', 'reply_to', 'quote', 'attachment'}, sorted(item)
     assert item['attachment'] == {'artifact_id': stored['artifact_id'], 'media_type': 'image/png',
                                   'sha256': stored['sha256'], 'size': stored['size']}, item['attachment']
     flat = json.dumps(item)
@@ -782,7 +782,7 @@ def claim_of_text_only_publication_is_unchanged():
     finally:
         server.close()
     item = json.loads(body)['items'][0]
-    assert set(item) == {'publication_id', 'attempt_id', 'target', 'text', 'reply_to'}, sorted(item)
+    assert set(item) == {'publication_id', 'attempt_id', 'target', 'text', 'reply_to', 'quote'}, sorted(item)
     assert item['text'] == '画好了，给你看' and item['target'] == {'type': 'dm', 'id': OWNER_ACCOUNT}
     row = store.db.messages.find_one({'_id': 'out-1'})
     assert 'attachment' not in row and 'attachment_skipped' not in row

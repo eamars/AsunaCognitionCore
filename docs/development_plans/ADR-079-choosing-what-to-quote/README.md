@@ -560,6 +560,30 @@ The inbound gates open in step 1, the outbound ones in step 2. QQ Bot's bridge m
 3. Per-session definitions and capabilities (9.7), together with Kazusa's `speak` (QQ Bot agent), and its inbound
    quotes.
 
+### 9.8a Step 2 as built (2026-10-18, wording read and agreed by Xiaoman about 16:0x NZDT)
+
+Decisions made while building, with why:
+
+- **One resolver for every pointer** (`People.line_of`): a number (brackets or not) or `这条`; a pointable line is anyone's
+  in that conversation or hers once delivered, never a program notice. Quote, reaction and recall all use it, so the
+  three cannot drift apart again.
+- **No lookup mode.** Every line delivered since step 1 is already in her conversation with its number; only lines from
+  before step 1 or lost to compaction have none. Instead of a new mode (Xiaoman first asked for `quote: ?`), a value
+  that is not a line is refused with the last six lines by number, speaker and first words, and a refusal comes back
+  in the same turn, so it costs nothing on turns that do not need it.
+- **The separate `quote` tool is removed.** It was listed only where `speak` is not, which today means Kazusa's QQ Bot
+  conversations, and that adapter cannot quote: a function shown and silently dropped. The character brain goes from
+  31 tools to 30 and its descriptions from 20,452 to 20,247 characters.
+- **The quote rides on her first text or picture part** of that `speak` call; a sticker, a poke or a reaction cannot
+  carry one, and asking for it there is refused.
+- **Two fields to the adapter.** The outbox item's `reply_to` is now the line her words answer (`platform_answers`), and
+  `quote` is the line she chose (`platform_reply_to`). NapCat shows only `quote`; QQ Bot's bridge reads `reply_to` as
+  its reply token unchanged, which now always names the line she answers instead of following the quote.
+- **A recall names its line;** whose it is follows from the line, so the 10-minute window that guessed "his latest"
+  is gone. The protections stand (not the owner, an admin or herself), and the platform keeps its own time limit.
+- **Private chats** carry her quote out through NapCat (`reply` segment in private sends); nothing is quoted there unless
+  she chooses, as in a group.
+
 ### 9.9 Open for Xiaoman
 
 1. Private chats: she asked earlier (13:0x) to keep their default; she withdrew that (Claude's paraphrase, 13:5x NZDT)

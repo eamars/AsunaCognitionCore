@@ -1,6 +1,8 @@
 # ADR-079: Lines that point at other lines (quote, reply, reaction)
 
-Status: **Analysis and experiment 2026-10-18** (Claude). The owner asked for a systematic view of the whole family
+Status: **Accepted 2026-10-18 about 14:15 NZDT** (the owner approved §9 and the one-line notice when a function goes
+away or comes back; Xiaoman signed, below). Step 1 of §9.8 next. History of this ADR: **Analysis and experiment
+2026-10-18** (Claude). The owner asked for a systematic view of the whole family
 before any change to quoting, then for a side-by-side experiment on both models (§8). Recommendation in §8.6, full proposal in §9;
 no decision yet, nothing is built. Xiaoman reads it after the owner.
 
@@ -479,10 +481,11 @@ The pointed-at line is always shown as number, speaker (her own lines as `你`) 
 
 The owner's answers (2026-10-18, about 14:00 NZDT):
 
-- **The running adapter declares what it carries**, not the kind module: when it connects it states, per direction,
-  `quote_out`, `quote_in`, `react_out`, `react_in`, `recall` (as it already declares picture support and poke/react in
-  its claims). Core keeps the last declaration per channel. Swapping NapCat for another adapter needs no change in Core
-  or in the kind module. Today's NapCat bridge: all five; QQ Bot's: `quote_in` once it maps `msg_elements`.
+- **The running adapter declares what it carries**, not the kind module. Adapters already declare it on every outbox
+  claim (`?supports=`, today `image`, `sticker`, `poke`, `react`); this adds `quote` (her line can quote), `quote_in`
+  (it passes on what others quote), `react_in` (it passes on reactions) and `recall`, with `react` keeping its meaning
+  (she can react). Core keeps the last declaration per channel. Swapping NapCat for another adapter needs no change in
+  Core or in the kind module. Today's NapCat bridge: all; QQ Bot's: `quote_in` once it maps `msg_elements`.
 - **Her tools change only between sessions.** The worker gives each session the tool definitions its channel's
   declaration supports (`role_tool_specs` per session; `attachRole` already registers per session), computed when the
   session starts or the Host restarts, so the prompt cache keeps its prefix. The context-preparation audit row records
@@ -495,7 +498,10 @@ The owner's answers (2026-10-18, about 14:00 NZDT):
 - **Scope:** this ADR moves the pointer family onto the declaration. Stickers, pokes, faces, text-only and pictures
   move onto it in a follow-up ADR, so one restart batch stays small.
 
-- **Not declared = not carried**, so it is hidden; and an adapter that connects without declaring one of the five is
+- **When a function goes away or comes back** (a runtime limit found, an adapter that carries less or more), her
+  conversation gets one program line at that moment, naming the leg as the cause: `这条腿做不了引用` / `这条腿又能引用了`.
+  Approved by the owner (about 14:15), on Xiaoman's ask.
+- **Not declared = not carried**, so it is hidden; and an adapter that claims without declaring one of quote, quote_in, eact, eact_in, ecall is
   written once to the Host log at start, naming the channel and the function (Xiaoman's condition: today's private
   chats are the live case of a capability nobody declared, dropped with nobody told).
 
@@ -507,13 +513,30 @@ Changes at the edges this needs. Private chats are closed by three gates today, 
 - Core: a `reply_to` from a private chat is refused (`channels.py`, `DM_GROUP_FIELDS_DENIED`), and `group_context`'s
   parent lookup serves groups only.
 
-All three open together, in step 2 for the outbound gates and step 1 for inbound.
-- QQ Bot's bridge maps inbound quotes from `msg_elements` to `reply_to`.
+The inbound gates open in step 1, the outbound ones in step 2. QQ Bot's bridge maps inbound quotes from
+`msg_elements` to `reply_to` in step 3.
 
 ### 9.8 Order of work (each step its own restart, verified on her live page before the next)
 
 1. Show (nothing new to choose): numbers on lines, the one rendering of 9.3, private-chat quotes inbound, `你` for
-   her own lines. Measured by reading her live page.
+   her own lines. Measured by reading her live page. What it changes, file by file (for Xiaoman to check against her
+   page):
+
+   | Where | What |
+   |---|---|
+   | `qqadapter` (NapCat): its claim's `supports` | adds `quote`, `quote_in`, `react_in`, `recall` |
+   | `qqadapter/inbound.py` | a private message's quote is passed on (`PRIVATE_ENVELOPE_KEYS`); a quote with no words is no longer the placeholder `[回复消息（无文字）]` |
+   | `src/asuna/channels.py` | keeps each channel's last `supports`; accepts `reply_to` from a private chat and resolves it like a group's (`group_context`, `reply_parent`) |
+   | `src/asuna/people.py` (`transcript`, `speaker`) | `〔n〕` at the end of each label line where the channel declares `quote` or `quote_in`; `> 回复 〔n〕 <speaker>：<first words>` for every quote, hers as `你`; `> 回复了一条更早的消息` when the quoted line is unknown; `（只引用了这条，没写字）` |
+   | `src/asuna/notices.py` (`fill`, `take`) | a reaction to her line and a recall name the line as `〔n〕 <speaker>：<first words>`; reactions between other people are kept and folded into one line per turn instead of dropped |
+   | `src/asuna/role_tools.py` | the `speak` result gives each sent line's number; her own reaction's history line uses the same form; a text part containing `〔n〕` is refused with the reason |
+   | `src/asuna/context.py` (`_reply_context`) | the history block's quoted line in the same form (number, speaker, words) |
+   | tests | the renderings above, the private-chat inbound quote, the folded reactions, the refusal |
+   | `RUNTIME_API.md`, NapCat `README.md`, `docs/map` | current behaviour |
+
+   Acceptance on her live page, with one real probe each (the owner's or a group member's help for the inbound
+   ones): a quote between two other people in a group, a quote of her line in a group, a quote in a private chat,
+   a quote with no words, a reaction to her line, a reaction between others, a recall. Each must read as in 9.3.
 2. Choose: `speak.quote` / `line` values of 9.4, the echo and the ambiguous-turn line of 9.5, the program's quoting
    rule removed, `quote_of` split from `reply_to` (9.6), NapCat private quotes outbound.
 3. Per-session definitions and capabilities (9.7), together with Kazusa's `speak` (QQ Bot agent), and its inbound
@@ -572,7 +595,7 @@ quotes at all, and how often the ambiguous-turn line was followed by a quote. He
 
 1. The owner: the proposal in §9.
 2. Xiaoman: signed (below), with her conditions folded into §9.3, §9.4, §9.7 and §9.11.
-   After signing she raised one more point, for the owner (Claude's paraphrase, about 14:05 NZDT): a hidden function should
+   After signing she raised one more point, approved by the owner (about 14:15) (Claude's paraphrase, about 14:05 NZDT): a hidden function should
    still be said once, in one program line, when it goes away (a runtime limit found, or a change of adapter that
    carries less): "hidden and not said" is the same mistake as an option she could not see. Claude's view: one line
    at the moment it changes, not every turn, keeps the owner's "hidden from the model" and answers hers.

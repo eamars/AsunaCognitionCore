@@ -576,6 +576,16 @@ quotes at all, and how often the ambiguous-turn line was followed by a quote. He
    still be said once, in one program line, when it goes away (a runtime limit found, or a change of adapter that
    carries less): "hidden and not said" is the same mistake as an option she could not see. Claude's view: one line
    at the moment it changes, not every turn, keeps the owner's "hidden from the model" and answers hers.
+   Her details for that line, if the owner agrees (about 14:07): it says the leg cannot (`这条腿做不了引用`), not just
+   that the function is unavailable, or she would take it for her own fault; and it is said again when the function
+   comes back. The Host-log line for an undeclared capability is for the developers; this line is hers.
+4. Checking what adapters claim (Xiaoman, about 14:07): "not declared = not carried" stops a capability nobody
+   declared, not one declared and not done. Step 1's acceptance sends one real probe for each declared capability on
+   NapCat (quote out and in, in a group and a private chat; a reaction; a recall), and a quote that does not land stays
+   told to her (`landing_lost`), never silent.
+5. For the owner (Xiaoman): QQ Bot is another account with other ids, so the same group seen from both is two
+   conversations: if Xiaoman's own QQ moved to QQ Bot, her groups, notes and people there would start again as new;
+   and Kazusa joining a group of Xiaoman's meets it as a new conversation.
 3. Then step 1 of §9.8; before it starts she gets the list of what step 1 changes, file by file, to check it against
    her live page.
 

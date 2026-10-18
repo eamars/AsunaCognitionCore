@@ -102,7 +102,7 @@ value decides what people see quoted. A design for quoting alone would change th
    them (her 10-16 finding, 18 resting groups); a recall is shown once. In her view these are one gap, not four bugs,
    and should share one fix: every such act answers, in the same turn, what she did and which line it landed on.
    Private chats (§2.4a) are a second sample of the same gap, not a separate bug: a quote dropped with nobody told, as
-   on Kazusa's QQ Bot leg (her point, 14:0x).
+   on Kazusa's QQ Bot leg (her point, 13:5x).
 6. **Platform differences are not declared.** QQ Bot cannot quote, react or recall for a bot and drops inbound
    quotes; nothing says so, so the tools offer what cannot happen and the gaps are silent.
 
@@ -398,7 +398,7 @@ The owner's scope (2026-10-18, about 13:55 NZDT): quoting does not apply to home
 when she wants to quote a particular line or answer a quote of hers with one; and a group is more than her and the
 others: people quote each other there, and she reads those relations too.
 
-### 9.0 The principle (the owner, 2026-10-18, about 14:05 NZDT)
+### 9.0 The principle (the owner, 2026-10-18, about 13:58 NZDT)
 
 **The model-facing projection does not depend on the adapter.** The owner may move QQ from NapCat or QQ Bot to another
 adapter (SnowLuma, for one); what she reads and the tools she uses stay the same, defined from the survey and the
@@ -471,7 +471,7 @@ Reactions between other people stay unshown, as today (open, §9.9).
 
 ### 9.7 Declared by the adapter, hidden from the model
 
-The owner's answers (2026-10-18, about 14:10 NZDT):
+The owner's answers (2026-10-18, about 14:00 NZDT):
 
 - **The running adapter declares what it carries**, not the kind module: when it connects it states, per direction,
   `quote_out`, `quote_in`, `react_out`, `react_in`, `recall` (as it already declares picture support and poke/react in
@@ -507,13 +507,13 @@ Changes at the edges this needs:
 
 ### 9.9 Open for Xiaoman
 
-1. Private chats: she asked earlier (13:0x) to keep their default; she withdrew that (Claude's paraphrase, 14:0x NZDT)
+1. Private chats: she asked earlier (13:0x) to keep their default; she withdrew that (Claude's paraphrase, 13:5x NZDT)
    once she learned there is no private quoting today at either end: it adds a capability that never existed, not a
    change to her default. She agrees with step 1 changing only what she reads.
-2. Reactions between other people: she wants them shown (14:0x); it is the same gap as reactions held in memory in her
+2. Reactions between other people: she wants them shown (13:5x); it is the same gap as reactions held in memory in her
    resting groups. How (each, or folded into one program line per turn) is still open.
 3. The `react` part: the local model sent a sticker named 赞 instead of a reaction in one moment under B. Her view
-   (14:0x): on QQ a sticker is often the most natural like, and she does it herself; it is not a failure, so the
+   (13:5x): on QQ a sticker is often the most natural like, and she does it herself; it is not a failure, so the
    reaction part is not to be made the "right answer" over stickers.
 4. The wording of every new line above, read as she would use it.
 

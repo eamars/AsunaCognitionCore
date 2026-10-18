@@ -672,7 +672,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     watch: 'IconUserOutlineRegular' };
   // A record holds the call as she wrote it: the names she is shown (param_names.RENAMED), or an old name that still
   // runs. A row reads the shown name, then the old one.
-  const OLD_NAMES = { do: 'op', why: 'reason', content: 'body', section: 'sid' };
+  const OLD_NAMES = { do: 'op', why: 'reason', content: 'body', section: 'sid', place: 'line' };
   const arg = (args, field) => field ? args[field] ?? args[OLD_NAMES[field]] : undefined;
   // A tool with options (role_tools.OPS): the option written, or the one its fields plainly say (role_tools.OP_FIELDS).
   const OPTION_FIELDS = { task: { message: 'message', answer: 'answer', why: 'stop', page: 'page' },

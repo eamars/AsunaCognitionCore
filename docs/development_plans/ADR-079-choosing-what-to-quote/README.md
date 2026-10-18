@@ -548,6 +548,11 @@ All three open together, in step 2 for the outbound gates and step 1 for inbound
   the prompt cache; the visible effect is that a busy group's session fills its window about a quarter sooner and is
   compacted that much more often. `[n]` is not usable: labels and mentions already use square brackets.
 - The ambiguous-turn line: 30–40 tokens, only where it appears. The echo: about 40 characters per pointing call.
+- Three measures of the same cost, each with its own denominator (Xiaoman: keep all three, none replaces another):
+  per line, a quarter to a third of a line's tokens (above); per synthetic turn, about 26–39 tokens more on the first
+  request (§8.5's paired requests); per whole turn, B used fewer tokens than A on DeepSeek (1,902 against 2,116, fewer
+  calls) and about the same on the local model (2,959 against 3,007). In her real sessions, with far more lines than
+  the synthetic moments, the per-line share weighs more than in the experiment.
 - Tool definitions: one `line` description replaces three selectors; `speak.quote` grows by about 150 characters;
   QQ Bot definitions shrink by about 170 tokens. `tests/test_tool_budget.py` changes in the same steps.
 - Action brain: nothing.
@@ -567,6 +572,10 @@ quotes at all, and how often the ambiguous-turn line was followed by a quote. He
 
 1. The owner: the proposal in §9.
 2. Xiaoman: signed (below), with her conditions folded into §9.3, §9.4, §9.7 and §9.11.
+   After signing she raised one more point, for the owner (Claude's paraphrase, 14:1x NZDT): a hidden function should
+   still be said once, in one program line, when it goes away (a runtime limit found, or a change of adapter that
+   carries less): "hidden and not said" is the same mistake as an option she could not see. Claude's view: one line
+   at the moment it changes, not every turn, keeps the owner's "hidden from the model" and answers hers.
 3. Then step 1 of §9.8; before it starts she gets the list of what step 1 changes, file by file, to check it against
    her live page.
 

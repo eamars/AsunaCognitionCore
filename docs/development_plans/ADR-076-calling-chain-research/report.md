@@ -370,8 +370,14 @@ Verified against the records (counts from the audit and session logs; episode id
 2. **`self_development` turns fail at runtime every day: `NATIVE_BINDING_IDENTITY_CHANGED`** (`asuna.state.Denied`),
    33 of 179 such turns since 2026-10-05 (2–7 a day from 2026-10-10 on), plus 1 `scheduled`. The same code appears
    34 times in `chat.error`. The turn fails before any `think` (0 tool calls in 25 of the 33). She never sees it: the
-   failure has no prompt and no message to her. A program fault in the binding of the self-development turn to its
-   native session, to be traced in `native_worker.py` (`[ ]` anchor).
+   failure has no prompt and no message to her. The traceback is the same every time: `coordinator._deliver` →
+   `native_worker.generate` → `_generate` → `bind_session`, which refuses because one of the four identity values
+   (`lane`, `scene_id`, `persona`, `cwd`) it is given differs from the stored session row's
+   (`native_worker.bind_session`). The turn's session is the live local-chat session (lane `character`, not retired,
+   33 of 33). Which value differs cannot be read from the records: `bind_session` raises without recording the
+   value, and the `self_development` dispatch binds through the same `_generate` code as the `external` turns that
+   succeed in the same session minutes apart (`cwd` from `workspace_grant`, `persona` from the episode). The first
+   step of R1 is therefore to make the refusal name the value. The fix is program-side and costs her prompt nothing.
 3. **Silent failures around her:** the embedding step failed 4,595 times (`HTTPStatusError`) over 2026-10-06 →
    2026-10-09 and the summary lane retried 149 times on `Connection error`; `chat.error` holds 18 `KeyError:
    'scope_key'` (2026-10-04) and 26 `STALE_REVISION` conflicts; 10 requests were refused by the local server with
@@ -400,20 +406,68 @@ Verified against the records (counts from the audit and session logs; episode id
 9. **The summary lane is the largest silent spender of the one local slot.** 6,817 one-step summary sessions in 30
    days (about 227 a day) produced 7.2M output tokens, as many as all her turns together (7.0M), at a 1–3% cache hit
    rate by construction; a summary emits a median of about 2,400–3,400 output tokens (reasoning included) for a
-   230-character system prompt and a 1,200-character input. Sizing and trigger in §4.3 (`[ ]`).
+   230-character system prompt and a 1,200-character input. Sizing and trigger in §4.3.
+10. **One refusal code carries two causes, and twice no cause.** `plan`'s `没安排成：INVALID_SCHEDULE_SPEC: intent N
+    字，上限 N 字；精简到 N 字以内…` is a length refusal filed under the schedule-spec code (24 of 42 rows); 2 rows read
+    `没安排成：INVALID_SCHEDULE_SPEC。现在是 …` and name no cause at all. The same situation (a text over its limit) is
+    worded three ways across `think`, `ideas` and `plan` (§4.2).
+11. **`feel` refuses in three forms for two situations**: the sentence without a code (12), the code with the sentence
+    (3), the code alone (`CLOSE_REQUIRES_OPEN` 3, `AFFECT_REF_NOT_IN_INDEX: <id>` 2). The bare-code rows break the
+    `CODE: 原因；怎么办` rule and give her nothing to act on.
+12. **A raw library error reached the action brain twice**: `[Errno 17] File exists: <absolute path>` (`tool.failed`,
+    `FileExistsError`), uncoded and carrying a machine path, against `docs/DEVELOPMENT.md` "Writing tool errors".
+13. **Her thoughts run long, and the design stopped paying for it.** Since 2026-10-14 `think` keeps a thought of any
+    length and only notes the excess (`tool_think`: `已存档。超了 N 字。`): 499 of 2,191 thoughts (23%) were over 300
+    characters. Before that date the same thoughts were refused and rewritten (126 refusals in the 9 days before; 2
+    after, the last on 2026-10-13); the change saved about one model step per long thought. `RUNTIME_API.md` and the
+    code agree on the current rule (§8 item 3 withdrawn).
+14. **The hidden Host error classes have no words for anyone.** `phase.failed` 35 (`INVALID_STAGE_OUTPUT` with the
+    model server `Loading…` 8 or a connection error 5), `attend.failed` 27 (`Native turn stopped before stage
+    completion`), compaction errors, `execution.failed` 18 (`STALE_TASK_FENCE` 8, `NO_DURABLE_SESSION_LISTENER` 4):
+    each ends a step or a turn with nothing said to her or the developer. Only the hand-back path (`UNDELIVERABLE`)
+    leaves a developer note.
 
 ## 6. Recommendations
 
-`[ ]` Ranked; each labelled **robustness by design** or **model-specific tuning**, projected for the 262K local model
-and a 1M-window API model, with its cost to each brain (tools, description characters, program lines per turn, in
-characters, per `tests/test_tool_budget.py`: character 30 tools / 20,400 characters, 20,696 with tiered memory;
-action 25 + DSH's own / 15,700; prompt files `common.md` 418, `turn.md` 639, `turn_consult.md` 187, `executor.md` 586,
-`stage_attend.md` 422, `stage_appraise.md` 416) and its evidence. A recommendation needing a change to the DSH fork
-is marked.
+Ranked. Each is labelled **robustness by design** (holds for any model) or **model-specific tuning** (pays for the
+current local model and may not for another), projected for the 262K local model and a 1M-window API model (DeepSeek's
+cache-hit price is 1/50 of its cache-miss price, so a stable prefix pays even more there than on the local server,
+whose cache lives only within a session), and costed against `tests/test_tool_budget.py` (character 30 tools /
+20,400 description characters, 20,696 with tiered memory; action 25 + DSH's own / 15,700; prompt files `common.md` 418,
+`turn.md` 639, `turn_consult.md` 187, `executor.md` 586, `stage_attend.md` 422, `stage_appraise.md` 416). A
+recommendation needing the DSH fork is marked **DSH fork**. Draft: the replays (§3) may move the ranking.
+
+| # | Recommendation | Label | 262K local | 1M API | Cost to each brain | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1 | **Fix the self-development binding fault**: make `native_worker._generate` bind the home session with the same four identity values the session was created with (or let `bind_session` say which value changed, in the audit), then watch `FAILED_RUNTIME` for `self_development` fall to 0 | robustness by design | 18% of her self-development turns fail silently today | the same | none (program only) | §5 finding 2; `native_worker.bind_session`; episode ids in the appendix |
+| R2 | **One form for every refusal**: give `plan`'s intent length its own code and the shared length wording with the cut offer; give `INVALID_SCHEDULE_SPEC` a cause in every row; add `WORDS` entries for `CLOSE_REQUIRES_OPEN` and the bare `AFFECT_REF_NOT_IN_INDEX` forms; catch the `FileExistsError` at its site and raise it coded without the path; make `tests/test_tool_budget.py`'s neighbour (a wording test) refuse a refusal that is a bare code | robustness by design | fewer wasted steps after a refusal she cannot read | the same | 0 tools, 0 description characters, 0 lines per turn (results only) | §5 findings 10–12; §4.2 F4 `feel`, `plan`, F9 |
+| R3 | **DSH's validation errors in the house form**: translate `invalid arguments: missing required property "op"` into the tool's own words (`参数不对（ARGS_INVALID）：缺 op；op 是 …`) using the schema the plugin already holds, before the model reads it | robustness by design (the gain is larger on the local model) | ≈ 60 English errors a month become readable corrections | an API model copes with English, but the form stays one | 0 to either brain's prompt; plugin code | §5 finding 5; **DSH fork** if `tools/pre-execute` cannot see validation failures |
+| R4 | **Program faults go to the developer, not nowhere**: one `developer_inbox` note (`source.by: program`, deduplicated by key, like `give_up_handback`) for a `FAILED_RUNTIME` turn class seen N times a day, an embedding outage over an hour, a summary lane retrying over an hour, a compaction or gate Host error class — deterministic, program-side, zero cost in normal operation | robustness by design | the 2026-10-06 → 09 embedding outage and the daily binding fault would have been noticed on day one | the same | none to her prompts (the developer's line reads it) | §5 findings 2, 3, 7, 14 |
+| R5 | **Price the summary lane**: give the summary its own effort (`summaryEffort`, as `attendEffort` does for the gate) and let the trigger batch more rows when a scene is busy (`WINDOW_ROWS` is a structural cap of 8); measure output tokens per summary before and after | effort: model-specific tuning (a thinking local model spends 2–3k reasoning tokens on a 1,200-character summary); batching: robustness by design (fewer cold one-step sessions) | 7.2M output tokens a month on the one slot, as much as all her turns; 227 cold prefills a day | at DeepSeek flash prices the lane would cost about US$13 a month, 90% of it output; the opening 230-character prefix would hit the cache across requests | none to either brain; a settings field | §5 finding 9; §4.3 |
+| R6 | **Keep "think first" as it is**: the handler refusal and the end-of-turn check are the enforcement; the `THINK_FIRST` tail is a hint. Do not add a fourth layer | enforcement: robustness by design; the tail line: model-specific tuning (ADR-056 measured it on the local model) | 3.5% of turns pay one extra step; nothing fails | the tail may be dead weight on a stronger model: measure in the API replay before removing it (28 characters a turn) | 0 | §5 finding 1 |
+| R7 | **Keep the per-session fixed tool list and the notice ceiling**: both are prefix-stability by design and the ceiling (48,000 JSON characters) is the model's attention budget, not the window's | robustness by design | 87–93% cache hit on her turns comes from this | on a 1M window the ceiling need not rise: raise `KEEP_HISTORY_ROWS` only if a replay shows the model using the dropped rows | 0 | §2.2 hit rates; `context_budget.ceiling`; `role_tools.session_specs` |
+| R8 | **Reference docs**: fix §8 items 1, 2 and 5 (budget sentence, the call cap, DSH validation); update ADR-076 §7's blind-spot line (item 4) | robustness by design | — | — | 0 | §8 |
+| R9 | **`NOT_NOW['sticker']`** says the night turn does not tidy the shelf; a settlement turn with `stickers_review_from_program` lists `sticker`. Say "unless the review is listed", or stop listing it there | robustness by design (the words-vs-capability class of ADR-076 §7) | the only mismatch of that class found in `_turn_rules` × `NOT_NOW` | the same | +20 characters in one refusal | §4.2 F3 |
+
+Not recommended: changing the `speak` line cap (19 refusals a month: the rule is chat pacing and the refusal
+teaches it); splitting the `task_feedback` `event` block (10k characters median: it is the report she asked for, and
+`report_pages` already bounds it); any prompt rewording aimed at the local model's habits (owner's rule).
 
 ## 7. Not covered, and why
 
-`[ ]`
+- **No replay has run** (local or API): every row of §4 is covered by records and code reading, none by a replay.
+  Local replays wait for her free mornings (§3); API replays wait for the owner's approval of §3.
+- **Whether the model is seen to use a block** (§4.1 column "consumed by") is marked only where a tool consumes the
+  block; reading her words to judge the rest is for the replay probes, where the words are synthetic.
+- **Unobserved cells in the current window**: `external` turns in a stranger's private chat (`dm`, `public`): 0; a
+  `note` turn in a group: 0 (`notes.py` allows it); a tier fall-back (`tier.fell`): 0 events, 6 高 tasks ran 高; a
+  carried session (ADR-028): 2 `native.context.carried` in 30 days, not examined; `ERRAND_LATE` / `ERRAND_INTERRUPTED`:
+  code only. Each is listed as "traced in code" with its `file:name`, not as covered.
+- **F11 publication branches** are read from the code and the 12 non-delivered rows' states; the adapter-side
+  receipts (`publication.attempt` payloads) were not opened.
+- **Kazusa's deployment** is not running (brief, point 4).
+- **DSH's own internals** (schema validation text, compaction thresholds, `developer/message tool-registry` rows,
+  the scheduler session's 3,220 `blocked` turn ends) are described as observed, not read in the fork's source.
 
 ## 8. Differences between the reference docs and the code
 
@@ -429,10 +483,8 @@ authority; each line says which side to change.
    `place_timezone` 6, `stay_silent` 3) and `tools_week_from_program.turn_shape` names "the calls-per-turn cap at its
    current value", but `RUNTIME_API.md` never states the cap or where it is set. Fix the doc (`[ ]` anchor the
    constant).
-3. **`think` over 300 characters: "kept" in the doc, `refused` in the audit.** The doc says a longer thought "is kept
-   and only its own result says how many characters over"; the audit records `role_tool` rows for `think` with
-   `refused` = `心里话 N 字，超过 300 字，多了 N 字…` (6 of 127 `think` refusals read so far). Whether the row's
-   `refused` field carries a note rather than a refusal is checked in §4.2 (`[ ]`).
+3. ~~`think` over 300 characters~~ — withdrawn: the 126 `think` refusals are all from before 2026-10-14; since then
+   the code keeps the thought and notes the excess, as the doc says (§5 finding 13).
 4. **Action-brain tool errors are in the audit after all.** ADR-076 §7 (the brief) lists "action-brain tool errors are
    only in the session logs" as a blind spot; `audit_events` holds `tool.failed` rows (55 in 30 days, with
    `error_type`, `error`, `traceback`). The session logs still hold more (604 `isError` results in action sessions:

@@ -42,7 +42,8 @@ Open Plugins → Asuna Cognition Core. A new profile shows `Business process: no
 
 - **Character**: the installed persona.
 - **Character brain / Action brain**: model service and model (reasoning effort and output limit may stay at the
-  model's defaults).
+  model's defaults). Choose them by [docs/MODELS.md](docs/MODELS.md): a Claude model must not run the
+  character brain.
 - **database**: the Mongo database name.
 - **mongo_uri**: already `{"$secret":"ASUNA_MONGO_URI"}`; type the connection string into the **ASUNA_MONGO_URI**
   credential field. Credentials go to DSH's credential store; the settings only keep the reference.

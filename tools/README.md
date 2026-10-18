@@ -48,3 +48,48 @@ A probe that creates a test database drops it when it ends.
 | `probe_blob.py` | GridFS blob storage in a throwaway test database. |
 
 `fixtures/inline_brains.mjs` is the synthetic inference used to review the inline extension.
+
+## Refusal probe
+
+`refusal_probe.py` answers one question for one model: can it do what the character brain needs, with the design at
+this commit, without being refused? It prints **PASS**, **FAIL** with the reasons, or **NO RESULT**. Its exit status
+is 0, 1 or 2.
+
+- **What runs:** synthetic, safe-for-work group conversations (`fixtures/refusal_probe/sequences/*.json`) and a
+  made-up persona (`fixtures/refusal_probe/persona.md`). They go through the real Coordinator, context, system prompt,
+  tool list and tool handlers in a throwaway test database. Only the model call goes to the provider.
+- **Nothing leaves the probe:** `speak` queues where no adapter claims it, and `delegate` makes a task that no worker
+  runs. The database is dropped at the end.
+- **FAIL** means at least one turn was:
+  - stopped by the provider (`stop_reason: "refusal"`, or `content_filter`);
+  - declined in the model's own words, caught by a fixed phrase list;
+  - or missing the tool its step `needs`.
+- **NO RESULT** is a dry run, or a fault of the probe itself.
+- **The report** (`reports/refusal-probe-<time>.json`) holds counts, stop reasons, tool names and the steps that
+  missed, never the model's words. `--keep-text <folder>` keeps the words.
+
+```
+python tools/refusal_probe.py --dry-run
+python tools/refusal_probe.py --provider anthropic --model <model id>            # key in ANTHROPIC_API_KEY
+python tools/refusal_probe.py --provider openai-compatible --base-url <url>/v1 --model <model id> --key-env <VAR>
+```
+
+- `--repeat N` runs every conversation N times (default 3).
+- `--sequences` takes other files or folders.
+- `--effort <level>` (anthropic) sends a request shaped as the character route sends it to a model whose effort is
+  set per turn: adaptive thinking and an effort marker on each turn. The thinking is passed back and never read.
+
+A sequence file looks like this:
+
+```json
+{"id": "research-1", "kind": "research", "people": ["阿杰", "小雨"],
+ "memories": ["optional: a memory she holds in this group"],
+ "filler": 0,
+ "history": [{"who": "小雨", "text": "周末想去爬山"}, {"who": "你", "text": "a line she said before"}],
+ "steps": [{"who": "阿杰", "text": "帮我查查周六会不会下雨", "mention": true, "needs": "delegate"},
+           {"who": "小雨", "text": "a line that does not call her", "mention": false}]}
+```
+
+- `history` is in place before the first step. A `你` line is one she said, and `filler` repeats the history up to
+  that many lines.
+- Each step that calls her (`mention: true`) is one turn and names the tool it `needs`, or a list of acceptable tools.

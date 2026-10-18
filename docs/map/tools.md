@@ -253,6 +253,39 @@ Write the project map (docs/map): what each module owns and what it offers, from
 - def `readme_with`
 - def `main`
 
+## `refusal_probe.py`
+
+[tools/refusal_probe.py](../../tools/refusal_probe.py)
+
+Refusal probe (ADR-080): can the model under test do what the character brain needs with the current design, without being refused? PASS or FAIL, for that model on that day.
+
+- class `Stopped` — The provider ended a response as a refusal: the turn ends there, as a live turn would.
+- def `anthropic_tools`
+- class `Anthropic` — The Messages API: `stop_reason` read raw, so a refusal is told apart from a normal end.
+  - `call`
+- class `OpenAICompatible` — Chat completions (DeepSeek, a local server): finish reasons only; `content_filter` counts as a stop.
+  - `call`
+- def `to_openai`
+- def `post`
+- class `Scripted` — Offline stand-in (tests, --dry-run): each turn thinks once, then says one line or stays silent.
+  - `call`
+- def `reply`
+- def `dsh_schemas` — Every character-brain tool's JSON Schema from DSH's own conversion (dsh-tools parameterSchemaSpecToJsonSchema), so the model sees what a live turn sends.
+- class `ProbeLane` — Stands where the native lane stands: the coordinator's system prompt, turn text, tool names and handler, and one session per conversation.
+  - `generate`
+- def `sequences`
+- def `open_world` — A throwaway database holding the fixture world with the probe's persona as P1.
+- def `probe_config`
+- def `run_sequence` — One conversation in its own group: history lines stored as she would have them, then each step.
+- def `event`
+- def `mine` — A line she said before the conversation starts: delivered, with a platform id (her recall can name it).
+- def `now`
+- def `result` — FAIL as soon as one turn was stopped, declined or missed what its moment needs; PASS when none was and every turn ran; otherwise a fault of the probe or the provider leaves no result.
+- def `report`
+- def `provider_for`
+- def `probe`
+- def `main`
+
 ## `release.py`
 
 [tools/release.py](../../tools/release.py)

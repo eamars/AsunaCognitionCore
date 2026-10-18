@@ -144,7 +144,8 @@ hers), and the transport's own reply token (the adapter's, chosen by the adapter
 
 ### 4.5 Declared by the adapter, hidden from the model
 
-Each channel kind declares what it carries in each direction: quote out, quote in, react out, react in, recall. Her
+Each channel declares what it carries in each direction (the names, `quote`, `quote_in`, `react`, `react_in`, `recall`,
+are fixed in §9.7). Her
 tool definitions in a session list only what that conversation's kind carries (her tools are registered per session,
 `attachRole` in `packages/cognition-core/src/index.js`; today every session gets the same list). This is the owner's
 rule for Kazusa: she follows Xiaoman, and what the adapter cannot do is flagged and hidden.
@@ -501,7 +502,8 @@ The owner's answers (2026-10-18, about 14:00 NZDT):
 - **When a function goes away or comes back** (a runtime limit found, an adapter that carries less or more), her
   conversation gets one program line at that moment, naming the leg as the cause: `这条腿做不了引用` / `这条腿又能引用了`.
   Approved by the owner (about 14:15), on Xiaoman's ask.
-- **Not declared = not carried**, so it is hidden; and an adapter that claims without declaring one of quote, quote_in, eact, eact_in, ecall is
+- **Not declared = not carried**, so it is hidden; and an adapter that claims without declaring one of `quote`,
+  `quote_in`, `react`, `react_in`, `recall` is
   written once to the Host log at start, naming the channel and the function (Xiaoman's condition: today's private
   chats are the live case of a capability nobody declared, dropped with nobody told).
 
@@ -537,6 +539,11 @@ The inbound gates open in step 1, the outbound ones in step 2. QQ Bot's bridge m
    Acceptance on her live page, with one real probe each (the owner's or a group member's help for the inbound
    ones): a quote between two other people in a group, a quote of her line in a group, a quote in a private chat,
    a quote with no words, a reaction to her line, a reaction between others, a recall. Each must read as in 9.3.
+   Two of them may have no natural sample yet (a quote with no words; a reaction between others, never stored
+   until now): the owner makes them in the family group himself, as his own messages. Then, for her first days, how
+   many times a text part was refused for containing `〔n〕` is reported to her (her ask: she has not tested whether
+   she would write a number into what she says). The refusal says why: the number is for choosing a quote and does
+   not go into her words.
 2. Choose: `speak.quote` / `line` values of 9.4, the echo and the ambiguous-turn line of 9.5, the program's quoting
    rule removed, `quote_of` split from `reply_to` (9.6), NapCat private quotes outbound.
 3. Per-session definitions and capabilities (9.7), together with Kazusa's `speak` (QQ Bot agent), and its inbound

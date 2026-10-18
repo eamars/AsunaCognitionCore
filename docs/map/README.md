@@ -293,6 +293,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures.
 - [`capabilities`](../../src/asuna/capabilities.py) — What a channel's running adapter says it carries (ADR-079 §9.7).
 - [`channel_admission`](../../src/asuna/channel_admission.py) — Owner-configured channel admission.
 - [`notices`](../../src/asuna/notices.py) — Platform notices as one-off lines (ADR-064 phase 1): the adapter projects a notice into words, the host passes them on as the program's line, never as the words of the person who did it.
+- [`faults`](../../src/asuna/faults.py) — When one of her turns fails in the program (FAILED_RUNTIME), nobody may be left not knowing (ADR-076 R4).
 - [`caught_up`](../../src/asuna/caught_up.py) — Lines caught up after a gap: a channel adapter fetched them from the platform's history once it was back.
 - [`forwards`](../../src/asuna/forwards.py) — Merged forwards in her conversations (QQ 合并转发): what a forward carried, kept on the line that brought it.
 - [`stickers`](../../src/asuna/stickers.py) — Her sticker shelf and the platform's own faces (ADR-016).

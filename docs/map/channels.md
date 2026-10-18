@@ -110,6 +110,16 @@ Platform notices as one-off lines (ADR-064 phase 1): the adapter projects a noti
 - def `settled` — Her answer's receipt: the request is answered, gone from the platform, or its fate unknown.
 - def `answer` — group_action accept/decline at home: queue the answer to one listed request for the adapter.
 
+## `faults`
+
+[src/asuna/faults.py](../../src/asuna/faults.py)
+
+When one of her turns fails in the program (FAILED_RUNTIME), nobody may be left not knowing (ADR-076 R4).
+
+- def `cause` — The failure's name: its error code if it carries one, else the exception's class.
+- def `turn_failed` — Report a failed turn to the developer and mark its conversation for her next turn there.
+- def `her_line` — The once-only line for her next turn where a turn of hers failed, or None; the mark is cleared.
+
 ## `caught_up`
 
 [src/asuna/caught_up.py](../../src/asuna/caught_up.py)

@@ -151,6 +151,15 @@ class Chat:
                 if self.on_turn_finished:
                     self.on_turn_finished()
 
+    def _report_fault(self, ep, error):
+        """A turn of hers failed in the program: the developer is told, and so is she, at her next turn there."""
+        try:
+            from . import faults
+            faults.turn_failed(self.app.store, ep, error)
+        except Exception:
+            self.app.evidence.record('chat.fault_report_error', {'episode_id': ep.get('_id'),
+                'traceback': redact(traceback.format_exc(), self.app.config)})
+
     def submit(self, text, *, event_id=None, native_session_id=None, native_message_ids=None, media=None, scene_id=None):
         """The owner's words from the Web: in the home chat, or on a home line he joins (scene_id, ADR-051)."""
         if media:
@@ -473,6 +482,8 @@ class Chat:
                         if turn and turn['state'] not in ('COMMITTED', 'WAITING_TASK'):
                             self.app.store.put('episodes', {**turn, 'state': 'INTERRUPTED' if self.stopping.is_set()
                                                else 'FAILED_RUNTIME', 'failure': error}, expected=turn['revision'], stream=turn['_id'])
+                            if not self.stopping.is_set():
+                                self._report_fault(turn, error)
                         elif not turn:
                             self.app.service.record_handback_failure(task['_id'], short)
                         self.app.service.handback(task, 'missed', 'turn' if turn else 'report', error.strip().splitlines()[-1][:200],
@@ -489,6 +500,8 @@ class Chat:
                     if ep and ep['state'] not in ('COMMITTED', 'WAITING_TASK'):
                         self.app.store.put('episodes', {**ep, 'state': 'INTERRUPTED' if self.stopping.is_set() else 'FAILED_RUNTIME',
                                            'failure': error}, expected=ep['revision'], stream=episode)
+                        if not self.stopping.is_set():
+                            self._report_fault(ep, error)
                 except Exception:
                     self.app.evidence.record('chat.persistence_error', {'episode_id': episode,
                         'traceback': redact(traceback.format_exc(), self.app.config)})

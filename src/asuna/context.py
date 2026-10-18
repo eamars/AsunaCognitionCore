@@ -1172,6 +1172,11 @@ class ContextBuilder:
         if phrasing:
             context['recent_phrasing_from_program']={'repeated_4grams':phrasing,
                 'note':'你最近常用这些说法；只是提示，不禁止，换不换由你。'}
+        # A turn of hers here failed in the program since her last turn here (ADR-076 R4): said once.
+        from . import faults
+        fault=faults.her_line(self.store,scene,schedule_rules.scene_timezone(self.store.config,scene))
+        if fault:
+            context['fault_from_program']=fault
         if scene.get('channel_id'):
             # How her words leave on a platform, and which lines are hers to answer now (coordinator._absorb).
             from . import channel_kinds

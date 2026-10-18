@@ -21,8 +21,9 @@
 `SnowLuma 状态` 换行 `版本: 1.14.16`、`NapCat 信息` 换行 `版本: 4.18.6`）与同一行写法各跑一次，
 再加一条人话里提到 napcat 的反例。判法若被写回同一行，带换行那两条就漏，这一格立刻红。
 
-编译产物不落技能目录：先试系统临时目录，宿主沙箱里它常被拒（只放行候选目录内的写，
-2026-10-10 生图技能那份自检就红在这），退到候选根目录，用完即删，不留 __pycache__。
+语法检查不落文件：compile(源码, 路径, 'exec') 在内存里查，沙箱里外都能真查，也不需要临时目录
+（2026-10-18 之前用 py_compile 写 .pyc，先试系统临时目录、再退候选根目录，行动脑沙箱里两处都可能写不动，
+那一格就只能报「没真查」）。分寸：compile() 只查语法，不查 import 和运行时。
 
 不联网、不查历史、不写 Mongo、不发 QQ。
 
@@ -32,11 +33,8 @@
 退出码 0 = 全绿；非 0 时最后一行写「N/M 通过，失败：<检查名>」。
 """
 import os
-import py_compile
 import re
-import shutil
 import sys
-import tempfile
 
 # 宿主普通 Windows 控制台默认码页是 cp1252：中文一 print 就 UnicodeEncodeError 整段崩，整段输出丢掉
 # （2026-10-15 实测：六份 check_skill.py 全中，rc=1、stdout 0 字节）。我的沙箱 env 带 PYTHONUTF8=1／
@@ -324,29 +322,6 @@ def cr_bytes(paths):
     return bad
 
 
-def pick_probe_dir():
-    """编译产物的落点：不能是技能目录本身。先试系统临时目录（本机跑没问题），
-    宿主沙箱只放行候选目录里的写，就退到候选根目录，再退到 skills/ 那一层。"""
-    bases = []
-    try:
-        bases.append(tempfile.gettempdir())
-    except Exception:  # noqa: BLE001 拿不到系统临时目录就直接退到候选里
-        pass
-    bases += [os.path.dirname(os.path.dirname(HERE)), os.path.dirname(HERE)]
-    for base in bases:
-        if not base or not os.path.isdir(base):
-            continue
-        probe = os.path.join(base, "_skillcheck-probe-%d" % os.getpid())
-        try:
-            os.makedirs(probe, exist_ok=True)
-            with open(os.path.join(probe, "w.txt"), "w", encoding="utf-8") as handle:
-                handle.write("ok")
-            return probe
-        except Exception:  # noqa: BLE001 不可写就换下一个落点
-            shutil.rmtree(probe, ignore_errors=True)
-    return None
-
-
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
     results = []
@@ -446,28 +421,21 @@ def main():
                          + "、".join(hit_label(n, c) for n, c, _w in allowed)
                          + "——理由见脚本 LISTED_WORD_ALLOW 那一条注释")
 
-    # 同目录脚本：必须存在且能编译。编译产物落在技能目录之外，用完即删。
+    # 同目录脚本：必须存在且语法能编译。不落文件，在内存里查（compile(源码, 路径, 'exec')）：
+    # 2026-10-18 之前用 py_compile 写 .pyc，要先找可写落点（系统临时目录 → 候选根目录），行动脑沙箱里
+    # 可能都写不动，那一格只能报「没真查」。内存 compile 不需要落点，compile_probe_dir_found／
+    # compile_probe_outside_skill_dir／compile_probe_cleaned_up 这三格跟着删。
+    # 分寸：compile() 只查语法，不查 import 和运行时（脚本能编译不等于能跑）。
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
     check("check_script_shipped", os.path.basename(__file__) in scripts, ",".join(scripts))
-    tmp = pick_probe_dir()
-    check("compile_probe_dir_found", tmp is not None, "系统临时目录与候选目录都写不了")
-    if tmp:
-        here = os.path.abspath(HERE) + os.sep
-        check("compile_probe_outside_skill_dir", not os.path.abspath(tmp).startswith(here), tmp)
+    for script in scripts:
         try:
-            for script in scripts:
-                target = os.path.join(tmp, script + "c")
-                try:
-                    py_compile.compile(os.path.join(HERE, script), cfile=target, doraise=True)
-                    check("compiles_" + script, True)
-                except Exception as exc:  # noqa: BLE001 编译失败要原样报出来
-                    check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-        check("compile_probe_cleaned_up", not os.path.exists(tmp), "临时目录没删掉：" + tmp)
-    else:
-        for script in scripts:
-            check("compiles_" + script, False, "没有可写的编译产物落点")
+            with open(os.path.join(HERE, script), "rb") as handle:
+                source = handle.read()
+            compile(source, os.path.join(HERE, script), "exec")
+            check("compiles_" + script, True)
+        except Exception as exc:  # noqa: BLE001 编译失败要原样报出来
+            check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
 
     stray = [name for name in os.listdir(HERE) if name == "__pycache__"]
     check("no_stray_pycache", not stray, ",".join(stray))

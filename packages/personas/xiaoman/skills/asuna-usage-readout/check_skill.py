@@ -14,12 +14,9 @@
 退出码 0 = 全绿；非 0 时最后一行写「N/M 通过，失败：<检查名>」。
 """
 import os
-import py_compile
 import re
-import shutil
 import subprocess
 import sys
-import time
 
 for _s in (sys.stdout, sys.stderr):
     if hasattr(_s, "reconfigure"):
@@ -357,17 +354,6 @@ def frontmatter(text):
     return fields, text[end + 4:]
 
 
-def probe_dir():
-    for base in (HERE, os.getcwd()):
-        d = os.path.join(base, "_compile-probe-%d" % int(time.time() * 1000))
-        try:
-            os.makedirs(d, exist_ok=True)
-            return d
-        except OSError:
-            continue
-    return None
-
-
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
     results, notes = [], []
@@ -436,18 +422,17 @@ def main():
         except OSError as e:                                  # noqa: BLE001
             cr.append("%s（读不了：%s）" % (os.path.basename(t), e))
     check("line_endings_are_lf", not cr, "、".join(cr))
-    tmp = probe_dir()
-    check("compile_probe_writable", tmp is not None, "临时目录不可写")
-    try:
-        for s in (scripts if tmp else []):
-            try:
-                py_compile.compile(os.path.join(HERE, s), cfile=os.path.join(tmp, s + "c"), doraise=True)
-                check("compiles_" + s, True)
-            except Exception as e:                            # noqa: BLE001
-                check("compiles_" + s, False, "%s: %s" % (type(e).__name__, e))
-    finally:
-        if tmp:
-            shutil.rmtree(tmp, ignore_errors=True)
+    # 语法检查不落文件：compile(源码, 路径, 'exec') 在内存里查，沙箱里外都能真查，不需要临时目录
+    # （2026-10-18 之前用 py_compile 写 .pyc，行动脑沙箱里技能目录和 cwd 都不让写，这一格只能报「没真查」）。
+    # 分寸：compile() 只查语法，不查 import 和运行时（下面 readout_script_runs 才是真跑一次离线模式）。
+    for s in scripts:
+        try:
+            with open(os.path.join(HERE, s), "rb") as h:
+                source = h.read()
+            compile(source, os.path.join(HERE, s), "exec")
+            check("compiles_" + s, True)
+        except Exception as e:                            # noqa: BLE001
+            check("compiles_" + s, False, "%s: %s" % (type(e).__name__, e))
     # 读数脚本：存在 ＋ 真跑一次它的离线模式。「跑不起来」和「跑过了」不是一回事——
     # 文件不在、起不了子进程、超时、非零退出、没打出 SELFCHK 那行，都记红，不因「脚本在目录里」就放行。
     readout = os.path.join(HERE, "usage_readout.py")

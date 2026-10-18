@@ -2,7 +2,7 @@
 """asuna-offline-selfchecks 的零依赖离线自检。
 
 本技能是核心技能 asuna-self-improvement 之上的**增量笔记**，所以这里查四件事：
-1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本能编译、
+1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本语法能编译（内存 compile，不落文件）、
    换行是 LF（读字节数 CR，文本模式那把尺看不见 CR）；
 2. 指向：正文指向核心技能，并写明两份不一致时按核心技能办；
 3. 增量与「不回潮」：几条增量（挂错项目的红、单个用例文件与 p3 现行跑法、pytest 不收
@@ -16,11 +16,10 @@
 
 不联网、不跑离线套件、不写 Mongo、不发 QQ。
 
-编译临时目录先试技能目录旁、再退到当前工作目录（系统 Temp 在 development_run 的沙箱里建得出目录、
-py_compile 落 .pyc 会 PermissionError，2026-10-15 在候选里实跑撞过），用完即删。两处都写不动记
-compile_probe_writable 一条红（detail 写清「编译这一项没真查——不是跑过了」）；真编译不过照旧逐条
-compiles_<脚本> 红并带 PyCompileError。名字与措辞跟另外几份 check_skill.py 对齐——2026-10-15 之前
-这一格叫 compiles_check_skill.py，红起来像编译坏了，其实是目录不可写。
+语法检查不落文件：compile(源码, 路径, 'exec') 在内存里查，沙箱里外都能真查，也不需要临时目录
+（2026-10-18 之前用 py_compile 写 .pyc，先试技能目录旁、再退当前目录，行动脑沙箱里两处都不让写，
+这一格只能报「没真查」——检查根本没跑起来）。语法不过照旧逐条 compiles_<脚本> 红并带 SyntaxError。
+分寸：compile() 只查语法，不查 import 和运行时——脚本能编译不等于能跑。
 
 用法：
     python3 check_skill.py [SKILL.md 路径]        # 默认取脚本旁边的 SKILL.md
@@ -28,11 +27,8 @@ compiles_<脚本> 红并带 PyCompileError。名字与措辞跟另外几份 chec
 退出码 0 = 全绿；非 0 时最后一行写「N/M 通过，失败：<检查名>」。
 """
 import os
-import py_compile
 import re
-import shutil
 import sys
-import time
 
 # 宿主普通 Windows 控制台默认码页是 cp1252：中文一 print 就 UnicodeEncodeError 整段崩，整段输出丢掉
 # （2026-10-15 实测：六份 check_skill.py 全中，rc=1、stdout 0 字节）。我的沙箱 env 带 PYTHONUTF8=1／
@@ -91,20 +87,6 @@ REPO_PATH = re.compile(r"(?<![\w/])(?:tests|tools|docs)/[^\s、，。；：（�
 # 反引号里的字面量是引用（命令原话、错误原文、旧记录里的实跑输出），只在散文里判红。
 PROSE = re.compile(r'`[^`]*`', re.S)
 PLACEHOLDER = re.compile(r"\bTODO\b|\bTBD\b|\bFIXME\b")
-
-
-def compile_tmp_dir():
-    """编译临时目录：先试技能目录旁（development_run 只放行候选目录里的写），
-    写不动退到当前工作目录（从 /task 那边跑、或跑装在 node_modules 里那份冻结版的情形）。
-    两处都不行返回 None。抄自 asuna-running-version 的 probe_dir()。"""
-    for base in (HERE, os.getcwd()):
-        candidate = os.path.join(base, "_compile-probe-%d" % int(time.time() * 1000))
-        try:
-            os.makedirs(candidate, exist_ok=True)
-            return candidate
-        except OSError:
-            continue
-    return None
 
 
 def cr_bytes(paths):
@@ -230,10 +212,10 @@ def main():
     check("no_placeholder_markers", not PLACEHOLDER.search(prose))
     check("skill_body_not_thin", len(body) >= 1500, "body_chars=%d" % len(body))
 
-    # 同目录脚本：必须存在且只用标准库能编译。编译产物落临时目录、用完即删：
-    # 系统 Temp 在 development_run 沙箱里建得出目录、写不进 .pyc（2026-10-15 撞过），
-    # 所以先试技能目录旁、再退当前目录。两处都写不动时记 compile_probe_writable 一条红
-    # （写清没真查）：不崩，也不绿着放过；真编译不过照旧逐条 compiles_<脚本> 红并带 PyCompileError。
+    # 同目录脚本：必须存在且语法能编译。不落文件，在内存里查（compile(源码, 路径, 'exec')）：
+    # 2026-10-18 之前用 py_compile 写 .pyc，先试技能目录旁、再退当前目录，行动脑沙箱里两处都不让写，
+    # 这一格只能报「没真查」——检查根本没跑起来。内存 compile 沙箱里外都真查，也不需要临时目录。
+    # 分寸：compile() 只查语法，不查 import 和运行时（脚本能编译不等于能跑）。
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
     check("check_script_shipped", os.path.basename(__file__) in scripts, ",".join(scripts))
 
@@ -242,20 +224,14 @@ def main():
     cr_files = cr_bytes([path] + [os.path.join(HERE, name) for name in scripts])
     check("line_endings_are_lf", not cr_files,
           "有 CR（仓库守卫 test_line_endings 会红）：" + "、".join(cr_files))
-    tmp = compile_tmp_dir()
-    check("compile_probe_writable", tmp is not None,
-          "技能目录旁和当前目录都写不动：临时目录不可写（沙箱限制），编译这一项没真查——不是跑过了")
-    try:
-        for script in (scripts if tmp else []):
-            target = os.path.join(tmp, script + "c")
-            try:
-                py_compile.compile(os.path.join(HERE, script), cfile=target, doraise=True)
-                check("compiles_" + script, True)
-            except Exception as exc:  # noqa: BLE001 编译失败要原样报出来
-                check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
-    finally:
-        if tmp:
-            shutil.rmtree(tmp, ignore_errors=True)
+    for script in scripts:
+        try:
+            with open(os.path.join(HERE, script), "rb") as handle:
+                source = handle.read()
+            compile(source, os.path.join(HERE, script), "exec")
+            check("compiles_" + script, True)
+        except Exception as exc:  # noqa: BLE001 编译失败要原样报出来
+            check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
 
     stray = [d for d in os.listdir(HERE) if d == "__pycache__"]
     if stray:

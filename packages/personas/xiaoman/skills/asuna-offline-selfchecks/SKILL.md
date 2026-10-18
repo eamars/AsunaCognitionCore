@@ -61,18 +61,20 @@ napcat-qq 适配器的自检（`--selftest --offline`，跑内置占位夹具）
 而我的沙箱 env 带 `PYTHONUTF8=1`，永远撞不到——所以发布前拿 `PYTHONIOENCODING=cp1252` 起一次子进程冒烟，
 rc=0 且 stderr 空才算数（沙箱绿了不等于现场能跑）。
 
-### 自检脚本的临时目录要带兜底
+### 自检脚本查语法不要落文件
 
-编译临时目录先试技能目录旁、写不动退当前工作目录（`compile_tmp_dir()`），两处都不行就记
-`compile_probe_writable` 一条红，detail 写清「编译这一项没真查——不是跑过了」；真编译不过照旧逐条
-`compiles_<脚本>` 红并带 PyCompileError，不被兜底吞。**「跑不起来」和「跑过了」不是一回事**，
-不许被兜底吞成绿（2026-10-15 从冻结快照跑，`os.makedirs` 一句 PermissionError 把整份自检带崩，
-而它前面刚打印完一条 NOTE，看着像跑到了）。
-这一格另外四份 `check_skill.py`（asuna-outbound-round、asuna-image-generation-and-display、
-asuna-render-budget-per-place、asuna-running-version）都叫 `compile_probe_writable`；本技能那份原来红的是
-老名字 `compiles_check_skill.py` ＋detail「临时目录不可写（沙箱限制，不是坏）」——名字不统一是个真陷阱：
-看见 `compiles_…` 红会以为是编译坏了，其实是目录不可写，而 detail 那句「不是坏」又容易被读成「那就当过了」。
-（asuna-bot-or-person 这一格用的是另一套名字 `compile_probe_dir_found`，本轮只报不动。）
+编译那一格在内存里查：`compile(源码, 路径, 'exec')`，不写 `.pyc`、不需要临时目录，沙箱里外都能真查；
+语法不过照旧逐条 `compiles_<脚本>` 红并带 SyntaxError。分寸：`compile()` 只查语法，不查 import 和运行时
+——这一格绿不等于脚本能跑。
+为什么换：`py_compile` 要落文件，得先找可写目录（技能目录旁 → 当前工作目录），行动脑沙箱里两处都写不动，
+于是这一格只能报「没真查」——**检查根本没跑起来**。「跑不起来」和「跑过了」不是一回事，这条判词没变，
+只是现在没有「可写不可写」这一层可兜了（2026-10-15 从冻结快照跑，`os.makedirs` 一句 PermissionError
+把整份自检带崩，而它前面刚打印完一条 NOTE，看着像跑到了）。
+2026-10-18 七份 `check_skill.py` 一起换法，各自删掉不再适用的探针格：asuna-outbound-round、
+asuna-image-generation-and-display、asuna-render-budget-per-place、asuna-running-version、
+asuna-usage-readout 与本技能各删 `compile_probe_writable`，asuna-bot-or-person 删
+`compile_probe_dir_found`／`compile_probe_outside_skill_dir`／`compile_probe_cleaned_up` 三条；
+`compiles_<脚本>` 那几格名字不动。
 
 ## 版本
 
@@ -119,6 +121,13 @@ v2.6（2026-10-15）：两格合成一发（owner 交代）。① 统一编译�
 （红里已经写清，不再重复）。② `integration/` 三份（envoy_meters_read.py、probe_catchup.py、probe_cfg.py）
 开头补 stdout／stderr UTF-8 守卫——owner 放开边界，采纳想法本 idea-42605f061b49e3af397e99ee6b78de6b；
 这三份确实在发布快照里，改前 cp1252 实测会崩（读数见当趟试用记录）。正文其余口径、守卫判据未动。
+
+v2.7（2026-10-18）：编译那一格换成内存 `compile(源码, 路径, 'exec')`（owner 交代，起因由 Claude 查实）。
+增量那一节从「自检脚本的临时目录要带兜底」改写成「自检脚本查语法不要落文件」：`py_compile` 写 `.pyc`
+在行动脑沙箱里技能目录旁和当前目录都写不动，那一格只能报「没真查」——检查根本没跑起来。
+七份 `check_skill.py` 同轮换法，各自删掉不再适用的探针格（本技能 29→28，少的就是 `compile_probe_writable`；
+`compiles_<脚本>` 判据名不动）。措辞分寸：`compile()` 只查语法，不查 import 和运行时，不写成「脚本能跑」。
+正文其余口径、守卫判据未动。
 
 ## 试用记录
 
@@ -240,3 +249,20 @@ v2.6（2026-10-15）：两格合成一发（owner 交代）。① 统一编译�
 - 没跑的：probe_catchup 走活体 NapCat 那条路今晚没跑（不占正向 WS），它的中文回包是夹具假设；
   envoy 只跑了 --selfcheck，没连光伏网关；
 - 发布结果以本次行动报告为准。
+
+2026-10-18（v2.7，七份 check_skill.py 的编译格换成内存 compile＋本节改写，xiaoman 候选）：
+
+- 我名下 `check_skill.py` 现在是 8 份（10-15 量到的六份之外，asuna-usage-readout 与 asuna-become-human
+  各自后来补了一份）：带 py_compile／临时目录写法的是 7 份，全改了；asuna-become-human 那份没这种写法，没动；
+- 改前现场取证（跑已发布快照 3dbba8a2 里那几份、cwd 指只读检出根）：outbound-round 37/38、
+  本技能 27/28、image-generation 154/155、running-version 53/54、render-budget 45/46、usage-readout 248/249
+  全 rc=1、红在 `compile_probe_writable`（detail 写「没真查」）；bot-or-person 139/139 绿——
+  它多一档兜底退到候选根目录，那一趟恰好写得动；
+- 改后：候选内 8 份全 rc=0（34、136、155、28、38、47、55、250），cwd 指只读检出根同样全 rc=0；
+  冻结快照里的复跑见当趟行动报告；
+- 反证：临时副本（系统 Temp，用完即删）里添一份语法错的 `broken_probe_case.py` → outbound-round 38/39、
+  bot-or-person 136/137、本技能 28/29，各红在 `compiles_broken_probe_case.py`
+  （`SyntaxError: invalid syntax (broken_probe_case.py, line 1)`）——内存 compile 真在查，不是永远绿；
+- 条数变化（逐份）：本技能 29→28、outbound-round 39→38、image-generation 156→155、render-budget 48→47、
+  running-version 56→55、usage-readout 251→250、bot-or-person 139→136。删掉的全是「找不到可写落点」那一族
+  探针格（内存 compile 不需要落点，留着就是永远绿的空判据）；`compiles_<脚本>` 那几格名字与条数不动。

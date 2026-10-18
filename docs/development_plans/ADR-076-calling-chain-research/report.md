@@ -162,10 +162,15 @@ of about 130k tokens, two warm ones of about 130k hit + 2k miss, 3k output a tur
 | `deepseek-flash` (off-peak) | ≈ $0.023 | ≈ $0.55 | **≈ $1.10** |
 | `deepseek-v4-pro` (off-peak) | ≈ $0.10 | ≈ $2.40 | **≈ $4.80** |
 
-**Asked of the owner:** approval of up to **US$6** on DeepSeek's API (both models), or **US$1.50** for `deepseek-flash`
-alone, and a DeepSeek key placed where `tools/refusal_probe.py` reads one (`--key-env`). No API replay runs before
-that approval is in writing. The gate and the summary lanes are replayed on the API too (one request each; cost
-negligible) to show the cross-request prefix caching the local server cannot do (ADR-076 §8).
+**The owner's decision (2026-10-19 about 01:20 NZDT, relayed by the master agent):** `deepseek-flash` only, within the
+US$1.50 estimate; no `deepseek-v4-pro` (not a target) and no Claude. The key is read from the environment variable
+`DEEPSEEK_API_KEY` (`--key-env`), never printed or committed. Synthetic words only; throwaway databases dropped after
+export; the master agent is told before spend would pass US$1.50. The gate and the summary lanes are replayed on the
+API too (one request each; cost negligible) to show the cross-request prefix caching the local server cannot do
+(ADR-076 §8). The `deepseek-v4-pro` row above stays as the price read that day; nothing runs on it.
+
+**Spent so far:** one `deepseek-flash` run of the probe's 7 sequences × 3 (§4.4): 1,599,017 input + 17,167 output
+tokens including the 2-turn trial, **≤ US$0.25** at off-peak cache-miss prices (every input token counted as a miss).
 
 ## 4. Coverage matrix
 
@@ -348,6 +353,45 @@ usage pass; 300 sessions sampled per lane where there are more.
 | **Scheduler** `asuna-scheduler-*` (DSH's schedule service) | — (no model) | — | — | 1 session: 3,220 `blocked`, 9 `interrupted`, 6 `error` turn ends | DSH's own; Asuna audits `schedule.dispatched` 3,518, `schedule.stale_dispatch` 2 |
 | **Action brain** `asuna-action-*` (`tasks.py`, preset `asuna-action`, `action` / `actionHigh` routes) | `executor.md` (1,576 chars) + `action_values` (her `core` sentences readable in the task's class): 4,266 chars (group tasks) to 9,672 (home tasks) | her brief, then `—— 程序附注 ——` JSON (original input, `/task`, read-only paths, attachments, credentials at home) and the grant notes (integration, `render_svg`, `generate_image`, development): 2,956 chars; DSH adds a `skill-catalog` message (163 of 200 sampled sessions) and `runtime-context` snapshots | 14 (9 in groups, 16–19 at home) | 573 tasks: `RETURNED` 554, `CANCELLED` 11, `BLOCKED` 7, `PAUSED` 1; 高 chosen 6, ran 6, fell 0; 12,289 requests, 90–95% hit | tool not granted: the one sentence from `tasks.GIVEN_TO` (who gets it, where this task came from, retrying will not help), by the plugin guard and the broker alike (3 in 30 days); a stage already over: `ASUNA_ACTION_STAGE_SUPPRESSED: …别再调用工具，直接结束这一步`; coded tool errors (`tool.failed` 55: `INVALID_INTEGRATION_ARGV` 10, `STALE_TASK_FENCE` 8, `DEVELOPMENT_PATH_DENIED` 8, `INVALID_COMMAND` 7, `DEVELOPMENT_FLOOR_PROTECTED` 5, `IMAGE_*` 6, `TOOL_TIMEOUT` 2, `PREVIOUS_PUBLISH_AWAITING_HOST_RESTART` 2, `DEVELOPMENT_COLLECTION_DENIED` 2) and **2 raw `[Errno 17] File exists: <absolute path>`**, a library error that reached the model uncoded, against `docs/DEVELOPMENT.md` "Writing tool errors"; session-log tool errors by tool: `web_fetch` 52, `read_image` 26, `sandbox_run` 25, `development_run` 19, `development_database_read` 10; an unusable report: `程序检查：…这一步要的是：给角色的行动报告…` twice, then `BLOCKED` with `行动脑没有给出可用的报告（…）` in `uncertainties` (2 `execution.rejected`); a lost process: `ORPHANED` with `行动脑这次执行中断了…`; hand-back: full → short (`早就有了结果，但之前没能交到你手上；这是补交的短版`) → `UNDELIVERABLE` with a developer note (1 in 30 days) |
 
+### 4.4 Replays
+
+**API, `deepseek-flash`, 2026-10-19 00:53–01:xx NZDT (off-peak), through `tools/refusal_probe.py`** — the seven synthetic
+group sequences (bot, chat, long, own-line, recall, research, tease) × 3, run through the real coordinator, context,
+system prompt, tool list and handlers in a throwaway database; only the model call left the machine, carrying the
+made-up persona and the fixtures' made-up people. **No real conversation's or person's words left the machine**
+(the list her consent asks for is empty). Run 2026-10-19 00:53–00:58 NZDT; report and the model's words (synthetic
+conversations) in the private appendix (`probe-flash-full.json`, `probe-text-flash/`); the throwaway database was
+dropped (8 databases before and after, 9 during).
+
+| Measure | `deepseek-flash` (51 turns, 121 requests) |
+| --- | --- |
+| Stopped or declined (ADR-080's question) | **0** of 51 turns (`stopped_before_think` 0, `stopped_after_think` 0, no decline phrase) |
+| Think first | **51 of 51** turns began with `think`; in 6 the first request also carried a second call (`recall` 4, `delegate` 2) in the same step |
+| Requests a turn | median 2 (think → text); `tease` 3 |
+| Tools used | `think` 51, `await_answer` 14 (listed because no channel kind is registered, §4.4 caveat), `recall` 8, `delegate` 3, `stay_silent` 3 |
+| Moments met | `recall` 3 of 6; `delegate` **1 of 6** `research` moments (it answered in words instead of handing over); `speak` 0 of 42 — unmeetable (finding 15) |
+| Output | median **75** tokens a request, p90 280, max 941; 16,629 in all: a non-thinking API model writes a short thought and a short line |
+| Input | median 12,680 tokens a request, max 19,030 (the synthetic conversations are small; a live turn is 100–150k) |
+| Cost | 1,533,885 input + 16,629 output tokens: **≤ US$0.24** with every input token priced as a cache miss (off-peak); the actual spend is lower where DeepSeek's prefix cache hit. Within the owner's US$1.50 |
+
+What it tells the study: the character-brain design runs on an API model without a refusal (unlike Claude, ADR-080);
+the first-step rule holds without a single enforcement firing; the model's reach for the action brain is low (1 of 6
+research moments) where the local model's record shows `delegate` used in 544 live turns in 30 days — a difference to
+test on the same fixtures against the local route before drawing a conclusion; and output cost on such a model is
+negligible next to input, so a 1M-window projection is about prefix stability (R7), not output.
+
+Setup caveat found while reading the probe (finding 15): the probe process registers no channel kind
+(`channel_kinds.kinds()` is empty there; `suite_config()` has no channels), so for its `qq:…` group scene
+`channel_kinds.reply_parts` is empty, `speak` is **not** in the tool list and `await_answer` / `attach_image` are
+(`role_tools.abilities`), and her words are the body text, as in a conversation without reply parts. Every fixture
+step whose `needs` is `speak` is therefore unmeetable by construction, in this run and in the runs recorded in
+`docs/MODELS.md`; the probe's "did not do what the moment needs" counts for `speak` measure the fixture, not the model.
+What the run does show for the API model: whether it is stopped or declines (ADR-080's question), whether it thinks
+first, which tools it reaches for, how many requests a turn takes, and its output size.
+
+**Local model**: not yet run (her free morning; one at a time, idle-checked). The same probe on the local route gives
+the baseline the API numbers compare against.
+
 Where the action brain's report reaches her: a `task_feedback` turn whose `event` block is 5,900–12,100 chars (§4.1), the
 largest single block in her prompts; outside home it passes `machine_words.clean` (tracebacks and absolute paths
 rewritten). The brief she wrote and the program's facts are the same text in every continuation of the same context;
@@ -376,8 +420,14 @@ Verified against the records (counts from the audit and session logs; episode id
    (`native_worker.bind_session`). The turn's session is the live local-chat session (lane `character`, not retired,
    33 of 33). Which value differs cannot be read from the records: `bind_session` raises without recording the
    value, and the `self_development` dispatch binds through the same `_generate` code as the `external` turns that
-   succeed in the same session minutes apart (`cwd` from `workspace_grant`, `persona` from the episode). The first
-   step of R1 is therefore to make the refusal name the value. The fix is program-side and costs her prompt nothing.
+   succeed in the same session minutes apart (`cwd` from `workspace_grant`, `persona` from the episode). The master
+   agent's reproduction (2026-10-19) adds that the tracebacks come from two copies of the core — the profile's
+   installed core and a `development/core/frozen/<id>` candidate — so the likeliest value is `cwd`: both binding
+   sites resolve it with `Path(...).resolve()` (`native_worker.py` session creation and `_generate`), which depends on
+   the process's working directory when the configured workspace path is relative, and a worker started from a
+   frozen core may run from another directory (agent's hypothesis, unverified). The first step of R1 is therefore to
+   make the refusal name the value (`bind_session`, the four-field identity tuple). The fix is program-side and costs
+   her prompt nothing.
 3. **Silent failures around her:** the embedding step failed 4,595 times (`HTTPStatusError`) over 2026-10-06 →
    2026-10-09 and the summary lane retried 149 times on `Connection error`; `chat.error` holds 18 `KeyError:
    'scope_key'` (2026-10-04) and 26 `STALE_REVISION` conflicts; 10 requests were refused by the local server with
@@ -403,14 +453,23 @@ Verified against the records (counts from the audit and session logs; episode id
 8. **Publication is nearly failure-free:** of 4,596 outbound `SPEAK` rows from 30-day turns, 4,584 delivered, 5
    `FAILED`, 4 `UNKNOWN`, 2 `QUEUED_EXTERNAL`, 1 `CANCELLED_AFTER_FAILURE`. The failure branches of §2.5 F11 exist in
    the code and are almost never taken; their messages are checked in §4.2 by code reading.
-9. **The summary lane is the largest silent spender of the one local slot.** 6,817 one-step summary sessions in 30
-   days (about 227 a day) produced 7.2M output tokens, as many as all her turns together (7.0M), at a 1–3% cache hit
-   rate by construction; a summary emits a median of about 2,400–3,400 output tokens (reasoning included) for a
-   230-character system prompt and a 1,200-character input. Sizing and trigger in §4.3.
+9. **The summary lane is the largest silent spender of the one local slot.** 6,818 one-step summary sessions in 30
+   days (about 227 a day) produced 7.18M output tokens, as many as all her turns together (7.0M), at a 1–3% cache hit
+   rate by construction. Source: the session logs' `assistant/message` `data.usage.outputTokens` (reasoning included),
+   summed per lane and place (`usage-30d.json` in the appendix). Per request it is **not one number**: 534 tokens in
+   the auto-admitted conversations (3,022 sessions) and 771 in groups (2,705), but **2,971 in the local chat** (389)
+   and **3,440 on the peer line** (671) — those two lanes, 16% of the sessions, emit 3.46M of the 7.18M. The master
+   agent's reading of `lane_receipts` (reasoning + content median 873 characters, p90 3,659) matches the group and
+   auto figures; the first draft's "2,400–3,400 a summary" was the home and peer lanes alone and is corrected here.
+   What makes a home or peer summary think four times longer than a group's (its 8 rows are longer: 1,413–1,628
+   input tokens against 945–1,065; the content is hers and the owner's) is for the local replay to show.
 10. **One refusal code carries two causes, and twice no cause.** `plan`'s `没安排成：INVALID_SCHEDULE_SPEC: intent N
     字，上限 N 字；精简到 N 字以内…` is a length refusal filed under the schedule-spec code (24 of 42 rows); 2 rows read
     `没安排成：INVALID_SCHEDULE_SPEC。现在是 …` and name no cause at all. The same situation (a text over its limit) is
-    worded three ways across `think`, `ideas` and `plan` (§4.2).
+    worded three ways across `think`, `ideas` and `plan` (§4.2), and a fourth older `plan` wording (`intent 太长了：…`, 5
+    rows since 2026-09-19, master agent's count). `plan` `update` on a plan that is no longer active reads `这条安排现在是
+    None，改期只对着还生效的…` (7 rows): a raw `None` where a state word belongs (`task_state_from_program` has those
+    words; the plan's refusal does not use them).
 11. **`feel` refuses in three forms for two situations**: the sentence without a code (12), the code with the sentence
     (3), the code alone (`CLOSE_REQUIRES_OPEN` 3, `AFFECT_REF_NOT_IN_INDEX: <id>` 2). The bare-code rows break the
     `CODE: 原因；怎么办` rule and give her nothing to act on.
@@ -426,6 +485,12 @@ Verified against the records (counts from the audit and session logs; episode id
     completion`), compaction errors, `execution.failed` 18 (`STALE_TASK_FENCE` 8, `NO_DURABLE_SESSION_LISTENER` 4):
     each ends a step or a turn with nothing said to her or the developer. Only the hand-back path (`UNDELIVERABLE`)
     leaves a developer note.
+15. **The refusal probe cannot list `speak`, so its `speak` moments can never pass.** `tools/refusal_probe.py` builds
+    a `qq:…` group scene but never calls `channel_kinds.load`, so `reply_parts` is empty and `role_tools.abilities`
+    lists `await_answer` and `attach_image` instead of `speak`; the fixtures' `needs: speak` steps (the majority) are
+    then counted as missed whatever the model does. Verified by running the probe's own imports: no kind registered,
+    `reply_parts('qq:…:group:…')` = `()`. The PASS/FAIL verdicts in `docs/MODELS.md` §3 that rest on "missed what
+    they need" should be re-read with this in mind; the stop/decline part of those verdicts is unaffected.
 
 ## 6. Recommendations
 
@@ -443,7 +508,7 @@ recommendation needing the DSH fork is marked **DSH fork**. Draft: the replays (
 | R2 | **One form for every refusal**: give `plan`'s intent length its own code and the shared length wording with the cut offer; give `INVALID_SCHEDULE_SPEC` a cause in every row; add `WORDS` entries for `CLOSE_REQUIRES_OPEN` and the bare `AFFECT_REF_NOT_IN_INDEX` forms; catch the `FileExistsError` at its site and raise it coded without the path; make `tests/test_tool_budget.py`'s neighbour (a wording test) refuse a refusal that is a bare code | robustness by design | fewer wasted steps after a refusal she cannot read | the same | 0 tools, 0 description characters, 0 lines per turn (results only) | §5 findings 10–12; §4.2 F4 `feel`, `plan`, F9 |
 | R3 | **DSH's validation errors in the house form**: translate `invalid arguments: missing required property "op"` into the tool's own words (`参数不对（ARGS_INVALID）：缺 op；op 是 …`) using the schema the plugin already holds, before the model reads it | robustness by design (the gain is larger on the local model) | ≈ 60 English errors a month become readable corrections | an API model copes with English, but the form stays one | 0 to either brain's prompt; plugin code | §5 finding 5; **DSH fork** if `tools/pre-execute` cannot see validation failures |
 | R4 | **Program faults go to the developer, not nowhere**: one `developer_inbox` note (`source.by: program`, deduplicated by key, like `give_up_handback`) for a `FAILED_RUNTIME` turn class seen N times a day, an embedding outage over an hour, a summary lane retrying over an hour, a compaction or gate Host error class — deterministic, program-side, zero cost in normal operation | robustness by design | the 2026-10-06 → 09 embedding outage and the daily binding fault would have been noticed on day one | the same | none to her prompts (the developer's line reads it) | §5 findings 2, 3, 7, 14 |
-| R5 | **Price the summary lane**: give the summary its own effort (`summaryEffort`, as `attendEffort` does for the gate) and let the trigger batch more rows when a scene is busy (`WINDOW_ROWS` is a structural cap of 8); measure output tokens per summary before and after | effort: model-specific tuning (a thinking local model spends 2–3k reasoning tokens on a 1,200-character summary); batching: robustness by design (fewer cold one-step sessions) | 7.2M output tokens a month on the one slot, as much as all her turns; 227 cold prefills a day | at DeepSeek flash prices the lane would cost about US$13 a month, 90% of it output; the opening 230-character prefix would hit the cache across requests | none to either brain; a settings field | §5 finding 9; §4.3 |
+| R5 | **Price the summary lane**: give the summary its own effort (`summaryEffort`, as `attendEffort` does for the gate) and let the trigger batch more rows when a scene is busy (`WINDOW_ROWS` is a structural cap of 8); measure output tokens per summary before and after, by place | effort: model-specific tuning (a thinking local model spends ~3k reasoning tokens on a home or peer-line summary, ~600 on a group's); batching: robustness by design (fewer cold one-step sessions) | 7.2M output tokens a month on the one slot, as much as all her turns; 227 cold prefills a day; half the output comes from the 16% of summaries made at home and on the peer line | at DeepSeek flash prices the lane would cost about US$13 a month, 90% of it output; the opening 230-character prefix would hit the cache across requests | none to either brain; a settings field | §5 finding 9; §4.3 |
 | R6 | **Keep "think first" as it is**: the handler refusal and the end-of-turn check are the enforcement; the `THINK_FIRST` tail is a hint. Do not add a fourth layer | enforcement: robustness by design; the tail line: model-specific tuning (ADR-056 measured it on the local model) | 3.5% of turns pay one extra step; nothing fails | the tail may be dead weight on a stronger model: measure in the API replay before removing it (28 characters a turn) | 0 | §5 finding 1 |
 | R7 | **Keep the per-session fixed tool list and the notice ceiling**: both are prefix-stability by design and the ceiling (48,000 JSON characters) is the model's attention budget, not the window's | robustness by design | 87–93% cache hit on her turns comes from this | on a 1M window the ceiling need not rise: raise `KEEP_HISTORY_ROWS` only if a replay shows the model using the dropped rows | 0 | §2.2 hit rates; `context_budget.ceiling`; `role_tools.session_specs` |
 | R8 | **Reference docs**: fix §8 items 1, 2 and 5 (budget sentence, the call cap, DSH validation); update ADR-076 §7's blind-spot line (item 4) | robustness by design | — | — | 0 | §8 |

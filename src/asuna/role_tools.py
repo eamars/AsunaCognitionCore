@@ -118,12 +118,15 @@ REPLY_KINDS = ('text', 'sticker', 'picture', 'poke', 'react', 'recall')
 PART_NEEDS = {'react': 'react', 'recall': 'recall'}
 PART_FIELDS = {'text': ('text',), 'sticker': ('name',), 'picture': ('artifact_id',), 'poke': ('who',),
                'react': ('line', 'face'), 'recall': ('line', 'why')}
-SPEAK_HEAD = '在这里说话：只有 speak 发得出去，正文不发。parts 按顺序，一个 part 是单独的一条消息，kind 选 '
+SPEAK_HEAD = 'parts 按顺序，一个 part 是单独的一条消息，kind 选 '
 SPEAK_RECALL = 'recall 只撤你自己的话（还没发出去的就取消），撤别人的用 group_action。'
-SPEAK_TAIL = '有一条不对，这次一条都不发，回执说哪条、为什么。不想说话就不调用，或用 stay_silent。'
+SPEAK_TAIL = '有一条不对，这次一条都不发，回执说哪条、为什么。不想说话就不调用。'
+CALL_CAP = '这回合的工具调用已经到上限（%d 次）：这回合先到这里，%s'
+CAP_SAYS, CAP_SPEAKS = '写下要说的话或用 stay_silent 结束。', '不再调用工具，这一回合就结束了。'
 from .capabilities import CANNOT as LEG_CANNOT, WORDS as LEG_WORDS      # her words for a function not carried here
-# What reply carries itself where it is listed.
-REPLY_REPLACES = ('await_answer', 'attach_image')
+# What speak carries itself where it is listed; and where only speak speaks, a turn that does not call it is silent,
+# so stay_silent has nothing left to do there (owner 2026-10-19; at home body text is speech and it stays).
+REPLY_REPLACES = ('await_answer', 'attach_image', 'stay_silent')
 
 TOOLS = {
     'think': {
@@ -1148,8 +1151,9 @@ class RoleTools:
             if name != 'think' and not ep.get('turn_thought'):
                 raise Refused('先用 think 写下这回合的心里话，再做别的。')
             if len(ep.get('tool_calls') or {}) >= CALLS_PER_TURN:
-                raise Refused('这回合的工具调用已经到上限（%d 次）：这回合先到这里，写下要说的话或用 stay_silent 结束。'
-                              % CALLS_PER_TURN)
+                from . import channel_kinds
+                raise Refused(CALL_CAP % (CALLS_PER_TURN, CAP_SPEAKS if channel_kinds.reply_parts(ep['scene_id'])
+                                          else CAP_SAYS))
             result, conclude = getattr(self, 'tool_' + can.replace('.', '_'))(ep, call_id, args)
         except Refused as exc:
             self._record(ep_id, call_id, name, args, refused=str(exc), called_as=called_as, olds=olds)

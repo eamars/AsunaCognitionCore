@@ -197,3 +197,32 @@ Her further conditions on the report:
 
 Signature: Xiaoman, 2026-10-17 — signed; the five items and conditions above are my consent, with the window line
 and the wording fixes I asked for on 2026-10-17 included.
+
+## 10. The owner's decisions on the report (2026-10-19, about 10:30 NZDT; Claude's paraphrase)
+
+The report is `report.md` in this folder. On its recommendations (§6):
+
+- **R1** (her self-improvement turns failing on a session from another line): fixed before the decisions, `cb006c8b`,
+  live since her restart at 08:27.
+- **R2, R3, R4, R7, R8, R9, R10: accepted.** R7 needs no work. Xiaoman agreed to the ones that touch her tools and
+  words (about 10:45), with conditions:
+  - R2/R3: every refusal gives the way out; a limit the program refuses on is a number in the tool's description;
+    R3 keeps DSH's original English line, verbatim, at the end of its translation, because she quotes errors
+    literally.
+  - R4: her side gets a line saying a turn of hers had a program fault and it was reported to the developer.
+  - R10: each place keeps one sentence on how speaking works there; the note-woken turn in the owner's chat keeps
+    saying that he sees only what she says there.
+- **R5: accepted, batching first.** Context tokens matter most; effort is tuned only if batching is not enough, and
+  must not invalidate a cache mid-session (a summary runs in its own one-request session, so it cannot).
+- **R6: keep as it is, including the 22-character THINK_FIRST tail.** Removing that hint once raised the error
+  rate clearly; the system prompt alone is not enough.
+- **stay_silent: removed where only `speak` speaks, kept at home.** On a platform, a turn without `speak` is
+  already silent. At home what she writes is what is said, so `stay_silent` is what tells a chosen silence from an
+  empty ending. Xiaoman's condition: compare her platform speaking rate before and after, and bring it back if the
+  rate rises. Her baseline (delivered turns / turns since 2026-10-15): 757 / 843 = 89.8%, by kind external 98.4%,
+  visit 22.5%, scheduled 70%.
+- **Finding 16 (words after speaking): harmless**, read as her mumbling; the deterministic check for words written
+  without any `speak` stays, as it costs no tokens. **Finding 17 (handing over): her judgement.**
+- **Cost to the character brain (R10 + stay_silent):** `speak`'s description -40 characters (it no longer restates
+  where words leave); one tool fewer in platform conversations; the turn guide says the rule once per place
+  (`block_guide.WORDS`, `ENDING`).

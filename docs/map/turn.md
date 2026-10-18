@@ -108,7 +108,7 @@ Role system prompt rendering (ADR-009 §8.1).
 - def `estimate_tokens` — Tokenizer-free upper estimate: one token per CJK character, DSH's characters/4 for everything else.
 - def `seed_estimate` — Estimated tokens of the owner-private render the installed package's own persona and voice seeds make, or None when the package declares neither.
 - def `budget_limit` — The larger of render.budget_tokens and the package's seeds with room to grow, never above the character context window × render.max_window_share; None when nothing bounds it.
-- def `render_system` — Render the current role system prompt for a session class and place; returns (text, system_ref).
+- def `render_system` — Render the current role system prompt for a session class and place, and whether its conversation speaks only through speak; returns (text, system_ref).
 - def `render_status` — The largest render over the places against the budget, for the settings card and memory tab.
 - def `report_budget`
 - def `budget_gate` — For DocumentStore.apply: refuse a persona/voice change that grows an over-budget render, and growth of a note already far over its limit (context_budget.note_gate).

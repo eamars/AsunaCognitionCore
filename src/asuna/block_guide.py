@@ -78,10 +78,20 @@ def strip(context):
     return out
 
 
-def guide(config):
-    """The fixed text of her turns: how a turn goes, what each block is, how to read memories."""
+# How her words leave, said once for the conversation (turn.md's {words} and {ending}): where only speak speaks
+# (a channel that declares reply parts), or where what she writes is what is said.
+WORDS = {False: '你用工具做事；写在正文里的话会按顺序发给对方，和工具调用写在同一步的也一样。',
+         True: '你用工具做事；这里只有 speak 发得出去，正文不发：写在正文里的话只是你自己的。'}
+ENDING = {False: '结束：还有话要说，写一段只有要说的话的正文；说完了或这回合不说话，调用 stay_silent。',
+          True: '结束：要说的话都用 speak 说；说完了或这回合不说话，就不再调用工具：这一回合到此为止，不算漏了什么。'}
+
+
+def guide(config, speaks=False):
+    """The fixed text of her turns: how a turn goes, what each block is, how to read memories. `speaks`: the
+    conversation speaks only through speak."""
     from .context import MEMORY_SOURCE_RULES
     turn = prompt_path(config, 'turn.md').read_text(encoding='utf-8').strip()
+    turn = turn.replace('{words}', WORDS[bool(speaks)]).replace('{ending}', ENDING[bool(speaks)])
     lines = ['# 每回合的资料', '带 _from_program 的块是程序事实；带 _at 的字段是本地钟点，和 clock_from_program 同一时区。'
              '下面是各块的说明，块里不再重复；某块自己带的 note 是这一回合特有的话，以它为准。']
     lines += ['- %s：%s' % pair for pair in DELIVERY]

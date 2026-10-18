@@ -37,7 +37,7 @@ except Exception:                     # 拿不到就整体不带附件位，行�
 # 主动机会给角色看的说明：只说清这是什么、她能选什么，不暗示她该说。
 CHAIN_NOTE = ('群里在跟队形：好几个人接连发了同一样东西，没人叫你。要跟就发同样的东西：一句话就照抄；'
               '是表情包就先用 sticker 的 keep 收下那条的表情包 ref，再单独写「[表情包:名字]」。'
-              '这一串程序只叫你这一次；跟不跟、怎么跟由你定，不跟就 stay_silent。')
+              '这一串程序只叫你这一次；跟不跟、怎么跟由你定，不跟就不发。')
 PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的闸门（安静时段、群里现在的语速、'
                   '同一话题没被接话之前只试一次、不催问）判断现在可以问你一句；值不值得说、'
                   '说多少、还是继续旁听，都由你定。沉默不需要理由，也不因为"有机会"就该开口。'
@@ -46,8 +46,8 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
 
 # ADR-018 §5.7 (owner 2026-10-07): one sentence in public turns. No content from her other conversations.
 # ADR-064 phase 2: where she speaks only through reply.
-REPLY_SENT=('这里只有 speak 发得出去：正文不发。一回合的 text 加起来最多 %d 行：每一行都算，不管分成几条消息；'
-            '空行不算，一个代码块算一行；贴纸、图、戳、点表情不算。不想说出口的放进 think。')
+REPLY_SENT=('一回合 speak 的 text 加起来最多 %d 行：每一行都算，不管分成几条消息；'
+            '空行不算，一个代码块算一行；贴纸、图、戳、点表情不算。')
 ONE_SELF = '你是一个人，同时在好几个对话里；在这里说的话，就是你说的。'
 # ADR-079 §9.5: the one line of a turn where others spoke after the line that called her.
 AMBIGUOUS = '叫你那条之后有 %d 条新话：%s。要引哪条就在 quote 写它的编号（只写数字），不写就不引用；一句话回好几条就不用引。'
@@ -359,7 +359,9 @@ class ContextBuilder:
         moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
         session_class=visibility.session_class(self.store.config,self.store.db,scene,event['person_id'])
         place=visibility.place(self.store.config,self.store.db,scene,event['person_id'])
-        system,system_ref=render_system(self.store,persona,session_class,place)
+        from . import channel_kinds as _kinds
+        system,system_ref=render_system(self.store,persona,session_class,place,
+                                        bool(scene.get('channel_id')) and bool(_kinds.reply_parts(scene['_id'])))
         docs=DocumentStore(self.store,persona)
         persona_doc=docs.read('persona')[1]
         body=render_markdown(readable_sections(persona_doc,visibility.OWNER_PRIVATE))
@@ -1175,8 +1177,9 @@ class ContextBuilder:
             from . import channel_kinds
             replying=bool(channel_kinds.reply_parts(scene['_id']))
             most=int(effective(model,'speak.max_messages',policy) or 1)
-            speak={'sent':(REPLY_SENT%most if replying else
-                           '你这回合写出来的话会作一条消息发出去，写在工具调用旁边的也算；不想说出口的放进 think。'),
+            # How her words leave is said once, in her turn guide for this place (render: speaks); here only the
+            # number that is this turn's.
+            speak={**({'sent':REPLY_SENT%most} if replying else {}),
                    'new_lines':'这段对话里新来的话——包括你这回合中途才到的——你看见了就算你接住了：'
                                '要回就在这回合一起回，它们不会再单独叫你一次。'}
             # Her channel lost or regained a function she uses: said once here, at this turn (ADR-079 §9.7).

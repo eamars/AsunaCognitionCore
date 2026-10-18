@@ -56,11 +56,12 @@ def compose(common, persona_content, voice_content, cls, place=None) -> str:
     return text + ('\n' + voice if voice else '')
 
 
-def role_text(config, rendered):
+def role_text(config, rendered, speaks=False):
     """Her role system prompt: the persona render, then how a turn goes and what its blocks are (block_guide.py,
-    ADR-056). The persona budget bounds the render alone: the guide is the core's, the same for every persona."""
+    ADR-056). The persona budget bounds the render alone: the guide is the core's, the same for every persona.
+    `speaks`: the conversation speaks only through speak (the guide says how her words leave, once)."""
     from .block_guide import guide
-    return rendered + '\n\n' + guide(config)
+    return rendered + '\n\n' + guide(config, speaks)
 
 
 def largest(common, persona_content, voice_content):
@@ -131,8 +132,9 @@ def budget_limit(store, persona):
     return min(limit, cap) if limit and cap else limit or cap
 
 
-def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE, place=None):
-    """Render the current role system prompt for a session class and place; returns (text, system_ref)."""
+def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE, place=None, speaks=False):
+    """Render the current role system prompt for a session class and place, and whether its conversation speaks only
+    through speak; returns (text, system_ref)."""
     docs = DocumentStore(store, persona)
     persona_rev, persona_doc = docs.read('persona')
     if persona_doc is None:
@@ -141,9 +143,9 @@ def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE, plac
     common = common_text(store.config)
     from .memory_tiers import placed                 # ADR-062: what is carried follows its place when tiers are on
     text = role_text(store.config, compose(common, placed(store, persona, 'persona', persona_doc),
-                                           placed(store, persona, 'voice', voice_doc), cls, place))
+                                           placed(store, persona, 'voice', voice_doc), cls, place), speaks)
     ref = {'persona_doc_revision': persona_rev, 'voice_doc_revision': voice_rev, 'session_class': cls, 'place': place,
-           'common_sha256': sha(common.encode()), 'render_sha256': _remember(text)}
+           'speaks': bool(speaks), 'common_sha256': sha(common.encode()), 'render_sha256': _remember(text)}
     report_budget(store, persona, persona_doc, voice_doc, common)
     return text, ref
 
@@ -222,7 +224,8 @@ def system_for(store, ref: dict, *, stream: str | None = None, scope: str = 'ope
         revisions.append(revision['content'] if revision else None)
     common = common_text(store.config)
     text = role_text(store.config, compose(common, revisions[0], revisions[1],
-                                           ref.get('session_class', visibility.OWNER_PRIVATE), ref.get('place')))
+                                           ref.get('session_class', visibility.OWNER_PRIVATE), ref.get('place')),
+                     ref.get('speaks', False))
     digest = _remember(text)
     if digest != ref['render_sha256'] and stream:
         store.audit(stream, 'system.render_drift', {'expected': ref['render_sha256'], 'actual': digest,

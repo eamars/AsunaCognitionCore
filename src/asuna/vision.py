@@ -34,6 +34,9 @@ IMAGE_MEDIA_TYPES = ('image/png', 'image/jpeg', 'image/webp', 'image/gif')
 # 在拉取这一步拦下 5 MiB 的照片只是我们自己加的围栏，不是路由的能力边界。
 DEFAULT_MAX_BYTES = 8 * 1024 * 1024
 HARD_MAX_BYTES = 8 * 1024 * 1024
+# A video is downloaded only to cut its contact sheet (animated.video_snapshot); its bytes are never stored.
+VIDEO_MAX_MB = 32
+VIDEO_MAX_BYTES = VIDEO_MAX_MB * 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 15
 MAX_ITEMS_PER_MESSAGE = 8
 SCENE_SCAN_MESSAGES = 50
@@ -62,6 +65,11 @@ TRY_LATER = '可以过一会儿再试一次；还不行就不看这张，照实�
 
 def _too_large(cap):
     return ValueError('IMAGE_TOO_LARGE: 图片超过程序上限 %.1f MiB（%d 字节）；%s' % (cap / 1048576, cap, GIVE_UP))
+
+
+def _video_too_large(size=None):
+    shown = '%.1f MB' % (size / 1048576) if size else '超过上限'
+    return 'VIDEO_TOO_LARGE: 视频 %s，超过上限 %d MB，没下载；%s' % (shown, VIDEO_MAX_MB, GIVE_UP)
 
 
 def _not_a_picture(declared=''):
@@ -136,6 +144,17 @@ def sniff_media_type(data):
         return 'image/gif'
     if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
         return 'image/webp'
+    return None
+
+
+def sniff_video_type(data):
+    """A video container by its magic number: MP4/MOV (ftyp), WebM/Matroska (EBML), AVI."""
+    if len(data) >= 12 and data[4:8] == b'ftyp':
+        return 'video/mp4'
+    if data.startswith(bytes.fromhex('1a45dfa3')):
+        return 'video/webm'
+    if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'AVI ':
+        return 'video/x-msvideo'
     return None
 
 
@@ -243,14 +262,14 @@ def sticker_kind(item):
 
 
 def attachments_of(message, *, config=None, limit=MAX_ITEMS_PER_MESSAGE):
-    """一条消息 → 有界附件清单（只列图片；其它类型只保留占位符事实）。"""
+    """一条消息 → 有界附件清单（图片和视频；其它类型只保留占位符事实）。"""
     block = media_block(message)
     if not block:
         return []
     vision = vision_capability(config or {})
     out = []
     for index, item in enumerate(block.get('items') or []):
-        if not isinstance(item, dict) or item.get('type') != 'image':
+        if not isinstance(item, dict) or item.get('type') not in ('image', 'video'):
             continue
         if len(out) >= limit:
             break
@@ -259,7 +278,7 @@ def attachments_of(message, *, config=None, limit=MAX_ITEMS_PER_MESSAGE):
         name = file_field(item.get('file'))
         parsed = urlsplit(url) if url else None
         host = (parsed.hostname or '') if parsed else ''
-        entry = {'ref': ref_of(message_id, index), 'type': 'image',
+        entry = {'ref': ref_of(message_id, index), 'type': item['type'],
                  'placeholder': _clean(item.get('placeholder'), 120),
                  'source_message_id': message_id,
                  'declared_bytes': _clean(item.get('size'), 16),
@@ -288,8 +307,11 @@ def attachments_of(message, *, config=None, limit=MAX_ITEMS_PER_MESSAGE):
         # 路径真能不能读由拉取那一侧按会话类别决定（群里调它吃 IMAGE_PATH_HOME_ONLY）。
         local_ok = bool(name and ((bool(vision['image_dirs']) and '/' not in name and '\\' not in name)
                                   or path_form(name)))
+        declared = int(_clean(item.get('size'), 16)) if _clean(item.get('size'), 16).isdigit() else 0
         if item.get('unreadable'):
             reason = 'unreadable（' + _clean(item['unreadable'], 80) + '）'
+        elif item['type'] == 'video' and declared > VIDEO_MAX_BYTES:
+            reason = 'too_large（' + _video_too_large(declared).split(': ', 1)[1].split('；')[0] + '）'
         elif 'image' not in vision['input_modalities']:
             # 路由本身不收图：清单里就标不可拉，别让她以为拉了能看到东西。
             reason = 'route_declares_image_input=false（当前模型路由不收图片）'
@@ -414,7 +436,8 @@ class _KeepInsideAllowList(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=visibility.PUBLIC, task_dir=None):
+def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=visibility.PUBLIC, task_dir=None,
+               video=False):
     """按元数据把图片字节拉回来。返回 (bytes, media_type, via, source)。失败一律抛真实错误码。
 
     只用标准库：这条路径要能在没有第三方 HTTP 库的离线自检里真跑一次真实 socket，
@@ -424,7 +447,7 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=vis
     （绝对路径 / ``/task/…``）就读那一个文件——路径只在 owner_private 的会话放行，判在 read_image_for_task。
     """
     vision = vision_capability(config)
-    cap = min(int(max_bytes or vision['max_bytes']), HARD_MAX_BYTES)
+    cap = VIDEO_MAX_BYTES if video else min(int(max_bytes or vision['max_bytes']), HARD_MAX_BYTES)
     path_source = ''                  # 字节来自本机某个文件时写它（source['path']，来源登记用它）
     if entry.get('pull_via') == 'url':
         url = _clean(entry.get('url'), URL_LIMIT)
@@ -450,7 +473,7 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=vis
                         break
                     total += len(part)
                     if total > cap:
-                        raise _too_large(cap)
+                        raise ValueError(_video_too_large()) if video else _too_large(cap)
                     chunks.append(part)
                 data = b''.join(chunks)
         except _RedirectDenied as exc:
@@ -502,8 +525,10 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=vis
         final_host = ''
     else:
         raise ValueError('IMAGE_SOURCE_UNAVAILABLE: 这张图没有能拉的来源（没有可用的链接，也没有本机文件）；' + GIVE_UP)
-    media_type = sniff_media_type(data)
+    media_type = sniff_video_type(data) if video else sniff_media_type(data)
     if media_type is None:
+        if video:
+            raise ValueError('VIDEO_TYPE_UNSUPPORTED: 拿到的内容不是认得的视频（mp4/mov/webm/avi，按文件头判断）；' + GIVE_UP)
         raise _not_a_picture(_clean(content_type, 80))
     if not data:
         raise ValueError('IMAGE_EMPTY: 拉回来是空的（0 字节）；' + TRY_LATER)
@@ -595,10 +620,19 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
         media_type, via, source = sniff_media_type(data), 'blob', {'host': '', 'content_type': ''}
     else:
         full = {**entry, **media_source(store, task, config, entry)}
-        data, media_type, via, source = pull_bytes(full, config, max_bytes=max_bytes)
+        data, media_type, via, source = pull_bytes(full, config, max_bytes=max_bytes, video=entry['type'] == 'video')
         blob = None
+    video = None
+    if entry['type'] == 'video':
+        # The video becomes its contact sheet now and its bytes are dropped: only the sheet is stored (media_life).
+        sheet, words = animated.video_snapshot(data)
+        if sheet is None:
+            raise ValueError(words['error'] + '；' + GIVE_UP)
+        video = {'media_type': media_type, 'bytes': len(data), 'sha256': sha(data)}
+        data, media_type = sheet, 'image/png'
     digest = sha(data)
-    shown, moving = animated.seen(data, media_type)
+    shown, moving = (animated.seen(data, media_type) if video is None
+                     else ({'media_type': media_type, 'data': base64.b64encode(data).decode()}, words))
     if blob is None:
         # 字节按**本任务**的 scope 落盘：图来自联动场景也不会写进别人场景的账本。
         blob = (blobs.put(data, task['scope_key'], 'image', media_type=media_type,
@@ -611,7 +645,7 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
                'sticker': entry.get('sticker') or None, 'media_type': media_type, 'bytes': len(data), 'sha256': digest, 'pulled_via': via,
                'source': source, 'blob_artifact': (blob or {}).get('artifact_id'),
                'blob_sha256': (blob or {}).get('sha256'),
-               'image': shown, **({'animated': moving} if moving else {}),
+               'image': shown, **({'animated': moving} if moving else {}), **({'video': video} if video else {}),
                'visual': 'awaiting_attachment',
                'note': '图片字节已按本次调用真实拉取；此前正文里的占位符只说明这里出现过一张图，不代表内容已被读过。'}
     if payload['linked_scene']:
@@ -764,11 +798,12 @@ def line_refs(message, config, recognize=None):
     known = recognize(every) if recognize else {}
     entries = [entry for entry in every
                if entry.get('pullable') or entry.get('sticker') == 'market' or entry['ref'] in known]
-    pictures = [entry['ref'] for entry in entries if not entry.get('sticker')]
+    pictures = [entry['ref'] for entry in entries if not entry.get('sticker') and entry['type'] == 'image']
+    videos = [entry['ref'] for entry in entries if entry['type'] == 'video']
     stickers = [entry['ref'] + ('，' + known[entry['ref']] if entry['ref'] in known else '')
                 for entry in entries if entry.get('sticker')]
     # A sticker's ref is also what keeping it takes (ADR-016); a store sticker can be kept without looking.
-    return (('（图 ref：' + '、'.join(pictures) + '）') if pictures else '') + \
+    return (('（图 ref：' + '、'.join(pictures) + '）') if pictures else '') +            (('（视频 ref：' + '、'.join(videos) + '）') if videos else '') + \
            (('（表情包 ref：' + ('；' if known else '、').join(stickers) + '）') if stickers else '')
 
 
@@ -780,7 +815,7 @@ def media_note(message, config):
     # Her own route decides whether she can look herself; the action brain's is what a delegation would use.
     capability = vision_capability(config, 'character')
     items = attachments_of(message, config=config)
-    others = [item for item in (block.get('items') or []) if isinstance(item, dict) and item.get('type') != 'image']
+    others = [item for item in (block.get('items') or []) if isinstance(item, dict) and item.get('type') not in ('image', 'video')]
     note = {'items': items or None,
             'other_media_placeholders': [_clean(item.get('placeholder'), 120) for item in others][:MAX_ITEMS_PER_MESSAGE] or None,
             'count': block.get('count'), 'truncated': bool(block.get('truncated')),
@@ -802,7 +837,8 @@ READ_IMAGE_TOOL = {
     'description': ('看一张图：ref 照抄图旁标的 ref，或附件清单（attachments、media_from_program）里的，7 天内都认；'
                     '也可以是一张存好的图的 artifact_id（blob-…），比如你自己画的、这回合能发的，画完或发之前用它看一遍。'
                     '没调用就是没看过。家里还能看你别的对话里 7 天内的图，也能读盘上的图（ref 写绝对路径，'
-                    '或行动任务工作区里的 /task/… 路径）。看不了会照实说原因。'),
+                    '或行动任务工作区里的 /task/… 路径）。视频的 ref 也认：给你按时间截的一张格子图（没有声音），'
+                    '视频超过 %d MB 不下载。看不了会照实说原因。' % VIDEO_MAX_MB),
     'parameters': {'ref': {'type': 'string', 'required': True}}}
 
 

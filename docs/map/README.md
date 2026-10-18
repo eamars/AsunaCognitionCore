@@ -298,6 +298,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures.
 - [`stickers`](../../src/asuna/stickers.py) — Her sticker shelf and the platform's own faces (ADR-016).
 - [`vision`](../../src/asuna/vision.py) — 入站图片元数据与行动脑 DSH ``read_image`` 接线。
 - [`media_keys`](../../src/asuna/media_keys.py) — Current signatures for a platform's media links (ADR-035).
+- [`media_life`](../../src/asuna/media_life.py) — How long stored media bytes live: every kind of stored picture has an owner or an expiry.
 - [`outbound_media`](../../src/asuna/outbound_media.py) — 出站图片附件：她的 attach_image 工具 → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
 - [`animated`](../../src/asuna/animated.py) — Animated pictures as something a still-image model can see: one labelled contact sheet plus words.
 

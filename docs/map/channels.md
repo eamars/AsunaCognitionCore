@@ -176,13 +176,14 @@ Her sticker shelf and the platform's own faces (ADR-016).
 - def `media_block` — adapter 注入的规范化媒体块；没有就 None。宿主不解析 OneBot raw，只认这个命名空间。
 - def `host_allowed` — 白名单：精确主机名，或以点开头的条目允许其子域。大小写不敏感。
 - def `sniff_media_type` — 只认魔数。声明的 content-type 只作为附带信息，不作为依据。
+- def `sniff_video_type` — A video container by its magic number: MP4/MOV (ftyp), WebM/Matroska (EBML), AVI.
 - def `path_form` — 'task' 是 /task/…（行动任务自己的工作区），'absolute' 是本机绝对路径，别的都不是路径。
 - def `file_field` — 消息写的那个文件：裸文件名照旧截到 120 字，路径形态留足长度（不然长路径会被截成另一个文件）。
 - def `local_uploads` — Pictures the owner attached in her local chat → her images in that chat (BlobStore, kind image) and the media block her input row records, the same shape a platform adapter writes.
 - def `local_upload_item` — A picture the program stored itself from the owner's local chat: never a platform message's claim.
 - def `vision_capability` — 这条模型路由现在到底能不能收图：只看配置声明，不看模型名字。route 是 executor（行动脑）或 character（角色脑）。
 - def `sticker_kind` — 'market' (a store sticker the platform can send again by its ids), 'custom' (a picture sent as a sticker: kept by its bytes), or None (a photo).
-- def `attachments_of` — 一条消息 → 有界附件清单（只列图片；其它类型只保留占位符事实）。
+- def `attachments_of` — 一条消息 → 有界附件清单（图片和视频；其它类型只保留占位符事实）。
 - def `readable_image_scenes` — 本任务能读图的范围：本场景（围栏照旧）+ 配置声明的只读联动场景（A2 同一口径）。
 - def `scene_attachments` — 本场景（外加按配置只读联动的场景）最近的入站图片。范围由任务绑定，参数换不了它。
 - def `attachment_by_ref` — (entry, listing): the attachment a ref names among the pictures of the last REF_DAYS days in this conversation and its linked scenes (the same fence as scene_attachments), or (None, listing).
@@ -216,6 +217,16 @@ Current signatures for a platform's media links (ADR-035).
 - def `current`
 - def `sign` — (url, signature): signature None for a link that carries none, 'renewed' once signed with the current key, 'unavailable' when no current key is known (the link goes out as stored).
 - def `forget` — Tests: start from no keys.
+
+## `media_life`
+
+[src/asuna/media_life.py](../../src/asuna/media_life.py)
+
+How long stored media bytes live: every kind of stored picture has an owner or an expiry.
+
+- def `life` — The life cycle of an artifacts row: by its first source id; anything not listed is kept.
+- def `named` — Artifact ids a lasting row names.
+- def `sweep` — Delete expired pulled copies and unlisted pool candidates; returns {'pulled': n, 'listed': n, 'bytes': n}.
 
 ## `outbound_media`
 
@@ -263,4 +274,5 @@ Current signatures for a platform's media links (ADR-035).
 Animated pictures as something a still-image model can see: one labelled contact sheet plus words.
 
 - def `snapshot` — (png bytes, words) for an animated picture; (None, words) when it could not be split; None when still.
+- def `video_snapshot` — (png bytes, words) for a video, or (None, words) with the reason it could not be split.
 - def `seen` — What the model is given for these bytes: ({'media_type', 'data'}, words or None).

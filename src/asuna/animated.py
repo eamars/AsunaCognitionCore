@@ -178,6 +178,97 @@ def snapshot(data):
     return sheet, words
 
 
+# A video is sampled the same way, by seeking: SAMPLES even moments are read (whatever its length), every
+# SAMPLES // CELLS-th of them is a cell, the rest measure motion and what the cells miss.
+SAMPLES = CELLS * 4
+VIDEO_NOTE = ('这是程序从视频里按时间截出的静止格子，不是视频本身：格与格之间的动作、一闪而过的画面都可能没截到；'
+              '格子里没有声音。')
+VIDEO_CELLS_NOTE = ('图里是按时间均匀取的 %d 个时刻，相邻看起来一样的已合成一格，共 %d 格；从左到右、从上到下，'
+                    '每格下面标着第几格和它在视频里的时刻（秒）。')
+SOUND = ('视频里有声音，这里听不到：有没有人说话、说了什么，从格子里看不出来', '视频里没有声音轨')
+VIDEO_UNREADABLE = 'VIDEO_NOT_SPLIT: 这段视频拆不开（%s），没有截图可看'
+VIDEO_NO_DECODER = 'VIDEO_NOT_SPLIT: 程序这边没装视频解码（av），这段视频看不了；重试也一样'
+
+
+def _video_frames(data):
+    """(seconds, has_sound, [(moment ms, RGBA frame)] at SAMPLES even moments) or an error string."""
+    try:
+        import av
+    except ImportError:
+        return VIDEO_NO_DECODER
+    try:
+        container = av.open(io.BytesIO(data))
+    except Exception as exc:               # noqa: BLE001 not a video the decoder knows
+        return VIDEO_UNREADABLE % type(exc).__name__
+    with container:
+        stream = next((item for item in container.streams if item.type == 'video'), None)
+        if stream is None:
+            return VIDEO_UNREADABLE % '里面没有画面'
+        seconds = (float(stream.duration * stream.time_base) if stream.duration
+                   else container.duration / 1_000_000 if container.duration else 0)
+        if seconds <= 0:
+            return VIDEO_UNREADABLE % '读不出时长'
+        sound = any(item.type == 'audio' for item in container.streams)
+        frames = []
+        try:
+            for k in range(SAMPLES):
+                moment = seconds * k / SAMPLES
+                container.seek(int(moment / stream.time_base), stream=stream, backward=True)
+                picked = None
+                for frame in container.decode(stream):
+                    picked = frame
+                    if frame.time is None or frame.time >= moment - 0.001:
+                        break
+                if picked is None:
+                    break
+                image = picked.to_image()
+                image.thumbnail((CELL_EDGE * 2, CELL_EDGE * 2))
+                frames.append((int(moment * 1000), image.convert('RGBA')))
+        except Exception as exc:           # noqa: BLE001 a truncated file: what was read so far still counts
+            if not frames:
+                return VIDEO_UNREADABLE % type(exc).__name__
+    if not frames:
+        return VIDEO_UNREADABLE % '一帧都没读出来'
+    return seconds, sound, frames
+
+
+def video_snapshot(data):
+    """(png bytes, words) for a video, or (None, words) with the reason it could not be split."""
+    made = _video_frames(data)
+    if isinstance(made, str):
+        return None, {'error': made}
+    seconds, sound, frames = made
+    thumbs = [frame.convert('L').resize((THUMB, THUMB)) for _, frame in frames]
+    step = max(1, len(frames) // CELLS)
+    picks = []                             # [(sample index, first moment, last moment)]
+    for index in range(0, len(frames), step)[:CELLS]:
+        moment = frames[index][0]
+        if picks and _diff(thumbs[picks[-1][0]], thumbs[index]) <= SAME:
+            picks[-1] = (picks[-1][0], picks[-1][1], moment)
+        else:
+            picks.append((index, moment, moment))
+    chosen = [index for index, _, _ in picks]
+    labels = ['%d · %ss' % (n + 1, _seconds(first)) if first == last else
+              '%d · %s-%ss' % (n + 1, _seconds(first), _seconds(last)) for n, (_, first, last) in enumerate(picks)]
+    changes, anchor = 0, thumbs[0]
+    for thumb in thumbs[1:]:
+        if _diff(anchor, thumb) > CHANGE:
+            changes, anchor = changes + 1, thumb
+    missed = sum(_diff(thumbs[i], thumbs[min(chosen, key=lambda c: abs(c - i))]) > APART
+                 for i in range(len(frames)) if i not in chosen)
+    words = {'kind': '视频快照',
+             'what': '视频约 %s 秒；%s' % (_seconds(int(seconds * 1000)), SOUND[0] if sound else SOUND[1]),
+             'cells': VIDEO_CELLS_NOTE % (len(range(0, len(frames), step)[:CELLS]), len(picks)),
+             'motion': next(text for limit, text in MOTION if changes <= limit),
+             'missed': next(text for limit, text in MISSED if missed / len(frames) <= limit),
+             'note': VIDEO_NOTE}
+    try:
+        sheet = _sheet([(frames[index][1], label) for index, label in zip(chosen, labels)])
+    except Exception as exc:               # noqa: BLE001
+        return None, {'error': VIDEO_UNREADABLE % type(exc).__name__}
+    return sheet, words
+
+
 def seen(data, media_type):
     """What the model is given for these bytes: ({'media_type', 'data'}, words or None)."""
     import base64

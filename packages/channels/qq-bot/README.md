@@ -21,8 +21,9 @@ sits beside [QQ through NapCat](../napcat-qq/README.md): a profile may have eith
     `/v2/groups/{group_openid}/info`), read once a day per group and kept with when it was read in the bridge's
     state file (`groups`). A bot the platform refuses that lookup gets no name, and the group shows none.
   - Other people's @ read as `@<openid>`.
-  - Pictures arrive as `[图片（未解析）]` with their link in `raw.asuna_media`, so she can read them. Video, voice
-    and files arrive as placeholders; a voice message carries the platform's transcript when it has one.
+  - Pictures and videos arrive as `[图片（未解析）]` / `[视频（未解析）]` with their link in `raw.asuna_media`, so she
+    can read them (a video as a contact sheet). Voice and files arrive as placeholders; a voice message carries the
+    platform's transcript when it has one.
   - Platform faces read as `[表情]`.
   - The platform's own send time is `occurred_at`. A message pushed twice is posted once.
 - **Outbound:** her words, with one picture where the outbox item carries one (`supports=image`). She speaks here

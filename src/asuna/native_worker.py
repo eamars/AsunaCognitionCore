@@ -608,7 +608,8 @@ class BusinessWorker:
         return 'asuna-action-' + sha(identity.encode())[:32]
 
     def audit_retention(self):
-        """ADR-074: the audit, bounded by time and by size, is pruned once at start and then daily."""
+        """ADR-074: the audit, bounded by time and by size, is pruned once at start and then daily; stored pictures
+        are swept by their life cycle (media_life) on the same beat."""
         from .audit import prune
         while True:
             try:
@@ -617,6 +618,14 @@ class BusinessWorker:
                     self.app.evidence.record('audit.pruned', {'deleted': deleted})
             except Exception as exc:
                 self.app.evidence.record('audit.prune_failed', {'error': redact_text(str(exc), self.app.config)[:300]})
+            try:
+                # Stored pictures live by media_life.POLICY: expired copies and unlisted candidates go.
+                from . import media_life
+                removed = media_life.sweep(self.app.store)
+                if removed['pulled'] or removed['listed']:
+                    self.app.evidence.record('media.swept', removed)
+            except Exception as exc:
+                self.app.evidence.record('media.sweep_failed', {'error': redact_text(str(exc), self.app.config)[:300]})
             if self.stopping.wait(24 * 3600):
                 return
 

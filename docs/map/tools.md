@@ -267,7 +267,7 @@ Refusal probe (ADR-080): can the model under test do what the character brain ne
   - `call`
 - def `to_openai`
 - def `post`
-- class `Scripted` — Offline stand-in (tests, --dry-run): each turn thinks once, then says one line or stays silent.
+- class `Scripted` — Offline stand-in (tests, --dry-run): each turn thinks once, then ends without speaking.
   - `call`
 - def `reply`
 - def `dsh_schemas` — Every character-brain tool's JSON Schema from DSH's own conversion (dsh-tools parameterSchemaSpecToJsonSchema), so the model sees what a live turn sends.

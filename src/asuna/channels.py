@@ -487,7 +487,8 @@ class Channels:
                 if row and row.get('not_before') and row['not_before'] > now():
                     row = None
                 if row and row.get('segment_index') and self.store.db.messages.find_one({'episode_id': row['episode_id'],
-                        'phase': 'SPEAK', 'segment_index': {'$lt': row['segment_index']}, 'delivery_state': {'$ne': 'DELIVERED'}}):
+                        'phase': 'SPEAK', 'segment_index': {'$lt': row['segment_index']},
+                        'delivery_state': {'$nin': ['DELIVERED', 'CANCELLED_BY_HER']}}):   # one she took back is settled
                     row = None
                 if row:
                     try:
@@ -616,6 +617,10 @@ class Channels:
                            'platform_message_id': body.get('platform_message_id'), 'receipt_at': now(),
                            'delivery_basis': 'platform_ack' if state == 'DELIVERED' else status},
                            expected=row['revision'], stream=row['episode_id'])
+            act = row.get('action') or {}
+            if state == 'DELIVERED' and act.get('kind') == 'recall' and act.get('line'):
+                # Her own line taken back: the line itself now says so wherever the program shows it again.
+                self.store.db.messages.update_one({'_id': act['line']}, {'$set': {'recalled_at': now()}})
             if state != 'DELIVERED':
                 from .publish import PublishService
                 PublishService(self.store).cancel_after({**row, 'delivery_state': state})

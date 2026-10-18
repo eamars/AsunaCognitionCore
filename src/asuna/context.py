@@ -392,7 +392,8 @@ class ContextBuilder:
             'attachment':1,'attachment_skipped':1,   # 附件位：只多带这两个小字段，字节仍在 BlobStore
             'occurred_at':1,'event.raw.'+caught_up.CATCHUP_KEY:1,   # a caught-up line shows when it was said
             'platform_receipt.response.verification':1,   # what of her line the platform really stored
-            'event.raw.asuna_notice':1}                   # a platform notice is the program's line (notices.py)
+            'event.raw.asuna_notice':1,                   # a platform notice is the program's line (notices.py)
+            'recalled_at':1}                              # a line of hers she took back (role_tools._recall_part)
         if read['linked_scenes']:
             # 只在真联动时多带这几个字段：归并要有可比的时间，行上也要能看出是哪个入口说的。
             history_projection=dict(history_projection,scene_id=1,occurred_at=1,receipt_at=1,
@@ -417,12 +418,21 @@ class ContextBuilder:
         for row in history:
             if ((row.pop('event', None) or {}).get('raw') or {}).get('asuna_notice'):
                 row['notice']=notices.HISTORY_WORD
+            if row.pop('recalled_at',None):
+                row['recalled']='你撤回了这句'
             # The platform took the line but stored less of it (a face, a quote): she reads which part did not land.
             lost=landing_lost((row.pop('platform_receipt',None) or {}).get('response',{}).get('verification'))
             if lost:row['not_landed']=lost
-        undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1,'platform_receipt.response.reason':1}).sort('scene_seq',-1).limit(4))
+        undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1,'platform_receipt.response.reason':1,'platform_receipt.response.retcode':1,'action.kind':1}).sort('scene_seq',-1).limit(4))
         for row in undelivered:
             row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
+            response=((row.get('platform_receipt') or {}).get('response') or {})
+            if (row.pop('action',None) or {}).get('kind')=='recall' and row.get('delivery_state') in ('FAILED','UNKNOWN'):
+                # Her taking back a line of hers that did not go through, said as such (her ask): never left as "handed over".
+                row.pop('platform_receipt',None)
+                row['delivery_state']=('撤回没成：平台没执行' if row['delivery_state']=='FAILED' else '撤回不知道成没成：平台没回话') \
+                    +('（%s）'%(response.get('reason') or 'retcode %s'%response.get('retcode')) if response.get('reason') or response.get('retcode') is not None else '')
+                continue
             reason=((row.pop('platform_receipt',None) or {}).get('response') or {}).get('reason')
             # In words (AGENTS.md): an unknown send has most likely arrived, so she does not send it twice.
             row['delivery_state']=(own_mute.FAILED_WORDS if row.get('delivery_state')=='FAILED' and reason==own_mute.REASON

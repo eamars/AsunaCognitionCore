@@ -25,8 +25,10 @@ for _row in _FACE_ROWS:                # a renamed face keeps its old names (`al
         FACES.setdefault(_alias, _row['id'])
 REQUESTS = True                   # friend and group requests reach her home, which answers them (qqadapter/notices.py)
 STICKERS = True                   # the adapter can send a sticker: a picture marked as one, or a store sticker
-# What her reply is made of here (ADR-064 phase 2): she speaks only through `reply`, in these parts.
-REPLY_PARTS = ('text', 'sticker', 'picture', 'poke', 'react')
+# What her reply is made of here (ADR-064 phase 2): she speaks only through `speak`, in these parts.
+REPLY_PARTS = ('text', 'sticker', 'picture', 'poke', 'react', 'recall')
+# QQ lets anyone take back their own message for two minutes (a group's owner or admin longer).
+OWN_RECALL_SECONDS = 120
 
 
 def sticker_of(item):

@@ -266,7 +266,7 @@ No other turn gets it.
 - a `react` part of `speak`: `line` = a number or `这条`; whose line it is follows from the line (`who` with
   `这条/刚才那条` goes).
 - `group_action` recall: the same `line` value (`which: 这条/他刚才那条` goes).
-- A text part that contains `〔n〕` is refused: the number is for choosing, not for the people she talks to.
+- A text part that contains `〔n〕` is refused: `编号是挑引用用的，不写进你说的话里。`
 
 **Where nothing changes or less is shown.** Home lines show no numbers and have no quoting. Private chats: see §9.1 (the
 owner's scope puts them in). Kazusa's QQ Bot conversations show no numbers, and her `speak` there
@@ -460,7 +460,7 @@ The pointed-at line is always shown as number, speaker (her own lines as `你`) 
 - `group_action` recall: `line`, the same value.
 - The description carries two examples: quoting her own line to amend it, and a line that sums up several lines,
   which needs no quote.
-- A text part containing `〔n〕` is refused with the reason: the number is for choosing, not for the people she talks to.
+- A text part containing `〔n〕` is refused with the reason `编号是挑引用用的，不写进你说的话里。`
 
 ### 9.5 What she gets back
 
@@ -539,12 +539,19 @@ The inbound gates open in step 1, the outbound ones in step 2. QQ Bot's bridge m
    Acceptance on her live page, with one real probe each (the owner's or a group member's help for the inbound
    ones): a quote between two other people in a group, a quote of her line in a group, a quote in a private chat,
    a quote with no words, a reaction to her line, a reaction between others, a recall. Each must read as in 9.3.
-   Two of them may have no natural sample yet (a quote with no words; a reaction between others, never stored
-   until now): the owner makes them in the family group himself, as his own messages, after step 1 is live (before it, they would
+   Samples, counted by Xiaoman over the last 7 days (about 14:20 NZDT): quotes between other people in groups 3,506
+   (19 groups), quotes of her line 559, reactions to her lines 28, quotes of a line Core does not know 20 (5 groups,
+   for `回复了一条更早的消息`) are there already. A private-chat quote (0: the gate is shut today), a quote with no
+   words (the 7 old ones hold only the placeholder text) and a reaction between others (never stored) have none.
+   Recalls do happen: NapCat posted 21–62 a day to Core in the last week (its notice counts), but Core holds a group
+   notice in memory and never stores it, so the database has none; one comes on its own. The three without a
+   sample: the owner makes them in the family group himself, as his own messages, after step 1 is live (before it, they would
    only show today's placeholder or nothing); Claude tells Xiaoman before he sends them. Then, for her first days, how
    many times a text part was refused for containing `〔n〕` is reported to her (her ask: she has not tested whether
-   she would write a number into what she says). The refusal says why: the number is for choosing a quote and does
-   not go into her words.
+   she would write a number into what she says). The refusal, in her words: `编号是挑引用用的，不写进你说的话里。`
+
+   Each of the seven is recorded as one line: which, when (her clock), and the line as her page shows it, copied;
+   Xiaoman judges it against 9.3 and posts the result, pass or not.
 2. Choose: `speak.quote` / `line` values of 9.4, the echo and the ambiguous-turn line of 9.5, the program's quoting
    rule removed, `quote_of` split from `reply_to` (9.6), NapCat private quotes outbound.
 3. Per-session definitions and capabilities (9.7), together with Kazusa's `speak` (QQ Bot agent), and its inbound
@@ -611,8 +618,9 @@ quotes at all, and how often the ambiguous-turn line was followed by a quote. He
    that the function is unavailable, or she would take it for her own fault; and it is said again when the function
    comes back. The Host-log line for an undeclared capability is for the developers; this line is hers.
 4. Checking what adapters claim (Xiaoman, about 14:07): "not declared = not carried" stops a capability nobody
-   declared, not one declared and not done. Step 1's acceptance sends one real probe for each declared capability on
-   NapCat (quote out and in, in a group and a private chat; a reaction; a recall), and a quote that does not land stays
+   declared, not one declared and not done. Each step's acceptance checks every capability that step opens with a
+   real sample on NapCat: step 1 the inbound ones (quotes in a group and a private chat, reactions, recalls), step 2
+   the outbound ones (her quote in a group and a private chat, her reaction, her recall); and a quote that does not land stays
    told to her (`landing_lost`), never silent.
 5. For the owner (Xiaoman): QQ Bot is another account with other ids, so the same group seen from both is two
    conversations: if Xiaoman's own QQ moved to QQ Bot, her groups, notes and people there would start again as new;

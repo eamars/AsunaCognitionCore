@@ -321,7 +321,7 @@ In this order, as the owner set it:
 2. **Cost**: added prompt and completion tokens per turn, on each model.
 3. **Consistency** with the other things she reads: a pointer looks the same whoever made it.
 
-### 8.5 Results (run 2026-10-18 13:2x–13:5x NZDT)
+### 8.5 Results (run 2026-10-18 13:3x–13:5x NZDT)
 
 600 runs (15 moments × 4 designs × 5 runs × 2 models), plus 120 follow-up runs of two variants of B. Models:
 the local model behind her character brain (reasoning effort medium) and `deepseek-flash` (medium). A test persona

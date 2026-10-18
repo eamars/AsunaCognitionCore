@@ -135,6 +135,9 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `renamed` — An old name's call as its tool and arguments: the option added, review_idea's idea (an id) as id.
 - def `specs` — The worker-side tool specs the plugin registers (name, description, parameters).
 - def `all_specs` — Her tools, and each old name registered but never listed, so a call by it still reaches the worker.
+- def `speak_kinds` — The parts speak takes in this conversation: its kind's parts, a pointer part only where the channel's adapter declared it (ADR-079 §9.7: not declared is not carried, so it is not shown).
+- def `speak_spec` — speak as a conversation with these parts shows it, with `quote` only where her line can quote.
+- def `session_specs` — Her tools as one conversation shows them (ADR-079 §9.7): `speak` with the parts and the quote its channel's adapter declared, the rest as all_specs.
 - def `aliases` — Old name -> the tool it runs as (the plugin lets one through where that tool is listed).
 - def `turn_kind`
 - def `exposed` — What this turn may use, by option: the turn's own rules (its kind, context and grants, §2.6) within the conversation's list (abilities).

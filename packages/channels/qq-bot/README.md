@@ -25,7 +25,9 @@ sits beside [QQ through NapCat](../napcat-qq/README.md): a profile may have eith
     and files arrive as placeholders; a voice message carries the platform's transcript when it has one.
   - Platform faces read as `[表情]`.
   - The platform's own send time is `occurred_at`. A message pushed twice is posted once.
-- **Outbound:** her words, with one picture where the outbox item carries one (`supports=image`).
+- **Outbound:** her words, with one picture where the outbox item carries one (`supports=image`). She speaks here
+  only through `speak`, in text and picture parts (the kind's `REPLY_PARTS`); the bridge declares no quote, reaction
+  or recall, so those are not shown to her here.
   - Each message goes out as a reply to the message she answers (`msg_id`, `msg_seq`) while the platform still takes
     replies to it: 60 minutes and 4 replies in a private chat, 5 minutes and 5 replies in a group. After that it
     goes out as her own message.

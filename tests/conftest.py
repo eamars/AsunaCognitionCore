@@ -262,6 +262,8 @@ def store(request):
     shutil.rmtree(WORK/name,ignore_errors=True)   # a reused database gets an empty workspace
     fixture_grant(config,name)
     db=Store(config,name)
+    from asuna import capabilities
+    capabilities.forget()                         # what an adapter declared is kept per run; each test declares its own
     try:
         install_world(db)
         yield db

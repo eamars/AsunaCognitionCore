@@ -15,6 +15,7 @@ Platform account numbers stay in program data: mentions of known people read as 
 from __future__ import annotations
 
 import re
+import threading
 import unicodedata
 
 from . import channel_kinds
@@ -53,7 +54,18 @@ def typed(text):
 
 UNKNOWN_NAME = '还不知道名字'
 REPLY_EXCERPT = 60
-THOUGHT_ANCHOR = 60                 # her thought under a quote of her line: about this long, cut at a sentence end
+POINTED_CHARS = 40                  # the first words of a line something points at: one length everywhere (her choice)
+THOUGHT_ANCHOR = 60                 # her thought under a line of hers someone points at: about this long, cut at a sentence end
+THOUGHT_THEN = '（你说那句时心里想的：%s）'
+# Her lines whose anchor the next turn in a conversation already has: once a turn however many point at it (her rule).
+_ANCHORED = {}
+_anchored_lock = threading.Lock()
+
+
+def anchors_shown(scene_id):
+    """Her turn's context is ready: anchors from here on are for her next turn there."""
+    with _anchored_lock:
+        _ANCHORED.pop(scene_id, None)
 
 
 def anchor(text, limit=THOUGHT_ANCHOR):
@@ -464,16 +476,40 @@ class People:
             return me or self.self_name
         return self.label(self.entry(scene, author, row))
 
-    def pointed(self, scene, row, chars=None):
+    def pointed(self, scene, row):
         """A line another line points at (a quote, a reaction, a recall), in the one form every pointer has
-        (ADR-079 §9.3): its number where the conversation shows numbers, its speaker (hers as 你), its first words."""
+        (ADR-079 §9.3), the same as its own label line: its number where the conversation shows numbers, its speaker
+        (hers as 你), when it was said on her clock, its first words. Number, speaker and time say which line; the
+        words say what it was (her choice: one length, POINTED_CHARS)."""
         from .capabilities import numbered
+        from .caught_up import CATCHUP_KEY, said_at
+        from .schedule_rules import line_stamp, scene_timezone
         said = self.mentions if row.get('direction') == 'outbound' else self.heard
         words = ' '.join(said(scene, row.get('text'), scene.get('channel_account_id')).split())
         number = '〔%d〕 ' % row['scene_seq'] if row.get('scene_seq') and numbered(self.store, scene) else ''
-        limit = chars or REPLY_EXCERPT
-        return '%s%s：%s' % (number, self.speaker(scene, row.get('author'), me='你'),
-                            words if len(words) <= limit else words[:limit] + '…')
+        if not (row.get('received_at') or row.get('receipt_at')) and row.get('_id'):
+            row = {**row, **(self.db.messages.find_one({'_id': row['_id']}, {
+                'received_at': 1, 'receipt_at': 1, 'occurred_at': 1, 'event.occurred_at': 1,
+                'event.raw.' + CATCHUP_KEY: 1}) or {})}
+        stamp = line_stamp(scene_timezone(self.config, scene), said_at(row))
+        return '%s%s%s：%s' % (number, self.speaker(scene, row.get('author'), me='你'), ' ' + stamp if stamp else '',
+                              words if len(words) <= POINTED_CHARS else words[:POINTED_CHARS] + '…')
+
+    def thought_then(self, row, once_in=None):
+        """Under a line of hers that someone else points at (a quote, a reaction, a recall, an essence): what she
+        thought when she said it, as she wrote it (reasons.py, ADR-043), as an anchor, not the whole old thought: read
+        in full it passes for a judgement of now (her choice, ADR-079). None for anyone else's line or no thought."""
+        if not row or row.get('direction') != 'outbound':
+            return None
+        if once_in:
+            with _anchored_lock:
+                shown = _ANCHORED.setdefault(once_in, set())
+                if row['_id'] in shown:
+                    return None             # this turn has it already, under another line pointing at the same one
+                shown.add(row['_id'])
+        from .reasons import for_message
+        then = for_message(self.store, row['_id'])
+        return THOUGHT_THEN % anchor(' '.join(then.split())) if then else None
 
     # A line she can point at: anyone's in this conversation, hers once delivered; a program notice is not one.
     POINTABLE = {'$or': [{'direction': 'inbound', 'event.raw.asuna_notice': {'$exists': False}},
@@ -494,12 +530,13 @@ class People:
         recent = list(self.db.messages.find({'scene_id': scene['_id'], **self.POINTABLE},
                                             {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1})
                       .sort('scene_seq', -1).limit(self.RECENT_LINES))
-        listed = '；'.join(self.pointed(scene, row, 20) for row in reversed(recent)) or '还没有'
+        listed = '；'.join(self.pointed(scene, row) for row in reversed(recent)) or '还没有'
         lead = '〔%s〕 不是这里的一行' % text if text.isdigit() else '写编号（只写数字，在每行末尾的〔〕里）或「这条」'
         return None, '%s；这里最近几行：%s' % (lead, listed)
 
-    def transcript(self, scene, row):
-        """One platform message as it enters her conversation: the speaker's label line, then the message, indented."""
+    def transcript(self, scene, row, once=True):
+        """One platform message as it enters her conversation: the speaker's label line, then the message, indented.
+        `once`: her thought under a line of hers comes once a turn (False for a view outside her conversation)."""
         event = row.get('event') or {}
         group = event.get('group_context') or {}
         account = (event.get('channel') or {}).get('account_id')
@@ -528,23 +565,22 @@ class People:
                                            {'author': 1, 'text': 1, 'direction': 1, 'scene_seq': 1}) if parent_id else None
         if parent:
             lines.append('  > 回复 ' + self.pointed(scene, parent))
-            if parent.get('direction') == 'outbound':
-                # A reply to her own line: what she thought when she said it, as she wrote it (reasons.py, ADR-043).
-                from .reasons import for_message
-                then = for_message(self.store, parent['_id'])
-                if then:
-                    # An anchor, not the whole old thought (her choice, ADR-079): read in full it passes for a
-                    # judgement of now. The whole thought stays where recall finds it.
-                    lines.append('  > （你说那句时心里想的：%s）' % anchor(' '.join(then.split())))
+            then = self.thought_then(parent, scene['_id'] if once else None)
+            if then:
+                lines.append('  > ' + then)
         elif quoted.get('reply_to'):
             lines.append('  > 回复了一条更早的消息')            # a line the program has no record of
         body = self.heard(scene, row.get('text') or '', account)
+        notice_then = None
         if (event.get('raw') or {}).get(NOTICE_KEY):
-            from .notices import words
+            from .notices import line_row, words
             body = words(self.store, scene, body, event['raw'][NOTICE_KEY])
+            notice_then = self.thought_then(line_row(self.store, event['raw'][NOTICE_KEY]), scene['_id'] if once else None)
         if (event.get('raw') or {}).get(REPLY_ONLY_KEY) and quoted.get('reply_to'):
             body = '（只引用了这条，没写字）'
         lines += ['  ' + said_line(line) for line in body.splitlines() or ['']]
+        if notice_then:
+            lines.append('  > ' + notice_then)      # a notice about her line: the same anchor a quote of it has
         from .stickers import PICTURE_FETCH_SECONDS, recognized
         from .vision import line_refs, media_source, pull_bytes
         task = {'scene_id': scene['_id'], 'scope_key': scene.get('scope_key'), 'policy_epoch': scene.get('policy_epoch')}

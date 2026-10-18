@@ -2,6 +2,7 @@
 of her first batch; the host passes a line on as the program's, through the same gates as a message, holds a group
 notice that starts no turn for that group's next turn only, and brings requests and news about her own account to
 her home, where group_action answers a request."""
+import re
 import json
 import sys
 import threading
@@ -28,6 +29,7 @@ CFG = fixtures.load_config()
 OWN, G1 = fixtures.ACCOUNT, fixtures.GROUPS[0]
 MEMBER, OTHER = '900000101', '900000102'          # members of G1 in the fixtures
 AT = 1_800_000_000
+STAMP = r' \d{1,2}/\d{1,2} \d{2}:\d{2}'              # a pointed-at line's time, as its label line has it
 
 
 def notice(notice_type, sub_type=None, group=G1, **fields):
@@ -265,13 +267,13 @@ def test_a_reaction_names_her_line_like_any_pointer_and_one_between_others_is_ke
     store.db.scenes.update_one({'_id': SCENE}, {'$set': {'focus_active': True}})
     assert channels.receive('qq', {**mine, 'event_id': 'again'}) == {'status': 'accepted'}
     # ADR-079 §9.3: the line it is on reads as every pointer does (speaker, hers as 你, and first words).
-    assert received[0]['text'] == '给 你：晚安 点了「赞」'
+    assert received[0]['text'] == '给 你 10/4 14:30：晚安 点了「赞」'
     store.db.messages.update_one({'_id': 'in-20002'}, {'$set': {'received_at': now()}})
     other = posted('20003', '给{line}点了「赞」', 'reaction', 'reacted', {'message_id': '720002', 'mine': True},
                    event_id='notice-reaction-2')
     assert channels.receive('qq', other) == {'status': 'held'} and len(received) == 2, 'kept, asks for no look'
     [line] = notices.take(store, store.db.scenes.find_one({'_id': SCENE}))['items']
-    assert line.startswith(notices.REACTIONS_HEAD) and '给 [阿杰 #1]：' in line and '点了「赞」' in line
+    assert line.startswith(notices.REACTIONS_HEAD) and re.search(r'给 \[阿杰 #1\]%s：' % STAMP, line) and '点了「赞」' in line
 
 
 def test_reactions_between_others_fold_into_one_line_with_the_older_ones_counted(store):
@@ -301,7 +303,7 @@ def test_a_recall_in_a_group_is_kept_across_a_restart_and_shown_once_naming_the_
     notices.forget()                                   # a Host restart: what was not shown yet is kept (ADR-079)
     shown = notices.take(store, scene)
     [item] = shown['items']
-    assert item.startswith('[阿杰 #1] ') and '（平台通知）撤回了 [阿杰 #1]：%s…' % long_line[:40] in item
+    assert item.startswith('[阿杰 #1] ') and re.search(r'（平台通知）撤回了 \[阿杰 #1\]%s：%s…' % (STAMP, long_line[:40]), item)
     assert notices.take(store, scene) is None, 'once'
     assert not store.db.artifacts.find_one({'kind': notices.HELD_KIND}), 'shown, it is gone'
     gone = posted('20003', '撤回了{line}', 'recall', line={'message_id': '999', 'mine': False}, event_id='r2')
@@ -354,7 +356,7 @@ def test_a_turn_shows_the_held_notice_once_without_repeating_a_line(store):
     ep = Coordinator(store, lane).ingest(event, persona='P1')
     assert ep['state'] == 'COMMITTED', ep.get('failure')
     [item] = ep['context']['notices_from_program']['items']
-    assert '（平台通知）撤回了 [阿杰 #1]：大家好呀' in item
+    assert re.search(r'（平台通知）撤回了 \[阿杰 #1\]%s：大家好呀' % STAMP, item)
     sent = lane.calls[0]['messages'][-1]['content']
     assert sent.count('撤回了 [阿杰 #1]') == 1, 'the notice once, in its own block'
     assert notices.take(store, scene) is None

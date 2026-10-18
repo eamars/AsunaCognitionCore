@@ -4,7 +4,7 @@ them on as the program's line, never as the words of the person who did it.
 A notice arrives as an event from the person who did it with `raw.asuna_notice` (`kind`, optional `gate`, optional
 `line`), through the same gates as a message (channels.py). Then:
 - `line` names the line it is about by its platform id, in the one form every pointer has (ADR-079 §9.3): its
-  number where the conversation shows numbers, its speaker (hers as 你) and its first words (QUOTE_CHARS), found
+  number where the conversation shows numbers, its speaker (hers as 你) and its first words, found
   read-only within this conversation and the last day; a line the program has no record of is `一条消息`;
 - in a group, `gate` (`poked`, `reacted`) puts it through the relevance gate, like a line that calls her without an @;
   it is then stored as that look's input, like every turn's. A reaction asks for a look only when it is on her line;
@@ -33,7 +33,6 @@ from .state import Denied, now
 
 KEY = 'asuna_notice'
 GATES = ('poked', 'reacted')
-QUOTE_CHARS = 40
 QUOTE_DAYS = 1
 HELD_MAX = 10
 HELD_KEPT = 50                               # held per conversation before the oldest go uncounted
@@ -90,7 +89,13 @@ def fill(store, scene, block, text, moment=None):
 
 def _named(store, scene, text, row):
     from .people import People
-    return text.replace('{line}', ' %s ' % People(store).pointed(scene, row, QUOTE_CHARS), 1).rstrip()
+    return text.replace('{line}', ' %s ' % People(store).pointed(scene, row), 1).rstrip()
+
+
+def line_row(store, block):
+    """The row of the line a notice is about, when it was found (its direction tells whether it is hers)."""
+    row_id = ((block or {}).get('line') or {}).get('row')
+    return store.db.messages.find_one({'_id': row_id}, {'direction': 1}) if row_id else None
 
 
 def words(store, scene, text, block):
@@ -147,6 +152,9 @@ def take(store, scene, persona=None, keep=False):
         body = words(store, scene, people.heard(scene, row['text'], (row['event'].get('channel') or {}).get('account_id')),
                      block)
         kind = block['kind']
+        then = people.thought_then(line_row(store, block), scene['_id'])
+        if then:
+            body += then                     # a notice about her line: the same anchor a quote of it has
         item = (reactions if kind in ('reaction', 'reaction_removed') else folded).setdefault((kind, body), {'who': [], 'at': ''})
         who = people.speaker(scene, row['author'], row)
         if who not in item['who']:

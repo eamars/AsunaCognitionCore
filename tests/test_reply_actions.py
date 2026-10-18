@@ -1,6 +1,8 @@
 """ADR-064 phase 2, stage B: a poke and a reaction as parts of her reply. Each is a row in her history in the
 program's words, marked as something she did; the adapter does it only when it declared it; its receipt has no
 message id; a reaction a private chat refuses is not tried there again until the Host restarts."""
+import re
+
 from asuna import param_names, role_tools
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane, FakeTurn
@@ -16,9 +18,12 @@ def mention(key):
 
 
 def world(store):
-    """The admin tests' group, where 20002 may be answered (the route lists them as a member)."""
+    """The admin tests' group, where 20002 may be answered (the route lists them as a member), on an adapter that
+    declared everything NapCat carries."""
+    from asuna import capabilities
     setup(store, 'member')
     store.config['channels']['qq']['routes']['g']['members'] = {'20002': {'person_id': 'qq:20002'}}
+    capabilities.declared(store, 'qq', ['image', 'sticker', 'poke', *capabilities.POINTERS])
 
 
 def turn(store, key, parts):
@@ -34,12 +39,12 @@ def test_a_poke_and_a_reaction_are_rows_in_her_words_marked_as_what_she_did(stor
     ep, result, ok, rows = turn(store, 'act-1', [{'kind': 'text', 'text': '来了'},
                                                  {'kind': 'poke', 'who': '阿杰'},
                                                  {'kind': 'react', 'who': '阿杰', 'line': '这条', 'face': '赞'}])
-    assert ok and result['note'].startswith('发出 3 条，都排上了：1 text；2 poke [阿杰 #2]；3 react「赞」给 [阿杰 #2]'), result
+    assert ok and result['note'].startswith('发出 3 条，都排上了：1 text 〔2〕；2 poke [阿杰 #2] 〔3〕；3 react「赞」给 〔1〕 [阿杰 #2]'), result
     texts = [row['text'] for row in rows]
     assert texts[0] == '来了'
     assert texts[1] == '戳了戳 [阿杰 #2]' + role_tools.ACTION_MARK
     # ADR-079 §9.3: the line she reacted to reads as every pointer does: speaker and first words.
-    assert texts[2].startswith('给 [阿杰 #2]：') and texts[2].endswith(' 点了「赞」' + role_tools.ACTION_MARK)
+    assert re.match(r'给 〔1〕 \[阿杰 #2\] \d+/\d+ \d\d:\d\d：', texts[2]) and texts[2].endswith(' 点了「赞」' + role_tools.ACTION_MARK)
     assert rows[1]['action'] == {'kind': 'poke', 'account': '20002'}
     assert rows[2]['action'] == {'kind': 'react', 'message_id': 'pe-act-1', 'emoji_id': '76'}
 

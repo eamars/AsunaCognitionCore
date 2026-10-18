@@ -10,6 +10,9 @@ The pointer family (quote, reply, reaction, recall):
   react      she can react to a line
   react_in   it passes on reactions
   recall     it carries recalls
+
+When a channel stops or starts carrying a function she uses herself (quote, react, recall), each of its
+conversations gets one program line at its next turn, naming the leg as the cause (her words).
 """
 from __future__ import annotations
 
@@ -20,6 +23,11 @@ from .state import now
 
 KIND = 'channel_capabilities'
 POINTERS = ('quote', 'quote_in', 'react', 'react_in', 'recall')
+CHANGE = 'capability_change'
+# What she does herself, in her words (ADR-079 §9.7): a change of one is told to each conversation once.
+WORDS = {'quote': '引用', 'react': '点表情', 'recall': '撤回自己的话'}
+CANNOT = '这条腿做不了%s'
+BACK = '这条腿又能%s了'
 log = logging.getLogger(__name__)
 
 _lock = threading.Lock()
@@ -43,16 +51,44 @@ def declared(store, channel_id, supports):
         _warned.add(channel_id)
     row = {'_id': _row_id(channel_id), 'kind': KIND, 'channel_id': channel_id, 'supports': list(names),
            'declared_at': now(), 'schema_version': 1}
-    if store.db.artifacts.find_one({'_id': row['_id']}, {'_id': 1}):
-        store.db.artifacts.replace_one({'_id': row['_id']}, row)
-    else:
-        try:
-            store.db.artifacts.insert_one(row)
-        except Exception:                                    # noqa: BLE001 another claim wrote it first
-            store.db.artifacts.replace_one({'_id': row['_id']}, row)
+    prior = store.db.artifacts.find_one({'_id': row['_id']}, {'supports': 1})
+    _write(store, row)
+    if prior is not None:
+        lost = [name for name in WORDS if name in prior.get('supports', ()) and name not in names]
+        gained = [name for name in WORDS if name not in prior.get('supports', ()) and name in names]
+        if lost or gained:
+            # The latest change stands; each conversation of the channel reads it once (change_line).
+            _write(store, {'_id': CHANGE + ':' + channel_id, 'kind': CHANGE, 'channel_id': channel_id, 'lost': lost,
+                           'gained': gained, 'at': now(), 'shown': [], 'schema_version': 1})
     missing = [name for name in POINTERS if name not in names]
     if missing and first:
         log.info('channel %s does not declare %s: hidden from her there', channel_id, ', '.join(missing))
+
+
+def _write(store, row):
+    if store.db.artifacts.find_one({'_id': row['_id']}, {'_id': 1}):
+        store.db.artifacts.replace_one({'_id': row['_id']}, row)
+        return
+    try:
+        store.db.artifacts.insert_one(row)
+    except Exception:                                        # noqa: BLE001 another claim wrote it first
+        store.db.artifacts.replace_one({'_id': row['_id']}, row)
+
+
+def change_line(store, scene):
+    """The one line a conversation gets after its channel lost or regained a function she uses, at its next turn;
+    None when there is none or it was shown here already."""
+    channel_id = (scene or {}).get('channel_id')
+    row = store.db.artifacts.find_one({'_id': CHANGE + ':' + channel_id}) if channel_id else None
+    if not row or scene['_id'] in (row.get('shown') or ()):
+        return None
+    store.db.artifacts.replace_one({'_id': row['_id']}, {**row, 'shown': [*(row.get('shown') or ()), scene['_id']]})
+    said = []
+    if row.get('lost'):
+        said.append(CANNOT % '、'.join(WORDS[name] for name in row['lost']))
+    if row.get('gained'):
+        said.append(BACK % '、'.join(WORDS[name] for name in row['gained']))
+    return '；'.join(said) + '。'
 
 
 def supports(store, channel_id):

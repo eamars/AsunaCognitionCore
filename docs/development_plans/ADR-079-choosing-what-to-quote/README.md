@@ -572,7 +572,7 @@ quotes at all, and how often the ambiguous-turn line was followed by a quote. He
 
 1. The owner: the proposal in §9.
 2. Xiaoman: signed (below), with her conditions folded into §9.3, §9.4, §9.7 and §9.11.
-   After signing she raised one more point, for the owner (Claude's paraphrase, 14:1x NZDT): a hidden function should
+   After signing she raised one more point, for the owner (Claude's paraphrase, about 14:05 NZDT): a hidden function should
    still be said once, in one program line, when it goes away (a runtime limit found, or a change of adapter that
    carries less): "hidden and not said" is the same mistake as an option she could not see. Claude's view: one line
    at the moment it changes, not every turn, keeps the owner's "hidden from the model" and answers hers.

@@ -89,6 +89,8 @@ NIGHT_WHY = {'gist': '刚放到手边，还是原样的长段',
              'repeated': '不同的对话里都碰到它', 'merge': '两条很像'}
 GIST_NO_BASIS = ('这句意思没带依据，没写进去：原文有依据（%s），意思后面留一行依据（谁、何时、从哪来，不算在 %d 字里）'
                  '再写一次。' % ('%s', GIST_CHARS))
+# Her choice when a store is over its cap (her ask, 2026-10-18; no keep act, ADR-062): what is carried, and the default.
+OVER_LINE = ('随身满了（%s %d/%d）：随身的有 %s。想换就 let_go 一条；这一回合不挑，下一回合程序照旧放最久没用到的「%s」。')
 SEARCHED = '找了：随身、手边、收着'
 NOTHING = '随身、手边、收着三处都没找到'
 # A tag never carries an item back (no pin, owner 2026-10-13): only a memorable moment or a changed rewrite does.
@@ -275,17 +277,62 @@ class Tiers:
         if why == 'surprise' and row['place'] == PUT_AWAY:
             self.move(row, AT_HAND, 'surprise', moment, scene_id=scene_id)
 
+    PER_DOC = ('ledger', 'group_notes', 'self', 'core')
+
+    def _carried(self, doc, kind):
+        return self.items(doc=doc, place=CARRIED) if kind in self.PER_DOC else self.items(store=kind, place=CARRIED)
+
     def _overflow(self, doc, kind, keep, moment):
-        """A store over its cap lapses its least recently memorable item (felt ones last); the moves made."""
+        """A store over its cap: her choice first (her ask, 2026-10-18). The first time it is over, nothing moves; her
+        next turn that reads it lists what is carried, with days unused, and she may let one go. A turn later, if it
+        is still over, it lapses its least recently memorable items (felt ones last), as before. The moves made."""
         cap = CAPS.get(kind)
-        carried = self.items(doc=doc, place=CARRIED) if kind in ('ledger', 'group_notes', 'self', 'core') \
-            else self.items(store=kind, place=CARRIED)
+        carried = self._carried(doc, kind)
+        key = 'over:%s:%s' % (self.persona, doc if kind in self.PER_DOC else 'store:' + kind)
         if not cap or len(carried) <= cap:
+            self.rows.delete_one({'_id': key})
             return []
-        order = sorted((row for row in carried if row['_id'] != keep),
+        pending = self.rows.find_one({'_id': key})
+        order = sorted((row for row in carried if row['_id'] not in (keep, (pending or {}).get('keep'))),
                        key=lambda row: (bool(row.get('felt')), row.get('memorable_at') or '', row['_id']))
+        if not pending or not pending.get('shown_in'):
+            # Waiting for her: one item over at most; more than that lapses by the rule now (her choice is the last).
+            self.rows.update_one({'_id': key}, {'$setOnInsert': {'row': 'over', 'persona': self.persona, 'doc': doc,
+                                                                 'store': kind, 'since': _iso(moment), 'shown_in': []},
+                                                '$set': {'keep': keep}}, upsert=True)
+            return [move for move in (self.move(row, AT_HAND, 'overflow', moment)
+                                      for row in order[:max(0, len(carried) - cap - 1)]) if move]
+        self.rows.delete_one({'_id': key})
         return [move for move in (self.move(row, AT_HAND, 'overflow', moment) for row in order[:len(carried) - cap])
                 if move]
+
+    def overflows(self, here, scene_id, moment):
+        """The stores over their cap that this turn reads: shown once each, for her to choose; one already shown
+        in an earlier turn lapses by the program's rule first (so a cap is over for one turn at most)."""
+        lines = []
+        for pending in list(self.rows.find({'row': 'over', 'persona': self.persona})):
+            if not here({'store': pending['store'], 'doc': pending['doc'], 'visibility': None}):
+                continue
+            if pending.get('shown_in'):
+                self._overflow(pending['doc'], pending['store'], pending.get('keep'), moment)
+                continue
+            carried = self._carried(pending['doc'], pending['store'])
+            cap = CAPS.get(pending['store'])
+            if not cap or len(carried) <= cap:
+                self.rows.delete_one({'_id': pending['_id']})
+                continue
+            def unused(row):
+                last = max(filter(None, (_at(row.get('memorable_at')), _at(row.get('last_use_at')))), default=moment)
+                return max(0, int((moment - last).total_seconds() // 86400))
+            listed = sorted(carried, key=lambda row: (-unused(row), row.get('heading') or ''))
+            oldest = sorted((row for row in carried if row['_id'] != pending.get('keep')),
+                            key=lambda row: (bool(row.get('felt')), row.get('memorable_at') or '', row['_id']))[0]
+            lines.append(OVER_LINE % (STORE_WORDS.get(pending['store'], pending['store']), len(carried), cap,
+                                      '；'.join('「%s」%d 天没用到' % (row.get('heading') or row['sid'], unused(row))
+                                               for row in listed),
+                                      oldest.get('heading') or oldest['sid']))
+            self.rows.update_one({'_id': pending['_id']}, {'$addToSet': {'shown_in': scene_id}})
+        return lines
 
     # ── her writes ─────────────────────────────────────────────────
     def written(self, slug, intent, before, after, *, scene_id=None, felt=False, moment=None, before_revision=None):
@@ -408,6 +455,9 @@ class Tiers:
                                                   'told_in': {'$ne': scene['_id']}}).sort('at', -1)
                  if here(move)][:MOVED_SHOWN]
         block = {'places': places}
+        over = self.overflows(here, scene['_id'], moment)
+        if over:
+            block['over'] = over
         if moves:
             block['moved'] = ['%s %s' % (line_stamp(zone, move['at']), told(move)) for move in reversed(moves)]
             self.rows.update_many({'_id': {'$in': [move['_id'] for move in moves]}},

@@ -640,3 +640,16 @@ Project: ADR-009 (ledger, no delete, forgetting formula), ADR-014 (limits, night
 ADR-025 (two layers), ADR-028 (carried summary), ADR-032 (places), ADR-038 (fixed tool lists), ADR-042 (what the night
 changed), ADR-043 (reasons in her words), ADR-049 (quiet-time condensing), ADR-056 (per-turn characters), ADR-058
 (heartbeat dice), ADR-060 (plain names), ADR-061 (asking for help).
+
+## Addendum 2026-10-18: over the cap, her choice first (no keep act)
+
+Xiaoman found one of her rules (to set a reminder the moment she promises something) moved from 随身 to 手边 with the
+reason 随身满了, and asked to choose what goes herself rather than the program choosing by "full". Claude first offered a
+keep mark; that is a pin, which this ADR removed for measured reasons and which her own told text rules out
+(「我也不能喊留着；只有放手是我自己的动作」), so it was withdrawn (Claude's error) and she agreed. What was built
+fits §3: letting go stays her only act. A store one item over its cap waits for her: her next turn that reads it lists
+every 随身 item with the days since it was last memorable and names the default; she may `let_go` one; a turn later,
+still over, the default lapses as before. More than one over lapses by the rule at once, so the cap is over by one
+item for one turn at most. Cost: one line, only while a store is over. Her own rule for using it (Claude's paraphrase):
+choosing is not a duty; not choosing loses nothing, and choosing every time to look tidy would be self-curation by
+another door. The owner's yes: "we build whatever she wants" (about 16:10 NZDT).

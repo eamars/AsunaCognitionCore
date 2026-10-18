@@ -52,6 +52,8 @@ VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send 
 # Home turns that may send her on an errand (ADR-066): someone speaking at home, her own plan due there, a note of hers
 # from home -- and a note from outside only when it carries the owner's own line (notes.owner_line).
 ERRAND_FROM = ('external', 'scheduled', 'note')
+# How a plan that can no longer be changed ended, in her words (one table for every plan refusal that names it).
+PLAN_ENDED = {'CANCELLED': '取消', 'SUSPENDED': '停', 'FIRED': '跑完', None: '失效'}
 # What a task needs, which an errand turn does not carry (errands.NO_DELEGATE).
 DELEGATING = ('delegate', 'task.message', 'task.stop')
 REFLECTION_NO_DELEGATE = ('这一回合是反思回合，跑在一个回合结束就收起来的会话里：交给行动脑的事会比它活得长，做完没处回报。'
@@ -800,7 +802,7 @@ NOT_NOW = {
     'task.stop': '现在没有在做或暂停着的任务可停。',
     'attach_image': ('这回合没有能带的图：能发的图列在 image_artifacts_from_program 里，这回合没有；'
                      '要新图，先用 delegate 交代行动脑画，画好那回合再带。'),
-    'sticker': ('这回合没有表情包可用：架子和候选不在这回合里（夜间沉淀那一回合也不整理架子）；'
+    'sticker': ('这回合没有表情包可用：架子和候选不在这回合里（夜间沉淀只在列出 stickers_review_from_program 那晚整理架子）；'
                 '在能发表情包的对话里，或者家里别的回合再用。'),
     'credential': '保险箱只在家里有人跟你说话、或者任务交回来的那一回合用；心跳、计划到点、自我改进这些回合不收不删。',
     'find_member': '这回合没有这个群的成员名单可查；照对话里的标签认人。',
@@ -942,6 +944,8 @@ WORDS = {
     'DOC_NOT_FOUND': '没有这份文档；新文档只能用 append_section 开始。',
     'DOC_SEED_NOT_FOUND': '人格包里没有这份种子。',
     'BASE_REVISION_STALE': '要改的东西刚被别处改过。',
+    'VOID_REQUIRES_WHY': 'void 要写 why：为什么这一笔的前提不成立。',
+    'SOURCE_IDENTITY_REQUIRED': '这一笔要写 source_identity（它来自哪条记录）。',
     'PERSONA_RENDER_OVER_BUDGET': '这样写完，每回合自动带上的人格和口吻会超出上限。',
     'POLICY_SET_REQUIRES_OWNER_PRIVATE': '参数只能在家里（家里·私聊、主人私聊这类可信的对话）改。',
     'PROMOTE_ONLY_IN_SETTLEMENT': '提升长期记忆只在夜间沉淀时做。',
@@ -2140,7 +2144,7 @@ class RoleTools:
                         row = kept
                     elif kept:
                         raise Refused('「%s」已经%s了，改不了；要再安排就新建一条（do=create）。'
-                                      % (plan_id, {'CANCELLED': '取消', 'SUSPENDED': '停'}.get(kept.get('status'), '跑完')))
+                                      % (plan_id, PLAN_ENDED.get(kept.get('status'), '跑完')))
                     else:
                         raise Refused('「%s」不在 plans_from_program 里，也不是这回合刚建的；照列表原样抄 plan_id，'
                                       '或抄这回合 plan 工具返回的 plan_id。' % plan_id)
@@ -2148,8 +2152,11 @@ class RoleTools:
                     plan = run(lambda: c.scheduler.cancel(plan_id, ep['scene_id'], ep['person_id'], ep['policy_epoch']))
                 else:
                     if row.get('status') not in ('CREATING', 'ACTIVE'):
-                        raise Refused('这条安排现在是 %s，改期只对着还生效的；要再安排就新建一条。' % row.get('status'))
-                    spec = {**({'intent': args['intent']} if args.get('intent') else {}), **({'schedule': timing} if timing else {})}
+                        raise Refused('「%s」已经%s了，改期只对着还生效的；要再安排就新建一条（do=create）。'
+                                      % (plan_id, PLAN_ENDED.get(row.get('status'), '跑完')))
+                    # The same length rule as create: refused with the cut offer, never by the scheduler's code.
+                    spec = {**({'intent': self._text(args, 'intent', 1000)} if args.get('intent') else {}),
+                            **({'schedule': timing} if timing else {})}
                     plan = run(lambda: c.scheduler.update(ep, plan_id, spec))
             else:
                 raise Refused('do 是 create、update 或 cancel%s；新建要写 intent 和一种计时，改或取消要写 plan_id。'
@@ -2158,8 +2165,9 @@ class RoleTools:
             # 换算/校验类失败（时间已过、钟点不存在、形状不对）回给她自己改，带上现在的钟面。
             clock = schedule_rules.local_clock(schedule_rules.scene_timezone(
                 self.store.config, self.store.db.scenes.find_one({'_id': ep['scene_id']})), schedule_rules.now_utc())
-            raise Refused('没安排成：%s。现在是 %s（%s，%s）。' % (exc, clock['now_local'], clock['weekday'],
-                                                            clock['timezone'])) from None
+            # The code stays in the record (words()); she reads the cause and the fix.
+            raise Refused('没安排成：%s。现在是 %s（%s，%s）。' % (words(exc).rstrip('。'), clock['now_local'],
+                                                            clock['weekday'], clock['timezone'])) from None
         return {'plan_id': plan['_id'], 'status': plan['status'], 'scheduled_at': plan.get('scheduled_at'),
                 'next_fire_at': plan.get('next_fire_at'), 'timezone': plan.get('timezone'),
                 'plan_version': plan.get('plan_version', 1),

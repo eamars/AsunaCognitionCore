@@ -7,6 +7,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { buildForkSeed } from '@deepseek-ai/dsh-session/fork';
 import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt';
 import { defineTool } from '@deepseek-ai/dsh-tools';
+import { argsRefusal } from './tool-args.js';
 import * as todoTool from '@deepseek-ai/dsh-tool-todo';
 import * as webTool from '@deepseek-ai/dsh-tool-web';
 import * as skillTool from '@deepseek-ai/dsh-tool-skill';
@@ -978,7 +979,11 @@ export class CognitionCore {
     if (lane === 'character') scope.tools.restrict({ allow: [] });
     scope.tools.guard(exec => {
       const exposed = this.exposed(lane, exec.agent.session.id) ?? new Set();
-      if (exposed.has(exec.name)) return undefined;
+      if (exposed.has(exec.name)) {
+        // Her arguments are checked here, in her words, before DSH's own validation would answer in English (ADR-076 R3).
+        const spec = lane === 'character' ? this.state(exec.agent.session.id).specs?.[exec.name] : undefined;
+        return spec ? argsRefusal(exec.name, spec, exec.arguments) : undefined;
+      }
       // An old name of hers runs where the tool it was merged into is listed (role_tools.RENAMED).
       if (lane === 'character' && exposed.has(this.roleAliases?.[exec.name])) return undefined;
       const usable = [...exposed].join('、') || '（没有）';
@@ -1175,6 +1180,8 @@ export class CognitionCore {
     await this.ready();
     // Her tools as this conversation shows them (ADR-079 §9.7): what its channel's adapter declared, fixed for the session.
     const specs = await this.worker.call('role_tool_specs', { session_id: agent.session.id });
+    // Kept for the guard: a call's arguments are checked against this session's own definitions (tool-args.js).
+    this.state(agent.session.id).specs = Object.fromEntries((specs ?? []).map(spec => [spec.name, spec]));
     for (const spec of specs ?? []) {
       scope.tools.register(defineTool({ ...spec,
         output: { schema: { type: 'json' }, render: asunaRender },

@@ -370,6 +370,7 @@ The DSH plugin (JavaScript): the worker it starts, her sessions, the action brai
 - [`svg-worker.js`](../../packages/cognition-core/src/svg-worker.js) — Renders one SVG to PNG with resvg in a worker thread (started by svg.js), so a heavy picture cannot hold up the Host.
 - [`svg.js`](../../packages/cognition-core/src/svg.js) — The Host side of render_svg (ADR-027): resvg renders an SVG the worker has already made safe (no links to pictures outside it), in a worker thread with a time and pixel limit.
 - [`tiers.js`](../../packages/cognition-core/src/tiers.js) — ADR-075: her action brain's two routes.
+- [`tool-args.js`](../../packages/cognition-core/src/tool-args.js) — Her tool calls whose arguments do not fit the tool's schema are refused in her words, before DSH's own validation would answer `invalid arguments: missing required property "op"` in English with no fix (ADR-076 R3).
 - [`tool-output.js`](../../packages/cognition-core/src/tool-output.js) — Save images before exposing their durable native attachment references.
 - [`ui-language.js`](../../packages/cognition-core/src/ui-language.js) — The language of the names the program gives what DSH shows as plain text: her rhythm tasks in the task page and the scheduler session's title.
 - [`worker.js`](../../packages/cognition-core/src/worker.js) — Runs the Python business worker (`asuna.native_worker`) as a child process in the profile's data folder and talks to it in JSON lines: `call` sends a request and waits for its answer; a line without an id is an event for index.js.

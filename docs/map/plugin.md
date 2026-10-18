@@ -478,6 +478,15 @@ ADR-075: her action brain's two routes. A job she sent to 高 runs on `routes.ac
 - def `restFor` — The rest a failure starts: null for a refusal; no clock when it waits on the owner.
 - def `resting` — Whether 高 is resting now.
 
+## `tool-args.js`
+
+[packages/cognition-core/src/tool-args.js](../../packages/cognition-core/src/tool-args.js)
+
+Her tool calls whose arguments do not fit the tool's schema are refused in her words, before DSH's own validation would answer `invalid arguments: missing required property "op"` in English with no fix (ADR-076 R3). The guard in index.js asks here with the session's own tool definition (role_tool_specs): one clause per violation — a missing field with the field's own description beside it, a wrong value with what it may be — and what to do next. The check is DSH's (`validateArgs`), so the two layers never disagree on what is valid; only the words are the house's. The code stays out of her words (ADR-060).
+
+- def `describeViolation` — One of DSH's violation lines, in her words.
+- def `argsRefusal` — The refusal for a call whose arguments fail `spec`'s parameter schema, or undefined when they pass.
+
 ## `tool-output.js`
 
 [packages/cognition-core/src/tool-output.js](../../packages/cognition-core/src/tool-output.js)

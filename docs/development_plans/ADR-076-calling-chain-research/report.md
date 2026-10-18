@@ -375,10 +375,13 @@ dropped (8 databases before and after, 9 during).
 | Cost | 1,533,885 input + 16,629 output tokens: **≤ US$0.24** with every input token priced as a cache miss (off-peak); the actual spend is lower where DeepSeek's prefix cache hit. Within the owner's US$1.50 |
 
 What it tells the study: the character-brain design runs on an API model without a refusal (unlike Claude, ADR-080);
-the first-step rule holds without a single enforcement firing; the model's reach for the action brain is low (1 of 6
-research moments) where the local model's record shows `delegate` used in 544 live turns in 30 days — a difference to
-test on the same fixtures against the local route before drawing a conclusion; and output cost on such a model is
-negligible next to input, so a 1M-window projection is about prefix stability (R7), not output.
+the first-step rule holds without a single enforcement firing; output cost on such a model is negligible next to
+input, so a 1M-window projection is about prefix stability (R7), not output. **The `delegate` 1 of 6 and `recall` 3 of
+6 are not evidence yet**: a turn offered `await_answer` instead of `speak` may choose differently, and the fixtures'
+intent is a `speak` turn. The master agent fixed the probe (branch `claude/probe-kinds`: the probe loads the NapCat
+kind, a test checks its groups offer `speak`, ADR-080 §7 and `docs/MODELS.md` corrected); this run is **to be
+repeated on the fixed probe** (same 51 turns, about US$0.25) and these numbers replaced, and the local baseline uses
+the fixed probe too.
 
 Setup caveat found while reading the probe (finding 15): the probe process registers no channel kind
 (`channel_kinds.kinds()` is empty there; `suite_config()` has no channels), so for its `qq:…` group scene

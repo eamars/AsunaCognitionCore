@@ -95,7 +95,8 @@ class Adapter:
         self._last_status = 0.0
         self.identity = None
         # what she may send through reply (ADR-064 phase 2); a poke or reaction NapCat refuses comes back to her
-        self.capabilities = list(CAPABILITIES) + ["react", "poke"]
+        # what this bridge carries, told to the host on every claim (ADR-079: the pointer family too)
+        self.capabilities = list(CAPABILITIES) + ["react", "poke", "quote", "quote_in", "react_in", "recall"]
 
     def log(self, msg):
         print("%s %s" % (utc_stamp(), msg), flush=True)

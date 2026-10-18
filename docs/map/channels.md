@@ -68,6 +68,18 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 - def `media_refusal` — 'expired' (the link's signature), 'gone' (the picture) or None, as the link's platform reads its host's refusal.
 - def `media_key_names` — The key names a channel's adapter may post (its kind's MEDIA_KEYS).
 
+## `capabilities`
+
+[src/asuna/capabilities.py](../../src/asuna/capabilities.py)
+
+What a channel's running adapter says it carries (ADR-079 §9.7).
+
+- def `declared` — Keep what an adapter declared on a claim; write the row only when it changed.
+- def `supports` — The names a channel's adapter last declared; empty when it never did.
+- def `carries` — Whether the scene's channel declares any of these.
+- def `numbered` — Lines there show their number: the channel carries quotes, out or in (ADR-079 §9.2).
+- def `forget`
+
 ## `channel_admission`
 
 [src/asuna/channel_admission.py](../../src/asuna/channel_admission.py)
@@ -84,8 +96,9 @@ Owner-configured channel admission. Platform events never grant owner access.
 Platform notices as one-off lines (ADR-064 phase 1): the adapter projects a notice into words, the host passes them on as the program's line, never as the words of the person who did it.
 
 - def `kept` — The notice block the host keeps from an adapter's raw event, or None.
-- def `fill` — The notice's words with its {line} filled; None when it is about a line of hers that is not hers.
-- def `hold`
+- def `fill` — (the notice's words with {line} filled for any reader, whether the line is hers, the line's row id or None).
+- def `words` — A notice's words as she reads them: the line it is about named now (ADR-079 §9.3), from the notice's own template, since a label written into the stored text would read as typed.
+- def `hold` — Kept until her next turn there shows it (ADR-079: a restart loses none); the oldest beyond HELD_KEPT go.
 - def `take` — The notices held for this conversation, as she reads them, once: {'items': [...], 'more': ...} or None.
 - def `drop_seen` — The gate showed them and she let the line pass: they were seen once.
 - def `forget`

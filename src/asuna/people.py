@@ -453,6 +453,17 @@ class People:
             return me or self.self_name
         return self.label(self.entry(scene, author, row))
 
+    def pointed(self, scene, row, chars=None):
+        """A line another line points at (a quote, a reaction, a recall), in the one form every pointer has
+        (ADR-079 §9.3): its number where the conversation shows numbers, its speaker (hers as 你), its first words."""
+        from .capabilities import numbered
+        said = self.mentions if row.get('direction') == 'outbound' else self.heard
+        words = ' '.join(said(scene, row.get('text'), scene.get('channel_account_id')).split())
+        number = '〔%d〕 ' % row['scene_seq'] if row.get('scene_seq') and numbered(self.store, scene) else ''
+        limit = chars or REPLY_EXCERPT
+        return '%s%s：%s' % (number, self.speaker(scene, row.get('author'), me='你'),
+                            words if len(words) <= limit else words[:limit] + '…')
+
     def transcript(self, scene, row):
         """One platform message as it enters her conversation: the speaker's label line, then the message, indented."""
         event = row.get('event') or {}
@@ -470,23 +481,33 @@ class People:
         stamp = line_stamp(scene_timezone(self.config, scene), said_at(row))
         if stamp and is_caught_up(row):
             stamp += '（%s）' % CAUGHT_UP_WORD
+        from .capabilities import numbered
+        from .channels import REPLY_ONLY_KEY
         from .notices import KEY as NOTICE_KEY, MARK as NOTICE_MARK
+        number = ' 〔%d〕' % row['scene_seq'] if row.get('scene_seq') and numbered(self.store, scene) else ''
         lines = [self.head(scene['_id'], doc, str(row.get('received_at') or now())) + (' ' + stamp if stamp else '')
-                 + (NOTICE_MARK if (event.get('raw') or {}).get(NOTICE_KEY) else '')]   # the program's line, not typed
-        parent_id = group.get('reply_message_id')
+                 + number + (NOTICE_MARK if (event.get('raw') or {}).get(NOTICE_KEY) else '')]   # the program's line
+        quoted = group if group.get('reply_to') or group.get('reply_message_id') else (event.get('reply') or {})
+        # (a private chat's quote is `event.reply`, ADR-079)
+        parent_id = quoted.get('reply_message_id')
         parent = self.db.messages.find_one({'_id': parent_id, 'scene_id': scene['_id']},
-                                           {'author': 1, 'text': 1, 'direction': 1}) if parent_id else None
+                                           {'author': 1, 'text': 1, 'direction': 1, 'scene_seq': 1}) if parent_id else None
         if parent:
-            said = self.mentions if parent.get('direction') == 'outbound' else self.heard
-            quote = ' '.join(said(scene, parent.get('text'), account).split())
-            lines.append('  > 回复 %s：%s' % (self.speaker(scene, parent.get('author')), excerpt(quote, REPLY_EXCERPT)))
+            lines.append('  > 回复 ' + self.pointed(scene, parent))
             if parent.get('direction') == 'outbound':
                 # A reply to her own line: what she thought when she said it, as she wrote it (reasons.py, ADR-043).
                 from .reasons import for_message
                 then = for_message(self.store, parent['_id'])
                 if then:
                     lines.append('  > （你说那句时心里想的：%s）' % ' '.join(then.split()))
+        elif quoted.get('reply_to'):
+            lines.append('  > 回复了一条更早的消息')            # a line the program has no record of
         body = self.heard(scene, row.get('text') or '', account)
+        if (event.get('raw') or {}).get(NOTICE_KEY):
+            from .notices import words
+            body = words(self.store, scene, body, event['raw'][NOTICE_KEY])
+        if (event.get('raw') or {}).get(REPLY_ONLY_KEY) and quoted.get('reply_to'):
+            body = '（只引用了这条，没写字）'
         lines += ['  ' + said_line(line) for line in body.splitlines() or ['']]
         from .stickers import PICTURE_FETCH_SECONDS, recognized
         from .vision import line_refs, media_source, pull_bytes
@@ -585,7 +606,7 @@ class People:
             if row.pop('scene_id') != (here or {}).get('_id'):
                 row['scene'] = self.scene_title(scene)
         row.pop('scope_key', None)
-        for key in ('reply_to', 'platform_event_id'):     # platform message numbers; reply_to_message says what it answered
+        for key in ('reply_to', 'platform_event_id'):     # platform message numbers; `quotes` says what it answered
             row.pop(key, None)
         if 'author' in row:
             row['speaker'] = self._author(scene, row.pop('author'))
@@ -596,8 +617,6 @@ class People:
         if isinstance(row.get('text'), str) and scene:
             said = self.mentions if row.get('direction') == 'outbound' else self.heard
             row['text'] = said(scene, row['text'], account)
-        if isinstance(row.get('reply_to_message'), dict):
-            self._row(scene, row['reply_to_message'])
         return row
 
     def relabel(self, context, scene, author):

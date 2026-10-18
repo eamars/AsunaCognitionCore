@@ -18,6 +18,7 @@ Rules shared by every tool:
 - Model-facing text is Chinese (the core prompts' language until ADR-010); the UI never shows it.
 """
 from __future__ import annotations
+import re
 
 import json
 from pathlib import Path
@@ -972,6 +973,9 @@ _HAN = __import__('re').compile(r'[一-鿿]')        # a detail written in words
 NO_REASON = '（没写为什么）'
 # Her pokes and reactions in her history: the program's words, marked as what she did (ADR-064 phase 2, her words).
 ACTION_MARK = '（你做的动作，不是你说的话）'
+# ADR-079: a line's number in her conversation (〔318〕) is for choosing what to point at, never for her words.
+LINE_NUMBER = re.compile(r'〔\s*\d+\s*〕')
+NUMBER_NOT_WORDS = '编号是挑引用用的，不写进你说的话里。'
 REACT_MINUTES = 10
 # Channels whose platform refused a reaction in a private chat: not tried there again until the Host restarts (her
 # call: the platform may take them one day).
@@ -1008,10 +1012,12 @@ def chat_lines(text):
 QUESTION_RECEIPT = '这是在问这里的人：问题 %s，等%s（%d 分钟）；有人回会叫你看一眼，回答进 questions_from_program。'
 
 
-def reply_receipt(queued):
-    """What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2)."""
+def reply_receipt(queued, numbered=False):
+    """What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2); where
+    the conversation shows line numbers, each sent line's own (ADR-079)."""
     done = [row for row in queued if row['state'] not in ('FAILED', 'UNKNOWN', 'CANCELLED_AFTER_FAILURE')]
-    listed = '；'.join('%d %s' % (row['number'], row['shown']) for row in done)
+    listed = '；'.join('%d %s%s' % (row['number'], row['shown'], ' 〔%d〕' % row['seq'] if numbered and row.get('seq') else '')
+                      for row in done)
     if len(done) == len(queued):
         return '发出 %d 条，%s排上了：%s。送没送到看下一回合的历史。' % (len(queued), '都' if len(queued) > 1 else '', listed)
     failed = next(row for row in queued if row not in done)
@@ -1369,6 +1375,8 @@ class RoleTools:
                     problems.append('第 %d 条里的「%s」要写成一个 kind=sticker 的 part' % (index, stickers.TOKEN.search(text).group(0)))
                 elif '[分条]' in text:
                     problems.append('第 %d 条：一个 text 就是一条消息，要分开就写成几个 text' % index)
+                elif LINE_NUMBER.search(text):
+                    problems.append('第 %d 条里的「%s」：%s' % (index, LINE_NUMBER.search(text).group(0), NUMBER_NOT_WORDS))
                 elif face:
                     problems.append('第 %d 条：%s' % (index, face))
                 elif same in texts:
@@ -1439,7 +1447,8 @@ class RoleTools:
                                            '\n'.join(row['text'] for row in planned if row['kind'] == 'text'), patience)
         self.coordinator._update(self._fresh(ep), reply={'texts': texts, 'lines': lines, 'parts': int(before.get('parts') or 0) + len(queued),
                                                           'calls': int(before.get('calls') or 0) + 1})
-        out = {'note': reply_receipt(queued)}
+        from .capabilities import numbered as shows_numbers
+        out = {'note': reply_receipt(queued, shows_numbers(self.store, scene))}
         if asked:
             out['question'] = QUESTION_RECEIPT % (asked['_id'], asked['patience'],
                                                   questions.PATIENCE[asked['patience']])
@@ -1449,7 +1458,6 @@ class RoleTools:
         """A poke or a reaction as a part of her reply: the program's words for her history, and the platform action."""
         from . import channel_kinds
         from .people import People
-        from .schedule_rules import line_stamp, scene_timezone
         people = People(self.store, ep['persona'])
         who = str(part.get('who') or '').strip()
         if not who and scene.get('kind') == 'dm':
@@ -1479,8 +1487,8 @@ class RoleTools:
         message_id = ((line or {}).get('event') or {}).get('channel', {}).get('platform_event_id')
         if not message_id:
             raise Refused('%s %d 分钟内在这里没说过能点的话' % (label, REACT_MINUTES))
-        stamp = line_stamp(scene_timezone(self.store.config, scene), line.get('occurred_at') or line.get('received_at'))
-        return {'kind': 'react', 'text': '给 %s %s 那句点了「%s」%s' % (label, stamp, face, ACTION_MARK),
+        # Her reaction reads like anyone's (ADR-079 §9.3): the line by its number, speaker and first words.
+        return {'kind': 'react', 'text': '给 %s 点了「%s」%s' % (people.pointed(scene, line, 30), face, ACTION_MARK),
                 'shown': 'react「%s」给 %s' % (face, label),
                 'fields': {'action': {'kind': 'react', 'message_id': str(message_id), 'emoji_id': str(faces[face])}}}
 

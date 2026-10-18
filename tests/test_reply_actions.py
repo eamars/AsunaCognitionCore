@@ -38,7 +38,8 @@ def test_a_poke_and_a_reaction_are_rows_in_her_words_marked_as_what_she_did(stor
     texts = [row['text'] for row in rows]
     assert texts[0] == '来了'
     assert texts[1] == '戳了戳 [阿杰 #2]' + role_tools.ACTION_MARK
-    assert texts[2].startswith("给 [阿杰 #2] ") and texts[2].endswith('那句点了「赞」' + role_tools.ACTION_MARK)
+    # ADR-079 §9.3: the line she reacted to reads as every pointer does: speaker and first words.
+    assert texts[2].startswith('给 [阿杰 #2]：') and texts[2].endswith(' 点了「赞」' + role_tools.ACTION_MARK)
     assert rows[1]['action'] == {'kind': 'poke', 'account': '20002'}
     assert rows[2]['action'] == {'kind': 'react', 'message_id': 'pe-act-1', 'emoji_id': '76'}
 

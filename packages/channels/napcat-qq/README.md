@@ -25,6 +25,9 @@ with Core (`registerChannel`).
   with name, account, time and text, `source` `inline` or `fetched`), and the line shows `[合并转发｜N 条｜ref]` with
   the first three messages, one short line each. One that cannot be read keeps its placeholder. The log names the
   segment's fields, the source and the count, never the text.
+- A group or private-chat message that quotes another carries the quoted message's ID as `reply_to`; one that only
+  quotes, with no words, also carries `raw.asuna_reply_only`. On every outbox claim the adapter declares what it
+  carries: `image`, `sticker`, `react`, `poke`, `quote`, `quote_in`, `react_in`, `recall`.
 - Duplicate detection binds the route, platform message ID and original send time in whole seconds. A pushed message and its catch-up copy use the same key; an ID reused at a later time is a new message. Reply attribution selects the newest matching line at or before the reply's send time.
 - Each admitted group's member list (`get_group_list`, then `get_group_member_list` for the groups the admission
   policy admits) is fetched when the adapter starts and every 6 hours, reduced to id, names, role and activity times,
@@ -41,7 +44,7 @@ with Core (`registerChannel`).
 - Every NapCat notice and request is projected into one line of words from a versioned table
   (`qqadapter/notices.py`, `WORDS`): a person in a group line is `@<account>` (Core shows their label), her own
   account is 你, text a person controls stays in 「」. Which kinds she is shown is the switch table `SHOWN`: a poke at
-  her, a reaction (Core keeps only one to a line of hers), a recall, friend and group requests, a kick of her account
+  her, a reaction (to a line of hers it asks for her look; one between others is kept for her next turn), a recall, friend and group requests, a kick of her account
   and a change of her admin role. A shown group or private-chat line goes to Core's `events` endpoint from the person
   who did it, under a message's gates, with `raw.asuna_notice` (`kind`, `gate` `poked` / `reacted`, `line`); a
   request or news about her account goes to the `notices` endpoint for her home, with the person's nickname

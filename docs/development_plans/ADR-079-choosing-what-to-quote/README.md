@@ -447,7 +447,8 @@ The pointed-at line is always shown as number, speaker (her own lines as `你`) 
 - a quote with no words of its own (a private-chat line that only quotes, today the placeholder
   `[回复消息（无文字）]`): the quote line, then `（只引用了这条，没写字）`;
 - reactions between other people (today dropped), folded into one program line per turn in that conversation:
-  `这期间的点表情：〔301〕 小雨 #5 收到 2 个「赞」、〔305〕 老周 #7 收到 1 个「笑哭」` (Xiaoman's choice, §9.9).
+  `这期间的点表情：阿杰 #3、豆豆 #9 给 〔301〕 小雨 #5：我考过了！！ 点了「赞」；老周 #7 给 〔305〕 …（平台通知）`: who reacted,
+  then the line in the one form (Xiaoman's choice, §9.9; as built in step 1, the adapter's words for each kind kept).
 
 ### 9.4 How she chooses: one value in every tool
 

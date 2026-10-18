@@ -159,9 +159,9 @@ def test_reply_history_identifies_recipient_without_cross_scene_lookup(store):
     _, context, _ = ContextBuilder(store).prepare(incoming)
     answer = next(row for row in context['delivered_history'] if row['_id']=='answer')
     question = next(row for row in context['delivered_history'] if row['_id']=='question')
-    assert 'author' not in answer['reply_to_message'] and answer['reply_to_message']['speaker']==question['speaker']
-    assert answer['reply_to_message']['text']=='my question'
-    assert context['group_continuity_from_program']['related_messages'][0]['reply_to_message']==answer['reply_to_message']
+    # ADR-079 §9.3: the quoted line in the one form every pointer has: speaker and first words, no ids.
+    assert answer['quotes'] == '%s：my question' % question['speaker']
+    assert context['group_continuity_from_program']['related_messages'][0]['quotes'] == answer['quotes']
     assert 'private canary' not in json.dumps(context)
 
 

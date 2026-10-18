@@ -42,6 +42,7 @@ def route_members(route):
 
 # A line the adapter knows is not addressed to her (a peer's turn that did not answer her): stored, no turn.
 ASIDE_KEY = 'asuna_aside'
+REPLY_ONLY_KEY = 'asuna_reply_only'          # the line only quotes another, with no words of its own (ADR-079)
 
 
 def kept_raw(event, raw, mentioned=None):
@@ -70,6 +71,8 @@ def kept_raw(event, raw, mentioned=None):
     from .caught_up import CATCHUP_KEY, mark
     if mark(raw):
         kept[CATCHUP_KEY] = mark(raw)                         # a line fetched from history after a gap (caught_up.py)
+    if raw.get(REPLY_ONLY_KEY) is True:
+        kept[REPLY_ONLY_KEY] = True
     if raw.get(ASIDE_KEY) is True:
         kept[ASIDE_KEY] = True                                # not addressed to her: kept, does not wake her (ADR-045)
     from . import notices
@@ -329,8 +332,8 @@ class Channels:
             raise ValueError('INVALID_MESSAGE_TEXT')
         if 'occurred_at' in body and not isinstance(body['occurred_at'], str):
             raise ValueError('INVALID_OCCURRED_AT')
-        if body.get('group_id') is None and any(k in body for k in ('group_id', 'mentioned_account_ids', 'reply_to')):
-            raise Denied('DM_GROUP_FIELDS_DENIED')
+        if body.get('group_id') is None and any(k in body for k in ('group_id', 'mentioned_account_ids')):
+            raise Denied('DM_GROUP_FIELDS_DENIED')     # a private chat's quote (reply_to) is its own (ADR-079)
         mentions, reply = body.get('mentioned_account_ids', []), body.get('reply_to')
         if not isinstance(mentions, list) or len(mentions) > 100 or any(not isinstance(v, str) for v in mentions):
             raise ValueError('INVALID_MENTIONS')
@@ -346,7 +349,7 @@ class Channels:
             raise Denied('CHANNEL_IDENTITY_DENIED')
         if route['target']['type'] == 'group' and body.get('group_id') != route['target']['id']:
             raise Denied('CHANNEL_GROUP_DENIED')
-        if route['target']['type'] == 'dm' and any(k in body for k in ('group_id', 'mentioned_account_ids', 'reply_to')):
+        if route['target']['type'] == 'dm' and any(k in body for k in ('group_id', 'mentioned_account_ids')):
             raise Denied('DM_GROUP_FIELDS_DENIED')
         if not isinstance(body.get('event_id'), str) or not 1 <= len(body['event_id']) <= 200:
             raise ValueError('INVALID_PLATFORM_EVENT_ID')
@@ -371,9 +374,14 @@ class Channels:
         scene = self.store.db.scenes.find_one({'_id': route['scene_id']}) if notice else None
         if notice:
             # A notice reads as the program's line (people.transcript); its {line} is the line it is about.
-            text = notices.fill(self.store, scene or {'_id': route['scene_id']}, notice, body['text'])
-            if text is None:
-                return {'status': 'dropped'}                # about a line that is not hers
+            text, hers, line_row = notices.fill(self.store, scene or {'_id': route['scene_id']}, notice, body['text'])
+            if line_row:
+                # Her reading names the line when she reads it (notices.words); the stored text is for any reader.
+                notice = {**notice, 'line': {**notice['line'], 'row': line_row}, 'words': body['text']}
+            if notice.get('gate') == 'reacted' and not hers:
+                # A reaction between other people: kept like a notice without a gate, it does not ask for a look.
+                notice = {key: value for key, value in notice.items() if key != 'gate'}
+            event['raw'][notices.KEY] = notice
             event['text'] = text
         if route['target']['type'] == 'group':
             event['group_context'] = group_context(self.store, route, body if not notice else
@@ -382,6 +390,12 @@ class Channels:
             if notice:
                 event['group_context'].update(wake_reason=notice.get('gate'),
                                               mentioned_account_ids=body.get('mentioned_account_ids', []))
+        elif body.get('reply_to'):
+            # ADR-079: a quote in a private chat binds to the line it quotes, as a group's does (group_context).
+            here = self.store.db.scenes.find_one({'_id': route['scene_id']})
+            parent = reply_parent(self.store, here, body['reply_to'], body.get('occurred_at'),
+                                  outbound_author=character_id(self.store.config)) if here else None
+            event['reply'] = {'reply_to': body['reply_to'], 'reply_message_id': parent['_id'] if parent else None}
         if 'occurred_at' in body:
             event['occurred_at'] = body['occurred_at']
         from . import lines
@@ -414,8 +428,8 @@ class Channels:
             if kept != reason:
                 event['group_context'].update(wake_reason=kept, resting=reason)
             if notice and not event['group_context']['wake_reason']:
-                # Not for a look: shown once in this group's next turn, never stored (notices.py).
-                notices.hold(route['scene_id'], {'author': member['person_id'], 'text': event['text'],
+                # Not for a look: shown once in this group's next turn, kept until then (notices.py).
+                notices.hold(self.store, route['scene_id'], {'author': member['person_id'], 'text': event['text'],
                                                  'scene_id': route['scene_id'], 'received_at': now(),
                                                  **({'occurred_at': event['occurred_at']} if 'occurred_at' in event
                                                     else {}), 'event': event})
@@ -454,7 +468,8 @@ class Channels:
     def claim(self, channel_id, wait_seconds=0, supports=None, target=None):
         # supports 是领取方声明的能力（napcat-qq 0.5.0 起带 supports=image）。没声明就只给文字，并把
         # 「这条本来带图、图没跟着出去」记在行上：只发文字却报平台已送达，等于声称对方收到一张没到的图。
-        from . import group_admin
+        from . import capabilities, group_admin
+        capabilities.declared(self.store, channel_id, supports)     # what this adapter carries (ADR-079 §9.7)
         deadline = time.monotonic() + min(25, max(0, wait_seconds))
         while not self.controller.stopping.is_set():
             if self.controller.reconfiguring:

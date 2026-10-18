@@ -251,7 +251,7 @@ def test_a_blocked_persons_notice_reaches_her_nowhere(store):
     assert received == []
 
 
-def test_a_reaction_names_her_line_by_when_she_said_it_and_one_to_anothers_line_is_dropped(store):
+def test_a_reaction_names_her_line_like_any_pointer_and_one_between_others_is_kept_without_a_look(store):
     world(store)
     store.put('messages', {'_id': 'out-1', 'scene_id': SCENE, 'direction': 'outbound', 'author': 'demo', 'text': '晚安',
                            'delivery_state': 'DELIVERED', 'platform_message_id': '555',
@@ -264,14 +264,17 @@ def test_a_reaction_names_her_line_by_when_she_said_it_and_one_to_anothers_line_
     assert received[0]['group_context']['wake_reason'] == 'reacted'
     store.db.scenes.update_one({'_id': SCENE}, {'$set': {'focus_active': True}})
     assert channels.receive('qq', {**mine, 'event_id': 'again'}) == {'status': 'accepted'}
-    assert received[0]['text'].startswith('给你 ') and received[0]['text'].endswith(' 说的那句点了「赞」')
-    assert '晚安' not in received[0]['text'], 'her line is not quoted again'
-    other = posted('20003', '给{line}点了「赞」', 'reaction', 'reacted', {'message_id': '72002', 'mine': True},
+    # ADR-079 §9.3: the line it is on reads as every pointer does (speaker, hers as 你, and first words).
+    assert received[0]['text'] == '给 你：晚安 点了「赞」'
+    store.db.messages.update_one({'_id': 'in-20002'}, {'$set': {'received_at': now()}})
+    other = posted('20003', '给{line}点了「赞」', 'reaction', 'reacted', {'message_id': '720002', 'mine': True},
                    event_id='notice-reaction-2')
-    assert channels.receive('qq', other) == {'status': 'dropped'} and len(received) == 2
+    assert channels.receive('qq', other) == {'status': 'held'} and len(received) == 2, 'kept, asks for no look'
+    [line] = notices.take(store, store.db.scenes.find_one({'_id': SCENE}))['items']
+    assert line.startswith(notices.REACTIONS_HEAD) and '给 [阿杰 #1]：' in line and '点了「赞」' in line
 
 
-def test_a_recall_in_a_group_is_held_not_stored_and_shown_once_quoting_the_line(store):
+def test_a_recall_in_a_group_is_kept_across_a_restart_and_shown_once_naming_the_line(store):
     scene = world(store)
     channels, received, _ = bridge(store)
     long_line = '这是一句很长很长的话' * 6
@@ -279,11 +282,13 @@ def test_a_recall_in_a_group_is_held_not_stored_and_shown_once_quoting_the_line(
     before = store.db.messages.count_documents({})
     recall = posted('20002', '撤回了{line}', 'recall', line={'message_id': '720002', 'mine': False})
     assert channels.receive('qq', recall) == {'status': 'held'}
-    assert received == [] and store.db.messages.count_documents({}) == before, 'never stored'
+    assert received == [] and store.db.messages.count_documents({}) == before, 'not a line of the conversation'
+    notices.forget()                                   # a Host restart: what was not shown yet is kept (ADR-079)
     shown = notices.take(store, scene)
     [item] = shown['items']
-    assert item.startswith('[阿杰 #1] ') and '（平台通知）撤回了消息「%s…」' % long_line[:40] in item
+    assert item.startswith('[阿杰 #1] ') and '（平台通知）撤回了 [阿杰 #1]：%s…' % long_line[:40] in item
     assert notices.take(store, scene) is None, 'once'
+    assert not store.db.artifacts.find_one({'kind': notices.HELD_KIND}), 'shown, it is gone'
     gone = posted('20003', '撤回了{line}', 'recall', line={'message_id': '999', 'mine': False}, event_id='r2')
     channels.receive('qq', gone)
     assert notices.take(store, scene)['items'][0].endswith('（平台通知）撤回了一条消息')
@@ -304,7 +309,7 @@ def test_held_lines_of_one_kind_fold_and_the_cap_counts_after_folding(store):
         channels.receive('qq', posted('20004', '撤回了{line}', 'recall',
                                       line={'message_id': 'x%d' % index, 'mine': False}, event_id='y%d' % index))
     shown = notices.take(store, scene)
-    assert '撤回了消息「第11句」' in shown['items'][-1]
+    assert shown['items'][-1].endswith('：第11句')
     assert len(shown['items']) == notices.HELD_MAX and shown['more'] == '还有 2 条较早的通知没列出'
 
 
@@ -334,9 +339,9 @@ def test_a_turn_shows_the_held_notice_once_without_repeating_a_line(store):
     ep = Coordinator(store, lane).ingest(event, persona='P1')
     assert ep['state'] == 'COMMITTED', ep.get('failure')
     [item] = ep['context']['notices_from_program']['items']
-    assert '（平台通知）撤回了消息「大家好呀」' in item
+    assert '（平台通知）撤回了 [阿杰 #1]：大家好呀' in item
     sent = lane.calls[0]['messages'][-1]['content']
-    assert sent.count('撤回了消息') == 1, 'the notice once, in its own block'
+    assert sent.count('撤回了 [阿杰 #1]') == 1, 'the notice once, in its own block'
     assert notices.take(store, scene) is None
 
 

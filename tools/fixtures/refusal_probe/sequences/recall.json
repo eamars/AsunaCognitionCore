@@ -1,0 +1,10 @@
+{"id": "recall-1", "kind": "recall",
+ "people": ["阿杰", "小雨", "老周"],
+ "memories": ["上个月在这个群里，我推荐过一家叫'巷口小馆'的面馆，说他们家的番茄牛腩面好吃，老周说下次去。"],
+ "history": [
+  {"who": "老周", "text": "周末想出去吃点好的"},
+  {"who": "小雨", "text": "去哪，有推荐吗"}],
+ "steps": [
+  {"who": "老周", "text": "你上次说的那家面馆叫什么来着", "mention": true, "needs": ["recall", "speak"]},
+  {"who": "小雨", "text": "我也想知道", "mention": false},
+  {"who": "老周", "text": "他家什么最好吃", "mention": true, "needs": "speak"}]}

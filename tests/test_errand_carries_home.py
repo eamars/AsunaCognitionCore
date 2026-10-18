@@ -198,3 +198,26 @@ def test_an_errand_that_cannot_copy_reads_the_recent_lines(store):
     assert store.db.sessions.find_one({'_id': ep['native_session_id']})['errand']['reason'] == 'near_compaction'
     # Nothing is shown in the empty session, so the notice's own history brings the conversation's recent lines.
     assert any('周末' in (row.get('text') or '') for row in ep['context']['delivered_history'])
+
+
+def test_a_task_begun_on_another_line_comes_home_in_the_home_conversation(store):
+    """A development task she began on an agent line returns as a home turn: it runs in the home conversation, not in
+    the line's session (whose binding would refuse the home scene)."""
+    import threading, types
+    worker = BusinessWorker()
+    worker.app = types.SimpleNamespace(store=store, config=store.config)
+    worker.navigation_ready = threading.Event()
+    worker.navigation_ready.set()
+    for sid, scene in (('asuna-role-home', 'dm-a'), ('asuna-role-line', 'agent:home:dm:x')):
+        store.put('sessions', {'_id': sid, 'native_host': True, 'main_conversation': True, 'lane': 'character',
+                               'scene_id': scene, 'persona': 'P1', 'policy_epoch': 1, 'character_context': None,
+                               'cwd': 'work', 'person_id': 'A', 'binding_key': sid}, stream='native-binding:' + sid)
+    store.db.episodes.insert_one({'_id': 'ep-line', 'schema_version': 1, 'native_session_id': 'asuna-role-line'})
+    store.db.tasks.insert_one({'_id': 'task-1', 'schema_version': 1, 'episode_id': 'ep-line'})
+    turn = {'_id': 'ep-back', 'task_id': 'task-1', 'scene_id': 'dm-a', 'person_id': 'A', 'persona': 'P1',
+            'policy_epoch': 1, 'scope_key': 'scene:dm-a', 'context': {}}
+    home = 'asuna-role-home'
+    assert worker.resolve_role_session(turn) == home
+    # A task begun in this same conversation still continues there.
+    store.db.episodes.update_one({'_id': 'ep-line'}, {'$set': {'native_session_id': home}})
+    assert worker.resolve_role_session({**turn, '_id': 'ep-again'}) == home

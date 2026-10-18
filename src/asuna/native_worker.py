@@ -634,7 +634,7 @@ class BusinessWorker:
         if ep.get('task_id'):
             task = store.db.tasks.find_one({'_id': ep['task_id']})
             original = store.db.episodes.find_one({'_id': task['episode_id']}) if task else None
-            if original and original.get('native_session_id') and not self.side_session(original['native_session_id']):
+            if original and self.carried(original.get('native_session_id'), ep):
                 return self.continued_session(original['native_session_id'])
         source = store.db.messages.find_one({'_id': 'in-' + ep['_id']}) or {}
         plan_id = source.get('event', {}).get('scheduled_plan_id')
@@ -642,7 +642,7 @@ class BusinessWorker:
         original = store.db.episodes.find_one({'_id': plan.get('source_episode_id')}) if plan else None
         # A plan or a task begun on an errand or in a reflection comes back to the conversation itself, never to the
         # side session.
-        if original and original.get('native_session_id') and not self.side_session(original['native_session_id']):
+        if original and self.carried(original.get('native_session_id'), ep):
             return self.continued_session(original['native_session_id'])
         primary = store.db.sessions.find_one({'native_host': True, 'main_conversation': True,
             'scene_id': ep['scene_id'], 'persona': ep['persona'], 'policy_epoch': ep['policy_epoch'],
@@ -659,6 +659,15 @@ class BusinessWorker:
             'native_session_id': session_id, 'legacy_history': 'read-only',
             'context': 'new native conversation; no tool or message replay'}, ep['scope_key'])
         return session_id
+
+    def carried(self, session_id, ep):
+        """Whether a turn that follows another (a task's, a plan's) continues that turn's session: only a conversation
+        of its own place. A task begun on one line whose turn comes home runs in the home conversation; binding it to
+        the other line's session would be refused (NATIVE_BINDING_IDENTITY_CHANGED)."""
+        if not session_id or self.side_session(session_id):
+            return False
+        row = self.app.store.db.sessions.find_one({'_id': session_id}, {'scene_id': 1}) or {}
+        return row.get('scene_id') in (None, ep['scene_id'])
 
     def side_session(self, session_id):
         """Whether this session is an errand's copy of a conversation (ADR-066) or a reflection's own (ADR-072): a

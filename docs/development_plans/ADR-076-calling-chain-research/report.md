@@ -1,12 +1,13 @@
 # ADR-076 report: her calling chains, paths and prompts
 
-Status: **draft in progress**. Research agent session 1, started 2026-10-19 00:13 NZDT on Fable 5.1 (`claude-fable-5-1`;
-the session ran on Opus 5.5 until the brief arrived). Branch `research/adr076`. Read-only on the live records; no
-contact with Xiaoman; no replay has run yet. Every judgement about one of her turns points to that turn's record id;
-quoted evidence lives only in the private appendix (`.runtime/private/adr076/`, never committed). Times are NZDT.
+Status: **final draft, 2026-10-19 01:21 NZDT**, for the master agent's reproduction pass and then the owner, Xiaoman
+and Claude. Research agent, one session, 00:13–01:21 NZDT on Fable 5.1 (`claude-fable-5-1`; Opus 5.5 until the brief
+arrived). Branch `research/adr076` (with `main` d34dc086 merged for the probe fix). Read-only on the live records; no
+contact with Xiaoman; replays: `deepseek-flash` (≤ US$0.63 of the approved US$1.50) and the local route, both on the
+fixed probe, idle-checked (§4.4). Every judgement about one of her turns points to that turn's record id; quoted
+evidence lives only in the private appendix (`.runtime/private/adr076/`, never committed). Times are NZDT.
 
-Sections 1–3 are checkpoint 1 (the owner approves §3 before any API replay runs). Sections 4–7 fill in as the study
-proceeds; a row or item marked `[ ]` is not yet covered.
+Sections 1–3 were checkpoint 1 (approved: flash only). A `[ ]` marks the few items left open, each named in §7.
 
 ## 1. How the records were read
 
@@ -84,8 +85,8 @@ reflection: no delegating).
 
 | Branch | What she or the action brain reads | 30-day count |
 | --- | --- | --- |
-| F1 DSH tool guard: a tool not in the conversation's list | `这个对话里没有 X 这个工具；有的是：…` (`index.js attachPreset`) | in session logs only (`[ ]` to count) |
-| F2 DSH schema validation before the worker | DSH's own validation error | in session logs only (`[ ]`) |
+| F1 DSH tool guard: a tool not in the conversation's list | `这个对话里没有 X 这个工具；有的是：…` (`index.js attachPreset`) | 6 (session logs only) |
+| F2 DSH schema validation before the worker | DSH's own validation error, in English | ≈ 60 (session logs only) |
 | F3 listed but not this turn | `NOT_NOW[name]`, `CONSULT_ONLY`, `NOTE_ONLY`, `ERRAND_NOTE`, `NO_DELEGATE`, switched-off text | part of 1,406 refused `role_tool` rows |
 | F4 handler refusal | `Refused` codes (`WORDS` table), the first-think gate `先用 think 写下这回合的心里话，再做别的。`, length refusals with a cut offer, old parameter names (`GONE`), the per-turn call cap (12), `TOOL_FAULT` | the first-think gate alone ≈ 190 rows across 20 tools |
 | F5 end-of-turn check | `no_thought` 99, `unsent` 5, program words in speech 13, a `#n` label 4, a sticker or face she lacks 3, a think end-mark leak 1 (`turn.rejected`); after 2 repairs `INVALID_TURN_OUTPUT` → `FAILED_PROTOCOL`; `TURN_NOT_FINISHED` for transport failures | 130 `turn.rejected` |
@@ -94,7 +95,7 @@ reflection: no delegating).
 | F8 gate | `ATTEND_FAILED` (passes quietly; `missed_looks`) | 27 of 614 looks (quiet 384, join 228) |
 | F9 action brain | guard `CAPABILITY_DENIED`, `ASUNA_ACTION_STAGE_SUPPRESSED`, `tool.failed` codes (`INVALID_INTEGRATION_ARGV` 10, `STALE_TASK_FENCE` 8, `DEVELOPMENT_PATH_DENIED` 8, `INVALID_COMMAND` 7, `DEVELOPMENT_FLOOR_PROTECTED` 5, `CAPABILITY_DENIED` 3, `IMAGE_*` 6, `TOOL_TIMEOUT` 2, a raw `[Errno 17]` 2), `execution.rejected` 2, `BLOCKED` 7 (`TimeoutError` 4, `RuntimeError` 3), `UNDELIVERABLE` 1, tier fall-back 0 (6 高 tasks ran 高) | 573 tasks |
 | F10 side sessions | appraisal `phase.rejected` 9 (8 `不是有效的 JSON`), `phase.failed` 35, summary `llm/retry` 149 `Connection error`, `embedding.failed` 4,595 | — |
-| F11 publication | outbox and part failures (`CANCELLED_AFTER_FAILURE`, `CHANNEL_DOES_NOT_DECLARE_*`), `not_landed`, recall refused | `[ ]` |
+| F11 publication | outbox and part failures (`CANCELLED_AFTER_FAILURE`, `CHANNEL_DOES_NOT_DECLARE_*`), `not_landed`, recall refused | 12 of 4,596 outbound rows not `DELIVERED` |
 | F12 notes | `NOTE_TOO_LONG` 75, `NOTE_HOP_LIMIT` 18, `NOTE_MODE_NOT_ALLOWED` 16, `NOTE_VISIT_NOT_NOW` 14, `NOTE_NOT_OWN_WORDS` 6, `NOTE_HOME_LIMIT` 6, `NOTE_DAY_LIMIT` 4, `NOTE_TARGET_UNKNOWN` 4 | 143 |
 
 ### 2.6 The window holds two designs
@@ -169,8 +170,9 @@ export; the master agent is told before spend would pass US$1.50. The gate and t
 API too (one request each; cost negligible) to show the cross-request prefix caching the local server cannot do
 (ADR-076 §8). The `deepseek-v4-pro` row above stays as the price read that day; nothing runs on it.
 
-**Spent so far:** one `deepseek-flash` run of the probe's 7 sequences × 3 (§4.4): 1,599,017 input + 17,167 output
-tokens including the 2-turn trial, **≤ US$0.25** at off-peak cache-miss prices (every input token counted as a miss).
+**Spent:** two `deepseek-flash` runs of the probe's 7 sequences × 3 plus a 2-turn trial (§4.4): 4,050,403 input +
+37,668 output tokens, **≤ US$0.63** at off-peak cache-miss prices (every input token counted as a miss). No other
+API call was made.
 
 ## 4. Coverage matrix
 
@@ -363,25 +365,27 @@ made-up persona and the fixtures' made-up people. **No real conversation's or pe
 conversations) in the private appendix (`probe-flash-full.json`, `probe-text-flash/`); the throwaway database was
 dropped (8 databases before and after, 9 during).
 
-| Measure | `deepseek-flash` (51 turns, 121 requests) |
+Two flash runs were made: the first on the probe as it was (no `speak` offered, finding 15; 121 requests, ≤ US$0.24),
+kept in the appendix as `probe-flash-full.json` and not used as evidence; the second, below, on the fixed probe
+(`main` d34dc086 merged: the probe loads the NapCat kind and its groups offer `speak`), 2026-10-19 01:06–01:11 NZDT.
+
+| Measure | `deepseek-flash`, fixed probe (51 turns, 176 requests) |
 | --- | --- |
 | Stopped or declined (ADR-080's question) | **0** of 51 turns (`stopped_before_think` 0, `stopped_after_think` 0, no decline phrase) |
-| Think first | **51 of 51** turns began with `think`; in 6 the first request also carried a second call (`recall` 4, `delegate` 2) in the same step |
-| Requests a turn | median 2 (think → text); `tease` 3 |
-| Tools used | `think` 51, `await_answer` 14 (listed because no channel kind is registered, §4.4 caveat), `recall` 8, `delegate` 3, `stay_silent` 3 |
-| Moments met | `recall` 3 of 6; `delegate` **1 of 6** `research` moments (it answered in words instead of handing over); `speak` 0 of 42 — unmeetable (finding 15) |
-| Output | median **75** tokens a request, p90 280, max 941; 16,629 in all: a non-thinking API model writes a short thought and a short line |
-| Input | median 12,680 tokens a request, max 19,030 (the synthetic conversations are small; a live turn is 100–150k) |
-| Cost | 1,533,885 input + 16,629 output tokens: **≤ US$0.24** with every input token priced as a cache miss (off-peak); the actual spend is lower where DeepSeek's prefix cache hit. Within the owner's US$1.50 |
+| Think first | **51 of 51** turns began with `think`; in 7 the first request also carried a second call in the same step (`recall` 3, `delegate` 3, `task` 1) |
+| Requests a turn | median 3 (think → speak → a closing text); `long` and `tease` 4 |
+| Tools used | `think` 51, `speak` 67 calls (65 text parts), `recall` 6, `delegate` 6, `task` 3, `stay_silent` 2, `understand_person` 1 |
+| Moments met | `speak` **45 of 45**; `recall` **3 of 3**; `delegate` **3 of 6** `research` moments (in the other 3 it answered in words); the probe's verdict FAIL rests on those 3 |
+| Output | median **84** tokens a request, p90 252, max 854; 20,501 in all |
+| Input | median 13,923 tokens a request, max 20,457 (the synthetic conversations are small; a live turn is 100–150k) |
+| Body text after `speak` | 49 of 51 turns ended with body text after speaking: in 12 it repeats a `speak` part, in **37 (73%) it is new words**, which never leave where only `speak` speaks (`coordinator`: handed back only when nothing was spoken; otherwise recorded as `turn.unsent_body` and told next turn as `unsent_from_program`) — the habit her live record shows 116 times in 30 days. Output: a `think` request writes a median 159 tokens, a `speak` request 84 |
+| Cost | 2,451,386 input + 20,501 output tokens: **≤ US$0.38** with every input token priced as a cache miss (off-peak) |
 
 What it tells the study: the character-brain design runs on an API model without a refusal (unlike Claude, ADR-080);
-the first-step rule holds without a single enforcement firing; output cost on such a model is negligible next to
-input, so a 1M-window projection is about prefix stability (R7), not output. **The `delegate` 1 of 6 and `recall` 3 of
-6 are not evidence yet**: a turn offered `await_answer` instead of `speak` may choose differently, and the fixtures'
-intent is a `speak` turn. The master agent fixed the probe (branch `claude/probe-kinds`: the probe loads the NapCat
-kind, a test checks its groups offer `speak`, ADR-080 §7 and `docs/MODELS.md` corrected); this run is **to be
-repeated on the fixed probe** (same 51 turns, about US$0.25) and these numbers replaced, and the local baseline uses
-the fixed probe too.
+the first-step rule holds in 51 of 51 turns without an enforcement firing; the `speak` contract is followed every
+time it is offered; the model hands over to the action brain in half the moments that call for it; output cost is
+negligible next to input, so a 1M-window projection is about prefix stability (R7), not output; and the one habit the
+design still pays for on this model is the closing body text after `speak`.
 
 Setup caveat found while reading the probe (finding 15): the probe process registers no channel kind
 (`channel_kinds.kinds()` is empty there; `suite_config()` has no channels), so for its `qq:…` group scene
@@ -392,8 +396,36 @@ step whose `needs` is `speak` is therefore unmeetable by construction, in this r
 What the run does show for the API model: whether it is stopped or declines (ADR-080's question), whether it thinks
 first, which tools it reaches for, how many requests a turn takes, and its output size.
 
-**Local model**: not yet run (her free morning; one at a time, idle-checked). The same probe on the local route gives
-the baseline the API numbers compare against.
+**Local model, the same fixed probe, 2026-10-19 01:09–01:19 NZDT** (the owner said she was free; each of the 21 runs —
+one sequence × one repeat — was preceded by an idle check on the live database: no episode live in the last 30 min,
+no `turn.started` without `turn.output` in 5 min, no inbound line waiting, no action task running; the first check
+read BUSY once and the driver waited, every later one read IDLE; the series would have stopped after 10 busy readings).
+Character route `qwen38-next-uncensored-strata-vision` on the local server; no API, no cost; databases 8 before and after.
+
+| Measure | local model, fixed probe (51 turns, 218 requests) | `deepseek-flash`, same probe |
+| --- | --- | --- |
+| Stopped or declined | **0** of 51 | 0 of 51 |
+| Think first | 48 of 51 turns began with `think`; **3 began with `recall`**, and 11 first requests carried a lone `speak` (the handler refuses it: `先用 think…`, the branch measured live at 3.5% of turns, §5 finding 1) | 51 of 51 |
+| Requests a turn | median 4 (think → speak → stay_silent, often a document write between) | 3 |
+| Tools used | `think` 51, `speak` 69 calls, `stay_silent` **41**, `write_document` 12, `understand_person` 9, `recall` 9, `delegate` 8, `task` 1 | `think` 51, `speak` 67, `recall` 6, `delegate` 6, `task` 3, `stay_silent` 2, `understand_person` 1 |
+| Moments met | `speak` **45 of 45**; `recall` **3 of 3**; `delegate` **0 of 6** `research` moments (it answered in words, twice wrote a document; its 8 `delegate` calls fell in other moments) | `speak` 45 of 45; `recall` 3 of 3; `delegate` 3 of 6 |
+| Ending the turn | `stay_silent` closes 41 turns; 42 of 62 recorded turn ends have no body text; **17 end with new unsent words** (27%), 3 echo a `speak` part | 2 of 51 without body text; 37 (73%) new unsent words; 12 echo |
+| Output | median 116 tokens a request (think 197, speak 102; reasoning included), p90 314, max 1,209; 35,512 in all | 84 (think 159, speak 84); 20,501 |
+| Input | median 13,665 tokens a request, max 21,228 | 13,923, max 20,457 |
+
+What the comparison tells the study (the fixtures are seven synthetic group conversations, 51 turns each side; they
+are not her live record):
+
+- **The design holds on both models**: no refusal, the `speak` contract met every time, `recall` used where the
+  moment asks. The enforcement that fires is the "think first" refusal, on the local model only (14 of 62 first
+  requests did not begin with `think`), at one extra step each — the live rate of the same branch is 3.5%.
+- **Where they differ is judgement, not mechanics**: the local model closes with `stay_silent` and writes documents
+  and understandings; flash closes with body text (73% new words that go nowhere) and hands research over in half
+  the moments where the local model never does (0 of 6). Both are choices the fixtures' author expected differently;
+  neither is a harness fault, and the owner's rule is that her choices are hers.
+- **Cost shape**: identical input sizes; the API model's output is 40% smaller; at API prices the whole 51-turn set is
+  under US$0.40 with no cache, so a 1M-window API deployment of this design is priced by its uncached input, which
+  the per-session fixed tool list and the held-back unchanged blocks already minimise (R7).
 
 Where the action brain's report reaches her: a `task_feedback` turn whose `event` block is 5,900–12,100 chars (§4.1), the
 largest single block in her prompts; outside home it passes `machine_words.clean` (tracebacks and absolute paths
@@ -402,8 +434,9 @@ a `fresh_context` continuation (after the route's `idleMinutes`) opens with the 
 
 ## 5. Findings
 
-`[ ]` Each finding points to the turn records it rests on; a guess about her state of mind is marked as the agent's
-guess.
+Each finding points to the records it rests on (counts from the audit, episodes, tasks and session logs; episode ids
+and the probe reports in the private appendix); a guess is marked as the agent's guess. No finding reads her state of
+mind.
 
 Verified against the records (counts from the audit and session logs; episode ids in the private appendix):
 
@@ -438,15 +471,16 @@ Verified against the records (counts from the audit and session logs; episode id
    its queue (`LOCAL_ENDPOINT_QUEUE_TIMEOUT`). None of these reach her as a message; whether each should is a design
    question for §6.
 4. **`write_document` op `correction` was refused all 29 times** (`DOC_OP_NOT_ALLOWED: 这份文档不能这样改`, 17 of
-   them adding `「work_log」是流水记录…`): an option she is shown and never once allowed to use in 30 days. Either
-   the option's description does not say where it applies, or the refusal should name the op to use instead (`[ ]`
-   read the description).
+   them adding `「work_log」是流水记录…`): an option she is shown and never once allowed to use in 30 days. The
+   description does say where it applies (`correction 给活账写更正（原条目不改）`: ledgers), and 17 of the 29 calls
+   aimed at `work_log`, a running record, where `RUNTIME_API.md` says `correction` does not apply. The refusal names
+   the rule; it could also name the op to use (`replace_section` or `append_section`) — folded into R2.
 5. **DSH's own schema validation speaks English and runs before every rule of the house.** About 60 calls in 30
    days were returned as `invalid arguments: missing required property "op"` and the like (`feel` 13, `write_document`
    12, `plan` 6, `private_words` 4, `sticker` 4, `ideas` 3, `stay_silent` 3, `think` 3, …). The message names the
    field, so she can correct it, but it is not in the `CODE: 原因；怎么办` form, not in Chinese, and carries no
-   "what to do next". Fixing the wording needs the DSH fork (**marked**); the record shows the next call usually
-   corrects it (`[ ]` measure).
+   "what to do next". Fixing the wording needs the DSH fork (**marked**) unless the plugin can see the failure first
+   (R3). Whether the next call corrects it was not measured (§7).
 6. **Hallucinated tool names hit the DSH guard 6 times** (`read_image` where the conversation has none, `ask`,
    `set_tags`, `lines_from_program` and `catchup` as tools): the guard's text lists the usable tools and says to go
    on without one; an adequate message.
@@ -492,8 +526,21 @@ Verified against the records (counts from the audit and session logs; episode id
     a `qq:…` group scene but never calls `channel_kinds.load`, so `reply_parts` is empty and `role_tools.abilities`
     lists `await_answer` and `attach_image` instead of `speak`; the fixtures' `needs: speak` steps (the majority) are
     then counted as missed whatever the model does. Verified by running the probe's own imports: no kind registered,
-    `reply_parts('qq:…:group:…')` = `()`. The PASS/FAIL verdicts in `docs/MODELS.md` §3 that rest on "missed what
-    they need" should be re-read with this in mind; the stop/decline part of those verdicts is unaffected.
+    `reply_parts('qq:…:group:…')` = `()`. Reproduced and fixed by the master agent the same night (`main` d34dc086:
+    the probe loads the NapCat kind, a test checks its groups offer `speak`; ADR-080 §7 and `docs/MODELS.md`
+    corrected — the local model's two "missed" moments were both `speak` and are void).
+16. **Both models end a spoken turn with body text that goes nowhere, flash far more.** On the fixed probe (§4.4)
+    `deepseek-flash` closed 37 of 51 turns with new words after `speak` (73%), the local model 17 of 62 turn ends
+    (27%; it closes with `stay_silent` 41 times). Where only `speak` speaks, such text is dropped, audited as
+    `turn.unsent_body` (116 live rows in 30 days) and told next turn in `unsent_from_program`. The design already
+    handles it at zero cost in the turn; the only price is the words she wrote for nothing and one block next turn.
+    Agent's reading: the instruction "写在正文里的话会按顺序发给对方" (`turn.md`) is true elsewhere and false on a
+    platform conversation, and a model that reads both rules takes the general one.
+17. **Handing over to the action brain is a judgement the two models make differently**: in the six fixture moments
+    written to need `delegate`, the local model handed over 0 times (it answered, or wrote a document) and flash 3
+    times. The live record shows the local model handing over 544 times in 30 days, so this is the fixtures' moments,
+    not an inability. No recommendation: whether to hand over is hers (owner's rule), and the probe's `needs` is its
+    author's expectation.
 
 ## 6. Recommendations
 
@@ -516,6 +563,7 @@ recommendation needing the DSH fork is marked **DSH fork**. Draft: the replays (
 | R7 | **Keep the per-session fixed tool list and the notice ceiling**: both are prefix-stability by design and the ceiling (48,000 JSON characters) is the model's attention budget, not the window's | robustness by design | 87–93% cache hit on her turns comes from this | on a 1M window the ceiling need not rise: raise `KEEP_HISTORY_ROWS` only if a replay shows the model using the dropped rows | 0 | §2.2 hit rates; `context_budget.ceiling`; `role_tools.session_specs` |
 | R8 | **Reference docs**: fix §8 items 1, 2 and 5 (budget sentence, the call cap, DSH validation); update ADR-076 §7's blind-spot line (item 4) | robustness by design | — | — | 0 | §8 |
 | R9 | **`NOT_NOW['sticker']`** says the night turn does not tidy the shelf; a settlement turn with `stickers_review_from_program` lists `sticker`. Say "unless the review is listed", or stop listing it there | robustness by design (the words-vs-capability class of ADR-076 §7) | the only mismatch of that class found in `_turn_rules` × `NOT_NOW` | the same | +20 characters in one refusal | §4.2 F3 |
+| R10 | **Say the body-text rule once, by place**: `turn.md` tells every conversation that body text is sent; on a platform conversation `speak_from_program.sent` says only `speak` speaks. Put the platform sentence where the general one is (the system prompt is already rendered per place, `render.compose`), so a model reads one rule, not two | robustness by design (one contract per place; not a wording tuned to a model) | 116 unsent bodies in 30 days; 27% of local probe turns | 73% of flash probe turns: the gain is larger on the API model | 0 tools; about −40 characters in `turn.md` for platform renders, +0 elsewhere; `speak_from_program.sent` can then go (−1 per-turn line on platforms) | §5 finding 16; §4.4 |
 
 Not recommended: changing the `speak` line cap (19 refusals a month: the rule is chat pacing and the refusal
 teaches it); splitting the `task_feedback` `event` block (10k characters median: it is the report she asked for, and
@@ -523,16 +571,22 @@ teaches it); splitting the `task_feedback` `event` block (10k characters median:
 
 ## 7. Not covered, and why
 
-- **No replay has run** (local or API): every row of §4 is covered by records and code reading, none by a replay.
-  Local replays wait for her free mornings (§3); API replays wait for the owner's approval of §3.
+- **The replays cover the probe's seven synthetic group conversations** (§4.4: local and `deepseek-flash`, 51 turns
+  each on the fixed probe), not every class of §2: home turns, the peer line, task feedback, consult, the night turns,
+  notes, visits and every failure branch are covered by records and code reading only. The probe fixtures were
+  written for ADR-080's question (is the model stopped), so they exercise S1–S5 of a group turn and the `speak`,
+  `recall`, `delegate` moments, and no refusal branch on purpose.
 - **Whether the model is seen to use a block** (§4.1 column "consumed by") is marked only where a tool consumes the
-  block; reading her words to judge the rest is for the replay probes, where the words are synthetic.
+  block; the replays' words were not read for this (they are the model's, in synthetic conversations, kept in the
+  appendix for the master agent's own reading).
 - **Unobserved cells in the current window**: `external` turns in a stranger's private chat (`dm`, `public`): 0; a
   `note` turn in a group: 0 (`notes.py` allows it); a tier fall-back (`tier.fell`): 0 events, 6 高 tasks ran 高; a
   carried session (ADR-028): 2 `native.context.carried` in 30 days, not examined; `ERRAND_LATE` / `ERRAND_INTERRUPTED`:
   code only. Each is listed as "traced in code" with its `file:name`, not as covered.
 - **F11 publication branches** are read from the code and the 12 non-delivered rows' states; the adapter-side
   receipts (`publication.attempt` payloads) were not opened.
+- **Not measured**: whether the call after a DSH validation error corrects it (finding 5); whether the model is seen to
+  use each block (§4.1 "consumed by" `[ ]`); the local model's probe output tokens split into reasoning and text.
 - **Kazusa's deployment** is not running (brief, point 4).
 - **DSH's own internals** (schema validation text, compaction thresholds, `developer/message tool-registry` rows,
   the scheduler session's 3,220 `blocked` turn ends) are described as observed, not read in the fork's source.
@@ -549,8 +603,8 @@ authority; each line says which side to change.
    implements the first; the second sentence is stale. Fix the doc.
 2. **The per-turn tool-call cap is undocumented.** Refusals read `这回合的工具调用已经到上限（12 次）…` (9 in 30 days,
    `place_timezone` 6, `stay_silent` 3) and `tools_week_from_program.turn_shape` names "the calls-per-turn cap at its
-   current value", but `RUNTIME_API.md` never states the cap or where it is set. Fix the doc (`[ ]` anchor the
-   constant).
+   current value", but `RUNTIME_API.md` never states the cap or where it is set (`role_tools.CALLS_PER_TURN`, 12;
+   `RECALLS_PER_TURN` 3 and `IDEAS_PER_TURN` 3 beside it). Fix the doc.
 3. ~~`think` over 300 characters~~ — withdrawn: the 126 `think` refusals are all from before 2026-10-14; since then
    the code keeps the thought and notes the excess, as the doc says (§5 finding 13).
 4. **Action-brain tool errors are in the audit after all.** ADR-076 §7 (the brief) lists "action-brain tool errors are

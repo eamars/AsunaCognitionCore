@@ -53,6 +53,17 @@ def typed(text):
 
 UNKNOWN_NAME = '还不知道名字'
 REPLY_EXCERPT = 60
+THOUGHT_ANCHOR = 60                 # her thought under a quote of her line: about this long, cut at a sentence end
+
+
+def anchor(text, limit=THOUGHT_ANCHOR):
+    """The first sentences of a thought that fit in about `limit` characters, cut where a sentence ends (a half
+    sentence is easier to repeat as if meant now), with the program's mark and the whole length when cut."""
+    if len(text) <= limit:
+        return text
+    ends = [i for i, ch in enumerate(text[:limit + 1]) if ch in '。！？；!?;']
+    cut = ends[-1] + 1 if ends else limit
+    return text[:cut] + '…（截断，原文 %d 字）' % len(text)
 
 
 def said_line(line):
@@ -499,7 +510,9 @@ class People:
                 from .reasons import for_message
                 then = for_message(self.store, parent['_id'])
                 if then:
-                    lines.append('  > （你说那句时心里想的：%s）' % ' '.join(then.split()))
+                    # An anchor, not the whole old thought (her choice, ADR-079): read in full it passes for a
+                    # judgement of now. The whole thought stays where recall finds it.
+                    lines.append('  > （你说那句时心里想的：%s）' % anchor(' '.join(then.split())))
         elif quoted.get('reply_to'):
             lines.append('  > 回复了一条更早的消息')            # a line the program has no record of
         body = self.heard(scene, row.get('text') or '', account)

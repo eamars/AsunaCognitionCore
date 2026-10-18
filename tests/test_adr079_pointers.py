@@ -112,3 +112,13 @@ def test_the_speak_result_gives_each_sent_lines_number_and_a_number_in_her_words
     assert '〔' not in reply_receipt(queued)
     assert LINE_NUMBER.search('你看〔318〕那句') and not LINE_NUMBER.search('今天 3 点')
     assert NUMBER_NOT_WORDS == '编号是挑引用用的，不写进你说的话里。'
+
+
+def test_her_thought_under_a_quote_of_her_line_is_an_anchor_cut_at_a_sentence_end():
+    from asuna.people import anchor
+    thought = '他说得对，我先认下。' + '后面这段是我当时对整件事的长判断' * 6
+    short = anchor(thought)
+    assert short == '他说得对，我先认下。…（截断，原文 %d 字）' % len(thought)
+    assert anchor('一句短的。') == '一句短的。'
+    no_end = '没有句号的一整段' * 12
+    assert anchor(no_end).startswith(no_end[:60] + '…（截断')

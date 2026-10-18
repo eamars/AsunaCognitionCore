@@ -146,7 +146,6 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `turn_pictures` — ([(ref, payload)] to attach to her group turn, pictures_from_program or None).
 - def `code_of` — The machine code of a refusal, kept in the record (ADR-060), never in her words.
 - def `words` — A refusal in words for her (ADR-060): what is wrong and what to do.
-- def `recent_line` — The line she means of theirs: the one that called her (这条, if it is theirs), else their latest within REACT_MINUTES (刚才那条, or 这条 when the line that called her is someone else's).
 - def `chat_lines` — How many lines a text part is in a chat (owner 2026-10-14: in online chat a line break is another message): each line with words counts, a blank line does not, a fenced code block counts as one.
 - def `reply_receipt` — What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2); where the conversation shows line numbers, each sent line's own (ADR-079).
 - class `RoleTools` — Runs one tool call for one episode, on the coordinator's thread (it holds the coordinator lock).
@@ -154,7 +153,6 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `tool_think`
   - `tool_recall`
   - `tool_stay_silent`
-  - `tool_quote`
   - `tool_credential`
   - `tool_watch`
   - `tool_await_answer`

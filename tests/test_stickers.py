@@ -40,14 +40,14 @@ def test_the_adapter_names_faces_and_tells_stickers_from_photos():
 
 
 def test_the_adapter_sends_faces_in_the_words_and_a_sticker_alone():
-    _, params = build_send_params('group', GROUP, '笑死[表情:汪汪] @qq:20002 [表情:没这个]', reply_to='9')
+    _, params = build_send_params('group', GROUP, '笑死[表情:汪汪] @qq:20002 [表情:没这个]', quote='9')
     assert [seg['type'] for seg in params['message']] == ['reply', 'text', 'face', 'text', 'at', 'text']
     assert params['message'][2]['data'] == {'id': '277'} and params['message'][-1]['data']['text'] == ' [表情:没这个]'
     _, params = build_send_params('dm', '20001', '[表情:微笑]好')
     assert [seg['type'] for seg in params['message']] == ['face', 'text']
     _, params = build_send_params('dm', '20001', '只有字')
     assert params['message'] == [{'type': 'text', 'data': {'text': '只有字'}}]     # unchanged without a face
-    _, params = build_send_params('group', GROUP, '', reply_to='9', image_b64='QUJD', sticker={'kind': 'custom'})
+    _, params = build_send_params('group', GROUP, '', quote='9', image_b64='QUJD', sticker={'kind': 'custom'})
     assert params['message'] == [{'type': 'image', 'data': {'file': 'base64://QUJD', 'sub_type': 1,
                                                             'summary': '[动画表情]'}}]
     _, params = build_send_params('group', GROUP, '', sticker={'kind': 'market', **MARKET, 'summary': '[臭]'})

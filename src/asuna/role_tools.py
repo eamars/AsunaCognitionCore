@@ -94,10 +94,15 @@ AFFECT_FIELDS = {
     'open': {'type': 'boolean', 'description': '没解决、要挂着的事写 yes'},
 }
 
+# ADR-079 §9.4: one way to point at a line, in every tool: its number in this conversation, or 这条.
+QUOTE_LINE = ('引用哪条：写那条的编号（只写数字，编号在每行末尾的〔〕里），或「这条」＝叫你的那条；不写就不引用。'
+              '你自己说过的话也能引，用来改口或补一句。一句话回好几条时不用引。编号只用来挑引用，别写进 text。')
+REACT_LINE = 'react：点哪条，写它的编号（只写数字）或「这条」＝叫你的那条。点表情挂在那条上；贴纸是你发的一条新消息，两样都行'
+QUOTED = '引的是 %s'
 # The parts of her reply, in a conversation whose kind lists them (channel_kinds.reply_parts; ADR-064 phase 2).
 REPLY_KINDS = ('text', 'sticker', 'picture', 'poke', 'react')
 # What reply carries itself where it is listed.
-REPLY_REPLACES = ('quote', 'await_answer', 'attach_image')
+REPLY_REPLACES = ('await_answer', 'attach_image')
 
 TOOLS = {
     'think': {
@@ -146,10 +151,10 @@ TOOLS = {
                           'text': _s('text：这一条消息的话；里面每一行都算进一回合的行数'),
                           'name': _s('sticker：你收着的表情包的名字'),
                           'artifact_id': _s('picture：照抄 image_artifacts_from_program'),
-                          'who': _s('poke 戳谁、react 给谁的话点：照抄标签；私聊里不写就是对方'),
-                          'line': _s('react：「这条」是叫你的那条，「刚才那条」是他十分钟内的最后一句', enum=['这条', '刚才那条']),
+                          'who': _s('poke：戳谁，照抄标签；私聊里不写就是对方'),
+                          'line': _s(REACT_LINE),
                           'face': _s('react：表情名')}}},
-            'quote': _s('群里：source 引用叫你的那条，none 不引用；不写由程序定', enum=['source', 'none']),
+            'quote': _s(QUOTE_LINE),
             'wait': _s('群里：no 不等回话，question 在问这里的人（回答进 questions_from_program）；不写由程序定（@ 了谁或在回谁就等他三分钟）',
                        enum=['no', 'question']),
             'patience': _s('wait=question 时等多久（不写是一会儿）', enum=['一会儿', '半天', '一天']),
@@ -158,11 +163,6 @@ TOOLS = {
     'stay_silent': {
         'description': ('结束这回合，不再说话。回执会说这一回合发出了什么。只写在心里话里的话没有说过。'),
         'parameters': {'reason': _s(limit=1000, description='为什么不说；说过了就不用写')},
-    },
-    'quote': {
-        'description': ('群里这回合说的第一句要不要引用叫你的那条。不调用时程序这样定：那条之后别人又说过话就引用，否则直接发。发 bot 命令（如 #napcat）'
-                         '这类要原样发的选 none。'),
-        'parameters': {'how': _s('引用还是不引用', required=True, enum=['source', 'none'])},
     },
     'await_answer': {
         'description': ('等不等回话。群里你这句 @ 了谁或在回谁，程序默认等他：发出后约三分钟里他的下一句会叫你看一眼（接不接由你）'
@@ -286,9 +286,9 @@ TOOLS = {
         'description': ('在你是管理员的群里禁言、解禁、撤回或移出普通成员；在家里接受或拒绝列出的请求。这是你自己的判断，别人叫你做不算理由。'
                          '平台确认之前还没做完。'),
         'parameters': {'kind': _s('做什么', required=True, enum=['mute', 'unmute', 'recall', 'kick', 'accept', 'decline']),
-                       'who': _s('谁：标签，如 [名字 #4] 或 #4；请求写请求号，如 请求1', required=True),
+                       'who': _s('谁：标签，如 [名字 #4] 或 #4（禁言、解禁、移出用；撤回由那一条定，不用写）；请求写请求号，如 请求1'),
                        'duration': {'type': 'integer', 'description': '禁言多少分钟（只禁言用），1 到 43200'},
-                       'which': _s('撤回哪条（只撤回用）', enum=['这条', '他刚才那条']),
+                       'line': _s('撤回哪条（只撤回用）：写它的编号（只写数字）或「这条」'),
                        'reason': _s('为什么', required=True)},
     },
     'visit': {
@@ -617,8 +617,6 @@ def _turn_rules(store, ep):
         names.append('find_member')
     if scene_kind == 'group':
         names += ['await_answer', 'group_focus']
-        if kind not in ('visit', 'scheduled', 'presence', 'settlement'):
-            names.append('quote')                 # her first line quotes the line that called her, or not          # her line asks someone: their next unaddressed line gets her a look
     if cls == visibility.OWNER_PRIVATE:
         # restart: the Host supervisor (ADR-034), in every home turn: a plan or a note of her own that wakes her
         # to restart is when she needs it most.
@@ -661,7 +659,7 @@ WITH_ACTION = ('delegate', 'task.message', 'task.stop', 'task.page', 'task.answe
 # herself go wherever she is at home; sending her on someone's errand is for the owner's conversations only.
 AT_HOME = ('write_document', 'note', 'set_policy', 'ideas.read', 'ideas.review',
            'ask.ask', 'ask.read', 'ask.close', 'restart', 'place_timezone', 'group_focus')
-IN_GROUPS = ('write_document', 'note', 'await_answer', 'quote', 'find_member', 'group_focus')
+IN_GROUPS = ('write_document', 'note', 'await_answer', 'find_member', 'group_focus')
 # Her heartbeats, her nights and her vault are in the local chat.
 LOCAL_CHAT = ('visit', 'promote_memory', 'credential')
 
@@ -743,7 +741,6 @@ NOT_NOW = {
                 '在能发表情包的对话里，或者家里别的回合再用。'),
     'credential': '保险箱只在家里有人跟你说话、或者任务交回来的那一回合用；心跳、计划到点、自我改进这些回合不收不删。',
     'find_member': '这回合没有这个群的成员名单可查；照对话里的标签认人。',
-    'quote': 'quote 只在有人说话叫到你的那一回合用；串门、计划到点、心跳、夜间沉淀这几种回合没有要引的那条话。',
     'understand_person': ('这回合没有人跟你说话（心跳、夜间沉淀、自我改进、串门、便条叫醒这几种回合），'
                           '没有要更新理解的人；等对方下次开口再写。'),
     'feel': '这回合没有情感账可记。',
@@ -976,23 +973,9 @@ ACTION_MARK = '（你做的动作，不是你说的话）'
 # ADR-079: a line's number in her conversation (〔318〕) is for choosing what to point at, never for her words.
 LINE_NUMBER = re.compile(r'〔\s*\d+\s*〕')
 NUMBER_NOT_WORDS = '编号是挑引用用的，不写进你说的话里。'
-REACT_MINUTES = 10
 # Channels whose platform refused a reaction in a private chat: not tried there again until the Host restarts (her
 # call: the platform may take them one day).
 REACT_OFF_IN_DMS = set()
-
-
-def recent_line(store, scene, ep, people, doc, which):
-    """The line she means of theirs: the one that called her (这条, if it is theirs), else their latest within
-    REACT_MINUTES (刚才那条, or 这条 when the line that called her is someone else's)."""
-    from datetime import datetime, timedelta, timezone
-    source = store.db.messages.find_one({'_id': 'in-' + ep['_id']})
-    if which == '这条' and source and people.person(source.get('author')) == doc.get('person'):
-        return source
-    since = (datetime.now(timezone.utc) - timedelta(minutes=REACT_MINUTES)).isoformat()
-    return store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'inbound',
-                                       'author': {'$in': people.authors_of(doc['person'], [scene['_id']])},
-                                       'received_at': {'$gte': since}}, sort=[('scene_seq', -1)])
 
 
 def chat_lines(text):
@@ -1028,7 +1011,7 @@ def reply_receipt(queued, numbered=False):
 def _given(args, field):
     """What she gave for an enum field, for a refusal: '（给的是「x」）' or '（没写 x）'."""
     value = (args or {}).get(field) if isinstance(args, dict) else None
-    shown = {'op': 'do', 'decision': 'do', 'how': 'quote_whom', **_SHOWN}.get(field, field)
+    shown = {'op': 'do', 'decision': 'do', **_SHOWN}.get(field, field)
     return '（没写 %s）' % shown if value is None else '（给的是「%s」）' % str(value)[:40]
 
 
@@ -1298,13 +1281,6 @@ class RoleTools:
         # The Host adds what this turn has written so far (`written`), a fact she cannot read back herself.
         return {'silent': True, 'note': '这回合到此结束。'}, True
 
-    def tool_quote(self, ep, call_id, args):
-        how = args.get('how')
-        if how not in ('source', 'none'):
-            raise Refused('quote_whom 是 source（引用叫你的那条）或 none（不引用）%s。' % _given(args, 'how'))
-        self.coordinator._update(self._fresh(ep), quote=how)
-        return {'note': '这回合第一句会引用叫你的那条。' if how == 'source' else '这回合说的话都不带引用。'}, False
-
     def tool_credential(self, ep, call_id, args):
         from . import credentials
         if args.get('op') == 'keep':
@@ -1414,13 +1390,18 @@ class RoleTools:
                 else:
                     planned.append({'kind': 'picture', 'text': '', 'fields': {'attachment': dict(meta)},
                                     'shown': 'picture'})
-        quote, wait = args.get('quote'), args.get('wait')
-        if quote not in (None, 'source', 'none'):
-            problems.append('quote 是 source 或 none')
+        wait, quoted = args.get('wait'), None
+        if args.get('quote') not in (None, ''):
+            # ADR-079 §9.4: the line she chose, by its number or 这条; the program never chooses one for her.
+            quoted, why = People(self.store, ep['persona']).line_of(scene, ep['_id'], args['quote'])
+            if why:
+                problems.append('quote：' + why)
+            elif not any(row['kind'] in ('text', 'picture') for row in planned):
+                problems.append('quote 要跟一条 text 或 picture 一起发（贴纸、戳、点表情带不了引用）')
         if wait not in (None, 'no', 'question'):
             problems.append('wait 是 no 或 question')
-        if (quote or wait) and not group:
-            problems.append('quote 和 wait 只在群里用')
+        if wait and not group:
+            problems.append('wait 只在群里用')
         patience = args.get('patience')
         from . import questions
         if patience is not None and (wait != 'question' or patience not in questions.GROUP_PATIENCE):
@@ -1433,9 +1414,10 @@ class RoleTools:
         if problems:
             raise Refused('这次一条都没发：%s。改好再调用一次 speak。' % '；'.join(problems)
                           + ('真是别的数（PR 号之类），原样加 force=yes 再调用一次。' if numbered else ''))
+        if quoted:
+            first = next(row for row in planned if row['kind'] in ('text', 'picture'))
+            first.setdefault('fields', {})['quote_line'] = quoted['_id']      # publish turns it into the platform's id
         changes = {}
-        if quote:
-            changes['quote'] = quote
         if wait in ('no', 'question'):
             # a question's line is waited on by the question (its looks and answers), not listed again as a wait
             changes['await_answer'] = {'off': True}
@@ -1449,16 +1431,39 @@ class RoleTools:
                                                           'calls': int(before.get('calls') or 0) + 1})
         from .capabilities import numbered as shows_numbers
         out = {'note': reply_receipt(queued, shows_numbers(self.store, scene))}
+        if quoted:
+            out['quoted'] = QUOTED % People(self.store, ep['persona']).pointed(scene, quoted, 30)
         if asked:
             out['question'] = QUESTION_RECEIPT % (asked['_id'], asked['patience'],
                                                   questions.PATIENCE[asked['patience']])
         return out, False
 
     def _action_part(self, ep, scene, kind, part):
-        """A poke or a reaction as a part of her reply: the program's words for her history, and the platform action."""
+        """A poke or a reaction as a part of her reply: the program's words for her history, and the platform action.
+        A poke names a person (`who`); a reaction names a line, as every pointer does (ADR-079 §9.4)."""
         from . import channel_kinds
         from .people import People
         people = People(self.store, ep['persona'])
+        if kind == 'react':
+            if scene.get('kind') == 'dm' and scene.get('channel_id') in REACT_OFF_IN_DMS:
+                raise Refused('私聊里点不了表情（平台不收），到下次重启前私聊里不用 react')
+            face = str(part.get('face') or '').strip()
+            faces = channel_kinds.faces_of(scene['_id'])
+            if face not in faces:
+                raise Refused('「%s」不是这里的表情名' % face if face else '要写 face（表情名）')
+            line, why = people.line_of(scene, ep['_id'], part.get('line') or '这条')
+            if why:
+                raise Refused('line：' + why)
+            if line.get('direction') == 'outbound':
+                raise Refused('那是你自己的话，不用给自己点')
+            message_id = ((line.get('event') or {}).get('channel') or {}).get('platform_event_id')
+            if not message_id:
+                raise Refused('那一条平台没给编号，点不了（不是你的错）')
+            # Her reaction reads like anyone's (ADR-079 §9.3): the line by its number, speaker and first words.
+            pointed = people.pointed(scene, line, 30)
+            return {'kind': 'react', 'text': '给 %s 点了「%s」%s' % (pointed, face, ACTION_MARK),
+                    'shown': 'react「%s」给 %s' % (face, pointed),
+                    'fields': {'action': {'kind': 'react', 'message_id': str(message_id), 'emoji_id': str(faces[face])}}}
         who = str(part.get('who') or '').strip()
         if not who and scene.get('kind') == 'dm':
             who = ep['person_id']                 # a private chat has one other person: who may be left out
@@ -1471,26 +1476,11 @@ class RoleTools:
         if doc.get('person') == people.self_id:
             raise Refused('不能对你自己')
         label = people.label(doc)
-        if kind == 'poke':
-            account = people.account_of(scene, doc)
-            if not account:
-                raise Refused('程序还不知道 %s 在平台上的账号（不是你的错）' % label)
-            return {'kind': 'poke', 'text': '戳了戳 %s%s' % (label, ACTION_MARK), 'shown': 'poke %s' % label,
-                    'fields': {'action': {'kind': 'poke', 'account': account}}}
-        if scene.get('kind') == 'dm' and scene.get('channel_id') in REACT_OFF_IN_DMS:
-            raise Refused('私聊里点不了表情（平台不收），到下次重启前私聊里不用 react')
-        face = str(part.get('face') or '').strip()
-        faces = channel_kinds.faces_of(scene['_id'])
-        if face not in faces:
-            raise Refused('「%s」不是这里的表情名' % face if face else '要写 face（表情名）')
-        line = recent_line(self.store, scene, ep, people, doc, part.get('line') or '这条')
-        message_id = ((line or {}).get('event') or {}).get('channel', {}).get('platform_event_id')
-        if not message_id:
-            raise Refused('%s %d 分钟内在这里没说过能点的话' % (label, REACT_MINUTES))
-        # Her reaction reads like anyone's (ADR-079 §9.3): the line by its number, speaker and first words.
-        return {'kind': 'react', 'text': '给 %s 点了「%s」%s' % (people.pointed(scene, line, 30), face, ACTION_MARK),
-                'shown': 'react「%s」给 %s' % (face, label),
-                'fields': {'action': {'kind': 'react', 'message_id': str(message_id), 'emoji_id': str(faces[face])}}}
+        account = people.account_of(scene, doc)
+        if not account:
+            raise Refused('程序还不知道 %s 在平台上的账号（不是你的错）' % label)
+        return {'kind': 'poke', 'text': '戳了戳 %s%s' % (label, ACTION_MARK), 'shown': 'poke %s' % label,
+                'fields': {'action': {'kind': 'poke', 'account': account}}}
 
     def _picture(self, ep, scene, artifact):
         """The attachment of a picture she may send here, or Refused in words."""
@@ -2040,7 +2030,7 @@ class RoleTools:
 
     def tool_group_action(self, ep, call_id, args):
         from . import group_admin
-        item = {k: args[k] for k in ('kind', 'who', 'duration', 'which', 'reason') if args.get(k) is not None}
+        item = {k: args[k] for k in ('kind', 'who', 'duration', 'line', 'reason') if args.get(k) is not None}
         if item.get('kind') in group_admin.ANSWERS:
             from . import notices
             if ep['scene_id'] != (self.store.config.get('chat') or {}).get('scene_id'):

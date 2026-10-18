@@ -104,6 +104,7 @@ map_from_program (ADR-073): in a reflection turn, a map of what she has, what ch
 Who is who in a scene, as the character reads it.
 
 - def `typed` — Someone's own text with any label-shaped part made plain: [name #4] reads ［name ＃4］, @#4 reads @＃4.
+- def `anchor` — The first sentences of a thought that fit in about `limit` characters, cut where a sentence ends (a half sentence is easier to repeat as if meant now), with the program's mark and the whole length when cut.
 - def `said_line` — One line of what someone wrote, as she reads it: a leading > (the mark of the program's quote and thought lines) is shown full-width, so a message cannot pass for a quote of someone else or for her own past thought.
 - def `safe_name` — A shown name she can read safely: one line, visible characters only, no label characters.
 - def `name_key` — What a name looks like, for spotting look-alikes: its letters only (no digits, spaces, symbols or case).
@@ -133,6 +134,7 @@ Who is who in a scene, as the character reads it.
   - `row_head` — Who wrote a stored row, as a history result names them: her own rows read as her name.
   - `speaker` — Label for a stored author (no notes): her own rows read `me` when given.
   - `pointed` — A line another line points at (a quote, a reaction, a recall), in the one form every pointer has (ADR-079 §9.3): its number where the conversation shows numbers, its speaker (hers as 你), its first words.
+  - `line_of` — The line she names by its number in this conversation (as shown, brackets or not) or by 这条 (the line that called her): (row, None), or (None, why, in words she can act on) (ADR-079 §9.4).
   - `transcript` — One platform message as it enters her conversation: the speaker's label line, then the message, indented.
   - `identity_line` — The current speaker, in full: label, notes, names in quotes, and how the owner is known.
   - `scene_title` — A conversation as she reads it: 家里·私聊, 群聊「name」 or 私聊 with the person's label; never an id.

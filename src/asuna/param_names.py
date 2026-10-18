@@ -23,7 +23,6 @@ RENAMED = {
     'watch': {'how_often': 'mode'},
     'note': {'deliver': 'mode'},
     'sticker': {'use_for': 'when'},
-    'quote': {'quote_whom': 'how'},
     'recall': {},
     'write_file': {'content': 'text'},
     'development_write': {'content': 'text'},

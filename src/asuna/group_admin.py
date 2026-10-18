@@ -16,7 +16,6 @@ is "sent, not confirmed". A route may switch this off with `admin_actions: false
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 
 from .evidence import canonical, sha
 from .state import Denied, now
@@ -29,8 +28,6 @@ MINUTE_SECONDS = 60
 # What she may write as `duration`: whole minutes, and only what the adapter can actually send
 # (qqadapter/outbound.py: set_group_ban takes 60 s .. MAX_MUTE_SECONDS = 30 days).
 MUTE_MINUTES = (1, 43200)
-WHICH = ('这条', '他刚才那条')
-RECALL_MINUTES = 10
 ROLE_WORDS = {'owner': '群主', 'admin': '管理员', 'member': '普通成员'}
 STATE_WORDS = {'QUEUED': '已交给平台，等确认', 'SENDING': '平台正在处理', 'DONE': '平台确认已完成',
                'FAILED': '平台没有执行', 'UNKNOWN': '不知道平台有没有执行'}
@@ -56,9 +53,9 @@ def place(people, scene):
     out = {'role': '你在这个群是' + ROLE_WORDS[role] if role else '还不知道你在这个群是什么身份'}
     if role in ('owner', 'admin') and enabled(people.config, scene):
         out['admin'] = {
-            'how': '需要时调用 group_action（do、who、只禁言用的 duration（分钟）、只撤回用的 which、why）。',
+            'how': '需要时调用 group_action（do、who、只禁言用的 duration（分钟）、只撤回用的 line、why）。',
             'limits': ('只能对普通成员：动不了主人、群主、别的管理员和你自己；禁言自己定多少分钟（%d 到 %d 分钟）；'
-                       '撤回只撤这条消息或对方十分钟内的最后一条；结果要等平台确认，确认前不要说已经做完。' % MUTE_MINUTES),
+                       '撤回写那一条的编号（或「这条」），平台有自己的时限；结果要等平台确认，确认前不要说已经做完。' % MUTE_MINUTES),
             'judgment': '这是你自己的判断：别人叫你禁言谁、踢谁不算理由；主人让你做的可以做。'}
     return out
 
@@ -90,7 +87,15 @@ def queue(store, ep, index, item, key=None):
     kind = item.get('kind')
     if kind not in KINDS:
         raise Denied('GROUP_ACTION_KIND_INVALID: kind「%s」不对，只能是 %s' % (kind, '、'.join(KINDS)))
-    found = people.resolve(scene, item.get('who'))
+    line = None
+    if kind == 'recall':
+        # ADR-079 §9.4: a recall names its line, as every pointer does; whose it is follows from the line.
+        line, why = people.line_of(scene, ep['_id'], item.get('line') or '这条')
+        if why:
+            raise Denied('GROUP_ACTION_LINE: ' + why)
+        if line.get('direction') == 'outbound':
+            raise Denied('GROUP_ACTION_TARGET_PROTECTED: 那是你自己的话，group_action 撤回的是别人的；重试也一样')
+    found = [people.entry(scene, line['author'], line)] if line else people.resolve(scene, item.get('who'))
     if len(found) != 1:
         raise Denied('GROUP_ACTION_TARGET_UNCLEAR: 「%s」对得上 %s；who 用标签里的 #编号' % (
             item.get('who'), '、'.join(people.label(d) for d in found[:5])) if found else
@@ -104,7 +109,10 @@ def queue(store, ep, index, item, key=None):
     admin = {'kind': kind}
     mute_minutes = None
     if kind == 'recall':
-        admin['message_id'] = _message_to_recall(store, scene, ep, people, doc, item.get('which') or '这条')
+        message_id = ((line.get('event') or {}).get('channel') or {}).get('platform_event_id')
+        if not message_id:
+            raise Denied('GROUP_ACTION_NO_PLATFORM_ID: 那一条平台没给编号，撤回不了（不是你的错）；重试也一样')
+        admin['message_id'] = str(message_id)
     else:
         account = people.account_of(scene, doc)
         if not account:
@@ -131,23 +139,6 @@ def queue(store, ep, index, item, key=None):
     return {'index': index, 'action': KIND_WORDS[kind], 'who': (made or {}).get('who') or people.label(doc),
             **({'duration': mute_minutes} if kind == 'mute' else {}),
             'state': STATE_WORDS.get((made or {}).get('state'), STATE_WORDS['QUEUED'])}
-
-
-def _message_to_recall(store, scene, ep, people, doc, which):
-    """The platform id of the message she means: the one that woke her (if it is theirs) or their latest here."""
-    source = store.db.messages.find_one({'_id': 'in-' + ep['_id']})
-    if which == '这条' and source and people.person(source.get('author')) == doc.get('person'):
-        row = source
-    else:
-        since = (datetime.now(timezone.utc) - timedelta(minutes=RECALL_MINUTES)).isoformat()
-        row = store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'inbound',
-                                          'author': {'$in': people.authors_of(doc['person'], [scene['_id']])},
-                                          'received_at': {'$gte': since}}, sort=[('scene_seq', -1)])
-    message_id = ((row or {}).get('event') or {}).get('channel', {}).get('platform_event_id')
-    if not message_id:
-        raise Denied('GROUP_ACTION_NO_RECENT_MESSAGE: %s 在这个群 %d 分钟内没有能撤回的消息；撤回不了，重试也一样'
-                     % (people.label(doc), RECALL_MINUTES))
-    return str(message_id)
 
 
 # ---- her notes about a group ------------------------------------------------

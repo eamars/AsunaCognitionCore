@@ -520,9 +520,9 @@ def _check_outbound_params(rep, gcfg, root):
         return
     groups = sorted(gcfg.allowed_groups)
 
-    def item(n, target, text="正文", reply_to=None):
+    def item(n, target, text="正文", reply_to=None, quote=None):
         return {"publication_id": "selftest-%s" % n, "attempt_id": "attempt-%s" % n,
-                "target": target, "text": text, "reply_to": reply_to}
+                "target": target, "text": text, "reply_to": reply_to, "quote": quote}
 
     def run_case(name, cfg, out_item, response=None, exc=None):
         stub, host = StubOneBot(response=response, exc=exc), StubHost()
@@ -543,7 +543,14 @@ def _check_outbound_params(rep, gcfg, root):
               host.last().get("payload", {}).get("platform_message_id") == "990001",
               json.dumps(host.last().get("payload", {}).get("status")))
 
-    stub, host, _c = run_case("grp", gcfg, item("grp", {"type": "group", "id": groups[0]}, reply_to="987654"))
+    # ADR-079: a private chat carries the line she chose to quote; what her words answer (reply_to) is not shown
+    stub, host, _c = run_case("dmq", gcfg, item("dmq", {"type": "dm", "id": OWNER}, reply_to="123", quote="321"))
+    call = stub.calls[0] if stub.calls else {}
+    rep.check("ob_dm_quote_segment", call.get("params", {}).get("message") ==
+              [{"type": "reply", "data": {"id": "321"}}, {"type": "text", "data": {"text": "正文"}}],
+              json.dumps(call.get("params", {}).get("message"), ensure_ascii=False))
+
+    stub, host, _c = run_case("grp", gcfg, item("grp", {"type": "group", "id": groups[0]}, quote="987654"))
     call = stub.calls[0] if stub.calls else {}
     rep.check("ob_group_uses_group_action", call.get("action") == "send_group_msg" and
               call.get("params", {}).get("group_id") == int(groups[0]) and
@@ -565,8 +572,8 @@ def _check_outbound_params(rep, gcfg, root):
               [{"type": "text", "data": {"text": "@全体 开会了"}}],
               json.dumps(stub.calls[0]["params"]["message"], ensure_ascii=False))
 
-    def wire(name, target, text, reply_to=None):
-        stub, _h, _c = run_case(name, gcfg, item(name, target, text=text, reply_to=reply_to))
+    def wire(name, target, text, quote=None):
+        stub, _h, _c = run_case(name, gcfg, item(name, target, text=text, quote=quote))
         call = stub.calls[0] if stub.calls else {}
         return call.get("params", {}).get("message")
 
@@ -581,7 +588,7 @@ def _check_outbound_params(rep, gcfg, root):
 
     GRP = {"type": "group", "id": groups[0]}
     DM = {"type": "dm", "id": OWNER}
-    got = wire("at1", GRP, "收到 @qq:900000103 的建议", reply_to="987654")
+    got = wire("at1", GRP, "收到 @qq:900000103 的建议", quote="987654")
     rep.check("ob_group_at_marker_promoted",
               got == [RP("987654"), T("收到 "), A("900000103"), T(" 的建议")],
               json.dumps(got, ensure_ascii=False))
@@ -605,13 +612,13 @@ def _check_outbound_params(rep, gcfg, root):
     got = wire("at8", GRP, "尾@qq:10003")
     rep.check("ob_group_marker_at_end_no_empty_text", got == [T("尾"), A("10003")],
               json.dumps(got, ensure_ascii=False))
-    got = wire("at9", DM, "@qq:900000103 收到 @全体", reply_to="123")
+    got = wire("at9", DM, "@qq:900000103 收到 @全体")
     rep.check("ob_dm_marker_never_promoted", got == [T("@qq:900000103 收到 @全体")],
               json.dumps(got, ensure_ascii=False))
 
     all_segs = []
     for name, out_item in [("x1", item("x1", DM, text="@qq:900000103 @全体")),
-                           ("x2", item("x2", {"type": "group", "id": groups[3]}, reply_to="7")),
+                           ("x2", item("x2", {"type": "group", "id": groups[3]}, quote="7")),
                            ("x3", item("x3", GRP, text="@全体 @qq:900000103"))]:
         stub, _h, _c = run_case(name, gcfg, out_item)
         for call in stub.calls:
@@ -726,9 +733,9 @@ def _check_outbound_verify(rep, gcfg, root):
     def RP(rid):
         return {"type": "reply", "data": {"id": rid}}
 
-    def item(name, target, text, reply_to=None):
+    def item(name, target, text, reply_to=None, quote=None):
         return {"publication_id": "vfy-%s" % name, "attempt_id": "a-%s" % name,
-                "target": target, "text": text, "reply_to": reply_to}
+                "target": target, "text": text, "reply_to": reply_to, "quote": quote}
 
     def run(name, out_item, send_response=None, verify_responses=None, verify_exc=None,
             verify=True, retry=0.0, send_exc=None):
@@ -750,7 +757,7 @@ def _check_outbound_verify(rep, gcfg, root):
     def actions(stub):
         return [c["action"] for c in stub.calls]
 
-    stub, host, counters, _ob = run("ok", item("ok", GRP, "收到 @qq:900000103 的建议", reply_to="987654"),
+    stub, host, counters, _ob = run("ok", item("ok", GRP, "收到 @qq:900000103 的建议", quote="987654"),
                                     verify_responses=[_stored_msg(sent_segs, group_id=grp, account=account)])
     payload = host.last().get("payload", {})
     ver = (payload.get("response") or {}).get("verification") or {}
@@ -818,7 +825,7 @@ def _check_outbound_verify(rep, gcfg, root):
               ver.get("target_ok") is False and ver.get("stored_target_id") == str(other_grp),
               json.dumps(ver, ensure_ascii=False))
 
-    stub, host, _c, _ob = run("seg", item("seg", GRP, "收到 @qq:900000103 的建议", reply_to="987654"),
+    stub, host, _c, _ob = run("seg", item("seg", GRP, "收到 @qq:900000103 的建议", quote="987654"),
                               verify_responses=[_stored_msg([T("正文")], group_id=grp, account=account)])
     payload = host.last().get("payload", {})
     ver = (payload.get("response") or {}).get("verification") or {}
@@ -986,9 +993,9 @@ def _check_outbound_attachments(rep, cfg, root):
     GRP = {"type": "group", "id": fixtures.GROUPS[0]}
     actions = set()
 
-    def item(name, target, text="这张给你", attachment=ABSENT, reply_to=None):
+    def item(name, target, text="这张给你", attachment=ABSENT, reply_to=None, quote=None):
         row = {"publication_id": "att-%s" % name, "attempt_id": "attempt-%s" % name,
-               "target": target, "text": text, "reply_to": reply_to}
+               "target": target, "text": text, "reply_to": reply_to, "quote": quote}
         if attachment is not ABSENT:
             row["attachment"] = attachment
         return row
@@ -1072,7 +1079,7 @@ def _check_outbound_attachments(rep, cfg, root):
     # a group carries her picture too (which one may go is the host's call); a reply stays first
     for name, reply_to, head in (("group", None, []),
                                  ("groupreply", "777001", [{"type": "reply", "data": {"id": "777001"}}])):
-        stub, host, _c = run(name, item(name, GRP, attachment=_att_descriptor(), reply_to=reply_to),
+        stub, host, _c = run(name, item(name, GRP, attachment=_att_descriptor(), quote=reply_to),
                              attachment=_att_ok())
         call = stub.calls[0] if stub.calls else {}
         msg = (call.get("params") or {}).get("message") or []

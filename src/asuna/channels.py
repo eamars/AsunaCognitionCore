@@ -531,7 +531,9 @@ class Channels:
                     text = People(self.store).outbound(scene, row['text']) if scene else row['text']
                     item = {'publication_id': row['_id'], 'attempt_id': attempt,
                             'target': row['target'], 'text': text,
-                            'reply_to': row['platform_reply_to']}
+                            # ADR-079 §9.6: the line her words answer (a reply token for a platform that needs one)
+                            # and, apart, the line she chose to quote (shown only by an adapter that declares quote).
+                            'reply_to': row.get('platform_answers'), 'quote': row.get('platform_reply_to')}
                     if carries:
                         item[outbound_media.ATTACHMENT_KEY] = declared      # 只有元数据，不带 base64；字节走下面的 GET
                     if sticker:

@@ -540,7 +540,8 @@ The inbound gates open in step 1, the outbound ones in step 2. QQ Bot's bridge m
    ones): a quote between two other people in a group, a quote of her line in a group, a quote in a private chat,
    a quote with no words, a reaction to her line, a reaction between others, a recall. Each must read as in 9.3.
    Two of them may have no natural sample yet (a quote with no words; a reaction between others, never stored
-   until now): the owner makes them in the family group himself, as his own messages. Then, for her first days, how
+   until now): the owner makes them in the family group himself, as his own messages, after step 1 is live (before it, they would
+   only show today's placeholder or nothing); Claude tells Xiaoman before he sends them. Then, for her first days, how
    many times a text part was refused for containing `〔n〕` is reported to her (her ask: she has not tested whether
    she would write a number into what she says). The refusal says why: the number is for choosing a quote and does
    not go into her words.

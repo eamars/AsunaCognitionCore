@@ -14,7 +14,10 @@ Sections 1–3 were checkpoint 1 (approved: flash only). A `[ ]` marks the few i
 > - ~~Finding 15 / the probe offered no `speak`~~: fixed on main `e4fb2a3d`; the §4.4 numbers are from the fixed probe.
 > - ~~Finding 2 / R1, her self-improvement runs failing~~: root cause found and fixed on main `cb006c8b`. A development
 >   task she began on an agent line came home in that line's session; a turn now keeps a followed session only in its
->   own place. It is live after her next restart; then `FAILED_RUNTIME` for `self_development` should fall to 0.
+>   own place. Live since her restart at 08:27 on 2026-10-19 (no new failure since). What was lost: the turn woken
+>   when her publication applied (`self-development:publish:…`), i.e. her closing steps; every one of the 33 tasks
+>   also had its own `task_feedback` turn, all COMMITTED, so she read every result (her count and correction, 08:4x).
+>   34 in all with one `scheduled`; 31 tasks, two of them twice.
 > - ~~§3 replay plan~~: approved (flash only) and run, ≤ US$0.63.
 > - Reproduced by Claude against the live records: findings 2, 9 (corrected by the study), 10, 11, 15, and both §4.4
 >   verdicts against the evidence files.

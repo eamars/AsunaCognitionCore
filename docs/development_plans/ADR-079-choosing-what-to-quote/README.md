@@ -220,12 +220,51 @@ Two more of hers (Claude's paraphrase, 13:2x NZDT):
 The design is chosen by a side-by-side experiment, not by argument: the same synthetic group moments, put to the
 local model and to DeepSeek, under each candidate design, reading each model's reasoning and its tool calls.
 
+### 8.0 Design B, concretely (the recommended one, §8.6)
+
+**What she reads.** In a group whose channel can quote, every line ends its label line with its number in that
+conversation (`scene_seq`):
+
+```
+阿杰 #3 14:01 〔300〕
+  @阿澄 你昨天推荐的那家火锅叫啥来着
+小雨 #5 14:02 〔302〕
+  阿澄你确定那家人均才八十？
+```
+
+Everything that points at a line shows the same three things, the number, the speaker (her own lines as `你`) and the
+first words, whoever made it:
+
+| | Today | Design B |
+|---|---|---|
+| someone quotes her line | `> 回复 阿澄：那部电影…` | `> 回复 〔300〕 你：那部电影…` |
+| someone reacts to her line | `给你 14:01 说的那句点了「赞」` | `给 〔301〕 你：看展也可以… 点了「赞」` |
+| a recall | `撤回了消息「…」` | `撤回了 〔300〕 小雨 #5：…` |
+| her own sent lines, in the `speak` result | `发出 2 条：1 text；2 text` | `发出 2 条：1 text 〔320〕；2 text 〔321〕` |
+
+**One line in an ambiguous turn only.** When others have spoken since the line that called her, the turn's program
+lines add: `叫你那条之后有 2 条新话：〔301〕、〔302〕。要引哪条就在 quote 写它的编号（只写数字），不写就不引用；一句话回好几条就不用引。`
+No other turn gets it.
+
+**One way to choose a line, in every tool.**
+
+- `speak.quote`: left out = no quote (the program no longer chooses); `这条` = the line that called her; a number = that
+  line, anyone's, her own included (to amend it).
+- a `react` part of `speak`: `line` = a number or `这条`; whose line it is follows from the line (`who` with
+  `这条/刚才那条` goes).
+- `group_action` recall: the same `line` value (`which: 这条/他刚才那条` goes).
+- A text part that contains `〔n〕` is refused: the number is for choosing, not for the people she talks to.
+
+**Where nothing changes or less is shown.** Private chats keep today's default (they quote the line that called her)
+and may say `不引用`. Home lines show no numbers. Kazusa's QQ Bot conversations show no numbers, and her `speak` there
+has no `quote` and only the text and picture parts; recall and reaction are not in her definitions.
+
 ### 8.1 Designs compared (arms)
 
 | Arm | Handle on lines | Choosing a line | Showing what points at what |
 |---|---|---|---|
 | A, today | none | `quote: source/none` + program default; react `who` + `这条/刚才那条`; recall `这条/他刚才那条` | as §2.3 |
-| B, §4 in full | `〔n〕` on every line | one `line` value (number or `这条`) for quote, react, recall; no value = no quote | one rendering for all (§4.2), echo in every result |
+| B, §4 in full (§8.0) | `〔n〕` on every line | one `line` value (number or `这条`) for quote, react, recall; no value = no quote | one rendering for all (§4.2), echo in every result |
 | C, numbers only where needed | none on lines; numbers listed only in the ambiguous-turn line and in echoes | same `line` value | as B |
 | D, label and time | none | `阿杰 #22 14:05` style (the first draft) | as B |
 
@@ -328,8 +367,8 @@ same on the local model.
 
 ### 8.6 Recommendation
 
-**B: a number on every line, one `line` value for every pointer, one rendering for every pointer, and the hint
-listing the new lines' numbers in an ambiguous turn.**
+**B, as §8.0: a number on every line, one `line` value for every pointer, one rendering for every pointer, and the
+hint listing the new lines' numbers in an ambiguous turn.**
 
 1. Efficiency and speed: the most right pointers on both models, the fewest wrong after D, the fewest model calls,
    and the shortest reasoning on DeepSeek.

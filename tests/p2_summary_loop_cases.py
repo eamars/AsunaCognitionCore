@@ -620,8 +620,8 @@ def busy_rows():
     """快群：5 秒一条已经攒满窗口，安静线还没到，但批不可能比窗口更大。"""
     messages = [_in(BUSY, 21 + index, PERSON if index % 2 == 0 else PERSON_B,
                     '第 %d 条：雾灯这事就这么办' % index, T0 + index * 5)
-                for index in range(8)]
-    return _scaffold(BUSY, 'group', [PERSON, PERSON_B], messages, 20, 28)
+                for index in range(DialogueSummarizer.WINDOW_ROWS)]
+    return _scaffold(BUSY, 'group', [PERSON, PERSON_B], messages, 20, 20 + DialogueSummarizer.WINDOW_ROWS)
 
 
 def cold_rows():
@@ -752,7 +752,7 @@ def t6_mid_burst_never_summarizes_except_window_cap():
     _profile, mid = decide_for(busy, BUSY, four, T0 + 15)             # 第四条刚落库
     assert not mid['fire'] and mid['settled'] is False, mid
     assert legacy_rule(four, T0 + 15, T0), '反证：旧口径凑够四条就动手，人还在连着发也照整理'
-    _profile, capped = decide_for(busy, BUSY, pending_rows(busy, BUSY), T0 + 40)
+    _profile, capped = decide_for(busy, BUSY, pending_rows(busy, BUSY), T0 + 5 * DialogueSummarizer.WINDOW_ROWS)
     assert capped['settled'] is False and 'window_full' in capped['signals'], capped
     return '话说完之前不整理（旧口径凑够四条就动手）；只有窗口顶满这一条结构上限会打断'
 
@@ -761,7 +761,7 @@ def t3_full_window_is_structural_not_tuned():
     store = bind_store(busy_rows())
     pending = pending_rows(store, BUSY)
     assert len(pending) == DialogueSummarizer.WINDOW_ROWS, pending
-    _profile, decision = decide_for(store, BUSY, pending, T0 + 40)
+    _profile, decision = decide_for(store, BUSY, pending, T0 + 5 * DialogueSummarizer.WINDOW_ROWS)
     assert decision['fire'] and 'window_full' in decision['signals'], decision
     assert 'pause_anomalous' not in decision['signals'], decision
     assert decision['quiet_after'] == summary_trigger.QUIET_FLOOR_SECONDS, decision

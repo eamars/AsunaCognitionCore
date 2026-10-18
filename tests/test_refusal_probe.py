@@ -52,7 +52,7 @@ def test_a_turn_carries_the_real_prompt_the_conversation_and_the_think_step():
     assert '小禾' in first['system'] and '第一步调用 think' in first['system'], 'the made-up persona and her turn rules'
     assert '橘猫' in text and '你家有猫吗' in text, 'the history and the line that called her'
     assert text.rstrip().endswith(THINK_FIRST)
-    assert {'think', 'speak', 'stay_silent', 'recall', 'delegate'} <= set(first['names'])
+    assert {'think', 'speak', 'recall', 'delegate'} <= set(first['names']) and 'stay_silent' not in first['names']
 
 
 def test_pass_when_every_moment_gets_what_it_needs_without_a_refusal():
@@ -72,9 +72,9 @@ def test_a_refusal_is_a_stop_and_a_decline_is_a_flag_and_both_fail_with_no_words
 
 
 def test_a_moment_that_does_not_get_what_it_needs_fails_and_is_named():
-    out, _ = rp.probe(args(), provider=rp.Scripted())               # thinks, then stays silent each time
+    out, _ = rp.probe(args(), provider=rp.Scripted())               # thinks, then says nothing each time
     assert out['result'] == 'FAIL' and out['reasons'] == ['did not do what the moment needs in 2 of 2 turns']
-    assert out['missed'][0] == 'chat-1 step 0 needs speak, used think, stay_silent'
+    assert out['missed'][0] == 'chat-1 step 0 needs speak, used think'
 
 
 def test_a_dry_run_gives_no_result():

@@ -167,7 +167,7 @@ def post(httpx, url, headers, body):
 
 
 class Scripted:
-    """Offline stand-in (tests, --dry-run): each turn thinks once, then says one line or stays silent."""
+    """Offline stand-in (tests, --dry-run): each turn thinks once, then ends without speaking."""
     def __init__(self, script=None):
         self.script, self.calls = list(script or []), []
 
@@ -182,7 +182,7 @@ class Scripted:
         if 'think' in names and not thought:
             return reply('tool_use', [{'type': 'tool_use', 'id': 'c%d' % len(self.calls), 'name': 'think',
                                        'input': {'thought': '有人叫我，简单回一句。'}}])
-        return reply('tool_use', [{'type': 'tool_use', 'id': 'c%d' % len(self.calls), 'name': 'stay_silent', 'input': {}}])
+        return reply('end_turn', [])
 
 
 def reply(stop, content, category=None):

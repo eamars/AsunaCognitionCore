@@ -63,13 +63,13 @@ def test_quiet_ends_the_turn_before_any_recall(store):
 
 def test_join_runs_the_full_turn_with_her_reason(store):
     setup(store)
-    character = FakeLane(store, [FakeTurn([('think', {'thought': '有人叫我，想了想还是不说。'}),
-                                           ('stay_silent', {'why': '想了想还是不说'})])])
+    character = FakeLane(store, [FakeTurn([('think', {'thought': '有人叫我，想了想还是不说。'})])])
     coordinator = Coordinator(store, character)
     coordinator.attend = FakeLane(store, [LaneResult('接话：有人提到我')])
     ep = coordinator.ingest(gated_event(20002, '演示 你怎么看', 'name_called'), persona='P1')
     assert [call['phase'] for call in character.calls] == ['TURN']
-    assert ep['state'] == 'COMMITTED' and ep['silent_reason'] == '想了想还是不说'
+    # In a group a turn that does not speak is silent; her reason is her thought.
+    assert ep['state'] == 'COMMITTED' and ep['silent_reason'] == '这回合没有 speak'
     assert ep['attend']['choice'] == 'join' and ep['context']['attend_from_program'].endswith('有人提到我')
     assert '有人提到我' in character.calls[0]['messages'][-1]['content']
     assert store.db.messages.find_one({'_id': 'in-' + ep['_id']})['processing_outcome'] == 'ATTEND_JOIN'

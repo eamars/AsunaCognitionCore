@@ -173,31 +173,29 @@ def test_words_outside_reply_never_leave_come_back_once_and_are_told_next_time(s
     assert 'unsent_from_program' not in again['context'], 'said once'
 
 
-def test_words_also_sent_through_speak_are_not_unsent_and_stay_silent_needs_no_why_after_speaking(store, monkeypatch):
+def test_words_also_sent_through_speak_are_not_unsent_and_the_turn_ends_when_she_stops_calling_tools(store, monkeypatch):
     store.config['persona_model'] = model(3)
     channel_scene(store, monkeypatch)
-    lane = FakeLane(store, [FakeTurn([THINK, said('就这样吧'), ('stay_silent', {})], said=['就这样吧'])])
+    lane = FakeLane(store, [FakeTurn([THINK, said('就这样吧')], said=['就这样吧'])])
     event = {'event_id': 'dup-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '然后呢',
              'channel': {'id': 'replay', 'account_id': 'bot', 'target': TARGET, 'platform_event_id': 'p-dup-1'}}
     persist_input(store, event, managed=True)
     ep = Coordinator(store, lane).ingest(event)
     assert len(lane.calls) == 1, 'nothing handed back'
-    assert [ok for _, _, name, _, _, ok in lane.tool_results if name == 'stay_silent'] == [True]
     assert not (store.db.scenes.find_one({'_id': 'dm-a'}) or {}).get('unsent'), 'said through speak: not unsent'
     assert [r['text'] for r in outbound(store, ep['_id'])] == ['就这样吧']
 
 
-def test_words_beside_stay_silent_come_back_too_and_a_reply_then_sends_them(store, monkeypatch):
+def test_words_written_without_speak_come_back_whole_and_a_speak_then_sends_them(store, monkeypatch):
     store.config['persona_model'] = model(3)
     channel_scene(store, monkeypatch)
     words = '我觉得挺好\n\n就是贵了点，' + '真的' * 60
-    lane = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'why': '说完了'})], said=[words]),
-                            FakeTurn([said('我觉得挺好'), ('stay_silent', {'why': '说完了'})])])
+    lane = FakeLane(store, [FakeTurn([THINK], said=[words]), FakeTurn([said('我觉得挺好')])])
     event = {'event_id': 'body-s', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你看呢',
              'channel': {'id': 'replay', 'account_id': 'bot', 'target': TARGET, 'platform_event_id': 'p-body-s'}}
     persist_input(store, event, managed=True)
     ep = Coordinator(store, lane).ingest(event)
-    assert lane.calls[1]['messages'][-1]['content'] == UNSENT_NOTE % words, 'whole, as written; stay_silent drops nothing'
+    assert lane.calls[1]['messages'][-1]['content'] == UNSENT_NOTE % words, 'whole, as written'
     assert ep['state'] == 'COMMITTED' and [r['text'] for r in outbound(store, ep['_id'])] == ['我觉得挺好']
 
 
@@ -215,15 +213,23 @@ def test_lines_count_in_every_message_blank_lines_and_code_do_not(store, monkeyp
     assert [r['text'] for r in outbound(store, ep['_id'])] == [two]
 
 
-def test_silence_says_how_many_parts_reply_sent(store, monkeypatch):
+def test_where_only_speak_speaks_silence_is_not_calling_it_and_the_guide_says_so_once(store, monkeypatch):
+    """Owner 2026-10-19: on a platform stay_silent goes (a turn without speak is silent); at home it stays, where
+    what she writes is what is said. The rule is said once, in the guide for the place (ADR-076 R10)."""
+    from asuna import role_tools
+    from asuna.block_guide import ENDING, WORDS
+    from asuna.render import system_for
     store.config['persona_model'] = model(3)
+    _, home, _ = turn(store, key='home', calls=[], content='好', channel=False)
+    assert 'stay_silent' in role_tools.abilities(store, home)
+    home_system = system_for(store, home['system_ref'])
+    assert WORDS[False] in home_system and ENDING[False] in home_system
     channel_scene(store, monkeypatch)
-    _, _, lane = turn(store, calls=[said('嗯'), ('stay_silent', {'why': '说完了'})])
-    [result] = [row[4] for row in lane.tool_results if row[2] == 'stay_silent']
-    assert result['sent'] == 'speak 这回合发了 1 条。'
-    _, _, lane = turn(store, key='quiet', calls=[('stay_silent', {'why': '不说'})])
-    [result] = [row[4] for row in lane.tool_results if row[2] == 'stay_silent']
-    assert result['sent'] == '这回合 speak 一条都没发。'
+    _, ep, lane = turn(store, key='quiet', calls=[])
+    assert 'stay_silent' not in role_tools.abilities(store, ep) and 'speak' in role_tools.abilities(store, ep)
+    assert ep['state'] == 'COMMITTED' and outbound(store, ep['_id']) == [] and len(lane.calls) == 1
+    system = system_for(store, ep['system_ref'])
+    assert WORDS[True] in system and ENDING[True] in system and 'stay_silent' not in system.split('# 每回合的资料')[0]
 
 
 def test_only_a_platform_turn_is_told_how_its_words_leave(store, monkeypatch):
@@ -232,12 +238,12 @@ def test_only_a_platform_turn_is_told_how_its_words_leave(store, monkeypatch):
     assert 'speak_from_program' not in local['context']
     channel_scene(store)
     _, plain, _ = turn(store, key='plain', calls=[], content='好')
-    assert set(plain['context']['speak_from_program']) == {'sent', 'new_lines', 'one_self'}     # ADR-018 §5.7
-    assert '作一条消息发出去' in plain['context']['speak_from_program']['sent']
+    # How words leave is said once, in her turn guide for the place; the notice adds only this turn's number.
+    assert set(plain['context']['speak_from_program']) == {'new_lines', 'one_self'}     # ADR-018 §5.7
     channel_scene(store, monkeypatch)
     _, replying, _ = turn(store, key='replying')
     sent = replying['context']['speak_from_program']['sent']
-    assert sent.startswith('这里只有 speak 发得出去') and '最多 3 行' in sent and '一个代码块算一行' in sent
+    assert sent.startswith('一回合 speak 的 text') and '最多 3 行' in sent and '一个代码块算一行' in sent
 
 
 def test_where_words_are_speech_everything_she_wrote_is_one_message(store):

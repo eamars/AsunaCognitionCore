@@ -104,10 +104,10 @@ def test_the_old_name_reply_still_speaks_and_says_the_new_one(store):
 
 
 def test_an_old_parameter_name_past_its_week_is_refused_by_name_and_counted(store):
-    """ADR-069: an old name her calls used fewer than 5 times in a week is not taken; plan's op still is."""
-    world(store)
+    """ADR-069: an old name her calls used fewer than 5 times in a week is not taken; plan's op still is.
+    (A home turn: stay_silent is listed where what she writes is what is said.)"""
     lane = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'reason': '不接'}), ('stay_silent', {'why': '不接'})])])
-    ep = Coordinator(store, lane).ingest(mention('old-param'), persona='P1')
+    ep = Coordinator(store, lane).ingest({'event_id': 'old-param', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '你好'})
     old, new = sorted((c for c in store.db.episodes.find_one({'_id': ep['_id']})['tool_calls'].values()
                        if c['tool'] == 'stay_silent'), key=lambda c: c['seq'])
     assert old['refused'] == 'reason（现在叫 why）已经不用了，这次什么都没做；改成新名字再调用。' and old['old_names'] == ['reason']

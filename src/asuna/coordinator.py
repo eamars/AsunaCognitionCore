@@ -55,7 +55,7 @@ THINK_FIRST = '这一回合第一步先调用 think 写心里话。'
 # ADR-064 phase 2: where only reply speaks, words written in the body come back once in the same turn.
 UNSENT_NOTE = '这段没发出去：「%s」。在这里说话用 speak。'
 UNSENT_CHARS = 40
-REPLY_THINK_NOTE = '这一回合还没写心里话：先调用 think，再用 speak 说话，或者用 stay_silent 结束。'
+REPLY_THINK_NOTE = '这一回合还没写心里话：先调用 think，再用 speak 说话；不说就不再调用工具。'
 
 
 def prepared_record(manifest, person_id, policy_epoch):

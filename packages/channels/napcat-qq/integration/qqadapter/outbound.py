@@ -482,7 +482,7 @@ class Outbound:
 
     @staticmethod
     def action_call(item):
-        """(OneBot action, params) for a poke or a reaction in her reply, or (None, reason)."""
+        """(OneBot action, params) for a poke, a reaction or a recall of her own line in her reply, or (None, reason)."""
         act = item.get("action") if isinstance(item.get("action"), dict) else {}
         target = item.get("target") or {}
         ttype, tid = str(target.get("type") or ""), str(target.get("id") or "")
@@ -501,6 +501,11 @@ class Outbound:
                 return None, "bad_reaction"
             return "set_msg_emoji_like", {"message_id": int(mid) if mid.lstrip("-").isdigit() else mid,
                                           "emoji_id": emoji, "set": True}
+        if act.get("kind") == "recall":
+            mid = str(act.get("message_id") or "")          # her own message she takes back
+            if not mid or len(mid) > 40:
+                return None, "bad_message_id"
+            return "delete_msg", {"message_id": int(mid) if mid.lstrip("-").isdigit() else mid}
         return None, "unknown_action"
 
     def handle_action(self, item, stopping=False):

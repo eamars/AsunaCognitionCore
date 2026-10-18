@@ -584,6 +584,34 @@ Decisions made while building, with why:
 - **Private chats** carry her quote out through NapCat (`reply` segment in private sends); nothing is quoted there unless
   she chooses, as in a group.
 
+### 9.8b Her own line taken back (her ask; the owner's yes, 2026-10-18 about 16:10 NZDT)
+
+Shape agreed with Xiaoman (about 16:1x NZDT), after the owner asked whether she ever gets a chance in time.
+
+**The chance, measured** (her QQ lines of the last 7 days, read 16:1x): 1,772 delivered; 507 were quoted by someone,
+median 40 s later, 83% within 2 minutes; she spoke again in that conversation from another turn after a median of
+85 s, 61% within 2 minutes; 386 of the 507 quoted lines (76%) had both within 2 minutes. She is an admin in one group
+(no time limit there). So the real path is someone quoting her and waking her; a line nobody answers is mostly past
+the window before she looks again (her own reading: the ability covers "quoted back in time", not "nobody answered").
+
+**One part, three outcomes by the line's state:** `speak` part `{kind: recall, line, why}`, in the pointer family
+beside `react` (no new tool):
+
+- still queued: cancelled, never leaves, no "recalled a message" mark for anyone (`CANCELLED_BY_HER`; later parts of
+  that call do not wait on it);
+- delivered within the platform's window: a recall the adapter does (`recall` action, `delete_msg` on NapCat);
+- past the window: refused with what she can do instead (add a line, or quote it and amend).
+
+The window is a platform fact, so the channel kind declares it (`OWN_RECALL_SECONDS`, 120 for QQ); none applies where
+she is a group's owner or admin. Only her own lines; `why` is required (100 characters, refused if longer, not cut)
+and written into her history line. The result says what happened, in the honest words step 1 used:
+`撤回 〔n〕 交给平台了（还没确认）` or `取消了 〔n〕，那句没发出去`. The platform's answer comes later, so she learns it
+in her next turn: a done recall marks her line `你撤回了这句`; a refused or unanswered one reads `撤回没成：…`, never
+left as "handed over" (her condition). Her own rules for using it (only for a wrong fact or a wrong place; a correction
+is often more honest, since QQ shows the recall) stay hers; the program does not judge when to use it.
+
+Cost: `speak`'s description +153 characters (budget raised in `tests/test_tool_budget.py`); no per-turn line.
+
 ### 9.9 Open for Xiaoman
 
 1. Private chats: she asked earlier (13:0x) to keep their default; she withdrew that (Claude's paraphrase, 13:5x NZDT)

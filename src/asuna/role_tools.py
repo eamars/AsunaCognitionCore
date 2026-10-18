@@ -97,10 +97,20 @@ AFFECT_FIELDS = {
 # ADR-079 §9.4: one way to point at a line, in every tool: its number in this conversation, or 这条.
 QUOTE_LINE = ('引用哪条：写那条的编号（只写数字，编号在每行末尾的〔〕里），或「这条」＝叫你的那条；不写就不引用。'
               '你自己说过的话也能引，用来改口或补一句。一句话回好几条时不用引。编号只用来挑引用，别写进 text。')
-REACT_LINE = 'react：点哪条，写它的编号（只写数字）或「这条」＝叫你的那条。点表情挂在那条上；贴纸是你发的一条新消息，两样都行'
+REACT_LINE = ('react：点哪条，写它的编号（只写数字）或「这条」＝叫你的那条。点表情挂在那条上；贴纸是你发的一条新消息，两样都行。'
+              'recall：撤你自己的哪一句，写它的编号')
+# Her own line taken back (her ask, the owner's yes, 2026-10-18): still queued it is cancelled, delivered it is recalled.
+RECALL_WHY_CHARS = 100
+RECALL_WHY = 'recall：为什么撤（必填，%d 字以内）' % RECALL_WHY_CHARS
+RECALL_QUEUED = '撤回 〔%d〕 交给平台了（还没确认）'
+RECALL_CANCELLED = '取消了 〔%d〕，那句没发出去'
+RECALL_TOO_LATE = '那句发出已经超过 %d 分钟，平台不让撤了；要改口就补一句，或者引它改口'
+RECALL_SENDING = '那句正在发，等它送达再撤'
+RECALL_NOT_YOURS = '只撤你自己的话；撤别人的用 group_action'
+CANCELLED_BY_HER = 'CANCELLED_BY_HER'           # a line of hers she took back before it left
 QUOTED = '引的是 %s'
 # The parts of her reply, in a conversation whose kind lists them (channel_kinds.reply_parts; ADR-064 phase 2).
-REPLY_KINDS = ('text', 'sticker', 'picture', 'poke', 'react')
+REPLY_KINDS = ('text', 'sticker', 'picture', 'poke', 'react', 'recall')
 # What reply carries itself where it is listed.
 REPLY_REPLACES = ('await_answer', 'attach_image')
 
@@ -141,7 +151,8 @@ TOOLS = {
     },
     'speak': {
         'description': ('在这里说话：只有 speak 发得出去，正文不发。parts 按顺序，一个 part 是单独的一条消息，kind 选 text、'
-                         'sticker、picture、poke、react，各写它的字段。有一条不对，这次一条都不发，回执说哪条、为什么。'
+                         'sticker、picture、poke、react、recall，各写它的字段；recall 只撤你自己的话（还没发出去的就取消），'
+                         '撤别人的用 group_action。有一条不对，这次一条都不发，回执说哪条、为什么。'
                          '不想说话就不调用，或用 stay_silent。'),
         'parameters': {
             'parts': {'type': 'array', 'required': True,
@@ -153,7 +164,8 @@ TOOLS = {
                           'artifact_id': _s('picture：照抄 image_artifacts_from_program'),
                           'who': _s('poke：戳谁，照抄标签；私聊里不写就是对方'),
                           'line': _s(REACT_LINE),
-                          'face': _s('react：表情名')}}},
+                          'face': _s('react：表情名'),
+                          'why': _s(RECALL_WHY)}}},
             'quote': _s(QUOTE_LINE),
             'wait': _s('群里：no 不等回话，question 在问这里的人（回答进 questions_from_program）；不写由程序定（@ 了谁或在回谁就等他三分钟）',
                        enum=['no', 'question']),
@@ -1329,7 +1341,7 @@ class RoleTools:
         before = ep.get('reply') or {}
         texts = list(before.get('texts') or [])
         lines = int(before.get('lines') or 0)
-        problems, planned, over = [], [], []
+        problems, planned, over, cancels = [], [], [], []
         # A number that is someone's here reads as nothing to the people here (owner 2026-10-14: a warning she may
         # overrule with force, not a conversion).
         from .people import People
@@ -1380,6 +1392,13 @@ class RoleTools:
                     planned.append(self._action_part(ep, scene, kind, part))
                 except Refused as exc:
                     problems.append('第 %d 条 %s' % (index, str(exc)))
+            elif kind == 'recall':
+                try:
+                    taken = self._recall_part(ep, scene, part)
+                except Refused as exc:
+                    problems.append('第 %d 条 recall：%s' % (index, str(exc)))
+                else:
+                    (cancels if taken.get('cancel') else planned).append(taken)
             elif kind == 'picture':
                 try:
                     meta = self._picture(ep, scene, str(part.get('artifact_id') or ''))
@@ -1421,7 +1440,9 @@ class RoleTools:
         if wait in ('no', 'question'):
             # a question's line is waited on by the question (its looks and answers), not listed again as a wait
             changes['await_answer'] = {'off': True}
-        queued = self.coordinator.queue_reply(self.coordinator._update(ep, **changes) if changes else ep, planned)
+        cancelled = [self._cancel_own(ep, item) for item in cancels]       # still queued: it never leaves
+        queued = self.coordinator.queue_reply(self.coordinator._update(ep, **changes) if changes else ep, planned) \
+            if planned else []
         asked = None
         if wait == 'question':
             # ADR-061 step 2: a question here is her reply's words; answers join by the program (questions.py).
@@ -1430,13 +1451,71 @@ class RoleTools:
         self.coordinator._update(self._fresh(ep), reply={'texts': texts, 'lines': lines, 'parts': int(before.get('parts') or 0) + len(queued),
                                                           'calls': int(before.get('calls') or 0) + 1})
         from .capabilities import numbered as shows_numbers
-        out = {'note': reply_receipt(queued, shows_numbers(self.store, scene))}
+        out = {'note': reply_receipt(queued, shows_numbers(self.store, scene)) if queued else '这次没发新的。'}
         if quoted:
             out['quoted'] = QUOTED % People(self.store, ep['persona']).pointed(scene, quoted, 30)
+        taken_back = [RECALL_QUEUED % item['seq'] for item in planned if item.get('recall_seq')] + cancelled
+        if taken_back:
+            out['recall'] = '；'.join(taken_back)
         if asked:
             out['question'] = QUESTION_RECEIPT % (asked['_id'], asked['patience'],
                                                   questions.PATIENCE[asked['patience']])
         return out, False
+
+    def _recall_part(self, ep, scene, part):
+        """Her own line taken back: still queued, a cancel (it never leaves); delivered within the platform's window, a
+        recall the adapter does; the line of her history says which line and why (her ask, 2026-10-18)."""
+        from . import channel_kinds
+        from .config import character_id
+        from .people import People
+        why = str(part.get('why') or '').strip()
+        if not why:
+            raise Refused('要写 why（为什么撤，%d 字以内）' % RECALL_WHY_CHARS)
+        if len(why) > RECALL_WHY_CHARS:
+            raise Refused('why 最多 %d 字（给的是 %d 字）' % (RECALL_WHY_CHARS, len(why)))
+        text = str(part.get('line') or '').strip().strip('〔〕[]「」 ')
+        if not text.isdigit():
+            raise Refused('line 写你那句的编号（只写数字）')
+        row = self.store.db.messages.find_one({'scene_id': scene['_id'], 'scene_seq': int(text), 'direction': 'outbound',
+                                               'author': character_id(self.store.config)})
+        if not row:
+            line, why_not = People(self.store, ep['persona']).line_of(scene, ep['_id'], text)
+            raise Refused(RECALL_NOT_YOURS if line else why_not)
+        state = row.get('delivery_state')
+        if state in ('READY', 'QUEUED_EXTERNAL'):
+            return {'cancel': True, 'row': row['_id'], 'seq': row['scene_seq'], 'why': why}
+        if state != 'DELIVERED':
+            raise Refused(RECALL_SENDING if state == 'SENDING' else '那句没发出去，不用撤')
+        limit = getattr(channel_kinds.of(scene['_id']), 'OWN_RECALL_SECONDS', None)
+        if limit and not (scene.get('kind') == 'group' and People(self.store, ep['persona']).self_role(scene) in ('owner', 'admin')):
+            sent = row.get('receipt_at')
+            from datetime import datetime, timezone
+            try:
+                age = (datetime.now(timezone.utc) - datetime.fromisoformat(str(sent).replace('Z', '+00:00'))).total_seconds()
+            except ValueError:
+                age = None
+            if age is None or age > limit:
+                raise Refused(RECALL_TOO_LATE % (limit // 60))
+        if not row.get('platform_message_id'):
+            raise Refused('那句平台没给编号，撤不了（不是你的错）')
+        pointed = People(self.store, ep['persona']).pointed(scene, row, 30)
+        return {'kind': 'recall', 'text': '撤回 %s（为什么：%s）%s' % (pointed, why, ACTION_MARK),
+                'shown': 'recall 〔%d〕' % row['scene_seq'], 'recall_seq': True, 'seq': row['scene_seq'],
+                'fields': {'action': {'kind': 'recall', 'message_id': str(row['platform_message_id']), 'line': row['_id']}}}
+
+    def _cancel_own(self, ep, item):
+        """A line of hers still in the outbox is taken out before it leaves; the row keeps why."""
+        from .state import Conflict
+        row = self.store.db.messages.find_one({'_id': item['row']})
+        if not row or row.get('delivery_state') not in ('READY', 'QUEUED_EXTERNAL'):
+            return '〔%d〕 %s' % (item['seq'], RECALL_SENDING)
+        try:
+            self.store.put('messages', {**row, 'delivery_state': CANCELLED_BY_HER,
+                                        'cancelled': {'why': item['why'], 'episode_id': ep['_id']}},
+                           expected=row['revision'], stream=row['episode_id'])
+        except Conflict:
+            return '〔%d〕 %s' % (item['seq'], RECALL_SENDING)            # the adapter took it just now
+        return RECALL_CANCELLED % item['seq']
 
     def _action_part(self, ep, scene, kind, part):
         """A poke or a reaction as a part of her reply: the program's words for her history, and the platform action.

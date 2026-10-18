@@ -104,6 +104,7 @@ map_from_program (ADR-073): in a reflection turn, a map of what she has, what ch
 Who is who in a scene, as the character reads it.
 
 - def `typed` — Someone's own text with any label-shaped part made plain: [name #4] reads ［name ＃4］, @#4 reads @＃4.
+- def `anchors_shown` — Her turn's context is ready: anchors from here on are for her next turn there.
 - def `anchor` — The first sentences of a thought that fit in about `limit` characters, cut where a sentence ends (a half sentence is easier to repeat as if meant now), with the program's mark and the whole length when cut.
 - def `said_line` — One line of what someone wrote, as she reads it: a leading > (the mark of the program's quote and thought lines) is shown full-width, so a message cannot pass for a quote of someone else or for her own past thought.
 - def `safe_name` — A shown name she can read safely: one line, visible characters only, no label characters.
@@ -133,7 +134,8 @@ Who is who in a scene, as the character reads it.
   - `authors_of` — Every stored author id in these scenes that is this person (aliases by configuration).
   - `row_head` — Who wrote a stored row, as a history result names them: her own rows read as her name.
   - `speaker` — Label for a stored author (no notes): her own rows read `me` when given.
-  - `pointed` — A line another line points at (a quote, a reaction, a recall), in the one form every pointer has (ADR-079 §9.3): its number where the conversation shows numbers, its speaker (hers as 你), its first words.
+  - `pointed` — A line another line points at (a quote, a reaction, a recall), in the one form every pointer has (ADR-079 §9.3), the same as its own label line: its number where the conversation shows numbers, its speaker (hers as 你), when it was said on h
+  - `thought_then` — Under a line of hers that someone else points at (a quote, a reaction, a recall, an essence): what she thought when she said it, as she wrote it (reasons.py, ADR-043), as an anchor, not the whole old thought: read in full it passes for a ju
   - `line_of` — The line she names by its number in this conversation (as shown, brackets or not) or by 这条 (the line that called her): (row, None), or (None, why, in words she can act on) (ADR-079 §9.4).
   - `transcript` — One platform message as it enters her conversation: the speaker's label line, then the message, indented.
   - `identity_line` — The current speaker, in full: label, notes, names in quotes, and how the owner is known.

@@ -97,8 +97,9 @@ AFFECT_FIELDS = {
 # ADR-079 §9.4: one way to point at a line, in every tool: its number in this conversation, or 这条.
 QUOTE_LINE = ('引用哪条：写那条的编号（只写数字，编号在每行末尾的〔〕里），或「这条」＝叫你的那条；不写就不引用。'
               '你自己说过的话也能引，用来改口或补一句。一句话回好几条时不用引。编号只用来挑引用，别写进 text。')
-REACT_LINE = ('react：点哪条，写它的编号（只写数字）或「这条」＝叫你的那条。点表情挂在那条上；贴纸是你发的一条新消息，两样都行。'
-              'recall：撤你自己的哪一句，写它的编号')
+REACT_LINE_REACT = 'react：点哪条，写它的编号（只写数字）或「这条」＝叫你的那条。点表情挂在那条上；贴纸是你发的一条新消息，两样都行。'
+REACT_LINE_RECALL = 'recall：撤你自己的哪一句，写它的编号'
+REACT_LINE = REACT_LINE_REACT + REACT_LINE_RECALL
 # Her own line taken back (her ask, the owner's yes, 2026-10-18): still queued it is cancelled, delivered it is recalled.
 RECALL_WHY_CHARS = 100
 RECALL_WHY = 'recall：为什么撤（必填，%d 字以内）' % RECALL_WHY_CHARS
@@ -111,6 +112,14 @@ CANCELLED_BY_HER = 'CANCELLED_BY_HER'           # a line of hers she took back b
 QUOTED = '引的是 %s'
 # The parts of her reply, in a conversation whose kind lists them (channel_kinds.reply_parts; ADR-064 phase 2).
 REPLY_KINDS = ('text', 'sticker', 'picture', 'poke', 'react', 'recall')
+# ADR-079 §9.7: a pointer part is listed only where the channel's adapter declared it, and each part's fields.
+PART_NEEDS = {'react': 'react', 'recall': 'recall'}
+PART_FIELDS = {'text': ('text',), 'sticker': ('name',), 'picture': ('artifact_id',), 'poke': ('who',),
+               'react': ('line', 'face'), 'recall': ('line', 'why')}
+SPEAK_HEAD = '在这里说话：只有 speak 发得出去，正文不发。parts 按顺序，一个 part 是单独的一条消息，kind 选 '
+SPEAK_RECALL = 'recall 只撤你自己的话（还没发出去的就取消），撤别人的用 group_action。'
+SPEAK_TAIL = '有一条不对，这次一条都不发，回执说哪条、为什么。不想说话就不调用，或用 stay_silent。'
+from .capabilities import CANNOT as LEG_CANNOT, WORDS as LEG_WORDS      # her words for a function not carried here
 # What reply carries itself where it is listed.
 REPLY_REPLACES = ('await_answer', 'attach_image')
 
@@ -150,10 +159,7 @@ TOOLS = {
                        'page': {'type': 'integer', 'description': '报告第几页，从 1 开始（page 要）'}},
     },
     'speak': {
-        'description': ('在这里说话：只有 speak 发得出去，正文不发。parts 按顺序，一个 part 是单独的一条消息，kind 选 text、'
-                         'sticker、picture、poke、react、recall，各写它的字段；recall 只撤你自己的话（还没发出去的就取消），'
-                         '撤别人的用 group_action。有一条不对，这次一条都不发，回执说哪条、为什么。'
-                         '不想说话就不调用，或用 stay_silent。'),
+        'description': SPEAK_HEAD + '、'.join(REPLY_KINDS) + '，各写它的字段；' + SPEAK_RECALL + SPEAK_TAIL,
         'parameters': {
             'parts': {'type': 'array', 'required': True,
                       'description': '这次要发的，按顺序；text 一回合加起来最多几行，speak_from_program 写着',
@@ -542,6 +548,51 @@ def all_specs():
     # update_self runs on, unlisted, where write_document is listed (ADR-055's rule for a retired name).
     return specs(TOOL_NAMES) + [unlisted(old, can) for old, can in RENAMED.items()] + [
         {'name': 'update_self', **UPDATE_SELF}, MESSAGE_DEVELOPER]
+
+
+def speak_kinds(store, scene):
+    """The parts speak takes in this conversation: its kind's parts, a pointer part only where the channel's adapter
+    declared it (ADR-079 §9.7: not declared is not carried, so it is not shown)."""
+    from . import capabilities, channel_kinds
+    refused = scene.get('kind') == 'dm' and scene.get('channel_id') in REACT_OFF_IN_DMS
+    return tuple(kind for kind in channel_kinds.reply_parts(scene['_id'])
+                 if (kind not in PART_NEEDS or capabilities.carries(store, scene, PART_NEEDS[kind]))
+                 and not (kind == 'react' and refused))
+
+
+def speak_spec(kinds, quotes):
+    """speak as a conversation with these parts shows it, with `quote` only where her line can quote. All the parts
+    with quoting is the shared definition, byte for byte."""
+    import copy
+    spec = copy.deepcopy(tools()['speak'])
+    if tuple(kinds) == REPLY_KINDS and quotes:
+        return spec
+    spec['description'] = (SPEAK_HEAD + '、'.join(kinds) + '，各写它的字段；' + (SPEAK_RECALL if 'recall' in kinds else '')
+                           + SPEAK_TAIL)
+    item = spec['parameters']['parts']['items']['properties']
+    item['kind']['enum'] = list(kinds)
+    keep = {'kind', *(field for kind in kinds for field in PART_FIELDS[kind])}
+    for field in [field for field in item if field not in keep]:
+        del item[field]
+    if 'line' in item:
+        item['line']['description'] = ''.join(text for kind, text in (('react', REACT_LINE_REACT),
+                                                                      ('recall', REACT_LINE_RECALL)) if kind in kinds)
+    if not quotes:
+        spec['parameters'].pop('quote', None)
+    return spec
+
+
+def session_specs(store, scene_id):
+    """Her tools as one conversation shows them (ADR-079 §9.7): `speak` with the parts and the quote its channel's
+    adapter declared, the rest as all_specs. Given when the session starts, so a session's tools never change."""
+    from . import capabilities
+    out = all_specs()
+    scene = store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}
+    kinds = speak_kinds(store, scene)
+    if not kinds:
+        return out
+    shaped = {'name': 'speak', **speak_spec(kinds, capabilities.carries(store, scene, 'quote'))}
+    return [shaped if spec['name'] == 'speak' else spec for spec in out]
 
 
 def aliases():
@@ -986,8 +1037,9 @@ ACTION_MARK = '（你做的动作，不是你说的话）'
 LINE_NUMBER = re.compile(r'〔\s*\d+\s*〕')
 NUMBER_NOT_WORDS = '编号是挑引用用的，不写进你说的话里。'
 # Channels whose platform refused a reaction in a private chat: not tried there again until the Host restarts (her
-# call: the platform may take them one day).
+# call: the platform may take them one day); a session that starts meanwhile is not shown react in a private chat.
 REACT_OFF_IN_DMS = set()
+REACT_DM_OFF = '私聊里点不了表情（平台不收），到下次重启前私聊里不用 react'
 
 
 def chat_lines(text):
@@ -1330,11 +1382,11 @@ class RoleTools:
         from .persona_model import effective
         from .render import model_and_policy
         ep = self._fresh(ep)
-        kinds = channel_kinds.reply_parts(ep['scene_id'])
+        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        kinds = speak_kinds(self.store, scene)
         parts = args.get('parts')
         if not isinstance(parts, list) or not parts:
             raise Refused('parts 要列出这次要发的，至少一个。')
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
         group = scene.get('kind') == 'group'
         model, policy = model_and_policy(self.store, ep['persona'])
         most = int(effective(model, 'speak.max_messages', policy) or 1)
@@ -1351,8 +1403,11 @@ class RoleTools:
             kind = part.get('kind')
             if kind not in REPLY_KINDS:
                 problems.append('第 %d 条的 kind 是 %s 之一' % (index, '、'.join(kinds)))
+            elif kind == 'react' and scene.get('kind') == 'dm' and scene.get('channel_id') in REACT_OFF_IN_DMS:
+                problems.append('第 %d 条 %s' % (index, REACT_DM_OFF))
             elif kind not in kinds:
-                problems.append('第 %d 条 %s 这里发不了' % (index, kind))
+                problems.append('第 %d 条 %s 这里发不了%s' % (index, kind, '：' + LEG_CANNOT % LEG_WORDS[kind]
+                                                               if kind in LEG_WORDS else ''))
             elif kind == 'text':
                 text = part.get('text') if isinstance(part.get('text'), str) else ''
                 same = ' '.join(text.split())
@@ -1410,7 +1465,10 @@ class RoleTools:
                     planned.append({'kind': 'picture', 'text': '', 'fields': {'attachment': dict(meta)},
                                     'shown': 'picture'})
         wait, quoted = args.get('wait'), None
-        if args.get('quote') not in (None, ''):
+        from . import capabilities
+        if args.get('quote') not in (None, '') and not capabilities.carries(self.store, scene, 'quote'):
+            problems.append('quote：' + LEG_CANNOT % LEG_WORDS['quote'])
+        elif args.get('quote') not in (None, ''):
             # ADR-079 §9.4: the line she chose, by its number or 这条; the program never chooses one for her.
             quoted, why = People(self.store, ep['persona']).line_of(scene, ep['_id'], args['quote'])
             if why:
@@ -1453,7 +1511,7 @@ class RoleTools:
         from .capabilities import numbered as shows_numbers
         out = {'note': reply_receipt(queued, shows_numbers(self.store, scene)) if queued else '这次没发新的。'}
         if quoted:
-            out['quoted'] = QUOTED % People(self.store, ep['persona']).pointed(scene, quoted, 30)
+            out['quoted'] = QUOTED % People(self.store, ep['persona']).pointed(scene, quoted)
         taken_back = [RECALL_QUEUED % item['seq'] for item in planned if item.get('recall_seq')] + cancelled
         if taken_back:
             out['recall'] = '；'.join(taken_back)
@@ -1498,7 +1556,7 @@ class RoleTools:
                 raise Refused(RECALL_TOO_LATE % (limit // 60))
         if not row.get('platform_message_id'):
             raise Refused('那句平台没给编号，撤不了（不是你的错）')
-        pointed = People(self.store, ep['persona']).pointed(scene, row, 30)
+        pointed = People(self.store, ep['persona']).pointed(scene, row)
         return {'kind': 'recall', 'text': '撤回 %s（为什么：%s）%s' % (pointed, why, ACTION_MARK),
                 'shown': 'recall 〔%d〕' % row['scene_seq'], 'recall_seq': True, 'seq': row['scene_seq'],
                 'fields': {'action': {'kind': 'recall', 'message_id': str(row['platform_message_id']), 'line': row['_id']}}}
@@ -1525,7 +1583,7 @@ class RoleTools:
         people = People(self.store, ep['persona'])
         if kind == 'react':
             if scene.get('kind') == 'dm' and scene.get('channel_id') in REACT_OFF_IN_DMS:
-                raise Refused('私聊里点不了表情（平台不收），到下次重启前私聊里不用 react')
+                raise Refused(REACT_DM_OFF)
             face = str(part.get('face') or '').strip()
             faces = channel_kinds.faces_of(scene['_id'])
             if face not in faces:
@@ -1539,7 +1597,7 @@ class RoleTools:
             if not message_id:
                 raise Refused('那一条平台没给编号，点不了（不是你的错）')
             # Her reaction reads like anyone's (ADR-079 §9.3): the line by its number, speaker and first words.
-            pointed = people.pointed(scene, line, 30)
+            pointed = people.pointed(scene, line)
             return {'kind': 'react', 'text': '给 %s 点了「%s」%s' % (pointed, face, ACTION_MARK),
                     'shown': 'react「%s」给 %s' % (face, pointed),
                     'fields': {'action': {'kind': 'react', 'message_id': str(message_id), 'emoji_id': str(faces[face])}}}

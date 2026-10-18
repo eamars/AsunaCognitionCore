@@ -1152,8 +1152,20 @@ class BusinessWorker:
                                    expected=row['revision'], stream=row['task_id'])
             return {'recorded': True}
         if method == 'role_tool_specs':
-            from .role_tools import all_specs
-            return all_specs()
+            # A role session gets her tools as its conversation shows them (ADR-079 §9.7), fixed for the session.
+            from .evidence import canonical
+            from .role_tools import all_specs, session_specs
+            record = (self.app.store.db.sessions.find_one({'_id': args['session_id'], 'native_host': True})
+                      if args.get('session_id') else None)
+            if not record:
+                return all_specs()
+            specs = session_specs(self.app.store, record['scene_id'])
+            speak = next((spec for spec in specs if spec['name'] == 'speak'), None)
+            self.app.store.audit(record['_id'], 'session.tools', {
+                'sha256': sha(canonical(specs)),
+                'speak_parts': speak['parameters']['parts']['items']['properties']['kind'].get('enum') if speak else None,
+                'quote': bool(speak and 'quote' in speak['parameters'])}, record.get('scope_key', 'operator'))
+            return specs
         if method == 'role_tool_aliases':
             from .role_tools import aliases
             return aliases()

@@ -315,7 +315,6 @@ export class CognitionCore {
       for (const summary of catalog.items)
         if (primary.has(summary.sessionId)) this.ctx.emit('api-session/added', summary);
       this.specs = await this.worker.call('tool_specs');
-      this.roleSpecs = await this.worker.call('role_tool_specs');
       this.roleAliases = await this.worker.call('role_tool_aliases');
       this.lifecycle.state = 'ready'; this.lifecycle.error = null;
       await this.worker.call('navigation.ready');
@@ -1174,7 +1173,9 @@ export class CognitionCore {
   async attachRole(agent) {
     const scope = agent.ctx;
     await this.ready();
-    for (const spec of this.roleSpecs ?? []) {
+    // Her tools as this conversation shows them (ADR-079 §9.7): what its channel's adapter declared, fixed for the session.
+    const specs = await this.worker.call('role_tool_specs', { session_id: agent.session.id });
+    for (const spec of specs ?? []) {
       scope.tools.register(defineTool({ ...spec,
         output: { schema: { type: 'json' }, render: asunaRender },
         execute: async (args, exec) => {

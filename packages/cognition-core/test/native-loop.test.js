@@ -50,6 +50,7 @@ async function harness(t, finish = 'stop', composition) {
   const onEvent = core.onEvent.bind(core);
   core.onEvent = async event => { if (event.kind === 'stage') stages.set(event.token, event.session_id); return onEvent(event); };
   core.worker = { async call(method, args) {
+    if (method === 'role_tool_specs') return [];          // her tools for the session: none in these fixtures
     business.push({ method, args });
     if (method === 'input') await core.onEvent({ kind: 'stage', session_id: args.session_id,
       token: 'stage-' + args.session_id, phase: 'TURN', lane: 'character',

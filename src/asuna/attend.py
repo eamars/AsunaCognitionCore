@@ -76,7 +76,7 @@ def recent(store, scene, until_seq, now_ts=None):
         if row['direction'] == 'outbound':
             text = ('你（差事）：' if row.get('errand') else '你：') + ' '.join(str(row.get('text') or '').split())
         else:
-            text = people.transcript(scene, row)
+            text = people.transcript(scene, row, once=False)
         used += len(text)
         if kept and used > MAX_CHARS:
             break
@@ -104,7 +104,7 @@ def material(store, scene, event, row, persona):
            'speaker': people.head(scene['_id'], doc, str(row.get('received_at') or '')),
            **{'speaker_' + key: value for key, value in familiarity.words(store, event['person_id'], persona).items()},
            'since_you_spoke': since,
-           'lines': lines or [people.transcript(scene, row)]}
+           'lines': lines or [people.transcript(scene, row, once=False)]}
     from . import notices
     held = notices.take(store, scene, persona, keep=True)      # after the stored lines; hers once, here or in the turn
     if held:

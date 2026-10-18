@@ -337,6 +337,13 @@ class ContextBuilder:
 
     def prepare(self, event: dict, persona='P1', recall=False, turn_kind=None):
         """`turn_kind`: a recall's own turn kind, for the shadow pilot's row only."""
+        try:
+            return self._prepare(event, persona, recall, turn_kind)
+        finally:
+            from .people import anchors_shown
+            anchors_shown(event['scene_id'])        # her thought under a line of hers: once a turn
+
+    def _prepare(self, event, persona, recall, turn_kind):
         scene=self.store.authorize(event['scene_id'],event['person_id'])
         from . import memory_tiers
         if memory_tiers.ENABLED and not recall:
@@ -1172,6 +1179,11 @@ class ContextBuilder:
                            '你这回合写出来的话会作一条消息发出去，写在工具调用旁边的也算；不想说出口的放进 think。'),
                    'new_lines':'这段对话里新来的话——包括你这回合中途才到的——你看见了就算你接住了：'
                                '要回就在这回合一起回，它们不会再单独叫你一次。'}
+            # Her channel lost or regained a function she uses: said once here, at this turn (ADR-079 §9.7).
+            from .capabilities import change_line
+            leg=change_line(self.store,scene)
+            if leg:
+                speak['leg']=leg
             if session_class!=visibility.OWNER_PRIVATE:
                 speak['one_self']=ONE_SELF          # ADR-018 §5.7: words only, nothing from elsewhere
             if replying and source and source.get('direction')=='inbound' and source.get('scene_seq') is not None:

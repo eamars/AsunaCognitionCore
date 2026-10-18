@@ -612,6 +612,44 @@ is often more honest, since QQ shows the recall) stay hers; the program does not
 
 Cost: `speak`'s description +153 characters (budget raised in `tests/test_tool_budget.py`); no per-turn line.
 
+### 9.8c Step 3 as built (2026-10-18 evening; Xiaoman's answers about 19:3x–19:5x NZDT, Claude's paraphrase)
+
+- **Tools per session.** A role session's tool definitions come from the worker when DSH creates the session
+  (`role_tool_specs` with the session id, `role_tools.session_specs`). They stay fixed for that session, and the
+  audit row `session.tools` keeps their hash. `speak` lists a react or recall part only where the channel's adapter
+  declared `react` / `recall`, and `quote` only where it declared `quote`. Its description and part fields name only
+  what is listed; with everything declared it is the shared definition, byte for byte. A part or quote not declared
+  is refused in her words (`这条腿做不了点表情`, `quote：这条腿做不了引用`).
+- **A function lost or regained.** When a channel's declaration loses or regains `quote`, `react` or `recall`, each
+  of its conversations reads one line at its next turn (`speak_from_program.leg`: `这条腿做不了引用。` /
+  `这条腿又能引用了。`). A first declaration tells nothing.
+- **The runtime limit.** The live case is a private chat refusing a reaction, which she has never tried (0 in her
+  records). It keeps her own rule: not tried again until the Host restarts. A session that starts meanwhile is not
+  shown the react part in that channel's private chats.
+- **Kazusa.** The QQ Bot kind lists `REPLY_PARTS = ('text', 'picture')`, so she speaks only through `speak`, as
+  Xiaoman does. The bridge declares only `image`, so she sees no quote, reaction or recall; her `speak` definition is
+  962 characters instead of 1,603.
+- **Not yet built: QQ Bot inbound quotes (`msg_elements` → `reply_to`).** They name the quoted message by the
+  platform's `msg_idx`, not its id. Mapping them needs each message's `msg_idx` kept, and no real quoted payload has
+  been seen. Built against a real sample with the owner's help, then the bridge declares `quote_in`.
+- **Her thought under a line of hers, wherever someone else points at it.** The owner found the gap on her page
+  (2026-10-18 about 19:40): a quote of her line carried her thought then, a reaction did not. That was inherited from
+  ADR-043, not decided. Now a quote, a reaction, an admin's recall and an essence mark all carry the same anchor,
+  folded notices included. Xiaoman agreed (about 19:45) with two rules, both kept:
+  - once a turn per line, however many lines point at it (the gate's own view keeps it);
+  - never under anyone else's line.
+  Her own acts carry none.
+- **One pointer form, with the time.** The same form had four lengths (quotes 60, notices 40, her receipts 30, the
+  refusal list 20). Xiaoman chose 40 everywhere (about 19:50). She also asked for the time, because number, speaker
+  and time say which line, while the words only say what it was: `〔302〕 小雨 #5 10/18 15:28：<first 40>…`. Claude
+  applied it to every pointer, not only her receipts, so there is one form; she was told. She chose not to number her
+  own lines in the gate's view, since the gate never picks a line.
+- **Cost for her** (characters):
+  - no tool added; `speak` is smaller where less is declared;
+  - one `leg` line once per change;
+  - about 12 characters of time per pointer, offset by quotes going from 60 to 40 characters;
+  - about 70 characters per reaction to her line (about 28 a week).
+
 ### 9.9 Open for Xiaoman
 
 1. Private chats: she asked earlier (13:0x) to keep their default; she withdrew that (Claude's paraphrase, 13:5x NZDT)

@@ -10,6 +10,9 @@ KIND = 'qqbot'                    # scene ids qqbot:<appid>:<dm|group>:<openid>;
 TITLE = 'QQ Bot'                  # the sidebar workspace its conversations live in
 # The hosts the platform delivers inbound pictures from (attachments[].url).
 IMAGE_HOSTS = ('multimedia.nt.qq.com.cn', 'gchat.qpic.cn')
+# She speaks here only through `speak`, in these parts (what the bridge sends: text, and a picture with or without
+# words); the platform has no stickers, pokes or reactions for a bot. What else it carries is the bridge's declaration.
+REPLY_PARTS = ('text', 'picture')
 
 # An OpenID (a user's in a private chat, a member's or a group's in a group): letters and digits, longer than any
 # QQ number, so a bare QQ number is never read as one.

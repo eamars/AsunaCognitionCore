@@ -49,7 +49,7 @@ def test_every_line_shows_its_number_and_a_quote_between_two_others_reads_like_a
     text = People(store).transcript(scene, reply)
     head, quoted = text.split('\n')[:2]
     assert head.endswith(' 〔302〕') and head.startswith('[小周 #')
-    assert re.fullmatch(r'  > 回复 〔301〕 \[阿杰 #\d+\]：今晚谁拼外卖', quoted)
+    assert re.fullmatch(r'  > 回复 〔301〕 \[阿杰 #\d+\] 10/4 14:00：今晚谁拼外卖', quoted)   # its label line's form
 
 
 def test_a_quote_of_her_line_names_her_as_you_and_an_unknown_one_says_so(store):
@@ -102,7 +102,7 @@ def test_a_private_chat_quote_reaches_her_like_a_groups(store):
     text = People(store).transcript(scene, {'_id': 'in-78', 'scene_id': dm, 'author': 'qq:20002', 'direction': 'inbound',
                                             'text': '几点来着', 'received_at': '2026-10-04T01:05:00+00:00',
                                             'scene_seq': 5, 'event': event})
-    assert '  > 回复 〔4〕 你：明早八点' in text
+    assert '  > 回复 〔4〕 你 10/4 14:00：明早八点' in text
 
 
 def test_the_speak_result_gives_each_sent_lines_number_and_a_number_in_her_words_is_refused():

@@ -75,6 +75,7 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 What a channel's running adapter says it carries (ADR-079 §9.7).
 
 - def `declared` — Keep what an adapter declared on a claim; write the row only when it changed.
+- def `change_line` — The one line a conversation gets after its channel lost or regained a function she uses, at its next turn; None when there is none or it was shown here already.
 - def `supports` — The names a channel's adapter last declared; empty when it never did.
 - def `carries` — Whether the scene's channel declares any of these.
 - def `numbered` — Lines there show their number: the channel carries quotes, out or in (ADR-079 §9.2).
@@ -97,6 +98,7 @@ Platform notices as one-off lines (ADR-064 phase 1): the adapter projects a noti
 
 - def `kept` — The notice block the host keeps from an adapter's raw event, or None.
 - def `fill` — (the notice's words with {line} filled for any reader, whether the line is hers, the line's row id or None).
+- def `line_row` — The row of the line a notice is about, when it was found (its direction tells whether it is hers).
 - def `words` — A notice's words as she reads them: the line it is about named now (ADR-079 §9.3), from the notice's own template, since a label written into the stored text would read as typed.
 - def `hold` — Kept until her next turn there shows it (ADR-079: a restart loses none); the oldest beyond HELD_KEPT go.
 - def `take` — The notices held for this conversation, as she reads them, once: {'items': [...], 'more': ...} or None.

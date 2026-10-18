@@ -1,6 +1,7 @@
 """Her own line taken back (her ask, the owner's yes, 2026-10-18): `speak`'s `recall` part names her line by its
 number with a reason. Still queued, it is cancelled and never leaves; delivered within the platform's window, the
 adapter recalls it; later, it is refused with what she can do instead; what came of it is in her history either way."""
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -44,7 +45,8 @@ def test_a_delivered_line_within_the_window_is_recalled_with_her_reason(group):
     result, ok, [row] = speak(group, 'r-1', [{'kind': 'recall', 'line': '〔50〕', 'why': '时间说错了，是两点'}])
     assert ok, result
     assert row['action'] == {'kind': 'recall', 'message_id': 'pm-50', 'line': 'mine-50'}
-    assert row['text'] == '撤回 你：周六三点集合（为什么：时间说错了，是两点）' + role_tools.ACTION_MARK
+    assert re.fullmatch(r'撤回 〔50〕 你 \d+/\d+ \d\d:\d\d：周六三点集合（为什么：时间说错了，是两点）' + re.escape(role_tools.ACTION_MARK),
+                        row['text'])
     assert result['recall'] == role_tools.RECALL_QUEUED % 50 and '还没确认' in result['recall']
 
 

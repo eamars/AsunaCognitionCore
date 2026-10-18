@@ -9,7 +9,7 @@ evidence lives only in the private appendix (`.runtime/private/adr076/`, never c
 
 Sections 1–3 were checkpoint 1 (approved: flash only). A `[ ]` marks the few items left open, each named in §7.
 
-> **For the owner: what to read** (Claude, master agent, 2026-10-19 01:4x NZDT). Struck-through items are done;
+> **For the owner: what to read** (Claude, master agent, 2026-10-19 01:37 NZDT). Struck-through items are done;
 > the rest is what needs your decision.
 > - ~~Finding 15 / the probe offered no `speak`~~: fixed on main `e4fb2a3d`; the §4.4 numbers are from the fixed probe.
 > - ~~Finding 2 / R1, her self-improvement runs failing~~: root cause found and fixed on main `cb006c8b`. A development

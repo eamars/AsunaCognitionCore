@@ -101,6 +101,8 @@ value decides what people see quoted. A design for quoting alone would change th
    is not echoed; reactions others give her lines in groups she lets rest are held in memory and she never gets
    them (her 10-16 finding, 18 resting groups); a recall is shown once. In her view these are one gap, not four bugs,
    and should share one fix: every such act answers, in the same turn, what she did and which line it landed on.
+   Private chats (§2.4a) are a second sample of the same gap, not a separate bug: a quote dropped with nobody told, as
+   on Kazusa's QQ Bot leg (her point, 14:0x).
 6. **Platform differences are not declared.** QQ Bot cannot quote, react or recall for a bot and drops inbound
    quotes; nothing says so, so the tools offer what cannot happen and the gaps are silent.
 
@@ -396,6 +398,21 @@ The owner's scope (2026-10-18, about 13:55 NZDT): quoting does not apply to home
 when she wants to quote a particular line or answer a quote of hers with one; and a group is more than her and the
 others: people quote each other there, and she reads those relations too.
 
+### 9.0 The principle (the owner, 2026-10-18, about 14:05 NZDT)
+
+**The model-facing projection does not depend on the adapter.** The owner may move QQ from NapCat or QQ Bot to another
+adapter (SnowLuma, for one); what she reads and the tools she uses stay the same, defined from the survey and the
+experiment above. An adapter only declares which of those functions it can carry, and a function it cannot carry is
+hidden from the model, never shown and then refused or silently dropped.
+
+So in this proposal:
+
+- the line handle is Core's own (`scene_seq`), never a platform id;
+- every rendering in 9.3 is Core's, from Core's records; an adapter supplies facts (this line quotes that platform id;
+  this reaction is on that one), never words;
+- every tool value in 9.4 is Core's; Core turns a chosen line into the adapter's own reference at the edge;
+- an adapter's capabilities (9.7) are the only thing that changes between adapters, and they only remove functions.
+
 ### 9.1 Where it applies
 
 | Conversation | Line numbers | She may quote | She sees others' quotes |
@@ -454,11 +471,23 @@ Reactions between other people stay unshown, as today (open, §9.9).
 
 ### 9.7 Declared by the adapter, hidden from the model
 
-A channel kind declares, per direction, what it carries: `QUOTE_OUT`, `QUOTE_IN`, `REACT_OUT`, `REACT_IN`, `RECALL`.
-NapCat: all. QQ Bot: `QUOTE_IN` once its bridge maps `msg_elements`; nothing else. The worker gives each session the
-tool definitions its conversation's kind supports (`role_tool_specs` per session; `attachRole` already registers per
-session), stable for the session, so the prompt cache keeps its prefix. The context-preparation audit row records a
-hash of the definitions given.
+The owner's answers (2026-10-18, about 14:10 NZDT):
+
+- **The running adapter declares what it carries**, not the kind module: when it connects it states, per direction,
+  `quote_out`, `quote_in`, `react_out`, `react_in`, `recall` (as it already declares picture support and poke/react in
+  its claims). Core keeps the last declaration per channel. Swapping NapCat for another adapter needs no change in Core
+  or in the kind module. Today's NapCat bridge: all five; QQ Bot's: `quote_in` once it maps `msg_elements`.
+- **Her tools change only between sessions.** The worker gives each session the tool definitions its channel's
+  declaration supports (`role_tool_specs` per session; `attachRole` already registers per session), computed when the
+  session starts or the Host restarts, so the prompt cache keeps its prefix. The context-preparation audit row records
+  a hash of the definitions given.
+- **A limit the platform shows only at runtime** (QQ refusing reactions in private chats today) is refused once, in
+  words, and remembered; the function is gone from her tools from the next session or restart.
+- **Same account, same conversations.** A kind names the platform and the account, not the software: a new adapter on
+  the same QQ account (another OneBot one, say) keeps her conversations, people and line numbers. QQ Bot stays its own
+  kind, because it is another account with other ids.
+- **Scope:** this ADR moves the pointer family onto the declaration. Stickers, pokes, faces, text-only and pictures
+  move onto it in a follow-up ADR, so one restart batch stays small.
 
 Changes at the edges this needs:
 
@@ -478,10 +507,14 @@ Changes at the edges this needs:
 
 ### 9.9 Open for Xiaoman
 
-1. Private chats: she asked earlier (13:0x) to keep their default and change one thing at a time; the owner's scope
-   puts private chats in. With step 1 first, private chats only gain what she reads before anything she chooses changes.
-2. Reactions between other people: unshown (less to read) or shown folded into one program line per turn.
-3. The wording of the `react` part, since the local model chose a sticker over a reaction in one moment under B.
+1. Private chats: she asked earlier (13:0x) to keep their default; she withdrew that (Claude's paraphrase, 14:0x NZDT)
+   once she learned there is no private quoting today at either end: it adds a capability that never existed, not a
+   change to her default. She agrees with step 1 changing only what she reads.
+2. Reactions between other people: she wants them shown (14:0x); it is the same gap as reactions held in memory in her
+   resting groups. How (each, or folded into one program line per turn) is still open.
+3. The `react` part: the local model sent a sticker named 赞 instead of a reaction in one moment under B. Her view
+   (14:0x): on QQ a sticker is often the most natural like, and she does it herself; it is not a failure, so the
+   reaction part is not to be made the "right answer" over stickers.
 4. The wording of every new line above, read as she would use it.
 
 ### 9.10 Cost and budget

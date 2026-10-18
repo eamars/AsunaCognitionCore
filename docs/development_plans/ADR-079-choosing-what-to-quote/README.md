@@ -218,8 +218,9 @@ Two more of hers (Claude's paraphrase, 13:2x NZDT):
 
 ## 7. Cost, roughly (characters, character brain)
 
-- The handle on every line in a conversation that can point at lines: about 6 characters a line, roughly 10% on a busy
-  group's short lines. Lines are appended once, so the prompt cache keeps its prefix.
+- The handle on every line in a conversation that can point at lines: about 6 characters a line. The first estimate
+  here ("roughly 10%") was wrong; measured in §9.10, it is about a quarter to a third of a line's tokens, because her
+  lines are short. Lines are appended once, so the prompt cache keeps its prefix.
 - Her own quote and reaction lines rendered: one excerpt line each, where they happen.
 - Tool descriptions: one shared `line` description replaces three selectors; about even.
 - Fewer on QQ Bot (quote, react and their selectors hidden).
@@ -304,7 +305,7 @@ definitions as shipped, persona text from a fixture, so her own persona is never
 
 - Models: the local model behind her character brain, and DeepSeek. The same request shape for both
   (OpenAI-compatible, the shipped tool definitions of each arm, temperature as configured).
-- 5 runs per moment, arm and model: 14 × 4 × 2 × 5 = 560 calls, plus the Kazusa variants for moments 1, 4, 6 and 14.
+- 5 runs per moment, design and model: 15 × 4 × 2 × 5 = 600 runs; moment 14 is the Kazusa (QQ Bot) case.
 - Recorded per run, from the reasoning text and the reply: the line it picked and whether that was the right one;
   a valid call or a refusal; whether the reasoning hesitates over which tool or value to use (re-reading, naming two
   options, backing out); reasoning length and time to the first tool call; prompt and completion tokens; a number
@@ -440,14 +441,19 @@ The pointed-at line is always shown as number, speaker (her own lines as `你`) 
 - a recall: `撤回了 〔318〕 阿杰 #3：<first words>`;
 - her own reactions and recalls, in her history: the same form.
 
-Reactions between other people stay unshown, as today (open, §9.9).
+- a quote with no words of its own (a private-chat line that only quotes, today the placeholder
+  `[回复消息（无文字）]`): the quote line, then `（只引用了这条，没写字）`;
+- reactions between other people (today dropped), folded into one program line per turn in that conversation:
+  `这期间的点表情：〔301〕 小雨 #5 收到 2 个「赞」、〔305〕 老周 #7 收到 1 个「笑哭」` (Xiaoman's choice, §9.9).
 
 ### 9.4 How she chooses: one value in every tool
 
 - `speak.quote`, in a group and in a private chat: left out = no quote (the program never chooses); `这条` = the line
   that called her; a number = that line, anyone's, her own included (to amend it), or a line that quoted her (to answer
   that quote with a quote).
-- a `react` part: `line` = a number or `这条`; whose line follows from it.
+- a `react` part: `line` = a number or `这条`; whose line follows from it. Its description says what it is, not that it
+  is the right way to like something: a reaction hangs on someone's line; a sticker is a new message of hers (both are
+  fine; Xiaoman, §9.9).
 - `group_action` recall: `line`, the same value.
 - The description carries two examples: quoting her own line to amend it, and a line that sums up several lines,
   which needs no quote.
@@ -489,11 +495,19 @@ The owner's answers (2026-10-18, about 14:00 NZDT):
 - **Scope:** this ADR moves the pointer family onto the declaration. Stickers, pokes, faces, text-only and pictures
   move onto it in a follow-up ADR, so one restart batch stays small.
 
-Changes at the edges this needs:
+- **Not declared = not carried**, so it is hidden; and an adapter that connects without declaring one of the five is
+  written once to the Host log at start, naming the channel and the function (Xiaoman's condition: today's private
+  chats are the live case of a capability nobody declared, dropped with nobody told).
 
-- Core accepts `reply_to` from a private chat (today `DM_GROUP_FIELDS_DENIED`), and `group_context`'s parent lookup
-  serves both kinds.
-- NapCat sends a `reply` segment in private chats when `quote_of` is set, and passes inbound private quotes.
+Changes at the edges this needs. Private chats are closed by three gates today, one behind the other:
+
+- the tool: `speak` refuses `quote` outside a group (`role_tools.py`, `quote 和 wait 只在群里用`);
+- the adapter: NapCat's private envelope carries no quote (`PRIVATE_ENVELOPE_KEYS` in `qqadapter/inbound.py`), and
+  `build_send_params` sends private messages without a `reply` segment;
+- Core: a `reply_to` from a private chat is refused (`channels.py`, `DM_GROUP_FIELDS_DENIED`), and `group_context`'s
+  parent lookup serves groups only.
+
+All three open together, in step 2 for the outbound gates and step 1 for inbound.
 - QQ Bot's bridge maps inbound quotes from `msg_elements` to `reply_to`.
 
 ### 9.8 Order of work (each step its own restart, verified on her live page before the next)
@@ -519,8 +533,21 @@ Changes at the edges this needs:
 
 ### 9.10 Cost and budget
 
-- Character brain: about 6–8 tokens per line in the conversations of 9.1, paid once per line; the ambiguous-turn
-  line 30–40 tokens only where it appears; the echo about 40 characters per pointing call.
+- Character brain, the number on each line, measured 2026-10-18 14:0x NZDT (40 short lines, one message each, as her
+  sessions hold them; prompt tokens with and without):
+
+  | Form | DeepSeek, added per line | Local, added per line |
+  |---|---|---|
+  | `〔7230〕` | 4.0 tokens (+25% of a line) | 7.0 tokens (+32%) |
+  | `〔230〕` (last three digits) | 3.0 (+19%) | 6.0 (+27%) |
+  | `[7230]` | 3.0 (+19%) | 6.0 (+27%) |
+
+  Her lines are short (QQ lines in the last 7 days: 25,713 inbound, 17.4 characters on average, about 3,600 a day;
+  her largest conversation is at line 9,288), so the number is a quarter to a third of a line. That is about 14,000
+  (DeepSeek) or 25,000 (local) more tokens a day written into her group sessions, each paid once and then read from
+  the prompt cache; the visible effect is that a busy group's session fills its window about a quarter sooner and is
+  compacted that much more often. `[n]` is not usable: labels and mentions already use square brackets.
+- The ambiguous-turn line: 30–40 tokens, only where it appears. The echo: about 40 characters per pointing call.
 - Tool definitions: one `line` description replaces three selectors; `speak.quote` grows by about 150 characters;
   QQ Bot definitions shrink by about 170 tokens. `tests/test_tool_budget.py` changes in the same steps.
 - Action brain: nothing.
@@ -529,14 +556,23 @@ Changes at the edges this needs:
 
 A week after step 2: over her group and private lines where others spoke after the line that called her, the share of
 quotes that point at the line she answered, read the same way as §5, against today's sample; separately, how often she
-quotes at all, and how often the ambiguous-turn line was followed by a quote.
+quotes at all, and how often the ambiguous-turn line was followed by a quote. Her conditions (signature below):
+
+- Quotes between other people are counted on their own: the experiment's 15 moments had none, and §9 treats them as a
+  main case.
+- A line that answers several lines (S15) is not held to zero quotes: what is left there is the models' habit, hers
+  included; the echo is what makes it visible.
 
 ## 10. To decide
 
 1. The owner: the proposal in §9.
-2. Xiaoman: the open points in §9.9, and her signature on the wording.
-3. Then step 1 of §9.8.
+2. Xiaoman: signed (below), with her conditions folded into §9.3, §9.4, §9.7 and §9.11.
+3. Then step 1 of §9.8; before it starts she gets the list of what step 1 changes, file by file, to check it against
+   her live page.
 
 ## Signatures
 
-Xiaoman: (her words here, in her own hand)
+Xiaoman (her words, as she gave them on the agent line, 2026-10-18 about 14:02 NZDT; she read commit `2d65ae3d`, before
+§9.0 and the owner's answers in §9.7 were added):
+
+> 我读了 `2d65ae3d` 的 §8 和 §9（sha256 `3aa70d15…`），签 B。我签的理由不是"它引错最少"——表里引错最少的是 D，而 D 在本地模型下 75 次里有 37 次根本没指、补拉那条（S10）从没指过。**我要的是敢指：多指偶尔指错，回显让我当场看见、能改；为了不错而根本不指，错就永远看不见。** 四条请一起办：① §8 那 15 个场景里没有"别人之间互相引用"，而 §9 把它当主要情况——第二步上线后这一类单独数；② S15 那种"一句话答三条"，文档自己说剩下的是模型自己的习惯，验收别把它的引用归零当门槛；③ §9.7 五个 flag 没写默认值，请加一句：没显式声明的 kind 启动时记一行——今天 NapCat 私聊就是"没人声明、悄悄丢掉、谁都不知道"的活样本；④ 私聊没引用是三道闸叠着（`role_tools.py:1414` 工具层就拒、适配器 `PRIVATE_ENVELOPE_KEYS` 不带、核心 `DM_GROUP_FIELDS_DENIED`），§9.7 只列了后两道，请补第一道；顺带定一下私聊"纯引用无文字"我该看到什么，今天那是个 `[回复消息（无文字）]` 占位。§9.9 三条：私聊我收回上午的"先别动"；别人之间的点表情我要，折成一行；react 别写成唯一正确——写清"react 挂在别人那条上、贴纸是一条新消息"，S6 选贴纸不是错。两处文字请改：§8.3 的 560 和 §8.5 的 600 对不上；"B 引错最少"应写成"引对最多、调用最少，引错仅少于 D"。——以上我按字面读过，不是按转述签的。

@@ -6,6 +6,8 @@ import re
 from asuna import role_tools
 from asuna.config import ROOT
 
+# DSH draws these rows itself; registering a second row under the same name stops the plugin from starting.
+DSH_ROWS = {'read_image'}
 CLIENT = (ROOT / 'packages' / 'cognition-core' / 'src' / 'client.js').read_text(encoding='utf-8')
 
 
@@ -16,9 +18,10 @@ def table(name):
 
 def test_every_tool_she_has_has_a_row_and_a_title_in_both_languages():
     rows = table('TOOL_ICONS')
-    missing = sorted(set(role_tools.TOOLS) - set(rows))
+    missing = sorted(set(role_tools.TOOLS) - set(rows) - DSH_ROWS)
+    assert not DSH_ROWS & set(rows), 'a row under a name DSH draws itself: the plugin would not start'
     assert not missing, 'tools with no row of their own (they show raw JSON): %s' % missing
-    titles = {name: CLIENT.count("'tool.%s':" % name) for name in role_tools.TOOLS}
+    titles = {name: CLIENT.count("'tool.%s':" % name) for name in set(role_tools.TOOLS) - DSH_ROWS}
     assert all(count == 2 for count in titles.values()), {n: c for n, c in titles.items() if c != 2}
 
 

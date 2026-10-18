@@ -82,3 +82,29 @@ def test_one_round_of_indexing_covers_her_owner_private_memories(store):
     indexer._run()
     private = visibility.owner_private_scope(store.config['chat']['persona'])
     assert (private, 1) in seen and seen[0][0] == store.db.scenes.find_one({'_id': 'dm-a'})['scope_key']
+
+
+def test_after_a_failed_query_embedding_turns_go_lexical_at_once_for_a_while(store, monkeypatch):
+    """Owner 2026-10-19: when the embedding service is offline her process must not crash; degradation is fine, and a
+    turn should not wait out the connection again and again."""
+    import time as clock
+    service = FakeService(limit=300, down=True)
+    r = retrieval(store, service)
+    with pytest.raises(httpx.ConnectError):
+        r.embed(['在吗'], 'query')
+    service.down = False
+    with pytest.raises(RuntimeError, match='EMBEDDING_RESTING'):
+        r.embed(['还在吗'], 'query')
+    assert service.calls == [1], 'resting: the service is not asked again'
+    assert len(r.embed(['一条记忆'], 'document')[0]) == 768, 'the indexer does not rest'
+    monkeypatch.setattr(clock, 'monotonic', lambda: r.resting_until + 1)
+    assert len(r.embed(['在吗'], 'query')[0]) == 768, 'after the rest it asks again'
+
+
+def test_a_failed_document_embedding_does_not_rest_queries(store):
+    service = FakeService(limit=300, down=True)
+    r = retrieval(store, service)
+    with pytest.raises(httpx.ConnectError):
+        r.embed(['一条记忆'], 'document')
+    service.down = False
+    assert len(r.embed(['在吗'], 'query')[0]) == 768

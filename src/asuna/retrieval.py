@@ -31,6 +31,7 @@ def refused(exc):
 
 class Retrieval:
     index_name='asuna_memory_v1'
+    REST_SECONDS=120
 
     def __init__(self, store: Store, evidence: Evidence):
         self.store,self.evidence=store,evidence
@@ -42,8 +43,22 @@ class Retrieval:
         self.dim=768
         self.cache=OrderedDict()
         self.vectors=OrderedDict()     # the last queries' vectors by query sha, for the shadow pilot (memory_pilot.py)
+        self.resting_until=0.0         # monotonic: query embeddings skipped until then, after a failure
 
     def embed(self, texts, purpose):
+        # The embedding service is outside the program: when it fails, a turn's query embeddings rest for REST_SECONDS
+        # and its searches go lexical at once, instead of each waiting out the connection again (the indexer, which
+        # embeds documents in the background, keeps its own retries).
+        if purpose == 'query' and time.monotonic() < self.resting_until:
+            raise RuntimeError('EMBEDDING_RESTING')
+        try:
+            return self._embed(texts, purpose)
+        except Exception:
+            if purpose == 'query':
+                self.resting_until = time.monotonic() + self.REST_SECONDS
+            raise
+
+    def _embed(self, texts, purpose):
         if self.cfg.get('manifest_sha256') and not self.weight_verified:
             tags=self.http.request('GET',self.cfg['base_url'].removesuffix('/v1')+'/api/tags','embedding.deployment_pin',api_key=self.cfg.get('api_key',''))
             match=next((m for m in tags['models'] if m['name'].removesuffix(':latest')==self.cfg['model'].removesuffix(':latest')),None)

@@ -207,7 +207,7 @@ These came before this wider analysis and still apply to §4:
 - Only in a turn where others have spoken since the line that called her, one program line lists the candidates'
   numbers to copy; no other turn gets a word more.
 - The number is shown at the end of the label line, she writes digits only, and a text that contains `〔318〕` is
-  refused, since the number is not for the people she talks to.
+  refused (`编号是挑引用用的，不写进你说的话里。`).
 - Numbers only where the conversation can point at lines (not her home lines).
 - Private chats keep their default; one change at a time.
 - Afterwards, measure separately over the ambiguous class, so the overall rate does not dilute the change.

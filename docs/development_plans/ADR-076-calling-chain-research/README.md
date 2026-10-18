@@ -211,8 +211,9 @@ The report is `report.md` in this folder. On its recommendations (§6):
     literally.
   - R4: her side gets a line saying a turn of hers had a program fault and it was reported to the developer.
     Built for failed turns (`faults.py`): one developer note a day per failure, counted; her next turn there reads
-    `fault_from_program` once. Not built yet: notes for an embedding outage, a summary lane retrying for an hour,
-    and Host error classes of compaction or the gate.
+    `fault_from_program` once. Not built, by the owner's decision (about 11:20): notes for an embedding outage or a
+    summary lane retrying for an hour. Those services are outside the program and nobody can act on their outages;
+    the program already backs off and retries. A note goes to the developer only for what the program got wrong.
   - R10: each place keeps one sentence on how speaking works there; the note-woken turn in the owner's chat keeps
     saying that he sees only what she says there.
 - **R5: accepted, batching first.** Context tokens matter most; effort is tuned only if batching is not enough, and

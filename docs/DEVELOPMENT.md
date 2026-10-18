@@ -158,8 +158,11 @@ Every error a tool call can return is read by a model that has to act on it, so 
   the library's short message.
 - The worker sends a coded message as it is. Any other exception reaching a tool result is a program fault and
   arrives as `TOOL_FAULT: 程序内部出错（Class: message）…`, which tells the caller its arguments are not the cause.
-- The character brain sees `WORDS[code] （CODE: detail）` for a code in the table, otherwise the message itself; a
-  `Refused` raised in `role_tools.py` is shown as written.
+- The character brain sees `WORDS[code]` followed by the detail written in words, never the code (`role_tools.words`;
+  the code stays in the record); a coded error raised without a detail must have a `WORDS` entry
+  (`tests/test_refusal_words.py`); a `Refused` raised in `role_tools.py` is shown as written. A call that fails the
+  tool's schema never reaches the worker: the Host plugin refuses it in the same form, keeping DSH's own line
+  verbatim at the end (`tool-args.js`).
 
 ## Writing docs and recording decisions
 

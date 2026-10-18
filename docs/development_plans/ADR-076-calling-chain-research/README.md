@@ -129,8 +129,9 @@ consult 37 + 17; settlement 7.
 
 **The records available.** Session logs per conversation on disk (`session.v4.jsonl.zstd`: requests, tool calls and
 results with `isError`, usage); audit (`role_tool` kept a year, the rest 30 days); episodes (context, `turn_tools`,
-tool calls); tasks with tiers; notes. Two known blind spots: action-brain tool errors are only in the session logs,
-not the audit; a tier rest at dispatch has no audit record of its own.
+tool calls); tasks with tiers; notes. Two known blind spots: the errors of DSH's own action tools (`web_fetch`,
+`web_search`, `skill`, `todo_write`) are only in the session logs, while the worker's action tools audit theirs as
+`tool.failed` (the study, report §8 item 4); a tier rest at dispatch has no audit record of its own.
 
 **Earlier studies to start from, not to trust blindly:** the wording audit (ADR-060), refusals by cause (ADR-054,
 ADR-055), tools kept by what only they do (ADR-069), cache-first disclosure (ADR-038), the context budget (ADR-014),

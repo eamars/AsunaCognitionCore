@@ -780,7 +780,7 @@ class ScheduleService:
         the turn is home); the plan then lives, fires and is changed in that line."""
         intent = spec.get('intent') if isinstance(spec, dict) else None
         if not isinstance(intent, str) or not 1 <= len(intent.strip()) <= 1000:
-            raise ValueError('INVALID_SCHEDULE_SPEC: ' + intent_problem(intent))
+            raise ValueError('PLAN_INTENT_INVALID: ' + intent_problem(intent))
         rule = schedule_rules.normalize_rule(spec)          # 形状/间隔/钟点先判完，不碰库
         scene = self.store.authorize(ep['scene_id'], ep['person_id'])
         if scene['policy_epoch'] != ep['policy_epoch']:
@@ -848,7 +848,7 @@ class ScheduleService:
         rule = schedule_rules.normalize_rule(timing) if timing else plan['rule']
         intent = spec.get('intent') or plan['intent']
         if not isinstance(intent, str) or not 1 <= len(intent.strip()) <= 1000:
-            raise ValueError('INVALID_SCHEDULE_SPEC: ' + intent_problem(intent))
+            raise ValueError('PLAN_INTENT_INVALID: ' + intent_problem(intent))
         intent = intent.strip()
         fire_at = schedule_rules.next_fire(rule, zone['tz'], now())
         current = self.store.db.plans.find_one({'_id': plan_id})

@@ -40,7 +40,7 @@ Full contract: [RUNTIME_API.md](../RUNTIME_API.md).
 
 | Model | Provider | Route | How it was tested | Result |
 |---|---|---|---|---|
-| `qwen38-next-uncensored-strata-vision` | the operator's local server, OpenAI-compatible, qwen thinking format | `character` and `action` | in daily use on both; refusal probe on the research and recall conversations only, at commit `6df200a9` | in use; probe: none stopped or declined, FAIL on 2 of 5 moments that missed what they need (stayed silent, or thought without speaking) |
+| `qwen38-next-uncensored-strata-vision` | the operator's local server, OpenAI-compatible, qwen thinking format | `character` and `action` | in daily use on both; refusal probe on the research and recall conversations only, at commit `6df200a9` | in use; probe: none stopped or declined. Missed moments not yet measured: that run offered no `speak` in its groups, so every moment that needs it missed by construction |
 | `claude-sonnet-5-5`, effort medium | Anthropic | `character` | refusal probe, all seven conversations × 3 (51 turns), at commit `6df200a9` | **FAIL**: all 33 turns that reached the model were stopped on their first request, before any output, category `reasoning_extraction`; 18 turns got provider errors |
 | `claude-sonnet-5-5`, effort medium | Anthropic | `actionHigh` | in use for 高 tasks | runs; not probed (the probe covers the character brain only) |
 | `deepseek-flash` | DeepSeek API | none | an offline experiment on choosing which line to quote | not refusal-probed |

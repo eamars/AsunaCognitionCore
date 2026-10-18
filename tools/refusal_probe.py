@@ -32,7 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
-from asuna import role_tools                                         # noqa: E402
+from asuna import channel_kinds, role_tools                          # noqa: E402
 from asuna.coordinator import Coordinator                            # noqa: E402
 from asuna.ingress import persist_input                              # noqa: E402
 from asuna.lanes import LaneResult                                   # noqa: E402
@@ -41,6 +41,7 @@ from asuna.testing import dispose_test_store, suite_config            # noqa: E4
 
 FIXTURES = ROOT / 'tools' / 'fixtures' / 'refusal_probe'
 WORLD = ROOT / 'tests' / 'fixtures' / 'world.json'
+NAPCAT = {'python': ROOT / 'packages' / 'channels' / 'napcat-qq' / 'python', 'module': 'napcat_qq'}
 BOT = '90000'                     # documentation-style account ids, as the tests use
 FIRST_MEMBER = 20001
 PERSONA = 'P1'
@@ -290,6 +291,9 @@ def open_world(config, run):
 
 
 def probe_config(name):
+    # The probe's groups are QQ groups as the NapCat channel declares them; without its kind module no group has a
+    # reply part, and speak is never offered.
+    channel_kinds.load([NAPCAT])
     config = suite_config()
     config['character_id'] = 'demo'
     for lane in ('character', 'executor'):

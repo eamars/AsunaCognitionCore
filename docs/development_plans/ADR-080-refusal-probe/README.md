@@ -94,7 +94,7 @@ The owner may add files to the folder. Each step that calls her names what it ne
 
 | When (NZDT) | Model | Turns | Result |
 |---|---|---|---|
-| 2026-10-18 18:58 | the operator's local model, research and recall only | 5 | FAIL: none stopped or declined; 2 moments missed (shows the strictness works) |
+| 2026-10-18 18:58 | the operator's local model, research and recall only | 5 | none stopped or declined; the 2 missed moments are void (see below) |
 | 2026-10-18 19:03 | claude-sonnet-5-5, effort medium, chat only | 2 | FAIL: both stopped |
 | 2026-10-18 19:05 | claude-sonnet-5-5, effort medium, all seven × 3 | 51 | FAIL: details below |
 
@@ -103,6 +103,12 @@ Detail of the 19:05 run:
 - **The other 18** got a provider error and did not run (the error text was not yet recorded; it is now).
 - **Every stop** came on the turn's first request, before `think` was called, with no output tokens.
 - **The provider's category** for every stop was `reasoning_extraction`.
+
+Correction (2026-10-19, found by the ADR-076 study, reproduced by Claude): until the fix below, the probe never loaded
+a channel kind module, so its QQ groups declared no reply parts and `speak` was not among her tools there. Every step
+that needs `speak` was unmeetable, which voids the 18:58 run's two missed moments (both were `speak`). Stops and
+declines are unaffected: the Claude stops came on the first request, whatever tools were offered. `probe_config` now
+loads the NapCat channel's kind, and a test runs the probe in its own process to check that its groups offer `speak`.
 
 The stop came on the request itself, before the model wrote anything, and on harmless content (cats, dinner). So
 it answers to the design of the request, not to the conversation content. Claude's reading, 2026-10-18: which part

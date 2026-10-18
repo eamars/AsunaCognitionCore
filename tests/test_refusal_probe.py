@@ -2,6 +2,8 @@
 gives PASS only when nothing was refused and every moment got what it needs, keeps no words, and leaves no database."""
 import argparse
 import json
+import os
+import subprocess
 import sys
 
 import pytest
@@ -110,3 +112,12 @@ def test_a_stop_fails_the_run_even_when_other_turns_could_not_run():
     verdict, reasons = rp.result(turns)
     assert verdict == 'FAIL' and reasons[-1] == '1 turns did not run (fault: provider answered 429)'
     assert rp.result(turns[1:])[0] == 'NO RESULT'
+
+
+def test_the_probe_offers_speak_in_its_groups_without_the_test_suite_loading_channels():
+    """The probe runs as its own process: the suite's conftest loads channel kinds, the probe must load its own."""
+    code = ("import sys; sys.path.insert(0, 'tools'); import refusal_probe as p; p.probe_config('x'); "
+            "from asuna import channel_kinds; print(channel_kinds.reply_parts('qq:%s:group:1' % p.BOT))")
+    out = subprocess.run([sys.executable, '-c', code], cwd=ROOT, capture_output=True, text=True, encoding='utf-8',
+                         env={**os.environ, 'PYTHONPATH': str(ROOT / 'src')}, check=True).stdout
+    assert 'text' in out, out

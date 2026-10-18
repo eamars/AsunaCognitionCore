@@ -50,8 +50,10 @@ MAX_MEDIA_ITEMS = 8
 MAX_URL = 420
 MAX_LABEL = 60
 
-PRIVATE_ENVELOPE_KEYS = {"route_id", "account_id", "sender_id", "event_id", "text", "occurred_at", "raw"}
-GROUP_ENVELOPE_KEYS = PRIVATE_ENVELOPE_KEYS | {"group_id", "mentioned_account_ids", "reply_to"}
+PRIVATE_ENVELOPE_KEYS = {"route_id", "account_id", "sender_id", "event_id", "text", "occurred_at", "raw", "reply_to"}
+GROUP_ENVELOPE_KEYS = PRIVATE_ENVELOPE_KEYS | {"group_id", "mentioned_account_ids"}
+# raw flag: the message only quotes another, with no words of its own (Core words it; ADR-079)
+REPLY_ONLY_KEY = "asuna_reply_only"
 
 # segment type -> (中文标签, 标签本身是否已说明内容)。自描述的标签不加
 # （未解析），因为它已经把内容说出来了；其余的都明说正文没读过。
@@ -421,6 +423,15 @@ def _base_envelope(event, user_id, event_id, text, route):
     return envelope
 
 
+def _mark_reply(envelope, parsed, text):
+    """The platform id of the line this one quotes, in a group or a private chat; a quote with no words of its own is
+    flagged so the host words it, not this adapter."""
+    if parsed["reply_to"]:
+        envelope["reply_to"] = parsed["reply_to"]
+        if text == REPLY_ONLY_FALLBACK and isinstance(envelope.get("raw"), dict):
+            envelope["raw"][REPLY_ONLY_KEY] = True
+
+
 def _media_meta(parsed):
     return {
         "media_segments": len(parsed["media"]) + int(parsed.get("media_extra") or 0),
@@ -474,6 +485,7 @@ def _classify_private(event, cfg, seen):
         return None, "duplicate_local"
     text, shrunk = fit_host_limit(parsed, text, False)
     envelope = _base_envelope(event, user_id, event_id, text, route)
+    _mark_reply(envelope, parsed, text)
     _attach_media(envelope, parsed, mode)
     meta = {
         "route_id": route.route_id,
@@ -526,8 +538,7 @@ def _classify_group(event, cfg, seen):
     envelope = _base_envelope(event, user_id, event_id, text, route)
     envelope["group_id"] = group_id
     envelope["mentioned_account_ids"] = list(parsed["at_ids"])
-    if parsed["reply_to"]:
-        envelope["reply_to"] = parsed["reply_to"]
+    _mark_reply(envelope, parsed, text)
     _attach_media(envelope, parsed, mode)
     meta = {
         "route_id": route.route_id,

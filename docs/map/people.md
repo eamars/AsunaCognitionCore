@@ -132,6 +132,7 @@ Who is who in a scene, as the character reads it.
   - `authors_of` — Every stored author id in these scenes that is this person (aliases by configuration).
   - `row_head` — Who wrote a stored row, as a history result names them: her own rows read as her name.
   - `speaker` — Label for a stored author (no notes): her own rows read `me` when given.
+  - `pointed` — A line another line points at (a quote, a reaction, a recall), in the one form every pointer has (ADR-079 §9.3): its number where the conversation shows numbers, its speaker (hers as 你), its first words.
   - `transcript` — One platform message as it enters her conversation: the speaker's label line, then the message, indented.
   - `identity_line` — The current speaker, in full: label, notes, names in quotes, and how the owner is known.
   - `scene_title` — A conversation as she reads it: 家里·私聊, 群聊「name」 or 私聊 with the person's label; never an id.

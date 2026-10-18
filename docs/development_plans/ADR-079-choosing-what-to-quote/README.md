@@ -447,7 +447,8 @@ The pointed-at line is always shown as number, speaker (her own lines as `你`) 
 - a quote with no words of its own (a private-chat line that only quotes, today the placeholder
   `[回复消息（无文字）]`): the quote line, then `（只引用了这条，没写字）`;
 - reactions between other people (today dropped), folded into one program line per turn in that conversation:
-  `这期间的点表情：〔301〕 小雨 #5 收到 2 个「赞」、〔305〕 老周 #7 收到 1 个「笑哭」` (Xiaoman's choice, §9.9).
+  `这期间的点表情：阿杰 #3、豆豆 #9 给 〔301〕 小雨 #5：我考过了！！ 点了「赞」；老周 #7 给 〔305〕 …（平台通知）`: who reacted,
+  then the line in the one form (Xiaoman's choice, §9.9; as built in step 1, the adapter's words for each kind kept).
 
 ### 9.4 How she chooses: one value in every tool
 
@@ -530,7 +531,7 @@ The inbound gates open in step 1, the outbound ones in step 2. QQ Bot's bridge m
    | `qqadapter/inbound.py` | a private message's quote is passed on (`PRIVATE_ENVELOPE_KEYS`); a quote with no words is no longer the placeholder `[回复消息（无文字）]` |
    | `src/asuna/channels.py` | keeps each channel's last `supports`; accepts `reply_to` from a private chat and resolves it like a group's (`group_context`, `reply_parent`) |
    | `src/asuna/people.py` (`transcript`, `speaker`) | `〔n〕` at the end of each label line where the channel declares `quote` or `quote_in`; `> 回复 〔n〕 <speaker>：<first words>` for every quote, hers as `你`; `> 回复了一条更早的消息` when the quoted line is unknown; `（只引用了这条，没写字）` |
-   | `src/asuna/notices.py` (`fill`, `take`) | a reaction to her line and a recall name the line as `〔n〕 <speaker>：<first words>`; reactions between other people are kept and folded into one line per turn instead of dropped |
+   | `src/asuna/notices.py` (`fill`, `take`), `channels.py` | a reaction to her line and a recall name the line as `〔n〕 <speaker>：<first words>`; reactions between other people are kept, not dropped; a notice that does not wake her is stored (a non-waking row marked as a notice, not a line of her conversation) instead of held in memory, and her next turn there shows the unshown ones folded into one program line, then marks them shown, so a restart loses none (Xiaoman's ask, the owner's choice about 14:49 NZDT) |
    | `src/asuna/role_tools.py` | the `speak` result gives each sent line's number; her own reaction's history line uses the same form; a text part containing `〔n〕` is refused with the reason |
    | `src/asuna/context.py` (`_reply_context`) | the history block's quoted line in the same form (number, speaker, words) |
    | tests | the renderings above, the private-chat inbound quote, the folded reactions, the refusal |
@@ -539,6 +540,8 @@ The inbound gates open in step 1, the outbound ones in step 2. QQ Bot's bridge m
    Acceptance on her live page, with one real probe each (the owner's or a group member's help for the inbound
    ones): a quote between two other people in a group, a quote of her line in a group, a quote in a private chat,
    a quote with no words, a reaction to her line, a reaction between others, a recall. Each must read as in 9.3.
+   And one with no one's help: a recall or a reaction that arrives after step 1 is still in her history after the
+   restart that follows.
    Samples, counted by Xiaoman over the last 7 days (about 14:20 NZDT): quotes between other people in groups 3,506
    (19 groups), quotes of her line 559, reactions to her lines 28, quotes of a line Core does not know 20 (5 groups,
    for `回复了一条更早的消息`) are there already. A private-chat quote (0: the gate is shut today), a quote with no

@@ -404,7 +404,7 @@ class Coordinator:
             self.store.put('messages',row,stream=ep_id)
             if part['kind']=='sticker':
                 stickers.sent(self.store,ep['persona'],part['name'],ep['scene_id'])
-            queued.append({'number':offset+1,'shown':part['shown'],'key':key,'state':'READY'})
+            queued.append({'number':offset+1,'shown':part['shown'],'key':key,'state':'READY','seq':sequence})
         for item in queued:
             published=self.publisher.publish(item['key'])
             item['state']=published.get('delivery_state') or 'READY'
@@ -489,7 +489,7 @@ class Coordinator:
         if verdict['choice']!='join':
             from . import notices
             if verdict['choice']=='quiet':
-                notices.drop_seen(ep['scene_id'])    # the notices the gate showed were seen once
+                notices.drop_seen(self.store,ep['scene_id'])    # the notices the gate showed were seen once
             return self._update(ep,state='COMMITTED',attend=verdict,
                                 silent_reason=verdict['reason'] if verdict['choice']=='failed' else '不理：'+verdict['reason'])
         _,context,manifest=self.context.prepare(event,ep['persona'])

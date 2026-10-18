@@ -134,7 +134,8 @@ def test_reply_uses_latest_same_scene_parent_not_later_than_reply(store, runtime
     assert ctx['reply_message_id'] == 'new-human' and ctx['wake_reason'] != 'reply_to_character'
     scene = store.db.scenes.find_one({'_id': SCENE})
     rows = ContextBuilder(store)._reply_context([{'platform_reply_to': '42', 'occurred_at': at}], scene)
-    assert rows[0]['reply_to_message']['_id'] == 'new-human'
+    new = store.db.messages.find_one({'_id': 'new-human'})
+    assert rows[0]['quotes'].endswith('：' + (new.get('text') or ''))
 
 
 def test_reused_platform_id_and_catchup_cross_real_ingress(store, runtime_work):

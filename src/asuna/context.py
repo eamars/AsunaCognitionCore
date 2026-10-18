@@ -236,16 +236,17 @@ class ContextBuilder:
             group = event.get('group_context', {})
             if group:
                 row['mentioned_account_ids'] = group.get('mentioned_account_ids', [])
-            reply = row.pop('platform_reply_to', None) or group.get('reply_to')
+            reply = row.pop('platform_reply_to', None) or group.get('reply_to') or (event.get('reply') or {}).get('reply_to')
             if not reply:
                 continue
             row['reply_to'] = reply
             from .channels import reply_parent
+            from .people import People
             source = self.store.db.scenes.find_one({'_id': row.get('scene_id', scene['_id'])})
             parent = reply_parent(self.store, source or scene, reply,
                                   row.get('occurred_at') or row.get('receipt_at') or row.get('received_at'))
-            if parent:
-                row['reply_to_message'] = {key: parent[key] for key in ('_id', 'text', 'author', 'direction')}
+            # The quoted line in the one form every pointer has (ADR-079 §9.3); unknown to the program, said so.
+            row['quotes'] = People(self.store).pointed(source or scene, parent) if parent else '一条更早的消息'
         return rows
 
     def _merge_linked_history(self, own, scene, read, projection):

@@ -3,14 +3,16 @@ them on as the program's line, never as the words of the person who did it.
 
 A notice arrives as an event from the person who did it with `raw.asuna_notice` (`kind`, optional `gate`, optional
 `line`), through the same gates as a message (channels.py). Then:
-- `line` names the line it is about by its platform id: a recalled line is quoted (at most QUOTE_CHARS, found
-  read-only within this conversation and the last day); a line of hers is named by when she said it, and a notice
-  about a line that is not hers is dropped;
+- `line` names the line it is about by its platform id, in the one form every pointer has (ADR-079 §9.3): its
+  number where the conversation shows numbers, its speaker (hers as 你) and its first words (QUOTE_CHARS), found
+  read-only within this conversation and the last day; a line the program has no record of is `一条消息`;
 - in a group, `gate` (`poked`, `reacted`) puts it through the relevance gate, like a line that calls her without an @;
-  it is then stored as that look's input, like every turn's;
-- in a group without a gate it is held in memory, never stored: shown once, after the stored lines, in that
-  conversation's next turn or relevance-gate material (`take`), lines of one kind with the same words folded into
-  one, at most HELD_MAX after folding, the rest counted; a Host restart loses what was not shown yet;
+  it is then stored as that look's input, like every turn's. A reaction asks for a look only when it is on her line;
+  one between other people is kept like a notice without a gate;
+- in a group without a gate it is kept in `artifacts` (kind `held_notice`), not as a line of the conversation: shown
+  once, after the stored lines, in that conversation's next turn or relevance-gate material (`take`), lines of one
+  kind with the same words folded into one, reactions between other people folded into one line, at most HELD_MAX
+  after folding, the rest counted; shown, it is deleted, and a Host restart keeps what was not shown yet;
 - in a private chat it is that chat's input, as a message would be.
 
 Notices about her own account or asking her to act (requests, a kick, an admin change) come by another endpoint
@@ -47,8 +49,7 @@ OPEN_HEAD = '重启以后还开着、等你回的请求'
 ANSWERED = {'DONE': 'answered', 'FAILED': 'gone', 'UNKNOWN': 'unknown'}
 
 _lock = threading.Lock()
-_held = {}                                   # scene_id -> [row]
-_peeked = {}                                 # scene_id -> how many of them the relevance gate showed
+_peeked = {}                                 # scene_id -> the held notices the relevance gate showed
 _home = {'items': [], 'timer': None}
 
 
@@ -67,47 +68,70 @@ def kept(raw):
 
 
 def fill(store, scene, block, text, moment=None):
-    """The notice's words with its {line} filled; None when it is about a line of hers that is not hers."""
+    """(the notice's words with {line} filled for any reader, whether the line is hers, the line's row id or None).
+    The words she reads name the line when she reads them (`words`), in the form every pointer has."""
     line = block.get('line')
     if not line:
-        return text.replace('{line}', '一条消息')
-    from .schedule_rules import line_stamp, scene_timezone
+        return text.replace('{line}', '一条消息'), False, None
     moment = moment or datetime.now(timezone.utc)
-    if line['mine']:
-        row = store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'outbound',
-                                          'platform_message_id': line['message_id']}, {'receipt_at': 1})
-        if not row:
-            return None
-        return text.replace('{line}', '你 %s 说的那句' % line_stamp(scene_timezone(store.config, scene),
-                                                                 row.get('receipt_at')), 1)
     since = (moment - timedelta(days=QUOTE_DAYS)).isoformat()
-    row = store.db.messages.find_one({'scene_id': scene['_id'], '$or': [
+    fields = {'_id': 1, 'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1}
+    # Her own line is found however old (its id is her receipt's); anyone's within the last QUOTE_DAYS.
+    row = (store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'outbound',
+                                       'platform_message_id': line['message_id']}, fields, sort=[('scene_seq', -1)])
+           if line.get('mine') else None) or store.db.messages.find_one({'scene_id': scene['_id'], '$or': [
         {'direction': 'inbound', 'event.channel.platform_event_id': line['message_id'], 'received_at': {'$gte': since}},
         {'direction': 'outbound', 'platform_message_id': line['message_id'], 'receipt_at': {'$gte': since}}]},
-        {'text': 1}, sort=[('scene_seq', -1)])
-    said = ' '.join(str((row or {}).get('text') or '').split())
-    quote = said[:QUOTE_CHARS] + ('…' if len(said) > QUOTE_CHARS else '')
-    return text.replace('{line}', '消息「%s」' % quote if said else '一条消息', 1)
+        fields, sort=[('scene_seq', -1)])
+    if not row:
+        return text.replace('{line}', '一条消息', 1), False, None
+    return _named(store, scene, text, row), row.get('direction') == 'outbound', row['_id']
+
+
+def _named(store, scene, text, row):
+    from .people import People
+    return text.replace('{line}', ' %s ' % People(store).pointed(scene, row, QUOTE_CHARS), 1).rstrip()
+
+
+def words(store, scene, text, block):
+    """A notice's words as she reads them: the line it is about named now (ADR-079 §9.3), from the notice's own
+    template, since a label written into the stored text would read as typed."""
+    template = (block or {}).get('words')
+    row_id = ((block or {}).get('line') or {}).get('row')
+    if not template or not row_id:
+        return text
+    row = store.db.messages.find_one({'_id': row_id}, {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1})
+    return _named(store, scene, template, row) if row else text
 
 
 # ---- seen once, in a group ------------------------------------------------------------------------------------------
-def hold(scene_id, row):
-    with _lock:
-        rows = _held.setdefault(scene_id, [])
-        rows.append(row)
-        del rows[:-HELD_KEPT]
+HELD_KIND = 'held_notice'
+REACTIONS_HEAD = '这期间的点表情：'
+
+
+def hold(store, scene_id, row):
+    """Kept until her next turn there shows it (ADR-079: a restart loses none); the oldest beyond HELD_KEPT go."""
+    store.db.artifacts.insert_one({'_id': 'notice-' + uuid.uuid4().hex, 'kind': HELD_KIND, 'scene_id': scene_id,
+                                   'received_at': row.get('received_at') or now(), 'row': row, 'schema_version': 1})
+    extra = list(store.db.artifacts.find({'kind': HELD_KIND, 'scene_id': scene_id}, {'_id': 1})
+                 .sort('received_at', -1).skip(HELD_KEPT))
+    if extra:
+        store.db.artifacts.delete_many({'_id': {'$in': [doc['_id'] for doc in extra]}})
 
 
 def take(store, scene, persona=None, keep=False):
     """The notices held for this conversation, as she reads them, once: {'items': [...], 'more': ...} or None.
     `keep` (the relevance gate) leaves them for her turn if she takes it up; `drop_seen` ends them if she does not."""
-    with _lock:
-        rows = list(_held.get(scene['_id'], []))
-        if keep:
-            _peeked[scene['_id']] = len(rows)
-        else:
-            _held.pop(scene['_id'], None)
+    held = list(store.db.artifacts.find({'kind': HELD_KIND, 'scene_id': scene['_id']}).sort('received_at', 1))
+    if keep:
+        with _lock:
+            _peeked[scene['_id']] = [doc['_id'] for doc in held]
+    else:
+        with _lock:
             _peeked.pop(scene['_id'], None)
+        if held:
+            store.db.artifacts.delete_many({'_id': {'$in': [doc['_id'] for doc in held]}})
+    rows = [doc['row'] for doc in held]
     if not rows:
         return None
     from .caught_up import said_at
@@ -115,31 +139,34 @@ def take(store, scene, persona=None, keep=False):
     from .schedule_rules import line_stamp, scene_timezone
     people = People(store, persona)
     zone = scene_timezone(store.config, scene)
-    folded = {}
+    folded, reactions = {}, {}
     for row in rows:
         _place(people, scene, row)
-        body = people.heard(scene, row['text'], (row['event'].get('channel') or {}).get('account_id'))
-        key = (row['event']['raw'][KEY]['kind'], body)
-        item = folded.setdefault(key, {'who': [], 'at': ''})
+        block = row['event']['raw'][KEY]
+        body = words(store, scene, people.heard(scene, row['text'], (row['event'].get('channel') or {}).get('account_id')),
+                     block)
+        kind = block['kind']
+        item = (reactions if kind in ('reaction', 'reaction_removed') else folded).setdefault((kind, body), {'who': [], 'at': ''})
         who = people.speaker(scene, row['author'], row)
         if who not in item['who']:
             item['who'].append(who)
         item['at'] = line_stamp(zone, said_at(row)) or item['at']
     items = ['%s %s%s%s' % ('、'.join(item['who']), item['at'], MARK, body) for (_, body), item in folded.items()]
+    if reactions:
+        items.append(REACTIONS_HEAD + '；'.join('%s %s' % ('、'.join(item['who']), body)
+                                                for (_, body), item in reactions.items()) + MARK)
     out = {'items': items[-HELD_MAX:]}
     if len(items) > HELD_MAX:
         out['more'] = '还有 %d 条较早的通知没列出' % (len(items) - HELD_MAX)
     return out
 
 
-def drop_seen(scene_id):
+def drop_seen(store, scene_id):
     """The gate showed them and she let the line pass: they were seen once."""
     with _lock:
-        count = _peeked.pop(scene_id, 0)
-        rows = _held.get(scene_id, [])
-        del rows[:count]
-        if not rows:
-            _held.pop(scene_id, None)
+        ids = _peeked.pop(scene_id, [])
+    if ids:
+        store.db.artifacts.delete_many({'_id': {'$in': ids}, 'kind': HELD_KIND})
 
 
 def _place(people, scene, row):
@@ -153,7 +180,6 @@ def _place(people, scene, row):
 
 def forget():
     with _lock:
-        _held.clear()
         _peeked.clear()
         _home['items'].clear()
         if _home['timer']:

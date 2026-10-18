@@ -217,6 +217,9 @@ The report is `report.md` in this folder. On its recommendations (§6):
     saying that he sees only what she says there.
 - **R5: accepted, batching first.** Context tokens matter most; effort is tuned only if batching is not enough, and
   must not invalidate a cache mid-session (a summary runs in its own one-request session, so it cannot).
+  Built: a summary takes up to 24 rows instead of 8 (`DialogueSummarizer.WINDOW_ROWS`), so a busy group opens a
+  third of the cold one-request sessions it did. Baseline to compare: 6,818 summary sessions in 30 days (about 227 a
+  day), 7.2M output tokens. Effort is left as it is until that comparison.
 - **R6: keep as it is, including the 22-character THINK_FIRST tail.** Removing that hint once raised the error
   rate clearly; the system prompt alone is not enough.
 - **stay_silent: removed where only `speak` speaks, kept at home.** On a platform, a turn without `speak` is

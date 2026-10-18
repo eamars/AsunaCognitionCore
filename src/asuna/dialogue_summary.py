@@ -23,7 +23,9 @@ from .config import character_id
 
 
 class DialogueSummarizer:
-    WINDOW_ROWS = 8              # 一次送进模型的真实行数上限：批不可能比窗口更大（结构性）
+    # 一次送进模型的真实行数上限：批不可能比窗口更大（结构性）。ADR-076 R5：快群里 8 行一满就开一次冷会话，
+    # 一个摘要的输出（含推理）和她一回合差不多；放到 24 行，同样的话少开三分之二的会话。
+    WINDOW_ROWS = 24
     ROW_CHAR_CAP = 4000          # 单行送进模型的字符上限，超了显式标 excerpt_truncated
     SCENE_KINDS = ('dm', 'group')
     RETRY_BASE_SECONDS = 30.0    # 失败退避：错误处理，不是触发条件

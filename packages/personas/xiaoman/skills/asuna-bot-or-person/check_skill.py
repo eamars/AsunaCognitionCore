@@ -17,6 +17,10 @@
    asuna.config.DATA 就够，往上走那条是给 asuna 不在 sys.path 上的环境兜底）。
 4. 没有占位符残留。
 
+桥状态串那一格不只查正文写没写：按正文写的判法造一条正则，拿带换行的真实播报（库里
+`SnowLuma 状态` 换行 `版本: 1.14.16`、`NapCat 信息` 换行 `版本: 4.18.6`）与同一行写法各跑一次，
+再加一条人话里提到 napcat 的反例。判法若被写回同一行，带换行那两条就漏，这一格立刻红。
+
 编译产物不落技能目录：先试系统临时目录，宿主沙箱里它常被拒（只放行候选目录内的写，
 2026-10-10 生图技能那份自检就红在这），退到候选根目录，用完即删，不留 __pycache__。
 
@@ -100,8 +104,10 @@ STRONG_FIXED_TEXT = [
     "API call failed after",
     "ATRIbot,版本",
     "ATRI用手挠了挠脑袋",
-    "NapCat 信息 版本:",
-    "SnowLuma 状态 版本:",
+    # 桥状态串按两段判（2026-10-18）：真实播报中间有换行，这里只钉两段各自的起头串；
+    # 「起头串 ＋ 版本:、中间可换行」这条判法由 STRONG_OTHER 那两条和下面的 BRIDGE_STATUS 功能检查钉。
+    "NapCat 信息",
+    "SnowLuma 状态",
 ]
 
 STRONG_OTHER = [
@@ -116,6 +122,23 @@ STRONG_OTHER = [
     ("strong_self_quote_typo_fix", "只发正确那个词、并引用那句错字"),
     ("strong_trigger_pair_astrbot", "只回 `/`、@、引用，别的一律不回（AstrBot）"),
     ("strong_trigger_pair_hermes", "没被 @ 的回话总在 5 秒之后（Hermes）"),
+    ("strong_bridge_status_two_parts", "按两段判"),
+    ("strong_bridge_status_newline_tolerant", "两段中间可能有换行"),
+    ("strong_repeat_by_human_not_a_hit", "同一串短时间重复、而这个人平时说人话 → 不算命中"),
+    ("strong_repeat_family_split_three_ways", "三条里两条指向人才算这一格成立"),
+    ("strong_repeat_keeps_confirmed_bot_verdict", "属正确命中，不计入误伤"),
+]
+
+# 桥状态串的功能检查（2026-10-18）：正文判法是「起头串 ＋ 版本:，两段中间可能有换行」。
+# 样本抄库里真实播报的开头（messages 里 in-ep-f757bc1c… 是 SnowLuma、in-ep-7aad7467… 是 NapCat），
+# 外加一条人话里提到 napcat 的反例（正文「三条别踩」第 2 条：人在话里提到这个词不算命中）。
+# 判法若被改回同一行，带换行那两条就漏 → 这一格红，不靠正文里一句话守着。
+BRIDGE_STATUS = re.compile(r"(?:NapCat 信息|SnowLuma 状态)[ \r\n]*版本[:：]")
+BRIDGE_SAMPLES = [
+    ("bridge_status_snowluma_newline_matches", "SnowLuma 状态\n版本: 1.14.16\n平台: win32-x64", True),
+    ("bridge_status_napcat_newline_matches", "NapCat 信息\n版本: 4.18.6\n平台: linux (64-bit)", True),
+    ("bridge_status_same_line_still_matches", "NapCat 信息 版本: 4.18.6", True),
+    ("bridge_status_person_mention_not_matched", "napcat有延迟，谁能修一下", False),
 ]
 
 MID_READINGS = [
@@ -365,6 +388,12 @@ def main():
     check("strong_fixed_text_list_not_thinned",
           sum(1 for literal in STRONG_FIXED_TEXT if literal in body) >= 12,
           "固定文本清单只剩 %d 条" % sum(1 for literal in STRONG_FIXED_TEXT if literal in body))
+
+    # 桥状态串：拿正文判法造的正则跑真实形状（10-12「一次都没命中过」那条 bug 的回归位）
+    for name, sample, want in BRIDGE_SAMPLES:
+        got = bool(BRIDGE_STATUS.search(sample))
+        check(name, got is want, "样本 %r 应该%s，实际%s"
+              % (sample, "命中" if want else "不命中", "命中" if got else "没命中"))
 
     for index, tier in enumerate(TIERS):
         check("tier_%d_present" % index, tier in body, tier)

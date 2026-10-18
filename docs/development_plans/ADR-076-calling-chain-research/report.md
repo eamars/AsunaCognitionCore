@@ -9,6 +9,18 @@ evidence lives only in the private appendix (`.runtime/private/adr076/`, never c
 
 Sections 1–3 were checkpoint 1 (approved: flash only). A `[ ]` marks the few items left open, each named in §7.
 
+> **For the owner: what to read** (Claude, master agent, 2026-10-19 01:4x NZDT). Struck-through items are done;
+> the rest is what needs your decision.
+> - ~~Finding 15 / the probe offered no `speak`~~: fixed on main `e4fb2a3d`; the §4.4 numbers are from the fixed probe.
+> - ~~Finding 2 / R1, her self-improvement runs failing~~: root cause found and fixed on main `cb006c8b`. A development
+>   task she began on an agent line came home in that line's session; a turn now keeps a followed session only in its
+>   own place. It is live after her next restart; then `FAILED_RUNTIME` for `self_development` should fall to 0.
+> - ~~§3 replay plan~~: approved (flash only) and run, ≤ US$0.63.
+> - Reproduced by Claude against the live records: findings 2, 9 (corrected by the study), 10, 11, 15, and both §4.4
+>   verdicts against the evidence files.
+> - **Your reading, in order:** §4.4 (the replays, half a page), §5 findings 16 and 17, then §6 R2–R10 (which to build).
+
+
 ## 1. How the records were read
 
 - **Session logs** `.runtime/adr008/home/sessions/<project>/<session>/session.v4.jsonl.zstd` and the one-shot
@@ -447,7 +459,7 @@ Verified against the records (counts from the audit and session logs; episode id
    call was then repeated; 3 turns needed it twice. 13 turns reached the end-of-turn `no_thought` rejection; all 13
    recovered on the first repair and committed. No turn failed on this rule. The refusal text names the fix and the
    fix works, so this is robustness by design, not a defect; its price is one extra model step per affected turn.
-2. **`self_development` turns fail at runtime every day: `NATIVE_BINDING_IDENTITY_CHANGED`** (`asuna.state.Denied`),
+2. ~~**`self_development` turns fail at runtime every day: `NATIVE_BINDING_IDENTITY_CHANGED`**~~ **Done** (`cb006c8b`, cause: a task begun on an agent line came home in that line's session) (`asuna.state.Denied`),
    33 of 179 such turns since 2026-10-05 (2–7 a day from 2026-10-10 on), plus 1 `scheduled`. The same code appears
    34 times in `chat.error`. The turn fails before any `think` (0 tool calls in 25 of the 33). She never sees it: the
    failure has no prompt and no message to her. The traceback is the same every time: `coordinator._deliver` →
@@ -522,7 +534,7 @@ Verified against the records (counts from the audit and session logs; episode id
     completion`), compaction errors, `execution.failed` 18 (`STALE_TASK_FENCE` 8, `NO_DURABLE_SESSION_LISTENER` 4):
     each ends a step or a turn with nothing said to her or the developer. Only the hand-back path (`UNDELIVERABLE`)
     leaves a developer note.
-15. **The refusal probe cannot list `speak`, so its `speak` moments can never pass.** `tools/refusal_probe.py` builds
+15. ~~**The refusal probe cannot list `speak`, so its `speak` moments can never pass.**~~ **Done** (`e4fb2a3d`) `tools/refusal_probe.py` builds
     a `qq:…` group scene but never calls `channel_kinds.load`, so `reply_parts` is empty and `role_tools.abilities`
     lists `await_answer` and `attach_image` instead of `speak`; the fixtures' `needs: speak` steps (the majority) are
     then counted as missed whatever the model does. Verified by running the probe's own imports: no kind registered,
@@ -554,7 +566,7 @@ recommendation needing the DSH fork is marked **DSH fork**. Draft: the replays (
 
 | # | Recommendation | Label | 262K local | 1M API | Cost to each brain | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| R1 | **Fix the self-development binding fault**: make `native_worker._generate` bind the home session with the same four identity values the session was created with (or let `bind_session` say which value changed, in the audit), then watch `FAILED_RUNTIME` for `self_development` fall to 0 | robustness by design | 18% of her self-development turns fail silently today | the same | none (program only) | §5 finding 2; `native_worker.bind_session`; episode ids in the appendix |
+| R1 | ~~**Fix the self-development binding fault**~~ **Done** (`cb006c8b`; live after her next restart): make `native_worker._generate` bind the home session with the same four identity values the session was created with (or let `bind_session` say which value changed, in the audit), then watch `FAILED_RUNTIME` for `self_development` fall to 0 | robustness by design | 18% of her self-development turns fail silently today | the same | none (program only) | §5 finding 2; `native_worker.bind_session`; episode ids in the appendix |
 | R2 | **One form for every refusal**: give `plan`'s intent length its own code and the shared length wording with the cut offer; give `INVALID_SCHEDULE_SPEC` a cause in every row; add `WORDS` entries for `CLOSE_REQUIRES_OPEN` and the bare `AFFECT_REF_NOT_IN_INDEX` forms; catch the `FileExistsError` at its site and raise it coded without the path; make `tests/test_tool_budget.py`'s neighbour (a wording test) refuse a refusal that is a bare code | robustness by design | fewer wasted steps after a refusal she cannot read | the same | 0 tools, 0 description characters, 0 lines per turn (results only) | §5 findings 10–12; §4.2 F4 `feel`, `plan`, F9 |
 | R3 | **DSH's validation errors in the house form**: translate `invalid arguments: missing required property "op"` into the tool's own words (`参数不对（ARGS_INVALID）：缺 op；op 是 …`) using the schema the plugin already holds, before the model reads it | robustness by design (the gain is larger on the local model) | ≈ 60 English errors a month become readable corrections | an API model copes with English, but the form stays one | 0 to either brain's prompt; plugin code | §5 finding 5; **DSH fork** if `tools/pre-execute` cannot see validation failures |
 | R4 | **Program faults go to the developer, not nowhere**: one `developer_inbox` note (`source.by: program`, deduplicated by key, like `give_up_handback`) for a `FAILED_RUNTIME` turn class seen N times a day, an embedding outage over an hour, a summary lane retrying over an hour, a compaction or gate Host error class — deterministic, program-side, zero cost in normal operation | robustness by design | the 2026-10-06 → 09 embedding outage and the daily binding fault would have been noticed on day one | the same | none to her prompts (the developer's line reads it) | §5 findings 2, 3, 7, 14 |

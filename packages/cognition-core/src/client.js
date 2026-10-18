@@ -41,7 +41,12 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.work': '工作了 {duration}', 'collab.call': '{n} 次工具调用', 'collab.calls': '{n} 次工具调用', 'collab.loading': '读取行动脑记录…',
       'collab.more': '展开全文', 'collab.less': '收起', 'collab.progress': '进展',
       'duration.seconds': '{n} 秒', 'duration.minutes': '{n} 分钟', 'duration.hours': '{h} 小时 {m} 分钟',
-      'tool.think': '心里话', 'tool.recall': '回想', 'tool.delegate': '交给行动脑', 'tool.message_action': '给行动脑补话',
+      'tool.think': '心里话', 'tool.speak': '说话', 'tool.ask': '问主人', 'tool.await_answer': '等回话', 'tool.credential': '保险箱',
+      'tool.errand': '差事', 'tool.find_member': '找群友', 'tool.group_focus': '群里的心思', 'tool.note': '便条', 'tool.peer_line': '旧居的线',
+      'tool.place_timezone': '地方的时区', 'tool.private_words': '私密名单', 'tool.read_image': '看图', 'tool.restart': '重启',
+      'tool.sticker': '表情包架子', 'tool.watch': '盯人',
+      'speak.sticker': '［贴纸：{name}］', 'speak.picture': '［图片］', 'speak.poke': '［戳了 {who}］', 'speak.react': '［给 {line} 点了「{face}」］',
+      'speak.recall': '［撤回 {line}：{why}］', 'speak.other': '［{kind}］', 'tool.recall': '回想', 'tool.delegate': '交给行动脑', 'tool.message_action': '给行动脑补话',
       'tool.stop_action': '叫停', 'tool.answer_action': '回答行动脑', 'tool.task': '行动脑的事', 'tool.ideas': '想法本', 'tool.stay_silent': '不说话',
       'tool.attach_image': '配图', 'tool.write_document': '写文档', 'tool.update_self': '更新自我',
       'tool.understand_person': '理解这个人', 'tool.set_policy': '调参数',
@@ -203,7 +208,12 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'collab.work': 'Worked {duration}', 'collab.call': '{n} tool call', 'collab.calls': '{n} tool calls', 'collab.loading': 'Loading the action brain’s record…',
       'collab.more': 'Show all', 'collab.less': 'Show less', 'collab.progress': 'Progress',
       'duration.seconds': '{n}s', 'duration.minutes': '{n} min', 'duration.hours': '{h} h {m} min',
-      'tool.think': 'Thought', 'tool.recall': 'Recall', 'tool.delegate': 'Hand to the action brain',
+      'tool.think': 'Thought', 'tool.speak': 'Speak', 'tool.ask': 'Ask the owner', 'tool.await_answer': 'Wait for an answer',
+      'tool.credential': 'Vault', 'tool.errand': 'Errand', 'tool.find_member': 'Find a member', 'tool.group_focus': 'Group focus',
+      'tool.note': 'Note', 'tool.peer_line': 'Peer line', 'tool.place_timezone': 'Place time zone', 'tool.private_words': 'Private words',
+      'tool.read_image': 'Look at a picture', 'tool.restart': 'Restart', 'tool.sticker': 'Sticker shelf', 'tool.watch': 'Watch someone',
+      'speak.sticker': '[sticker: {name}]', 'speak.picture': '[picture]', 'speak.poke': '[poked {who}]', 'speak.react': '[reacted {face} to {line}]',
+      'speak.recall': '[recalled {line}: {why}]', 'speak.other': '[{kind}]', 'tool.recall': 'Recall', 'tool.delegate': 'Hand to the action brain',
       'tool.message_action': 'Message the action brain', 'tool.stop_action': 'Stop a task', 'tool.answer_action': 'Answer the action brain', 'tool.task': 'A task', 'tool.ideas': 'Her ideas',
       'tool.stay_silent': 'Stay silent', 'tool.attach_image': 'Attach a picture', 'tool.write_document': 'Write document',
       'tool.update_self': 'Update self', 'tool.understand_person': 'Understand this person', 'tool.set_policy': 'Adjust a setting',
@@ -653,7 +663,13 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     group_action: 'IconUsersOutlineRegular', promote_memory: 'IconArchiveOutlineRegular', note_idea: 'IconLightOutlineRegular',
     read_ideas: 'IconListPenOutlineRegular', read_report: 'IconFlatListOutlineRegular', review_idea: 'IconChecklistOutlineRegular', visit: 'IconRightUpOutlineRegular',
     ask_character: 'IconQuestionOutlineRegular', report_progress: 'IconInfoOutlineRegular',
-    task: 'IconPaperPlaneOutlineRegular', ideas: 'IconLightOutlineRegular' };
+    task: 'IconPaperPlaneOutlineRegular', ideas: 'IconLightOutlineRegular',
+    speak: 'IconSendOutlineRegular', reply: 'IconSendOutlineRegular', ask: 'IconQuestionOutlineRegular', await_answer: 'IconAlarmClockOutlineRegular',
+    credential: 'IconArchiveOutlineRegular', errand: 'IconRightUpOutlineRegular', find_member: 'IconSearchOutlineRegular',
+    group_focus: 'IconUsersOutlineRegular', note: 'IconListPenOutlineRegular', peer_line: 'IconPaperPlaneOutlineRegular',
+    place_timezone: 'IconAlarmClockOutlineRegular', private_words: 'IconChecklistOutlineRegular',
+    read_image: 'IconPaperclipOutlineRegular', restart: 'IconInfoOutlineRegular', sticker: 'IconLikeOutlineRegular',
+    watch: 'IconUserOutlineRegular' };
   // A record holds the call as she wrote it: the names she is shown (param_names.RENAMED), or an old name that still
   // runs. A row reads the shown name, then the old one.
   const OLD_NAMES = { do: 'op', why: 'reason', content: 'body', section: 'sid' };
@@ -675,19 +691,31 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     answer_action: 'answer', stay_silent: 'why', attach_image: 'why', write_document: 'doc', update_self: 'target',
     understand_person: 'content', set_policy: 'key', feel: 'why', plan: 'intent', group_action: 'who',
     promote_memory: 'fact', note_idea: 'idea', review_idea: 'why', ask_character: 'question', report_progress: 'note',
-    visit: 'topic' };
+    visit: 'topic', ask: 'question', await_answer: 'why', credential: 'name', errand: 'request', find_member: 'name',
+    group_focus: 'place', note: 'text', peer_line: 'place', place_timezone: 'place', private_words: 'category',
+    read_image: 'ref', restart: 'why', sticker: 'name', watch: 'person' };
   const TOOL_BODY = { think: 'thought', delegate: 'brief', message_action: 'message', answer_action: 'answer',
     write_document: 'content', update_self: 'content', understand_person: 'content', note_idea: 'idea', ask_character: 'question',
-    report_progress: 'note', promote_memory: 'fact' };
+    report_progress: 'note', promote_memory: 'fact', ask: 'question', errand: 'request', note: 'text' };
   const parseArgs = raw => { try { const value = JSON.parse(raw ?? ''); return value && typeof value === 'object' ? value : {}; } catch { return {}; } };
   const firstSentence = text => String(text ?? '').split(/(?<=[。！？!?.\n])/)[0].trim();
   const resultText = block => (block?.content ?? []).filter(part => part.type === 'text').map(part => part.text).join('\n');
   const ROLE_TOOLS = Object.keys(TOOL_ICONS);
   /** A call's row, read from the call as recorded: which row, what it was about, and the body it opens to. */
   const toolRow = (tool, args) => {
+    if (tool === 'speak' || tool === 'reply') {
+      const parts = Array.isArray(args.parts) ? args.parts.filter(part => part && typeof part === 'object') : [];
+      const text = parts.find(part => part.kind === 'text' && typeof part.text === 'string');
+      return { name: 'speak', said: text ? text.text : parts[0]?.kind ?? '', body: '', parts };
+    }
     const name = OPTION_ROWS[tool + '.' + optionOf(tool, args)] ?? tool, body = arg(args, TOOL_BODY[name]);
     return { name, said: arg(args, TOOL_SUMMARY[name]), body: typeof body === 'string' ? body : '' };
   };
+  // A part of hers that is not words, named the way her history names it.
+  const partLine = (t, part) => part.kind === 'text' ? String(part.text ?? '')
+    : t('speak.' + (['sticker', 'picture', 'poke', 'react', 'recall'].includes(part.kind) ? part.kind : 'other'),
+      { name: part.name ?? '', who: part.who ?? '', line: part.line ?? '', face: part.face ?? '', why: part.why ?? '',
+        kind: part.kind ?? '' });
 
   function apply(ctx) {
     ctx.effect(() => ctx.locale.register(NS, DICTIONARY));
@@ -1248,17 +1276,23 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       const disclosure = props.useDisclosure();
       const raw = props.phase === 'start' ? props.block.argsRaw : props.phase === 'result' ? props.block.call?.argsRaw : '';
       const args = parseArgs(raw);
-      const { name, said, body: written } = toolRow(props.toolName, args);
+      const { name, said, body: written, parts } = toolRow(props.toolName, args);
       const refused = props.phase === 'result' && props.block.isError;
       const summary = name === 'think' ? firstSentence(said) : typeof said === 'string' ? said : said === undefined ? '' : JSON.stringify(said);
       // A call whose only text is its summary (stay_silent's reason, feel's why…) opens to that text in full when
       // the one-line row really cuts it off at this width; a call with a body opens to the body.
       const line = React.useRef(null);
       const cut = useCut(line, [summary], !disclosure.expanded);       // measured while closed; kept while open
-      const body = written || (name !== 'think' && typeof said === 'string' && cut ? said : '');
+      const body = written || (name !== 'think' && name !== 'speak' && typeof said === 'string' && cut ? said : '');
       const result = props.phase === 'result' ? resultText(props.block) : '';
       const Icon = primitives[TOOL_ICONS[name]] ?? primitives.IconInfoOutlineRegular;
-      const detail = [body && h(MarkdownText, { key: 'body', text: body, labels: markdownLabels(t) }),
+      // Her own words in a tool (a thought, a brief, a note) read as DSH reads reasoning: the compact text, under the
+      // title; what speak sent is her speech and reads as speech.
+      const spoken = name === 'speak' && parts?.length ? parts.map(part => partLine(t, part)).join('\n\n') : '';
+      const detail = [body && h('div', { key: 'body', style: { padding: '4px 0 4px calc(22px + var(--dsh-content-font-delta, 0px))', minWidth: 0 } },
+          h(MarkdownText, { text: body, labels: markdownLabels(t), variant: 'compact' })),
+        spoken && h('div', { key: 'spoken', style: { padding: '4px 0 4px calc(22px + var(--dsh-content-font-delta, 0px))', minWidth: 0 } },
+          h(MarkdownText, { text: spoken, labels: markdownLabels(t) })),
         refused && h('p', { key: 'refused', style: { ...small, color: 'var(--dsw-alias-state-error-primary)' } }, t('tool.refused') + ' · ' + result)]
         .filter(Boolean);
       return h(DisclosureRow, { icon: h(Icon), previewChevron: false,

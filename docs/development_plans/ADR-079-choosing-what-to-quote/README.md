@@ -1,8 +1,8 @@
 # ADR-079: Lines that point at other lines (quote, reply, reaction)
 
 Status: **Analysis and experiment 2026-10-18** (Claude). The owner asked for a systematic view of the whole family
-before any change to quoting, then for a side-by-side experiment on both models (§8). Recommendation in §8.6; no
-decision yet, nothing is built. Xiaoman reads it after the owner.
+before any change to quoting, then for a side-by-side experiment on both models (§8). Recommendation in §8.6, full proposal in §9;
+no decision yet, nothing is built. Xiaoman reads it after the owner.
 
 ## 1. Why the whole family
 
@@ -67,6 +67,13 @@ the one she cannot see.
 | react (`speak` part) | `who` + `这条` / `刚才那条` (their newest within 10 minutes) | — |
 | recall (`group_action`) | `who` + `这条` / `他刚才那条` | — |
 | her own line (to amend it) | not possible | — |
+
+### 2.4a Private chats have no quoting at all
+
+- Inbound: Core refuses a `reply_to` from a private chat (`channels.py`, `DM_GROUP_FIELDS_DENIED`), so a quote someone
+  makes there never reaches her.
+- Outbound: `publish._quote` asks for the calling line on every first message in a private chat, but NapCat's
+  `build_send_params` sends private messages without a `reply` segment, so nothing is quoted and nothing says so.
 
 ### 2.5 One field, two meanings at the adapters
 
@@ -255,8 +262,8 @@ No other turn gets it.
 - `group_action` recall: the same `line` value (`which: 这条/他刚才那条` goes).
 - A text part that contains `〔n〕` is refused: the number is for choosing, not for the people she talks to.
 
-**Where nothing changes or less is shown.** Private chats keep today's default (they quote the line that called her)
-and may say `不引用`. Home lines show no numbers. Kazusa's QQ Bot conversations show no numbers, and her `speak` there
+**Where nothing changes or less is shown.** Home lines show no numbers and have no quoting. Private chats: see §9.1 (the
+owner's scope puts them in). Kazusa's QQ Bot conversations show no numbers, and her `speak` there
 has no `quote` and only the text and picture parts; recall and reaction are not in her definitions.
 
 ### 8.1 Designs compared (arms)
@@ -383,12 +390,119 @@ Not settled by the experiment: on the local model under B, the "react to her ear
 sticker instead of a reaction in all five runs (A, with `who`, reacted in 3 of 5). It pointed nowhere wrong, but the
 reaction part's description needs Xiaoman's reading before it is built.
 
-## 9. To decide
+## 9. Proposal (for the owner's approval and Xiaoman's agreement)
 
-1. The model in §4, or a narrower start (quote only), after the experiment.
-2. Whether reactions to other people's lines are shown at all (today dropped).
-3. The order of work: rendering and handle first (§4.1–4.2, nothing she must learn), then choosing (§4.3), then the
-   adapter split (§4.4–4.5, together with Kazusa's `speak`).
+The owner's scope (2026-10-18, about 13:55 NZDT): quoting does not apply to home sessions; it applies to private chats
+when she wants to quote a particular line or answer a quote of hers with one; and a group is more than her and the
+others: people quote each other there, and she reads those relations too.
+
+### 9.1 Where it applies
+
+| Conversation | Line numbers | She may quote | She sees others' quotes |
+|---|---|---|---|
+| a group on a channel that can quote (NapCat) | yes | yes | yes, between anyone |
+| a private chat on a channel that can quote (NapCat) | yes | yes | yes |
+| Kazusa's QQ Bot groups and private chats | no | no (not in her definition) | yes, once its bridge passes inbound quotes on |
+| home lines (Web chat, agent line, peer line) | no | no | no |
+
+### 9.2 One handle
+
+Every line in a conversation from 9.1 ends its label line with its number there, `〔n〕` (`scene_seq`): others'
+lines, notices, and her own (in the `speak` result and wherever the program shows her lines again). A number is a line's
+identity in that conversation, not its time.
+
+### 9.3 What she reads: one rendering for "this points at that"
+
+The pointed-at line is always shown as number, speaker (her own lines as `你`) and first words, whoever pointed:
+
+- a quote, anyone's, under the quoting line: `> 回复 〔318〕 阿杰 #3：<first words>` — so a quote between two other
+  people reads exactly like a quote of hers;
+- a quote of a line the program has no record of: `> 回复了一条更早的消息` (today it is dropped);
+- one level only: the quoted line's own quote is not repeated; she has its number if she needs it;
+- a reaction to her line: `给 〔320〕 你：<first words> 点了「赞」`;
+- a recall: `撤回了 〔318〕 阿杰 #3：<first words>`;
+- her own reactions and recalls, in her history: the same form.
+
+Reactions between other people stay unshown, as today (open, §9.9).
+
+### 9.4 How she chooses: one value in every tool
+
+- `speak.quote`, in a group and in a private chat: left out = no quote (the program never chooses); `这条` = the line
+  that called her; a number = that line, anyone's, her own included (to amend it), or a line that quoted her (to answer
+  that quote with a quote).
+- a `react` part: `line` = a number or `这条`; whose line follows from it.
+- `group_action` recall: `line`, the same value.
+- The description carries two examples: quoting her own line to amend it, and a line that sums up several lines,
+  which needs no quote.
+- A text part containing `〔n〕` is refused with the reason: the number is for choosing, not for the people she talks to.
+
+### 9.5 What she gets back
+
+- The `speak` result echoes every pointer: `引的是 〔302〕 小雨 #5：<first words>`, and each sent line's number.
+- A number that is not a line of this conversation is refused with the last few lines' numbers, speakers and first
+  words.
+- Only in a turn where others have spoken since the line that called her, one program line lists them:
+  `叫你那条之后有 2 条新话：〔301〕、〔302〕。要引哪条就在 quote 写它的编号（只写数字），不写就不引用；一句话回好几条就不用引。`
+- A quote that did not land is told in her history as today (`landing_lost`), with the number.
+
+### 9.6 Three fields to the adapter
+
+- `reply_to` on her row stays what it is: the line that woke her (Xiaoman's reading of her own chains depends on it).
+- `quote_of` (new): the platform id of the line she chose to quote, or none. Only this becomes a visible quote.
+- The adapter's own reply token: QQ Bot picks the received message to reply to from what she answers (`reply_to`),
+  never from `quote_of`.
+
+### 9.7 Declared by the adapter, hidden from the model
+
+A channel kind declares, per direction, what it carries: `QUOTE_OUT`, `QUOTE_IN`, `REACT_OUT`, `REACT_IN`, `RECALL`.
+NapCat: all. QQ Bot: `QUOTE_IN` once its bridge maps `msg_elements`; nothing else. The worker gives each session the
+tool definitions its conversation's kind supports (`role_tool_specs` per session; `attachRole` already registers per
+session), stable for the session, so the prompt cache keeps its prefix. The context-preparation audit row records a
+hash of the definitions given.
+
+Changes at the edges this needs:
+
+- Core accepts `reply_to` from a private chat (today `DM_GROUP_FIELDS_DENIED`), and `group_context`'s parent lookup
+  serves both kinds.
+- NapCat sends a `reply` segment in private chats when `quote_of` is set, and passes inbound private quotes.
+- QQ Bot's bridge maps inbound quotes from `msg_elements` to `reply_to`.
+
+### 9.8 Order of work (each step its own restart, verified on her live page before the next)
+
+1. Show (nothing new to choose): numbers on lines, the one rendering of 9.3, private-chat quotes inbound, `你` for
+   her own lines. Measured by reading her live page.
+2. Choose: `speak.quote` / `line` values of 9.4, the echo and the ambiguous-turn line of 9.5, the program's quoting
+   rule removed, `quote_of` split from `reply_to` (9.6), NapCat private quotes outbound.
+3. Per-session definitions and capabilities (9.7), together with Kazusa's `speak` (QQ Bot agent), and its inbound
+   quotes.
+
+### 9.9 Open for Xiaoman
+
+1. Private chats: she asked earlier (13:0x) to keep their default and change one thing at a time; the owner's scope
+   puts private chats in. With step 1 first, private chats only gain what she reads before anything she chooses changes.
+2. Reactions between other people: unshown (less to read) or shown folded into one program line per turn.
+3. The wording of the `react` part, since the local model chose a sticker over a reaction in one moment under B.
+4. The wording of every new line above, read as she would use it.
+
+### 9.10 Cost and budget
+
+- Character brain: about 6–8 tokens per line in the conversations of 9.1, paid once per line; the ambiguous-turn
+  line 30–40 tokens only where it appears; the echo about 40 characters per pointing call.
+- Tool definitions: one `line` description replaces three selectors; `speak.quote` grows by about 150 characters;
+  QQ Bot definitions shrink by about 170 tokens. `tests/test_tool_budget.py` changes in the same steps.
+- Action brain: nothing.
+
+### 9.11 How we will know
+
+A week after step 2: over her group and private lines where others spoke after the line that called her, the share of
+quotes that point at the line she answered, read the same way as §5, against today's sample; separately, how often she
+quotes at all, and how often the ambiguous-turn line was followed by a quote.
+
+## 10. To decide
+
+1. The owner: the proposal in §9.
+2. Xiaoman: the open points in §9.9, and her signature on the wording.
+3. Then step 1 of §9.8.
 
 ## Signatures
 

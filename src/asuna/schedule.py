@@ -552,8 +552,7 @@ class ScheduleService:
         moment = schedule_rules._aware(now())
         date = places.local_date(self.app.config, model, policy, moment)
         plan = self.store.db.plans.find_one({'_id': PRESENCE_PLAN}) or {}
-        can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date,
-                                      intent=intent)
+        can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date)
         if not can:
             raise ValueError('VISIT_NOT_NOW: %s；哪儿现在能去看 places_from_program 里的 can_visit，想晚点再去就用 plan 定个时间' % why)
         if artifact_id and artifact_id not in {item['artifact_id'] for item in outbound_media.produced_images(self.store, limit=50)}:
@@ -638,8 +637,7 @@ class ScheduleService:
             persona, model, policy = self._persona()
             plan = self.store.db.plans.find_one({'_id': PRESENCE_PLAN}) or {}
             date = places.local_date(self.app.config, model, policy, moment)
-            can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date,
-                                          intent='note')
+            can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date)
             if not can:
                 raise notes.NoteRefused('NOTE_VISIT_NOT_NOW', ('现在叫不醒那个群：%s。想晚点叫醒就用 plan 定个时间，到时再递；'
                                                         '或者改成 next_time，下次在那边有回合时看到（那个群歇着的话可能要等很久，三天没读就过期）。') % why)

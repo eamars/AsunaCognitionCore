@@ -21,7 +21,7 @@ def test_a_muted_group_rests_she_does_not_visit_and_it_ends_by_itself(store):
     later = NOW + timedelta(hours=1)
     assert switches.muted(store, 'g-mine', later)
     assert focus.wake(store, mine, 'chain') is None and focus.wake(store, mine, 'mentioned_account') == 'mentioned_account'
-    assert places.eligibility(store, mine, {}, {'per_day': 8}, later, '2026-10-12', here={'mine_at': None}) == (
+    assert places.eligibility(store, mine, {}, {'per_day': 8}, later, '2026-10-12') == (
         False, '你把这个群静音了：静音时不去，到点自己结束')
     # A day later it is over: the group is as she left it, and home says once that it ended.
     after = NOW + timedelta(hours=25)

@@ -19,7 +19,7 @@ PLACE = places.place_id('g1')
 def group_world(store, quiet_hours=()):
     """g1 is a QQ-like group she is routed to; g2 is blocked."""
     service = scheduler(store)
-    store.config['persona_model']['heartbeat'].update(visits=True, quiet_min=30, after_own_min=360, visits_per_day=4)
+    store.config['persona_model']['heartbeat'].update(visits=True, visits_per_day=4)
     store.config['channels'] = {'qq': {'account_id': 'acct', 'blocked_groups': ['G2'], 'routes': {
         'r1': {'scene_id': 'g1', 'target': {'type': 'group', 'id': 'G1'}, 'members': {'s-a': {'person_id': 'A'},
                                                                                       's-b': {'person_id': 'B'}},
@@ -61,16 +61,15 @@ def test_her_places_read_in_words_and_each_says_whether_she_can_go(store):
     assert 'GROUP_LINE_NEVER_SHOWN_AT_HOME' not in json.dumps(block, ensure_ascii=False)
     line(store, 'g1', 'm-now', '在吗', minutes_ago=1, wake='mentioned_account')
     [row] = view(store, service)['items']
-    assert row['can_visit'].startswith('正有人在聊：可以去看看') and row['called_you'] and '零星有人说话' in row['now']
+    # While people talk she may still go, even to start a topic: the row says how lively it is, the choice is hers.
+    assert row['can_visit'] == '可以去' and row['called_you'] and '零星有人说话' in row['now']
     beat = {'_id': 'ep-home', 'source_event_id': 'presence:s-p5:1'}
-    with pytest.raises(ValueError, match='起话头等安静下来'):
-        service.visit(beat, PLACE, 'start_topic', None, None)        # talking: no new topic over them
     assert places.eligibility(store, store.db.scenes.find_one({'_id': 'g1'}), {}, places.settings(
-        store.config['persona_model'], {}), datetime.now(timezone.utc), None, intent='share_picture')[0]
-    assert service.visit(beat, PLACE, 'write_notes', None, None)['going_to']   # but she may go and look
+        store.config['persona_model'], {}), datetime.now(timezone.utc), None)[0]
+    assert service.visit(beat, PLACE, 'start_topic', None, None)['going_to']
     service = group_world(store, quiet_hours=[('00:00', '23:59')])
-    # No night hours on her own visits: she reads the time there herself. What holds her now is the visit above.
-    assert view(store, service)['items'][0]['can_visit'].startswith('你已经出门去那个群了')
+    # No night hours and no gap after her own visit: she reads the time there and her last visit herself.
+    assert view(store, service)['items'][0]['can_visit'] == '可以去'
     PolicyStore(store, 'P1', store.config['persona_model']).set([{'key': 'heartbeat.visits', 'value': False, 'what': 'x'}],
         base_revision_id=None, reason='不出门', author='character', mutation_id='visits-off')
     model = store.config['persona_model']
@@ -127,15 +126,14 @@ def test_a_heartbeat_at_home_sends_her_to_a_group_and_only_her_category_and_topi
     assert not store.db.state_revisions.find_one({'mutation_id': {'$regex': '^' + visit['_id'] + ':understanding'}})
     said = store.db.messages.find_one({'episode_id': visit['_id'], 'direction': 'outbound'})
     assert said['scene_id'] == 'g1' and said['target'] == {'type': 'group', 'id': 'G1'}
-    # Brought home: what happened, then a second visit there waits (she was just there).
+    # Brought home: what happened; a second visit there is hers to choose (no gap after her own).
     plan = store.db.plans.find_one({'_id': 'plan-asuna-presence'})
     assert places.outcome(store, plan['visits'][-1]) == 'sending'
     store.db.messages.update_one({'_id': said['_id']}, {'$set': {'delivery_state': 'DELIVERED', 'receipt_at': now()}})
     assert places.outcome(store, plan['visits'][-1]) == 'unanswered'
     line(store, 'g1', 'm-reply', '去爬山！', minutes_ago=0)
     assert places.outcome(store, plan['visits'][-1]) == 'answered'
-    with pytest.raises(ValueError, match='VISIT_NOT_NOW'):
-        service.visit({'_id': 'ep-x', 'source_event_id': 'presence:s-p5:10'}, PLACE, 'check_in', None, None)
+    assert service.visit({'_id': 'ep-x', 'source_event_id': 'presence:s-p5:10'}, PLACE, 'check_in', None, None)['going_to']
 
 
 def test_the_owner_sends_her_on_an_errand_and_only_its_status_comes_home(store):
@@ -397,8 +395,8 @@ def test_a_visit_whose_turn_has_not_run_reads_as_not_done_yet_from_home(store):
     plan = store.db.plans.find_one({'_id': 'plan-asuna-presence'})
     assert places.outcome(store, plan['visits'][-1]) == 'pending'
     assert places.OUTCOMES['pending'] == '那边那一回合还没跑完，结果还没出来'
-    with pytest.raises(ValueError, match='已经出门去那个群了，那边那一回合还没跑完'):
-        service.visit({'_id': 'ep-x', 'source_event_id': 'presence:s-p5:10'}, PLACE, 'check_in', None, None)
+    [row] = view(store, service)['items']                            # she sees it; going again is hers to choose
+    assert row['last_visit'] == '来看过：那边那一回合还没跑完，结果还没出来' and row['can_visit'] == '可以去'
 
 
 def test_a_group_she_gave_a_time_zone_shows_its_own_clock(store):

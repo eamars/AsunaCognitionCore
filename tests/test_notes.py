@@ -39,7 +39,7 @@ class Lane(FakeLane):
 def world(store):
     """dm-a is her local chat (the owner A); dm-o the owner's QQ DM (home too); g1, g2 groups; dm-b B's DM."""
     service = scheduler(store)
-    store.config['persona_model']['heartbeat'].update(visits=True, quiet_min=30, after_own_min=360, visits_per_day=4)
+    store.config['persona_model']['heartbeat'].update(visits=True, visits_per_day=4)
     home = store.db.scenes.find_one({'_id': 'dm-a'})
     store.db.scenes.insert_one({**home, '_id': 'dm-o', 'scene_id': 'dm-o', 'scope_key': 'scene:dm-o', 'sequence': 0})
     store.config['channels']['qq'] = {'account_id': 'acct', 'routes': {

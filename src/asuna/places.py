@@ -28,8 +28,6 @@ OUTCOMES = {'answered': '说了话，有人接了', 'unanswered': '说了话，�
             'not_sent': '想说的话没发出去', 'notes': '没说话，写了笔记', 'silent': '看了看，没说话',
             'pending': '那边那一回合还没跑完，结果还没出来', 'failed': '没去成'}
 SENDING = ('READY', 'QUEUED_EXTERNAL', 'SENDING')
-# Intents that open a conversation: these wait until the group has been quiet for heartbeat.quiet_min.
-STARTING = ('start_topic',)          # a picture fits into talk; a new topic waits (owner 2026-10-06)
 # Someone called her (channels.group_context): an @, a reply to her, or her name.
 ADDRESSED = ('mentioned_account', 'reply_to_character', 'name_called')
 WAKE_REASON = 'visit'
@@ -343,38 +341,20 @@ def last_visit(store, plan, scene_id):
                  if visit['scene_id'] == scene_id and outcome(store, visit) != 'failed'), None)
 
 
-def eligibility(store, scene, plan, settings, moment, date, here=None, intent=None):
-    """(can go, words). Deterministic; the view and the visit tool use the same answer. While people are
-    talking she may still go and look, take notes or share a picture; starting a topic waits for quiet."""
-    here = here or room(store, scene, moment)
+def eligibility(store, scene, plan, settings, moment, date):
+    """(can go, words). Deterministic; the view and the visit tool use the same answer. When to go is hers: the
+    row shows how lively the group is, when she last spoke or came, and the time there."""
     from . import switches
     if switches.muted(store, scene['_id'], moment):
         return False, '你把这个群静音了：静音时不去，到点自己结束'
     if today(store, plan, date) >= settings['per_day']:
         return False, '今天出门的次数用完了'
-    visit = last_visit(store, plan, scene['_id'])
-    gap = timedelta(minutes=settings['after_own_min'])
-    if visit and outcome(store, visit) == 'unanswered':
-        gap *= 2                         # she spoke and nobody answered: wait twice as long (as P5 does)
-    recent = [at for at in (here['mine_at'], _at((visit or {}).get('at'))) if at]
-    if recent and moment - max(recent) < gap:
-        # Read from home as well as in the group: name the group, never "here"; a visit whose turn has not run yet
-        # is not a look she took.
-        if visit and max(recent) == _at(visit.get('at')) and outcome(store, visit) == 'pending':
-            return False, '你已经出门去那个群了，那边那一回合还没跑完；等它跑完、结果带回来再说'
-        return False, '你不久前去过那个群（在那儿说过话或看过），过一阵再去'
-    if here['last_line_at'] and moment - here['last_line_at'] < timedelta(minutes=settings['quiet_min']):
-        if intent in STARTING:
-            return False, '这会儿有人在聊；起话头等安静下来，去看看、写笔记、发图可以'
-        return True, '正有人在聊：可以去看看、写笔记、发图；起话头等安静下来'
     return True, '可以去'
 
 
 def settings(model, policy):
     from .persona_model import effective
     return {'per_day': int(effective(model, 'heartbeat.visits_per_day', policy) or 0),
-            'after_own_min': int(effective(model, 'heartbeat.after_own_min', policy) or 0),
-            'quiet_min': int(effective(model, 'heartbeat.quiet_min', policy) or 0),
             'per_beat': int(effective(model, 'heartbeat.visits_per_beat', policy) or 1)}
 
 
@@ -396,7 +376,7 @@ def places_block(store, persona, model, policy, plan, moment, date):
         if not scene:
             continue
         here = room(store, scene, moment)
-        can, why = eligibility(store, scene, plan, rule, moment, date, here)
+        can, why = eligibility(store, scene, plan, rule, moment, date)
         notes = [section.get('heading') for section in (docs.read(notes_slug(scene_id))[1] or {}).get('sections', [])
                  if section.get('heading')][:NOTE_HEADINGS]
         visit = last_visit(store, plan, scene_id)

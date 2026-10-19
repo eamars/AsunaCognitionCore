@@ -32,9 +32,6 @@ CORE_WRITABLE_KEYS = {
     'heartbeat.pause_min': {'type': 'integer', 'min': 0, 'max': 720,
                             'what': '让心跳安静一阵（分钟，0 = 马上恢复）；到时自动恢复'},
     'heartbeat.visits': {'type': 'boolean', 'what': '心跳时可以出门，去你在的群里看看'},
-    'heartbeat.quiet_min': {'type': 'integer', 'min': 0, 'max': 240, 'what': '群里安静多久，才去那儿起话头（分钟）'},
-    'heartbeat.after_own_min': {'type': 'integer', 'min': 30, 'max': 1440,
-                                'what': '在一个群说过话或去看过以后，多久内不再去（分钟）'},
     'heartbeat.visits_per_day': {'type': 'integer', 'min': 0, 'max': 8, 'what': '每天最多出门几次'},
     'heartbeat.visits_per_beat': {'type': 'integer', 'min': 1, 'max': 3, 'what': '一拍里最多去几个群'},
     # The heartbeat's die (ADR-058): named weights, a name left out weighs 0.
@@ -62,7 +59,7 @@ CORE_DEFAULTS = {
                'kinds': {}, 'bands': [], 'policy': []},
     'rhythm': {'settle_at': None, 'timezone': None, 'sleep_window': None, 'public_clock': False},
     'heartbeat': {'enabled': False, 'every_min': 60, 'min_gap_min': 120, 'pause_min': 0,
-                  'visits': False, 'quiet_min': 30, 'after_own_min': 360, 'visits_per_day': 4,
+                  'visits': False, 'visits_per_day': 4,
                   'visits_per_beat': 1, 'dice_awake': '歇着 40、有趣 31、自我开发 10、自我评估 12、复盘 2、找人 5、待着 0',
                   'dice_asleep': '歇着 66、自我开发 20、自我评估 8、复盘 2、找人 4、待着 0'},
     'memory': {'forgetting': {'half_life_days': 30, 'half_life_messages': 1500, 'step_back_below': 0.1}, 'coverage_floor': 0,

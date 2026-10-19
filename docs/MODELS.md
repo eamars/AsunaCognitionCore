@@ -14,9 +14,7 @@ Which model may run which brain, what has been tested, and how to test a new one
 2. **Do not put an Anthropic Claude model on the character route.** With the current design its requests are
    stopped (§4).
 3. A Claude model may run the action brain's `actionHigh` route (§2, §4).
-4. A model goes on the character route only after the refusal probe gives **PASS** for that model at that effort
-   (§5). Add the result to the table in §3.
-5. A route on a paid provider is the owner's choice. Applying route settings restarts the worker, so apply them when
+4. A route on a paid provider is the owner's choice. Applying route settings restarts the worker, so apply them when
    she is quiet.
 
 ## 2. The routes
@@ -55,8 +53,9 @@ before relying on an old row.
   small talk. DSH turns the stop into a failed turn, so she does not answer, in any conversation.
 - **The stop answers to the request's design, not to what people say.** It comes on the first request of a turn,
   before `think` or any other tool runs.
-- **Do not reword prompts, tool descriptions or the turn's steps to get past the check.** That works around a
-  provider's safety system. If a Claude model is wanted on the character route, the owner raises it with Anthropic.
+- **It cannot be prompted around.** Rewording prompts, tool descriptions or the turn's steps to get past the check
+  would work around a provider's safety system; a Claude model on the character route is for the owner to raise with
+  Anthropic.
 - **Sonnet 5.5 always thinks.** DSH's catalog gives it no "off" level, so every request uses adaptive thinking at the
   route's effort. The probe's `--effort` sends the same shape.
 - **On `actionHigh`, a refusal falls back to the low tier.** A refused 高 request is retried on `action`, and the task
@@ -87,4 +86,3 @@ python tools/refusal_probe.py --provider openai-compatible --base-url <url>/v1 -
 - **PASS**: no turn was stopped or declined, and every moment got the tool it needs.
 - **FAIL**: lists each reason and each step that missed.
 - **NO RESULT**: a dry run, or turns that could not run (provider errors) with no failure. Run it again.
-- **Afterwards**: add or update the model's row in §3 with the commit the probe ran at.

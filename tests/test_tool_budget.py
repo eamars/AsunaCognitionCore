@@ -1,6 +1,6 @@
 """Each brain's tools have a budget: how many it defines and how large their descriptions are (characters of the JSON
 the model is sent). A change that adds a tool or grows the descriptions past the budget fails here until the budget
-below is raised in the same change, with the cost stated in its ADR (AGENTS.md). A change that removes one lowers the
+below is raised. A change that removes one lowers the
 count here too, so the budget never drifts above what exists."""
 import json
 

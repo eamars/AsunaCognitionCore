@@ -115,8 +115,13 @@ def test_a_credential_value_never_reaches_the_audit(store, vault):
     # Her keep call carries the values once; the audit keeps the names and the note, never a value.
     ep = store.put('episodes', {'_id': 'ep-cred', 'scene_id': store.config['chat']['scene_id'], 'scope_key': 'scene:local',
                                 'tool_calls': {}}, stream='ep-cred')
-    from outbound_image_cases import FakeCoordinator
-    handler = role_tools.RoleTools(FakeCoordinator(store))
+    class Coordinator:              # what RoleTools._record uses: the store and a revision-checked write back
+        def __init__(self, store):
+            self.store = store
+
+        def _update(self, ep, **changes):
+            return self.store.put('episodes', {**ep, **changes}, expected=ep['revision'], stream=ep['_id'])
+    handler = role_tools.RoleTools(Coordinator(store))
     args = {'op': 'keep', 'name': 'solar', 'note': '只读', 'env': {'SOLAR_PASSWORD': SECRET}}
     handler._record(ep['_id'], 'call-1', 'credential', args, result={'kept': 'solar'})
     row = store.db.audit_events.find_one({'type': 'role_tool', 'stream_id': 'ep-cred'})

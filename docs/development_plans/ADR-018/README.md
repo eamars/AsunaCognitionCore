@@ -439,3 +439,11 @@ The task thread runs `executor.run`, then `pending.put` a feedback item (`chat.p
 | A. New internal kind through `Chat.receive` | Like `visit`/`errand` | **Chosen.** Durable before queueing, recovered at restart, deduplicated, runs after the target's current turn, globally serial; the kind drives trusted/untrusted context and tools. Cost: a scene-kind rule for home targets and new caps |
 | B. Bare `pending.put` like task feedback | — | Not chosen: nothing stored before the put, lost on restart |
 | C. Plugin append to the target DSH session (`recordChannelInput` / `agent.followup`) | — | Not chosen: a surface append is seen by a running turn's next step (steering), `followup` of a user message is refused outside the local scene, and nothing serialises across sessions |
+
+## A turn opened by a note from outside may read her questions (owner 2026-10-20)
+
+Her ask: in a home turn an outside note opened, `ask` was refused even for reading her own old questions. Reading
+carries nothing home, so `ask.read` joins that turn's tools; asking and closing stay out. Writing what she read into
+her documents still waits. The boundary is the delay and her second look at home (owner: "reinforced by delay +
+secondary inspection at home"), so in that turn it goes into `ideas note`, and her self-improvement turn decides what
+enters her documents. The turn's words now say so.

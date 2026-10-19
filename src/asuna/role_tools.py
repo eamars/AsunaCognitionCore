@@ -666,6 +666,10 @@ def _turn_rules(store, ep):
         # ADR-018 §5.4: a note from outside is a message. Its turn reads, answers, notes down and replies back;
         # nothing with consequences (a wish to act goes into the notebook for her self-improvement review).
         names += note_tool
+        if cls == visibility.OWNER_PRIVATE:
+            # Reading her own questions carries nothing home (owner 2026-10-20); writing stays behind the delay and
+            # her second look at home, through the notebook.
+            names.append('ask.read')
         if context.get('affect_from_program'):
             names.append('feel')
         if (first or {}).get('owner_line') and context.get('errand_places_from_program'):
@@ -851,7 +855,7 @@ ERRAND_NOTE = ('外面写来的便条叫起来的回合，只有便条带着主�
                '要去办，等主人在家里说，或者写进计划。')
 CONSULT_ONLY = '行动脑在问你话：这一回合只用 task 的 answer 回答它（think、recall 也能用），别的事等下一回合。'
 NOTE_ONLY = ('这一回合是外面一张便条叫起来的：只读、回话、记想法（ideas 的 note），不做有后果的事；'
-             '想做的记进想法本，到自我改进时再定。')
+             '想做的、读到要落账的，都用 ideas 的 note 记下，到自我改进那一回合再定、再写进文档。')
 
 
 def not_now(store, ep, name):

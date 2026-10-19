@@ -19,7 +19,7 @@ from reply_parts import said
 G1, G2, DM_B, OWNER_DM = (places.place_id(s) for s in ('g1', 'g2', 'dm-b', 'dm-o'))
 CONSEQUENCES = {'delegate', 'task.message', 'task.stop', 'errand', 'visit', 'credential', 'update_self',
                 'set_policy', 'write_document', 'plan', 'peer_line', 'understand_person'}
-UNTRUSTED_TURN = {'think', 'recall', 'read_image', 'stay_silent', 'ideas.note', 'note', 'feel', 'watch'}
+UNTRUSTED_TURN = {'think', 'recall', 'read_image', 'stay_silent', 'ideas.note', 'note', 'feel', 'watch', 'ask.read'}
 GROUP = {'wake_reason': 'mentioned_account', 'topic_id': None, 'reply_to': None, 'reply_message_id': None,
          'mentioned_account_ids': []}
 
@@ -459,6 +459,8 @@ def test_a_visit_an_outside_note_opens_in_a_home_group_does_nothing_with_consequ
     if trust == 'untrusted' and cls == visibility.OWNER_PRIVATE:
         assert not tools & CONSEQUENCES, tools & CONSEQUENCES
         assert role_tools.not_now(store, ep, 'write_document') == role_tools.NOTE_ONLY
+        # Reading her own questions carries nothing home (owner 2026-10-20); asking or closing one stays out.
+        assert 'ask.read' in tools and not tools & {'ask.ask', 'ask.close'}
     elif cls == visibility.OWNER_PRIVATE:
         assert 'write_document' in tools, 'a note from home keeps the home group what it has'
     else:

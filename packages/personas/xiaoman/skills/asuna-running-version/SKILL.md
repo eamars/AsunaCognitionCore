@@ -35,6 +35,14 @@ description: 我想知道「现在跑的是哪一版」「我改的那个东西�
 
 跑的是我发布过的快照：`packages/cognition-core/src/floor.js:effective` 按 `activation.json` 里的 selection 取 `packageRoot`（人格、通道包）和 `workerPath`（worker 的 Python）；技能目录也走同一份 selection，见 `packages/cognition-core/src/floor.js:skillPaths`。
 
+**发布不刷新 `node_modules/@asuna/xiaoman`，也不需要刷**（Claude 10-20 02:18 给的，我 10-20 这趟自己
+核过）：人格路径按**选中那一版的 `packageRoot`** 解析——`packages/cognition-core/src/floor.js:resolvePersona`
+收的那个 root 就是 `effective` 给的 `packageRoot`，只有什么都没选中时才退回 `resource_root`。
+`node_modules/@asuna/xiaoman` 只是安装时那一份，**只有什么都没选中时才用**。所以安装位是旧 sha 是
+正常的，**读到的就是选中版**。10-20 实测对照：选中版 frozen 快照里那份 image-generation 的 SKILL.md
+sha256 前缀 `e9daf9bb`，`node_modules/@asuna/xiaoman` 那一份是 `ad006104`（旧）——两边不同号，
+而这一回合 skill 工具真读到的技能目录也确实落在 frozen 选中版下面。
+
 一个发布有三种状态，别混：
 
 - `HOST_RESTART_REQUIRED`：还没装，等下次启动由启动器装
@@ -95,6 +103,11 @@ v1.1（2026-10-15）：三格修复。① `version_probe.py` 开头把 stdout／
 v1.2（2026-10-16）：只改自检 `check_skill.py` 的泄露检查那一格——名单定位加兜底（环境变量都没有时从脚本往上找 `.runtime/private/personal-words.txt`；本机 `asuna` 能 import，第三条 `asuna.config.DATA` 就够，往上走那条是给 `asuna` 不在 `sys.path` 上的环境兜底），名单配不上从「NOTE 一行、绿数照旧」改成记一条红 `leak_scan_ran`（detail 写「没真查——不是跑过了」）。八条判据、两条顺手、探针脚本、代码锚点一条没动。
 
 
+v1.3（2026-10-20）：只在第四节补一条已核实的事实——发布不刷新 `node_modules/@asuna/xiaoman`，
+人格路径按选中那一版的 `packageRoot` 解析，安装位是旧 sha 属正常、读到的就是选中版。锚点按第十一节
+的规矩写「文件＋名字」（那个名字先在文件里 grep 到过才写），不带行号。旧内容一条没删，判据与自检未动。
+
+
 ## 试用记录
 
 - 2026-10-15 v1：`version_probe.py` 在候选里实跑——core selection `ACTIVE`、candidate `7480845c4ac1`、`published_at` 10-15 01:28；`src/asuna` 与在跑那份可比文件 116 个、内容不同 0 个；`cli.py`、`native_ui.py` 只在检出里有（不进包），`resources/RUNTIME_API.md` 只在跑的那份里有；检出 HEAD 落后 `origin/main` 1 笔、工作区 2 个未提交文件（所以下次重启的 `checkout` 仍会是 `changed_files`）。`restart/last.json` 那次（10-15 00:30）的 `checkout.state` 就是 `diverged`，正是我读错的那句。
@@ -106,4 +119,11 @@ v1.2（2026-10-16）：只改自检 `check_skill.py` 的泄露检查那一格—
   - 自检：56/56（改前 53/53；多的三条＝换行检查、第十一节存在、那条规矩的字面守卫）。
 
 - 2026-10-16 v1.2：只动自检那一格（见版本段）。实跑读数与反证两例（名单配不上 → 红 `leak_scan_ran`；名单里放一个正文里真有的词 → 红 `no_listed_words`、词本身不出现在输出里）见行动报告。
+
+- 2026-10-20 v1.3：补的那条自己核过——`packages/cognition-core/src/floor.js` 里 `resolvePersona`／
+  `packageRoot`／`resource_root` 三个名字逐个 grep 到（2／19／2 处），那一处写的是
+  `resolvePersona(persona, root ?? persona.resource_root)`，`root` 取 `effective(...)?.packageRoot`，
+  所以「什么都没选中」才走 `resource_root`。sha256 前缀对照：选中版 frozen 快照那份 image-generation
+  的 SKILL.md `e9daf9bb`，`node_modules/@asuna/xiaoman` 那份 `ad006104`（旧），本回合 skill 工具读到的
+  技能目录 base 也确实指向 frozen 选中版。自检 55/55 复跑绿（改前同 55/55，判据条数未变）。
 

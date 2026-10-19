@@ -9,6 +9,13 @@
 
 行号锚点：一律红（2026-10-15 定的规矩，仓库共用测试 tests/test_skill_anchors.py 查的是同一条）。v3 曾为
 六格① 的代码位置开过四处白名单，2026-10-17 撤掉：代码位置写 `文件:函数名`，行号会随每次编辑漂走、不算锚点。
+节名锚点：2026-10-20 起加 `section_anchors_resolve`——正文里 § 指节名的锚、以及 RUNTIME_API.md
+后面用箭头串起来的路径式节名，逐个去那份文档的标题表里找，找不到就红并报出 SKILL.md 的行号与那一行
+原文。起因是 ADR-083 重排那份文档后我技能里指过去的节名失效过，而这两份自检里没有任何判据在守它。
+文档找法不绑死环境：从脚本往上走认仓库根（.git 或 pyproject.toml）取根下那份，再退 core 候选根那份；
+两处都没有就报 UNCHECKED（没查），不算过也不判红。这条不进仓库共用测试：共用测试一红会卡住改文档
+节名的人（Claude 与主人 10-20 定的）。
+
 
 用法：python3 skills/asuna-usage-readout/check_skill.py [SKILL.md 路径]
 退出码 0 = 全绿；非 0 时最后一行写「N/M 通过，失败：<检查名>」。
@@ -355,6 +362,113 @@ def frontmatter(text):
     return fields, text[end + 4:]
 
 
+
+# ── 文档节名锚点（2026-10-20 补；两份 check_skill.py 同一套写法）──────────────────
+# 起因：ADR-083 重排 RUNTIME_API.md 之后，我技能里指过去的 §节名 失效过，而这两份自检里
+# 没有任何判据在守节名——反证做过：把节名改错，自检照绿。
+# 为什么不进仓库共用测试（Claude 与主人 10-20 定的）：共用测试一红会卡住改文档节名的人；
+# 我的技能只有我能改，所以这条守在我自己的 check_skill.py 里。
+# 指向文档节名的两种写法都收：§ 指节名的锚，以及 RUNTIME_API.md 后面用箭头串起来的路径式
+# （某一跳可能带 §）。
+SECTION_ANCHOR = re.compile(r"§+([A-Za-z0-9][A-Za-z0-9 .&'-]*)")
+DOC_PATH_ANCHOR = re.compile(r"RUNTIME_API\.md`?\s*(?:→|->)\s*([^\n]+)")
+# 纯数字节号（§4.6 那种）指的是 ADR 里的编号节，不是这份文档的节名——不收。
+NUMERIC_SECTION = re.compile(r"[\d.]+")
+# 那份文档的节名全是英文：锚点后面跟着的中文正文（含中文标点、全角括号、反引号）要截掉。
+# 哪天文档真出现中文节名，这条会红而不是静默漏掉——照红改判据，别改成永远绿。
+ANCHOR_CUT = re.compile(r"[　-〿一-鿿豈-﫿＀-￯`]")
+
+
+def cut_anchor(text):
+    """锚点后面跟着的正文不算节名：截到第一个 CJK 字符或反引号为止，再去掉首尾的 § 与标点。"""
+    cut = ANCHOR_CUT.search(text)
+    if cut:
+        text = text[:cut.start()]
+    return text.strip().lstrip("§").strip().strip("，。；、：:（()）")
+
+
+def doc_anchors(text):
+    """SKILL.md 里（含 frontmatter）指向文档节名的锚：[(行号, 那一行原文, 节名)]。
+
+    扫整份文件而不是只扫正文：报出来的行号就是文件里的真行号，照着行号能翻到那一行。
+    """
+    found = []
+    for number, line in enumerate(text.splitlines(), 1):
+        for match in SECTION_ANCHOR.finditer(line):
+            name = cut_anchor(match.group(1))
+            if name and not NUMERIC_SECTION.fullmatch(name):
+                found.append((number, line.strip(), name))
+        for match in DOC_PATH_ANCHOR.finditer(line):
+            for hop in re.split(r"→|->", match.group(1)):
+                name = cut_anchor(hop)
+                if name and not NUMERIC_SECTION.fullmatch(name):
+                    found.append((number, line.strip(), name))
+    return sorted(set(found))
+
+
+def doc_headings(path):
+    """那份文档的标题表：# 到 ###### 每行的节名（去掉 # 与首尾空白）。"""
+    headings = []
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            match = re.match(r"^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$", line)
+            if match:
+                headings.append(match.group(1).strip())
+    return headings
+
+
+def runtime_api_doc():
+    """找到那份 RUNTIME_API.md，返回 (路径或 None, 试过的地方)。判据不绑死环境。
+
+    找法：从脚本所在目录往上走，认带 .git 或 pyproject.toml 的仓库根，取根下那一份；
+    再退一层试 <某一上层>/.runtime/work/self-development/core/RUNTIME_API.md（core 候选根那份）。
+    ASUNA_RUNTIME_API 指哪儿就读哪儿（反证、或文档放在别处时用）。
+    两处都找不到返回 None：调用方记 UNCHECKED（没查），不算过也不判红——主人 10-19 定的：
+    测试绑死环境＝测试有问题，skip 要写明是没查、不是过了。
+    """
+    named = os.environ.get("ASUNA_RUNTIME_API")
+    if named:
+        return ((named, [named]) if os.path.isfile(named) else (None, [named]))
+    current = os.path.abspath(HERE)
+    ancestors, roots = [], []
+    for _ in range(12):
+        current = os.path.dirname(current)
+        if not current:
+            break
+        ancestors.append(current)
+        if (os.path.isdir(os.path.join(current, ".git"))
+                or os.path.isfile(os.path.join(current, "pyproject.toml"))):
+            roots.append(current)
+    candidates = [os.path.join(root, "RUNTIME_API.md") for root in roots]
+    candidates += [os.path.join(top, ".runtime", "work", "self-development", "core", "RUNTIME_API.md")
+                   for top in ancestors]
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate, candidates
+    return None, candidates
+
+
+def section_anchor_check(text, check, notes):
+    """正文里指向 RUNTIME_API.md 节名的锚，逐个去那份文档的标题表里找。
+
+    找不到就红，报出 SKILL.md 的行号和那一行原文；文档找不到 → 不记这条判据，
+    改打一行 UNCHECKED 并在结尾那句绿话里写明「没查」——不算过也不判红。
+    返回要拼进结尾那句的说明。
+    """
+    doc, tried = runtime_api_doc()
+    wanted = doc_anchors(text)
+    if doc is None:
+        notes.append("UNCHECKED section_anchors_resolve  <- 没查：找不到 RUNTIME_API.md（试过 %s）"
+                     % "、".join(tried))
+        return "（section_anchors_resolve 没查：找不到 RUNTIME_API.md——不算过）"
+    headings = doc_headings(doc)
+    missing = ["SKILL.md 第 %d 行「%s」→ 节名「%s」在那份文档的标题表里找不到" % (n, line, name)
+               for n, line, name in wanted if name not in headings]
+    check("section_anchors_resolve", not missing,
+          "%s（%d 个标题）：%s" % (doc, len(headings), "；".join(missing)))
+    return "，文档节名锚点核过 %d 条（%s）" % (len(wanted), doc)
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
     results, notes = [], []
@@ -389,6 +503,10 @@ def main():
           all(re.search(r"^%d\. \*\*" % n, body, re.M) for n in range(1, 9)), "八条判据编号 1-8")
     check("six_cells_marked",
           all(("\n**%s " % m) in body for m in "①②③④⑤⑥"), "六格各有一行 **① … 起头")
+
+    # 文档节名锚点（2026-10-20）：找不到就红并报出 SKILL.md 行号与那一行原文；
+    # 那份文档找不到 → UNCHECKED（没查），不算过也不判红。
+    anchor_note = section_anchor_check(text, check, notes)
 
     p, entries = private_list()
     if entries is None:
@@ -479,7 +597,7 @@ def main():
         return 1
     print("%d/%d 通过：来源口径、六格口径（含跨类拷贝去重四条）、三处坑、八条判据、三张表（含样例表标记）、"
           "版本写就时刻与计划真跑日都在，v1／v2 退役字面没残留%s。（只查文件本身，外加把 usage_readout.py 的离线模式真跑了一遍；没读过会话记录和库。）"
-          % (total, total, leak))
+          % (total, total, anchor_note + leak))
     return 0
 
 

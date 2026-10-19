@@ -43,6 +43,14 @@ asuna.config.DATA → 从脚本所在目录往上找 .runtime/private/personal-w
 归属与「过期说法」两类红只看散文：反引号里的字面量（错误码、历史段引用的旧句子、反证记录里
 被改坏的副本内容）按引用处理，不算数——和占位标记同一套口径。
 
+2026-10-20 起再补两条锚点判据（起因：ADR-083 重排 RUNTIME_API.md 后我指过去的节名失效过，
+而这份自检里没有任何判据在守节名——节名改错它照绿）：`no_line_anchors`（反引号里的行号锚一律红，
+判法照 asuna-usage-readout 那份搬、没有白名单）与 `section_anchors_resolve`（正文里 § 指节名的锚、
+以及 RUNTIME_API.md 后面用箭头串起来的路径式节名，逐个去那份文档的标题表里找，找不到就红并报出
+SKILL.md 的行号与那一行原文）。那份文档的找法不绑死环境：从脚本往上走认仓库根（.git 或
+pyproject.toml）取根下那份，再退 core 候选根那份；两处都没有就报 UNCHECKED（没查），
+不算过也不判红。这两条不进仓库共用测试：共用测试一红会卡住改文档节名的人（Claude 与主人 10-20 定的）。
+
 不联网、不调生图服务、不生成图、不写 Mongo、不发 QQ。
 
 用法：
@@ -423,9 +431,121 @@ def listed_hits(entries, text):
     return hits
 
 
+# 行号锚点：一律红（2026-10-15 定的规矩，仓库共用测试 tests/test_skill_anchors.py 查的是同一条）。
+# 判法照 asuna-usage-readout/check_skill.py 那份原样搬，没有白名单：代码位置写 `文件:函数名`，
+# 行号会随每次编辑漂走、不算锚点。
+LINE_ANCHOR = re.compile(r"`(?:[\w./-]+\.(?:py|mjs|js|json|md|yml)|):\d+(?:-\d+)?`")
+
+
+# ── 文档节名锚点（2026-10-20 补；两份 check_skill.py 同一套写法）──────────────────
+# 起因：ADR-083 重排 RUNTIME_API.md 之后，我技能里指过去的 §节名 失效过，而这两份自检里
+# 没有任何判据在守节名——反证做过：把节名改错，自检照绿。
+# 为什么不进仓库共用测试（Claude 与主人 10-20 定的）：共用测试一红会卡住改文档节名的人；
+# 我的技能只有我能改，所以这条守在我自己的 check_skill.py 里。
+# 指向文档节名的两种写法都收：§ 指节名的锚，以及 RUNTIME_API.md 后面用箭头串起来的路径式
+# （某一跳可能带 §）。
+SECTION_ANCHOR = re.compile(r"§+([A-Za-z0-9][A-Za-z0-9 .&'-]*)")
+DOC_PATH_ANCHOR = re.compile(r"RUNTIME_API\.md`?\s*(?:→|->)\s*([^\n]+)")
+# 纯数字节号（§4.6 那种）指的是 ADR 里的编号节，不是这份文档的节名——不收。
+NUMERIC_SECTION = re.compile(r"[\d.]+")
+# 那份文档的节名全是英文：锚点后面跟着的中文正文（含中文标点、全角括号、反引号）要截掉。
+# 哪天文档真出现中文节名，这条会红而不是静默漏掉——照红改判据，别改成永远绿。
+ANCHOR_CUT = re.compile(r"[　-〿一-鿿豈-﫿＀-￯`]")
+
+
+def cut_anchor(text):
+    """锚点后面跟着的正文不算节名：截到第一个 CJK 字符或反引号为止，再去掉首尾的 § 与标点。"""
+    cut = ANCHOR_CUT.search(text)
+    if cut:
+        text = text[:cut.start()]
+    return text.strip().lstrip("§").strip().strip("，。；、：:（()）")
+
+
+def doc_anchors(text):
+    """SKILL.md 里（含 frontmatter）指向文档节名的锚：[(行号, 那一行原文, 节名)]。
+
+    扫整份文件而不是只扫正文：报出来的行号就是文件里的真行号，照着行号能翻到那一行。
+    """
+    found = []
+    for number, line in enumerate(text.splitlines(), 1):
+        for match in SECTION_ANCHOR.finditer(line):
+            name = cut_anchor(match.group(1))
+            if name and not NUMERIC_SECTION.fullmatch(name):
+                found.append((number, line.strip(), name))
+        for match in DOC_PATH_ANCHOR.finditer(line):
+            for hop in re.split(r"→|->", match.group(1)):
+                name = cut_anchor(hop)
+                if name and not NUMERIC_SECTION.fullmatch(name):
+                    found.append((number, line.strip(), name))
+    return sorted(set(found))
+
+
+def doc_headings(path):
+    """那份文档的标题表：# 到 ###### 每行的节名（去掉 # 与首尾空白）。"""
+    headings = []
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            match = re.match(r"^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$", line)
+            if match:
+                headings.append(match.group(1).strip())
+    return headings
+
+
+def runtime_api_doc():
+    """找到那份 RUNTIME_API.md，返回 (路径或 None, 试过的地方)。判据不绑死环境。
+
+    找法：从脚本所在目录往上走，认带 .git 或 pyproject.toml 的仓库根，取根下那一份；
+    再退一层试 <某一上层>/.runtime/work/self-development/core/RUNTIME_API.md（core 候选根那份）。
+    ASUNA_RUNTIME_API 指哪儿就读哪儿（反证、或文档放在别处时用）。
+    两处都找不到返回 None：调用方记 UNCHECKED（没查），不算过也不判红——主人 10-19 定的：
+    测试绑死环境＝测试有问题，skip 要写明是没查、不是过了。
+    """
+    named = os.environ.get("ASUNA_RUNTIME_API")
+    if named:
+        return ((named, [named]) if os.path.isfile(named) else (None, [named]))
+    current = os.path.abspath(HERE)
+    ancestors, roots = [], []
+    for _ in range(12):
+        current = os.path.dirname(current)
+        if not current:
+            break
+        ancestors.append(current)
+        if (os.path.isdir(os.path.join(current, ".git"))
+                or os.path.isfile(os.path.join(current, "pyproject.toml"))):
+            roots.append(current)
+    candidates = [os.path.join(root, "RUNTIME_API.md") for root in roots]
+    candidates += [os.path.join(top, ".runtime", "work", "self-development", "core", "RUNTIME_API.md")
+                   for top in ancestors]
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate, candidates
+    return None, candidates
+
+
+def section_anchor_check(text, check, notes):
+    """正文里指向 RUNTIME_API.md 节名的锚，逐个去那份文档的标题表里找。
+
+    找不到就红，报出 SKILL.md 的行号和那一行原文；文档找不到 → 不记这条判据，
+    改打一行 UNCHECKED 并在结尾那句绿话里写明「没查」——不算过也不判红。
+    返回要拼进结尾那句的说明。
+    """
+    doc, tried = runtime_api_doc()
+    wanted = doc_anchors(text)
+    if doc is None:
+        notes.append("UNCHECKED section_anchors_resolve  <- 没查：找不到 RUNTIME_API.md（试过 %s）"
+                     % "、".join(tried))
+        return "（section_anchors_resolve 没查：找不到 RUNTIME_API.md——不算过）"
+    headings = doc_headings(doc)
+    missing = ["SKILL.md 第 %d 行「%s」→ 节名「%s」在那份文档的标题表里找不到" % (n, line, name)
+               for n, line, name in wanted if name not in headings]
+    check("section_anchors_resolve", not missing,
+          "%s（%d 个标题）：%s" % (doc, len(headings), "；".join(missing)))
+    return "，文档节名锚点核过 %d 条（%s）" % (len(wanted), doc)
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
-    results = []
+    results, notes = [], []
 
     def check(name, ok, detail=""):
         results.append((name, bool(ok), detail))
@@ -513,6 +633,15 @@ def main():
     stale = [item for item in STALE_CLAIMS if item in prose]
     check("no_stale_text_only_claim", not stale, ",".join(stale))
 
+    # 行号锚点：反引号里的 `文件.md:123`／`文件.py:45-60` 一律红（判法照 asuna-usage-readout 那份，
+    # 没有白名单）。代码位置写 `文件:函数名`——行号每次有人改那个文件就漂，名字不会。
+    line_anchor_hits = [hit.group(0) for hit in LINE_ANCHOR.finditer(body)]
+    check("no_line_anchors", not line_anchor_hits,
+          "正文里有行号锚点（代码位置写 `文件:函数名`）：%s" % "、".join(line_anchor_hits[:5]))
+
+    # 文档节名锚点：找不到就红并报出 SKILL.md 行号与那一行原文；文档找不到 → UNCHECKED（没查）。
+    anchor_note = section_anchor_check(text, check, notes)
+
     # 泄露检查（2026-10-16 v8 起）：这一族以前在本脚本里根本没有。别的技能脚本有，但名单找不到时
     # 只打一行 NOTE、绿数照旧——「检查项没跑」和「检查项过了」长得一样。这里不这么办：
     # 名单找得到就真扫（命中只报类别与名单行号），找不到记一条红并写清没真查。
@@ -549,7 +678,6 @@ def main():
             check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
 
     stray = [d for d in os.listdir(HERE) if d == "__pycache__"]
-    notes = []
     if stray:
         notes.append("NOTE 技能目录里有 __pycache__（compileall 留下的），发布前清掉："
                      "find skills -name '__pycache__' -type d -prune -exec rm -rf {} +")
@@ -567,7 +695,7 @@ def main():
     print("%d/%d 通过：技能文件、工具名、发图那条路（QQ speak 的 picture／别处 attach_image）的清单与失败码、"
           "改图那条路（source_image／IMAGE_WORKFLOW_* 即时拒绝码／归属／剥文字块）、"
           "群聊生图上限那条（节标题／最多 4 张／到顶默认不发／唯一的例外是 10:59 版）、"
-          "历史段、群发前自检四条要点、归属都在%s。" % (total, total, leak_note))
+          "历史段、群发前自检四条要点、归属都在%s。" % (total, total, leak_note + anchor_note))
     return 0
 
 

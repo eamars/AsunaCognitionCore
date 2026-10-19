@@ -445,6 +445,19 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
 
 ## 版本
 
+v10（2026-10-20）：只加两条锚点判据，正文口径一条没动。`check_skill.py` 新增 `no_line_anchors`
+（反引号里的行号锚一律红，判法照 `asuna-usage-readout` 那份搬、没有白名单）与
+`section_anchors_resolve`（正文里 § 指节名的锚、以及这份文档后面用箭头串起来的路径式节名，逐个去
+RUNTIME_API.md 的标题表里找，找不到就红并报出 SKILL.md 的行号与那一行原文；那份文档找不到就报
+UNCHECKED＝没查，不算过也不判红）。起因：ADR-083 重排那份文档后我指过去的节名失效过，而这份自检里
+没有任何判据在守节名——节名改错它照绿（反证做过）。两条不进仓库共用测试：共用测试一红会卡住改文档
+节名的人（Claude 与主人 10-20 定的）。判据 155→157。
+
+同一轮改一处写法（owner 授权动这一处）：v6 那条历史记录里的旧行号锚改成不带反引号的叙述
+「RUNTIME_API.md 旧版 164 行」——是为了让新加的 `no_line_anchors` 能全绿，不是删掉历史：
+「当时我核的是旧文档 164 行」这句和「已失效」那句都还在原处。判据判的是反引号里的行号锚，
+不给它一个锚它就不该红；也不为这一处开白名单——白名单开一次就会开第二次。
+
 v9（2026-10-18）：只动「离线自检」一节的措辞与 `check_skill.py` 的编译格：语法检查改成内存
 `compile(源码, 路径, 'exec')`，不再用 `py_compile` 写 `.pyc`、不再找可写临时目录（行动脑沙箱里技能目录旁
 和当前目录都写不动，那一格只能报「没真查」）。分寸：`compile()` 只查语法，不查 import 和运行时，
@@ -477,7 +490,7 @@ v7（2026-10-16）：补上改图通路——`generate_image` 的 `source_image`
 步骤 1 的 2026-10-04 路由读数标注为当时口径。`check_skill.py` 同改：新增改图一节与字面量判据，`九条路线全是 t2i` 进过期说法守卫。
 事实来自 2026-10-16 09:16 现场验收与 09:18 `list_routes` 只读复核（没画图、没发 QQ）。
 
-v6（2026-10-14）：与 ADR-064 phase 2（REPLY_PARTS）对齐——QQ（napcat）的 channel kind 声明了 reply parts，那一轮她只通过 speak 说话，speak 取代 quote、await_answer、attach_image（认知核 `RUNTIME_API.md` §Claim public output 与 `role_tools.py` 的 `REPLY_KINDS`/`REPLY_REPLACES`）；QQ 私聊与群发图改成 speak 的 picture 那一项（artifact_id 照抄 image_artifacts_from_program、可以不带话、有一条 part 不对整批不排队）。没声明 REPLY_PARTS 的对话（比如另一条线在做的 QQ 官方 Bot 通道）仍列 attach_image，它的参数、拒绝码与「一回合至多一张」都没变。`check_skill.py` 判据同改：押两条路的说法在不在，不再押裸字面量 attach_image 的在/不在。事实来自 2026-10-14 对 core 候选 `role_tools.py`（88-90、590-591、697-698）与 `RUNTIME_API.md:164` 的只读复核。（旧版行号锚；ADR-083 重排后该节是 §Claim public output，行号锚已失效）
+v6（2026-10-14）：与 ADR-064 phase 2（REPLY_PARTS）对齐——QQ（napcat）的 channel kind 声明了 reply parts，那一轮她只通过 speak 说话，speak 取代 quote、await_answer、attach_image（认知核 `RUNTIME_API.md` §Claim public output 与 `role_tools.py` 的 `REPLY_KINDS`/`REPLY_REPLACES`）；QQ 私聊与群发图改成 speak 的 picture 那一项（artifact_id 照抄 image_artifacts_from_program、可以不带话、有一条 part 不对整批不排队）。没声明 REPLY_PARTS 的对话（比如另一条线在做的 QQ 官方 Bot 通道）仍列 attach_image，它的参数、拒绝码与「一回合至多一张」都没变。`check_skill.py` 判据同改：押两条路的说法在不在，不再押裸字面量 attach_image 的在/不在。事实来自 2026-10-14 对 core 候选 `role_tools.py`（88-90、590-591、697-698）与 RUNTIME_API.md 旧版 164 行的只读复核。（旧版行号锚；ADR-083 重排后该节是 §Claim public output，行号锚已失效。10-20 把这处改成不带反引号的叙述写法，历史事实没删，原因见版本 v10）
 
 v5（2026-10-10）：步骤 7 从「可选／看不到自己刚生成的图」改成必须用 `read_image` 拿 `artifact_id` 亲眼看一遍再交，
 「未做视觉复核」降为失败分支（只有真读不到才这么写，并写清是哪种红）；步骤 1 补「先按目标选路由」（anime fallback 默认、照片感写进 prompt、CFG 1 的路由不吃 `negative_prompt`）；

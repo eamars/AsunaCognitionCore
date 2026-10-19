@@ -29,9 +29,10 @@ sits beside [QQ through NapCat](../napcat-qq/README.md): a profile may have eith
 - **Outbound:** her words, with one picture where the outbox item carries one (`supports=image`). She speaks here
   only through `speak`, in text and picture parts (the kind's `REPLY_PARTS`); the bridge declares no quote, reaction
   or recall, so those are not shown to her here.
-  - Each message goes out as a reply to the message she answers (`msg_id`, `msg_seq`) while the platform still takes
-    replies to it: 60 minutes and 4 replies in a private chat, 5 minutes and 5 replies in a group. After that it
-    goes out as her own message.
+  - Each message goes out as a reply (`msg_id`, `msg_seq`) to the message she answers while the platform still
+    takes replies to it (60 minutes and 4 replies in a private chat, 5 minutes and 5 replies in a group, less a
+    15-second margin); after that, as a reply to the newest received message in that conversation that still takes
+    one; when none does, as her own message.
   - When the platform refuses a reply, the message is sent once as her own message. A refusal of that is a failed
     receipt with the platform's code. The platform may refuse her own messages in a group, or from someone who
     turned them off.
@@ -68,7 +69,7 @@ sits beside [QQ through NapCat](../napcat-qq/README.md): a profile may have eith
    - `token`: a random string of at least 24 characters for the channel API, as for any channel.
    - `app_secret` lives in DSH's credential store. A first-install file may hold the plain value, which the
      installer moves there.
-   - With **QQ 接入策略** `automatic`, every private chat and group the bot is reached in gets its route on its
+   - With **外部渠道接入策略** (Channel admission) `automatic`, every private chat and group the bot is reached in gets its route on its
      first message, so no route needs configuring.
    - Optional fields:
      - `api_base` (default `https://api.sgroup.qq.com`) and `token_url` (default

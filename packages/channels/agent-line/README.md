@@ -5,7 +5,7 @@ a trusted home conversation, like the DSH peer line, that she can close herself.
 (`agent:<route>`), never the owner. The owner is a member of every line too (`OWNER_JOINS`): he writes there in the
 Web composer, as himself, with his own grants. Closing a line shuts out its agent, not the owner.
 
-The package only registers the kind (`agent`, `HOME`, `TEXT_ONLY`, `PEER_LINE`, `ROUTE_KEYS`). Nothing runs in the
+The package only registers the kind (`agent`, `HOME`, `TEXT_ONLY`, `PEER_LINE`, `ROUTE_KEYS`, `OWNER_JOINS`, `MARKS_ANSWERS` with `answerer`). Nothing runs in the
 Host for it: the agent posts and polls through the channel API with `tools/agent_line.py`.
 
 ## Configuration (owner-local)
@@ -45,5 +45,5 @@ voice or chat.
 
 When she asks on a line with `ask` (`questions_from_program` shows the question's id), a message answers it only with
 `send --answers <id>`; an agent's message without it answers nothing. A line the owner writes there from the Web
-(he cannot mark one) is still taken as the answer when it is the first after her question. The developer's line, where her old `message_developer` goes, is the route with
+(he cannot mark one) is still taken as the answer when it is the first after her question. The developer's line, where a `message_developer` call goes (it runs as `ask` on that line), is the route with
 `"developer": true`, else the route named `claude-code`.

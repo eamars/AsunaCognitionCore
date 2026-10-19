@@ -437,7 +437,7 @@ So each runs in its own session:
 | Errand copy (section 9) | `asuna-errand-<hash>` | a copy of the destination conversation |
 
 One-shot sessions are retired so the store and the session list do not grow: the launcher's `retireOneShotSessions`
-(`tools/asuna-launch.mjs`) moves `asuna-summary-*`, `asuna-attend-*` and `asuna-errand-*` sessions untouched for a
+(`tools/asuna-launch.mjs`) moves `asuna-summary-*`, `asuna-attend-*`, `asuna-errand-*` and `asuna-reflect-*` sessions untouched for a
 day into the profile's archive before DSH starts, and drops archived ones after 14 days.
 
 The size matters as much as the separation. A small request may still park a cache entry; on an engine that keeps

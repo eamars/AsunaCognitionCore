@@ -15,8 +15,13 @@ A kind module knows one platform's id formats and adapter conventions:
                                                from the Web as the owner; default False
   SERVICE_ARGV (optional)                      its managed adapter's resident command, started by itself once
   REQUESTS (optional)                          its adapter brings friend and group requests her home answers
-  REPLY_PARTS (optional)                       she speaks there only through `reply`, in these parts (text,
-                                               sticker, picture, poke, react); without it her words are speech
+  REPLY_PARTS (optional)                       she speaks there only through `speak`, in these parts (text,
+                                               sticker, picture, poke, react, recall); without it her words are speech
+  OWN_RECALL_SECONDS (optional)                how long after delivery she may take back a line of hers
+  PEER_LINE (optional)                         she opens and closes each of its direct lines herself (lines.py)
+  ROUTE_KEYS (optional)                        each route has a key of its own that opens only that line
+  MARKS_ANSWERS, answerer(scene) (optional)    who on a line marks the lines that answer her questions
+  MEDIA_KEYS (optional)                        the media-link key names its adapter posts (media_keys.py)
 
 Scene and person ids start with their kind (`<kind>:…`), and a configured channel's id names its kind
 (`channels.qq`).

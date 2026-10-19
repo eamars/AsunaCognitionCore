@@ -44,10 +44,10 @@ Open Plugins → Asuna Cognition Core. A new profile shows `Business process: no
 - **Character brain / Action brain**: model service and model (reasoning effort and output limit may stay at the
   model's defaults). Choose them by [docs/MODELS.md](docs/MODELS.md): a Claude model must not run the
   character brain.
-- **database**: the Mongo database name.
-- **mongo_uri**: already `{"$secret":"ASUNA_MONGO_URI"}`; type the connection string into the **ASUNA_MONGO_URI**
+- **Database name** (`database`): the Mongo database name.
+- **Mongo connection** (`mongo_uri`): already `{"$secret":"ASUNA_MONGO_URI"}`; type the connection string into the **ASUNA_MONGO_URI**
   credential field. Credentials go to DSH's credential store; the settings only keep the reference.
-- **embedding**: `{"base_url":"http://<host>:<port>/v1","model":"<embedding model>"}`.
+- **Embedding model** (`embedding`): `{"base_url":"http://<host>:<port>/v1","model":"<embedding model>"}`.
 - **Python**: leave empty to let Asuna build its environment (needs uv or Python 3.12+), or give an interpreter
   that already has the pinned dependencies.
 - Optional `sandbox`: `{"backend":"auto"}` (default: DSH's sandbox) or `{"backend":"none"}`.
@@ -55,22 +55,23 @@ Open Plugins → Asuna Cognition Core. A new profile shows `Business process: no
 **Save settings**, then **Apply saved settings**. The first start may take a few minutes while the Python
 environment is built; the status line shows the step.
 
-Check: the card shows `Business process: ready · Mongo: connected`, and its last status line names the sandbox
-(`Sandbox: dsh`, or `none (reason)`).
+Check: the card shows `Business process: ready · Mongo: connected`, and the status line above the saved-settings line
+ends with the sandbox (`Sandbox: DSH sandbox`, or `Sandbox: none (<reason>): running code, self-development and integration are off`).
 
 Everything the profile writes goes to its data folder, `$DSH_HOME/asuna/<profile>/` by default (the floor's
 `dataRoot` setting moves it). Nothing is written into the installed packages.
 
 ## 4. Optional: the action brain's work shown inline
 
-By default the action brain's work opens in DSH's own subagent view (the work row's "open the full process" link).
+By default the action brain's work opens in DSH's own subagent view (the work row's "Open the full record in the sidebar" button).
 Showing it inline in the main conversation needs two patched DSH UI packages, built locally — they are not published:
 
 1. Clone the branch and commit named in [`tools/dsh-inline/source.json`](tools/dsh-inline/source.json) (DSH with
    the two patch commits) into a dedicated folder.
 2. In a checkout of this repository: `node tools/build_dsh_inline.mjs --source <that folder>`. It refuses any other
-   commit or local changes and writes two `.tgz` files to `.runtime/adr008/packages/`.
-3. `dsh plugin --profile <name> add <the two .tgz files>`, then restart the profile.
+   commit or local changes and writes, to `.runtime/adr008/packages/`, each of the two packages as a `.tgz`
+   and as a copy named with its digest (`…-<sha256 first 12>.tgz`), plus `native-inline-manifest.json`.
+3. `dsh plugin --profile <name> add <the two digest-named .tgz files>`, then restart the profile.
 
 Check: an action brain's work row expands to its tool calls in place. Asuna detects the patched Chat by itself;
 removing the packages returns it to the subagent view without errors.

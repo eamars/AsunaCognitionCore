@@ -12,13 +12,13 @@ described in [RUN_ASUNA.md](../../RUN_ASUNA.md). Everything Docker-specific is i
   1. clones the repository into the empty volume (once);
   2. installs Node dependencies whenever `package-lock.json` changes, and syncs the Python environment from `uv.lock`;
   3. applies the LAN login patch (`lan-login.mjs`, below);
-  4. builds the native rendering extension (`tools/dsh-inline`) from DSH's public release tag when it is missing
+  4. builds the native rendering extension (`tools/dsh-inline`) from the DSH fork branch named in `tools/dsh-inline/source.json` when it is missing
      or out of date;
   5. installs the profile when it has never been installed, or when the stack names other packages than the ones
      recorded in its `launch.json`;
   6. starts `start-asuna.sh`, the same launcher every install uses. It installs any other change to the checkout.
-- **Network:** the three containers share the stack's own network. **Only Caddy publishes ports**: 8443 (the
-  page, HTTPS) and 8781 (Caddy's root certificate). Asuna shares Caddy's network namespace: DSH listens only on
+- **Network:** the three containers share the stack's own network. **Caddy publishes the LAN ports**: 8443 (the
+  page, HTTPS) and 8781 (Caddy's root certificate); `mongo` is published only on the host's loopback (below). Asuna shares Caddy's network namespace: DSH listens only on
   loopback (port 8780), where Caddy reaches it. Asuna reaches MongoDB as `mongo` and NapCat, the model servers and
   the embedding service at their LAN addresses. Recreating the caddy container needs a restart of `asuna` too.
 - **`mongo`** is the stack's own MongoDB, `mongo:27017` inside the stack and `127.0.0.1:27099` on the host:

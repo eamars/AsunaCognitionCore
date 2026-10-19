@@ -9,8 +9,8 @@ in [NATIVE_PLUGIN.md](../NATIVE_PLUGIN.md), and the contracts in [RUNTIME_API.md
 | Path | What it holds |
 |---|---|
 | `src/asuna/` | The Python business worker (queues, cognition, memory, channels, integration supervision). `resources/prompts` and `resources/schemas` are the neutral core prompts and JSON schemas. |
-| `packages/cognition-core/` | The Host plugin: `src/` (JS), `test/` (node tests), `skills/` (core skills), `locale/`. `runtime-manifest.json` is written by the packer; `python/` is the packer's ignored copy of `src/asuna`. |
-| `packages/channels/<name>/` | A channel package: `src/index.js` (`registerChannel`), `python/<module>/` (the kind module), `integration/` (a managed adapter, if any), `skills/`, `test/`. |
+| `packages/cognition-core/` | The Host plugin: `src/` (JS), `test/` (node tests), `skills/` (core skills), `locale/`, `meta/` (the preset, floor and persistence plugins' locales), `cordis.patch.yml` (its presets). `runtime-manifest.json` is written by the packer; `python/` is the packer's ignored copy of `src/asuna`. |
+| `packages/channels/<name>/` | A channel package: `src/index.js` (`registerChannel`), `python/<module>/` (the kind module), `cordis.patch.yml`, `locale/`, and where it has them `integration/` (a managed adapter), `skills/`, `test/`. |
 | `packages/personas/<name>/` | A persona package: `src/index.js` (`registerPersona`), `persona-model.json`, `seeds/`, `skills/`, `cordis.patch.yml` (its role preset), `locale/`, `icon.*`. |
 | `tests/` | pytest suites (`test_*.py`); case modules shared with the offline checks (`*_cases.py`); fixtures (`fixtures/world.json`, the synthetic persona `fixtures/personas/demo`); `dsh_sandbox.mjs`, which wraps test commands in DSH's sandbox. |
 | `tools/` | Install, launch, pack and build scripts, repository checks and diagnostics: see [tools/README.md](../tools/README.md). |
@@ -30,14 +30,16 @@ Ignored and local: `.runtime/`, `.venv/`, `node_modules/`, `reports/`, `config/l
 - **`.runtime/adr008/`** (profile `asuna-native`; another profile uses `.runtime/adr008/profiles/<name>/`):
   - `packages/`: packed `.tgz` files (packing removes those that no manifest, installed profile or `activation.json`
     names), `manifest.json`, and `native-inline-manifest.json` when the inline extension is built;
-  - `launch.json`: the config, the installed package list (`setup`) and digests (`installed`);
+  - `launch.json`: the config, the profile, its Web port when one was given, the installed package list (`setup`) and
+    digests (`installed`);
   - `activation.json`: the selected artifact per development project, and the last one that ran;
   - `home/`: the DSH home (`DSH_HOME`), with the profile under `home/profiles/<profile>/` (its `cordis.patch.yml`
     holds the saved settings, its `node_modules` the installed plugins).
-- **The profile's data folder**, `$DSH_HOME/asuna/<profile>/`: development candidates, the worker's Python
-  environment, bridge positions, integration runs.
-- **The worker's data root** (`ASUNA_DATA_ROOT`, default `.runtime/`): task and channel workspaces (`work/`,
-  `channels/`), the evidence of the last five worker starts (`reports/native-host-*`, each its newest 3,000 records), the deployment's private
+- **The profile's data folder** (`<data>`): the floor's `dataRoot`, which the worker gets as `ASUNA_DATA_ROOT`. A
+  checkout install sets it to `.runtime/` for `asuna-native` and to `.runtime/adr008/profiles/<name>/` for another
+  profile; without the setting it is `$DSH_HOME/asuna/<profile>/`, and a worker started without the variable uses
+  `.runtime/`. It holds development candidates, the worker's Python environment, bridge positions, integration runs,
+  task and channel workspaces (`work/`, `channels/`), the evidence of the last five worker starts (`reports/native-host-*`, each its newest 3,000 records), the deployment's private
   files (`private/`, with the list of words that point at real people and places, `personal-words.txt`) and the
   worker's own files.
   Everything under `.runtime/` is local and disposable except what a profile needs; never commit it.
@@ -62,7 +64,7 @@ answer names something the code does not have.
 ## Tests
 
 ```powershell
-npm.cmd run test:native                       # node tests of the core and every channel package
+npm.cmd run test:native                       # node tests of the core and of each channel package's test/
 .\.venv\Scripts\python.exe -m pytest -q       # Python suites
 .\.venv\Scripts\python.exe tools\check_staged_secrets.py --personal --all
 ```
@@ -123,13 +125,17 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
 
 **A channel package:** start from `packages/channels/dsh-peer` or `packages/channels/qq-bot` (adapter in the Host
 process; `ctx.asuna.channelEndpoint(kind)` gives the channel API and the channel's settings with credentials
-resolved) or `packages/channels/napcat-qq` (managed adapter in the sandbox, which reaches only local addresses).
+resolved) or `packages/channels/napcat-qq` (managed adapter in the sandbox, which reaches only local addresses), or
+`packages/channels/agent-line` (no adapter: its clients post through the channel API themselves).
 
 1. `src/index.js` calls `registerChannel({kind, title, project, resource_root, python, module,
    integration_directory, skill_directories})`.
 2. `python/<module>/__init__.py` is the kind module: the names listed in `src/asuna/channel_kinds.py`'s docstring
    (id formats, mentions, media hosts, derived adapter settings; optional faces, stickers, home or text-only, and
-   `SERVICE_ARGV`, the managed adapter's resident command, which an enabled integration starts by itself).
+   `SERVICE_ARGV`, the managed adapter's resident command, which an enabled integration starts by itself), and the
+   optional names the core reads beyond that docstring: `MARKS_ANSWERS` with `answerer`, `sticker_of`, `sticker_md5`,
+   `media_key_name`, `MEDIA_KEYS` (`src/asuna/channel_kinds.py`), `PEER_LINE` (`src/asuna/lines.py`) and `ROUTE_KEYS`
+   (`src/asuna/channels.py`).
 3. The adapter speaks the channel API in [RUNTIME_API.md](../RUNTIME_API.md#channel-api) with the channel's token.
 4. The README says what a deployment configures (see the QQ package's "Setting up QQ").
 5. `npm install`, `npm run test:native`, then add it to a profile
@@ -166,7 +172,7 @@ Every error a tool call can return is read by a model that has to act on it, so 
 
 ## Writing docs and recording decisions
 
-- Reference docs (`README*`, `INSTALL.md`, `RUN_ASUNA.md`, `NATIVE_PLUGIN.md`, `RUNTIME_API.md`, package and tool
+- Reference docs (`README.md`, `INSTALL.md`, `RUN_ASUNA.md`, `NATIVE_PLUGIN.md`, `RUNTIME_API.md`, package and tool
   READMEs, this page) describe the current state only: what it is, how to use it, what it needs. No history, dates,
   ADR provenance or reasons. Change them in the same commit as the behavior.
 - Decisions, designs and plans go in an ADR: `docs/development_plans/ADR-0NN-<slug>/README.md`, with a row in

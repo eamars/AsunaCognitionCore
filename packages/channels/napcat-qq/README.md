@@ -55,7 +55,7 @@ with Core (`registerChannel`).
   (`get_stranger_info`) and, for a group she has no conversation in, its name (`get_group_info`). Her answer to a
   request comes back as an admin action and becomes `set_friend_add_request` or `set_group_add_request` with the
   request's flag. Every kind is counted, with no content: `health.json` `notices` shows today's and the last 7 days'
-  counts by kind and outcome (`posted`, `home`, `not_shown`, `not_projected`, `unknown`, a gate that dropped it),
+  counts by kind and outcome (`posted`, `home`, `own_state`, `not_shown`, `not_projected`, `unknown`, a gate that dropped it),
   kept by UTC day for 14 days in `notices/counts.json` in the adapter's data folder. Typing, connection events, her
   messages sent elsewhere and online-file transfers are counted, never projected.
 - Her own mute in each admitted group goes to Core's `own_mute` endpoint. A `group_ban` notice (`ban` / `lift_ban`)
@@ -86,9 +86,9 @@ own account ([Running several characters](../../../RUN_ASUNA.md#running-several-
    - `account_id`: the bot's QQ number;
    - `token`: a random string of at least 24 characters, shared by the adapter and Core's channel API;
    - `routes`: at least the owner's DM, `{"sender_id", "person_id": "qq:<id>", "scene_id": "qq:<bot>:dm:<id>",
-     "target": {"type": "dm", "id": "<id>"}}`. A group route has `"target": {"type": "group", "id": "<group>"}` and
+     "target": {"type": "dm", "id": "<id>"}}`. A group route has `"scene_id": "qq:<bot>:group:<group>"`, `"target": {"type": "group", "id": "<group>"}` and
      `members` (`{"<qq id>": {"person_id": "qq:<qq id>"}}`). Each person's workspace is a folder in the profile's data
-     folder unless the route or member names an absolute `workspace` there. With **QQ 接入策略** `automatic` (or `--channel-admission
+     folder unless the route or member names an absolute `workspace` there. With **外部渠道接入策略** (Channel admission) `automatic` (or `--channel-admission
      automatic` at install), new DMs and groups get routes on their first valid message, so only the owner's DM
      needs configuring;
    - optional `blocked_senders` / `blocked_groups`.
@@ -99,7 +99,7 @@ own account ([Running several characters](../../../RUN_ASUNA.md#running-several-
    - `endpoints`: the addresses the adapter may reach, each `{"name", "host": "<private or loopback IP>",
      "port": <local alias port ≥ 1024>, "target_port": <the device's port>}` — one for NapCat and one for
      Core's channel API (`127.0.0.1`, `channel_port`, default 8766);
-   - `adapter_config.napcat`: `{"transport": "websocket_forward", "url": "ws://<ip>:<alias port>", "token": "<NapCat
+   - `adapter_config.napcat`: `{"transport": "websocket_forward", "url": "ws://127.0.0.1:<alias port>", "token": "<NapCat
      access token>"}`;
    - `adapter_config.host`: `{"base_url": "http://127.0.0.1:<alias port>", "channel_id": "qq"}`;
    - optional `adapter_config.catchup`: `{"routes": ["<route id>", …] or "all", "lookback_hours": 6}` turns on
@@ -107,7 +107,9 @@ own account ([Running several characters](../../../RUN_ASUNA.md#running-several-
      without one is `auto-group-<id>` / `auto-dm-<id>`; `"all"` means the configured routes and every admitted
      route the adapter has a cursor for).
    With `enabled: true`, the adapter starts by itself on the first start (`python3 /app/adapter.py --service`) and
-   restarts with her from then on; after an `integration_stop` it stays stopped until started again.
+   restarts with her from then on, unless its integration settings changed since it last ran other than by applying
+   the settings card (it then stays stopped until `integration_start`); after an `integration_stop` it stays stopped
+   until started again.
    The NapCat account id, the host token, routes and allowlists are derived from `channels.qq`; do not repeat them.
 5. **Save and apply** on the settings card, then check the card's status line and send her a DM.
    `python tools/probe_qq_admission.py packages/channels/napcat-qq` checks the admission policy offline.

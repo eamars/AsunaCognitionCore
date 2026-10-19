@@ -35,13 +35,8 @@ checks the installed result. Without a build, packing and installing skip the ex
 UI review uses an isolated Web profile with real adapters disabled and [the synthetic fixture](../fixtures/inline_brains.mjs).
 Entered in that profile's native composer:
 
-- `dual-flow`: a real native task with two tool consultations; `dual-failure`: an actual native failure;
-  `dual-media`: a native file link and image from the action's distinct workspace.
-- `dual-long`: 600 native assistant steps and 599 numbered tool receipts. DSH counts assistant/user messages toward
-  its 500-message page cap; cold loading shows the final 500 steps, and the shipped Load earlier control retrieves
-  the rest.
-- `dual-continue-first` then `dual-continue-next`: cold continuation of a native source across separate tasks on
-  the same execution binding; `dual-continue-auto` announces the successor inside the first Turn's result
-  acknowledgement. Both tasks keep their own grants and source ranges.
+- `dual-flow` (any input containing `dual-`): her turn delegates a real native task; the action brain reads two
+  synthetic records, asks her once, leaves a progress note and reports, and her next turn reads the result.
+- `dual-failure`: the same task with an actual native failure in the action session.
 
 These scenarios run no external model or channel consumer.

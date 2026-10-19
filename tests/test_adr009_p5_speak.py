@@ -197,6 +197,23 @@ def test_words_written_without_speak_come_back_whole_and_a_speak_then_sends_them
     ep = Coordinator(store, lane).ingest(event)
     assert lane.calls[1]['messages'][-1]['content'] == UNSENT_NOTE % words, 'whole, as written'
     assert ep['state'] == 'COMMITTED' and [r['text'] for r in outbound(store, ep['_id'])] == ['我觉得挺好']
+    assert not (store.db.scenes.find_one({'_id': 'dm-a'}) or {}).get('unsent'), 'she spoke: what she left out is hers'
+
+
+def test_a_turn_that_spoke_ends_in_words_that_are_not_unsent(store, monkeypatch):
+    """ADR-076 R10: where only speak speaks, the turn ends with words, which are its ending, not lost speech."""
+    store.config['persona_model'] = model(3)
+    channel_scene(store, monkeypatch)
+    lane = FakeLane(store, [FakeTurn([THINK, said('好呀')], '嗯，说完了')])
+    event = {'event_id': 'end-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '一起吗',
+             'channel': {'id': 'replay', 'account_id': 'bot', 'target': TARGET, 'platform_event_id': 'p-end-1'}}
+    persist_input(store, event, managed=True)
+    ep = Coordinator(store, lane).ingest(event)
+    assert len(lane.calls) == 1 and [r['text'] for r in outbound(store, ep['_id'])] == ['好呀']
+    assert not (store.db.scenes.find_one({'_id': 'dm-a'}) or {}).get('unsent')
+    assert not store.db.audit_events.find_one({'type': 'turn.unsent_body', 'stream_id': ep['_id']})
+    _, nxt, _ = turn(store, key='end-2')
+    assert 'unsent_from_program' not in nxt['context']
 
 
 def test_lines_count_in_every_message_blank_lines_and_code_do_not(store, monkeypatch):

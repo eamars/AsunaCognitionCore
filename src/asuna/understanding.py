@@ -119,10 +119,12 @@ def entry(store, scene, person_id, persona, people):
     from .familiarity import words
     person, here = layers(store, scene, person_id)
     item = {'who': people.speaker(scene, person_id), **words(store, person_id, persona)}
-    if line(person):
-        item['short'] = line(person)
-    if line(here):
-        item['here'] = line(here)
+    for key, pair in (('short', person), ('here', here)):
+        content = (pair[1].get('content') or {}) if pair else {}
+        if content.get('short'):
+            item[key] = content['short']
+        elif content.get('body'):            # written before shorts: the body, named as one (ADR-082 D4)
+            item[key + '_body'] = content['body']
     written = _written_at(person, here) if (person or here) else None
     if written:
         item['written_at'] = written

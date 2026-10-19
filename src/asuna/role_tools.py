@@ -2092,6 +2092,9 @@ class RoleTools:
         from .people import People
         if self._place(ep) == visibility.OWNER_PRIVATE:
             raise Refused('家里的人屏蔽不了：watch 的 block 只在家外的对话里用，屏蔽正在跟你说话的那个人。')
+        if turn_kind(ep) != 'external':
+            # A visit, a plan or a task's report has no speaker: its person only authorizes the turn (places.visitor).
+            raise Refused('这一回合没有人在跟你说话，block 屏蔽的是正在跟你说话的那个人：等他说话的那一回合再用。')
         scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
         label = People(self.store, ep.get('persona')).speaker(scene, ep['person_id'])
         row = switches.set_switch(self.store, ep, 'block', label=label, person_id=ep['person_id'], hours=hours)

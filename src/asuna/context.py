@@ -117,7 +117,7 @@ DOC_REFS_NOTE = ('你能引用的文档小节：写文档、记想法或记感�
 THOUGHTS_NOTE = '这是你此前在这里的心里话（最近的在最后），是当时的看法，不是说出口的话。'
 # Said once in her system prompt (block_guide), not in every turn (measured 2026-10-16: in 92% of turns).
 PEOPLE_NOTE = ('叫你的人：开启这一回合的人，和排在后面 @ 你、回你的人；熟悉程度、那一档的态度，和你写过的一句话（short 是人那层的，'
-               'here 是这里那层的）。本会话里给过、还在眼前的不再给；同一个人两份都在眼前时，以后给的为准。short 是给你自己的提示，'
+               'here 是这里那层的；那层还没写 short 时给的是全文 short_body、here_body）。本会话里给过、还在眼前的不再给；同一个人两份都在眼前时，以后给的为准。short 是给你自己的提示，'
                '不是要说出口的话。完整的理解用 recall 的 person 读；没写过的人只有熟悉程度。')
 UNDERSTANDING_NOTE = ('有值得留下的理解变化时，用 understand_person 写下那一层完整的新理解（两层各自一回合最多写一次）；无需每轮更新。'
                       '本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；'
@@ -1197,6 +1197,7 @@ class ContextBuilder:
         fault=faults.her_line(self.store,scene,schedule_rules.scene_timezone(self.store.config,scene))
         if fault:
             context['fault_from_program']=fault
+            manifest.setdefault('told',{})['fault']=scene['fault'].get('at')
         if scene.get('channel_id'):
             # How her words leave on a platform, and which lines are hers to answer now (coordinator._absorb).
             from . import channel_kinds
@@ -1229,7 +1230,7 @@ class ContextBuilder:
             if unsent.get('text'):
                 # ADR-064 phase 2: words she wrote in the body of her last turn here never left; said once.
                 context['unsent_from_program']='没发出去：「%s」'%unsent['text']
-                self.store.db.scenes.update_one({'_id':scene['_id']},{'$unset':{'unsent':''}})
+                manifest.setdefault('told',{})['unsent']=unsent.get('episode_id')
         if event.get('episode_kind')=='settlement':
             from .rhythm import promotion_candidates
             from .affect import kind_label

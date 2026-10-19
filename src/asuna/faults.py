@@ -43,10 +43,21 @@ def turn_failed(store, ep, error, now=None):
 
 
 def her_line(store, scene, zone):
-    """The once-only line for her next turn where a turn of hers failed, or None; the mark is cleared."""
+    """The once-only line for her next turn where a turn of hers failed, or None. The mark stays until a turn that
+    showed it commits (`told`), so a turn that fails after it was prepared does not lose it."""
     fault = scene.get('fault')
     if not fault:
         return None
-    store.db.scenes.update_one({'_id': scene['_id']}, {'$unset': {'fault': ''}})
     from .schedule_rules import line_stamp
     return HER_LINE % (line_stamp(zone, fault.get('at')) or '刚才', fault.get('cause') or '原因不明')
+
+
+def told(store, ep):
+    """A turn ran to its end: the once-only marks its context showed (manifest `told`) are cleared, each only if it is
+    still the mark that was shown (a newer one set meanwhile stays for the next turn)."""
+    shown = (ep.get('manifest') or {}).get('told') or {}
+    if shown.get('fault'):
+        store.db.scenes.update_one({'_id': ep['scene_id'], 'fault.at': shown['fault']}, {'$unset': {'fault': ''}})
+    if shown.get('unsent'):
+        store.db.scenes.update_one({'_id': ep['scene_id'], 'unsent.episode_id': shown['unsent']},
+                                   {'$unset': {'unsent': ''}})

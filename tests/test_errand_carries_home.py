@@ -218,6 +218,11 @@ def test_a_task_begun_on_another_line_comes_home_in_the_home_conversation(store)
             'policy_epoch': 1, 'scope_key': 'scene:dm-a', 'context': {}}
     home = 'asuna-role-home'
     assert worker.resolve_role_session(turn) == home
-    # A task begun in this same conversation still continues there.
-    store.db.episodes.update_one({'_id': 'ep-line'}, {'$set': {'native_session_id': home}})
-    assert worker.resolve_role_session({**turn, '_id': 'ep-again'}) == home
+    # A task begun in this same conversation still continues its own session there: one that is not the
+    # conversation's main session, so only continuation (not the fallback to the main one) can return it.
+    store.put('sessions', {'_id': 'asuna-role-home-2', 'native_host': True, 'main_conversation': False,
+                           'lane': 'character', 'scene_id': 'dm-a', 'persona': 'P1', 'policy_epoch': 1,
+                           'character_context': None, 'cwd': 'work', 'person_id': 'A',
+                           'binding_key': 'asuna-role-home-2'}, stream='native-binding:asuna-role-home-2')
+    store.db.episodes.update_one({'_id': 'ep-line'}, {'$set': {'native_session_id': 'asuna-role-home-2'}})
+    assert worker.resolve_role_session({**turn, '_id': 'ep-again'}) == 'asuna-role-home-2'

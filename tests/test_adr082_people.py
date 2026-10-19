@@ -128,12 +128,13 @@ def test_every_entry_has_familiarity_and_stance_and_nothing_unwritten(store):
     assert not {kind for kind in audits if 'understanding' in kind or kind.startswith('people')}, audits
 
 
-def test_a_layer_written_before_shorts_shows_its_body_in_the_short_place(store):
+def test_a_layer_written_before_shorts_shows_its_body_named_as_a_body(store):
     store.init_head('relationship:A', 'person', {'body': '旧的人那层，没有 short。'}, [])
     store.init_head('relationship:A', 'scene:g1', {'body': '旧的这里那层。'}, [])
     ep, _ = turn(store, event('t-old'))
     [item] = ep['context']['people_from_program']['items']
-    assert item['short'] == '旧的人那层，没有 short。' and item['here'] == '旧的这里那层。'
+    assert item['short_body'] == '旧的人那层，没有 short。' and item['here_body'] == '旧的这里那层。'
+    assert 'short' not in item and 'here' not in item
     assert item['written_at'] == store.head('relationship:A', 'scene:g1')[1]['created_at']
     person, here = store.head('relationship:A', 'person')[0], store.head('relationship:A', 'scene:g1')[0]
     assert ep['manifest']['people_shown'] == {'A': {'person': person['revision_id'], 'here': here['revision_id']}}
@@ -375,3 +376,15 @@ def test_watch_block_blocks_the_turns_person_and_never_at_home(store):
     blocked = coordinator.tools.tool_watch(store.db.episodes.find_one({'_id': ep['_id']}), 'c2',
                                            {'op': 'block', 'hours': 2})[0]
     assert label(store, 'A') in blocked['done'] and switches.blocked(store, 'A')['_id'] == blocked['id']
+
+
+@pytest.mark.parametrize('kind', ['visit', 'scheduled', 'task_feedback'])
+def test_watch_block_is_refused_in_a_turn_nobody_spoke_in(store, kind):
+    """A visit's person only authorizes the visit (places.visitor); a plan or a report has no speaker either."""
+    lane = FakeLane(store, [FakeTurn([THINK], '在。')])
+    coordinator = Coordinator(store, lane)
+    ep = coordinator.ingest(event('t-quiet-' + kind))
+    quiet = {**store.db.episodes.find_one({'_id': ep['_id']}), 'episode_kind': kind, 'turn_kind': kind}
+    with pytest.raises(role_tools.Refused, match='这一回合没有人在跟你说话'):
+        coordinator.tools.tool_watch(quiet, 'c1', {'op': 'block', 'hours': 2})
+    assert switches.blocked(store, 'A') is None

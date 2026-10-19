@@ -118,7 +118,8 @@ When one of her turns fails in the program (FAILED_RUNTIME), nobody may be left 
 
 - def `cause` — The failure's name: its error code if it carries one, else the exception's class.
 - def `turn_failed` — Report a failed turn to the developer and mark its conversation for her next turn there.
-- def `her_line` — The once-only line for her next turn where a turn of hers failed, or None; the mark is cleared.
+- def `her_line` — The once-only line for her next turn where a turn of hers failed, or None.
+- def `told` — A turn ran to its end: the once-only marks its context showed (manifest `told`) are cleared, each only if it is still the mark that was shown (a newer one set meanwhile stays for the next turn).
 
 ## `caught_up`
 

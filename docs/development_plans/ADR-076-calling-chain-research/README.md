@@ -1,9 +1,6 @@
 # ADR-076: A research study of her calling chains, paths and prompts
 
-Status: **Proposed 2026-10-17** — the owner's request; Claude prepared the brief and the first pass after the owner
-answered Claude's questions (2026-10-17, about 15:40–16:00 NZDT). A research agent the owner starts runs it as a
-one-off case study early in the week of 2026-10-19. Its findings come back as a report and recommendations; Claude
-implements what the owner and Xiaoman agree to afterwards.
+Status: **Under review** since 2026-10-19. The study ran 2026-10-18/19 (`report.md`); the owner decided on its recommendations 2026-10-19 (§10) and everything accepted is built and live: R1 `cb006c8b`, R2/R3/R8/R9 `ea2519a8`, R4 `2bcc9ef3`/`69b668f2`, R5 `e69859e4`, R10 and stay_silent off on platforms, installed at her restart 2026-10-19 about 11:10 NZDT. Two verdicts wait on her real records, read about 2026-10-22 and written here: her platform speaking rate against the 89.8% baseline (stay_silent comes back if it rises), and summary sessions a day against 227 (R5). First written 2026-10-17 as the brief for the study.
 
 ## 1. What the owner wants
 

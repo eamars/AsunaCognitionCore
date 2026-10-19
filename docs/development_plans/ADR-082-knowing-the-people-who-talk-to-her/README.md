@@ -1,8 +1,9 @@
 # ADR-082: Knowing the people who talk to her
 
-Status: **Accepted** 2026-10-19: the owner's design, worked through with Claude and tested on her model; reviewed
-independently (Fable 5.1, `.runtime/private/adr082/review.md`) and revised; agreed with the owner and signed by her 2026-10-19
-(her nine points folded in). Not built.
+Status: **Under review** since 2026-10-19: the owner's design, worked through with Claude and tested on her model;
+reviewed independently (Fable 5.1, `.runtime/private/adr082/review.md`) and revised; agreed with the owner and signed by
+her (her nine points folded in); built `7cc6d2d4` and live from her restart at 19:16 NZDT. Her group behaviour (§9) is
+read about 2026-10-22 and the verdict written here.
 Builds on ADR-009 (one memory truth), ADR-025 (two layers), ADR-038 (fixed tool lists), ADR-056 (context delivery).
 
 ## 1. Context

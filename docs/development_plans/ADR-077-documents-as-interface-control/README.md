@@ -1,7 +1,7 @@
 # ADR-077: The current references, analysed and reshaped as interface control documents
 
 Status: **Proposed 2026-10-17** — the owner's request. It starts **after the ADR-076 research study** has reported and
-its recommendations are agreed. Claude does the analysis and the work; Xiaoman reviews and gives feedback.
+its recommendations are agreed. Claude does the analysis and the work; Xiaoman reviews and gives feedback. **Analysed 2026-10-19** (§9): the shape waits for her review of the samples and the owner's decision.
 
 ## 1. Problem
 
@@ -125,3 +125,91 @@ Signature: ____
 After the ADR-076 report and the owner's and Xiaoman's decisions on its recommendations, because those may change
 behaviour the documents describe. It is built in small batches, one document family at a time, each verified before
 the next.
+
+## 9. The analysis (2026-10-19, Claude)
+
+### 9.1 How it was run
+
+Every current reference was checked statement by statement against the code (§4 step 2), by helpers working in
+parallel under one brief (`.runtime/private/adr077/brief-facts.md`): `RUNTIME_API.md` in six slices, the other
+references in one, and the real lookups (§4 step 1) in one. Each statement got a class (interface, behaviour,
+instruction), a verdict (correct, wrong, stale, unverifiable, history) with its `file:line` evidence, and where else the
+same fact is stated; each slice also lists interfaces in the code that no reference mentions. Read only, no model
+calls. Evidence: `.runtime/private/adr077/` (the per-slice tables, `lookups.md`), about 0.55 MB, kept until this ADR
+is closed.
+
+| Slice | Statements | Wrong | Stale | History | Undocumented in the code |
+|---|---|---|---|---|---|
+| `RUNTIME_API.md` 1–41 (responsibilities, configuration) | 187 | 32 | 1 | 2 | 55 |
+| 42–264 (channel API) | ≈190 | 17 | 3 | 8 | 26 |
+| 265–306 (action capabilities, history, what a turn carries) | 258 | 27 | 3 | 3 | 80 |
+| 307–349 (people, her place in a group) | 84 | 7 | 2 | 1 | 33 |
+| 350–465 (tiered memory, media, attach and stickers) | 99 | 17 | 1 | 8 | 43 |
+| 466–570 (schedules, integration, self-development) | ≈154 | ≈35 | 1 | 3 | ≈58 |
+| The other references | 396 | 56 | 11 | 11 | 62 |
+| **Total** | **≈1,370** | **≈190** | **22** | **36** | **≈360** |
+
+### 9.2 Who reads, for which question
+
+77 distinct questions from the records (`lookups.md`): 262 Claude Code transcripts, 7 Codex sessions, 87 of her
+action-brain tasks that read references (271 reads).
+
+- **Agents mostly ask where a fact lives, not what it is.** The most frequent question, about 137 lookups: "where
+  does the document describe X, so I can update it?"; then whole-document reads to get oriented (about 57) and "does
+  anything still mention the removed name Y?" (about 33). That is the cost of a fact living in several places.
+- **She reads whole files and checks them against the code.** Five of her tasks read more than 58,000 characters (the
+  largest 93,842). Her questions follow her four turn questions (which tools in this turn, their limits, what is
+  refused, whether a refusal gives the next step).
+- **One grep can return a whole paragraph**: 17,236 characters for one refusal's wording.
+- **Five copies of `RUNTIME_API.md` were read**: the root, the packed copy, the channel copy, the installed copy and
+  the public GitHub copy. One (a channel package's ignored copy from 10-14) was stale and has been deleted.
+- **Readers went wrong** nine ways on record, among them: her usage readout said a field did not exist that does
+  (`tasks.tier.fell`); the reference contradicted itself on an image cap and on a turn rule; a security review relied
+  on "ids never reach her model", which the code did not hold; the owner swapped two relevance-gate rules spread over
+  several paragraphs.
+
+### 9.3 What it found
+
+- **About one statement in six is wrong or stale.** Most are exact facts a reader acts on: a parameter name that is
+  now refused (`kind`, `reason`, `inject`, `op` in four tools), a limit or default that changed, a list missing a member
+  (the die's seven faces, the fifth rhythm task, the `raw` fields the Host keeps).
+- **The code-to-document direction is the larger gap**, as her first feedback said. 415 refusal codes are raised in
+  `src/asuna`; 43 of them (10%) appear in `RUNTIME_API.md`. Context blocks, audit events, HTTP outcomes and record fields
+  are missing in the same way.
+- **One fact, many homes, each drifting alone.** The DSH version is stated in nine places; the persona and channel
+  contracts in four; within `RUNTIME_API.md` several rules are stated two or three times and disagree (the image cap,
+  the effort settings, where pictures may go).
+- **History in current references**: reasons, dates and "as before" in about 40 places (AGENTS.md says none).
+- **Some errors were the program's, not the document's.** The check found them and they were fixed and installed the
+  same evening (main `130e4e71`, her restart 20:15): a credential's values written into the audit in plain text; her
+  `plan` tool able to cancel her rhythms; four hints that taught calls the program refuses (`kind 写 accept`,
+  `[表情包:名字]` in text, `affect_adopt`, visibility `private`); the persona-model schema refusing four keys the core
+  declares. Two more were found and fixed the same night (on main, installed at her next
+  restart): the settings card said night stages skip while a publication waits for a restart, and the code (by design)
+  runs them; her `when_shown` hint said an item comes back to 随身 when it is used again or corrected, and by ADR-062
+  (§4.2 step 7) and the code only a rewrite that changes it does.
+- **The way a 收着 item comes back by surprise (ADR-062 §4.2) is not built**: `memorable(…, 'surprise')` has no
+  caller, and a correction supersedes the item it corrects (moves it down). That is ADR-062's to decide, not this one's.
+- **A test is not an ICD.** The two existing agreement tests (`docs/map`, `tests/test_tool_budget.py`) stop drift where
+  they reach; nothing reaches the prose of `RUNTIME_API.md`.
+
+### 9.4 What it means for the shape (§5)
+
+The analysis supports option A, and says which parts to generate first:
+
+1. **Her tools, by turn** (her reading order): for each place and turn kind, the tools she has, each with its
+   parameters as she is shown them, their limits, when it is not available and the words she then reads, and the words
+   of every refusal, marked where a refusal gives no next step. Generated from `role_tools`.
+2. **Refusal codes**: every code with its words, who reads it (her, the action brain, an adapter, the operator) and
+   where it is raised. Generated from the source.
+3. **Context blocks**: each `_from_program` block, when it comes, its fields, and the guide line she reads for it.
+4. **The channel API**: endpoints, envelopes, outcomes and codes (adapters' agents read it).
+5. **Short prose for behaviour**, one section per subsystem, each fact stated once; other documents link to it.
+
+The agreement test runs both ways and blocks the commit: a generated page that is not what the generator writes now
+fails; prose that names a code, tool, option or block the code does not have fails; a code, tool or block the code has
+and no page lists fails. Generated pages say at the top that they are generated and where to edit instead.
+
+Samples for her review (§6), built from the code: `.runtime/private/adr077/samples/` — `tools-group.md` and
+`tools-home.md` (her tools in a group and at home, with their refusals; 10 and 11 refusals flagged as giving no next
+step) and `errors.md` (113 codes with their words, by module). The final version is one page per turn kind.

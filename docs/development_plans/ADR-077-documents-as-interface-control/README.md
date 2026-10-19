@@ -1,6 +1,6 @@
 # ADR-077: The current references, analysed and reshaped as interface control documents
 
-Status: **Proposed 2026-10-17** — the owner's request. It starts **after the ADR-076 research study** has reported and
+Status: **Archived 2026-10-20, superseded by [ADR-083](../ADR-083-runtime-api-as-icd/README.md).** The plan below grew into code (generators, an agreement test, a hook) for a documentation job; the owner reset it. The analysis (§9) and the corrections it led to stand. **Proposed 2026-10-17** — the owner's request. It starts **after the ADR-076 research study** has reported and
 its recommendations are agreed. Claude does the analysis and the work; Xiaoman reviews and gives feedback. **Analysed 2026-10-19** (§9); reviewed independently (Claude Opus 5.5, a subagent that built none of it; `.runtime/private/adr-review/review-1.md`) (§10). Before the shape is decided: the samples regenerated from the runtime, her review, the owner's choice of the commit gate, and the batch correcting the wrong facts.
 
 ## 1. Problem

@@ -5,7 +5,7 @@ item. The program never rewrites an item's text; beside it, in the collection `m
 the item's place (随身 carried in every turn where it is readable, 手边 at hand: found by a turn about it or by
 `recall`, 收着 put away: found by `recall` only), when it was last memorable and its stay. A 随身 item lapses to 手边
 when its stay runs out; each memorable moment (recall returned it, a rewrite that changed it, its `doc:` ref cited, a
-second conversation it came up in, a correction touching it) starts the stay again and, once per stay, doubles the
+second conversation it came up in, a near-duplicate met from another conversation) starts the stay again and, once per stay, doubles the
 next. A store over its count cap lapses its least recently memorable item. Memories (`self`, running records) cool to
 收着 by disuse; facts (persona, voice, ledgers, group notes, `core`) never do: a correction or a merge supersedes
 them. Every move is one row `move` and one audit line `memory.moved`, and is told once in each conversation that can
@@ -61,8 +61,7 @@ JOURNAL_COOL_DAYS = 30
 AGE_WORDS = ((1, '刚写的'), (7, '这几天'), (14, '前阵子'), (45, '上个月'), (None, '更早'))
 COUNT_WORDS = ((0, '没有'), (3, '几条'), (9, '好几条'), (19, '十几条'), (99, '几十条'), (None, '很多条'))
 REASONS = {'stay': '一阵子没用到', 'overflow': '随身满了', 'cooled': '很久没用', 'let_go': '你放手了',
-           'superseded': '被更正替换', 'merged': '合并了', 'gist_skipped': '两晚没写意思', 'rewritten': '你改写了它',
-           'surprise': '被更正碰到了'}
+           'superseded': '被更正替换', 'merged': '合并了', 'gist_skipped': '两晚没写意思', 'rewritten': '你改写了它'}
 MOVED_SHOWN = 5
 FLOOR, OWN_SLOTS, SLOTS = 0.83, 2, 6     # her own items: two of a turn's six memory slots, above an absolute floor
 HEADINGS_SHOWN = 8
@@ -268,15 +267,13 @@ class Tiers:
         return [move for move in moves if move]
 
     def memorable(self, row, why, moment=None, *, scene_id=None):
-        """A memorable moment: the stay starts again from now and, once per stay, the next one doubles. A surprise
-        brings an item put away back to hand."""
+        """A memorable moment: the stay starts again from now and, once per stay, the next one doubles. It never moves
+        the item: only a changed rewrite brings one back up (ADR-062 §11)."""
         moment = moment or _now()
         fields = {'memorable_at': _iso(moment), 'last_use_at': _iso(moment), 'last_moment': why}
         if not row.get('doubled'):
             fields.update(stay_days=min(STAY_CAP_DAYS, float(row.get('stay_days') or STAY_DAYS) * 2), doubled=True)
         self.rows.update_one({'_id': row['_id']}, {'$set': fields, '$inc': {'uses': 1}})
-        if why == 'surprise' and row['place'] == PUT_AWAY:
-            self.move(row, AT_HAND, 'surprise', moment, scene_id=scene_id)
 
     PER_DOC = ('ledger', 'group_notes', 'self', 'core')
 

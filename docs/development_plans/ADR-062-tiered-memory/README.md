@@ -1,7 +1,7 @@
 # ADR-062: Tiered memory: down by default, kept up by use, details fade into gist
 
 Status: **Built, switched on 2026-10-14** at her quiet restart, after she had written her self as items and her
-first 12 core sentences (§7). Accepted 2026-10-13 (the owner's finding and direction; the design by Claude, building
+first 12 core sentences (§7). The surprise path was dropped 2026-10-20 (§11). Accepted 2026-10-13 (the owner's finding and direction; the design by Claude, building
 on Claude's earlier proposal and the owner's). She answered all nine questions (2026-10-13 evening, §9) and they are
 built: phase 0, the phase 1 pilot and phase 2 (`memory_tiers.ENABLED`). ADR-063, its gate, is done.
 
@@ -258,7 +258,7 @@ program never rewrites an item's text; it keeps beside it:
     tool call; it was surfaced to her in two or more different conversations (one conversation echoing itself counts
     nothing, so what is shown does not keep itself);
   - *surprise*: a `correction`, a `replace_section` that changes its meaning, or a dialogue summary's correction
-    pointing at its subject;
+    pointing at its subject (dropped 2026-10-20, never wired: §11);
   - *repetition from several sides*: the same idea written or met in different conversations or from different people
     (the index's near-duplicate across scenes);
   - *feeling at the time*, a tie-breaker only: a `feel` in the turn that wrote it (5% of her turns record one).
@@ -560,7 +560,7 @@ finding: the trigger, the clock, and a group's mute line while she is muted ther
 - refusals for length on her stores (goal: zero within a week of phase 2; today 17 budget refusals on the persona
   document, and `SELF_STATE_TOO_LARGE` on `current_self`; if they do not reach zero, the cap is still doing the
   forgetting, not memorability);
-- moves per day by reason; how many lapsed items came back within a week by her rewrite or a surprise (the "regret
+- moves per day by reason; how many lapsed items came back within a week by her rewrite (the "regret
   rate"; a high rate means stays are too short); gists written vs skipped twice; `let_go` uses;
 - rewrites per item per week in 随身 (a flat line is a habit; a jump right after a lapse notice is hoarding, and the
   notice then stops naming that item); which memorable moments kept items up, by kind (feeling is expected rare);
@@ -653,3 +653,26 @@ still over, the default lapses as before. More than one over lapses by the rule 
 item for one turn at most. Cost: one line, only while a store is over. Her own rule for using it (Claude's paraphrase):
 choosing is not a duty; not choosing loses nothing, and choosing every time to look tidy would be self-curation by
 another door. The owner's yes: "we build whatever she wants" (about 16:10 NZDT).
+
+## 11. The surprise path, dropped (owner, 2026-10-20)
+
+§4.1 named *surprise* as a memorable moment that could bring a 收着 item back to 手边. Phase 2 step 1 (`e4f5a47d`,
+2026-10-13) built the receiving end (a `surprise` branch in `memorable()`), and nothing ever called it; nothing
+recorded why. Its three triggers had each been taken by another mechanism, or had no signal:
+
+- **a correction** is supersession: the correcting item is new and carried, the corrected one goes 收着. Bringing
+  the corrected item back would undo that.
+- **a rewrite that changes meaning** is the changed rewrite, which brings the item back to 随身, further than
+  surprise would.
+- **a summary's correction pointing at its subject** has nothing to connect to: summaries correct speaker labels, not
+  her items, and linking a summary to an item would mean the program judging what was said, which this ADR refused
+  for a similar signal (a correction thread that upholds an item).
+
+Dropped by the owner on Claude's recommendation, "open for future diagnosis": the dead branch and its reason word
+are removed. A memorable moment keeps an item from fading and never moves it; only her changed rewrite brings one
+back up, as her `when_shown` hint says.
+
+**What would reopen it:** items that stay 收着 while she keeps needing them. The signal is in `memory_tiers` rows
+`item`: a 收着 item whose `recalled_in` names two or more conversations within 30 days. Each such recall finds it,
+and it still stays put away. Read with the regret rate in §7. If such items keep turning up, a way back to hand
+by use is missing. That would be a new design of its own, not this branch revived.

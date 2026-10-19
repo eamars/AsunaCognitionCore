@@ -66,7 +66,7 @@ description: 我每七天跑一次的「用量读数」：读三张表——① 
 - `tier.rest` 审计：`stream_id` 固定 `action-tiers`，payload `reason, until`，恢复时 `{over: true}`。
 - 库里那条路只在 `tier.ran=="高"` 时才有落档可言，低档不会有落档记录。
 - 现状每次现读、读的那一刻报数：带 `tier` 的任务几件、其中 `tier.fell` 几件、审计 `tier.fell`／`tier.rest` 各几行——**「没落过档」和「没这个字段」是两回事**，报数时别混。
-- 文档字面在 `RUNTIME_API.md` 讲 delegate 分档那段。
+- 文档字面在 `RUNTIME_API.md` → Configuration → Model routes 的 `actionHigh`（高档那条路，默认 off）与 `idleMinutes`（`action`／`actionHigh` 歇多久之后续跑换新上下文；在 `actionHigh` 上还管那条线失败之后歇多久）两行。旧那句「讲 delegate 分档那段」已失效：新文档全文 `delegate` 0 命中。
 - v2 列的「未验：开工时 `high rests`（`at_dispatch`）那条路有没有 audit」——本次读代码已答：**没有**，上面那三条就是答案。
 
 **② 会话种类认法：按目录名前缀，不按 `agentPreset`**

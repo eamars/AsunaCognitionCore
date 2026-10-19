@@ -18,7 +18,7 @@ scene_kinds: [home, group]
 ## 前提与授权
 
 - 需要 owner 集成授权。`import_integration_artifact` 属 managed integration 组，**QQ 任务的授权里不带它**
-  （RUNTIME_API §tools）；这条流程只能跑在有该授权的本机 owner 任务里。
+  （RUNTIME_API.md → Action capabilities → §Tools a task is given）；这条流程只能跑在有该授权的本机 owner 任务里。
 - 生图请求只能在集成进程里发：`/integration/config.json` 只有受管理集成进程可读；普通 `sandbox_run` 完全无网络，
   `integration_test` 只允许配置内的 TCP 转发。探测脚本写进 **napcat-qq 通道包候选的 `integration/`**
   （`development_write` 带 `project: "napcat-qq"`），`integration_test` 把候选的 `integration/` 冻结成只读 `/app`
@@ -477,7 +477,7 @@ v7（2026-10-16）：补上改图通路——`generate_image` 的 `source_image`
 步骤 1 的 2026-10-04 路由读数标注为当时口径。`check_skill.py` 同改：新增改图一节与字面量判据，`九条路线全是 t2i` 进过期说法守卫。
 事实来自 2026-10-16 09:16 现场验收与 09:18 `list_routes` 只读复核（没画图、没发 QQ）。
 
-v6（2026-10-14）：与 ADR-064 phase 2（REPLY_PARTS）对齐——QQ（napcat）的 channel kind 声明了 reply parts，那一轮她只通过 speak 说话，speak 取代 quote、await_answer、attach_image（认知核 `RUNTIME_API.md` §Claim public output 与 `role_tools.py` 的 `REPLY_KINDS`/`REPLY_REPLACES`）；QQ 私聊与群发图改成 speak 的 picture 那一项（artifact_id 照抄 image_artifacts_from_program、可以不带话、有一条 part 不对整批不排队）。没声明 REPLY_PARTS 的对话（比如另一条线在做的 QQ 官方 Bot 通道）仍列 attach_image，它的参数、拒绝码与「一回合至多一张」都没变。`check_skill.py` 判据同改：押两条路的说法在不在，不再押裸字面量 attach_image 的在/不在。事实来自 2026-10-14 对 core 候选 `role_tools.py`（88-90、590-591、697-698）与 `RUNTIME_API.md:164` 的只读复核。
+v6（2026-10-14）：与 ADR-064 phase 2（REPLY_PARTS）对齐——QQ（napcat）的 channel kind 声明了 reply parts，那一轮她只通过 speak 说话，speak 取代 quote、await_answer、attach_image（认知核 `RUNTIME_API.md` §Claim public output 与 `role_tools.py` 的 `REPLY_KINDS`/`REPLY_REPLACES`）；QQ 私聊与群发图改成 speak 的 picture 那一项（artifact_id 照抄 image_artifacts_from_program、可以不带话、有一条 part 不对整批不排队）。没声明 REPLY_PARTS 的对话（比如另一条线在做的 QQ 官方 Bot 通道）仍列 attach_image，它的参数、拒绝码与「一回合至多一张」都没变。`check_skill.py` 判据同改：押两条路的说法在不在，不再押裸字面量 attach_image 的在/不在。事实来自 2026-10-14 对 core 候选 `role_tools.py`（88-90、590-591、697-698）与 `RUNTIME_API.md:164` 的只读复核。（旧版行号锚；ADR-083 重排后该节是 §Claim public output，行号锚已失效）
 
 v5（2026-10-10）：步骤 7 从「可选／看不到自己刚生成的图」改成必须用 `read_image` 拿 `artifact_id` 亲眼看一遍再交，
 「未做视觉复核」降为失败分支（只有真读不到才这么写，并写清是哪种红）；步骤 1 补「先按目标选路由」（anime fallback 默认、照片感写进 prompt、CFG 1 的路由不吃 `negative_prompt`）；
@@ -527,7 +527,7 @@ v1（2026-10-04）：首次记录。步骤、错误码、大小与路由事实�
 
 2026-10-14（v6 这一轮，只改本技能文件与 `check_skill.py`，**没生成图、没发 QQ、没改 core、没发布前的我不动适配器**）：
 
-- 只读复核 core 候选：`role_tools.py` 的 `REPLY_KINDS = ('text', 'sticker', 'picture', 'poke', 'react')`、`REPLY_REPLACES = ('quote', 'await_answer', 'attach_image')`（88-90）；attach_image 仍挂在没声明 reply parts 的对话（590-591 随本轮清单进表、697-698 按 `outbound_media.target_allowed` 进表）；`RUNTIME_API.md:164`：声明 REPLY_PARTS 的 channel kind 里她只通过 speak 说话，picture 那一项「names an artifact in image_artifacts_from_program and may leave without words」，所有 parts 先全查、有一条不对一条都不排队，回执点名哪条为什么。
+- 只读复核 core 候选：`role_tools.py` 的 `REPLY_KINDS = ('text', 'sticker', 'picture', 'poke', 'react')`、`REPLY_REPLACES = ('quote', 'await_answer', 'attach_image')`（88-90）；attach_image 仍挂在没声明 reply parts 的对话（590-591 随本轮清单进表、697-698 按 `outbound_media.target_allowed` 进表）；`RUNTIME_API.md` §Claim public output（`REPLY_PARTS` 这一项本身在 §Kind module）：声明 REPLY_PARTS 的 channel kind 里她只通过 speak 说话，picture 那一项「names an artifact in image_artifacts_from_program and may leave without words」，所有 parts 先全查、有一条不对一条都不排队，回执点名哪条为什么。
 - `check_skill.py`：`attach_tool`（裸字面量）与 frontmatter 的 `description_mentions_attach_image` 换成两条路的判据（「speak 的 picture」「别处列着 attach_image」必须在，裸字面量 attach_image 不再被要求在或不在）；新增步骤 8 节内 speak+picture 的切片检查与 stale 守卫「`那一轮调用 attach_image`」（反引号外裸写回散文才红）。实跑结果见行动报告。
 - `check_skill.py` 的编译产物从系统临时目录挪到 cwd 下 `skillcheck-tmp`（跑完删）：development_run 沙箱里系统 temp 不可写，2026-10-14 实测红在 `PermissionError`——「沙箱别用 tempfile」这条就是这么撞上的。
 
@@ -551,6 +551,7 @@ v1（2026-10-04）：首次记录。步骤、错误码、大小与路由事实�
 - 观察（本次不改，core 自己的文本）：core 根 `RUNTIME_API.md` 的「Sending an image with her words」一节
   还写着 DECIDE 时代的「She may answer with `attach: [...]`」，而同文件的回合工具列表已经是 `attach_image`。
   本技能按核代码的真实形状教；那句旧文本留给 core 侧决定。
+  2026-10-20 补：该节在 ADR-083 重排后已不存在，新文档对应节是 §Sending pictures；旧文本 `attach: [...]` 在新文档全文 0 命中（这条历史记录本身保留）。
 - `check_skill.py` 同步改口径（`attach_image` 清单与拒绝码、退役说法进散文判红），实跑结果见行动报告；
   compileall 通过，`__pycache__` 已清。
 
@@ -560,7 +561,7 @@ v1（2026-10-04）：首次记录。步骤、错误码、大小与路由事实�
   `offer` / `accept_artifact` / `serve` / `register_imported_image` / `history_slot`）、`decide_delta._attach`
   的判定顺序、`channels.attachment` 的 403 码、`context.py`（`image_artifacts_from_program` 挂在 media 块，
   方向不对或没图就不写这个键）、`decision-delta.schema.json`（`attach` `maxItems: 1`、`artifact_id` 必填 ≤200、`why` ≤300、无额外字段）、`stage_decide.md` / `stage_speak.md`、`RUNTIME_API.md` 的
-  §Claim public output / §Fetch attachment bytes / §Sending an image with her words。
+  §Claim public output / §Fetch attachment bytes / §Sending pictures。
 - core 侧离线自检实跑：`python3 -B tools/outbound_image_offline_check.py` → `33/33 通过`、exit 0。
   里面正好覆盖我写进技能的每条红：`decide_attach_rejects_artifact_not_offered_this_turn`
   （`ATTACH_ARTIFACT_NOT_IN_CONTEXT`）、`decide_attach_refuses_group_and_non_owner_private_deterministically`

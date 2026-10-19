@@ -150,13 +150,14 @@ def _lengths(calls):
 
 
 def _turn_shape(calls):
-    from .role_tools import CALLS_PER_TURN
+    from .role_tools import CALLS_HARD, CALLS_USUAL
     per = collections.Counter(c.get('stream_id') for c in calls)
     sizes = sorted(per.values())
     before_think = sum(1 for c in calls if '先用 think' in str(c['payload'].get('refused') or ''))
     return {'turns': len(sizes), 'calls_middle': statistics.median(sizes) if sizes else 0,
-            'calls_most': max(sizes) if sizes else 0, 'cap': CALLS_PER_TURN,
-            'at_cap': sum(1 for n in sizes if n >= CALLS_PER_TURN), 'refused_before_think': before_think}
+            'calls_most': max(sizes) if sizes else 0, 'usual': CALLS_USUAL, 'hard': CALLS_HARD,
+            'past_usual': sum(1 for n in sizes if n > CALLS_USUAL), 'at_hard': sum(1 for n in sizes if n >= CALLS_HARD),
+            'refused_before_think': before_think}
 
 
 def _action_brain(store, since, until):

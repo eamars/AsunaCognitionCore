@@ -153,8 +153,9 @@ def test_one_wrong_part_sends_nothing_and_says_which(store, monkeypatch):
     assert '第 4 条：一个 text 就是一条消息' in refused and refused.endswith('改好再调用一次 speak。')
     assert results[1][1] and results[2][1]
     assert not results[3][1] and '已经发过一样的' in results[3][0], 'the same text twice in one turn'
-    assert not results[4][1] and '最多 2 行' in results[4][0], 'her speak.max_messages counts lines across calls'
-    assert [r['text'] for r in outbound(store, ep['_id'])] == ['一', '二']
+    # Past her usual (speak.max_messages) it is sent and the result gives the numbers (ADR-084).
+    assert results[4][1] and results[4][0]['lines'] == '这回合已说 3 行（你平时 2 行以内，硬线 6）'
+    assert [r['text'] for r in outbound(store, ep['_id'])] == ['一', '二', '三']
 
 
 def test_words_outside_reply_never_leave_come_back_once_and_are_told_next_time(store, monkeypatch):
@@ -224,12 +225,13 @@ def test_lines_count_in_every_message_blank_lines_and_code_do_not(store, monkeyp
     channel_scene(store, monkeypatch)
     code = '看这个：' + chr(10) + '```' + chr(10) + 'print(1)' + chr(10) + 'print(2)' + chr(10) + '```'
     two = '第一行' + chr(10) + chr(10) + '第二行'
-    _, ep, lane = turn(store, calls=[said(two), said('第三行', '第四行'), said(code)])
+    _, ep, lane = turn(store, calls=[said(two), said('第三行', '第四行'), said(code), said('第七行')])
     results = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'speak']
-    assert results[0][1], 'a blank line is not a line'
-    assert not results[1][1] and '第 2 条有 1 行（前面已经 3 行）' in results[1][0], 'two lines in one message count as two'
-    assert not results[2][1], 'a code block is one line, its words another: over 3'
-    assert [r['text'] for r in outbound(store, ep['_id'])] == [two]
+    assert results[0][1] and results[0][0]['lines'].startswith('这回合已说 2 行'), 'a blank line is not a line'
+    assert results[1][1] and results[1][0]['lines'].startswith('这回合已说 4 行')
+    assert results[2][1] and results[2][0]['lines'].startswith('这回合已说 6 行'), 'a code block is one line, its words another'
+    assert not results[3][1] and '第 1 条有 1 行（前面已经 6 行）' in results[3][0], 'the hard line, 6'
+    assert [r['text'] for r in outbound(store, ep['_id'])] == [two, '第三行', '第四行', code]
 
 
 def test_where_only_speak_speaks_silence_is_not_calling_it_and_the_guide_says_so_once(store, monkeypatch):
@@ -262,7 +264,7 @@ def test_only_a_platform_turn_is_told_how_its_words_leave(store, monkeypatch):
     channel_scene(store, monkeypatch)
     _, replying, _ = turn(store, key='replying')
     sent = replying['context']['speak_from_program']['sent']
-    assert sent.startswith('一回合 speak 的 text') and '最多 3 行' in sent and '一个代码块算一行' in sent
+    assert sent.startswith('一回合 speak 的 text') and '平时 3 行以内，硬线 6 行' in sent and '一个代码块算一行' in sent
 
 
 def test_where_words_are_speech_everything_she_wrote_is_one_message(store):
@@ -285,3 +287,18 @@ def test_the_line_cap_counts_only_lines_that_left_or_may_still_leave(store):
                                'reply_part': True, 'delivery_state': state, 'text': '第%d句\n第二行' % index,
                                **({'sticker': {'kind': 'market'}} if state == 'QUEUED_EXTERNAL' else {})}, stream='ep-lines')
     assert role_tools.spoken(store, {'_id': 'ep-lines'}) == (4, ['第0句 第二行', '第4句 第二行'])
+
+
+def test_tool_calls_past_the_usual_carry_the_numbers_and_the_hard_line_ends_the_turn(store, monkeypatch):
+    """ADR-084 step 7 (owner and her, 2026-10-20): from the 10th call each result gives the numbers; the 24th is refused
+    with the warning that the next is the last; the 25th runs and the turn ends after it, so a loop stops."""
+    store.config['persona_model'] = model(3)
+    channel_scene(store, monkeypatch)
+    thoughts = [('think', {'thought': '再想一下 %d' % index}) for index in range(30)]
+    _, ep, lane = turn(store, calls=thoughts)
+    rows = [(row[4], row[5]) for row in lane.tool_results]
+    assert len(rows) == 25, 'nothing runs after the 25th'
+    assert 'calls' not in rows[8][0] and rows[9][0]['calls'] == '这回合第 10 次工具调用（提醒线 9，硬线 24，还剩 14 次）'
+    assert rows[20][0]['calls'].endswith('还剩 3 次），先想清楚哪一步不做')
+    assert not rows[23][1] and '到了硬线（24）' in rows[23][0] and '下一次是最后一次' in rows[23][0]
+    assert rows[24][1] and rows[24][0]['ended'].startswith('这回合的工具调用过了硬线（24）')

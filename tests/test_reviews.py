@@ -113,7 +113,7 @@ def test_refusals_say_what_they_cost_and_a_lookup_task_is_counted(store):
     ideas = next(item for item in out['refused'] if item['tool'] == 'ideas')
     assert ideas['times'] == 1 and ideas['retried'] == 1 and out['lengths']['over'] == {'ideas': 1}
     assert out['looking_things_up'] == {'this_week': 1, 'week_before': 0}
-    assert out['turn_shape']['cap'] > 0, 'a limit is shown at its current value'
+    assert out['turn_shape']['usual'] == 9 and out['turn_shape']['hard'] == 24, 'the lines at their current values'
 
 
 def test_a_self_evaluation_beat_carries_the_review_and_nine_days_bring_it_to_any_home_beat(store, monkeypatch):

@@ -37,7 +37,11 @@ THOUGHT_CHARS = 300                  # what she is asked for; a longer thought i
 # A field a refusal names, by the name she is shown (ADR-060).
 _SHOWN = {'body': 'content', 'reason': 'why', 'sid': 'section', 'line': 'place'}
 RECALLS_PER_TURN = 3
-CALLS_PER_TURN = 12
+# ADR-084 step 7 (owner and her, 2026-10-20): a turn's tool calls and spoken lines have a usual and a hard line. Past the
+# usual each result gives the numbers (hers: numbers, not judgement); the hard lines catch only loops and model
+# failure. The 24th call is refused with the warning; the 25th runs and the turn ends after it.
+CALLS_USUAL, CALLS_HARD = 9, 24
+SPEAK_HARD_LINES = 6
 IDEAS_PER_TURN = 3
 IDEA_CHARS = 500
 IDEAS_PAGE = 20                 # one page of her notebook (ideas op read pages and searches the rest)
@@ -122,8 +126,11 @@ PART_FIELDS = {'text': ('text',), 'sticker': ('name',), 'picture': ('artifact_id
 SPEAK_HEAD = 'parts 按顺序，一个 part 是单独的一条消息，kind 选 '
 SPEAK_RECALL = 'recall 只撤你自己的话（还没发出去的就取消），撤别人的用 group_action。'
 SPEAK_TAIL = '有一条不对，这次一条都不发，回执说哪条、为什么。不想说话就不调用。'
-CALL_CAP = '这回合的工具调用已经到上限（%d 次）：这回合先到这里，%s'
-CAP_SAYS, CAP_SPEAKS = '写下要说的话或用 stay_silent 结束。', '不再调用工具，这一回合就结束了。'
+CALLS_WORDS = '这回合第 %d 次工具调用（提醒线 %d，硬线 %d，还剩 %d 次）'
+CALLS_FEW = '先想清楚哪一步不做'
+CALL_LAST = '这回合第 %d 次工具调用，到了硬线（%d）：这次不做。下一次是最后一次，照做，做完这回合就结束；%s'
+CAP_SAYS, CAP_SPEAKS = '用它写下要说的话，或 stay_silent。', '用它 speak 把要说的说完。'
+CALLS_ENDED = '这回合的工具调用过了硬线（%d），回合到这里结束。'
 from .capabilities import CANNOT as LEG_CANNOT, WORDS as LEG_WORDS      # her words for a function not carried here
 # What speak carries itself where it is listed; and where only speak speaks, a turn that does not call it is silent,
 # so stay_silent has nothing left to do there (owner 2026-10-19; at home body text is speech and it stays).
@@ -1194,12 +1201,20 @@ class RoleTools:
                 raise Refused(not_now(self.store, ep, can))
             if name != 'think' and not ep.get('turn_thought'):
                 raise Refused('先用 think 写下这回合的心里话，再做别的。')
-            if len(ep.get('tool_calls') or {}) >= CALLS_PER_TURN:
+            made = len(ep.get('tool_calls') or {}) + 1                # this call's number in the turn
+            if made == CALLS_HARD:
                 from . import channel_kinds
-                raise Refused(CALL_CAP % (CALLS_PER_TURN, CAP_SPEAKS if channel_kinds.reply_parts(ep['scene_id'])
-                                          else CAP_SAYS))
-            self.over = []
-            result, conclude = getattr(self, 'tool_' + can.replace('.', '_'))(ep, call_id, args)
+                raise Refused(CALL_LAST % (made, CALLS_HARD, CAP_SPEAKS if channel_kinds.reply_parts(ep['scene_id'])
+                                           else CAP_SAYS))
+            if made > CALLS_HARD + 1:                                 # the last one was refused: nothing more runs
+                result, conclude = {'ended': CALLS_ENDED % CALLS_HARD}, True
+            else:
+                self.over = []
+                result, conclude = getattr(self, 'tool_' + can.replace('.', '_'))(ep, call_id, args)
+                if made > CALLS_HARD:
+                    conclude = True
+                    if isinstance(result, dict):
+                        result = {**result, 'ended': CALLS_ENDED % CALLS_HARD}
         except Refused as exc:
             self._record(ep_id, call_id, name, args, refused=str(exc), called_as=called_as, olds=olds)
             if ep.get('errand'):
@@ -1211,6 +1226,10 @@ class RoleTools:
             raise Refused('%s（%s）' % (message, ERRAND_MARK) if ep.get('errand') else message) from None
         if self.over and isinstance(result, dict):
             result = {**result, 'length': '；'.join(self.over)}
+        if CALLS_USUAL < made <= CALLS_HARD and isinstance(result, dict):
+            left = CALLS_HARD - made
+            result = {**result, 'calls': CALLS_WORDS % (made, CALLS_USUAL, CALLS_HARD, left)
+                      + ('，' + CALLS_FEW if left <= 3 else '')}
         if called_as and isinstance(result, dict):
             result = {**result, 'renamed': rename_note(called_as)}
         if old_names and isinstance(result, dict):
@@ -1524,7 +1543,7 @@ class RoleTools:
                     numbered = True
                     problems.append('第 %d 条里%s，这里的人看不懂：写名字，或 @ 整个标签' % (index, '，'.join(
                         '「%s」是 %s 的编号' % found for found in people.numbers(scene, text))))
-                elif lines + chat_lines(text) > most:      # lines: this turn's, earlier calls and this one so far
+                elif lines + chat_lines(text) > SPEAK_HARD_LINES:    # this turn's lines that left, and this call's
                     over.append('第 %d 条有 %d 行' % (index, chat_lines(text)) + ('（前面已经 %d 行）' % lines if lines else ''))
                 else:
                     texts.append(same)
@@ -1582,8 +1601,8 @@ class RoleTools:
         if wait == 'question' and not any(row['kind'] == 'text' for row in planned):
             problems.append('wait=question 要有一个 text 写问题')
         if over:
-            problems.append('text 一回合最多 %d 行（你的 speak.max_messages；每一行都算，空行不算，一个代码块算一行）：%s'
-                            % (most, '；'.join(over)))
+            problems.append('text 一回合到硬线 %d 行为止（你平时 %d 行以内；每一行都算，空行不算，一个代码块算一行）：%s'
+                            % (SPEAK_HARD_LINES, most, '；'.join(over)))
         if problems:
             raise Refused('这次一条都没发：%s。改好再调用一次 speak。' % '；'.join(problems)
                           + ('真是别的数（PR 号之类），原样加 force=yes 再调用一次。' if numbered else ''))
@@ -1606,6 +1625,9 @@ class RoleTools:
                                                           'calls': int(before.get('calls') or 0) + 1})
         from .capabilities import numbered as shows_numbers
         out = {'note': reply_receipt(queued, shows_numbers(self.store, scene)) if queued else '这次没发新的。'}
+        if any(part['kind'] == 'text' for part in planned):
+            # Her budget reminder (ADR-084): the turn's lines so far, in numbers.
+            out['lines'] = '这回合已说 %d 行（你平时 %d 行以内，硬线 %d）' % (lines, most, SPEAK_HARD_LINES)
         if quoted:
             out['quoted'] = QUOTED % People(self.store, ep['persona']).pointed(scene, quoted)
         taken_back = [RECALL_QUEUED % item['seq'] for item in planned if item.get('recall_seq')] + cancelled

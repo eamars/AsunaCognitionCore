@@ -46,7 +46,7 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
 
 # ADR-018 §5.7 (owner 2026-10-07): one sentence in public turns. No content from her other conversations.
 # ADR-064 phase 2: where she speaks only through reply.
-REPLY_SENT=('一回合 speak 的 text 加起来最多 %d 行：每一行都算，不管分成几条消息；'
+REPLY_SENT=('一回合 speak 的 text 加起来平时 %d 行以内，硬线 %d 行：每一行都算，不管分成几条消息；'
             '空行不算，一个代码块算一行；贴纸、图、戳、点表情不算。')
 ONE_SELF = '你是一个人，同时在好几个对话里；在这里说的话，就是你说的。'
 # ADR-079 §9.5: the one line of a turn where others spoke after the line that called her.
@@ -1201,11 +1201,12 @@ class ContextBuilder:
         if scene.get('channel_id'):
             # How her words leave on a platform, and which lines are hers to answer now (coordinator._absorb).
             from . import channel_kinds
+            from .role_tools import SPEAK_HARD_LINES
             replying=bool(channel_kinds.reply_parts(scene['_id']))
             most=int(effective(model,'speak.max_messages',policy) or 1)
             # How her words leave is said once, in her turn guide for this place (render: speaks); here only the
             # number that is this turn's.
-            speak={**({'sent':REPLY_SENT%most} if replying else {}),
+            speak={**({'sent':REPLY_SENT%(most,SPEAK_HARD_LINES)} if replying else {}),
                    'new_lines':'这段对话里新来的话——包括你这回合中途才到的——你看见了就算你接住了：'
                                '要回就在这回合一起回，它们不会再单独叫你一次。'}
             # Her channel lost or regained a function she uses: said once here, at this turn (ADR-079 §9.7).

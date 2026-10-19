@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """asuna-usage-readout 的零依赖离线自检（只查文件本身，不读会话记录、不连库）。
 
-查七件事：文件结构（frontmatter、章节、LF 换行、脚本能编译）＋读数脚本 `usage_readout.py` 在、且它的 `--selfcheck`（不读盘不连库的纯逻辑模式）真跑通；来源／口径字面与六格口径（v3：① 落档件数
+查七件事：文件结构（frontmatter、章节、LF 换行、脚本能编译）＋读数脚本 `usage_readout.py` 在、且它的 `--selfcheck`（不读盘不连库的纯逻辑模式）真跑通、脚本本体里跨帧解那一格还在（`read_across_frames=True` 写在 `stream_reader` 那一行）；来源／口径字面与六格口径（v3：① 落档件数
 只从字段数、② 跨类拷贝去重四条、③ 反思回合已核）都在；三张表（含标明「不是正式读数」的样例表）与硬规矩
 都在；v1／v2 已被核掉的旧字面不残留（含 2026-10-23 v2、未逐条核、0 样本、写死的 484／7 件）；版本与试用
 记录按写就时刻标、另起一行标计划首次真跑；不带个人信息（私密名单命中只报类别与行号，名单配不上、或名单在
@@ -37,6 +37,7 @@ FACTS = [
     ("src_path", ".runtime/adr008/home/sessions/"),
     ("src_file", "session.v4.jsonl.zstd"),
     ("src_zstandard", "zstandard"),
+    ("src_read_across_frames", "read_across_frames=True"),
     ("src_development_run", "development_run"),
     ("src_project_core", "project=core"),
     ("src_message_row", "assistant/message"),
@@ -449,6 +450,20 @@ def main():
         except Exception as exc:                            # noqa: BLE001
             check("readout_script_runs", False,
                   "起不了子进程（%s: %s）——没真跑，不是跑过了" % (type(exc).__name__, exc))
+    # 跨帧解那一格要在脚本本体里才算数：上面 FACTS 里的 src_read_across_frames 查的是正文那句，
+    # 这一格查 usage_readout.py 真把 read_across_frames=True 写在了 stream_reader 那一行上
+    # （写法照 FACTS：只有真写了才会出现的字面；退回默认就红）。
+    try:
+        with open(readout, encoding="utf-8") as handle:
+            readout_source = handle.read()
+    except OSError as exc:                                  # noqa: BLE001 读不到就红，不放行
+        readout_source = ""
+        notes.append("NOTE 读不了 usage_readout.py（%s: %s）" % (type(exc).__name__, exc))
+    cross_frame = [line for line in readout_source.splitlines()
+                   if "stream_reader(" in line and "read_across_frames=True" in line]
+    check("readout_reads_across_frames", bool(cross_frame),
+          "usage_readout.py 里没有哪一行同时写着 stream_reader( 与 read_across_frames=True"
+          "——多帧文件只解第一帧会少算且不报错")
     if "__pycache__" in os.listdir(HERE):
         notes.append("NOTE 技能目录里有 __pycache__，发布前清掉")
 

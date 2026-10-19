@@ -20,7 +20,8 @@ data.message.id（判重键）、目录名和首行的 createdAt（判拷贝用�
     python3 usage_readout.py --days 7
     python3 usage_readout.py --since 2026-10-16 --until 2026-10-23   # 六格⑥ 那种写死窗口
     python3 usage_readout.py --selfcheck         # 不读盘不连库，只验纯逻辑（给 check_skill.py 跑通用）
-退出码 0＝六格都出了读数；1＝有一格没读到（会说清哪一格、为什么）。
+退出码 0＝六格都出了读数，且盘上那一格有分母（没有解不开的文件、窗口内不是 0 行）；
+1＝有一格没读到、或有解不开的帧、或窗口内 0 行（会说清哪一格、为什么）。
 """
 import argparse
 import io
@@ -200,11 +201,16 @@ def iter_session_files(root, problems):
 
 
 def read_rows(path):
-    """zstandard 解 → 逐行 json.loads。只把当次那一行交出去，不留整行。"""
+    """zstandard 解 → 逐行 json.loads。只把当次那一行交出去，不留整行。
+
+    必须跨帧：`stream_reader` 写死 `read_across_frames=True`。session.v4.jsonl.zstd 是多帧文件，
+    默认（False）只解第一帧、到帧尾就当读到头——后面的帧静默丢掉：行数少算，且不报错。
+    """
     import zstandard
     decompressor = zstandard.ZstdDecompressor()
     with open(path, "rb") as handle:
-        with decompressor.stream_reader(handle) as stream:
+        # 跨帧解（SKILL.md 第二节「来源」那条）：去掉 read_across_frames=True 就是少算且不报错，别改回默认。
+        with decompressor.stream_reader(handle, read_across_frames=True) as stream:
             with io.BufferedReader(stream, buffer_size=1 << 20) as reader:
                 for raw in reader:
                     if raw and raw.strip():
@@ -212,7 +218,7 @@ def read_rows(path):
 
 
 def scan_sessions(root, tier_by_session, problems):
-    """一遍扫完：返回（每前缀盘上目录数，调用行 occurrences）。occurrence 只带数字与判重键。"""
+    """一遍扫完：返回（每前缀盘上目录数，调用行 occurrences，解不开的文件数）。occurrence 只带数字与判重键。"""
     dirs_by_prefix = {}
     occurrences = []
     unreadable = 0
@@ -257,7 +263,7 @@ def scan_sessions(root, tier_by_session, problems):
                                 "copied": bool(created_ms and moment < created_ms), **numbers})
     if unreadable:
         problems.append("有 %d 个会话文件解不开，已从这次读数里跳过（不是全量）" % unreadable)
-    return dirs_by_prefix, occurrences
+    return dirs_by_prefix, occurrences, unreadable
 
 
 def dedupe(occurrences):
@@ -665,8 +671,9 @@ def main():
             if ran:
                 tier_by_session[row["_id"]] = ran
 
+    unreadable = 0
     if root:
-        dirs_by_prefix, occurrences = scan_sessions(root, tier_by_session, problems)
+        dirs_by_prefix, occurrences, unreadable = scan_sessions(root, tier_by_session, problems)
         best = dedupe(occurrences)
         per_kind, totals = aggregate(occurrences, best, lo_ms, hi_ms)
     else:
@@ -674,6 +681,19 @@ def main():
         totals = {name: 0 for name in TOTALS_KEYS}
     own_rates = {kind: own_slice(occurrences, best, lo_ms, hi_ms, kind) for kind in per_kind}
     disk_rows = len([1 for item in occurrences if lo_ms <= item["t"] < hi_ms]) if root else None
+
+    # 读数完整性闸门：解不开的东西与「窗口内 0 行」既进 problems，也进退出码。
+    # 来路（2026-10-19 交代）：这台机器没装 zstandard 那次跑 --days 7，926 个文件全解不开，
+    # 六格照出、退出码还是 0，ModuleNotFoundError 只塞在 stdout 最后一行——跑绿了但什么都没跑出来，
+    # 照那样交上去就是一张「我这七天什么都没干」。解不开＝那一格没有分母；0 行＝先怀疑读法。
+    gate_problems = []
+    if unreadable:
+        gate_problems.append("解不开 %d 个会话文件——那一格没有分母，不是没有数据" % unreadable)
+    if root and disk_rows == 0:
+        gate_problems.append("窗口内一条调用行都没解出来（0 行）——先怀疑解不开／窗口给错，"
+                             "别报成「这七天什么都没干」")
+    gate_ok = not gate_problems
+    problems.extend(gate_problems)
 
     print("asuna-usage-readout 读数｜脚本 %s｜窗口＝最近 %s 天（--days／--since／--until 可改）"
           % (os.path.abspath(__file__), args.days))
@@ -687,11 +707,15 @@ def main():
             cell_hit_rate(totals, per_kind, own_rates, root)):
         print("\n".join(lines))
         ok.append(cell_ok)
+    # 这一行永远打出来：解不开几个／窗口内几行，摆在明面上，不用去翻最后一行
+    print("读数完整性｜解不开 %s 个／窗口内 %s 行（调用行，去重前）｜%s"
+          % (unreadable, "?" if disk_rows is None else disk_rows,
+             "过" if gate_ok else "没过（退出码非零）"))
     if problems:
         print("没读到／要留神的：%s" % "；".join(problems))
     print("读法提醒：交回只等于交回；拷贝占比高的那一类要标样本量；"
           "这些数当天就会旧，跨趟对数先对「几点读的」再对数。")
-    return 0 if all(ok) else 1
+    return 0 if (all(ok) and gate_ok) else 1
 
 
 if __name__ == "__main__":

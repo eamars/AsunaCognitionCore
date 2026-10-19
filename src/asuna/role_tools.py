@@ -379,7 +379,7 @@ TOOLS = {
                        'hours': {'type': 'integer', 'description': 'mute：静音多少小时'}},
     },
     'place_timezone': {
-        'description': ('你在的群各在哪个时区：设了以后，那边是不是夜里、你在那个群定的计划，都按那个群的钟。do=list 列出每个群设了什么、那边现在几点；'
+        'description': ('你在的群各在哪个时区：设了以后，那边几点、你在那个群定的计划，都按那个群的钟。do=list 列出每个群设了什么、那边现在几点；'
                          'set 给一个群设（place 照抄，timezone 写 IANA 名，如 Asia/Shanghai，'
                          '回执里有那边现在几点）；clear 撤掉。拿不准的群不设，按宿主的钟。'),
         'parameters': {'op': {'type': 'string', 'enum': ['list', 'set', 'clear'], 'description': 'list、set 或 clear',
@@ -2498,7 +2498,7 @@ class RoleTools:
             raise Refused(str(exc)) from exc
         self.store.audit(ep['_id'], 'place.timezone', {'scene_id': scene_id, 'timezone': name}, ep['scope_key'])
         row = next(row for row in places.zones(self.store, ep['persona'], moment) if row['place'] == place)
-        return {**row, 'note': '设好了，「那边是不是夜里」从现在起按这个算。' if name else '撤掉了，这个群照旧按宿主的钟算。'}, False
+        return {**row, 'note': '设好了：那边几点、你在那个群定的计划，从现在起按这个算。' if name else '撤掉了，这个群照旧按宿主的钟算。'}, False
 
     def tool_find_member(self, ep, call_id, args):
         from . import group_members

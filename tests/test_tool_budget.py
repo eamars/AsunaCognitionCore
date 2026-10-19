@@ -12,7 +12,7 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (30, 20955)       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
+CHARACTER = (30, 20952)       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
                               # ADR-064 phase 2: reply +1,334 (QQ group lists +451 net, QQ private +1,028), stay_silent -16, leave_note question +88;
                               # reply force (a #number that is someone here is sent back unless force=yes; owner 2026-10-14) +90; stay_silent why optional (said: nothing to explain) -10;
                               # ADR-060 leftovers: recall query optional with sections, feel yes/no and its decisions named, recall section +25
@@ -30,8 +30,9 @@ CHARACTER = (30, 20955)       # ADR-060: new names and the wording audit, 21,490
                               # ADR-082: recall reads a person and 「名单」 at home +114; understand_person writes anyone present
                               # with its short, 「不更新」, the three questions and speak-first +351 (block_hours leaves it);
                               # watch does block +85: 20,405 -> 20,955
+                              # no night hours on her visits: place_timezone no longer says it decides night -3
 # With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): let_go, nature, from, about and the recall sentence (+294).
-CHARACTER_TIERED = (30, 21251)
+CHARACTER_TIERED = (30, 21248)
 ACTION = (25 + len(ACTION_DSH_CAPABILITIES), 15700)        # the worker's tools, plus DSH's own (skill, todo, web)
 
 

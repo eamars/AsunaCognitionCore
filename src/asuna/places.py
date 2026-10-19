@@ -200,23 +200,6 @@ def clock_gap(scene, moment, home):
     return '那边的钟比你这边%s %s' % ('快' if gap > 0 else '慢', span)
 
 
-def night_there(config, scene, moment):
-    """Quiet hours there are about other people's night: the route's P5 quiet hours, or the core default, on the
-    route's offset, else the group's own time zone (place_timezone), else the Host's clock."""
-    from . import proactive, schedule_rules
-    limits = proactive.route_settings(config, scene)
-    if limits['enabled']:
-        windows, offset = limits['quiet_windows'], limits['utc_offset_minutes']
-    else:
-        windows = [(proactive._clock(start, None), proactive._clock(end, None)) for start, end in proactive.QUIET_DEFAULT]
-        offset = None
-    tz = group_zone(scene)
-    if offset is None and tz:
-        offset = schedule_rules.offset_minutes(tz, moment)
-    windows = [(start, end) for start, end in windows if start is not None and end is not None]
-    return proactive.in_quiet(proactive.local_minutes(moment.timestamp(), offset), windows)
-
-
 def set_zone(store, place, name):
     """Set or (name None) clear a group's time zone. Returns the group's row as zones() shows it."""
     from . import schedule_rules
@@ -243,7 +226,7 @@ def zones(store, persona, moment):
             continue
         time = their_time(scene, moment)
         rows.append({'place': place_id(scene_id), 'group': people.scene_title(scene),
-                     'timezone': scene.get('timezone') if time else '没设（夜里按宿主的钟算）',
+                     'timezone': scene.get('timezone') if time else '没设（按宿主的钟算）',
                      **({'their_time': '那边现在 ' + time} if time else {})})
     return rows
 
@@ -369,8 +352,6 @@ def eligibility(store, scene, plan, settings, moment, date, here=None, intent=No
         return False, '你把这个群静音了：静音时不去，到点自己结束'
     if today(store, plan, date) >= settings['per_day']:
         return False, '今天出门的次数用完了'
-    if night_there(store.config, scene, moment):
-        return False, '那边这会儿是夜里，别去吵'
     visit = last_visit(store, plan, scene['_id'])
     gap = timedelta(minutes=settings['after_own_min'])
     if visit and outcome(store, visit) == 'unanswered':

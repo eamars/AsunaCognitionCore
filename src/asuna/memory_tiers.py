@@ -93,8 +93,9 @@ GIST_NO_BASIS = ('这句意思没带依据，没写进去：原文有依据（%s
 OVER_LINE = ('随身满了（%s %d/%d）：随身的有 %s。想换就 let_go 一条；这一回合不挑，下一回合程序照旧放最久没用到的「%s」。')
 SEARCHED = '找了：随身、手边、收着'
 NOTHING = '随身、手边、收着三处都没找到'
-# A tag never carries an item back (no pin, owner 2026-10-13): only a memorable moment or a changed rewrite does.
-NOT_BACK = ('when_shown 改成 always 不会把它带回随身：它再被用到、被你改写出变化、或被更正碰到，才会回来；'
+# A tag never carries an item back (no pin, owner 2026-10-13): only a changed rewrite does (ADR-062 §4.2 step 7); a
+# use keeps it from cooling but does not lift it.
+NOT_BACK = ('when_shown 改成 always 不会把它带回随身：你把它改写出变化，它才会回来；再被用到只让它不再往下放；'
             '现在它在%s。')
 # What she is told once per conversation, in her system prompt where the memory rules are (ADR-062 §4.3): her own
 # text, written by her on the agent line (2026-10-13), word for word.

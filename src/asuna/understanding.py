@@ -199,8 +199,7 @@ def listing(store, persona):
             where = store.db.scenes.find_one({'scope_key': scope})
             layer = {'layer': '这里那层：%s' % (people.scene_title(where) if where else '一个现在已经没有的对话'),
                      'chars': len(body), 'written_at': revision.get('created_at')}
-        if not (revision.get('content') or {}).get('short'):
-            layer['short'] = '没有'
+        layer['short'] = (revision.get('content') or {}).get('short') or '没有'      # every row says which it is
         found.setdefault(person, []).append(layer)
     rows = [{'name': _name(store, people, person), 'person': person,
              'layers': sorted(layers_, key=lambda l: l.get('written_at') or '', reverse=True)}

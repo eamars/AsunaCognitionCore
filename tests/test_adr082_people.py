@@ -178,7 +178,7 @@ def test_people_list_at_home_and_refused_outside(store):
     assert set(rows) == {'林', '明'} and 'person' not in json.dumps(list(listed['people'][0]), ensure_ascii=False)
     person_layer = next(layer for layer in rows['林'] if layer['layer'] == '人那层')
     assert person_layer['chars'] == len('A 说话直接，先给结论。') and person_layer['written_in'] and person_layer['written_at']
-    assert 'short' not in person_layer
+    assert person_layer['short'] == (store.head('relationship:A', 'person')[1]['content'].get('short') or '没有')
     [b_here] = rows['明']
     assert b_here['layer'].startswith('这里那层') and b_here['chars'] > 0 and b_here['short'] == '没有'
     # At home a read names anyone on the list; his here layer is the one of the conversation it is read in.

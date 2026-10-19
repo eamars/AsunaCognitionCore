@@ -1,6 +1,6 @@
 # ADR-083: RUNTIME_API.md as an interface control document
 
-Status: **Open** since 2026-10-20: decided by the owner, worked through with Claude, and built the same night (`RUNTIME_API.md` 189,317 → 63,596 characters, largest paragraph 691, 50 tables; `packages/cognition-core/DSH_API.md`). Waiting: the owner's read, the reviewer's spot check, her review (§5). Replaces ADR-077, whose plan was under-thought
+Status: **Open** since 2026-10-20: decided by the owner, worked through with Claude, and built the same night (`RUNTIME_API.md` 189,317 → 63,596 characters, largest paragraph 691, 50 tables; `packages/cognition-core/DSH_API.md`). The owner waived his read and the independent spot check (2026-10-20: agent-facing, Claude's read is enough); Claude read it whole and checked its numbers, codes, files and anchors against the code. Waiting: her review (§5). Replaces ADR-077, whose plan was under-thought
 and grew into code (generators, an agreement test, a commit hook) for what is a documentation job. ADR-077's analysis
 (its §9 and `.runtime/private/adr077/`) is the evidence this ADR builds on.
 
@@ -57,9 +57,9 @@ A fact that cannot be checked against the code when it is moved is cut, not carr
 
 ## 5. Sign-off
 
-- The owner reads the result by using it.
-- No paragraph over about 1,500 characters; every section is in the contents list.
-- A spot check by the independent reviewer (the same one as ADR-076/082) finds no entry that contradicts the code.
+- No paragraph over about 1,500 characters; every section is in the contents list (done: largest 691).
+- Claude reads it whole against the code (done, 2026-10-20; the owner and an independent spot check were waived as
+  not needed for an agent-facing document).
 - She has reviewed it and updated her skills' anchors.
 
 ## 6. Cost

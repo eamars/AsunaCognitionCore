@@ -13,7 +13,7 @@ import { dataRoot, floorState } from './paths.js';
 export const name = 'asuna-publication-floor';
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
 const hash = data => createHash('sha256').update(data).digest('hex');
-const excluded = new Set(['.runtime', '.venv', '.git', 'node_modules', '__pycache__', '.pytest_cache', 'reports']);
+const excluded = new Set(['.runtime', '.venv', '.git', 'node_modules', '__pycache__', '.pytest_cache', 'reports', '.tmp']);
 // The floor and everything it imports (ADR-011 §6.4): persona.js and channel.js for floor.js,
 // settings.js for recovery.js. A publication can never replace what keeps the Host bootable.
 const FLOOR_FILES = ['floor.js', 'recovery.js', 'persistence.js', 'persona.js', 'channel.js', 'settings.js', 'paths.js'];

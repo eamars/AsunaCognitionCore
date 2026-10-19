@@ -45,12 +45,14 @@ test('a publication whose package is byte for byte the running one is active at 
   assert.equal(first.state, 'APPLIED', JSON.stringify(first));
   await floor.workerReady('persona');
   await floor.call('development_write', { path: 'docs/notes.md', text: 'outside the package' });
+  await floor.call('development_write', { path: '.tmp/scratch.py', text: 'her temporary folder' });
   const second = await floor.call('development_publish', { reason: 'a document only' });
   assert.equal(second.state, 'ACTIVE', JSON.stringify(second));            // not APPLIED: the Host restarts for APPLIED
   assert.equal(second.activated, true);
   assert.equal(second.sha256, first.sha256);
   assert.deepEqual(second.changed_files, ['docs/notes.md']);
   assert.equal(await fs.readFile(path.join(source, 'docs/notes.md'), 'utf8'), 'outside the package');
+  await assert.rejects(fs.stat(path.join(source, '.tmp')));                 // the sandbox's temporary folder never reaches the source
   assert.equal((await floor.effective('persona')).sha256, first.sha256);
   await floor.call('development_write', { path: 'README.md', text: 'Changed again', overwrite: true });
   assert.equal((await floor.call('development_publish', { reason: 'packed again' })).state, 'APPLIED');

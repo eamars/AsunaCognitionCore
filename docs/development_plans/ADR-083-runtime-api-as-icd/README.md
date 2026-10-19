@@ -1,6 +1,6 @@
 # ADR-083: RUNTIME_API.md as an interface control document
 
-Status: **Open** since 2026-10-20: decided by the owner, worked through with Claude, and built the same night (`RUNTIME_API.md` 189,317 → 63,596 characters, largest paragraph 691, 50 tables; `packages/cognition-core/DSH_API.md`). The owner waived his read and the independent spot check (2026-10-20: agent-facing, Claude's read is enough); Claude read it whole and checked its numbers, codes, files and anchors against the code. Waiting: her review (§5). Replaces ADR-077, whose plan was under-thought
+Status: **Built and reviewed 2026-10-20**: decided by the owner, worked through with Claude, and built the same night (`RUNTIME_API.md` 189,317 → 63,596 characters, largest paragraph 691, 50 tables; `packages/cognition-core/DSH_API.md`). The owner waived his read and the independent spot check (2026-10-20: agent-facing, Claude's read is enough); Claude read it whole and checked its numbers, codes, files and anchors against the code. Her review (§5), 2026-10-20 02:00 NZDT: 14 questions she would really look up, answered 1 in full, 8 in part, 5 not; she kept the pointer design and asked for three more pointers (the publication receipt, a note's limits, a watch's limits), added the same night with `block`'s turn rule. Her skills' anchors she updates herself. Replaces ADR-077, whose plan was under-thought
 and grew into code (generators, an agreement test, a commit hook) for what is a documentation job. ADR-077's analysis
 (its §9 and `.runtime/private/adr077/`) is the evidence this ADR builds on.
 

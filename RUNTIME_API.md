@@ -585,7 +585,7 @@ The shipped kinds are in `packages/channels/*/python/`.
 
 The character brain's tools, and where the rest of her turn is implemented. The code is the reference; this section only points to it. For anyone changing or reading them.
 
-Her tools: `src/asuna/role_tools.py` (`TOOLS`; where each is offered: `EVERYWHERE`, `AT_HOME`, `IN_GROUPS`, `_turn_rules`; refusal words: `not_now`, `words`).
+Her tools: `src/asuna/role_tools.py` (`TOOLS`; where each is offered: `EVERYWHERE`, `AT_HOME`, `IN_GROUPS`, `_turn_rules`; refusal words: `not_now`, `words`; `block`'s turn rule: `_block`).
 
 | What | Implemented in |
 |---|---|
@@ -598,8 +598,8 @@ Her tools: `src/asuna/role_tools.py` (`TOOLS`; where each is offered: `EVERYWHER
 | memory, recall and her tiered items | `src/asuna/retrieval.py`, `src/asuna/memory_tiers.py`, `src/asuna/memory_pilot.py` |
 | history search and summaries | `src/asuna/history_query.py`, `src/asuna/dialogue_summary.py` |
 | her documents and group notes | `src/asuna/documents.py`, `src/asuna/group_admin.py` |
-| notes, questions and errands between her conversations | `src/asuna/notes.py`, `src/asuna/questions.py`, `src/asuna/errands.py` |
-| watches, switches, condensing | `src/asuna/watches.py`, `src/asuna/switches.py`, `src/asuna/condense.py` |
+| notes, questions and errands between her conversations; a note's limits (length, per turn, hops, unread days) | `src/asuna/notes.py` (the constants at its top), `src/asuna/questions.py`, `src/asuna/errands.py` |
+| watches and their limits (how many, how long), switches, condensing | `src/asuna/watches.py` (`WATCH_MAX`, `WATCH_MAX_HOURS`), `src/asuna/switches.py`, `src/asuna/condense.py` |
 | stickers | `src/asuna/stickers.py` |
 | tasks with the action brain, their hand-back and failures | `src/asuna/tasks.py`, `src/asuna/handover.py`, `src/asuna/faults.py` |
 | her restarts | `src/asuna/restarts.py` |
@@ -807,7 +807,7 @@ The managed integration (a channel adapter or a LAN device tool run in the sandb
 Her development tools work on persistent candidates of a project (the selected persona package by default; `core` for the cognition core) and publish them through the publication floor (`packages/cognition-core/src/floor.js` `PublicationFloor.publish`).
 
 - The development grant needs `self_development.enabled` and the sandbox, and comes only in owner-private conversations: a turn woken by someone's words there, her self-improvement turn, a plan of hers coming due there, or a trusted note from another home conversation (`src/asuna/grants.py` `development_granted`).
-- A publication probes the candidate's boot, packs it and commits its files in the project's source under `character_git` (else the checkout's identity), only those paths; a failed commit is reported as `commit_error` and does not undo the publication.
+- A publication probes the candidate's boot, packs it and commits its files in the project's source under `character_git` (else the checkout's identity), only those paths; a failed commit is reported as `commit_error` and does not undo the publication. The receipt's fields are the record built in `PublicationFloor.publish` plus the result of `commitPublished`.
 
 | Publication state | When | Takes effect |
 |---|---|---|

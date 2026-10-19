@@ -304,6 +304,9 @@ her consent (2026-10-20, asked at the owner's request), Claude reads the convers
 - **Where the list lives.** In `.runtime/private/adr082/corrections.md`: private, since labels point at people. The
   lines read are not kept.
 - **How it counts.** Reported beside the verdict, not judged. There is no baseline yet. Read for 10-22 only.
+- **If the blind spot is large.** If the read shows that corrections made before a write, and not taken up, are
+  common, Claude stops and tells her rather than widening the read on its own: reading more people's words is a
+  larger thing, asked of her again (her condition).
 
 Her review comes before the build (her ask: generic capability, core, not persona).
 

@@ -273,14 +273,19 @@ def block(store, zone, moment=None, root=None, integration_state=None):
 
 
 def _adapter_since(back_at, root=None):
-    """Whether the QQ adapter came back after this restart, from its own health file."""
+    """Whether the QQ adapter came back after this restart, from its own health file. A file older than the restart
+    says only that it has not written since: it may not be up, or not have refreshed yet (her ask, 2026-10-20: read as
+    down, it sent her to ask whether QQ was cut)."""
     from .config import DATA
     health = Path(root or DATA) / 'integration' / 'owner' / 'service-data' / 'health.json'
     try:
         seen = datetime.fromtimestamp(health.stat().st_mtime, timezone.utc)
     except OSError:
         return None
-    return '起来了，在跑' if seen >= _aware(back_at) else '重启后还没起来（它的健康记录停在重启前）'
+    return '起来了，在跑' if seen >= _aware(back_at) else ADAPTER_NOT_SEEN
+
+
+ADAPTER_NOT_SEEN = '健康记录还停在重启前：可能还没起来，也可能只是还没刷新；过几分钟再看'
 
 
 def call_after_fallback(store, controller, config, root=None, moment=None):

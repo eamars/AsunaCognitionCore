@@ -126,6 +126,9 @@ def test_her_home_turns_carry_the_supervisors_record_for_a_day(store, tmp_path):
     health = tmp_path / 'integration' / 'owner' / 'service-data'
     health.mkdir(parents=True)
     (health / 'health.json').write_text('{}', encoding='utf-8')
+    stale = (T0 - timedelta(minutes=10)).timestamp()
+    os.utime(health / 'health.json', (stale, stale))                  # not written since the restart: unknown, not down
+    assert restarts.block(store, 'Pacific/Auckland', T0, root=tmp_path)['qq_adapter'] == restarts.ADAPTER_NOT_SEEN
     alive = (T0 + timedelta(minutes=1)).timestamp()
     os.utime(health / 'health.json', (alive, alive))                  # the adapter wrote it after she came back
     later = restarts.block(store, 'Pacific/Auckland', T0, root=tmp_path)

@@ -96,4 +96,4 @@ On 2026-10-20 the owner recalled a "~60 character budget" for `think` as an earl
 
 ## 7. Open, each its own task
 
-- **A restart receipt's `qq_adapter` line** reads as down while its health record lags behind the restart. Her ask: say so ("或健康记录还没刷新").
+- Done 2026-10-20: a restart receipt's `qq_adapter` line read as down while its health record lagged behind the restart; it now says the record is from before the restart and either may be true (her ask).

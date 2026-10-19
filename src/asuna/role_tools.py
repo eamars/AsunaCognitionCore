@@ -870,6 +870,14 @@ STICKER_LOOKED_NOTE = ('这是个表情包。想以后再见到它不用再看�
                        '（ref 照抄）；想收着自己发就 keep。都不想就不用管。')
 
 
+def _audited_args(name, args):
+    """A call's arguments as the audit keeps them: a credential's values never reach a record (names and notes do)."""
+    if name != 'credential' or not isinstance(args, dict) or not isinstance(args.get('env'), dict):
+        return args
+    from .credentials import HIDDEN
+    return {**args, 'env': {key: HIDDEN for key in args['env']}}
+
+
 def offered_pictures(ep):
     """The artifact ids her turn may send (image_artifacts_from_program): she may also look at them."""
     from .stickers import candidate_ids
@@ -1219,7 +1227,7 @@ class RoleTools:
                           **({'reason_ref': reason} if reason else {}),
                           **({'conclude': True} if conclude else {})}
         c._update(ep, tool_calls=calls)
-        self.store.audit(ep_id, 'role_tool', {'call_id': call_id, 'tool': name, 'args': args,
+        self.store.audit(ep_id, 'role_tool', {'call_id': call_id, 'tool': name, 'args': _audited_args(name, args),
                                               **({'called_as': called_as} if called_as else {}),
                                               **({'old_names': olds} if olds else {}),
                                               **({'refused': refused} if refused else {'result': result}),

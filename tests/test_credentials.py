@@ -109,3 +109,16 @@ def test_every_tool_schema_stays_inside_what_dsh_registers():
     for spec in specs:
         for name, param in spec['parameters'].items():
             check({k: v for k, v in param.items() if k != 'required'}, spec['name'] + '.' + name)
+
+
+def test_a_credential_value_never_reaches_the_audit(store, vault):
+    # Her keep call carries the values once; the audit keeps the names and the note, never a value.
+    ep = store.put('episodes', {'_id': 'ep-cred', 'scene_id': store.config['chat']['scene_id'], 'scope_key': 'scene:local',
+                                'tool_calls': {}}, stream='ep-cred')
+    from outbound_image_cases import FakeCoordinator
+    handler = role_tools.RoleTools(FakeCoordinator(store))
+    args = {'op': 'keep', 'name': 'solar', 'note': '只读', 'env': {'SOLAR_PASSWORD': SECRET}}
+    handler._record(ep['_id'], 'call-1', 'credential', args, result={'kept': 'solar'})
+    row = store.db.audit_events.find_one({'type': 'role_tool', 'stream_id': 'ep-cred'})
+    assert SECRET not in str(row) and 'SOLAR_PASSWORD' in str(row) and '[凭据已隐藏]' in str(row)
+    assert args['env']['SOLAR_PASSWORD'] == SECRET            # the call itself is untouched

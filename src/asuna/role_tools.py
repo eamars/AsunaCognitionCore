@@ -2246,6 +2246,11 @@ class RoleTools:
                     else:
                         raise Refused('「%s」不在 plans_from_program 里，也不是这回合刚建的；照列表原样抄 plan_id，'
                                       '或抄这回合 plan 工具返回的 plan_id。' % plan_id)
+                from .schedule import RHYTHM_KINDS
+                if row.get('kind') in RHYTHM_KINDS:
+                    # Her rhythms belong to the program (ADR-012 §4.3): she tunes them, never cancels or retimes them here.
+                    raise Refused('「%s」是你的节律（心跳、夜间沉淀、自我改进或整理安静的群），归程序排，plan 改不了也停不了；'
+                                  '要调快慢、时间或开关，在家里用 set_policy。' % plan_id)
                 if op == 'cancel':
                     plan = run(lambda: c.scheduler.cancel(plan_id, ep['scene_id'], ep['person_id'], ep['policy_epoch']))
                 else:

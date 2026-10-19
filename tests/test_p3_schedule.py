@@ -188,3 +188,21 @@ def test_a_plan_in_her_list_can_be_changed(store, driven):
     driven.update = lambda ep, plan_id, spec: asked.append((plan_id, spec)) or {**row, 'intent': spec['intent']}
     coordinator.tools.tool_plan(ep, 'c1', {'op': 'update', 'plan_id': plan['_id'], 'intent': '改成喝茶'})
     assert asked == [(plan['_id'], {'intent': '改成喝茶'})]       # reached the scheduler, not refused as status None
+
+
+def test_her_plan_tool_cannot_cancel_or_retime_a_rhythm(store, driven):
+    """Her rhythms are the program's (ADR-012 §4.3): one of this conversation's, named by its id, is refused with where
+    to tune it, and stays as it was."""
+    from asuna.coordinator import Coordinator
+    from asuna.lanes import FakeLane
+    from asuna.role_tools import Refused
+    p2.seed_real(store)
+    coordinator = Coordinator(store, FakeLane(store, []))
+    coordinator.scheduler = driven
+    plan = driven.create(EP, DAILY)
+    store.db.plans.update_one({'_id': plan['_id']}, {'$set': {'kind': 'presence'}})
+    ep = {**EP, 'persona': 'P1', 'context': {'plans_from_program': []}, 'tool_calls': {}}
+    for args in ({'op': 'cancel', 'plan_id': plan['_id']}, {'op': 'update', 'plan_id': plan['_id'], 'intent': '换个时间'}):
+        with pytest.raises(Refused, match='是你的节律.*set_policy'):
+            coordinator.tools.tool_plan(ep, 'c-' + args['op'], args)
+    assert store.db.plans.find_one({'_id': plan['_id']})['status'] == 'ACTIVE'

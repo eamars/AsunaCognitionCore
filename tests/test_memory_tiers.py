@@ -217,6 +217,11 @@ def test_let_go_in_her_turn_and_where_things_are_told_once_per_conversation(stor
     assert tiers.item('persona', row['sid'])['place'] == AT_HAND
     second = coordinator.ingest(event('e-after'))['context']['things_from_program']
     assert any('你放手了' in line for line in second['moved']) and '人设' in second['places']
+    # 随身 says the room left under the cap, counted as the cap is: every carried item, readable here or not.
+    left = memory_tiers.CAPS['persona'] - len(tiers._carried(None, 'persona'))
+    assert second['places']['人设'].startswith('随身 ' + memory_tiers.words(memory_tiers.ROOM_WORDS, max(0, left)) + '、')
+    assert [memory_tiers.words(memory_tiers.ROOM_WORDS, n) for n in (0, 1, 3, 9, 10)] == [
+        '满了', '还能放一条', '还能放两三条', '还能放好几条', '还空着很多']
     third = coordinator.ingest(event('e-later'))['context']['things_from_program']
     assert 'moved' not in third, 'told once in a conversation'
     assert third['self_items'] == memory_tiers.SELF_OFFER, 'offered until she writes herself as items'

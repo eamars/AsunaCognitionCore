@@ -676,3 +676,7 @@ back up, as her `when_shown` hint says.
 `item`: a 收着 item whose `recalled_in` names two or more conversations within 30 days. Each such recall finds it,
 and it still stays put away. Read with the regret rate in §7. If such items keep turning up, a way back to hand
 by use is missing. That would be a new design of its own, not this branch revived.
+
+## Room left in 随身 (2026-10-20)
+
+`things_from_program` says, for each capped store, how much room its 随身 has left under the cap (`ROOM_WORDS`: 满了, 还能放一条, 还能放两三条, 还能放好几条, 还空着很多) instead of how many items it carries: the carried items are already in front of her; the cap was visible only once it was over (her need, 2026-10-19). The room is counted as `_overflow` counts the cap: every carried item of the store, or of each document where the cap is per document, the tightest one the turn reads. On 2026-10-20 her self and core stores were full, the fullest group notes full, persona two left, voice one.

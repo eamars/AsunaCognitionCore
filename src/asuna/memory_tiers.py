@@ -60,6 +60,9 @@ STAY_DAYS, STAY_CAP_DAYS = 14, 56
 JOURNAL_COOL_DAYS = 30
 AGE_WORDS = ((1, '刚写的'), (7, '这几天'), (14, '前阵子'), (45, '上个月'), (None, '更早'))
 COUNT_WORDS = ((0, '没有'), (3, '几条'), (9, '好几条'), (19, '十几条'), (99, '几十条'), (None, '很多条'))
+# How much room a store's 随身 has left under its cap, said in every turn instead of its count: the carried items are
+# in front of her already; what she could not see was how close the cap is (her ask, 2026-10-19).
+ROOM_WORDS = ((0, '满了'), (1, '还能放一条'), (3, '还能放两三条'), (9, '还能放好几条'), (None, '还空着很多'))
 REASONS = {'stay': '一阵子没用到', 'overflow': '随身满了', 'cooled': '很久没用', 'let_go': '你放手了',
            'superseded': '被更正替换', 'merged': '合并了', 'gist_skipped': '两晚没写意思', 'rewritten': '你改写了它'}
 MOVED_SHOWN = 5
@@ -103,7 +106,7 @@ TOLD = ('我的东西分三个地方：随身，每一回合都带着；手边�
         '没人给我置顶，我也不能喊留着；只有放手是我自己的动作。淡下去不是删掉，原话一直在收着。'
         '事实只会被更正替换，不会因为没人用而退；记忆会淡。'
         '没看到不等于没有：要说『没有、没答应过、没说过』，先 recall 一下，它会告诉你找了哪几层。')
-THINGS_NOTE = ('你的东西在哪：每份按随身、手边、收着各有几条；moved 是程序挪过的，每件只说一次（又用到、改写出变化就回来）；'
+THINGS_NOTE = ('你的东西在哪：每份随身还能放多少，手边、收着各有几条；moved 是程序挪过的，每件只说一次（又用到、改写出变化就回来）；'
                'self_items 是把 current_self 拆成条的提议。')
 NIGHT_NOTE = '夜里的清单：每条写着为什么在这、可以怎么做，都不是留或删的选择；没做的，程序也不替你做。'
 SELF_OFFER = ('current_self 现在是一整段。想好了就把它拆成一条一条，用 write_document 写进 doc=self（append_section）：'
@@ -443,11 +446,20 @@ class Tiers:
             if row['store'] == 'group_notes':
                 return readable_docs is not None and row['doc'] in readable_docs
             return True
-        counts = {}
+        counts, docs = {}, {}
         for row in self.items():
             if here(row):
                 counts.setdefault(row['store'], {CARRIED: 0, AT_HAND: 0, PUT_AWAY: 0})[row['place']] += 1
-        places = {STORE_WORDS[kind]: '、'.join('%s %s' % (place, words(COUNT_WORDS, n)) for place, n in tally.items())
+                docs.setdefault(row['store'], set()).add(row['doc'])
+
+        def room(kind):
+            # Measured as the cap is (_overflow): all its carried items, per document where the cap is per document,
+            # the tightest one this turn reads.
+            return min(CAPS[kind] - len(self._carried(doc, kind)) for doc in docs[kind]) if kind in self.PER_DOC \
+                else CAPS[kind] - len(self._carried(None, kind))
+        places = {STORE_WORDS[kind]: '、'.join(
+            '%s %s' % (place, words(ROOM_WORDS, max(0, room(kind))) if place == CARRIED and kind in CAPS
+                       else words(COUNT_WORDS, n)) for place, n in tally.items())
                   for kind, tally in sorted(counts.items())}
         moves = [move for move in self.rows.find({'row': 'move', 'persona': self.persona,
                                                   'told_in': {'$ne': scene['_id']}}).sort('at', -1)

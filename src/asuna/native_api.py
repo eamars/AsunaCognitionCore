@@ -226,7 +226,7 @@ class NativeMemory:
                 or speaker_name(self.store.config, person, None, self.store.db))
 
     def relation_records(self, person=None):
-        """{person: [(scope, body, time)]}: what holds of them anywhere (scope `person`) and how they are in each
+        """{person: [(scope, short and body, time)]}: what holds of them anywhere (scope `person`) and how they are in each
         conversation (scope `scene:...`)."""
         pattern = '^relationship:' + (re.escape(person) + '[|]' if person else '')
         heads = list(self.store.db.state_heads.find({'_id': {'$regex': pattern}}))
@@ -236,8 +236,11 @@ class NativeMemory:
         for head in heads:
             entity, scope = head['_id'].rsplit('|', 1)
             revision = revisions.get(head['revision_id']) or {}
+            content = revision.get('content') or {}
+            # Her one line for herself first, then the body (ADR-082); read only.
+            text = (content['short'] + '\n\n' if content.get('short') else '') + content.get('body', '')
             found.setdefault(entity.removeprefix('relationship:'), []).append(
-                (scope, (revision.get('content') or {}).get('body', ''),
+                (scope, text,
                  head.get('updated_at') or revision.get('generated_at') or revision.get('created_at')))
         return found
 

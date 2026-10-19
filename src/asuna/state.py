@@ -295,7 +295,7 @@ class Store:
     def mutate(self, entity: str, scope: str, base_revision_id: str, content: dict,
                sources: list[str], request_scope: str, mutation_id: str, actor='character',*,reason=None,change_class=None,linked_scopes=(),origin=None):
         # A relationship is her understanding in prose; no level fields (nothing ever wrote them).
-        allowed = {'body'}
+        allowed = {'body', 'short'}           # her prose, and her one line for herself (ADR-082)
         # 跨场景只读联动（A2）里唯一被放宽的是「关系/偏好状态落在哪一份」：配置认定同一个人时，
         # 别名场景这一轮写的是 canonical 那一份。linked_scopes 就是本轮授权的那个场景 scope——
         # 来源证据仍只许落在 global-safe、目标 scope 或它里面；不传就等于原来的行为。

@@ -31,6 +31,7 @@ TABLES_VERSION = 1
 NOTE_CHARS = 300                 # a note that crosses between home and outside
 HOME_NOTE_CHARS = 1500           # from home to another home line: no boundary to guard, room for the context
 PER_TURN = 2
+# Daily caps on notes from public conversations; a reply is outside them and not counted in them.
 PUBLIC_HOME_PER_SCENE = 6        # public -> home, per sending conversation and home it goes to
 PUBLIC_PAIR = 3                  # public -> public, per pair of conversations
 PUBLIC_TOTAL = 10                # public -> public, in all
@@ -246,14 +247,20 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
     if not question and sent_here >= PER_TURN:
         raise NoteRefused('NOTE_TURN_LIMIT', '这一回合已经写了 %d 张便条（上限 %d 张），先到这里；还要说的下回合再写。'
                           % (sent_here, PER_TURN))
+    reply = None if question else first if first and first['from_scene'] == to_scene else store.db.notes.find_one(
+        {'from_scene': to_scene, 'to_scene': ep['scene_id'], 'seen_in': ep['_id']}, sort=[('created_at', -1)])
+    hop = (reply.get('hop', 1) + 1) if reply else 1
+    if hop > MAX_HOP:
+        raise NoteRefused('NOTE_HOP_LIMIT', '那张便条已经是回信了，不用再回（便条、回信，到此为止）；想说的就在这一回合里说。')
     # No cap over all directions: a note is read in real time, so nothing piles up; only what comes from public
-    # conversations is counted per day (owner, 2026-10-12).
+    # conversations is counted per day (owner, 2026-10-12). A reply is neither capped nor counted: it answers a note
+    # written to here and ends the chain (note, reply, stop), so replies never outnumber notes (owner, 2026-10-19).
     since = (moment - timedelta(days=1)).isoformat()
-    day = {'persona': persona, 'created_at': {'$gte': since}}
-    if trust == UNTRUSTED and kind == 'home' and store.db.notes.count_documents(
+    day = {'persona': persona, 'created_at': {'$gte': since}, 'reply_to': None}
+    if not reply and trust == UNTRUSTED and kind == 'home' and store.db.notes.count_documents(
             {**day, 'from_scene': ep['scene_id'], 'to_scene': to_scene}) >= PUBLIC_HOME_PER_SCENE:
         raise NoteRefused('NOTE_HOME_LIMIT', '今天从这里往那边写的便条（%d 张）写满了，明天再写。' % PUBLIC_HOME_PER_SCENE)
-    if trust == UNTRUSTED and kind == 'group':
+    if not reply and trust == UNTRUSTED and kind == 'group':
         outside = {**day, 'trust': UNTRUSTED, 'kind': 'group'}
         if store.db.notes.count_documents(outside) >= PUBLIC_TOTAL:
             raise NoteRefused('NOTE_OUTSIDE_LIMIT', '今天群和群之间的便条（%d 张）写满了，明天再写。' % PUBLIC_TOTAL)
@@ -261,11 +268,6 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
                         {'from_scene': to_scene, 'to_scene': ep['scene_id']}]}
         if store.db.notes.count_documents({**outside, **pair}) >= PUBLIC_PAIR:
             raise NoteRefused('NOTE_PAIR_LIMIT', '今天这两个群之间的便条（%d 张）写满了，明天再写。' % PUBLIC_PAIR)
-    reply = None if question else first if first and first['from_scene'] == to_scene else store.db.notes.find_one(
-        {'from_scene': to_scene, 'to_scene': ep['scene_id'], 'seen_in': ep['_id']}, sort=[('created_at', -1)])
-    hop = (reply.get('hop', 1) + 1) if reply else 1
-    if hop > MAX_HOP:
-        raise NoteRefused('NOTE_HOP_LIMIT', '那张便条已经是回信了，不用再回（便条、回信，到此为止）；想说的就在这一回合里说。')
     said = owner_line(store, ep) if trust == UNTRUSTED and kind == 'home' else None
     return {'_id': note_id, 'persona': persona, 'from_scene': ep['scene_id'], 'from_class': cls,
             'from_episode': ep['_id'], 'to_scene': to_scene, 'kind': kind, 'place': place, 'text': text,

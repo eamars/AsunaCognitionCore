@@ -162,12 +162,11 @@ def group_notes(store, persona, scene):
 
 
 def speaker_understanding(store, scene, person_id):
-    """What she wrote about the speaker, the person layer then this group's, the first UNDERSTANDING_CHARS
-    characters; nothing from her other conversations."""
+    """Her lines about the speaker (ADR-082): the person layer's short, then this group's, each the body while it has
+    no short; cut at UNDERSTANDING_CHARS. Nothing from her other conversations."""
     from . import understanding
-    person = store.head(understanding.person_entity(store.config, store.db, person_id), understanding.PERSON_SCOPE)
-    here = store.head('relationship:' + person_id, scene['scope_key'])
-    parts = [str(((head or [None, {}])[1].get('content') or {}).get('body') or '').strip() for head in (person, here)]
+    person, here = understanding.layers(store, scene, person_id)
+    parts = [str(understanding.line(pair) or '').strip() for pair in (person, here)]
     text = '\n'.join(part for part in parts if part)
     return _cut(text, UNDERSTANDING_CHARS) if text else None
 

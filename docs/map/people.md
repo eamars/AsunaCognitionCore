@@ -15,7 +15,7 @@ The relevance gate (owner direction 2026-10-04): may she let a group message pas
 - def `material` — Everything the gate reads, in words.
 - def `system` — Shared rules, then who she is: her core sentences (public), not her persona's rules for talking; small, so a cold read is cheap (owner 2026-10-14: the gate only answers whether to join, she judges in her turn).
 - def `group_notes` — Her notes about this group: the always-shown sections in their order, headings and bodies, the first NOTES_CHARS characters.
-- def `speaker_understanding` — What she wrote about the speaker, the person layer then this group's, the first UNDERSTANDING_CHARS characters; nothing from her other conversations.
+- def `speaker_understanding` — Her lines about the speaker (ADR-082): the person layer's short, then this group's, each the body while it has no short; cut at UNDERSTANDING_CHARS.
 - def `instruction`
 - def `check` — The verdict of an answer whose first line starts with 接话 or 不理; anything else is a mistake the gate tells back to her (answers.py).
 - def `parse` — {'choice': 'join'|'quiet', 'reason': words}; anything she did not answer as 接话 counts as 不理.
@@ -430,6 +430,16 @@ Her understanding of a person, in two layers (owner 2026-10-08, with her wording
 - def `person_entity`
 - def `person_ids` — Every id this person goes by: the account, its canonical person, and configured aliases.
 - def `person_view` — The person layer as she reads it: the fixed line first, then her text and where it was last written.
+- def `layers` — (person head, here head) of this person as this conversation reads them; each (head, revision) or None.
+- def `line` — Her line for a layer: its short, or its body while it has none (written before shorts); None when unwritten.
+- def `pins` — The revisions a view showed, for the write rule: {'person': id or None, 'here': id or None}.
+- def `entry` — One person as a group turn shows them: label, familiarity and stance (as every turn did), her shorts when she has written them.
+- def `group_people` — people_from_program for a group turn: the person who started it, then whoever's @ or reply to her waits behind it in this scene's queue (at most ENTRY_MAX); and what each item showed ({person_id: pins}).
+- def `read` — What `recall`'s `person` returns: the person layer as she reads it (with its short), this conversation's here layer, and the revisions shown.
+- def `listing` — 「名单」 (home only): everyone she has written, each layer with its length, where and when it was last written; newest first.
+- class `Unknown` — A `person` this turn cannot take; the message lists the ones it can.
+- def `present` — The people whose own lines are in this turn (the manifest's `present`, recorded at prepare while the rows still carry ids), and whoever its entry listed (the queue behind it).
+- def `resolve` — The person_id `value` names in this turn, or Unknown with the labels it can take.
 
 ## `private_words`
 

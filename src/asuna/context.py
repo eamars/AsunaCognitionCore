@@ -71,7 +71,7 @@ BLOCKS = {
                    'night_from_program'),
     'affect': ('affect_from_program', 'how_to_record_from_program'),
     'affect_proposals': ('affect_proposals_from_program',),
-    'relationship': ('relationship', 'relationship_shared_from_program'),
+    'relationship': ('relationship', 'relationship_shared_from_program', 'people_from_program'),
     'ledgers': ('ledgers_from_program',),
     'rhythm': ('rhythm_from_program',),
     'memories': ('memories', 'memory_source_rules', 'coverage_from_program'),
@@ -116,6 +116,9 @@ EXPERIENCE_NOTE = ('真实历史片段与行动结果；每条保留来源场景
 DOC_REFS_NOTE = ('你能引用的文档小节：写文档、记想法或记感受要指向某一节时，照抄这里的 doc:… 引用。')
 THOUGHTS_NOTE = '这是你此前在这里的心里话（最近的在最后），是当时的看法，不是说出口的话。'
 # Said once in her system prompt (block_guide), not in every turn (measured 2026-10-16: in 92% of turns).
+PEOPLE_NOTE = ('叫你的人：开启这一回合的人，和排在后面 @ 你、回你的人；熟悉程度、那一档的态度，和你写过的一句话（short 是人那层的，'
+               'here 是这里那层的）。本会话里给过、还在眼前的不再给；同一个人两份都在眼前时，以后给的为准。short 是给你自己的提示，'
+               '不是要说出口的话。完整的理解用 recall 的 person 读；没写过的人只有熟悉程度。')
 UNDERSTANDING_NOTE = ('有值得留下的理解变化时，用 understand_person 写下那一层完整的新理解（两层各自一回合最多写一次）；无需每轮更新。'
                       '本轮上下文里的 derived_summary 也会被程序一并登记成这次理解的来源（按本轮实际展示与当前场景/纪元复核，不用你填 ID）；'
                       '同一批原文已经进过这条关系时，程序记为未提交并给出原因，那不算你改过自己。群场景里只有 about_current_speaker '
@@ -1037,10 +1040,27 @@ class ContextBuilder:
                 memory_tiers.placed(self.store,persona,'persona',persona_doc),session_class)]]))
         if doc_refs:context['doc_refs_from_program']=doc_refs
         manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'person_revision':person_head[0]['revision_id'] if person_head else None,'person_entity_key':person_entity+'|'+_understanding.PERSON_SCOPE,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
-        # Available with or without a record: her first understanding of someone creates it.
-        context['understanding_update_from_program']={
-            'available':True,'target':target_note,
-            'note':UNDERSTANDING_NOTE}
+        if scene['kind']=='group':
+            # ADR-082: a group is read by people. The person who starts the turn (and whoever's @ or reply to her waits
+            # behind it) comes as an entry: familiarity, stance, her shorts; the full layers come with recall's person.
+            for key in ('relationship','relationship_shared_from_program'):
+                context.pop(key,None)
+            # Whose own lines this turn shows (ids, before the rows read as labels): whom recall and understand_person
+            # may name here.
+            # A visit's event person only authorizes the visit; it is not someone in the room.
+            manifest['present']=list(dict.fromkeys([*([] if event.get('episode_kind')=='visit' else [event['person_id']]),
+                                                    *(row.get('author') for row in history
+                                                                          if row.get('direction')!='outbound' and row.get('author'))]))
+            if event.get('episode_kind','external')=='external':
+                items,shown=_understanding.group_people(self.store,scene,event,persona,source)
+                if items:
+                    context['people_from_program']={'items':items,'note':PEOPLE_NOTE}
+                manifest['people_shown']=shown
+        else:
+            # Available with or without a record: her first understanding of someone creates it.
+            context['understanding_update_from_program']={
+                'available':True,'target':target_note,
+                'note':UNDERSTANDING_NOTE}
         from .grants import workspace_grant
         grant = workspace_grant(self.store.config, scene['_id'], event['person_id'], required=False)
         context['action_capabilities_from_program']={

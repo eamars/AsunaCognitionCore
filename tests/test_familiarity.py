@@ -51,7 +51,7 @@ def test_first_understanding_needs_no_placeholder_record(store):
     """Nobody starts with a relationship record: her context says so, and her first understanding creates it."""
     store.db.state_heads.delete_many({'_id': {'$regex': '^relationship:A\\|'}})
     text = 'A 说话直接，喜欢先听结论。'
-    lane = FakeLane(store, [FakeTurn([('think', {'thought': '第一次认真聊。'}), ('understand_person', {'layer': 'here', 'content': text})], '好。')])
+    lane = FakeLane(store, [FakeTurn([('think', {'thought': '第一次认真聊。'}), ('understand_person', {'layer': 'here', 'content': text, 'short': '先说结论'})], '好。')])
     event = {'event_id': 'first-understanding', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '结论先说。'}
     _, before, manifest = ContextBuilder(store).prepare(event)
     assert before['relationship']['here'] == NO_HERE
@@ -59,7 +59,7 @@ def test_first_understanding_needs_no_placeholder_record(store):
     done = Coordinator(store, lane).ingest(event)
     assert done['state'] == 'COMMITTED'
     head, revision = store.head('relationship:A', 'scene:dm-a')
-    assert revision['content'] == {'body': text} and revision['parent_revision_id'] is None
+    assert revision['content'] == {'body': text, 'short': '先说结论'} and revision['parent_revision_id'] is None
     _, after, _ = ContextBuilder(store).prepare({**event, 'event_id': 'later'})
     assert after['relationship']['here'] == text
     assert after['relationship']['familiarity'] == familiarity.CORE_WORDS['known']

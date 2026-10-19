@@ -123,7 +123,10 @@ she left it out in 41 of 108 runs. Reading a person is remembering them, so it m
   to read out by accident).
 - **A long `short` is kept, not refused**: the result says how many characters over 80 (her rule for `think`,
   2026-10-14: a refusal costs a whole retry). Measured: median 46, max 93, 4 of 290 over.
-- `block_hours` keeps blocking only the person the turn is about, never at home (unchanged).
+- **Blocking moves to `watch`** (`do` `block`, `hours`): with `layer`, `content` and `short` required, a call that only
+  blocks could not pass `understand_person` any more. It still blocks the account speaking to her, never at home;
+  `watch` is listed in every platform conversation, groups and private chats (her yes, 2026-10-19: watching and
+  blocking are both whom she hears; she had blocked once).
 
 ## 4. Every path
 
@@ -236,7 +239,7 @@ only, 1.6 MB), kept until this ADR is decided, then reduced to the scores.
 
 | | Today | After |
 |---|---|---|
-| Tool descriptions | `recall` 594, `understand_person` 496 characters (the brain's 20,405 budget is exactly full) | about +480 (`recall` `person` and 「名单」; `understand_person` `person`, `short`, 「不更新」, the read rule, ASK, D9, "not words to say"): the character budget goes from 20,405 to about 20,890, the exact number written here and in `tests/test_tool_budget.py` when built. No other tool's description is cut to make room (her ask: the cost of adding must stay visible) |
+| Tool descriptions | `recall` 594, `understand_person` 496 characters (the brain's 20,405 budget is exactly full) | **+550, built**: `recall` +114 (`person`, 「名单」), `understand_person` +351 (`person`, `short`, 「不更新」, the read rule, ASK, D9, "not words to say"; `block_hours` left it), `watch` +85 (`block`). The character budget goes from 20,405 to 20,955 (21,251 with tiered memory) in `tests/test_tool_budget.py`; no other tool's description was cut (her ask: the cost of adding must stay visible) |
 | System prompt | the `understanding_update_from_program` guide line | the `people_from_program` line (~150), once per conversation; one prefix-cache miss per conversation at the restart that installs it (ADR-038) |
 | Per session context, per person who starts a group turn | `relationship`: ~150–200 characters for **every** distinct speaker (fixed line, NO_PERSON/NO_HERE, familiarity), plus both bodies where written (group here layers 250–600; DMs 661–1,958; person layers 215 and 2,037) | ~60–120 (familiarity and stance) for someone she has not written; at most ~280 with both shorts |
 | Relevance gate question | up to 400 characters | up to 160 |

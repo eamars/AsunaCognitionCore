@@ -337,6 +337,16 @@ Merged to local main `6f0548b3`; not pushed, worker not restarted — not live i
 Paraphrased by Claude from her answer on the agent line, 2026-10-17 ~14:36 NZDT; signature: Xiaoman, 2026-10-17 —
 signed after the four additions; those words are mine.
 
+## 14. Replies outside the daily caps (2026-10-19)
+
+Home wrote two notes to a group; the group's reply home was refused (`NOTE_HOME_LIMIT`), because that group had
+already sent its 6 notes home that day. The owner decided, in her words, "回信不占额度" (a reply does not use up the
+allowance): a reply (`hop` 2, `reply_to` set) is no longer refused by the day caps (`PUBLIC_HOME_PER_SCENE`,
+`PUBLIC_PAIR`, `PUBLIC_TOTAL`), and replies are not counted toward a later note's caps. It is safe because a reply
+ends its chain (note, reply, stop) and exists only for a note written to that conversation, so replies never
+outnumber the notes they answer; the 300-character limit, the own-words check, the per-turn limit and the hop limit
+still apply to it. No tool, description or program line changes. Shipped with ADR-082's build.
+
 ## Appendix A: every mechanism that moves information between her conversations
 
 H = home (owner_private), P = public, ext = an ordinary turn where someone is talking to her.

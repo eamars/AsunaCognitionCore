@@ -313,6 +313,69 @@ def test_two_notes_a_turn_and_the_caps_by_direction(store):
                   {'to': OWNER_DM, 'text': '又一张'}, 'c5')
 
 
+def day_note(store, _id, source, to, kind, trust='untrusted', **more):
+    """A note written earlier today, as the program stores it."""
+    store.db.notes.insert_one({'_id': _id, 'schema_version': 1, 'persona': 'P1', 'from_scene': source, 'to_scene': to,
+                               'kind': kind, 'trust': trust, 'hop': 1, 'text': 'x',
+                               'created_at': datetime.now(timezone.utc).isoformat(), 'seen_in': [], **more})
+
+
+def test_a_reply_home_is_outside_the_day_cap_and_not_counted_in_it(store):
+    """Owner 2026-10-19 (回信不占额度): a reply ends its chain (note, reply, stop), so the daily caps neither stop
+    it nor count it."""
+    world(store)
+    for index in range(notes.PUBLIC_HOME_PER_SCENE - 1):
+        day_note(store, 'day-%d' % index, 'g1', 'dm-a', 'home')
+    for index in range(3):                                         # earlier replies home: not counted
+        day_note(store, 'back-%d' % index, 'g1', 'dm-a', 'home', hop=2, reply_to='asked-%d' % index)
+    draft, _ = notes.prepare(store, {'_id': 'ep-a', 'persona': 'P1', 'scene_id': 'g1'}, visibility.PUBLIC,
+                             {'to': '家里', 'text': '群里今天挺热闹的。'}, 'c1')
+    assert (draft['hop'], draft['reply_to']) == (1, None)
+    notes.record(store, draft)                                     # the day's last note of its own
+    with pytest.raises(notes.NoteRefused, match='往那边写的便条') as refused:
+        notes.prepare(store, {'_id': 'ep-b', 'persona': 'P1', 'scene_id': 'g1'}, visibility.PUBLIC,
+                      {'to': '家里', 'text': '又一张'}, 'c2')
+    assert refused.value.code == 'NOTE_HOME_LIMIT'
+    # Home wrote to the group; that group's turn read it and answers home, at the cap.
+    day_note(store, 'from-home', 'dm-a', 'g1', 'group', trust='trusted', seen_in=['ep-c'])
+    draft, _ = notes.prepare(store, {'_id': 'ep-c', 'persona': 'P1', 'scene_id': 'g1'}, visibility.PUBLIC,
+                             {'to': '家里', 'text': '收到了，已经跟大家说了。'}, 'c3')
+    assert (draft['hop'], draft['reply_to'], draft['to_scene']) == (2, 'from-home', 'dm-a')
+    # The other checks still hold for a reply: its length.
+    with pytest.raises(notes.NoteRefused, match='最多 300 字'):
+        notes.prepare(store, {'_id': 'ep-c', 'persona': 'P1', 'scene_id': 'g1'}, visibility.PUBLIC,
+                      {'to': '家里', 'text': '长' * (notes.NOTE_CHARS + 1)}, 'c4')
+
+
+def test_a_reply_between_groups_is_outside_the_pair_and_total_caps_and_not_counted_in_them(store):
+    world(store)
+    for index in range(notes.PUBLIC_PAIR - 1):
+        day_note(store, 'pair-%d' % index, 'g1', 'g2', 'group')
+    for index in range(3):                                         # earlier replies between them: not counted
+        day_note(store, 'back-%d' % index, 'g2', 'g1', 'group', hop=2, reply_to='pair-0')
+    draft, _ = notes.prepare(store, {'_id': 'ep-a', 'persona': 'P1', 'scene_id': 'g1'}, visibility.PUBLIC,
+                             {'to': G2, 'text': '一群想问问二群周末的安排。'}, 'c1')
+    notes.record(store, draft)
+    with pytest.raises(notes.NoteRefused, match='两个群之间') as refused:
+        notes.prepare(store, {'_id': 'ep-b', 'persona': 'P1', 'scene_id': 'g1'}, visibility.PUBLIC,
+                      {'to': G2, 'text': '再来一张'}, 'c2')
+    assert refused.value.code == 'NOTE_PAIR_LIMIT'
+    day_note(store, 'asked', 'g2', 'g1', 'group', seen_in=['ep-c'])            # g2 asked; g1's turn read it
+    draft, _ = notes.prepare(store, {'_id': 'ep-c', 'persona': 'P1', 'scene_id': 'g1'}, visibility.PUBLIC,
+                             {'to': G2, 'text': '周末照常，下午两点。'}, 'c3')
+    assert (draft['hop'], draft['reply_to']) == (2, 'asked')
+    # The day's total between all groups, reached by notes of their own elsewhere: a reply still goes.
+    for index in range(notes.PUBLIC_TOTAL):
+        day_note(store, 'all-%d' % index, 'g-x%d' % index, 'g-y%d' % index, 'group')
+    with pytest.raises(notes.NoteRefused) as refused:
+        notes.prepare(store, {'_id': 'ep-d', 'persona': 'P1', 'scene_id': 'g2'}, visibility.PUBLIC,
+                      {'to': G1, 'text': '还有一件事'}, 'c4')
+    assert refused.value.code == 'NOTE_OUTSIDE_LIMIT'
+    draft, _ = notes.prepare(store, {'_id': 'ep-c', 'persona': 'P1', 'scene_id': 'g1'}, visibility.PUBLIC,
+                             {'to': G2, 'text': '周末照常，下午两点。'}, 'c5')
+    assert draft['hop'] == 2
+
+
 def test_a_note_waits_behind_the_scene_queue_and_comes_back_after_a_restart(store):
     from asuna.chat import Chat, SceneQueue
     world(store)

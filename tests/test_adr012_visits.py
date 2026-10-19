@@ -103,7 +103,10 @@ def test_a_heartbeat_at_home_sends_her_to_a_group_and_only_her_category_and_topi
     # The visit itself: a public turn in g1 that sees the room and her topic, and nothing from home.
     visit_event = {'event_id': event_id, 'scene_id': 'g1', 'person_id': person, 'adapter_id': 'visit',
                    'episode_kind': 'visit', 'text': service.controller.texts[-1], **envelope}
-    group = FakeLane(store, [FakeTurn([THINK], '周末大家打算去哪儿玩？')])
+    # ADR-082 D6: on a visit she may write about anyone whose lines it shows, naming whom (the visit's event person
+    # only authorizes the visit); a write that names nobody is refused and the turn goes on.
+    unnamed = ('understand_person', {'layer': 'here', 'content': '周末爱聊出去玩。', 'short': '爱聊周末'})
+    group = FakeLane(store, [FakeTurn([THINK, unnamed], '周末大家打算去哪儿玩？')])
     visit = Coordinator(store, group).ingest(visit_event)
     assert visit['state'] in ('COMMITTED', 'WAITING_TASK'), visit.get('failure')
     assert visit['manifest']['session_class'] == 'public'
@@ -117,7 +120,10 @@ def test_a_heartbeat_at_home_sends_her_to_a_group_and_only_her_category_and_topi
     seen = json.dumps([context, group.calls], ensure_ascii=False)
     assert 'HOME_SECRET_LINE' not in seen and '周末大家都在干嘛' in seen
     assert not {'visit', 'set_policy', 'update_self'} & set(group.calls[0]['tools'])     # home's tools: not listed here
-    assert 'understand_person' not in visit['turn_tools']                               # nobody spoke to her
+    assert 'understand_person' in visit['turn_tools']                                   # the room's lines are in front of her
+    [written] = [row for row in group.tool_results if row[2] == 'understand_person']
+    assert not written[5] and '串门时要写 person' in written[4]
+    assert not store.db.state_revisions.find_one({'mutation_id': {'$regex': '^' + visit['_id'] + ':understanding'}})
     said = store.db.messages.find_one({'episode_id': visit['_id'], 'direction': 'outbound'})
     assert said['scene_id'] == 'g1' and said['target'] == {'type': 'group', 'id': 'G1'}
     # Brought home: what happened, then a second visit there waits (she was just there).

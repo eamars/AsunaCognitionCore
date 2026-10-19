@@ -8,7 +8,7 @@ from asuna.memory import MemoryService
 
 def setup_turn(store, reflection):
     store.config['task_mode']='workspace'
-    understand=('understand_person',{'layer':'here','content':reflection})
+    understand=('understand_person',{'layer':'here','content':reflection,'short':'A 要先听结论。'})
     lane=FakeLane(store,[
         FakeTurn([('think',{'thought':'这是当前人物明确的反馈，不代表所有人。'}),understand],'知道了。'),
         # The resumed turn is told which calls already took effect (think); the interrupted one is not among them.
@@ -22,8 +22,8 @@ def test_role_update_survives_interruption_without_double_commit_or_scope_leak(s
     coordinator,lane,event=setup_turn(store,text)
     before=store.head('relationship:A','scene:dm-a')[1]
     original=MemoryService.commit_understanding
-    def interrupted(service,ep,body,layer='here'):
-        result=original(service,ep,body,layer)
+    def interrupted(service,ep,body,layer='here',**kwargs):
+        result=original(service,ep,body,layer,**kwargs)
         raise RuntimeError('after state commit, before episode marker')
     monkeypatch.setattr(MemoryService,'commit_understanding',interrupted)
     with pytest.raises(RuntimeError):coordinator.ingest(event)
@@ -37,7 +37,7 @@ def test_role_update_survives_interruption_without_double_commit_or_scope_leak(s
     assert '这一回合中断前已经生效的工具调用（不用再做一遍）：think' in lane.calls[1]['messages'][-1]['content']
     assert done['understanding_update']['state']=='COMMITTED'
     revision=store.head('relationship:A','scene:dm-a')[1]
-    assert revision['content']['body']==text
+    assert revision['content']=={'body':text,'short':'A 要先听结论。'}
     assert revision['parent_revision_id']==before['_id']
     assert revision['source_ids']==done['monologue_refs']
     assert store.db.state_revisions.count_documents({'mutation_id':ep['_id']+':understanding'})==1

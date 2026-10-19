@@ -30,42 +30,48 @@ class MemoryService:
     # "本轮是否真的展示给过角色 + 现在仍是当前 scope/纪元的 active 条目"重读复核。
     UNDERSTANDING_AUTO_SOURCES=('dialogue_summary',)
 
-    def commit_understanding(self,episode,body,layer='here'):
+    def commit_understanding(self,episode,body,layer='here',person_id=None,short=None,base=None):
         """Commit bounded role-authored prose using the existing revision/CAS path: the here layer (this
-        conversation's record) or the person layer (one record for the person, understanding.py)."""
-        scope=episode['scope_key'];operation=episode['_id']+(':understanding' if layer=='here' else ':understanding:person')
+        conversation's record) or the person layer (one record for the person, understanding.py).
+
+        `person_id`: whom it is about (default the turn's person); `short`: her one line for herself, saved in the
+        same revision (ADR-082); `base`: the revisions this turn showed her of that person ({'here', 'person'}, from a
+        recall), in place of the turn's own projection. A body of 「不更新」 with a short keeps the body as shown and
+        changes only the short."""
+        person_id=person_id or episode['person_id']
+        own=person_id==episode['person_id']
+        scope=episode['scope_key'];operation=episode['_id']+(':understanding' if layer=='here' else ':understanding:person')+('' if own else ':'+person_id)
         scene=self.store.authorize(episode['scene_id'],episode['person_id'])
         if (scene['scope_key'],scene['policy_epoch'])!=(scope,episode['policy_epoch']):
             raise Denied('UNDERSTANDING_SCOPE_OR_EPOCH_CHANGED: 这个对话的授权刚变过（不是你的错），这次理解存不了；重试也一样，下回合再更新')
-        if body.strip()=='不更新':
+        if body.strip()=='不更新' and short is None:
             result={'state':'NO_CHANGE'}
         elif layer=='person':
-            result=self._commit_person(episode,body,scope,operation)
+            result=self._commit_person(episode,body,scope,operation,person_id,short,base)
         else:
-            entity='relationship:'+episode['person_id']
+            entity='relationship:'+person_id
             target_scope,linked=scope,[]
             if scene_links:
-                target=scene_links.relationship_target(self.store.config,self.store.db,scene,episode['person_id'])
+                target=scene_links.relationship_target(self.store.config,self.store.db,scene,person_id)
                 entity,target_scope,linked=target['entity'],target['scope'],list(target['linked_scopes'])
             # 本轮上下文里给她看的那一份优先（manifest 记的是她实际读到的 head）；但它只能是本场景
             # 那一份，或配置认定同一个人时的那一份——别的都算越权，不给「看起来连着」的错写。
-            key=episode['manifest'].get('relationship_entity_key') or (entity+'|'+target_scope)
-            if key not in {entity+'|'+target_scope,'relationship:'+episode['person_id']+'|'+scope}:
+            key=(episode['manifest'].get('relationship_entity_key') if own and base is None else None) or (entity+'|'+target_scope)
+            if key not in {entity+'|'+target_scope,'relationship:'+person_id+'|'+scope}:
                 raise Denied(NOT_THIS_SCENE)
             entity,_,target_scope=key.rpartition('|')
             if target_scope!=scope and (not linked or scope not in linked
                                         or not entity.startswith('relationship:')):
                 raise Denied(NOT_THIS_SCENE)
-            base_id=episode['manifest']['relationship_revision']
-            base=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':key}) if base_id else None
+            base_id=(base or {}).get('here') if base is not None else episode['manifest']['relationship_revision']
+            found=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':key}) if base_id else None
             # No record yet (everyone starts with none): her first understanding creates it.
-            if base_id and not base:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这回合看到的那份理解已经找不到了（不是你的错）；重试也一样，下回合再更新')
-            if not body.strip():raise Denied('EMPTY_UNDERSTANDING')
-            if base and body==base['content'].get('body'):
+            if base_id and not found:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这回合看到的那份理解已经找不到了（不是你的错）；重试也一样，下回合再更新')
+            content=self._content(found,body,short)
+            if content is None:
                 result={'state':'NO_CHANGE'}
             else:
-                sources,auto,skipped,stale=self._understanding_sources(episode,scope)
-                content={'body':body}
+                sources,auto,skipped,stale=self._understanding_sources(episode,scope,person_id)
                 try:
                     revision=self.store.mutate(entity,target_scope,base_id,content,sources,scope,operation,
                         linked_scopes=linked,
@@ -76,34 +82,51 @@ class MemoryService:
                     # processed_source_ids：那是"没有可提交的新证据"，不是协议错误。
                     # 记审计后让本轮继续说话，不把整轮打成 FAILED_RUNTIME。
                     result={'state':'NOT_COMMITTED','entity':entity,'target_scope':target_scope,'base_revision':base_id,
-                        'reason':str(exc),'body':body,'source_ids':sources,'auto_source_ids':auto,
+                        'reason':str(exc),'body':content['body'],'source_ids':sources,'auto_source_ids':auto,
                         'auto_source_skipped':skipped,'auto_stale_source_ids':stale}
                 else:
                     result={'state':'COMMITTED','entity':entity,'target_scope':target_scope,'base_revision':base_id,
-                        'accepted_revision':revision['_id'],'body':body,'source_ids':sources,
+                        'accepted_revision':revision['_id'],'body':content['body'],'source_ids':sources,
                         'auto_source_ids':auto,'auto_source_skipped':skipped,
                         'auto_stale_source_ids':stale}
-        self.store.audit(episode['_id'],'understanding.result',{**result,'layer':layer},scope)
+        self.store.audit(episode['_id'],'understanding.result',{**result,'layer':layer,'person_id':person_id},scope)
         return result
 
-    def _commit_person(self,episode,body,scope,operation):
+    @staticmethod
+    def _content(base,body,short):
+        """The new content of a layer, or None when nothing changes. 「不更新」 keeps the shown body and changes the
+        short (there must be a body to keep)."""
+        old=(base or {}).get('content') or {}
+        if body.strip()=='不更新':
+            if not base:
+                raise Denied('UNDERSTANDING_NOTHING_TO_KEEP: 这一层还没写过，没有正文可以留着；content 写完整的正文')
+            body=old.get('body') or ''
+        elif not body.strip():
+            raise Denied('EMPTY_UNDERSTANDING')
+        content={'body':body,**({'short':short} if short is not None else {})}
+        if base and body==old.get('body') and (short is None or short==old.get('short')):
+            return None
+        return content
+
+    def _commit_person(self,episode,body,scope,operation,person_id=None,short=None,base=None):
         """The person layer: written from this conversation into the person's one record, with where and when."""
         from .understanding import PERSON_SCOPE,person_entity
-        entity=person_entity(self.store.config,self.store.db,episode['person_id'])
-        key=episode['manifest'].get('person_entity_key')
+        person_id=person_id or episode['person_id']
+        entity=person_entity(self.store.config,self.store.db,person_id)
+        key=entity+'|'+PERSON_SCOPE if base is not None else episode['manifest'].get('person_entity_key')
         if key!=entity+'|'+PERSON_SCOPE:
             raise Denied('UNDERSTANDING_PERSON_NOT_IN_CONTEXT: 这回合没给你看他的人那层（不是你的错）；重试也一样，下回合再写')
-        base_id=episode['manifest'].get('person_revision')
-        base=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':key}) if base_id else None
-        if base_id and not base:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这回合看到的那份理解已经找不到了（不是你的错）；重试也一样，下回合再更新')
-        if not body.strip():raise Denied('EMPTY_UNDERSTANDING')
-        if base and body==base['content'].get('body'):
+        base_id=(base or {}).get('person') if base is not None else episode['manifest'].get('person_revision')
+        found=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':key}) if base_id else None
+        if base_id and not found:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这回合看到的那份理解已经找不到了（不是你的错）；重试也一样，下回合再更新')
+        content=self._content(found,body,short)
+        if content is None:
             return {'state':'NO_CHANGE'}
-        sources,auto,skipped,stale=self._understanding_sources(episode,scope)
-        common={'entity':entity,'target_scope':PERSON_SCOPE,'base_revision':base_id,'body':body,'source_ids':sources,
+        sources,auto,skipped,stale=self._understanding_sources(episode,scope,person_id)
+        common={'entity':entity,'target_scope':PERSON_SCOPE,'base_revision':base_id,'body':content['body'],'source_ids':sources,
                 'auto_source_ids':auto,'auto_source_skipped':skipped,'auto_stale_source_ids':stale}
         try:
-            revision=self.store.mutate(entity,PERSON_SCOPE,base_id,{'body':body},sources,scope,operation,
+            revision=self.store.mutate(entity,PERSON_SCOPE,base_id,content,sources,scope,operation,
                 linked_scopes=[scope],change_class='interpretation',
                 reason='角色在一个对话里写下的、她认为这个人在哪儿都成立的理解；来源由程序关联。',
                 origin={'scene_id':episode['scene_id'],'at':now()})
@@ -111,7 +134,7 @@ class MemoryService:
             return {'state':'NOT_COMMITTED','reason':str(exc),**common}
         return {'state':'COMMITTED','accepted_revision':revision['_id'],**common}
 
-    def _understanding_sources(self,episode,scope):
+    def _understanding_sources(self,episode,scope,person_id=None):
         """本回合独白 + 本回合程序实际展示过、且确实盖到当前说话人的当前场景摘要。
 
         独白仍必须是本 episode 写的那条（沿用原检查，防复用旧 episode 的独白）；摘要没有
@@ -135,7 +158,7 @@ class MemoryService:
                     'policy_epoch':episode['policy_epoch'],'status':'active',
                     'kind':{'$in':list(self.UNDERSTANDING_AUTO_SOURCES)}})
             if not unit:continue
-            covers,why=summary_attribution.covers_person(self.store,unit,episode['person_id'])
+            covers,why=summary_attribution.covers_person(self.store,unit,person_id or episode['person_id'])
             if not covers:
                 skipped.append({'id':key,'reason':why});continue
             auto.append(key)

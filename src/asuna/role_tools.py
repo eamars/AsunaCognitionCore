@@ -128,6 +128,8 @@ from .capabilities import CANNOT as LEG_CANNOT, WORDS as LEG_WORDS      # her wo
 # so stay_silent has nothing left to do there (owner 2026-10-19; at home body text is speech and it stays).
 REPLY_REPLACES = ('await_answer', 'attach_image', 'stay_silent')
 
+from . import understanding as _understanding
+
 TOOLS = {
     'think': {
         'description': ('写下这回合的心里话：注意到了什么、心里什么感觉、打算怎么做。用你自己的口吻写两三句，%d 字以内，不是完整的推理过程。'
@@ -138,8 +140,10 @@ TOOLS = {
     'recall': {
         'description': ('回想：按一句话搜你的记忆（query）；或读文档里某一节的原文（sections，照抄 doc 和 section）'
                          '，合并转发的全文也这样读（doc 写 forward，section 照抄那行里的 ref）。每回合最多 %d 次。'
-                         '对话里说过的话用它想起来；记不起来就照实说，不编。在家里还会带上你在群里那时的心里话。' % RECALLS_PER_TURN),
-        'parameters': {'query': _s(limit=500, description='想找什么，用一句话说；只读 sections 时可省略'),
+                         '对话里说过的话用它想起来；记不起来就照实说，不编。在家里还会带上你在群里那时的心里话。'
+                         '回想一个人用 person：读你对他两层理解的全文。' % RECALLS_PER_TURN),
+        'parameters': {'query': _s(limit=500, description='想找什么，用一句话说；只读 sections 或 person 时可省略'),
+                       'person': _s('回想一个人：照抄他的标签；在家里写「名单」列出你写过的所有人'),
                        'sections': {'type': 'array', 'description': '要读原文的文档节（至多 3 条）',
                                     'items': {'type': 'object', 'additionalProperties': False, 'properties': {
                                         'doc': _s('文档，如 persona、voice；合并转发写 forward', required=True),
@@ -208,10 +212,11 @@ TOOLS = {
         'description': ('盯一个人：on 把这个对话里的一个人（照抄标签或写名字）加进名单，之后他在你任何一个对话里说话，你都会在那边知道（群里会叫你看一眼）'
                          '。how_often=once（默认）他第一次说话叫你一次；burst 他每次沉默十分钟后再开口都叫你。'
                          'hours 盯多久（1–72），最多同时 5 个，到期自己停；off 停掉一个（id 照抄 watching_from_program）'
-                         '。刚 @ 过或回过的人程序本来就等三分钟。'),
-        'parameters': {'op': _s('做什么', required=True, enum=['on', 'off']),
+                         '。刚 @ 过或回过的人程序本来就等三分钟。block 屏蔽正在跟你说话的这个账号：他的话照存，但哪儿都不叫你，到点结束；'
+                         '家里的人屏蔽不了。'),
+        'parameters': {'op': _s('做什么', required=True, enum=['on', 'off', 'block']),
                        'person': _s('on 用：这个对话里的人（标签、#编号或名字）'),
-                       'hours': {'type': 'integer', 'description': 'on 用：盯多少小时，1–72'},
+                       'hours': {'type': 'integer', 'description': 'on 用：盯多少小时，1–72；block 用：屏蔽多少小时，默认 24，最多 168'},
                        'mode': _s('on 用：once 或 burst，默认 once', enum=['once', 'burst']),
                        'why': _s('on 可写：为什么盯他，一句话（家里写的只在家里看得到）'),
                        'id': _s('off 用：watching_from_program 里的 id')},
@@ -256,13 +261,17 @@ TOOLS = {
         },
     },
     'understand_person': {
-        'description': ('更新你对当前说话人的理解，选一层：person 人那层（在哪儿遇到他都看得到），here 这里那层（只在这个对话）'
-                         '。content 写那一层完整的新正文，留着仍然成立的旧内容，分清他说的、你看到的和你推的。只在真有值得留下的变化时写，'
-                         '两层各一回合最多一次。他的喜好、习惯、怎么跟他聊记在这里。家外的对话里写 block_hours（默认 24，'
-                         '最多 168）屏蔽这个账号：他的话照存，但哪儿都不叫你，到点结束。'),
-        'parameters': {'layer': _s('person（人那层）或 here（这里那层）', enum=['person', 'here']),
-                       'body': _s(limit=SINGLE_BODY_CHARS, description='那一层完整的新正文'),
-                       'block': {'type': 'integer', 'description': '屏蔽他多少小时（不写理解时 layer、content 可省略）'}},
+        'description': ('写你对一个人的理解，选一层：person 人那层（在哪儿遇到他都看得到），here 这里那层（只在这个对话）。'
+                         'content 写那一层完整的新正文，留着仍然成立的旧内容，分清他说的、你看到的和你推的；正文不动、只换 short 时 content 写「不更新」。'
+                         'short 一句话（%d 字以内）：他是谁、怎么跟他聊，只写正文里有的，推的标明是推的；short 是给你自己的提示，不是要说出口的话。'
+                         '改写已有的那层先用 recall 的 person 读。person 照抄他的标签，不写是开启这一回合的人；串门时要写。'
+                         '每人每层一回合最多一次。在群里先 speak 再写。他的喜好、习惯、怎么跟他聊记在这里。' % _understanding.SHORT_CHARS
+                         + _understanding.ASK),
+        'parameters': {'person': _s('他的标签（照抄）；不写是开启这一回合的人'),
+                       'layer': _s('person（人那层）或 here（这里那层）', enum=['person', 'here'], required=True),
+                       'body': _s(limit=SINGLE_BODY_CHARS, description='那一层完整的新正文；正文不动只换 short 写「不更新」',
+                                  required=True),
+                       'short': _s('一句话：他是谁、怎么跟他聊', required=True)},
     },
     'set_policy': {
         'description': ('调整你自己声明过的一个参数（persona-model 里的 policy key）。也管开关：key=tools_off 把 place 那个对话的一些工具关掉（value 是工具名列表，'
@@ -690,7 +699,12 @@ def _turn_rules(store, ep):
         # to restart is when she needs it most.
         names += ['set_policy', 'ask.ask', 'ask.read', 'ask.close', 'place_timezone', 'restart',
                   'group_focus']
-    if kind not in ('presence', 'settlement', 'self_development', 'visit', 'note') and (
+    if scene_kind == 'group':
+        # ADR-082: in a group she writes about anyone whose lines are in front of her, visits included; a plan due
+        # there has no one's lines of its own.
+        if kind in ('external', 'task_feedback', 'visit'):
+            names.append('understand_person')
+    elif kind not in ('presence', 'settlement', 'self_development', 'visit', 'note') and (
             context.get('understanding_update_from_program') or {}).get('available'):
         names.append('understand_person')
     if context.get('affect_from_program'):
@@ -809,8 +823,8 @@ NOT_NOW = {
                 '在能发表情包的对话里，或者家里别的回合再用。'),
     'credential': '保险箱只在家里有人跟你说话、或者任务交回来的那一回合用；心跳、计划到点、自我改进这些回合不收不删。',
     'find_member': '这回合没有这个群的成员名单可查；照对话里的标签认人。',
-    'understand_person': ('这回合没有人跟你说话（心跳、夜间沉淀、自我改进、串门、便条叫醒这几种回合），'
-                          '没有要更新理解的人；等对方下次开口再写。'),
+    'understand_person': ('这回合没有人跟你说话（心跳、夜间沉淀、自我改进、便条叫醒这几种回合，群里还有计划到点），'
+                          '没有要写理解的人；等对方下次开口，或者去那个群串门时再写。'),
     'feel': '这回合没有情感账可记。',
     'group_action': '群里：你在这个群现在不是管理员，或者管理动作关着；家里：现在没有等你回的请求。',
     'promote_memory': '提升长期记忆只在夜间沉淀那一回合做（候选和配额那时才列出来）；现在先记着，晚上再提。',
@@ -1260,10 +1274,15 @@ class RoleTools:
 
     def tool_recall(self, ep, call_id, args):
         # ADR-060: query is optional when sections name what to read.
-        query = self._text(args, 'query', 500, required=not args.get('sections'))
+        query = self._text(args, 'query', 500, required=not (args.get('sections') or args.get('person')))
         count = int(ep.get('recall_count') or 0)
         if count >= RECALLS_PER_TURN:
             raise Refused('这回合已经回想了 %d 次：用已经想起来的回答，记不清就直说。' % RECALLS_PER_TURN)
+        if args.get('person'):
+            result = self._recall_person(ep, count, args['person'])
+            if query or args.get('sections'):
+                result['not_used'] = 'query 和 sections 这次没用：person 单独读一个人；要搜记忆或读文档，另调一次 recall。'
+            return result, False
         from . import memory_tiers
         sections = args.get('sections') or []
         listing = [item for item in sections if memory_tiers.ENABLED and isinstance(item, dict)
@@ -1361,16 +1380,45 @@ class RoleTools:
             return credentials.drop(args.get('name')), False
         raise Refused('do 是 keep 或 drop%s。' % _given(args, 'op'))
 
+    def _recall_person(self, ep, count, value):
+        """recall's person (ADR-082): both layers of one person as this conversation reads them, pinned for a write;
+        at home 「名单」 lists everyone she has written. Never touches the embedding route."""
+        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        home = self._place(ep) == visibility.OWNER_PRIVATE
+        text = ' '.join(str(value).split())
+        c = self.coordinator
+        if text == _understanding.LIST_WORD:
+            if not home:
+                raise Refused(_understanding.LIST_HOME_ONLY)
+            c._update(self._fresh(ep), recall_count=count + 1)
+            rows = _understanding.listing(self.store, ep['persona'])
+            self.store.audit(ep['_id'], 'recall.people', {'listed': len(rows)}, ep['scope_key'])
+            return {'people': [{k: v for k, v in r.items() if k != 'person'} for r in rows]
+                    or _understanding.NOT_WRITTEN + '任何人。'}
+        try:
+            person_id = _understanding.resolve(self.store, ep, scene, text, ep['persona'], home=home, for_read=True)
+        except _understanding.Unknown as exc:
+            raise Refused(str(exc))
+        view, shown = _understanding.read(self.store, scene, person_id)
+        ep = self._fresh(ep)
+        c._update(ep, recall_count=count + 1,
+                  understanding_seen={**(ep.get('understanding_seen') or {}), person_id: shown})
+        from .people import People
+        self.store.audit(ep['_id'], 'recall.person', {'person_id': person_id, 'shown': shown}, ep['scope_key'])
+        return {'who': People(self.store, ep['persona']).speaker(scene, person_id), **view}
+
     def tool_watch(self, ep, call_id, args):
         from . import watches
         op = args.get('op')
+        if op == 'block':
+            return self._block(ep, args.get('hours') if args.get('hours') is not None else 24), False
         if op == 'on':
             if (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind') not in ('group', 'dm'):
                 raise Refused('这里不是群或私聊，盯不了人：到看得到他的群或私聊里再用 on。')
             return watches.add(self.store, ep, ep['persona'], self._place(ep), args), False
         if op == 'off':
             return watches.stop(self.store, ep['persona'], args.get('id')), False
-        raise Refused('do 是 on 或 off%s。' % _given(args, 'op'))
+        raise Refused('do 是 on、off 或 block%s。' % _given(args, 'op'))
 
     def tool_await_answer(self, ep, call_id, args):
         wait = args.get('wait', 'yes')
@@ -1932,38 +1980,76 @@ class RoleTools:
         from .memory import MemoryService
         from .queue import database_effects_lock
         from .tasks import require_current_feedback
-        blocked = self._block(ep, args['block']) if args.get('block') is not None else None
-        if blocked and args.get('body') is None:
-            return blocked, False
         body = self._text(args, 'body', SINGLE_BODY_CHARS)
+        short = self._text(args, 'short', 20000)      # a guard only: a long short is kept and the result says so
         layer = args.get('layer')
         if layer not in ('person', 'here'):
             raise Refused('UNDERSTANDING_LAYER_REQUIRED: layer 要写 person（人那层，哪儿都看得到）或 here（这里那层，只在这个对话里）；'
                           '给的是 %r。拿不准就问自己：这条换个群还成立吗，成立是 person，不成立是 here' % (layer,))
-        if not ((ep.get('context') or {}).get('understanding_update_from_program') or {}).get('available'):
-            raise Denied('UNDERSTANDING_UPDATE_NOT_AVAILABLE')
-        field = 'understanding_update' if layer == 'here' else 'person_understanding_update'
+        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        group = scene.get('kind') == 'group'
+        if group and turn_kind(ep) == 'visit' and not args.get('person'):
+            raise Refused('串门时要写 person：照抄你要写的那个人的标签。')
+        try:
+            person_id = _understanding.resolve(self.store, ep, scene, args.get('person'), ep['persona'])
+        except _understanding.Unknown as exc:
+            raise Refused(str(exc))
+        own = person_id == ep['person_id']
+        # Once per person and layer a turn, said before anything asks her to read again.
+        field = ('understanding_update' if layer == 'here' else 'person_understanding_update') if own else None
         words = '这里那层' if layer == 'here' else '人那层'
-        if (ep.get(field) or {}).get('state') == 'COMMITTED':
-            raise Refused('这回合已经写过一次%s了，每层一回合只写一次；还有要补的，下回合再写。' % words)
-        mutation = ep['_id'] + (':understanding' if layer == 'here' else ':understanding:person')
+        done = (ep.get(field) or {}) if own else ((ep.get('understanding_writes') or {}).get(layer + '|' + person_id) or {})
+        if done.get('state') == 'COMMITTED':
+            raise Refused('这回合已经写过一次他的%s了，每人每层一回合只写一次；还有要补的，下回合再写。' % words)
+        seen = (ep.get('understanding_seen') or {}).get(person_id)
+        if group or not own:
+            # ADR-082: in a group the layers are not in the turn; a write is against what a recall showed this turn.
+            if seen is None:
+                person, here = _understanding.layers(self.store, scene, person_id)
+                existing = person if layer == 'person' else here
+                if existing:
+                    view, shown = _understanding.read(self.store, scene, person_id)
+                    ep = self._fresh(ep)
+                    self.coordinator._update(ep, understanding_seen={**(ep.get('understanding_seen') or {}),
+                                                                     person_id: shown})
+                    current = view['person'] if layer == 'person' else view['here']
+                    raise Refused('这回合还没读过他现在的%s，不能直接改写（content 要写完整的新正文，或者写「不更新」只换 short）。'
+                                  '他现在的这一层：%s　照这份改，再写一次。'
+                                  % ('人那层' if layer == 'person' else '这里那层', json.dumps(current, ensure_ascii=False)))
+                seen = _understanding.pins(person, here)
+            base = seen
+        else:
+            if not ((ep.get('context') or {}).get('understanding_update_from_program') or {}).get('available'):
+                raise Denied('UNDERSTANDING_UPDATE_NOT_AVAILABLE')
+            base = None
+        mutation = ep['_id'] + (':understanding' if layer == 'here' else ':understanding:person') + ('' if own else ':' + person_id)
         saved = self.store.db.state_revisions.find_one({'mutation_id': mutation}, {'_id': 1})
         if saved:
-            # Saved before this turn was interrupted: once per episode and layer, never a second revision.
+            # Saved before this turn was interrupted: once per episode, person and layer, never a second revision.
             update = {'state': 'COMMITTED', 'accepted_revision': saved['_id']}
-            self.coordinator._update(self._fresh(ep), **{field: update})
+            self._record_write(ep, own, field, layer, person_id, update)
             return {'state': 'COMMITTED', 'note': '这回合中断前已经保存过%s。' % words}, False
         with database_effects_lock(self.store.name):
             require_current_feedback(self.store, ep)
-            update = MemoryService(self.store).commit_understanding(self._fresh(ep), body, layer)
-        self.coordinator._update(self._fresh(ep), **{field: update})
+            update = MemoryService(self.store).commit_understanding(self._fresh(ep), body, layer, person_id=person_id,
+                                                                    short=short, base=base)
+        self._record_write(ep, own, field, layer, person_id, update)
         result = {k: update.get(k) for k in ('state', 'reason') if update.get(k)}
-        if blocked:
-            result['block'] = blocked
+        if len(short) > _understanding.SHORT_CHARS:
+            # Kept whatever its length (her rule for think, 2026-10-14): only this result says it.
+            result['short'] = 'short 超了 %d 字，下次短些。' % (len(short) - _understanding.SHORT_CHARS)
         if update.get('state') == 'NOT_COMMITTED':
             result['note'] = UNDERSTANDING_NOT_SAVED.get(str(update.get('reason')).split(':', 1)[0],
                                                          '这次理解没存上（不是你的错）；重试也一样，下回合再更新。')
         return result, False
+
+    def _record_write(self, ep, own, field, layer, person_id, update):
+        ep = self._fresh(ep)
+        if own:
+            self.coordinator._update(ep, **{field: update})
+        else:
+            self.coordinator._update(ep, understanding_writes={**(ep.get('understanding_writes') or {}),
+                                                               layer + '|' + person_id: update})
 
     def _mute(self, ep, scene, on, hours):
         """ADR-052: a group muted for a while: it rests, and she neither speaks first there nor visits."""
@@ -1997,7 +2083,7 @@ class RoleTools:
         from . import switches
         from .people import People
         if self._place(ep) == visibility.OWNER_PRIVATE:
-            raise Refused('家里的人屏蔽不了：block_hours 只在家外的对话里用，屏蔽正在跟你说话的那个人。')
+            raise Refused('家里的人屏蔽不了：watch 的 block 只在家外的对话里用，屏蔽正在跟你说话的那个人。')
         scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
         label = People(self.store, ep.get('persona')).speaker(scene, ep['person_id'])
         row = switches.set_switch(self.store, ep, 'block', label=label, person_id=ep['person_id'], hours=hours)

@@ -33,7 +33,7 @@ class CognitionView:
         for audit in self.store.db.audit_events.find(query, {
                 'stream_id': 1, 'occurred_at': 1}).sort([('occurred_at', -1), ('_id', -1)]).limit(24):
             episode = self.store.db.episodes.find_one({**episode_query, '_id': audit['stream_id']},
-                {'context': 1, 'manifest': 1, 'monologue_refs': 1})
+                {'context': 1, 'manifest': 1, 'monologue_refs': 1, 'understanding_seen': 1})
             if episode:
                 return {**episode, 'at': audit['occurred_at']}
         return None
@@ -52,6 +52,12 @@ class CognitionView:
             elif entity.startswith('relationship:'):
                 selected = (manifest.get('relationship_revision') if key == manifest.get('relationship_entity_key')
                             else manifest.get('person_revision') if key == manifest.get('person_entity_key') else None)
+                # ADR-082: in a group, what an entry or a recall of hers showed of each person.
+                shown = {rev for pins in [*(manifest.get('people_shown') or {}).values(),
+                                          *(self.snapshot.get('understanding_seen') or {}).values()]
+                         for rev in (pins or {}).values() if rev}
+                if revision in shown:
+                    return 'used'
             elif entity.startswith(('character_core:', 'current_self:')):
                 selected = (context.get('self_state_from_program', {}).get(entity.split(':')[0]) or {}).get('revision_id')
             else:

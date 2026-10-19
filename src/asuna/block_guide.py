@@ -16,6 +16,7 @@ def notes():
     return {
         'recent_thoughts_from_program': (context.THOUGHTS_NOTE,),
         'understanding_update_from_program': (context.UNDERSTANDING_NOTE,),
+        'people_from_program': (context.PEOPLE_NOTE,),
         'doc_refs_from_program': (context.DOC_REFS_NOTE,),
         'ideas_from_program': (context.IDEAS_NOTE,),
         'recent_experience_from_program': (context.EXPERIENCE_NOTE,),

@@ -267,3 +267,10 @@ until the minimum is reached, it is never a pass by default.
    choice (`visit`, `scheduled`, `note`), baseline 52 of 98 = 53.1% (10-15 to 10-18 22:15Z). With at least 40 such
    turns (fewer: the read waits), **fail** (stay_silent comes back) if they speak above 68%, or if group external
    turns fall below 95% (baseline 98.4%); otherwise **pass**. The ADR-082 install changed the same group turns; reported beside it.
+   **Read in two parts (her review, 2026-10-20, fixed before the read).** The same window changed two things in
+   opposite directions: the 「没发出去」 line stopped appearing where it was wrong, and platforms lost `stay_silent`.
+   So the window's turns where silence is a choice are split. Those that carried the line are the episodes with
+   `manifest.told.unsent` set, recorded from T. The 68% is judged on the turns without the line. The turns with the
+   line are reported beside, with their count. The baseline cannot be split, because the record starts at T, so it
+   stays 53.1%. She also named a third change in the window, resting groups' stickers waking her; it is reported, not
+   separated.

@@ -286,6 +286,25 @@ Otherwise **fail**. Reported beside it, not judged: entries sent a day, and how 
 an old body; M5 as a person short written in the window that contains the title of a group where that person has a
 here layer, or a run of 6 or more characters shared with that person's here body.
 
+**Her review of the verdict (2026-10-20, fixed before the read).** A count of writes rewards writing more, not
+writing right. She asked for a measure from outside. The records cannot give one: a write carries no reason. So, with
+her consent (2026-10-20, asked at the owner's request), Claude reads the conversations for it:
+
+- **What is read.** For each committed write about a person in the window: that person's own lines in the same
+  conversation, from the write until the next write about them (or the read), read for a correction of what was
+  written. Her written layer is used only to see what was corrected. Nothing else of hers is read: no thoughts,
+  diary, notes, or her letter to her next self.
+- **Its name: written, then corrected by the person (「写入后被本人更正」).** It is not "how many she got wrong".
+  The window cannot see a correction made before the write that she did not take up.
+- **What it measures.** It is a lower bound on wrong writes, not an accuracy: a write nobody corrected is not shown to
+  be right. It is never reported as an accuracy rate.
+- **What is reported.** Writes, and how many were then corrected by the person, always both numbers. Each corrected
+  one gets its person, layer, date and the line's number, so she can check the judgement herself. No one's words are
+  quoted.
+- **Where the list lives.** In `.runtime/private/adr082/corrections.md`: private, since labels point at people. The
+  lines read are not kept.
+- **How it counts.** Reported beside the verdict, not judged. There is no baseline yet. Read for 10-22 only.
+
 Her review comes before the build (her ask: generic capability, core, not persona).
 
 ## 10. Verification before it ships

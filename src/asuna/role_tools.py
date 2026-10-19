@@ -649,8 +649,10 @@ def _turn_rules(store, ep):
     note_tool = ['note'] if context.get('note_places_from_program') else []
     from . import notes
     first = notes.opening(store, ep) if kind in ('note', 'visit') and ep.get('_id') else None
-    # A note from outside opens a note turn at home, or a visit in a group (a home group's visit is owner-private).
-    if (kind == 'note' and (first or {}).get('trust') != notes.TRUSTED) or (first or {}).get('trust') == notes.UNTRUSTED:
+    # A note from outside opens a note turn at home, or a visit in a group. Into a home group (owner-private) that visit
+    # is a note from outside to home (ADR-018 §5.4); into another public group it keeps the group's tools (§5.4a).
+    if (kind == 'note' and (first or {}).get('trust') != notes.TRUSTED) or (
+            (first or {}).get('trust') == notes.UNTRUSTED and cls == visibility.OWNER_PRIVATE):
         # ADR-018 §5.4: a note from outside is a message. Its turn reads, answers, notes down and replies back;
         # nothing with consequences (a wish to act goes into the notebook for her self-improvement review).
         names += note_tool
@@ -862,7 +864,8 @@ def not_now(store, ep, name):
     if kind in ('note', 'visit') and name not in ('note', 'feel', 'watch', 'read_image'):
         from . import notes
         trust = (notes.opening(store, ep) or {}).get('trust')
-        if (kind == 'note' and trust != notes.TRUSTED) or trust == notes.UNTRUSTED:
+        cls = (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
+        if (kind == 'note' and trust != notes.TRUSTED) or (trust == notes.UNTRUSTED and cls == visibility.OWNER_PRIVATE):
             return NOTE_ONLY
     return NOT_NOW.get(name, '这一回合用不了 %s。' % named(name))
 

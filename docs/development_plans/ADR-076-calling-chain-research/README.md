@@ -253,16 +253,17 @@ binding error since R1, every refusal in her words, DSH's argument errors transl
 
 ### 11.2 The verdicts (pass or fail)
 
-The window starts at T, the restart that installs `3b72fd0f`.
+The window starts at T, the restart that installs `3b72fd0f`. Each verdict has a minimum; below it the read waits
+until the minimum is reached, it is never a pass by default.
 
 1. **R1, binding fault.** `audit_events` `type: chat.error` from 2026-10-18 22:15Z matching
-   `NATIVE_BINDING_IDENTITY_CHANGED`. **Pass** if 0 and at least 5 `self_development` turns committed in the window.
+   `NATIVE_BINDING_IDENTITY_CHANGED`. **Pass** if 0, with at least 5 `self_development` turns committed in the window (fewer: the read waits).
 2. **R5, summary batching.** `memory_units` `{kind: dialogue_summary, generated_at >= T}`: summaries per 100
-   summarised rows (100 / mean `len(source_event_ids)`), baseline 22.6 (10-12 to 10-18). **Pass** if at least 1,000
-   rows are summarised and the metric is at most 20.6. On a fail, summary effort is the next step (§10). Sessions a
+   summarised rows (100 / mean `len(source_event_ids)`), baseline 22.6 (10-12 to 10-18). **Pass** if the metric is at
+   most 20.6, over at least 1,000 summarised rows (fewer: the read waits). On a fail, summary effort is the next step (§10). Sessions a
    day are reported beside it, not judged.
 3. **stay_silent off on platforms.** Platform scenes (`channel_id` set), `turn.started` from T joined to `episodes`;
    spoke = an outbound `messages` row `DELIVERED` with that `episode_id`. Judged on the turns where silence is a
-   choice (`visit`, `scheduled`, `note`), baseline 52 of 98 = 53.1% (10-15 to 10-18 22:15Z). **Fail** (stay_silent
-   comes back) if at least 40 such turns speak above 68%, or group external turns fall below 95% (baseline 98.4%).
-   Otherwise **pass**. The ADR-082 install changed the same group turns; reported beside it.
+   choice (`visit`, `scheduled`, `note`), baseline 52 of 98 = 53.1% (10-15 to 10-18 22:15Z). With at least 40 such
+   turns (fewer: the read waits), **fail** (stay_silent comes back) if they speak above 68%, or if group external
+   turns fall below 95% (baseline 98.4%); otherwise **pass**. The ADR-082 install changed the same group turns; reported beside it.

@@ -324,3 +324,7 @@ Then:
 - **The planned agent-line check could not show the entry**: §10 now reads the group records.
 - **§7's gate line** said 160 while an old body still reaches the 400 cut: corrected.
 - The commit `7cc6d2d4` also carried ADR-018's reply-note change; recorded there, a note only.
+
+Round 2 (same reviewer, 2026-10-20): both faults closed with tests; §9 is pass/fail. One case D6 does not cover: a
+visit that a note from outside opens in a home group keeps only the note's tools (ADR-018 §5.4); in any other group
+it keeps the group's own (§5.4a), `understand_person` included. None has happened live.

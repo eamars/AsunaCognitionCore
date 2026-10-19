@@ -135,7 +135,7 @@ parallel under one brief (`.runtime/private/adr077/brief-facts.md`): `RUNTIME_AP
 references in one, and the real lookups (§4 step 1) in one. Each statement got a class (interface, behaviour,
 instruction), a verdict (correct, wrong, stale, unverifiable, history) with its `file:line` evidence, and where else the
 same fact is stated; each slice also lists interfaces in the code that no reference mentions. Read only, no model
-calls. Evidence: `.runtime/private/adr077/` (the per-slice tables, `lookups.md`), about 0.55 MB, kept until this ADR
+calls. Evidence: `.runtime/private/adr077/` (the per-slice tables, `lookups.md`, `samples/`), about 0.9 MB, kept until this ADR
 is closed.
 
 | Slice | Statements | Wrong | Stale | History | Undocumented in the code |
@@ -232,3 +232,11 @@ The review spot-checked three "wrong" rows against the code; all held. It found:
   turn side from the runtime itself, which supersedes it.
 - **"No fact lost"** is checked against the facts files, which are the inventory of every old statement.
 - Her first feedback (§6) still waits for her signature.
+
+Round 2 (same reviewer, 2026-10-20): the 25 corrections sampled are true against the code and add no history. The
+samples were still short of her real sessions (`feel`, `read_image`, `group_action` missing): they were computed from
+`config/local.json`, which lacks the Host's live configuration (the affect and vision routes, her admin groups). They
+are now built from what each session was really sent (the `request/header` of its DSH session log, names and
+descriptions as given), with the turn's `turn_tools` and the `not_now` words; each page also shows where the
+program's own list, computed offline, differs. That is the design input for the agreement check: it compares against
+what the Host sends, or runs with the Host's own configuration, never a local file. Evidence now about 0.9 MB.

@@ -280,6 +280,10 @@ class Coordinator:
                         self.store.db.scenes.update_one({'_id':ep['scene_id']},{'$set':{'unsent':{
                             'text':excerpt(' '.join(speech.split()),UNSENT_CHARS),'episode_id':ep['_id']}}})
                         self.store.audit(ep['_id'],'turn.unsent_body',{'chars':len(speech)},ep['scope_key'])
+                    elif pieces:
+                        # Her ending after she spoke: kept as a count for the operator, never told back to her.
+                        self.store.audit(ep['_id'],'turn.ending_body',{'chars':len('\n\n'.join(pieces)),
+                            'parts':(ep.get('reply') or {}).get('parts')},ep['scope_key'])
                     self._absorb(ep,seen)
                     said=(ep.get('reply') or {}).get('parts')
                     return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',

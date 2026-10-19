@@ -212,6 +212,8 @@ def test_a_turn_that_spoke_ends_in_words_that_are_not_unsent(store, monkeypatch)
     assert len(lane.calls) == 1 and [r['text'] for r in outbound(store, ep['_id'])] == ['好呀']
     assert not (store.db.scenes.find_one({'_id': 'dm-a'}) or {}).get('unsent')
     assert not store.db.audit_events.find_one({'type': 'turn.unsent_body', 'stream_id': ep['_id']})
+    ending = store.db.audit_events.find_one({'type': 'turn.ending_body', 'stream_id': ep['_id']})
+    assert ending and ending['payload']['chars'] == len('嗯，说完了'), 'kept as a count for the operator'
     _, nxt, _ = turn(store, key='end-2')
     assert 'unsent_from_program' not in nxt['context']
 

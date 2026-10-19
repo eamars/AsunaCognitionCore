@@ -49,6 +49,10 @@ def test_wrong_names_are_answered_with_the_real_ones_and_nothing_writes(store):
     assert 'created_at' in asked['unseen_fields']
     with pytest.raises(ValueError, match='只读'):
         db.aggregate('messages', [{'$match': {}}, {'$out': 'copy'}])
+    line(store, 2, '2026-10-12T08:31:00+00:00')
+    cut = db.aggregate('messages', [{'$match': {}}], limit=1)
+    assert cut['found'] == 1 and 'more' in cut, 'a cut at the limit is said, as find says it'
+    assert 'more' not in db.aggregate('messages', [{'$match': {}}], limit=5)
     assert not [name for name in dir(dbread.Reader) if name.startswith(('insert', 'update', 'delete', 'replace'))]
 
 

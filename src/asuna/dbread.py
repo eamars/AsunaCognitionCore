@@ -185,9 +185,11 @@ class Reader:
         if any(stage in WRITERS for step in pipeline for stage in step):
             raise ValueError('aggregate 只读：$out 和 $merge 会写库，这里不做')
         limit = max(1, min(int(limit or LIMIT), MOST))
-        rows = list(self.collection(name).aggregate(list(pipeline) + [{'$limit': limit}]))
+        rows = list(self.collection(name).aggregate(list(pipeline) + [{'$limit': limit + 1}]))
         first = next((step['$match'] for step in pipeline if '$match' in step), {})
-        return self._answer(name, first, rows, pipeline=_plain(pipeline), limit=limit)
+        # Cut at the limit as find is, and said as find says it (her ask, 2026-10-20: 50 groups read as all of them).
+        return self._answer(name, first, rows[:limit], pipeline=_plain(pipeline), limit=limit,
+                            **({'more': '还有更多：结果截在 limit 了，加大 limit 或缩小过滤'} if len(rows) > limit else {}))
 
     def place(self, code):
         """Which conversation a place code (g + six hex, as her notes and plans name places) stands for."""

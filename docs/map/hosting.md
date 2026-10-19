@@ -195,7 +195,7 @@ The worker's MongoDB store: every write goes through `Store.put` with an expecte
 Checks and replays the store's audit trail: `verify` walks each stream's hash chain, `verify_documents` compares stored documents with their last audited commit, and `replay` rebuilds the state in an empty test database.
 
 - def `reconcile_calls`
-- def `prune` — Delete the audit records past retention, then the oldest while the audit is over its cap; one `audit.pruned` record per run says up to when, how many and why.
+- def `prune` — Delete the audit records past retention, then the oldest while the audit is over its cap.
 - def `verify` — Each event's own hash, and each stream's chain.
 - def `verify_documents` — Compare each document's latest audited commit with the collection (ADR-009 D-4).
 - def `trace_contents` — {content_sha256: document} for reference commits that still match the collection; exported with a trace.

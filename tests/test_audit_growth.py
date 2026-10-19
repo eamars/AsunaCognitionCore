@@ -66,12 +66,27 @@ def test_past_retention_every_record_goes_but_her_tool_calls_and_the_latest_show
     left = [(e['stream_id'], e['type']) for e in store.db.audit_events.find(mine).sort([('stream_id', 1), ('seq', 1)])]
     assert left == [('ep-old', 'role_tool'), ('ep-old', 'context.prepared'), ('review:p', 'review.map')]
     [mark] = store.db.audit_events.find({'type': 'audit.pruned'})
-    assert mark['payload']['deleted'] == 6 and mark['payload']['by'] == ['time'] and mark['payload']['before'] < moment.isoformat()
+    assert mark['payload']['deleted'] == 6 and mark['payload']['by'] == {'time': 6} and mark['payload']['before'] < moment.isoformat()
+    assert mark['payload']['records'][0] > mark['payload']['records'][1] and mark['payload']['seconds'] >= 0
     everything = list(store.db.audit_events.find({}))
     audit.verify(everything)                                                 # gaps where retention cut: accepted
     with pytest.raises(ValueError, match='AUDIT_HASH_CHAIN_INVALID'):
         audit.verify([e for e in everything if e['type'] != 'audit.pruned'])  # the same gaps unexplained: not
-    assert audit.prune(store, moment) == 0 and store.db.audit_events.count_documents({'type': 'audit.pruned'}) == 1
+    # A run that deletes nothing says so too (her ask, 2026-10-20): otherwise it reads as no run at all.
+    assert audit.prune(store, moment) == 0
+    latest = store.db.audit_events.find_one({'type': 'audit.pruned'}, sort=[('seq', -1)])
+    assert latest['payload']['deleted'] == 0 and latest['payload']['by'] == {}
+    assert store.db.audit_events.count_documents({'type': 'audit.pruned'}) == 2
+
+
+def test_the_latest_run_record_stays_past_retention_so_the_chain_gaps_stay_explained(store, monkeypatch):
+    moment = datetime.now(timezone.utc)
+    real_now = state.now
+    monkeypatch.setattr(state, 'now', lambda: (moment - timedelta(days=audit.RETENTION_DAYS + 5)).isoformat())
+    store.audit('audit-retention', 'audit.pruned', {'before': '2000-01-01', 'deleted': 1, 'by': {'time': 1}})
+    monkeypatch.setattr(state, 'now', real_now)
+    audit.prune(store, moment)
+    assert store.db.audit_events.count_documents({'type': 'audit.pruned'}) == 2, 'the old latest stays this run'
 
 
 def test_over_its_cap_the_oldest_go_first_whatever_their_kind_and_the_latest_showing_stays(store, monkeypatch):
@@ -92,5 +107,7 @@ def test_over_its_cap_the_oldest_go_first_whatever_their_kind_and_the_latest_sho
     assert all(e['occurred_at'] >= oldest_left for e in store.db.audit_events.find({'type': 'role_tool'}))
     assert not store.db.audit_events.find_one({'stream_id': 'ep-40'})       # the oldest went first
     [mark] = store.db.audit_events.find({'type': 'audit.pruned'})
-    assert mark['payload']['by'] == ['time', 'size'] and mark['payload']['cap_bytes'] == size // 2
+    # Deleted by size alone: the record says size, not time (her ask, 2026-10-20).
+    assert mark['payload']['by'] == {'size': deleted} and mark['payload']['cap_bytes'] == size // 2
+    assert mark['payload']['bytes'][1] < mark['payload']['bytes'][0]
     audit.verify(list(store.db.audit_events.find({})))

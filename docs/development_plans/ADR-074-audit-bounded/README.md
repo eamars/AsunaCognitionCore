@@ -43,3 +43,7 @@ to account for it.
 ## Cost (AGENTS.md)
 
 Neither brain: no tool, option or line. Program: `audit.prune`, its tests, one index.
+
+## Every run says what it did (2026-10-20)
+
+From her own study of retention (the store had never yet deleted anything, so a run that found nothing and no run at all looked the same): every run writes `audit.pruned`, also with `deleted: 0`, and the worker's evidence records it each time. `by` counts per rule that deleted (`{'time': n, 'size': m}`), where it used to say `time` even for a run that deleted by size alone. The record carries the audit's records and bytes before and after, and how long the run took. The latest `audit.pruned` is in `LATEST_KEPT`, so the record that explains the chain's gaps (`verify`) is never itself pruned. Her `dbread.aggregate` now says when its result was cut at the limit, as `find` does. Her estimate then: about 89,000 records a day, 3.15 GB, the 6 GB cap near 11-04, close to when the 30-day rule starts deleting.

@@ -613,9 +613,7 @@ class BusinessWorker:
         from .audit import prune
         while True:
             try:
-                deleted = prune(self.app.store)
-                if deleted:
-                    self.app.evidence.record('audit.pruned', {'deleted': deleted})
+                self.app.evidence.record('audit.pruned', {'deleted': prune(self.app.store)})     # 0 too: it ran
             except Exception as exc:
                 self.app.evidence.record('audit.prune_failed', {'error': redact_text(str(exc), self.app.config)[:300]})
             try:

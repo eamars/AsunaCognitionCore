@@ -29,7 +29,8 @@ def reconcile_calls(observed_body_hashes,events):
 # whatever their kind, until it is under the cap again.
 RETENTION_DAYS=30
 KEPT_DAYS={'role_tool':365}
-LATEST_KEPT=('review.tools_week','review.tools_week.started','review.exchanges','review.map','sticker.review_offered')
+LATEST_KEPT=('review.tools_week','review.tools_week.started','review.exchanges','review.map','sticker.review_offered',
+           'audit.pruned')      # the latest run explains the chain's gaps (verify), whatever its age
 CAP_BYTES=6*10**9
 
 
@@ -41,11 +42,15 @@ def _latest(store):
 
 
 def prune(store, moment=None, cap=None):
-    """Delete the audit records past retention, then the oldest while the audit is over its cap; one `audit.pruned`
-    record per run says up to when, how many and why."""
+    """Delete the audit records past retention, then the oldest while the audit is over its cap. Every run writes one
+    `audit.pruned` record, also when it deleted nothing (her ask, 2026-10-20: a run that found nothing and no run look
+    alike otherwise): up to when, how many by which rule, the audit's records and bytes before and after, how long."""
+    import time
     from datetime import datetime,timedelta,timezone
+    started=time.monotonic()
     moment=moment or datetime.now(timezone.utc)
     cap=CAP_BYTES if cap is None else cap
+    first=store.db.command('collStats','audit_events')
     keep=_latest(store)
     cutoff=(moment-timedelta(days=RETENTION_DAYS)).isoformat()
     deleted=store.db.audit_events.delete_many({'occurred_at':{'$lt':cutoff},'_id':{'$nin':keep},
@@ -53,7 +58,7 @@ def prune(store, moment=None, cap=None):
     for kind,days in KEPT_DAYS.items():
         deleted+=store.db.audit_events.delete_many({'type':kind,'occurred_at':{
             '$lt':(moment-timedelta(days=days)).isoformat()}}).deleted_count
-    before,by=cutoff,['time']
+    before,by=cutoff,{'time':deleted} if deleted else {}
     stats=store.db.command('collStats','audit_events')
     if stats.get('size',0)>cap and stats.get('count'):
         # as many of the oldest as the excess holds at the average record size; the boundary is the next one's time
@@ -61,11 +66,14 @@ def prune(store, moment=None, cap=None):
         nxt=list(store.db.audit_events.find({'_id':{'$nin':keep}},{'occurred_at':1}).sort('occurred_at',1).skip(over).limit(1))
         if nxt:
             before=max(before,nxt[0]['occurred_at'])
-            deleted+=store.db.audit_events.delete_many({'occurred_at':{'$lt':before},'_id':{'$nin':keep}}).deleted_count
-            by.append('size')
-    if deleted:
-        store.audit('audit-retention','audit.pruned',{'before':before,'deleted':deleted,'by':by,'days':RETENTION_DAYS,
-                                                     'kept_days':KEPT_DAYS,'latest_kept':list(LATEST_KEPT),'cap_bytes':cap})
+            by['size']=store.db.audit_events.delete_many({'occurred_at':{'$lt':before},'_id':{'$nin':keep}}).deleted_count
+            deleted+=by['size']
+    last=store.db.command('collStats','audit_events')
+    store.audit('audit-retention','audit.pruned',{'before':before,'deleted':deleted,'by':by,
+                                                 'records':[first.get('count',0),last.get('count',0)],
+                                                 'bytes':[first.get('size',0),last.get('size',0)],
+                                                 'seconds':round(time.monotonic()-started,1),'days':RETENTION_DAYS,
+                                                 'kept_days':KEPT_DAYS,'latest_kept':list(LATEST_KEPT),'cap_bytes':cap})
     return deleted
 
 

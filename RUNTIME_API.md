@@ -522,7 +522,7 @@ The model is the package's defaults for the core's parameters, checked against `
 | `people.owner_label` | `本机用户` | the start of the owner's label in her conversations |
 | `people.self_names` | `[]` | other names she answers to in groups |
 | `people.familiarity` | `{}` | her words and stance for each familiarity level |
-| `speak.max_messages` | 1 | lines her `speak` text may hold in one turn |
+| `speak.max_messages` | 1 | her usual lines of `speak` text in one turn: past it the text is sent and the result gives the count; past `role_tools.SPEAK_HARD_LINES` a call is refused |
 | `speak.chars_per_second`, `speak.min_gap_s`, `speak.max_gap_s` | 12, 1, 5 | typing pace between her parts |
 | `heartbeat.enabled` | `false` | her heartbeat ([Schedules](#schedules)) |
 | `self_review.tag` | — | the tag of her own sections her reviews read |

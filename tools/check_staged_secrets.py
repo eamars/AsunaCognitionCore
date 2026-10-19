@@ -11,7 +11,8 @@ Hits are deduplicated per path, line and category. The last line is ``personal-s
 Categories:
   account_id       >=7 consecutive ASCII digits in content or file name.
   private_address  RFC 1918 dotted quads (10/8, 172.16/12, 192.168/16), word-bounded, each octet 0-255.
-  denylist         entries of config/personal-denylist.local.txt (override: ASUNA_PERSONAL_DENYLIST); one
+  denylist         entries of <data>/private/personal-denylist.txt (<data>: ASUNA_DATA_ROOT, else .runtime;
+                   override: ASUNA_PERSONAL_DENYLIST); one
                    case-insensitive literal per line, ``re:`` prefix for a regex, ``#`` comments. Absent file:
                    category skipped. Invalid regex entries are skipped (never echoed).
   timezone         concrete IANA Region/City literals; UTC and Etc/* never hit.
@@ -108,7 +109,8 @@ def load_list(env,default):
 
 def denylist():
     out=[]
-    for entry in load_list('ASUNA_PERSONAL_DENYLIST',ROOT/'config'/'personal-denylist.local.txt'):
+    data=Path(os.environ.get('ASUNA_DATA_ROOT') or ROOT/'.runtime')
+    for entry in load_list('ASUNA_PERSONAL_DENYLIST',data/'private'/'personal-denylist.txt'):
         try:out.append(re.compile(entry[3:]) if entry.startswith('re:') else re.compile(re.escape(entry),re.I))
         except re.error:pass
     return out

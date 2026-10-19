@@ -1,6 +1,7 @@
 # Template for the local personal-data deny list (ADR-009 CLEANUP 9.2). Keep this file empty of real values.
-# Copy it to config/personal-denylist.local.txt (git-ignored) and fill that copy on the owner's machine with
-# the owner's own accounts, nicknames, host names, user names, address fragments and other private strings.
+# Copy it to <data>/private/personal-denylist.txt (.runtime/private/ in a checkout, never committed) and fill that
+# copy on the owner's machine with the owner's own accounts, nicknames, host names, user names, address fragments
+# and other private strings.
 # `python tools/check_staged_secrets.py --personal` reports any line containing an entry as `path:line:denylist`
 # and never prints the entry itself. ASUNA_PERSONAL_DENYLIST may point at another file.
 #

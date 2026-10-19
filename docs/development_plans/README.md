@@ -66,7 +66,7 @@ Status: **Active** (an ongoing routine or plan), **Open** (built, with a named p
 | 034 | Host supervisor | Built | The launcher restarts DSH on her request or a crash, down a fallback ladder; her `restart` tool | [folder](ADR-034-host-supervisor/README.md) |
 | 035 | QQ picture links | Built | Picture links re-signed with the current key when fetched | [folder](ADR-035-qq-picture-links/README.md) |
 | 036 | Models are DSH providers | Built | The brains' models are DSH providers; no model routes or keys in Asuna's config | [folder](ADR-036-models-are-dsh-providers/README.md) |
-| 037 | Following DSH | Active | Every DSH alpha after 7 days; patches as commits on the owner's fork; the upgrade routine | [folder](ADR-037-following-dsh/README.md) |
+| 037 | Following DSH | Active | Every DSH alpha after 7 days; patches as commits on the owner's fork; the upgrade routine, the owner's work (2026-10-20) | [folder](ADR-037-following-dsh/README.md) |
 | 038 | Fixed tool lists | Built | One tool list per conversation for cache hits; turn rules as refusals; `pin_memory` removed | [folder](ADR-038-fixed-tool-lists/README.md) |
 | 039 | Active groups | Built | Resting groups wake her only when meant for her; she chooses with `group_focus` | [folder](ADR-039-active-groups/README.md) |
 | 040 | Merged forwards | Built | Forwards read and previewed; the full text pulled by ref | [folder](ADR-040-merged-forwards/README.md) |

@@ -1,7 +1,8 @@
 # ADR-037: Following DSH alpha by alpha
 
 Status: **Accepted 2026-10-10**, owner's decisions. The fork is set up; the routine below is handed to a dedicated
-upgrade agent.
+upgrade agent. **Owner, 2026-10-20:** upgrading DSH and keeping Asuna compatible with it is the owner's work; the
+other agents build on the pinned DSH as it is (AGENTS.md).
 
 ## Context
 

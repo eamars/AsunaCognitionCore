@@ -351,6 +351,7 @@ Notes between her own conversations (ADR-018, owner 2026-10-07).
 - def `prepare` — Validate one note from this turn: (draft, None), or (None, the row already sent by this call).
 - def `owner_line` — The owner's own words that woke this turn outside (his platform account, mapped to him by configuration), or None.
 - def `record`
+- def `text_limit` — The length the program refuses past: home to home has no boundary to guard.
 - def `result` — What the sending turn reads back.
 - def `state`
 - def `opening_block` — note_from_program: the note that opened this turn, its source named, never a line of this conversation.

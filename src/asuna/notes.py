@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from .config import character_id, cut_offer, excerpt
+from .config import character_id, cut_offer, excerpt, over, soft
 from .evidence import canonical, sha
 from .state import now
 from . import scene_links, visibility
@@ -227,12 +227,13 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
     text = str(args.get('text') or '').strip()
     if not text:
         raise NoteRefused('NOTE_TEXT_REQUIRED', 'text 写便条的内容。')
-    limit = HOME_NOTE_CHARS if trust == TRUSTED and kind == 'home' else NOTE_CHARS
+    limit = text_limit(trust, kind)
     if len(text) > limit:
         raise NoteRefused('NOTE_TOO_LONG', ('送到%s的便条最多 %d 字，现在 %d 字，超了 %d 字。三条路：'
                                             '① 压到 %d 字以内；② 原样拆成两张接着发，开头标 1/2、2/2，让那边知道是接续'
                                             '（一回合最多 %d 张）；③ 照这个截好的发：%s')
-                          % (KIND_WORDS[kind], limit, len(text), len(text) - limit, limit, PER_TURN, cut_offer(text, limit)))
+                          % (KIND_WORDS[kind], limit, len(text), len(text) - limit, soft(limit), PER_TURN,
+                             cut_offer(text, limit)))
     default, choices = MODES[cls][kind]
     mode = args.get('mode') or default
     if mode not in choices:
@@ -297,11 +298,18 @@ def record(store, draft, event_id=None):
     return row
 
 
+def text_limit(trust, kind):
+    """The length the program refuses past: home to home has no boundary to guard."""
+    return HOME_NOTE_CHARS if trust == TRUSTED and kind == 'home' else NOTE_CHARS
+
+
 def result(store, row):
     """What the sending turn reads back."""
     from .people import People
     scene = store.db.scenes.find_one({'_id': row['to_scene']})
+    longer = over(len(row.get('text') or ''), text_limit(row['trust'], row['kind']))
     return {'note': row['_id'], 'to': People(store, row['persona']).scene_title(scene), 'arrives': MODE_WORDS[row['mode']],
+            **({'length': 'text ' + longer} if longer else {}),
             'how': '那边会知道是你自己%s写的，不会当成那里有人说的话。' % ('在家里' if row['trust'] == TRUSTED else '在外面'),
             'later': '那边读没读、回没回，之后在这里的 notes_sent_from_program 看。'}
 

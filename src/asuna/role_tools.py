@@ -29,7 +29,7 @@ from .state import Conflict, Denied
 from . import visibility
 from .errands import MARK as ERRAND_MARK
 from .vision import inline_summary as picture_receipt
-from .config import cut_offer
+from .config import cut, cut_offer, over, soft
 from .context_budget import SINGLE_BODY_CHARS
 
 THOUGHT_CHARS = 300                  # what she is asked for; a longer thought is kept, and only its own result says by how much
@@ -74,14 +74,15 @@ class Refused(Exception):
     """A call she can correct herself: the message says, in words for her, what to do instead."""
 
 
-LIMIT_WORDS = '（最多 %d 字）'
+LIMIT_WORDS = '（%d 字以内，最多 %d 字）'    # what she is asked for, and where the program refuses (owner 2026-10-20)
+EXACT_WORDS = '（最多 %d 字）'                # a name or a search, not her prose
 
 
-def _s(description, limit=None, **extra):
+def _s(description, limit=None, exact=False, **extra):
     """A string parameter; `limit` is the length the program refuses past (ADR-054), stated in words: DSH's tool
     schema subset has no maxLength, and a key outside it fails the whole preset."""
     if limit:
-        description += LIMIT_WORDS % limit
+        description += EXACT_WORDS % limit if exact else LIMIT_WORDS % (soft(limit), limit)
     return {'type': 'string', 'description': description, **extra}
 
 
@@ -104,7 +105,7 @@ REACT_LINE_RECALL = 'recall：撤你自己的哪一句，写它的编号'
 REACT_LINE = REACT_LINE_REACT + REACT_LINE_RECALL
 # Her own line taken back (her ask, the owner's yes, 2026-10-18): still queued it is cancelled, delivered it is recalled.
 RECALL_WHY_CHARS = 100
-RECALL_WHY = 'recall：为什么撤（必填，%d 字以内）' % RECALL_WHY_CHARS
+RECALL_WHY = 'recall：为什么撤（必填，%d 字以内，最多 %d 字）' % (soft(RECALL_WHY_CHARS), RECALL_WHY_CHARS)
 RECALL_QUEUED = '撤回 〔%d〕 交给平台了（还没确认）'
 RECALL_CANCELLED = '取消了 〔%d〕，那句没发出去'
 RECALL_TOO_LATE = '那句发出已经超过 %d 分钟，平台不让撤了；要改口就补一句，或者引它改口'
@@ -129,6 +130,7 @@ from .capabilities import CANNOT as LEG_CANNOT, WORDS as LEG_WORDS      # her wo
 REPLY_REPLACES = ('await_answer', 'attach_image', 'stay_silent')
 
 from . import understanding as _understanding
+from . import notes as _notes, places as _places
 
 TOOLS = {
     'think': {
@@ -330,7 +332,7 @@ TOOLS = {
                          '想晚点去就用 plan 定时间。'),
         'parameters': {'place': _s('去哪儿：places_from_program 里的 place', required=True),
                        'intent': _s('去做什么', required=True, enum=['start_topic', 'share_picture', 'check_in', 'write_notes']),
-                       'topic': _s('想聊的话头，80 字以内，可省略'),
+                       'topic': _s(limit=_places.TOPIC_CHARS, description='想聊的话头，可省略'),
                        'artifact_id': _s('intent=share_picture 时想分享的那张你自己做的图（可省略，到了再挑）')},
     },
     'errand': {
@@ -346,7 +348,8 @@ TOOLS = {
         'description': ('给别的对话里的你写一张便条：to 照抄 note_places_from_program 里的 place（在外面也可写「家里」）。'
                          '那边的你会读到，那边的人看不到，但可能被照着说，所以只写愿意在那边说的；用你自己的话，别人托的写清是谁的意思。'
                          'deliver：wake 马上叫醒那边（排在那边手上的事后面），next_time 那边下次有回合时看到；能选哪样看从哪写到哪，'
-                         '不写按那边的默认。叫醒一个群算一次出门。家里送家里 1500 字以内，别的 300 字以内；一回合最多两张。'),
+                         '不写按那边的默认。叫醒一个群算一次出门。家里送家里 %d 字以内（最多 %d），别的 %d 字以内（最多 %d）；一回合最多两张。'
+                         % (soft(_notes.HOME_NOTE_CHARS), _notes.HOME_NOTE_CHARS, soft(_notes.NOTE_CHARS), _notes.NOTE_CHARS)),
         'parameters': {'to': _s('送到哪儿：note_places_from_program 里的 place，或「家里」', required=True),
                        'text': _s('便条，你自己的话', required=True),
                        'mode': _s('wake 或 next_time，可省略', enum=['wake', 'next_time']),
@@ -417,7 +420,7 @@ TOOLS = {
     'find_member': {
         'description': ('在这个群的成员名单里按名字找人（群名片或昵称里带这几个字的），最多 10 个，最近说过话的在前。找到的人给的是标签，'
                          '照抄就能 @；进了名册的人会一直留着。members_from_program 只列了一部分，别的人用这个找。'),
-        'parameters': {'name': _s(limit=20, description='名字里的几个字', required=True)},
+        'parameters': {'name': _s(limit=20, exact=True, description='名字里的几个字', required=True)},
     },
     'promote_memory': {
         'description': ('夜间沉淀时，把值得长期记住的事实提升为长期记忆（配额和来源程序会查）。why 写为什么值得留下，会记进你自己的记录。'),
@@ -1180,6 +1183,7 @@ class RoleTools:
                 from . import channel_kinds
                 raise Refused(CALL_CAP % (CALLS_PER_TURN, CAP_SPEAKS if channel_kinds.reply_parts(ep['scene_id'])
                                           else CAP_SAYS))
+            self.over = []
             result, conclude = getattr(self, 'tool_' + can.replace('.', '_'))(ep, call_id, args)
         except Refused as exc:
             self._record(ep_id, call_id, name, args, refused=str(exc), called_as=called_as, olds=olds)
@@ -1190,6 +1194,8 @@ class RoleTools:
             message = words(exc)
             self._record(ep_id, call_id, name, args, refused=message, called_as=called_as, code=code_of(exc), olds=olds)
             raise Refused('%s（%s）' % (message, ERRAND_MARK) if ep.get('errand') else message) from None
+        if self.over and isinstance(result, dict):
+            result = {**result, 'length': '；'.join(self.over)}
         if called_as and isinstance(result, dict):
             result = {**result, 'renamed': rename_note(called_as)}
         if old_names and isinstance(result, dict):
@@ -1261,9 +1267,17 @@ class RoleTools:
             raise Refused(('%s 要写内容（%d 字以内）。' if required else '%s 是空的：要么写内容（%d 字以内），要么不写这个字段。')
                           % (field, limit))
         if len(value) > limit:
-            raise Refused('%s 太长了：%d 字，%d 字以内，超了 %d 字。精简后再调用，或者照这个截好的写：%s'
-                          % (_SHOWN.get(field, field), len(value), limit, len(value) - limit, cut_offer(value, limit)))
+            raise Refused('%s 太长了：%d 字，最多 %d 字，超了 %d 字。精简到 %d 字以内再调用，或者照这个截好的写：%s'
+                          % (_SHOWN.get(field, field), len(value), limit, len(value) - limit, soft(limit),
+                             cut_offer(value, limit)))
+        self._longer(field, len(value), limit)
         return value.strip()
+
+    def _longer(self, field, length, limit):
+        """A text kept although longer than she was asked for: this call's result says so (like think's)."""
+        words = over(length, limit)
+        if words:
+            self.__dict__.setdefault('over', []).append('%s %s' % (_SHOWN.get(field, field), words))
 
     # ── mind ────────────────────────────────────────────────────────
     def tool_think(self, ep, call_id, args):
@@ -1598,7 +1612,8 @@ class RoleTools:
         if not why:
             raise Refused('要写 why（为什么撤，%d 字以内）' % RECALL_WHY_CHARS)
         if len(why) > RECALL_WHY_CHARS:
-            raise Refused('why 最多 %d 字（给的是 %d 字）' % (RECALL_WHY_CHARS, len(why)))
+            raise Refused('why 最多 %d 字（给的是 %d 字），精简到 %d 字以内' % (RECALL_WHY_CHARS, len(why), soft(RECALL_WHY_CHARS)))
+        self._longer('why', len(why), RECALL_WHY_CHARS)
         text = str(part.get('line') or '').strip().strip('〔〕[]「」 ')
         if not text.isdigit():
             raise Refused('line 写你那句的编号（只写数字）')
@@ -2129,7 +2144,7 @@ class RoleTools:
                 switches.clear(self.store, ep, row['_id'])
             return {'done': '%s的工具都恢复了' % label}
         row = switches.set_switch(self.store, ep, 'tools_off', label=label, scene_id=found[0], tools=tools,
-                                  hours=args.get('hours'), why=reason[:200])
+                                  hours=args.get('hours'), why=cut(reason, 200))
         return {'done': '%s里关了：%s' % (label, '、'.join(row['tools'])), 'until_at': row['until'], 'id': row['_id']}
 
     def tool_set_policy(self, ep, call_id, args):
@@ -2152,7 +2167,7 @@ class RoleTools:
             raise Refused('要写 value：这个参数的新值（类型照它的声明，比如整数、true/false）。')
         model, _ = model_and_policy(self.store, ep['persona'])
         policy = PolicyStore(self.store, ep['persona'], model)
-        spec_what = policy.validate([{'key': key, 'value': args['value'], 'what': reason[:300]}])
+        spec_what = policy.validate([{'key': key, 'value': args['value'], 'what': cut(reason, 300)}])
         what = ((model.get('policy_keys') or {}).get(key) or {}).get('what') or spec_what[key]['what']
         revision = policy.set([{'key': key, 'value': args['value'], 'what': what}], base_revision_id=policy.read()[0],
                               reason=reason, author='character', mutation_id=f"{ep['_id']}:policy_set:{call_id}",

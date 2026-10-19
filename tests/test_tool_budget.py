@@ -5,6 +5,7 @@ count here too, so the budget never drifts above what exists."""
 import json
 
 from asuna import role_tools
+from asuna.config import soft
 from asuna.development import DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
 from asuna.image_generation import GENERATE_IMAGE_TOOL
 from asuna.private_words import PRIVATE_WORDS_TOOL
@@ -12,7 +13,7 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (30, 20952)       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
+CHARACTER = (30, 21107)       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
                               # ADR-064 phase 2: reply +1,334 (QQ group lists +451 net, QQ private +1,028), stay_silent -16, leave_note question +88;
                               # reply force (a #number that is someone here is sent back unless force=yes; owner 2026-10-14) +90; stay_silent why optional (said: nothing to explain) -10;
                               # ADR-060 leftovers: recall query optional with sections, feel yes/no and its decisions named, recall section +25
@@ -31,8 +32,10 @@ CHARACTER = (30, 20952)       # ADR-060: new names and the wording audit, 21,490
                               # with its short, 「不更新」, the three questions and speak-first +351 (block_hours leaves it);
                               # watch does block +85: 20,405 -> 20,955
                               # no night hours on her visits: place_timezone no longer says it decides night -3
+                              # soft text budget (owner 2026-10-20): each stated length gives what she is asked for and
+                              # where the program refuses, 「N 字以内，最多 M 字」 (her ask: both numbers) +155
 # With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): let_go, nature, from, about and the recall sentence (+294).
-CHARACTER_TIERED = (30, 21248)
+CHARACTER_TIERED = (30, 21403)
 ACTION = (25 + len(ACTION_DSH_CAPABILITIES), 15700)        # the worker's tools, plus DSH's own (skill, todo, web)
 
 
@@ -109,7 +112,8 @@ def test_every_length_she_can_be_refused_for_is_stated(tmp_path):
                 value = getattr(importlib.import_module('asuna.' + module), limit)
             if field not in params or value >= SAFETY_CAP or (tool, field) in COPIED:
                 continue
-            if role_tools.LIMIT_WORDS % value not in params[field].get('description', ''):
+            stated = (role_tools.LIMIT_WORDS % (soft(value), value), role_tools.EXACT_WORDS % value)
+            if not any(words in params[field].get('description', '') for words in stated):
                 unstated.append('%s.%s (%d)' % (tool, field, value))
     assert not unstated, 'state these limits with _s(limit=...): ' + ', '.join(unstated)
 

@@ -399,7 +399,10 @@ def places_block(store, persona, model, policy, plan, moment, date):
         if gap:
             row['their_clock'] = gap
         if visit:
-            row['last_visit'], row['last_visit_at'] = '来看过：' + OUTCOMES[outcome(store, visit)], _stamp(_at(visit['at']))
+            done = outcome(store, visit)
+            # A visit whose turn has not run is not a look she took (her question, 2026-10-20).
+            row['last_visit'] = ('出门了：' if done == 'pending' else '来看过：') + OUTCOMES[done]
+            row['last_visit_at'] = _stamp(_at(visit['at']))
         if here['called']:
             row['called_you'] = '你上次说话以后，有人叫过你'
         items.append((not can, row))

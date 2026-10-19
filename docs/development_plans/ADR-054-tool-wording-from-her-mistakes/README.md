@@ -69,3 +69,7 @@ are worth a wording line or a program decision; a one-off miss gets neither.
 By cause, never by the total (the 88 `think`-first refusals are by design and would hide everything else): the same
 classification as the table above, after 7 and 14 days. A sentence whose cause has not fallen by half after 14 days is
 taken out again. Before building, the side-by-side harness's confusion cases on both models, before and after.
+
+## Soft text budget (owner 2026-10-20)
+
+Every length the program refuses past stays where it was, so a turn carries no more than before. What she is asked for is four fifths of it, and the description states both numbers, 「N 字以内，最多 M 字」: her ask, since 「约」 reads as elastic and a single lower number reads as the hard line. A text between the two is kept and its result says by how much (`config.over`, like `think`'s). A refusal past the limit also shows what its offered cut leaves out (her ask, after a plan cut lost its tail). Measured before: 81 notes, 53 plan intents, 44 ideas and 13 short fields refused for length over 2026-10-05 to 10-20; her view is that the value is the retries saved, not shorter writing. Two silent cuts are now marked inside their limit (a tools_off reason, a policy `what`), and an answer read back past 2000 characters says it was cut and how long it was. Identifiers, sticker names, search words, the private-words reason and the memory gist keep their single limit. Tool descriptions +155 characters.

@@ -25,6 +25,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta, timezone
 
+from .config import excerpt
 from .evidence import canonical, sha
 from .state import Conflict, now
 from . import visibility
@@ -469,7 +470,7 @@ def read(store, persona, qid, moment=None, outside=False):
                 text = str((line or {}).get('text') or '')
                 said = {'by': answer.get('by'), 'at': answer.get('at'), 'line': answer['line'],
                         'event_id': answer.get('event_id'),
-                        'text': text if len(text) <= ANSWER_CHARS else text[:ANSWER_CHARS] + '…'}
+                        'text': excerpt(text, ANSWER_CHARS)}
                 if source.get('kind') == 'group':
                     # A group's own words, read from its record for this turn only; home keeps none (her answer a).
                     said['where'] = GROUP_ORIGINAL % (source.get('name') or '那个群')

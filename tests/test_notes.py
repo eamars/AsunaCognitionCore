@@ -274,11 +274,12 @@ def test_a_note_over_its_length_sends_nothing_and_offers_its_beginning_cut_and_m
     ep, lane = turn(store, service, {'event_id': 'ask-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '写便条'},
                     [('note', {'to': G1, 'text': long})], '好')
     [(refused, ok)] = results(lane, 'note')
-    offered = refused.split('③ 照这个截好的发：' + chr(10), 1)[1]
+    offered, left = refused.split('③ 照这个截好的发：' + chr(10), 1)[1].split(chr(10) + '这样截，去掉的是', 1)
     kept = offered.split('（截在这里')[0]
     assert not ok and not store.db.notes.find_one({'from_episode': ep['_id']})
     assert len(offered) <= notes.NOTE_CHARS and long.startswith(kept) and kept.endswith('。')
     assert offered == kept + '（截在这里，原文还有 %d 字）' % (len(long) - len(kept))
+    assert left == '这 %d 字：' % (len(long) - len(kept)) + chr(10) + long[len(kept):]
 
 
 def test_two_notes_a_turn_and_the_caps_by_direction(store):

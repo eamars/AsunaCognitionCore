@@ -396,7 +396,7 @@ def test_a_visit_whose_turn_has_not_run_reads_as_not_done_yet_from_home(store):
     assert places.outcome(store, plan['visits'][-1]) == 'pending'
     assert places.OUTCOMES['pending'] == '那边那一回合还没跑完，结果还没出来'
     [row] = view(store, service)['items']                            # she sees it; going again is hers to choose
-    assert row['last_visit'] == '来看过：那边那一回合还没跑完，结果还没出来' and row['can_visit'] == '可以去'
+    assert row['last_visit'] == '出门了：那边那一回合还没跑完，结果还没出来' and row['can_visit'] == '可以去'
 
 
 def test_a_group_she_gave_a_time_zone_shows_its_own_clock(store):

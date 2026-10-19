@@ -155,13 +155,24 @@ SENTENCE_ENDS = '。！？!?…\n'
 CLOSERS = '”’」』）)"\''
 
 
-def cut(text, limit):
-    """An over-long text of hers cut to fit `limit` with the mark included: the beginning kept, the end cut at the last
-    sentence end that fits (else at the limit), and the mark saying how much was cut, so that sending it as it is
-    can never pass for the whole text (ADR-069)."""
-    text = str(text or '').strip()
-    if len(text) <= limit:
-        return text
+TAIL_SHOWN = 300                     # how much of what a cut leaves out a refusal shows
+
+
+def soft(limit):
+    """The length she is asked for: four fifths of the limit the program refuses past, which stays where it was. A
+    model does not count exactly; the room between the two is for that, and a turn never carries more (owner
+    2026-10-20)."""
+    return limit * 4 // 5
+
+
+def over(length, limit):
+    """Words for a text kept although longer than she was asked for, or None."""
+    ask = soft(limit)
+    return ('%d 字，超了 %d 字（%d 字以内，最多 %d 字），这次照收了' % (length, length - ask, ask, limit)
+            if ask < length <= limit else None)
+
+
+def _head(text, limit):
     room = max(0, limit - len(CUT_MARK % len(text)))
     head = text[:room]
     end = max(head.rfind(mark) for mark in SENTENCE_ENDS)
@@ -170,13 +181,30 @@ def cut(text, limit):
         while end < len(head) and head[end] in CLOSERS:
             end += 1
         head = head[:end]
-    head = head.rstrip()
+    return head.rstrip()
+
+
+def cut(text, limit):
+    """An over-long text of hers cut to fit `limit` with the mark included: the beginning kept, the end cut at the last
+    sentence end that fits (else at the limit), and the mark saying how much was cut, so that sending it as it is
+    can never pass for the whole text (ADR-069)."""
+    text = str(text or '').strip()
+    if len(text) <= limit:
+        return text
+    head = _head(text, limit)
     return head + CUT_MARK % (len(text) - len(head))
 
 
 def cut_offer(text, limit):
-    """The cut version as a refusal offers it: on its own lines, ready to copy."""
-    return '\n' + cut(text, limit)
+    """The cut version as a refusal offers it, on its own lines ready to copy, and the part that cut leaves out, so
+    what would be lost is seen before it is sent (her ask, 2026-10-20)."""
+    text = str(text or '').strip()
+    offer = '\n' + cut(text, limit)
+    if len(text) <= limit:
+        return offer
+    tail = text[len(_head(text, limit)):].strip()
+    shown = tail if len(tail) <= TAIL_SHOWN else tail[:TAIL_SHOWN] + '……'
+    return offer + '\n这样截，去掉的是这 %d 字：\n%s' % (len(tail), shown)
 
 
 def excerpt(text, limit):

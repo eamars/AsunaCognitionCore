@@ -820,3 +820,7 @@ characters. Action brain: nothing. The adapter needs her publish (a picture with
   `speak` is also the word of its block (`speak_from_program`) and its policy (`speak.max_messages`). The old name
   runs as `speak`, unlisted, with 「reply 现在叫 speak，这次照办，下次直接用新名字。」 until she uses it fewer than 5
   times in a week. Cost: none (same length).
+
+## The line cap counts what left (2026-10-20)
+
+`speak.max_messages` counts this turn's text lines that left or may still leave, read from the turn's outbox at each call (`role_tools.spoken`), not a counter kept from earlier calls. A part that failed, was cancelled after a failure, or that she took back while queued gives its lines back, including a failure the platform reports after the call; `UNKNOWN` may have left and counts. Her ask; before it, 3 of 1,893 reply parts had failed and none of the 12 turns refused at the cap had lost a line first.

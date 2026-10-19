@@ -149,6 +149,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `turn_pictures` — ([(ref, payload)] to attach to her group turn, pictures_from_program or None).
 - def `code_of` — The machine code of a refusal, kept in the record (ADR-060), never in her words.
 - def `words` — A refusal in words for her (ADR-060): what is wrong and what to do.
+- def `spoken` — (lines, texts) of this turn's text parts that left or may still leave, read from its outbox each time: a failure the platform reports after the call gives its lines back too.
 - def `chat_lines` — How many lines a text part is in a chat (owner 2026-10-14: in online chat a line break is another message): each line with words counts, a blank line does not, a fenced code block counts as one.
 - def `reply_receipt` — What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2); where the conversation shows line numbers, each sent line's own (ADR-079).
 - class `RoleTools` — Runs one tool call for one episode, on the coordinator's thread (it holds the coordinator lock).

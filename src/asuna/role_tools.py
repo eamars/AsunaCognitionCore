@@ -1078,6 +1078,21 @@ REACT_OFF_IN_DMS = set()
 REACT_DM_OFF = '私聊里点不了表情（平台不收），到下次重启前私聊里不用 react'
 
 
+# A part of hers that is known not to have left (her ask, 2026-10-20): its lines are not the turn's. UNKNOWN may
+# have left, so it counts.
+NEVER_LEFT = ('FAILED', 'CANCELLED_AFTER_FAILURE', CANCELLED_BY_HER)
+
+
+def spoken(store, ep):
+    """(lines, texts) of this turn's text parts that left or may still leave, read from its outbox each time: a failure
+    the platform reports after the call gives its lines back too."""
+    rows = store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK', 'reply_part': True,
+                                   'delivery_state': {'$nin': list(NEVER_LEFT)}},
+                                  {'text': 1, 'sticker': 1, 'attachment': 1, 'action': 1})
+    words = [row.get('text') or '' for row in rows if not ({'sticker', 'attachment', 'action'} & set(row))]
+    return sum(chat_lines(text) for text in words), [' '.join(text.split()) for text in words]
+
+
 def chat_lines(text):
     """How many lines a text part is in a chat (owner 2026-10-14: in online chat a line break is another message):
     each line with words counts, a blank line does not, a fenced code block counts as one."""
@@ -1473,8 +1488,7 @@ class RoleTools:
         model, policy = model_and_policy(self.store, ep['persona'])
         most = int(effective(model, 'speak.max_messages', policy) or 1)
         before = ep.get('reply') or {}
-        texts = list(before.get('texts') or [])
-        lines = int(before.get('lines') or 0)
+        lines, texts = spoken(self.store, ep)
         problems, planned, over, cancels = [], [], [], []
         # A number that is someone's here reads as nothing to the people here (owner 2026-10-14: a warning she may
         # overrule with force, not a conversion).
@@ -1588,7 +1602,7 @@ class RoleTools:
             # ADR-061 step 2: a question here is her reply's words; answers join by the program (questions.py).
             asked = questions.ask_in_group(self.store, self._fresh(ep), scene,
                                            '\n'.join(row['text'] for row in planned if row['kind'] == 'text'), patience)
-        self.coordinator._update(self._fresh(ep), reply={'texts': texts, 'lines': lines, 'parts': int(before.get('parts') or 0) + len(queued),
+        self.coordinator._update(self._fresh(ep), reply={'parts': int(before.get('parts') or 0) + len(queued),
                                                           'calls': int(before.get('calls') or 0) + 1})
         from .capabilities import numbered as shows_numbers
         out = {'note': reply_receipt(queued, shows_numbers(self.store, scene)) if queued else '这次没发新的。'}

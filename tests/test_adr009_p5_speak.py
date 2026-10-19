@@ -6,7 +6,7 @@ import threading
 
 import pytest
 
-from asuna import channel_kinds
+from asuna import channel_kinds, role_tools
 from asuna.channels import Channels
 from asuna.coordinator import Coordinator, UNSENT_NOTE
 from asuna.ingress import persist_input
@@ -274,3 +274,14 @@ def test_where_words_are_speech_everything_she_wrote_is_one_message(store):
     persist_input(store, event, managed=True)
     ep = Coordinator(store, lane).ingest(event)
     assert [r['text'] for r in outbound(store, ep['_id'])] == ['那必须的，被夸了我会更来劲。\n\n他教没教我不好说。']
+
+
+def test_the_line_cap_counts_only_lines_that_left_or_may_still_leave(store):
+    """Her ask (2026-10-20): a part that failed, was cancelled after a failure, or that she took back while queued
+    gives its lines back, also when the platform reports the failure after the call; UNKNOWN may have left."""
+    states = ['DELIVERED', 'FAILED', 'CANCELLED_AFTER_FAILURE', role_tools.CANCELLED_BY_HER, 'UNKNOWN', 'QUEUED_EXTERNAL']
+    for index, state in enumerate(states):
+        store.put('messages', {'_id': 'ep-lines:speak:%d' % index, 'episode_id': 'ep-lines', 'phase': 'SPEAK',
+                               'reply_part': True, 'delivery_state': state, 'text': '第%d句\n第二行' % index,
+                               **({'sticker': {'kind': 'market'}} if state == 'QUEUED_EXTERNAL' else {})}, stream='ep-lines')
+    assert role_tools.spoken(store, {'_id': 'ep-lines'}) == (4, ['第0句 第二行', '第4句 第二行'])

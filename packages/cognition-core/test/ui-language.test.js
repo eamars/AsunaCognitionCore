@@ -12,7 +12,7 @@ test('names follow a supported language; anything else is English', async () => 
   for (const other of ['fr', '', undefined, '../en', 'x'.repeat(40)]) assert.equal((await languageWords(other)).language, 'en');
   for (const language of ['en', 'zh']) {
     const { titles } = await languageWords(language);
-    assert.deepEqual(Object.keys(titles).sort(), ['errand', 'presence', 'schedules', 'self_development', 'self_development_night', 'settlement']);
+    assert.deepEqual(Object.keys(titles).sort(), ['condense', 'errand', 'presence', 'schedules', 'self_development', 'self_development_night', 'settlement']);
   }
 });
 

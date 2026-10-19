@@ -647,21 +647,21 @@ def _turn_rules(store, ep):
         names.append('read_image')
     names += ['stay_silent', 'ideas.note']
     note_tool = ['note'] if context.get('note_places_from_program') else []
-    if kind == 'note':
-        from . import notes
-        first = notes.opening(store, ep) if ep.get('_id') else None
-        if (first or {}).get('trust') != notes.TRUSTED:
-            # ADR-018 §5.4: a note from outside is a message. Its turn reads, answers, notes down and replies back;
-            # nothing with consequences (a wish to act goes into the notebook for her self-improvement review).
-            names += note_tool
-            if context.get('affect_from_program'):
-                names.append('feel')
-            if (first or {}).get('owner_line') and context.get('errand_places_from_program'):
-                names.append('errand')
-            from . import channel_kinds
-            if channel_kinds.reply_parts(ep['scene_id']):
-                names.append('speak')           # in the owner's own platform chat she answers him in speech
-            return names + ['watch']
+    from . import notes
+    first = notes.opening(store, ep) if kind in ('note', 'visit') and ep.get('_id') else None
+    # A note from outside opens a note turn at home, or a visit in a group (a home group's visit is owner-private).
+    if (kind == 'note' and (first or {}).get('trust') != notes.TRUSTED) or (first or {}).get('trust') == notes.UNTRUSTED:
+        # ADR-018 §5.4: a note from outside is a message. Its turn reads, answers, notes down and replies back;
+        # nothing with consequences (a wish to act goes into the notebook for her self-improvement review).
+        names += note_tool
+        if context.get('affect_from_program'):
+            names.append('feel')
+        if (first or {}).get('owner_line') and context.get('errand_places_from_program'):
+            names.append('errand')
+        from . import channel_kinds
+        if channel_kinds.reply_parts(ep['scene_id']):
+            names.append('speak')           # in the owner's own platform chat she answers him in speech
+        return names + ['watch']
     names.append('private_words')       # a new name shows up anywhere: she lists it there (not from an outside note)
     # Her notebook is read and decided in her self-improvement turns, and when the owner asks in private.
     if kind == 'self_development' and (context.get('ideas_from_program') or {}).get('items'):
@@ -859,9 +859,10 @@ def not_now(store, ep, name):
         return REFLECTION_NO_DELEGATE
     if kind == 'note' and name == 'errand':
         return ERRAND_NOTE
-    if kind == 'note' and name not in ('note', 'feel', 'watch', 'read_image'):
+    if kind in ('note', 'visit') and name not in ('note', 'feel', 'watch', 'read_image'):
         from . import notes
-        if (notes.opening(store, ep) or {}).get('trust') != notes.TRUSTED:
+        trust = (notes.opening(store, ep) or {}).get('trust')
+        if (kind == 'note' and trust != notes.TRUSTED) or trust == notes.UNTRUSTED:
             return NOTE_ONLY
     return NOT_NOW.get(name, '这一回合用不了 %s。' % named(name))
 

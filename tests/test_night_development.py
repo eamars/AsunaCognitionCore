@@ -123,6 +123,15 @@ def test_rhythm_task_names_follow_the_words_the_host_gives_and_only_they_are_ren
         RHYTHM_TITLES.clear(); RHYTHM_TITLES.update(saved)
 
 
+def test_every_rhythm_task_has_a_title_in_every_ui_language():
+    """A rhythm the locale files do not name keeps its English title in any UI language."""
+    import json, pathlib
+    from asuna.schedule import RHYTHM_TITLES
+    for path in pathlib.Path(__file__).parents[1].joinpath('packages/cognition-core/locale').glob('*.json'):
+        titles = json.loads(path.read_text(encoding='utf-8'))['asuna']['titles']
+        assert set(RHYTHM_TITLES) <= set(titles), (path.name, set(RHYTHM_TITLES) - set(titles))
+
+
 def test_a_plan_title_drops_markdown_bold_and_code_marks_but_keeps_her_words():
     from asuna.schedule import plan_title
     assert plan_title({'intent': '回看 Claude 那两件**我自己看到没有**，看 `scene_people`'}) == '回看 Claude 那两件我自己看到没有，看 scene_people'

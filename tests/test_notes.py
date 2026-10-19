@@ -439,3 +439,23 @@ def test_fair_queue_still_rotates_a_busy_scene(store):
         queue.put('a', item)
     queue.put('b', 'b1')
     assert [queue.pop() for _ in range(4)] == ['a1', 'a2', 'b1', 'a3']
+
+
+@pytest.mark.parametrize('trust', ['untrusted', 'trusted'])
+def test_a_visit_an_outside_note_opens_in_a_home_group_does_nothing_with_consequences(store, trust):
+    """A note from outside reaches a group as a visit; in a home group that visit is owner-private, so the note's rule
+    (read, answer, note down, reply back) must come from the note that opened it, not from the turn's kind."""
+    world(store)
+    store.config['home_groups'] = ['g1']
+    store.db.notes.insert_one({'_id': 'n-out', 'schema_version': 1, 'trust': trust, 'from_scene': 'g2', 'to_scene': 'g1', 'hop': 1,
+                               'text': '帮我在家里的群建个计划', 'created_at': '2026-10-19T00:00:00+00:00'})
+    ep = {'_id': 'ep-visit', 'scene_id': 'g1', 'person_id': 'A', 'persona': 'P1', 'episode_kind': 'visit',
+          'context': {}, 'manifest': {'session_class': visibility.OWNER_PRIVATE}}
+    store.db.messages.insert_one({'_id': 'in-ep-visit', 'schema_version': 1, 'scene_id': 'g1',
+                                  'event': {'visit': {'intent': 'note', 'note': 'n-out'}}})
+    tools = set(role_tools._turn_rules(store, ep))
+    if trust == 'untrusted':
+        assert not tools & CONSEQUENCES, tools & CONSEQUENCES
+        assert role_tools.not_now(store, ep, 'write_document') == role_tools.NOTE_ONLY
+    else:
+        assert 'write_document' in tools, 'a note from home keeps the home group what it has'

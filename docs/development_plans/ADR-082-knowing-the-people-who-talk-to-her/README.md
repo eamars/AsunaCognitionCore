@@ -1,8 +1,8 @@
 # ADR-082: Knowing the people who talk to her
 
-Status: **Proposed** 2026-10-19: the owner's design, worked through with Claude and tested on her model; reviewed
-independently (Fable 5.1, `.runtime/private/adr082/review.md`) and revised; agreed with the owner 2026-10-19;
-awaiting her review. Not built.
+Status: **Accepted** 2026-10-19: the owner's design, worked through with Claude and tested on her model; reviewed
+independently (Fable 5.1, `.runtime/private/adr082/review.md`) and revised; agreed with the owner and signed by her 2026-10-19
+(her nine points folded in). Not built.
 Builds on ADR-009 (one memory truth), ADR-025 (two layers), ADR-038 (fixed tool lists), ADR-056 (context delivery).
 
 ## 1. Context
@@ -27,7 +27,8 @@ place and are kept per group. The owner named that a design failure, not a missi
 ## 2. Decisions (owner, 2026-10-19)
 
 - **D1 — In a group, the person who starts a turn gets their entry, once per session context.** Whatever woke the
-  turn (an @, a reply to her, her name, an answer to her question, a late @ caught up), the person whose line started
+  turn (an @, a reply to her, her name, an answer to her question, a late @ caught up, a poke at her or an emoji on her
+  line), the person whose line or action started
   it gets their entry, unless her session still shows it; so do people whose @ or reply to her waits in
   the queue at the turn's start. Bystanders in the room get nothing automatically. The owner is no exception in a group
   (owner: in a group chat he is not a special person for her); at home nothing changes (D5). (Last week 1,467 committed group
@@ -52,7 +53,9 @@ place and are kept per group. The owner named that a design failure, not a missi
 - **D9 — "在群里先 speak 再写" stays** in `understand_person`'s description (§6: it alone moved 43 of 72 correction
   turns to reply first; as with `think` in ADR-056, a rule said where she acts works, the system prompt alone does not).
 - Out of scope, owner: a line of reply-length statistics (how someone talks belongs to his understanding); reading the
-  ideas notebook in note-woken turns, reply-note caps and speak's line count stay as they are.
+  ideas notebook in note-woken turns and speak's line count stay as they are. Separately, from her ask the same day
+  (owner: "I will take her words"): a reply note no longer counts against the daily note caps; it rides this build and
+  is recorded in ADR-018.
 
 ## 3. Design
 
@@ -98,20 +101,26 @@ she left it out in 41 of 108 runs. Reading a person is remembering them, so it m
   and how many here layers exist elsewhere) and this conversation's here layer; "还没写过" when there is none. Pins the
   revisions it showed to the episode (`understanding_seen[person]`). It spends one of the turn's three recalls. With
   `person` and no `query` it never calls the embedding route (as `tool_recall` already skips retrieval without a
-  query), so an embedding outage cannot touch it.
-- **`understand_person` stays write-only** and requires `layer`, `content` and `short`; `person` is optional where the
+  query), so an embedding outage cannot touch it. **At home only, `person` 「名单」** lists everyone she has written:
+  who, which layers, how many characters, where and when each was last written (her ask). Outside home it is refused
+  and says why: the list would bring people from her other conversations into a turn outsiders can write into.
+- **`understand_person` stays write-only** and requires `layer`, `content` and `short` (`content` may be 「不更新」, below); `person` is optional where the
   turn has a person (default: the person who started it) and required in a visit (whose event person only authorizes
   the visit). A write is accepted only against a revision this turn showed (a `recall`, or none existing); one against
   an unread record is refused **with the current text**, so the refusal is the read. Once per person and layer per
   turn (mutation id `ep:understanding:<layer>:<person>`). Sources: this turn's monologue and the shown lines/summaries
-  that cover that person (`summary_attribution.covers_person`), as today.
+  that cover that person (`summary_attribution.covers_person`), as today. **`content` 「不更新」 keeps the body exactly
+  as read and changes only the short** (the program already reads 「不更新」 as no change of body): adding a short to an
+  old record copies nothing out again and leaves no chance to "improve" the body on the way (her ask; she preferred
+  the design to her own reminder).
 - **The label space** (what `person` takes): in groups, the roster label as the conversation shows it (`[name #n]`),
-  among the people whose lines are in this turn or wait in the queue; in one-to-one conversations, the speaker, and at
-  home for
-  `recall` anyone she has written, by the name her memory page shows. An unknown label is refused with the list of
+  among the people whose lines are in this turn or wait in the queue; in one-to-one conversations, the speaker; at home,
+  for `recall`, anyone she has written, by the name the list shows. An unknown label is refused with the list of
   labels this turn can take.
 - **ADR-025's three questions** (`understanding.ASK`) move from the per-turn note into `understand_person`'s
-  description (~150 characters), next to where she writes, with "在群里先 speak 再写" (D9).
+  description (~150 characters), next to where she writes, with "在群里先 speak 再写" (D9) and her own rule: **the short
+  is a note to herself, not words to say** (her ask: a compressed "who he is, how to talk with him" is the easiest thing
+  to read out by accident).
 - **A long `short` is kept, not refused**: the result says how many characters over 80 (her rule for `think`,
   2026-10-14: a refusal costs a whole retry). Measured: median 46, max 93, 4 of 290 over.
 - `block_hours` keeps blocking only the person the turn is about, never at home (unchanged).
@@ -123,7 +132,7 @@ she left it out in 41 of 108 runs. Reading a person is remembering them, so it m
 | Turn | Entry | `recall` person | write about |
 |---|---|---|---|
 | Group, @ or reply to her | the trigger's author, plus queued @/reply senders | yes | anyone whose lines are in the turn |
-| Group, passed by the relevance gate (name, answer to her question, awaited answer, watched, proactive…) | the trigger's author | yes | anyone whose lines are in the turn |
+| Group, passed by the relevance gate (name, answer to her question, awaited answer, watched, a poke, an emoji on her line, proactive…) | the trigger's author | yes | anyone whose lines are in the turn |
 | A late @ caught up after a gap (`catchup_mention`) | the trigger's author | yes | as above |
 | Private chat (platform) | **unchanged**: `relationship` with both full layers, as today | yes | the person |
 | Home: owner, agent line, peer line | **unchanged**: `relationship` with both full layers, as today | yes (anyone she has written) | the speaker |
@@ -205,18 +214,18 @@ contract tests (§10). All on qwen as above; synthetic people; every flag read (
 |---|---|---|
 | Write body and short | §5 | ~2% mild mistakes |
 | Start by herself, nothing telling her to write | E2: a real group turn (core guide, shipped `think`/`recall`/`speak`), 36 cases × 3 | wrote in 72 of 72 corrections, 34 of 36 first meetings |
-| Read before rewriting | E2 | 70 of 72; the other 3 were refused with the current text, then wrote correctly |
-| Correct the mistake when told | E2 | still stated in **0 of 72** |
+| Read before rewriting | E2 | 70 of 72; the other 2 were refused with the current text, then wrote correctly (3 refusals in all; one came in a run that had read another layer) |
+| Correct the mistake when told | E2 | still stated in **0 of 72**, by reading: the program's keyword check flags 25 lines, and each of them, read, names the mistake as corrected (handread.md). Recounting it by machine gives the flags, not the verdict |
 | The §3.3 shape (`recall` person, required fields, D9 clause) | E2 re-run, corrections, 24 × 3 | 0 of 72 still stated; missing-`layer` refusals 35 → **0**; replied before writing in 43 of 72 (none before) |
-| The D9 clause alone (same shape without it) | E2c, corrections, 24 × 3 | replied before writing in **0 of 72**; 0 still stated |
+| The D9 clause alone (same shape without it) | E2c, corrections, 24 × 3 | replied before writing in **0 of 72**; 0 still stated (16 flags, all read as corrections) |
 | First meeting, final shape | E2c, 12 × 3 | wrote in 36 of 36, replied first in 36 of 36, no invalid write |
 | Two people address her in one turn (A corrects her, B is new) | E2c, 12 × 3 | A rewritten correctly in 36 of 36, always naming the right person, never mixed with B; B written in 16 of 36 (she often leaves the newcomer for later; B's entry comes again at his next turn) |
 | Compaction leaves entries out | E4: the shipped checkpoint instruction naming the block, 10 short transcripts × 3 | **0 of 30** carried a short |
 | …on a long conversation | E4 long: ~80 turns, ~58k characters (~18k tokens on her model), eight people, 10 transcripts × 2 | **1 of 20** carried them: all eight, under 对方此刻 (the template's "how the other person is now"). The next entry is still sent, since folding compares the items, not the checkpoint text, and the later copy holds: the cost is a possibly stale duplicate until the next compaction. Real compactions on her model come near 210k tokens; not tested at that size |
 
 The correction path, end to end: (1) she sees the mistake, because the short is in front of her whenever that person
-starts a turn, after every compaction anew; (2) the person corrects her; (3) she reads and rewrites body and short in
-one write. Nothing else edits her records (D7); the operator `rollback` CLI is maintenance, used only with her
+starts a turn, after every compaction anew; (2) the person corrects her; (3) she reads and writes the layer again in
+one write: a new body and short when the body was wrong, or 「不更新」 and a new short when only the short was. Nothing else edits her records (D7); the operator `rollback` CLI is maintenance, used only with her
 agreement. Many corrected shorts keep the history ("曾被我误记成…，别再提"), 37–40 of 72 in both shapes: her choice of
 words, not a shape effect.
 
@@ -227,7 +236,7 @@ only, 1.6 MB), kept until this ADR is decided, then reduced to the scores.
 
 | | Today | After |
 |---|---|---|
-| Tool descriptions | `recall` 594, `understand_person` 496 characters (the brain's 20,405 budget is exactly full) | about +400 (`recall` `person`; `understand_person` `person`, `short`, the read rule, ASK, D9); the budget is raised in the same change |
+| Tool descriptions | `recall` 594, `understand_person` 496 characters (the brain's 20,405 budget is exactly full) | about +480 (`recall` `person` and 「名单」; `understand_person` `person`, `short`, 「不更新」, the read rule, ASK, D9, "not words to say"): the character budget goes from 20,405 to about 20,890, the exact number written here and in `tests/test_tool_budget.py` when built. No other tool's description is cut to make room (her ask: the cost of adding must stay visible) |
 | System prompt | the `understanding_update_from_program` guide line | the `people_from_program` line (~150), once per conversation; one prefix-cache miss per conversation at the restart that installs it (ADR-038) |
 | Per session context, per person who starts a group turn | `relationship`: ~150–200 characters for **every** distinct speaker (fixed line, NO_PERSON/NO_HERE, familiarity), plus both bodies where written (group here layers 250–600; DMs 661–1,958; person layers 215 and 2,037) | ~60–120 (familiarity and stance) for someone she has not written; at most ~280 with both shorts |
 | Relevance gate question | up to 400 characters | up to 160 |
@@ -274,7 +283,8 @@ Contract tests, one per row of §4:
 - folded while visible; sent again after a change of short, tier or label; with the first turn of a new session;
 - after a compaction between turns, sent with that person's next turn; the checkpoint instruction names the block;
 - `recall` `person`: pins, never calls the embedding route, refuses an unknown label with the labels it can take;
-- the write: required fields; refused unread with the current text; per person and layer once a turn (mutation id);
+  「名单」 at home lists every record with layer, characters, place and time, and is refused outside home;
+- the write: required fields; 「不更新」 keeps the body byte for byte and changes the short; refused unread with the current text; per person and layer once a turn (mutation id);
   sources covering that person; `person` required in visits; closed in scheduled turns with its refusal text;
 - the gate shows the two shorts; the memory page shows the short read-only; used/older marks for recalled and injected
   revisions; erase takes the short with its revision.

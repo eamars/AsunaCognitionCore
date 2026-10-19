@@ -449,3 +449,12 @@ def test_a_request_keeps_its_number_across_a_restart_and_is_listed_again_until_a
     controller.offers.clear()
     notices.answer(store, ep, {'kind': 'accept', 'who': '请求3'}, key='a3')
     assert notices.remind_open(store, controller) is None and controller.offers == [], 'nothing open: no event'
+
+
+def test_the_words_that_teach_a_call_use_the_names_she_is_shown():
+    """What the program tells her to write must be what the tool takes (ADR-077 fact check: two of them taught
+    retired names, so following them was refused)."""
+    from asuna import context, notices, role_tools
+    shown = role_tools.TOOLS['group_action']['parameters']
+    assert 'do 写 accept' in notices.ANSWER_HINT and 'do' in shown and 'kind' not in shown
+    assert '[表情包:' not in context.CHAIN_NOTE and 'kind=sticker' in context.CHAIN_NOTE

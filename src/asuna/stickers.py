@@ -7,9 +7,10 @@ fits; a picture she made herself may go on the shelf too. Only stickers can be k
 
 - Keeping a custom sticker stores its bytes once (``global-safe``: a sticker is public meme content, not
   anyone's private picture); a store sticker keeps the ids the platform needs to send it again.
-- In a conversation whose platform sends stickers, ``[表情包:名字]`` in what she says goes out as that
-  sticker, as a message of its own; one per turn. ``[表情:名字]`` is one of the platform's own faces, inside
-  the text; the adapter turns a known name into the real face.
+- In a conversation whose platform sends stickers, a ``speak`` part of kind ``sticker`` with its ``name`` goes
+  out as that sticker, as a message of its own; a ``[表情包:名字]`` token inside a text part is refused.
+  ``[表情:名字]`` is one of the platform's own faces, inside the text; the adapter turns a known name into
+  the real face.
 - The shelf holds STICKER_SHELF; her turn lists names and notes only. Rotating is hers: a weekly look in
   the nightly settlement lists the ones she has not used, and she drops what she no longer wants. The
   program never drops one for her.

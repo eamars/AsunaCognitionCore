@@ -2,7 +2,7 @@
 
 Status: **Under review** since 2026-10-19: the owner's design, worked through with Claude and tested on her model;
 reviewed independently (Fable 5.1, `.runtime/private/adr082/review.md`) and revised; agreed with the owner and signed by
-her (her nine points folded in); built `7cc6d2d4` and live from her restart at 19:16 NZDT. Her group behaviour (§9) is
+her (her nine points folded in); built `7cc6d2d4` and live from her restart at 19:16 NZDT. Reviewed independently (Claude Opus 5.5, a subagent that built none of it; `.runtime/private/adr-review/review-1.md`) 2026-10-19: one fault fixed and the old bodies named as bodies (`3b72fd0f`, §11). Her group behaviour (§9) is
 read about 2026-10-22 and the verdict written here.
 Builds on ADR-009 (one memory truth), ADR-025 (two layers), ADR-038 (fixed tool lists), ADR-056 (context delivery).
 
@@ -234,7 +234,7 @@ agreement. Many corrected shorts keep the history ("曾被我误记成…，别�
 words, not a shape effect.
 
 Evidence: the scripts, cases, raw rows, the review and the hand reading in `.runtime/private/adr082/` (synthetic people
-only, 1.6 MB), kept until this ADR is decided, then reduced to the scores.
+only, 1.6 MB), kept until §9's verdict is written, then reduced to the scores.
 
 ## 7. Cost
 
@@ -242,8 +242,8 @@ only, 1.6 MB), kept until this ADR is decided, then reduced to the scores.
 |---|---|---|
 | Tool descriptions | `recall` 594, `understand_person` 496 characters (the brain's 20,405 budget is exactly full) | **+550, built**: `recall` +114 (`person`, 「名单」), `understand_person` +351 (`person`, `short`, 「不更新」, the read rule, ASK, D9, "not words to say"; `block_hours` left it), `watch` +85 (`block`). The character budget goes from 20,405 to 20,955 (21,251 with tiered memory) in `tests/test_tool_budget.py`; no other tool's description was cut (her ask: the cost of adding must stay visible) |
 | System prompt | the `understanding_update_from_program` guide line | the `people_from_program` line (~150), once per conversation; one prefix-cache miss per conversation at the restart that installs it (ADR-038) |
-| Per session context, per person who starts a group turn | `relationship`: ~150–200 characters for **every** distinct speaker (fixed line, NO_PERSON/NO_HERE, familiarity), plus both bodies where written (group here layers 250–600; DMs 661–1,958; person layers 215 and 2,037) | ~60–120 (familiarity and stance) for someone she has not written; at most ~280 with both shorts |
-| Relevance gate question | up to 400 characters | up to 160 |
+| Per session context, per person who starts a group turn | `relationship`: ~150–200 characters for **every** distinct speaker (fixed line, NO_PERSON/NO_HERE, familiarity), plus both bodies where written (group here layers 250–600; DMs 661–1,958; person layers 215 and 2,037) | ~60–120 (familiarity and stance) for someone she has not written; at most ~280 with both shorts; a layer written before shorts comes whole (`short_body` / `here_body`): 7 of the first 10 live entries, about 2,000 characters |
+| Relevance gate question | up to 400 characters | up to 160 for written shorts; a layer written before shorts still reaches the 400-character cut (`attend.py`) |
 | A correction | one write | `recall` + write: about 4.1 calls to her last write or reply (E2 re-run) |
 | Cache | — | entries at the tail, as every notice block: no prefix change |
 
@@ -274,6 +274,18 @@ reading her text:
 - entries sent per day, and how many carried a short;
 - M5: place words of a here layer appearing in a person short (§5).
 
+**The verdict** (pass or fail), over the window from 06:15Z on 10-19 to the read: committed `understanding.result`
+audits joined to their episodes; group external turns from `turn.started`; entries as delivered from the role
+session logs (the episode's context is the unfolded copy). **Pass** if all hold:
+1. committed group writes per 100 group external turns are at least 0.85, twice last week's 0.42 (6 group writes in
+   about 1,420 group turns), with at least 300 group turns in the window (fewer: the read waits for 300);
+2. at least one group write is about someone other than the turn's person, or made on a visit (D6 used);
+3. no group turn is `FAILED_RUNTIME` with an understanding code.
+
+Otherwise **fail**. Reported beside it, not judged: entries sent a day, and how many carried a written short against
+an old body; M5 as a person short written in the window that contains the title of a group where that person has a
+here layer, or a run of 6 or more characters shared with that person's here body.
+
 Her review comes before the build (her ask: generic capability, core, not persona).
 
 ## 10. Verification before it ships
@@ -293,5 +305,22 @@ Contract tests, one per row of §4:
 - the gate shows the two shorts; the memory page shows the short read-only; used/older marks for recalled and injected
   revisions; erase takes the short with its revision.
 
-Live, on her agent line with her agreement: she writes a short line about Claude; Claude starts a turn in a new
-session and she shows she knows it; after a compaction it comes back with Claude's next turn.
+Live: read on her group records, not on an agent line (a one-to-one line never shows the entry). The first group turns
+after the install each carried one entry, and delivery folded the unchanged ones (6 sent, 4 folded, 2026-10-19).
+
+## 11. Independent review, round 1 (2026-10-19, about 20:50 NZDT)
+
+The review (`.runtime/private/adr-review/review-1.md`) found the build doing what was decided, with contract tests
+through the real Coordinator and `composeContext`, and live entries in every group external turn since the install.
+Then:
+
+- **`watch` `block` could block someone who did not speak (fixed, `3b72fd0f`).** It blocks the turn's person; in a
+  group visit that is only the route member who authorizes the visit (`places.visitor`), in a plan the plan's
+  author. When blocking left `understand_person` for `watch` it reached those turns too. Now a turn nobody spoke in (a
+  visit, a plan, a task's report) refuses it with the way out: block in the turn where that person talks to her.
+- **An old body was called a short (fixed, `3b72fd0f`).** A layer written before shorts now comes as `short_body` /
+  `here_body`, and the guide line says so (+19 characters, once per conversation).
+- **§9 had no pass/fail line**: written in §9.
+- **The planned agent-line check could not show the entry**: §10 now reads the group records.
+- **§7's gate line** said 160 while an old body still reaches the 400 cut: corrected.
+- The commit `7cc6d2d4` also carried ADR-018's reply-note change; recorded there, a note only.

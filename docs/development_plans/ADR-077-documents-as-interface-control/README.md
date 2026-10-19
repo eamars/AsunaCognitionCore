@@ -1,7 +1,7 @@
 # ADR-077: The current references, analysed and reshaped as interface control documents
 
 Status: **Proposed 2026-10-17** — the owner's request. It starts **after the ADR-076 research study** has reported and
-its recommendations are agreed. Claude does the analysis and the work; Xiaoman reviews and gives feedback. **Analysed 2026-10-19** (§9): the shape waits for her review of the samples and the owner's decision.
+its recommendations are agreed. Claude does the analysis and the work; Xiaoman reviews and gives feedback. **Analysed 2026-10-19** (§9); reviewed independently (Claude Opus 5.5, a subagent that built none of it; `.runtime/private/adr-review/review-1.md`) (§10). Before the shape is decided: the samples regenerated from the runtime, her review, the owner's choice of the commit gate, and the batch correcting the wrong facts.
 
 ## 1. Problem
 
@@ -112,8 +112,8 @@ Signature: ____
 ## 7. Sign-off
 
 - **Real lookups.** A set of real questions collected in §4.1, each answered from the new documents. Each answer is
-  correct against the code and reached with far fewer characters read than before; the before and after counts are
-  both recorded.
+  correct against the code and reached with far fewer characters read than before: the median characters read per lookup over the
+  77 questions of `lookups.md` falls by at least 70%; the before and after counts are both recorded.
 - **Agreement with the code, both ways.** The agreement test passes; it fails on a deliberately broken limit or name,
   and on an interface present in the code but missing from the document. A stale document blocks the commit.
 - **No fact lost.** Every interface fact of the old documents is in the new ones or listed as removed, with the reason
@@ -170,11 +170,11 @@ action-brain tasks that read references (271 reads).
 
 ### 9.3 What it found
 
-- **About one statement in six is wrong or stale.** Most are exact facts a reader acts on: a parameter name that is
+- **About one checked row in seven is wrong or stale** (15%; a paragraph correct throughout is one row, so this is an upper bound). Most are exact facts a reader acts on: a parameter name that is
   now refused (`kind`, `reason`, `inject`, `op` in four tools), a limit or default that changed, a list missing a member
   (the die's seven faces, the fifth rhythm task, the `raw` fields the Host keeps).
-- **The code-to-document direction is the larger gap**, as her first feedback said. 415 refusal codes are raised in
-  `src/asuna`; 43 of them (10%) appear in `RUNTIME_API.md`. Context blocks, audit events, HTTP outcomes and record fields
+- **The code-to-document direction is the larger gap**, as her first feedback said. 524 refusal codes are raised in
+  `src/asuna` (an upper-case code with an underscore at the start of a `raise`'s first string); 51 of them (10%) appear in `RUNTIME_API.md`. Context blocks, audit events, HTTP outcomes and record fields
   are missing in the same way.
 - **One fact, many homes, each drifting alone.** The DSH version is stated in nine places; the persona and channel
   contracts in four; within `RUNTIME_API.md` several rules are stated two or three times and disagree (the image cap,
@@ -213,3 +213,22 @@ and no page lists fails. Generated pages say at the top that they are generated 
 Samples for her review (§6), built from the code: `.runtime/private/adr077/samples/` — `tools-group.md` and
 `tools-home.md` (her tools in a group and at home, with their refusals; 10 and 11 refusals flagged as giving no next
 step) and `errors.md` (113 codes with their words, by module). The final version is one page per turn kind.
+
+## 10. Independent review, round 1 (2026-10-19, about 20:50 NZDT)
+
+The review spot-checked three "wrong" rows against the code; all held. It found:
+
+- **The samples were assembled by hand, and wrong where she looks first**: the group page listed `stay_silent` and
+  `await_answer` beside `speak`, which the code replaces in platform groups. The samples are regenerated from the
+  runtime's own functions (`role_tools` per place, channel kind and turn kind) and diffed against them before she
+  reviews them.
+- **"A stale document blocks the commit" has no mechanism**: the repository has no git hook and no CI, so a test
+  blocks nothing unless someone runs it. The shape decision names the gate; recommended: a pre-commit hook running
+  only the agreement test (about a second, no Mongo). The owner's call.
+- **The wrong facts stay live while the shape waits.** One batch corrects the wrong, stale and history rows from the
+  facts files now; the reshape inherits correct facts.
+- **The headline is a row rate** and the code count had no stated rule: both corrected in §9.3.
+- **§4 step 3** (the ADR-076 matrix as the source for the turn side) was not used; the regenerated samples take the
+  turn side from the runtime itself, which supersedes it.
+- **"No fact lost"** is checked against the facts files, which are the inventory of every old statement.
+- Her first feedback (§6) still waits for her signature.

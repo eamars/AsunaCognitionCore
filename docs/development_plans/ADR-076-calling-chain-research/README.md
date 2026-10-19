@@ -1,6 +1,6 @@
 # ADR-076: A research study of her calling chains, paths and prompts
 
-Status: **Under review** since 2026-10-19. The study ran 2026-10-18/19 (`report.md`); the owner decided on its recommendations 2026-10-19 (§10) and everything accepted is built and live: R1 `cb006c8b`, R2/R3/R8/R9 `ea2519a8`, R4 `2bcc9ef3`/`69b668f2`, R5 `e69859e4`, R10 and stay_silent off on platforms, installed at her restart 2026-10-19 about 11:10 NZDT. Two verdicts wait on her real records, read about 2026-10-22 and written here: her platform speaking rate against the 89.8% baseline (stay_silent comes back if it rises), and summary sessions a day against 227 (R5). First written 2026-10-17 as the brief for the study.
+Status: **Under review** since 2026-10-19. The study ran 2026-10-18/19 (`report.md`); the owner decided on its recommendations 2026-10-19 (§10) and everything accepted is built and live: R1 `cb006c8b`, R2/R3/R8/R9 `ea2519a8`, R4 `2bcc9ef3`/`69b668f2`, R5 `e69859e4`, R10 and stay_silent off on platforms, installed at her restart 2026-10-19 about 11:10 NZDT. Reviewed independently (Claude Opus 5.5, a subagent that built none of it; `.runtime/private/adr-review/review-1.md`) 2026-10-19: one fault fixed (`3b72fd0f`) and the verdicts restated (§11). Three verdicts wait on her real records from the restart that installs `3b72fd0f`, read about 2026-10-22 and written here (§11.2). First written 2026-10-17 as the brief for the study.
 
 ## 1. What the owner wants
 
@@ -216,7 +216,7 @@ The report is `report.md` in this folder. On its recommendations (§6):
 - **R5: accepted, batching first.** Context tokens matter most; effort is tuned only if batching is not enough, and
   must not invalidate a cache mid-session (a summary runs in its own one-request session, so it cannot).
   Built: a summary takes up to 24 rows instead of 8 (`DialogueSummarizer.WINDOW_ROWS`), so a busy group opens a
-  third of the cold one-request sessions it did. Baseline to compare: 6,818 summary sessions in 30 days (about 227 a
+  third of the cold one-request sessions it did (overall at most about 9%: §11). Baseline to compare: 6,818 summary sessions in 30 days (about 227 a
   day), 7.2M output tokens. Effort is left as it is until that comparison.
 - **R6: keep as it is, including the 22-character THINK_FIRST tail.** Removing that hint once raised the error
   rate clearly; the system prompt alone is not enough.
@@ -229,4 +229,40 @@ The report is `report.md` in this folder. On its recommendations (§6):
   without any `speak` stays, as it costs no tokens. **Finding 17 (handing over): her judgement.**
 - **Cost to the character brain (R10 + stay_silent):** `speak`'s description -40 characters (it no longer restates
   where words leave); one tool fewer in platform conversations; the turn guide says the rule once per place
-  (`block_guide.WORDS`, `ENDING`).
+  (`block_guide.WORDS`, `ENDING`), +9 characters there on platforms.
+
+## 11. Independent review, round 1 (2026-10-19, about 20:50 NZDT)
+
+The review (`.runtime/private/adr-review/review-1.md`) found R1–R4, R8–R10 built as decided and holding live: no
+binding error since R1, every refusal in her words, DSH's argument errors translated (8 of 8 since the install). Then:
+
+- **R10 made her ending "unsent" (fixed, `3b72fd0f`).** On a platform a turn ends with words. A turn that had called
+  `speak` still had its closing words marked unsent and told back to her next turn (`unsent_from_program`): 93% of
+  group turns since the install, against 12% before, so she was nudged to resend them. That went against finding 16
+  as decided (§10: harmless; only words with no `speak` at all are handed back). Now a turn that spoke ends in its
+  words; the mark and the told line come only from a turn with words and no `speak`.
+- **R4 lost its line on a failed turn (fixed, `3b72fd0f`).** The fault and unsent lines were cleared when the next
+  turn was prepared; now when a turn that showed them commits (manifest `told`).
+- **R1's test passed by the fallback path (fixed, `3b72fd0f`).** It now continues a session that is not the
+  conversation's main one.
+- **The verdicts could not measure the change.** R5 changes only fires caused by a full window: 13% of last week's
+  summaries had that as their only signal, so at most about 9% fewer sessions, and the daily count follows traffic
+  (1,025 on 10-09, 155–167 on 10-17/18, before R5). The 89.8% speaking rate mixes turn kinds and sits at a ceiling
+  for external turns (98.4%). Restated below.
+- **Appendix.** `.runtime/private/adr076/`, 0.74 MB, kept until the verdicts are written.
+
+### 11.2 The verdicts (pass or fail)
+
+The window starts at T, the restart that installs `3b72fd0f`.
+
+1. **R1, binding fault.** `audit_events` `type: chat.error` from 2026-10-18 22:15Z matching
+   `NATIVE_BINDING_IDENTITY_CHANGED`. **Pass** if 0 and at least 5 `self_development` turns committed in the window.
+2. **R5, summary batching.** `memory_units` `{kind: dialogue_summary, generated_at >= T}`: summaries per 100
+   summarised rows (100 / mean `len(source_event_ids)`), baseline 22.6 (10-12 to 10-18). **Pass** if at least 1,000
+   rows are summarised and the metric is at most 20.6. On a fail, summary effort is the next step (§10). Sessions a
+   day are reported beside it, not judged.
+3. **stay_silent off on platforms.** Platform scenes (`channel_id` set), `turn.started` from T joined to `episodes`;
+   spoke = an outbound `messages` row `DELIVERED` with that `episode_id`. Judged on the turns where silence is a
+   choice (`visit`, `scheduled`, `note`), baseline 52 of 98 = 53.1% (10-15 to 10-18 22:15Z). **Fail** (stay_silent
+   comes back) if at least 40 such turns speak above 68%, or group external turns fall below 95% (baseline 98.4%).
+   Otherwise **pass**. The ADR-082 install changed the same group turns; reported beside it.

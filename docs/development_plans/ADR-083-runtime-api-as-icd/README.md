@@ -1,6 +1,6 @@
 # ADR-083: RUNTIME_API.md as an interface control document
 
-Status: **Decided 2026-10-20** (the owner, worked through with Claude). Replaces ADR-077, whose plan was under-thought
+Status: **Open** since 2026-10-20: decided by the owner, worked through with Claude, and built the same night (`RUNTIME_API.md` 189,317 → 63,596 characters, largest paragraph 691, 50 tables; `packages/cognition-core/DSH_API.md`). Waiting: the owner's read, the reviewer's spot check, her review (§5). Replaces ADR-077, whose plan was under-thought
 and grew into code (generators, an agreement test, a commit hook) for what is a documentation job. ADR-077's analysis
 (its §9 and `.runtime/private/adr077/`) is the evidence this ADR builds on.
 

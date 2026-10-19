@@ -193,6 +193,7 @@ All of these are ignored by git. Templates are tracked next to them as `*.exampl
 - These two sibling files belong to `config/local.json` only. Any other config file names them explicitly with `channel_config` / `integration_config`, so a second config never inherits real routes.
 - `<data>/private/personal-denylist.txt` (template `config/personal-denylist.example.txt`): your own account names, host names and similar literals for `tools/check_staged_secrets.py --personal`.
 - `.runtime/adr008/home/profiles/asuna-native/cordis.patch.yml`: editable native provider and Asuna settings. Do not pass it again as a command-line overlay.
+- Locks that keep one Host per database are per user on the machine, in `ASUNA_LOCK_ROOT` (default `<temp>/asuna-locks`), so two profiles on one database still exclude each other.
 
 Models are DSH providers. A provider pi-ai knows (OpenAI, DeepSeek, OpenRouter and the others in its catalog, or a custom provider at such a service's address) needs only its key on DSH's Models page. A self-hosted server is not recognizable by its address, so how it switches reasoning is stated in that provider's `compat` in the `llm-pi-ai` settings of the profile (`cordis.patch.yml`), which the Models page form does not show: `thinkingFormat` (`qwen`, `chat-template` with `chatTemplateKwargs`, …), `maxTokensField`, `supportsDeveloperRole`, and its `reasoningEfforts` per model. A thinking model needs a thinking budget, or one step can think through its whole output limit and say nothing: give its provider `compat` `"supportsThinkingTokenBudget": true` and the field its server reads (`"thinkingTokenBudgetField": "thinking_token_budget"`, `thinking_budget` or `thinking_budget_tokens`). DSH then sends a per-effort budget, capped so at least 1,024 tokens stay for the answer: by default minimal 1,024, low 2,048, medium 8,192, high (and xhigh) 16,384; the provider's `thinkingBudgets` (all four efforts, in tokens) replaces them. The server must end its thinking at that budget; one that ignores the field gets no protection from it.
 
@@ -280,3 +281,5 @@ npm.cmd run test:native
 ```
 
 What the tests guarantee and how they treat Mongo is in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#tests). The scripts under `tools/` are described in [tools/README.md](tools/README.md).
+
+Before stopping a Host in a way that is not a clean stop (killing its process tree), run `python -m asuna.host_stops planned [--by NAME]`: a stop within the next 10 minutes is then recorded as planned and not shown to her as an outside termination.

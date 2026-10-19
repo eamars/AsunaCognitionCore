@@ -92,7 +92,7 @@
             "null"
           ],
           "minimum": 256,
-          "maximum": 200000
+          "maximum": 12288
         },
         "max_window_share": {
           "type": "number",
@@ -401,6 +401,22 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 8
+        },
+        "pause_min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 720
+        },
+        "visits_per_beat": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "dice_awake": {
+          "type": "string"
+        },
+        "dice_asleep": {
+          "type": "string"
         }
       }
     },

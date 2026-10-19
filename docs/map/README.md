@@ -189,6 +189,7 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`application`](../../src/asuna/application.py) — Wires the worker's services together: `Application` opens the store, starts retrieval and the action brain's tool broker, then the model lanes, the coordinator, the executor and the router.
 - [`cli`](../../src/asuna/cli.py) — The `asuna` command line: `asuna ui` opens the native DSH Web profile; every other command is debug or maintenance only and needs `--debug`.
 - [`config`](../../src/asuna/config.py) — Paths and checks every module shares: `ROOT` (the source tree), `DATA` (this profile's data folder), `LOCKS`, the allowed-database and endpoint rules, and credential redaction.
+- [`repo_files`](../../src/asuna/repo_files.py) — The files of a source tree as git lists them, with or without git.
 - [`native_settings`](../../src/asuna/native_settings.py) — Native DSH settings migration and model-free runtime validation.
 - [`lanes`](../../src/asuna/lanes.py) — The model-lane contract: `LaneResult` is what one turn returns (its text, tool calls and everything she said), and `FakeLane` is the scripted stand-in tests use instead of a model.
 - [`queue`](../../src/asuna/queue.py) — Process-wide and cross-process endpoint serialization, without cloud routes.

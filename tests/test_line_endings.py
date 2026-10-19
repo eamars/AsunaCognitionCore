@@ -3,10 +3,9 @@
 .gitattributes makes git store and check out text as LF. This catches the other way CRLF comes back: a file
 rewritten on Windows in the working tree (an editor, a shell tool) before it is committed.
 """
-import subprocess
 
 from asuna.config import ROOT
-from conftest import needs_git
+from asuna import repo_files
 
 
 def test_gitattributes_keeps_text_as_lf():
@@ -15,15 +14,13 @@ def test_gitattributes_keeps_text_as_lf():
     assert rules == ['* text=auto eol=lf']
 
 
-@needs_git
 def test_no_tracked_text_file_has_crlf():
-    listed = subprocess.run(['git', 'ls-files', '--eol'], cwd=ROOT, capture_output=True, text=True, check=True).stdout
     crlf = []
-    for row in listed.splitlines():
-        flags, path = row.split('\t', 1)
-        if flags.split()[0] == 'i/-text':            # binary (images): bytes are left alone
-            continue
+    for path in repo_files.files(ROOT):
         file = ROOT / path
-        if file.is_file() and b'\r\n' in file.read_bytes():
+        data = file.read_bytes() if file.is_file() else b''
+        if b'\0' in data[:8000]:                     # binary (images): bytes are left alone
+            continue
+        if b'\r\n' in data:
             crlf.append(path)
     assert not crlf, 'convert to LF: %s' % crlf

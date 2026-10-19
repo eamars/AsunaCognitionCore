@@ -9,10 +9,10 @@ import subprocess
 import sys
 
 from asuna.config import ROOT
-from conftest import needs_git
 
 sys.path.insert(0, str(ROOT / 'tools'))
 import release  # noqa: E402
+from asuna import repo_files
 
 RELEASED = ['packages/cognition-core', 'packages/channels/napcat-qq']
 
@@ -21,16 +21,13 @@ def shipped():
     files = []
     for package in RELEASED:
         listed = json.loads((ROOT / package / 'package.json').read_text(encoding='utf-8'))['files']
-        tracked = subprocess.run(['git', 'ls-files', '--', *(package + '/' + entry for entry in listed)], cwd=ROOT,
-                                 capture_output=True, text=True, check=True).stdout.split()
+        tracked = repo_files.files(ROOT, *(package + '/' + entry for entry in listed))
         files += [path for path in tracked if '/integration/vendor/' not in path]
     # The core's python/ folder is packed from src/asuna; check the source it is copied from.
-    files += subprocess.run(['git', 'ls-files', '--', 'src/asuna'], cwd=ROOT, capture_output=True, text=True,
-                            check=True).stdout.split()
+    files += repo_files.files(ROOT, 'src/asuna')
     return sorted(set(files))
 
 
-@needs_git
 def test_the_released_files_have_no_personal_data():
     scan = subprocess.run([sys.executable, str(ROOT / 'tools/check_staged_secrets.py'), '--personal', '--paths',
                            *shipped()], cwd=ROOT, capture_output=True, text=True, encoding='utf-8')
@@ -38,7 +35,6 @@ def test_the_released_files_have_no_personal_data():
     assert re.search(r'personal-scan: 0 hit', scan.stdout), 'path:line:category %s' % hits
 
 
-@needs_git
 def test_the_released_files_name_no_persona():
     names = release.persona_names()
     found = []

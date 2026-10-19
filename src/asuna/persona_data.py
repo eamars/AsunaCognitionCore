@@ -314,13 +314,11 @@ class PersonaDataAPI:
 
 def check_export_path(target, root):
     """Export only outside the repository worktree, or into a git-ignored path (R-7)."""
-    import subprocess
+    from . import repo_files
     target, root = Path(target).resolve(), Path(root).resolve()
     if not target.is_relative_to(root):
         return target
-    relative = target.relative_to(root).as_posix() + '/probe.md'
-    ignored = subprocess.run(['git', 'check-ignore', '-q', relative], cwd=root, stdin=subprocess.DEVNULL).returncode == 0
-    if not ignored:
+    if not repo_files.ignored(root, target.relative_to(root).as_posix() + '/probe.md'):
         raise DataError('EXPORT_PATH_TRACKED', 'export_dir must be outside the worktree or git-ignored')
     return target
 

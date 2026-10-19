@@ -3,6 +3,8 @@ from pathlib import Path
 import sandbox_temp
 sandbox_temp.inherit()   # tmp_path folders a run inside DSH's Windows sandbox can use
 import pytest
+
+from asuna import repo_files
 from pymongo import MongoClient
 from asuna.config import ROOT,DATA
 from asuna.state import Store
@@ -67,23 +69,14 @@ CANNOT_CONFINE=_cannot_confine()
 UNCHECKED='UNCHECKED, not passed: no confined command runs in this run (%s)'%CANNOT_CONFINE
 
 
-def _git_checkout():
-    try:
-        return subprocess.run(['git','rev-parse','--is-inside-work-tree'],cwd=ROOT,capture_output=True,text=True,
-                              timeout=30).stdout.strip()=='true'
-    except (OSError,subprocess.SubprocessError):
-        return False
-
-
-# Repository guards read git; a copy that is not a checkout (an installed package, a Docker image) cannot be guarded.
-GIT_CHECKOUT=_git_checkout()
-needs_git=pytest.mark.skipif(not GIT_CHECKOUT,reason='UNCHECKED, not passed: %s is not a git checkout'%ROOT)
+# Repository guards read the tree's files through asuna.repo_files: git in a checkout, the tree and its .gitignore in
+# a plain copy (a publication's candidate), so they run in both.
 
 
 def pytest_report_header(config):
     return ['asuna data folder: %s'%DATA,
             'Host sandbox: '+(UNCHECKED if CANNOT_CONFINE else 'confines commands'),
-            'git checkout: '+('yes' if GIT_CHECKOUT else 'no, repository guards skip as unchecked')]
+            'source tree: '+('a git checkout' if repo_files.checkout(ROOT) else 'a plain copy, read with its .gitignore')]
 
 
 def host_confine(argv,root):

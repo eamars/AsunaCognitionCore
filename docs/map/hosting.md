@@ -114,6 +114,16 @@ Paths and checks every module shares: `ROOT` (the source tree), `DATA` (this pro
 - def `cut_offer` — The cut version as a refusal offers it: on its own lines, ready to copy.
 - def `excerpt` — Bounded text for a context block; a cut always says so and how long the original was.
 
+## `repo_files`
+
+[src/asuna/repo_files.py](../../src/asuna/repo_files.py)
+
+The files of a source tree as git lists them, with or without git.
+
+- def `checkout` — Whether `root` is the top of a git work tree (inside one, as a candidate under `.runtime/` is, does not count).
+- def `files` — Tracked files (posix, relative to root), optionally only those under or matching the given pathspecs.
+- def `ignored` — Whether a path inside the tree is ignored (git's answer in a checkout, the tree's `.gitignore` otherwise).
+
 ## `native_settings`
 
 [src/asuna/native_settings.py](../../src/asuna/native_settings.py)

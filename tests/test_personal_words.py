@@ -3,21 +3,19 @@
 The list lives with the deployment's data and never in git. Without one there is nothing to check against: the scan is
 skipped with its path named, so a run never reads as clean when it checked nothing. A hit names the file, line,
 category and the entry's line number, never the word."""
-import subprocess
 
 import pytest
 
 from asuna import private_words
 from asuna.config import ROOT
-from conftest import needs_git
+from asuna import repo_files
 
 TEXT_LIMIT = 2 * 1024 * 1024
 
 
 def committed_texts():
-    names = subprocess.run(['git', 'ls-files', '-z'], cwd=ROOT, capture_output=True, check=True).stdout.split(b'\0')
-    for raw in filter(None, names):
-        path = ROOT / raw.decode('utf-8')
+    for name in repo_files.files(ROOT):
+        path = ROOT / name
         if not path.is_file() or path.stat().st_size > TEXT_LIMIT:
             continue
         data = path.read_bytes()
@@ -26,7 +24,6 @@ def committed_texts():
         yield path, data.decode('utf-8', 'replace')
 
 
-@needs_git
 def test_no_committed_file_names_a_real_person_or_place():
     entries = private_words.load()
     if entries is None:

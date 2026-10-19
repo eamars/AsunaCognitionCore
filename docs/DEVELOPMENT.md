@@ -94,10 +94,11 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
   on Windows a private folder would drop the write grant DSH's sandbox gives by inheritance.
 - The tests run as a Host that has a sandbox, so what the program grants with one is checked on every machine. The
   pytest header (without `-q`) names the data folder, whether a confined command runs here (measured by running one in
-  the data folder) and whether the tree is a git checkout. Where no confined command runs (no DSH sandbox runner or
-  no `node_modules`, a folder the user may not re-permission, or a run that is itself confined), each test reaching
-  one skips there with a reason starting `UNCHECKED, not passed`; so do the repository guards that read git outside a
-  git checkout, and the `uv.lock` check when uv cannot use its cache.
+  the data folder) and whether the tree is a git checkout or a plain copy. Where no confined command runs (no DSH
+  sandbox runner or no `node_modules`, a folder the user may not re-permission, or a run that is itself confined), each
+  test reaching one skips there with a reason starting `UNCHECKED, not passed`; so does the `uv.lock` check when uv
+  cannot use its cache. The repository guards read the tree's files through `asuna.repo_files`: git in a checkout, the
+  tree and its `.gitignore` in a plain copy (a publication's candidate), so they run in both.
 - **Repository guards** fail the suite when the tree drifts: `test_line_endings` (LF everywhere),
   `test_lock_files` (both locks match `package.json` / `pyproject.toml`), `test_no_docker_in_core` (no Docker in
   `src/` or `packages/`), `test_platform_branches` (OS branches only in the files it lists),

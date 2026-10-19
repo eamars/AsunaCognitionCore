@@ -24,7 +24,7 @@ BEGIN, END = '<!-- map:modules -->', '<!-- /map:modules -->'
 # Python modules of the core by area (src/asuna). A module missing here fails the test: give it an area.
 AREAS = {
     'hosting': ('Entry and hosting', 'The worker the Host plugin starts, its store, configuration and audit.', [
-        'native_worker', 'host', 'application', 'cli', 'config', 'native_settings', 'lanes', 'queue', 'state',
+        'native_worker', 'host', 'application', 'cli', 'config', 'repo_files', 'native_settings', 'lanes', 'queue', 'state',
         'audit', 'evidence', 'testing', 'restarts', 'host_stops', 'host_lease', 'local_time']),
     'turn': ('A turn', 'From an input to her words: queueing, context, her tools, the checks, publishing.', [
         'ingress', 'router', 'coordinator', 'context', 'context_budget', 'block_guide', 'render', 'role_tools', 'param_names', 'tool_args',

@@ -2830,7 +2830,7 @@ def promote(store, ep, item, *, key):
     if item.get('visibility') == 'public' and _from_home(store, ep['persona'], item['source_ids'], episodes):
         # A public memory shows in every conversation; one built on anything said at home stays at home (ADR-050).
         raise Denied('PROMOTION_NOT_PUBLIC: 这条的来源里有家里的对话，置公开会把家里的话带到每个群和私聊里；'
-                     '要提升就把 visibility 写成 private，留在家里')
+                     '要提升就把 visibility 写成 owner_private，留在家里')
     landed_note = None
     if memory_tiers.ENABLED and item.get('about'):
         landed, landed_note = memory_tiers.land(store, ep, item, episodes)

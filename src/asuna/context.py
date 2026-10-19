@@ -1176,7 +1176,7 @@ class ContextBuilder:
             proposals=ledger.proposals(scope,session_class)
             if proposals:
                 context['affect_proposals_from_program']={'items':proposals,
-                    'note':'情感评估路由给出的提案，只是建议：用 affect_adopt 逐条 accept/decline/edit；过期的已明示，不再能采纳。'}
+                    'note':'情感评估路由给出的提案，只是建议：用 feel 逐条 accept、decline 或 edit（proposal_id 照抄）；过期的已明示，不再能采纳。'}
         from .rhythm import rhythm_block, recent_phrasing
         owner=(self.store.config.get('chat') or {}).get('person_id')
         last=next(iter(self.store.db.messages.find({'direction':'inbound','author':owner},{'received_at':1}).sort('received_at',-1).limit(1)),None) if owner else None

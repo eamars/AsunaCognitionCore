@@ -458,3 +458,7 @@ def test_the_words_that_teach_a_call_use_the_names_she_is_shown():
     shown = role_tools.TOOLS['group_action']['parameters']
     assert 'do 写 accept' in notices.ANSWER_HINT and 'do' in shown and 'kind' not in shown
     assert '[表情包:' not in context.CHAIN_NOTE and 'kind=sticker' in context.CHAIN_NOTE
+    import inspect
+    assert 'affect_adopt' not in inspect.getsource(context) and 'affect_adopt' not in role_tools.TOOLS
+    assert "visibility 写成 private" not in inspect.getsource(role_tools)
+    assert 'owner_private' in role_tools.TOOLS['promote_memory']['parameters']['visibility']['enum']

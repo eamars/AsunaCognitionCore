@@ -328,7 +328,7 @@ without D5's neutral recording words.
 | D5 | `role_tools.TOOLS['feel']` | her wording; +264 characters of tool list with D1's field |
 | D6 | `attend.material`, `affect.gate` | the public paragraph as `mood`, a string; `gate: none` leaves it out |
 | D7 | `dice.review` | each roll row carries `mood`, the band at that beat |
-| E1 | `attend.GATED` (+`mentioned_account`, `reply_to_character`), `attend.MUST_WAKE` (`awaited_answer`, `question_wait`, `watched` now run the full turn), `attend.addressed`, `coordinator._attend` | an addressed line is asked; 不理 leaves the row with `ATTEND_QUIET` and the verdict, visible in `attend.recent`'s catch-up; a failed gate on an addressed line runs the full turn, audited as `attend.fallback`; the gate prompt says 被 @ 了也可以不理 (+23 characters) |
+| E1 | `attend.GATED` (+`mentioned_account`, `reply_to_character`), `channels.group_context` (`answers_her`), `attend.gated`, `attend.addressed`, `coordinator._attend` | an addressed line is asked; one from the person she is waiting on or inside her open question's wait (`answers_her`, from the intake's own awaited-answer and question-wait checks) runs the full turn at once; the ambiguous unaddressed looks (`awaited_answer`, `question_wait`, `watched`) stay asked as before (Claude's review: she said 不理 to 46% of them over 14 days); 不理 leaves the row with `ATTEND_QUIET` and the verdict, visible in `attend.recent`'s catch-up; a failed gate on an addressed line runs the full turn, audited as `attend.fallback`; the gate prompt says 被 @ 了也可以不理 (+23 characters) |
 | E2 | `role_tools.CALLED_NOTE`, `role_tools.called`, `context` | `called_from_program`, her wording, in every turn someone called her (addressed group lines, and a person's line at home, in a private chat or on a line); the same text each time, so delivery sends it once per session |
 | E3 | `role_tools.CALLED_LEFT`, `tool_stay_silent` | the receipt's `left` line when she ends a called turn without speaking |
 | tests | `tests/test_affect_model.py` (8), `tests/test_attend.py` (3 new, 2 rewritten), `tests/test_adr009_p3.py`, `tests/test_tool_budget.py`; her own edits (§11.9): `tests/test_persona_her_edits.py` — `test_her_persona_with_the_diff_and_an_edited_stance_passes_the_publish_validation` (a temp copy of her real model with the diff and one edited stance through `persona_model.load`, the check `floor.js` runs before activation) and `test_each_new_policy_key_set_through_the_policy_path_changes_the_projection` (each kind's `half_h` and `arousal` as her package's `policy_keys`, the arousal key with the scale's words as its `enum`, applied by `affect_model`) | |
@@ -381,7 +381,7 @@ answered in every arm. Whether she joins, stays quiet, keeps it short or takes a
 
 | | today | after step 1 |
 |---|---|---|
-| `affect_from_program`, home | median 1,441 characters, sent in 25% of turns (the week's measurement, `what-she-reads-each-turn.md`) | about 500–800: one paragraph with up to six reasons as today; the four slot lines and the tendencies list gone (about −250) |
+| `affect_from_program`, home | median 1,441 characters, sent in 25% of turns (the week's measurement, `what-she-reads-each-turn.md`); Claude's render of her real ledger with the build: 1,602 | the paragraph names its causes by feeling, strength and age and leaves their words to the `reasons` list (once); the four slot lines and the tendencies list go. Claude's render with the words repeated was 1,629; with them named once the block is about 1,450 (expected, to be measured at install) |
 | `affect_from_program`, public | about 300 (label, face, three slots, tendencies, note) | about 100–160 at a non-neutral band; nothing at 不错 and 平静 |
 | the gate's material | about 300 of mood in every gated question | `none`: 0, about 300 characters fewer in each of the roughly 50 gated questions a day (686 in 14 days, §2.1); `paragraph`: 100–160 at a non-neutral band, nothing at 不错 and 平静 |
 | a person's entry | – | +20 to 40 characters while a feeling toward them is live |
@@ -405,6 +405,11 @@ the mechanism, never a score of her.
 - **The mood explains something.** Gate join rate, speech length and help-or-decline, each by band, from the audit and
   the turn records; a difference between bands in the direction of §4 is the pass. No difference after 7 days means
   the block is not reaching her decisions and D4's wording is looked at next.
+- **The first days apart.** D1 works by `who`, so her 87 person-kind events recorded before install (no `who`) stay
+  in the global sum and fade by themselves (Claude's render on her real ledger with the diff: 愉快 at install, 不错
+  after about three to four days with no new feelings: valence 100, 86, 52, 33, 22 at 0, 24, 48, 72 and 96 h). No
+  history is converted. The reading judges mood variation on the days after those have faded and reports the first
+  days separately.
 - **The pull sentence does not freeze**: the longest run of consecutive turns with the same pull sentence (her D4
   condition).
 - **The mood matches its causes** (her condition on the reading): judged by whether the mood of a beat matches her
@@ -573,10 +578,10 @@ choose, never what she should do.
   gated: the owner's words, home lines, the agent line and errands (no gate exists there and none is added). Her
   three conditions (§15), all built: (1) the lost-line count is really counted: a 不理'd addressed line is visible in
   her next catch-up there and her one-line reason is in the audit; (2) a gate that fails, times out or errors on an
-  addressed line falls back to today's behaviour, a full turn (today a failed gate ends the episode silently); (3) a
-  reply to something she is waiting for or to a question she asked (`awaited_answer`, `question_wait`, `watched`:
-  the wake reasons that exist to wake her) skips the gate: what is needed is a list of what must wake her, not a
-  list of what she never takes.
+  addressed line falls back to today's behaviour, a full turn (today a failed gate ends the episode silently); (3) an
+  addressed line that answers something she is waiting for or a question she asked skips the gate (`answers_her`
+  at intake, from the same checks that give an unaddressed line its one look): what is needed is a list of what
+  must wake her, not a list of what she never takes. The ambiguous unaddressed looks stay asked, as they were.
 - **E2. One neutral line where the program says someone called her**, in the style of `PROACTIVE_NOTE` (it says what
   the event is and what she can choose, never what she should do), in her wording (§15): 「有人叫了你。回不回、什么时候回、
   回多少，由你定；先放着也可以，只是对方不会知道。」 It is core wording about the event, not persona, and not a list of what

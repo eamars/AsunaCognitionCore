@@ -169,9 +169,10 @@ def review(store, persona, occurrence, moment=None):
     rows = list(store.db.audit_events.find(rolled, {'occurred_at': 1, 'payload': 1})
                 .sort('occurred_at', -1).limit(REVIEW_ROLLS))[::-1]
     out = []
-    from .affect import AffectLedger, first_rule
+    from .affect import AffectLedger, first_rule, project
     model, policy = model_and_policy(store, persona)
     ledger = AffectLedger(store, persona, model, policy)
+    felt = (ledger.events(), ledger.amendments()) if ledger.enabled else None      # read once for every roll
     for row in rows:
         p = row['payload']
         item = {'at': row['occurred_at'], 'roll': NAMES.get(p.get('outcome'), p.get('outcome')),
@@ -179,7 +180,7 @@ def review(store, persona, occurrence, moment=None):
                 'reached': '叫了你' if p.get('reaches') else '没叫你'}
         if ledger.enabled:
             # ADR-086 D7: the band at that beat, so she can see her own mood-behaviour pairs when she retunes.
-            band = first_rule(ledger.model.get('bands', []), ledger.projection(row['occurred_at'])) or {}
+            band = first_rule(ledger.model.get('bands', []), project(ledger.model, felt[0], felt[1], row['occurred_at'])) or {}
             item['mood'] = band.get('label') or '平静'
         lost = p.get('lost') or {}
         if lost:                               # a 'nothing' beat that still reached her, and why

@@ -113,7 +113,7 @@ def _written_at(person, here):
     return max(times) if times else None
 
 
-def entry(store, scene, person_id, persona, people):
+def entry(store, scene, person_id, persona, people, ledger=None):
     """One person as a group turn shows them: label, familiarity and stance (as every turn did), her shorts when she
     has written them. Every field is the same from turn to turn until something changes, so delivery folds it."""
     from .familiarity import words
@@ -129,10 +129,12 @@ def entry(store, scene, person_id, persona, people):
     if written:
         item['written_at'] = written
     # ADR-086 D1: her live feelings toward this person (a group entry is public: the feeling and how long ago).
-    from .affect import AffectLedger
-    from .render import model_and_policy
     from . import visibility
-    felt = AffectLedger(store, persona, *model_and_policy(store, persona)).person_feelings(person_id, visibility.PUBLIC)
+    if ledger is None:
+        from .affect import AffectLedger
+        from .render import model_and_policy
+        ledger = AffectLedger(store, persona, *model_and_policy(store, persona))
+    felt = ledger.person_feelings(person_id, visibility.PUBLIC)
     if felt:
         item['feelings_toward'] = felt
     return item, pins(person, here)
@@ -151,11 +153,14 @@ def group_people(store, scene, event, persona, source):
                                           {'author': 1}).sort('scene_seq', 1).limit(ENTRY_MAX * 4):
             if row.get('author') and row['author'] not in ids:
                 ids.append(row['author'])
+    from .affect import AffectLedger
+    from .render import model_and_policy
+    ledger = AffectLedger(store, persona, *model_and_policy(store, persona))     # once for every entry of the turn
     items, shown = [], {}
     for person_id in ids[:ENTRY_MAX]:
         if person_id == people.self_id:
             continue
-        item, showed = entry(store, scene, person_id, persona, people)
+        item, showed = entry(store, scene, person_id, persona, people, ledger)
         items.append(item)
         shown[person_id] = showed
     return items, shown

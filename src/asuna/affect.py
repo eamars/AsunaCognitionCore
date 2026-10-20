@@ -250,7 +250,7 @@ def readable_here(row, cls, scope):
     return row.get('source_scope') in ('global-safe', scope)
 
 
-def paragraph(model, state, cls, where=None, scope=None):
+def paragraph(model, state, cls, scope=None):
     """ADR-086 D4: the mood as one paragraph: the band's face, up to two causes she may read here, the pull of the
     strongest kind. None at a quiet band (``quiet`` on the band; the fallback band unless it says otherwise): at the
     usual state she reads nothing, because even a neutral paragraph moved her (ADR-086 run K)."""
@@ -264,9 +264,9 @@ def paragraph(model, state, cls, where=None, scope=None):
     causes = []
     for row in shown:
         if cls == visibility.OWNER_PRIVATE:
-            place = ('，' + where[row['event_id']]) if where and row['event_id'] in where else ''
-            causes.append('%s（%s，%s%s）——%s' % (kind_label(model, row['kind']), _word(scale['val'], abs(row['val'])),
-                                                 rough_ago(row['age_h']), place, row['why']))
+            # Home names the cause by feeling, strength and age; its words are in the reasons list beside it (once).
+            causes.append('%s（%s，%s）' % (kind_label(model, row['kind']), _word(scale['val'], abs(row['val'])),
+                                          rough_ago(row['age_h'])))
         else:
             causes.append(row['why'] + ('（这里记的）' if row.get('source_scope') == scope else ''))
     text = face.rstrip('。') + '。'
@@ -285,7 +285,7 @@ def interpret(model, state, cls, where=None, scope=None):
     paragraph, None at a quiet band; at home the reasons list stays beside it (event ids she can close or void).
     With it off: the band, its face, the policy slots and the tendencies, as before."""
     if model.get('paragraph', True):
-        text = paragraph(model, state, cls, where, scope)
+        text = paragraph(model, state, cls, scope)
         out = {'心情': text} if text else {}
         if cls != visibility.OWNER_PRIVATE:
             return out or None

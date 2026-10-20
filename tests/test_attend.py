@@ -34,11 +34,14 @@ def test_parse_takes_only_the_two_answers():
     odd = attend.parse('我觉得可以说两句')
     assert odd['choice'] == 'quiet' and odd['unparsed'] == '我觉得可以说两句'
     assert attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'name_called'}})
-    # ADR-086 E1: an @ or a reply to her is asked too; what exists to wake her is not.
+    # ADR-086 E1: an @ or a reply to her is asked too, unless it answers what she waits for or asked; the ambiguous
+    # looks stay asked.
     assert attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'mentioned_account'}})
     assert attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'reply_to_character'}})
-    assert not attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'awaited_answer'}})
-    assert not attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'watched'}})
+    assert not attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'mentioned_account', 'answers_her': True}})
+    assert attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'awaited_answer'}})
+    assert attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'question_wait'}})
+    assert attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'watched'}})
     assert not attend.gated({'kind': 'dm'}, {'group_context': {'wake_reason': 'proactive_unprompted'}})
 
 
@@ -160,15 +163,29 @@ def test_a_gate_that_cannot_answer_an_addressed_line_falls_back_to_the_full_turn
     assert store.db.messages.find_one({'_id': 'in-' + ep['_id']})['processing_outcome'] == 'ATTEND_FAILED'
 
 
-def test_what_exists_to_wake_her_is_not_gated(store):
-    """ADR-086 E1, her condition: a reply to what she waits for runs the full turn without a gate question."""
-    setup(store)
-    character = FakeLane(store, [FakeTurn([('think', {'thought': '他在回我。'}), ('stay_silent', {'why': '不用说'})])])
-    coordinator = Coordinator(store, character)
-    coordinator.attend = FakeLane(store, [])
-    ep = coordinator.ingest(gated_event(20002, '没有这东西', 'awaited_answer'), persona='P1')
-    assert [call['phase'] for call in character.calls] == ['TURN'] and 'attend' not in ep
-    assert ep['state'] == 'COMMITTED' and coordinator.attend.calls == []
+def test_an_addressed_answer_to_what_she_waits_for_is_not_gated_but_an_ordinary_at_is(store):
+    """ADR-086 E1, her condition: an @ or a reply to her from the person she is waiting on must wake her; an @ from
+    anyone else is asked at the gate like the rest."""
+    from datetime import datetime, timezone
+    from asuna.config import character_id
+    from test_watches import intake, world
+    from test_group_admin import BOT, SCENE
+    world(store)
+    scene = store.db.scenes.find_one({'_id': SCENE})
+    store.db.messages.insert_one({'_id': 'in-ep-ask', 'schema_version': 1, 'scene_id': SCENE, 'policy_epoch': scene['policy_epoch'],
+                                  'scene_seq': 900, 'direction': 'inbound', 'author': 'qq:20002', 'text': '嗨'})
+    store.db.messages.insert_one({'_id': 'out-901', 'schema_version': 1, 'scene_id': SCENE, 'policy_epoch': scene['policy_epoch'],
+                                  'scene_seq': 901, 'direction': 'outbound', 'author': character_id(store.config),
+                                  'delivery_state': 'DELIVERED', 'reply_to': 'in-ep-ask', 'episode_id': 'ep-ask', 'text': '你有空吗',
+                                  'receipt_at': datetime.now(timezone.utc).isoformat()})
+    store.db.episodes.insert_one({'_id': 'ep-ask', 'schema_version': 1, 'await_answer': {'why': '问他有没有空'}})
+    line = intake(store)
+    answer = line('20002', 'e-answer', mentions=[BOT])
+    assert answer['group_context']['wake_reason'] == 'mentioned_account' and answer['group_context']['answers_her']
+    assert not attend.gated({'kind': 'group'}, answer)
+    other = line('20003', 'e-other', mentions=[BOT])
+    assert other['group_context']['wake_reason'] == 'mentioned_account' and 'answers_her' not in other['group_context']
+    assert attend.gated({'kind': 'group'}, other)
 
 
 def test_catch_up_reaches_back_to_her_last_words_within_an_hour(store):
@@ -235,7 +252,7 @@ def test_a_line_she_waits_on_gets_one_look_at_the_asked_persons_next_line(store)
     store.db.messages.insert_one({'_id': 'in-look', 'schema_version': 1, 'scene_id': SCENE, 'scene_seq': 902, 'direction': 'inbound',
                                   'author': 'qq:20002', 'event': {'group_context': {'wake_reason': 'awaited_answer'}}})
     assert not awaited_answer(store, scene, 'qq:20002', [], None)               # one look per line of hers
-    assert not attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'awaited_answer'}})   # ADR-086 E1: it wakes her
+    assert attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'awaited_answer'}})
 
 
 def test_the_gate_reads_her_core_her_notes_here_and_what_she_wrote_of_the_speaker_cut_the_same_every_time(store):

@@ -216,13 +216,18 @@ def group_context(store, route, body, event_id, person_id=None):
         from . import questions
         if questions.wants_look(store, scene, person_id):
             reason = 'question_wait'       # her question here still waits: one look per person (ADR-061 step 2)
+    answers_her = False
+    if reason in ('mentioned_account', 'reply_to_character') and person_id and not late:
+        # ADR-086 E1: an @ or a reply to her that answers what she waits for or asked must wake her (attend.gated).
+        from . import questions
+        answers_her = bool(awaited_answer(store, scene, person_id, [], None) or questions.wants_look(store, scene, person_id))
     if late and reason in ('mentioned_account', 'reply_to_character'):
         reason = 'catchup_mention'         # an old @ or reply to her asks her first (attend.GATED)
     if topic is None:
         topic, topic_via = event_id, (topic_via or ('mentioned' if reason else 'new'))
     return {'wake_reason': reason, 'topic_id': topic, 'topic_via': topic_via,
             'reply_to': reply, 'reply_message_id': parent['_id'] if parent else None,
-            'mentioned_account_ids': mentions}
+            'mentioned_account_ids': mentions, **({'answers_her': True} if answers_her else {})}
 
 
 def route_key(channel_token, route_id):

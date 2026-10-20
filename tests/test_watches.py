@@ -46,7 +46,7 @@ def test_a_watched_person_speaking_gets_her_one_look_where_they_spoke(store):
     assert added['watching'] == '阿杰' and added['for'] == '3 小时'
     event = line('20002', 'e1')
     assert event['watched'] == added['id'] and event['group_context']['wake_reason'] == 'watched'
-    assert not attend.gated({'kind': 'group'}, event)                # ADR-086 E1: what exists to wake her is not gated
+    assert attend.gated({'kind': 'group'}, event)
     assert 'watched' not in line('20002', 'e2')                       # once: the first time, then the watch is done
     assert 'watched' not in line('20003', 'e3')                       # someone else
     assert store.db.watches.find_one({'_id': added['id']})['state'] == 'done'

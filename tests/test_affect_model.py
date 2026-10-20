@@ -58,7 +58,8 @@ def test_the_mood_is_one_paragraph_with_the_causes_readable_here_and_nothing_at_
     elsewhere = interpret(model, strong, 'public', scope='g2')
     assert '他夸了我' not in elsewhere['心情'] and affect.PUBLIC_MOOD_NOTE in elsewhere['心情']
     home = interpret(model, strong, 'owner_private')
-    assert '秘密' in home['心情'] and len(home['reasons']) == 2 and all(len(r['event_id']) == 12 for r in home['reasons'])
+    assert '秘密' not in home['心情'] and 'pride（强烈' in home['心情']          # home names the cause; its words are in reasons
+    assert [r['why'] for r in home['reasons']] == ['秘密', '他夸了我'] and all(len(r['event_id']) == 12 for r in home['reasons'])
     assert not any(ch.isdigit() for ch in home['心情'])
     faint = project(model, [event('sadness', -20, scope='g1')], [], AT)        # the fallback band: quiet by default
     assert interpret(model, faint, 'public', scope='g1') is None

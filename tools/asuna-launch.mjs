@@ -285,6 +285,10 @@ async function main() {
     child.once('error', reject); child.once('exit', code => resolve(code ?? 1));
   });
   const host = ['--profile', launch.profile, '--no-open', '--host', '127.0.0.1', '--port', String(launch.port)];
+  const pruneCache = async () => {
+    const removed = await pruneProjectionCache(launch.home);
+    if (removed) process.stderr.write('Asuna: removed ' + removed + ' projection-cache records of sessions no longer in the store\n');
+  };
   // Before any start the Host is down: a writer lock it left empty is cleared (clearEmptyLocks).
   const clearLocks = async () => {
     for (const name of await clearEmptyLocks(launch.home))
@@ -297,6 +301,7 @@ async function main() {
       if (fastForward) process.stdout.write(CHECKOUT_MARK + JSON.stringify(await fastForwardCheckout(root)) + '\n');
       if (launch.sync) await syncCheckout(launch, exec);
       await retireOneShotSessions(launch.home, path.join(launch.base, 'archive', 'sessions'));
+      await pruneCache();
       // advanceSelection reverts only a selection that never came up in two starts: that is a fallback too.
       notes = (await applySelection(launch, run, advanceSelection)).filter(note => note.includes('returned to'));
     } else if (prepareRung === 1) {
@@ -310,6 +315,7 @@ async function main() {
     await clearLocks();
     if (launch.sync) await syncCheckout(launch, exec);
     await retireOneShotSessions(launch.home, path.join(launch.base, 'archive', 'sessions'));
+    await pruneCache();
     await applySelection(launch, run, advanceSelection);
     return run(host);
   }
@@ -357,6 +363,28 @@ async function main() {
 const RETIRED_PREFIXES = ['asuna-summary-', 'asuna-attend-', 'asuna-errand-', 'asuna-reflect-'];
 const RETIRE_AFTER_MS = 24 * 3600 * 1000;
 const ARCHIVE_KEEP_MS = 14 * 24 * 3600 * 1000;
+
+/** DSH keeps one projection-cache record per session (`storages/session_projcache/sessions/<id>.json`) and loads
+ * them all at once at every start: past about 8,000 files, a Windows process runs out of file handles and the start
+ * can fail (EMFILE, ADR-034 addendum 2026-10-21). A session that left the store (retired here, or removed) keeps its
+ * record unless the record goes too. Before a start (Host stopped), records of sessions no longer in the store are
+ * removed; a session that comes back has its record rebuilt from its log. A store that lists no session at all is
+ * left alone rather than read as empty. Returns how many were removed. */
+export async function pruneProjectionCache(home) {
+  const live = new Set();
+  const sessions = path.join(home, 'sessions');
+  for (const project of await fs.readdir(sessions).catch(() => []))
+    for (const id of await fs.readdir(path.join(sessions, project)).catch(() => [])) live.add(id);
+  if (!live.size) return 0;
+  const cache = path.join(home, 'storages', 'session_projcache', 'sessions');
+  let removed = 0;
+  for (const name of await fs.readdir(cache).catch(() => [])) {
+    if (!name.endsWith('.json') || live.has(name.slice(0, -5))) continue;
+    await fs.rm(path.join(cache, name), { force: true });
+    removed++;
+  }
+  return removed;
+}
 
 /** Move finished one-shot sessions out of DSH's store (Host stopped); drop archived ones past their keep. */
 export async function retireOneShotSessions(home, archive, now = Date.now()) {

@@ -8,7 +8,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { fastForwardCheckout, packageManagerEnv, prepareFresh, retireOneShotSessions } from '../../../tools/asuna-launch.mjs';
+import { fastForwardCheckout, packageManagerEnv, prepareFresh, pruneProjectionCache, retireOneShotSessions } from '../../../tools/asuna-launch.mjs';
 
 const pnpmName = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const corepackName = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
@@ -262,4 +262,19 @@ test('a writer lock a Host that stopped left empty is cleared before a start; a 
   } finally {
     await fs.rm(home, { recursive: true, force: true });
   }
+});
+
+test('projection-cache records of sessions no longer in the store are removed before a start; a store read as empty is left alone', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-projcache-'));
+  try {
+    const home = path.join(dir, 'home'), cache = path.join(home, 'storages', 'session_projcache', 'sessions');
+    await fs.mkdir(cache, { recursive: true });
+    for (const id of ['asuna-role-a', 'asuna-summary-gone', 'asuna-attend-gone']) await fs.writeFile(path.join(cache, id + '.json'), '{}');
+    await fs.writeFile(path.join(cache, 'notes.txt'), '');
+    assert.equal(await pruneProjectionCache(home), 0, 'no session listed: nothing is removed');
+    await fs.mkdir(path.join(home, 'sessions', 'p', 'asuna-role-a'), { recursive: true });
+    assert.equal(await pruneProjectionCache(home), 2);
+    assert.deepEqual((await fs.readdir(cache)).sort(), ['asuna-role-a.json', 'notes.txt']);
+    assert.equal(await pruneProjectionCache(path.join(dir, 'none')), 0);
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });

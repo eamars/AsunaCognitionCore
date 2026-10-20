@@ -37,6 +37,7 @@ Stable entry: native Web and repair tools boot without importing Python code.
 - def `dataFolder`
 - def `resolveLaunch`
 - def `listProfiles` — Every installed profile of this checkout: its persona, Web port, database and whether something answers there.
+- def `pruneProjectionCache` — DSH keeps one projection-cache record per session (`storages/session_projcache/sessions/<id>.json`) and loads them all at once at every start: past about 8,000 files, a Windows process runs out of file handles and the start can fail (EMFILE
 - def `retireOneShotSessions` — Move finished one-shot sessions out of DSH's store (Host stopped); drop archived ones past their keep.
 
 ## `asuna-supervisor.mjs`

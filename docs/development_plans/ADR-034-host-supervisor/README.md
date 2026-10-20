@@ -92,3 +92,13 @@ Decided by the owner 2026-10-20 ("launcher fixes first"), built:
 
 Not changed: the ladder still blames the new package for any failed first start. With the first fix, a package set aside for an environment fault is installed again by the next start. The record's fix runs in the resident launcher, so it applies once the launcher itself is restarted; the other two are in the per-start preparation and apply at the next start.
 
+## Addendum 2026-10-21: why the start ran out of file handles
+
+Investigated the night of 2026-10-20 (Claude; scratchpad test `emfile_limit.mjs`, counts of `.runtime/adr008/home/storages/session_projcache/sessions`):
+
+- One Node process on this Windows host holds at most 8,189 files open; the next open fails with EMFILE. An exclusive create (`wx`) that fails this way leaves an empty file behind: that is the empty lock of 23:22.
+- DSH loads a `per-record` JSON table by reading every file at once (`dsh-storage-json` `loadTableRecords`, an unbounded `Promise.all`). The session projection cache is such a table, and at each start it is loaded while other plugins open files, so past about 8,000 records a start can fail on whatever opens next, the credentials lock that night.
+- The cache held 8,780 records; 7,939 (90%) were of sessions no longer in the store: 6,291 retired to the archive by the launcher (summaries, gate looks), 1,648 already dropped from it. Retiring moved a session's folder but not its record. The cache passed 8,189 records on 2026-10-18 17:58; from then each start was a race, lost once.
+
+Fix here (owner, 2026-10-21): before a start, the preparation removes projection-cache records of sessions no longer in the store (`pruneProjectionCache`), so the cache follows the live sessions (about 840). The bounded loading and an empty lock's recovery belong to DSH, the owner's fork.
+

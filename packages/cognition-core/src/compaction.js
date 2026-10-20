@@ -13,9 +13,11 @@
  * halving again while a part does not fit. `floorTokens` is the size past which
  * a quiet group's conversation is condensed without her mark (ADR-049): half of
  * this engine's own compaction threshold for the conversation's model. The
- * summary request thinks at `summaryReasoningEffort` (a persona preset sets it beside the summary cap) when the model
- * offers that level, and a summary without every section the instruction asks for, in order, is rejected like an
- * empty one: no checkpoint is written and the next step tries again. The action brain keeps DSH's own engineering
+ * summary request thinks at the conversation's own reasoning level, so it carries that level's thinking budget and
+ * the engine still matches it against the conversation's cache (a different level matches nothing); a conversation
+ * that names no level uses `summaryReasoningEffort` (a persona preset sets it beside the summary cap), when the model
+ * offers it. A summary without every section the instruction asks for, in order, is rejected like an empty one: no
+ * checkpoint is written and the next step tries again. The action brain keeps DSH's own engineering
  * template. */
 import z from '@deepseek-ai/schemastery';
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic';
@@ -175,16 +177,20 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
     return { ...size, messages, tail: messages.slice(span) };
   }
 
-  /** The configured thinking level for the summary request when the model offers it; otherwise none, with one log line
-   * saying so. */
+  /** The summary request's thinking level: the conversation's own (its latest request's), else the configured one,
+   * when the model offers it; otherwise none. One log line says which level and where it came from. */
   async summaryEffort(agent, target, signal) {
-    const level = this.summaryReasoningEffort;
+    const own = agent.session.requestHeader?.()?.config?.reasoningEffort;
+    const level = own ?? this.summaryReasoningEffort;
+    const from = own ? "the conversation's" : 'the preset\'s';
     if (!level || !this.ctx.llm.resolveModelInfo) return undefined;
     const info = await this.ctx.llm.resolveModelInfo(target.provider, target.model, signal);
-    if (info?.reasoning?.efforts?.some(effort => effort.id === level)) return level;
-    this.ctx.logger?.info?.('compaction: ' + target.provider + '/' + target.model + ' offers no reasoning effort "' + level
-      + '"; the summary request names none in ' + agent.session.id);
-    return undefined;
+    const offered = info?.reasoning?.efforts?.some(effort => effort.id === level);
+    this.ctx.logger?.info?.('compaction: summary request thinks at ' + (offered
+      ? '"' + level + '" (' + from + ')'
+      : 'no named level: ' + target.provider + '/' + target.model + ' offers no "' + level + '" (' + from + ')')
+      + ' in ' + agent.session.id);
+    return offered ? level : undefined;
   }
 
   /** One log line each time the summary request falls back to the replayed span alone, with the sizes it judged by,

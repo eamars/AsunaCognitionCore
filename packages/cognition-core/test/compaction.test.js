@@ -132,8 +132,9 @@ test('role compaction sends the whole conversation and names the kept tail, or t
   assert.match(logged.at(-1), /span is not the start/);
 });
 
-// The summary thinks at the persona's level when the model offers it, and a checkpoint missing a section is rejected.
-test('the summary request names the configured thinking level the model offers, and a summary must carry every section', async t => {
+// The summary thinks at the conversation's level, else the persona's, when the model offers it; a checkpoint missing
+// a section is rejected.
+test('the summary request names the conversation\'s thinking level, else the configured one, when the model offers it, and a summary must carry every section', async t => {
   let sent, text = CHECKPOINT;
   const logged = [];
   const plugins = new Context();
@@ -158,13 +159,21 @@ test('the summary request names the configured thinking level the model offers, 
     options: {} };
   const input = { messages: [{ role: 'user', content: [{ type: 'text', text: '周末去哪' }] }] };
   await engine.summarize(input, agent);
-  assert.equal(sent.reasoningEffort, 'medium');
-  assert.deepEqual(logged, []);
+  assert.equal(sent.reasoningEffort, 'medium', 'the conversation names no level: the preset\'s');
+  assert.match(logged.at(-1), /thinks at "medium" \(the preset's\) in s$/);
+
+  // The conversation's own level wins: a different level would match none of its cache.
+  let header = { provider: 'p', model: 'm', reasoningEffort: 'high' };
+  agent.session.requestHeader = () => ({ config: header });
+  await engine.summarize(input, agent);
+  assert.equal(sent.reasoningEffort, 'high');
+  assert.match(logged.at(-1), /thinks at "high" \(the conversation's\)/);
+  header = { provider: 'p', model: 'm' };
 
   efforts = ['high'];
   await engine.summarize(input, agent);
   assert.equal(sent.reasoningEffort, undefined, 'a level the model does not offer is not named');
-  assert.match(logged.at(-1), /p\/m offers no reasoning effort "medium"/);
+  assert.match(logged.at(-1), /no named level: p\/m offers no "medium" \(the preset's\)/);
 
   for (const broken of [CHECKPOINT.slice(0, CHECKPOINT.lastIndexOf('##')), ROLE_SECTIONS.slice().reverse().join('\n')]) {
     text = broken;

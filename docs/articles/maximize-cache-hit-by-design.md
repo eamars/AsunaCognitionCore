@@ -371,8 +371,9 @@ Two details in `compaction.js` are cache-aware:
   one request is summarized in steps (`inSteps`). Each fallback writes one log line with its reason and the sizes
   it judged by (`spanAlone`).
 - A summary that reaches its cap, or lacks any section the instruction asks for, is rejected: no checkpoint is
-  written, and the next step tries again. The summary request thinks at the level its persona preset names
-  (`summaryReasoningEffort`); the level is not part of the prompt, so it does not affect the cache.
+  written, and the next step tries again. The summary request thinks at its conversation's own reasoning level
+  (`summaryEffort`): the local engine matches the level with the tokens, so a request at a different level matches
+  none of the conversation's cache, not even the system prompt.
 
 ### Thresholds leave room for the summary
 
@@ -680,5 +681,5 @@ A checklist for review:
 
 ## Latest change
 
-Section 7 explains why quiet groups are condensed in their quiet spell: the cache has lapsed by then, so the reset
-costs nothing, the next cold read is small, and the summary runs while nobody waits.
+The character's summary request thinks at its conversation's own reasoning level: the local engine matches the level
+with the tokens, so a summary at another level reused none of the conversation's cache (section 7, ADR-085).

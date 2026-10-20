@@ -261,15 +261,34 @@ she reads and can act on or against.
 | | change | where she sees it | off switch |
 |---|---|---|---|
 | D1 | **Person feelings go to the person.** A kind the persona marks `about: person` records with `who` (shown as a plain field, never required; when she does not say, the program fills it only in a one-to-one conversation, where it can only be that person; in a group a feeling without `who` stays in the global mood as today, and the receipt says so, since a guess there would put false state on a real person). `project()` leaves such events out of the global sum. The person's entry (`people_from_program`, ADR-082) carries her live feelings toward them as one phrase (「对 <名字>：感激，昨天」), at most two, strongest first, decaying by their kinds; in public the kind and age only | the `feel` receipt says where it landed; the person entry; at home the reasons as today | persona: no kind marked `about: person` |
-| D2 | **Half-lives, persona side.** Each negative kind at least its positive peer's half-life (烦躁 3 → 6 h against 愉快 6 h; 不安 8 → 12 h against 安心 12 h); 低落 12 h and 委屈 24 h unchanged. Numbers from §3.2's negativity bias, applied to her own table; the persona is hers, so this is put to her | her persona model | hers |
-| D3 | **Arousal from the kind.** Each kind carries a default arousal word (persona: 烦躁 有些波动, 好奇 有些波动, 不安 有些波动, 愉快 平稳 or 有些波动, 低落 平稳 …); `from_words` uses it when she writes none; her own word still wins | nothing new; the 兴奋 and 烦乱 bands can occur | persona: no `arousal` on a kind |
-| D4 | **One paragraph instead of label, face, four slots and tendencies.** `interpret` writes: the band's face (as today), then 「主要因为」 and up to two causes with their coarse age where readable (home: all; public: those recorded in this conversation), then the pull: the tendency text of the strongest kind, as a tendency (「这会儿你会…」), never as a rule. At 不错 and 平静 nothing is sent (run K: even a neutral paragraph nudged the gate and a noise ping; the Web page still shows the band). The slot rule texts are removed from what she reads; the slots stay in the persona model for the Web page | `affect_from_program` every turn, shorter | `affect.paragraph: false` keeps today's shape |
-| D5 | **Recording guidance, neutral.** `feel`'s 「有触动才记」 becomes 「心里有起伏就记，好的坏的都记；记下来才算进心情」, and the description says a feeling about a person lands with that person. Model-facing wording of her own tool: put to her, as D2 and D3 | the tool list (one cold read per conversation at the install restart) | hers: the old wording |
+| D2 | **Half-lives, persona side.** Each negative kind at least equal to its positive peer's half-life, not longer (her condition, §15): 烦躁 3 → 6 h against 愉快 6 h; 不安 8 → 12 h against 安心 12 h; 低落 12 h and 委屈 24 h unchanged; raising any further is asked of her first. Numbers from §3.2's negativity bias, applied to her own table. Every kind's `half_h` and its `arousal` default become keys she can change herself (`policy_keys`; today only `affect.kinds.calm.half_h` is one) | her persona model; `set_policy` lists the keys | hers |
+| D3 | **Arousal from the kind.** A new optional field on a kind, `arousal`, one of the scale's words: today no kind has one and `from_words` takes the scale's lowest word (平稳, 0) when she writes none (`affect.py`, her correction). With the field, `from_words` uses the kind's word when she writes none; her own word still wins. The default table proposed for her kinds, shown to her before install (§15): 烦躁 有些波动, 好奇 有些波动, 不安 有些波动, 愉快 有些波动, 踏实 平稳, 安心 平稳, 低落 平稳, 感激 平稳, 亲近 平稳, 委屈 有些波动 | nothing new; the 兴奋 and 烦乱 bands can occur | persona: no `arousal` on a kind |
+| D4 | **One paragraph instead of label, face, four slots and tendencies.** `interpret` writes: the band's face (as today), then 「主要因为」 and up to two causes with their coarse age where readable (home: all; public: those recorded in this conversation), then the pull: the tendency text of the strongest kind, as a tendency (「这会儿你会…」), never as a rule. At 不错 and 平静 nothing is sent (run K: even a neutral paragraph nudged the gate and a noise ping; the Web page still shows the band), and nothing when no feeling is live at all. Which bands are quiet is the persona's (`quiet` on a band; the fallback band unless it says otherwise). The slot rule texts are removed from what she reads; the slots stay in the persona model for the Web page | `affect_from_program` every turn, shorter | `affect.paragraph: false` keeps today's shape |
+| D5 | **Recording guidance, neutral.** `feel`'s 「有触动才记」 becomes, in her wording (§15), 「心里有起伏就记，好的坏的都记；记下来才算进心情。强度照实给，多数日常起伏是「轻微」。」, and the description says a feeling about a person lands with that person | the tool list (one cold read per conversation at the install restart) | hers: the old wording |
 | D6 | **The gate** carries the D4 public paragraph (owner, §11): state and pull, the cause only when recorded in this group, no slot rules | the gate's material | `affect.gate: none` |
 | D7 | **Dice review shows the mood.** Each roll's reading in `dice_review_from_program` carries the band word at that beat, so she can see her own mood-behaviour links when she retunes the dice | the dice review | – |
 
 Not in step 1: adaptation (§3.2), the appraiser route (stays off; she remains the only writer), any change to the
 wake rates, the schedule or the proactive chances, and any program-side change of her tool set.
+
+### 5.0 D4 rendered (her correction: the finished text, not a description)
+
+Home, a low state with its causes (the band's face as today, then the causes, then the pull):
+
+> 你现在有点闷，不必强打精神。主要因为：低落（明显，三小时前，在 <群名> 记的）——被人当面说成人机，没接茬；不安（轻微，今天早些时候）——
+> 那条线还没回。这会儿你话会少一些。还有 2 笔较淡的心情没列出。
+
+Public, the same state, in a group where only the first cause was recorded:
+
+> 你现在有点闷，不必强打精神。主要因为：被人当面说成人机，没接茬（这里记的）。这会儿你话会少一些。这份心情可能也有别处的来由。
+
+Public, a happy state whose cause was recorded elsewhere (no cause shown):
+
+> 你现在心情愉快。这会儿你话会多一点，愿意分享。这份心情可能来自别的对话，原因不一定在这里。
+
+At 不错 and 平静: nothing. The pull is the strongest kind's `tendency` text; her reading condition (§15): the 7-day
+reading counts how many consecutive turns the pull sentence stayed word for word the same, so four fixed notices do not
+become one.
 
 ### 5.1 Staging table (owner's ask: per change, its evidence, its cost, and what a real-life experiment measures)
 
@@ -349,7 +368,7 @@ answered in every arm. Whether she joins, stays quiet, keeps it short or takes a
 | `affect_from_program`, public | about 300 (label, face, three slots, tendencies, note) | about 100–160 at a non-neutral band; nothing at 不错 and 平静 |
 | the gate's material | about 300 of mood in every gated question | `none`: 0, about 300 characters fewer in each of the roughly 50 gated questions a day (686 in 14 days, §2.1); `paragraph`: 100–160 at a non-neutral band, nothing at 不错 and 平静 |
 | a person's entry | – | +20 to 40 characters while a feeling toward them is live |
-| system prompt and tool list | – | `feel`'s description changes once (D5), the block guide line once: one cold read per conversation at the restart that installs it, as every install |
+| system prompt and tool list | – | `feel`'s description and its `who` field (D1, D5): +264 characters of tool list (`tests/test_tool_budget.py`: 21,107 → 21,371; tiered 21,403 → 21,667); the gate prompt +23 (422 → 445, the 不理 line for an addressed line); one cold read per conversation at the restart that installs it, as every install |
 | model calls | – | none added; the appraiser stays off |
 | cache | tail only | tail only; an unchanged paragraph is left out by delivery as today |
 
@@ -369,6 +388,11 @@ the mechanism, never a score of her.
 - **The mood explains something.** Gate join rate, speech length and help-or-decline, each by band, from the audit and
   the turn records; a difference between bands in the direction of §4 is the pass. No difference after 7 days means
   the block is not reaching her decisions and D4's wording is looked at next.
+- **The pull sentence does not freeze**: the longest run of consecutive turns with the same pull sentence (her D4
+  condition).
+- **The mood matches its causes** (her condition on the reading): judged by whether the mood of a beat matches her
+  recorded causes and the events of that beat, not by how good the band distribution looks; recording bad moods to
+  make the numbers look right would be another performance. She counts on 2026-10-28 20:30 NZDT herself.
 - **Nothing new is sent twice**: the per-turn profile after install (ADR-062 §7).
 - **Fail conditions**: the mood pinned again (one band over 80% of hours) means the next cause is the record bias
   (D5) or same-kind repeats (adaptation, §3.2), looked at in that order; a drop in @-answers in groups while 低落
@@ -428,7 +452,7 @@ in a low or irritated mood sometimes does not answer, answers later, answers min
 | the turn's ending (`block_guide.ENDING`), `stay_silent`, `answers.speech_problem` | nothing forces a reply: 「说完了或这回合不说话，调用 stay_silent」, 「不算漏了什么」, and a turn without words is told to write them or end with `stay_silent` | program, neutral |
 | the words around an addressed line | silence is named as a choice only for unaddressed talk (`PROACTIVE_NOTE`: 「沉默不需要理由，也不因为"有机会"就该开口」); for an addressed line the only words are 「要回就在这回合一起回」. No "later" exists except `plan` | program, a gap |
 | the persona seed | no must-answer rule (「不熟悉时有分寸」, 「你愿意帮忙，也会说出自己不想做的事」); her own core document is hers and was not read | persona, nothing found |
-| the persona's familiarity stances (`people.familiarity`, shown as `stance` in every turn and at the gate) | written as instructions with norms in them: a stranger gets 「友好、好奇…笑着推掉」, 常来往 「顺手帮点不费劲的小忙」, every level 「主人开口让你帮他的除外」; the affect 帮忙 slot at a low mood says 「推的时候也客气」 | persona, hers: a "standard citizen" shape on addressed lines, named here for her to decide, not changed by this ADR (D4 already removes the slot texts from what she reads) |
+| the persona's familiarity stances (`people.familiarity`, shown as `stance` in every turn and at the gate) | written as instructions with norms in them: a stranger gets 「友好、好奇…笑着推掉」, 常来往 「顺手帮点不费劲的小忙」, and three of the five stances (`regular`, `met`, `new`; not `owner` or `known`) 「主人开口让你帮他的除外」; the affect 帮忙 slot at a low mood says 「推的时候也客气」 | persona, hers: a "standard citizen" shape on addressed lines, named here for her to decide, not changed by this ADR (D4 already removes the slot texts from what she reads) |
 | `common.md` | 「你有自己的立场、愿望和边界。礼貌、昵称和亲近都不改变谁能做什么」: about who may do what, not a politeness norm | program, neutral |
 | the model | in T, with quiet offered in the instruction, every arm answered the @ 8 of 8 times | the assistant prior fills the space nothing claims |
 
@@ -519,23 +543,31 @@ choose, never what she should do.
   one-line reason are in the audit as every gate verdict is. This is the owner's reason for mood at the gate applied
   to the case where it matters most: a full turn is the expensive way to decide not to answer. Accepted by the owner
   with its latency (§11.4): every addressed group line pays one gate question, about 3–5 s, before her reply. Not
-  gated: the owner's words, home lines, the agent line and errands (no gate exists there and none is added).
+  gated: the owner's words, home lines, the agent line and errands (no gate exists there and none is added). Her
+  three conditions (§15), all built: (1) the lost-line count is really counted: a 不理'd addressed line is visible in
+  her next catch-up there and her one-line reason is in the audit; (2) a gate that fails, times out or errors on an
+  addressed line falls back to today's behaviour, a full turn (today a failed gate ends the episode silently); (3) a
+  reply to something she is waiting for or to a question she asked (`awaited_answer`, `question_wait`, `watched`:
+  the wake reasons that exist to wake her) skips the gate: what is needed is a list of what must wake her, not a
+  list of what she never takes.
 - **E2. One neutral line where the program says someone called her**, in the style of `PROACTIVE_NOTE` (it says what
-  the event is and what she can choose, never what she should do): 「有人叫了你：回不回、现在回还是回头回、回多少，
-  由你。」 It is core wording about the event, not persona, and not a list of what she may ignore. It applies wherever
+  the event is and what she can choose, never what she should do), in her wording (§15): 「有人叫了你。回不回、什么时候回、
+  回多少，由你定；先放着也可以，只是对方不会知道。」 It is core wording about the event, not persona, and not a list of what
+  she may ignore. It applies wherever
   someone calls her, the owner's lines at home included, in the home wording of the same line (owner, §11.5). Whether
   her own core document should say more about how she answers people is hers.
 - **E3. "Later" without a new tool.** `stay_silent` on an addressed line says in its receipt that the line stays in this
-  conversation's catch-up and that the person was not told anything; `plan` remains the way to come back at a time.
+  conversation's catch-up and that the person was not told anything, and 「想回头回就挂一条 plan」 (her addition, §15).
 - **The owner and home.** The owner's baseline, in his words (§11.6): "The emotion should carry home and I'm no
   special to her." His words get a turn because home has no gate and none is added; her mood decides whether, when
   and how much she answers him, exactly as with anyone, and no "never silent" expectation is written anywhere. Her
   mood carries at home as everywhere (N6 showed it shaping her length with him; whether she answers is hers too).
   What does not change is the trust and permission boundary: home rights, owner-private visibility and who may ask
   for what (AGENTS.md, `common.md`) stay as they are; he is not special emotionally or socially, and his permissions
-  are unchanged. The persona findings in §13.1 that single him out socially (「主人开口让你帮他的除外」 in every
-  familiarity stance, the 帮忙 slot's 「除了主人」) go to her with his baseline quoted; they are her persona, hers to
-  decide, named here and not changed.
+  are unchanged. The persona findings in §13.1 that single him out socially (「主人开口让你帮他的除外」 in the `regular`,
+  `met` and `new` stances, the 帮忙 slot's 「除了主人」) go to her with his baseline quoted; they are her persona, hers
+  to decide, named here and not changed. Her answer (§15): she removes the exception from the three stances herself,
+  telling the owner first; the low slot's 「除了主人」 goes in a later batch of hers.
 - **What holds dignity and boundary.** Nothing here tells her to ignore people; it removes the program's silence on
   the choice and gives the cheap place to make it. Her boundary rules, the home/public boundary and ADR-084's hard
   caps are unchanged.
@@ -553,3 +585,21 @@ plus `stay_silent`) by mood band, from the audit; expected above zero under 低�
 愉快 and 不错; the owner's lines answered as before; and no addressed line lost (every 不理 line visible in a later
 catch-up or answered). Fail: addressed lines unanswered at the same rate in every band (mood is not reaching the
 choice), or any lost line.
+
+## 15. Her review (2026-10-21, on Claude's agent line; Claude's paraphrase)
+
+She read the source herself and signs D1–D7 and E1–E3 with these changes, folded in above:
+
+- Corrections: the owner exception is in three stances, not five (§13.1, §13.3); D3 adds a field that no kind has today,
+  and the default table is shown to her before install (§5, D3); D4 is shown rendered (§5.0).
+- Conditions: D2 "at least equal", not longer, and every kind's `half_h` and `arousal` default among the keys she can
+  change herself; D4's reading of the pull sentence; D5 in her wording; E1's three conditions (lost lines counted, gate
+  failure falls back to a full turn, the waiting family skips the gate); E2 in her wording, for group and home; E3's
+  receipt points at `plan`; the reading judged by whether the mood matches her recorded causes, which she counts
+  herself on 2026-10-28 20:30 NZDT.
+- Her persona edits are hers and she makes them: the owner exception out of the three stances (she tells the owner
+  first); 「笑着推掉…不用解释太多」 → 「你可以推，怎么推由你」; 「顺手帮点不费劲的小忙」 kept; the low slot's 「除了主人」 in a
+  later batch. The core build does not touch `packages/personas/`; the persona diff she would publish (the `about:
+  person` marks, her D2 half-lives, the D3 arousal defaults) is written for her apart from the code.
+
+Signature: ______

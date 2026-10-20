@@ -43,8 +43,8 @@ was not contacted. Model runs went to the owner's local server only, during the 
 
 Fifteen of the 2,058 lines are hers, each long and analytical, mostly when addressed. The group's own emotional life is
 fast and reactive: frustration with tools and quotas, teasing, memes repeated by four people in a row, occasional
-stings about bots in general (「机器就该像机器一样工作」, 「本质蛤蟆，一戳一蹦哒」) said while she was present and not
-addressed. Her lines carry no visible mood: the same register in a sting, a joke and a question. A person present for
+stings about bots in general (a remark that machines should behave like machines; another that today's bots are
+inert until poked) said while she was present and not addressed. Her lines carry no visible mood: the same register in a sting, a joke and a question. A person present for
 those three days would have been stung once or twice, amused often, and bored for long stretches; nothing in her
 records could have produced any of those, because her mood read 愉快 throughout.
 
@@ -193,7 +193,7 @@ fixes what the projection sums:
 | phase | who | what | where she sees it |
 |---|---|---|---|
 | generation | she, in any turn | `feel` records a feeling in words: kind, intensity, cause (`ref`), why; arousal from the kind unless she says otherwise (D3); a feeling toward a person carries `who` (D1) | the tool's receipt |
-| influence | the program, every turn | the projection as one paragraph: the state, its strongest causes where readable, and the pull of the strongest kind (D4); a person's feelings in that person's entry (D1); in the gate, nothing (§6) | `affect_from_program`, the person entry, the gate's material |
+| influence | the program, every turn | the projection as one paragraph: the state, its strongest causes where readable, and the pull of the strongest kind (D4); a person's feelings in that person's entry (D1); in the gate, nothing, or the public paragraph (§6, the owner's call) | `affect_from_program`, the person entry, the gate's material |
 | fading | the program | each event decays by its kind's half-life; an unsettled one holds until closed; night settlement lists what is still open | the paragraph's "when" words; the settlement block |
 
 ## 4. Each mood: thinking, decisions, speech
@@ -226,11 +226,11 @@ she reads and can act on or against.
 
 | | change | where she sees it | off switch |
 |---|---|---|---|
-| D1 | **Person feelings go to the person.** A kind the persona marks `about: person` records with `who` (the turn's speaker when she does not say; shown as a plain field, never required). `project()` leaves such events out of the global sum. The person's entry (`people_from_program`, ADR-082) carries her live feelings toward them as one phrase (「对他：感激，昨天」), at most two, strongest first, decaying by their kinds; in public the kind and age only | the `feel` receipt says where it landed; the person entry; at home the reasons as today | persona: no kind marked `about: person` |
+| D1 | **Person feelings go to the person.** A kind the persona marks `about: person` records with `who` (shown as a plain field, never required; when she does not say, the program fills it only in a one-to-one conversation, where it can only be that person; in a group a feeling without `who` stays in the global mood as today, and the receipt says so, since a guess there would put false state on a real person). `project()` leaves such events out of the global sum. The person's entry (`people_from_program`, ADR-082) carries her live feelings toward them as one phrase (「对 <名字>：感激，昨天」), at most two, strongest first, decaying by their kinds; in public the kind and age only | the `feel` receipt says where it landed; the person entry; at home the reasons as today | persona: no kind marked `about: person` |
 | D2 | **Half-lives, persona side.** Each negative kind at least its positive peer's half-life (烦躁 3 → 6 h against 愉快 6 h; 不安 8 → 12 h against 安心 12 h); 低落 12 h and 委屈 24 h unchanged. Numbers from §3.2's negativity bias, applied to her own table; the persona is hers, so this is put to her | her persona model | hers |
 | D3 | **Arousal from the kind.** Each kind carries a default arousal word (persona: 烦躁 有些波动, 好奇 有些波动, 不安 有些波动, 愉快 平稳 or 有些波动, 低落 平稳 …); `from_words` uses it when she writes none; her own word still wins | nothing new; the 兴奋 and 烦乱 bands can occur | persona: no `arousal` on a kind |
 | D4 | **One paragraph instead of label, face, four slots and tendencies.** `interpret` writes: the band's face (as today), then 「主要因为」 and up to two causes with their coarse age where readable (home: all; public: those recorded in this conversation), then the pull: the tendency text of the strongest kind, as a tendency (「这会儿你会…」), never as a rule. At 平静 with no cause: one line. The slot rule texts are removed from what she reads; the slots stay in the persona model for the Web page | `affect_from_program` every turn, shorter | `affect.paragraph: false` keeps today's shape |
-| D5 | **Recording guidance, neutral.** `feel`'s 「有触动才记」 becomes 「心里有起伏就记，好的坏的都记；记下来才算进心情」, and the description says a feeling about a person lands with that person | the tool list (one cold read per conversation at the install restart) | – |
+| D5 | **Recording guidance, neutral.** `feel`'s 「有触动才记」 becomes 「心里有起伏就记，好的坏的都记；记下来才算进心情」, and the description says a feeling about a person lands with that person. Model-facing wording of her own tool: put to her, as D2 and D3 | the tool list (one cold read per conversation at the install restart) | hers: the old wording |
 | D6 | **The gate**: §6 | the gate's material | `affect.gate: none` |
 | D7 | **Dice review shows the mood.** Each roll's reading in `dice_review_from_program` carries the band word at that beat, so she can see her own mood-behaviour links when she retunes the dice | the dice review | – |
 
@@ -258,6 +258,19 @@ untouched. The alternative, a band word only when the band is not neutral (`affe
 characters per gated question and keeps the one-moment swings of B1/B2 with the reason hidden; it is kept as a
 switch for the owner, not recommended.
 
+**Claude's view (the coordinating agent, on review of this ADR), for the owner to read beside the recommendation.**
+The defect in her records is a constant, rule-shaped block, not mood at the gate as such; §3.2 itself says a positive
+mood broadens attention and that consulting one's mood, misattribution included, is how people really decide. With
+`gate: none`, a good mood can never make her take up a line nobody addressed to her, because the gate has said 不理
+before the turn sees the mood: broadening is lost entirely for unaddressed talk, while a low mood still acts in the
+turn. That asymmetry pulls away from "closer to a real person". Claude's option, `affect.gate: paragraph`: after D1,
+the gate gets the same D4 paragraph in its public form (state and pull, the cause only when recorded in this group, no
+slot rules), and §9 judges gate join by band. The numbers for both readings: at the gate the cause-bearing happy form
+(A4) joined the maths 0.20 and the chorus 0.80 against 0.00 and 0.10 without it, less than today's block (0.60,
+1.00); the bare and default forms (B1, B3) moved it with the reason hidden. The research agent's reading of the same
+numbers: 0.80 on a chorus about a tool she does not use is still mood standing in for relevance, and after D1 the
+mood would read 愉快 in roughly half the hours. The owner decides (§11).
+
 ## 7. After the dice
 
 When a roll gives her a turn (a heartbeat, a visit, an unprompted group turn), nothing new happens in the program:
@@ -272,7 +285,7 @@ answered in every arm. Whether she joins, stays quiet, keeps it short or takes a
 |---|---|---|
 | `affect_from_program`, home | median 1,441 characters, sent in 25% of turns (the week's measurement, `what-she-reads-each-turn.md`) | about 500–800: one paragraph with up to six reasons as today; the four slot lines and the tendencies list gone (about −250) |
 | `affect_from_program`, public | about 300 (label, face, three slots, tendencies, note) | about 100–160 at a non-neutral band; one line (about 20) at 平静 |
-| the gate's material | about 300 of mood in every gated question | 0 (D6); about 300 characters fewer in each of the roughly 50 gated questions a day (686 in 14 days, §2.1) |
+| the gate's material | about 300 of mood in every gated question | `none`: 0, about 300 characters fewer in each of the roughly 50 gated questions a day (686 in 14 days, §2.1); `paragraph`: 100–160 at a non-neutral band, about 20 at 平静 |
 | a person's entry | – | +20 to 40 characters while a feeling toward them is live |
 | system prompt and tool list | – | `feel`'s description changes once (D5), the block guide line once: one cold read per conversation at the restart that installs it, as every install |
 | model calls | – | none added; the appraiser stays off |
@@ -301,8 +314,9 @@ the mechanism, never a score of her.
 
 ## 10. Later steps (not in this ADR's first step)
 
-- **Feelings in moments she does not take.** 96% of her group moments end at the gate with 不理; a real person is
-  stung or amused in moments they do not answer. The gate's one line could carry an optional feeling word from her
+- **Feelings in moments she does not take.** Most of her group moments end without a turn: 420 of 686 gated
+  verdicts were quiet (61%, §2.1), and most lines never reach the gate at all (she spoke 15 of the extract's 2,058
+  lines, §2.2); a real person is stung or amused in moments they do not answer. The gate's one line could carry an optional feeling word from her
   kinds table (「不理，有点刺」), recorded as a 轻微 event with the line as its cause. Zero extra calls, a few characters
   in the gate's prompt. Proposed for step 2 after step 1 is read; it widens generation to where most of her day is.
 - **Adaptation**, if §9 shows same-kind pinning.
@@ -311,7 +325,8 @@ the mechanism, never a score of her.
 
 ## 11. Decisions that are the owner's
 
-1. The gate's form (§6): no mood text at the gate (recommended, on G2), or a band word when the band is not neutral.
+1. The gate's form (§6): no mood text at the gate (the research agent's recommendation, on G2), the D4 public
+   paragraph (Claude's option), or a band word when the band is not neutral.
 2. Whether step 2's gate feeling word (§10) waits for the 14-day reading or goes in with step 1.
 3. D2 and D3 are persona changes: the owner decides whether they are put to her with this ADR or after it.
 

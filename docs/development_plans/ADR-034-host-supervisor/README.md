@@ -74,3 +74,21 @@ resident launcher only starts and watches DSH; each start's preparation (sync, i
 `asuna-launch.mjs --prepare <rung>` process from the code on disk, and its output is kept in
 `<data>/restart/prepare.log`, with a failure's last lines in the restart record she reads. What remains resident
 (the supervise loop in `asuna-supervisor.mjs`) still needs a launcher restart to change.
+
+## Addendum 2026-10-20: a start that failed for the environment pinned her to old code
+
+Her restart at 23:21 NZDT to install `0e622df6` (records `.runtime/restart/last.json`, `history.jsonl`, `host.log`; Host startup logs `.runtime/adr008/home/logs/startup-*`):
+
+1. The first start failed as DSH activated its credentials store: `EMFILE: too many open files` opening `.credentials.yaml.lock`. The cause of the EMFILE is not yet known.
+2. The lock was left empty (created, never given its process id). DSH takes over a lock whose recorded process has exited, but an empty one names none, so the next two starts timed out waiting on it and the ladder went on retrying every minute. Claude removed it by hand (23:23:49, no Host process alive); the next start came back at 23:24:30.
+3. The second rung had returned core and persona to the previous running version, so she came back on old code. Her next restart (23:31) installed nothing: the launcher compares the packed digests with `launch.json`'s record of the last install, which still named the set-aside package, so the checkout looked installed.
+4. The record said the new packages loaded: `loaded.packages` came from `launch.json`, and `reverted_from` printed a field the selection does not have, so it was empty. Xiaoman found both by reading the code and checking the running files' digests.
+
+Decided by the owner 2026-10-20 ("launcher fixes first"), built:
+
+- A package a start set aside counts as not installed, so the next start installs the checkout again (`changedPackages`, `setAsideDigests`). A start that fails again falls back again; nothing is retried in a loop beyond the ladder's own.
+- Before each start the preparation removes empty writer locks at the top of DSH's home (`clearEmptyLocks`); at that moment no Host runs, so no writer exists. Locks that name a process stay DSH's.
+- The record reports a selected package's running digest and the digest it returned from (`loaded`).
+
+Not changed: the ladder still blames the new package for any failed first start. With the first fix, a package set aside for an environment fault is installed again by the next start. The record's fix runs in the resident launcher, so it applies once the launcher itself is restarted; the other two are in the per-start preparation and apply at the next start.
+

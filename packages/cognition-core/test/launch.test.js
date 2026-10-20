@@ -76,6 +76,15 @@ test('owner 2026-10-07: a start installs the checkout only when its packed diges
     await fs.writeFile(manifest, JSON.stringify([{ name: '@asuna/cognition-core', sha256: 'aa' }, { name: '@asuna/demo', sha256: 'bb' }]));
     assert.equal(await syncCheckout(launch, exec, note => notes.push(note), { python, manifest }), 'UP_TO_DATE');
     assert.deepEqual(calls, ['tools/pack_plugins.py'], 'unchanged: packed and compared, nothing installed');
+    // A package a failed start set aside is installed again, although launch.json records it as installed.
+    const selection = path.join(dir, 'activation.json');
+    await fs.writeFile(selection, JSON.stringify({ projects: { core: { sha256: 'old', reverted_from: { sha256: 'aa', starts: 1 } } } }));
+    let again;
+    const watch = async (command, args) => { if (args[0].includes('setup')) again = true; return 0; };
+    assert.equal(await syncCheckout(launch, watch, note => notes.push(note), { python, manifest, selection }), 'INSTALLED');
+    assert.ok(again);
+    assert.match(notes.at(-1), /installing the checkout \(@asuna\/cognition-core\)/);
+    assert.deepEqual(changedPackages({ a: '1', b: '2' }, [{ name: 'a', sha256: '1' }, { name: 'b', sha256: '2' }], ['2']), ['b']);
     await fs.writeFile(manifest, JSON.stringify([{ name: '@asuna/cognition-core', sha256: 'cc' }, { name: '@asuna/demo', sha256: 'bb' }]));
     let installArgs;
     const record = async (command, args) => { if (args[0].includes('setup')) installArgs = args; return 0; };
@@ -237,4 +246,20 @@ test('ADR-065: a fast-forward git itself refuses leaves the checkout as it was a
   assert.deepEqual(await fastForwardCheckout('unused', git),
     { state: 'fast_forward_failed', detail: 'fatal: Not possible to fast-forward' });
   assert.ok(!seen.some(command => ['rebase', 'reset', 'pull'].includes(command)), 'never rebases, resets or pulls');
+});
+
+test('a writer lock a Host that stopped left empty is cleared before a start; a lock with content or another file is not', async () => {
+  const { clearEmptyLocks } = await import('../../../tools/asuna-launch.mjs');
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-locks-'));
+  try {
+    await fs.writeFile(path.join(home, '.credentials.yaml.lock'), '');
+    await fs.writeFile(path.join(home, 'settings.yaml.lock'), '4242\n');
+    await fs.writeFile(path.join(home, 'empty.txt'), '');
+    await fs.mkdir(path.join(home, 'folder.lock'));
+    assert.deepEqual(await clearEmptyLocks(home), ['.credentials.yaml.lock']);
+    assert.deepEqual((await fs.readdir(home)).sort(), ['empty.txt', 'folder.lock', 'settings.yaml.lock']);
+    assert.deepEqual(await clearEmptyLocks(path.join(home, 'none')), []);
+  } finally {
+    await fs.rm(home, { recursive: true, force: true });
+  }
 });

@@ -109,12 +109,38 @@ export const checkoutPython = (base = root, platform = process.platform) =>
   platform === 'win32' ? path.join(base, '.venv', 'Scripts', 'python.exe') : path.join(base, '.venv', 'bin', 'python');
 
 /** Which packed packages differ from the ones this profile last installed, or were never installed (a channel
- * package newly added to the profile), by name; all of them when nothing is recorded. */
-export function changedPackages(installed, packed) {
+ * package newly added to the profile), by name; all of them when nothing is recorded. A package a failed start set
+ * aside (`setAside`: the digests the selection returned from) is not running although it was installed, so it is
+ * installed again: a start runs what the checkout holds, and a start that fails again falls back again. */
+export function changedPackages(installed, packed, setAside = []) {
   const wanted = Object.keys(installed ?? {});
   if (!wanted.length) return null;
   const now = Object.fromEntries((packed ?? []).map(artifact => [artifact.name, artifact.sha256]));
-  return [...wanted.filter(name => now[name] !== installed[name]), ...Object.keys(now).filter(name => !(name in installed))];
+  return [...wanted.filter(name => now[name] !== installed[name] || setAside.includes(now[name])),
+    ...Object.keys(now).filter(name => !(name in installed))];
+}
+
+/** The digests the profile's selection returned from after a start that never came up (activation.json). */
+export async function setAsideDigests(selectionPath) {
+  const selection = await read(selectionPath, { projects: {} });
+  return Object.values(selection.projects ?? {}).map(selected => selected.reverted_from?.sha256).filter(Boolean);
+}
+
+/** A DSH writer lock (`<file>.lock`, created exclusively, then given its process id) left empty by a Host that died
+ * between the two: DSH takes over a lock whose recorded process has exited, but an empty one names nobody, so every
+ * later start waits on it and fails. Run only while no Host is running (a start's preparation), so no writer exists.
+ * Returns the names removed. */
+export async function clearEmptyLocks(home) {
+  const removed = [];
+  for (const name of await fs.readdir(home).catch(() => [])) {
+    if (!name.endsWith('.lock')) continue;
+    const file = path.join(home, name);
+    const stat = await fs.lstat(file).catch(() => null);
+    if (!stat?.isFile() || stat.size !== 0) continue;
+    await fs.rm(file, { force: true });
+    removed.push(name);
+  }
+  return removed;
 }
 
 /** Owner 2026-10-07: a start installs what the checkout holds now, so a change never waits on a manual install.
@@ -122,7 +148,8 @@ export function changedPackages(installed, packed) {
  * difference runs the installer, which records the previous running package so a start that never comes up returns
  * to it (advanceSelection below). Uncommitted edits are installed too: what is on disk is what runs. */
 export async function syncCheckout(launch, exec, report = text => process.stderr.write(text + '\n'),
-  { python = checkoutPython(), manifest = path.join(root, '.runtime/adr008/packages/manifest.json') } = {}) {
+  { python = checkoutPython(), manifest = path.join(root, '.runtime/adr008/packages/manifest.json'),
+    selection = launch.base && path.join(launch.base, 'activation.json') } = {}) {
   const setup = launch.setup;
   if (!setup) { report('Asuna: this profile does not record its packages yet; run tools/setup_native_profile.py once.'); return 'UNKNOWN'; }
   if (!await exists(python)) { report('Asuna: no checkout environment (.venv); run `uv sync` to let starts install changes.'); return 'NO_PYTHON'; }
@@ -130,7 +157,7 @@ export async function syncCheckout(launch, exec, report = text => process.stderr
   if (await exec(python, ['tools/pack_plugins.py', '--persona', setup.persona_package, ...channels], { quiet: true }) !== 0)
     throw new Error('Packing the checkout failed; start with --no-sync to run what is installed');
   const packed = await read(manifest, []);
-  const changed = changedPackages(launch.installed, packed);
+  const changed = changedPackages(launch.installed, packed, selection ? await setAsideDigests(selection) : []);
   if (changed && !changed.length) return 'UP_TO_DATE';
   report('Asuna: installing the checkout (' + (changed ?? ['all packages']).join(', ') + ')');
   const install = ['tools/setup_native_profile.py', '--config', launch.config, '--profile', launch.profile,
@@ -258,8 +285,14 @@ async function main() {
     child.once('error', reject); child.once('exit', code => resolve(code ?? 1));
   });
   const host = ['--profile', launch.profile, '--no-open', '--host', '127.0.0.1', '--port', String(launch.port)];
+  // Before any start the Host is down: a writer lock it left empty is cleared (clearEmptyLocks).
+  const clearLocks = async () => {
+    for (const name of await clearEmptyLocks(launch.home))
+      process.stderr.write('Asuna: removed ' + name + ', a writer lock a Host that stopped left empty\n');
+  };
   if (prepareRung !== null) {
     let notes = [];
+    await clearLocks();
     if (prepareRung === 0) {
       if (fastForward) process.stdout.write(CHECKOUT_MARK + JSON.stringify(await fastForwardCheckout(root)) + '\n');
       if (launch.sync) await syncCheckout(launch, exec);
@@ -274,6 +307,7 @@ async function main() {
     return 0;
   }
   if (launch.once) {
+    await clearLocks();
     if (launch.sync) await syncCheckout(launch, exec);
     await retireOneShotSessions(launch.home, path.join(launch.base, 'archive', 'sessions'));
     await applySelection(launch, run, advanceSelection);

@@ -186,18 +186,25 @@ export async function supervise(d) {
   }
 }
 
-/** What actually runs after a start: the checkout's commit and each selected package. */
-export async function loaded(base, launchFile) {
-  const commit = spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true });
+/** What actually runs after a start: the checkout's commit, and each package's digest. A package the selection
+ * names runs as selected (activation.json), which a fallback changes without a new install; launch.json's record of
+ * the last install covers the others. A selection that fell back names the digest it returned from. */
+export async function loaded(base, launchFile, commitOf = () =>
+  spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true }).stdout) {
   const read = async file => { try { return JSON.parse(await fs.readFile(file, 'utf8')); } catch { return {}; } };
   const selection = await read(path.join(base, 'activation.json'));
   const launch = await read(launchFile);
+  const short = sha => String(sha).slice(0, 12);
+  const packages = Object.fromEntries(Object.entries(launch.installed ?? {}).map(([name, sha]) => [name, short(sha)]));
+  for (const selected of Object.values(selection.projects ?? {}))
+    if (selected.packageRoot && selected.sha256)
+      packages['@asuna/' + path.basename(selected.packageRoot)] = short(selected.sha256);
   return {
-    commit: (commit.stdout || '').trim() || null,
-    packages: Object.fromEntries(Object.entries(launch.installed ?? {}).map(([name, sha]) => [name, String(sha).slice(0, 12)])),
+    commit: (commitOf() || '').trim() || null,
+    packages,
     selections: Object.fromEntries(Object.entries(selection.projects ?? {}).map(([id, s]) =>
-      [id, { state: s.state, candidate: s.candidate ? String(s.candidate).slice(0, 12) : null,
-             ...(s.reverted_from ? { reverted_from: String(s.reverted_from.candidate ?? '').slice(0, 12) } : {}) }])),
+      [id, { state: s.state, candidate: s.candidate ? short(s.candidate) : null,
+             ...(s.reverted_from ? { reverted_from: short(s.reverted_from.sha256 ?? s.reverted_from.candidate ?? '') } : {}) }])),
   };
 }
 

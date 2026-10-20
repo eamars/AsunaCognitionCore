@@ -28,6 +28,8 @@ Stable entry: native Web and repair tools boot without importing Python code.
 - def `fastForwardCheckout` — Her restart brings origin/main into the checkout when it can (owner 2026-10-13, ADR-065): fetch, then a fast-forward only when the branch is main, tracked files are unchanged and main is behind origin/main.
 - def `checkoutPython`
 - def `changedPackages` — Which packed packages differ from the ones this profile last installed, or were never installed (a channel package newly added to the profile), by name; all of them when nothing is recorded.
+- def `setAsideDigests` — The digests the profile's selection returned from after a start that never came up (activation.json).
+- def `clearEmptyLocks` — A DSH writer lock (`<file>.lock`, created exclusively, then given its process id) left empty by a Host that died between the two: DSH takes over a lock whose recorded process has exited, but an empty one names nobody, so every later start w
 - def `syncCheckout` — Owner 2026-10-07: a start installs what the checkout holds now, so a change never waits on a manual install.
 - def `MAX_UNCONFIRMED_STARTS`
 - def `advanceSelection` — Advance one start: count unconfirmed selections and revert those that never came up.
@@ -55,7 +57,7 @@ The Host supervisor (ADR-034): the launcher stays as DSH's parent, restarts it w
 - def `revertSelections` — A selection being applied goes straight back to the one that ran before it (rung 1).
 - def `killTree`
 - def `supervise` — The loop.
-- def `loaded` — What actually runs after a start: the checkout's commit and each selected package.
+- def `loaded` — What actually runs after a start: the checkout's commit, and each package's digest.
 - def `takeRequest`
 - def `writeRecord`
 - def `HISTORY_KEPT` — history.jsonl keeps the newest HISTORY_KEPT finished restarts, one line each.

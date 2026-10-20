@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { hostLog, readySince, revertSelections, supervise, writeRecord, RUNGS } from '../../../tools/asuna-supervisor.mjs';
+import { hostLog, loaded, readySince, revertSelections, supervise, writeRecord, RUNGS } from '../../../tools/asuna-supervisor.mjs';
 
 /**
  * A fake DSH world. `starts` scripts each start: 'ready', 'exit' (dies before ready), 'never' (no ready), or
@@ -176,4 +176,22 @@ test('the Host log keeps its newest lines: past the limit the file becomes host.
     assert.equal(await fs.readFile(file + '.1', 'utf8'), 'aaaaaa');
     assert.equal(await fs.readFile(file, 'utf8'), 'bbbbbbcc');
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
+test('the record says what runs: a selection that fell back reports the package it runs and the one it returned from', async () => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-loaded-'));
+  try {
+    await fs.writeFile(path.join(base, 'launch.json'), JSON.stringify({ installed: {
+      '@asuna/cognition-core': '59273e56719b8c09', '@deepseek-ai/dsh-client-ui-chat': 'cd35f89fef652bf4' } }));
+    await fs.writeFile(path.join(base, 'activation.json'), JSON.stringify({ projects: { core: {
+      state: 'ACTIVE', sha256: 'fb763b01ca4c4725', packageRoot: path.join('profiles', 'node_modules', '@asuna', 'cognition-core'),
+      reverted_from: { sha256: '59273e56719b8c09', starts: 1, by: 'supervisor' } } } }));
+    const record = await loaded(base, path.join(base, 'launch.json'), () => 'abc1234\n');
+    assert.equal(record.commit, 'abc1234');
+    assert.equal(record.packages['@asuna/cognition-core'], 'fb763b01ca4c', 'the running selection, not the last install');
+    assert.equal(record.packages['@deepseek-ai/dsh-client-ui-chat'], 'cd35f89fef65');
+    assert.deepEqual(record.selections.core, { state: 'ACTIVE', candidate: null, reverted_from: '59273e56719b' });
+  } finally {
+    await fs.rm(base, { recursive: true, force: true });
+  }
 });

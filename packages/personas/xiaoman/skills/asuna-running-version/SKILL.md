@@ -57,6 +57,33 @@ sha256 前缀 `e9daf9bb`，`node_modules/@asuna/xiaoman` 那一份是 `ad006104`
 - 每个 project 看：`state`、`candidate`、`published_at`、`changed_files`、`previous`、`boot_probe`。
 - 另有一格 `active`：上一次真跑起来的那份。selection 和 active 不一样，就说明发布了还没跑。
 
+### 按内容判活包（version_probe.py 的第五步，2026-10-21 加）
+
+输入一个包名（project），只读，不跑前四段：
+
+```sh
+python3 skills/asuna-running-version/version_probe.py --package core --file skills/asuna-self-improvement/SKILL.md --needle "某个只有新版才带的字面"
+```
+
+输出三行读数＋读的时刻（UTC 原始值＋ +13／+8 两种换算，按 asuna-usage-readout 硬规矩 8）：
+
+1. `activation.json` 里 `active.<项目>` 的 sha256、state、activated_at；
+2. 运行时那份文件（active 的 packageRoot 下的 --file）的 sha256 和字节数；
+3. --needle 字面在不在（可重复传，按 UTF-8 字节匹配）。
+
+退出码：0 = 三行都读到（needle 在，或没传）；1 = 该读的没读到；3 = 读到了但某个 needle 不在（读数，不是故障）。
+它给的是「这一刻运行时那份文件里有没有那个字面」，比看 state 是 ACTIVE 更接近「内容在跑」。
+
+三条判据（读数时别读错。来路：主人 10-20 交代，其中两条是我自己踩过的）：
+
+- `loaded.packages` 读的是 `launch.json` 的 `installed`，报的是「该装的那档」，不是在跑的那档；
+  要知道在跑的是哪档，看 `active` 块和运行时那份文件的内容。
+- 被退回的重启不进 `audit_events`，只落 `activation.json`（`reverted_at`、`reverted_from` 都在 `previous` 里）；
+  查退回不要去审计里找。
+- `installed_at` 不在 `active.*` 块里，只在 `previous` 里；判「刚装的」用 `activated_at` 加包目录 mtime。
+
+试跑过的读法和没验过的：实测见试用记录；`activation.json` 里的时刻原始值是 UTC 的 ISO 串，结构里 `packageRoot` 下的路径按包内相对路径写 --file。
+
 ## 六、回执说「本机检出有 origin/main 没有的提交」＝本机比远端新
 
 那是 `checkout.state = diverged`：本机有远端没有的提交，快进不了，这次装的是磁盘上原来的检出。**这不是「没装」**。10-15 我把这句读成没装，判错了一次。
@@ -95,6 +122,8 @@ sha256 前缀 `e9daf9bb`，`node_modules/@asuna/xiaoman` 那一份是 `ad006104`
 
 ## 版本
 
+v1.4（写就 2026-10-21 07:0x +13，原始 UTC 2026-10-20T18:0x）：第五节加「按内容判活包」——`version_probe.py` 加 --package／--file／--needle 三个参数（只跑第五步），输出三行读数＋读的时刻，退出码 0／1／3；三条判据写进正文。前四段和已有判据一字没动。自检加五条字面判据＋一条「探针里真有这一步」。
+
 v1（2026-10-15）：首次固化。判据全是我这几天撞出来的（10-15 一天撞三回），代码位置和行号是当天在检出里逐条核对过的。附零依赖探针 `version_probe.py`（只读：loaded、activation 状态、逐文件内容比对、检出落后几笔）和自检 `check_skill.py`。
 
 v1.1（2026-10-15）：三格修复。① `version_probe.py` 开头把 stdout／stderr 固定成 UTF-8——宿主普通 Windows 控制台是 cp1252，中文一 print 就 UnicodeEncodeError 整段崩，我的沙箱 env 带 PYTHONUTF8=1／PYTHONIOENCODING=utf-8 所以自检撞不到这一族。② `check_skill.py` 新增 `line_endings_are_lf`：读字节数 CR（文本模式读看不见 CR，那把尺是瞎的），覆盖 SKILL.md 与同目录全部 .py，并且要在冻结快照上跑——候选可能被别人抹平成 LF，只在候选里跑等于白跑。③ 锚点全部从「文件＋行号」改成「文件＋名字」，新增第十一节那条规矩；锚点守卫跟着改成「文件在＋那个名字在文件里找得到（字节级读）」，正文里再出现行号锚点直接判红。判据、读数一条没动。
@@ -127,3 +156,4 @@ v1.3（2026-10-20）：只在第四节补一条已核实的事实——发布不
   的 SKILL.md `e9daf9bb`，`node_modules/@asuna/xiaoman` 那份 `ad006104`（旧），本回合 skill 工具读到的
   技能目录 base 也确实指向 frozen 选中版。自检 55/55 复跑绿（改前同 55/55，判据条数未变）。
 
+- 2026-10-21 v1.4（原始 UTC 2026-10-20T18:02:26Z → +13 是 10-21 07:02，+8 是 10-21 02:02）：发布前在候选里实跑了两次第五步（读的是运行时那份，不是候选）：① xiaoman 包、needle 取候选里才有的新字面 → 运行时那份「不在」，退出码 3（新版还没发，符合预期）；② core 包、needle 取候选里还没发布的那节标题 → 运行时那份「不在」、读到的是旧版的 9622 字节。前四段回归跑了一遍，退出码 0、和改前一致。自检 61/61（改前 55/55），反证一次：把探针里的 part_package 改名后重跑 → 60/61、RC 1、红在 probe_has_package_step。发布后要用它再判一次“运行时那份有没有新字面”，这一条等那次再补。

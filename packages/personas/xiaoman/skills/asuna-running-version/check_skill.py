@@ -81,6 +81,12 @@ CRITERIA = [
     ("criterion_git_read_commands", "rev-list --count"),
     ("criterion_git_write_denied", "index.lock"),
     ("criterion_anchor_rule", "行号每次有人改那个文件就漂，名字不会"),
+    # v1.4（2026-10-21）：按内容判活包那一步的五条字面（用法、三条判据）
+    ("criterion_package_step_usage", "--package"),
+    ("criterion_package_step_three_lines", "三行读数"),
+    ("criterion_loaded_packages_is_should_install", "「该装的那档」，不是在跑的那档"),
+    ("criterion_revert_not_in_audit", "不进 `audit_events`，只落 `activation.json`"),
+    ("criterion_installed_at_only_previous", "`installed_at` 不在 `active.*` 块里，只在 `previous` 里"),
 ]
 
 # 代码锚点：反引号里的 path:line 或 path:line-line。仓库根找到才真查。
@@ -294,6 +300,15 @@ def main():
     check("skill_body_not_thin", len(body) >= 1500, "body_chars=%d" % len(body))
     check("selfcheck_documented", "check_skill.py" in body)
     check("probe_shipped", "version_probe.py" in body)
+    # v1.4：正文说有第五步，探针里就得真有（字节级读）
+    try:
+        with open(os.path.join(HERE, "version_probe.py"), "rb") as handle:
+            probe_src = handle.read()
+    except OSError:
+        probe_src = b""
+    check("probe_has_package_step",
+          b"def part_package" in probe_src and b"--package" in probe_src and b"--needle" in probe_src,
+          "version_probe.py 里找不到 part_package／--package／--needle")
 
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
     check("check_script_shipped", os.path.basename(__file__) in scripts, ",".join(scripts))

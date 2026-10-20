@@ -14,6 +14,20 @@
     python3 version_probe.py --repo <检出根> --data <数据根> --project core
 退出码 0 = 四段都跑到了（内容不同、落后几笔都不算错，是要我读的数）；
 1 = 该找到的东西没找到（会说清哪一段缺）。
+
+第五步（2026-10-21 加，按内容判活包，只读）：
+    python3 version_probe.py --package xiaoman --file skills/asuna-running-version/version_probe.py --needle part_package
+只跑这一步、不跑上面四段。输入一个包名（project：xiaoman／core／napcat-qq／dsh-peer／agent-line），
+输出三行读数＋读的时刻（UTC 原始值＋ +13／+8 两种换算）：
+  1. activation.json 的 active.<项目>：sha256、state、activated_at
+  2. 运行时那份文件（active 的 packageRoot 下的 --file）：sha256、字节数
+  3. --needle 字面在不在（可重复传；字面按 UTF-8 字节匹配）
+退出码：0 = 三行都读到（needle 在，或没传）；1 = 该读的没读到（没 activation／没这个项目／文件不在）；
+3 = 都读到了但某个 needle 不在（这是读数，不是故障）。
+判据来源（读数时别读错，同样写在 SKILL.md 第五节）：
+  - launch.json 的 installed（loaded.packages 就读它）报的是「该装的那档」，不是在跑的那档；
+  - 被退回（supervisor 退回上一档）的重启不进 audit_events，只落 activation.json；
+  - installed_at 不在 active.* 块里，只在 previous 里；判「刚装的」用 activated_at＋包目录 mtime。
 """
 import argparse
 import hashlib
@@ -21,6 +35,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 
 # 宿主普通 Windows 控制台默认码页是 cp1252：中文一 print 就 UnicodeEncodeError 整段崩
 # （2026-10-15 实测）。我的沙箱 env 带 PYTHONUTF8=1／PYTHONIOENCODING=utf-8，自检撞不到这一族。
@@ -186,11 +201,73 @@ def part_git(repo):
     return True
 
 
+def clock_lines(now=None):
+    """读的时刻：一条原始 UTC ＋ +13／+8 两种换算（偏移量写明，不借本机钟面）。"""
+    utc = now or datetime.now(timezone.utc)
+    raw = utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return raw, {
+        13: (utc + timedelta(hours=13)).strftime("%m-%d %H:%M:%S"),
+        8: (utc + timedelta(hours=8)).strftime("%m-%d %H:%M:%S"),
+    }
+
+
+def part_package(data, project, relfile, needles):
+    """按内容判活包：三行读数＋读的时刻。返回退出码 0／1／3。
+
+    判据来源（别读错）：
+    - launch.json 的 installed（loaded.packages 读它）报的是「该装的那档」，不是在跑的那档；
+    - 被退回的重启不进 audit_events，只落 activation.json（所以要看 active 块，不看审计）；
+    - installed_at 不在 active.* 块里（只在 previous 里）；判「刚装的」用 activated_at＋包目录 mtime。
+    """
+    raw, shifted = clock_lines()
+    section("5. 按内容判活包：%s" % project)
+    print("读的时刻：UTC %s → UTC+13 %s ／ UTC+8 %s（同一个 UTC 读数的两种换算）" % (raw, shifted[13], shifted[8]))
+    activation = read_json(os.path.join(data, "adr008", "activation.json"))
+    if not activation or "_坏在哪" in activation:
+        print("读不到 activation.json：", activation)
+        return 1
+    active = (activation.get("active") or {}).get(project)
+    if not active:
+        print("activation.json 的 active 里没有 %s（可选的：%s）" % (project, "、".join(sorted(activation.get("active") or {}))))
+        return 1
+    print("1) active.%s: sha256=%s state=%s activated_at=%s"
+          % (project, active.get("sha256"), active.get("state"), active.get("activated_at")))
+    root = active.get("packageRoot")
+    target = os.path.join(root, *relfile.replace("\\", "/").split("/")) if root and relfile else None
+    if not target or not os.path.isfile(target):
+        print("2) 运行时那份文件找不到：", target, "（packageRoot=%s）" % root)
+        return 1
+    with open(target, "rb") as handle:
+        blob = handle.read()
+    print("2) 运行时 %s: sha256=%s 字节=%d" % (relfile, hashlib.sha256(blob).hexdigest(), len(blob)))
+    missing = []
+    if not needles:
+        print("3) needle: 没传（--needle <字面>）")
+    for needle in needles:
+        count = blob.count(needle.encode("utf-8"))
+        print("3) needle %r: %s（出现 %d 处）" % (needle, "在" if count else "不在", count))
+        if not count:
+            missing.append(needle)
+    # 旁注：判「刚装的」要的两样（installed_at 不在 active 块里）
+    try:
+        mtime = datetime.fromtimestamp(os.path.getmtime(root), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except OSError:
+        mtime = "读不到"
+    print("旁注：包目录 mtime（UTC）%s；installed_at 只在 previous 里：%s" % (mtime, (active.get("previous") or {}).get("installed_at")))
+    selected = ((activation.get("projects") or {}).get(project) or {})
+    if selected.get("sha256") and selected.get("sha256") != active.get("sha256"):
+        print("旁注：selection 与 active 的 sha256 不同——发布了但还没跑起来（selection state=%s）" % selected.get("state"))
+    return 3 if missing else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="现在跑的是哪版（只读探针）")
     parser.add_argument("--repo", help="检出的根目录（默认从 asuna.config.ROOT 或 ASUNA_REPO 找）")
     parser.add_argument("--data", help="这个 profile 的数据根（默认 asuna.config.DATA 或 ASUNA_DATA_ROOT）")
     parser.add_argument("--project", default="core", help="要比内容的 project（默认 core）")
+    parser.add_argument("--package", help="按内容判活包：包名（project）。只跑第五步，不跑前四段")
+    parser.add_argument("--file", help="配合 --package：运行时那份里要读的文件（相对 packageRoot），如 skills/<技能>/SKILL.md")
+    parser.add_argument("--needle", action="append", default=[], help="配合 --package：要找的字面，可重复")
     args = parser.parse_args()
     found_repo, found_data = find_roots()
     repo = args.repo or found_repo
@@ -200,6 +277,11 @@ def main():
     if not data:
         print("没有数据根就什么都查不到：带 --data <数据根> 再跑。")
         return 1
+    if args.package:
+        if not args.file:
+            print("--package 要配 --file <相对 packageRoot 的路径>")
+            return 1
+        return part_package(data, args.package, args.file, args.needle)
     ok = []
     ok.append(part_restart(data))
     selection = part_activation(data, args.project)

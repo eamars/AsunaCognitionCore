@@ -13,7 +13,11 @@
  * halving again while a part does not fit. `floorTokens` is the size past which
  * a quiet group's conversation is condensed without her mark (ADR-049): half of
  * this engine's own compaction threshold for the conversation's model. The
- * action brain keeps DSH's own engineering template. */
+ * summary request thinks at `summaryReasoningEffort` (a persona preset sets it beside the summary cap) when the model
+ * offers that level, and a summary without every section the instruction asks for, in order, is rejected like an
+ * empty one: no checkpoint is written and the next step tries again. The action brain keeps DSH's own engineering
+ * template. */
+import z from '@deepseek-ai/schemastery';
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic';
 import { BlockAssembler, LlmError, contentHasImage, createUserMessage } from '@deepseek-ai/dsh-llm';
 import { overflowed } from './carry.js';
@@ -53,6 +57,21 @@ export const ROLE_COMPACTION_INSTRUCTION = [
   '- 直接整理，不必反复推敲。',
 ].join('\n');
 
+/** The checkpoint's sections, in the order the instruction asks for them. */
+export const ROLE_SECTIONS = ROLE_COMPACTION_INSTRUCTION.split('\n').filter(line => line.startsWith('## '));
+
+/** Whether a summary carries every section, in order. A summary cut short, or one that thinking spilled into, does
+ * not, and writing it would leave the compacted span without its record. */
+export function hasSections(text) {
+  let from = 0;
+  for (const head of ROLE_SECTIONS) {
+    const at = text.indexOf(head, from);
+    if (at < 0) return false;
+    from = at + head.length;
+  }
+  return true;
+}
+
 /** Prompt room the whole-conversation request keeps for the instruction and for the meter's estimate of what was added
  * since the last request the provider counted. */
 const WHOLE_SPARE_TOKENS = 6144;
@@ -86,6 +105,14 @@ function finishError(finish) {
 }
 
 export default class RoleCompactionEngine extends BasicCompactionEngine {
+  static Config = z.intersect([BasicCompactionEngine.Config, z.object({ summaryReasoningEffort: z.string() })]);
+
+  constructor(ctx, config = {}) {
+    const { summaryReasoningEffort, ...basic } = config;
+    super(ctx, basic);
+    this.summaryReasoningEffort = summaryReasoningEffort;
+  }
+
   async summarize(input, agent, signal) {
     const latest = agent.session.requestHeader()?.config;
     const configured = this.config.summarizationProvider
@@ -93,6 +120,7 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
     const target = configured ?? latest ?? (agent.options.provider && agent.options.model
       ? { provider: agent.options.provider, model: agent.options.model } : undefined);
     if (!target) throw new Error('no provider/model available for summarization');
+    const effort = await this.summaryEffort(agent, target, signal);
     const once = async (messages, kept) => {
       const instruction = kept ? ROLE_COMPACTION_INSTRUCTION + '\n' + keptRule(kept) : ROLE_COMPACTION_INSTRUCTION;
       const options = {
@@ -101,6 +129,7 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
         toolHistory: agent.session.toolHistory(),
         ...(input.tools === undefined ? {} : { tools: [...input.tools] }),
         maxTokens: this.config.maxTokens, sessionId: agent.session.id, purpose: 'compaction',
+        ...(effort === undefined ? {} : { reasoningEffort: effort }),
         ...(signal === undefined ? {} : { signal }),
       };
       const assembler = new BlockAssembler();
@@ -111,6 +140,8 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
       if (contentHasImage(rawOutput)) throw new LlmError('compaction summary cannot contain image output', 'UNSUPPORTED_CONTENT');
       const summary = rawOutput.filter(block => block.type === 'text');
       if (!summary.some(block => block.text.trim())) throw new Error('summarization produced no text summary content');
+      if (!hasSections(summary.map(block => block.text).join('\n')))
+        throw new Error('summary lacks sections of the checkpoint (cut short, or thinking spilled into it)');
       return { summary, rawOutput, llmStreamCall: true, provider: options.provider, model: options.model,
         maxTokens: this.config.maxTokens, ...(assembler.usage === undefined ? {} : { usage: assembler.usage }) };
     };
@@ -142,6 +173,18 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
     if (messages.length <= span || messages.slice(0, span).some((message, index) =>
       JSON.stringify(message) !== JSON.stringify(input.messages[index]))) return { ...size, reason: 'span is not the start' };
     return { ...size, messages, tail: messages.slice(span) };
+  }
+
+  /** The configured thinking level for the summary request when the model offers it; otherwise none, with one log line
+   * saying so. */
+  async summaryEffort(agent, target, signal) {
+    const level = this.summaryReasoningEffort;
+    if (!level || !this.ctx.llm.resolveModelInfo) return undefined;
+    const info = await this.ctx.llm.resolveModelInfo(target.provider, target.model, signal);
+    if (info?.reasoning?.efforts?.some(effort => effort.id === level)) return level;
+    this.ctx.logger?.info?.('compaction: ' + target.provider + '/' + target.model + ' offers no reasoning effort "' + level
+      + '"; the summary request names none in ' + agent.session.id);
+    return undefined;
   }
 
   /** One log line each time the summary request falls back to the replayed span alone, with the sizes it judged by,

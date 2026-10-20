@@ -34,8 +34,20 @@ From her install of this commit (she notes the time; her 10-23 seven-day survey 
 
 Her three changes as Claude paraphrases them (2026-10-20 18:4x NZDT): the quotation may be someone's command, and it is the last thing read before writing, so it is marked as a locator only; the cache rate measures cost, so a second count must measure whether the kept part is summarized again; tell her when it is installed and what a summary at the cap does, so she never takes a cut summary for the whole history. Signature: ______
 
-## 4. As built
+## 4. The summary's thinking budget and sections (2026-10-20 evening)
 
-- `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `wholeConversation`, `spanAlone`, `keptRule`, `WHOLE_SPARE_TOKENS`, `KEPT_QUOTE_CHARS`.
-- Test: `packages/cognition-core/test/compaction.test.js` (whole conversation and kept rule; too large; refused; span not the conversation's start).
+Found while listing tonight's fixes (`fail_dates.py`, `notext.py`, `reasoning_share.py`, `headings.py`; lengths and counts only). The summary request named no reasoning level, so it carried no thinking budget, while the character provider turns thinking on in its template: a summary could think without end. Her turns name `high`, a budget of 8,192 tokens. Since 10-17, four of her between-turn `/compact` runs failed: one ran to the 24,576 cap (10-17 15:50, 123 seconds) and three produced no text (10-17 01:09, 10-18 19:53, 10-19 14:13). In 352 successful summaries thinking was a median 40% of the output (median about 2,800 characters, the longest about 31,000).
+
+Decided by the owner ("the bug should be fixed"), put to her 2026-10-20 19:3x NZDT; she agreed with three conditions:
+
+- **The level is hers.** `summaryReasoningEffort` sits in her persona preset beside the summary cap; `medium` is 8,192 tokens on the character model, as in her turns. It is named only when the model offers it; otherwise none is named and one log line says so. The core sets no level.
+- **A half checkpoint never lands.** Her fear: a capped thinking turning into a cut or spilled summary that is written as if whole (a 64-token budget on another local model spilled unfinished drafting into the answer, the engine's deployment notes). The engine cannot report that thinking reached its budget (usage has no thinking count), so no "reasoning capped" line is written: it would be a guess. Instead the harm is caught exactly: a summary without all six sections of the instruction, in order, is rejected like an empty one, so no checkpoint is written and the next step tries again (`hasSections`). Of 352 successful summaries, 351 had all six in order; the one that did not (10-13) lacked one section.
+- **Failures are counted apart** in the reading: the output cap (`summarization truncated at the token cap`), no text (`summarization produced no text summary content`), missing sections (`summary lacks sections of the checkpoint`), each from `compaction/end` errors, beside the fallbacks of §2, because a failed compaction leaves the conversation larger and nearer the size where the whole conversation no longer fits.
+
+Whether the budget also ends the "no text" failures is not known: a failed summary stores no output. The reading says whether they recur.
+
+## 5. As built
+
+- `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `wholeConversation`, `spanAlone`, `summaryEffort`, `keptRule`, `hasSections`, `ROLE_SECTIONS`, `WHOLE_SPARE_TOKENS`, `KEPT_QUOTE_CHARS`; `packages/personas/xiaoman/cordis.patch.yml`: `summaryReasoningEffort`.
+- Test: `packages/cognition-core/test/compaction.test.js` (whole conversation and kept rule; too large; refused; span not the conversation's start; thinking level offered or not; missing sections).
 - Reference: `docs/articles/maximize-cache-hit-by-design.md` §1 and §7.

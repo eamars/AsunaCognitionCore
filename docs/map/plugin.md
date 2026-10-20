@@ -121,10 +121,13 @@ The two brains' collaboration thread in her conversation (ADR-011 §7.1).
 Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoint.
 
 - def `ROLE_COMPACTION_INSTRUCTION`
+- def `ROLE_SECTIONS` — The checkpoint's sections, in the order the instruction asks for them.
+- def `hasSections` — Whether a summary carries every section, in order.
 - def `keptRule` — The instruction's last rule when the summary request carries the retained tail: how many messages stay as they are, and the opening of the first one with text, quoted only to locate it.
 - class `RoleCompactionEngine`
   - `summarize`
   - `wholeConversation` — The whole conversation as the next request would send it, split after the replayed span, when the span is its start and the whole of it fits the window beside the summary cap; otherwise why not (`reason`), or undefined when there is no mete
+  - `summaryEffort` — The configured thinking level for the summary request when the model offers it; otherwise none, with one log line saying so.
   - `spanAlone` — One log line each time the summary request falls back to the replayed span alone, with the sizes it judged by, so a reading of compactions can tell the two shapes apart.
   - `pressure` — This engine's compaction threshold for the conversation's model, as DSH's basic engine resolves it (`resolveCompactSpec`), or undefined when the model declares no window.
   - `floorTokens` — Half of this engine's compaction threshold for the conversation's model, in DSH's own measure (ADR-049's size floor), or undefined when the model declares no window.

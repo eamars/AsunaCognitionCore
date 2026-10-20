@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Context } from '@deepseek-ai/cordis';
 import { CONTEXT_WINDOW_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm';
-import RoleCompactionEngine, { ROLE_COMPACTION_INSTRUCTION, inSteps } from '../src/compaction.js';
+import RoleCompactionEngine, { ROLE_COMPACTION_INSTRUCTION, ROLE_SECTIONS, hasSections, inSteps } from '../src/compaction.js';
+
+const CHECKPOINT = ROLE_SECTIONS.map(head => head + '\n- （无）').join('\n\n');
 
 // The role summary must reuse the replayed prefix byte for byte (provider cache)
 // and differ from DSH's request only in the final, Chinese instruction.
@@ -11,7 +14,7 @@ test('role compaction keeps the replayed prefix and asks for a Chinese role-play
   engine.config = { summarizationProvider: '', summarizationModel: '', maxTokens: 24576 };
   engine.ctx = { llm: { async *stream(options) {
     sent = options;
-    yield { type: 'text-delta', index: 0, text: '## 对话脉络\n- 聊到周末安排' };
+    yield { type: 'text-delta', index: 0, text: CHECKPOINT };
     yield { type: 'finish', reason: { kind: 'stop' } };
   } } };
   const prefix = [{ role: 'system', content: [{ type: 'text', text: 'render' }] },
@@ -24,7 +27,8 @@ test('role compaction keeps the replayed prefix and asks for a Chinese role-play
   assert.doesNotMatch(ROLE_COMPACTION_INSTRUCTION, /coding assistant|English/);
   assert.equal(sent.provider, 'p');
   assert.equal(sent.purpose, 'compaction');
-  assert.equal(result.summary[0].text, '## 对话脉络\n- 聊到周末安排');
+  assert.equal(result.summary[0].text, CHECKPOINT);
+  assert.equal(sent.reasoningEffort, undefined, 'no level configured: none named');
 
   engine.ctx.llm.stream = async function *() { yield { type: 'finish', reason: { kind: 'max-tokens' } }; };
   await assert.rejects(engine.summarize({ messages: prefix }, agent), { code: 'MAX_TOKENS' });
@@ -85,7 +89,7 @@ test('role compaction sends the whole conversation and names the kept tail, or t
         if (refuse && options.messages.length > span.length + 2) {
           throw Object.assign(new Error('too long'), { code: CONTEXT_WINDOW_EXCEEDED_CODE });
         }
-        yield { type: 'text-delta', index: 0, text: '## 对话脉络' };
+        yield { type: 'text-delta', index: 0, text: CHECKPOINT };
         yield { type: 'finish', reason: { kind: 'stop' } };
       },
     },
@@ -126,4 +130,46 @@ test('role compaction sends the whole conversation and names the kept tail, or t
   assert.equal(sent.length, 1);
   assert.equal(sent[0].length, 3);
   assert.match(logged.at(-1), /span is not the start/);
+});
+
+// The summary thinks at the persona's level when the model offers it, and a checkpoint missing a section is rejected.
+test('the summary request names the configured thinking level the model offers, and a summary must carry every section', async t => {
+  let sent, text = CHECKPOINT;
+  const logged = [];
+  const plugins = new Context();
+  t.after(() => plugins.fiber.dispose());
+  const engine = new RoleCompactionEngine(plugins, { maxTokens: 24576, summaryReasoningEffort: 'medium', auto: false });
+  assert.equal(engine.summaryReasoningEffort, 'medium', 'its own key, kept apart from the keys DSH checks');
+  assert.equal(engine.config.maxTokens, 24576);
+  assert.equal(RoleCompactionEngine.Config({ summaryReasoningEffort: 'medium' }).summaryReasoningEffort, 'medium');
+  let efforts = ['low', 'medium', 'high'];
+  engine.ctx = {
+    logger: { info: line => logged.push(line) },
+    llm: {
+      resolveModelInfo: async () => ({ reasoning: { efforts: efforts.map(id => ({ id, name: id })) } }),
+      async *stream(options) {
+        sent = options;
+        yield { type: 'text-delta', index: 0, text };
+        yield { type: 'finish', reason: { kind: 'stop' } };
+      },
+    },
+  };
+  const agent = { session: { id: 's', requestHeader: () => ({ config: { provider: 'p', model: 'm' } }), toolHistory: () => [] },
+    options: {} };
+  const input = { messages: [{ role: 'user', content: [{ type: 'text', text: '周末去哪' }] }] };
+  await engine.summarize(input, agent);
+  assert.equal(sent.reasoningEffort, 'medium');
+  assert.deepEqual(logged, []);
+
+  efforts = ['high'];
+  await engine.summarize(input, agent);
+  assert.equal(sent.reasoningEffort, undefined, 'a level the model does not offer is not named');
+  assert.match(logged.at(-1), /p\/m offers no reasoning effort "medium"/);
+
+  for (const broken of [CHECKPOINT.slice(0, CHECKPOINT.lastIndexOf('##')), ROLE_SECTIONS.slice().reverse().join('\n')]) {
+    text = broken;
+    await assert.rejects(engine.summarize(input, agent), /lacks sections/);
+  }
+  assert.ok(hasSections(CHECKPOINT));
+  assert.equal(ROLE_SECTIONS.length, 6);
 });

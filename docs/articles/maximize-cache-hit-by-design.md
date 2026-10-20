@@ -369,7 +369,9 @@ Two details in `compaction.js` are cache-aware:
   Otherwise, or when the model refuses it for its window, the compacted span alone is sent, and a span too large for
   one request is summarized in steps (`inSteps`). Each fallback writes one log line with its reason and the sizes
   it judged by (`spanAlone`).
-- A summary that reaches its cap is rejected: no checkpoint is written, and the next step tries again.
+- A summary that reaches its cap, or lacks any section the instruction asks for, is rejected: no checkpoint is
+  written, and the next step tries again. The summary request thinks at the level its persona preset names
+  (`summaryReasoningEffort`); the level is not part of the prompt, so it does not affect the cache.
 
 ### Thresholds leave room for the summary
 

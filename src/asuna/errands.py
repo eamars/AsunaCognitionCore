@@ -25,7 +25,8 @@ LINE_MARK = '差事：家里托你来说的'
 HOME_TASK = ('这件算家里的：结果回到家里那一拍，这个会话的上下文不跟过去；要说给这边，回家后再跑一趟差事。'
              '在那之前不要说已经做完。')
 # The tasks listed on an errand are that conversation's, which home's authority does not reach.
-NO_STEER = '差事回合不给任务补话、叫停：这里列的是这边的任务，家里的权限管不到；家里的任务回家里再补。'
+NO_STEER = ('差事回合不给任务补话、叫停：这里列的是这边的任务，家里的权限管不到，等交代它的人在这边叫你时再补；'
+            '家里的任务回家里再补。')
 STATES = {'late': '没赶上：那边排着的事办完时已经过了 %d 分钟，话题过去了，没发' % PATIENCE_MINUTES,
           'interrupted': '中途断了（重启）：%s'}
 TOLD_NOTE = ('这是你从家里出门来这里办的事：不是这里有人叫你，托你的话留在家里。这里列的是你当时在这里说的，'

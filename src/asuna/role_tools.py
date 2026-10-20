@@ -61,6 +61,8 @@ PLAN_ENDED = {'CANCELLED': '取消', 'SUSPENDED': '停', 'FIRED': '跑完', None
 # An errand turn hands new work home but does not steer the tasks listed there: they are that conversation's, which
 # home's authority does not reach (errands.NO_STEER). A reflection turn delegates as any home turn does.
 STEERING = ('task.message', 'task.stop')
+# Why think comes first, said where it is refused (her count, 2026-10-20: 153 refusals that gave no reason).
+THINK_FIRST = '先用 think 写下这回合的心里话，再做别的：它是你这一回合每一步的理由，存了档，之后回想得起来为什么这么做。'
 # What a task begun in a one-shot turn says: it belongs to home's own session, not to the one this turn runs in.
 REFLECTION_TASK = '结果回到家里那一拍，这个会话的上下文不跟过去；在那之前不要说已经做完。'
 # ADR-049: where she decides it: a visit, her own moments at home, and at home a turn a plan of hers woke (her rule:
@@ -973,7 +975,9 @@ def turn_pictures(store, ep):
 # fix; a code not listed here is passed on as it is (its own message says both).
 WORDS = {
     'DOC_WRITE_REQUIRES_OWNER_PRIVATE': '这份文档只能在家里（家里·私聊、主人私聊这类可信的对话）改。',
-    'GROUP_NOTES_ONLY_IN_ITS_GROUP': '群笔记在那个群里用 doc=group_notes 写，夜间整理时用列出的 doc 写；只能 append_section、replace_section 或 set_tags。',
+    'GROUP_NOTES_ONLY_IN_ITS_GROUP': ('群笔记是那个群自己的，在那个群的回合里读，所以在那个群里用 doc=group_notes 写；家里没有「这个群」。'
+                                      '从家里写，等夜间整理那一回合用它列出的 doc 名写；此刻要记，先用 ideas 的 note 记下。'
+                                      '只能 append_section、replace_section 或 set_tags。'),
     'NOTE_OVER_LIMIT': '这份笔记已经超出每回合上限很多了，先整理（改短、合并，或用 set_tags 把不常用的节收起来）再加新的。',
     'DOC_SECTION_NOT_FOUND': '没有这一节。',
     'DOC_BODY_REQUIRED': '这个操作要在 content 里写正文。',
@@ -1203,7 +1207,7 @@ class RoleTools:
             elif can not in (ep.get('turn_tools') or ()):
                 raise Refused(not_now(self.store, ep, can))
             if name != 'think' and not ep.get('turn_thought'):
-                raise Refused('先用 think 写下这回合的心里话，再做别的。')
+                raise Refused(THINK_FIRST)
             made = len(ep.get('tool_calls') or {}) + 1                # this call's number in the turn
             if made == CALLS_HARD:
                 from . import channel_kinds

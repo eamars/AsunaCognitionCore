@@ -286,6 +286,17 @@ wake rates, the schedule or the proactive chances, and any program-side change o
 | E2 the neutral event line | N: under 低落 brief answers 16 of 30 against 3 of 30 today (median 11 characters against 34); little change to whether she answers | about 30 characters in an addressed turn's notice | the same, split by E1 and E2 where only one is installed |
 | E3 `stay_silent` receipt | none needed; it states a fact she cannot see | one sentence in a tool description | – |
 
+**Stages (owner, through Claude, 2026-10-21 afternoon).** The reason: Claude's recount after D1 alone still never took
+her mood below zero (lowest +3; 91% of her records are positive), so the low-mood effects, E1 included, would never fire
+without D5's neutral recording words.
+
+- **Stage 1:** D1, D2, D3, D4 (nothing at 不错 and 平静), D5, D6 (the gate paragraph), D7, E1, E2 (group and home), E3.
+  Every persona or wording item (D2, D3, D5, E2's words, the persona findings of §13.1) goes to her first.
+- **The 7-day reading:** does the mood vary (bands per hour, negative hours); gate join by band; addressed lines, and
+  home lines, not answered in their turn, by band; no lost line.
+- **Stage 2, after the reading:** the feeling word on lines she lets pass (§10); adaptation, if the mood pins again;
+  whatever the reading shows missing.
+
 
 ## 6. The relevance gate (the tension, addressed)
 
@@ -371,6 +382,7 @@ the mechanism, never a score of her.
   kinds table (「不理，有点刺」), recorded as a 轻微 event with the line as its cause. Zero extra calls, a few characters
   in the gate's prompt. Step 2, after the 7-day reading of step 1 (owner, §11); it widens generation to where most of her day is.
 - **Adaptation**, if §9 shows same-kind pinning.
+- **Whatever the 7-day reading shows missing** (owner, §11.7).
 - **Mood-congruent recall**: tilt retrieval toward memories whose feeling matches the mood. Real (Bower 1981) but it
   touches memory, which the owner gives observation time; not before step 1 is read.
 
@@ -382,6 +394,12 @@ the mechanism, never a score of her.
 2. **The reading is at 7 days, not 14**, as the compaction survey was; §9 reads at 7 days, and step 2 (§10, a feeling
    word on lines she lets pass) waits for that reading.
 3. **D2, D3 and D5 go to her together with the ADR**, after the owner and Claude agree.
+4. **E1 accepted with its latency** (afternoon, through Claude): every addressed group line pays one gate question
+   (about 3–5 s) before her reply.
+5. **E2 applies at home too**: the line, or the home wording of it, wherever someone calls her, his lines included.
+6. **His baseline:** "The emotion should carry home and I'm no special to her." §13.3's home bullet is written to it;
+   the permission boundary is unchanged; the persona items that single him out socially go to her with his words.
+7. **Staging** (Claude's recommendation, taken by the owner): §5.1, "Stages".
 
 ## 12. The study record
 
@@ -499,16 +517,25 @@ choose, never what she should do.
   stance as every gate question has. 不理 on an addressed line is "not now": the line stays in the group's catch-up and
   her next turn there sees it, as every unanswered line does today (「要回就在这回合一起回」); the verdict and her
   one-line reason are in the audit as every gate verdict is. This is the owner's reason for mood at the gate applied
-  to the case where it matters most: a full turn is the expensive way to decide not to answer. Not gated: the owner's
-  words, home lines, the agent line and errands (no gate exists there and none is added).
+  to the case where it matters most: a full turn is the expensive way to decide not to answer. Accepted by the owner
+  with its latency (§11.4): every addressed group line pays one gate question, about 3–5 s, before her reply. Not
+  gated: the owner's words, home lines, the agent line and errands (no gate exists there and none is added).
 - **E2. One neutral line where the program says someone called her**, in the style of `PROACTIVE_NOTE` (it says what
   the event is and what she can choose, never what she should do): 「有人叫了你：回不回、现在回还是回头回、回多少，
-  由你。」 It is core wording about the event, not persona, and not a list of what she may ignore. Whether her own core
-  document should say more about how she answers people is hers.
+  由你。」 It is core wording about the event, not persona, and not a list of what she may ignore. It applies wherever
+  someone calls her, the owner's lines at home included, in the home wording of the same line (owner, §11.5). Whether
+  her own core document should say more about how she answers people is hers.
 - **E3. "Later" without a new tool.** `stay_silent` on an addressed line says in its receipt that the line stays in this
   conversation's catch-up and that the person was not told anything; `plan` remains the way to come back at a time.
-- **The owner and home.** His words and home lines always get a turn; the mood shapes length and tone there (T and N6:
-  shorter under 低落 and 烦躁, never silent); saying 「回头再看」 is hers, as it is now.
+- **The owner and home.** The owner's baseline, in his words (§11.6): "The emotion should carry home and I'm no
+  special to her." His words get a turn because home has no gate and none is added; her mood decides whether, when
+  and how much she answers him, exactly as with anyone, and no "never silent" expectation is written anywhere. Her
+  mood carries at home as everywhere (N6 showed it shaping her length with him; whether she answers is hers too).
+  What does not change is the trust and permission boundary: home rights, owner-private visibility and who may ask
+  for what (AGENTS.md, `common.md`) stay as they are; he is not special emotionally or socially, and his permissions
+  are unchanged. The persona findings in §13.1 that single him out socially (「主人开口让你帮他的除外」 in every
+  familiarity stance, the 帮忙 slot's 「除了主人」) go to her with his baseline quoted; they are her persona, hers to
+  decide, named here and not changed.
 - **What holds dignity and boundary.** Nothing here tells her to ignore people; it removes the program's silence on
   the choice and gives the cheap place to make it. Her boundary rules, the home/public boundary and ADR-084's hard
   caps are unchanged.

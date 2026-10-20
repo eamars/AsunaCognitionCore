@@ -7,9 +7,10 @@
 记录按写就时刻标、另起一行标计划首次真跑；不带个人信息（私密名单命中只报类别与行号，名单配不上、或名单在
 却解析出 0 条有效词，都记红）。
 
-读数守卫（2026-10-20 v5）：硬规矩 8「时刻基准」与 9「编号出处」各有字面锚（GUARDS），另有两条
-结构判据——这两条必须是硬规矩里编号 8、9 那两条（guards_in_hard_rules），且每条底下带
-「什么算违反」那一行（guards_have_violation_line）。
+读数守卫（2026-10-20：v5 两条、v6 三条）：硬规矩 8「时刻基准」、9「编号出处」与 10「字段缺了」各有字面锚
+（GUARDS），另有三条结构判据——这三条必须是硬规矩里编号 8、9、10 那三条（guards_in_hard_rules）、每条底下带
+「什么算违反」那一行（guards_have_violation_line）、关键句必须待在各自本体里而不是只活在版本／试用记录里
+（guards_words_in_place——v5 反证 ② 露的洞：字面锚会被文档别处的引用喂饱）。
 
 行号锚点：一律红（2026-10-15 定的规矩，仓库共用测试 tests/test_skill_anchors.py 查的是同一条）。v3 曾为
 六格① 的代码位置开过四处白名单，2026-10-17 撤掉：代码位置写 `文件:函数名`，行号会随每次编辑漂走、不算锚点。
@@ -263,8 +264,9 @@ TABLES = [
     ("hard_no_stale_numbers", "当天会旧的数不写进这份技能"),
 ]
 
-# 读数守卫（2026-10-20 v5）：硬规矩 8「时刻基准」、9「编号出处」——每条查几句只有照写出来才会出现的字面，
-# 另加两条结构判据（在 main 里）：这两条必须是硬规矩里编号 8、9 那两条，且每条底下带「什么算违反」那一行。
+# 读数守卫（2026-10-20 v5 两条、v6 三条）：硬规矩 8「时刻基准」、9「编号出处」、10「字段缺了」——每条查几句
+# 只有照写出来才会出现的字面，另加三条结构判据（在 main 里）：这三条必须是硬规矩里编号 8、9、10 那三条、
+# 每条底下带「什么算违反」那一行、关键句必须在本体里（guards_words_in_place，防字面锚被别处引用喂饱）。
 GUARDS = [
     ("guard_time_heading", "**时刻基准**"),
     ("guard_time_offset_cell", "① 用的偏移量"),
@@ -282,7 +284,22 @@ GUARDS = [
     ("guard_id_made_up", "编号是顺手补出来的"),
     ("guard_id_source_task", "task-5b399a9567c3e25d64bb33eabe11bf9c"),
     ("guard_id_real_task", "task-d9aab3742eaed3695ba873b44b30c14f"),
-    ("guard_weekly_run", "两个守卫各过一遍"),
+    ("guard_field_heading", "**字段缺了**"),
+    ("guard_field_two_questions", "先判两件事，再决定报不报修"),
+    ("guard_field_read_literal", "去读落盘那段代码的字面"),
+    ("guard_field_zero_key", "值为 0 就不写键"),
+    ("guard_field_structure", "这类调用结构上能不能有这个值"),
+    ("guard_field_two_cleared", "两条都排除，才谈「记录丢了」或「服务器没返回」"),
+    ("guard_field_anchor_mapusage", "packages/llm/llm-pi-ai/src/stream.ts:mapUsage"),
+    ("guard_field_literal_ternary", "usage.cacheRead > 0"),
+    ("guard_field_comment_nonzero", "appear only when non-zero"),
+    ("guard_field_anchor_addusage", "packages/bundle/headless/src/json-stream.ts:addUsage"),
+    ("guard_field_comment_summed", "an optional bucket is summed only when every contribution reports it"),
+    ("guard_field_two_causes", "缺键有两种成因"),
+    ("guard_field_raw_log", "那是改动不是读数，先问值不值"),
+    ("guard_field_scope_unverified", "哪条 route 走哪个 provider 适配器"),
+    ("guard_field_no_raw_switch", "原始响应日志开关我没找到现成的"),
+    ("guard_weekly_run", "三个守卫各过一遍"),
 ]
 
 # 版本与试用记录：日期一律写就时刻，计划真跑另起一行
@@ -299,6 +316,8 @@ VERSION = [
     ("trial_v4", "2026-10-19 18:54 写就 v4"),
     ("ver_v5_written", "v5（写就 2026-10-20"),
     ("trial_v5", "写就 v5"),
+    ("ver_v6_written", "v6（写就 2026-10-20"),
+    ("trial_v6", "写就 v6"),
 ]
 
 # 被核掉／改掉的旧字面：留在正文里就说明那一格没真改
@@ -534,27 +553,31 @@ def main():
     check("six_cells_marked",
           all(("\n**%s " % m) in body for m in "①②③④⑤⑥"), "六格各有一行 **① … 起头")
 
-    # 读数守卫（2026-10-20 v5）：两条必须待在「## 一、硬规矩」里、编号是 8 和 9，且每条底下带
-    # 「什么算违反」那一行。挪到别的章节、改成正文里一句话、把编号去掉、或删掉「什么算违反」，都红。
+    # 读数守卫（2026-10-20 v5 两条、v6 三条）：三条必须待在「## 一、硬规矩」里、编号是 8、9 和 10，
+    # 且每条底下带「什么算违反」那一行。挪到别的章节、改成正文里一句话、把编号去掉、或删掉那一行，都红。
     hard = (body.split("## 一、硬规矩", 1)[-1].split("## 二、来源和口径", 1)[0]
             if "## 一、硬规矩" in body else "")
     check("guards_in_hard_rules",
           bool(re.search(r"^8\. \*\*时刻基准\*\*", hard, re.M)
-               and re.search(r"^9\. \*\*编号出处\*\*", hard, re.M)),
-          "「## 一、硬规矩」里缺编号 8「时刻基准」或 9「编号出处」——挪走、改标题或掉编号都红")
+               and re.search(r"^9\. \*\*编号出处\*\*", hard, re.M)
+               and re.search(r"^10\. \*\*字段缺了\*\*", hard, re.M)),
+          "「## 一、硬规矩」里缺编号 8「时刻基准」／9「编号出处」／10「字段缺了」——挪走、改标题或掉编号都红")
 
     def guard_segment(head):
+        # 段＝从这一条的开头到下一条（任意位数编号）的开头；最后一条到硬规矩那节结束为止。
+        # 旧写法 rest[1:] 只当编号是一位数，10 号会被「0. **」误判成下一条、段长只剩一个字符（v6 撞上的）。
         found = re.search(r"(?m)^%s" % head, hard)
         if not found:
             return ""
-        rest = hard[found.start():]
-        nxt = re.search(r"(?m)^\d\. \*\*", rest[1:])
-        return rest[:nxt.start() + 1] if nxt else rest
+        rest = hard[found.end():]
+        nxt = re.search(r"(?m)^\d+\. \*\*", rest)
+        return hard[found.start():found.end() + nxt.start()] if nxt else hard[found.start():]
 
     check("guards_have_violation_line",
           "什么算违反" in guard_segment(r"8\. \*\*时刻基准\*\*")
-          and "什么算违反" in guard_segment(r"9\. \*\*编号出处\*\*"),
-          "硬规矩 8／9 里缺「什么算违反」那一行——守卫必须写清什么算违反，否则只是口号")
+          and "什么算违反" in guard_segment(r"9\. \*\*编号出处\*\*")
+          and "什么算违反" in guard_segment(r"10\. \*\*字段缺了\*\*"),
+          "硬规矩 8／9／10 里缺「什么算违反」那一行——守卫必须写清什么算违反，否则只是口号")
 
     # 反证 ②（2026-10-20）露的洞：把硬规矩 8 里「按 +13 和 +8 各换一次」改掉，自检照绿——
     # 因为同一句在「试用记录」里被引了一遍，字面锚就满足了。关键句必须待在守卫本体里才算。
@@ -562,8 +585,18 @@ def main():
           all(phrase in guard_segment(r"8\. \*\*时刻基准\*\*")
               for phrase in ("① 用的偏移量", "按 +13 和 +8 各换一次", "不进账、不拿去对夜锚、不拿去排作息"))
           and all(phrase in guard_segment(r"9\. \*\*编号出处\*\*")
-                  for phrase in ("从哪个文件／哪张集合的哪个字段读到的", "「编号未证」，不许当入口引用")),
-          "守卫的关键句必须写在硬规矩 8／9 那两条本体里——只在试用记录里出现一遍不算（反证 ② 做过）")
+                  for phrase in ("从哪个文件／哪张集合的哪个字段读到的", "「编号未证」，不许当入口引用"))
+          and all(phrase in guard_segment(r"10\. \*\*字段缺了\*\*")
+                  for phrase in ("先判两件事，再决定报不报修", "去读落盘那段代码的字面", "值为 0 就不写键",
+                                 "这类调用结构上能不能有这个值", "两条都排除，才谈「记录丢了」或「服务器没返回」",
+                                 "appear only when non-zero",
+                                 "an optional bucket is summed only when every contribution reports it",
+                                 "usage.cacheRead > 0",
+                                 "packages/llm/llm-pi-ai/src/stream.ts:mapUsage",
+                                 "packages/bundle/headless/src/json-stream.ts:addUsage",
+                                 "缺键有两种成因", "那是改动不是读数，先问值不值")),
+          "守卫的关键句（含 10 号那两处落盘字面与两处注释原话）必须写在硬规矩 8／9／10 那三条本体里——"
+          "只在版本或试用记录里出现一遍不算（v5 反证 ② 露的洞；v6 反证 ④ 又露一次：只列关键句、不列注释原话，删掉本体里那句照样绿）")
 
     # 文档节名锚点（2026-10-20）：找不到就红并报出 SKILL.md 行号与那一行原文；
     # 那份文档找不到 → UNCHECKED（没查），不算过也不判红。
@@ -657,7 +690,7 @@ def main():
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
     print("%d/%d 通过：来源口径、六格口径（含跨类拷贝去重四条）、三处坑、八条判据、三张表（含样例表标记）、"
-          "版本写就时刻与计划真跑日都在，两条读数守卫（时刻基准／编号出处）各带「什么算违反」，v1／v2 退役字面没残留%s。（只查文件本身，外加把 usage_readout.py 的离线模式真跑了一遍；没读过会话记录和库。）"
+          "版本写就时刻与计划真跑日都在，三条读数守卫（时刻基准／编号出处／字段缺了）各带「什么算违反」，v1／v2 退役字面没残留%s。（只查文件本身，外加把 usage_readout.py 的离线模式真跑了一遍；没读过会话记录和库。）"
           % (total, total, anchor_note + leak))
     return 0
 

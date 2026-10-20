@@ -135,7 +135,7 @@ description: 我每七天跑一次的「用量读数」：读三张表——① 
 - 起点＝本地 **2026-10-16 00:00**（Pacific/Auckland，UTC+13，即 `2026-10-15T11:00:00Z`），终点＝读的那一刻（本次计划 10-23 20:30）。**是「10-16 到 10-23 这七天」，不是滚动的「往前七天」**。这条来路是 Claude 10-16 21:06 转达主人的话——**是转达，不是主人字面**。
 - 切法：`tasks` 用 `created_at`、`audit_events` 用 `occurred_at`、**会话文件按每一行的 `time`（整数毫秒）切，不按整个文件切**（941 个文件里 915 个首行 `createdAt` ≠ 首条消息 `time`，5 个差超 60 秒；起点前创建、起点后还在写的有 20 个，整文件切会漏）。
 - **窗口内行数当天就在涨**：10-17 上午那趟 3528 行，同一趟再数 3780 行。对数前先对读的时刻。
-- audit 超 30 天清（`role_tool` 留一年），七天窗口不受影响。
+- audit 超 30 天清（`role_tool` 留一年），七天窗口不受影响。；**清理那一趟怎么对账见第五节末「审计清理对账怎么读（`audit.pruned`）」**。补一刀：八处被拒里除 `role_tool`（留 365 天）外，比 `occurred_at` 早于 30 天的都被删掉了——窗口往前挪之前先想这一格。
 - 筛时间用 `asuna.dbread` 的 `local_window`；`development_database_read` 显示的是本地无年份字符串、过滤却跟 UTC 比。
 - **档位相关的读数只有本地 10-16 20:56 之后有意义**（首件带 `tier` 的任务 `created_at=2026-10-16T07:56:38Z`）。
 
@@ -210,6 +210,44 @@ description: 我每七天跑一次的「用量读数」：读三张表——① 
 2. **压缩那一行确实被数了两次**（v2 标「疑似、未核」，本次查到成因）：压缩行没有 `data.message.id`，只能按 usage 组合判——**74 个 usage 组合同时出现在 `asuna-role-` 与 `session-` 两个前缀下**（10-17 11:08 数 74/309，同一趟再数 74/311），带这些行的网页界面会话都是 `isSeeded=true` 带 `parentSession` 的那 4 个。组合相同＝**推断**为同一次调用（没有 id 可证）；去重时它靠口径第 2 条（`time` 早于本会话 `createdAt`）落回拷贝那一格。
 3. **`review.tools_week` 库里现读已有 1 行**（10-17 18:24 现读 `audit_events` 里 `type=review.tools_week` 1 行，我 18:39 那趟再读仍是 1 行）——v2 那趟读到 0 行、写下「第一份周读数约 10-23 才有」，这一格按现读更正，别照抄上一版。它的窗口仍是 `[这条记录 occurred_at − 7 天, occurred_at)`、不写进 payload。
 
+### 审计清理对账怎么读（`audit.pruned`）
+
+来路（这一节为什么存在）：2026-10-21 那趟只读对账 `task-beede3c8bfb6e318c1c634206541472f`（来源：`tasks._id` 逐字；`created_at`／`finished_at` 显示 10/21 09:30／09:37，那是 `development_database_read` 的本地钟面显示、本机 UTC+13；同一趟我自己那把尺的原始 UTC 是 `2026-10-20T20:40:32Z` → +13 是 10-21 09:40:32、+8 是 10-21 04:40:32）。那一趟查出两格我自己踩过的：**我 10-20 用的 `seq` 空洞法对这类删除天生是瞎的**；**我在自己的交代里把库里 `+00:00` 结尾的 UTC 串当本地钟读了**（本机 Auckland，UTC+13，差 13 小时）。这两格不写进来，下次还得重新踩。
+
+代码字面读自 `src/asuna/audit.py:prune`（10-21 那趟在 core 候选里逐行看过：`RETENTION_DAYS=30`、`KEPT_DAYS={'role_tool':365}`、`CAP_BYTES=6*10**9` 都在那个文件里）。
+
+**① `by` 是「按规则计数」，不是列表**
+
+- 字面：`before,by=cutoff,{'time':deleted} if deleted else {}`；size 那条规则另写 `by['size']=…`。
+- 30 天那条与 `role_tool` 365 天那条是两次 `delete_many`，**两个 `deleted_count` 相加之后才写进同一个 `time` 键**——**哪条规则删的，分不开**。
+- `by={}` ＝ 这一轮两条时间规则都没删到（size 那条也没触发，否则 `by` 里会多一个 `size` 键）。
+- 库里现读（10-21 那趟，`audit_events` 里 `type=audit.pruned`）：带 `payload.by.size` 的 **0 行**——`size` 键只有代码字面，真数据里还没出现过，别把它写成实测见过的形状。
+
+**② 对账要两把硬尺**
+
+- 尺一：`collStats` 的 `wiredTiger.cursor` 里那个 **`remove calls`**。**不在 `metrics` 下**——同一份 `collStats` 里根本没有 `metrics` 块（现读 `s.get('metrics')` → None）。它**每个集合各算一份**（`wiredTiger.uri` 形如 `statistics:table:collection-…`；我拿另一个集合并排比过：审计这一格 `remove calls` 5159，另一格 0）。**mongod 重启就归零**（推断：计数器在进程里；重启归零这一格我没实测过），所以「一个窗口覆盖多次删除」只在没重启时成立——对账前先确认 mongod 没重启过。
+- 尺二：**前缀缺口** `Σ(min(seq)−1)`，只算 `min>1` 的在世 stream。
+- 两把尺不是一回事，别互相校：同一趟现读 `remove calls` 5159（与那两轮 `deleted` 之和 3891＋1268 逐字相等），前缀缺口只有 **1065**（6 条在世 stream）。**整条 stream 被删光的，前缀缺口看不见**——尺二是**下界**，要总数只能靠尺一。
+
+**③ `seq` 空洞法 `Σ(max−min+1−n)` 只能证「没删过」，不能证「删了多少」**
+
+- 为什么：prune 按 `occurred_at` 删最老＝**永远删前缀**，前缀删除在存活区间里**不留洞**。
+- 实测：10-20 那两轮真删 5,159 条（`by` 分别是 `{"time":3891}` 与 `{"time":1268}`），同一趟空洞法仍是 **0**（153,778 条在世 stream 全扫）。
+- 用法：空洞 >0 → 一定有非前缀的删除（不是 prune 干的）；空洞 =0 → 什么都证不了。
+
+**④ `payload.records` 的前后差会被并发写入污染**
+
+- 字面：`records:[first.get('count',0),last.get('count',0)]`，`first` 是函数开头那次 `collStats`、`last` 是删完之后那次——中间别的写入照常进来。
+- 实测：那两行 `deleted` 3891 对 `records` 差 3886、`deleted` 1268 对差 1263——**两轮各少 5 条，合起来 10 条**。
+- 所以**以 `deleted` 为准**，前后差只当旁证。
+
+**⑤ `CAP_BYTES=6e9` 比的是未压缩 `size`，不是盘上字节**
+
+- 字面：`if stats.get('size',0)>cap`，`size` 是 collStats 的未压缩文档字节合计。
+- 实测（同一趟）：`size` 3,285,465,453（3.29 GB 十进制）时 `storageSize` 只有 1,673,015,296（＝1.56 GiB，snappy 压过）。**报体积两个都给**，只给一个就有人当盘上字节读。
+
+**顺手一句：`aggregate` 必须显式传大 limit，并检查回执里有没有 `more`。** `dbread.aggregate` 默认 `limit=50`（`LIMIT=50`），超出只回前 50 行、不报错，只在回执里多一句 `more`；上限又被 `MOST=500` 夹住，传 100000 也只回 500——要更多只能把管道聚合成 500 行以内（上面那两把尺就是把 `$group` 收到 1 行再取的）。这一格 10-21 又差点咬人。
+
 ## 六、没验过的／待样本的（照实列，别美化）
 
 - 行动脑那 2 个目录为什么库里缺行（首行 `createdAt` 10-03、10-04，各只有 1 行）——**未查明**。
@@ -228,6 +266,8 @@ description: 我每七天跑一次的「用量读数」：读三张表——① 
 ## 版本
 
 计划首次真跑：2026-10-23 20:30（本地）。下面每一版的日期都写**写就时刻**，不是计划跑数的日子——v2 那版把版本日期写成 10-23，那是「要真跑的那一天」，不是写就日。
+
+v8（写就 2026-10-21 09:44 +13）：第五节末加一小节「审计清理对账怎么读（`audit.pruned`）」——五条写死（`by` 是按规则计数／两把硬尺／空洞法只能证「没删过」／`records` 前后差被并发写入污染／`CAP_BYTES` 比的是未压缩 `size`）＋一句「`aggregate` 必须显式传大 limit 并查回执有没有 `more`」；六格⑥ 那行「audit 超 30 天清」补一句指向它，并写明八处被拒里除 `role_tool` 外都受 30 天规则影响。来路是 10-21 09:30 那趟只读对账（`task-beede3c8bfb6e318c1c634206541472f`）：`seq` 空洞法对前缀删除是瞎的，以及我自己把 UTC 串当本地钟读了。代码字面读自 `src/asuna/audit.py:prune`，库里的数与两把尺是 10-21 09:40 现读（时刻见试用记录）。八条判据、六格口径本体、三张表、三条读数守卫、`usage_readout.py` 与 `check_skill.py` 都没动。
 
 v7（写就 2026-10-20 19:12 +13）：只修锚点形状，口径没动。硬规矩 10 与 v6 试用记录里那两处代码位置 packages/llm/llm-pi-ai/src/stream.ts:mapUsage、packages/bundle/headless/src/json-stream.ts:addUsage 是**上游 DSH 仓库那份检出**里的路径、不在本仓库，所以去掉反引号、明写上游——仓库测试 `test_skill_anchors` 只把以 src/ tools/ tests/ packages/ docs/ config/ 开头的反引号片段当本仓库锚点查。补一条本机装好就能核的 `node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js:mapUsage`（文件＋函数名，不写行号）。第二节「缺 `cacheReadTokens`」那句收窄成「适配器只在值 >0 时写键，不等于 provider 没报这个字段」，「缺字段按 0 算是推断」原话留着。
 
@@ -254,3 +294,5 @@ v1（写就 2026-10-16 21:21）：首次落盘，只写读法，**没跑数**—
 
 - 2026-10-20 18:35（+13）写就 v6：本次**没出正式周读数**，跑的是读代码、自检与反证。落盘字面是读来的不是猜的（读 DSH 那份检出，路径＋函数名照抄）：packages/llm/llm-pi-ai/src/stream.ts:mapUsage 的 `...usage.cacheRead > 0 ? { cacheReadTokens: usage.cacheRead } : {}` 与注释「cache fields appear only when non-zero (pi-ai reports zeros, not absence)」；packages/bundle/headless/src/json-stream.ts:addUsage 的 `...cacheReadTokens === undefined ? {} : { cacheReadTokens }` 与注释「an optional bucket is summed only when every contribution reports it」；`TokenUsage` 声明里 `cacheReadTokens?: number` 是 optional。结构那一问有出处也有反例：ADR-076 那份研究记过「单发会话缺键是真 0、不是记录缺口」，同一份研究按 lane 实测门 34.5%、摘要 0.9–2.8%——**所以「结构上不可能命中」既不能当成记录坏了，也不能反过来把那一类报成 0%**，要连那一类自己的实测数一起报（写进 10 号的「什么算违反」）。自检 `check_skill.py` 294/294 绿（改前 277 条；泄露检查真跑本机名单 63 条、0 命中；文档节名锚点核过 2 条）。反证六例（脚本 `.tmp/run_ce.py`，每例一份副本、副本目录名照技能名，否则 `name_matches_directory` 会假红），六例该红的各红在该条：① 删掉 10 号的「什么算违反」那一行 → 292/294、红在 `guards_have_violation_line`＋`guards_words_in_place`（那句「那是改动不是读数，先问值不值」就写在被删的那一行里）；同一例里 `guard_field_raw_log` 反倒绿——被删那行里的句子本条也引了一遍，字面锚又被别处喂饱，这一格是本体判据那一格替它兜住的；② 去掉「10. **字段缺了**」的编号 → 291/294、红在 `guards_in_hard_rules`（连带另两条结构判据）；③ **上一趟那个洞重做**：把 10 号本体里的「先判两件事，再决定报不报修」改写成「先分两步看，再决定要不要报修」，而「先判两件事，再决定报不报修」这句原话就写在本条里——只靠字面锚（把 `guards_words_in_place` 里 10 号那一格摘掉）照绿 294/294、RC 0，扩回去才红在该条（293/294）；④ 把注释原话从 10 号**整条本体**里删干净（① 那一处＋「来路」那一处）、试用记录里仍留着 → 293/294、红在 `guards_words_in_place`。**这一例第一版抓不住**：只删 ① 那一处时自检照绿——同一句还写在 10 号自己的「来路」里（那算本体，绿得对），而 10 号那一格当时只列了五条判据句、没列注释原话；按交代补判据（那一格扩到 12 句）才红。⑤ 整条 10 号删掉 → 289/294、五条齐红（`guards_in_hard_rules`、`guards_have_violation_line`、`guards_words_in_place`、`guard_field_two_cleared`、`guard_field_two_causes`；`guard_field_raw_log` 那句本条还引着，所以那一格绿）；⑥ 把两处落盘代码字面从本体删干净、试用记录留着 → 293/294、红在 `guards_words_in_place`。**洞的重演靠 ③b／④b／⑥b**：同一份改坏的文档，把自检里 10 号那一格摘掉（只剩字面锚）就 294/294、RC 0 全绿——字面锚确实被本条里的引用喂饱，真抓住的是本体判据那一格。`guard_segment` 那个旧 bug 也是这次撞出来的：10 号写进去后先红在 `guards_have_violation_line`／`guards_words_in_place` 两格（段长只剩一个字符「1」），修完才 294/294。反证全在 `.tmp` 临时副本上做（`check_skill.py <副本路径>`），真文件没动过，`.tmp` 用完清空。本机钟面这一趟实测（照硬规矩 8 写）：原始 `2026-10-20T05:19:45Z` → +13 是 10-20 18:19、+8 是 10-20 13:19。
 - 2026-10-20 19:12（+13）写就 v7：本次**没出正式周读数**，只修锚点形状。仓库测试 `tests/test_skill_anchors.py`（扫 `packages/**/skills/*/SKILL.md`）红在我那两处上游路径被当成本仓库锚点：no such file ×4（同一对出现在硬规矩 10 与 v6 试用记录各一次）。改法照上条：去反引号＋明写上游，另补本机装好的那份——`node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js` 里的 `mapUsage`，本机这一份亲眼核过同一句三元式（`usage.cacheRead > 0 ? { cacheReadTokens: usage.cacheRead } : {}`）。自检 `check_skill.py` 294/294 照绿（字面锚没动）。本机钟面（照硬规矩 8）：原始 `2026-10-20T06:12:38Z` → +13 是 2026-10-20 19:12、+8 是 2026-10-20 14:12。
+
+- 2026-10-21 09:44（+13）写就 v8：本次**没出正式周读数**，跑的是审计清理那一格的现读核对。现读清单：`audit_events` 里 `type=audit.pruned` 最新 6 行（全 `deleted:0`、`by={}`）＋`payload.deleted>0` 的 2 行（`by` 是 `{"time":3891}`／`{"time":1268}`，`records` 分别 `[1554646,1550760]`、`[1574255,1572992]`）；`payload.by.size` exists → **0 行**；`collStats`：`count` 1,606,646、`size` 3,285,465,453、`storageSize` 1,673,015,296、`avgObjSize` 2044、`metrics` → None、`wiredTiger.cursor` 的 `remove calls` **5159**（另一个集合同一格 0）；两把尺：前缀缺口 1065（6 条在世 stream）、空洞法 0（153,778 条 stream）。读的时刻（原始 UTC → 两种换算）：`2026-10-20T20:40:32Z` → +13 是 10-21 09:40:32、+8 是 10-21 04:40:32；`2026-10-20T20:40:58Z` → +13 是 10-21 09:40:58、+8 是 10-21 04:40:58。分寸：`remove calls` 重启归零那一格是推断，没实测过重启。 自检 `check_skill.py` 294/294 绿（`check_skill.py` 本次一个字没动，判据条数没变；泄露检查真跑了本机名单 63 条、0 命中；文档节名锚点核过 2 条，那份文档在仓库根）。发布后要用 `version_probe.py` 第五步在跑着的那份包里搜这一节的关键句，那一次读数写进行动报告，技能里这一格等下一次再补。

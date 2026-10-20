@@ -41,7 +41,9 @@ Three properties follow from how this works, at every provider:
 - **Reuse resumes from a stored point.** Engines store the state at certain points (checkpoints or cache blocks), and
   a request can resume only from a stored point that it *fully extends*. On the local engine of the owner's deployment, the
   stored points are the end of the system prompt (tools included), the end of each assistant turn, and every 16K
-  tokens. Hosted APIs use fixed-size blocks; the principle is the same.
+  tokens, and it keeps only the latest few of them. A request that shares a long prefix but stops in the middle of the
+  history can find no stored point near where it stops, and resumes from much earlier. Hosted APIs use fixed-size
+  blocks; the principle is the same.
 - **Order is fixed by the protocol.** The system prompt comes first, then the tool definitions, then the history, then
   the new message. Many local engines render the tool definitions into the system message through the chat template;
   hosted APIs take tools as a separate field and place them ahead of the messages. Either way, tools sit *before* the
@@ -358,9 +360,15 @@ always a full miss.** Compacting less often is a cache gain in itself, which is 
 
 Two details in `compaction.js` are cache-aware:
 
-- `summarize` sends the conversation's own replayed prefix, with the same tools, and swaps only the final instruction,
-  so the summary request itself reads from the cache.
-- A span too large for one summary request is summarized in steps (`inSteps`).
+- `summarize` sends the whole conversation, the kept tail included, with the same tools, and then the instruction.
+  The request extends exactly what was last read, so it reads from the cache up to its last message; a request that
+  sent only the compacted span would stop mid-history (section 1). The instruction's last rule (`keptRule`) names
+  the kept tail: how many messages stay after the checkpoint, and the opening of the first one, quoted only to locate
+  it. DSH still chooses what is compacted and what is kept.
+- The whole conversation is sent only when it fits the window beside the summary cap (`wholeConversation`).
+  Otherwise, or when the model refuses it for its window, the compacted span alone is sent, and a span too large for
+  one request is summarized in steps (`inSteps`).
+- A summary that reaches its cap is rejected: no checkpoint is written, and the next step tries again.
 
 ### Thresholds leave room for the summary
 
@@ -625,11 +633,18 @@ A checklist for review:
 | Turn ceiling and limits | `src/asuna/context_budget.py` (ADR-014, ADR-063) |
 | Local clock at the tail | `src/asuna/local_time.py`: `for_model` |
 | Lines appended, held lines | `packages/cognition-core/src/navigation.js`: `recordChannelInput`; `pairing.js` |
-| Compaction | `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `pressure`, `floorTokens`, `inSteps`; thresholds in `packages/cognition-core/cordis.patch.yml` and each persona package's `cordis.patch.yml` |
+| Compaction | `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `wholeConversation`, `keptRule`, `pressure`, `floorTokens`, `inSteps`; thresholds in `packages/cognition-core/cordis.patch.yml` and each persona package's `cordis.patch.yml` |
 | Carry to a new session | `packages/cognition-core/src/carry.js`: `overflowed`, `lastSummary`, `carrySession`; `src/asuna/native_worker.py`: `BusinessWorker.carry_session` (ADR-028) |
 | Early condensing | `src/asuna/condense.py`; `index.js`: `compactSession`, `conversationSize` (ADR-049) |
 | Relevance gate, summaries | `src/asuna/attend.py`, `packages/cognition-core/src/attend.js`, `summary.js`; `native_worker.gate_session_id` |
 | Retiring one-shot sessions | `tools/asuna-launch.mjs`: `retireOneShotSessions` |
 | Errand copy | `src/asuna/errands.py`; `native_worker.errand_session`; `index.js`: `errandSession`, `completedPrefix`, `ERRAND_ROOM`, `ensureAgent` (`copy`), `retireErrand` (ADR-066) |
 | DSH mechanisms | `@deepseek-ai/dsh-session/fork` `buildForkSeed`; `@deepseek-ai/dsh-llm` `SystemPromptUpdate`, `ToolUpdate`; `@deepseek-ai/dsh-agent-loop` `SystemPromptProjection`; `@deepseek-ai/dsh-compaction-basic` |
-| Decisions | ADR-014 (context budget), ADR-028 (carry), ADR-032 (section places), ADR-038 (fixed tool lists), ADR-049 (quiet-time upkeep), ADR-052 (switches), ADR-055 (fewer tools), ADR-056 (per-turn characters), ADR-063 (context growth defects), ADR-066 (errand carries home) |
+| Decisions | ADR-014 (context budget), ADR-028 (carry), ADR-032 (section places), ADR-038 (fixed tool lists), ADR-049 (quiet-time upkeep), ADR-052 (switches), ADR-055 (fewer tools), ADR-056 (per-turn characters), ADR-063 (context growth defects), ADR-066 (errand carries home), ADR-085 (summary request sends the whole conversation) |
+
+---
+
+## Latest change
+
+The character's summary request sends the whole conversation and names the kept tail, so it reads from the cache up
+to its last message (section 7, ADR-085).

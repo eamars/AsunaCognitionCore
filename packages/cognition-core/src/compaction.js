@@ -115,30 +115,40 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
         maxTokens: this.config.maxTokens, ...(assembler.usage === undefined ? {} : { usage: assembler.usage }) };
     };
     const whole = await this.wholeConversation(input, agent, target, signal);
-    if (whole) {
+    if (whole?.messages) {
       try { return await once(whole.messages, whole.tail); }
-      catch (error) { if (!overflowed(error)) throw error; }
-    }
+      catch (error) { if (!overflowed(error)) throw error; this.spanAlone(agent, 'refused for the window', whole); }
+    } else if (whole) this.spanAlone(agent, whole.reason, whole);
     const [head, body] = input.messages[0]?.role === 'system'
       ? [input.messages.slice(0, 1), input.messages.slice(1)] : [[], input.messages];
     return inSteps(head, body, messages => once(messages));
   }
 
   /** The whole conversation as the next request would send it, split after the replayed span, when the span is its
-   * start and the whole of it fits the window beside the summary cap; otherwise undefined. */
+   * start and the whole of it fits the window beside the summary cap; otherwise why not (`reason`), or undefined when
+   * there is no meter or window to judge by. */
   async wholeConversation(input, agent, target, signal) {
     const session = agent.session;
     const meter = this.ctx.tokenMeter;
     if (!session.surface?.nodes || !meter || !this.ctx.llm.resolveModelInfo) return undefined;
     const info = await this.ctx.llm.resolveModelInfo(target.provider, target.model, signal);
     const window = info?.context?.contextWindow;
-    if (!window || meter.measure(session).totalTokens + WHOLE_SPARE_TOKENS + this.config.maxTokens > window) return undefined;
+    if (!window) return undefined;
+    const size = { tokens: meter.measure(session).totalTokens, window };
+    if (size.tokens + WHOLE_SPARE_TOKENS + this.config.maxTokens > window) return { ...size, reason: 'too large' };
     const messages = session.surface.nodes.map(seq => session.deriveEventMessage(session.eventAt(seq)))
       .filter(message => message !== null);
     const span = input.messages.length;
     if (messages.length <= span || messages.slice(0, span).some((message, index) =>
-      JSON.stringify(message) !== JSON.stringify(input.messages[index]))) return undefined;
-    return { messages, tail: messages.slice(span) };
+      JSON.stringify(message) !== JSON.stringify(input.messages[index]))) return { ...size, reason: 'span is not the start' };
+    return { ...size, messages, tail: messages.slice(span) };
+  }
+
+  /** One log line each time the summary request falls back to the replayed span alone, with the sizes it judged by,
+   * so a reading of compactions can tell the two shapes apart. */
+  spanAlone(agent, reason, { tokens, window }) {
+    this.ctx.logger?.info?.('compaction: summary request sends the compacted span alone (' + reason + '; conversation ~'
+      + tokens + ' tokens, summary cap ' + this.config.maxTokens + ', window ' + window + ') in ' + agent.session.id);
   }
 
   /** This engine's compaction threshold for the conversation's model, as DSH's basic engine resolves it

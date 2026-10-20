@@ -367,7 +367,8 @@ Two details in `compaction.js` are cache-aware:
   it. DSH still chooses what is compacted and what is kept.
 - The whole conversation is sent only when it fits the window beside the summary cap (`wholeConversation`).
   Otherwise, or when the model refuses it for its window, the compacted span alone is sent, and a span too large for
-  one request is summarized in steps (`inSteps`).
+  one request is summarized in steps (`inSteps`). Each fallback writes one log line with its reason and the sizes
+  it judged by (`spanAlone`).
 - A summary that reaches its cap is rejected: no checkpoint is written, and the next step tries again.
 
 ### Thresholds leave room for the summary

@@ -58,10 +58,11 @@ VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send 
 ERRAND_FROM = ('external', 'scheduled', 'note')
 # How a plan that can no longer be changed ended, in her words (one table for every plan refusal that names it).
 PLAN_ENDED = {'CANCELLED': '取消', 'SUSPENDED': '停', 'FIRED': '跑完', None: '失效'}
-# What a task needs, which an errand turn does not carry (errands.NO_DELEGATE).
-DELEGATING = ('delegate', 'task.message', 'task.stop')
-REFLECTION_NO_DELEGATE = ('这一回合是反思回合，跑在一个回合结束就收起来的会话里：交给行动脑的事会比它活得长，做完没处回报。'
-                          '要行动脑做的，下一回合在家里交，或者现在记一个 plan 到时候交。')
+# An errand turn hands new work home but does not steer the tasks listed there: they are that conversation's, which
+# home's authority does not reach (errands.NO_STEER). A reflection turn delegates as any home turn does.
+STEERING = ('task.message', 'task.stop')
+# What a task begun in a one-shot turn says: it belongs to home's own session, not to the one this turn runs in.
+REFLECTION_TASK = '结果回到家里那一拍，这个会话的上下文不跟过去；在那之前不要说已经做完。'
 # ADR-049: where she decides it: a visit, her own moments at home, and at home a turn a plan of hers woke (her rule:
 # nobody there is waiting for her to speak); never in a group or someone else's chat, where someone is.
 CONDENSE_TURNS = ('visit', 'presence', 'self_development', 'settlement')
@@ -636,12 +637,12 @@ def exposed(store, ep):
     from . import switches
     off = switches.tools_off(store, ep['scene_id'])          # ADR-052: still listed (a stable list), not usable
     return [name for name in dict.fromkeys(_turn_rules(store, ep)) if name in listed and name.split('.')[0] not in off
-            and not (_one_shot(ep) and name in DELEGATING)]
+            and not (ep.get('errand') and name in STEERING)]
 
 
 def _one_shot(ep):
-    """An errand or a reflection turn: it runs in a session archived when the turn ends, so work handed to the action
-    brain would outlive it with nowhere to report."""
+    """An errand or a reflection turn: it runs in a session archived when the turn ends, so work it hands to the action
+    brain belongs to home's own session (Coordinator.delegate)."""
     from . import self_review
     return bool(ep.get('errand')) or self_review.reflecting(ep.get('context'))
 
@@ -868,11 +869,9 @@ def not_now(store, ep, name):
     kind = turn_kind(ep)
     if kind == CONSULT:
         return CONSULT_ONLY
-    if ep.get('errand') and name in DELEGATING:
-        from .errands import NO_DELEGATE
-        return NO_DELEGATE
-    if _one_shot(ep) and name in DELEGATING:
-        return REFLECTION_NO_DELEGATE
+    if ep.get('errand') and name in STEERING:
+        from .errands import NO_STEER
+        return NO_STEER
     if kind == 'note' and name == 'errand':
         return ERRAND_NOTE
     if kind in ('note', 'visit') and name not in ('note', 'feel', 'watch', 'read_image'):
@@ -1782,12 +1781,14 @@ class RoleTools:
             except ValueError as exc:
                 raise Refused(str(exc))
         task = self.coordinator.delegate(ep, call_id, title, brief, tier=tier)
+        from .errands import HOME_TASK
         from .tasks import queue_words
         return {'task': task['_id'], 'state': '已交给行动脑',
                 **({'tier': task['tier_words']} if task.get('tier_words') else {}),
                 'action_brain': '新开一份上下文：它只看得到这次的 brief 和对方的原话。',
                 'queue': queue_words(self.store, task['_id']),
-                'note': '结果回来会再叫你；在那之前不要说已经做完。'}, False
+                'note': (HOME_TASK if ep.get('errand') else REFLECTION_TASK if _one_shot(ep)
+                         else '结果回来会再叫你；在那之前不要说已经做完。')}, False
 
     def _own_task(self, ep, task_id):
         if not isinstance(task_id, str) or not task_id:

@@ -50,3 +50,10 @@ reflection turn delegated, the job lost its parent when the session was archived
 and the turn was left waiting. `delegate` and `task` message and stop are now refused there with words saying to hand
 it over in her next home turn or as a plan (`role_tools.REFLECTION_NO_DELEGATE`). The stuck turn was settled
 (`episode.settled`).
+
+## A reflection turn delegates (owner and her, 2026-10-20)
+
+A reflection turn may hand work to the action brain and steer or stop its tasks. The task runs under home's own
+session (the reflection session's `home_session_id`), not the reflection's, which is retired when the turn ends: on
+2026-10-17 such a job lost its parent and was blocked. Its report opens a turn at home; the reflection's own context
+does not follow, and the delegate result says so, in her words.

@@ -20,9 +20,12 @@ OPENING = '家里交代的，带着家里的全部权限；你说出口的话那
 MARK = '差事回合，家里的权限'
 # Her own lines sent on an errand, wherever she reads them back.
 LINE_MARK = '差事：家里托你来说的'
-# A task outlives the turn and reports back in the destination's own conversation, where home's authority does not go.
-NO_DELEGATE = ('差事回合带的家里权限只到这一回合为止：交给行动脑的事会比这一回合活得长，结果回到这边的对话里，'
-               '家里的权限跟不过去。要行动脑做的事回家交；这里只说话。')
+# A task begun on an errand is home's (owner and her, 2026-10-20): home's authority lasts this turn only, so its report
+# comes home, where that authority holds, and she carries the result back with another errand.
+HOME_TASK = ('这件算家里的：结果回到家里那一拍，这个会话的上下文不跟过去；要说给这边，回家后再跑一趟差事。'
+             '在那之前不要说已经做完。')
+# The tasks listed on an errand are that conversation's, which home's authority does not reach.
+NO_STEER = '差事回合不给任务补话、叫停：这里列的是这边的任务，家里的权限管不到；家里的任务回家里再补。'
 STATES = {'late': '没赶上：那边排着的事办完时已经过了 %d 分钟，话题过去了，没发' % PATIENCE_MINUTES,
           'interrupted': '中途断了（重启）：%s'}
 TOLD_NOTE = ('这是你从家里出门来这里办的事：不是这里有人叫你，托你的话留在家里。这里列的是你当时在这里说的，'

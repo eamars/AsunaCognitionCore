@@ -68,11 +68,30 @@ def test_the_errand_turn_acts_with_homes_authority_and_its_thoughts_stay_home(st
     assert results and all(row.get('turn') == errands.MARK for row in results), lane.tool_results
 
 
-def test_a_task_does_not_carry_homes_authority_past_the_turn(store):
+def test_a_task_begun_on_an_errand_is_homes_and_its_report_comes_home(store):
+    """Owner and her, 2026-10-20: home's authority lasts the turn, so the task is home's; its report comes home and
+    names the place, so she can carry the result back with another errand. Steering that conversation's tasks stays out."""
     service = group_world(store)
-    _, ep, _, _ = sent_on_errand(store, service)
-    assert not set(role_tools.DELEGATING) & set(ep['turn_tools'])
-    assert role_tools.not_now(store, ep, 'delegate') == errands.NO_DELEGATE
+    home_ep, ep, lane, _ = sent_on_errand(store, service, calls=[('delegate', {'title': '查开会的地方', 'brief': '查一下'})])
+    assert 'delegate' in ep['turn_tools'] and not set(role_tools.STEERING) & set(ep['turn_tools'])
+    assert role_tools.not_now(store, ep, 'task.message') == errands.NO_STEER
+    [(result, ok)] = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'delegate']
+    assert ok and result['note'] == errands.HOME_TASK, result
+    task = store.db.tasks.find_one({'_id': result['task']})
+    assert (task['scene_id'], task['scope_key'], task['policy_epoch']) == (
+        home_ep['scene_id'], home_ep['scope_key'], home_ep['policy_epoch'])
+    assert task['requester_id'] == ep['errand']['person_id'] and task['errand_place'] == places.place_id(ep['scene_id'])
+    # Its report opens a turn at home, saying where the errand was.
+    from asuna.tasks import TaskService
+    service_tasks = TaskService(store)
+    claimed = service_tasks.claim(task['_id'])
+    done = store.put('tasks', {**claimed, 'state': 'RETURNED', 'feedback_state': 'READY',
+                               'result': {'task_id': task['_id'], 'intent_revision': 1, 'text': '在三楼会议室。',
+                                          'facts': [], 'artifact_refs': []}}, expected=claimed['revision'])
+    report = service_tasks.feedback(done, Coordinator(store, FakeLane(store, [FakeTurn([THINK], '查到了。')])))
+    assert report['state'] == 'COMMITTED' and report['scene_id'] == home_ep['scene_id'], report.get('failure')
+    said = store.db.messages.find_one({'_id': 'in-' + report['_id']})
+    assert '托话的那边是 %s' % task['errand_place'] in said['text']
 
 
 def test_the_destination_hears_once_what_she_said_never_the_request(store):

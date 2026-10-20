@@ -414,8 +414,11 @@ class TaskService:
             depth=original.get('delegation_depth',0)+1
             event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 task 的 message。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],**_why_then(self.store,task),'value':shown(bounded_result(task.get('result'))) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
             source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0], 'scope_key':task['scope_key'], 'policy_epoch':task['policy_epoch']})
-            if original.get('native_session_id'):
-                event['native_session_id']=original['native_session_id']
+            # The session the task belongs to (home's own for one begun on an errand or in a reflection).
+            if task.get('native_session_id') or original.get('native_session_id'):
+                event['native_session_id']=task.get('native_session_id') or original['native_session_id']
+            if task.get('errand_place'):
+                event['text']+='这件是差事带出来的，托话的那边是 %s（errand 的 place 照抄它）。'%task['errand_place']
             if source and source.get('event', {}).get('group_context'):
                 event['group_context'] = source['event']['group_context']
             # 原样回传那个值：窄授权任务的反馈回合也要拿得到它，否则 task 的 message 会被判成授权不一致。

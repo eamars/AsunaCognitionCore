@@ -150,3 +150,11 @@ Her points, all folded in above:
 6. Row 7's "a handful a week" is a premise to re-measure, not a fact.
 
 Signed: 小满, 2026-10-15 (on the agent line: 「我这段是我签的」).
+
+## A task begun on an errand is home's (owner and her, 2026-10-20)
+
+An errand turn may delegate. The task is home's: its conversation, scope, epoch and person are home's, and it runs
+under home's own session, so its thread and its report are drawn there, where home's authority holds. The report
+names the errand's place (`errand_place`), so she can carry the result back with another errand; the delegate result
+says so (`errands.HOME_TASK`). Steering the tasks listed on an errand stays out (`errands.NO_STEER`): they are that
+conversation's. Her condition: without the place in the report, the extra hop would become a hop that never runs.

@@ -615,8 +615,13 @@ class Coordinator:
 
     def delegate(self, ep, call_id, title, brief, tier=None):
         """A new task: the action brain's first message is her brief (§4). `tier` (ADR-075): (tier, why) she chose."""
+        from . import places
         from .grants import workspace_grant
-        workspace_grant(self.store.config,ep['scene_id'],ep['person_id'])
+        # A task begun on an errand is home's, and one begun in a reflection runs under home's own session: both turns
+        # run in a session retired when they end, which a task would outlive (owner and her, 2026-10-20).
+        home=ep.get('errand') or ep
+        session=self._task_session(ep)
+        workspace_grant(self.store.config,home['scene_id'],home['person_id'])
         task_id='task-'+sha(canonical([ep['_id'],call_id]))[:32]
         task=self.store.db.tasks.find_one({'_id':task_id})
         said=None
@@ -631,18 +636,34 @@ class Coordinator:
             with database_effects_lock(self.store.name):
                 require_current_feedback(self.store, ep)
                 task=self.store.put('tasks',{'_id':task_id,'request_key':task_id,'thread':task_id,'episode_id':ep['_id'],
-                    'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],
-                    'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],
+                    'scene_id':home['scene_id'],'scope_key':home['scope_key'],'requester_id':home['person_id'],
+                    'policy_epoch':home['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],
                     'intent_revision':1,'goal':title,'title':title,'brief':brief,'constraints':[],
                     'raw_input_refs':raw,'state':'READY','fencing_token':0,'tool_steps':0,
                     'integration_profile':integration,'development_grant':development,
-                    'allowed_capabilities':names,'native_session_id':ep.get('native_session_id'),
+                    'allowed_capabilities':names,'native_session_id':session,
+                    **({'errand_place':places.place_id(ep['scene_id'])} if ep.get('errand') else {}),
                     **({'tier':tier} if tier else {}),'created_at':now()},stream=ep['_id'])
             self.crash('after_task_persist')
         fresh=self.store.db.episodes.find_one({'_id':ep['_id']})
         self._update(fresh,task_ids=[*dict.fromkeys([*(fresh.get('task_ids') or []),task_id])])
         self.collab(task,'message',{'from':'character','text':brief,'title':title},entry_id='brief:'+task_id)
         return {**task,**({'tier_words':said} if said else {})}
+
+    def _task_session(self, ep):
+        """The role session a task of this turn belongs to: its own, or home's live one for a one-shot turn."""
+        session=ep.get('native_session_id')
+        if not role_tools._one_shot(ep):
+            return session
+        if ep.get('errand'):
+            home=self.store.db.episodes.find_one({'_id':ep['errand']['from']},{'native_session_id':1}) or {}
+            found=home.get('native_session_id')
+        else:
+            side=self.store.db.sessions.find_one({'_id':session},{'reflection':1}) if session else None
+            found=((side or {}).get('reflection') or {}).get('home_session_id')
+        if not found and session:
+            raise role_tools.Refused('家里的会话这会儿找不到（不是你的错）：这件回家再交，或者记一个 plan 到时候交。')
+        return found or session
 
     def _zone(self, ep):
         from .schedule_rules import scene_timezone

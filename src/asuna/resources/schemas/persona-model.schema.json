@@ -230,6 +230,16 @@
                   "positive",
                   "negative"
                 ]
+              },
+              "about": {
+                "enum": [
+                  "person"
+                ]
+              },
+              "arousal": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8
               }
             }
           }
@@ -254,6 +264,9 @@
               "face": {
                 "type": "string",
                 "maxLength": 300
+              },
+              "quiet": {
+                "type": "boolean"
               }
             }
           }
@@ -326,6 +339,15 @@
               }
             }
           }
+        },
+        "paragraph": {
+          "type": "boolean"
+        },
+        "gate": {
+          "enum": [
+            "paragraph",
+            "none"
+          ]
         }
       },
       "if": {
@@ -545,8 +567,16 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "label": {"type": "string", "minLength": 1, "maxLength": 60},
-                "stance": {"type": "string", "minLength": 1, "maxLength": 300}
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60
+                },
+                "stance": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                }
               }
             }
           }

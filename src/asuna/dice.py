@@ -55,7 +55,7 @@ REVIEW_ROLLS = 60
 REVIEW_DAYS = 14
 QUIET_CHARS = 80
 REVIEW_NOTE = ('这是上次复盘以来每一掷的原始读数（最多最近 60 掷、14 天），没替你总结：at 几点，roll 掷到什么，'
-               'reached 叫没叫你，tools 那拍用了哪些工具几次，said 那拍说了几句，quiet 你安静时写的理由；'
+               'reached 叫没叫你，mood 那拍你的心情档位，tools 那拍用了哪些工具几次，said 那拍说了几句，quiet 你安静时写的理由；'
                'counts 是各面掷到几次；tables 是你现在两张表。要调就 set_policy heartbeat.dice_awake 或 '
                'heartbeat.dice_asleep；想要一种新的拍，跟开发者说。')
 
@@ -169,11 +169,18 @@ def review(store, persona, occurrence, moment=None):
     rows = list(store.db.audit_events.find(rolled, {'occurred_at': 1, 'payload': 1})
                 .sort('occurred_at', -1).limit(REVIEW_ROLLS))[::-1]
     out = []
+    from .affect import AffectLedger, first_rule
+    model, policy = model_and_policy(store, persona)
+    ledger = AffectLedger(store, persona, model, policy)
     for row in rows:
         p = row['payload']
         item = {'at': row['occurred_at'], 'roll': NAMES.get(p.get('outcome'), p.get('outcome')),
                 'period': PERIOD_WORDS.get(p.get('period'), p.get('period')),
                 'reached': '叫了你' if p.get('reaches') else '没叫你'}
+        if ledger.enabled:
+            # ADR-086 D7: the band at that beat, so she can see her own mood-behaviour pairs when she retunes.
+            band = first_rule(ledger.model.get('bands', []), ledger.projection(row['occurred_at'])) or {}
+            item['mood'] = band.get('label') or '平静'
         lost = p.get('lost') or {}
         if lost:                               # a 'nothing' beat that still reached her, and why
             item['why'] = '、'.join(([LOST_WORDS['waiting_groups'] % lost['waiting_groups']] if lost.get('waiting_groups') else [])
@@ -192,7 +199,6 @@ def review(store, persona, occurrence, moment=None):
                 if ep.get('silent_reason'):
                     item['quiet'] = excerpt(' '.join(str(ep['silent_reason']).split()), QUIET_CHARS)
         out.append(item)
-    model, policy = model_and_policy(store, persona)
     return {'rolls': out, 'counts': dict(collections.Counter(item['roll'] for item in out)),
             'tables': {PERIOD_WORDS[period]: words(weights_for(model, policy, period)) for period in KEYS},
             **({'since_at': last['occurred_at']} if last else {}), 'note': REVIEW_NOTE}

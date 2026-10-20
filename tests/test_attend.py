@@ -34,7 +34,11 @@ def test_parse_takes_only_the_two_answers():
     odd = attend.parse('我觉得可以说两句')
     assert odd['choice'] == 'quiet' and odd['unparsed'] == '我觉得可以说两句'
     assert attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'name_called'}})
-    assert not attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'mentioned_account'}})
+    # ADR-086 E1: an @ or a reply to her is asked too; what exists to wake her is not.
+    assert attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'mentioned_account'}})
+    assert attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'reply_to_character'}})
+    assert not attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'awaited_answer'}})
+    assert not attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'watched'}})
     assert not attend.gated({'kind': 'dm'}, {'group_context': {'wake_reason': 'proactive_unprompted'}})
 
 
@@ -91,7 +95,7 @@ def test_a_line_changed_while_the_gate_thinks_still_gets_its_turn(store):
     character = FakeLane(store, [FakeTurn([('think', {'thought': '他在回我。'}), ('stay_silent', {'why': '不用说'})])])
     coordinator = Coordinator(store, character)
     coordinator.attend = Chunked(store, FakeLane(store, [LaneResult('接话：他在回我')]))
-    ep = coordinator.ingest(gated_event(20002, '没有这东西', 'awaited_answer'), persona='P1')
+    ep = coordinator.ingest(gated_event(20002, '没有这东西', 'reply_in_active_topic'), persona='P1')
     assert ep['state'] == 'COMMITTED' and ep['attend']['choice'] == 'join'
     assert [call['phase'] for call in character.calls] == ['TURN']
     message = store.db.messages.find_one({'_id': 'in-' + ep['_id']})
@@ -123,13 +127,46 @@ def test_each_gate_question_has_its_own_session_and_its_repairs_stay_in_it():
     assert gate_session_id('c:g:1:P1', 'ep-1:ATTEND:0:fix-1') == first
 
 
-def test_addressed_messages_skip_the_gate(store):
+def test_an_addressed_line_is_asked_at_the_gate_and_stays_visible_when_let_pass(store):
+    """ADR-086 E1: an @ or a reply to her meets the gate; 不理 is "not now": the line keeps its row, its verdict and
+    her reason are in the audit, and the catch-up of her next turn there still shows it."""
+    from asuna.attend import recent
     setup(store)
-    character = FakeLane(store, [FakeTurn([('think', {'thought': '有人 @ 我，看到了，不用说。'}),
-                                           ('stay_silent', {'why': '不用说'})])])
+    character = FakeLane(store, [])                                   # no full turn runs
+    coordinator = Coordinator(store, character)
+    coordinator.attend = FakeLane(store, [LaneResult('不理：这会儿没劲头，回头再说')])
+    ep = coordinator.ingest(gated_event(20004, '@演示 在吗', 'mentioned_account'), persona='P1')
+    assert ep['state'] == 'COMMITTED' and ep['attend']['choice'] == 'quiet' and character.calls == []
+    asked = coordinator.attend.calls[0]['messages'][-1]['content']
+    assert '有人 @ 了你' in asked and '被 @ 了也可以不理' in asked
+    message = store.db.messages.find_one({'_id': 'in-' + ep['_id']})
+    assert message['processing_outcome'] == 'ATTEND_QUIET' and message['attend']['reason'] == '这会儿没劲头，回头再说'
+    assert store.db.audit_events.find_one({'stream_id': ep['_id'], 'type': 'attend.verdict', 'payload.choice': 'quiet'})
+    scene = store.db.scenes.find_one({'_id': SCENE})
+    lines, _ = recent(store, scene, message['scene_seq'])
+    assert any('在吗' in line for line in lines), lines                 # her next look here still shows it
+
+
+def test_a_gate_that_cannot_answer_an_addressed_line_falls_back_to_the_full_turn(store):
+    """ADR-086 E1, her condition: a failed gate on an @ is not her 不理; the turn runs as before the gate asked."""
+    setup(store)
+    character = FakeLane(store, [FakeTurn([('think', {'thought': '有人 @ 我。'}), ('stay_silent', {'why': '不用说'})])])
+    coordinator = Coordinator(store, character)
+    coordinator.attend = Boom()
+    ep = coordinator.ingest(gated_event(20004, '@演示 在吗', 'mentioned_account'), persona='P1')
+    assert [call['phase'] for call in character.calls] == ['TURN'] and ep['state'] == 'COMMITTED'
+    assert ep['attend']['choice'] == 'failed' and 'attend_from_program' not in ep['context']
+    assert store.db.audit_events.find_one({'stream_id': ep['_id'], 'type': 'attend.fallback'})
+    assert store.db.messages.find_one({'_id': 'in-' + ep['_id']})['processing_outcome'] == 'ATTEND_FAILED'
+
+
+def test_what_exists_to_wake_her_is_not_gated(store):
+    """ADR-086 E1, her condition: a reply to what she waits for runs the full turn without a gate question."""
+    setup(store)
+    character = FakeLane(store, [FakeTurn([('think', {'thought': '他在回我。'}), ('stay_silent', {'why': '不用说'})])])
     coordinator = Coordinator(store, character)
     coordinator.attend = FakeLane(store, [])
-    ep = coordinator.ingest(gated_event(20004, '@演示 在吗', 'mentioned_account'), persona='P1')
+    ep = coordinator.ingest(gated_event(20002, '没有这东西', 'awaited_answer'), persona='P1')
     assert [call['phase'] for call in character.calls] == ['TURN'] and 'attend' not in ep
     assert ep['state'] == 'COMMITTED' and coordinator.attend.calls == []
 
@@ -198,7 +235,7 @@ def test_a_line_she_waits_on_gets_one_look_at_the_asked_persons_next_line(store)
     store.db.messages.insert_one({'_id': 'in-look', 'schema_version': 1, 'scene_id': SCENE, 'scene_seq': 902, 'direction': 'inbound',
                                   'author': 'qq:20002', 'event': {'group_context': {'wake_reason': 'awaited_answer'}}})
     assert not awaited_answer(store, scene, 'qq:20002', [], None)               # one look per line of hers
-    assert attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'awaited_answer'}})
+    assert not attend.gated({'kind': 'group'}, {'group_context': {'wake_reason': 'awaited_answer'}})   # ADR-086 E1: it wakes her
 
 
 def test_the_gate_reads_her_core_her_notes_here_and_what_she_wrote_of_the_speaker_cut_the_same_every_time(store):

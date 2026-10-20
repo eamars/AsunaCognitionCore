@@ -102,6 +102,7 @@ AFFECT_FIELDS = {
     'why': _s('来由'),
     'cost': _s('代价，可省略'),
     'open': {'type': 'boolean', 'description': '没解决、要挂着的事写 yes'},
+    'who': _s('对谁的心情（种类是对人的那几种时）：照抄对方的标签；一对一的对话里不写就是对方。群里不写，这笔就算进你整体的心情'),
 }
 
 # ADR-079 §9.4: one way to point at a line, in every tool: its number in this conversation, or 这条.
@@ -298,7 +299,8 @@ TOOLS = {
     'feel': {
         'description': ('记心情：do=record 记一笔（只用 how_to_record_from_program 里的词）'
                          '；close 事情了结；void 前提不成立（写 why）；对情感评估的提案用 accept、decline 或 edit 逐条决定（proposal_id 照抄）'
-                         '。有触动才记。'),
+                         '。心里有起伏就记，好的坏的都记；记下来才算进心情。强度照实给，多数日常起伏是「轻微」。'
+                         '对人的那几种心情记在那个人身上，不算进整体心情。'),
         'parameters': {
             'op': _s('做什么（不写时：有 feeling 就是 record）', enum=['record', 'close', 'void', 'accept', 'decline', 'edit']),
             **AFFECT_FIELDS,
@@ -673,7 +675,7 @@ def _turn_rules(store, ep):
             # Reading her own questions and notebook carries nothing home (owner 2026-10-20); writing stays behind the
             # delay and her second look at home, through the notebook, which she can now check before adding to it.
             names += ['ask.read', 'ideas.read']
-        if context.get('affect_from_program'):
+        if context.get('how_to_record_from_program'):       # the ledger is on (the mood itself may be quiet, ADR-086)
             names.append('feel')
         if (first or {}).get('owner_line') and context.get('errand_places_from_program'):
             names.append('errand')
@@ -726,7 +728,7 @@ def _turn_rules(store, ep):
     elif kind not in ('presence', 'settlement', 'self_development', 'visit', 'note') and (
             context.get('understanding_update_from_program') or {}).get('available'):
         names.append('understand_person')
-    if context.get('affect_from_program'):
+    if context.get('how_to_record_from_program'):           # the ledger is on (the mood itself may be quiet, ADR-086)
         names.append('feel')
     names.append('plan')
     from . import notices
@@ -1081,6 +1083,23 @@ _HAN = __import__('re').compile(r'[一-鿿]')        # a detail written in words
 
 
 NO_REASON = '（没写为什么）'
+# ADR-086 E2/E3: someone called her. Her wording (her review, 2026-10-21): what she can choose, never what to do.
+CALLED_NOTE = '有人叫了你。回不回、什么时候回、回多少，由你定；先放着也可以，只是对方不会知道。'
+CALLED_LEFT = '这句留在这里的对话里，下回合还看得到；对方不会收到任何提示。想回头回就挂一条 plan。'
+CALLED_REASONS = ('mentioned_account', 'reply_to_character', 'name_called', 'catchup_mention')
+
+
+def called(ep):
+    """Whether this turn is someone calling her: an addressed group line, or a person's line in a one-to-one
+    conversation (home, a private chat, a line); never a heartbeat, a visit, a note or a task's hand-back."""
+    event = ep.get('attend_event') or (ep.get('context') or {}).get('event') or {}
+    kind = ep.get('episode_kind', 'external')
+    if kind != 'external':
+        return False
+    group = (event.get('group_context') or {}) if isinstance(event, dict) else {}
+    if group.get('wake_reason'):
+        return group['wake_reason'] in CALLED_REASONS
+    return bool(ep.get('person_id'))
 # Her pokes and reactions in her history: the program's words, marked as what she did (ADR-064 phase 2, her words).
 ACTION_MARK = '（你做的动作，不是你说的话）'
 # ADR-079: a line's number in her conversation (〔318〕) is for choosing what to point at, never for her words.
@@ -1431,13 +1450,16 @@ class RoleTools:
         reason = self._text(args, 'reason', 1000, required=False) or NO_REASON
         ep = self.coordinator._update(self._fresh(ep), silent={'reason': reason})
         from . import channel_kinds
+        out = {'silent': True, 'note': '这回合到此结束。'}
+        if called(ep) and not int((ep.get('reply') or {}).get('parts') or 0):
+            # ADR-086 E3: a line someone addressed to her, left unanswered: what that means, in facts she cannot see.
+            out['left'] = CALLED_LEFT
         if channel_kinds.reply_parts(ep['scene_id']):
             # ADR-064 phase 2 (her condition): how many parts reply queued this turn, 0 included.
             parts = int((ep.get('reply') or {}).get('parts') or 0)
-            return {'silent': True, 'note': '这回合到此结束。',
-                    'sent': 'speak 这回合发了 %d 条。' % parts if parts else '这回合 speak 一条都没发。'}, True
+            return {**out, 'sent': 'speak 这回合发了 %d 条。' % parts if parts else '这回合 speak 一条都没发。'}, True
         # The Host adds what this turn has written so far (`written`), a fact she cannot read back herself.
-        return {'silent': True, 'note': '这回合到此结束。'}, True
+        return out, True
 
     def tool_credential(self, ep, call_id, args):
         from . import credentials
@@ -2243,8 +2265,9 @@ class RoleTools:
         op, cls, key = args.get('op') or ('record' if args.get('kind') else None), self._cls(ep), 'feel:' + call_id
         fields = {k: v for k, v in args.items() if k in AFFECT_FIELDS and v is not None}
         if op == 'record':
+            fields, landed = self._feel_who(ep, fields, ledger)
             row = ledger.record(ep, 0, fields, cls, key=key)
-            return {'event_id': row['_id'], 'feeling': kind_label(ledger.model, row.get('kind'))}, False
+            return {'event_id': row['_id'], 'feeling': kind_label(ledger.model, row.get('kind')), 'landed': landed}, False
         if op in ('close', 'void'):
             event_id = self._text(args, 'event_id', 300)
             why = self._text(args, 'why', 500, required=op == 'void')
@@ -2263,6 +2286,29 @@ class RoleTools:
             return {'proposal_id': item['proposal_id'], 'decision': item['decision'],
                     'event_id': row['_id'] if row else None}, False
         raise Refused('do 是 record、close、void、accept、decline 或 edit%s；只记一笔心情时写 feeling 和 intensity 就行。' % _given(args, 'op'))
+
+    def _feel_who(self, ep, fields, ledger):
+        """ADR-086 D1: a feeling of a person kind lands with that person. `who` is resolved from the label she wrote;
+        in a one-to-one conversation an unwritten `who` is the person there; in a group an unwritten one stays in
+        the global mood (a guess would put false state on a real person). Returns (fields, where it landed)."""
+        from .affect import kind_key, person_kinds
+        kind = kind_key(ledger.model, fields.get('kind'))
+        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        if kind not in person_kinds(ledger.model):
+            if fields.get('who'):
+                raise Refused('「%s」不是对人的心情，不用写 who；去掉 who 再记。' % kind_label(ledger.model, kind))
+            return fields, '算进了你的心情'
+        from .people import People
+        people = People(self.store, ep['persona'])
+        if fields.get('who'):
+            found = people.resolve(scene, fields['who'])
+            if len(found) != 1 or not found[0].get('person'):
+                raise Refused('who「%s」%s；照抄这回合里对方的标签（如 [名字 #4]），或者不写。'
+                              % (fields['who'], '对得上不止一个人' if len(found) > 1 else '不是这个对话里的人'))
+            return {**fields, 'who': found[0]['person']}, '记在了对%s的心情里' % people.label(found[0])
+        if scene.get('kind') != 'group' and ep.get('person_id') and ep['person_id'] != people.self_id:
+            return {**fields, 'who': ep['person_id']}, '记在了对%s的心情里' % people.speaker(scene, ep['person_id'])
+        return {k: v for k, v in fields.items() if k != 'who'}, '没写对谁，算进了你的心情'
 
     def tool_plan(self, ep, call_id, args):
         from . import schedule_rules

@@ -231,7 +231,11 @@ Affect ledger and projection (ADR-009 ARCHITECTURE §6).
 - def `kind_key` — A kind given by key or by its display label.
 - def `kind_label`
 - def `from_words` — A feeling recorded in words → the numeric event the ledger stores.
+- def `readable_here` — Whether a contribution's cause may be read in this conversation: home reads every reason; outside, those recorded here or written for everywhere (ADR-009 §2.2, ADR-018 §6).
+- def `paragraph` — ADR-086 D4: the mood as one paragraph: the band's face, up to two causes she may read here, the pull of the strongest kind.
 - def `interpret` — Projection → the words she reads (no numbers).
+- def `person_kinds` — The kinds the persona marks as feelings toward a person (ADR-086 D1).
+- def `person_feelings` — Her live feelings toward one person, from that person's projection: the strongest PERSON_FEELINGS_SHOWN, each the feeling and how long ago; at home its reason too.
 - def `recording_guide` — How she records a feeling, in words.
 - def `affect_model` — Persona model ``affect`` merged over core defaults, with policy overrides for affect.* keys.
 - class `AffectError`
@@ -240,6 +244,7 @@ Affect ledger and projection (ADR-009 ARCHITECTURE §6).
   - `events`
   - `amendments`
   - `projection`
+  - `person_feelings` — ADR-086 D1: her live feelings toward this person, in words; [] when the ledger is off or none is left.
   - `description` — §6.5 injection, filtered by readable source scopes for the contribution reasons.
   - `readable`
   - `check` — Program gates for a committed event (§6.4): any failure refuses only this item.

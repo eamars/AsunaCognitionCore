@@ -128,6 +128,13 @@ def entry(store, scene, person_id, persona, people):
     written = _written_at(person, here) if (person or here) else None
     if written:
         item['written_at'] = written
+    # ADR-086 D1: her live feelings toward this person (a group entry is public: the feeling and how long ago).
+    from .affect import AffectLedger
+    from .render import model_and_policy
+    from . import visibility
+    felt = AffectLedger(store, persona, *model_and_policy(store, persona)).person_feelings(person_id, visibility.PUBLIC)
+    if felt:
+        item['feelings_toward'] = felt
     return item, pins(person, here)
 
 

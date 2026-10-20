@@ -492,14 +492,20 @@ class Coordinator:
             outcome={'join':'ATTEND_JOIN','failed':'ATTEND_FAILED'}.get(verdict['choice'],'ATTEND_QUIET')
             self.store.put('messages',{**row,'processing_outcome':outcome,
                                        'attend':verdict},expected=row['revision'],stream=ep['_id'])
-        if verdict['choice']!='join':
+        fallback=verdict['choice']=='failed' and attend.addressed(event)
+        if fallback:
+            # ADR-086 E1 (her condition): a gate that could not answer on an @ or a reply to her is not her 不理:
+            # the turn runs as it did before the gate asked, and the record says why.
+            self.store.audit(ep['_id'],'attend.fallback',{'reason':verdict['reason']},ep['scope_key'])
+        if verdict['choice']!='join' and not fallback:
             from . import notices
             if verdict['choice']=='quiet':
                 notices.drop_seen(self.store,ep['scene_id'])    # the notices the gate showed were seen once
             return self._update(ep,state='COMMITTED',attend=verdict,
                                 silent_reason=verdict['reason'] if verdict['choice']=='failed' else '不理：'+verdict['reason'])
         _,context,manifest=self.context.prepare(event,ep['persona'])
-        context['attend_from_program']='你刚才决定接这次话：'+(verdict['reason'] or '想说点什么')
+        if not fallback:
+            context['attend_from_program']='你刚才决定接这次话：'+(verdict['reason'] or '想说点什么')
         self.store.audit(ep['_id'],'context.prepared',prepared_record(manifest,ep['person_id'],ep['policy_epoch']),ep['scope_key'])
         return self._update(ep,state='PREPARED',attend=verdict,context=context,manifest=manifest,
                             system_ref=manifest['system_ref'])

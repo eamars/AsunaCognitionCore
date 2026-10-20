@@ -39,10 +39,11 @@ def test_T3_4_reasons_never_reach_public_turns_or_the_action_brain(store):
     for value in ('OWNER_SECRET_WHY', 'OWNER_SECRET_COST', 'private-1', '靠近一点'):
         assert value not in visible, value
     block = ep['context']['affect_from_program']
-    assert {'label', 'policy', 'tendencies', 'note'} <= set(block) and block['label']
+    # ADR-086 D4: outside home the mood is one paragraph: the state and its pull, never a number, a reason recorded
+    # elsewhere, a slot rule or an owner-private tendency.
+    assert set(block) == {'心情'} and block['心情']
     assert ep['context']['how_to_record_from_program']['kinds']          # how to record is its own block
-    assert not set(block) & {'val', 'arl', 'reasons', 'main_feelings', 'contributions'}
-    assert all(slot['slot'] != '提要求' for slot in block['policy'])      # owner-private slot hidden
+    assert '提要求' not in block['心情'] and '可以提' not in block['心情']  # owner-private slot and tendency hidden
 
 
 def test_T3_8_she_reads_and_writes_feelings_in_words_and_the_same_state_reads_the_same(store):

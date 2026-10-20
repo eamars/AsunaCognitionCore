@@ -25,9 +25,15 @@ EVENT_FIELDS = ('kind', 'val', 'arl', 'who', 'ref', 'why', 'cost', 'open', 'half
 CORE = {'close_mode': 'from_close', 'require_cost': False, 'allow_untyped': True,
         'max_delta': {'val': 100, 'arl': 100}, 'proposal_ttl_h': 24, 'kind_floor': 0,
         'kinds': {}, 'bands': [], 'policy': [],
+        # ADR-086: what she reads is one paragraph (state, causes, pull), nothing at a quiet band; the gate reads its
+        # public form ('paragraph') or nothing ('none').
+        'paragraph': True, 'gate': 'paragraph',
         # Words a model writes, and the numbers they stand for (a model never writes or reads the numbers).
         'scale': {'val': {'轻微': 8, '明显': 20, '强烈': 40}, 'arl': {'平稳': 0, '有些波动': 15, '激动': 35}}}
 PUBLIC_MOOD_NOTE = '这份心情可能来自别的对话，原因不一定在这里。'
+PUBLIC_MORE_NOTE = '这份心情可能也有别处的来由。'
+PERSON_KIND = 'person'           # a kind marked `about: person` is a feeling toward someone, not mood (ADR-086 D1)
+PERSON_FEELINGS_SHOWN = 2
 
 
 # ── pure projection ─────────────────────────────────────────────────
@@ -83,8 +89,12 @@ def _clamp(value, bounds):
     return max(float(bounds[0]), min(float(bounds[1]), value))
 
 
-def project(model, events, amendments, at):
-    """Projection at a moment: sum then clamp; future events excluded; void counts as never counted."""
+def project(model, events, amendments, at, who=None):
+    """Projection at a moment: sum then clamp; future events excluded; void counts as never counted.
+
+    A feeling toward a person (``who`` set on the event, ADR-086 D1) is state about that person: left out of the
+    global projection (``who=None``), and the only events counted when projecting that person (``who=<person id>``).
+    """
     moment = parse_ts(at)
     mode = model.get('close_mode', 'from_close')
     if mode not in ('from_close', 'retroactive'):
@@ -93,7 +103,7 @@ def project(model, events, amendments, at):
     held_count, rows = 0, []
     for event in fold(events, amendments):
         start = parse_ts(event['ts'])
-        if start > moment or event['_void']:
+        if start > moment or event['_void'] or (event.get('who') or None) != who:
             continue
         half_v = half_life(event, model)
         if event.get('half_arl') is not None and float(event['half_arl']) < 0:
@@ -118,7 +128,8 @@ def project(model, events, amendments, at):
         total_arl += value_a
         if abs(value_v) >= 0.5 or abs(value_a) >= 0.5:
             rows.append({'event_id': event['id'], 'kind': event.get('kind') or '', 'val': value_v, 'arl': value_a,
-                         'age_h': age_h, 'held': held, 'why': event.get('why', '')})
+                         'age_h': age_h, 'held': held, 'why': event.get('why', ''),
+                         **({'source_scope': event['source_scope']} if event.get('source_scope') else {})})
     state = {'val': _clamp(total_val, model['clamp']['val']), 'arl': _clamp(total_arl, model['clamp']['arl'])}
     state['contributions'] = sorted(rows, key=lambda row: -(abs(row['val']) + abs(row['arl'])))
     state['open_count'] = held_count
@@ -199,11 +210,13 @@ def from_words(model, item):
         raise AffectError('AFFECT_INTENSITY_UNKNOWN', '%s；intensity 只能是 %s（how_to_record_from_program.intensity）'
                           % ('没写 intensity' if item.get('intensity') is None else '「%s」不在词表里' % item['intensity'],
                              '、'.join(scale['val'])))
-    arousal = item.get('arousal') or min(scale['arl'], key=scale['arl'].get)
+    spec = model.get('kinds', {}).get(kind) or {}
+    # ADR-086 D3: the kind's own arousal word when she writes none; the scale's lowest word when the kind has none.
+    arousal = item.get('arousal') or spec.get('arousal') or min(scale['arl'], key=scale['arl'].get)
     if arousal not in scale['arl']:
         raise AffectError('AFFECT_AROUSAL_UNKNOWN', '「%s」不在词表里；arousal 只能是 %s（how_to_record_from_program.arousal），'
                           '也可以不写' % (arousal, '、'.join(scale['arl'])))
-    valence = (model.get('kinds', {}).get(kind) or {}).get('valence')
+    valence = spec.get('valence')
     direction = item.get('direction') or {'positive': '好', 'negative': '坏'}.get(valence)
     if direction not in ('好', '坏'):
         raise AffectError('AFFECT_DIRECTION_REQUIRED', '「%s」本身不带好坏：写 direction（好 或 坏）'
@@ -214,33 +227,115 @@ def from_words(model, item):
     return {**value, 'val': scale['val'][item['intensity']] * (1 if direction == '好' else -1), 'arl': scale['arl'][arousal]}
 
 
-def interpret(model, state, cls, where=None):
-    """Projection → the words she reads (no numbers). Public: mood, public tendencies and hints, and a note."""
-    view = describe(model, state, cls)
-    scale = model.get('scale') or CORE['scale']
+def _pull(model, state, cls):
+    """The strongest kind's tendency, as what she tends to now; None when it is not hers to read here."""
+    weights = {}
+    for row in state['contributions']:
+        weights[row['kind']] = weights.get(row['kind'], 0.0) + abs(row['val'])
+    for kind, _ in sorted(weights.items(), key=lambda item: -item[1]):
+        spec = model.get('kinds', {}).get(kind, {})
+        if not spec.get('tendency'):
+            continue
+        if spec.get('tendency_visibility', 'owner_private') == 'public' or cls == visibility.OWNER_PRIVATE:
+            return '这会儿你' + spec['tendency'].rstrip('。') + '。'
+        return None
+    return None
+
+
+def readable_here(row, cls, scope):
+    """Whether a contribution's cause may be read in this conversation: home reads every reason; outside, those
+    recorded here or written for everywhere (ADR-009 §2.2, ADR-018 §6)."""
+    if cls == visibility.OWNER_PRIVATE:
+        return True
+    return row.get('source_scope') in ('global-safe', scope)
+
+
+def paragraph(model, state, cls, where=None, scope=None):
+    """ADR-086 D4: the mood as one paragraph: the band's face, up to two causes she may read here, the pull of the
+    strongest kind. None at a quiet band (``quiet`` on the band; the fallback band unless it says otherwise): at the
+    usual state she reads nothing, because even a neutral paragraph moved her (ADR-086 run K)."""
     band = first_rule(model.get('bands', []), state) or {}
-    out = {'label': view['label'] or '平静', **({'face': band['face']} if band.get('face') else {}),
-           'policy': view['policy'], 'tendencies': view['tendencies']}
-    if cls != visibility.OWNER_PRIVATE:
-        return {**out, 'note': PUBLIC_MOOD_NOTE}
-    out['main_feelings'] = [kind_label(model, item['kind']) for item in view['top_kinds']]
-    if view['open_count']:
-        out['unsettled'] = f"{view['open_count']} 件事还挂着"
+    if band.get('quiet', 'if' not in band) or not state['contributions']:
+        return None
+    scale = model.get('scale') or CORE['scale']
+    face = band.get('face') or ('你现在' + (band.get('label') or '') + '。')
+    rows = [row for row in state['contributions'] if row.get('why')]
+    shown = [row for row in rows if readable_here(row, cls, scope)][:2]
+    causes = []
+    for row in shown:
+        if cls == visibility.OWNER_PRIVATE:
+            place = ('，' + where[row['event_id']]) if where and row['event_id'] in where else ''
+            causes.append('%s（%s，%s%s）——%s' % (kind_label(model, row['kind']), _word(scale['val'], abs(row['val'])),
+                                                 rough_ago(row['age_h']), place, row['why']))
+        else:
+            causes.append(row['why'] + ('（这里记的）' if row.get('source_scope') == scope else ''))
+    text = face.rstrip('。') + '。'
+    if causes:
+        text += '主要因为：' + '；'.join(causes) + '。'
+    pull = _pull(model, state, cls)
+    if pull:
+        text += pull
+    if cls != visibility.OWNER_PRIVATE and len(shown) < len(rows):
+        text += PUBLIC_MORE_NOTE if causes else PUBLIC_MOOD_NOTE
+    return text
+
+
+def interpret(model, state, cls, where=None, scope=None):
+    """Projection → the words she reads (no numbers). With ``paragraph`` on (core default, ADR-086 D4): 心情 as one
+    paragraph, None at a quiet band; at home the reasons list stays beside it (event ids she can close or void).
+    With it off: the band, its face, the policy slots and the tendencies, as before."""
+    if model.get('paragraph', True):
+        text = paragraph(model, state, cls, where, scope)
+        out = {'心情': text} if text else {}
+        if cls != visibility.OWNER_PRIVATE:
+            return out or None
+    else:
+        view = describe(model, state, cls)
+        band = first_rule(model.get('bands', []), state) or {}
+        out = {'label': view['label'] or '平静', **({'face': band['face']} if band.get('face') else {}),
+               'policy': view['policy'], 'tendencies': view['tendencies']}
+        if cls != visibility.OWNER_PRIVATE:
+            return {**out, 'note': PUBLIC_MOOD_NOTE}
+        out['main_feelings'] = [kind_label(model, item['kind']) for item in view['top_kinds']]
+    scale = model.get('scale') or CORE['scale']
+    if state.get('open_count'):
+        out['unsettled'] = f"{state['open_count']} 件事还挂着"
     # Bounded and stable (context_budget.py): every unsettled feeling, then the strongest others up to the limit;
     # times in coarse words and short ids, so an unchanged mood reads the same from one turn to the next.
-    rows = view['contributions']
+    rows = state['contributions']
     held = [row for row in rows if row.get('held')]
     shown = held + [row for row in rows if not row.get('held')][:max(AFFECT_REASONS - len(held), 0)]
-    out['reasons'] = [{'feeling': kind_label(model, row['kind']),
-                       'strength': _word(scale['val'], abs(row['val'])), 'stirred': _word(scale['arl'], row['arl']),
-                       'when': rough_ago(row['age_h']),
-                       **({'unsettled': True} if row.get('held') else {}), 'why': row.get('why', ''),
-                       # ADR-018 §6: a reason written outside says where (where: event id -> words, home only).
-                       **({'where': where[row['event_id']]} if where and row['event_id'] in where else {}),
-                       'event_id': row['event_id'][:SHORT_ID]}
-                      for row in rows if row in shown]
+    reasons = [{'feeling': kind_label(model, row['kind']),
+                'strength': _word(scale['val'], abs(row['val'])), 'stirred': _word(scale['arl'], row['arl']),
+                'when': rough_ago(row['age_h']),
+                **({'unsettled': True} if row.get('held') else {}), 'why': row.get('why', ''),
+                # ADR-018 §6: a reason written outside says where (where: event id -> words, home only).
+                **({'where': where[row['event_id']]} if where and row['event_id'] in where else {}),
+                'event_id': row['event_id'][:SHORT_ID]}
+               for row in rows if row in shown]
+    if reasons:
+        out['reasons'] = reasons
     if len(rows) > len(shown):
         out['fainter'] = f'还有 {len(rows) - len(shown)} 笔较淡的心情没列出'
+    return out or None
+
+
+def person_kinds(model):
+    """The kinds the persona marks as feelings toward a person (ADR-086 D1)."""
+    return {key for key, spec in model.get('kinds', {}).items() if spec.get('about') == PERSON_KIND}
+
+
+def person_feelings(model, state, cls):
+    """Her live feelings toward one person, from that person's projection: the strongest PERSON_FEELINGS_SHOWN, each
+    the feeling and how long ago; at home its reason too. [] when none is left."""
+    scale = model.get('scale') or CORE['scale']
+    out = []
+    for row in state['contributions'][:PERSON_FEELINGS_SHOWN]:
+        item = {'feeling': kind_label(model, row['kind']), 'strength': _word(scale['val'], abs(row['val'])),
+                'when': rough_ago(row['age_h'])}
+        if cls == visibility.OWNER_PRIVATE and row.get('why'):
+            item['why'] = row['why']
+        out.append(item)
     return out
 
 
@@ -315,8 +410,14 @@ class AffectLedger:
     def amendments(self):
         return list(self.store.db.affect_amendments.find({'persona': self.persona}))
 
-    def projection(self, at=None):
-        return project(self.model, self.events(), self.amendments(), at or datetime.now(timezone.utc))
+    def projection(self, at=None, who=None):
+        return project(self.model, self.events(), self.amendments(), at or datetime.now(timezone.utc), who=who)
+
+    def person_feelings(self, person_id, cls, at=None):
+        """ADR-086 D1: her live feelings toward this person, in words; [] when the ledger is off or none is left."""
+        if not self.enabled or not person_id:
+            return []
+        return person_feelings(self.model, self.projection(at, who=person_id), cls)
 
     def description(self, cls, at=None):
         """§6.5 injection, filtered by readable source scopes for the contribution reasons."""

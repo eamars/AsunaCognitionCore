@@ -1171,12 +1171,25 @@ class ContextBuilder:
                     if scope_key not in titles:
                         titles[scope_key]=people.scene_title(self.store.db.scenes.find_one({'scope_key':scope_key}))
                     where[row['_id']]='在%s记的'%titles[scope_key]
-            context['affect_from_program']=interpret(m,mood,session_class,where)
+            read=interpret(m,mood,session_class,where,scope=scope)
+            if read:                                    # ADR-086 D4: nothing at a quiet band outside home
+                context['affect_from_program']=read
             context['how_to_record_from_program']=recording_guide(m)
+            if scene.get('kind')!='group' and isinstance(context.get('relationship'),dict) and event.get('person_id'):
+                # ADR-086 D1: her live feelings toward the person she is with, beside the relationship.
+                felt=ledger.person_feelings(event['person_id'],session_class)
+                if felt:
+                    context['relationship']['feelings_toward']=felt
             proposals=ledger.proposals(scope,session_class)
             if proposals:
                 context['affect_proposals_from_program']={'items':proposals,
                     'note':'情感评估路由给出的提案，只是建议：用 feel 逐条 accept、decline 或 edit（proposal_id 照抄）；过期的已明示，不再能采纳。'}
+        from .role_tools import called, CALLED_NOTE
+        if not recall and called({'episode_kind':event.get('episode_kind','external'),'person_id':event.get('person_id'),
+                                  'context':{'event':event}}):
+            # ADR-086 E2: someone called her; what she can choose, in her wording. The same text every time, so the
+            # delivery sends it once per session.
+            context['called_from_program']=CALLED_NOTE
         from .rhythm import rhythm_block, recent_phrasing
         owner=(self.store.config.get('chat') or {}).get('person_id')
         last=next(iter(self.store.db.messages.find({'direction':'inbound','author':owner},{'received_at':1}).sort('received_at',-1).limit(1)),None) if owner else None

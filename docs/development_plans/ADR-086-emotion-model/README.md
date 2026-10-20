@@ -317,6 +317,23 @@ without D5's neutral recording words.
   whatever the reading shows missing.
 
 
+### 5.3 Stage 1 as built (2026-10-21 afternoon, the research agent's branch; Claude reviews, the owner installs)
+
+| | where | what the code does |
+|---|---|---|
+| D1 | `affect.project(who=…)`, `AffectLedger.person_feelings`, `role_tools.RoleTools._feel_who`, `understanding.entry`, `context` (one-to-one) | an event with `who` is left out of the global sum and projected per person; `feel` takes `who` (a label, resolved; one-to-one: the person there; a group without it: global, receipt `landed` says so; a non-person kind with `who` is refused); a person's entry carries `feelings_toward` (feeling, strength, when; home adds why) |
+| D2 | persona only | `persona-diff-for-her.md` (her values) |
+| D3 | `affect.from_words`, schema `kinds.*.arousal` | the kind's word when she writes none |
+| D4 | `affect.paragraph`, `affect.interpret`, schema `bands.*.quiet`, `affect.paragraph` (core default on) | `affect_from_program` is `{"心情": …}` outside home (absent at a quiet band or with no live feeling); at home the paragraph plus `reasons` (ids to close or void); `paragraph: false` keeps the old shape; the Web page's mood card is unchanged (`describe`) |
+| D5 | `role_tools.TOOLS['feel']` | her wording; +264 characters of tool list with D1's field |
+| D6 | `attend.material`, `affect.gate` | the public paragraph as `mood`, a string; `gate: none` leaves it out |
+| D7 | `dice.review` | each roll row carries `mood`, the band at that beat |
+| E1 | `attend.GATED` (+`mentioned_account`, `reply_to_character`), `attend.MUST_WAKE` (`awaited_answer`, `question_wait`, `watched` now run the full turn), `attend.addressed`, `coordinator._attend` | an addressed line is asked; 不理 leaves the row with `ATTEND_QUIET` and the verdict, visible in `attend.recent`'s catch-up; a failed gate on an addressed line runs the full turn, audited as `attend.fallback`; the gate prompt says 被 @ 了也可以不理 (+23 characters) |
+| E2 | `role_tools.CALLED_NOTE`, `role_tools.called`, `context` | `called_from_program`, her wording, in every turn someone called her (addressed group lines, and a person's line at home, in a private chat or on a line); the same text each time, so delivery sends it once per session |
+| E3 | `role_tools.CALLED_LEFT`, `tool_stay_silent` | the receipt's `left` line when she ends a called turn without speaking |
+| tests | `tests/test_affect_model.py` (8), `tests/test_attend.py` (3 new, 2 rewritten), `tests/test_adr009_p3.py`, `tests/test_tool_budget.py`; her own edits (§11.9): `tests/test_persona_her_edits.py` — `test_her_persona_with_the_diff_and_an_edited_stance_passes_the_publish_validation` (a temp copy of her real model with the diff and one edited stance through `persona_model.load`, the check `floor.js` runs before activation) and `test_each_new_policy_key_set_through_the_policy_path_changes_the_projection` (each kind's `half_h` and `arousal` as her package's `policy_keys`, the arousal key with the scale's words as its `enum`, applied by `affect_model`) | |
+| docs | `RUNTIME_API.md` (addressed lines and the gate), `docs/map` (regenerated; the gate answer) | |
+
 ## 6. The relevance gate (the tension, addressed)
 
 The rule: the gate stays light, core sentences not persona, group notes plus the speaker's understanding, nothing from
@@ -424,6 +441,16 @@ the mechanism, never a score of her.
 6. **His baseline:** "The emotion should carry home and I'm no special to her." §13.3's home bullet is written to it;
    the permission boundary is unchanged; the persona items that single him out socially go to her with his words.
 7. **Staging** (Claude's recommendation, taken by the owner): §5.1, "Stages".
+8. **No amplification in stage 1.** The owner had wanted her mood amplified, to pull her away from serving people.
+   Claude pushed back on the data: the lever is already strong (G1, T, the slot-rule job refusals); the defect was a
+   mood that never moved and was written as rules, and amplifying a mood that finally varies would make her days run
+   on weather rather than will, and make the 7-day reading measure our dial instead of her. The owner agreed: stage 1
+   ships at the strength the data shows; any amplification comes after the 7-day reading, and only where it shows a
+   gap (for example, she still takes a stranger's instruction-worded demand in a low mood).
+9. **She reviews and edits her own persona after the build, unblocked.** The schema and `persona_model.py` accept
+   every new field; her `set_policy` can set each kind's `half_h` and `arousal` default and `affect_model` applies
+   them; a test runs a temp copy of her real model with the persona diff and an edited stance through the publish
+   flow's validation (§5.3, tests).
 
 ## 12. The study record
 

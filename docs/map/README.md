@@ -66,8 +66,11 @@ Two hops, each over a local HTTP API: NapCat ⇄ the QQ adapter ⇄ Asuna's chan
    - The server is `channels.ChannelServer`; `channels.Channels.receive` admits new groups and people
      (`channel_admission.admit`) and hands the line to the queue.
    - `ingress.persist_input` stores it, and the scene's queue takes it in order (`chat.Chat`).
-   - In a group, the relevance gate (`attend`) decides whether she joins in. In a group she lets rest, only an @,
-     a reply to her, her awaited answers and watched people wake her (`focus.wake`).
+   - In a group, the relevance gate (`attend`) decides whether she joins in: it asks her one question, with her mood
+     as one public paragraph, for unaddressed talk and for an @ or a reply to her alike; 不理 on an addressed line
+     leaves it in her next catch-up there, and a gate that fails on one falls back to the full turn. In a group
+     she lets rest, only an @, a reply to her, her awaited answers and watched people wake her (`focus.wake`); her
+     awaited answers and watched people run the full turn without the gate.
 3. **Asuna → DSH.** The line becomes input to the conversation's DSH role session.
    - The worker emits `channel_input` (`native_worker`); the Host plugin ([index.js](../../packages/cognition-core/src/index.js))
      puts it into the session's inbox.

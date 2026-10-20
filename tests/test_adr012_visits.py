@@ -16,16 +16,16 @@ from test_engineering_m1 import THINK
 PLACE = places.place_id('g1')
 
 
-def group_world(store, quiet_hours=()):
+def group_world(store):
     """g1 is a QQ-like group she is routed to; g2 is blocked."""
     service = scheduler(store)
     store.config['persona_model']['heartbeat'].update(visits=True, visits_per_day=4)
     store.config['channels'] = {'qq': {'account_id': 'acct', 'blocked_groups': ['G2'], 'routes': {
         'r1': {'scene_id': 'g1', 'target': {'type': 'group', 'id': 'G1'}, 'members': {'s-a': {'person_id': 'A'},
                                                                                       's-b': {'person_id': 'B'}},
-               'proactive': {'enabled': True, 'quiet_hours': [list(pair) for pair in quiet_hours]}},
+               'proactive': {'enabled': True}},
         'r2': {'scene_id': 'g2', 'target': {'type': 'group', 'id': 'G2'}, 'members': {'s-a': {'person_id': 'A'}},
-               'proactive': {'enabled': True, 'quiet_hours': [list(pair) for pair in quiet_hours]}}}}}
+               'proactive': {'enabled': True}}}}}
     store.db.scenes.update_many({'_id': {'$in': ['g1', 'g2']}}, {'$set': {'channel_id': 'qq', 'channel_account_id': 'acct'}})
     service.ensure_presence()
     service.app.coordinator = None
@@ -67,7 +67,7 @@ def test_her_places_read_in_words_and_each_says_whether_she_can_go(store):
     assert places.eligibility(store, store.db.scenes.find_one({'_id': 'g1'}), {}, places.settings(
         store.config['persona_model'], {}), datetime.now(timezone.utc), None)[0]
     assert service.visit(beat, PLACE, 'start_topic', None, None)['going_to']
-    service = group_world(store, quiet_hours=[('00:00', '23:59')])
+    service = group_world(store)
     # No night hours and no gap after her own visit: she reads the time there and her last visit herself.
     assert view(store, service)['items'][0]['can_visit'] == '可以去'
     PolicyStore(store, 'P1', store.config['persona_model']).set([{'key': 'heartbeat.visits', 'value': False, 'what': 'x'}],
@@ -401,7 +401,7 @@ def test_a_visit_whose_turn_has_not_run_reads_as_not_done_yet_from_home(store):
 
 def test_a_group_she_gave_a_time_zone_shows_its_own_clock(store):
     """A group's own time zone, set with place_timezone, gives the time there and its gap to her clock."""
-    group_world(store, quiet_hours=(('23:00', '08:00'),))
+    group_world(store)
     scene = lambda: store.db.scenes.find_one({'_id': 'g1'})
     with pytest.raises(ValueError, match='IANA'):
         places.set_zone(store, PLACE, 'Asia/Atlantis')

@@ -28,6 +28,7 @@ Every number below says where it came from, so none is left without a source. A 
 | 3 | Length limits on her prose fields | **hard limits unchanged**; she is asked for **0.8×** of each, and the description states both numbers; text in between is kept and its result says by how much; a refusal shows what its cut leaves out; silent cuts are marked | refused: notes 81, plan intents 53, ideas 44, other short fields 13. **0.8** is the owner's number, chosen 2026-10-20 ("0.8 is my made-up number"). Both numbers on the page: her ask | 3441eeb4; ADR-054 §Soft text budget |
 | 4 | `speak` line cap counted lines that never left | counted from the turn's own outgoing messages; failed, cancelled and taken-back parts give their lines back; UNKNOWN counts | 3 failed parts of 1,893; of 12 turns refused at the cap, 0 had lost a line first. She later wrote that her stated reason had been her own mistake | 08edbbb8; ADR-064 |
 | 5 | 随身 room was visible only once a store was over its cap | each capped store says how much room is left | that day: self, core and the fullest group notes full; persona 2 left; voice 1 | 13090b88; ADR-062 |
+| 8 | Clock gates in the groups: condensing counted 01:00–07:00 "there" as quiet (`condense.py` `NIGHT_HOURS`), and unprompted wakes were held 23:00–08:00 (`proactive.py` quiet hours, with an "urgent words" exception, also over chain wakes) | both removed; the urgent-word exception with them; only quiet decides condensing, and the other wake rules stay | quiet hours held 207 wakes in 7 days, most at 00–03 NZ, which is 19–22 in China; 20 of 21 groups used the host's NZ zone for it, and 6 of 21 her NZ zone for the condensing night | see §8 |
 | 6 | Audit retention left no trace when it deleted nothing | every run is recorded; `by` per rule; totals; the latest record kept; `dbread.aggregate` says when it cuts | her own study and her five points | 13cf32b8; ADR-074 |
 
 **Her reading of step 3, in her own measurement.** The soft receipt saves retries; it does not change how she writes. Her first plan intent after the change took six refusals: 1269 → 1216 → 1123 → 1074 → 1033 → 1005 → 999 characters, accepted with the 「超了 199 字」 line. She cut to avoid the refusal, not because she saw the target. Judge the feature by retries saved, not by shorter text.
@@ -97,3 +98,18 @@ On 2026-10-20 the owner recalled a "~60 character budget" for `think` as an earl
 ## 7. Open, each its own task
 
 - Done 2026-10-20: a restart receipt's `qq_adapter` line read as down while its health record lagged behind the restart; it now says the record is from before the restart and either may be true (her ask).
+
+## 8. Step 8: the night touches only her own schedule (2026-10-20 late)
+
+Owner: the night changes her schedule and her heartbeat dice, and nothing else; most people are still up after 1 a.m. and groups are still busy, so her schedule must not be laid over public groups.
+
+Claude's inventory of every decision made from a clock (code read 2026-10-20 23:3x):
+
+- **Kept, her own schedule:** the heartbeat dice's awake and asleep tables (her declared sleep window, `dice.py`); her night self-improvement stages (`schedule.py`, `self_development.night_start_hour`); the nightly settlement; the rhythm block at home, which shows whether she is in her sleep window (information, not a gate).
+- **Removed:** the condensing night (`condense.night_there`, `NIGHT_HOURS`): six of 21 groups have no zone of their own and used her NZ zone, and even in the right zone it condensed groups that were talking. The proactive quiet hours (`proactive.py` `QUIET_DEFAULT`, `quiet_hours`, `urgent_cues`, the route's proactive `utc_offset_minutes`): 20 of 21 groups used the host's NZ zone; 207 holds in seven days, mostly 00:00–03:00 NZ, China's evening. Chain wakes are held only by a busy foreground.
+- **Already removed this morning:** the visit night gate (step 1).
+
+Put to her 2026-10-20 23:4x; she agreed, with three conditions as Claude paraphrases them: keep the first turn's "this group was condensed" line (unchanged); keep each group's own clock in her judgement (`their_clock`, `place_timezone`, unchanged), so the hour is hers to weigh, not a gate; and a reading one week after install. Signature: ______
+
+**Reading (one week after her install):** how many unprompted wakes she took in China's evening, whether they read as interrupting, whether a busy group was condensed while talking, and how many more wakes a day than before. If it reads badly, the clock gate does not come back: the group's own clock goes into her judgement instead (her condition). She sets the zones of the six groups without one herself (10-21 15:00) and reports which, on what grounds, and which she left unset.
+

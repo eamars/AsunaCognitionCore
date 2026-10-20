@@ -442,8 +442,8 @@ cold.
 So the condensing of quiet groups is timed to the lapse:
 
 - **It waits for the quiet the cache needs to lapse.** A group with 100 or more lines a day is condensed after 10
-  quiet minutes, one with 30 or more after 15, a quieter one after 30 (`condense.py QUIET_TIERS`). Between 01:00 and
-  07:00 in the group's own time zone it is condensed at once, without waiting: night counts as quiet (`NIGHT_HOURS`).
+  quiet minutes, one with 30 or more after 15, a quieter one after 30 (`condense.py QUIET_TIERS`). The clock does
+  not count: a group talks late at night too, and condensing it then would reset a cache in use.
 - **The cold read lands on a small conversation.** When someone speaks again, the first request reads the summary
   and the kept tail, not the whole history. On the local engine a cold read runs at about 6K tokens a second, so
   every 100K tokens condensed away is about 17 seconds less before her first word.
@@ -681,5 +681,4 @@ A checklist for review:
 
 ## Latest change
 
-The character's summary request thinks at its conversation's own reasoning level: the local engine matches the level
-with the tokens, so a summary at another level reused none of the conversation's cache (section 7, ADR-085).
+Quiet groups are condensed by how long they have been quiet only; the hour no longer counts as quiet (section 7).

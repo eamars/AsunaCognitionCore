@@ -34,7 +34,7 @@ BOT = '100276'
 EVIDENCE = base.FakeEvidence
 _iso = base._iso
 
-ENABLED = {'enabled': True, 'utc_offset_minutes': 480, 'quiet_hours': [['23:00', '08:00']]}
+ENABLED = {'enabled': True}
 NIGHT = datetime(2026, 9, 24, 20, 0, tzinfo=timezone.utc).timestamp()   # 本地 UTC+8 → 凌晨 4 点
 
 
@@ -172,18 +172,14 @@ def q1_topic_line_reaches_the_role_context():
     return '醒来看见的是整条话题线（含旁听行），外加一句不催她开口的说明'
 
 
-# ── Q7②：冷却与安静时段只压未请求的插话 ───────────────────
-def q2_quiet_hours_hold_unprompted_only():
+# ── Q7②：钟点不拦（owner 2026-10-20）：群在深夜也聊，那边几点由她自己判断 ───────────────────
+def q2_the_clock_holds_nothing():
     store = base.bind_store(data_for(calm_rows()))
     trigger = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
     decision, _updated, _e = run(store, trigger, moment=NIGHT + 60)
-    assert not decision['fire'] and 'quiet_hours' in decision['holds'], decision
-    assert decision['local_minutes'] == 4 * 60 + 1, decision['local_minutes']  # 本地凌晨 4:01
-    store = base.bind_store(data_for(calm_rows('传感器故障了，谁看一下')))
-    trigger = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
-    decision, _updated, _e = run(store, trigger, moment=NIGHT + 60)
-    assert decision['fire'] and 'urgent_cue' in decision['signals'], decision
-    return '凌晨默认不评估；带紧急线索词只放宽这一道闸，醒了还是可以自己选沉默'
+    assert decision['fire'] and 'quiet_hours' not in decision['holds'], decision
+    assert 'local_minutes' not in decision and 'urgent_cue' not in decision, decision
+    return '凌晨也照常评估：没有钟点闸、也没有紧急词放行；醒了还是可以自己选沉默'
 
 
 def q2_cooldown_does_not_touch_direct_questions():
@@ -504,7 +500,7 @@ def fragments_within_ten_seconds_are_one_candidate():
 
 CASES = [q1_unprompted_message_can_get_a_chance,
          q1_topic_line_reaches_the_role_context,
-         q2_quiet_hours_hold_unprompted_only,
+         q2_the_clock_holds_nothing,
          q2_cooldown_does_not_touch_direct_questions,
          q2_foreground_task_and_queued_inputs_win,
          rhythm_gate_blocks_fast_exchanges,

@@ -28,12 +28,10 @@ ADR-005 P5：没被@的时候要不要醒一次——分寸从这个场景已经
 
 - def `now_ts` — 评估用的单一时刻：调用方可注入固定钟点，检查里不谎称真等过冷却。
 - def `route_settings` — 这个群场景开没开主动模式。没配 = 一切照旧（旁听就是旁听），不猜默认开启。
-- def `local_minutes` — 评估时刻换成本地钟点（分钟）。没给偏移就按宿主本地时区，不硬绑某个城市。
-- def `in_quiet`
 - def `observe` — 把"我最近主动说过几次、哪条被接了、现在几点、群里说得多快"从真实行里读出来。
 - def `decide`
 - def `chain` — 这条行是不是正在形成的队形：结尾一串同样内容、来自至少 CHAIN_PEOPLE 个不同的人、她还没跟过、 这串也还没叫过她。返回 {'what','people','media','first'}；不是就 None。只读已落库的行。
-- def `chain_decision` — 队形叫她只看两道闸：深夜安静时段，前台正忙。快速连发、冷却、每小时上限都不拦——队形本来就是快的， 一串只叫一次。
+- def `chain_decision` — 队形叫她只看一道闸：前台正忙。快速连发、冷却、每小时上限、钟点都不拦——队形本来就是快的，一串只叫一次。
 - def `consider` — 旁听行落库之后的一次评估：把决定写进那一行，返回（决定，可直接入队的事件）。
 
 ## `rhythm`
@@ -319,8 +317,7 @@ Quiet-time upkeep of a group (ADR-049): what she learns there and condensing its
 - def `per_day` — Average incoming lines a day there over the last week.
 - def `quiet_minutes` — How long the group must be quiet before condensing, by how busy it is.
 - def `last_line` — When someone other than her last spoke there; her own lines never restart the wait.
-- def `night_there`
-- def `due` — Whether a marked group may be condensed now.
+- def `due` — Whether a marked group may be condensed now: it has been quiet long enough for how busy it is.
 - def `size_words`
 - def `main_session` — The character session this group's conversation continues in now (native_worker.resolve_role_session): (session id, its working folder), or None.
 - def `mark`

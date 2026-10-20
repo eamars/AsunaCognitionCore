@@ -5,7 +5,6 @@
 
   · 只在**有新入站消息**时评估——没有任何定时器会去重开旧话题（DELIVERY_PLAN §P5）；
   · 快速连发时不插话：密度用 P2 那套中位数＋MAD 的场景节奏线判，不另写一份间隔统计；
-  · 深夜／凌晨不评估：默认本地 23:00–08:00 安静时段，配置可改；带紧急线索词的例外**只放宽这一道闸**；
   · 同一话题在她被接话之前只试一次；说过之后没人接就退回旁听，不催问；
   · 场景级最小间隔与每小时上限都从"我自己已送达的主动出站行"倒推，不另存一份计数器；
   · 前台行动在跑、或本场景队列里已经排着别的输入 → 这次机会直接作废，不排队等。
@@ -23,12 +22,10 @@ try:                                  # 宿主按包加载
     from . import summary_trigger
     from .history_query import (DELIVERED, DELIVERY_FIELD, OUTBOUND, _outbound_time, _receipt_ref,
                                _sink_times)
-    from .discussion_digest import _first_cue
 except Exception:                     # 同目录平铺加载（离线自检）也认
     import summary_trigger
     from history_query import (DELIVERED, DELIVERY_FIELD, OUTBOUND, _outbound_time, _receipt_ref,
                                _sink_times)
-    from discussion_digest import _first_cue
 
 WAKE_REASON = 'proactive_unprompted'
 OUTCOME_WAKE = 'PROACTIVE_WAKE'
@@ -44,12 +41,8 @@ PROBE_INTERVAL_SECONDS = 180.0     # 两次"问她要不要说"之间的最小�
 MIN_INTERVAL_SECONDS = 120.0       # DECISIONS §7：同场景两次确认发布的插话至少间隔 120 秒
 MERGE_WINDOW_SECONDS = 10.0        # DECISIONS §7：10 秒内的片段算一波，等她发完再考虑插话
 MAX_PER_HOUR = 2                   # 每小时主动开口上限
-QUIET_DEFAULT = (('23:00', '08:00'),)   # 默认安静时段（本地钟点）；配置可覆盖或清空
-URGENT_CUES = ('紧急', '急事', '故障', '崩了', '挂了', '报错', '出问题了', '救命')
-MAX_WINDOWS = 4
-MAX_CUES = 12
-REPORT_FIELDS = ('fire', 'signals', 'holds', 'quiet_now', 'quiet_windows', 'local_minutes',
-                 'urgent_cue', 'dense', 'dense_median', 'dense_max_gap', 'quiet_after',
+# 钟点不进闸门：群在深夜也聊，她自己的作息只管她的心跳；那边几点是她自己判断时看的（places their_clock）。
+REPORT_FIELDS = ('fire', 'signals', 'holds', 'dense', 'dense_median', 'dense_max_gap', 'quiet_after',
                  'quiet_source', 'samples', 'burst_rows', 'merge_window_seconds',
                  'since_wake', 'since_utterance', 'utterances_last_hour', 'topic_id',
                  'topic_attempts', 'topic_responded', 'probe_interval_seconds',
@@ -62,25 +55,14 @@ def now_ts():
     return datetime.now(timezone.utc).timestamp()
 
 
-def _clock(text, fallback):
-    parts = str(text or '').strip().split(':')
-    try:
-        hour, minute = int(parts[0]), int(parts[1])
-    except (IndexError, ValueError):
-        return fallback
-    if not (0 <= hour < 24 and 0 <= minute < 60):
-        return fallback
-    return hour * 60 + minute
-
 
 def route_settings(config, scene):
     """这个群场景开没开主动模式。没配 = 一切照旧（旁听就是旁听），不猜默认开启。"""
-    limits = {'enabled': False, 'quiet_windows': [(_clock(start, 0), _clock(end, 0)) for start, end in QUIET_DEFAULT],
-              'utc_offset_minutes': None,
+    limits = {'enabled': False,
               'probe_interval_seconds': PROBE_INTERVAL_SECONDS,
               'min_interval_seconds': MIN_INTERVAL_SECONDS, 'max_per_hour': MAX_PER_HOUR,
               'dense_max_gap': DENSE_MAX_GAP, 'merge_window_seconds': MERGE_WINDOW_SECONDS,
-              'urgent_cues': list(URGENT_CUES), 'why': 'scene_not_group'}
+              'why': 'scene_not_group'}
     if not isinstance(scene, dict) or scene.get('kind') != 'group':
         return limits
     limits['why'] = 'not_enrolled'
@@ -93,28 +75,8 @@ def route_settings(config, scene):
     if route is None:
         return limits
     block = route.get('proactive')
-    if isinstance(block, dict) and block.get('enabled') is not True:
-        # Off, but its night and offset still decide when a chain may call her (chain_decision).
-        offset = block.get('utc_offset_minutes')
-        if type(offset) is int and -840 <= offset <= 840:
-            limits['utc_offset_minutes'] = offset
     if not isinstance(block, dict) or block.get('enabled') is not True:
         return limits
-    windows = []
-    raw = block.get('quiet_hours', [list(pair) for pair in QUIET_DEFAULT])
-    if isinstance(raw, list):
-        for pair in raw[:MAX_WINDOWS]:
-            if not isinstance(pair, (list, tuple)) or len(pair) != 2:
-                continue
-            start, end = _clock(pair[0], None), _clock(pair[1], None)
-            if start is not None and end is not None and start != end:
-                windows.append((start, end))
-    offset = block.get('utc_offset_minutes')
-    if type(offset) is not int or not -840 <= offset <= 840:
-        offset = None
-    cues = block.get('urgent_cues')
-    if not isinstance(cues, list) or not all(isinstance(item, str) and 1 <= len(item) <= 12 for item in cues):
-        cues = list(URGENT_CUES)
     for field, key, floor, cap in (('probe_interval_seconds', 'probe_interval_seconds', 30, 86400),
                                    ('min_interval_seconds', 'min_interval_seconds', 60, 86400),
                                    ('max_per_hour', 'max_per_hour', 1, 12),
@@ -123,29 +85,10 @@ def route_settings(config, scene):
         value = block.get(key)
         if type(value) is int and floor <= value <= cap:
             limits[field] = value
-    limits.update(enabled=True, quiet_windows=windows, utc_offset_minutes=offset,
-                  urgent_cues=list(cues[:MAX_CUES]), why='enrolled')
+    limits.update(enabled=True, why='enrolled')
     return limits
 
 
-def local_minutes(now_ts, offset_minutes=None):
-    """评估时刻换成本地钟点（分钟）。没给偏移就按宿主本地时区，不硬绑某个城市。"""
-    if offset_minutes is None:
-        offset = datetime.now().astimezone().utcoffset() or timedelta(0)
-        zone = timezone(offset)
-    else:
-        zone = timezone(timedelta(minutes=offset_minutes))
-    moment = datetime.fromtimestamp(now_ts, zone)
-    return moment.hour * 60 + moment.minute
-
-
-def in_quiet(minutes, windows):
-    for start, end in windows:
-        if start < end and start <= minutes < end:
-            return True
-        if start > end and (minutes >= start or minutes < end):   # 跨过午夜
-            return True
-    return False
 
 
 # ── 观察：只读已经落库的行，不猜、不写、不调模型 ──────────────────
@@ -219,9 +162,6 @@ def observe(store, scene, *, now_ts, trigger=None, limits=None):
     tail = (rhythm.get('peer_gaps') or [])[-DENSE_TAIL_GAPS:]
     median = statistics.median(tail) if tail else None
     dense_max = limits.get('dense_max_gap', DENSE_MAX_GAP)
-    minutes = local_minutes(now_ts, limits.get('utc_offset_minutes'))
-    body = (trigger or {}).get('text')
-    cue = _first_cue(body if isinstance(body, str) else '', limits.get('urgent_cues') or list(URGENT_CUES))
     return {'scene_id': scene['_id'], 'scene_kind': scene.get('kind'),
             'trigger_id': trigger_id, 'topic_id': topic_id,
             'trigger_time': summary_trigger._epoch((trigger or {}).get('occurred_at')
@@ -233,8 +173,7 @@ def observe(store, scene, *, now_ts, trigger=None, limits=None):
             'dense_max_gap': dense_max,
             'dense': bool(tail) and len(tail) >= DENSE_MIN_GAPS and median <= dense_max
                    and median < DENSE_GAP_RATIO * quiet,
-            'local_minutes': minutes, 'quiet_now': in_quiet(minutes, limits.get('quiet_windows') or []),
-            'urgent_cue': cue, 'last_wake_at': max((wake['at'] for wake in wakes), default=None),
+            'last_wake_at': max((wake['at'] for wake in wakes), default=None),
             'since_wake': round(since_wake, 1) if since_wake is not None else None,
             'last_utterance_at': max((item['at'] for item in utterances), default=None),
             'since_utterance': round(since_utterance, 1) if since_utterance is not None else None,
@@ -256,8 +195,6 @@ def decide(profile, limits, *, now_ts=None, can_run=True):
         holds.append('not_a_group_scene')
     if profile.get('trigger_time') is None:
         holds.append('trigger_without_time')
-    if profile.get('quiet_now') and not profile.get('urgent_cue'):
-        holds.append('quiet_hours')
     if profile.get('dense'):
         holds.append('dense_exchange')
     if profile.get('burst_rows', 0) >= 2:
@@ -280,15 +217,12 @@ def decide(profile, limits, *, now_ts=None, can_run=True):
         signals.append('unprompted_group_message')
         if profile.get('topic_attempts'):
             signals.append('topic_was_replied')
-        if profile.get('urgent_cue'):
-            signals.append('urgent_cue')
     note = ''
     if profile.get('quiet_source') == 'seed':
         note = '本场景还没有实测节奏，密度按先验停顿线判'
     elif profile.get('rows_without_time'):
         note = '有 %d 行读不到时间，没算进间隔' % profile['rows_without_time']
     return {'fire': not holds, 'holds': holds, 'signals': signals,
-            'quiet_windows': [list(pair) for pair in (limits.get('quiet_windows') or [])],
             'probe_interval_seconds': probe, 'min_interval_seconds': floor,
             'max_per_hour': limits.get('max_per_hour', MAX_PER_HOUR), 'note': note,
             **{field: profile.get(field) for field in REPORT_FIELDS
@@ -340,11 +274,8 @@ def chain(store, scene, row, *, character=None):
 
 
 def chain_decision(found, limits, now_ts, can_run):
-    """队形叫她只看两道闸：深夜安静时段，前台正忙。快速连发、冷却、每小时上限都不拦——队形本来就是快的，
-    一串只叫一次。"""
+    """队形叫她只看一道闸：前台正忙。快速连发、冷却、每小时上限、钟点都不拦——队形本来就是快的，一串只叫一次。"""
     holds = []
-    if in_quiet(local_minutes(now_ts, limits.get('utc_offset_minutes')), limits.get('quiet_windows') or []):
-        holds.append('quiet_hours')
     if not can_run:
         holds.append('foreground_busy')
     return {'fire': not holds, 'holds': holds, 'signals': ['chain'] if not holds else [], 'chain': found,

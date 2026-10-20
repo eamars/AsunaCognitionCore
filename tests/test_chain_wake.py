@@ -20,7 +20,7 @@ def world(store):
     route['members'] = {str(n): {'person_id': 'qq:%d' % n} for n in (20001, 20002, 20003, 20004)}
     # Default quiet hours follow the route's offset when it names one, else the host's local time: pin it, so these
     # tests read the same on any machine and in any time zone (ADR-019 M2 ran them in a UTC container).
-    route['proactive'] = {'enabled': False, 'utc_offset_minutes': 480}
+    route['proactive'] = {'enabled': False}
     assert not proactive.route_settings(store.config, scene)['enabled']        # unprompted speaking is off here
     return store.db.scenes.find_one({'_id': SCENE})
 
@@ -69,17 +69,15 @@ def test_two_people_or_the_same_person_are_not_a_chain(store):
         assert consider(store, scene, line(store, n, author, '+1'))[1] is None
 
 
-def test_the_same_sticker_is_a_chain_and_night_or_a_busy_foreground_hold_it(store):
+def test_the_same_sticker_is_a_chain_and_only_a_busy_foreground_holds_it_at_any_hour(store):
     scene = world(store)
     sticker = {'type': 'image', 'file': 'A' * 32 + '.png', 'sub_type': '1', 'sticker': 'custom'}
     for n, author in enumerate((20001, 20002)):
         line(store, n, author, '[表情包]', media=sticker)
     row = line(store, 2, 20003, '[表情包]', media=sticker)
-    night = NOON.replace(hour=16)                                  # 00:00 at +8, inside the default quiet hours
-    store.config['channels']['qq']['routes']['g']['proactive'] = {'enabled': False, 'utc_offset_minutes': 480}
-    decision, event = consider(store, scene, row, at=night)
-    assert not decision['fire'] and decision['holds'] == ['quiet_hours'] and event is None
-    assert consider(store, scene, row, can_run=False)[0]['holds'] == ['foreground_busy']
+    night = NOON.replace(hour=16)                                  # 00:00 at +8: the clock holds nothing
+    decision, event = consider(store, scene, row, at=night, can_run=False)
+    assert decision['holds'] == ['foreground_busy'] and event is None
     decision, event = consider(store, scene, row)
     assert decision['fire'] and event['event']['group_context']['chain']['media'] is True
 

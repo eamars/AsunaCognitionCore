@@ -3,7 +3,8 @@
 On a visit, or at home in her heartbeat or reflection, she may choose to have a group's conversation condensed once
 the group has gone quiet (`group_focus` op `condense`; `keep` takes the choice back). A home plan looks every few
 minutes while she is in any group: it condenses the marked groups whose quiet has lasted long enough for how busy they
-are, or whose local night it is, through DSH's own compaction of that conversation (host request `compact_session`).
+are, through DSH's own compaction of that conversation (host request `compact_session`). The clock does not decide:
+a group talks late at night too, and condensing it then would reset a cache in use.
 The plugin refuses while a turn of hers runs there; the next look tries again.
 
 A group she has not marked is condensed by its size (the size floor she agreed to): at a quiet spell after new lines,
@@ -29,7 +30,6 @@ TABLES_VERSION = 1
 # 2026-10-12: 8 days of 16 groups; ADR-049).
 QUIET_TIERS = ((100, 10), (30, 15), (0, 30))
 WEEK_DAYS = 7
-NIGHT_HOURS = (1, 7)                  # local night in the group's own clock: condensing waits for no quiet there
 PLAN_ID = 'plan-asuna-condense'
 UNAVAILABLE = ('no_commands_service', 'no_compact_command')   # the Host has no way to condense: not retried
 LOOK_EVERY_SECONDS = 300
@@ -92,17 +92,9 @@ def last_line(store, scene_id):
     return _at(row['received_at']) if row and row.get('received_at') else None
 
 
-def night_there(store, scene, moment):
-    from .schedule_rules import scene_timezone
-    zone = scene_timezone(store.config, scene or {})
-    hour = moment.astimezone(zone['tz']).hour
-    return NIGHT_HOURS[0] <= hour < NIGHT_HOURS[1]
-
 
 def due(store, scene, moment):
-    """Whether a marked group may be condensed now."""
-    if night_there(store, scene, moment):
-        return True
+    """Whether a marked group may be condensed now: it has been quiet long enough for how busy it is."""
     last = last_line(store, scene['_id'])
     return last is None or moment - last >= timedelta(minutes=quiet_minutes(store, scene['_id'], moment))
 
@@ -140,7 +132,7 @@ def mark(store, scene, ep, moment=None):
     store.audit(ep['_id'], 'condense.wanted', {'scene_id': scene['_id']}, ep['scope_key'])
     minutes = quiet_minutes(store, scene['_id'], moment)
     return {'done': '记下了：等这个群安静下来就压一压这段对话',
-            'when': ('这个群按它平常的热闹，安静满 %d 分钟、或者那边凌晨一点到七点，就会压；你那时在这里说着话就再等等'
+            'when': ('这个群按它平常的热闹，安静满 %d 分钟就会压；你那时在这里说着话就再等等'
                      % minutes),
             **({'size': size_words(scene)} if size_words(scene) else {})}
 

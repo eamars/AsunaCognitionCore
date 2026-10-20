@@ -34,7 +34,8 @@ def test_how_long_quiet_follows_how_busy_the_group_is(store):
     assert [condense.quiet_minutes(store, name, NOW) for name in ('g-busy', 'g-mid', 'g-quiet')] == [10, 15, 30]
     assert condense.due(store, busy, NOW) and not condense.due(store, middling, NOW)
     assert not condense.due(store, quiet, NOW)
-    assert condense.due(store, quiet, datetime(2026, 10, 12, 2, 0, tzinfo=timezone.utc))   # night there
+    # The clock decides nothing (owner 2026-10-20): a group talks late too, so only its quiet counts.
+    assert not hasattr(condense, 'night_there') and not hasattr(condense, 'NIGHT_HOURS')
 
 
 def test_her_own_line_does_not_restart_the_wait(store):

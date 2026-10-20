@@ -7,6 +7,10 @@
 记录按写就时刻标、另起一行标计划首次真跑；不带个人信息（私密名单命中只报类别与行号，名单配不上、或名单在
 却解析出 0 条有效词，都记红）。
 
+读数守卫（2026-10-20 v5）：硬规矩 8「时刻基准」与 9「编号出处」各有字面锚（GUARDS），另有两条
+结构判据——这两条必须是硬规矩里编号 8、9 那两条（guards_in_hard_rules），且每条底下带
+「什么算违反」那一行（guards_have_violation_line）。
+
 行号锚点：一律红（2026-10-15 定的规矩，仓库共用测试 tests/test_skill_anchors.py 查的是同一条）。v3 曾为
 六格① 的代码位置开过四处白名单，2026-10-17 撤掉：代码位置写 `文件:函数名`，行号会随每次编辑漂走、不算锚点。
 节名锚点：2026-10-20 起加 `section_anchors_resolve`——正文里 § 指节名的锚、以及 RUNTIME_API.md
@@ -259,6 +263,28 @@ TABLES = [
     ("hard_no_stale_numbers", "当天会旧的数不写进这份技能"),
 ]
 
+# 读数守卫（2026-10-20 v5）：硬规矩 8「时刻基准」、9「编号出处」——每条查几句只有照写出来才会出现的字面，
+# 另加两条结构判据（在 main 里）：这两条必须是硬规矩里编号 8、9 那两条，且每条底下带「什么算违反」那一行。
+GUARDS = [
+    ("guard_time_heading", "**时刻基准**"),
+    ("guard_time_offset_cell", "① 用的偏移量"),
+    ("guard_time_two_conversions", "按 +13 和 +8 各换一次"),
+    ("guard_time_raw_example", "2026-10-20T04:19:26Z"),
+    ("guard_time_unsettled", "记成「基准未定」"),
+    ("guard_time_no_ledger", "不进账、不拿去对夜锚、不拿去排作息"),
+    ("guard_time_words_not_evidence", "这句话不是证据"),
+    ("guard_time_source_task", "task-3261095b96c6f55ff22a36bfef9ac266"),
+    ("guard_time_check_task_a", "task-9c720fd9e17b6f704854edf441adaea5"),
+    ("guard_time_check_task_b", "task-c4e2b3a8cff48bf36333c1039c9c922c"),
+    ("guard_id_heading", "**编号出处**"),
+    ("guard_id_question", "从哪个文件／哪张集合的哪个字段读到的"),
+    ("guard_id_unproved", "「编号未证」，不许当入口引用"),
+    ("guard_id_made_up", "编号是顺手补出来的"),
+    ("guard_id_source_task", "task-5b399a9567c3e25d64bb33eabe11bf9c"),
+    ("guard_id_real_task", "task-d9aab3742eaed3695ba873b44b30c14f"),
+    ("guard_weekly_run", "两个守卫各过一遍"),
+]
+
 # 版本与试用记录：日期一律写就时刻，计划真跑另起一行
 VERSION = [
     ("ver_planned_run", "计划首次真跑：2026-10-23 20:30（本地）"),
@@ -269,6 +295,10 @@ VERSION = [
     ("trial_v1", "2026-10-16 21:21 写就 v1"),
     ("trial_v2", "2026-10-17 09:21 写就 v2"),
     ("trial_v3", "2026-10-17 13:07 写就 v3"),
+    ("ver_v4_written", "v4（写就 2026-10-19 18:54）"),
+    ("trial_v4", "2026-10-19 18:54 写就 v4"),
+    ("ver_v5_written", "v5（写就 2026-10-20"),
+    ("trial_v5", "写就 v5"),
 ]
 
 # 被核掉／改掉的旧字面：留在正文里就说明那一格没真改
@@ -491,7 +521,7 @@ def main():
     check("description_specific_enough", len((fields or {}).get("description", "")) >= 120)
     for i, s in enumerate(SECTIONS):
         check("section_%d" % i, ("\n" + s) in ("\n" + body), s)
-    for name, tok in FACTS + CELLS + PITS + CRITERIA + TABLES + VERSION:
+    for name, tok in FACTS + CELLS + PITS + CRITERIA + TABLES + GUARDS + VERSION:
         check(name, tok in body, tok)
     for name, tok in STALE:
         check("stale_gone_" + name, tok not in body, "旧字面还在正文里：%s" % tok)
@@ -503,6 +533,37 @@ def main():
           all(re.search(r"^%d\. \*\*" % n, body, re.M) for n in range(1, 9)), "八条判据编号 1-8")
     check("six_cells_marked",
           all(("\n**%s " % m) in body for m in "①②③④⑤⑥"), "六格各有一行 **① … 起头")
+
+    # 读数守卫（2026-10-20 v5）：两条必须待在「## 一、硬规矩」里、编号是 8 和 9，且每条底下带
+    # 「什么算违反」那一行。挪到别的章节、改成正文里一句话、把编号去掉、或删掉「什么算违反」，都红。
+    hard = (body.split("## 一、硬规矩", 1)[-1].split("## 二、来源和口径", 1)[0]
+            if "## 一、硬规矩" in body else "")
+    check("guards_in_hard_rules",
+          bool(re.search(r"^8\. \*\*时刻基准\*\*", hard, re.M)
+               and re.search(r"^9\. \*\*编号出处\*\*", hard, re.M)),
+          "「## 一、硬规矩」里缺编号 8「时刻基准」或 9「编号出处」——挪走、改标题或掉编号都红")
+
+    def guard_segment(head):
+        found = re.search(r"(?m)^%s" % head, hard)
+        if not found:
+            return ""
+        rest = hard[found.start():]
+        nxt = re.search(r"(?m)^\d\. \*\*", rest[1:])
+        return rest[:nxt.start() + 1] if nxt else rest
+
+    check("guards_have_violation_line",
+          "什么算违反" in guard_segment(r"8\. \*\*时刻基准\*\*")
+          and "什么算违反" in guard_segment(r"9\. \*\*编号出处\*\*"),
+          "硬规矩 8／9 里缺「什么算违反」那一行——守卫必须写清什么算违反，否则只是口号")
+
+    # 反证 ②（2026-10-20）露的洞：把硬规矩 8 里「按 +13 和 +8 各换一次」改掉，自检照绿——
+    # 因为同一句在「试用记录」里被引了一遍，字面锚就满足了。关键句必须待在守卫本体里才算。
+    check("guards_words_in_place",
+          all(phrase in guard_segment(r"8\. \*\*时刻基准\*\*")
+              for phrase in ("① 用的偏移量", "按 +13 和 +8 各换一次", "不进账、不拿去对夜锚、不拿去排作息"))
+          and all(phrase in guard_segment(r"9\. \*\*编号出处\*\*")
+                  for phrase in ("从哪个文件／哪张集合的哪个字段读到的", "「编号未证」，不许当入口引用")),
+          "守卫的关键句必须写在硬规矩 8／9 那两条本体里——只在试用记录里出现一遍不算（反证 ② 做过）")
 
     # 文档节名锚点（2026-10-20）：找不到就红并报出 SKILL.md 行号与那一行原文；
     # 那份文档找不到 → UNCHECKED（没查），不算过也不判红。
@@ -596,7 +657,7 @@ def main():
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
     print("%d/%d 通过：来源口径、六格口径（含跨类拷贝去重四条）、三处坑、八条判据、三张表（含样例表标记）、"
-          "版本写就时刻与计划真跑日都在，v1／v2 退役字面没残留%s。（只查文件本身，外加把 usage_readout.py 的离线模式真跑了一遍；没读过会话记录和库。）"
+          "版本写就时刻与计划真跑日都在，两条读数守卫（时刻基准／编号出处）各带「什么算违反」，v1／v2 退役字面没残留%s。（只查文件本身，外加把 usage_readout.py 的离线模式真跑了一遍；没读过会话记录和库。）"
           % (total, total, anchor_note + leak))
     return 0
 

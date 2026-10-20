@@ -443,7 +443,8 @@ The task thread runs `executor.run`, then `pending.put` a feedback item (`chat.p
 ## A turn opened by a note from outside may read her questions (owner 2026-10-20)
 
 Her ask: in a home turn an outside note opened, `ask` was refused even for reading her own old questions. Reading
-carries nothing home, so `ask.read` joins that turn's tools; asking and closing stay out. Writing what she read into
+carries nothing home, so `ask.read` and `ideas.read` join that turn's tools (her notebook too: noting with no way
+to check what is already there is how it fills with duplicates); asking, closing and reviewing stay out. Writing what she read into
 her documents still waits. The boundary is the delay and her second look at home (owner: "reinforced by delay +
 secondary inspection at home"), so in that turn it goes into `ideas note`, and her self-improvement turn decides what
 enters her documents. The turn's words now say so.

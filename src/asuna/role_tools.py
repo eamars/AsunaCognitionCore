@@ -667,9 +667,9 @@ def _turn_rules(store, ep):
         # nothing with consequences (a wish to act goes into the notebook for her self-improvement review).
         names += note_tool
         if cls == visibility.OWNER_PRIVATE:
-            # Reading her own questions carries nothing home (owner 2026-10-20); writing stays behind the delay and
-            # her second look at home, through the notebook.
-            names.append('ask.read')
+            # Reading her own questions and notebook carries nothing home (owner 2026-10-20); writing stays behind the
+            # delay and her second look at home, through the notebook, which she can now check before adding to it.
+            names += ['ask.read', 'ideas.read']
         if context.get('affect_from_program'):
             names.append('feel')
         if (first or {}).get('owner_line') and context.get('errand_places_from_program'):

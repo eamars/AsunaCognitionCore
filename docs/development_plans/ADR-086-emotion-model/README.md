@@ -1,8 +1,8 @@
 # ADR-086: A psychological emotion model for her agentic loop
 
 Status: **Proposed**, 2026-10-21. Written by the research agent (Claude Fable 5.1) at the owner's request, from the
-brief Claude prepared; nothing here is built, and it reaches the character only after the owner and Claude agree.
-Every number says where it came from.
+brief Claude prepared; the owner's decisions of 11:2x NZDT are in §11; nothing here is built, and it reaches the
+character only after the owner and Claude agree. Every number says where it came from.
 
 ## 1. The owner's goal and what was fixed before the study
 
@@ -193,7 +193,7 @@ fixes what the projection sums:
 | phase | who | what | where she sees it |
 |---|---|---|---|
 | generation | she, in any turn | `feel` records a feeling in words: kind, intensity, cause (`ref`), why; arousal from the kind unless she says otherwise (D3); a feeling toward a person carries `who` (D1) | the tool's receipt |
-| influence | the program, every turn | the projection as one paragraph: the state, its strongest causes where readable, and the pull of the strongest kind (D4); a person's feelings in that person's entry (D1); in the gate, nothing, or the public paragraph (§6, the owner's call) | `affect_from_program`, the person entry, the gate's material |
+| influence | the program, every turn | the projection as one paragraph: the state, its strongest causes where readable, and the pull of the strongest kind (D4); a person's feelings in that person's entry (D1); in the gate, the public paragraph (§6, §11) | `affect_from_program`, the person entry, the gate's material |
 | fading | the program | each event decays by its kind's half-life; an unsettled one holds until closed; night settlement lists what is still open | the paragraph's "when" words; the settlement block |
 
 ## 4. Each mood: thinking, decisions, speech
@@ -231,7 +231,7 @@ she reads and can act on or against.
 | D3 | **Arousal from the kind.** Each kind carries a default arousal word (persona: 烦躁 有些波动, 好奇 有些波动, 不安 有些波动, 愉快 平稳 or 有些波动, 低落 平稳 …); `from_words` uses it when she writes none; her own word still wins | nothing new; the 兴奋 and 烦乱 bands can occur | persona: no `arousal` on a kind |
 | D4 | **One paragraph instead of label, face, four slots and tendencies.** `interpret` writes: the band's face (as today), then 「主要因为」 and up to two causes with their coarse age where readable (home: all; public: those recorded in this conversation), then the pull: the tendency text of the strongest kind, as a tendency (「这会儿你会…」), never as a rule. At 平静 with no cause: one line. The slot rule texts are removed from what she reads; the slots stay in the persona model for the Web page | `affect_from_program` every turn, shorter | `affect.paragraph: false` keeps today's shape |
 | D5 | **Recording guidance, neutral.** `feel`'s 「有触动才记」 becomes 「心里有起伏就记，好的坏的都记；记下来才算进心情」, and the description says a feeling about a person lands with that person. Model-facing wording of her own tool: put to her, as D2 and D3 | the tool list (one cold read per conversation at the install restart) | hers: the old wording |
-| D6 | **The gate**: §6 | the gate's material | `affect.gate: none` |
+| D6 | **The gate** carries the D4 public paragraph (owner, §11): state and pull, the cause only when recorded in this group, no slot rules | the gate's material | `affect.gate: none` |
 | D7 | **Dice review shows the mood.** Each roll's reading in `dice_review_from_program` carries the band word at that beat, so she can see her own mood-behaviour links when she retunes the dice | the dice review | – |
 
 Not in step 1: adaptation (§3.2), the appraiser route (stays off; she remains the only writer), any change to the
@@ -249,7 +249,8 @@ lets more pass, in a good one takes up more. Her real records agree in direction
 quiet does (§2.1). The question is form and size. G2 answers it: there is no light form. A bare band word moves the gate on one moment each way, today's shape at
 its middle band moves two, and neither says so in the reason; the forms that do name the mood (A1, B4) move it most.
 The gate was built to answer one question from this group's own material; the mood is, by the block's own note,
-「可能来自别的对话」. **Decision proposed: the gate carries no mood text (D6, `affect.gate: none` as the default).**
+「可能来自别的对话」. **The research agent's recommendation: the gate carries no mood text (`affect.gate: none`).** (The owner decided
+otherwise, §11: the gate carries the D4 public paragraph; `none` is the off switch.)
 Mood acts in the turn, where T shows it quiets, shortens, lengthens and colours what she does while an @ is still
 answered and a job still taken. What is given up: a low mood cannot let a line pass before the full turn; the turn's
 own `stay_silent` does that at the cost of one full turn, in hours that after D1 are the minority. This is not a new
@@ -296,7 +297,7 @@ tokenizers).
 
 ## 9. Verification on her real records after install
 
-Read-only, with Claude's scripts on the real ledger, 14 days after the restart that installs step 1. The reading is of
+Read-only, with Claude's scripts on the real ledger, 7 days after the restart that installs step 1 (owner, §11). The reading is of
 the mechanism, never a score of her.
 
 - **The mood varies.** No band holds more than 60% of the hours; at least three bands occur; no band runs more than 48
@@ -305,7 +306,7 @@ the mechanism, never a score of her.
 - **Person feelings land with persons.** The share of records with `who`, and the global sum's median (expected near
   Claude's recount, about 27, not 163).
 - **The mood explains something.** Gate join rate, speech length and help-or-decline, each by band, from the audit and
-  the turn records; a difference between bands in the direction of §4 is the pass. No difference after 14 days means
+  the turn records; a difference between bands in the direction of §4 is the pass. No difference after 7 days means
   the block is not reaching her decisions and D4's wording is looked at next.
 - **Nothing new is sent twice**: the per-turn profile after install (ADR-062 §7).
 - **Fail conditions**: the mood pinned again (one band over 80% of hours) means the next cause is the record bias
@@ -318,17 +319,19 @@ the mechanism, never a score of her.
   verdicts were quiet (61%, §2.1), and most lines never reach the gate at all (she spoke 15 of the extract's 2,058
   lines, §2.2); a real person is stung or amused in moments they do not answer. The gate's one line could carry an optional feeling word from her
   kinds table (「不理，有点刺」), recorded as a 轻微 event with the line as its cause. Zero extra calls, a few characters
-  in the gate's prompt. Proposed for step 2 after step 1 is read; it widens generation to where most of her day is.
+  in the gate's prompt. Step 2, after the 7-day reading of step 1 (owner, §11); it widens generation to where most of her day is.
 - **Adaptation**, if §9 shows same-kind pinning.
 - **Mood-congruent recall**: tilt retrieval toward memories whose feeling matches the mood. Real (Bower 1981) but it
   touches memory, which the owner gives observation time; not before step 1 is read.
 
-## 11. Decisions that are the owner's
+## 11. The owner's decisions (2026-10-21, 11:2x NZDT, through Claude)
 
-1. The gate's form (§6): no mood text at the gate (the research agent's recommendation, on G2), the D4 public
-   paragraph (Claude's option), or a band word when the band is not neutral.
-2. Whether step 2's gate feeling word (§10) waits for the 14-day reading or goes in with step 1.
-3. D2 and D3 are persona changes: the owner decides whether they are put to her with this ADR or after it.
+1. **The gate carries the mood**, in the D4 paragraph's public form (state and pull, the cause only when recorded in
+   this group, no slot rules): Claude's option in §6. The owner's reason: the gate is the cheap place to decide not
+   to reply, so a mood that lets a line pass there saves a full turn. `affect.gate: none` stays as the off switch only.
+2. **The reading is at 7 days, not 14**, as the compaction survey was; §9 reads at 7 days, and step 2 (§10, a feeling
+   word on lines she lets pass) waits for that reading.
+3. **D2, D3 and D5 go to her together with the ADR**, after the owner and Claude agree.
 
 ## 12. The study record
 

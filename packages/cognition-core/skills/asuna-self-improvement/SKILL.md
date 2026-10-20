@@ -92,6 +92,21 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 - 推公开仓库之前没人替你审：先跑私人词检查（`tests/test_personal_words.py`，名单不在就是没查过，不是干净）。
 - 不 force-push。推被拒，就 fetch 下来 rebase 再推，别盖掉别人的提交。
 
+## 读自己发布产生的 git 提交
+
+`development_publish` 会把被发布的那份改动自动提交进本机检出（`packages/cognition-core/src/floor.js:commitPublished`；`RUNTIME_API.md` 的 Self-development 一节写着回执里的提交结果是它的返回值）。读这类提交，三条：
+
+1. **只信 `--stat`，不信提交正文。** 正文是发布时那段理由的复读，讲的是「打算改什么」；`git show --stat <sha>` 讲的是这一笔真动了哪些文件。两者打架时以 `--stat` 为准，并把打架本身报出来。
+   - 什么算违反：拿提交正文当「这一笔改了什么」的凭据下结论；正文与 `--stat` 不一致却只抄正文；把正文里那句「没动 X」当成 X 没进这一笔的证据。
+2. **判「某笔改动在不在跑」靠两件事**：① `git merge-base --is-ancestor <那一笔> <在跑的那一笔或 HEAD>`，rc=0 才算在历史里；② 在**运行时那份文件**里 grep 那一笔才带进来的新符号（新字符串、新函数名），grep 到才算装上。两条缺一不算判过。
+   - 什么算违反：只查提交在不在、不查运行时文件里那个符号在不在；用提交正文代替那次 grep；`--is-ancestor` 没跑就写「在跑」或「没在跑」。
+3. **重启回执里「`<head> is not behind origin/main <target>`」／「本机检出有 origin/main 没有的提交」不等于没装。** 启动器只在 main 落后于 origin/main 时才快进（`tools/asuna-launch.mjs:fastForwardCheckout`），快进不了返回 `diverged`、不报错；发布的自动提交压在远端那一笔之上，本机就正好是「比远端新一格」——既 not behind、又多出一笔自己的提交。要判的是第 2 条：那一笔在不在 HEAD 的历史里，不是「本机比远端多几笔」。
+   - 什么算违反：把「not behind」读成「改动没进去」；把「本机有 origin/main 没有的提交」当成回滚、或当成有人动了本机；只报 ahead 几笔，不跑 `--is-ancestor`。
+
+来路：2026-10-20 12:13 那笔 `ede4e2b0` 是发布自动提交，父提交 `f9bc5f20`（`git merge-base --is-ancestor f9bc5f20 ede4e2b0` → rc=0），`--stat` 显示这一笔改的是 `packages/personas/xiaoman/persona-model.json`（1 增 1 删），而它自己的提交正文写着「没动 packages/personas/xiaoman/ 镜像」——正文与 `--stat` 打架的就是这一格。发布任务：`task-2a3c346e608f1837268c9a1421d9b66d`。
+
 ## 版本
+
+v2（写就 2026-10-20 17:27 UTC+13）：加「读自己发布产生的 git 提交」一节——只信 `--stat`；判在不在跑用 `git merge-base --is-ancestor` ＋ 在运行时那份文件里 grep 那一笔才带进来的新符号；再写清重启回执里「not behind」／「本机检出有 origin/main 没有的提交」该怎么读。来路是 2026-10-20 那笔发布自动提交 `ede4e2b0`（发布任务 `task-2a3c346e608f1837268c9a1421d9b66d`）：提交正文与 `--stat` 打架；「not behind」这一格容易被读成「没装」，这里写死该怎么读。旧内容一条没删。
 
 v1（2026-10-05）：随 ADR-011 首次发布；吸收了人格包里 `asuna-offline-selfchecks` 与人格无关的部分。

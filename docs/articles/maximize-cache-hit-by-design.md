@@ -17,7 +17,8 @@ The short version:
 3. The system prompt and the tool list are per conversation. The turn's own rules are applied by the program
    (refusals), and the turn's own facts are text at the end of the turn's message.
 4. The program sends only what the conversation no longer shows, and keeps the conversation small enough that the
-   cache can hold it.
+   cache can hold it. A quiet conversation is condensed while its cache has lapsed anyway, so the reset costs nothing
+   and the next cold read is a small one.
 5. Work that is not the conversation (a yes/no gate, a summary) runs in its own small session so it does not disturb
    the conversation's cached prefix.
 
@@ -429,6 +430,34 @@ flowchart TD
 **Rule:** treat every compaction as a cache reset. Keep notices small so it happens rarely, leave room for the
 summary request, and keep parked conversations small so more of them fit in the cache.
 
+### A quiet spell is when a compaction costs nothing
+
+A compaction's cost is the reset: the next request reads the conversation again from its start. In a quiet spell
+there is nothing left to reset. The cache lapses with idle time (section 1: idle 5 to 30 minutes, about 55% of next
+requests missed; 30 minutes or more, 90 to 100%; hosted APIs expire entries after minutes), so the next line in that
+group is read cold whether or not the conversation was condensed. Condensing first decides only how much is read
+cold.
+
+So the condensing of quiet groups is timed to the lapse:
+
+- **It waits for the quiet the cache needs to lapse.** A group with 100 or more lines a day is condensed after 10
+  quiet minutes, one with 30 or more after 15, a quieter one after 30 (`condense.py QUIET_TIERS`); in the group's
+  local night it waits for no quiet (`NIGHT_HOURS`).
+- **The cold read lands on a small conversation.** When someone speaks again, the first request reads the summary
+  and the kept tail, not the whole history. On the local engine a cold read runs at about 6K tokens a second, so
+  every 100K tokens condensed away is about 17 seconds less before her first word.
+- **The work runs while nobody waits.** The summary request, and its own cold read after a long quiet, happen in
+  idle time. A compaction inside a turn makes the person who woke her wait for it.
+- **The cache gets room back.** A smaller parked entry leaves space for the conversations that are active, so they
+  are evicted less.
+- **What the summary drops stays with her.** An unmarked group gets a notes visit before it is condensed, and the
+  first turn there afterwards says where the summary is, so she can add what it left out to the group's notes.
+
+The usual alternatives each pay one of these costs. A bot that rebuilds a short prompt every turn reads every turn
+cold and keeps no long conversation. A bot that keeps the history and compacts only when it overflows reads the whole
+history cold after every quiet spell, then compacts inside a reply. Condensing at the quiet spell keeps the long
+conversation and its cache while it is active, and moves the reset to the moment it is free.
+
 ---
 
 ## 8. Side requests get their own small sessions
@@ -616,6 +645,8 @@ A checklist for review:
 - The session log is the only record of what was shown (`source.carried`); keep no side cache of it.
 - Every compaction is a cache reset: keep notices small, leave room for the summary request, condense quiet
   conversations early, and do not warm them.
+- Do the reset when the cache has lapsed anyway: condense in the quiet spell, so the next cold read is small and no
+  one waits for the summary.
 - Side work runs in its own small session and is retired.
 - New rights in an old conversation: keep the prefix, change the program's authority.
 - State the cost of every tool, option and per-turn line in characters, in the ADR, and in the budget test.
@@ -649,5 +680,5 @@ A checklist for review:
 
 ## Latest change
 
-The character's summary request sends the whole conversation and names the kept tail, so it reads from the cache up
-to its last message (section 7, ADR-085).
+Section 7 explains why quiet groups are condensed in their quiet spell: the cache has lapsed by then, so the reset
+costs nothing, the next cold read is small, and the summary runs while nobody waits.

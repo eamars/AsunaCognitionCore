@@ -65,7 +65,7 @@ PLAN_MOVED_FIRED = ('「%s」这回合已经到点跑完了，它还是跑完的
 ASK_UNKNOWN = 'ASK_QUESTION_UNKNOWN: 没有「%s」这个问题：id 照抄 questions_from_program 或 ask 的结果。'
 # ADR-088 §4.2: a plan from a turn a note from outside opened at home is made where the note came from.
 PLAN_THERE = '建在%s（便条来的那边）：到点在那边跑，带那边的权限'
-PLAN_OUTSIDE_LINE = '这一回合是外面的便条叫起来的：安排建在便条来的那边，挂不到线上；去掉 line 再建。'
+PLAN_OUTSIDE_LINE = '这一回合是外面的便条叫起来的：安排自动建在便条来的那边，不用写 place；去掉 place 再建。'
 PLAN_OUTSIDE_GONE = '叫起这一回合的便条（或写它的那一回合）找不到了，不知道它从哪边来，安排建不了；要记着的事在这里说出来。'
 PLAN_OUTSIDE_ONLY_MADE = ('「%s」不是这一回合建的：外面的便条叫起来的回合只能改或取消它自己刚建的安排；'
                           '别的安排在它们自己的对话里改。')

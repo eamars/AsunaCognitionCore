@@ -314,7 +314,8 @@ least as its handle.**
 
 Then `trimTurn` applies the turn's ceiling (`context_budget.TURN_CHARS`, 48,000 JSON characters, ADR-014): over it,
 the oldest rows of listed lists go first, then the longest text is halved, saying what was cut; what is cut is no
-longer counted as carried. Under it nothing is cut, so the same content is always sent the same way.
+longer counted as carried, and a block sent cut is recorded as such (`carried.cut`), so it is the newest copy and
+matches nothing. Under it nothing is cut, so the same content is always sent the same way.
 
 ```mermaid
 sequenceDiagram
@@ -695,7 +696,7 @@ ADR-085 (summary request sends the whole conversation), ADR-086 (emotion model: 
 ## Changelog
 
 - **2026-10-21** — A block is named unchanged only when its newest copy on the surface matches; an older copy no
-  longer counts once a later notice sent the block differently (section 6).
+  longer counts once a later notice sent the block differently, or cut (section 6).
 - **2026-10-21** — ADR-086: an @ or a reply to her in a group goes through the relevance gate first, except a reply
   from the person she waits on or within her open question's wait; a gate that cannot answer it falls back to the
   turn (sections 1, 8). The gate and the tail read her mood as one short paragraph, nothing at a calm band; a fixed

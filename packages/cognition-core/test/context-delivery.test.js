@@ -216,6 +216,19 @@ test('a notice over the ceiling loses the oldest rows first, then halves its lon
   assert.deepEqual(composed.omitted.trimmed, left);
 });
 
+test('a block sent cut is its newest copy: an older whole copy no longer counts', () => {
+  const first = composeContext(context([], { relationship: { body: '认识' } }), visibleCarried(surface([])));
+  const second = composeContext(context([], { relationship: { body: '吵'.repeat(20000) } }),
+    visibleCarried(surface([notice(first, 'ep-1')])));
+  assert.ok(trimTurn(second, ceiling).shortened_texts >= 1);
+  assert.deepEqual(second.carried.cut, ['relationship']);
+  assert.equal(second.carried.blocks.relationship, undefined);
+  const third = composeContext(context([], { relationship: { body: '认识' } }),
+    visibleCarried(surface([notice(first, 'ep-1'), notice(second, 'ep-2')])));
+  assert.deepEqual(third.context.relationship, { body: '认识' }, 'she last saw the cut copy, so the block is sent whole');
+  assert.ok(third.context.unchanged_from_program.includes('self_state_from_program'), 'a block never cut stays unchanged');
+});
+
 // ADR-063 D2: nothing a notice called unchanged may be missing when the model reads the next request.
 test('after a compaction, what a notice relied on and the surface no longer shows is restored', () => {
   const rows = [{ _id: 'in-1', direction: 'inbound', text: '旧话' }];

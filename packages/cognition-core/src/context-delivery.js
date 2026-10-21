@@ -59,8 +59,10 @@ export function visibleCarried(session, pending = []) {
     const carried = source?.kind === 'asuna' ? source.carried : undefined;
     if (!carried) return;
     // A list block sent folded: the whole block as it was then (its items on this and older notices).
+    // A block sent cut (trimTurn) is its newest copy too: it hides the older ones and matches nothing.
     const blocks = carried.blocks ?? {}, lists = carried.lists ?? {};
-    for (const key of new Set([...Object.keys(blocks), ...Object.keys(lists)])) newest.set(key, { block: blocks[key], list: lists[key] });
+    for (const key of new Set([...Object.keys(blocks), ...Object.keys(lists), ...carried.cut ?? []]))
+      newest.set(key, { block: blocks[key], list: lists[key] });
     for (const [key, values] of Object.entries(carried.items ?? {})) for (const value of values) visible.items.add(key + ':' + value);
     for (const id of carried.rows ?? []) visible.rows.add(id);
     for (const id of carried.memories ?? []) visible.memories.add(id);
@@ -307,7 +309,11 @@ export function trimTurn(composed, ceiling) {
     }
   }
   if (shortened) left.shortened_texts = shortened;
-  for (const block of touched) { delete carried.blocks[block]; delete carried.lists[block]; }
+  for (const block of touched) {
+    // Sent, though not whole: recorded as cut, so no older copy of it counts as the one she sees.
+    if (block in carried.blocks || block in carried.lists) (carried.cut ??= []).push(block);
+    delete carried.blocks[block]; delete carried.lists[block];
+  }
   const entries = Object.entries(context), at = entries.findIndex(([key]) => !HEAD.includes(key));
   entries.splice(at < 0 ? entries.length : at, 0, ['trimmed_from_program', { left_out: left, note: ceiling.note }]);
   composed.context = Object.fromEntries(entries);

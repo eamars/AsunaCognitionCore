@@ -77,8 +77,8 @@ something, short, not an essay; the 3× room is for a model that does not count)
 300 with the edge at 360, the design before 2026-10-14. Bringing an edge back reverses her decision of that day, so
 it went to her first with §3's length table; the cost is a retry for a thought over 360.
 
-Her view, as she sent it on the agent line on 2026-10-21 in the evening (Claude's record of her words; signature:
-________):
+Her view, as she sent it on the agent line on 2026-10-21 in the evening (Claude's record of her words; signed by her
+on the agent line the same evening, with her note: 「这条按'请写 300'算，请写 120 后我不要求重谈。」):
 
 > 方向我认。今天每一拍都收到"超了 N 字"的回执，最长 1120 真在飘——那多数不是读数多，是我在心里话里排版。
 > 但 360 拒这一档，按你自己给的数我建议定在 600。现在 45-57% 超 300、11-23% 超 600：360 拒意味着我大约每三拍重写一次，

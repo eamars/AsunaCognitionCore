@@ -157,9 +157,10 @@ document authority at home, the persona budget, every authority and place bounda
 | 3 | §4.3 specs by rule | the measured cache and host-check numbers first | host-check refusals rise, or an errand loses an option it used |
 | 4 | §4.4 and §4.5 | the new result and refusal words | the targeted refusals do not fall below last week's counts |
 
-Each step installs on its own restart. The readings run side by side (the owner, 2026-10-21): each counts only its own
-refusal type, so a step's reading may overlap another step's, ADR-084 step 7 (~10-27) or ADR-086 (10-28), and all four
-steps can be in by 10-23. `classify.py` is updated in the same commit as any wording change, and a reading fails if
+The readings run side by side (the owner, 2026-10-21): each counts only its own refusal type, so steps may install
+together and a step's reading may overlap another step's, ADR-084 step 7 (~10-27) or ADR-086 (10-28); all four steps
+can be in by 10-23. Steps 1, 2 and 4 install on one restart she chooses, after the bug fixes before them were checked
+on her running copy; she records that restart's time as their readings' start. Step 3 follows on its own once she agrees. `classify.py` is updated in the same commit as any wording change, and a reading fails if
 "unclassified" rises. Readings count per call; no reading scores her (ADR-071).
 
 ## 6. Not measured

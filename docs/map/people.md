@@ -436,7 +436,7 @@ Her understanding of a person, in two layers (owner 2026-10-08, with her wording
 - def `entry` — One person as a group turn shows them: label, familiarity and stance (as every turn did), her shorts when she has written them.
 - def `group_people` — people_from_program for a group turn: the person who started it, then whoever's @ or reply to her waits behind it in this scene's queue (at most ENTRY_MAX); and what each item showed ({person_id: pins}).
 - def `read` — What `recall`'s `person` returns: the person layer as she reads it (with its short), this conversation's here layer, and the revisions shown.
-- def `listing` — 「名单」 (home only): everyone she has written, each layer with its length, where and when it was last written; newest first.
+- def `listing` — 「名单」 (home only): everyone she has written, each layer with its length, where and when it was last written; newest first, as many as fit `limit` characters, then one entry naming how many earlier ones are left out.
 - class `Unknown` — A `person` this turn cannot take; the message lists the ones it can.
 - def `present` — The people whose own lines are in this turn (the manifest's `present`, recorded at prepare while the rows still carry ids), and whoever its entry listed (the queue behind it).
 - def `resolve` — The person_id `value` names in this turn, or Unknown with the labels it can take.

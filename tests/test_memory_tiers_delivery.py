@@ -150,6 +150,23 @@ def test_an_empty_recall_says_all_three_places_and_a_doc_without_sid_lists_its_h
     assert places[sids['mountain']] == PUT_AWAY and places[sids['recipe']] == CARRIED
 
 
+def test_a_long_documents_headings_are_listed_latest_first_within_bounds(setup):
+    """B15: a log of hundreds of sections listed whole spilled past what a tool result carries inline. The listing keeps
+    the latest headings that fit, after one entry naming how many earlier ones there are and how to reach them."""
+    store, builder, sids, tiers = setup
+    docs = DocumentStore(store, 'P1')
+    for n in range(500):
+        write(docs, 'work_log', '第 %03d 天：照着清单把那一批事情做完了，记一笔' % n, '做完了。')
+    listed = recall_turn(store, builder, {'query': '记了什么', 'sections': [{'doc': 'work_log'}]})
+    [doc] = listed['documents']
+    first, rest = doc['headings'][0], doc['headings'][1:]
+    assert first == {'earlier': memory_tiers.EARLIER_HEADINGS % (500 - len(rest), 500)}
+    assert rest[-1]['heading'].startswith('第 499 天') and rest[0]['heading'].startswith('第 %03d 天' % (500 - len(rest)))
+    assert len(json.dumps(rest, ensure_ascii=False)) <= memory_tiers.LISTED_HEADINGS_CHARS
+    short = recall_turn(store, builder, {'query': '人设有什么', 'sections': [{'doc': 'persona'}]})
+    assert all('earlier' not in h for h in short['documents'][0]['headings']), 'a short one is listed whole'
+
+
 def test_a_turn_with_tiers_on_sends_nothing_twice(setup):
     """The ADR-062 profile's check on a synthetic turn: no text of 60 characters or more in two blocks, and nothing
     carried in the system prompt surfaced again among memories."""

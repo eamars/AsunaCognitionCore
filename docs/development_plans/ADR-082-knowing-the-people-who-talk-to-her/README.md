@@ -350,3 +350,11 @@ Then:
 Round 2 (same reviewer, 2026-10-20): both faults closed with tests; §9 is pass/fail. One case D6 does not cover: a
 visit that a note from outside opens in a home group keeps only the note's tools (ADR-018 §5.4); in any other group
 it keeps the group's own (§5.4a), `understand_person` included. None has happened live.
+
+## Addendum 2026-10-21: 「名单」 within bounds
+
+`recall` with person 「名单」 lists everyone she has written, each layer a row; it grows with everyone she writes (18
+layers of 12 people on 2026-10-21). It now keeps the newest that fit 8,000 characters (`understanding.LISTED_CHARS`),
+then one entry naming how many earlier ones are left out and how to read one (`EARLIER_PEOPLE`: recall's person with
+the label). Found in the check of every role result that lists without a bound (B15, the coordinator's request), after
+a document's headings spilled past what a tool result carries inline. Test: `tests/test_adr082_people.py`.

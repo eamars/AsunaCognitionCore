@@ -827,13 +827,31 @@ def headings(store, persona, pilot, query, readable, cls, shown=()):
     return [entry for *_, entry in sorted(found)[:HEADINGS_SHOWN]]
 
 
-def doc_headings(store, persona, slug, content, cls):
-    """recall with a doc and no sid: that document's headings, each with its place."""
+# A document's headings as recall lists them: the latest that fit, after one entry saying how many earlier ones there
+# are and how to reach them. A log runs to hundreds of sections: 476 headings were 60,740 characters, past what a tool
+# result may carry inline, so the result was cut and its path pointed at a tool she does not have (B15, 2026-10-21).
+LISTED_HEADINGS_CHARS = 8000
+EARLIER_HEADINGS = ('前面还有 %d 个更早的标题没列出（这份共 %d 个）：要找哪一节，用 recall 的 query 搜标题，'
+                    '或 sections 写 {doc, section} 直接读。')
+
+
+def doc_headings(store, persona, slug, content, cls, limit=LISTED_HEADINGS_CHARS):
+    """recall with a doc and no sid: that document's headings, each with its place; the latest that fit `limit`
+    characters, after a first entry naming how many earlier ones are left out."""
+    import json
     from . import visibility
     places = {row['sid']: row['place'] for row in Tiers(store, persona).items(doc=slug)}
-    return [{'sid': s['sid'], 'heading': s.get('heading') or s['sid'],
-             'place': places.get(s['sid']) or FROM_INJECT.get(s.get('inject'), AT_HAND)}
-            for s in (content or {}).get('sections') or [] if visibility.readable(s.get('visibility') or 'public', cls)]
+    listing = [{'sid': s['sid'], 'heading': s.get('heading') or s['sid'],
+                'place': places.get(s['sid']) or FROM_INJECT.get(s.get('inject'), AT_HAND)}
+               for s in (content or {}).get('sections') or [] if visibility.readable(s.get('visibility') or 'public', cls)]
+    kept, size = [], 0
+    for item in reversed(listing):
+        size += len(json.dumps(item, ensure_ascii=False)) + 2            # with its separator in the list
+        if size > limit:
+            break
+        kept.append(item)
+    earlier = len(listing) - len(kept)
+    return ([{'earlier': EARLIER_HEADINGS % (earlier, len(listing))}] if earlier else []) + kept[::-1]
 
 
 DOC_REF = re.compile(r'doc:([^#\s"\'，。、]+)#([^\s"\'，。、）)]+)')

@@ -185,6 +185,12 @@ def test_people_list_at_home_and_refused_outside(store):
     # At home a read names anyone on the list; his here layer is the one of the conversation it is read in.
     assert by_name['who'] and by_name['person']['text'] == NO_PERSON and by_name['here'] == {'text': NO_HERE}
     assert '另外 1 个对话' in by_name['person']['first']
+    # B15: it grows with everyone she writes; past its bound, the newest, then how many earlier ones are left out.
+    from asuna import understanding
+    whole = understanding.listing(store, 'P1')
+    cut = understanding.listing(store, 'P1', limit=len(json.dumps(
+        {k: v for k, v in whole[0].items() if k != 'person'}, ensure_ascii=False, default=str)) + 2)
+    assert cut == [whole[0], {'earlier': understanding.EARLIER_PEOPLE % (1, 2)}]
 
 
 # ---- the write -----------------------------------------------------------------------------------------------------

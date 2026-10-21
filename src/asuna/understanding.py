@@ -189,9 +189,30 @@ def _name(store, people, person):
             or speaker_name(store.config, person, None, store.db))
 
 
-def listing(store, persona):
+# 「名单」 grows with everyone she writes: the newest that fit, then how many earlier ones there are (B15: a listing
+# with no bound runs past what a tool result carries inline).
+LISTED_CHARS = 8000
+EARLIER_PEOPLE = '还有 %d 个人是更早写的，没列出（共 %d 个）：要看谁，recall 的 person 写他的标签。'
+
+
+def listing(store, persona, limit=LISTED_CHARS):
     """「名单」 (home only): everyone she has written, each layer with its length, where and when it was last written;
-    newest first. [{'name', 'person', 'layers': [...]}]"""
+    newest first, as many as fit `limit` characters, then one entry naming how many earlier ones are left out.
+    [{'name', 'person', 'layers': [...]}, …, {'earlier': …}]"""
+    import json
+    rows = _everyone(store, persona)
+    size, kept = 0, []
+    for row in rows:
+        size += len(json.dumps({k: v for k, v in row.items() if k != 'person'}, ensure_ascii=False, default=str)) + 2
+        if size > limit:
+            break
+        kept.append(row)
+    left = len(rows) - len(kept)
+    return kept + ([{'earlier': EARLIER_PEOPLE % (left, len(rows))}] if left else [])
+
+
+def _everyone(store, persona):
+    """Everyone she has written, newest first."""
     from .people import People
     people = People(store, persona)
     heads = list(store.db.state_heads.find({'_id': {'$regex': '^relationship:'}}))

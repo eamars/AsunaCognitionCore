@@ -6,7 +6,7 @@ import pytest
 from asuna import role_tools, visibility
 from asuna.role_tools import Refused
 from asuna.tasks import (FIRST_PAGE_CHARS, FIRST_PAGE_MOST, RECORDS_TITLE, REPORT_CHARS, TaskService, bounded_result,
-                         key_observations, report_pages)
+                         key_observations, records_pages, report_pages)
 
 
 def report(lines=40, width=400):
@@ -39,10 +39,24 @@ def test_the_hand_back_gives_the_first_page_and_says_how_to_turn_it():
 def test_the_first_page_names_the_pages_after_it_and_the_tool_records_come_last():
     # Her answer (2026-10-21): she knows what she is concluding from, so the first page says what follows.
     text = '## 结论\n部分做成。\n' + '字\n' * 1200 + '## 改了什么\n' + '改\n' * 2000 + '## 没做到的\n' + '没\n' * 500
-    value = bounded_result({'task_id': 'task-1', 'text': text}, records=3)
+    records = records_pages([{'tool': 'read_file', 'result_excerpt': 'a'}] * 3)
+    value = bounded_result({'task_id': 'task-1', 'text': text}, records=records)
     pages = report_pages(text)
     assert value['report_pages'] == len(pages) + 1
-    assert '后面：第 2 页「改了什么」' in value['text'] and '「%s」' % RECORDS_TITLE in value['text']
+    assert '后面：第 2 页「改了什么」' in value['text'] and '「%s（共 3 条' % RECORDS_TITLE in value['text']
+
+
+def test_a_task_with_many_calls_has_its_records_on_pages_no_longer_than_the_reports():
+    # B15: one page of every record ran to 154 records of up to 600 characters each, past what a tool result carries
+    # inline; the records are paged like the report, every record still there.
+    many = [{'tool': 'sandbox_run', 'result_excerpt': '%03d %s' % (n, '字' * 590)} for n in range(154)]
+    pages = records_pages(many)
+    assert len(pages) > 10 and all(len(page) <= REPORT_CHARS for page in pages)
+    assert pages[0].startswith(RECORDS_TITLE + '（第 1–') and pages[-1].split('\n')[0].endswith('共 154 条，每条截到 600 字）')
+    assert sum(page.count('\n- sandbox_run：') + page.startswith('- ') for page in pages) == 154
+    assert records_pages([]) == [] and records_pages(many[:2])[0].startswith(RECORDS_TITLE + '（共 2 条')
+    value = bounded_result({'task_id': 'task-1', 'text': '## 结论\n做成了。\n'}, records=pages)
+    assert value['report_pages'] == 1 + len(pages) and '第 1/%d 页' % (1 + len(pages)) in value['text']
 
 
 def test_the_first_page_stretches_to_the_next_section_or_the_end_of_a_table():

@@ -84,7 +84,7 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 - def `placed` — A document's sections as the turn reads them when the switch is on; unchanged when it is off.
 - def `deliver` — Her own items a turn brings up by itself (手边; a recall also reaches 收着), scored as memories are, at most OWN_SLOTS above FLOOR, as memory entries with their store, place and age words and a doc ref.
 - def `headings` — recall: the headings of her items at hand or put away that match the question, beyond the bodies it returns.
-- def `doc_headings` — recall with a doc and no sid: that document's headings, each with its place.
+- def `doc_headings` — recall with a doc and no sid: that document's headings, each with its place; the latest that fit `limit` characters, after a first entry naming how many earlier ones are left out.
 - def `refs_in` — The `doc:slug#sid` refs anywhere in a tool call's arguments.
 
 ## `retrieval`

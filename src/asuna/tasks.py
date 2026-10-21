@@ -42,7 +42,7 @@ FIRST_PAGE_CHARS = 2000          # the first page's usual length
 FIRST_PAGE_MOST = 3000           # ... stretched to here so its section or a table is not cut in half
 OBSERVATION_CHARS = 600
 # Tool records on the first page: only for a task that changed or published something, the receipts that say whether
-# it took (her answer: the risk is "it says it changed, and did not"); every record is the report's last page.
+# it took (her answer: the risk is "it says it changed, and did not"); every record is on the report's last pages.
 KEY_OBSERVATIONS = 2
 CHANGING_TOOLS = ('write_file', 'development_write', 'development_publish', 'integration_start', 'integration_stop',
                   'import_integration_artifact', 'generate_image', 'persona_job_run')
@@ -146,12 +146,20 @@ def key_observations(observations):
     return picked or [item for item in observations if item['tool'] in CHANGING_TOOLS][-KEY_OBSERVATIONS:]
 
 
-def records_page(observations):
-    """Every tool record of the task as the report's last page, or None when it made no call."""
-    if not observations:
-        return None
-    return RECORDS_TITLE + '（共 %d 条，每条截到 %d 字）\n' % (len(observations), OBSERVATION_CHARS) + ''.join(
-        '- %s：%s\n' % (item['tool'], item['result_excerpt']) for item in observations)
+def records_pages(observations, size=REPORT_CHARS):
+    """Every tool record of the task as the report's last pages, each at most `size` characters like the report's own
+    (a task makes up to a hundred and more calls: one page of them all ran past what a tool result carries inline);
+    none when it made no call."""
+    lines = ['- %s：%s\n' % (item['tool'], item['result_excerpt']) for item in observations]
+    head = lambda first, last: RECORDS_TITLE + (
+        '（共 %d 条，每条截到 %d 字）\n' % (len(lines), OBSERVATION_CHARS) if (first, last) == (1, len(lines)) else
+        '（第 %d–%d 条，共 %d 条，每条截到 %d 字）\n' % (first, last, len(lines), OBSERVATION_CHARS))
+    pages, first = [], 1
+    for n in range(1, len(lines) + 1):
+        if n == len(lines) or len(head(first, n + 1)) + sum(map(len, lines[first - 1:n + 1])) > size:
+            pages.append(head(first, n) + ''.join(lines[first - 1:n]))
+            first = n + 1
+    return pages
 
 
 def observations_of(store, task, shown=lambda value: value):
@@ -166,20 +174,19 @@ def observations_of(store, task, shown=lambda value: value):
 def task_pages(store, task, shown=lambda value: value):
     """The pages task op page reads: the report's, then its tool records."""
     pages = report_pages(((task.get('result') or {}).get('text')) or '')
-    records = records_page(observations_of(store, task, shown))
-    return pages + [records] if records else pages
+    return pages + records_pages(observations_of(store, task, shown))
 
 
-def bounded_result(result, records=0):
+def bounded_result(result, records=()):
     if isinstance(result, dict) and isinstance(result.get('text'), str):
         # The ids of its tool records are audit, not something she reads: a count says how much was done. `facts`
-        # repeats the report with every record's id (the stored result keeps it). `records`: how many tool records
-        # follow the report as its last page.
+        # repeats the report with every record's id (the stored result keeps it). `records`: the pages of tool records
+        # that follow the report (records_pages).
         refs = result.get('artifact_refs')
         value = {key: item for key, item in result.items() if key not in ('artifact_refs', 'facts')}
         pages = report_pages(result['text'])
-        titles = [page_title(page) for page in pages[1:]] + ([RECORDS_TITLE] if records else [])
-        count = len(pages) + (1 if records else 0)
+        titles = [page_title(page) for page in [*pages[1:], *records]]
+        count = len(pages) + len(records)
         text = pages[0] if count == 1 else pages[0] + page_note(result.get('task_id'), 1, count, len(result['text']),
                                                                 titles)
         return {**value, 'text': text, **({'report_pages': count} if count > 1 else {}),
@@ -535,7 +542,7 @@ class TaskService:
         else:
             depth=original.get('delegation_depth',0)+1
             observations=[] if short else observations_of(self.store,task,shown)
-            event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 task 的 message。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],**_why_then(self.store,task),'value':shown(bounded_result(task.get('result'),len(observations))) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
+            event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 task 的 message。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],**_why_then(self.store,task),'value':shown(bounded_result(task.get('result'),records_pages(observations))) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
             source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0], 'scope_key':task['scope_key'], 'policy_epoch':task['policy_epoch']})
             # The session the task belongs to (home's own for one begun on an errand or in a reflection).
             if task.get('native_session_id') or original.get('native_session_id'):
@@ -551,7 +558,7 @@ class TaskService:
             else:
                 # When it ran (a result handed back late describes that time); stored UTC, her turn shows it local.
                 # Tool records on the first page only where the task changed something (key_observations); all of
-                # them are the report's last page.
+                # them are on the report's last pages.
                 event['trusted_context_events'][0].update(original_input=(source or {}).get('text'),
                     original_input_id=(source or {}).get('_id'),brief=task.get('brief') or task['goal'],
                     **({'observations':key} if (key:=key_observations(observations)) else {}),

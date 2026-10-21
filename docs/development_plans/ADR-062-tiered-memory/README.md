@@ -680,3 +680,13 @@ by use is missing. That would be a new design of its own, not this branch revive
 ## Room left in 随身 (2026-10-20)
 
 `things_from_program` says, for each capped store, how much room its 随身 has left under the cap (`ROOM_WORDS`: 满了, 还能放一条, 还能放两三条, 还能放好几条, 还空着很多) instead of how many items it carries: the carried items are already in front of her; the cap was visible only once it was over (her need, 2026-10-19). The room is counted as `_overflow` counts the cap: every carried item of the store, or of each document where the cap is per document, the tightest one the turn reads. On 2026-10-20 her self and core stores were full, the fullest group notes full, persona two left, voice one.
+
+## Addendum 2026-10-21: a document's headings, listed within bounds
+
+`recall` with a doc and no section listed every heading of that document. A work log of 476 sections listed 60,740
+characters, 90% of a 67,594-character result; DSH cut it to a preview and a file path she has no tool to read (the
+only role result that spilled in 30 days, 2026-10-21 21:00 in a private chat). The listing (`doc_headings`) now keeps
+the latest headings that fit 8,000 characters (`LISTED_HEADINGS_CHARS`), after one entry saying how many earlier ones
+there are and how to reach them with what `recall` already has: a query searches headings, `sections` with a section
+reads one (`EARLIER_HEADINGS`). No new tool or option; nothing changes for a document that fits. Coordinator's decision
+on the coder's proposal (B15). Test: `tests/test_memory_tiers_delivery.py`.

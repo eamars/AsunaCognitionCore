@@ -14,7 +14,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 - def `page_title` — A page's first line as its title, without its Markdown marks.
 - def `page_note` — What the end of a page says: where she is, how long the report is, what the pages after it are called, and how to turn the page.
 - def `key_observations` — The tool records the first page keeps: none for a task that changed nothing; for one that did, the latest publish or start/stop receipt and the latest run (its test), else its latest changes.
-- def `records_page` — Every tool record of the task as the report's last page, or None when it made no call.
+- def `records_pages` — Every tool record of the task as the report's last pages, each at most `size` characters like the report's own (a task makes up to a hundred and more calls: one page of them all ran past what a tool result carries inline); none when it made
 - def `observations_of` — The task's finished tool calls, each as its tool and an excerpt of its result (a failed one: its error).
 - def `task_pages` — The pages task op page reads: the report's, then its tool records.
 - def `bounded_result`

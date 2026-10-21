@@ -165,3 +165,13 @@ same words.
   (`observations_of`), so "it says it changed, and did not" stays visible there.
 - Tests: `tests/test_workspace_tasks.py` (read_file `PATH_DENIED` on both layers, the protected write, the words),
   `tests/test_integration.py` (an unknown import endpoint).
+
+## Addendum 2026-10-21: the tool records on pages of their own
+
+"Every record is the report's last page" put all of a task's records on one page: up to 154 records of up to 600
+characters (on 2026-10-21, 72 of 835 tasks had more than 50), past what a tool result carries inline, so `task` op page
+would have been cut to a preview and a file path she has no tool to read. The records are now pages like the report's,
+at most `REPORT_CHARS` each (`records_pages`), every record still there, each page titled with which records it holds
+(「工具记录（第 a–b 条，共 N 条…）」; a task whose records fit one page keeps 「工具记录（共 N 条…）」); the hand-back's page
+count and the names of the pages after the first include them. Found in the check of every role result that lists
+without a bound (B15). Test: `tests/test_read_report.py`.

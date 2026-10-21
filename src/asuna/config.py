@@ -165,9 +165,9 @@ def soft(limit):
     return limit * 4 // 5
 
 
-def over(length, limit):
-    """Words for a text kept although longer than she was asked for, or None."""
-    ask = soft(limit)
+def over(length, limit, ask=None):
+    """Words for a text kept although longer than she was asked for (`ask`, by default soft(limit)), or None."""
+    ask = ask or soft(limit)
     return ('%d 字，超了 %d 字（%d 字以内，最多 %d 字），这次照收了' % (length, length - ask, ask, limit)
             if ask < length <= limit else None)
 

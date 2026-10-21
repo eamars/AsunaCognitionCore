@@ -32,7 +32,8 @@ from .vision import inline_summary as picture_receipt
 from .config import cut, cut_offer, over, soft
 from .context_budget import SINGLE_BODY_CHARS
 
-THOUGHT_CHARS = 300                  # what she is asked for; a longer thought is kept, and only its own result says by how much
+THOUGHT_CHARS = 120                  # what she is asked for: her first reaction, short (ADR-087 §4.1)
+THOUGHT_HARD_CHARS = 360             # refused past this; the room up to it is the model's, said in the result
 # How a length limit counts, said with every over-length refusal so one cut is enough.
 # A field a refusal names, by the name she is shown (ADR-060).
 _SHOWN = {'body': 'content', 'reason': 'why', 'sid': 'section', 'line': 'place'}
@@ -145,9 +146,10 @@ from . import notes as _notes, places as _places
 
 TOOLS = {
     'think': {
-        'description': ('写下这回合的心里话：注意到了什么、心里什么感觉、打算怎么做。用你自己的口吻写两三句，%d 字以内，不是完整的推理过程。'
+        'description': ('写下这回合的心里话：注意到了什么、心里什么感觉、打算怎么做。用你自己的口吻写两三句' + LIMIT_WORDS
+                         % (THOUGHT_CHARS, THOUGHT_HARD_CHARS) + '，不是完整的推理过程。'
                          '每回合第一步调用它。心里话会存档：这个对话里最近三段，下一回合一定看得到（还在屏上的就在原处，不另给）；'
-                         '更早的用 recall 找。' % THOUGHT_CHARS),
+                         '更早的用 recall 找。'),
         'parameters': {'thought': _s('心里话', required=True)},
     },
     'recall': {
@@ -1316,7 +1318,9 @@ class RoleTools:
         """The class of the conversation this turn is in: what goes out there and who is there."""
         return (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
 
-    def _text(self, args, field, limit, *, required=True):
+    def _text(self, args, field, limit, *, required=True, ask=None):
+        """A text field refused past `limit`; she is asked for `ask` (by default four fifths of it, config.soft)."""
+        ask = ask or soft(limit)
         value = args.get(field)
         if value is None and not required:
             return None
@@ -1328,20 +1332,21 @@ class RoleTools:
                           % (field, limit))
         if len(value) > limit:
             raise Refused('%s 太长了：%d 字，最多 %d 字，超了 %d 字。精简到 %d 字以内再调用，或者照这个截好的写：%s'
-                          % (_SHOWN.get(field, field), len(value), limit, len(value) - limit, soft(limit),
+                          % (_SHOWN.get(field, field), len(value), limit, len(value) - limit, ask,
                              cut_offer(value, limit)))
-        self._longer(field, len(value), limit)
+        self._longer(field, len(value), limit, ask)
         return value.strip()
 
-    def _longer(self, field, length, limit):
-        """A text kept although longer than she was asked for: this call's result says so (like think's)."""
-        words = over(length, limit)
+    def _longer(self, field, length, limit, ask=None):
+        """A text kept although longer than she was asked for: this call's result says so."""
+        words = over(length, limit, ask)
         if words:
             self.__dict__.setdefault('over', []).append('%s %s' % (_SHOWN.get(field, field), words))
 
     # ── mind ────────────────────────────────────────────────────────
     def tool_think(self, ep, call_id, args):
-        thought = self._text(args, 'thought', 100000)
+        # Asked for THOUGHT_CHARS, refused past THOUGHT_HARD_CHARS (ADR-087 §4.1); one kept between says so (`length`).
+        thought = self._text(args, 'thought', THOUGHT_HARD_CHARS, ask=THOUGHT_CHARS)
         from .config import character_id
         memory_id = 'mono-' + ep['_id'] + ':' + call_id
         home = ep.get('errand') or ep               # an errand's thoughts are kept at home (ADR-066)
@@ -1354,9 +1359,7 @@ class RoleTools:
         ep = self._fresh(ep)
         self.coordinator._update(ep, turn_thought=True,
                                  monologue_refs=[*dict.fromkeys([*(ep.get('monologue_refs') or []), memory_id])])
-        over = len(thought) - THOUGHT_CHARS
-        # Kept whatever its length (her decision, 2026-10-14): a refusal cost a whole retry. Only this result says it.
-        return {'saved': True, 'note': '已存档。' + ('超了 %d 字。' % over if over > 0 else '')}, False
+        return {'saved': True, 'note': '已存档。'}, False
 
     def tool_recall(self, ep, call_id, args):
         # ADR-060: query is optional when sections name what to read.

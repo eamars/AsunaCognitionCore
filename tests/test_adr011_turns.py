@@ -68,12 +68,18 @@ def test_think_comes_first_and_a_refusal_goes_back_to_her(store):
     assert ep['state'] == 'COMMITTED' and ep['recall_count'] == 1
 
 
-def test_a_long_thought_is_kept_and_only_its_own_result_says_by_how_much(store):
-    coordinator, lane = run(store, FakeTurn([('think', {'thought': '很' * 400}), ('think', {'thought': '短的'})], '好。'))
+def test_a_thought_is_asked_for_120_kept_up_to_360_and_refused_past_it(store):
+    """ADR-087 §4.1 (owner, 2026-10-21): a thought is her first reaction, asked for 120 characters; one up to 360 is
+    kept and its result says by how much, as for any field kept past its ask; past 360 it is refused."""
+    assert '（120 字以内，最多 360 字）' in role_tools.TOOLS['think']['description']
+    coordinator, lane = run(store, FakeTurn([('think', {'thought': '很' * 361}), ('think', {'thought': '很' * 360}),
+                                             ('think', {'thought': '短的'})], '好。'))
     ep = coordinator.ingest(event())
-    long, short = lane.tool_results
-    assert long[5] and '超了 100 字' in long[4]['note'] and short[5] and '超了' not in short[4]['note']
-    assert ep['state'] == 'COMMITTED' and len(ep['monologue_refs']) == 2
+    refused, edge, short = lane.tool_results
+    assert not refused[5] and '最多 360 字，超了 1 字。精简到 120 字以内' in refused[4]
+    assert edge[5] and edge[4]['length'] == 'thought 360 字，超了 240 字（120 字以内，最多 360 字），这次照收了'
+    assert short[5] and 'length' not in short[4]
+    assert ep['state'] == 'COMMITTED' and len(ep['monologue_refs']) == 2, 'the refused thought is not kept'
 
 
 def test_every_notice_ends_with_think_first_and_the_think_tool_says_how_many_thoughts_come_back(store):

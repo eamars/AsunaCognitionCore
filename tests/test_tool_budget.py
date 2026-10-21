@@ -13,7 +13,7 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (30, 21371)       # ADR-086 D1/D5: feel's who field and the recording words, +264;       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
+CHARACTER = (30, 21381)       # ADR-087 §4.1: think asks 120, refused past 360 (both numbers) +10; ADR-086 D1/D5: feel's who field and the recording words, +264;       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
                               # ADR-064 phase 2: reply +1,334 (QQ group lists +451 net, QQ private +1,028), stay_silent -16, leave_note question +88;
                               # reply force (a #number that is someone here is sent back unless force=yes; owner 2026-10-14) +90; stay_silent why optional (said: nothing to explain) -10;
                               # ADR-060 leftovers: recall query optional with sections, feel yes/no and its decisions named, recall section +25
@@ -35,7 +35,7 @@ CHARACTER = (30, 21371)       # ADR-086 D1/D5: feel's who field and the recordin
                               # soft text budget (owner 2026-10-20): each stated length gives what she is asked for and
                               # where the program refuses, 「N 字以内，最多 M 字」 (her ask: both numbers) +155
 # With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): let_go, nature, from, about and the recall sentence (+294).
-CHARACTER_TIERED = (30, 21667)
+CHARACTER_TIERED = (30, 21677)
 ACTION = (25 + len(ACTION_DSH_CAPABILITIES), 15700)        # the worker's tools, plus DSH's own (skill, todo, web)
 
 

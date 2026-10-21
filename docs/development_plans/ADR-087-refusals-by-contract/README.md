@@ -97,7 +97,9 @@ every later turn carries.
 
 A closed list of calls that write nothing may run before her first thought: `recall`, `read_image`, `task.page`,
 `ideas.read`, `ask.read`, `find_member`, and each list or preview operation named in the list. It lives in code next to
-`reasons._action`. Every other call, `feel` and `task.answer` included, still needs a thought first, so each action
+`reasons._action` (`reasons.READS`; the list and preview options there are `restart.preview`, `group_focus.list`,
+`place_timezone.list` and `private_words.summary`; the sticker shelf and pool listings are left out, since they record
+what they showed in the turn). Every other call, `feel` and `task.answer` included, still needs a thought first, so each action
 keeps its recorded reason (ADR-043). The tail line `coordinator.THINK_FIRST` stays. Up to 53 fewer refusals a week,
 less those that move to the first acting call.
 
@@ -155,8 +157,9 @@ document authority at home, the persona budget, every authority and place bounda
 | 3 | §4.3 specs by rule | the measured cache and host-check numbers first | host-check refusals rise, or an errand loses an option it used |
 | 4 | §4.4 and §4.5 | the new result and refusal words | the targeted refusals do not fall below last week's counts |
 
-Each step installs on its own restart, and its reading does not overlap another step's or ADR-084 step 7 (~10-27) and
-ADR-086 (10-28). `classify.py` is updated in the same commit as any wording change, and a reading fails if
+Each step installs on its own restart. The readings run side by side (the owner, 2026-10-21): each counts only its own
+refusal type, so a step's reading may overlap another step's, ADR-084 step 7 (~10-27) or ADR-086 (10-28), and all four
+steps can be in by 10-23. `classify.py` is updated in the same commit as any wording change, and a reading fails if
 "unclassified" rises. Readings count per call; no reading scores her (ADR-071).
 
 ## 6. Not measured

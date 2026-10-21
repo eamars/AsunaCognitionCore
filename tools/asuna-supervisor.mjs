@@ -5,7 +5,8 @@
  *
  * Files, in <data>/restart/ (ASUNA_DATA_ROOT, else .runtime):
  *   request.json  written by the worker when her restart is due (asuna/restarts.py); taken and removed here
- *   last.json     the record of the latest restart, written here once she is back; the worker reads it
+ *   last.json     the record of the latest start: the launcher's own, her restart, or one after a crash; written here
+ *                 once she is back (and at every failed start); the worker reads it
  */
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
@@ -98,9 +99,12 @@ export function killTree(child, platform = process.platform) {
  */
 export async function supervise(d) {
   const poll = d.pollMs ?? POLL_MS, readyMs = (d.readySeconds ?? READY_SECONDS) * 1000;
-  let record = null, rung = 0, failures = 0, reverted = [], asked = false;
+  let rung = 0, failures = 0, reverted = [], asked = false;
   const begin = fields => ({ id: 'restart-' + new Date(d.now()).toISOString().replace(/[-:.TZ]/g, '').slice(0, 14),
                              down_at: new Date(d.now()).toISOString(), attempts: [], ...fields });
+  // The launcher's own start is recorded like any other: last.json then describes the Host that runs, not the restart
+  // before it (her finding, 2026-10-21: after a start from start-asuna.cmd her block read an old record as running).
+  let record = begin({ asked: 'launcher', why: 'the launcher started the Host' });
   while (!d.stopped()) {
     const since = d.now();
     if (record?.drill && !record.drilled) {

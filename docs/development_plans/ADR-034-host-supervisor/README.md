@@ -102,3 +102,15 @@ Investigated the night of 2026-10-20 (Claude; scratchpad test `emfile_limit.mjs`
 
 Fix here (owner, 2026-10-21): before a start, the preparation removes projection-cache records of sessions no longer in the store (`pruneProjectionCache`), so the cache follows the live sessions (about 840). The bounded loading and an empty lock's recovery belong to DSH, the owner's fork.
 
+## Addendum 2026-10-21 (night): the launcher's own start is recorded too
+
+Her finding: `last.json` was written only for starts the supervisor made after something happened (her restart, a
+crash, a failed start). The launcher's own first start (`start-asuna.cmd`) wrote nothing when it came up, so for a day
+her `restart_from_program` read the restart before it as the Host that runs. The coordinator's decision (C1): the
+supervisor begins a record for its first start (`asked: launcher`), written like any other: when it is back (id,
+`back_at`, `result`, `rung`, `loaded` with the commit, packages and selections) and at every failed start (`not_back`);
+a launcher start that came back is kept in `history.jsonl` too. It has no `checkout` field: a launcher start never
+fetches, and `loaded.commit` names what runs. Her block says 「启动：从启动器开的，不是你要的重启」 and when the start began
+and came up (`restarts.ASKED_WORDS`, `LAUNCHED_WHEN`). `--once` runs no supervisor and writes no record, as before.
+Tests: `packages/cognition-core/test/supervisor.test.js`, `tests/test_restarts.py`.
+

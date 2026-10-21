@@ -232,6 +232,12 @@ def waiting(root=None):
 
 
 # ── after a restart ────────────────────────────────────────────────
+# Who a record says asked: her `restart`, nobody (the Host exited and the supervisor brought it back), or the launcher
+# itself starting the Host (start-asuna.cmd: the supervisor records that start too).
+LAUNCHER = 'launcher'
+ASKED_WORDS = {'self': '你自己要的', 'nobody': '没人要：宿主自己退出了，监工把它拉起来',
+               LAUNCHER: '从启动器开的，不是你要的重启'}
+LAUNCHED_WHEN = '%s 启动器开始，%s 起来，用了约 %s'
 def block(store, zone, moment=None, root=None, integration_state=None):
     """restart_from_program for a home turn: a request waiting at the desk, and the supervisor's latest record, for a
     day."""
@@ -242,12 +248,14 @@ def block(store, zone, moment=None, root=None, integration_state=None):
     pending = waiting(root)
     if not record or not record.get('back_at') or moment - _aware(record['back_at']) > timedelta(hours=SHOWN_HOURS):
         return {'waiting': waiting_words(pending, zone)} if pending else None
-    asked = {'self': '你自己要的', 'nobody': '没人要：宿主自己退出了，监工把它拉起来'}.get(record.get('asked'), str(record.get('asked')))
+    asked = ASKED_WORDS.get(record.get('asked'), str(record.get('asked')))
     down = _span((_aware(record['back_at']) - _aware(record['down_at'])).total_seconds())
     tries = record.get('attempts') or []
-    value = {'what': ('演练' if record.get('drill') else '重启') + '：' + asked,
+    launched = record.get('asked') == LAUNCHER
+    value = {'what': ('演练' if record.get('drill') else '启动' if launched else '重启') + '：' + asked,
              'why': str(record.get('why') or '')[:200],
-             'when': '%s 停，%s 起来，中间约 %s' % (line_stamp(zone, record['down_at']), line_stamp(zone, record['back_at']), down),
+             'when': (LAUNCHED_WHEN if launched else '%s 停，%s 起来，中间约 %s') % (
+                 line_stamp(zone, record['down_at']), line_stamp(zone, record['back_at']), down),
              'result': RESULT_WORDS.get(record.get('result'), str(record.get('result'))),
              'attempts': ['第 %d 次：%s' % (i + 1, '起来了' if a.get('ok') else '没起来：' + str(a.get('reason'))[:120]) for i, a in enumerate(tries)],
              'loaded': record.get('loaded') or {},

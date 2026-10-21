@@ -56,11 +56,28 @@ function world({ starts = [], events = [], reverts = {}, checkout = null } = {})
   return { d, records, interim, notes, prepared, slept, forwarded };
 }
 
-test('her restart comes back on the same packages and the record says what loaded', async () => {
-  const w = world({ events: [{ request: { asked: 'self', why: 'a JS change', interrupted: ['nothing'] } }] });
+test("the launcher's own start is recorded, so the record always describes the Host that runs", async () => {
+  // Her finding (2026-10-21): after a start from start-asuna.cmd her block read the restart before it as running.
+  const w = world({ events: [{ stop: true }] });
   await supervise(w.d);
   assert.equal(w.records.length, 1);
   const [record] = w.records;
+  assert.equal(record.asked, 'launcher'); assert.equal(record.result, 'running');
+  assert.ok(record.id && record.down_at && record.back_at);
+  assert.deepEqual(record.loaded, { commit: 'abc1234', packages: {} });
+  assert.equal(record.checkout, undefined, "the launcher's start never fetches");
+  const failing = world({ starts: ['exit'], events: [{ stop: true }] });
+  await supervise(failing.d);
+  assert.equal(failing.interim[0].asked, 'launcher'); assert.equal(failing.interim[0].result, 'not_back');
+  assert.equal(failing.records[0].asked, 'launcher'); assert.equal(failing.records[0].result, 'fell_back');
+});
+
+test('her restart comes back on the same packages and the record says what loaded', async () => {
+  const w = world({ events: [{ request: { asked: 'self', why: 'a JS change', interrupted: ['nothing'] } }] });
+  await supervise(w.d);
+  assert.equal(w.records.length, 2);
+  const [launcher, record] = w.records;
+  assert.equal(launcher.asked, 'launcher');
   assert.equal(record.asked, 'self'); assert.equal(record.why, 'a JS change');
   assert.equal(record.result, 'running'); assert.equal(record.rung, RUNGS[0]);
   assert.deepEqual(record.attempts.map(a => [a.rung, a.ok]), [[0, true]]);
@@ -75,7 +92,7 @@ test('ADR-065: only the first start of a restart she asked for brings origin/mai
   await supervise(w.d);
   // The owner's start, her restart, then a crash's start, which fails once and goes a rung down.
   assert.deepEqual(w.forwarded, [false, true, false, false]);
-  const [hers, crash] = w.records;
+  const [, hers, crash] = w.records;
   assert.deepEqual(hers.checkout, reason);
   assert.equal(hers.result, 'running', 'a checkout left as it was is not a fallback');
   assert.equal(hers.reverted, undefined);
@@ -86,7 +103,7 @@ test('a start that fails goes one rung down and the record says she fell back an
   const w = world({ starts: ['ready', 'exit'], events: [{ request: { asked: 'self', why: 'publish' } }],
                     reverts: { 1: ['core: returned to the previous running version'] } });
   await supervise(w.d);
-  const [record] = w.records;
+  const [, record] = w.records;
   assert.equal(record.result, 'fell_back');
   assert.deepEqual(record.attempts.map(a => [a.rung, a.ok]), [[0, false], [1, true]]);
   assert.match(record.attempts[0].reason, /exited before it was ready/);
@@ -99,7 +116,7 @@ test('a start that fails goes one rung down and the record says she fell back an
 test('the ladder ends on what is installed and keeps trying with a backoff; it never gives up', async () => {
   const w = world({ starts: ['ready', 'prepare', 'never', 'exit', 'exit'], events: [{ request: { asked: 'self', why: 'x' } }] });
   await supervise(w.d);
-  const [record] = w.records;
+  const [, record] = w.records;
   assert.deepEqual(record.attempts.map(a => [a.rung, a.ok]), [[0, false], [1, false], [2, false], [2, false], [2, true]]);
   assert.match(record.attempts[0].reason, /could not be prepared: packing failed/);
   assert.match(record.attempts[1].reason, /not ready within/);
@@ -110,7 +127,7 @@ test('the ladder ends on what is installed and keeps trying with a backoff; it n
 test('a drill fails its first start on purpose and is back on the same packages', async () => {
   const w = world({ events: [{ request: { asked: 'self', why: 'drill', drill: true } }] });
   await supervise(w.d);
-  const [record] = w.records;
+  const [, record] = w.records;
   assert.deepEqual(record.attempts.map(a => [a.rung, a.ok]), [[0, false], [1, true]]);
   assert.match(record.attempts[0].reason, /^drill:/);
   assert.equal(record.result, 'running');
@@ -120,9 +137,9 @@ test('a drill fails its first start on purpose and is back on the same packages'
 test('a Host that exits on its own is started again, asked by nobody; a stop ends it all', async () => {
   const w = world({ events: [{ crash: true }] });
   await supervise(w.d);
-  assert.equal(w.records.length, 1);
-  assert.equal(w.records[0].asked, 'nobody');
-  assert.match(w.records[0].why, /exited on its own/);
+  assert.equal(w.records.length, 2);
+  assert.equal(w.records[1].asked, 'nobody');
+  assert.match(w.records[1].why, /exited on its own/);
   assert.deepEqual(w.prepared, [0, 0]);
 });
 

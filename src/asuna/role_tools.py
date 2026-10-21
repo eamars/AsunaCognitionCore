@@ -231,10 +231,10 @@ TOOLS = {
         'description': ('盯一个人：on 把这个对话里的一个人（照抄标签或写名字）加进名单，之后他在你任何一个对话里说话，你都会在那边知道（群里会叫你看一眼）'
                          '。how_often=once（默认）他第一次说话叫你一次；burst 他每次沉默十分钟后再开口都叫你。'
                          'hours 盯多久（1–72），最多同时 5 个，到期自己停；off 停掉一个（id 照抄 watching_from_program）'
-                         '。刚 @ 过或回过的人程序本来就等三分钟。block 屏蔽正在跟你说话的这个账号：他的话照存，但哪儿都不叫你，到点结束；'
-                         '家里的人屏蔽不了。'),
+                         '。刚 @ 过或回过的人程序本来就等三分钟。block 屏蔽这个对话里的一个人（person 写他，不写就是正在跟你说话的账号）：'
+                         '他的话照存，但哪儿都不叫你，到点结束；家里的人屏蔽不了。'),
         'parameters': {'op': _s('做什么', required=True, enum=['on', 'off', 'block']),
-                       'person': _s('on 用：这个对话里的人（标签、#编号或名字）'),
+                       'person': _s('on、block 用：这个对话里的人（标签、#编号或名字）'),
                        'hours': {'type': 'integer', 'description': 'on 用：盯多少小时，1–72；block 用：屏蔽多少小时，默认 24，最多 168'},
                        'mode': _s('on 用：once 或 burst，默认 once', enum=['once', 'burst']),
                        'why': _s('on 可写：为什么盯他，一句话（家里写的只在家里看得到）'),
@@ -1516,7 +1516,7 @@ class RoleTools:
         from . import watches
         op = args.get('op')
         if op == 'block':
-            return self._block(ep, args.get('hours') if args.get('hours') is not None else 24), False
+            return self._block(ep, args.get('hours') if args.get('hours') is not None else 24, args.get('person')), False
         if op == 'on':
             if (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind') not in ('group', 'dm'):
                 raise Refused('这里不是群或私聊，盯不了人：到看得到他的群或私聊里再用 on。')
@@ -2205,18 +2205,33 @@ class RoleTools:
                 pass
         return result
 
-    def _block(self, ep, hours):
-        """ADR-052: block the account speaking to her, outside home only (nobody at home can be blocked)."""
+    def _block(self, ep, hours, person=None):
+        """ADR-052: block someone in this conversation, outside home only and never anyone from home: the person named
+        (a label, #number or name, resolved as watch on), else the account speaking to her."""
         from . import switches
+        from .config import refs_usable
         from .people import People
         if self._place(ep) == visibility.OWNER_PRIVATE:
-            raise Refused('家里的人屏蔽不了：watch 的 block 只在家外的对话里用，屏蔽正在跟你说话的那个人。')
-        if turn_kind(ep) != 'external':
-            # A visit, a plan or a task's report has no speaker: its person only authorizes the turn (places.visitor).
-            raise Refused('这一回合没有人在跟你说话，block 屏蔽的是正在跟你说话的那个人：等他说话的那一回合再用。')
+            raise Refused('家里的人屏蔽不了：watch 的 block 只在家外的对话里用。')
         scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
-        label = People(self.store, ep.get('persona')).speaker(scene, ep['person_id'])
-        row = switches.set_switch(self.store, ep, 'block', label=label, person_id=ep['person_id'], hours=hours)
+        people = People(self.store, ep.get('persona'))
+        if person:
+            found = people.resolve(scene, person)
+            if len(found) != 1:
+                usable = [people.label(doc) for doc in sorted(people.ensure_roster(scene).values(),
+                                                              key=lambda doc: str(doc.get('seen_at') or ''), reverse=True)
+                          if doc.get('person') != people.self_id and people.person(doc.get('person')) != people.owner]
+                raise Refused(('「%s」对得上不止一个人：%s。' % (person, '、'.join(people.label(d) for d in found[:5])) if found
+                               else '这个对话里没有「%s」。' % person) + refs_usable(usable))
+            target, label = found[0]['person'], people.label(found[0])
+        else:
+            if turn_kind(ep) != 'external':
+                # A visit, a plan or a task's report has no speaker: its person only authorizes the turn (places.visitor).
+                raise Refused('这一回合没有人在跟你说话：block 不写 person 屏蔽的是正在跟你说话的人；要屏蔽这里的谁，person 写他。')
+            target, label = ep['person_id'], people.speaker(scene, ep['person_id'])
+        if people.person(target) == people.owner:
+            raise Refused('家里的人屏蔽不了：主人在哪个对话里都不屏蔽。')
+        row = switches.set_switch(self.store, ep, 'block', label=label, person_id=target, hours=hours)
         return {'done': '屏蔽了%s：他的话照存，但哪儿都不叫你' % label, 'until_at': row['until'], 'id': row['_id']}
 
     def _switch_policy(self, ep, key, args, reason):

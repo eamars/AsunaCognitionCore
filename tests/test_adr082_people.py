@@ -386,10 +386,37 @@ def test_watch_block_blocks_the_turns_person_and_never_at_home(store):
     with pytest.raises(role_tools.Refused, match='家里的人屏蔽不了'):
         coordinator.tools.tool_watch(store.db.episodes.find_one({'_id': home['_id']}), 'c1', {'op': 'block'})
     assert switches.blocked(store, 'A') is None
-    ep = coordinator.ingest(event('t-block'))
+    room(store)
+    ep = coordinator.ingest(event('t-block', person='B'))
     blocked = coordinator.tools.tool_watch(store.db.episodes.find_one({'_id': ep['_id']}), 'c2',
                                            {'op': 'block', 'hours': 2})[0]
-    assert label(store, 'A') in blocked['done'] and switches.blocked(store, 'A')['_id'] == blocked['id']
+    assert label(store, 'B') in blocked['done'] and switches.blocked(store, 'B')['_id'] == blocked['id']
+
+
+def test_watch_block_names_someone_here_never_anyone_from_home(store):
+    """block takes person as on does (a label, #number or name here); without it, the one speaking. The owner is
+    never blocked, in any conversation: a block silences that person's lines everywhere, his own chat included."""
+    owner(store, person='O')
+    room(store)
+    lane = FakeLane(store, [FakeTurn([THINK], '在。') for _ in range(3)])
+    coordinator = Coordinator(store, lane)
+    ep = store.db.episodes.find_one({'_id': coordinator.ingest(event('t-name'))['_id']})
+    named = coordinator.tools.tool_watch(ep, 'c1', {'op': 'block', 'person': label(store, 'B'), 'hours': 2})[0]
+    assert label(store, 'B') in named['done'] and switches.blocked(store, 'B') and switches.blocked(store, 'A') is None
+    speaking = coordinator.tools.tool_watch(ep, 'c2', {'op': 'block', 'hours': 2})[0]
+    assert label(store, 'A') in speaking['done'] and switches.blocked(store, 'A')
+    with pytest.raises(role_tools.Refused) as unknown:
+        coordinator.tools.tool_watch(ep, 'c3', {'op': 'block', 'person': '[没这人 #99]'})
+    assert '这个对话里没有「[没这人 #99]」' in str(unknown.value) and '能用的：' in str(unknown.value)
+    assert str(unknown.value).endswith('能用的：%s、%s。' % (label(store, 'A'), label(store, 'B'))), 'the people seen here'
+    visit = {**ep, 'episode_kind': 'visit', 'turn_kind': 'visit'}
+    assert label(store, 'C') in coordinator.tools.tool_watch(visit, 'c4', {'op': 'block', 'person': label(store, 'C')})[0]['done'], \
+        'named, it needs no one speaking'
+    owner(store, person='A')
+    with pytest.raises(role_tools.Refused, match='家里的人屏蔽不了'):
+        coordinator.tools.tool_watch(ep, 'c5', {'op': 'block', 'person': label(store, 'A').split()[-1]})   # [林 #1]
+    with pytest.raises(role_tools.Refused, match='家里的人屏蔽不了'):
+        coordinator.tools.tool_watch(ep, 'c6', {'op': 'block'})
 
 
 @pytest.mark.parametrize('kind', ['visit', 'scheduled', 'task_feedback'])

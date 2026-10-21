@@ -97,3 +97,18 @@ Her character brain already has many tools, so the switches are options on tools
 - Cost (AGENTS.md): no new tool; her character brain's descriptions grow by 557 characters (group_focus 166,
   set_policy 286, understand_person 105), to 20,824 of the 20,900 budget; no per-turn line, one block where a switch
   is on.
+
+## Addendum 2026-10-21: block names someone here
+
+`watch` do=block (where block moved with ADR-082) blocked only the account speaking in that turn. The coordinator's
+decision (B17, under the owner's "tiny technical decisions are yours"): block takes `person`, a label, #number or name
+of someone in this conversation, resolved as `watch` on resolves it; without it, the one speaking, as before (and only
+in a turn someone spoke in). Named, it works in any turn of a conversation outside home. A name that is no one here,
+or more than one, is refused with the people that can be named here (`config.refs_usable`, most recently seen first;
+the owner is not among them).
+- **Nobody from home**, on both ways: a block silences that person's platform lines everywhere (`channels.py` checks
+  it for every input), so blocking the owner in a group would also silence his own chat. Until now only a block made
+  in a home conversation was refused; the owner speaking in a group could be blocked as its speaker. Now
+  `People.person(target) == owner` is refused in any conversation (「家里的人屏蔽不了：主人在哪个对话里都不屏蔽。」).
+- Cost: `watch`'s description and its `person` field, +29 characters (21,442 of the budget; 21,738 with tiered
+  memory). No per-turn line. Tests: `tests/test_adr082_people.py`.

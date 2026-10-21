@@ -2860,14 +2860,18 @@ def ideas_block(store, persona, moment, limit=None, page=1, search=None):
 
 IDEA_BY_NOTE = '%s（你在那边写的便条带来的%s）'
 IDEA_OWNER_LINE = '，便条里有主人本人的原话'
+IDEA_PLACE_UNKNOWN = '归属未定（是便条叫起来的那一回合记的，那张便条找不到了）'
 
 
 def idea_place(store, people, source):
     """Where an idea came from, in words: the conversation its turn ran in, or, when a note opened that turn, the
     conversation the note was written in (ADR-088 step 1: such a turn runs at home, which is not where the idea came
-    from). Read from the note itself, so ideas noted before this rule read right too."""
+    from). Read from the note itself, so ideas noted before this rule read right too; a note turn whose note is gone
+    says so rather than naming the most likely place (her rule, 2026-10-21)."""
     from . import notes
     first = notes.opening(store, {'_id': source['episode_id']}) if source.get('episode_id') else None
+    if not first and source.get('turn') == 'note':
+        return IDEA_PLACE_UNKNOWN
     scene_id = (first or {}).get('from_scene') or source.get('scene_id')
     scene = store.db.scenes.find_one({'_id': scene_id}) if scene_id else None
     if not scene:

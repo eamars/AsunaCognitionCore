@@ -161,6 +161,10 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
     # The idea she noted here came from the group, not from home, where the turn ran (ADR-088 step 1).
     [idea] = ideas_block(store, 'P1', datetime.now(timezone.utc))
     assert idea['where'] == role_tools.IDEA_BY_NOTE % (places_title(store, 'g1'), '')
+    # Her rule: when the note that opened it cannot be found, the place is undetermined, not the likeliest one.
+    store.db.messages.update_one({'_id': 'in-' + home['_id']}, {'$unset': {'event.note': ''}})
+    [idea] = ideas_block(store, 'P1', datetime.now(timezone.utc))
+    assert idea['where'] == role_tools.IDEA_PLACE_UNKNOWN
     # Later at home: a heartbeat shows it, labelled; only a self-improvement turn (development grant) keeps it out.
     beat, _ = turn(store, service, {'event_id': 'presence:s-p5:1', 'scene_id': 'dm-a', 'person_id': 'A',
                                     'adapter_id': 'presence', 'episode_kind': 'presence', 'text': '心跳'},

@@ -72,7 +72,9 @@ Built: `role_tools.idea_place`, read by `ideas_block`; the place reads as 「‹
 「，便条里有主人本人的原话」 when the note carried the owner's line. Test: `tests/test_notes.py`
 (`test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_with_consequences`). On the live record
 (read-only, 2026-10-21) it places all 55 outside ideas at their groups (19 open) and 7 ideas from her own trusted notes
-at the home line each was written in.
+at the home line each was written in. Her rule (2026-10-21, on Claude's agent line): an idea whose origin cannot be
+read is marked undetermined, never filled with the likeliest place; so a note turn whose note cannot be found reads
+「归属未定（…那张便条找不到了）」 (`IDEA_PLACE_UNKNOWN`). On the live record all 64 ideas from note turns find their note.
 
 ### 4.2 Step 2: the turn has the origin's class
 

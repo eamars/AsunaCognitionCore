@@ -345,7 +345,8 @@ Notes between her own conversations (ADR-018, owner 2026-10-07).
 - def `opening_for` — The note an input carries (a home note turn, or a visit a note opened), or None.
 - def `opening` — The note that opened this turn, or None.
 - def `can_send` — Whether a turn opened by this note may write one (note -> reply -> stop).
-- def `allowed` — Where this turn may write: anywhere it reaches, or only back, when an untrusted note opened it.
+- def `outside_class` — The class a home turn acts with when a note from outside opened it (ADR-088 §4.2): that of the place the note came from, never home's; None for any other turn.
+- def `allowed` — Where this turn may write, `cls` being its conversation's class: anywhere it reaches; when an untrusted note opened it, back to where the note came from, and at home also on to a group, never to another home conversation (ADR-088 §4.2).
 - def `places_view` — note_places_from_program: where a note from here can go, by name, with what happens there by default.
 - def `borrowed` — The recent line of someone else here the note shares a run of OWN_WORDS_RUN characters with, as {author, at, first, last}: the line's author and time, and the stretch of her text that matches it (1-based, inclusive, spaces counted); None wh
 - def `copied_words` — The copied-words refusal (ADR-087 §4.5): which stretch of her note matches whose line, by label and time, never the line itself; naming the source does not make it pass.

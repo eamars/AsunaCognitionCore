@@ -1,5 +1,6 @@
-"""ADR-018 MongoDB tests: notes between her own conversations -- trusted from home, cautioned and tool-limited from
-outside, queued behind a running turn, never shown as a line of the conversation they land in."""
+"""ADR-018 MongoDB tests: notes between her own conversations -- trusted from home; from outside, cautioned and acting
+with the class of where they came from (ADR-088); queued behind a running turn, never shown as a line of the
+conversation they land in."""
 from datetime import datetime, timezone
 import json
 import threading
@@ -17,10 +18,10 @@ from test_engineering_m1 import THINK
 from reply_parts import said
 
 G1, G2, DM_B, OWNER_DM = (places.place_id(s) for s in ('g1', 'g2', 'dm-b', 'dm-o'))
-CONSEQUENCES = {'delegate', 'task.message', 'task.stop', 'errand', 'visit', 'credential', 'update_self',
-                'set_policy', 'write_document', 'plan', 'peer_line', 'understand_person'}
-UNTRUSTED_TURN = {'think', 'recall', 'read_image', 'stay_silent', 'ideas.note', 'note', 'feel', 'watch', 'ask.read',
-                  'ideas.read'}
+# What needs home's authority: never in a turn a note from outside opened at home (ADR-088 §4.2).
+HOME_ONLY = {'delegate', 'task.message', 'task.stop', 'errand', 'visit', 'credential', 'update_self', 'set_policy',
+             'write_document', 'peer_line', 'understand_person', 'restart', 'place_timezone', 'group_action',
+             'ask.ask', 'ask.close', 'ideas.review'}
 GROUP = {'wake_reason': 'mentioned_account', 'topic_id': None, 'reply_to': None, 'reply_message_id': None,
          'mentioned_account_ids': []}
 
@@ -72,11 +73,11 @@ def results(lane, tool):
     return [(row[4], row[5]) for row in lane.tool_results if row[2] == tool]
 
 
-def delivered(service):
-    """The input the last wake queued, as the host would receive it."""
-    kind, event_id, scene_id, person = service.controller.offers[-1]
+def delivered(service, at=-1):
+    """The input a wake queued (the last by default), as the host would receive it."""
+    kind, event_id, scene_id, person = service.controller.offers[at]
     return {'event_id': event_id, 'scene_id': scene_id, 'person_id': person, 'adapter_id': kind, 'episode_kind': kind,
-            'text': service.controller.texts[-1], **service.controller.envelopes[-1]}
+            'text': service.controller.texts[at], **service.controller.envelopes[at]}
 
 
 def group_line(key, text, person='B', scene='g1'):
@@ -119,7 +120,10 @@ def test_a_note_from_home_wakes_another_home_line_as_her_own_initiative(store):
     assert sent['state'] == notes.STATE_WORDS['read'] and sent['to'].startswith('私聊')
 
 
-def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_with_consequences(store):
+def test_a_note_from_a_group_opens_a_home_turn_with_the_groups_class(store):
+    """ADR-088 §4.2-4.4: a note from outside reaches home at once and opens a turn there that acts with the class of
+    where it came from: it speaks at home, reads its own notebook and questions, writes notes and plans as from
+    outside, and has nothing that needs home's authority."""
     service = world(store)
     ordinary, lane = turn(store, service, {'event_id': 'ask-0', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '在吗'}, [], '在')
     assert 'delegate' in lane.calls[0]['tools']                          # home can hand work over, normally
@@ -134,54 +138,123 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
     assert not ok_first and '自己的话' in refused and ok_second
     assert store.db.audit_events.find_one({'type': 'note.refused', 'payload.code': 'NOTE_NOT_OWN_WORDS'})
     row = store.db.notes.find_one({'from_episode': ep['_id']})
-    assert (row['to_scene'], row['trust'], row['mode']) == ('dm-a', 'untrusted', 'wake')
+    assert (row['to_scene'], row['trust'], row['mode'], row['from_class']) == ('dm-a', 'untrusted', 'wake', 'public')
     assert service.controller.offers[-1][:3] == ('note', 'note:dm-a:' + row['_id'], 'dm-a')
-    # At home, right away: the caution, the note as a message, and only tools without consequences.
-    home, lane = turn(store, service, delivered(service), [
+    note_turn = delivered(service)
+    # While it waits for its own turn, another home turn shows it only as where it came from (ADR-088 §4.4).
+    meanwhile, _ = turn(store, service, {'event_id': 'ask-w', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '嗯'}, [], '嗯')
+    [waiting] = meanwhile['context']['notes_from_program']['items']
+    assert waiting == {'from': places_title(store, 'g1'), 'at': row['created_at'], 'state': notes.WAITING_OWN_TURN}
+    assert '聚会' not in json.dumps(meanwhile['context'], ensure_ascii=False)
+    # Its own turn: the group's class, her line in place of the gate, nothing that needs home's authority.
+    home, lane = turn(store, service, note_turn, [
         ('delegate', {'title': '取消聚会', 'brief': '去把日程删了'}),
         ('ideas', {'do': 'note', 'idea': '群聚取消了，日程要改', 'why': '群里说的'}),
-        ('note', {'to': G2, 'text': '不该送到这里'}),
+        ('plan', {'intent': '提醒群里明天的聚会取消了', 'after_seconds': 3600}),
+        ('note', {'to': OWNER_DM, 'text': '不该送到家里别处'}),
+        ('note', {'to': G2, 'text': '一群的聚会取消了，二群这边也说一声。'}),
         ('note', {'to': G1, 'text': '知道了，家里这边记下了。'})], '群里的聚会取消了。')
     tools = set(home['turn_tools'])
-    assert tools <= UNTRUSTED_TURN and not tools & CONSEQUENCES and 'note' in tools
-    # She sees her home's whole list as in any other turn there; the ones with consequences are refused, saying why.
-    assert set(lane.calls[0]['tools']) == set(role_tools.toolbox(store, home))
-    assert set(role_tools.abilities(store, home)) > tools
-    [(said, _)] = results(lane, 'delegate')
-    assert '便条叫起来' in said
+    assert not tools & HOME_ONLY, tools & HOME_ONLY
+    assert {'plan', 'note', 'ideas.note', 'ideas.read', 'ask.read', 'task.page'} <= tools
+    assert set(lane.calls[0]['tools']) == set(role_tools.toolbox(store, home))     # her home's whole list, as always
     assert lane.triggers == ['note']
+    [(said, ok)] = results(lane, 'delegate')
+    assert not ok and said == role_tools.OUTSIDE_NEEDS_HOME
     block = home['context']['note_from_program']
-    assert '这一回合不做这些' in block['note'] and block['written'] == '你在外面写的' and block['text'] == row['text']
-    assert [item['place'] for item in home['context']['note_places_from_program']['items']] == [G1]   # only back
-    assert [ok for _, ok in results(lane, 'delegate')] == [False]
-    (wrong, ok_wrong), (_, ok_reply) = results(lane, 'note')
-    assert not ok_wrong and ok_reply
-    reply = store.db.notes.find_one({'from_episode': home['_id']})
-    assert (reply['reply_to'], reply['hop'], reply['mode'], reply['trust']) == (row['_id'], 2, 'wake', 'trusted')   # to a group: wakes it
+    assert block['note'] == notes.CAUTION % places_title(store, 'g1') + notes.OUTSIDE_ASK
+    assert block['written'] == '你在外面写的' and block['text'] == row['text']
+    assert [item['place'] for item in home['context']['note_places_from_program']['items']] == [G1, G2]
+    assert home['context']['note_places_from_program']['note'].endswith(notes.OUTSIDE_PLACES)
+    # Its plan lives and fires in the group, as made in the turn that wrote the note.
+    [(planned, ok)] = results(lane, 'plan')
+    assert ok, planned
+    plan = store.db.plans.find_one({'_id': planned['plan_id']})
+    assert (plan['scene_id'], plan['person_id'], plan['from_scene_id']) == ('g1', 'B', 'dm-a')
+    assert planned['where'] == role_tools.PLAN_THERE % places_title(store, 'g1')
+    # Its notes are written as from outside: never to home, on to a group with the chain continued, back as a reply.
+    (home_refused, ok_home), (_, ok_group), (_, ok_reply) = results(lane, 'note')
+    assert not ok_home and '送不到' in home_refused and ok_group and ok_reply
+    onward = store.db.notes.find_one({'from_episode': home['_id'], 'to_scene': 'g2'})
+    assert (onward['trust'], onward['hop'], onward['reply_to'], onward['kind']) == ('untrusted', 2, None, 'group')
+    reply = store.db.notes.find_one({'from_episode': home['_id'], 'to_scene': 'g1'})
+    assert (reply['reply_to'], reply['hop'], reply['mode'], reply['trust']) == (row['_id'], 2, 'wake', 'untrusted')
     # The idea she noted here came from the group, not from home, where the turn ran (ADR-088 step 1).
     [idea] = ideas_block(store, 'P1', datetime.now(timezone.utc))
     assert idea['where'] == role_tools.IDEA_BY_NOTE % (places_title(store, 'g1'), '')
-    # Her rule: when the note that opened it cannot be found, the place is undetermined, not the likeliest one.
-    store.db.messages.update_one({'_id': 'in-' + home['_id']}, {'$unset': {'event.note': ''}})
-    [idea] = ideas_block(store, 'P1', datetime.now(timezone.utc))
-    assert idea['where'] == role_tools.IDEA_PLACE_UNKNOWN
-    # Later at home: a heartbeat shows it, labelled; only a self-improvement turn (development grant) keeps it out.
+    # Read, it shows at home as an excerpt; only a self-improvement turn (development grant) keeps it out.
     beat, _ = turn(store, service, {'event_id': 'presence:s-p5:1', 'scene_id': 'dm-a', 'person_id': 'A',
                                     'adapter_id': 'presence', 'episode_kind': 'presence', 'text': '心跳'},
                    [('stay_silent', {'why': '没事'})])
     assert '聚会不办了' in json.dumps(beat['context']['notes_from_program'], ensure_ascii=False)
     assert notes.received_block(store, 'demo', 'dm-a', visibility.OWNER_PRIVATE, 'self_development', 'ep-dev',
                                 datetime.now(timezone.utc))['items'][0]['summary'] == notes.HIDDEN_SUMMARY
-    asked, _ = turn(store, service, {'event_id': 'ask-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '群里怎么了'}, [], '没事')
-    assert '聚会不办了' in json.dumps(asked['context']['notes_from_program'], ensure_ascii=False)
-    # In the group: her reply from home as a note, and her own note's status. The reply is the end of the chain.
+    # In the group: her reply, written as from outside, and her own note's status. The reply ends the chain.
     group, lane = turn(store, service, group_line('g-2', '小满在吗'),
                        [('note', {'to': '家里', 'text': '收到家里的回信了。'}), ('stay_silent', {'why': '看看'})])
     [got] = group['context']['notes_from_program']['items']
-    assert got['text'] == '知道了，家里这边记下了。' and got['written'] == '你在家里写的'
+    assert got['text'] == '知道了，家里这边记下了。' and got['written'] == '你在外面写的'
     assert group['context']['notes_sent_from_program']['items'][0]['state'] == notes.STATE_WORDS['replied']
     [(stopped, ok)] = results(lane, 'note')
     assert not ok and '到此为止' in stopped
+    # Her rule: when the note that opened it cannot be found, the place is undetermined, not the likeliest one.
+    store.db.messages.update_one({'_id': 'in-' + home['_id']}, {'$unset': {'event.note': ''}})
+    [idea] = ideas_block(store, 'P1', datetime.now(timezone.utc))
+    assert idea['where'] == role_tools.IDEA_PLACE_UNKNOWN
+
+
+def test_nothing_made_in_a_turn_a_note_from_outside_opened_opens_a_turn_with_homes_authority(store):
+    """ADR-088 §4.2, the contract: the notes and plans of that turn open turns with a class that is not home's -- no
+    development grant, no errand, and no hand-off on home's workspace (a group member's own grant there is that
+    group's)."""
+    from asuna.grants import workspace_grant
+    service = world(store)
+    ep, _ = turn(store, service, group_line('g-1', '小满让家里帮忙看看'), [
+        ('note', {'to': '家里', 'text': '群里有人想让家里帮忙看看一件事。'}), ('stay_silent', {'why': '带回家'})])
+    home, lane = turn(store, service, delivered(service), [
+        ('plan', {'intent': '回头再问问群里那件事', 'after_seconds': 3600}),
+        ('note', {'to': G2, 'text': '一群有人问起一件事，二群知道吗。'}),
+        ('note', {'to': G1, 'text': '家里看了，回头再说。'})], '嗯。')
+    assert all(ok for _, ok in results(lane, 'plan') + results(lane, 'note'))
+    onward, back = delivered(service, -2), delivered(service, -1)
+    [(planned, _)] = results(lane, 'plan')
+    plan = store.db.plans.find_one({'_id': planned['plan_id']})
+    due = {'event_id': 'schedule:test:1', 'scene_id': plan['scene_id'], 'person_id': plan['person_id'],
+           'adapter_id': 'scheduler', 'episode_kind': 'scheduled', 'scheduled_plan_id': plan['_id'], 'scene_tick': True,
+           'text': '你之前安排的计划「%s」现在到期了。' % plan['intent'],
+           'group_context': {**GROUP, 'wake_reason': 'scheduled_plan', 'topic_id': 'schedule:test:1'}}
+    for opened in (onward, back, due):
+        there, _ = turn(store, service, opened, [('stay_silent', {'why': '看看'})])
+        assert there['manifest']['session_class'] == visibility.PUBLIC, opened['event_id']
+        assert 'errand' not in there['turn_tools']
+        assert 'development' not in there['context'].get('action_capabilities_from_program', {})
+        if 'delegate' in there['turn_tools']:
+            assert workspace_grant(store.config, there['scene_id'], there['person_id'], required=False) \
+                is not store.config['chat'], 'never home\'s workspace'
+
+
+def test_a_note_carrying_the_owners_line_keeps_the_errand_and_no_gate(store):
+    """ADR-088 §4.5: a note whose text carries the owner's verified line is the outside turn plus his errand; its
+    block keeps his line, without the gate sentence and without her line."""
+    service = world(store)
+    store.db.notes.insert_one({'_id': 'n-owner', 'schema_version': 1, 'persona': 'P1', 'trust': 'untrusted',
+                               'from_scene': 'g1', 'from_class': 'public', 'to_scene': 'dm-a', 'kind': 'home', 'hop': 1,
+                               'text': '主人在群里让我把图发他', 'owner_line': '小满，把那张图私聊发我',
+                               'created_at': datetime.now(timezone.utc).isoformat(), 'seen_in': []})
+    ep = {'_id': 'ep-owner', 'turn_kind': 'note', 'scene_id': 'dm-a', 'person_id': 'A', 'persona': 'P1',
+          'context': {'errand_places_from_program': [{'place': G1}], 'note_places_from_program': {'items': [{}]}},
+          'manifest': {'session_class': visibility.OWNER_PRIVATE}}
+    store.db.messages.insert_one({'_id': 'in-ep-owner', 'schema_version': 1, 'event': {'note': {'id': 'n-owner'}}})
+    tools = set(role_tools._turn_rules(store, ep))
+    assert 'errand' in tools and not tools & (HOME_ONLY - {'errand'}) and 'plan' in tools
+    row = store.db.notes.find_one({'_id': 'n-owner'})
+    block = notes.opening_block(store, 'P1', row, visibility.OWNER_PRIVATE, 'ep-owner', datetime.now(timezone.utc))
+    assert block['note'] == notes.CAUTION % places_title(store, 'g1') and block['owner_said']['text']
+    # A reply from outside to a note of hers is not asked her question either.
+    store.db.notes.update_one({'_id': 'n-owner'}, {'$unset': {'owner_line': 1}, '$set': {'reply_to': 'n-home'}})
+    block = notes.opening_block(store, 'P1', store.db.notes.find_one({'_id': 'n-owner'}), visibility.OWNER_PRIVATE,
+                                'ep-owner', datetime.now(timezone.utc))
+    assert notes.OUTSIDE_ASK not in block['note'] and '这一回合不做' not in block['note']
 
 
 def test_a_note_from_outside_reaches_the_owners_own_chat_and_she_answers_him_there(store, monkeypatch):
@@ -205,13 +278,15 @@ def test_a_note_from_outside_reaches_the_owners_own_chat_and_she_answers_him_the
     row = store.db.notes.find_one({'from_episode': ep['_id']})
     assert (row['to_scene'], row['trust'], row['mode'], row['kind']) == ('dm-o', 'untrusted', 'wake', 'home')
     assert service.controller.offers[-1][:3] == ('note', 'note:dm-o:' + row['_id'], 'dm-o')
-    # There, right away: she may speak to him; nothing with consequences.
+    # There, right away: she may speak to him; nothing that needs home's authority.
     there, lane = turn(store, service, delivered(service), [said('刚才群里有点烦，跟你说一声。')])
     tools = set(there['turn_tools'])
-    assert 'speak' in tools and not tools & CONSEQUENCES
-    # It says where she is and who reads her words: he sees only what she says here, never the note.
+    assert 'speak' in tools and not tools & HOME_ONLY
+    # It says where she is and who reads her words: he sees only what she says here, never the note; her own
+    # question about an outside request ends it, in place of the gate (ADR-088 §4.3).
     block = there['context']['note_from_program']
     assert block['note'].startswith('他看不到便条，只看得到你在这里说的话：这里是主人的私聊。')
+    assert block['note'].endswith(notes.OUTSIDE_ASK) and '这一回合不做' not in block['note']
     assert block['reply'].startswith('在这里说的他马上看得到')
     [(spoken, ok)] = results(lane, 'speak')
     assert ok, spoken
@@ -487,9 +562,9 @@ def test_where_the_note_tool_is_not_in_a_turn_she_reads_the_real_reason(store):
 
 @pytest.mark.parametrize('trust,cls', [('untrusted', visibility.OWNER_PRIVATE), ('trusted', visibility.OWNER_PRIVATE),
                                        ('untrusted', visibility.PUBLIC)])
-def test_a_visit_an_outside_note_opens_in_a_home_group_does_nothing_with_consequences(store, trust, cls):
-    """A note from outside reaches a group as a visit; in a home group that visit is owner-private, so the note's rule
-    (read, answer, note down, reply back) must come from the note that opened it, not from the turn's kind."""
+def test_a_visit_an_outside_note_opens_in_a_home_group_acts_with_the_outside_class(store, trust, cls):
+    """A note from outside reaches a group as a visit; in a home group that visit is owner-private, so its class
+    (ADR-088 §4.2) must come from the note that opened it, not from the turn's kind."""
     world(store)
     store.config['home_groups'] = ['g1']
     store.db.notes.insert_one({'_id': 'n-out', 'schema_version': 1, 'trust': trust, 'from_scene': 'g2', 'to_scene': 'g1', 'hop': 1,
@@ -500,10 +575,10 @@ def test_a_visit_an_outside_note_opens_in_a_home_group_does_nothing_with_consequ
                                   'event': {'visit': {'intent': 'note', 'note': 'n-out'}}})
     tools = set(role_tools._turn_rules(store, ep))
     if trust == 'untrusted' and cls == visibility.OWNER_PRIVATE:
-        assert not tools & CONSEQUENCES, tools & CONSEQUENCES
-        assert role_tools.not_now(store, ep, 'write_document') == role_tools.NOTE_ONLY
-        # Reading her own questions carries nothing home (owner 2026-10-20); asking or closing one stays out.
-        assert {'ask.read', 'ideas.read'} <= tools and not tools & {'ask.ask', 'ask.close', 'ideas.review'}
+        assert not tools & HOME_ONLY, tools & HOME_ONLY
+        assert role_tools.not_now(store, ep, 'write_document') == role_tools.OUTSIDE_NEEDS_HOME
+        # Reading her own questions and notebook is home's exception; a plan goes where the note came from.
+        assert {'ask.read', 'ideas.read', 'plan'} <= tools
     elif cls == visibility.OWNER_PRIVATE:
         assert 'write_document' in tools, 'a note from home keeps the home group what it has'
     else:

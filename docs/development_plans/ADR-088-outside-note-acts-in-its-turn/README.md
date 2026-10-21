@@ -123,6 +123,31 @@ Her 15:42 ask is not taken: with §4.2 the gate that cost her most is gone, the 
 they happen, and a standing "you can't" list is the negative context the owner ruled out (2026-10-20). Claude tells her
 this with the numbers.
 
+### 4.7 Step 2, built on a branch (not installed)
+
+Branch `outside-note-turn` (2026-10-21), waiting on §6:
+
+- §4.2: `notes.outside_class` gives a home turn opened by an untrusted note (a note turn, or a visit into a home group)
+  the class of where the note came from; `RoleTools._cls` returns it, and `role_tools._turn_rules` decides the turn's
+  tools from it, with home's two exceptions (`ideas.read`, `ask.read`, and speaking where it runs) and without
+  delegate, task steering, `write_document`, `understand_person`, `peer_line` or `group_action`. A refused call that
+  needs home's authority reads `OUTSIDE_NEEDS_HOME` (say it here; the owner reads it here). `notes.allowed` sends its
+  notes back to the origin (a stranger's DM with next_time) and on to groups, never to a home conversation; they are
+  untrusted (300 characters, the public caps) and continue the opening note's hop. A plan is created in the origin
+  with the person of the turn that wrote the note (a group member there, so it fires; `notes.receiver` would be the
+  first member, possibly the owner). Contract test: `tests/test_notes.py`
+  (`test_nothing_made_in_a_turn_a_note_from_outside_opened_opens_a_turn_with_homes_authority`).
+- §4.3: her line verbatim as `notes.OUTSIDE_ASK`, after `CAUTION` (local chat) or `OWNER_CHAT_NOTE` (the owner's DM),
+  both now without their gate sentences; not on a reply to a note of hers or a note carrying the owner's line.
+- §4.4: a waiting untrusted note reads `{from, at, state: 等它自己那一回合}` in other home turns; read, the 60-character
+  excerpt stays.
+- §4.5: an owner's-line note gets the same turn plus `errand`; its block keeps `owner_said`.
+- **Cost (ADR-030):** no tool description changes (the character tool list stays 21,371 characters). An outside
+  note's opening block grows from 155 to 196 characters in the local chat and from 97 to 138 in the owner's DM (her
+  line, 71, replaces the gate sentence, 30); the places note tail goes from 25 to 45; a waiting outside note in
+  another home turn shrinks from about 337 to 71 characters (for a 60-character note); a refused home-authority call
+  reads 59 characters instead of 96; a plan made there adds a 27-character line plus the place's name.
+
 ## 5. Life cycle
 
 No new stored state. The turn's class is derived from its opening note each time it is needed; a plan's authority is

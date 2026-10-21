@@ -32,7 +32,9 @@ Every turn has a **class**, decided by the program from the conversation and the
   `promote_memory` and `credential` only in the local chat.
 - **What crosses is always hers and always visible.**
   - A note she writes from one conversation to another (`notes`) arrives marked trusted when it comes from home and
-    untrusted from outside. An untrusted one opens a turn that can only read, answer and note ideas.
+    untrusted from outside. An untrusted one that opens a turn at home gives that turn the class of where it came
+    from (`notes.outside_class`): it speaks at home and reads her own notebook and questions there, its notes and
+    plans go as from outside, and what needs home's authority is refused.
   - A visit (she goes to a group) carries only the words she takes there (`places`). An errand (home sends her
     elsewhere) is a home turn speaking into another place (`errands`): it runs in its own copy of that conversation
     with home's authority, and only what she says there goes out; the request and what she read stay home. The

@@ -63,6 +63,12 @@ PLAN_ENDED = {'CANCELLED': '取消', 'SUSPENDED': '停', 'FIRED': '跑完', None
 PLAN_MOVED_FIRED = ('「%s」这回合已经到点跑完了，它还是跑完的那条，没有改动；按你给的时间新建了一条：%s。'
                     '这件事以后改期或取消，用新的这条。')
 ASK_UNKNOWN = 'ASK_QUESTION_UNKNOWN: 没有「%s」这个问题：id 照抄 questions_from_program 或 ask 的结果。'
+# ADR-088 §4.2: a plan from a turn a note from outside opened at home is made where the note came from.
+PLAN_THERE = '建在%s（便条来的那边）：到点在那边跑，带那边的权限'
+PLAN_OUTSIDE_LINE = '这一回合是外面的便条叫起来的：安排建在便条来的那边，挂不到线上；去掉 line 再建。'
+PLAN_OUTSIDE_GONE = '叫起这一回合的便条（或写它的那一回合）找不到了，不知道它从哪边来，安排建不了；要记着的事在这里说出来。'
+PLAN_OUTSIDE_ONLY_MADE = ('「%s」不是这一回合建的：外面的便条叫起来的回合只能改或取消它自己刚建的安排；'
+                          '别的安排在它们自己的对话里改。')
 # An errand turn hands new work home but does not steer the tasks listed there: they are that conversation's, which
 # home's authority does not reach (errands.NO_STEER). A reflection turn delegates as any home turn does.
 STEERING = ('task.message', 'task.stop')
@@ -742,52 +748,42 @@ def _turn_rules(store, ep):
     note_tool = ['note'] if context.get('note_places_from_program') else []
     from . import notes
     first = notes.opening(store, ep) if kind in ('note', 'visit') and ep.get('_id') else None
-    # A note from outside opens a note turn at home, or a visit in a group. Into a home group (owner-private) that visit
-    # is a note from outside to home (ADR-018 §5.4); into another public group it keeps the group's tools (§5.4a).
-    if (kind == 'note' and (first or {}).get('trust') != notes.TRUSTED) or (
-            (first or {}).get('trust') == notes.UNTRUSTED and cls == visibility.OWNER_PRIVATE):
-        # ADR-018 §5.4: a note from outside is a message. Its turn reads, answers, notes down and replies back;
-        # nothing with consequences (a wish to act goes into the notebook for her self-improvement review).
-        names += note_tool
-        if cls == visibility.OWNER_PRIVATE:
-            # Reading her own questions and notebook carries nothing home (owner 2026-10-20); writing stays behind the
-            # delay and her second look at home, through the notebook, which she can now check before adding to it.
-            names += ['ask.read', 'ideas.read']
-        if context.get('how_to_record_from_program'):       # the ledger is on (the mood itself may be quiet, ADR-086)
-            names.append('feel')
-        if (first or {}).get('owner_line') and context.get('errand_places_from_program'):
-            names.append('errand')
-        from . import channel_kinds
-        if channel_kinds.reply_parts(ep['scene_id']):
-            names.append('speak')           # in the owner's own platform chat she answers him in speech
-        return names + ['watch']
-    names.append('private_words')       # a new name shows up anywhere: she lists it there (not from an outside note)
+    # ADR-088 §4.2: a note from outside that opens a turn at home (a note turn, or a visit into a home group) gives the
+    # turn the class of where it came from, never home's: what follows is decided by that class, with home's own
+    # exceptions named below. Into another public group a visit keeps the group's tools (ADR-018 §5.4a).
+    outside = notes.outside_class(store, ep, first)
+    if outside:
+        cls = outside
+    names.append('private_words')       # a new name shows up anywhere: she lists it there
     # Her notebook is read and decided in her self-improvement turns, and when the owner asks in private.
     if kind == 'self_development' and (context.get('ideas_from_program') or {}).get('items'):
         names += ['ideas.read', 'ideas.review']          # the listing shows the first page; she reads on herself
     elif cls == visibility.OWNER_PRIVATE and kind not in ('presence', 'settlement', 'scheduled', 'note'):
         names += ['ideas.read', 'ideas.review']
+    elif outside:
+        names += ['ideas.read', 'ask.read']     # home's exceptions: her own notebook and questions, read
     elif cls == visibility.OWNER_PRIVATE and kind == 'note':
-        # Her own note from another home line (an outside note's turn returned above with the same read): she checks
-        # her notebook before adding to it; deciding stays in self-improvement and when the owner asks.
+        # Her own note from another home line: she checks her notebook before adding to it; deciding stays in
+        # self-improvement and when the owner asks.
         names.append('ideas.read')
     names.append('task.page')           # a long report reaches her as its first page: she turns the pages herself
     capabilities = context.get('action_capabilities_from_program') or {}
     tasks = context.get('task_state_from_program') or []
-    if capabilities.get('available'):
+    # Home's workspace and the tasks it runs are home's authority (ADR-088 §4.2).
+    if capabilities.get('available') and not outside:
         names.append('delegate')
         if tasks:
             names.append('task.message')
     # A paused task is open work in her context, so she can close it as well (ADR-011 §7.1).
-    if tasks and store.db.tasks.find_one({'_id': {'$in': [task['_id'] for task in tasks]},
-                                          'state': {'$in': ['READY', 'RUNNING', 'PAUSED']}}, {'_id': 1}):
+    if tasks and not outside and store.db.tasks.find_one({'_id': {'$in': [task['_id'] for task in tasks]},
+                                                          'state': {'$in': ['READY', 'RUNNING', 'PAUSED']}}, {'_id': 1}):
         names.append('task.stop')
     if context.get('image_artifacts_from_program'):
         names.append('attach_image')
     if context.get('stickers_from_program') or context.get('stickers_review_from_program')             or context.get('sticker_candidates_from_program'):
         names.append('sticker')
     scene_kind = (store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
-    if cls == visibility.OWNER_PRIVATE or scene_kind == 'group':
+    if (cls == visibility.OWNER_PRIVATE or scene_kind == 'group') and not outside:
         names.append('write_document')
     if kind in ('external', 'task_feedback'):
         names.append('credential')            # her credential vault: filed in the local chat only (toolbox)
@@ -804,8 +800,8 @@ def _turn_rules(store, ep):
                   'group_focus']
     if scene_kind == 'group':
         # ADR-082: in a group she writes about anyone whose lines are in front of her, visits included; a plan due
-        # there has no one's lines of its own.
-        if kind in ('external', 'task_feedback', 'visit'):
+        # there has no one's lines of its own. Home's people are not written from a note from outside.
+        if kind in ('external', 'task_feedback', 'visit') and not outside:
             names.append('understand_person')
     elif kind not in ('presence', 'settlement', 'self_development', 'visit', 'note') and (
             context.get('understanding_update_from_program') or {}).get('available'):
@@ -814,15 +810,17 @@ def _turn_rules(store, ep):
         names.append('feel')
     names.append('plan')
     from . import notices
-    if ((context.get('your_place_from_program') or {}).get('admin')) or (
-            ep.get('scene_id') == (store.config.get('chat') or {}).get('scene_id') and notices.pending(store)):
+    if not outside and (((context.get('your_place_from_program') or {}).get('admin')) or (
+            ep.get('scene_id') == (store.config.get('chat') or {}).get('scene_id') and notices.pending(store))):
         names.append('group_action')        # a group where she is an admin; at home, while a request waits on her
     if kind == 'settlement':
         names.append('promote_memory')
-    if (context.get('lines_from_program') or {}).get('items'):
+    if (context.get('lines_from_program') or {}).get('items') and not outside:
         names.append('peer_line')
-    # ADR-017: in the owner's own conversations (toolbox), whoever is talking to her may send her on an errand.
-    if cls == visibility.OWNER_PRIVATE and kind in ERRAND_FROM and context.get('errand_places_from_program'):
+    # ADR-017: in the owner's own conversations (toolbox), whoever is talking to her may send her on an errand; from
+    # outside, only a note carrying the owner's own line (ADR-066, ADR-088 §4.5).
+    if (cls == visibility.OWNER_PRIVATE or (first or {}).get('owner_line')) and kind in ERRAND_FROM \
+            and context.get('errand_places_from_program'):
         names.append('errand')
     # ADR-012 §4.2: from a heartbeat at home, or a plan of hers due there, she may go and see one of her groups.
     if kind in VISIT_FROM and cls == visibility.OWNER_PRIVATE and (context.get('places_from_program') or {}).get('items'):
@@ -939,10 +937,14 @@ NOT_NOW = {
     'note': '这回合没有能送便条的地方：没有别的对话可去。',
 }
 ERRAND_NOTE = ('外面写来的便条叫起来的回合，只有便条带着主人本人的原话（程序核对过他的账号）才能接差事；这张没有。'
-               '要去办，等主人在家里说，或者写进计划。')
+               '要去办，就在这里说出来，主人在这里看得到。')
 CONSULT_ONLY = '行动脑在问你话：这一回合只用 task 的 answer 回答它（think、recall 也能用），别的事等下一回合。'
-NOTE_ONLY = ('这一回合是外面一张便条叫起来的：只读、回话、记想法（ideas 的 note），不做有后果的事；'
-             '想做的、读到要落账的，都用 ideas 的 note 记下，到自我改进那一回合再定、再写进文档。')
+# ADR-088 §4.2: what needs home's authority, refused in a turn a note from outside opened at home, says where it goes.
+OUTSIDE_NEEDS_HOME = ('这一回合是外面写来的便条叫起来的，带的是便条那边的权限；这件事要家里的权限。'
+                      '真要做，就在这里说出来，主人在这里看得到。')
+HOME_AUTHORITY = frozenset(('delegate', 'task.message', 'task.stop', 'errand', 'visit', 'credential', 'write_document',
+                            'set_policy', 'restart', 'place_timezone', 'group_focus', 'ask.ask', 'ask.close',
+                            'ideas.review', 'peer_line', 'group_action'))
 
 
 def not_now(store, ep, name):
@@ -960,12 +962,10 @@ def not_now(store, ep, name):
         return NO_STEER
     if kind == 'note' and name == 'errand':
         return ERRAND_NOTE
-    if kind in ('note', 'visit') and name not in ('note', 'feel', 'watch', 'read_image'):
+    if kind in ('note', 'visit') and name in HOME_AUTHORITY:
         from . import notes
-        trust = (notes.opening(store, ep) or {}).get('trust')
-        cls = (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
-        if (kind == 'note' and trust != notes.TRUSTED) or (trust == notes.UNTRUSTED and cls == visibility.OWNER_PRIVATE):
-            return NOTE_ONLY
+        if notes.outside_class(store, ep, notes.opening(store, ep)):
+            return OUTSIDE_NEEDS_HOME
     if name == 'note':
         # The tool is left out only where a reply opened the turn or nowhere else is reached (notes.allowed); the daily
         # counts refuse a note when it is written, they never take the tool away.
@@ -1403,8 +1403,19 @@ class RoleTools:
         return self.store.db.episodes.find_one({'_id': ep['_id']})
 
     def _cls(self, ep):
-        """The authority this turn acts with: its conversation's class, or home's on an errand (ADR-066)."""
-        return visibility.OWNER_PRIVATE if ep.get('errand') else self._place(ep)
+        """The authority this turn acts with: its conversation's class, home's on an errand (ADR-066), or, at home in a
+        turn a note from outside opened, the class of where the note came from (ADR-088 §4.2)."""
+        if ep.get('errand'):
+            return visibility.OWNER_PRIVATE
+        from . import notes
+        return notes.outside_class(self.store, ep, notes.opening(self.store, ep)) or self._place(ep)
+
+    def _outside(self, ep):
+        """The note from outside that opened this turn at home, which gives the turn its origin's class; None for any
+        other turn, and {} when that note cannot be found."""
+        from . import notes
+        first = notes.opening(self.store, ep)
+        return (first or {}) if notes.outside_class(self.store, ep, first) else None
 
     def _place(self, ep):
         """The class of the conversation this turn is in: what goes out there and who is there."""
@@ -2461,11 +2472,23 @@ class RoleTools:
             with database_effects_lock(self.store.name):
                 require_current_feedback(self.store, ep)
                 return action()
+        # ADR-088 §4.2: from a turn a note from outside opened at home, a plan lives and fires where the note came from,
+        # with that place's authority; only the plans this turn made there can be changed from it.
+        outside = self._outside(ep)
         try:
             if op == 'create':
                 spec = {'intent': self._text(args, 'intent', 1000, offer=False), **timing}
                 where = None
-                if args.get('line'):
+                if outside is not None:
+                    if args.get('line'):
+                        raise Refused(PLAN_OUTSIDE_LINE)
+                    # It is made as in the turn that wrote the note, with that turn's person (who spoke there).
+                    origin = outside and self.store.db.episodes.find_one({'_id': outside.get('from_episode')},
+                                                                         {'person_id': 1})
+                    if not origin:
+                        raise Refused(PLAN_OUTSIDE_GONE)
+                    where = {'scene_id': outside['from_scene'], 'person_id': origin['person_id']}
+                elif args.get('line'):
                     # From home, a plan may fire in one of her peer lines (owner 2026-10-06): both ends are home.
                     from . import lines
                     if self._cls(ep) != visibility.OWNER_PRIVATE:
@@ -2482,8 +2505,11 @@ class RoleTools:
                 # A plan made earlier in this turn is hers to change too, though the turn's list predates it.
                 made = {(call.get('result') or {}).get('plan_id') for call in (ep.get('tool_calls') or {}).values()
                         if call.get('tool') == 'plan'}
+                if outside is not None and plan_id not in made:
+                    raise Refused(PLAN_OUTSIDE_ONLY_MADE % plan_id)
                 # Hers when listed or made this turn; the list shows a plan in words, so its state is read from the plan.
-                row = (plan_id in planned or plan_id in made) and self.store.db.plans.find_one({'_id': plan_id})
+                row = (plan_id in made or plan_id in planned and outside is None) and self.store.db.plans.find_one(
+                    {'_id': plan_id})
                 if not row:
                     # Her list shows a few plans; one of this conversation's that it leaves out is still hers (ADR-054).
                     kept = self.store.db.plans.find_one({'_id': plan_id, 'scene_id': ep['scene_id']})
@@ -2501,13 +2527,17 @@ class RoleTools:
                     # Her rhythms belong to the program (ADR-012 §4.3): she tunes them, never cancels or retimes them here.
                     raise Refused('「%s」是你的节律（心跳、夜间沉淀、自我改进或整理安静的群），归程序排，plan 改不了也停不了；'
                                   '要调快慢、时间或开关，在家里用 set_policy。' % plan_id)
+                # A plan this turn made where the note came from is changed there, as that place's.
+                there = ({**ep, 'scene_id': row['scene_id'], 'person_id': row['person_id'],
+                          'policy_epoch': row['policy_epoch']} if outside is not None else ep)
                 if op == 'cancel':
-                    plan = run(lambda: c.scheduler.cancel(plan_id, ep['scene_id'], ep['person_id'], ep['policy_epoch']))
+                    plan = run(lambda: c.scheduler.cancel(plan_id, there['scene_id'], there['person_id'],
+                                                          there['policy_epoch']))
                 elif self._fired_here(ep, row, op, timing):
                     # ADR-087 §4.4: a one-shot plan moved in the turn it fired stays fired; a new plan takes the timing
                     # (and the old intent when none is given), and the result names it.
                     spec = {'intent': self._text(args, 'intent', 1000, offer=False) if args.get('intent') else row['intent'], **timing}
-                    plan = run(lambda: c.scheduler.create(ep, spec, plan_id='plan-' + sha(canonical([ep['_id'], call_id]))[:32]))
+                    plan = run(lambda: c.scheduler.create(there, spec, plan_id='plan-' + sha(canonical([ep['_id'], call_id]))[:32]))
                     moved = PLAN_MOVED_FIRED % (plan_id, plan['_id'])
                 else:
                     if row.get('status') not in ('CREATING', 'ACTIVE'):
@@ -2516,7 +2546,7 @@ class RoleTools:
                     # The same length rule as create: refused with the cut offer, never by the scheduler's code.
                     spec = {**({'intent': self._text(args, 'intent', 1000, offer=False)} if args.get('intent') else {}),
                             **({'schedule': timing} if timing else {})}
-                    plan = run(lambda: c.scheduler.update(ep, plan_id, spec))
+                    plan = run(lambda: c.scheduler.update(there, plan_id, spec))
             else:
                 raise Refused('do 是 create、update 或 cancel%s；新建要写 intent 和一种计时，改或取消要写 plan_id。'
                               % _given(args, 'op'))
@@ -2527,9 +2557,13 @@ class RoleTools:
             # The code stays in the record (words()); she reads the cause and the fix.
             raise Refused('没安排成：%s。现在是 %s（%s，%s）。' % (words(exc).rstrip('。'), clock['now_local'],
                                                             clock['weekday'], clock['timezone'])) from None
+        there = outside and self.store.db.scenes.find_one({'_id': plan.get('scene_id')})
+        if there:
+            from .people import People
+            there = PLAN_THERE % People(self.store, ep['persona']).scene_title(there)
         return {'plan_id': plan['_id'], 'status': plan['status'], 'scheduled_at': plan.get('scheduled_at'),
                 'next_fire_at': plan.get('next_fire_at'), 'timezone': plan.get('timezone'),
-                'plan_version': plan.get('plan_version', 1),
+                'plan_version': plan.get('plan_version', 1), **({'where': there} if there else {}),
                 **({'note': '没写 do：有 intent 和计时、没有 plan_id，按新建（create）办了。'} if inferred else {}),
                 **({'note': moved} if moved else {})}, False
 
@@ -2600,9 +2634,10 @@ class RoleTools:
             raise Refused(str(exc)) from None
 
     def tool_note(self, ep, call_id, args):
-        # Trust is the program's: from the conversation the note is written in (notes.trust_of), never from the call.
+        # Trust is the program's: from the conversation the note is written in (notes.trust_of), never from the call;
+        # at home a turn a note from outside opened writes as from outside (ADR-088 §4.2).
         qid = args.get('question')
-        if self._place(ep) == visibility.OWNER_PRIVATE:
+        if self._place(ep) == visibility.OWNER_PRIVATE and self._outside(ep) is None:
             if qid is not None:
                 raise Refused('question 是在群里把问到的回答带回家用的；家里的便条不写它。')
             return self._note(ep, call_id, args, visibility.OWNER_PRIVATE)
@@ -2841,8 +2876,9 @@ class RoleTools:
         from . import questions
         qid = self._text(args, 'id', 40, required=False)
         if qid:
-            found = questions.read(self.store, ep['persona'], qid,
-                                   outside=self._cls(ep) != visibility.OWNER_PRIVATE)
+            # Her own questions read at home as at home, also in a turn a note from outside opened (ADR-088 §4.2).
+            found = questions.read(self.store, ep['persona'], qid, outside=visibility.OWNER_PRIVATE not in (
+                self._cls(ep), self._place(ep)))
             if not found:
                 raise Refused(ASK_UNKNOWN % qid + refs_usable(self._listed_questions(ep)))
             return found, False

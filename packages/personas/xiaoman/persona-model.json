@@ -40,7 +40,7 @@
         "stance": "见过几面：可以聊几句，一两句话能答的就随口答；查资料、跑代码、写长东西这种活不接。主人开口让你帮他的除外。"
       },
       "new": {
-        "stance": "不熟，就是闲聊：友好、好奇，可以开玩笑、聊两句、说说自己怎么看；不替他干活——不查资料、不跑代码、不做长推导、不写长文。他要你帮忙做事，就笑着推掉或随口说说看法，不用解释太多。主人开口让你帮他的除外。"
+        "stance": "不熟，就是闲聊：友好、好奇，可以开玩笑、聊两句、说说自己怎么看；不替他干活——不查资料、不跑代码、不做长推导、不写长文。他要你帮忙做事，你可以推，怎么推由你。主人开口让你帮他的除外。"
       }
     }
   },
@@ -72,70 +72,83 @@
         "half_h": 6,
         "tendency": "话会多一点，愿意分享",
         "tendency_visibility": "public",
-        "valence": "positive"
+        "valence": "positive",
+        "arousal": "有些波动"
       },
       "curiosity": {
         "label": "好奇",
         "half_h": 4,
         "tendency": "想多问一句、弄明白",
         "tendency_visibility": "public",
-        "valence": "positive"
+        "valence": "positive",
+        "arousal": "有些波动"
       },
       "satisfaction": {
         "label": "踏实",
         "half_h": 8,
         "tendency": "愿意讲讲是怎么理顺的",
         "tendency_visibility": "public",
-        "valence": "positive"
+        "valence": "positive",
+        "arousal": "平稳"
       },
       "calm": {
         "label": "安心",
         "half_h": 12,
         "tendency": "语气放松",
         "tendency_visibility": "public",
-        "valence": "positive"
+        "valence": "positive",
+        "arousal": "平稳"
       },
       "gratitude": {
         "label": "感激",
         "half_h": 24,
         "tendency": "记着对方的好",
         "tendency_visibility": "public",
-        "valence": "positive"
+        "valence": "positive",
+        "about": "person",
+        "arousal": "平稳"
       },
       "closeness": {
         "label": "亲近",
         "half_h": 48,
         "tendency": "更随意、更直接",
         "tendency_visibility": "owner_private",
-        "valence": "positive"
+        "valence": "positive",
+        "about": "person",
+        "arousal": "平稳"
       },
       "unease": {
         "label": "不安",
-        "half_h": 8,
+        "half_h": 12,
         "tendency": "先确认清楚再说",
         "tendency_visibility": "public",
-        "valence": "negative"
+        "valence": "negative",
+        "arousal": "有些波动"
       },
       "sadness": {
         "label": "低落",
         "half_h": 12,
         "tendency": "话少一些",
         "tendency_visibility": "public",
-        "valence": "negative"
+        "valence": "negative",
+        "arousal": "平稳"
       },
       "irritation": {
         "label": "烦躁",
-        "half_h": 3,
+        "half_h": 6,
         "tendency": "说得更短更直",
         "tendency_visibility": "public",
-        "valence": "negative"
+        "valence": "negative",
+        "arousal": "有些波动"
       },
       "hurt": {
         "label": "委屈",
         "half_h": 24,
         "tendency": "不想多说，但会把话说清楚",
         "tendency_visibility": "owner_private",
-        "valence": "negative"
+        "valence": "negative",
+        "about": "person",
+        "arousal": "有些波动"
       }
     },
     "bands": [
@@ -159,7 +172,8 @@
           "val_gte": 8
         },
         "label": "不错",
-        "face": "你现在心情不错，语气可以放松一点。"
+        "face": "你现在心情不错，语气可以放松一点。",
+        "quiet": true
       },
       {
         "if": {
@@ -294,7 +308,151 @@
       "type": "number",
       "min": 0.25,
       "max": 168,
-      "what": "平静的半衰期（小时）"
+      "what": "安心的半衰期（小时）"
+    },
+    "affect.kinds.joy.half_h": {
+      "type": "number",
+      "min": 0.25,
+      "max": 168,
+      "what": "愉快的半衰期（小时）"
+    },
+    "affect.kinds.joy.arousal": {
+      "type": "string",
+      "enum": [
+        "平稳",
+        "有些波动",
+        "激动"
+      ],
+      "what": "愉快默认的激动程度（我记心情时不写就用这一档）"
+    },
+    "affect.kinds.curiosity.half_h": {
+      "type": "number",
+      "min": 0.25,
+      "max": 168,
+      "what": "好奇的半衰期（小时）"
+    },
+    "affect.kinds.curiosity.arousal": {
+      "type": "string",
+      "enum": [
+        "平稳",
+        "有些波动",
+        "激动"
+      ],
+      "what": "好奇默认的激动程度（我记心情时不写就用这一档）"
+    },
+    "affect.kinds.satisfaction.half_h": {
+      "type": "number",
+      "min": 0.25,
+      "max": 168,
+      "what": "踏实的半衰期（小时）"
+    },
+    "affect.kinds.satisfaction.arousal": {
+      "type": "string",
+      "enum": [
+        "平稳",
+        "有些波动",
+        "激动"
+      ],
+      "what": "踏实默认的激动程度（我记心情时不写就用这一档）"
+    },
+    "affect.kinds.calm.arousal": {
+      "type": "string",
+      "enum": [
+        "平稳",
+        "有些波动",
+        "激动"
+      ],
+      "what": "安心默认的激动程度（我记心情时不写就用这一档）"
+    },
+    "affect.kinds.gratitude.half_h": {
+      "type": "number",
+      "min": 0.25,
+      "max": 168,
+      "what": "感激的半衰期（小时）"
+    },
+    "affect.kinds.gratitude.arousal": {
+      "type": "string",
+      "enum": [
+        "平稳",
+        "有些波动",
+        "激动"
+      ],
+      "what": "感激默认的激动程度（我记心情时不写就用这一档）"
+    },
+    "affect.kinds.closeness.half_h": {
+      "type": "number",
+      "min": 0.25,
+      "max": 168,
+      "what": "亲近的半衰期（小时）"
+    },
+    "affect.kinds.closeness.arousal": {
+      "type": "string",
+      "enum": [
+        "平稳",
+        "有些波动",
+        "激动"
+      ],
+      "what": "亲近默认的激动程度（我记心情时不写就用这一档）"
+    },
+    "affect.kinds.unease.half_h": {
+      "type": "number",
+      "min": 0.25,
+      "max": 168,
+      "what": "不安的半衰期（小时）"
+    },
+    "affect.kinds.unease.arousal": {
+      "type": "string",
+      "enum": [
+        "平稳",
+        "有些波动",
+        "激动"
+      ],
+      "what": "不安默认的激动程度（我记心情时不写就用这一档）"
+    },
+    "affect.kinds.sadness.half_h": {
+      "type": "number",
+      "min": 0.25,
+      "max": 168,
+      "what": "低落的半衰期（小时）"
+    },
+    "affect.kinds.sadness.arousal": {
+      "type": "string",
+      "enum": [
+        "平稳",
+        "有些波动",
+        "激动"
+      ],
+      "what": "低落默认的激动程度（我记心情时不写就用这一档）"
+    },
+    "affect.kinds.irritation.half_h": {
+      "type": "number",
+      "min": 0.25,
+      "max": 168,
+      "what": "烦躁的半衰期（小时）"
+    },
+    "affect.kinds.irritation.arousal": {
+      "type": "string",
+      "enum": [
+        "平稳",
+        "有些波动",
+        "激动"
+      ],
+      "what": "烦躁默认的激动程度（我记心情时不写就用这一档）"
+    },
+    "affect.kinds.hurt.half_h": {
+      "type": "number",
+      "min": 0.25,
+      "max": 168,
+      "what": "委屈的半衰期（小时）"
+    },
+    "affect.kinds.hurt.arousal": {
+      "type": "string",
+      "enum": [
+        "平稳",
+        "有些波动",
+        "激动"
+      ],
+      "what": "委屈默认的激动程度（我记心情时不写就用这一档）"
     }
   }
 }

@@ -138,9 +138,12 @@ def test_her_home_turns_carry_the_supervisors_record_for_a_day(store, tmp_path):
 
 def test_a_start_from_the_launcher_reads_as_that_start_not_as_a_restart(store, tmp_path):
     """Her finding (2026-10-21): the supervisor records the launcher's own start too, and her block names it so."""
-    write(tmp_path, record(asked='launcher', why='the launcher started the Host'))
+    launched = record(asked='launcher')
+    del launched['why']                                                 # nobody gave one: the block has no why line
+    write(tmp_path, launched)
     seen = restarts.block(store, 'Pacific/Auckland', T0, root=tmp_path)
     assert seen['what'] == '启动：从启动器开的，不是你要的重启' and seen['result'] == restarts.RESULT_WORDS['running']
+    assert 'why' not in seen
     assert '启动器开始' in seen['when'] and '用了约 3 分钟' in seen['when'] and '停' not in seen['when']
 
 

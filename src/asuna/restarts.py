@@ -253,7 +253,7 @@ def block(store, zone, moment=None, root=None, integration_state=None):
     tries = record.get('attempts') or []
     launched = record.get('asked') == LAUNCHER
     value = {'what': ('演练' if record.get('drill') else '启动' if launched else '重启') + '：' + asked,
-             'why': str(record.get('why') or '')[:200],
+             **({'why': str(record['why'])[:200]} if record.get('why') else {}),
              'when': (LAUNCHED_WHEN if launched else '%s 停，%s 起来，中间约 %s') % (
                  line_stamp(zone, record['down_at']), line_stamp(zone, record['back_at']), down),
              'result': RESULT_WORDS.get(record.get('result'), str(record.get('result'))),

@@ -104,7 +104,7 @@ export async function supervise(d) {
                              down_at: new Date(d.now()).toISOString(), attempts: [], ...fields });
   // The launcher's own start is recorded like any other: last.json then describes the Host that runs, not the restart
   // before it (her finding, 2026-10-21: after a start from start-asuna.cmd her block read an old record as running).
-  let record = begin({ asked: 'launcher', why: 'the launcher started the Host' });
+  let record = begin({ asked: 'launcher' });
   while (!d.stopped()) {
     const since = d.now();
     if (record?.drill && !record.drilled) {

@@ -116,6 +116,13 @@ page's tool rows ([client.js](../../packages/cognition-core/src/client.js)) read
 2. **Running.** `tasks.Executor` runs it in its own DSH session, a child of her conversation
    ([children.js](../../packages/cognition-core/src/children.js)), and the Web page shows it inline under her turn.
    Every tool call goes through `tasks.ToolBroker` and is checked against the task's grant.
+   - **Its folder.** A task's files are its `/task` folder and nothing else: the folder of the person the task is
+     for (`grants.workspace_grant`, bound in `tasks.ToolBroker.bind`). Home's tasks, begun at home or on an errand
+     from home, use home's folder, which holds her working copy of the project
+     ([working-copy.js](../../packages/cognition-core/src/working-copy.js)). A task begun in a group or in someone's
+     chat uses that person's own folder there, which holds only what was made for that task. `read_only_paths`
+     marks files inside `/task` as read-only sources; it opens nothing outside. A job that needs the project's
+     files is handed over from home.
 3. **Handing back.** The report comes back to her conversation as a task result. A long report comes as its first
    page, and she turns the rest with `task` do `page`. With `task` she also talks to a task (`message`), stops it
    (`stop`), and answers its questions (`answer`).

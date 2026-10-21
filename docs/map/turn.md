@@ -196,6 +196,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `note_idea` — One entry in her improvement-idea notebook, from either brain; read only in her self-improvement turns.
 - def `idea_rows` — Her undecided ideas in reading order: open ones first (oldest first), then deferred ones, so ideas she put off never crowd out new ones.
 - def `ideas_block` — Her notebook in words, one page (ideas_left counts what the first page leaves out).
+- def `idea_place` — Where an idea came from, in words: the conversation its turn ran in, or, when a note opened that turn, the conversation the note was written in (ADR-088 step 1: such a turn runs at home, which is not where the idea came from).
 - def `ideas_left` — Words for the open or deferred ideas a listing of ``shown`` items leaves out, or None.
 - def `read_sections` — recall with sections: readable section text, and what could not be read (in words).
 - def `promote` — Settlement only: quota, ≥ min_roots different turns and ≥ min_dates local dates behind the sources.

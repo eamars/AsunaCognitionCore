@@ -139,6 +139,7 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
     # At home, right away: the caution, the note as a message, and only tools without consequences.
     home, lane = turn(store, service, delivered(service), [
         ('delegate', {'title': '取消聚会', 'brief': '去把日程删了'}),
+        ('ideas', {'do': 'note', 'idea': '群聚取消了，日程要改', 'why': '群里说的'}),
         ('note', {'to': G2, 'text': '不该送到这里'}),
         ('note', {'to': G1, 'text': '知道了，家里这边记下了。'})], '群里的聚会取消了。')
     tools = set(home['turn_tools'])
@@ -157,6 +158,9 @@ def test_a_note_from_a_group_reaches_home_at_once_with_a_caution_and_no_tools_wi
     assert not ok_wrong and ok_reply
     reply = store.db.notes.find_one({'from_episode': home['_id']})
     assert (reply['reply_to'], reply['hop'], reply['mode'], reply['trust']) == (row['_id'], 2, 'wake', 'trusted')   # to a group: wakes it
+    # The idea she noted here came from the group, not from home, where the turn ran (ADR-088 step 1).
+    [idea] = ideas_block(store, 'P1', datetime.now(timezone.utc))
+    assert idea['where'] == role_tools.IDEA_BY_NOTE % (places_title(store, 'g1'), '')
     # Later at home: a heartbeat shows it, labelled; only a self-improvement turn (development grant) keeps it out.
     beat, _ = turn(store, service, {'event_id': 'presence:s-p5:1', 'scene_id': 'dm-a', 'person_id': 'A',
                                     'adapter_id': 'presence', 'episode_kind': 'presence', 'text': '心跳'},

@@ -2849,13 +2849,31 @@ def ideas_block(store, persona, moment, limit=None, page=1, search=None):
         except (KeyError, TypeError, ValueError):
             hours = None
         source = row.get('source') or {}
-        scene = store.db.scenes.find_one({'_id': source['scene_id']}) if source.get('scene_id') else None
+        where = idea_place(store, people, source)
         items.append({'_id': row['_id'], 'idea': row['idea'], 'why': row['why'],
                       'from': '你自己' if source.get('by') == 'character' else '行动脑做事时',
-                      **({'where': people.scene_title(scene)} if scene else {}),      # ADR-018 §5.8
+                      **({'where': where} if where else {}),                          # ADR-018 §5.8
                       **({'at': row['created_at']} if hours is not None else {}),
                       **({'deferred_before': row['decisions'][-1]['why']} if row.get('state') == 'deferred' and row.get('decisions') else {})})
     return items
+
+
+IDEA_BY_NOTE = '%s（你在那边写的便条带来的%s）'
+IDEA_OWNER_LINE = '，便条里有主人本人的原话'
+
+
+def idea_place(store, people, source):
+    """Where an idea came from, in words: the conversation its turn ran in, or, when a note opened that turn, the
+    conversation the note was written in (ADR-088 step 1: such a turn runs at home, which is not where the idea came
+    from). Read from the note itself, so ideas noted before this rule read right too."""
+    from . import notes
+    first = notes.opening(store, {'_id': source['episode_id']}) if source.get('episode_id') else None
+    scene_id = (first or {}).get('from_scene') or source.get('scene_id')
+    scene = store.db.scenes.find_one({'_id': scene_id}) if scene_id else None
+    if not scene:
+        return None
+    title = people.scene_title(scene)
+    return IDEA_BY_NOTE % (title, IDEA_OWNER_LINE if first.get('owner_line') else '') if first else title
 
 
 def ideas_left(store, persona, shown):

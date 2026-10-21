@@ -1,6 +1,6 @@
 # ADR-076: A research study of her calling chains, paths and prompts
 
-Status: **Under review** since 2026-10-19. The study ran 2026-10-18/19 (`report.md`); the owner decided on its recommendations 2026-10-19 (§10) and everything accepted is built and live: R1 `cb006c8b`, R2/R3/R8/R9 `ea2519a8`, R4 `2bcc9ef3`/`69b668f2`, R5 `e69859e4`, R10 and stay_silent off on platforms, installed at her restart 2026-10-19 about 11:10 NZDT. Reviewed independently (Claude Opus 5.5, a subagent that built none of it; `.runtime/private/adr-review/review-1.md`) 2026-10-19: one fault fixed (`3b72fd0f`) and the verdicts restated (§11). Three verdicts wait on her real records from the restart that installs `3b72fd0f`, read about 2026-10-22 and written here (§11.2). First written 2026-10-17 as the brief for the study.
+Status: **Under review** since 2026-10-19. The study ran 2026-10-18/19 (`report.md`); the owner decided on its recommendations 2026-10-19 (§10) and everything accepted is built and live: R1 `cb006c8b`, R2/R3/R8/R9 `ea2519a8`, R4 `2bcc9ef3`/`69b668f2`, R5 `e69859e4`, R10 and stay_silent off on platforms, installed at her restart 2026-10-19 about 11:10 NZDT. Reviewed independently (Claude Opus 5.5, a subagent that built none of it; `.runtime/private/adr-review/review-1.md`) 2026-10-19: one fault fixed (`3b72fd0f`) and the verdicts restated (§11). Three verdicts on her real records from the restart that installed `3b72fd0f`, read 2026-10-22 (§11.3): R1 and stay_silent pass, R5 fails by 0.1; the summary's effort is the next step. First written 2026-10-17 as the brief for the study.
 
 ## 1. What the owner wants
 
@@ -274,3 +274,23 @@ until the minimum is reached, it is never a pass by default.
    line are reported beside, with their count. The baseline cannot be split, because the record starts at T, so it
    stays 53.1%. She also named a third change in the window, resting groups' stickers waking her; it is reported, not
    separated.
+
+### 11.3 The verdicts, read (2026-10-22 10:40 NZDT, Claude; counts only)
+
+T = 2026-10-19 11:20:29Z, the first restart after `3b72fd0f` reached main (21:16 NZDT); window to 10-22 10:40 NZDT.
+The baselines were recomputed first and reproduced exactly, which fixes the definitions: "platform scenes" are every
+scene with a `channel_id` (QQ, the peer line and the agent lines), from 10-14 11:00Z (10-15 NZDT); "spoke" is any
+`DELIVERED` outbound row of the episode.
+
+1. **R1: pass.** 0 `NATIVE_BINDING_IDENTITY_CHANGED` since 10-18 22:15Z; 53 `self_development` turns committed.
+2. **R5: fail, by 0.1.** 276 summaries over 1,331 rows: 20.7 per 100 rows against 22.6 (reproduced: 1,973 over 8,732,
+   10-12 to 10-18), pass at 20.6 or less. Batching took off 8.4%, about the ceiling the review computed (at most about
+   9%, §11); the pass line sat at that ceiling. Sessions a day: 112 and 111 on 10-20 and 10-21 (reported only). By §10
+   the next step is the summary's thinking effort, a proposal to the owner with its numbers.
+3. **stay_silent off on platforms: pass.** 85 turns where silence is a choice (41 visit, 23 note, 21 scheduled):
+   without the unsent line 47 of 72 spoke, 65.3% (fail above 68%; baseline 53.1%, 52 of 98, reproduced); with the
+   line 7 of 13, 53.8% (reported). Group external turns spoke 209 of 215, 97.2% (fail below 95%; baseline 98.4%, 657 of
+   668, reproduced). Stickers waking her from resting groups are not separated (her note).
+
+The appendix `.runtime/private/adr076/` is reduced to `usage-30d.json` (13 KB, counts per lane over the 30 days before the
+study), which the effort proposal compares against; the rest is removed.

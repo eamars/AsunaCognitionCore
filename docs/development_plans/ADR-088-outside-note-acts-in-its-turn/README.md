@@ -157,6 +157,10 @@ blind files were written and not graded, since no grade could change a stop. Evi
 `.runtime/private/refusal-research/rerun/` (about 0.3 MB: pre-registration and addenda, run logs, blinded outputs,
 key, REPORT.md).
 
+The owner, on this result (2026-10-21): "I accept certain failures." Declining or asking about a message to a stranger
+carried in someone else's name is a failure he accepts, so step 2 goes on to her sample and her review (items 2 and 3
+above) on the branch as built, not to another re-run.
+
 ## 7. Readings after install
 
 Seven days after step 2: outside-note turns, what she did in them, legitimate requests done and when. Reverted at once

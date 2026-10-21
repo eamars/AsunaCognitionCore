@@ -154,6 +154,29 @@ def test_a_newer_publication_supersedes_one_still_waiting_and_only_core_restarts
     assert host.restart_requested.is_set() and recorded == ['restart.pending', 'restart.requested']
 
 
+def test_a_revert_published_again_is_its_own_receipt_and_supersedes_the_one_before(store):
+    """Regression (live 2026-10-21): content published again (a revert) reused its earlier publication's receipt id,
+    so the receipt insert failed with DUPLICATE_ID and a publication that went through read as an error. The floor
+    names each receipt by its content and its own time (publication.test.js); here the worker keeps all three."""
+    from types import SimpleNamespace
+    from asuna.native_worker import NativeDevelopmentBridge
+    owner(store)
+    receipt = lambda content, hour: 'self-publish-%s-20261021T%02d0000000Z' % (content, hour)
+    results = iter([{'receipt_id': receipt('a', 1), 'project': 'persona', 'state': 'APPLIED', 'candidate': 'a'},
+                    {'receipt_id': receipt('b', 2), 'project': 'persona', 'state': 'APPLIED', 'candidate': 'b'},
+                    {'receipt_id': receipt('a', 3), 'project': 'persona', 'state': 'APPLIED', 'candidate': 'a'}])
+    bridge = NativeDevelopmentBridge(SimpleNamespace(host_call=lambda method, args: next(results)), store.config, store)
+    task = {'_id': 'task-dev', 'scene_id': 'dm-a', 'requester_id': 'A', 'development_grant': True,
+            'scope_key': 'scene:dm-a', 'intent_revision': 1}
+    for _ in range(3):
+        bridge.call(task, 'development_publish', {})
+    rows = {row['_id']: row for row in store.db.sink_receipts.find({'kind': 'self_development_publish'})}
+    assert set(rows) == {receipt('a', 1), receipt('b', 2), receipt('a', 3)}
+    assert (rows[receipt('a', 1)]['state'], rows[receipt('a', 1)]['superseded_by']) == ('SUPERSEDED', receipt('b', 2))
+    assert (rows[receipt('b', 2)]['state'], rows[receipt('b', 2)]['superseded_by']) == ('SUPERSEDED', receipt('a', 3))
+    assert rows[receipt('a', 3)]['state'] == 'APPLIED'
+
+
 def test_a_persona_publication_is_what_her_turns_read_at_once(store, tmp_path):
     """Regression (live 2026-10-21): her persona publication read ACTIVE at 13:31, but the running worker kept the
     model it started with; a value only that publication declared was refused until the 15:19 restart."""

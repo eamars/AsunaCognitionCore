@@ -446,11 +446,13 @@ export class PublicationFloor {
     // A package byte for byte the one running (her change lay outside its `files`, docs/ for one) has nothing new to
     // load: it is selected as already running, so no worker or Host restart follows it.
     const same = selected.active?.[project.id]?.sha256 === hash(bytes);
+    const published = new Date().toISOString();
+    // Each publication has its own receipt: the same content published again (a revert) is another publication.
     const value = { candidate: identity, packageRoot: prepared.packageRoot, workerPath: prepared.workerPath,
       artifact: addressed, sha256: hash(bytes), state: same ? 'ACTIVE' : restartRequired ? 'HOST_RESTART_REQUIRED' : 'APPLIED',
       project: project.id, changed_files: changed, deleted_files: deleted, reason,
-      receipt_id: 'self-publish-' + identity.slice(0, 32), origin,
-      published_at: new Date().toISOString(), boot_probe: prepared.boot_probe };
+      receipt_id: 'self-publish-' + identity.slice(0, 32) + '-' + published.replace(/[-:.]/g, ''), origin,
+      published_at: published, boot_probe: prepared.boot_probe };
     // No rollback pointer. The next successful publication advances this record.
     // The last selection that actually ran: the launcher returns to it when this one never starts (§6.4).
     const previous = selected.active?.[project.id];

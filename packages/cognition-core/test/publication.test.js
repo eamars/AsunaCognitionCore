@@ -58,6 +58,29 @@ test('a publication whose package is byte for byte the running one is active at 
   assert.equal((await floor.call('development_publish', { reason: 'packed again' })).state, 'APPLIED');
 });
 
+test('each publication has its own receipt: A, B, then A again (a revert) gives three', async t => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/revert-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  const source = path.join(workspace, 'source'); await fs.mkdir(source);
+  await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', files: ['README.md'], type: 'module' }));
+  await fs.writeFile(path.join(source, 'README.md'), 'Running');
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
+  const publish = async text => {
+    await floor.call('development_write', { path: 'README.md', text, overwrite: true });
+    return floor.call('development_publish', { reason: text });
+  };
+  const a = await publish('A');
+  await floor.workerReady('persona');
+  const b = await publish('B');
+  const reverted = await publish('A');
+  assert.equal(reverted.candidate, a.candidate, 'the same content');
+  assert.equal(reverted.state, 'ACTIVE', 'A is still the running package');
+  assert.equal(new Set([a.receipt_id, b.receipt_id, reverted.receipt_id]).size, 3, JSON.stringify([a, b, reverted].map(r => r.receipt_id)));
+  for (const receipt of [a, b, reverted]) assert.ok(receipt.receipt_id.startsWith('self-publish-' + receipt.candidate.slice(0, 32) + '-'));
+  assert.equal((await floor.selected()).projects.persona.receipt_id, reverted.receipt_id);
+});
+
 test('ADR-010 D9: a file she changed whose source moved after her baseline is marked stale before publish', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });     // a fresh checkout has no data folder yet
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/stale-probe-'));

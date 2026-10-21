@@ -47,6 +47,27 @@ Decided by the owner ("the bug should be fixed"), put to her 2026-10-20 19:3x NZ
 
 Whether the budget also ends the "no text" failures is not known: a failed summary stores no output. The reading says whether they recur.
 
+## 4a. First reading (2026-10-21 14:3x NZDT, Claude; counts only)
+
+Every automatic compaction in her live sessions, from the session logs (`.runtime/private/compaction/survey_1021.py`):
+
+| window | compactions | reuse when the step before was warm | failed ends |
+|---|---|---|---|
+| before 10-20 19:19 (span only) | 493 | median 10.5%; 54 of 478 at 90% or more | 71 (14%) |
+| 19:37 to 23:42:14 (one level for every summary) | 4 | the three `high` ones 0%, the `medium` one 99.2% | 0 |
+| from 23:42:14 (the conversation's own level) | 10 | every one 98.9% to 99.7%, median 99.7% | 0 |
+
+- **Cache: decided, keep.** Ten of ten above the 90% bar, against a 10.5% baseline; the 20-compaction count was set
+  for a median near the bar, not this far above it.
+- **Failures: not yet decided.** 0 in the 14 since 19:19 against 14% before; at the old rate 14 clean ones in a row
+  happen about 11% of the time by chance. About 30 since the level fix (near 10-24 at five or six a day) decides it.
+- **Her memory gate (§3): not yet counted.** Summaries grew (median output 4,245 tokens before, 6,205 after; the
+  largest 8,268, under the 24,576 cap); whether the growth repeats the kept tail is what the 8-gram count reads.
+- **What the sample cannot show:** all 14 come from the same three group conversations; the fallback and level lines
+  reach a file only from 2026-10-21 14:20 (`restart/host.log`), so whether any of the ten fell back is not recorded.
+
+The owner reads it again the same evening.
+
 ## 5. As built
 
 - `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `wholeConversation`, `spanAlone`, `summaryEffort`, `keptRule`, `hasSections`, `ROLE_SECTIONS`, `WHOLE_SPARE_TOKENS`, `KEPT_QUOTE_CHARS`; `packages/personas/xiaoman/cordis.patch.yml`: `summaryReasoningEffort`.

@@ -68,6 +68,32 @@ Every automatic compaction in her live sessions, from the session logs (`.runtim
 
 The owner reads it again the same evening.
 
+## 4b. Her memory gate, read (2026-10-22, Claude and an independent researcher)
+
+- **The counter (§3, 8-grams of the summary found only in the kept tail):** median 11.4% in the 20 automatic
+  compactions after the level fix against 1.2% before, a clear rise. Correction to §4a: 21 of those 24 are her home
+  chat and the agent line, not groups; in group conversations automatic compaction is rare (3 since the cut, all in
+  one group) and most compactions are the program's condense of a quiet group (ADR-049), which keeps one message.
+- **Groups, read bullet by bullet** (the owner asked for the text to be read against the instruction; 19 summaries,
+  699 bullets, group conversations only): repeating the kept tail is new and only in automatic compactions (0%, 13%,
+  51% of characters in the three cases); the counter catches about a sixth of what reading finds. Already there before
+  the cut and unchanged by it: 30–40% of every group checkpoint repeats a program block (mostly her group notes, which
+  the do-not-copy rule does not name, and the task list, which 委托中的事 asks for) or is waste (sections restating
+  the narrative; an opening pointer to the previous checkpoint, which the merge replaces). Cause of the new part: the
+  sections still mean "now" (话题怎么转到现在, 对方此刻), which is the end of the kept tail once it is sent, and the kept
+  rule's locator (a message count of hundreds; a 40-character quote that often lands on a notice's common opening, a
+  tool result or a program error) cannot be followed.
+- **The rewording, replayed** (pre-registered; the local character model; 10 past automatic compactions of her home
+  chat and the agent line; installed instruction vs boundary first with "the checkpoint is as of the moment the kept
+  part begins"): median 7.2% vs 0.8%, but below on only 6 of 10 pairs (the rule asked 7): it removed the leak in 5 of
+  the 6 that leaked and added one where there was none. **Failed as pre-registered.**
+- **Open, the owner's:** revert to the span alone for automatic compactions (about 20 s and 120k re-read tokens each,
+  the template waste unchanged), accept the repeats, or a new pre-registered run of the researcher's variant (the
+  boundary named by the first kept line's `[label] MM/DD HH:MM` stamp). The template waste is a separate proposal, to her
+  after the owner.
+- **Evidence** (`.runtime/private/compaction-study/`, numbers and redacted readings only): `researcher-audit.md` (24 KB),
+  `researcher/` (scripts, per-summary readings, per-bullet metrics; 247 KB), `replay/` (PREREG, VERDICT, runs; 24 KB).
+
 ## 5. As built
 
 - `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `wholeConversation`, `spanAlone`, `summaryEffort`, `keptRule`, `hasSections`, `ROLE_SECTIONS`, `WHOLE_SPARE_TOKENS`, `KEPT_QUOTE_CHARS`; `packages/personas/xiaoman/cordis.patch.yml`: `summaryReasoningEffort`.

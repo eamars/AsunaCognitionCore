@@ -165,3 +165,15 @@ action session was bound from the errand turn: the group's place, person and fol
 against its task's grant (home's), so nothing could pass. Fixed: the action session is bound from its task
 (`NativeLane`: the task's scene, requester, scope, epoch and conversation), which for every other task is the same as
 its turn. Test: `tests/test_errand_carries_home.py::test_the_action_brain_of_a_task_begun_on_an_errand_works_in_homes_folder`.
+
+**The same class, two more readers (2026-10-21 evening, her run):** such a task got no `sandbox_run` and none of the
+development tools, because its grants were read from the errand turn (the group's class and event), and the action
+brain's `ask_character` failed `CONSULT_CONTEXT_UNAVAILABLE`, because the consult looked for the errand turn in home's
+scene. Fixed for the class: `errands.home_turn` gives the turn whose authority an errand turn carries (the home turn
+that sent it), and every read that grants or authorizes for such a task goes through it: its grants
+(`Coordinator._grants`), its input (`raw_input_refs`: the home turn's message), its consult (`Coordinator.consult`,
+the stage binding in `NativeLane`), where its result is said (`publish.py`), the unattended rule (`ADR-021 D4`) and the
+memory view of its session (`native_cognition.py`). The errand turn stays the record of where she handed it over:
+her thought then (`tasks._why_then`), the turn that waits on the task and its delegation depth. Tests:
+`test_a_task_begun_on_an_errand_has_the_grants_and_the_input_of_the_home_turn_that_sent_it`,
+`test_the_action_brain_asking_about_a_task_begun_on_an_errand_is_answered_at_home`.

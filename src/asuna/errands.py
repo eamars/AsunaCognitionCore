@@ -53,6 +53,15 @@ def carried(store, event):
             'by': visit.get('by')}
 
 
+def home_turn(store, ep):
+    """The turn whose authority an errand turn carries: the home turn that sent it (ADR-066); any other turn, itself.
+    What grants or authorizes for work begun on an errand (a task's grants, its input, its consult, where its result
+    is said) reads this turn, never the errand's; the errand turn stays the record of what she did and thought there."""
+    if not (ep or {}).get('errand'):
+        return ep
+    return store.db.episodes.find_one({'_id': ep['errand']['from']}) or ep
+
+
 def session_id(episode_id):
     """The errand's own session: named, so the launcher retires it like the other one-shot sessions."""
     return SESSION_PREFIX + sha(episode_id.encode())[:32]

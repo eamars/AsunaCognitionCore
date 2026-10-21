@@ -94,6 +94,42 @@ def test_a_task_begun_on_an_errand_is_homes_and_its_report_comes_home(store):
     assert '托话的那边是 %s' % task['errand_place'] in said['text']
 
 
+def test_a_task_begun_on_an_errand_has_the_grants_and_the_input_of_the_home_turn_that_sent_it(store):
+    """Regression (live 2026-10-21): the task's grants were read from the errand turn (the group's class and its
+    event), so a task home's turn would have run with the sandbox got no sandbox_run, and none of the development
+    tools; its input was the errand's notice in the group."""
+    service = group_world(store)
+    store.config['self_development'] = {'enabled': True}
+    home_ep, ep, lane, coordinator = sent_on_errand(store, service, calls=[('delegate', {'title': '跑一下', 'brief': '跑个脚本'})])
+    assert ep['manifest']['session_class'] == visibility.PUBLIC
+    assert errands.home_turn(store, ep)['_id'] == home_ep['_id'] and errands.home_turn(store, home_ep) is home_ep
+    [task_id] = [row[4]['task'] for row in lane.tool_results if row[2] == 'delegate']
+    task = store.db.tasks.find_one({'_id': task_id})
+    assert 'sandbox_run' in task['allowed_capabilities'] and task['development_grant'] is True
+    assert task['raw_input_refs'] == ['in-' + home_ep['_id']]
+    assert task['episode_id'] == ep['_id'], 'the errand turn stays the record of where she handed it over'
+    # The same group turn without the errand's link is the group's own: no sandbox, no development grant.
+    development, _, names = coordinator._grants({**ep, 'errand': None})
+    assert not development and 'sandbox_run' not in names
+
+
+def test_the_action_brain_asking_about_a_task_begun_on_an_errand_is_answered_at_home(store):
+    """Regression (live 2026-10-21): ask_character on a task begun on an errand looked for the errand turn in home's
+    scene and failed CONSULT_CONTEXT_UNAVAILABLE. She answers in the conversation the task belongs to."""
+    from asuna.tasks import TaskService
+    service = group_world(store)
+    home_ep, ep, lane, coordinator = sent_on_errand(store, service, calls=[('delegate', {'title': '查开会的地方', 'brief': '查一下'})])
+    [task_id] = [row[4]['task'] for row in lane.tool_results if row[2] == 'delegate']
+    task = TaskService(store).claim(task_id)
+    coordinator.character = FakeLane(store, [FakeTurn([('think', {'thought': '问的是哪个会。'}),
+                                                       ('task', {'do': 'answer', 'answer': '今晚八点那个会。'})])])
+    answer = coordinator.consult(task, 'call-1', {'question': '哪个会？'})
+    assert answer['answer'] == '今晚八点那个会。'
+    asked = store.db.episodes.find_one({'episode_kind': 'consult'})
+    assert (asked['scene_id'], asked['scope_key']) == (home_ep['scene_id'], home_ep['scope_key'])
+    assert asked.get('native_session_id') == home_ep.get('native_session_id')
+
+
 def test_the_action_brain_of_a_task_begun_on_an_errand_works_in_homes_folder(store, tmp_path):
     """Regression (live 2026-10-21 15:26): the action session was bound from the errand turn (the group, its folder),
     the task from home, so every tool call of that run was refused WORKSPACE_GRANT_MISMATCH."""

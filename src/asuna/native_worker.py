@@ -147,7 +147,9 @@ class NativeLane:
                         'task_id':task_id,'intent_revision':task['intent_revision']})
                     if not artifact:
                         raise Denied('STALE_TASK_FENCE')
-                ep = self.store.db.episodes.find_one({'_id': task['episode_id']})
+                # The turn the task works for: on an errand, the home turn that sent it (errands.home_turn).
+                from . import errands
+                ep = errands.home_turn(self.store, self.store.db.episodes.find_one({'_id': task['episode_id']}))
                 if ep and self.lane == 'executor' and task.get('native_session_id'):
                     # The action brain works for its task: the task's place, requester and conversation, which for
                     # one begun on an errand are home's, not the errand turn's (coordinator.delegate).
@@ -1378,7 +1380,8 @@ class NativeDevelopmentBridge:
                                                              max(1, limit*self.PAGE_BYTES//size)))
             return {'database':self.store.name,'collection':collection,'skip':skip,'limit':limit,'rows':rows}
         try:
-            episode = self.store.db.episodes.find_one({'_id': task.get('episode_id')}, {'episode_kind': 1}) or {}
+            from . import errands
+            episode = errands.home_turn(self.store, self.store.db.episodes.find_one({'_id': task.get('episode_id')})) or {}
             result = self.worker.host_call('development', {'tool':tool,'args':args, 'origin': {
                 'task_id': task['_id'], 'scope_key': task['scope_key'], 'intent_revision': task['intent_revision'],
                 # A self-improvement turn runs with nobody present (ADR-021 D4: it never publishes onto a waiting change).

@@ -257,6 +257,7 @@ An errand carries home (ADR-066).
 
 - def `of` — The errand this turn runs on, or None: {from, scene_id, scope_key, policy_epoch, person_id, by}.
 - def `carried` — At ingest: the home turn an errand visit came from, whose authority its turn carries; None otherwise.
+- def `home_turn` — The turn whose authority an errand turn carries: the home turn that sent it (ADR-066); any other turn, itself.
 - def `session_id` — The errand's own session: named, so the launcher retires it like the other one-shot sessions.
 - def `is_errand_visit`
 - def `late` — Whether an errand waited past its patience before its turn came (row: its input message).

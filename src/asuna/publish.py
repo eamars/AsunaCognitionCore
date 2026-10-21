@@ -81,7 +81,9 @@ class PublishService:
                 seen.add(source_ep['_id'])
                 feedback_source = db.messages.find_one({'_id':'in-'+source_ep['_id']})
                 task = db.tasks.find_one({'_id': feedback_source['event']['task_id']})
-                source_ep = db.episodes.find_one({'_id': task['episode_id']})
+                # A task begun on an errand answers where home sent it from (errands.home_turn).
+                from . import errands
+                source_ep = errands.home_turn(self.store, db.episodes.find_one({'_id': task['episode_id']}))
             source = db.messages.find_one({'_id': 'in-' + source_ep['_id']})
             channel = (source or {}).get('event', {}).get('channel', {})
             origin = (source or {}).get('event', {})

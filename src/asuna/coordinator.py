@@ -148,10 +148,16 @@ class Coordinator:
         with self.lock:
             self.tasks.valid(task)
             scene=self.store.authorize(task['scene_id'],task['requester_id'])
-            original=self.store.db.episodes.find_one({'_id':task['episode_id'],
-                'scene_id':task['scene_id'],'person_id':task['requester_id'],
-                'scope_key':task['scope_key'],'policy_epoch':task['policy_epoch']})
-            if not original or scene['scope_key']!=task['scope_key']:raise Denied('CONSULT_CONTEXT_UNAVAILABLE')
+            # She answers in the conversation the task belongs to: for one begun on an errand, the home turn that sent
+            # it, whose place, person and scope the task carries (delegate).
+            from . import errands
+            begun=self.store.db.episodes.find_one({'_id':task['episode_id']}) or {}
+            belongs=begun.get('errand') or begun
+            original=errands.home_turn(self.store,begun) if begun else None
+            if (not original or scene['scope_key']!=task['scope_key']
+                    or any(belongs.get(field)!=task[key] for field,key in (('scene_id','scene_id'),
+                           ('person_id','requester_id'),('scope_key','scope_key'),('policy_epoch','policy_epoch')))):
+                raise Denied('CONSULT_CONTEXT_UNAVAILABLE')
             source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0],
                 'scene_id':task['scene_id'],'scope_key':task['scope_key'],'policy_epoch':task['policy_epoch']})
             if not source:raise ValueError('CONSULT_SOURCE_MISSING')
@@ -585,11 +591,14 @@ class Coordinator:
 
     # ── working with the action brain (ADR-011 §4) ──────────────────
     def _grants(self, ep):
-        """(development, integration profile, capabilities) for a task delegated from this episode."""
+        """(development, integration profile, capabilities) for a task delegated from this episode: from the turn whose
+        authority it carries (errands.home_turn: on an errand, the home turn that sent it)."""
         from .tasks import WORKSPACE_TOOLS, ACTION_DSH_CAPABILITIES
         from .vision import route_filtered_tool_names
         from .integration import event_profile, integration_tools
         from .grants import development_granted
+        from . import errands
+        ep=errands.home_turn(self.store,ep)
         source=self.store.db.messages.find_one({'_id':'in-'+ep['_id']}) or {}
         event=source.get('event',{})
         scene=self.store.db.scenes.find_one({'_id':ep['scene_id']}) or {'_id':ep['scene_id']}
@@ -621,11 +630,13 @@ class Coordinator:
 
     def delegate(self, ep, call_id, title, brief, tier=None):
         """A new task: the action brain's first message is her brief (§4). `tier` (ADR-075): (tier, why) she chose."""
-        from . import places
+        from . import errands, places
         from .grants import workspace_grant
         # A task begun on an errand is home's, and one begun in a reflection runs under home's own session: both turns
-        # run in a session retired when they end, which a task would outlive (owner and her, 2026-10-20).
+        # run in a session retired when they end, which a task would outlive (owner and her, 2026-10-20). Its grants
+        # and its input are the home turn's that sent the errand (errands.home_turn).
         home=ep.get('errand') or ep
+        authority=errands.home_turn(self.store,ep)
         session=self._task_session(ep)
         workspace_grant(self.store.config,home['scene_id'],home['person_id'])
         task_id='task-'+sha(canonical([ep['_id'],call_id]))[:32]
@@ -636,7 +647,7 @@ class Coordinator:
             tier,said=action_tiers.at_dispatch(*tier,self._zone(ep))
         if not task:
             development,integration,names=self._grants(ep)
-            source_ref=('in-'+ep['_id']) if ep.get('episode_kind')!='consult' else None
+            source_ref=('in-'+authority['_id']) if authority.get('episode_kind')!='consult' else None
             original=self.store.db.tasks.find_one({'_id':ep.get('task_id')}) if ep.get('task_id') else None
             raw=[source_ref] if source_ref and self.store.db.messages.find_one({'_id':source_ref},{'_id':1}) else (original or {}).get('raw_input_refs',[])
             with database_effects_lock(self.store.name):

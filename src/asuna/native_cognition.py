@@ -28,8 +28,11 @@ class CognitionView:
                 'policy_epoch': self.binding['policy_epoch']})
             if not task:
                 return None
-            episode_query['_id'] = task['episode_id']
-            query['stream_id'] = task['episode_id']
+            # The turn the task works for: on an errand, the home turn that sent it (errands.home_turn).
+            from .errands import home_turn
+            begun = home_turn(self.store, self.store.db.episodes.find_one({'_id': task['episode_id']}, {'errand': 1})
+                              or {'_id': task['episode_id']})
+            episode_query['_id'] = query['stream_id'] = begun['_id']
         for audit in self.store.db.audit_events.find(query, {
                 'stream_id': 1, 'occurred_at': 1}).sort([('occurred_at', -1), ('_id', -1)]).limit(24):
             episode = self.store.db.episodes.find_one({**episode_query, '_id': audit['stream_id']},

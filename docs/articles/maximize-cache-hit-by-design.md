@@ -284,7 +284,8 @@ show (`packages/cognition-core/src/context-delivery.js`).
 the part DSH keeps verbatim) and collects what is visible:
 
 - each earlier notice's `source.carried`: digests of the blocks it sent whole, digests of list items per path, the
-  history rows, memories and episode it carried;
+  history rows, memories and episode it carried. A block counts only as its **newest** copy: the last notice that
+  sent it, whole or folded, hides every older copy, so a block that went A, then B, then A again is sent again;
 - platform lines projected into the conversation as they arrived (by receipt);
 - the character's own thoughts, by the call id of her `think` calls.
 
@@ -300,7 +301,7 @@ the session log loses something (a compaction), the visible set shrinks with it,
 - **History rows, memories and her own thoughts** already visible are dropped and counted in
   `repeated_from_program`. A line goes once per notice, in its primary block. A recalled memory whose every source
   line is visible is dropped too.
-- **A block identical to a visible copy** is not sent; its name goes into `unchanged_from_program`.
+- **A block identical to its newest visible copy** is not sent; its name goes into `unchanged_from_program`.
 - **A list block that changed** goes item by item: items still visible fold into one `same_as_before` line, saying
   how many, in which states, and **the handle of each folded item** (`HANDLES`: `_id`, `plan_id`, `task_id`,
   `artifact_id`, `place` and similar). The code's own example reads
@@ -693,6 +694,8 @@ ADR-085 (summary request sends the whole conversation), ADR-086 (emotion model: 
 
 ## Changelog
 
+- **2026-10-21** — A block is named unchanged only when its newest copy on the surface matches; an older copy no
+  longer counts once a later notice sent the block differently (section 6).
 - **2026-10-21** — ADR-086: an @ or a reply to her in a group goes through the relevance gate first, except a reply
   from the person she waits on or within her open question's wait; a gate that cannot answer it falls back to the
   turn (sections 1, 8). The gate and the tail read her mood as one short paragraph, nothing at a calm band; a fixed

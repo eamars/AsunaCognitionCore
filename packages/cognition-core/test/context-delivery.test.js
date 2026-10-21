@@ -238,6 +238,36 @@ test('after a compaction, what a notice relied on and the surface no longer show
   assert.ok(all.context.event && all.context.scene);
 });
 
+test('a block is unchanged only when its newest copy matches: A, then B, then A sends A again', () => {
+  const first = composeContext(context([], { relationship: { body: '认识' } }), visibleCarried(surface([])));
+  const second = composeContext(context([], { relationship: { body: '吵过一架' } }),
+    visibleCarried(surface([notice(first, 'ep-1')])));
+  assert.deepEqual(second.context.relationship, { body: '吵过一架' });
+  const events = [notice(first, 'ep-1'), notice(second, 'ep-2')];
+  const third = composeContext(context([], { relationship: { body: '认识' } }), visibleCarried(surface(events)));
+  assert.deepEqual(third.context.relationship, { body: '认识' }, 'the newest copy she sees is B, so A is sent whole');
+  assert.ok(!third.context.unchanged_from_program.includes('relationship'));
+  assert.ok(third.context.unchanged_from_program.includes('self_state_from_program'), 'a block never changed stays unchanged');
+  // Once A is the newest copy again, it is unchanged.
+  const fourth = composeContext(context([], { relationship: { body: '认识' } }),
+    visibleCarried(surface([...events, notice(third, 'ep-3')])));
+  assert.ok(fourth.context.unchanged_from_program.includes('relationship'));
+  // A notice about to join the surface in this step is its newest.
+  const waiting = notice(second, 'ep-2').data;
+  const pending = composeContext(context([], { relationship: { body: '认识' } }),
+    visibleCarried(surface([notice(first, 'ep-1')]), [waiting]));
+  assert.deepEqual(pending.context.relationship, { body: '认识' });
+  // A list block sent whole, then folded with another item, then as it first was: the newest copy lists both, so the
+  // block is not named unchanged; its item still in view folds.
+  const plans = items => ({ plans_from_program: items });
+  const p1 = { _id: 'p1', intent: '喝水' }, p2 = { _id: 'p2', intent: '看群' };
+  const once = composeContext(context([], plans([p1])), visibleCarried(surface([])));
+  const twice = composeContext(context([], plans([p1, p2])), visibleCarried(surface([notice(once, 'ep-1')])));
+  const again = composeContext(context([], plans([p1])),
+    visibleCarried(surface([notice(once, 'ep-1'), notice(twice, 'ep-2')])));
+  assert.deepEqual(again.context.plans_from_program, { items: [], same_as_before: '其余 1 条同前：p1' });
+});
+
 test('a block whose list only changed order is named unchanged, not sent again', () => {
   const mood = order => ({ label: '平静', reasons: order.map(n => ({ feeling: '开心', why: '理由 ' + n, event_id: 'e' + n })) });
   const first = composeContext(context([], { affect_from_program: mood([1, 2, 3]) }), visibleCarried(surface([])));

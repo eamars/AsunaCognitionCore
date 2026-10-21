@@ -29,10 +29,14 @@ test('a person\'s entry is folded while the session shows it and sent again when
   assert.equal(second.context.people_from_program.note, NOTE);
   assert.equal(second.omitted.items, 1);
 
-  // The same people again, all still visible: nothing of the block is sent.
+  // A alone again: the newest copy she sees lists B too, so the block is not unchanged; A, still visible, folds.
   const third = composeContext(people(a), visibleCarried(surface([...events, notice(second, 'ep-2')])));
-  assert.equal(third.context.people_from_program, undefined);
-  assert.ok(third.context.unchanged_from_program.includes('people_from_program'));
+  assert.deepEqual(third.context.people_from_program, { items: [], same_as_before: '其余 1 条同前', note: NOTE });
+  assert.ok(!(third.context.unchanged_from_program ?? []).includes('people_from_program'));
+  // The same people once more: now the newest copy matches, and nothing of the block is sent.
+  const fourth = composeContext(people(a), visibleCarried(surface([...events, notice(second, 'ep-2'), notice(third, 'ep-3')])));
+  assert.equal(fourth.context.people_from_program, undefined);
+  assert.ok(fourth.context.unchanged_from_program.includes('people_from_program'));
 
   // Her write changed A's short, his tier or his label: a new digest, sent again.
   for (const changed of [{ ...a, short: '说话直接，肯听人说完' }, { ...a, familiarity: '常来往' }, { ...a, who: '[甲改名 #1]' }]) {

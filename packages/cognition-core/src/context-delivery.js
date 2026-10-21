@@ -44,10 +44,12 @@ function shapeDigest(value) {
 }
 
 /** What the surface already carries. Messages about to join it in the same step (lines waiting in the inbox,
- * navigation.js, and notices claimed with them) count too. */
+ * navigation.js, and notices claimed with them) count too, as its newest. A block counts only as its newest copy:
+ * the last notice that sent it, whole (its digest) or folded (its shape), hides every older copy. */
 export function visibleCarried(session, pending = []) {
   const visible = { blocks: new Set(), items: new Set(), lists: new Set(), rows: new Set(), memories: new Set(),
     episodes: new Set(), thoughts: new Set(), native: new Set() };
+  const newest = new Map();
   const take = (content, source) => {
     // Her own thought, as she wrote it with `think` (its call id ends the stored thought's id).
     if (Array.isArray(content)) for (const block of content)
@@ -56,15 +58,14 @@ export function visibleCarried(session, pending = []) {
     if (source?.kind === 'user' && source.channel && source.receipt) { visible.rows.add(source.receipt); return; }
     const carried = source?.kind === 'asuna' ? source.carried : undefined;
     if (!carried) return;
-    for (const [key, value] of Object.entries(carried.blocks ?? {})) visible.blocks.add(key + ':' + value);
-    for (const [key, values] of Object.entries(carried.items ?? {})) for (const value of values) visible.items.add(key + ':' + value);
     // A list block sent folded: the whole block as it was then (its items on this and older notices).
-    for (const [key, value] of Object.entries(carried.lists ?? {})) visible.lists.add(key + ':' + value);
+    const blocks = carried.blocks ?? {}, lists = carried.lists ?? {};
+    for (const key of new Set([...Object.keys(blocks), ...Object.keys(lists)])) newest.set(key, { block: blocks[key], list: lists[key] });
+    for (const [key, values] of Object.entries(carried.items ?? {})) for (const value of values) visible.items.add(key + ':' + value);
     for (const id of carried.rows ?? []) visible.rows.add(id);
     for (const id of carried.memories ?? []) visible.memories.add(id);
     if (carried.episode) visible.episodes.add(carried.episode);
   };
-  for (const message of pending) take(message.content, message.source);
   for (const seq of session.surface.nodes) {
     const event = session.eventAt(seq);
     if (!event) continue;
@@ -72,6 +73,11 @@ export function visibleCarried(session, pending = []) {
     // A line written in the Web composer is on the surface as itself: its id is the line's platform event id.
     if (event.type === 'user/message' && !event.data?.source?.channel && message?.id) visible.native.add(message.id);
     take(message?.content ?? '', event.type === 'user/message' ? event.data?.source : undefined);
+  }
+  for (const message of pending) take(message.content, message.source);
+  for (const [key, { block, list }] of newest) {
+    if (block !== undefined) visible.blocks.add(key + ':' + block);
+    if (list !== undefined) visible.lists.add(key + ':' + list);
   }
   return visible;
 }

@@ -1407,13 +1407,15 @@ class RoleTools:
         turn a note from outside opened, the class of where the note came from (ADR-088 §4.2)."""
         if ep.get('errand'):
             return visibility.OWNER_PRIVATE
-        from . import notes
-        return notes.outside_class(self.store, ep, notes.opening(self.store, ep)) or self._place(ep)
+        first = self._outside(ep)
+        return ((first or {}).get('from_class') or visibility.PUBLIC) if first is not None else self._place(ep)
 
     def _outside(self, ep):
         """The note from outside that opened this turn at home, which gives the turn its origin's class; None for any
         other turn, and {} when that note cannot be found."""
         from . import notes
+        if turn_kind(ep) not in ('note', 'visit') or not ep.get('_id'):
+            return None
         first = notes.opening(self.store, ep)
         return (first or {}) if notes.outside_class(self.store, ep, first) else None
 

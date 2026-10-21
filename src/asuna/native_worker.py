@@ -1197,7 +1197,7 @@ class BusinessWorker:
                       if args.get('session_id') else None)
             if not record:
                 return all_specs()
-            specs = session_specs(self.app.store, record['scene_id'])
+            specs = session_specs(self.app.store, record['scene_id'], record.get('person_id'))
             speak = next((spec for spec in specs if spec['name'] == 'speak'), None)
             self.app.store.audit(record['_id'], 'session.tools', {
                 'sha256': sha(canonical(specs)),

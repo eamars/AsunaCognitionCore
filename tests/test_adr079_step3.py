@@ -34,7 +34,7 @@ def bot_group(store):
 
 def test_where_everything_is_declared_speak_is_the_shared_definition_byte_for_byte(store):
     world(store)
-    assert role_tools.session_specs(store, SCENE) == role_tools.all_specs()
+    assert speak_of(role_tools.session_specs(store, SCENE)) == speak_of(role_tools.all_specs())
 
 
 def test_a_qq_bot_conversation_shows_text_and_picture_and_no_quote(store):

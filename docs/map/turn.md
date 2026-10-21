@@ -137,7 +137,9 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `all_specs` — Her tools, and each old name registered but never listed, so a call by it still reaches the worker.
 - def `speak_kinds` — The parts speak takes in this conversation: its kind's parts, a pointer part only where the channel's adapter declared it (ADR-079 §9.7: not declared is not carried, so it is not shown).
 - def `speak_spec` — speak as a conversation with these parts shows it, with `quote` only where her line can quote.
-- def `session_specs` — Her tools as one conversation shows them (ADR-079 §9.7): `speak` with the parts and the quote its channel's adapter declared, the rest as all_specs.
+- def `session_specs` — Her tools as one conversation shows them: `speak` with the parts and the quote its channel's adapter declared (ADR-079 §9.7), and each option left out that no turn there can use (`placed_spec`, ADR-087 §4.3); the rest as all_specs.
+- def `conversation_class` — The class of a conversation's turns: the local chat's is its person's, a private chat's the person it is with, a group's its own.
+- def `placed_spec` — One tool's spec as a conversation of this class and kind shows it, `listed` being what it lists (abilities).
 - def `aliases` — Old name -> the tool it runs as (the plugin lets one through where that tool is listed).
 - def `turn_kind`
 - def `exposed` — What this turn may use, by option: the turn's own rules (its kind, context and grants, §2.6) within the conversation's list (abilities).

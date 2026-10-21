@@ -117,10 +117,10 @@ Measured 2026-10-21 (read-only, 7 days, her role sessions; `.runtime/private/ref
   model, prefixes are shared across conversations: the two conversations that began that week got about 13.4k of
   their ~25.9k-token first prompt from cache. Tool lists change only at restarts (64 changes, all on resume; none
   within a run).
-- The options this step removes are the same for every conversation of a place (`note.deliver` in every public
-  conversation; `ideas` read and review and home documents in every group), so conversations of one place keep one
-  shared spec and keep sharing their prefix. Expected cache loss: none beyond the change every install already makes;
-  refusals removed: about 43 a week.
+- The options this step removes are the same for every conversation of a place and class, so conversations of one
+  place keep one shared spec and keep sharing their prefix. Expected cache loss: none beyond the change every install
+  already makes. (The first reading of this list named home documents in groups too and expected about 43 refusals
+  fewer; corrected when built, below.)
 - The host refuses about 54 calls a week that never reach the worker's record: 13 by its argument check, 11 by DSH's
   own validation, 30 for a tool not in that conversation (26 of them `stay_silent` in groups, where `speak` replaces
   it).
@@ -128,6 +128,28 @@ Measured 2026-10-21 (read-only, 7 days, her role sessions; `.runtime/private/ref
 Decided (the owner took Claude's recommendation, 2026-10-21): specs by this rule, one per place, with a second variant
 only where a conversation hosts errands. The step's reading counts the host's refusals (argument check, DSH
 validation, unexposed tool) next to the worker's, and fails if they rise.
+
+Built (2026-10-21, branch `specs-by-place`; the coordinator's decisions on the coder's findings), with every turn a
+conversation can host read from the code, ADR-088's outside-note turn included:
+- **No errand variant exists.** An errand turn needs nothing its destination's own turns lack: its notes go with the
+  conversation's class (`RoleTools._place`), its list is the conversation's (the errand visit's person is a member
+  there, so its class is the conversation's), and `write_document`, which follows home's class on an errand
+  (`RoleTools._cls`), may write home documents in any group. Every group with turns hosts errands
+  (`places.errand_targets`: every routed group that is not blocked; a blocked group gets no input), so every group keeps
+  `write_document` whole, and the home-document refusals in groups stay.
+- **The rule, per class and kind** (`role_tools.placed_spec`): `note.deliver` only where `notes.MODES` gives the
+  conversation's class a choice (home's conversations; an outside-note turn writes with the origin's class and never
+  has one); `note.question` only in groups (a group's question is answered there: in public groups, and in a home group
+  by a note from outside visiting it); `ideas` with the options the conversation lists (`abilities`: read and review
+  at home and on trusted lines, only `note` elsewhere, where `do` and the fields only read and review take are left
+  out). The sentences of a left-out option leave the description with it. One spec per place and class.
+- **Recount** (`calls.jsonl`, the same 7 days, 8,209 calls): refusals this removes: `deliver` 23 (public groups),
+  `ideas` read/review 10 (public groups), `question` 0; about **33 a week**. Kept: 10 home-document refusals in
+  groups. A call that still writes a left-out field passes the host's check (the specs do not forbid other fields) and
+  reaches the worker, which answers as before.
+- **Reading:** host refusals with `host_refusals.py`, worker refusals with `classify.py` (both in
+  `.runtime/private/refusal-research/`); baseline for the host, 7 days to 2026-10-21 23:06 NZDT: argument check 13, DSH
+  validation 10, unexposed 28. Tests: `tests/test_specs_by_place.py`.
 
 ### 4.4 Defaults from state the program has, said in the result
 

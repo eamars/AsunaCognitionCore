@@ -618,17 +618,81 @@ def speak_spec(kinds, quotes):
     return spec
 
 
-def session_specs(store, scene_id):
-    """Her tools as one conversation shows them (ADR-079 §9.7): `speak` with the parts and the quote its channel's
-    adapter declared, the rest as all_specs. Given when the session starts, so a session's tools never change."""
+def session_specs(store, scene_id, person_id=None):
+    """Her tools as one conversation shows them: `speak` with the parts and the quote its channel's adapter declared
+    (ADR-079 §9.7), and each option left out that no turn there can use (`placed_spec`, ADR-087 §4.3); the rest as
+    all_specs. Given when the session starts, so a session's tools never change. `person_id`: who the conversation is
+    with (the session's), which decides a private chat's class."""
     from . import capabilities
-    out = all_specs()
     scene = store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}
+    cls = conversation_class(store, scene, person_id)
+    listed = abilities(store, {'scene_id': scene_id, 'manifest': {'session_class': cls}})
+    out = [placed_spec(spec, cls, scene.get('kind'), listed) for spec in all_specs()]
     kinds = speak_kinds(store, scene)
     if not kinds:
         return out
     shaped = {'name': 'speak', **speak_spec(kinds, capabilities.carries(store, scene, 'quote'))}
     return [shaped if spec['name'] == 'speak' else spec for spec in out]
+
+
+def conversation_class(store, scene, person_id=None):
+    """The class of a conversation's turns: the local chat's is its person's, a private chat's the person it is with,
+    a group's its own."""
+    chat = store.config.get('chat') or {}
+    if person_id is None:
+        person_id = (chat.get('person_id') if scene['_id'] == chat.get('scene_id')
+                     else next(iter(scene.get('members') or ()), None))
+    return visibility.session_class(store.config, store.db, scene, person_id)
+
+
+# ADR-087 §4.3: an option is left out of a conversation's specs only when no turn that conversation can host can use it.
+# An errand turn runs on the destination's specs (ADR-066) and needs nothing more there: its notes go with the
+# conversation's class (`_place`), its list is the conversation's, and write_document, which follows home's class on an
+# errand (`_cls`), stays whole in every group because every group with turns hosts errands. A turn a note from outside
+# opened (ADR-088) writes notes with the origin's class, which never has a choice of `deliver`, and may answer a
+# group's question in a home group. So: `deliver` where the class has a choice, `question` in groups, `ideas` with the
+# options the conversation lists. One spec per place and class.
+NOTE_DELIVER = ('deliver：wake 马上叫醒那边（排在那边手上的事后面），next_time 那边下次有回合时看到；能选哪样看从哪写到哪，'
+                '不写按那边的默认。')
+IDEAS_CHOOSE = '，do 选一样：note '
+IDEAS_OP_WORDS = {'read': 'read 读出还没处理完的，先没处理的、再暂缓的，旧的在前，一页 %d 条。' % IDEAS_PAGE,
+                  'review': 'review 对一条写处理结果：adopt 采纳（接着用 delegate 交代行动脑去做）、defer 暂缓、drop 放弃，都写 why。'}
+IDEAS_WHY_NOTE = '为什么想到这个'
+
+
+def placed_spec(spec, cls, scene_kind, listed):
+    """One tool's spec as a conversation of this class and kind shows it, `listed` being what it lists (abilities)."""
+    from . import notes
+    if spec['name'] == 'note':
+        chooses = any(len(allowed) > 1 for _, allowed in notes.MODES.get(cls, {}).values())
+        left = [name for name, kept in (('deliver', chooses), ('question', scene_kind == 'group')) if not kept]
+        if not left:
+            return spec
+        return {**spec, 'description': _without(spec['description'], *([NOTE_DELIVER] if 'deliver' in left else [])),
+                'parameters': {k: v for k, v in spec['parameters'].items() if k not in left}}
+    if spec['name'] == 'ideas':
+        ops = [op for op in OPS['ideas'] if 'ideas.' + op in listed]
+        if len(ops) == len(OPS['ideas']):
+            return spec
+        # Her notebook is listed everywhere for writing (EVERYWHERE); reading and deciding are home's.
+        gone = [op for op in OPS['ideas'] if op not in ops]
+        fields = {k: v for k, v in spec['parameters'].items()
+                  if OP_FIELDS['ideas'].get(k) not in gone and not (k == 'do' and ops == ['note'])}
+        if ops == ['note']:
+            fields['why'] = {**fields['why'], 'description': IDEAS_WHY_NOTE}
+        text = _without(spec['description'], *(IDEAS_OP_WORDS[op] for op in gone))
+        return {**spec, 'description': text.replace(IDEAS_CHOOSE, '：') if ops == ['note'] else text,
+                'parameters': fields}
+    return spec
+
+
+def _without(text, *parts):
+    """`text` without each of `parts`, which it must contain (a changed wording fails here, not silently)."""
+    for part in parts:
+        if part not in text:
+            raise ValueError('SPEC_WORDING_CHANGED: %r' % part[:24])
+        text = text.replace(part, '')
+    return text
 
 
 def aliases():

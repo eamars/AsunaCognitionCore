@@ -590,7 +590,7 @@ Her tools: `src/asuna/role_tools.py` (`TOOLS`; where each is offered: `EVERYWHER
 | What | Implemented in |
 |---|---|
 | parameter names she is shown, and old names still taken | `src/asuna/param_names.py` (`RENAMED`, `STILL_TAKEN`) |
-| a conversation's tool list, fixed when its session starts | `src/asuna/role_tools.py` (`session_specs`) |
+| a conversation's tool list and the options it shows (an option no turn there can use is left out, one spec per place and class), fixed when its session starts | `src/asuna/role_tools.py` (`session_specs`, `placed_spec`) |
 | the context blocks a turn carries, their limits, and their words | `src/asuna/context.py` (`ContextBuilder`), `src/asuna/context_budget.py`, `src/asuna/block_guide.py` |
 | the checks on a turn's end, the gate's answer, an appraisal | `src/asuna/answers.py` |
 | the relevance gate and group focus | `src/asuna/attend.py`, `src/asuna/focus.py` |

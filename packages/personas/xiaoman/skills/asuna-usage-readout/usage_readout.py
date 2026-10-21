@@ -1,33 +1,45 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""asuna-usage-readout 的读数脚本：只读，六格各出一行，每行末尾带来源／筛法／读的时刻。
+"""asuna-usage-readout 的读数脚本：只读。先出一张「各行必须加到合计」的对账表（2026-10-21 主人定的口径），
+再出六格长句读数（每周三张表的原料，口径见 SKILL.md 第三节）。
+
+对账表（SKILL.md 第二·五节）：
+  列：类别｜请求数｜读入提示｜命中｜新读入｜写缓存｜输出｜命中率；读入提示＝input＋cacheRead＋cacheWrite。
+  行：角色脑／行动脑·高／行动脑·低／行动脑·未归档／压缩／门／调度／其余／合计／拷贝行（不计入合计）。
+  行归属按会话首行 agentPreset；行动脑按所配任务 tier.ran（缺则 tier.chosen）分档，分不出进未归档。
+  数据源两个根：<data>/adr008/home/sessions 与 <data>/adr008/archive/sessions，去重跨两个根。
+  硬断言（不过就报错不出表）：①每行 读入提示＝命中＋新读入＋写缓存；②各行（不含拷贝行）之和＝合计每一列
+  （合计另用一遍独立直加核对）；③请求数同样加和相等；④窗口内每条要么进类行要么进拷贝行。
 
 读三处（字段名照 SKILL.md 第二节，不另起一套）：
-  1. 盘上会话记录 <data>/adr008/home/sessions/<工作区目录>/<会话 id>/session.v4.jsonl.zstd
-     ——zstandard 解；一行 type=="assistant/message" ＝ 一次模型调用；取 data.usage 的
-       inputTokens／cacheReadTokens／cacheWriteTokens／outputTokens／totalTokens；种类按目录名前缀认。
+  1. 盘上会话记录 <root>/<工作区目录>/<会话 id>/session.v4.jsonl.zstd ——zstandard 跨帧解；
+     一行 type=="assistant/message" ＝ 一次模型调用；取 data.usage 的 inputTokens／cacheReadTokens／
+     cacheWriteTokens／outputTokens／totalTokens；另取首行 agentPreset／createdAt（都是短字段）。
   2. 库 asuna_cognition_core_v2 集合 tasks：tier.chosen／tier.ran／tier.why／tier.fell、state。
   3. 库 audit_events 八处被拒 ＋ episodes.rejections[]。
 
-排法：⑥ 窗口放在最前一行当基准（其余几行的数没有基准就没法复核），然后 ①②③④⑤。
-「选高率」并进 ①（与落档同源，不另起第七行）；「三张表」是报给人看的排法，这里不印它们的名字。
+排法：对账表排最前（断言过了才印）；六格里 ⑥ 窗口放在其余几行前当基准；「选高率」并进 ①。
 
 只读数字、字段名、枚举短码和计数，不读正文：会话记录里只碰 type、time、data.usage 那五个数、
-data.message.id（判重键）、目录名和首行的 createdAt（判拷贝用）；不印整行，不取 message／content／text。
+data.message.id（判重键）、原始行字节的 sha256（判重键，不存原文）、目录名和首行的
+agentPreset／createdAt（判拷贝用）；不印整行，不取 message／content／text。
 
 跑法（读会话记录按硬规矩 2 用 development_run project=core；sandbox_run 里 asuna 也在，两处都能跑）：
     python3 usage_readout.py                     # 默认窗口＝最近 24 小时
     python3 usage_readout.py --days 7
-    python3 usage_readout.py --since 2026-10-16 --until 2026-10-23   # 六格⑥ 那种写死窗口
+    python3 usage_readout.py --since "2026-10-20 14:00" --until "2026-10-21 14:00"   # 本地钟点（+13）
+    python3 usage_readout.py --no-archive        # 对账表也只扫 home（覆盖面会写明少了归档根）
     python3 usage_readout.py --selfcheck         # 不读盘不连库，只验纯逻辑（给 check_skill.py 跑通用）
-退出码 0＝六格都出了读数，且盘上那一格有分母（没有解不开的文件、窗口内不是 0 行）；
-1＝有一格没读到、或有解不开的帧、或窗口内 0 行（会说清哪一格、为什么）。
+退出码 0＝对账表断言全过、六格都出了读数，且盘上那一格有分母（没有解不开的文件、窗口内不是 0 行）；
+1＝断言没过、有一格没读到、有解不开的帧、或窗口内 0 行（会说清哪一格、为什么）。
 """
 import argparse
+import hashlib
 import io
 import json
 import os
 import sys
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 # 宿主普通 Windows 控制台默认码页是 cp1252：中文一 print 就 UnicodeEncodeError 整段崩。
@@ -58,6 +70,25 @@ UNARCHIVED = "行动脑·未归档位"               # 对不上任务 tier 的�
 OTHER_KIND = "其他（前缀不在认法表）"
 KIND_ORDER = ["我的对话", "行动脑·高档 ran=高", "行动脑·低档 ran=低", UNARCHIVED, "差事",
               "反思回合", COMPACT_KIND, "摘要", "门", "调度", "网页界面会话", OTHER_KIND]
+
+# 对账表（2026-10-21 主人定的行清单；「调度」是现读盘上发现第五种 preset 后补的一格）
+T_ROLE = "角色脑"
+T_HIGH = "行动脑·高"
+T_LOW = "行动脑·低"
+T_UNARCH = "行动脑·未归档"
+T_COMPACT = "压缩"
+T_GATE = "门"
+T_SCHED = "调度"
+T_OTHER = "其余"
+T_TOTAL = "合计"
+T_COPY = "拷贝行（不计入合计）"
+TABLE_ROWS = (T_ROLE, T_HIGH, T_LOW, T_UNARCH, T_COMPACT, T_GATE, T_SCHED, T_OTHER)
+TABLE_COLS = ("requests", "prompt", "hit", "fresh", "write", "output")
+COL_NAMES = {"requests": "请求数", "prompt": "读入提示", "hit": "命中", "fresh": "新读入",
+             "write": "写缓存", "output": "输出"}
+PRESET_TABLE = {T_ROLE: "asuna-xiaoman", T_COMPACT: "asuna-summary",
+                T_GATE: "asuna-attend", T_SCHED: "asuna-scheduler"}
+PRESET_BY_NAME = {name: kind for kind, name in PRESET_TABLE.items()}
 
 # 六格④ 的八处被拒：主口径是 role_tool 的 payload.refused；note.refused 是它的子集，不相加
 REFUSALS = (
@@ -124,20 +155,33 @@ def utc_str_to_ms(text):
     return int(datetime.strptime(text, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp() * 1000)
 
 
-def resolve_sessions_root(cli, problems):
-    if cli:
-        return cli
-    data = None
+def resolve_data_root():
     try:
         from asuna import config as asuna_config
         data = str(asuna_config.DATA)
     except Exception:                                        # noqa: BLE001
         data = os.environ.get("ASUNA_DATA_ROOT")
+    return data or None
+
+
+def resolve_sessions_root(cli, problems):
+    if cli:
+        return cli
+    data = resolve_data_root()
     if not data:
         problems.append("没找到数据根（asuna.config.DATA 与 ASUNA_DATA_ROOT 都没有）"
                         "——盘上那一格没读，不是没有数据")
         return None
     return os.path.join(data, "adr008", "home", "sessions")
+
+
+def resolve_archive_root(cli):
+    if cli:
+        return cli
+    data = resolve_data_root()
+    if not data:
+        return None
+    return os.path.join(data, "adr008", "archive", "sessions")
 
 
 def resolve_database():
@@ -162,6 +206,23 @@ def classify(sid, tier_by_session):
                 return UNARCHIVED
             return kind
     return OTHER_KIND
+
+
+def classify_table(row_type, preset, sid, tier_full):
+    """对账表的行归属（2026-10-21 主人定）：compaction/summary 行一律进压缩；
+    行动脑按所配任务 tier.ran 分档、ran 缺则退回 tier.chosen、两个都分不出进未归档；
+    其余按首行 agentPreset 认，preset 缺／不在清单进「其余」。"""
+    if row_type == COMPACT_ROW:
+        return T_COMPACT
+    if preset == "asuna-action":
+        ran, chosen = tier_full.get(sid, (None, None))
+        for value in (ran, chosen):
+            if value == "高":
+                return T_HIGH
+            if value == "低":
+                return T_LOW
+        return T_UNARCH
+    return PRESET_BY_NAME.get(preset, T_OTHER)
 
 
 def parse_created_ms(value):
@@ -201,7 +262,7 @@ def iter_session_files(root, problems):
 
 
 def read_rows(path):
-    """zstandard 解 → 逐行 json.loads。只把当次那一行交出去，不留整行。
+    """zstandard 解 → 逐行交回原始字节（原始行 sha256 是对账表判重键之一，解析前就得算）。
 
     必须跨帧：`stream_reader` 写死 `read_across_frames=True`。session.v4.jsonl.zstd 是多帧文件，
     默认（False）只解第一帧、到帧尾就当读到头——后面的帧静默丢掉：行数少算，且不报错。
@@ -214,40 +275,55 @@ def read_rows(path):
             with io.BufferedReader(stream, buffer_size=1 << 20) as reader:
                 for raw in reader:
                     if raw and raw.strip():
-                        yield json.loads(raw.decode("utf-8"))
+                        yield raw
 
 
-def scan_sessions(root, tier_by_session, problems):
-    """一遍扫完：返回（每前缀盘上目录数，调用行 occurrences，解不开的文件数）。occurrence 只带数字与判重键。"""
-    dirs_by_prefix = {}
+def scan_sessions(root, label, tier_by_session, tier_full, problems, dirs_by_prefix=None, counters=None):
+    """一遍扫完：返回（调用行 occurrences，解不开的文件数，扫过的文件数）。
+    occurrence 只带数字与判重键，不带原文。
+
+    dirs_by_prefix 给了才计数（六格只数 home 根）；counters 记「有调用行形状但没 usage 键」与
+    「time 不是整数」的行数——这些不进 token 列，只在覆盖面里报行数。"""
     occurrences = []
     unreadable = 0
+    nfiles = 0
+    if counters is None:
+        counters = Counter()
     for sid, path in iter_session_files(root, problems):
+        nfiles += 1
         prefix = "session-<uuid>" if sid.startswith("session-") else (
             sid.split("-")[0] + "-" + (sid.split("-")[1] + "-" if sid.count("-") > 1 else ""))
-        dirs_by_prefix[prefix] = dirs_by_prefix.get(prefix, 0) + 1
+        if dirs_by_prefix is not None:
+            dirs_by_prefix[prefix] = dirs_by_prefix.get(prefix, 0) + 1
         kind = classify(sid, tier_by_session)
         try:
-            rows = list(read_rows(path))
+            rows = []
+            for raw in read_rows(path):
+                rows.append((raw, json.loads(raw.decode("utf-8"))))
         except Exception as exc:                             # noqa: BLE001 单个文件坏了不拦整次读数
             unreadable += 1
             problems.append("解不开 %s（%s: %s）" % (path, type(exc).__name__, exc))
             continue
         created_ms = None
-        for row in rows:
+        preset = None
+        for _raw, row in rows:
             if row.get("type") == FIRST_ROW:
                 created_ms = parse_created_ms(row.get("createdAt"))
+                value = row.get("agentPreset")
+                preset = value if isinstance(value, str) and value else None
                 break
-        for row in rows:
+        for raw, row in rows:
             row_type = row.get("type")
             if row_type not in (CALL_ROW, COMPACT_ROW):
                 continue
             moment = row.get("time")
             if not isinstance(moment, int):
+                counters["no_time"] += 1
                 continue
             data = row.get("data") or {}
             usage = data.get("usage")
             if not isinstance(usage, dict):
+                counters["compact_no_usage" if row_type == COMPACT_ROW else "call_no_usage"] += 1
                 continue
             message = data.get("message")
             mid = message.get("id") if isinstance(message, dict) else None
@@ -258,16 +334,25 @@ def scan_sessions(root, tier_by_session, problems):
                    ("heur", moment, numbers["inputTokens"], numbers["outputTokens"],
                     numbers["cacheReadTokens"], numbers["cacheWriteTokens"], numbers["totalTokens"]))
             occurrences.append({"t": moment, "kind": COMPACT_KIND if row_type == COMPACT_ROW else kind,
+                                "tkind": classify_table(row_type, preset, sid, tier_full),
+                                "rtype": row_type,
                                 "sid": sid, "created": created_ms or 0, "key": key,
+                                "ikey": ("id", mid) if mid else None,
+                                "ukey": ("usage", moment, numbers["inputTokens"], numbers["outputTokens"],
+                                         numbers["totalTokens"], numbers["cacheReadTokens"],
+                                         numbers["cacheWriteTokens"]),
+                                "raw": hashlib.sha256(raw).hexdigest(),
+                                "root": label,
                                 "has_cache_read": "cacheReadTokens" in usage,
                                 "copied": bool(created_ms and moment < created_ms), **numbers})
     if unreadable:
         problems.append("有 %d 个会话文件解不开，已从这次读数里跳过（不是全量）" % unreadable)
-    return dirs_by_prefix, occurrences, unreadable
+    return occurrences, unreadable, nfiles
 
 
 def dedupe(occurrences):
-    """全局按判重键去重：一条只算一次，归首次出现那一次（首次＝行内 time 最早，同刻按会话首行 createdAt）。"""
+    """六格用的旧去重：全局按判重键（id 或启发式）一条只算一次，归首次出现那一次
+    （首次＝行内 time 最早，同刻按会话首行 createdAt）。"""
     best = {}
     for index, item in enumerate(occurrences):
         current = best.get(item["key"])
@@ -278,6 +363,201 @@ def dedupe(occurrences):
         if (item["t"], item["created"], item["sid"]) < (rival["t"], rival["created"], rival["sid"]):
             best[item["key"]] = index
     return best
+
+
+def dedupe_table(occurrences):
+    """对账表用的并查集去重（2026-10-21 交代）：三把键任一相同即同一次调用——
+    原始行字节 sha256（home↔archive 拷贝、播种带去的整行副本）、data.message.id、
+    usage 组合（time＋五个 token 数，抓「父会话 compaction 行 ↔ 摘要会话调用行」这种不同形状的同一调用）。
+    压缩那批没有 message.id，旧键对它们不生效——这就是必须带原始行 sha256 与 usage 组合的原因。
+    归首次出现（time 最早；同刻按 createdAt、再按会话 id、再按根）那一次。返回 {index: 是否入选}。"""
+    parent = list(range(len(occurrences)))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    first = {}
+    for i, item in enumerate(occurrences):
+        for key in (item["raw"], item["ikey"], item["ukey"]):
+            if key is None:
+                continue
+            j = first.get(key)
+            if j is None:
+                first[key] = j = i
+            else:
+                union(i, j)
+    groups = {}
+    for i in range(len(occurrences)):
+        groups.setdefault(find(i), []).append(i)
+    winner = {}
+    for members in groups.values():
+        best = min(members, key=lambda i: (occurrences[i]["t"], occurrences[i]["created"],
+                                           occurrences[i]["sid"], occurrences[i]["root"]))
+        for i in members:
+            winner[i] = (i == best)
+    return winner
+
+
+def build_recon_table(occurrences, winner, lo_ms, hi_ms):
+    """窗口内：入选且非拷贝的行进各自类行，其余（落选的重复行＋行 time 早于本会话 createdAt 的历史）
+    全进拷贝行。合计另用一遍独立直加（total_direct），给断言当第二把尺。"""
+    rows = {kind: Counter() for kind in TABLE_ROWS}
+    copy = Counter()
+    total_direct = Counter()
+    window_rows = 0
+    for i, item in enumerate(occurrences):
+        if not lo_ms <= item["t"] < hi_ms:
+            continue
+        window_rows += 1
+        fresh = item["inputTokens"]
+        hit = item["cacheReadTokens"]
+        write = item["cacheWriteTokens"]
+        target = copy if ((not winner[i]) or item["copied"]) else rows[item["tkind"]]
+        target["requests"] += 1
+        target["prompt"] += fresh + hit + write
+        target["hit"] += hit
+        target["fresh"] += fresh
+        target["write"] += write
+        target["output"] += item["outputTokens"]
+        if target is not copy:
+            total_direct["requests"] += 1
+            total_direct["prompt"] += fresh + hit + write
+            total_direct["hit"] += hit
+            total_direct["fresh"] += fresh
+            total_direct["write"] += write
+            total_direct["output"] += item["outputTokens"]
+    return rows, copy, total_direct, window_rows
+
+
+def assert_recon_table(rows, copy, total_direct, window_rows):
+    """硬断言（写进脚本，不靠人眼）：不过就报错不出表。返回问题列表（空＝全过）。"""
+    problems = []
+    for kind in TABLE_ROWS:
+        r = rows[kind]
+        if r["prompt"] != r["hit"] + r["fresh"] + r["write"]:
+            problems.append("断言① 行「%s」读入提示 %s ≠ 命中＋新读入＋写缓存 %s"
+                            % (kind, r["prompt"], r["hit"] + r["fresh"] + r["write"]))
+    for col in TABLE_COLS:
+        summed = sum(rows[k][col] for k in TABLE_ROWS)
+        if summed != total_direct[col]:
+            problems.append("断言②③ 列「%s」各行之和 %s ≠ 独立直加 %s"
+                            % (COL_NAMES[col], summed, total_direct[col]))
+    counted = sum(rows[k]["requests"] for k in TABLE_ROWS)
+    if counted + copy["requests"] != window_rows:
+        problems.append("断言④ 窗口内 %s 条 ≠ 类行 %s ＋拷贝行 %s——有行静默丢了"
+                        % (window_rows, counted, copy["requests"]))
+    return problems
+
+
+def fmt_int(value):
+    """表内一律原始整数＋千分位（1,234,567）——四舍五入成万／亿之后各行加不齐，表就没法对账。"""
+    return format(int(value), ",")
+
+
+def rate_of(hit, prompt):
+    return "无分母" if not prompt else "%.2f%%" % (100.0 * hit / prompt)
+
+
+def render_recon_table(occurrences, winner, lo_ms, hi_ms, local_bounds, utc_bounds, zone_name,
+                       roots, unreadable, read_at_local, read_at_utc, db_available, counters):
+    """对账表整段：表头元信息（一行一条）→ 表 → 口径与子计数。断言不过只回报错行。"""
+    rows, copy, total_direct, window_rows = build_recon_table(occurrences, winner, lo_ms, hi_ms)
+    problems = assert_recon_table(rows, copy, total_direct, window_rows)
+    if problems:
+        return ["", "断言失败｜对账表不出（硬断言没过，先修读法再要表）："] + ["   " + p for p in problems], False
+
+    def in_window(items):
+        return [it for it in items if lo_ms <= it["t"] < hi_ms]
+
+    comp_all = [it for it in occurrences if it["rtype"] == COMPACT_ROW]
+    summ_all = [it for it in occurrences if it["rtype"] == CALL_ROW and it["tkind"] == T_COMPACT]
+    raw_comp = {it["raw"] for it in comp_all}
+    raw_summ = {it["raw"] for it in summ_all}
+    uk_comp = {it["ukey"] for it in comp_all}
+    uk_summ = {it["ukey"] for it in summ_all}
+    combo_comp = {(it["inputTokens"], it["outputTokens"], it["totalTokens"],
+                   it["cacheReadTokens"], it["cacheWriteTokens"]) for it in comp_all}
+    combo_summ = {(it["inputTokens"], it["outputTokens"], it["totalTokens"],
+                   it["cacheReadTokens"], it["cacheWriteTokens"]) for it in summ_all}
+    gate_all = [it for it in occurrences if it["rtype"] == CALL_ROW and it["tkind"] == T_GATE]
+
+    def multi_file(items, key_name):
+        where = {}
+        for it in items:
+            where.setdefault(it[key_name], set()).add((it["root"], it["sid"]))
+        return sum(1 for key, spots in where.items() if len(spots) > 1)
+
+    lines = ["", "【对账表】一行一类；各行（不含拷贝行）之和＝合计。硬断言①②③④全过才印这张表。",
+             "恒等式：读入提示＝命中＋新读入＋写缓存——每一行都能拿这一句自查。",
+             "合计命中率＝总命中／总读入，不是各行命中率的平均。",
+             "命中率＝命中／读入提示；分母含写缓存（cacheWrite 算未命中、留在分母里，六格⑤）。",
+             "窗口：本地 %s → %s（%s，该日 UTC+13）＝UTC %s → %s"
+             % (local_bounds[0], local_bounds[1], zone_name, utc_bounds[0], utc_bounds[1]),
+             "一次请求：一条 type==\"assistant/message\" 记一次，按 data.message.id 去重；"
+             "压缩行的请求数含 compaction/summary 行（无 id，按原始行 sha256＋usage 组合去重）。",
+             "数据源根目录：%s" % "＋".join("%s（%s 个会话文件）" % (r, fmt_int(c)) for r, c in roots),
+             "覆盖面：扫 %s 个文件、窗口内调用行 %s 条（去重前、含拷贝，按行 time 切）；解不开 %s 个；"
+             "无截断（两根全量扫，未抽样）；无 usage 的记录行：compaction %s 条／assistant %s 条不进 token 列；"
+             "time 不是整数的行 %s 条没进表"
+             % (fmt_int(sum(c for _r, c in roots)), fmt_int(window_rows), fmt_int(unreadable),
+                fmt_int(counters.get("compact_no_usage", 0)), fmt_int(counters.get("call_no_usage", 0)),
+                fmt_int(counters.get("no_time", 0))),
+             "生成时刻：本地 %s（%s）＝UTC %s" % (read_at_local, zone_name, read_at_utc),
+             "口语总量：读入提示约 %.1f 万 token、输出约 %.1f 万 token——表内一律原始整数＋千分位，一种写法。"
+             % (total_direct["prompt"] / 10000.0, total_direct["output"] / 10000.0)]
+    if not db_available:
+        lines.append("注意：库里连不上，行动脑档位没读到——行动脑全进未归档，不是没跑过高档。")
+    lines.append("")
+    lines.append("类别｜请求数｜读入提示｜命中｜新读入｜写缓存｜输出｜命中率")
+    for kind in TABLE_ROWS:
+        r = rows[kind]
+        lines.append("%s｜%s｜%s｜%s｜%s｜%s｜%s｜%s"
+                     % (kind, fmt_int(r["requests"]), fmt_int(r["prompt"]), fmt_int(r["hit"]),
+                        fmt_int(r["fresh"]), fmt_int(r["write"]), fmt_int(r["output"]),
+                        rate_of(r["hit"], r["prompt"])))
+    lines.append("%s｜%s｜%s｜%s｜%s｜%s｜%s｜%s"
+                 % (T_TOTAL, fmt_int(total_direct["requests"]), fmt_int(total_direct["prompt"]),
+                    fmt_int(total_direct["hit"]), fmt_int(total_direct["fresh"]),
+                    fmt_int(total_direct["write"]), fmt_int(total_direct["output"]),
+                    rate_of(total_direct["hit"], total_direct["prompt"])))
+    lines.append("%s｜%s｜%s｜%s｜%s｜%s｜%s｜%s"
+                 % (T_COPY, fmt_int(copy["requests"]), fmt_int(copy["prompt"]), fmt_int(copy["hit"]),
+                    fmt_int(copy["fresh"]), fmt_int(copy["write"]), fmt_int(copy["output"]),
+                    rate_of(copy["hit"], copy["prompt"])))
+    lines += ["",
+              "拷贝判定：同一次调用只数一次——同一 data.message.id、同一原始行字节 sha256、"
+              "同一 usage 组合（time＋input/output/total/cacheRead/cacheWrite 五个数）任一相同即同一次，"
+              "归首次出现（time 最早；同刻按会话首行 createdAt、再按会话 id、再按根）那一次；"
+              "其余出现、以及行 time 早于本会话首行 createdAt 的行（分叉／播种带进来的历史），"
+              "都进「拷贝行」，不计入合计。",
+              "行归属：按会话首行 agentPreset 认——asuna-xiaoman→角色脑；asuna-action→按所配任务 tier.ran"
+              "（缺则 tier.chosen）分高／低，两个都分不出进未归档；asuna-summary→压缩；asuna-attend→门；"
+              "asuna-scheduler→调度；compaction/summary 行一律进压缩；其余 preset／缺 preset→其余。",
+              "压缩子计数（2026-10-21 交代：①父会话里的 compaction 行与②摘要会话自己的调用行可能是同一调用记两遍，"
+              "先量重合再合并）：①带 usage 的 compaction/summary 行 全史 %s／窗口内 %s；"
+              "②asuna-summary 会话调用行 全史 %s／窗口内 %s；"
+              "两批重合：原始行 sha256 相同 %s 条、usage 组合（含 time）相同 %s 条、"
+              "只看五个 token 数不含 time 相同 %s 条（最后这个只当线索，没拿去重依据）；"
+              "去重后进压缩行（窗口内）%s 条。"
+              % (fmt_int(len(comp_all)), fmt_int(len(in_window(comp_all))),
+                 fmt_int(len(summ_all)), fmt_int(len(in_window(summ_all))),
+                 fmt_int(len(raw_comp & raw_summ)), fmt_int(len(uk_comp & uk_summ)),
+                 fmt_int(len(combo_comp & combo_summ)), fmt_int(rows[T_COMPACT]["requests"])),
+              "门重复检查：门调用行里 usage 组合出现在 2 处以上（跨文件／跨根）的 %s 条、"
+              "原始行 sha256 相同的 %s 条（全史）。"
+              % (fmt_int(multi_file(gate_all, "ukey")), fmt_int(multi_file(gate_all, "raw"))),
+              "断言（写进脚本，不靠人眼）：①每行 读入提示＝命中＋新读入＋写缓存；"
+              "②各行（不含拷贝行）之和＝合计每一列（合计另用一遍独立直加核对）；③请求数同样加和相等；"
+              "④窗口内每条要么进类行要么进拷贝行。不过就报错不出表。"]
+    return lines, True
 
 
 def aggregate(occurrences, best, lo_ms, hi_ms):
@@ -569,7 +849,7 @@ def cell_hit_rate(totals, per_kind, own_rates, root):
 # --------------------------------------------------------------------------- 离线自检（不读盘、不连库）
 
 def selfcheck():
-    """纯逻辑自检：认法、命中率式子、跨类去重、拷贝判定、窗口切法。给 check_skill.py 跑通用。"""
+    """纯逻辑自检：认法、命中率式子、跨类去重、拷贝判定、窗口切法、对账表三把键与断言。给 check_skill.py 跑通用。"""
     checks = []
 
     def check(name, ok):
@@ -628,22 +908,89 @@ def selfcheck():
     check("utc_bounds_are_naive_utc", utc_str_to_ms("2026-10-16T05:00:00")
           == int(datetime(2026, 10, 16, 5, 0, tzinfo=timezone.utc).timestamp() * 1000))
 
+    # ---- 对账表（2026-10-21 口径）：行归属、三把键去重、拷贝行、断言、数字写法
+    tiers = {"a-h": ("高", "高"), "a-l": ("低", "高"), "a-c": (None, "低"), "a-n": (None, None)}
+    check("classify_table_role", classify_table(CALL_ROW, "asuna-xiaoman", "s", tiers) == T_ROLE)
+    check("classify_table_compaction_row", classify_table(COMPACT_ROW, "asuna-xiaoman", "s", tiers) == T_COMPACT)
+    check("classify_table_gate", classify_table(CALL_ROW, "asuna-attend", "s", tiers) == T_GATE)
+    check("classify_table_scheduler", classify_table(CALL_ROW, "asuna-scheduler", "s", tiers) == T_SCHED)
+    check("classify_table_missing_preset", classify_table(CALL_ROW, None, "s", tiers) == T_OTHER)
+    check("classify_table_unknown_preset", classify_table(CALL_ROW, "asuna-whatever", "s", tiers) == T_OTHER)
+    check("classify_table_action_ran", classify_table(CALL_ROW, "asuna-action", "a-h", tiers) == T_HIGH)
+    check("classify_table_action_ran_beats_chosen", classify_table(CALL_ROW, "asuna-action", "a-l", tiers) == T_LOW)
+    check("classify_table_action_chosen_fallback", classify_table(CALL_ROW, "asuna-action", "a-c", tiers) == T_LOW)
+    check("classify_table_action_unarchived", classify_table(CALL_ROW, "asuna-action", "a-n", tiers) == T_UNARCH)
+    check("classify_table_action_no_task", classify_table(CALL_ROW, "asuna-action", "a-x", tiers) == T_UNARCH)
+
+    def trow(moment, tkind, mid, created, inp, cache_read, cache_write, out, total, sid, raw,
+             rtype=CALL_ROW, root="home"):
+        return {"t": moment, "kind": tkind, "tkind": tkind, "rtype": rtype, "sid": sid, "created": created,
+                "root": root, "key": ("id", mid) if mid else ("heur", moment, inp, out, cache_read, cache_write, total),
+                "ikey": ("id", mid) if mid else None,
+                "ukey": ("usage", moment, inp, out, total, cache_read, cache_write), "raw": raw,
+                "has_cache_read": True, "copied": moment < created, "inputTokens": inp,
+                "cacheReadTokens": cache_read, "cacheWriteTokens": cache_write,
+                "outputTokens": out, "totalTokens": total}
+
+    # 同一会话在 home 与 archive 各一份：原始行 sha256 相同 → 只数一次
+    pair = [trow(100, T_ROLE, "m1", 50, 10, 90, 5, 7, 112, "asuna-role-a", "RA", root="home"),
+            trow(100, T_ROLE, "m1", 50, 10, 90, 5, 7, 112, "asuna-role-a", "RA", root="archive")]
+    won = dedupe_table(pair)
+    check("table_dedup_raw_across_roots", sum(1 for v in won.values() if v) == 1)
+
+    # 父会话 compaction 行（无 id）↔ 摘要会话调用行（有 id）：usage 组合相同 → 同一调用，只数一次、进压缩
+    cross = [trow(200, T_COMPACT, None, 50, 20, 80, 4, 6, 110, "asuna-role-a", "RB", rtype=COMPACT_ROW),
+             trow(200, T_COMPACT, "s1", 190, 20, 80, 4, 6, 110, "asuna-summary-x", "RC")]
+    won = dedupe_table(cross)
+    rows_t, copy_t, direct_t, win_rows_t = build_recon_table(cross, won, 0, 1000)
+    check("table_dedup_compaction_via_ukey",
+          sum(1 for v in won.values() if v) == 1 and rows_t[T_COMPACT]["requests"] == 1
+          and copy_t["requests"] == 1)
+
+    # 拷贝行收集落选行与「time 早于 createdAt」的历史行；断言四格各抓各的
+    mix = [trow(300, T_ROLE, "m2", 100, 30, 70, 0, 9, 109, "asuna-role-a", "RD"),
+           trow(300, T_ROLE, "m2", 150, 30, 70, 0, 9, 109, "asuna-errand-b", "RE"),
+           trow(50, T_ROLE, "m3", 100, 1, 1, 0, 1, 3, "asuna-role-a", "RF"),
+           trow(900, T_GATE, "m4", 800, 2, 8, 0, 1, 11, "asuna-attend-a", "RG"),
+           trow(5000, T_GATE, "m5", 800, 2, 8, 0, 1, 11, "asuna-attend-a", "RH")]
+    won = dedupe_table(mix)
+    rows_t, copy_t, direct_t, win_rows_t = build_recon_table(mix, won, 0, 1000)
+    check("table_copy_row_collects_loser_and_history",
+          rows_t[T_ROLE]["requests"] == 1 and copy_t["requests"] == 2 and rows_t[T_GATE]["requests"] == 1)
+    check("table_window_cuts_by_row_time", win_rows_t == 4)
+    check("table_assert_passes_on_good", assert_recon_table(rows_t, copy_t, direct_t, win_rows_t) == [])
+    broken = {k: Counter(v) for k, v in rows_t.items()}
+    broken[T_ROLE]["prompt"] += 1
+    check("table_assert_catches_bad_identity",
+          any("断言①" in p for p in assert_recon_table(broken, copy_t, direct_t, win_rows_t)))
+    check("table_assert_catches_bad_total",
+          any("断言②③" in p for p in assert_recon_table(rows_t, copy_t, broken[T_ROLE], win_rows_t)))
+    check("table_assert_catches_missing_row",
+          any("断言④" in p for p in assert_recon_table(rows_t, copy_t, direct_t, win_rows_t + 1)))
+    check("table_thousands_separator", fmt_int(1234567) == "1,234,567" and fmt_int(0) == "0")
+    check("table_rows_list_complete",
+          TABLE_ROWS == (T_ROLE, T_HIGH, T_LOW, T_UNARCH, T_COMPACT, T_GATE, T_SCHED, T_OTHER))
+
     failed = [name for name, ok in checks if not ok]
     for name in failed:
         print("FAIL selfcheck %s" % name)
-    print("SELFCHK %d/%d 通过（纯逻辑：种类认法、命中率分母含写缓存、跨类按 id 去重归首次、"
-          "拷贝判定、窗口按行切；没读盘、没连库）" % (len(checks) - len(failed), len(checks)))
+    print("SELFCHK %d/%d 通过（纯逻辑：种类认法、命中率分母含写缓存、跨类按 id 去重归首次、拷贝判定、"
+          "窗口按行切；对账表：preset 行归属、行动脑 ran→chosen 退回与未归档、三把键去重（原始行 sha256／"
+          "message.id／usage 组合）、拷贝行、四条硬断言、千分位写法；没读盘、没连库）"
+          % (len(checks) - len(failed), len(checks)))
     return 1 if failed else 0
 
 
 # --------------------------------------------------------------------------- 主流程
 
 def main():
-    parser = argparse.ArgumentParser(description="asuna-usage-readout 的六格读数（只读）")
+    parser = argparse.ArgumentParser(description="asuna-usage-readout：对账表＋六格读数（只读）")
     parser.add_argument("--days", type=float, default=1.0, help="窗口长度（天），默认 1＝最近 24 小时")
     parser.add_argument("--since", help="窗口起点，本地钟点 2026-10-16 或 2026-10-16 20:30（给了就不看 --days）")
     parser.add_argument("--until", help="窗口终点，本地钟点；默认＝读的那一刻")
     parser.add_argument("--sessions-root", help="会话记录根目录，默认 <data>/adr008/home/sessions")
+    parser.add_argument("--archive-root", help="归档会话根目录，默认 <data>/adr008/archive/sessions")
+    parser.add_argument("--no-archive", action="store_true", help="对账表也只扫 home（覆盖面会写明少了归档根）")
     parser.add_argument("--no-db", action="store_true", help="只读盘，不连库（库里那三格会说没读到）")
     parser.add_argument("--selfcheck", action="store_true", help="不读盘不连库，只验纯逻辑")
     args = parser.parse_args()
@@ -656,31 +1003,64 @@ def main():
     window, utc_bounds, local_bounds = build_window(args, zone_name)
     lo_ms, hi_ms = utc_str_to_ms(utc_bounds[0]), utc_str_to_ms(utc_bounds[1])
     read_at = datetime.now(zone_of(zone_name)).strftime("%Y-%m-%d %H:%M:%S")
+    read_at_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     root = resolve_sessions_root(args.sessions_root, problems)
+    archive_root = None if args.no_archive else resolve_archive_root(args.archive_root)
+    if archive_root and not os.path.isdir(archive_root):
+        problems.append("没找到归档根 %s——对账表只扫了 home，覆盖面照实写" % archive_root)
+        archive_root = None
     dbread, db_error = (None, "带了 --no-db") if args.no_db else resolve_database()
     if db_error and not args.no_db:
         problems.append("dbread 连不上（%s）——库里那三格没读到，不是没有数据" % db_error)
 
     tier_by_session = {}
+    tier_full_by_session = {}
     if dbread:
-        tier_by_task = {row["_id"]: (row.get("tier") or {}).get("ran")
+        tier_by_task = {row["_id"]: ((row.get("tier") or {}).get("ran"),
+                                     (row.get("tier") or {}).get("chosen"))
                         for row in page(dbread, "tasks", {"tier": {"$exists": True}}, ["_id", "tier"])}
         for row in page(dbread, "sessions", {"_id": {"$regex": "^asuna-action-"},
                                              "task_id": {"$exists": True, "$ne": None}}, ["_id", "task_id"]):
-            ran = tier_by_task.get(row.get("task_id"))
+            ran, chosen = tier_by_task.get(row.get("task_id"), (None, None))
             if ran:
                 tier_by_session[row["_id"]] = ran
+            if ran or chosen:
+                tier_full_by_session[row["_id"]] = (ran, chosen)
 
     unreadable = 0
+    counters = Counter()
+    dirs_by_prefix = {}
+    occ_home, occ_all = [], []
+    roots = []
     if root:
-        dirs_by_prefix, occurrences, unreadable = scan_sessions(root, tier_by_session, problems)
-        best = dedupe(occurrences)
-        per_kind, totals = aggregate(occurrences, best, lo_ms, hi_ms)
+        found, bad, nfiles = scan_sessions(root, "home", tier_by_session, tier_full_by_session,
+                                           problems, dirs_by_prefix, counters)
+        occ_home = found
+        occ_all += found
+        unreadable += bad
+        roots.append((root, nfiles))
     else:
-        dirs_by_prefix, occurrences, best, per_kind = {}, [], {}, {}
-        totals = {name: 0 for name in TOTALS_KEYS}
-    own_rates = {kind: own_slice(occurrences, best, lo_ms, hi_ms, kind) for kind in per_kind}
-    disk_rows = len([1 for item in occurrences if lo_ms <= item["t"] < hi_ms]) if root else None
+        roots.append(("（home 根没找到）", 0))
+    if archive_root:
+        found, bad, nfiles = scan_sessions(archive_root, "archive", tier_by_session, tier_full_by_session,
+                                           problems, None, counters)
+        occ_all += found
+        unreadable += bad
+        roots.append((archive_root, nfiles))
+    elif not args.no_archive:
+        roots.append(("（归档根没找到）", 0))
+
+    # 对账表：两个根一起、三把键并查集去重（跨根），断言过了才印
+    winner = dedupe_table(occ_all)
+    table_lines, table_ok = render_recon_table(
+        occ_all, winner, lo_ms, hi_ms, local_bounds, utc_bounds, zone_name, roots,
+        unreadable, read_at, read_at_utc, bool(dbread), counters)
+
+    # 六格：口径没动，仍只数 home 根（覆盖面在表头写明）
+    best = dedupe(occ_home)
+    per_kind, totals = aggregate(occ_home, best, lo_ms, hi_ms)
+    own_rates = {kind: own_slice(occ_home, best, lo_ms, hi_ms, kind) for kind in per_kind}
+    disk_rows = len([1 for item in occ_home if lo_ms <= item["t"] < hi_ms]) if root else None
 
     # 读数完整性闸门：解不开的东西与「窗口内 0 行」既进 problems，也进退出码。
     # 来路（2026-10-19 交代）：这台机器没装 zstandard 那次跑 --days 7，926 个文件全解不开，
@@ -695,9 +1075,11 @@ def main():
     gate_ok = not gate_problems
     problems.extend(gate_problems)
 
-    print("asuna-usage-readout 读数｜脚本 %s｜窗口＝最近 %s 天（--days／--since／--until 可改）"
-          % (os.path.abspath(__file__), args.days))
-    ok = []
+    print("asuna-usage-readout 读数｜脚本 %s｜窗口＝本地 %s → %s（%s）"
+          % (os.path.abspath(__file__), local_bounds[0], local_bounds[1], zone_name))
+    print("\n".join(table_lines))
+    ok = [table_ok]
+    print("\n—— 以下六格长句读数（每周三张表的原料，口径见 SKILL.md 第三节；只数 home 根）——")
     for lines, cell_ok in (
             cell_window(dbread, window, local_bounds, disk_rows, zone_name, zone_source, read_at, root),
             cell_tiers(dbread, window),
@@ -708,7 +1090,7 @@ def main():
         print("\n".join(lines))
         ok.append(cell_ok)
     # 这一行永远打出来：解不开几个／窗口内几行，摆在明面上，不用去翻最后一行
-    print("读数完整性｜解不开 %s 个／窗口内 %s 行（调用行，去重前）｜%s"
+    print("读数完整性｜解不开 %s 个／窗口内 %s 行（调用行，去重前，home 根）｜%s"
           % (unreadable, "?" if disk_rows is None else disk_rows,
              "过" if gate_ok else "没过（退出码非零）"))
     if problems:

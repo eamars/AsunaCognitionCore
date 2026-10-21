@@ -84,3 +84,14 @@ UI 开发与人工检查用演示 profile（只装合成人格 `demo`、测试�
 不做 Kazusa 式多轴评估、门控情绪公式、RAG 规划器、多 LLM 巩固链；不做数值关系分；不默认做数值睡眠恢复；不建第二个数据库、向量库或 md 同步守护进程；不让行动脑、群聊或跨场景链接接触 `owner_private` 内容；不替人格标注可见性、取参数值、写题库或导入真实数据；不默认引入独立复审 LLM。
 
 Full text: git 47a7434e
+
+## Addendum 2026-10-22: a waiting part holds only its own conversation (11.1)
+
+Live 2026-10-22 00:10 NZDT (her finding, read in code by her home turn): a turn's first part failed 0.48 s before its later
+parts were queued, so `cancel_after` (which reaches only the parts that exist) missed them; the claim's order guard then
+returned nothing for the head of the shared queue, and the whole QQ channel stopped sending. `Channels._next` now walks the
+queue: a part whose earlier part settled without arriving (failed, unknown, cancelled after a failure) is cancelled when it
+comes up, whenever it was queued; a part still waiting for its time or for an earlier part holds its own conversation only,
+so later lines there never overtake it and other conversations still send. Tests: `tests/test_adr009_p5_speak.py`
+(`test_a_part_queued_after_an_earlier_part_failed_is_cancelled_when_it_comes_up`,
+`test_a_waiting_part_holds_its_own_conversation_and_no_other`; both fail on the code before).

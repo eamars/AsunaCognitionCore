@@ -129,6 +129,49 @@ def test_T5_9_a_crash_between_parts_still_sends_what_reply_queued(store, monkeyp
     assert [r['delivery_state'] for r in after] == ['QUEUED_EXTERNAL'] * 3
 
 
+def test_a_part_queued_after_an_earlier_part_failed_is_cancelled_when_it_comes_up(store, monkeypatch):
+    store.config['persona_model'] = model(3)
+    channel_scene(store, monkeypatch)
+    _, ep, _ = turn(store)
+    rows = outbound(store, ep['_id'])
+    # The live race of 2026-10-21: part 1 failed before parts 2 and 3 were queued, so cancel_after did not reach them
+    # and the line stopped for good behind part 2.
+    first = store.db.messages.find_one({'_id': rows[0]['_id']})
+    store.put('messages', {**first, 'delivery_state': 'FAILED', 'failure': 'PLATFORM_REFUSED'},
+              expected=first['revision'], stream=first['episode_id'])
+    release(store, rows[1:])
+    assert channels(store).claim('replay') == {'items': []}
+    assert [r['delivery_state'] for r in outbound(store, ep['_id'])] == [
+        'FAILED', 'CANCELLED_AFTER_FAILURE', 'CANCELLED_AFTER_FAILURE']
+
+
+def test_a_waiting_part_holds_its_own_conversation_and_no_other(store, monkeypatch):
+    store.config['persona_model'] = model(3)
+    channel_scene(store, monkeypatch)
+    store.config['channels']['replay']['routes']['peer-b'] = {
+        'scene_id': 'dm-b', 'sender_id': 'peer-b', 'person_id': 'B', 'target': {'type': 'dm', 'id': 'peer-b'}}
+    scene = store.db.scenes.find_one({'_id': 'dm-b'})
+    store.put('scenes', {**scene, 'channel_id': 'replay'}, expected=scene['revision'])
+    _, ep, _ = turn(store)
+    bridge = channels(store)
+    sending = bridge.claim('replay')['items'][0]            # part 1 is on its way; parts 2 and 3 wait for it
+    lane = FakeLane(store, [FakeTurn([THINK], '好的，收到。')])
+    event = {'event_id': 'b-one', 'scene_id': 'dm-b', 'person_id': 'B', 'text': '在吗',
+             'channel': {'id': 'replay', 'account_id': 'bot', 'target': {'type': 'dm', 'id': 'peer-b'},
+                         'platform_event_id': 'p-b-one'}}
+    persist_input(store, event, managed=True)
+    other = Coordinator(store, lane).ingest(event)
+    [line] = outbound(store, other['_id'])
+    # Queued behind the waiting parts, as the shared queue orders them.
+    last = max(r['scene_seq'] for r in outbound(store, ep['_id']))
+    store.put('messages', {**line, 'scene_seq': last + 100}, expected=line['revision'], stream=line['episode_id'])
+    release(store, outbound(store, ep['_id'])[1:])
+    item = bridge.claim('replay')['items'][0]
+    assert item['publication_id'] == line['_id'], 'the other conversation is not held by her waiting parts'
+    assert sending['publication_id'] == outbound(store, ep['_id'])[0]['_id']
+    assert [r['delivery_state'] for r in outbound(store, ep['_id'])][1:] == ['QUEUED_EXTERNAL'] * 2
+
+
 def test_T5_9_sending_part_becomes_unknown_and_cancels_the_rest(store, monkeypatch):
     store.config['persona_model'] = model(3)
     channel_scene(store, monkeypatch)

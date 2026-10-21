@@ -470,6 +470,37 @@ class Channels:
             if not task or task['intent_revision'] != episode['intent_revision'] or task['state'] in ('CANCELLED', 'STALE'):
                 raise Denied('PUBLICATION_INTENT_STALE')
 
+    # A part of her turn waits for the parts before it: while one is still on its way the later ones wait; once one has
+    # settled without arriving (failed, unknown, cancelled after a failure) the later ones never go.
+    PART_ON_ITS_WAY = ('READY', 'QUEUED_EXTERNAL', 'SENDING')
+    PART_SETTLED = ('DELIVERED', 'CANCELLED_BY_HER')            # one she took back is settled
+
+    def _next(self, query):
+        """The next line to hand out: the first queued one whose conversation is not waiting. A paced part holds its
+        conversation until its time and until the parts before it are delivered, so later lines there never overtake
+        it (ADR-009 §11.1); it holds no other conversation. A part whose earlier part will never arrive is cancelled
+        here, whenever it was queued: cancel_after reaches only the parts that existed when that one failed."""
+        held = set()
+        for row in self.store.db.messages.find(query, sort=[('scene_seq', 1)]):
+            if row['scene_id'] in held:
+                continue
+            if row.get('segment_index'):
+                earlier = [part['delivery_state'] for part in self.store.db.messages.find(
+                    {'episode_id': row['episode_id'], 'phase': 'SPEAK', 'segment_index': {'$lt': row['segment_index']},
+                     'delivery_state': {'$nin': list(self.PART_SETTLED)}}, {'delivery_state': 1})]
+                if any(state not in self.PART_ON_ITS_WAY for state in earlier):
+                    self.store.put('messages', {**row, 'delivery_state': 'CANCELLED_AFTER_FAILURE'},
+                                   expected=row['revision'], stream=row['episode_id'])
+                    continue
+                if earlier:
+                    held.add(row['scene_id'])
+                    continue
+            if row.get('not_before') and row['not_before'] > now():
+                held.add(row['scene_id'])
+                continue
+            return row
+        return None
+
     def claim(self, channel_id, wait_seconds=0, supports=None, target=None):
         # supports 是领取方声明的能力（napcat-qq 0.5.0 起带 supports=image）。没声明就只给文字，并把
         # 「这条本来带图、图没跟着出去」记在行上：只发文字却报平台已送达，等于声称对方收到一张没到的图。
@@ -486,15 +517,7 @@ class Channels:
                 query = {'channel_id': channel_id, 'delivery_state': 'QUEUED_EXTERNAL'}
                 if target:                       # a route key claims only its own line's words (ADR-033)
                     query.update({'target.type': target['type'], 'target.id': target['id']})
-                row = self.store.db.messages.find_one(query, sort=[('scene_seq', 1)])
-                # A paced segment holds the line until its time and until earlier segments are delivered,
-                # so later messages never overtake it (ADR-009 §11.1).
-                if row and row.get('not_before') and row['not_before'] > now():
-                    row = None
-                if row and row.get('segment_index') and self.store.db.messages.find_one({'episode_id': row['episode_id'],
-                        'phase': 'SPEAK', 'segment_index': {'$lt': row['segment_index']},
-                        'delivery_state': {'$nin': ['DELIVERED', 'CANCELLED_BY_HER']}}):   # one she took back is settled
-                    row = None
+                row = self._next(query)
                 if row:
                     try:
                         self._valid_publication(row, channel_id)

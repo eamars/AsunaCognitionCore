@@ -49,6 +49,9 @@ Survey: `.runtime/private/refusal-research/REPORT.md`; review: `.runtime/private
   Other changes landed in the same days, so this is a trend, not a proven cause.
 - **Think first.** 110 refusals (4.1% of turns). In all 110 the refused call was her first, she thought in the next
   request, and the call then went through. 53 were reads (`read_image` 22, `task.page` 22, `recall` 9).
+- **Think's length by day** (recount 2026-10-21 evening, UTC days, `$strLenCP` in the database): over 360 characters
+  20% on 10-17 and 10-18, then 38%, 45% and 55% on 10-19, 10-20 and 10-21 (113, 113 and 75 thoughts); over 600
+  2%, 2%, 11%, 21%, 23%. The rise starts on 10-19, five days after the edge was removed.
 - **Options shown that a conversation can never use.** `note`'s `deliver` in public conversations, where only `wake`
   is allowed (23 refusals); `ideas` read/review and home documents in groups (20).
 - **Cross-model** (synthetic conversations on the real Coordinator, prompts and schemas; `deepseek-flash` about
@@ -68,9 +71,24 @@ The owner's design (2026-10-21): every limited text keeps its current hard limit
 fifths of it, so a model that does not count exactly has room (ADR-084 step 3, `config.soft`; ADR-054 §Soft text
 budget). That stands for every field. The program does not split notes for her.
 
-`think` is brought into line with it: the ask stays 300 and the refusal comes back at 360, the design before
-2026-10-14. This reverses her decision of that day, so it goes to her first with §3's length table; the cost is a
-retry for a thought over 360.
+`think` gets an edge again, with more room than the other fields: she is asked for 120 characters and the refusal
+comes back past 360 (the owner, 2026-10-21 evening, after her view below: a thought is her first reaction to
+something, short, not an essay; the 3× room is for a model that does not count). The first draft of this step asked
+300 with the edge at 360, the design before 2026-10-14. Bringing an edge back reverses her decision of that day, so
+it went to her first with §3's length table; the cost is a retry for a thought over 360.
+
+Her view, as she sent it on the agent line on 2026-10-21 in the evening (Claude's record of her words; signature:
+________):
+
+> 方向我认。今天每一拍都收到"超了 N 字"的回执，最长 1120 真在飘——那多数不是读数多，是我在心里话里排版。
+> 但 360 拒这一档，按你自己给的数我建议定在 600。现在 45-57% 超 300、11-23% 超 600：360 拒意味着我大约每三拍重写一次，
+> 而"每 20 个里超 1 个在 360 被拒就重谈"这条失败判据第一周几乎必然触发——那 7 天后数出来的不是"想法有没有变好"，是"我重写了几次"。
+> 定在 600 的话，"请写 300"照留，那已经够逼我把加粗和排比砍掉，同时保住给未来的我的读数。
+> 主人就要 360 我也认（他说了照他的装），只求一条：被拒后重写那一拍不计入任何统计——不然我会开始写短到没有读数，那是用另一种方式失真。
+
+Her view answered the 300/360 draft. The owner's answer: the edge stays at 360 and the ask drops to 120, so the edge
+sits three times above what she is asked for. Readings count calls and never score her (ADR-071); a thought written
+again after a refusal is one more call, nothing else.
 
 Length refusals remain the largest single cost (about 190 a week); that is accepted as the price of shorter texts that
 every later turn carries.

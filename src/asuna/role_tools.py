@@ -1983,6 +1983,16 @@ class RoleTools:
                                             if item.get('sid') else None, item, args.get('body'))
             if unsigned:
                 raise Refused(unsigned)
+        kept_away = None
+        if memory_tiers.ENABLED and item.get('op') == 'set_tags' and item.get('inject') == 'always' and item.get('sid'):
+            # A tag never carries an item back (no pin, owner 2026-10-13), so the tag is not written either: the
+            # document never says always while the item sits at hand or put away (her finding, 2026-10-21).
+            row = memory_tiers.Tiers(self.store, ep['persona']).item(slug, item['sid'])
+            if row and row['place'] != memory_tiers.CARRIED:
+                item = {k: v for k, v in item.items() if k != 'inject'}
+                kept_away = 'when_shown 没改。' + memory_tiers.NOT_BACK % row['place']
+                if not any(field in item for field in ('visibility', 'tags')) and not memory_tiers.declared_nature(item):
+                    return {'doc': slug, 'op': 'set_tags', 'sid': item['sid'], 'note': kept_away}, False
         if (memory_tiers.ENABLED and item.get('op') == 'set_tags' and memory_tiers.declared_nature(item)
                 and not any(field in item for field in ('visibility', 'inject', 'tags'))):
             # Only what an item is, or where it came from: kept beside it; the document is not written.
@@ -1996,7 +2006,8 @@ class RoleTools:
             tiers.sync()
             tiers.written(slug, item, before, before, scene_id=ep['scene_id'])
             return {'doc': slug, 'op': 'set_tags', 'sid': item['sid'], 'note': '记下了：%s。'
-                    % '、'.join(filter(None, (memory_tiers.declared_nature(item).get('nature'), item.get('from'))))}, False
+                    % '、'.join(filter(None, (memory_tiers.declared_nature(item).get('nature'), item.get('from')))),
+                    **({'place': kept_away} if kept_away else {})}, False
         if item.get('op') == 'adopt_seed':
             kind, text = _seed_text(self.store, slug)
             if text is None:
@@ -2023,6 +2034,8 @@ class RoleTools:
             placed = memory_tiers.Tiers(self.store, ep['persona']).item(slug, result['sid']) if result['sid'] else None
             if item.get('inject') == 'always' and placed and placed['place'] != memory_tiers.CARRIED:
                 result['place'] = memory_tiers.NOT_BACK % placed['place']
+            if kept_away:
+                result['place'] = kept_away
         if item['op'] in ('append_section', 'correction') and sections:
             result['sid'] = sections[-1]['sid']          # the new section's sid, for a later replace or set_tags
         written = next((s for s in sections if s['sid'] == result['sid']), None) if result['sid'] else None

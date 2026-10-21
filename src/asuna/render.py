@@ -190,20 +190,28 @@ def budget_gate(store, persona):
         before = largest(common, current['persona'], current['voice'])[0]
         after = largest(common, proposed['persona'], proposed['voice'])[0]
         if after > before and after > limit:
-            raise DocumentError('PERSONA_RENDER_OVER_BUDGET', over_budget_words(proposed, before, after, limit))
+            raise DocumentError('PERSONA_RENDER_OVER_BUDGET', over_budget_words(proposed, before, after, limit, common))
     return check
 
 
-def over_budget_words(proposed, before, after, limit):
-    """By how much a write overshoots, and the largest always-injected sections she could tuck away or trim."""
+# Each place has its own render, bounded on its own (largest): a section pinned to one place never fills another's.
+PLACE_WORDS = {'home': '家里', 'peer': '另一个自己那条线', 'group': '群里', 'dm': '私聊'}
+
+
+def over_budget_words(proposed, before, after, limit, common=''):
+    """By how much a write overshoots, in which place's render, and the largest always-injected sections there she
+    could tuck away or trim (a section pinned to another place is not in that render, so tucking it frees nothing)."""
+    place, cls = max(visibility.PLACE_CLASS.items(), key=lambda item: estimate_tokens(
+        compose(common, proposed['persona'], proposed['voice'], item[1], item[0])))
     sizes = sorted(((estimate_tokens(s['heading'] + s['body']), slug, s['sid'])
                     for slug in ('persona', 'voice')
                     for s in readable_sections((proposed[slug] or {}).get('sections') and proposed[slug],
-                                               visibility.OWNER_PRIVATE)), reverse=True)[:3]
+                                               cls, place=place)), reverse=True)[:3]
     largest = '、'.join('%s#%s（约 %d）' % (slug, sid, tokens) for tokens, slug, sid in sizes)
-    return ('写完约 %d token，上限 %d，超出 %d（写之前是 %d）；%s先把不常用的 always 节用 set_tags 改成 when_shown=on_demand '
-            '收起来（recall 还读得到），或把这次写的改短' % (after, limit, after - limit, before,
-                                                       '最大的 always 节：%s。' % largest if largest else ''))
+    return ('写完%s那一份约 %d token，上限 %d，超出 %d（写之前最大的一份是 %d；每个地方各算各的）；%s先把不常用的 always 节用 '
+            'set_tags 改成 when_shown=on_demand 收起来（recall 还读得到），或把这次写的改短'
+            % (PLACE_WORDS.get(place, place), after, limit, after - limit, before,
+               '那里最大的 always 节：%s。' % largest if largest else ''))
 
 
 def system_for(store, ref: dict, *, stream: str | None = None, scope: str = 'operator') -> str:

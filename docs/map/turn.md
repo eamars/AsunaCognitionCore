@@ -112,7 +112,7 @@ Role system prompt rendering (ADR-009 §8.1).
 - def `render_status` — The largest render over the places against the budget, for the settings card and memory tab.
 - def `report_budget`
 - def `budget_gate` — For DocumentStore.apply: refuse a persona/voice change that grows an over-budget render, and growth of a note already far over its limit (context_budget.note_gate).
-- def `over_budget_words` — By how much a write overshoots, and the largest always-injected sections she could tuck away or trim.
+- def `over_budget_words` — By how much a write overshoots, in which place's render, and the largest always-injected sections there she could tuck away or trim (a section pinned to another place is not in that render, so tucking it frees nothing).
 - def `system_for` — Re-render the system prompt an episode fixed at preparation time.
 - def `episode_system` — Stage system prompt, re-rendered from the episode's system_ref (drift is audited).
 - def `action_values` — Action-brain system suffix (ADR-009 §8.3, revised by the owner 2026-10-04).

@@ -243,7 +243,9 @@ def test_a_tag_lets_an_item_go_down_but_never_carries_it_back_up(store, tiers_on
     assert tiers.item('persona', up['sid'])['place'] == AT_HAND, 'a tag is not a way up'
     assert tiers.item('persona', down['sid'])['place'] == AT_HAND, 'a tag down is letting go'
     pinned = next(call for call in ep['tool_calls'].values() if call['tool'] == 'write_document')
-    assert pinned['result']['place'] == memory_tiers.NOT_BACK % AT_HAND
+    # The tag that cannot carry it back is not written either, so the document never says always while it is at hand.
+    assert pinned['result']['note'] == 'when_shown 没改。' + memory_tiers.NOT_BACK % AT_HAND
+    assert 'revision_id' not in pinned['result']
 
 
 def test_her_numbers_and_words(store, tiers_on):

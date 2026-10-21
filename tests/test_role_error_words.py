@@ -42,8 +42,20 @@ def test_an_over_budget_write_says_by_how_much_and_the_largest_sections():
     proposed = {'persona': {'sections': [section('big', '字' * 300), section('small', '字' * 10)]},
                 'voice': {'sections': [section('tone', '字' * 100)]}}
     said = render.over_budget_words(proposed, 400, 420, 410)
-    assert '写完约 420 token，上限 410，超出 10' in said and said.index('persona#big') < said.index('voice#tone')
+    assert '约 420 token，上限 410，超出 10' in said and said.index('persona#big') < said.index('voice#tone')
     assert 'when_shown=on_demand' in said
+
+
+def test_an_over_budget_write_names_the_place_and_only_that_place_s_sections():
+    # Her finding (2026-10-21): a home rule over the budget pointed her at a group rule, which is not in the home render.
+    def section(sid, body, place, visibility='public'):
+        return {'sid': sid, 'heading': sid, 'body': body, 'visibility': visibility, 'inject': 'always',
+                'tags': ['place:' + place]}
+    proposed = {'persona': {'sections': [section('home_rule', '字' * 300, 'home', 'owner_private'),
+                                         section('group_rule', '字' * 250, 'group')]},
+                'voice': {'sections': []}}
+    said = render.over_budget_words(proposed, 400, 420, 410)
+    assert '家里那一份' in said and 'home_rule' in said and 'group_rule' not in said
 
 
 def test_a_missing_section_lists_the_sids_there_are():

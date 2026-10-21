@@ -267,6 +267,16 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `dispose`
 - def `apply`
 
+## `log-sink.js`
+
+[packages/cognition-core/src/log-sink.js](../../packages/cognition-core/src/log-sink.js)
+
+Asuna's own log lines, kept. The Host's logger keeps a plugin's messages in memory only (a ring of the newest thousand, gone at each restart), so a line such as a summary request's reasoning level or a worker restart's reason reached no file. This exporter writes the lines Asuna writes (they start with `Asuna`) to the Host's stderr, which the supervisor keeps in `restart/host.log`; every other plugin's lines are left as they were.
+
+- def `PREFIX` — Asuna's own log lines, kept.
+- def `formatted` — A message's arguments as one line of text, `%s`, `%d` and `%o` filled in the way the Host's own logger does.
+- def `asunaLogExporter` — The exporter for `ctx.logger.exporter()`: each Asuna line, stamped with its time and level, through `write`.
+
 ## `navigation.js`
 
 [packages/cognition-core/src/navigation.js](../../packages/cognition-core/src/navigation.js)

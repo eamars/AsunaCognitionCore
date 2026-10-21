@@ -186,7 +186,7 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
     if (!level || !this.ctx.llm.resolveModelInfo) return undefined;
     const info = await this.ctx.llm.resolveModelInfo(target.provider, target.model, signal);
     const offered = info?.reasoning?.efforts?.some(effort => effort.id === level);
-    this.ctx.logger?.info?.('compaction: summary request thinks at ' + (offered
+    this.ctx.logger?.info?.('Asuna compaction: summary request thinks at ' + (offered
       ? '"' + level + '" (' + from + ')'
       : 'no named level: ' + target.provider + '/' + target.model + ' offers no "' + level + '" (' + from + ')')
       + ' in ' + agent.session.id);
@@ -196,7 +196,7 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
   /** One log line each time the summary request falls back to the replayed span alone, with the sizes it judged by,
    * so a reading of compactions can tell the two shapes apart. */
   spanAlone(agent, reason, { tokens, window }) {
-    this.ctx.logger?.info?.('compaction: summary request sends the compacted span alone (' + reason + '; conversation ~'
+    this.ctx.logger?.info?.('Asuna compaction: summary request sends the compacted span alone (' + reason + '; conversation ~'
       + tokens + ' tokens, summary cap ' + this.config.maxTokens + ', window ' + window + ') in ' + agent.session.id);
   }
 

@@ -86,15 +86,16 @@ class Refused(Exception):
     """A call she can correct herself: the message says, in words for her, what to do instead."""
 
 
-LIMIT_WORDS = '（%d 字以内，最多 %d 字）'    # what she is asked for, and where the program refuses (owner 2026-10-20)
-EXACT_WORDS = '（最多 %d 字）'                # a name or a search, not her prose
+LIMIT_WORDS = '（%d 字以内）'    # what she is asked for; the program refuses only well past it (owner 2026-10-22)
+EXACT_WORDS = '（最多 %d 字）'    # a name or a search, not her prose
 
 
 def _s(description, limit=None, exact=False, **extra):
     """A string parameter; `limit` is the length the program refuses past (ADR-054), stated in words: DSH's tool
-    schema subset has no maxLength, and a key outside it fails the whole preset."""
+    schema subset has no maxLength, and a key outside it fails the whole preset. Her prose is described by what she
+    is asked for (config.soft); a name or a search by its exact limit."""
     if limit:
-        description += EXACT_WORDS % limit if exact else LIMIT_WORDS % (soft(limit), limit)
+        description += EXACT_WORDS % limit if exact else LIMIT_WORDS % soft(limit)
     return {'type': 'string', 'description': description, **extra}
 
 
@@ -118,7 +119,7 @@ REACT_LINE_RECALL = 'recall：撤你自己的哪一句，写它的编号'
 REACT_LINE = REACT_LINE_REACT + REACT_LINE_RECALL
 # Her own line taken back (her ask, the owner's yes, 2026-10-18): still queued it is cancelled, delivered it is recalled.
 RECALL_WHY_CHARS = 100
-RECALL_WHY = 'recall：为什么撤（必填，%d 字以内，最多 %d 字）' % (soft(RECALL_WHY_CHARS), RECALL_WHY_CHARS)
+RECALL_WHY = 'recall：为什么撤（必填，%d 字以内）' % soft(RECALL_WHY_CHARS)
 RECALL_QUEUED = '撤回 〔%d〕 交给平台了（还没确认）'
 RECALL_CANCELLED = '取消了 〔%d〕，那句没发出去'
 RECALL_TOO_LATE = '那句发出已经超过 %d 分钟，平台不让撤了；要改口就补一句，或者引它改口'
@@ -151,7 +152,7 @@ from . import notes as _notes, places as _places
 TOOLS = {
     'think': {
         'description': ('写下这回合的心里话：注意到了什么、心里什么感觉、打算怎么做。用你自己的口吻写两三句' + LIMIT_WORDS
-                         % (THOUGHT_CHARS, THOUGHT_HARD_CHARS) + '，不是完整的推理过程。'
+                         % THOUGHT_CHARS + '，不是完整的推理过程。'
                          '每回合第一步调用它。心里话会存档：这个对话里最近三段，下一回合一定看得到（还在屏上的就在原处，不另给）；'
                          '更早的用 recall 找。'),
         'parameters': {'thought': _s('心里话', required=True)},
@@ -367,8 +368,8 @@ TOOLS = {
                          '那边的你会读到，那边的人看不到，但可能被照着说，所以只写愿意在那边说的；用你自己的话：'
                          '和这里别人刚说的一长段一样的，写明是谁说的也送不出去；别人托的，用你的话说清是谁的意思。'
                          'deliver：wake 马上叫醒那边（排在那边手上的事后面），next_time 那边下次有回合时看到；能选哪样看从哪写到哪，'
-                         '不写按那边的默认。叫醒一个群算一次出门。家里送家里 %d 字以内（最多 %d），别的 %d 字以内（最多 %d）；一回合最多两张。'
-                         % (soft(_notes.HOME_NOTE_CHARS), _notes.HOME_NOTE_CHARS, soft(_notes.NOTE_CHARS), _notes.NOTE_CHARS)),
+                         '不写按那边的默认。叫醒一个群算一次出门。家里送家里 %d 字以内，别的 %d 字以内；一回合最多两张。'
+                         % (soft(_notes.HOME_NOTE_CHARS), soft(_notes.NOTE_CHARS))),
         'parameters': {'to': _s('送到哪儿：note_places_from_program 里的 place，或「家里」', required=True),
                        'text': _s('便条，你自己的话', required=True),
                        'mode': _s('wake 或 next_time，可省略', enum=['wake', 'next_time']),
@@ -1410,15 +1411,15 @@ class RoleTools:
         if value is None and not required:
             return None
         if value is not None and not isinstance(value, str):
-            raise Refused('%s 要是一段文字（%d 字以内），给的是%s。' % (field, limit, {
+            raise Refused('%s 要是一段文字（%d 字以内），给的是%s。' % (field, ask, {
                 bool: ' true/false', int: '数字', float: '数字', list: '列表', dict: '对象'}.get(type(value), '别的类型')))
         if not value or not value.strip():
             raise Refused(('%s 要写内容（%d 字以内）。' if required else '%s 是空的：要么写内容（%d 字以内），要么不写这个字段。')
-                          % (field, limit))
+                          % (field, ask))
         if len(value) > limit:
-            raise Refused('%s 太长了：%d 字，最多 %d 字，超了 %d 字。精简到 %d 字以内再调用，或者照这个截好的写：%s'
-                          % (_SHOWN.get(field, field), len(value), limit, len(value) - limit, ask,
-                             cut_offer(value, limit)))
+            # Refused past `limit`, worded by `ask`: what she reads is the length to aim for (owner 2026-10-22).
+            raise Refused('%s 太长了：%d 字，要求 %d 字以内，超了 %d 字。精简到 %d 字以内再调用，或者照这个截好的写：%s'
+                          % (_SHOWN.get(field, field), len(value), ask, len(value) - ask, ask, cut_offer(value, ask)))
         self._longer(field, len(value), limit, ask)
         return value.strip()
 
@@ -1767,7 +1768,8 @@ class RoleTools:
         if not why:
             raise Refused('要写 why（为什么撤，%d 字以内）' % RECALL_WHY_CHARS)
         if len(why) > RECALL_WHY_CHARS:
-            raise Refused('why 最多 %d 字（给的是 %d 字），精简到 %d 字以内' % (RECALL_WHY_CHARS, len(why), soft(RECALL_WHY_CHARS)))
+            raise Refused('why 太长了：%d 字，要求 %d 字以内，超了 %d 字，精简到 %d 字以内'
+                          % (len(why), soft(RECALL_WHY_CHARS), len(why) - soft(RECALL_WHY_CHARS), soft(RECALL_WHY_CHARS)))
         self._longer('why', len(why), RECALL_WHY_CHARS)
         text = str(part.get('line') or '').strip().strip('〔〕[]「」 ')
         if not text.isdigit():

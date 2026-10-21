@@ -231,7 +231,7 @@ def test_her_self_description_and_understanding_have_a_length_limit(store):
     lane = FakeLane(store, [FakeTurn([THINK, ('update_self', {'target': 'current_self', 'content': long, 'why': '写'})], '嗯。')])
     Coordinator(store, lane).ingest(event('self-1'))
     refused = lane.tool_results[1]
-    assert not refused[5] and '最多 %d 字' % budget.SINGLE_BODY_CHARS in refused[4]
+    assert not refused[5] and '要求 %d 字以内' % (budget.SINGLE_BODY_CHARS * 4 // 5) in refused[4]
 
 
 def test_the_persona_render_has_a_fixed_budget_she_can_only_raise_so_far():

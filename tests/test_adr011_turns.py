@@ -89,13 +89,16 @@ def test_the_reads_that_may_come_before_a_thought_are_a_closed_list_of_calls_wit
 def test_a_thought_is_asked_for_120_kept_up_to_360_and_refused_past_it(store):
     """ADR-087 §4.1 (owner, 2026-10-21): a thought is her first reaction, asked for 120 characters; one up to 360 is
     kept and its result says by how much, as for any field kept past its ask; past 360 it is refused."""
-    assert '（120 字以内，最多 360 字）' in role_tools.TOOLS['think']['description']
+    # What she reads names only the 120 (owner 2026-10-22: a model does not count exactly; the room is the program's).
+    assert '（120 字以内）' in role_tools.TOOLS['think']['description'] and '360' not in role_tools.TOOLS['think']['description']
     coordinator, lane = run(store, FakeTurn([('think', {'thought': '很' * 361}), ('think', {'thought': '很' * 360}),
                                              ('think', {'thought': '短的'})], '好。'))
     ep = coordinator.ingest(event())
     refused, edge, short = lane.tool_results
-    assert not refused[5] and '最多 360 字，超了 1 字。精简到 120 字以内' in refused[4]
-    assert edge[5] and edge[4]['length'] == 'thought 360 字，超了 240 字（120 字以内，最多 360 字），这次照收了'
+    assert not refused[5] and 'thought 太长了：361 字，要求 120 字以内，超了 241 字。精简到 120 字以内' in refused[4]
+    offered = refused[4].split('截好的写：\n', 1)[1].split('\n', 1)[0]
+    assert '最多' not in refused[4] and offered.count('很') <= 120, 'the offered cut fits the ask'
+    assert edge[5] and edge[4]['length'] == 'thought 360 字，要求 120 字以内，超了 240 字，这次照收了'
     assert short[5] and 'length' not in short[4]
     assert ep['state'] == 'COMMITTED' and len(ep['monologue_refs']) == 2, 'the refused thought is not kept'
 

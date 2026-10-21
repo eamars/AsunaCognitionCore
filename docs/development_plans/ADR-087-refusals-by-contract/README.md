@@ -93,6 +93,10 @@ again after a refusal is one more call, nothing else.
 Length refusals remain the largest single cost (about 190 a week); that is accepted as the price of shorter texts that
 every later turn carries.
 
+2026-10-22 (owner): what she reads about a thought's length names only the 120: the description 「（120 字以内）」, a kept
+one 「要求 120 字以内，超了 N 字」, a refusal past 360 worded against the 120 with its cut at 120; the 360 edge does not move.
+The same for every prose field (ADR-054, "What she reads names only the ask"); built, waiting for her answer.
+
 ### 4.2 Reads may come before her thought
 
 A closed list of calls that write nothing may run before her first thought: `recall`, `read_image`, `task.page`,

@@ -25,7 +25,8 @@ def test_every_length_refusal_offers_the_cut():
         role_tools.RoleTools._text(None, {'idea': '想法一。' * 200}, 'idea', role_tools.IDEA_CHARS)
     except role_tools.Refused as exc:
         said = str(exc)
-    assert '超了 300 字' in said and cut('想法一。' * 200, role_tools.IDEA_CHARS) in said
+    # Worded by what she is asked for, and the cut offered fits it (owner 2026-10-22).
+    assert '要求 400 字以内，超了 400 字' in said and cut('想法一。' * 200, 400) in said and '最多' not in said
     assert '去掉的是这' in said                            # what the cut leaves out is shown too (her ask)
     assert cut('到点了。' * 300, schedule.INTENT_CHARS) in schedule.intent_problem('到点了。' * 300)
 
@@ -38,5 +39,5 @@ def test_a_text_past_what_she_was_asked_for_but_within_the_limit_is_kept_and_sai
     assert soft(role_tools.IDEA_CHARS) == 400
     assert tools._text({'idea': 'x' * 400}, 'idea', role_tools.IDEA_CHARS) and tools.over == []
     assert tools._text({'idea': 'x' * 450}, 'idea', role_tools.IDEA_CHARS)
-    assert tools.over == ['idea 450 字，超了 50 字（400 字以内，最多 500 字），这次照收了']
+    assert tools.over == ['idea 450 字，要求 400 字以内，超了 50 字，这次照收了']
     assert over(501, 500) is None and over(400, 500) is None

@@ -81,7 +81,7 @@ def test_only_her_own_and_a_reason_within_its_limit(group):
     result, ok, _ = speak(group, 'r-5', [{'kind': 'recall', 'line': '54'}])
     assert not ok and '要写 why' in str(result)
     result, ok, _ = speak(group, 'r-6', [{'kind': 'recall', 'line': '54', 'why': '长' * 101}])
-    assert not ok and 'why 最多 100 字（给的是 101 字）' in str(result)
+    assert not ok and 'why 太长了：101 字，要求 80 字以内，超了 21 字' in str(result)
 
 
 def test_what_came_of_it_is_in_her_history_either_way(group):

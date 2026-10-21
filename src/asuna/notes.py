@@ -249,11 +249,11 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
         raise NoteRefused('NOTE_TEXT_REQUIRED', 'text 写便条的内容。')
     limit = text_limit(trust, kind)
     if len(text) > limit:
-        raise NoteRefused('NOTE_TOO_LONG', ('送到%s的便条最多 %d 字，现在 %d 字，超了 %d 字。三条路：'
+        ask = soft(limit)                 # refused past `limit`, worded by what she is asked for (owner 2026-10-22)
+        raise NoteRefused('NOTE_TOO_LONG', ('送到%s的便条要求 %d 字以内，现在 %d 字，超了 %d 字。三条路：'
                                             '① 压到 %d 字以内；② 原样拆成两张接着发，开头标 1/2、2/2，让那边知道是接续'
                                             '（一回合最多 %d 张）；③ 照这个截好的发：%s')
-                          % (KIND_WORDS[kind], limit, len(text), len(text) - limit, soft(limit), PER_TURN,
-                             cut_offer(text, limit)))
+                          % (KIND_WORDS[kind], ask, len(text), len(text) - ask, ask, PER_TURN, cut_offer(text, ask)))
     default, choices = MODES[cls][kind]
     mode = args.get('mode') or default
     if mode not in choices:

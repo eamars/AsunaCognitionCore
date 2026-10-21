@@ -174,9 +174,11 @@ def refs_usable(refs, cap=12):
 
 
 def over(length, limit, ask=None):
-    """Words for a text kept although longer than she was asked for (`ask`, by default soft(limit)), or None."""
+    """Words for a text kept although longer than she was asked for (`ask`, by default soft(limit)), or None. Her
+    words name only what she is asked for: a model does not count exactly, so the program refuses only well past it
+    (owner 2026-10-22)."""
     ask = ask or soft(limit)
-    return ('%d 字，超了 %d 字（%d 字以内，最多 %d 字），这次照收了' % (length, length - ask, ask, limit)
+    return ('%d 字，要求 %d 字以内，超了 %d 字，这次照收了' % (length, ask, length - ask)
             if ask < length <= limit else None)
 
 

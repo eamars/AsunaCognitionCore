@@ -110,6 +110,23 @@ conversation specs do to prompt-cache hits across conversations on an API model,
 argument check (`index.js` `argsRefusal`, `tool-args.js`) refuses today, so a narrower schema does not just move
 refusals out of the record. The worker's checks stay the real guard.
 
+Measured 2026-10-21 (read-only, 7 days, her role sessions; `.runtime/private/refusal-research/B7.md`):
+- Every role request ran on the local model, so the API-model effect cannot be read from her record. On the local
+  model, prefixes are shared across conversations: the two conversations that began that week got about 13.4k of
+  their ~25.9k-token first prompt from cache. Tool lists change only at restarts (64 changes, all on resume; none
+  within a run).
+- The options this step removes are the same for every conversation of a place (`note.deliver` in every public
+  conversation; `ideas` read and review and home documents in every group), so conversations of one place keep one
+  shared spec and keep sharing their prefix. Expected cache loss: none beyond the change every install already makes;
+  refusals removed: about 43 a week.
+- The host refuses about 54 calls a week that never reach the worker's record: 13 by its argument check, 11 by DSH's
+  own validation, 30 for a tool not in that conversation (26 of them `stay_silent` in groups, where `speak` replaces
+  it).
+
+Decided (the owner took Claude's recommendation, 2026-10-21): specs by this rule, one per place, with a second variant
+only where a conversation hosts errands. The step's reading counts the host's refusals (argument check, DSH
+validation, unexposed tool) next to the worker's, and fails if they rise.
+
 ### 4.4 Defaults from state the program has, said in the result
 
 - A one-shot plan moved in the turn it fired: the program creates a new plan with the timing given (and the old intent

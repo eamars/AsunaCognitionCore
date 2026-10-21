@@ -1,6 +1,6 @@
 # ADR-085: the character's summary request sends the whole conversation
 
-Status: **Built**, 2026-10-20. Found from her own reading of the compaction cache rate, decided by the owner on Claude's recommendation, put to her 2026-10-20 18:4x NZDT and agreed by her with three changes, all taken.
+Status: **Built**, 2026-10-20; narrowed 2026-10-22 (§4c): only a commanded compaction sends the whole conversation, an automatic one sends the compacted span alone, because a summarizer that reads a long kept tail restates it. Closing waits on the live reading of §4c (§6). Found from her own reading of the compaction cache rate, decided by the owner on Claude's recommendation, put to her 2026-10-20 18:4x NZDT and agreed by her with three changes, all taken.
 
 ## 1. Context
 
@@ -119,6 +119,24 @@ Test: `packages/cognition-core/test/compaction.test.js`.
 
 ## 5. As built
 
-- `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `wholeConversation`, `spanAlone`, `summaryEffort`, `keptRule`, `hasSections`, `ROLE_SECTIONS`, `WHOLE_SPARE_TOKENS`, `KEPT_QUOTE_CHARS`; `packages/personas/xiaoman/cordis.patch.yml`: `summaryReasoningEffort`.
-- Test: `packages/cognition-core/test/compaction.test.js` (whole conversation and kept rule; too large; refused; span not the conversation's start; thinking level offered or not; missing sections).
+- `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `compactIfNeeded` (marks an automatic compaction, `automatic`), `wholeConversation`, `spanAlone`, `summaryEffort`, `keptRule`, `hasSections`, `ROLE_SECTIONS`, `WHOLE_SPARE_TOKENS`, `KEPT_QUOTE_CHARS`; `packages/personas/xiaoman/cordis.patch.yml`: `summaryReasoningEffort`.
+- Test: `packages/cognition-core/test/compaction.test.js` (whole conversation and kept rule for a commanded compaction; the span alone for an automatic one; too large; refused; span not the conversation's start; thinking level offered or not; missing sections).
 - Reference: `docs/articles/maximize-cache-hit-by-design.md` §1 and §7.
+
+## 6. Before it closes (2026-10-22)
+
+- **§4c read live** on the first automatic compactions after her 10:36 NZDT restart (`bd91dd21`): the Host line
+  `span alone (automatic)`, the checkpoint written with all six sections, no cap or window failure.
+- **Her reading** (her condition, 10-22): she reads the first two automatic checkpoints herself, for anything from the
+  compacted part that is lost (promises, start times, someone's correction); one loss is reported at once.
+- **The cost, as she asked:** during each of the first automatic compactions, the longest wait of her other
+  conversations' requests and any queue timeout on the local engine; the worst case, not a mean.
+- **§3 restated:** its cache verdict now covers commanded compactions only; its memory verdict was answered by §4b and
+  §4c. The ~10-24 reading becomes: cap and window failures over all compactions since 10-22 10:36, and the kept-tail
+  repeat in commanded ones.
+- **Evidence:** `.runtime/private/compaction-study/` (0.5 MB) is reduced to `researcher-audit.md`, `replay/PREREG.md`,
+  `PREREG2.md`, `VERDICT.md`, `VERDICT2.md` and `runs.jsonl` (numbers only) when this closes.
+- **Not here:** the checkpoint template's own 30–40% waste (sections restating each other, the task section copying the
+  task list, group notes missing from the do-not-copy rule, the pointer to the previous checkpoint) is its own change,
+  approved by the owner, proposed to her after §4c is read.
+

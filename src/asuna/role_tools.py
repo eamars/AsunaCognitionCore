@@ -1491,8 +1491,10 @@ class RoleTools:
                 raise Refused(_understanding.LIST_HOME_ONLY)
             c._update(self._fresh(ep), recall_count=count + 1)
             rows = _understanding.listing(self.store, ep['persona'])
-            self.store.audit(ep['_id'], 'recall.people', {'listed': len(rows)}, ep['scope_key'])
-            return {'people': [{k: v for k, v in r.items() if k != 'person'} for r in rows]
+            left_out = sum(row.get('left_out', 0) for row in rows)       # the closing entry is no person
+            self.store.audit(ep['_id'], 'recall.people', {'listed': sum('person' in row for row in rows),
+                                                          **({'left_out': left_out} if left_out else {})}, ep['scope_key'])
+            return {'people': [{k: v for k, v in r.items() if k not in ('person', 'left_out')} for r in rows]
                     or _understanding.NOT_WRITTEN + '任何人。'}
         try:
             person_id = _understanding.resolve(self.store, ep, scene, text, ep['persona'], home=home, for_read=True)

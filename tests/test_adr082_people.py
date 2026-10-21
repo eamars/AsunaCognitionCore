@@ -166,7 +166,7 @@ def test_recall_person_reads_both_layers_pins_them_and_never_searches(store, mon
     assert not refused_ok and '[没这人 #9]' in refused and label(store, 'A') in refused
 
 
-def test_people_list_at_home_and_refused_outside(store):
+def test_people_list_at_home_and_refused_outside(store, monkeypatch):
     write_dm(store)
     _, lane = turn(store, event('t-list'), ('recall', {'person': '名单'}))
     assert results(lane, 'recall') == [(LIST_HOME_ONLY, False)]
@@ -190,7 +190,15 @@ def test_people_list_at_home_and_refused_outside(store):
     whole = understanding.listing(store, 'P1')
     cut = understanding.listing(store, 'P1', limit=len(json.dumps(
         {k: v for k, v in whole[0].items() if k != 'person'}, ensure_ascii=False, default=str)) + 2)
-    assert cut == [whole[0], {'earlier': understanding.EARLIER_PEOPLE % (1, 2)}]
+    assert cut == [whole[0], {'earlier': understanding.EARLIER_PEOPLE % (1, 2), 'left_out': 1}]
+    # Through recall: she sees the closing line without its count; the audit counts the people listed and left out.
+    monkeypatch.setattr(understanding, 'LISTED_CHARS', len(json.dumps(
+        {k: v for k, v in whole[0].items() if k != 'person'}, ensure_ascii=False, default=str)) + 2)
+    ep, lane = turn(store, {**DM, 'event_id': 'home-list-cut'}, ('recall', {'person': '名单'}))
+    [(shown, ok)] = results(lane, 'recall')
+    assert ok and shown['people'][-1] == {'earlier': understanding.EARLIER_PEOPLE % (1, 2)}
+    audit = store.db.audit_events.find_one({'type': 'recall.people', 'stream_id': ep['_id']})
+    assert audit['payload'] == {'listed': 1, 'left_out': 1}
 
 
 # ---- the write -----------------------------------------------------------------------------------------------------

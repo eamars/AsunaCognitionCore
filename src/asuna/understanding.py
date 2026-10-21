@@ -195,11 +195,12 @@ LISTED_CHARS = 8000
 EARLIER_PEOPLE = '还有 %d 个人是更早写的，没列出（共 %d 个）：要看谁，recall 的 person 写他的标签。'
 
 
-def listing(store, persona, limit=LISTED_CHARS):
+def listing(store, persona, limit=None):
     """「名单」 (home only): everyone she has written, each layer with its length, where and when it was last written;
-    newest first, as many as fit `limit` characters, then one entry naming how many earlier ones are left out.
-    [{'name', 'person', 'layers': [...]}, …, {'earlier': …}]"""
+    newest first, as many as fit `limit` characters (LISTED_CHARS), then one entry naming how many earlier ones are left
+    out, with their count for the audit. [{'name', 'person', 'layers': [...]}, …, {'earlier': …, 'left_out': n}]"""
     import json
+    limit = LISTED_CHARS if limit is None else limit
     rows = _everyone(store, persona)
     size, kept = 0, []
     for row in rows:
@@ -208,7 +209,7 @@ def listing(store, persona, limit=LISTED_CHARS):
             break
         kept.append(row)
     left = len(rows) - len(kept)
-    return kept + ([{'earlier': EARLIER_PEOPLE % (left, len(rows))}] if left else [])
+    return kept + ([{'earlier': EARLIER_PEOPLE % (left, len(rows)), 'left_out': left}] if left else [])
 
 
 def _everyone(store, persona):

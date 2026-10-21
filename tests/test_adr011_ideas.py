@@ -190,21 +190,41 @@ def test_a_persona_publication_is_what_her_turns_read_at_once(store, tmp_path):
     model['persona']['id'] = persona_id
     path = tmp_path / 'persona-model.json'
 
-    def publish(edited):
+    def package(edited, persona):
         path.write_text(json.dumps(edited, ensure_ascii=False), encoding='utf-8')
-        return BusinessWorker.dispatch(worker, 'persona.resources', {'skill_directories': ['skills'], 'persona': {
-            'id': persona_id, 'display_name': '新名字', 'character_id': 'character-1', 'model': str(path), 'jobs': []}})
+        return {'id': persona, 'display_name': '新名字', 'character_id': 'character-1', 'model': str(path), 'jobs': []}
+
+    def publish(edited, folders=('skills',), persona=persona_id):
+        return BusinessWorker.dispatch(worker, 'persona.resources', {'skill_directories': list(folders),
+                                                                     'persona': package(edited, persona)})
+
+    def check(edited, persona=persona_id):
+        return BusinessWorker.dispatch(worker, 'persona.check', {'persona': package(edited, persona)})['refused']
 
     worker = SimpleNamespace(app=SimpleNamespace(config=store.config, store=store))
-    publish({**model, 'model_version': 1})
+    store.config.pop('_skill_directories', None)
+    taken = publish({**model, 'model_version': 1})
     assert store.config['persona_model'] == {**model, 'model_version': 1}
     assert store.config['chat']['display_name'] == '新名字' and store.config['_skill_directories'] == ['skills']
+    # The receipt keeps what the worker took (index.js applyInPlace).
+    assert taken == {'accepted': True, 'applied': ['persona model swapped',
+        'skills swapped: new action scopes read them from this package', 'existing self heads preserved']}
     edited = {**model, 'persona': {**model['persona'], 'display_name': '改过'}}
-    publish(edited)
+    assert publish(edited)['applied'][:2] == ['persona model swapped', 'skills unchanged']
     assert store.config['persona_model'] == edited, 'the newest publication, not the one the worker started with'
+    assert publish(edited, folders=('skills', 'more'))['applied'][:2] == ['persona model unchanged',
+        'skills swapped: new action scopes read them from this package']
+    # Before it is selected, a candidate is read the same way (floor.js prepare): one the worker would refuse is
+    # refused there with the reason, and reading it changes nothing.
+    assert check(edited) is None
+    assert check({**model, 'persona': {**model['persona'], 'id': 'someone-else'}}).startswith('PERSONA_ID_MISMATCH')
+    assert check(edited, persona='another-persona').startswith('PERSONA_STATE_ID_MISMATCH：正在跑的这个工作进程装不上')
+    assert store.config['persona_model'] == edited and store.config['_skill_directories'] == ['skills', 'more']
+    # Taking one that fails validation raises and changes nothing.
     with pytest.raises(PersonaModelError):
         publish({**model, 'persona': {**model['persona'], 'id': 'someone-else'}})
     assert store.config['persona_model'] == edited, 'a model that fails validation changes nothing'
+    assert store.config['_skill_directories'] == ['skills', 'more']
 
 
 def test_a_database_read_mongo_refuses_comes_back_coded_without_the_server_reply(store):

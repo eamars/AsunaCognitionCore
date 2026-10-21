@@ -241,12 +241,12 @@ With `self_development.enabled` and a working sandbox, work with these tools goe
 
 `development_publish` builds a frozen artifact and reports its actual state:
 
-- `BOOT_FAILED` / `PACK_FAILED`: the failed candidate and diagnostics are kept; nothing new was activated. The boot probe checks syntax, imports the plugin entry in a child process (resolving Host packages from this installation), and reads `persona-model.json` (its persona id cannot change) and `cordis.patch.yml`.
+- `BOOT_FAILED` / `PACK_FAILED`: the failed candidate and diagnostics are kept; nothing new was activated. The boot probe checks syntax, imports the plugin entry in a child process (resolving Host packages from this installation), and reads `persona-model.json` (its persona id cannot change) and `cordis.patch.yml`; with Core running, the running worker also reads a persona package as it would take it, so a package it would refuse is never selected.
 - `APPLIED`: selected, not yet confirmed running.
 - `ACTIVE`: the relevant worker or resources loaded successfully.
 - `HOST_RESTART_REQUIRED`: restart this Host to install the selected JS, composition or dependency change.
 
-The receipt's `activated` says whether the published artifact is already the one running: `false` beside `APPLIED` means published and not yet running. Read it first; the activation record (`active` against `selection`) says the same later.
+The receipt's `activated` says whether the published artifact is already the one running: `false` beside `APPLIED` means published and not yet running. `unchanged: true` beside it means the package is byte for byte the one running, so nothing was swapped in. Read it first; the activation record (`active` against `selection`) says the same later.
 
 At night she gets self-improvement turns in stages: inside a window on her clock (default 01:00–06:00) one every N minutes (default 30), each with the development grant. A stage is skipped while an earlier one's turn or task is still at work, or while one of her publications is still being activated, so one stage does one thing. The window and pace are her policy keys (`self_development.night_start_hour`, `night_hours`, `night_every_min`); `self_development.night: false` in the local config switches the stages off. A publication that needs a Host restart waits for the next Host restart (the owner's, or one she asks for at home with her `restart` tool); until then the Asuna plugin card says which project's change waits and since when, the stages go on, and a self-improvement turn cannot publish to that project.
 

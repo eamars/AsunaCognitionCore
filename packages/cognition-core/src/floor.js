@@ -168,12 +168,19 @@ export class PublicationFloor {
     this.projects = new Map((config.projects ?? []).map(project => [project.id, project]));
     this.serial = Promise.resolve();
     this.coreProbe = null;
+    this.personaProbe = null;
   }
 
   /** Core lends the floor a settings check for a core candidate's worker (see prepare). Returns the release. */
   setCoreProbe(probe) {
     this.coreProbe = probe;
     return () => { if (this.coreProbe === probe) this.coreProbe = null; };
+  }
+
+  /** Core lends the floor its running worker's reading of a persona package (see prepare). Returns the release. */
+  setPersonaProbe(probe) {
+    this.personaProbe = probe;
+    return () => { if (this.personaProbe === probe) this.personaProbe = null; };
   }
 
   /** The selection record (activation.json): each project's published selection (`projects`) and the one that last ran (`active`). */
@@ -464,7 +471,10 @@ export class PublicationFloor {
     for (const name of changed) { const target = path.join(project.source, name);
       await fs.mkdir(path.dirname(target), { recursive: true }); await fs.copyFile(current.get(name), target); }
     await atomic(project.baselineFile, hashes);
-    return { ...value, activated: same, ...await this.commitPublished(project, [...changed, ...deleted], reason, identity, author) };
+    // `activated`: this publication is what runs now. A package byte for byte the running one is, with nothing swapped
+    // (`unchanged`); a persona or channel one becomes it in the Host's in-place apply (index.js applyInPlace).
+    return { ...value, activated: same, ...(same && { unchanged: true }),
+      ...await this.commitPublished(project, [...changed, ...deleted], reason, identity, author) };
   }
 
   /** Her publication committed where it was copied, under her name (`author` {name, email}, the character's git name),
@@ -577,6 +587,13 @@ export class PublicationFloor {
         { env: { ...process.env, PYTHONPATH: await this.workerPath(), PYTHONUTF8: '1', PYTHONDONTWRITEBYTECODE: '1' } });
       if (checked.exit_code !== 0) return { packageRoot: target, workerPath, boot_probe: checked };
       probe = { ...probe, stdout: probe.stdout + checked.stdout };
+    }
+    // With Core running, its worker reads a persona package as it would take it, now or at the next start: one it
+    // would refuse is refused here, before anything is selected or committed.
+    if (!workerPath && this.personaProbe) {
+      const read = await this.personaProbe(project.id, target);
+      if (read.exit_code !== 0) return { packageRoot: target, workerPath, boot_probe: read };
+      probe = { ...probe, stdout: probe.stdout + read.stdout };
     }
     if (workerPath) {
       probe = await run(this.config.python ?? this.workerPython, ['-c', 'import asuna.native_worker; print("Worker imports.")'],

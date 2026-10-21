@@ -6,6 +6,8 @@ import { execFileSync } from 'node:child_process';
 import { Context } from '@deepseek-ai/cordis';
 import LocalSpillStore from '@deepseek-ai/dsh-spill-local';
 import { PublicationFloor } from '../src/floor.js';
+import { CognitionCore } from '../src/index.js';
+import { asunaLogExporter } from '../src/log-sink.js';
 import { readSpill } from '../src/spill.js';
 
 test('actual npm artifact freezes a bounded candidate; edits do not change active resources', async t => {
@@ -48,7 +50,9 @@ test('a publication whose package is byte for byte the running one is active at 
   await floor.call('development_write', { path: '.tmp/scratch.py', text: 'her temporary folder' });
   const second = await floor.call('development_publish', { reason: 'a document only' });
   assert.equal(second.state, 'ACTIVE', JSON.stringify(second));            // not APPLIED: the Host restarts for APPLIED
-  assert.equal(second.activated, true);
+  assert.equal(second.activated, true, 'what runs now');
+  assert.equal(second.unchanged, true, 'the running package: nothing swapped in');
+  assert.equal(first.unchanged, undefined);
   assert.equal(second.sha256, first.sha256);
   assert.deepEqual(second.changed_files, ['docs/notes.md']);
   assert.equal(await fs.readFile(path.join(source, 'docs/notes.md'), 'utf8'), 'outside the package');
@@ -79,6 +83,89 @@ test('each publication has its own receipt: A, B, then A again (a revert) gives 
   assert.equal(new Set([a.receipt_id, b.receipt_id, reverted.receipt_id]).size, 3, JSON.stringify([a, b, reverted].map(r => r.receipt_id)));
   for (const receipt of [a, b, reverted]) assert.ok(receipt.receipt_id.startsWith('self-publish-' + receipt.candidate.slice(0, 32) + '-'));
   assert.equal((await floor.selected()).projects.persona.receipt_id, reverted.receipt_id);
+});
+
+// A Core over a stand-in floor and worker: what the Host does around a publication.
+const persona = model => ({ id: 'demo', resource_root: '/installed', model, seeds: [], jobs: [], skill_directories: [] });
+function hostWith(floor, call, logged = []) {
+  const core = new CognitionCore({ get: () => undefined, agents: { get: () => undefined }, llm: {}, asunaFloor: floor,
+    logger: { info: line => logged.push(line) } }, { persona: 'demo', deployment: {}, routes: {} });
+  core.personas.set('demo', persona('persona-model.json'));
+  core.channelPlugins = async () => [];
+  core.worker = { call };
+  return core;
+}
+
+test('a persona publication applied in place: the receipt says what the worker took, one log line each time', async () => {
+  const logged = [], readied = [];
+  const record = { project: 'persona', state: 'APPLIED', sha256: 'abcdef0123456789', receipt_id: 'self-publish-x' };
+  const floor = { persona: async persona => persona, skillPaths: async () => ['persona-skills'], effective: async () => undefined,
+    workerReady: async id => { readied.push(id); return [{ ...record, state: 'ACTIVE', activated_at: '2026-10-21T09:00:00.000Z' }]; } };
+  const lines = ['persona model swapped', 'skills swapped: new action scopes read them from this package', 'existing self heads preserved'];
+  const core = hostWith(floor, async (method, args) => {
+    assert.equal(method, 'persona.resources'); assert.ok(args.skill_directories.includes('persona-skills'));
+    return { accepted: true, applied: lines };
+  }, logged);
+  const swapped = await core.applyInPlace({ ...record, activated: false, commit: 'c0ffee1' });
+  assert.equal(swapped.state, 'ACTIVE');
+  assert.equal(swapped.activated, true);
+  assert.deepEqual(swapped.applied, lines, 'the worker\'s own lines');
+  assert.equal(swapped.commit, 'c0ffee1', 'the commit survives the activation record');
+  assert.deepEqual(readied, ['persona']);
+  assert.deepEqual(logged, ['Asuna publication: persona abcdef012345 applied in place: ' + lines.join('; ')]);
+  // The line reaches restart/host.log: the log sink keeps lines that start with Asuna.
+  const written = [];
+  asunaLogExporter(text => written.push(text)).export({ ts: 0, type: 'info', args: [logged[0]] });
+  assert.equal(written.length, 1);
+});
+
+test('the running worker reads a persona candidate as it would take it, before anything is selected', async () => {
+  const calls = [];
+  const floor = { config: { defaultProject: 'persona' } };
+  const core = hostWith(floor, async (method, args) => {
+    calls.push([method, args.persona.model]);
+    return { refused: args.persona.model.includes('bad') ? 'PERSONA_ID_MISMATCH: …：正在跑的这个工作进程装不上这个人格包' : null };
+  });
+  core.lifecycle.state = 'ready';
+  assert.equal((await core.personaProbe('persona', path.resolve('/candidate'))).exit_code, 0);
+  assert.deepEqual(calls, [['persona.check', path.join(path.resolve('/candidate'), 'persona-model.json')]], 'read at the candidate');
+  core.personas.set('demo', persona('bad-model.json'));
+  const refused = await core.personaProbe('persona', path.resolve('/candidate'));
+  assert.equal(refused.exit_code, 1);
+  assert.match(refused.stderr, /PERSONA_ID_MISMATCH.*装不上/);
+  // Another project has no persona model; a worker not running cannot say (recovery): the probe passes both.
+  assert.equal((await core.personaProbe('napcat-qq', '/candidate')).exit_code, 0);
+  core.lifecycle.state = 'failed';
+  assert.equal((await core.personaProbe('persona', '/candidate')).exit_code, 0);
+  assert.equal(calls.length, 2);
+});
+
+test('a persona package the worker would refuse is refused at publication: nothing selected, nothing written back', async t => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/persona-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  const source = path.join(workspace, 'source'); await fs.mkdir(source);
+  await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', files: ['README.md'], type: 'module' }));
+  await fs.writeFile(path.join(source, 'README.md'), 'Running');
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
+  const read = [];
+  floor.setPersonaProbe(async (project, root) => { read.push([project, root]);
+    return { exit_code: 1, stdout: '', stderr: 'PERSONA_STATE_ID_MISMATCH：正在跑的这个工作进程装不上这个人格包' }; });
+  await floor.call('development_write', { path: 'README.md', text: 'Refused', overwrite: true });
+  const refused = await floor.call('development_publish', { reason: 'refused by the worker' });
+  assert.equal(refused.state, 'BOOT_FAILED');
+  assert.equal(refused.activated, false);
+  assert.match(refused.boot_probe.stderr, /PERSONA_STATE_ID_MISMATCH/);
+  assert.equal(read[0][0], 'persona');
+  assert.equal((await floor.selected()).projects.persona, undefined, 'nothing selected');
+  assert.equal(await fs.readFile(path.join(source, 'README.md'), 'utf8'), 'Running', 'nothing copied to the source');
+  // Released, the probe no longer runs; the same candidate then publishes.
+  const release = floor.setPersonaProbe(async () => ({ exit_code: 0, stdout: ' The running worker takes this persona package.\n', stderr: '' }));
+  const taken = await floor.call('development_publish', { reason: 'taken' });
+  assert.equal(taken.state, 'APPLIED', JSON.stringify(taken.boot_probe));
+  assert.match(taken.boot_probe.stdout, /The running worker takes this persona package/);
+  release();
+  assert.equal(floor.personaProbe, null);
 });
 
 test('ADR-010 D9: a file she changed whose source moved after her baseline is marked stale before publish', async t => {

@@ -24,7 +24,7 @@ import { appendFile } from 'node:fs/promises';
 import { NativeSchedules } from './schedule.js';
 import { AsunaApi } from './api.js';
 import { readSpill } from './spill.js';
-import { normalizePersona } from './persona.js';
+import { normalizePersona, resolvePersona } from './persona.js';
 import { normalizeChannel } from './channel.js';
 import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput, retitleSession } from './navigation.js';
 import { release, releaseAfterCompaction, repair } from './pairing.js';
@@ -263,6 +263,35 @@ export class CognitionCore {
     return [core, ...await this.ctx.asunaFloor.skillPaths(persona), ...channels.flatMap(channel => channel.skill_directories)];
   }
 
+  /** A persona or channel publication that needs no restart: the worker takes the persona model at once, new action
+   * scopes discover its skills, and the next integration_start runs its adapter. The receipt keeps the worker's lines
+   * on what it took; one log line each time, kept in restart/host.log (log-sink.js). */
+  async applyInPlace(value) {
+    const persona = this.personas.get(this.config.persona);
+    const channels = await this.channelPlugins(this.config.deployment);
+    const taken = await this.worker.call('persona.resources', { persona: await this.ctx.asunaFloor.persona(persona),
+      skill_directories: await this.skillDirectories(persona, channels), channels });
+    this.ctx.logger.info('Asuna publication: ' + value.project + ' ' + String(value.sha256).slice(0, 12)
+      + ' applied in place: ' + taken.applied.join('; '));
+    // The activation record was written before her publication was committed: the receipt keeps what the commit said.
+    const { commit, commit_error: commitError } = value;
+    const [ready] = await this.ctx.asunaFloor.workerReady(value.project);
+    return { ...ready, activated: true, applied: taken.applied, ...(commit && { commit }),
+      ...(commitError && { commit_error: commitError }) };
+  }
+
+  /** The running worker's reading of a persona package published to `root`, as it would take it on a swap or at the
+   * next start (persona.check: its model loaded and its id checked, nothing applied), in the boot probe's form. Only
+   * the persona's own project has one, and only a running worker can say; otherwise the probe passes it. */
+  async personaProbe(project, root) {
+    const persona = this.personas.get(this.config.persona);
+    if (project !== this.ctx.asunaFloor.config.defaultProject || !persona || this.lifecycle.state !== 'ready')
+      return { exit_code: 0, stdout: '', stderr: '' };
+    const { refused } = await this.worker.call('persona.check', { persona: resolvePersona(persona, root) });
+    return refused ? { exit_code: 1, stdout: '', stderr: refused }
+      : { exit_code: 0, stdout: ' The running worker takes this persona package.\n', stderr: '' };
+  }
+
   ready() {
     if (!this.initializing) this.initializing = (async () => {
       const persona = this.personas.get(this.config.persona);
@@ -285,6 +314,9 @@ export class CognitionCore {
       this.releaseProbe = this.ctx.asunaFloor.setCoreProbe(workerPath => this.validateSettings(this.config, workerPath).then(
         () => ({ exit_code: 0, stdout: ' Profile settings validated against the existing database; no live consumers started.\n', stderr: '' }),
         error => ({ exit_code: 1, stdout: '', stderr: String(error?.message ?? error) })));
+      // A persona candidate is read by this worker as it would take it, before it can be published (floor.js).
+      this.releasePersonaProbe?.();
+      this.releasePersonaProbe = this.ctx.asunaFloor.setPersonaProbe((project, root) => this.personaProbe(project, root));
       const nativeSessions = (await this.ctx.sessionPersistence.list()).map(row => ({
         id: row.header.id, createdAt: row.header.createdAt, agentPreset: row.header.agentPreset }));
       const channels = await this.channelPlugins(this.config.deployment);
@@ -664,20 +696,8 @@ export class CognitionCore {
           : event.method === 'conversation_size' ? await this.conversationSize(event.args)
           : event.method === 'errand_session' ? await this.errandSession(event.args)
           : (() => { throw new Error('Unknown Host request'); })();
-        if (event.method === 'development' && value.state === 'APPLIED' && value.project !== 'core') {
-          // A persona or channel publication that needs no restart: the worker takes the persona model at once,
-          // new action scopes discover its skills, and the next integration_start runs its adapter. A core one
-          // restarts the worker.
-          const persona = this.personas.get(this.config.persona);
-          const channels = await this.channelPlugins(this.config.deployment);
-          await this.worker.call('persona.resources', { persona: await this.ctx.asunaFloor.persona(persona),
-            skill_directories: await this.skillDirectories(persona, channels), channels });
-          // The activation record was written before her publication was committed: the receipt keeps what the
-          // commit said.
-          const { commit, commit_error: commitError } = value;
-          [value] = await this.ctx.asunaFloor.workerReady(value.project);
-          value = { ...value, ...(commit && { commit }), ...(commitError && { commit_error: commitError }) };
-        }
+        // A core publication restarts the worker; a persona or channel one applies in place.
+        if (event.method === 'development' && value.state === 'APPLIED' && value.project !== 'core') value = await this.applyInPlace(value);
         await this.worker.call('host_result', { request_id: event.request_id, value });
       } catch (error) {
         await this.worker.call('host_result', { request_id: event.request_id, error: error?.message ?? String(error) });

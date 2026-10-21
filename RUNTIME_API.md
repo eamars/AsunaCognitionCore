@@ -816,3 +816,23 @@ Her development tools work on persistent candidates of a project (the selected p
 | `HOST_RESTART_REQUIRED` | a changed JavaScript file, `package.json`, `package-lock.json`, `cordis.patch.yml`, `uv.lock`, `pyproject.toml`, or a package's `python/` | at the next Host start |
 
 While a project waits for a restart, a self-improvement turn cannot publish to it again (`DEVELOPMENT_PUBLISH_WAITING_RESTART`).
+
+Each publication has its own receipt (`sink_receipts`, kind `self_development_publish`, id
+`self-publish-<content identity>-<publication time>`), so content published again (a revert) is a receipt of its own;
+a newer publication marks a project's earlier receipt still `APPLIED` or `HOST_RESTART_REQUIRED` as `SUPERSEDED`.
+Beside the record's fields it says what happened:
+
+| Field | Meaning |
+|---|---|
+| `activated` | `true` when this publication is what runs now: a persona or channel publication applied in place, or a package byte for byte the running one; otherwise `false` |
+| `unchanged` | `true` when the package is byte for byte the running one (state `ACTIVE`): nothing was swapped in |
+| `applied` | the worker's own lines for an in-place apply: persona model swapped or unchanged, skills swapped or unchanged, existing self heads preserved |
+| `sha256` | the hash of the package archive (`.tgz`), the same value as in `activation.json` |
+
+With Core running, a persona package is also read by the running worker before it is selected, as it would take it
+on an in-place apply or at the next start (`persona.check`: its model loaded and its persona id checked, nothing
+applied); one it would refuse ends `BOOT_FAILED` with the worker's reason, and nothing is selected or committed.
+
+Each in-place apply writes one `Asuna publication:` line to `restart/host.log` (the project, the archive hash's first
+12 characters and the worker's lines). The archive hash is not the persona text's hash: a turn's context manifest
+carries `persona_sha256`, the hash of her persona document's text as that turn read it (`src/asuna/context.py`).

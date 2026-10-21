@@ -44,14 +44,20 @@ def prune_host_reports():
         shutil.rmtree(old, ignore_errors=True)
 
 
-def take_persona(config, persona):
-    """The persona package as the worker reads it: at its start and after each persona publication, so what a
-    publication reports ACTIVE is what her turns use. The model is validated (jsonschema) before anything changes."""
+def read_persona(config, persona):
+    """A persona package's model as the worker takes it, validated (jsonschema); raises PersonaModelError or
+    PERSONA_STATE_ID_MISMATCH and changes nothing. A publication is read this way before it is selected (persona.check)."""
     from .persona_model import load as load_model, neutral
     if config['chat']['persona'] != persona['id']:
         raise ValueError('PERSONA_STATE_ID_MISMATCH')
-    model = (load_model(persona['model'], persona['id']) if persona.get('model')
-             else neutral(persona['id'], persona['display_name']))
+    return (load_model(persona['model'], persona['id']) if persona.get('model')
+            else neutral(persona['id'], persona['display_name']))
+
+
+def take_persona(config, persona):
+    """The persona package as the worker reads it: at its start and after each persona publication, so what a
+    publication reports ACTIVE is what her turns use. The model is validated before anything changes."""
+    model = read_persona(config, persona)
     config['chat'] = {**config['chat'], 'display_name': persona['display_name']}
     config['character_id'] = persona['character_id']
     config['persona_contribution'] = persona
@@ -1257,15 +1263,27 @@ class BusinessWorker:
             if not self.host.schedule:
                 raise RuntimeError('SCHEDULE_NOT_MOUNTED')
             return self.host.schedule.deliver(args)
+        if method == 'persona.check':
+            # A persona publication is read as persona.resources and the next start take it, before it is selected:
+            # one this worker would refuse is never selected or committed (floor.js prepare).
+            try:
+                read_persona(self.app.config, args['persona'])
+            except ValueError as exc:
+                return {'refused': '%s：正在跑的这个工作进程装不上这个人格包，这次没有选用也没有提交；照这个改了再发布' % exc}
+            return {'refused': None}
         if method == 'persona.resources':
             # A persona publication applies in place: her model and contribution now, her skills in new action scopes.
+            model, folders = self.app.config.get('persona_model'), self.app.config.get('_skill_directories')
             take_persona(self.app.config, args['persona'])
             self.app.config['_skill_directories'] = args['skill_directories']
             # A published adapter is what the next integration_start (or restoration) runs.
             releases = [entry['integration_release'] for entry in args.get('channels') or () if entry.get('integration_release')]
             if releases:
                 self.app.config['_native_integration_release'] = releases[0]
-            return {'accepted': True, 'applies': 'persona model now; skills in new action scopes; existing self heads preserved'}
+            return {'accepted': True, 'applied': [
+                'persona model swapped' if self.app.config['persona_model'] != model else 'persona model unchanged',
+                'skills swapped: new action scopes read them from this package' if args['skill_directories'] != folders
+                else 'skills unchanged', 'existing self heads preserved']}
         if method == 'publication.activated':
             for publication in args['publications']:
                 receipt_id = publication['receipt_id']

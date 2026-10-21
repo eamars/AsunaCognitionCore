@@ -172,6 +172,7 @@ Minimal publication floor, deliberately independent of the business worker. Immu
 - def `apply`
 - class `PublicationFloor`
   - `setCoreProbe` — Core lends the floor a settings check for a core candidate's worker (see prepare).
+  - `setPersonaProbe` — Core lends the floor its running worker's reading of a persona package (see prepare).
   - `selected` — The selection record (activation.json): each project's published selection (`projects`) and the one that last ran (`active`).
   - `effective` — What runs for a project now: its selection once installed (APPLIED or ACTIVE), else the one that last ran.
   - `workerPath` — The worker's Python package: the core selection's, else this package's own.
@@ -221,6 +222,8 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `channelOf`
   - `channelPlugins` — Every configured channel's plugin, waited for (plugins register on their own schedule), with resolved paths.
   - `skillDirectories`
+  - `applyInPlace` — A persona or channel publication that needs no restart: the worker takes the persona model at once, new action scopes discover its skills, and the next integration_start runs its adapter.
+  - `personaProbe` — The running worker's reading of a persona package published to `root`, as it would take it on a swap or at the next start (persona.check: its model loaded and its id checked, nothing applied), in the boot probe's form.
   - `ready`
   - `attachSchedule`
   - `routeFor` — A brain's route: the one chosen on the settings card, else DSH's own default model (the appraiser and the action brain's 高 have none: unset, they are off).

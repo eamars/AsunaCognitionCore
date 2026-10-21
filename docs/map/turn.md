@@ -307,6 +307,7 @@ The reasons behind her actions: what she did after each thought, and the thought
 
 - def `then` — What she did after this thought, in her words, one line each; [] when it was not followed by anything.
 - def `consequential` — Whether a call has consequences (the one table: _action).
+- def `before_thought` — Whether a call may run before her first thought in the turn: a read on the closed list READS.
 - def `newest` — The id of her newest thought in this turn (before the call at seq `before`), or None; a refused thought left no memory.
 - def `reason_of` — The thought a call came from: as recorded, or by the same rule for a call recorded before reasons were.
 - def `thought` — Her thought as she wrote it (the excerpt mark if ever cut), or None.

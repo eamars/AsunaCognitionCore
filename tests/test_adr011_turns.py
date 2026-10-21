@@ -60,12 +60,30 @@ def test_words_written_before_stay_silent_still_leave(store):
 
 
 def test_think_comes_first_and_a_refusal_goes_back_to_her(store):
-    coordinator, lane = run(store, FakeTurn([('recall', {'query': '他是谁'}), THINK, ('recall', {'query': '他是谁'})], '想起来了。'))
+    """ADR-087 §4.2: a read may come before her thought (reasons.READS); a call with consequences still needs one,
+    and the refusal goes back to her in the turn."""
+    coordinator, lane = run(store, FakeTurn([
+        ('recall', {'query': '他是谁'}), ('ideas', {'do': 'note', 'idea': '记住他是谁', 'why': '老忘'}),
+        THINK, ('recall', {'query': '他是谁'})], '想起来了。'))
     ep = coordinator.ingest(event())
-    first, _, third = lane.tool_results
-    assert not first[5] and '先用 think' in first[4]
-    assert third[5] and third[4]['query'] == '他是谁'
-    assert ep['state'] == 'COMMITTED' and ep['recall_count'] == 1
+    read, noted, _, again = lane.tool_results
+    assert read[5] and read[4]['query'] == '他是谁', 'a read before the thought runs'
+    assert not noted[5] and noted[4] == role_tools.THINK_FIRST
+    assert again[5] and ep['state'] == 'COMMITTED' and ep['recall_count'] == 2
+
+
+def test_the_reads_that_may_come_before_a_thought_are_a_closed_list_of_calls_with_no_consequences():
+    from asuna import reasons
+    for tool, args in [('recall', {'query': 'x'}), ('read_image', {}), ('task', {'op': 'page'}), ('ideas', {'op': 'read'}),
+                       ('ask', {'op': 'read'}), ('find_member', {}), ('restart', {'op': 'preview'}),
+                       ('group_focus', {'op': 'list'}), ('place_timezone', {'op': 'list'}),
+                       ('private_words', {'op': 'summary'}), ('read_report', {})]:
+        assert reasons.before_thought(tool, args) and not reasons.consequential(tool, args), tool
+    for tool, args in [('feel', {'kind': '开心'}), ('task', {'op': 'answer'}), ('task', {'op': 'message'}),
+                       ('restart', {'op': 'request'}), ('group_focus', {'op': 'active'}), ('place_timezone', {'op': 'set'}),
+                       ('private_words', {'op': 'add'}), ('plan', {'op': 'create'}), ('speak', {}), ('stay_silent', {}),
+                       ('ideas', {'op': 'note'}), ('ask', {'op': 'ask'}), ('note', {}), ('sticker', {'op': 'shelf'})]:
+        assert not reasons.before_thought(tool, args), tool
 
 
 def test_a_thought_is_asked_for_120_kept_up_to_360_and_refused_past_it(store):

@@ -1227,7 +1227,9 @@ class RoleTools:
                 pass                              # her retired name, where write_document is hers (ADR-062)
             elif can not in (ep.get('turn_tools') or ()):
                 raise Refused(not_now(self.store, ep, can))
-            if name != 'think' and not ep.get('turn_thought'):
+            from . import reasons
+            # A read may come before her thought; anything else needs one (ADR-087 §4.2, reasons.READS).
+            if name != 'think' and not ep.get('turn_thought') and not reasons.before_thought(name, args):
                 raise Refused(THINK_FIRST)
             made = len(ep.get('tool_calls') or {}) + 1                # this call's number in the turn
             if made == CALLS_HARD:

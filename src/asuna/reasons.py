@@ -135,6 +135,20 @@ def consequential(tool, args):
     return isinstance(args, dict) and _action(tool, args) is not None
 
 
+# ADR-087 §4.2: the calls that write nothing and may run before her first thought in a turn, by tool or option. Every
+# other call, `feel` and `task.answer` included, needs a thought first, so each action keeps its recorded reason.
+READS = frozenset(('recall', 'read_image', 'task.page', 'ideas.read', 'ask.read', 'find_member', 'restart.preview',
+                   'group_focus.list', 'place_timezone.list', 'private_words.summary'))
+
+
+def before_thought(tool, args):
+    """Whether a call may run before her first thought in the turn: a read on the closed list READS."""
+    from .role_tools import ability
+    can = ability(tool, args)
+    op = args.get('op') if isinstance(args, dict) else None
+    return can in READS or bool(op) and '%s.%s' % (can, op) in READS
+
+
 def newest(episode, before=None):
     """The id of her newest thought in this turn (before the call at seq `before`), or None; a refused thought left
     no memory."""

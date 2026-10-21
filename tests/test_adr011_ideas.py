@@ -133,7 +133,7 @@ def test_a_newer_publication_supersedes_one_still_waiting_and_only_core_restarts
     results = iter([{'receipt_id': 'self-publish-a', 'project': 'channel', 'state': 'APPLIED', 'candidate': 'a'},
                     {'receipt_id': 'self-publish-b', 'project': 'channel', 'state': 'APPLIED', 'candidate': 'b'},
                     {'receipt_id': 'self-publish-c', 'project': 'core', 'state': 'APPLIED', 'candidate': 'c'}])
-    worker = SimpleNamespace(host_call=lambda method, args: next(results))
+    worker = SimpleNamespace(host_call=lambda method, args, timeout=120: next(results))
     bridge = NativeDevelopmentBridge(worker, store.config, store)
     task = {'_id': 'task-dev', 'scene_id': 'dm-a', 'requester_id': 'A', 'development_grant': True,
             'scope_key': 'scene:dm-a', 'intent_revision': 1}
@@ -165,7 +165,7 @@ def test_a_revert_published_again_is_its_own_receipt_and_supersedes_the_one_befo
     results = iter([{'receipt_id': receipt('a', 1), 'project': 'persona', 'state': 'APPLIED', 'candidate': 'a'},
                     {'receipt_id': receipt('b', 2), 'project': 'persona', 'state': 'APPLIED', 'candidate': 'b'},
                     {'receipt_id': receipt('a', 3), 'project': 'persona', 'state': 'APPLIED', 'candidate': 'a'}])
-    bridge = NativeDevelopmentBridge(SimpleNamespace(host_call=lambda method, args: next(results)), store.config, store)
+    bridge = NativeDevelopmentBridge(SimpleNamespace(host_call=lambda method, args, timeout=120: next(results)), store.config, store)
     task = {'_id': 'task-dev', 'scene_id': 'dm-a', 'requester_id': 'A', 'development_grant': True,
             'scope_key': 'scene:dm-a', 'intent_revision': 1}
     for _ in range(3):
@@ -240,6 +240,24 @@ def test_a_database_read_mongo_refuses_comes_back_coded_without_the_server_reply
     assert 'clusterTime' not in str(refused.value)
     with pytest.raises(ValueError, match='DEVELOPMENT_PAGE_INVALID: .*skip=-1，limit=20'):
         bridge.call(task, 'development_database_read', {'collection': 'scenes', 'skip': -1})
+
+
+def test_a_development_command_is_waited_for_as_long_as_it_was_given(store):
+    """Live 10-20/21: a command given 240, 300 or 600 s came back as a program fault at 120 s while the Host still ran
+    it, and the next call waited behind it. The wait follows the command's own time; other tools keep 120 s."""
+    from types import SimpleNamespace
+    from asuna.native_worker import NativeDevelopmentBridge
+    owner(store)
+    waits = []
+    worker = SimpleNamespace(host_call=lambda method, args, timeout=120: waits.append((args['tool'], timeout)) or {})
+    bridge = NativeDevelopmentBridge(worker, store.config, store)
+    task = {'_id': 'task-dev', 'scene_id': 'dm-a', 'requester_id': 'A', 'development_grant': True,
+            'scope_key': 'scene:dm-a', 'intent_revision': 1}
+    for args in ({'argv': ['python3', '-V'], 'timeout': 600}, {'argv': ['python3', '-V']}, {'argv': ['x'], 'timeout': 'long'}):
+        bridge.call(task, 'development_run', args)
+    bridge.call(task, 'development_write', {'path': 'a.txt', 'content': 'x'})
+    assert waits == [('development_run', 660), ('development_run', 95), ('development_run', 95),
+                     ('development_write', 120)]
 
 
 def test_a_database_read_of_an_archived_row_still_reaches_her_character_brain(store):

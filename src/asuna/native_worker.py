@@ -348,14 +348,16 @@ class BusinessWorker:
         self.stopping = threading.Event()
         self.carry_lock = threading.Lock()
 
-    def host_call(self, method, args):
+    def host_call(self, method, args, timeout=120):
+        """A request the Host answers; `timeout` is how long to wait for it, which must cover any time the request
+        itself is allowed to take there."""
         request_id = uuid.uuid4().hex
         future = Future()
         with self.pending_lock:
             self.host_pending[request_id] = future
         self.emit({'kind': 'host_request', 'request_id': request_id, 'method': method, 'args': args})
         try:
-            return future.result(timeout=120)
+            return future.result(timeout=timeout)
         finally:
             with self.pending_lock:
                 self.host_pending.pop(request_id, None)
@@ -1333,6 +1335,18 @@ class NativeDevelopmentBridge:
     def __init__(self, worker, config, store):
         self.worker, self.config, self.store = worker, config, store
 
+    # development_run's own time in the Host (floor.js: 35 s unless the call gives 1..600) and the room after it.
+    RUN_SECONDS, RUN_SPARE_SECONDS = 35, 60
+
+    @classmethod
+    def wait_seconds(cls, tool, args):
+        """How long to wait for the Host's answer: a command runs as long as it was given there and then returns what
+        it printed, so the wait covers that time; every other development tool answers within the Host's 90 s."""
+        if tool != 'development_run':
+            return 120
+        given = args.get('timeout')
+        return (given if type(given) is int and 1 <= given <= 600 else cls.RUN_SECONDS) + cls.RUN_SPARE_SECONDS
+
     def call(self, task, tool, args):
         from . import visibility
         scene = self.store.db.scenes.find_one({'_id': task['scene_id']}) or {'_id': task['scene_id']}
@@ -1387,7 +1401,8 @@ class NativeDevelopmentBridge:
                 # A self-improvement turn runs with nobody present (ADR-021 D4: it never publishes onto a waiting change).
                 'unattended': episode.get('episode_kind') == 'self_development'},
                 # Her publication is committed in the checkout under her own git name (`character_git`).
-                **({'author': self.store.config.get('character_git')} if tool == 'development_publish' else {})})
+                **({'author': self.store.config.get('character_git')} if tool == 'development_publish' else {})},
+                timeout=self.wait_seconds(tool, args))
         except RuntimeError as exc:
             if tool == 'development_write' and 'EEXIST' in str(exc):
                 raise ValueError('DEVELOPMENT_FILE_EXISTS: %s 已经存在；要替换就加 overwrite: true，要保留就换个路径'

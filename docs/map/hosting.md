@@ -22,7 +22,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `wait` — The stage's result; her tool calls in the meantime run here, one at a time, in call order.
   - `close`
 - class `BusinessWorker`
-  - `host_call`
+  - `host_call` — A request the Host answers; `timeout` is how long to wait for it, which must cover any time the request itself is allowed to take there.
   - `emit`
   - `initialize`
   - `prepare_navigation` — Bind real native conversations; the Host owns their logs and workspaces.
@@ -60,6 +60,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `schedule`
   - `close`
 - class `NativeDevelopmentBridge` — Keep source publication available even when this worker cannot import.
+  - `wait_seconds` — How long to wait for the Host's answer: a command runs as long as it was given there and then returns what it printed, so the wait covers that time; every other development tool answers within the Host's 90 s.
   - `call`
 - def `error_text`
 - class `Dispatcher`

@@ -123,6 +123,13 @@ def test_feel_lands_a_person_feeling_with_the_person_only_where_it_cannot_be_a_g
         lane = FakeLane(store, [FakeTurn([THINK, ('feel', {**record[1], 'ref': 'group-2', 'why': '错的人', 'who': '[没有这人 #99]'})], '嗯。')])
         Coordinator(store, lane).ingest(turn_event('group-2', scene='g1'))
         assert not lane.tool_results[1][5] and '不是这个对话里的人' in lane.tool_results[1][4]
+        # A feeling not about a person, with who written: refused in words (live 10-21: a NameError instead).
+        kinds = store.config['persona_model']['affect']['kinds']
+        mood = next(name for name, kind in kinds.items() if kind.get('about') != 'person')
+        lane = FakeLane(store, [FakeTurn([THINK, ('feel', {**record[1], 'feeling': mood, 'ref': 'dm-2', 'why': '只是心情',
+                                                           'who': '[A #1]'})], '嗯。')])
+        Coordinator(store, lane).ingest(turn_event('dm-2'))
+        assert not lane.tool_results[1][5] and '不是对人的心情，不用写 who' in lane.tool_results[1][4]
 
 
 def test_someone_calling_her_is_said_as_her_choice_and_silence_says_what_it_leaves(store):

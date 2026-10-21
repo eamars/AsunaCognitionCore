@@ -78,6 +78,9 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
   per session and resets a reused `asuna_v2_test_*` database for each test; every test database is dropped at
   session end, failures included. Mongo tests skip when the service is unavailable.
 - Native node tests and the native worker/product tests use synthetic inference and create no database.
+- The Python suites need the `dev` dependency group (`uv sync` installs it): pytest, mongomock and pyflakes.
+  `tests/test_no_undefined_names.py` fails on any name a Python file uses but never defines, in `src/asuna`,
+  `tools`, `packages/channels` and `tests` (not the vendored websocket client or the persona packages).
 - pytest imports `asuna` from the checkout's own `src/` (`pythonpath` in `pyproject.toml`), never an installed copy.
 - A test run writes only under the data folder (`ASUNA_DATA_ROOT`, else the checkout's `.runtime`) and pytest's
   `--basetemp`; the DSH home it uses is `<data>/asuna-dsh`, whatever `config/local.json` names. A run confined to one

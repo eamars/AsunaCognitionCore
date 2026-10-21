@@ -2425,7 +2425,7 @@ class RoleTools:
         """ADR-086 D1: a feeling of a person kind lands with that person. `who` is resolved from the label she wrote;
         in a one-to-one conversation an unwritten `who` is the person there; in a group an unwritten one stays in
         the global mood (a guess would put false state on a real person). Returns (fields, where it landed)."""
-        from .affect import kind_key, person_kinds
+        from .affect import kind_key, kind_label, person_kinds
         kind = kind_key(ledger.model, fields.get('kind'))
         scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
         if kind not in person_kinds(ledger.model):

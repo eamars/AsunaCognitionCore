@@ -98,7 +98,7 @@ Host-owned resource grants, never inferred from a message or model role.
 
 Business ownership for native DSH reminders; no host time wheel.
 
-- def `intent_problem` — What is wrong with a plan's intent, with its length and the limit.
+- def `intent_problem` — What is wrong with a plan's intent, with its length and the length she is asked for.
 - def `night_stage_busy` — Why a night stage would stack on an earlier one, or None: a self-development turn or its task still at work, or one of her publications still being activated.
 - def `waiting_restart` — Her publications that run only once the Host restarts: [(project, published_at)], oldest first.
 - def `set_titles` — The Host's words for her rhythm tasks; keys it does not know are ignored.

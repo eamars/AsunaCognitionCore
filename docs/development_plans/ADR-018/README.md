@@ -461,3 +461,13 @@ another home line opened could not (`_turn_rules` left every `note` turn out of 
 `ideas.read` as well, read only; `ideas.review` stays in self-improvement turns and when the owner asks in private.
 The refusal for each now says its own rule (`NOT_NOW`: reading also in a note-woken turn; deciding only there and
 when asked). Test: `tests/test_notes.py`.
+
+### Addendum 2026-10-22: the reason she reads where the tool is not in a turn
+
+She asked (2026-10-22 morning) for a warning before her daily note limit, having read 「今天的条数用完了」 twice that
+night where `note` was not in her turn, once while she meant to send a control note. No daily count takes the tool away:
+the caps (ADR-084 B11–B13) refuse a note from a public conversation when it is written, and `note` is left out of a turn
+only where a reply opened it (note, reply, stop) or nothing else is reached (`notes.allowed`). The line named a cause
+that cannot happen, so a warning would have been built on it. Now `not_now` says the real one: in a turn a reply opened,
+the chain's end (`notes.REPLY_ENDS`, the same words as NOTE_HOP_LIMIT); elsewhere, 「这回合没有能送便条的地方：没有别的
+对话可去。」 Test: `tests/test_notes.py`.

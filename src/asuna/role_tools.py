@@ -936,7 +936,7 @@ NOT_NOW = {
     'errand': ('差事在家里接：有人跟你说话让你去办、你自己的计划到点、或者你在家里写的便条叫醒你的那一回合，'
                '去处列在 errand_places_from_program；自己想去别处串门，用 visit。'),
     'visit': 'visit 只在家里的心跳或计划到点的回合里用：想出门，等下一拍心跳，或者用 plan 定个时间，到点再去。',
-    'note': '这回合没有能留条的地方：今天的条数用完了，或者没有别的对话可去。',
+    'note': '这回合没有能送便条的地方：没有别的对话可去。',
 }
 ERRAND_NOTE = ('外面写来的便条叫起来的回合，只有便条带着主人本人的原话（程序核对过他的账号）才能接差事；这张没有。'
                '要去办，等主人在家里说，或者写进计划。')
@@ -966,6 +966,12 @@ def not_now(store, ep, name):
         cls = (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
         if (kind == 'note' and trust != notes.TRUSTED) or (trust == notes.UNTRUSTED and cls == visibility.OWNER_PRIVATE):
             return NOTE_ONLY
+    if name == 'note':
+        # The tool is left out only where a reply opened the turn or nowhere else is reached (notes.allowed); the daily
+        # counts refuse a note when it is written, they never take the tool away.
+        from . import notes
+        if not notes.can_send(notes.opening(store, ep)):
+            return notes.REPLY_ENDS
     return NOT_NOW.get(name, '这一回合用不了 %s。' % named(name))
 
 

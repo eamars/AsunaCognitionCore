@@ -36,6 +36,7 @@ PUBLIC_HOME_PER_SCENE = 6        # public -> home, per sending conversation and 
 PUBLIC_PAIR = 3                  # public -> public, per pair of conversations
 PUBLIC_TOTAL = 10                # public -> public, in all
 MAX_HOP = 2                      # a note, its reply, and no more
+REPLY_ENDS = '这一回合是一张回信叫起来的，不能再写便条了（便条、回信，到此为止）；想说的就在这一回合里说。'
 KEEP_HOURS = 72                  # unread past this: expired
 SHOWN = 5
 EXCERPT = 60
@@ -234,7 +235,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
     persona, trust = ep['persona'], trust_of(cls)
     first = opening(store, ep)
     if not can_send(first):
-        raise NoteRefused('NOTE_HOP_LIMIT', '这一回合是一张回信叫起来的，不能再写便条了（便条、回信，到此为止）；想说的就在这一回合里说。')
+        raise NoteRefused('NOTE_HOP_LIMIT', REPLY_ENDS)
     found = allowed(store, ep['scene_id'], cls, first)
     place = _resolve(store, persona, found, args.get('to'), cls)
     if not place:

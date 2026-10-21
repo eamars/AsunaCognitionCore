@@ -468,6 +468,23 @@ def test_a_home_turn_a_note_opened_reads_her_notebook_and_decides_nothing_there(
     assert not {'ideas.read', 'ideas.review'} & set(role_tools._turn_rules(store, plan_due)), 'a plan due: unchanged'
 
 
+def test_where_the_note_tool_is_not_in_a_turn_she_reads_the_real_reason(store):
+    """No daily count takes the tool away (they refuse a note when it is written): a turn a reply opened says the chain
+    ended there, any other says there is nowhere to send (she read 「今天的条数用完了」 there, 2026-10-22)."""
+    world(store)
+    store.db.notes.insert_one({'_id': 'n-reply', 'schema_version': 1, 'trust': 'trusted', 'from_scene': 'g1',
+                               'to_scene': 'dm-a', 'hop': 2, 'reply_to': 'n-first', 'text': '知道了',
+                               'created_at': '2026-10-21T00:00:00+00:00'})
+    ep = {'_id': 'ep-reply', 'scene_id': 'dm-a', 'person_id': 'A', 'persona': 'P1', 'episode_kind': 'note',
+          'context': {}, 'manifest': {'session_class': visibility.OWNER_PRIVATE}}
+    store.db.messages.insert_one({'_id': 'in-' + ep['_id'], 'schema_version': 1, 'scene_id': 'dm-a',
+                                  'event': {'note': {'id': 'n-reply', 'trust': 'trusted', 'hop': 2}}})
+    assert not notes.allowed(store, 'dm-a', visibility.OWNER_PRIVATE, notes.opening(store, ep))
+    assert role_tools.not_now(store, ep, 'note') == notes.REPLY_ENDS
+    asked = {**ep, '_id': 'ep-asked', 'episode_kind': 'turn'}
+    assert role_tools.not_now(store, asked, 'note') == role_tools.NOT_NOW['note'] and '今天' not in role_tools.NOT_NOW['note']
+
+
 @pytest.mark.parametrize('trust,cls', [('untrusted', visibility.OWNER_PRIVATE), ('trusted', visibility.OWNER_PRIVATE),
                                        ('untrusted', visibility.PUBLIC)])
 def test_a_visit_an_outside_note_opens_in_a_home_group_does_nothing_with_consequences(store, trust, cls):

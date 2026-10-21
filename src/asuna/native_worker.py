@@ -142,6 +142,14 @@ class NativeLane:
                     if not artifact:
                         raise Denied('STALE_TASK_FENCE')
                 ep = self.store.db.episodes.find_one({'_id': task['episode_id']})
+                if ep and self.lane == 'executor' and task.get('native_session_id'):
+                    # The action brain works for its task: the task's place, requester and conversation, which for
+                    # one begun on an errand are home's, not the errand turn's (coordinator.delegate).
+                    home = self.store.db.sessions.find_one({'_id': task['native_session_id']}, {'character_context': 1})
+                    ep = {**ep, 'scene_id': task['scene_id'], 'person_id': task['requester_id'],
+                          'scope_key': task['scope_key'], 'policy_epoch': task['policy_epoch'],
+                          'native_session_id': task['native_session_id'],
+                          'character_context': (home or {}).get('character_context', ep.get('character_context'))}
             else:
                 ep = self.store.db.episodes.find_one({'_id': base.split(':', 1)[0]})
             if not ep:

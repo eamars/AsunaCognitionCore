@@ -94,6 +94,62 @@ def test_a_task_begun_on_an_errand_is_homes_and_its_report_comes_home(store):
     assert '托话的那边是 %s' % task['errand_place'] in said['text']
 
 
+def test_the_action_brain_of_a_task_begun_on_an_errand_works_in_homes_folder(store, tmp_path):
+    """Regression (live 2026-10-21 15:26): the action session was bound from the errand turn (the group, its folder),
+    the task from home, so every tool call of that run was refused WORKSPACE_GRANT_MISMATCH."""
+    import threading, types
+    from pathlib import Path
+    import pytest
+    from asuna.native_worker import NativeLane
+    from asuna.tasks import TaskService
+    service = group_world(store)
+    store.config['chat']['workspace'] = str(tmp_path)
+    _, ep, lane, _ = sent_on_errand(store, service, calls=[('delegate', {'title': '查开会的地方', 'brief': '查一下'})])
+    [task_id] = [row[4]['task'] for row in lane.tool_results if row[2] == 'delegate']
+    # Live, the errand turn runs in its own copy of the group's conversation and the task belongs to home's.
+    store.db.episodes.update_one({'_id': ep['_id']}, {'$set': {'native_session_id': 'errand-1'}})
+    store.db.tasks.update_one({'_id': task_id}, {'$set': {'native_session_id': 'role-home'}})
+    ep = store.db.episodes.find_one({'_id': ep['_id']})
+    task = TaskService(store).claim(task_id)
+    store.config['workflow_timeout_seconds'] = 0.2
+    emitted = []
+
+    class Worker:
+        pending_lock = threading.Lock()
+        pending = {}
+        navigation_ready = threading.Event()
+        navigation_ready.set()
+        controller = types.SimpleNamespace(ingress_lock=threading.Lock(), reconfiguring=False)
+        app = types.SimpleNamespace(service=TaskService(store), broker=types.SimpleNamespace(bindings={}))
+
+        def continued_session(self, session_id):
+            return session_id
+
+        def action_session_id(self, binding, role_id, ep, task):
+            return 'action-1'
+
+        def refusals_for(self, task):
+            return {}
+
+        def bind_session(self, session_id, values):
+            return {'_id': session_id, **values}
+
+        def emit(self, request):
+            emitted.append(request)
+
+    native = NativeLane(Worker(), {'executor': {'model': 'native-host'}}, store, None, 'executor')
+    with pytest.raises(TimeoutError):
+        native.generate('b', task['_id'] + ':execute:' + str(task['intent_revision']), 'EXECUTE', 'brief', 'system')
+    [stage] = [request for request in emitted if request['kind'] == 'stage']
+    bound = stage['binding']
+    assert Path(bound['cwd']).resolve() == tmp_path.resolve(), 'home\'s folder, which the task\'s grant names'
+    assert (bound['scene_id'], bound['person_id']) == (task['scene_id'], task['requester_id'])
+    assert bound['role_session_id'] == task['native_session_id'] != ep['native_session_id']
+    from asuna.grants import workspace_grant          # the check (ToolBroker.bind) that refused every call
+    assert Path(bound['cwd']).resolve() == Path(workspace_grant(store.config, task['scene_id'], task['requester_id'])
+                                                ['workspace']).resolve()
+
+
 def test_the_destination_hears_once_what_she_said_never_the_request(store):
     service = group_world(store)
     _, ep, _, _ = sent_on_errand(store, service, request='HOME_ONLY_WORDS 今晚开会', said='今晚八点开会，大家记得')

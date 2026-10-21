@@ -158,3 +158,10 @@ under home's own session, so its thread and its report are drawn there, where ho
 names the errand's place (`errand_place`), so she can carry the result back with another errand; the delegate result
 says so (`errands.HOME_TASK`). Steering the tasks listed on an errand stays out (`errands.NO_STEER`): they are that
 conversation's. Her condition: without the place in the report, the extra hop would become a hop that never runs.
+
+**Found unmet live (2026-10-21 15:26, her report):** a task begun on an errand had every tool call refused
+`WORKSPACE_GRANT_MISMATCH` (14 calls; only `todo_write`, which touches no folder, worked). The task was home's, but its
+action session was bound from the errand turn: the group's place, person and folder. The broker checks a run's folder
+against its task's grant (home's), so nothing could pass. Fixed: the action session is bound from its task
+(`NativeLane`: the task's scene, requester, scope, epoch and conversation), which for every other task is the same as
+its turn. Test: `tests/test_errand_carries_home.py::test_the_action_brain_of_a_task_begun_on_an_errand_works_in_homes_folder`.

@@ -66,7 +66,7 @@ ASK_UNKNOWN = 'ASK_QUESTION_UNKNOWN: 没有「%s」这个问题：id 照抄 ques
 # ADR-088 §4.2: a plan from a turn a note from outside opened at home is made where the note came from.
 PLAN_THERE = '建在%s（便条来的那边）：到点在那边跑，带那边的权限'
 PLAN_OUTSIDE_LINE = '这一回合是外面的便条叫起来的：安排自动建在便条来的那边，不用写 place；去掉 place 再建。'
-PLAN_OUTSIDE_GONE = '叫起这一回合的便条（或写它的那一回合）找不到了，不知道它从哪边来，安排建不了；要记着的事在这里说出来。'
+OUTSIDE_GONE = '叫起这一回合的便条（或写它的那一回合）找不到了，不知道它从哪边来，这件事做不了；要记着或要说的在这里说出来。'
 PLAN_OUTSIDE_ONLY_MADE = ('「%s」不是这一回合建的：外面的便条叫起来的回合只能改或取消它自己刚建的安排；'
                           '别的安排在它们自己的对话里改。')
 # An errand turn hands new work home but does not steer the tasks listed there: they are that conversation's, which
@@ -792,7 +792,8 @@ def _turn_rules(store, ep):
     if scene_kind == 'group' and context.get('members_from_program'):
         names.append('find_member')
     if scene_kind == 'group':
-        names += ['await_answer', 'group_focus']
+        # A home group a note from outside opened a visit in: its focus is home's to set.
+        names += ['await_answer', *([] if outside else ['group_focus'])]
     if cls == visibility.OWNER_PRIVATE:
         # restart: the Host supervisor (ADR-034), in every home turn: a plan or a note of her own that wakes her
         # to restart is when she needs it most.
@@ -1419,6 +1420,20 @@ class RoleTools:
         first = notes.opening(self.store, ep)
         return (first or {}) if notes.outside_class(self.store, ep, first) else None
 
+    def _as_place(self, ep):
+        """The turn as the place it acts for: for a turn a note from outside opened at home, the conversation the note
+        came from, with the person who spoke in the turn that wrote it (ADR-088 §4.2, the inverse of an errand), so
+        what reads or writes as a place (recall, a task's pages, a feeling) does it there; any other turn, itself.
+        Refused when that note or turn cannot be found."""
+        first = self._outside(ep)
+        if first is None:
+            return ep
+        origin = first and self.store.db.episodes.find_one(
+            {'_id': first.get('from_episode')}, {'scene_id': 1, 'person_id': 1, 'scope_key': 1, 'policy_epoch': 1})
+        if not origin:
+            raise Refused(OUTSIDE_GONE)
+        return {**ep, **{k: origin[k] for k in ('scene_id', 'person_id', 'scope_key', 'policy_epoch')}}
+
     def _place(self, ep):
         """The class of the conversation this turn is in: what goes out there and who is there."""
         return (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
@@ -1491,7 +1506,10 @@ class RoleTools:
             raise Refused('sections 是至多 3 条 {doc, section}（都是文字，section 照抄 recall 或文档里的）%s。'
                           % ('；给了 %d 条' % len(sections) if isinstance(sections, list) and len(sections) > 3 else ''))
         c = self.coordinator
-        event = {'event_id': ep['source_event_id'], 'scene_id': ep['scene_id'], 'person_id': ep['person_id'], 'text': query}
+        # What she recalls is what the place the turn acts for would recall (_as_place).
+        where = self._as_place(ep)
+        event = {'event_id': ep['source_event_id'], 'scene_id': where['scene_id'], 'person_id': where['person_id'],
+                 'text': query}
         recalled = c.context.prepare(event, ep['persona'], recall=True, turn_kind=turn_kind(ep))[1] if query else {}
         if ep.get('errand') and query:
             # ADR-066: home's memories as well, as home would recall them.
@@ -1500,7 +1518,7 @@ class RoleTools:
             seen = {m.get('_id') for m in recalled.get('memories') or []}
             recalled = {**recalled, 'memories': [*(recalled.get('memories') or []),
                                                  *(m for m in home.get('memories') or [] if m.get('_id') not in seen)]}
-        documents, missing = read_sections(self.store, ep, [s for s in sections if s not in listing], self._cls(ep))
+        documents, missing = read_sections(self.store, where, [s for s in sections if s not in listing], self._cls(ep))
         # At home her recall also reaches what she herself thought in her groups (her own words, never theirs).
         elsewhere = []
         if self._cls(ep) == visibility.OWNER_PRIVATE and query:
@@ -1545,8 +1563,8 @@ class RoleTools:
                         self.store, ep['persona'], item['doc'], content, self._cls(ep))})
                 else:
                     result.setdefault('not_read', []).append('%s：没有这份文档' % item['doc'])
-            readable = {'global-safe', ep['scope_key'], *([visibility.owner_private_scope(ep['persona'])]
-                                                          if self._cls(ep) == visibility.OWNER_PRIVATE else [])}
+            readable = {'global-safe', where['scope_key'], *([visibility.owner_private_scope(ep['persona'])]
+                                                             if self._cls(ep) == visibility.OWNER_PRIVATE else [])}
             shown = {m.get('_id') for m in result['memories']}
             found = memory_tiers.headings(self.store, ep['persona'], c.context.pilot, query, readable, self._cls(ep),
                                           shown) if query else []
@@ -1583,9 +1601,11 @@ class RoleTools:
 
     def _recall_person(self, ep, count, value):
         """recall's person (ADR-082): both layers of one person as this conversation reads them, pinned for a write;
-        at home 「名单」 lists everyone she has written. Never touches the embedding route."""
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
-        home = self._place(ep) == visibility.OWNER_PRIVATE
+        at home 「名单」 lists everyone she has written. Never touches the embedding route. A turn a note from outside
+        opened reads as the place it acts for (_as_place)."""
+        where = self._as_place(ep)
+        scene = self.store.db.scenes.find_one({'_id': where['scene_id']}) or {'_id': where['scene_id']}
+        home = self._cls(ep) == visibility.OWNER_PRIVATE and self._place(ep) == visibility.OWNER_PRIVATE
         text = ' '.join(str(value).split())
         c = self.coordinator
         if text == _understanding.LIST_WORD:
@@ -1599,7 +1619,7 @@ class RoleTools:
             return {'people': [{k: v for k, v in r.items() if k not in ('person', 'left_out')} for r in rows]
                     or _understanding.NOT_WRITTEN + '任何人。'}
         try:
-            person_id = _understanding.resolve(self.store, ep, scene, text, ep['persona'], home=home, for_read=True)
+            person_id = _understanding.resolve(self.store, where, scene, text, ep['persona'], home=home, for_read=True)
         except _understanding.Unknown as exc:
             raise Refused(str(exc))
         view, shown = _understanding.read(self.store, scene, person_id)
@@ -2411,14 +2431,16 @@ class RoleTools:
             raise Refused('你没有情感账（affect 没开），feel 用不了；重试也一样。')
         op, cls, key = args.get('op') or ('record' if args.get('kind') else None), self._cls(ep), 'feel:' + call_id
         fields = {k: v for k, v in args.items() if k in AFFECT_FIELDS and v is not None}
+        # A feeling is recorded, settled or adopted as the place the turn acts for would: its people, its scope.
+        place = self._as_place(ep)
         if op == 'record':
-            fields, landed = self._feel_who(ep, fields, ledger)
-            row = ledger.record(ep, 0, fields, cls, key=key)
+            fields, landed = self._feel_who(place, fields, ledger)
+            row = ledger.record(place, 0, fields, cls, key=key)
             return {'event_id': row['_id'], 'feeling': kind_label(ledger.model, row.get('kind')), 'landed': landed}, False
         if op in ('close', 'void'):
             event_id = self._text(args, 'event_id', 300)
             why = self._text(args, 'why', 500, required=op == 'void')
-            ledger.amend(ep, 0, {'op': op, 'event_id': event_id, **({'why': why} if why else {})}, cls, key=key)
+            ledger.amend(place, 0, {'op': op, 'event_id': event_id, **({'why': why} if why else {})}, cls, key=key)
             return {'op': op, 'event_id': event_id}, False
         if op == 'adopt':
             item = {'proposal_id': self._text(args, 'proposal_id', 300), 'decision': args.get('decision'),
@@ -2429,7 +2451,7 @@ class RoleTools:
                 if not isinstance(args.get('edit'), dict):
                     raise Refused('do=edit 时要写 edit：改成的样子（feeling、intensity、ref、why 这些字段）。')
                 item['edit'] = args['edit']
-            row = ledger.adopt(ep, 0, item, cls, key=key)
+            row = ledger.adopt(place, 0, item, cls, key=key)
             return {'proposal_id': item['proposal_id'], 'decision': item['decision'],
                     'event_id': row['_id'] if row else None}, False
         raise Refused('do 是 record、close、void、accept、decline 或 edit%s；只记一笔心情时写 feeling 和 intensity 就行。' % _given(args, 'op'))
@@ -2485,11 +2507,8 @@ class RoleTools:
                     if args.get('line'):
                         raise Refused(PLAN_OUTSIDE_LINE)
                     # It is made as in the turn that wrote the note, with that turn's person (who spoke there).
-                    origin = outside and self.store.db.episodes.find_one({'_id': outside.get('from_episode')},
-                                                                         {'person_id': 1})
-                    if not origin:
-                        raise Refused(PLAN_OUTSIDE_GONE)
-                    where = {'scene_id': outside['from_scene'], 'person_id': origin['person_id']}
+                    origin = self._as_place(ep)
+                    where = {'scene_id': origin['scene_id'], 'person_id': origin['person_id']}
                 elif args.get('line'):
                     # From home, a plan may fire in one of her peer lines (owner 2026-10-06): both ends are home.
                     from . import lines
@@ -2941,8 +2960,9 @@ class RoleTools:
             raise Refused('page 是从 1 开始的整数%s。' % _given(args, 'page')) from None
         # At home every task of hers; anywhere else only the tasks this conversation sent (as reading a file by path).
         home = self._cls(ep) == visibility.OWNER_PRIVATE
-        where = {'_id': task_id} if home else {'_id': task_id, 'scene_id': ep['scene_id'], 'scope_key': ep['scope_key'],
-                                                'policy_epoch': ep['policy_epoch']}
+        place = self._as_place(ep)          # a turn a note from outside opened reads the tasks of where it came from
+        where = {'_id': task_id} if home else {'_id': task_id, 'scene_id': place['scene_id'],
+                                                'scope_key': place['scope_key'], 'policy_epoch': place['policy_epoch']}
         task = self.store.db.tasks.find_one(where, {'result.text': 1, 'title': 1, 'goal': 1, 'intent_revision': 1})
         if not task:
             raise Refused('「%s」不是%s的任务；task 照抄交回来的结果里的 task，或 task_state_from_program 里的 id。%s'

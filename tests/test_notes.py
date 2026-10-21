@@ -233,6 +233,47 @@ def test_nothing_made_in_a_turn_a_note_from_outside_opened_opens_a_turn_with_hom
                 is not store.config['chat'], 'never home\'s workspace'
 
 
+def test_recall_in_a_turn_a_note_from_outside_opened_reads_as_the_place_it_came_from(store, tmp_path):
+    """ADR-088 §4.2, every handler follows the class: recall there searches as the group the note came from would, so
+    home's own memories never come back into a turn whose notes go out (B10 review)."""
+    from datetime import timedelta
+    from asuna.evidence import Evidence
+    from asuna.retrieval import Retrieval
+    service = world(store)
+    who, at = store.config['character_id'], (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    unit = lambda _id, scope, text: {'_id': _id, 'schema_version': 1, 'scope_key': scope, 'policy_epoch': 1,
+                                     'kind': 'chat_chunk', 'status': 'active', 'character_id': who, 'occurred_at': at,
+                                     'body_markdown': text}
+    store.db.memory_units.insert_many([
+        unit('home-1', store.db.scenes.find_one({'_id': 'dm-a'})['scope_key'], '周末集合 主人家里的事 周末集合'),
+        unit('home-2', visibility.owner_private_scope('P1'), '周末集合 只在家里说的事 周末集合'),
+        unit('group-1', store.db.scenes.find_one({'_id': 'g1'})['scope_key'], '周末集合 爬山群北门集合 周末集合')])
+    ep, _ = turn(store, service, group_line('g-r', '小满周末集合在哪'), [
+        ('note', {'to': '家里', 'text': '群里在问周末集合的地方。'}), ('stay_silent', {'why': '带回家'})])
+    retrieval = Retrieval(store, Evidence(tmp_path / 'evidence'))
+    try:
+        lane = Lane(store, [FakeTurn([THINK, ('recall', {'query': '周末集合'}), ('stay_silent', {'why': '想好了'})], '')])
+        coordinator = Coordinator(store, lane)
+        coordinator.scheduler, coordinator.context.retrieval = service, retrieval
+        home = coordinator.ingest(delivered(service))
+        [(recalled, ok)] = results(lane, 'recall')
+        found = {m['_id'] for m in recalled['memories']}
+        assert ok and 'group-1' in found and not found & {'home-1', 'home-2'}, found
+        # The same recall in an ordinary home turn reaches home's memories.
+        lane = Lane(store, [FakeTurn([THINK, ('recall', {'query': '周末集合'})], '嗯')])
+        coordinator = Coordinator(store, lane)
+        coordinator.scheduler, coordinator.context.retrieval = service, retrieval
+        coordinator.ingest({'event_id': 'ask-r', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '周末集合的事'})
+        [(recalled, ok)] = results(lane, 'recall')
+        assert ok and {'home-1', 'home-2'} & {m['_id'] for m in recalled['memories']}
+        # Its note gone, the turn has no place to recall as: refused, saying so.
+        store.db.messages.update_one({'_id': 'in-' + home['_id']}, {'$unset': {'event.note': ''}})
+        with pytest.raises(Refused, match='找不到了'):
+            coordinator.tools._as_place(store.db.episodes.find_one({'_id': home['_id']}))
+    finally:
+        retrieval.close()
+
+
 def test_a_note_carrying_the_owners_line_keeps_the_errand_and_no_gate(store):
     """ADR-088 §4.5: a note whose text carries the owner's verified line is the outside turn plus his errand; its
     block keeps his line, without the gate sentence and without her line."""

@@ -135,8 +135,13 @@ Branch `outside-note-turn` (2026-10-21), waiting on §6:
   notes back to the origin (a stranger's DM with next_time) and on to groups, never to a home conversation; they are
   untrusted (300 characters, the public caps) and continue the opening note's hop. A plan is created in the origin
   with the person of the turn that wrote the note (a group member there, so it fires; `notes.receiver` would be the
-  first member, possibly the owner). Contract test: `tests/test_notes.py`
-  (`test_nothing_made_in_a_turn_a_note_from_outside_opened_opens_a_turn_with_homes_authority`).
+  first member, possibly the owner). What reads or writes as a place does it as that origin conversation
+  (`RoleTools._as_place`, the inverse of an errand): `recall` (its search, its sections and a person's layers),
+  `task.page` (only tasks that conversation sent) and `feel` (its people and scope); a turn whose note or writing turn
+  is gone is refused there (`OUTSIDE_GONE`). In a home group a visit opened that way does not set the group's focus.
+  Contract test: `tests/test_notes.py`
+  (`test_nothing_made_in_a_turn_a_note_from_outside_opened_opens_a_turn_with_homes_authority`); recall:
+  `test_recall_in_a_turn_a_note_from_outside_opened_reads_as_the_place_it_came_from`.
 - §4.3: her line verbatim as `notes.OUTSIDE_ASK`, after `CAUTION` (local chat) or `OWNER_CHAT_NOTE` (the owner's DM),
   both now without their gate sentences; not on a reply to a note of hers or a note carrying the owner's line.
 - §4.4: a waiting untrusted note reads `{from, at, state: 等它自己那一回合}` in other home turns; read, the 60-character

@@ -824,3 +824,14 @@ characters. Action brain: nothing. The adapter needs her publish (a picture with
 ## The line cap counts what left (2026-10-20)
 
 `speak.max_messages` counts this turn's text lines that left or may still leave, read from the turn's outbox at each call (`role_tools.spoken`), not a counter kept from earlier calls. A part that failed, was cancelled after a failure, or that she took back while queued gives its lines back, including a failure the platform reports after the call; `UNKNOWN` may have left and counts. Her ask; before it, 3 of 1,893 reply parts had failed and none of the 12 turns refused at the cap had lost a line first.
+
+## stay_silent where speak replaced it ends the turn (2026-10-21, night)
+
+Where only `speak` speaks, `stay_silent` is not listed (`role_tools.REPLY_REPLACES`, owner 2026-10-19), and a call to it
+was refused by the Host's tool guard (「这个对话里没有 stay_silent 这个工具」): 27 in the 7 days to 2026-10-22 00:27, 26
+of them on 10-19, the day it left the list, and one since (`host_refusals.py`); in 20 of those turns she ended the turn
+anyway. Her meaning is plain. The coordinator's decision (C2): it runs the way an old name does
+(`role_tools.aliases`: `stay_silent` → `speak`, so the guard lets it through where `speak` is listed, and `RoleTools.call`
+runs it there): it ends the turn, says nothing, and its result says once that not calling `speak` is enough here
+(`SILENT_WHERE_SPEAK`). The list her conversation shows is unchanged, so its cached prefix holds. Reading: the same
+counter a week after install; the unexposed `stay_silent` refusals should be 0. Test: `tests/test_silence_where_speak.py`.

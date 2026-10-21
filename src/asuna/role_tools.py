@@ -696,9 +696,15 @@ def _without(text, *parts):
 
 
 def aliases():
-    """Old name -> the tool it runs as (the plugin lets one through where that tool is listed)."""
+    """Old name -> the tool it runs as (the plugin lets one through where that tool is listed). stay_silent runs where
+    speak replaced it (REPLY_REPLACES): there it ends the turn silently, as she meant (SILENT_WHERE_SPEAK)."""
     return {**{old: can.split('.')[0] for old, can in RENAMED.items()}, 'update_self': 'write_document',
-            MESSAGE_DEVELOPER['name']: 'ask'}
+            MESSAGE_DEVELOPER['name']: 'ask', 'stay_silent': 'speak'}
+
+
+# Where only speak speaks, a turn that does not call it says nothing: a stay_silent call there (26 a week in groups,
+# refused by the Host, the turn then ending anyway) ends the turn and says so once (C2, 2026-10-21).
+SILENT_WHERE_SPEAK = '这里不调 speak 就是不说话，用不着 stay_silent；这回合到此结束。'
 
 
 def turn_kind(ep):
@@ -1267,7 +1273,7 @@ class RoleTools:
         """(result, concludes_turn). Raises Refused for a call she can correct herself."""
         c = self.coordinator
         ep = self.store.db.episodes.find_one({'_id': ep_id})
-        called_as = None
+        called_as, replaced = None, False
         if name in RENAMED and isinstance(args, dict):          # an old name runs as its option (ADR-055)
             called_as, (name, args) = name, renamed(name, args)
         elif name == MESSAGE_DEVELOPER['name'] and isinstance(args, dict):
@@ -1298,6 +1304,8 @@ class RoleTools:
             if (can == 'update_self' and 'write_document' in (ep.get('turn_tools') or ())
                     and visibility.OWNER_PRIVATE == self._cls(ep)):
                 pass                              # her retired name, where write_document is hers (ADR-062)
+            elif can == 'stay_silent' and 'speak' in (ep.get('turn_tools') or ()) and can not in ep['turn_tools']:
+                replaced = True                   # where speak replaced it: silence as she meant (SILENT_WHERE_SPEAK)
             elif can not in (ep.get('turn_tools') or ()):
                 raise Refused(not_now(self.store, ep, can))
             from . import reasons
@@ -1335,6 +1343,8 @@ class RoleTools:
                       + ('，' + CALLS_FEW if left <= 3 else '')}
         if called_as and isinstance(result, dict):
             result = {**result, 'renamed': rename_note(called_as)}
+        if replaced and isinstance(result, dict):
+            result = {**result, 'note': SILENT_WHERE_SPEAK}
         if old_names and isinstance(result, dict):
             result = {**result, 'old_names': ' '.join(old_names)}
         if inferred and isinstance(result, dict):

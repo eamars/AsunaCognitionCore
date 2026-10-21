@@ -719,6 +719,22 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       { name: part.name ?? '', who: part.who ?? '', line: part.line ?? '', face: part.face ?? '', why: part.why ?? '',
         kind: part.kind ?? '' });
 
+  /** One tool row's registration on its own (her ask): DSH refusing a row (2026-10-18: a name its own tool UI draws)
+   * threw out of the plugin's start and left the page with "Failed to load plugins". Now that row is skipped and named
+   * with DSH's reason, and every other row and the rest of this page start. A row that fails to draw is caught by DSH's
+   * own slot boundary. */
+  function isolatedRow(ctx, name, register) {
+    return () => {
+      try {
+        return register();
+      } catch (error) {
+        const text = 'Asuna: the ' + name + ' tool row was not registered and is skipped: ' + (error?.message ?? error);
+        if (ctx.logger?.warn) ctx.logger.warn(text); else console.error(text);
+        return () => {};
+      }
+    };
+  }
+
   function apply(ctx) {
     ctx.effect(() => ctx.locale.register(NS, DICTIONARY));
     const t = ctx.locale.bind(NS);
@@ -1308,8 +1324,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
         keepContentWhenOpen: true, open: disclosure.expanded, expandable: detail.length > 0,
         expandOnRowClick: true, onToggle: disclosure.toggle }, ...detail);
     }
-    for (const name of ROLE_TOOLS) ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
-      name: 'tool.call.toolview', key: name, locale: NS }, RoleToolRow));
+    for (const name of ROLE_TOOLS) ctx.slots.inject('tool.call.toolview', isolatedRow(ctx, name, () => ctx.slots.register({
+      name: 'tool.call.toolview', key: name, locale: NS }, RoleToolRow)));
     // The program's note between a rejected draft and her rewrite, drawn like her tool rows.
     function RepairNote(props) {
       const t = props.t, text = props.node.data.text;
@@ -1431,7 +1447,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     }, ActiveStage));
 
   }
-  return { apply, toolRow, stageDefinitions, collabDefinitions, repairDefinitions, threadOf, stageIdentity, stageLabel, subscribeInputPolicies, DICTIONARY,
+  return { apply, isolatedRow, toolRow, stageDefinitions, collabDefinitions, repairDefinitions, threadOf, stageIdentity, stageLabel, subscribeInputPolicies, DICTIONARY,
     inject: ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'connection', 'remote', 'remote.settings', 'remote.credentials', 'configForms',
       'sessions', 'conversation', 'uiConversation', 'uiWorkspace'] };
 } });

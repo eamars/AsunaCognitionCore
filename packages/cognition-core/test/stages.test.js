@@ -27,8 +27,32 @@ async function load(path) {
   return result;
 }
 const { ConversationNodeAssembler } = await load(require.resolve('@deepseek-ai/dsh-client-ui-conversation/client'));
-const { stageDefinitions, collabDefinitions, repairDefinitions, threadOf, subscribeInputPolicies, toolRow, DICTIONARY } = await load(new URL('../src/client.js', import.meta.url));
+const { stageDefinitions, collabDefinitions, repairDefinitions, threadOf, subscribeInputPolicies, toolRow, DICTIONARY, isolatedRow } = await load(new URL('../src/client.js', import.meta.url));
 const words = (key, params = {}) => DICTIONARY.en[key].replace(/\{(\w+)\}/g, (_, name) => params[name]);
+
+test('one tool row DSH refuses is skipped and named; the other rows and the page still start', () => {
+  // Her ask, after 2026-10-18: a row under a name DSH draws itself threw out of the plugin's start ("Failed to load
+  // plugins"). Each row now registers on its own, through the inject callback DSH runs.
+  const warned = [], registered = [];
+  const ctx = { logger: { warn: text => warned.push(text) } };
+  const callbacks = ['think', 'read_image', 'speak'].map(name => isolatedRow(ctx, name, () => {
+    if (name === 'read_image') throw new Error("slot 'tool.call.toolview' already has key 'read_image'");
+    registered.push(name);
+    return () => registered.splice(registered.indexOf(name), 1);
+  }));
+  const disposers = callbacks.map(callback => callback());
+  assert.deepEqual(registered, ['think', 'speak']);
+  assert.equal(warned.length, 1);
+  assert.match(warned[0], /the read_image tool row was not registered and is skipped: slot 'tool.call.toolview' already has key 'read_image'/);
+  assert.ok(disposers.every(dispose => typeof dispose === 'function'), 'every callback gives DSH a disposer');
+  disposers.forEach(dispose => dispose());
+  assert.deepEqual(registered, [], 'the registered rows dispose as before');
+});
+
+test('apply registers every tool row through isolatedRow', async () => {
+  const source = await fs.readFile(new URL('../src/client.js', import.meta.url), 'utf8');
+  assert.match(source, /for \(const name of ROLE_TOOLS\) ctx\.slots\.inject\('tool\.call\.toolview', isolatedRow\(ctx, name,/);
+});
 
 test('cold composer stays blocked until QQ policy resolves, and stale queries cannot block Local', async () => {
   let state, listener;

@@ -306,7 +306,9 @@ the session log loses something (a compaction), the visible set shrinks with it,
   how many, in which states, and **the handle of each folded item** (`HANDLES`: `_id`, `plan_id`, `task_id`,
   `artifact_id`, `place` and similar). The code's own example reads
   `其余 4 条同前（读过了 3、已送到 1）：p1、p2、p3、p4` ("4 others as before (3 read, 1 delivered): p1, p2, p3, p4").
-  An item marked `waiting_on_you` is always sent in full.
+  An item with a handle folds only while its newest copy on the surface is this one (`carried.handles`, per path and
+  handle), so a plan moved and moved back is sent again; an item without one folds while any copy is visible. An
+  item marked `waiting_on_you` is always sent in full.
 
 The handles matter. The full copy of a folded item can be far back in the conversation; "2 others as before" without
 their ids leaves her unable to update one of those plans. **Anything the model must act on has to be on screen, at
@@ -696,7 +698,8 @@ ADR-085 (summary request sends the whole conversation), ADR-086 (emotion model: 
 ## Changelog
 
 - **2026-10-21** — A block is named unchanged only when its newest copy on the surface matches; an older copy no
-  longer counts once a later notice sent the block differently, or cut (section 6).
+  longer counts once a later notice sent the block differently, or cut; the same holds for a list item with a handle
+  (section 6).
 - **2026-10-21** — ADR-086: an @ or a reply to her in a group goes through the relevance gate first, except a reply
   from the person she waits on or within her open question's wait; a gate that cannot answer it falls back to the
   turn (sections 1, 8). The gate and the tail read her mood as one short paragraph, nothing at a calm band; a fixed

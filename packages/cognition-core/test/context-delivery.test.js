@@ -216,6 +216,29 @@ test('a notice over the ceiling loses the oldest rows first, then halves its lon
   assert.deepEqual(composed.omitted.trimmed, left);
 });
 
+test('an item with a handle folds only as its newest copy: X, then Y, then X again is sent again', () => {
+  const plans = items => ({ plans_from_program: items });
+  const x = { _id: 'p1', intent: '八点喝水' }, y = { _id: 'p1', intent: '九点喝水' }, other = { _id: 'p2', intent: '看群' };
+  const once = composeContext(context([], plans([x, other])), visibleCarried(surface([])));
+  assert.deepEqual(once.carried.handles, { plans_from_program: { p1: once.carried.items.plans_from_program[0], p2: once.carried.items.plans_from_program[1] } });
+  const twice = composeContext(context([], plans([y, other])), visibleCarried(surface([notice(once, 'ep-1')])));
+  assert.deepEqual(twice.context.plans_from_program, { items: [y], same_as_before: '其余 1 条同前：p2' });
+  const events = [notice(once, 'ep-1'), notice(twice, 'ep-2')];
+  const back = composeContext(context([], plans([x, other])), visibleCarried(surface(events)));
+  assert.deepEqual(back.context.plans_from_program, { items: [x], same_as_before: '其余 1 条同前：p2' },
+    'the newest copy of p1 she sees is Y, so X is sent, not folded as before');
+  // Once X is the newest copy, the same block again is wholly before her: named unchanged.
+  const again = composeContext(context([], plans([x, other])), visibleCarried(surface([...events, notice(back, 'ep-3')])));
+  assert.equal(again.context.plans_from_program, undefined);
+  assert.ok(again.context.unchanged_from_program.includes('plans_from_program'));
+  // An item without a handle keeps the digest rule: any visible copy folds it.
+  const note = text => ({ notes_from_program: { items: [{ from: '群 A', text }] } });
+  const a = composeContext(context([], note('早')), visibleCarried(surface([])));
+  const b = composeContext(context([], note('晚')), visibleCarried(surface([notice(a, 'ep-4')])));
+  const c = composeContext(context([], note('早')), visibleCarried(surface([notice(a, 'ep-4'), notice(b, 'ep-5')])));
+  assert.deepEqual(c.context.notes_from_program, { items: [], same_as_before: '其余 1 条同前' });
+});
+
 test('a block sent cut is its newest copy: an older whole copy no longer counts', () => {
   const first = composeContext(context([], { relationship: { body: '认识' } }), visibleCarried(surface([])));
   const second = composeContext(context([], { relationship: { body: '吵'.repeat(20000) } }),

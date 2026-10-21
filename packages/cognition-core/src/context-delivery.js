@@ -45,10 +45,11 @@ function shapeDigest(value) {
 
 /** What the surface already carries. Messages about to join it in the same step (lines waiting in the inbox,
  * navigation.js, and notices claimed with them) count too, as its newest. A block counts only as its newest copy:
- * the last notice that sent it, whole (its digest) or folded (its shape), hides every older copy. */
+ * the last notice that sent it, whole (its digest) or folded (its shape), hides every older copy; so does a list item
+ * with a handle (HANDLES), per path and handle. */
 export function visibleCarried(session, pending = []) {
-  const visible = { blocks: new Set(), items: new Set(), lists: new Set(), rows: new Set(), memories: new Set(),
-    episodes: new Set(), thoughts: new Set(), native: new Set() };
+  const visible = { blocks: new Set(), items: new Set(), handles: new Map(), lists: new Set(), rows: new Set(),
+    memories: new Set(), episodes: new Set(), thoughts: new Set(), native: new Set() };
   const newest = new Map();
   const take = (content, source) => {
     // Her own thought, as she wrote it with `think` (its call id ends the stored thought's id).
@@ -64,6 +65,8 @@ export function visibleCarried(session, pending = []) {
     for (const key of new Set([...Object.keys(blocks), ...Object.keys(lists), ...carried.cut ?? []]))
       newest.set(key, { block: blocks[key], list: lists[key] });
     for (const [key, values] of Object.entries(carried.items ?? {})) for (const value of values) visible.items.add(key + ':' + value);
+    for (const [key, named] of Object.entries(carried.handles ?? {}))
+      for (const [handle, value] of Object.entries(named)) visible.handles.set(key + ':' + handle, value);
     for (const id of carried.rows ?? []) visible.rows.add(id);
     for (const id of carried.memories ?? []) visible.memories.add(id);
     if (carried.episode) visible.episodes.add(carried.episode);
@@ -127,28 +130,39 @@ function listOf(value) {
 
 /** Fold a block's object lists: its own list (a list, or `items`) under the block's key, and every object list in
  * its fields, at any depth, under that field's path (`block.field.field`). An item still visible under its path folds,
- * except one waiting on her. Returns the value to send, the digests of the items sent per path, and how many items
- * were folded and kept. */
-function fold(path, value, seen) {
+ * except one waiting on her: one with a handle only while its newest copy is this one, one without while any copy is.
+ * Returns the value to send, the digests of the items sent per path and of those with a handle by handle, and how many
+ * items were folded and kept. */
+function fold(path, value, visible) {
   const list = listOf(value);
   if (list) {
-    const kept = list.items.filter(item => item.waiting_on_you === true || !seen.has(path + ':' + digest(item)));
+    const shown = item => {
+      const handle = handleOf(item), key = path + ':' + handle;
+      return handle && visible.handles?.has(key) ? visible.handles.get(key) === digest(item)
+        : (visible.items ?? new Set()).has(path + ':' + digest(item));
+    };
+    const kept = list.items.filter(item => item.waiting_on_you === true || !shown(item));
     const folded = list.items.filter(item => !kept.includes(item));
-    return { value: folded.length ? list.wrap(kept, sameAsBefore(folded)) : value,
-      sent: { [path]: kept.map(digest) }, folded: folded.length, kept: kept.length };
+    const named = kept.filter(handleOf).map(item => [handleOf(item), digest(item)]);
+    return { value: folded.length ? list.wrap(kept, sameAsBefore(folded)) : value, sent: { [path]: kept.map(digest) },
+      named: named.length ? { [path]: Object.fromEntries(named) } : {}, folded: folded.length, kept: kept.length };
   }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return { value, sent: {}, folded: 0, kept: 0 };
-  const out = {}, sent = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { value, sent: {}, named: {}, folded: 0, kept: 0 };
+  const out = {}, sent = {}, named = {};
   let folded = 0, kept = 0;
   for (const [field, inner] of Object.entries(value)) {
-    const nested = fold(path + '.' + field, inner, seen);
-    out[field] = nested.value; Object.assign(sent, nested.sent); folded += nested.folded; kept += nested.kept;
+    const nested = fold(path + '.' + field, inner, visible);
+    out[field] = nested.value; Object.assign(sent, nested.sent); Object.assign(named, nested.named);
+    folded += nested.folded; kept += nested.kept;
   }
-  return { value: folded ? out : value, sent, folded, kept };
+  return { value: folded ? out : value, sent, named, folded, kept };
 }
 
 /** The fields an item is acted on by (a plan's _id, a picture's artifact_id, a place): copied, never recalled. */
 const HANDLES = ['_id', 'id', 'plan_id', 'task_id', 'artifact_id', 'event_id', 'place'];
+
+/** An item's handle: the first of its HANDLES it has, or undefined. */
+const handleOf = item => HANDLES.map(field => item[field]).find(value => typeof value === 'string' && value);
 
 /** "其余 4 条同前（读过了 3、已送到 1）：p1、p2、p3、p4": how many items were folded, their states when they have one,
  * and the handle of each that has one. The copy shown earlier can be far back; the handle to act on it is here. */
@@ -156,14 +170,14 @@ function sameAsBefore(folded) {
   const states = new Map();
   for (const item of folded) if (typeof item.state === 'string') states.set(item.state, (states.get(item.state) ?? 0) + 1);
   const tally = [...states].map(([state, count]) => state + ' ' + count).join('、');
-  const handles = folded.map(item => HANDLES.map(field => item[field]).find(value => typeof value === 'string' && value))
-    .filter(Boolean);
+  const handles = folded.map(handleOf).filter(Boolean);
   return '其余 ' + folded.length + ' 条同前' + (tally ? '（' + tally + '）' : '') + (handles.length ? '：' + handles.join('、') : '');
 }
 
 /** The context this notice sends, what it carries, and what it left out (for the audit). */
 export function composeContext(context, visible) {
-  const entries = [], carried = { blocks: {}, items: {}, lists: {}, rows: [], memories: [] }, unchanged = [], empty = new Set();
+  const entries = [], carried = { blocks: {}, items: {}, handles: {}, lists: {}, rows: [], memories: [] }, unchanged = [];
+  const empty = new Set();
   let rows = 0, memories = 0, thoughts = 0, items = 0;
   const shownThought = id => typeof id === 'string' && id.startsWith('mono-')
     && (visible.thoughts ?? new Set()).has(id.slice(id.lastIndexOf(':') + 1));
@@ -229,8 +243,9 @@ export function composeContext(context, visible) {
     } else {
       const value_digest = digest(value);
       if (visible.blocks.has(key + ':' + value_digest)) { unchanged.push(key); continue; }
-      const folding = fold(key, value, visible.items ?? new Set());
+      const folding = fold(key, value, visible);
       Object.assign(carried.items, folding.sent);
+      Object.assign(carried.handles, folding.named);
       const shape_digest = shapeDigest(value);
       if (!folding.folded) {
         carried.blocks[key] = value_digest;
@@ -274,6 +289,9 @@ export function trimTurn(composed, ceiling) {
     else if (row && carried.items[path]) {
       const index = carried.items[path].indexOf(digest(row));
       if (index >= 0) carried.items[path].splice(index, 1);
+      // An item left out was not shown: its newest copy is still the one before.
+      const handle = handleOf(row);
+      if (handle && carried.handles[path]?.[handle] === digest(row)) delete carried.handles[path][handle];
     }
   };
   for (const [block, inner, end] of ceiling.order) {
@@ -306,6 +324,9 @@ export function trimTurn(composed, ceiling) {
     else {
       touched.add(block);
       for (const path of Object.keys(carried.items)) if (path === block || path.startsWith(block + '.')) delete carried.items[path];
+      // Its items with a handle were sent, perhaps cut: each is the newest copy and matches nothing.
+      for (const path of Object.keys(carried.handles)) if (path === block || path.startsWith(block + '.'))
+        for (const handle of Object.keys(carried.handles[path])) carried.handles[path][handle] = null;
     }
   }
   if (shortened) left.shortened_texts = shortened;

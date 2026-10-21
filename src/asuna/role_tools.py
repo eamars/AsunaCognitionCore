@@ -1404,8 +1404,11 @@ class RoleTools:
         """The class of the conversation this turn is in: what goes out there and who is there."""
         return (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
 
-    def _text(self, args, field, limit, *, required=True, ask=None):
-        """A text field refused past `limit`; she is asked for `ask` (by default four fifths of it, config.soft)."""
+    def _text(self, args, field, limit, *, required=True, ask=None, offer=True):
+        """A text field refused past `limit`; she is asked for `ask` (by default four fifths of it, config.soft).
+        offer=False for a list she writes (a plan's intent, an idea, an errand): its last line often says what counts
+        as done, and any cut of the end loses it, so the refusal leaves the choice of what to drop to her (her ask,
+        2026-10-22)."""
         ask = ask or soft(limit)
         value = args.get(field)
         if value is None and not required:
@@ -1418,8 +1421,9 @@ class RoleTools:
                           % (field, ask))
         if len(value) > limit:
             # Refused past `limit`, worded by `ask`: what she reads is the length to aim for (owner 2026-10-22).
-            raise Refused('%s 太长了：%d 字，要求 %d 字以内，超了 %d 字。精简到 %d 字以内再调用，或者照这个截好的写：%s'
-                          % (_SHOWN.get(field, field), len(value), ask, len(value) - ask, ask, cut_offer(value, ask)))
+            raise Refused('%s 太长了：%d 字，要求 %d 字以内，超了 %d 字。精简到 %d 字以内再调用%s'
+                          % (_SHOWN.get(field, field), len(value), ask, len(value) - ask, ask,
+                             '，或者照这个截好的写：' + cut_offer(value, ask) if offer else '，删哪段你自己定。'))
         self._longer(field, len(value), limit, ask)
         return value.strip()
 
@@ -2453,7 +2457,7 @@ class RoleTools:
                 return action()
         try:
             if op == 'create':
-                spec = {'intent': self._text(args, 'intent', 1000), **timing}
+                spec = {'intent': self._text(args, 'intent', 1000, offer=False), **timing}
                 where = None
                 if args.get('line'):
                     # From home, a plan may fire in one of her peer lines (owner 2026-10-06): both ends are home.
@@ -2496,7 +2500,7 @@ class RoleTools:
                 elif self._fired_here(ep, row, op, timing):
                     # ADR-087 §4.4: a one-shot plan moved in the turn it fired stays fired; a new plan takes the timing
                     # (and the old intent when none is given), and the result names it.
-                    spec = {'intent': self._text(args, 'intent', 1000) if args.get('intent') else row['intent'], **timing}
+                    spec = {'intent': self._text(args, 'intent', 1000, offer=False) if args.get('intent') else row['intent'], **timing}
                     plan = run(lambda: c.scheduler.create(ep, spec, plan_id='plan-' + sha(canonical([ep['_id'], call_id]))[:32]))
                     moved = PLAN_MOVED_FIRED % (plan_id, plan['_id'])
                 else:
@@ -2504,7 +2508,7 @@ class RoleTools:
                         raise Refused('「%s」已经%s了，改期只对着还生效的；要再安排就新建一条（do=create）。'
                                       % (plan_id, PLAN_ENDED.get(row.get('status'), '跑完')))
                     # The same length rule as create: refused with the cut offer, never by the scheduler's code.
-                    spec = {**({'intent': self._text(args, 'intent', 1000)} if args.get('intent') else {}),
+                    spec = {**({'intent': self._text(args, 'intent', 1000, offer=False)} if args.get('intent') else {}),
                             **({'schedule': timing} if timing else {})}
                     plan = run(lambda: c.scheduler.update(ep, plan_id, spec))
             else:
@@ -2570,7 +2574,7 @@ class RoleTools:
         if turn_kind(ep) not in ERRAND_FROM:
             raise Denied('ERRAND_ONLY_WHEN_ASKED')
         place = self._text(args, 'place', 40)
-        request = self._text(args, 'request', ERRAND_CHARS)
+        request = self._text(args, 'request', ERRAND_CHARS, offer=False)
         artifact = self._text(args, 'artifact_id', 200, required=False)
         if not self.coordinator.scheduler:
             raise Refused('现在没有定时服务，办不了（不是你的错）；重试也一样，跟托你的人说一声。')
@@ -2667,7 +2671,7 @@ class RoleTools:
 
     # ── her improvement ideas (ADR-011 §6.2) ────────────────────────
     def tool_ideas_note(self, ep, call_id, args):
-        idea = self._text(args, 'idea', IDEA_CHARS)
+        idea = self._text(args, 'idea', IDEA_CHARS, offer=False)
         why = self._text(args, 'why', IDEA_CHARS)
         noted = [call for call in (ep.get('tool_calls') or {}).values()
                  if ability(call.get('tool'), call) == 'ideas.note' and 'result' in call]

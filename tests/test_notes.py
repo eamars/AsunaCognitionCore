@@ -276,19 +276,17 @@ def test_a_note_to_a_group_from_home_is_a_visit_and_a_dm_waits_for_her_next_turn
     assert 'note' in lane.calls[0]['tools']
 
 
-def test_a_note_over_its_length_sends_nothing_and_offers_its_beginning_cut_and_marked(store):
-    """ADR-069: the limit is real; the refusal offers the beginning, cut at a sentence end, with the program's mark."""
+def test_a_note_over_its_length_sends_nothing_and_leaves_what_to_drop_to_her(store):
+    """ADR-069: the limit is real. A note's last line often says what counts as done and a cut of the end loses it, so
+    no cut is offered: she shortens it or splits it (her ask, 2026-10-22)."""
     service = world(store)
     long = '今天下午去看了展。' * 40                       # 360 characters from home to a group: over 300
     ep, lane = turn(store, service, {'event_id': 'ask-1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '写便条'},
                     [('note', {'to': G1, 'text': long})], '好')
     [(refused, ok)] = results(lane, 'note')
-    offered, left = refused.split('③ 照这个截好的发：' + chr(10), 1)[1].split(chr(10) + '这样截，去掉的是', 1)
-    kept = offered.split('（截在这里')[0]
     assert not ok and not store.db.notes.find_one({'from_episode': ep['_id']})
-    assert len(offered) <= notes.NOTE_CHARS and long.startswith(kept) and kept.endswith('。')
-    assert offered == kept + '（截在这里，原文还有 %d 字）' % (len(long) - len(kept))
-    assert left == '这 %d 字：' % (len(long) - len(kept)) + chr(10) + long[len(kept):]
+    assert '要求 240 字以内，现在 360 字，超了 120 字。两条路' in refused and '删哪段你自己定' in refused
+    assert '1/2、2/2' in refused and '截' not in refused
 
 
 def test_two_notes_a_turn_and_the_caps_by_direction(store):

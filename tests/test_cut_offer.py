@@ -1,5 +1,6 @@
 """ADR-069: a text over its length is refused and nothing is done; the refusal offers its beginning, cut at the last
-sentence end that fits, with the program's mark of the cut, so that sending it as it is never passes for the whole."""
+sentence end that fits, with the program's mark of the cut, so that sending it as it is never passes for the whole; a
+list she writes gets no cut, since its end says what counts as done (her ask, 2026-10-22)."""
 from asuna import role_tools, schedule
 from asuna.config import CUT_MARK, cut
 
@@ -20,15 +21,30 @@ def test_without_a_sentence_end_it_cuts_at_the_limit_and_a_short_text_is_as_it_i
     assert cut('短。', 10) == '短。'
 
 
-def test_every_length_refusal_offers_the_cut():
+def refused(args, field, limit, **kw):
     try:
-        role_tools.RoleTools._text(None, {'idea': '想法一。' * 200}, 'idea', role_tools.IDEA_CHARS)
+        role_tools.RoleTools._text(None, args, field, limit, **kw)
     except role_tools.Refused as exc:
-        said = str(exc)
+        return str(exc)
+
+
+def test_a_length_refusal_offers_the_cut_and_a_list_gets_none():
+    said = refused({'why': '因为这样。' * 100}, 'why', 200)
     # Worded by what she is asked for, and the cut offered fits it (owner 2026-10-22).
-    assert '要求 400 字以内，超了 400 字' in said and cut('想法一。' * 200, 400) in said and '最多' not in said
+    assert '要求 160 字以内，超了 340 字' in said and cut('因为这样。' * 100, 160) in said and '最多' not in said
     assert '去掉的是这' in said                            # what the cut leaves out is shown too (her ask)
-    assert cut('到点了。' * 300, schedule.INTENT_CHARS) in schedule.intent_problem('到点了。' * 300)
+    # A list's last line says what counts as done and any cut of the end loses it: no cut, she chooses (her ask).
+    said = refused({'idea': '想法一。' * 200}, 'idea', role_tools.IDEA_CHARS, offer=False)
+    assert said.endswith('要求 400 字以内，超了 400 字。精简到 400 字以内再调用，删哪段你自己定。') and '截' not in said
+    assert '截' not in schedule.intent_problem('到点了。' * 300)
+
+
+def test_the_list_fields_are_the_ones_without_a_cut():
+    import inspect
+    source = inspect.getsource(role_tools)
+    for field in ("'intent', 1000", "'request', ERRAND_CHARS", "'idea', IDEA_CHARS"):
+        calls = source.split("self._text(args, %s" % field)[1:]
+        assert calls and all(call.startswith(', offer=False)') for call in calls), field
 
 
 def test_a_text_past_what_she_was_asked_for_but_within_the_limit_is_kept_and_said():

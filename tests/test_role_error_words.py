@@ -9,7 +9,7 @@ from asuna.state import Denied
 
 
 def test_a_plan_intent_over_the_limit_says_its_length_and_the_limit():
-    assert schedule.intent_problem('x' * 1132) .startswith('intent 1132 字，上限 1000 字；精简到 1000 字以内，或者照这个截好的写：')
+    assert schedule.intent_problem('x' * 1132) == 'intent 1132 字，要求 800 字以内，超了 332 字；精简到 800 字以内，删哪段你自己定'
     assert 'intent 要写' in schedule.intent_problem('  ')
 
 

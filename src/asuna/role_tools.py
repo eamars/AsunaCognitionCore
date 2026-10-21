@@ -1766,7 +1766,7 @@ class RoleTools:
         from .people import People
         why = str(part.get('why') or '').strip()
         if not why:
-            raise Refused('要写 why（为什么撤，%d 字以内）' % RECALL_WHY_CHARS)
+            raise Refused('要写 why（为什么撤，%d 字以内）' % soft(RECALL_WHY_CHARS))
         if len(why) > RECALL_WHY_CHARS:
             raise Refused('why 太长了：%d 字，要求 %d 字以内，超了 %d 字，精简到 %d 字以内'
                           % (len(why), soft(RECALL_WHY_CHARS), len(why) - soft(RECALL_WHY_CHARS), soft(RECALL_WHY_CHARS)))

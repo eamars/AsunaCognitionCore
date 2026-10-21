@@ -39,7 +39,7 @@ def test_without_a_configured_high_tier_nothing_changes(store):
 def test_with_one_delegate_takes_a_tier_in_capability_words_and_low_is_the_default(store, offered):
     params = role_tools.tools()['delegate']['parameters']
     assert params['tier']['enum'] == ['低', '高'] and '不写就是低' in params['tier']['description']
-    assert '80' in params['why']['description']
+    assert '（64 字以内）' in params['why']['description'] and '80' not in params['why']['description']
     shown = json.dumps(params['tier'], ensure_ascii=False) + params['why']['description']
     assert not any(word in shown for word in IMPLEMENTATION)
     _, result, ok, task = delegate(store, {})

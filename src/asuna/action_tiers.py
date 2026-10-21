@@ -51,11 +51,14 @@ def chosen(args):
     tier = (args or {}).get('tier') or LOW
     if tier not in (LOW, HIGH):
         raise ValueError('tier 写 低 或 高（不写就是低）。%s。%s。' % (LINES[LOW], LINES[HIGH]))
+    from .config import soft
+    ask = soft(WHY_CHARS)                 # refused past WHY_CHARS, worded by what she is asked for (ADR-054)
     why = str((args or {}).get('why') or '').strip()
     if tier == HIGH and not why:
-        raise ValueError('选高要写 why：为什么这件要高档（%d 字以内）。%s。%s。' % (WHY_CHARS, LINES[LOW], LINES[HIGH]))
+        raise ValueError('选高要写 why：为什么这件要高档（%d 字以内）。%s。%s。' % (ask, LINES[LOW], LINES[HIGH]))
     if len(why) > WHY_CHARS:
-        raise ValueError('why 最多 %d 字，这次 %d 字；说清为什么要高档就够了。' % (WHY_CHARS, len(why)))
+        raise ValueError('why 太长了：%d 字，要求 %d 字以内，超了 %d 字；说清为什么要高档就够了。'
+                         % (len(why), ask, len(why) - ask))
     return tier, (why if tier == HIGH else None)
 
 

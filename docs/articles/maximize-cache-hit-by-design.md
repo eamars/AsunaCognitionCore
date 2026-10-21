@@ -367,11 +367,15 @@ always a full miss.** Compacting less often is a cache gain in itself, which is 
 
 Two details in `compaction.js` are cache-aware:
 
-- `summarize` sends the whole conversation, the kept tail included, with the same tools, and then the instruction.
-  The request extends exactly what was last read, so it reads from the cache up to its last message; a request that
-  sent only the compacted span would stop mid-history (section 1). The instruction's last rule (`keptRule`) names
-  the kept tail: how many messages stay after the checkpoint, and the opening of the first one, quoted only to locate
-  it. DSH still chooses what is compacted and what is kept.
+- A commanded compaction (`/compact`, which keeps the last message) sends the whole conversation, the kept message
+  included, with the same tools, and then the instruction. The request extends exactly what was last read, so it
+  reads from the cache up to its last message; a request that sent only the compacted span would stop mid-history
+  (section 1). The instruction's last rule (`keptRule`) names the kept part: how many messages stay after the
+  checkpoint, and the opening of the first one, quoted only to locate it. DSH still chooses what is compacted and
+  what is kept.
+- An automatic compaction (step pressure or context overflow) sends the compacted span alone and pays the cold read:
+  a summary request that carries a long kept tail restates it in the checkpoint, however the instruction names the
+  boundary.
 - The whole conversation is sent only when it fits the window beside the summary cap (`wholeConversation`).
   Otherwise, or when the model refuses it for its window, the compacted span alone is sent, and a span too large for
   one request is summarized in steps (`inSteps`). Each fallback writes one log line with its reason and the sizes
@@ -691,12 +695,14 @@ A checklist for review:
 | Errand copy | `src/asuna/errands.py`; `native_worker.errand_session`; `index.js`: `errandSession`, `completedPrefix`, `ERRAND_ROOM`, `ensureAgent` (`copy`), `retireErrand` (ADR-066) |
 | DSH mechanisms | `@deepseek-ai/dsh-session/fork` `buildForkSeed`; `@deepseek-ai/dsh-llm` `SystemPromptUpdate`, `ToolUpdate`; `@deepseek-ai/dsh-agent-loop` `SystemPromptProjection`; `@deepseek-ai/dsh-compaction-basic` |
 | Decisions | ADR-014 (context budget), ADR-028 (carry), ADR-032 (section places), ADR-038 (fixed tool lists), ADR-049 (quiet-time upkeep), ADR-052 (switches), ADR-055 (fewer tools), ADR-056 (per-turn characters), ADR-063 (context growth defects), ADR-066 (errand carries home), ADR-084 (mechanical limits removed one at a time),
-ADR-085 (summary request sends the whole conversation), ADR-086 (emotion model: the mood paragraph, addressed lines at the gate) |
+ADR-085 (summary request: the whole conversation for a commanded compaction, the span alone for an automatic one), ADR-086 (emotion model: the mood paragraph, addressed lines at the gate) |
 
 ---
 
 ## Changelog
 
+- **2026-10-22** — ADR-085 §4c: an automatic compaction sends the compacted span alone again; a commanded one keeps
+  the whole conversation (section "Compaction resets the prefix").
 - **2026-10-21** — A block is named unchanged only when its newest copy on the surface matches; an older copy no
   longer counts once a later notice sent the block differently, or cut; the same holds for a list item with a handle
   (section 6).

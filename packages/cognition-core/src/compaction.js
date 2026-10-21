@@ -79,6 +79,11 @@ export function hasSections(text) {
 const WHOLE_SPARE_TOKENS = 6144;
 /** How much of the first kept message the instruction quotes to mark where the kept part starts. */
 const KEPT_QUOTE_CHARS = 40;
+/** Agents in an automatic compaction (step pressure or context overflow). Their summary request carries the compacted
+ * span alone: one that also carries the retained tail restates it, however the instruction names the boundary (ADR-085
+ * §4c). A commanded compaction keeps its last message only and still sends the whole conversation, which its cache
+ * reads. */
+const automatic = new WeakSet();
 
 /** The instruction's last rule when the summary request carries the retained tail: how many messages stay as they
  * are, and the opening of the first one with text, quoted only to locate it. */
@@ -147,7 +152,7 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
       return { summary, rawOutput, llmStreamCall: true, provider: options.provider, model: options.model,
         maxTokens: this.config.maxTokens, ...(assembler.usage === undefined ? {} : { usage: assembler.usage }) };
     };
-    const whole = await this.wholeConversation(input, agent, target, signal);
+    const whole = automatic.has(agent) ? { reason: 'automatic' } : await this.wholeConversation(input, agent, target, signal);
     if (whole?.messages) {
       try { return await once(whole.messages, whole.tail); }
       catch (error) { if (!overflowed(error)) throw error; this.spanAlone(agent, 'refused for the window', whole); }
@@ -155,6 +160,12 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
     const [head, body] = input.messages[0]?.role === 'system'
       ? [input.messages.slice(0, 1), input.messages.slice(1)] : [[], input.messages];
     return inSteps(head, body, messages => once(messages));
+  }
+
+  /** DSH's automatic compaction, marked for `summarize` while it runs. */
+  async compactIfNeeded(agent, trigger, signal) {
+    automatic.add(agent);
+    try { return await super.compactIfNeeded(agent, trigger, signal); } finally { automatic.delete(agent); }
   }
 
   /** The whole conversation as the next request would send it, split after the replayed span, when the span is its
@@ -196,8 +207,9 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
   /** One log line each time the summary request falls back to the replayed span alone, with the sizes it judged by,
    * so a reading of compactions can tell the two shapes apart. */
   spanAlone(agent, reason, { tokens, window }) {
-    this.ctx.logger?.info?.('Asuna compaction: summary request sends the compacted span alone (' + reason + '; conversation ~'
-      + tokens + ' tokens, summary cap ' + this.config.maxTokens + ', window ' + window + ') in ' + agent.session.id);
+    this.ctx.logger?.info?.('Asuna compaction: summary request sends the compacted span alone (' + reason + (tokens
+      ? '; conversation ~' + tokens + ' tokens, summary cap ' + this.config.maxTokens + ', window ' + window : '')
+      + ') in ' + agent.session.id);
   }
 
   /** This engine's compaction threshold for the conversation's model, as DSH's basic engine resolves it

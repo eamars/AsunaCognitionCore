@@ -67,7 +67,7 @@ test('the size floor is half the engine\'s own compaction threshold for the conv
 
 // The summary request carries the whole conversation, so it extends what the server last processed and resumes from
 // there; the instruction names the kept tail and quotes its start only to locate it.
-test('role compaction sends the whole conversation and names the kept tail, or the span alone when it would not fit', async () => {
+test('a commanded compaction sends the whole conversation and names the kept tail; an automatic one, or one that would not fit, the span alone', async () => {
   const text = (role, value) => ({ role, content: [{ type: 'text', text: value }] });
   const system = { role: 'system', content: [{ type: 'text', text: 'render' }] };
   const span = [text('user', '周末去哪'), text('assistant', '去海边')];
@@ -130,6 +130,23 @@ test('role compaction sends the whole conversation and names the kept tail, or t
   assert.equal(sent.length, 1);
   assert.equal(sent[0].length, 3);
   assert.match(logged.at(-1), /span is not the start/);
+
+  // An automatic compaction (DSH's compactIfNeeded): the span alone, though the whole would fit (ADR-085 §4c).
+  const basic = Object.getPrototypeOf(RoleCompactionEngine.prototype);
+  const own = basic.compactIfNeeded;
+  basic.compactIfNeeded = async function (owner) { return this.summarize(input, owner); };
+  try {
+    sent.length = 0;
+    await engine.compactIfNeeded(agent, 'pressure');
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0].slice(0, -1), input.messages);
+    assert.equal(sent[0].at(-1).content[0].text, ROLE_COMPACTION_INSTRUCTION);
+    assert.match(logged.at(-1), /span alone \(automatic\) in s$/);
+  } finally { basic.compactIfNeeded = own; }
+  // A commanded one after it still sends the whole conversation.
+  sent.length = 0;
+  await engine.summarize(input, agent);
+  assert.deepEqual(sent[0].slice(0, -1), events);
 });
 
 // The summary thinks at the conversation's level, else the persona's, when the model offers it; a checkpoint missing

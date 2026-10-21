@@ -94,6 +94,29 @@ The owner reads it again the same evening.
 - **Evidence** (`.runtime/private/compaction-study/`, numbers and redacted readings only): `researcher-audit.md` (24 KB),
   `researcher/` (scripts, per-summary readings, per-bullet metrics; 247 KB), `replay/` (PREREG, VERDICT, runs; 24 KB).
 
+## 4c. The boundary by its stamp, replayed; automatic compactions send the span alone (2026-10-22)
+
+The owner approved one more pre-registered replay (`.runtime/private/compaction-study/replay/PREREG2.md`, 6 KB with its
+amendments, written before any output): arm C names the boundary by the `[label] MM/DD HH:MM` stamp of the first kept
+platform line and says 现在 / 此刻 / 最近 mean that moment (the researcher's recommendation, her first choice). If it
+passed it would be installed; if it failed, automatic compactions would send the compacted span alone, with no third
+round. Before the first call the researcher's dry run found no platform line in the home conversation's kept tails,
+where C is A's rule word for word, so step 1 was amended to the five agent-line points (no leak above 3% allowed).
+
+Result (local character model, high, as A; `runs.jsonl`, numbers only): after three agent-line points C leaked in two
+(4.8% against A's 9.8%; 1.8% against 7.2%; 7.2% against 1.3%), so the stopping rule ended the run: **C fails**. Like
+arm B it lowers the leak where A leaks and adds its own where A does not; a boundary named in the instruction, by
+count, quote or stamp, does not stop a summarizer that reads the tail from restating it.
+
+So an automatic compaction (DSH's `compactIfNeeded`: step pressure, context overflow) sends the compacted span alone
+again (`compaction.js`, `automatic`); the summarizer never reads what it must not summarize. It costs the cold read
+§1 measured on the local engine, about 20 s and about 120k tokens per automatic compaction, about ten a day, nearly all
+in her home conversation and the agent line. A commanded compaction (`/compact`, which keeps the last message; ADR-049's
+condensing of groups) still sends the whole conversation: its kept part is one message, the group readings found no
+kept-tail repeat in it (researcher-audit.md §5), and its cache read stays. Each automatic one writes one Host log line
+(`spanAlone`, reason `automatic`). The template's own 30–40% waste is a separate proposal, after this lands (owner).
+Test: `packages/cognition-core/test/compaction.test.js`.
+
 ## 5. As built
 
 - `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `wholeConversation`, `spanAlone`, `summaryEffort`, `keptRule`, `hasSections`, `ROLE_SECTIONS`, `WHOLE_SPARE_TOKENS`, `KEPT_QUOTE_CHARS`; `packages/personas/xiaoman/cordis.patch.yml`: `summaryReasoningEffort`.

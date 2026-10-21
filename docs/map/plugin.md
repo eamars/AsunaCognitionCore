@@ -126,6 +126,7 @@ Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoi
 - def `keptRule` — The instruction's last rule when the summary request carries the retained tail: how many messages stay as they are, and the opening of the first one with text, quoted only to locate it.
 - class `RoleCompactionEngine`
   - `summarize`
+  - `compactIfNeeded` — DSH's automatic compaction, marked for `summarize` while it runs.
   - `wholeConversation` — The whole conversation as the next request would send it, split after the replayed span, when the span is its start and the whole of it fits the window beside the summary cap; otherwise why not (`reason`), or undefined when there is no mete
   - `summaryEffort` — The summary request's thinking level: the conversation's own (its latest request's), else the configured one, when the model offers it; otherwise none.
   - `spanAlone` — One log line each time the summary request falls back to the replayed span alone, with the sizes it judged by, so a reading of compactions can tell the two shapes apart.

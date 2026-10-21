@@ -120,7 +120,8 @@ page's tool rows ([client.js](../../packages/cognition-core/src/client.js)) read
      for (`grants.workspace_grant`, bound in `tasks.ToolBroker.bind`). Home's tasks, begun at home or on an errand
      from home, use home's folder, which holds her working copy of the project
      ([working-copy.js](../../packages/cognition-core/src/working-copy.js)). A task begun in a group or in someone's
-     chat uses that person's own folder there, which holds only what was made for that task. `read_only_paths`
+     chat uses that person's own folder there, which holds only what was made for that task; when that person has
+     no grant there, the task has no folder at all (`WORKSPACE_NOT_AUTHORIZED`). `read_only_paths`
      marks files inside `/task` as read-only sources; it opens nothing outside. A job that needs the project's
      files is handed over from home.
 3. **Handing back.** The report comes back to her conversation as a task result. A long report comes as its first

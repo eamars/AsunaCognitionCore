@@ -451,6 +451,25 @@ def test_fair_queue_still_rotates_a_busy_scene(store):
     assert [queue.pop() for _ in range(4)] == ['a1', 'a2', 'b1', 'a3']
 
 
+@pytest.mark.parametrize('trust', ['trusted', 'untrusted'])
+def test_a_home_turn_a_note_opened_reads_her_notebook_and_decides_nothing_there(store, trust):
+    """Her own note from another home line reads her notebook as a note from outside does: she checks what is there
+    before adding to it. Deciding stays in self-improvement and when the owner asks in private."""
+    world(store)
+    store.db.notes.insert_one({'_id': 'n-' + trust, 'schema_version': 1, 'trust': trust, 'from_scene': 'g1',
+                               'to_scene': 'dm-a', 'hop': 1, 'text': '回家看看想法本', 'created_at': '2026-10-21T00:00:00+00:00'})
+    ep = {'_id': 'ep-note-' + trust, 'scene_id': 'dm-a', 'person_id': 'A', 'persona': 'P1', 'episode_kind': 'note',
+          'context': {}, 'manifest': {'session_class': visibility.OWNER_PRIVATE}}
+    store.db.messages.insert_one({'_id': 'in-' + ep['_id'], 'schema_version': 1, 'scene_id': 'dm-a',
+                                  'event': {'note': {'id': 'n-' + trust, 'trust': trust, 'hop': 1}}})
+    tools = set(role_tools._turn_rules(store, ep))
+    assert 'ideas.read' in tools and 'ideas.review' not in tools
+    assert role_tools.not_now(store, ep, 'ideas.review') == (role_tools.NOT_NOW['ideas.review'] if trust == 'trusted'
+                                                             else role_tools.NOTE_ONLY)
+    plan_due = {**ep, '_id': 'ep-plan', 'episode_kind': 'scheduled'}
+    assert not {'ideas.read', 'ideas.review'} & set(role_tools._turn_rules(store, plan_due)), 'a plan due: unchanged'
+
+
 @pytest.mark.parametrize('trust,cls', [('untrusted', visibility.OWNER_PRIVATE), ('trusted', visibility.OWNER_PRIVATE),
                                        ('untrusted', visibility.PUBLIC)])
 def test_a_visit_an_outside_note_opens_in_a_home_group_does_nothing_with_consequences(store, trust, cls):

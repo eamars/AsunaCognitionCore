@@ -452,3 +452,12 @@ to check what is already there is how it fills with duplicates); asking, closing
 her documents still waits. The boundary is the delay and her second look at home (owner: "reinforced by delay +
 secondary inspection at home"), so in that turn it goes into `ideas note`, and her self-improvement turn decides what
 enters her documents. The turn's words now say so.
+
+## Her own note's turn reads her notebook too (2026-10-21)
+
+After the rule above, a home turn an outside note opened could read her notebook and a home turn her own note from
+another home line opened could not (`_turn_rules` left every `note` turn out of reading). The coordinator's decision
+(B16, under the owner's "tiny technical decisions are yours"): a home `note` turn opened by a trusted note gets
+`ideas.read` as well, read only; `ideas.review` stays in self-improvement turns and when the owner asks in private.
+The refusal for each now says its own rule (`NOT_NOW`: reading also in a note-woken turn; deciding only there and
+when asked). Test: `tests/test_notes.py`.

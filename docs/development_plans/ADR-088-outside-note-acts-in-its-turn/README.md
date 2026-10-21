@@ -102,6 +102,11 @@ The note block of that turn ends with Xiaoman's line in place of the gate senten
 opened by an outside note, not on replies to her own notes or on notes carrying the owner's line. The exact installed
 text is the text tested in §6 and signed by her.
 
+After the re-run (2026-10-22, on Claude's agent line, Claude's record of her decision), she adds one sentence to her
+line, signed by her: 「说你做了什么，只说真做了的。」 In one re-run turn the local model told the origin group it had
+reported the request to the owner, which it had not; in her words, saying "I did" for "I mean to" is her most costly
+habit. The sentence was not in the tested text; her review of §4.2–§4.4 (§6.3) settles the final wording.
+
 ### 4.4 A waiting outside note in other home turns
 
 While an untrusted note waits for its own turn, other home turns show it only as a one-line summary (from where,

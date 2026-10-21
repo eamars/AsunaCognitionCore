@@ -154,7 +154,7 @@ document authority at home, the persona budget, every authority and place bounda
 |---|---|---|---|
 | 1 | §4.2 reads before thought | the read list and the tail line unchanged | any call outside the list runs before a thought; any turn ends with no thought |
 | 2 | §4.1 think's 360 edge | §3's length table | more than 1 in 20 thoughts is refused at 360 (then back to her) |
-| 3 | §4.3 specs by rule | the measured cache and host-check numbers first | host-check refusals rise, or an errand loses an option it used |
+| 3 | §4.3 specs by rule | the measured cache and host-check numbers first | host-check refusals rise (each kind with its denominator, said which kind rose), an errand loses an option it used, or she meets an option she wanted in a turn and it is not in the list (her report, counted as a failure sample) |
 | 4 | §4.4 and §4.5 | the new result and refusal words | the targeted refusals do not fall below last week's counts |
 
 The readings run side by side (the owner, 2026-10-21): each counts only its own refusal type, so steps may install

@@ -458,6 +458,15 @@ the mechanism, never a score of her.
    them; a test runs a temp copy of her real model with the persona diff and an edited stance through the publish
    flow's validation (§5.3, tests).
 
+   **Found unmet live (2026-10-21, her reading):** her persona publication (13:31) read `activated: true`, but at
+   13:35 `set_policy affect.kinds.irritation.half_h` was refused, and it was accepted only after the 15:19 launcher
+   restart. The cause: a persona publication applies without a restart, and the Host passed the new persona to the
+   worker (`persona.resources`), but the worker took only its skill folders; the persona model it started with stayed
+   in use while the receipt said ACTIVE. Fixed: `native_worker.take_persona` reads the persona model and contribution
+   both at start and on `persona.resources`, validating the model before anything changes; a model that fails
+   validation leaves the running one and the publish returns the error. Test:
+   `tests/test_adr011_ideas.py::test_a_persona_publication_is_what_her_turns_read_at_once`.
+
 ## 12. The study record
 
 - Folder: `.runtime/private/emotion-research/` in the research worktree (local, never committed, removed by Claude

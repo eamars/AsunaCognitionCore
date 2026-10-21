@@ -154,6 +154,36 @@ def test_a_newer_publication_supersedes_one_still_waiting_and_only_core_restarts
     assert host.restart_requested.is_set() and recorded == ['restart.pending', 'restart.requested']
 
 
+def test_a_persona_publication_is_what_her_turns_read_at_once(store, tmp_path):
+    """Regression (live 2026-10-21): her persona publication read ACTIVE at 13:31, but the running worker kept the
+    model it started with; a value only that publication declared was refused until the 15:19 restart."""
+    import pytest
+    from pathlib import Path
+    from types import SimpleNamespace
+    from asuna.native_worker import BusinessWorker
+    from asuna.persona_model import PersonaModelError
+    persona_id = store.config['chat']['persona']
+    model = json.loads((Path(__file__).parent / 'fixtures/personas/demo/persona-model.json').read_text(encoding='utf-8'))
+    model['persona']['id'] = persona_id
+    path = tmp_path / 'persona-model.json'
+
+    def publish(edited):
+        path.write_text(json.dumps(edited, ensure_ascii=False), encoding='utf-8')
+        return BusinessWorker.dispatch(worker, 'persona.resources', {'skill_directories': ['skills'], 'persona': {
+            'id': persona_id, 'display_name': '新名字', 'character_id': 'character-1', 'model': str(path), 'jobs': []}})
+
+    worker = SimpleNamespace(app=SimpleNamespace(config=store.config, store=store))
+    publish({**model, 'model_version': 1})
+    assert store.config['persona_model'] == {**model, 'model_version': 1}
+    assert store.config['chat']['display_name'] == '新名字' and store.config['_skill_directories'] == ['skills']
+    edited = {**model, 'persona': {**model['persona'], 'display_name': '改过'}}
+    publish(edited)
+    assert store.config['persona_model'] == edited, 'the newest publication, not the one the worker started with'
+    with pytest.raises(PersonaModelError):
+        publish({**model, 'persona': {**model['persona'], 'id': 'someone-else'}})
+    assert store.config['persona_model'] == edited, 'a model that fails validation changes nothing'
+
+
 def test_a_database_read_mongo_refuses_comes_back_coded_without_the_server_reply(store):
     import pytest
     from types import SimpleNamespace

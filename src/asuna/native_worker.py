@@ -44,6 +44,20 @@ def prune_host_reports():
         shutil.rmtree(old, ignore_errors=True)
 
 
+def take_persona(config, persona):
+    """The persona package as the worker reads it: at its start and after each persona publication, so what a
+    publication reports ACTIVE is what her turns use. The model is validated (jsonschema) before anything changes."""
+    from .persona_model import load as load_model, neutral
+    if config['chat']['persona'] != persona['id']:
+        raise ValueError('PERSONA_STATE_ID_MISMATCH')
+    model = (load_model(persona['model'], persona['id']) if persona.get('model')
+             else neutral(persona['id'], persona['display_name']))
+    config['chat'] = {**config['chat'], 'display_name': persona['display_name']}
+    config['character_id'] = persona['character_id']
+    config['persona_contribution'] = persona
+    config['persona_model'] = model
+
+
 def gate_session_id(binding, operation):
     """A fresh gate session for each question, its repairs included: the material is complete every time, so the
     gate keeps no history and never compacts (attend.py)."""
@@ -357,16 +371,8 @@ class BusinessWorker:
         # The same across machines: a lease in the database itself (ADR-020).
         from .host_lease import DatabaseLease
         lease = self.stack.enter_context(DatabaseLease(config, persona=persona['id']))
-        # Existing state identity wins. Package defaults seed only absent heads.
-        if config['chat']['persona'] != persona['id']:
-            raise ValueError('PERSONA_STATE_ID_MISMATCH')
-        config['chat'] = {**config['chat'], 'display_name': persona['display_name']}
-        config['character_id'] = persona['character_id']
-        config['persona_contribution'] = persona
-        # The persona model is validated here (jsonschema); an invalid model keeps Core inert.
-        from .persona_model import load as load_model, neutral
-        config['persona_model'] = (load_model(persona['model'], persona['id']) if persona.get('model')
-                                   else neutral(persona['id'], persona['display_name']))
+        # Existing state identity wins. Package defaults seed only absent heads. An invalid model keeps Core inert.
+        take_persona(config, persona)
         config['_skill_directories'] = skill_directories or persona.get('skill_directories', [])
         config['_native_routes'] = routes or {}
         if action_idle_minutes:
@@ -1244,12 +1250,14 @@ class BusinessWorker:
                 raise RuntimeError('SCHEDULE_NOT_MOUNTED')
             return self.host.schedule.deliver(args)
         if method == 'persona.resources':
+            # A persona publication applies in place: her model and contribution now, her skills in new action scopes.
+            take_persona(self.app.config, args['persona'])
             self.app.config['_skill_directories'] = args['skill_directories']
             # A published adapter is what the next integration_start (or restoration) runs.
             releases = [entry['integration_release'] for entry in args.get('channels') or () if entry.get('integration_release')]
             if releases:
                 self.app.config['_native_integration_release'] = releases[0]
-            return {'accepted': True, 'applies': 'new action scopes; existing self heads preserved'}
+            return {'accepted': True, 'applies': 'persona model now; skills in new action scopes; existing self heads preserved'}
         if method == 'publication.activated':
             for publication in args['publications']:
                 receipt_id = publication['receipt_id']

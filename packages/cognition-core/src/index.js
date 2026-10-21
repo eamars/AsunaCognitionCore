@@ -665,8 +665,9 @@ export class CognitionCore {
           : event.method === 'errand_session' ? await this.errandSession(event.args)
           : (() => { throw new Error('Unknown Host request'); })();
         if (event.method === 'development' && value.state === 'APPLIED' && value.project !== 'core') {
-          // A persona or channel publication that needs no restart: new action scopes discover its
-          // skills, and the next integration_start runs its adapter. A core one restarts the worker.
+          // A persona or channel publication that needs no restart: the worker takes the persona model at once,
+          // new action scopes discover its skills, and the next integration_start runs its adapter. A core one
+          // restarts the worker.
           const persona = this.personas.get(this.config.persona);
           const channels = await this.channelPlugins(this.config.deployment);
           await this.worker.call('persona.resources', { persona: await this.ctx.asunaFloor.persona(persona),

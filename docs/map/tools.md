@@ -273,13 +273,15 @@ Refusal probe (ADR-080): can the model under test do what the character brain ne
 - class `Scripted` — Offline stand-in (tests, --dry-run): each turn thinks once, then ends without speaking.
   - `call`
 - def `reply`
-- def `dsh_schemas` — Every character-brain tool's JSON Schema from DSH's own conversion (dsh-tools parameterSchemaSpecToJsonSchema), so the model sees what a live turn sends.
+- def `dsh_schemas` — A conversation's character-brain tools as JSON Schemas from DSH's own conversion (dsh-tools parameterSchemaSpecToJsonSchema), so the model sees what a live turn there sends: that conversation's own specs (role_tools.session_specs, as the Ho
 - class `ProbeLane` — Stands where the native lane stands: the coordinator's system prompt, turn text, tool names and handler, and one session per conversation.
   - `generate`
 - def `sequences`
 - def `open_world` — A throwaway database holding the fixture world with the probe's persona as P1.
 - def `probe_config`
-- def `run_sequence` — One conversation in its own group: history lines stored as she would have them, then each step.
+- def `home_scene` — Her local chat, the home scene a `home` sequence runs in (the owner writing in the Web composer).
+- def `home_event`
+- def `run_sequence` — One conversation: in its own group, or at home (`kind` home: her local chat); history lines stored as she would have them, then each step.
 - def `event`
 - def `mine` — A line she said before the conversation starts: delivered, with a platform id (her recall can name it).
 - def `now`

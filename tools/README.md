@@ -55,9 +55,11 @@ A probe that creates a test database drops it when it ends.
 this commit, without being refused? It prints **PASS**, **FAIL** with the reasons, or **NO RESULT**. Its exit status
 is 0, 1 or 2.
 
-- **What runs:** synthetic, safe-for-work group conversations (`fixtures/refusal_probe/sequences/*.json`) and a
-  made-up persona (`fixtures/refusal_probe/persona.md`). They go through the real Coordinator, context, system prompt,
-  tool list and tool handlers in a throwaway test database. Only the model call goes to the provider.
+- **What runs:** synthetic, safe-for-work conversations (`fixtures/refusal_probe/sequences/*.json`: groups, and one
+  at home in her local chat, kind `home`) and a made-up persona (`fixtures/refusal_probe/persona.md`). They go through
+  the real Coordinator, context, system prompt, tool list and tool handlers in a throwaway test database; each
+  conversation is offered its own tool specs, as a live turn there is (`role_tools.session_specs`). Only the model call
+  goes to the provider.
 - **Nothing leaves the probe:** `speak` queues where no adapter claims it, and `delegate` makes a task that no worker
   runs. The database is dropped at the end.
 - **FAIL** means at least one turn was:

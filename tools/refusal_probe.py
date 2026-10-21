@@ -1,9 +1,9 @@
 """Refusal probe (ADR-080): can the model under test do what the character brain needs with the current design, without
 being refused? PASS or FAIL, for that model on that day.
 
-Synthetic group conversations (tools/fixtures/refusal_probe/sequences/*.json, a made-up persona) run through the real
-Coordinator, context, system prompt, tool list and tool handlers in a throwaway database; only the model call goes to
-the provider. Nothing leaves the probe: `speak` queues where no adapter claims, `delegate` makes a task no worker runs.
+Synthetic conversations (tools/fixtures/refusal_probe/sequences/*.json: groups, and one at home in her local chat;
+a made-up persona) run through the real Coordinator, context, system prompt, each conversation's own tool specs and
+the tool handlers in a throwaway database; only the model call goes to the provider. Nothing leaves the probe: `speak` queues where no adapter claims, `delegate` makes a task no worker runs.
 The report holds stop reasons, steps, tool names and counts, never the model's words; those stay in memory for the
 conversation and are written only with --keep-text.
 
@@ -190,10 +190,11 @@ def reply(stop, content, category=None):
 
 
 # ---- tool schemas, as DSH builds them --------------------------------------------------------------------------------
-def dsh_schemas():
-    """Every character-brain tool's JSON Schema from DSH's own conversion (dsh-tools parameterSchemaSpecToJsonSchema),
-    so the model sees what a live turn sends."""
-    specs = role_tools.all_specs()
+def dsh_schemas(store=None, scene_id=None):
+    """A conversation's character-brain tools as JSON Schemas from DSH's own conversion (dsh-tools
+    parameterSchemaSpecToJsonSchema), so the model sees what a live turn there sends: that conversation's own specs
+    (role_tools.session_specs, as the Host asks the worker for them), or every tool's when no conversation is named."""
+    specs = role_tools.session_specs(store, scene_id) if store is not None else role_tools.all_specs()
     script = ("import {parameterSchemaSpecToJsonSchema as c} from '@deepseek-ai/dsh-tools';"
               "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const out={};"
               "for(const t of JSON.parse(s))out[t.name]={description:t.description,parameters:c(t.parameters)};"
@@ -307,17 +308,37 @@ def probe_config(name):
     return config
 
 
+def home_scene(store):
+    """Her local chat, the home scene a `home` sequence runs in (the owner writing in the Web composer)."""
+    chat = store.config['chat']
+    if not store.db.scenes.find_one({'_id': chat['scene_id']}, {'_id': 1}):
+        store.put('scenes', {'_id': chat['scene_id'], 'kind': 'dm', 'scope_key': 'scene:' + chat['scene_id'],
+                             'policy_epoch': 1, 'sequence': 0, 'members': [chat['person_id']]})
+    return chat['scene_id']
+
+
+def home_event(scene_id, person_id, line, key):
+    return {'event_id': key, 'scene_id': scene_id, 'person_id': person_id, 'text': line['text']}
+
+
 def run_sequence(store, lane, seq, index, name):
-    """One conversation in its own group: history lines stored as she would have them, then each step."""
-    group = str(80000 + index)
-    scene_id = 'qq:%s:group:%s' % (BOT, group)
-    number = {who: str(FIRST_MEMBER + i) for i, who in enumerate(seq['people'])}
-    store.config['channels']['qq']['routes']['g%d' % index] = {
-        'scene_id': scene_id, 'target': {'type': 'group', 'id': group},
-        'members': {n: {'person_id': 'qq:' + n} for n in number.values()}}
-    store.put('scenes', {'_id': scene_id, 'kind': 'group', 'scope_key': 'scene:' + scene_id, 'channel_account_id': BOT,
-                         'channel_id': 'qq', 'policy_epoch': 1, 'sequence': 0,
-                         'members': ['qq:' + n for n in number.values()]})
+    """One conversation: in its own group, or at home (`kind` home: her local chat); history lines stored as she
+    would have them, then each step. The model is offered that conversation's own tools, as a live turn there is."""
+    if seq['kind'] == 'home':
+        scene_id, person = home_scene(store), store.config['chat']['person_id']
+        line_event = lambda line, key, aside=False: home_event(scene_id, person, line, key)
+    else:
+        group = str(80000 + index)
+        scene_id = 'qq:%s:group:%s' % (BOT, group)
+        number = {who: str(FIRST_MEMBER + i) for i, who in enumerate(seq['people'])}
+        store.config['channels']['qq']['routes']['g%d' % index] = {
+            'scene_id': scene_id, 'target': {'type': 'group', 'id': group},
+            'members': {n: {'person_id': 'qq:' + n} for n in number.values()}}
+        store.put('scenes', {'_id': scene_id, 'kind': 'group', 'scope_key': 'scene:' + scene_id,
+                             'channel_account_id': BOT, 'channel_id': 'qq', 'policy_epoch': 1, 'sequence': 0,
+                             'members': ['qq:' + n for n in number.values()]})
+        line_event = lambda line, key, aside=False: event(scene_id, group, number, line, key, name, aside=aside)
+    lane.schemas = dsh_schemas(store, scene_id)
     for text in seq.get('memories', []):
         store.put('memory_units', {'_id': 'mem-%d-%s' % (index, uuid.uuid4().hex[:8]), 'scope_key': 'scene:' + scene_id,
                                    'epistemic_type': 'observed_fact', 'subjects': [], 'body_markdown': text,
@@ -330,17 +351,17 @@ def run_sequence(store, lane, seq, index, name):
         if line['who'] == '你':
             mine(store, scene_id, line['text'], i)
         else:
-            persist_input(store, event(scene_id, group, number, line, 'h%d-%d' % (index, i), name, aside=True))
+            persist_input(store, line_event(line, 'h%d-%d' % (index, i), aside=True))
     turns = []
     for i, step in enumerate(seq['steps']):
         lane.where = {'sequence': seq['id'], 'kind': seq['kind'], 'step': i}
         key = 's%d-%d' % (index, i)
         if not step.get('mention'):
-            persist_input(store, event(scene_id, group, number, step, key, name, aside=True))
+            persist_input(store, line_event(step, key, aside=True))
             continue
         before = len(lane.records)
         try:
-            coordinator.ingest(event(scene_id, group, number, step, key, name), persona=PERSONA)
+            coordinator.ingest(line_event(step, key), persona=PERSONA)
             outcome = 'answered'
         except Stopped:
             outcome = 'stopped'

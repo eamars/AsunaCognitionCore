@@ -94,6 +94,23 @@ def test_the_probe_leaves_no_database():
         client.close()
 
 
+def test_each_conversation_is_offered_its_own_tools_and_home_is_one_of_them():
+    """ADR-087 §3: the probe showed every conversation the global specs (all_specs), so its group turns saw speak
+    options their adapter never declared. Each conversation now gets its own (session_specs, as the Host asks the
+    worker), and a home sequence runs in her local chat with home's tools."""
+    class Specs(Watching):
+        def call(self, system, messages, schemas, names):
+            self.speak = getattr(self, 'speak', []) + [json.dumps(schemas.get('speak'), sort_keys=True)]
+            return super().call(system, messages, schemas, names)
+    provider = Specs()
+    out, _ = rp.probe(args(sequences=[CHAT, str(rp.FIXTURES / 'sequences' / 'home.json')], dry_run=True), provider=provider)
+    group, home = provider.sent[0]['names'], provider.sent[-1]['names']
+    assert 'speak' in group and 'restart' not in group
+    assert {'restart', 'set_policy', 'plan', 'delegate'} <= set(home) and 'speak' not in home
+    assert provider.speak[0] != json.dumps(rp.dsh_schemas()['speak'], sort_keys=True), "the group's own speak"
+    assert out['turns'] == 4 and {t['kind'] for t in out['turns_detail']} == {'chat', 'home'}
+
+
 def test_tool_schemas_come_from_dshs_own_conversion():
     think_schema = rp.dsh_schemas()['think']['parameters']
     assert think_schema['type'] == 'object' and think_schema['required'] == ['thought']

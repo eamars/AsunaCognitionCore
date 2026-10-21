@@ -255,6 +255,14 @@ PACE_VERSION = 1
 PACE_GAP = timedelta(minutes=30)
 PACE_ROWS = 300
 SAID = ((0, '还没有别的话'), (5, '几句'), (20, '一二十句'), (60, '几十句'), (None, '很多句'))
+# How long she has been talking here against how long the people here usually talk (her ask, ADR-084 addendum
+# 2026-10-21): the mean of her last lines here over the median of the others' lines here in the last days, from this
+# group's own lines only, never a scale from elsewhere. The ratio reaches her as words only (the first band it is below).
+LENGTH_VERSION = 1
+LENGTH_DAYS, LENGTH_THEIRS_MIN, LENGTH_MINE, LENGTH_MINE_MIN = 7, 20, 20, 5
+LENGTH_WORDS = ((0.7, '你最近在这里比这里的人平常说得短'), (1.4, '你最近在这里说的长短和这里的人差不多'),
+                (2.5, '你最近在这里说的比这里的人平常长不少'),
+                (None, '你最近在这里说的比这里的人平常长很多（这里的人平常一句话很短）'))
 
 
 def _span(delta):
@@ -287,7 +295,27 @@ def pace(store, scene, moment, zone):
             line_stamp(zone, before.isoformat()), _tier(SAID, stretch))
     else:
         value['before'] = '往前看的这些话中间没停过'
+    length = your_length(store, scene, moment)
+    if length:
+        value['your_length'] = length
     return value
+
+
+def your_length(store, scene, moment):
+    """Her recent lines here against the people here, in words (LENGTH_WORDS); None with too few lines of either."""
+    from statistics import median
+    from .ingress import NOT_CORE_NOTICE
+    since = (moment - timedelta(days=LENGTH_DAYS)).isoformat()
+    sizes = lambda rows: [len(row['text']) for row in rows if isinstance(row.get('text'), str) and row['text']]
+    theirs = sizes(store.db.messages.find(
+        {'scene_id': scene['_id'], 'direction': 'inbound', 'received_at': {'$gte': since}, **NOT_CORE_NOTICE},
+        {'text': 1}))
+    mine = sizes(store.db.messages.find({'scene_id': scene['_id'], 'direction': 'outbound', 'delivery_state': 'DELIVERED'},
+                                        {'text': 1}).sort('scene_seq', -1).limit(LENGTH_MINE))
+    if len(theirs) < LENGTH_THEIRS_MIN or len(mine) < LENGTH_MINE_MIN:
+        return None
+    ratio = (sum(mine) / len(mine)) / median(theirs)
+    return next(words for bound, words in LENGTH_WORDS if bound is None or ratio < bound)
 
 
 def episode_key(visit):

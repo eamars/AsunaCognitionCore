@@ -235,6 +235,7 @@ Her places (ADR-012 §4.2, §4.4): the groups she can visit from home, and what 
 - def `zones` — Every group she is in: whether its time zone is set, and the time there now.
 - def `room` — The room as it is now, from stored rows only.
 - def `pace` — The group's talk as it reads now: the current stretch and, before it, the last pause and what came since.
+- def `your_length` — Her recent lines here against the people here, in words (LENGTH_WORDS); None with too few lines of either.
 - def `episode_key`
 - def `outcome` — What happened on one visit, read from its turn and the room afterwards.
 - def `local_date` — Her local date (her rhythm's time zone), for the daily counts.

@@ -113,3 +113,30 @@ Put to her 2026-10-20 23:4x; she agreed, with three conditions as Claude paraphr
 
 **Reading (one week after her install):** how many unprompted wakes she took in China's evening, whether they read as interrupting, whether a busy group was condensed while talking, and how many more wakes a day than before. If it reads badly, the clock gate does not come back: the group's own clock goes into her judgement instead (her condition). She sets the zones of the six groups without one herself (10-21 15:00) and reports which, on what grounds, and which she left unset.
 
+## 9. How long she talks in a group, as a fact (2026-10-21)
+
+Her ask: to see whether her lines in a group run long for that group, instead of a limit on them. The coordinator's
+decision (B18, under the owner's "tiny technical decisions are yours"): one line in the group's own pace block
+(`pace_from_program`, `places.pace`, in every full group turn; not in the relevance gate), `your_length`, comparing the
+mean length of her last 20 lines here (at least 5) with the median length of the others' lines here in the last 7 days
+(at least 20), from this group's lines only, never a scale from elsewhere (`places.your_length`). The ratio reaches
+her as words from a versioned table (`LENGTH_VERSION` 1, `LENGTH_WORDS`), no number:
+
+| ratio (hers / theirs) | words |
+|---|---|
+| under 0.7 | 你最近在这里比这里的人平常说得短 |
+| 0.7 to under 1.4 | 你最近在这里说的长短和这里的人差不多 |
+| 1.4 to under 2.5 | 你最近在这里说的比这里的人平常长不少 |
+| 2.5 and over | 你最近在这里说的比这里的人平常长很多（这里的人平常一句话很短） |
+
+With too few lines of either, no line. Placed in the pace block because it is the one block every group turn has
+about how the talk there reads (neither ADR-084 nor ADR-086 owned a group block; this section records it here, where
+facts take the place of limits).
+- **Cost:** 35 to 50 characters (`, "your_length": "…"`, by band) each time the pace block is sent, which is most group
+  turns (the block changes whenever someone has spoken). The words change only when a band changes; the 7-day window
+  can also move a band with nobody speaking, rarely. No tool, no description change.
+- **Today** (read-only, counts only): of her groups with enough lines, 12 read 「长很多」, 1
+  「长不少」, 1 「差不多」; 8 have too few lines for a line.
+- Tests: `tests/test_group_pace.py` (each band, too few lines on either side, another group's lines and lines older
+  than 7 days not counted, no digit in the words).
+

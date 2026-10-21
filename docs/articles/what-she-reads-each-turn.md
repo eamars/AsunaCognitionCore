@@ -321,6 +321,9 @@ conversation. Script: `.runtime/private/articles/measure_week.py` (local, read-o
 
 ## Changelog
 
+- **2026-10-21 (night)** — A group's `pace` block carries `your_length` where there are enough lines: how long her
+  recent lines here run against the others' usual length here, as words (ADR-084 §9), 35–50 characters more when the
+  block is sent. The `pace` row above is the earlier form's until the next measurement.
 - **2026-10-21 (evening)** — Both choices from the re-measurement built, in the shape she set (ADR-030 addendum,
   ADR-016 §5). A: a hand-back carries a first page of about 2,000 characters (up to 3,000 so a section or a table is
   not cut), the action brain's report opens with the verdict, what changed, a publish's `state` and `activated`, the

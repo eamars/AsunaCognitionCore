@@ -102,7 +102,7 @@ class PublishService:
             if (channel.get('id') != scene['channel_id'] or channel.get('target') != route['target']
                     or channel.get('account_id') != self.store.config['channels'][scene['channel_id']]['account_id']):
                 raise Denied('PUBLICATION_SOURCE_TARGET_MISMATCH')
-            return self.store.put('messages', {**msg, 'delivery_state': 'QUEUED_EXTERNAL',
+            return self.store.put('messages', {**msg, 'delivery_state': 'QUEUED_EXTERNAL', 'queued_at': now(),
                                   'channel_id': scene['channel_id'], 'target': route['target'],
                                   'channel_account_id': channel['account_id'],
                                   # ADR-079 §9.6: what her line quotes (visible, hers to choose) and what it answers

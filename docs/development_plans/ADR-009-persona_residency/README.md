@@ -95,3 +95,22 @@ comes up, whenever it was queued; a part still waiting for its time or for an ea
 so later lines there never overtake it and other conversations still send. Tests: `tests/test_adr009_p5_speak.py`
 (`test_a_part_queued_after_an_earlier_part_failed_is_cancelled_when_it_comes_up`,
 `test_a_waiting_part_holds_its_own_conversation_and_no_other`; both fail on the code before).
+
+Installed 2026-10-22 01:03 NZDT. In the field the same hour: from 00:44:22 a recall part's later part, queued 65 s after
+the recall failed, held the whole QQ channel for 19 minutes; at 01:03:12 the first claim on the new code cancelled it and
+the other group's two waiting turns went out in the same second.
+
+## Addendum 2026-10-22: conversations take turns by when they queued; a queued line reads as not sent
+
+Her two questions after the jam (2026-10-22 ~01:00 NZDT, her reading of the code):
+
+- **Order between conversations.** The claim sorted the shared queue by `scene_seq`, which counts within one conversation
+  only, so a conversation with smaller numbers always went first. A row now records `queued_at` when it is queued
+  (`PublishService`); `Channels._next` orders conversations by their oldest queued row and keeps each conversation's own
+  order by `scene_seq`. Rows queued before this have no `queued_at` and go first, as they would have.
+- **What a queued line is called.** Her history block called a `QUEUED_EXTERNAL` line 「在发」, the word for `SENDING`,
+  which `recall` refuses; `recall` cancels a queued line (「还没发出去的就取消」). During the jam she read her waiting lines
+  as already leaving. It now reads 「排着队，还没发出去」 (`context.UNDELIVERED_WORDS`); `SENDING` stays 「在发」.
+
+Tests: `test_conversations_take_turns_by_when_their_lines_were_queued` (test_adr009_p5_speak.py),
+`test_a_line_still_queued_is_cancelled_and_never_leaves` (test_own_recall.py); both fail on the code before.

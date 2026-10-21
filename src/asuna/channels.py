@@ -479,9 +479,14 @@ class Channels:
         """The next line to hand out: the first queued one whose conversation is not waiting. A paced part holds its
         conversation until its time and until the parts before it are delivered, so later lines there never overtake
         it (ADR-009 §11.1); it holds no other conversation. A part whose earlier part will never arrive is cancelled
-        here, whenever it was queued: cancel_after reaches only the parts that existed when that one failed."""
-        held = set()
-        for row in self.store.db.messages.find(query, sort=[('scene_seq', 1)]):
+        here, whenever it was queued: cancel_after reaches only the parts that existed when that one failed.
+        Conversations take turns by when their oldest queued line was queued (scene_seq counts within one conversation
+        only); within one, lines go in their order."""
+        held, rows, first = set(), list(self.store.db.messages.find(query)), {}
+        for row in rows:
+            first[row['scene_id']] = min(first.get(row['scene_id'], '~'), str(row.get('queued_at') or ''))
+        rows.sort(key=lambda row: (first[row['scene_id']], row['scene_seq']))
+        for row in rows:
             if row['scene_id'] in held:
                 continue
             if row.get('segment_index'):

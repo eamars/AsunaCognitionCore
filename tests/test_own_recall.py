@@ -52,6 +52,10 @@ def test_a_delivered_line_within_the_window_is_recalled_with_her_reason(group):
 
 def test_a_line_still_queued_is_cancelled_and_never_leaves(group):
     her_line(group, 51, state='QUEUED_EXTERNAL')
+    from asuna.context import ContextBuilder
+    _, context, _ = ContextBuilder(group).prepare(mention('r-2a'))
+    [shown] = [r for r in context.get('undelivered_outbound_not_public') or [] if r.get('_id') == 'mine-51']
+    assert shown['delivery_state'] == '排着队，还没发出去', 'it reads as not sent, as recall takes it'
     result, ok, rows = speak(group, 'r-2', [{'kind': 'recall', 'line': '51', 'why': '发错群了'}])
     assert ok and rows == [], 'a cancel is no outbox row'
     row = group.db.messages.find_one({'_id': 'mine-51'})

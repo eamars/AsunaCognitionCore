@@ -159,6 +159,31 @@ def test_she_keeps_stickers_from_the_group_and_sends_one_as_its_own_message(stor
     assert data == PNG + STICKER_URL.encode() and media == 'image/png'
 
 
+def test_a_kept_png_with_text_goes_out_without_it(store, monkeypatch):
+    """A PNG keeps its text chunks where it is stored; what leaves drops them, and the row declares what leaves."""
+    import io
+    from PIL import Image, PngImagePlugin
+    refs = group_world(store, monkeypatch)
+    info = PngImagePlugin.PngInfo()
+    info.add_text('prompt', 'the request that drew it')
+    buffer = io.BytesIO()
+    Image.new('RGB', (8, 8), (20, 120, 200)).save(buffer, 'PNG', pnginfo=info)
+    drawn = buffer.getvalue()
+    monkeypatch.setattr(vision, 'pull_bytes', lambda entry, config, max_bytes=None, timeout=None:
+                        (drawn, 'image/png', 'url', {}))
+    lane = FakeLane(store, [FakeTurn([THINK, ('sticker', {'do': 'keep', 'ref': refs['custom'], 'name': '画的',
+                                                          'use_for': '随手'}),
+                                      ('speak', {'parts': [{'kind': 'sticker', 'name': '画的'}]})])])
+    ep = Coordinator(store, lane).ingest(mention('keep-png'), persona='P1')
+    [row] = list(store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK'}))
+    store.db.messages.update_one({'_id': row['_id']}, {'$unset': {'not_before': ''}})
+    [item] = bridge(store).claim('qq', supports=['image', 'sticker'])['items']
+    claimed = store.db.messages.find_one({'_id': item['publication_id']})
+    data, media = outbound_media.serve(store, BlobStore(store), claimed, outbound_media.declared(claimed))[:2]
+    assert media == 'image/png' and b'the request that drew it' not in data
+    assert data == outbound_media.without_text(drawn) and claimed['attachment']['size'] == len(data)
+
+
 def test_an_adapter_that_cannot_send_stickers_sends_none(store, monkeypatch):
     refs = group_world(store, monkeypatch)
     lane = FakeLane(store, [FakeTurn([THINK, ('sticker', {'do': 'keep', 'ref': refs['market'], 'name': '臭', 'use_for': '嫌弃'}),

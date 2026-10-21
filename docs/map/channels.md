@@ -161,6 +161,7 @@ Her sticker shelf and the platform's own faces (ADR-016).
 - def `names_block` — stickers_from_program at home outside the turns that tidy the shelf: its names only (her answer, 2026-10-16: what she has stays in mind; the uses are what take the room).
 - def `faces_block` — faces_from_program: the platform faces people here used lately, by name.
 - def `speech_problem` — What is wrong with the stickers and faces in what she is about to say; None when they can go.
+- def `leaving` — The sha and size of a shelf picture as it leaves: its stored bytes without their text, which is what outbound_media.serve sends and checks the declared sha against.
 - def `outbound` — The row fields of a message that is one sticker token: what the channel sends; None for words.
 - def `sent`
 - def `on_shelf` — A kept sticker's picture: it may go to any conversation that takes stickers (outbound_media.serve).

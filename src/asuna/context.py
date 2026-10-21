@@ -105,7 +105,8 @@ def landing_lost(verification):
     return ('平台收下了这句，但%s没落成：对方看到的没有它' % '、'.join(dict.fromkeys(lost))) if lost else None
 
 
-UNDELIVERED_WORDS = {'READY': '还没发', 'QUEUED_EXTERNAL': '在发', 'SENDING': '在发', 'FAILED': '没发出去',
+# A queued line has not left: recall takes it out (SPEAK_RECALL), so it reads as not sent, not as one on its way.
+UNDELIVERED_WORDS = {'READY': '还没发', 'QUEUED_EXTERNAL': '排着队，还没发出去', 'SENDING': '在发', 'FAILED': '没发出去',
                      'UNKNOWN': '平台没给准话：多半已经发出去了，先看看那边有没有再决定，别直接重发'}
 # What these blocks are for, said once in her system prompt (block_guide.py, ADR-056).
 IDEAS_NOTE = ('这是你的「改进想法」本里还没处理完的想法（来自你自己或行动脑做事时）。逐条用 ideas 的 review 写下处理结果'

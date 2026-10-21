@@ -172,6 +172,33 @@ def test_a_waiting_part_holds_its_own_conversation_and_no_other(store, monkeypat
     assert [r['delivery_state'] for r in outbound(store, ep['_id'])][1:] == ['QUEUED_EXTERNAL'] * 2
 
 
+def test_conversations_take_turns_by_when_their_lines_were_queued(store, monkeypatch):
+    store.config['persona_model'] = model(1)
+    channel_scene(store, monkeypatch)
+    store.config['channels']['replay']['routes']['peer-b'] = {
+        'scene_id': 'dm-b', 'sender_id': 'peer-b', 'person_id': 'B', 'target': {'type': 'dm', 'id': 'peer-b'}}
+    scene = store.db.scenes.find_one({'_id': 'dm-b'})
+    store.put('scenes', {**scene, 'channel_id': 'replay'}, expected=scene['revision'])
+    event = {'event_id': 'b-one', 'scene_id': 'dm-b', 'person_id': 'B', 'text': '在吗',
+             'channel': {'id': 'replay', 'account_id': 'bot', 'target': {'type': 'dm', 'id': 'peer-b'},
+                         'platform_event_id': 'p-b-one'}}
+    persist_input(store, event, managed=True)
+    other = Coordinator(store, FakeLane(store, [FakeTurn([THINK], '好的，收到。')])).ingest(event)
+    [early] = outbound(store, other['_id'])
+    _, ep, _ = turn(store, calls=[said('嗯，在。')])
+    release(store, outbound(store, ep['_id']))
+    [late] = outbound(store, ep['_id'])
+    assert early['queued_at'] and late['queued_at'], 'a line records when it was queued'
+    # Each conversation counts its own lines: the one queued first can carry the larger number.
+    store.put('messages', {**early, 'scene_seq': late['scene_seq'] + 100, 'queued_at': '2026-01-01T00:00:00+00:00'},
+              expected=early['revision'], stream=early['episode_id'])
+    bridge = channels(store)
+    first = bridge.claim('replay')['items'][0]
+    assert first['publication_id'] == early['_id'], 'the line queued first goes first'
+    assert receipt(bridge, first, 'platform_accepted') == {'status': 'DELIVERED'}
+    assert bridge.claim('replay')['items'][0]['publication_id'] == late['_id']
+
+
 def test_T5_9_sending_part_becomes_unknown_and_cancels_the_rest(store, monkeypatch):
     store.config['persona_model'] = model(3)
     channel_scene(store, monkeypatch)

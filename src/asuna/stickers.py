@@ -264,6 +264,20 @@ def speech_problem(store, ep, speech):
     return None
 
 
+def leaving(store, row):
+    """The sha and size of a shelf picture as it leaves: its stored bytes without their text, which is what
+    outbound_media.serve sends and checks the declared sha against. A copy that cannot be read keeps the shelf's own
+    sha, and serve refuses it and says why."""
+    from .blobs import BlobStore
+    from .outbound_media import sha256_of, without_text
+    item = store.db.artifacts.find_one({'_id': row['artifact_id']}, {'scope_key': 1}) or {}
+    try:
+        data = without_text(BlobStore(store).get(row['artifact_id'], item.get('scope_key'), operator=True))
+    except (Denied, ValueError):
+        return {'sha256': row['sha256'], 'size': row.get('size')}
+    return {'sha256': sha256_of(data), 'size': len(data)}
+
+
 def outbound(store, persona, segment):
     """The row fields of a message that is one sticker token: what the channel sends; None for words."""
     from .outbound_media import descriptor
@@ -274,7 +288,7 @@ def outbound(store, persona, segment):
     if row['kind'] == 'market':
         return {'sticker': {'kind': 'market', 'name': row['name'], **row['market']}}
     attachment = descriptor({'attachment': {'artifact_id': row['artifact_id'], 'media_type': row.get('media_type'),
-                                            'sha256': row['sha256'], 'size': row.get('size')}})
+                                            **leaving(store, row)}})
     if not attachment:
         return None
     return {'sticker': {'kind': 'custom', 'name': row['name']}, 'attachment': attachment}

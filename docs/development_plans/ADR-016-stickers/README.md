@@ -53,3 +53,10 @@
 
 - 能发表情包的会话里，`stickers_from_program` 是 `names`（架子上所有名字）、`shelf`（几个，满到哪）和一句说明（`stickers.send_block`）；她写的用法、发过几次用 `sticker` 的 `shelf` 看。
 - 家里照旧：整理架子的回合列全，别的回合只列名字。
+
+## 6. 补记 2026-10-22：自己架上的 PNG 按发出去的那份声明
+
+她查出来的（2026-10-22 ~01:00 NZDT，读的代码）：出站取图时（`outbound_media.serve`）先去掉 PNG 里的文字块（生成器把整份请求写在那里，不能跟着图出去），再拿 sha 跟行上声明的比；表情包那行声明的却是架子上记的存档 sha（`stickers.outbound`），存档里还带着文字块，所以带文字块的 PNG 表情包每次都 403 `ATTACHMENT_SHA_MISMATCH`。GIF、JPEG 和不带文字块的 PNG 不受影响。
+
+- 现在表情包那行声明的是发出去的那份（存档去掉文字块后）的 sha 和大小（`stickers.leaving`），跟 `accept_artifact` 给普通图声明的一样。架子上的记录不动（身份照旧按存档 sha 去重）。
+- 测试：`tests/test_stickers.py::test_a_kept_png_with_text_goes_out_without_it`（改之前的代码上会失败）。

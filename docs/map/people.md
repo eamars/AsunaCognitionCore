@@ -346,7 +346,8 @@ Notes between her own conversations (ADR-018, owner 2026-10-07).
 - def `can_send` — Whether a turn opened by this note may write one (note -> reply -> stop).
 - def `allowed` — Where this turn may write: anywhere it reaches, or only back, when an untrusted note opened it.
 - def `places_view` — note_places_from_program: where a note from here can go, by name, with what happens there by default.
-- def `borrowed` — Whose recent line here the note shares a run of OWN_WORDS_RUN characters with, or None.
+- def `borrowed` — The recent line of someone else here the note shares a run of OWN_WORDS_RUN characters with, as {author, at, first, last}: the line's author and time, and the stretch of her text that matches it (1-based, inclusive, spaces counted); None wh
+- def `copied_words` — The copied-words refusal (ADR-087 §4.5): which stretch of her note matches whose line, by label and time, never the line itself; naming the source does not make it pass.
 - def `prepare` — Validate one note from this turn: (draft, None), or (None, the row already sent by this call).
 - def `owner_line` — The owner's own words that woke this turn outside (his platform account, mapped to him by configuration), or None.
 - def `record`

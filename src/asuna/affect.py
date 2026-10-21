@@ -446,8 +446,10 @@ class AffectLedger:
         if not self.enabled:
             raise AffectError('AFFECT_DISABLED', '情感账没开；重试也一样')
         if item.get('ref') not in refs:
-            raise AffectError('AFFECT_REF_NOT_IN_INDEX', '%s不在%s里；ref 照抄%s里触动你的那条（消息或记忆）的 id'
-                              % ('没写 ref，' if not item.get('ref') else 'ref「%s」' % item['ref'], where, where))
+            from .config import refs_usable
+            raise AffectError('AFFECT_REF_NOT_IN_INDEX', '%s不在%s里；ref 照抄%s里触动你的那条（消息或记忆）的 id。%s'
+                              % ('没写 ref，' if not item.get('ref') else 'ref「%s」' % item['ref'], where, where,
+                                 refs_usable(refs)))
         if self.model.get('require_cost') and not str(item.get('cost') or '').strip():
             raise AffectError('AFFECT_COST_REQUIRED', '这份情感账每一笔都要写 cost：这件事让你付出了什么')
         limit = self.model.get('max_delta') or {}

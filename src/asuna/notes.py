@@ -43,6 +43,11 @@ OWN_WORDS_RUN = 20
 OWN_WORDS_HOURS = 2
 OWNER_LINE_CHARS = 300
 OWNER_SAID = '写这张便条时叫你的那句，是主人本人在那边说的（程序按他的账号核对过）：他托的事，这一回合可以用 errand 去办。'
+# The copied-words refusal (ADR-087 §4.5): the stretch of her note, whose line by label and time, never the words.
+NOT_OWN_WORDS = ('便条第 %d–%d 字和 %s %s 在这里说的一句一样。写明是谁说的也不行，这一段只能换成你自己的话；'
+                 '别人托你的，用你的话说清是谁的意思。')
+# A group that cannot be woken now, with no deliver given, gets the note next time (ADR-087 §4.4).
+NEXT_TIME_INSTEAD = '那个群现在叫不醒（%s），改成那边下次有回合时看到；三天（72 小时）没读就过期了，读没读在 notes_sent_from_program 看。'
 TRUSTED, UNTRUSTED = 'trusted', 'untrusted'
 WAKE, NEXT_TIME = 'wake', 'next_time'
 FINISHED = ('COMMITTED', 'WAITING_TASK')
@@ -171,19 +176,34 @@ def places_view(store, persona, scene_id, cls, first):
 
 # ── sending ─────────────────────────────────────────────────────────
 def borrowed(store, scene_id, text, moment):
-    """Whose recent line here the note shares a run of OWN_WORDS_RUN characters with, or None."""
-    flat = ''.join(text.split())
+    """The recent line of someone else here the note shares a run of OWN_WORDS_RUN characters with, as {author, at,
+    first, last}: the line's author and time, and the stretch of her text that matches it (1-based, inclusive,
+    spaces counted); None when there is none."""
+    kept = [i for i, ch in enumerate(text) if not ch.isspace()]          # where each non-space character sits
+    flat = ''.join(text[i] for i in kept)
     if len(flat) < OWN_WORDS_RUN:
         return None
-    runs = {flat[i:i + OWN_WORDS_RUN] for i in range(len(flat) - OWN_WORDS_RUN + 1)}
     since = (moment - timedelta(hours=OWN_WORDS_HOURS)).isoformat()
     me = character_id(store.config)
     for row in store.db.messages.find({'scene_id': scene_id, 'direction': 'inbound', 'author': {'$ne': me},
-                                       'received_at': {'$gte': since}}, {'text': 1, 'author': 1}):
+                                       'received_at': {'$gte': since}}, {'text': 1, 'author': 1, 'received_at': 1}):
         line = ''.join(str(row.get('text') or '').split())
-        if len(line) >= OWN_WORDS_RUN and any(run in line for run in runs):
-            return row['author']
+        hits = [i for i in range(len(flat) - OWN_WORDS_RUN + 1) if flat[i:i + OWN_WORDS_RUN] in line]
+        if len(line) >= OWN_WORDS_RUN and hits:
+            return {'author': row['author'], 'at': row.get('received_at'), 'first': kept[hits[0]] + 1,
+                    'last': kept[hits[-1] + OWN_WORDS_RUN - 1] + 1}
     return None
+
+
+def copied_words(store, persona, scene_id, match):
+    """The copied-words refusal (ADR-087 §4.5): which stretch of her note matches whose line, by label and time, never
+    the line itself; naming the source does not make it pass."""
+    from . import local_time
+    from .people import People
+    scene = store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}
+    who = People(store, persona).speaker(scene, match['author'])
+    when = local_time.stamp(match['at'], local_time.zone_of(store, scene_id)) if match.get('at') else '刚才'
+    return NOT_OWN_WORDS % (match['first'], match['last'], who, when)
 
 
 def _resolve(store, persona, found, wanted, cls):
@@ -240,10 +260,9 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
         raise NoteRefused('NOTE_MODE_NOT_ALLOWED', '送到%s的便条只能%s：deliver 写 %s，或不写。'
                           % (KIND_WORDS[kind], MODE_WORDS[choices[0]], choices[0]))
     if trust == UNTRUSTED:
-        who = borrowed(store, ep['scene_id'], text, moment)
-        if who:
-            raise NoteRefused('NOTE_NOT_OWN_WORDS', '便条里有一长段和这里别人刚说的话一样。用你自己的话写；'
-                                                    '要是别人托你的，写清是谁的意思。')
+        match = borrowed(store, ep['scene_id'], text, moment)
+        if match:
+            raise NoteRefused('NOTE_NOT_OWN_WORDS', copied_words(store, persona, ep['scene_id'], match))
     sent_here = store.db.notes.count_documents({'from_episode': ep['_id'], 'question': {'$exists': False}})
     if not question and sent_here >= PER_TURN:
         raise NoteRefused('NOTE_TURN_LIMIT', '这一回合已经写了 %d 张便条（上限 %d 张），先到这里；还要说的下回合再写。'

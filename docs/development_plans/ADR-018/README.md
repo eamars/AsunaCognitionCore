@@ -303,6 +303,10 @@ never rings"). It still counts as a visit and is refused at night there; the ref
 `next_time`. **A note to someone else's DM still waits** (`next_time` only): waking it would mean speaking first to
 that person, which is `errand`'s job, with its account of on whose behalf.
 
+Changed by ADR-087 §4.4 (2026-10-21): when the group cannot be woken now (muted, or its day of outings used up) and she
+gave no `deliver`, the note goes `next_time` instead of being refused, and the result says it may expire unread after
+72 hours (`notes.NEXT_TIME_INSTEAD`). Asking for `wake` there is still refused with the reason.
+
 ## 13. From anywhere to the owner's own chat (2026-10-17)
 
 The owner's decision, from a wish she had mentioned: she should be able to reach him from anywhere, at any time, and

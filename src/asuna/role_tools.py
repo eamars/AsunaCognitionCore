@@ -29,7 +29,7 @@ from .state import Conflict, Denied
 from . import visibility
 from .errands import MARK as ERRAND_MARK
 from .vision import inline_summary as picture_receipt
-from .config import cut, cut_offer, over, soft
+from .config import cut, cut_offer, over, refs_usable, soft
 from .context_budget import SINGLE_BODY_CHARS
 
 THOUGHT_CHARS = 120                  # what she is asked for: her first reaction, short (ADR-087 §4.1)
@@ -59,6 +59,10 @@ VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send 
 ERRAND_FROM = ('external', 'scheduled', 'note')
 # How a plan that can no longer be changed ended, in her words (one table for every plan refusal that names it).
 PLAN_ENDED = {'CANCELLED': '取消', 'SUSPENDED': '停', 'FIRED': '跑完', None: '失效'}
+# ADR-087 §4.4 (with her ask: the new id named, the old one plainly still fired).
+PLAN_MOVED_FIRED = ('「%s」这回合已经到点跑完了，它还是跑完的那条，没有改动；按你给的时间新建了一条：%s。'
+                    '这件事以后改期或取消，用新的这条。')
+ASK_UNKNOWN = 'ASK_QUESTION_UNKNOWN: 没有「%s」这个问题：id 照抄 questions_from_program 或 ask 的结果。'
 # An errand turn hands new work home but does not steer the tasks listed there: they are that conversation's, which
 # home's authority does not reach (errands.NO_STEER). A reflection turn delegates as any home turn does.
 STEERING = ('task.message', 'task.stop')
@@ -360,7 +364,8 @@ TOOLS = {
     },
     'note': {
         'description': ('给别的对话里的你写一张便条：to 照抄 note_places_from_program 里的 place（在外面也可写「家里」）。'
-                         '那边的你会读到，那边的人看不到，但可能被照着说，所以只写愿意在那边说的；用你自己的话，别人托的写清是谁的意思。'
+                         '那边的你会读到，那边的人看不到，但可能被照着说，所以只写愿意在那边说的；用你自己的话：'
+                         '和这里别人刚说的一长段一样的，写明是谁说的也送不出去；别人托的，用你的话说清是谁的意思。'
                          'deliver：wake 马上叫醒那边（排在那边手上的事后面），next_time 那边下次有回合时看到；能选哪样看从哪写到哪，'
                          '不写按那边的默认。叫醒一个群算一次出门。家里送家里 %d 字以内（最多 %d），别的 %d 字以内（最多 %d）；一回合最多两张。'
                          % (soft(_notes.HOME_NOTE_CHARS), _notes.HOME_NOTE_CHARS, soft(_notes.NOTE_CHARS), _notes.NOTE_CHARS)),
@@ -1821,9 +1826,13 @@ class RoleTools:
                 'note': (HOME_TASK if ep.get('errand') else REFLECTION_TASK if _one_shot(ep)
                          else '结果回来会再叫你；在那之前不要说已经做完。')}, False
 
+    def _listed_tasks(self, ep):
+        """The ids of the tasks this turn lists (task_state_from_program): what a task reference can name."""
+        return [task.get('_id') for task in (ep.get('context') or {}).get('task_state_from_program') or []]
+
     def _own_task(self, ep, task_id):
         if not isinstance(task_id, str) or not task_id:
-            raise Refused('task 要照抄 task_state_from_program 里的 _id。')
+            raise Refused('task 要照抄 task_state_from_program 里的 _id。' + refs_usable(self._listed_tasks(ep)))
         task = self.store.db.tasks.find_one({'_id': task_id, 'scene_id': ep['scene_id'],
                                              'requester_id': ep['person_id'], 'policy_epoch': ep['policy_epoch']})
         if not task:
@@ -1839,8 +1848,8 @@ class RoleTools:
             close = [row['_id'] for row in self.store.db.tasks.find(
                 {'scene_id': ep['scene_id'], 'requester_id': ep['person_id'], 'policy_epoch': ep['policy_epoch'],
                  '_id': {'$regex': '^' + __import__('re').escape(task_id[:12])}}, {'_id': 1}).limit(3)]
-            raise Refused('「%s」不是这个对话里的任务%s。照 task_state_from_program 原样抄 _id。'
-                          % (task_id, '；可能是：' + '、'.join(close) if close else ''))
+            raise Refused('「%s」不是这个对话里的任务。照 task_state_from_program 原样抄 _id。%s'
+                          % (task_id, refs_usable([*close, *self._listed_tasks(ep)])))
         return task
 
     def tool_task_message(self, ep, call_id, args):
@@ -2339,6 +2348,7 @@ class RoleTools:
         op = args.get('op') or ('create' if args.get('intent') and timing and not args.get('plan_id') else None)
         inferred = not args.get('op') and op == 'create'
         planned = {row.get('_id'): row for row in (ep.get('context') or {}).get('plans_from_program') or []}
+        moved = None
 
         def run(action):
             with database_effects_lock(self.store.name):
@@ -2356,7 +2366,8 @@ class RoleTools:
                     wanted = self._text(args, 'line', 80)
                     where = next((item for item in lines.peer_lines(self.store) if item['label'] == wanted), None)
                     if not where:
-                        raise Refused('没有这条线；照抄 lines_from_program 里的 place。')
+                        raise Refused('没有这条线；照抄 lines_from_program 里的 place。'
+                                      + refs_usable(item['label'] for item in lines.peer_lines(self.store)))
                 plan = run(lambda: c.scheduler.create(ep, spec, plan_id='plan-' + sha(canonical([ep['_id'], call_id]))[:32],
                                                       where=where))
             elif op in ('update', 'cancel'):
@@ -2369,14 +2380,15 @@ class RoleTools:
                 if not row:
                     # Her list shows a few plans; one of this conversation's that it leaves out is still hers (ADR-054).
                     kept = self.store.db.plans.find_one({'_id': plan_id, 'scene_id': ep['scene_id']})
-                    if kept and kept.get('status') in ('CREATING', 'ACTIVE'):
+                    if kept and (kept.get('status') in ('CREATING', 'ACTIVE') or self._fired_here(ep, kept, op, timing)):
                         row = kept
                     elif kept:
                         raise Refused('「%s」已经%s了，改不了；要再安排就新建一条（do=create）。'
                                       % (plan_id, PLAN_ENDED.get(kept.get('status'), '跑完')))
                     else:
+                        usable = [*planned, *(made - {None})]
                         raise Refused('「%s」不在 plans_from_program 里，也不是这回合刚建的；照列表原样抄 plan_id，'
-                                      '或抄这回合 plan 工具返回的 plan_id。' % plan_id)
+                                      '或抄这回合 plan 工具返回的 plan_id。%s' % (plan_id, refs_usable(usable)))
                 from .schedule import RHYTHM_KINDS
                 if row.get('kind') in RHYTHM_KINDS:
                     # Her rhythms belong to the program (ADR-012 §4.3): she tunes them, never cancels or retimes them here.
@@ -2384,6 +2396,12 @@ class RoleTools:
                                   '要调快慢、时间或开关，在家里用 set_policy。' % plan_id)
                 if op == 'cancel':
                     plan = run(lambda: c.scheduler.cancel(plan_id, ep['scene_id'], ep['person_id'], ep['policy_epoch']))
+                elif self._fired_here(ep, row, op, timing):
+                    # ADR-087 §4.4: a one-shot plan moved in the turn it fired stays fired; a new plan takes the timing
+                    # (and the old intent when none is given), and the result names it.
+                    spec = {'intent': self._text(args, 'intent', 1000) if args.get('intent') else row['intent'], **timing}
+                    plan = run(lambda: c.scheduler.create(ep, spec, plan_id='plan-' + sha(canonical([ep['_id'], call_id]))[:32]))
+                    moved = PLAN_MOVED_FIRED % (plan_id, plan['_id'])
                 else:
                     if row.get('status') not in ('CREATING', 'ACTIVE'):
                         raise Refused('「%s」已经%s了，改期只对着还生效的；要再安排就新建一条（do=create）。'
@@ -2405,7 +2423,15 @@ class RoleTools:
         return {'plan_id': plan['_id'], 'status': plan['status'], 'scheduled_at': plan.get('scheduled_at'),
                 'next_fire_at': plan.get('next_fire_at'), 'timezone': plan.get('timezone'),
                 'plan_version': plan.get('plan_version', 1),
-                **({'note': '没写 do：有 intent 和计时、没有 plan_id，按新建（create）办了。'} if inferred else {})}, False
+                **({'note': '没写 do：有 intent 和计时、没有 plan_id，按新建（create）办了。'} if inferred else {}),
+                **({'note': moved} if moved else {})}, False
+
+    def _fired_here(self, ep, plan, op, timing):
+        """Whether this call moves a one-shot plan in the very turn it fired (ADR-087 §4.4)."""
+        if op != 'update' or not timing or (plan or {}).get('status') != 'FIRED':
+            return False
+        source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']}, {'event.scheduled_plan_id': 1}) or {}
+        return (source.get('event') or {}).get('scheduled_plan_id') == plan['_id']
 
     def tool_group_action(self, ep, call_id, args):
         from . import group_admin
@@ -2529,7 +2555,8 @@ class RoleTools:
         wanted = self._text(args, 'line', 80)
         line = next((item for item in lines.peer_lines(self.store) if item['label'] == wanted), None)
         if not line:
-            raise Refused('没有这条线；照抄 lines_from_program 里的 place。')
+            raise Refused('没有这条线；照抄 lines_from_program 里的 place。'
+                          + refs_usable(item['label'] for item in lines.peer_lines(self.store)))
         op = args.get('op')
         if op not in ('open', 'close'):
             raise Refused('do 是 open 或 close%s。' % _given(args, 'op'))
@@ -2710,7 +2737,7 @@ class RoleTools:
             found = questions.read(self.store, ep['persona'], qid,
                                    outside=self._cls(ep) != visibility.OWNER_PRIVATE)
             if not found:
-                raise Refused('ASK_QUESTION_UNKNOWN: 没有「%s」这个问题：id 照抄 questions_from_program 或 ask 的结果。' % qid)
+                raise Refused(ASK_UNKNOWN % qid + refs_usable(self._listed_questions(ep)))
             return found, False
         wanted = args.get('to')
         wanted = wanted[0] if isinstance(wanted, list) and len(wanted) == 1 else wanted
@@ -2727,8 +2754,13 @@ class RoleTools:
         took = self._text(args, 'took', TOOK_CHARS)
         row, words = questions.close(self.store, ep['persona'], qid, took)
         if not row:
-            raise Refused('ASK_QUESTION_UNKNOWN: 没有「%s」这个问题：id 照抄 questions_from_program 或 ask 的结果。' % qid)
+            raise Refused(ASK_UNKNOWN % qid + refs_usable(self._listed_questions(ep)))
         return {'id': qid, 'closed': words}, False
+
+    def _listed_questions(self, ep):
+        """The ids of her questions this turn lists (questions_from_program)."""
+        listed = ((ep.get('context') or {}).get('questions_from_program') or {}).get('items') or []
+        return [item.get('id') for item in listed if isinstance(item, dict)]
 
     def tool_ideas_read(self, ep, call_id, args):
         from . import schedule_rules
@@ -2768,8 +2800,8 @@ class RoleTools:
                                                 'policy_epoch': ep['policy_epoch']}
         task = self.store.db.tasks.find_one(where, {'result.text': 1, 'title': 1, 'goal': 1, 'intent_revision': 1})
         if not task:
-            raise Refused('「%s」不是%s的任务；task 照抄交回来的结果里的 task，或 task_state_from_program 里的 id。'
-                          % (task_id, '你' if home else '这个对话里'))
+            raise Refused('「%s」不是%s的任务；task 照抄交回来的结果里的 task，或 task_state_from_program 里的 id。%s'
+                          % (task_id, '你' if home else '这个对话里', refs_usable([ep.get('task_id'), *self._listed_tasks(ep)])))
         text = (task.get('result') or {}).get('text')
         if not isinstance(text, str) or not text:
             raise Refused('这个任务还没有报告：它还在跑，或者没交回文字。')
@@ -2792,7 +2824,8 @@ class RoleTools:
             raise Refused('decision 是 adopt、defer 或 drop%s。' % _given(args, 'decision'))
         row = self.store.db.ideas.find_one({'_id': idea_id, 'persona': ep['persona']})
         if not row or row.get('state') not in ('open', 'deferred'):
-            raise Refused('「%s」不是想法本里还没处理完的一条；照 ideas_from_program 或 ideas 的 read 里的原样抄 _id。' % idea_id)
+            raise Refused('「%s」不是想法本里还没处理完的一条；照 ideas_from_program 或 ideas 的 read 里的原样抄 _id。%s'
+                          % (idea_id, refs_usable(row['_id'] for row in idea_rows(self.store, ep['persona'], None))))
         state = {'adopt': 'adopted', 'defer': 'deferred', 'drop': 'dropped'}[decision]
         from .state import now
         self.store.put('ideas', {**row, 'state': state, 'decisions': [*(row.get('decisions') or []),

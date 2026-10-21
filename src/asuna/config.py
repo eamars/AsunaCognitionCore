@@ -165,6 +165,14 @@ def soft(limit):
     return limit * 4 // 5
 
 
+def refs_usable(refs, cap=12):
+    """What a refusal that named a wrong reference adds (ADR-087 §4.5): the ones that can be used there, a few."""
+    refs = [str(ref) for ref in dict.fromkeys(refs) if ref]
+    if not refs:
+        return '现在没有能用的。'
+    return '能用的：%s%s。' % ('、'.join(refs[:cap]), '（还有 %d 个）' % (len(refs) - cap) if len(refs) > cap else '')
+
+
 def over(length, limit, ask=None):
     """Words for a text kept although longer than she was asked for (`ask`, by default soft(limit)), or None."""
     ask = ask or soft(limit)

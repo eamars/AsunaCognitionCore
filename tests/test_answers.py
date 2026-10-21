@@ -131,7 +131,7 @@ def test_a_mistyped_task_id_is_told_with_the_real_one(store):
     ep = Coordinator(store, lane).ingest(event('second', text='那后天呢'))
     refused, fixed = lane.tool_results[1], lane.tool_results[2]
     assert not refused[5]
-    assert refused[4].startswith('「' + garbled + '」不是这个对话里的任务；可能是：' + real)
+    assert refused[4].startswith('「' + garbled + '」不是这个对话里的任务。') and ('能用的：' + real) in refused[4]
     assert fixed[5] and fixed[4]['continues'] == real
     continued = store.db.tasks.find_one({'_id': ep['task_ids'][0]})
     assert ep['task_ids'] == [fixed[4]['task']] and continued['continues_task_id'] == real

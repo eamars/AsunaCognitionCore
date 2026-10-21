@@ -1,8 +1,9 @@
 # ADR-086: A psychological emotion model for her agentic loop
 
-Status: **Proposed**, 2026-10-21. Written by the research agent (Claude Fable 5.1) at the owner's request, from the
-brief Claude prepared; the owner's decisions of 11:2x NZDT are in §11; nothing here is built, and it reaches the
-character only after the owner and Claude agree. Every number says where it came from.
+Status: **Stage 1 built and installed** 2026-10-21 13:18:51 NZDT (main 5fff9161, reviewed by Claude; her persona
+values published by her, 72830d0a); the 7-day reading is §9, stage 2 waits for it. Written by the research agent
+(Claude Fable 5.1) at the owner's request, from the brief Claude prepared; the owner's decisions are in §11, her
+review in §15. Every number says where it came from.
 
 ## 1. The owner's goal and what was fixed before the study
 

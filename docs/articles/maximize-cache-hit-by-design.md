@@ -86,9 +86,9 @@ already sent.**
 
 Measurements from one deployment (the owner's), quoted to show scale, not as targets:
 
-- When the character's tool list changed between turns, only 12% of a turn's prompt came from cache, against 81%
-  when it stayed the same: about 137K tokens read again per turn instead of 29K, and the first reply step took a
-  median 33 s instead of 7.4 s. This motivated ADR-038.
+- When the character's tool list changes between turns, only 12% of a turn's prompt comes from cache, against 81%
+  when it stays the same: about 137K tokens read again per turn instead of 29K, and the first reply step takes a
+  median 33 s instead of 7.4 s.
 - Over one busy group's long day of discussion, 98.8% of about 151M prompt tokens came from cache.
 - On the local engine, a step that missed the cache took a median of about 25 s; a hit took about 3 s. Cold reads
   were 57% of all prompt time.
@@ -102,7 +102,7 @@ misses; idle 5 to 30 minutes, about 55%; idle 30 minutes or more, 90 to 100%. Ho
 on their own schedules.
 
 Two consequences shape the rest of this article. Small side requests that park their own entries crowd out the long
-conversations (section 7). And a conversation that is smaller is cheaper to read again when it does miss
+conversations (section 8). And a conversation that is smaller is cheaper to read again when it does miss
 (sections 5 and 6).
 
 ### The cheapest hit is no request
@@ -110,8 +110,9 @@ conversations (section 7). And a conversation that is smaller is cheaper to read
 Most of what arrives never needs a model. In the same deployment the router answered about 86% of group lines with no
 model call at all: the line is recorded into the conversation (`navigation.js recordChannelInput`) and wakes nobody.
 Only lines with a reason to wake her (an @, a reply to her, a thread she is in, a watched person; `channels.py`,
-`attend.py GATED`) lead to a turn, and many of those go through the small relevance gate first (section 7). Before
-you optimize a request, ask whether it needs to exist.
+`attend.py GATED`) lead to a turn, and in a group almost all of them, an @ included, go through the small relevance
+gate first (section 8): letting a line pass there costs one short request instead of a turn. Before you optimize a
+request, ask whether it needs to exist.
 
 ---
 
@@ -166,14 +167,11 @@ changes per turn, it does not belong there at all.
 
 ## 4. One tool list per conversation (ADR-038)
 
-### The decision
+### Two questions
 
-ADR-011 originally had the program pick the character's tools per turn: `visit` only in a heartbeat, `read_ideas`
-only in a self-improvement turn, and so on. It kept each turn's tool list small, and it was the single most
-expensive thing in the system: the measurement in section 1 (12% vs 81% cached) is that design. Each change also
-wrote a DSH "tool added/removed" notice into the conversation.
-
-ADR-038 replaced it with two separate questions:
+A tool list that follows the turn is the most expensive thing a design can do here: section 1's 12% against 81% is
+that cost, and every change also writes a DSH "tool added/removed" notice into the conversation. So two separate
+questions decide the tools:
 
 - **What the conversation lists** (`role_tools.toolbox`, built from `abilities`): decided by the conversation's place
   (`visibility.place`: home, peer, group, dm), its channel (does it carry pictures, stickers, reply parts) and the
@@ -214,9 +212,9 @@ Other mechanisms follow the same pattern, which is how you recognise it:
 - **Consult turns** (the action brain asking her a question): only `think`, `recall` and `task` op `answer` are
   usable, but the whole list is still shown.
 - **Errand turns** (ADR-066, section 8): `delegate` and `task` `message`/`stop` are refused in the turn, not removed.
-- **Merged tools** (ADR-055): `task` and `ideas` replace eight tools with options (`op`). An option not usable this
-  turn is refused with the old tool's words. Fewer tools, the same abilities, and per-turn availability moves from
-  the list into refusals.
+- **Merged tools** (ADR-055): `task` and `ideas` carry eight abilities as options (`op`). An option not usable this
+  turn is refused with the words of its rule. Fewer tools, the same abilities, and per-turn availability lives in
+  refusals, not in the list.
 
 The price is one extra round when she calls a tool outside its turn. It is paid rarely, teaches the rule, and the tool
 never runs outside its turn.
@@ -227,8 +225,8 @@ A stable list is not free: every tool, option and description is read on every c
 is one more choice in front of the model. AGENTS.md makes this a rule: a change that adds a tool, an option or a
 per-turn line states in its ADR what it adds to each brain, in characters (not one provider's tokens), and prefers an
 option on an existing tool or a program-written line over a new tool. `tests/test_tool_budget.py` holds each brain's
-budget (at the time of writing the character brain: 33 tool definitions and at most 21,218 description characters;
-the action brain has its own row). Raising the budget is part of the same change; removing a tool lowers it.
+budget (the character brain: 30 tool definitions and at most 21,371 description characters, 21,667 with tiered memory
+on; the action brain has its own row). Raising the budget is part of the same change; removing a tool lowers it.
 
 **Rule:** never make the tool list depend on the turn. Express "not now" as a refusal that teaches the rule, and
 "worth using now" as text at the tail (next section).
@@ -249,21 +247,25 @@ request. The worker prepares them (`context.py` and the modules that own each bl
 
 ### Explanations live once, in the system prompt
 
-ADR-056 found that a large share of every notice was text that never changed: the turn instruction, each block's own
-explanation (`note`), fixed rule texts. All of it moved into the system prompt once, as the block guide
-(`block_guide.guide`, appended by `render.role_text`). `block_guide.strip` removes a block's `note` when it is the
+Text that never changes (the turn instruction, each block's own explanation (`note`), fixed rule texts) lives once in
+the system prompt, as the block guide (`block_guide.guide`, appended by `render.role_text`; ADR-056). `block_guide.strip` removes a block's `note` when it is the
 guide's text; a note worded for this turn only stays with its block. The delivery's own lines (`unchanged_from_program`,
 `repeated_from_program`, `restored_from_program`, `same_as_before`) are also explained there, so they carry no
 explanation of their own.
 
 ### Blocks must be byte-stable when nothing changed
 
-The delivery recognises an unchanged block by a digest of its content (section 6). A block that says "12 minutes
-ago" changes its digest every minute although nothing happened. ADR-056 rule 2 replaced relative times inside blocks
-with clock times (`at`, `*_at`, shown by `local_time.for_model`), and the clock itself is one block. Lists whose order
+The delivery recognises an unchanged block by a digest of its content (section 6). A block that said "12 minutes
+ago" would change its digest every minute although nothing happened, so blocks carry clock times (`at`, `*_at`,
+shown by `local_time.for_model`; ADR-056 rule 2), and the clock itself is one block. Lists whose order
 shifts without meaning (mood reasons re-ranked as they fade) are compared as sets (`shapeDigest`). AGENTS.md's rule
 that state reaches a model as interpreted text from versioned tables (coarse tiers, fixed wording) helps here too:
 a coarse word ("half full") changes far less often than a number.
+
+A block with nothing to say is left out entirely: her mood at a calm band sends no text at all (ADR-086), so the
+usual state costs nothing and changes nothing. A fixed line that marks a kind of turn, such as `called_from_program`
+on a turn where someone addressed her, is the same bytes every time, so after its first showing in a conversation the
+delivery names it unchanged.
 
 **Rule:** a per-turn fact is a block at the tail. Its explanation goes once into the block guide. Its content is
 deterministic and changes only when its meaning does.
@@ -305,9 +307,9 @@ the session log loses something (a compaction), the visible set shrinks with it,
   `其余 4 条同前（读过了 3、已送到 1）：p1、p2、p3、p4` ("4 others as before (3 read, 1 delivered): p1, p2, p3, p4").
   An item marked `waiting_on_you` is always sent in full.
 
-The handles matter. The full copy of a folded item can be far back in the conversation. Before the handles were
-added, the character saw "2 others as before" and could not update one of her plans, because its id was out of
-reach. **Anything the model must act on has to be on screen, at least as its handle.**
+The handles matter. The full copy of a folded item can be far back in the conversation; "2 others as before" without
+their ids leaves her unable to update one of those plans. **Anything the model must act on has to be on screen, at
+least as its handle.**
 
 Then `trimTurn` applies the turn's ceiling (`context_budget.TURN_CHARS`, 48,000 JSON characters, ADR-014): over it,
 the oldest rows of listed lists go first, then the longest text is halved, saying what was cut; what is cut is no
@@ -369,7 +371,8 @@ Two details in `compaction.js` are cache-aware:
 - The whole conversation is sent only when it fits the window beside the summary cap (`wholeConversation`).
   Otherwise, or when the model refuses it for its window, the compacted span alone is sent, and a span too large for
   one request is summarized in steps (`inSteps`). Each fallback writes one log line with its reason and the sizes
-  it judged by (`spanAlone`).
+  it judged by (`spanAlone`), and each summary one line with its reasoning level and where the level came from; both
+  are kept in `restart/host.log`.
 - A summary that reaches its cap, or lacks any section the instruction asks for, is rejected: no checkpoint is
   written, and the next step tries again. The summary request thinks at its conversation's own reasoning level
   (`summaryEffort`): the local engine matches the level with the tokens, so a request at a different level matches
@@ -382,10 +385,10 @@ preset in `packages/cognition-core/cordis.patch.yml`, and in each persona packag
 deployed character's). `RoleCompactionEngine.pressure` resolves it as
 `min(window × ratio, window − maxTokens − headroom)`.
 
-The lesson behind those numbers: the provider counts prompt **plus** reserved output against the window, and a summary
-request replays the prefix and reserves its own output. A live conversation at about 218K tokens on a 262K window
-received a large notice; the summary request no longer fit, the overflow retry failed the same way, and every later
-turn failed (ADR-028). The threshold must leave room for one large step plus the summary request.
+The provider counts prompt **plus** reserved output against the window, and a summary request replays the prefix and
+reserves its own output. A conversation just under the threshold that receives one large notice can leave no room
+for the summary request, and then every later turn fails too (ADR-028). The threshold leaves room for one large step
+plus the summary request.
 
 ### After a compaction: restore what fell off
 
@@ -411,8 +414,8 @@ Left alone, they become huge (one reached 821K characters), take a whole cache s
 when read cold. ADR-049 condenses them early, at a quiet moment: by the character's own mark on a visit, or, past a
 size floor of half the compaction threshold (`compaction.js floorTokens`, measured by `conversationSize` in DSH's
 token meter), without it, after a notes visit first. The Host runs DSH's own `/compact` on that conversation
-(`compactSession`), never during a turn there. ADR-049 also decided **not** to warm a conversation after condensing:
-reading it right away would keep it cached but push another conversation out.
+(`compactSession`), never during a turn there. A condensed conversation is **not** warmed: reading it right away would
+keep it cached but push another conversation out.
 
 ```mermaid
 flowchart TD
@@ -442,8 +445,8 @@ cold.
 So the condensing of quiet groups is timed to the lapse:
 
 - **It waits for the quiet the cache needs to lapse.** A group with 100 or more lines a day is condensed after 10
-  quiet minutes, one with 30 or more after 15, a quieter one after 30 (`condense.py QUIET_TIERS`). The clock does
-  not count: a group talks late at night too, and condensing it then would reset a cache in use.
+  quiet minutes, one with 30 or more after 15, a quieter one after 30 (`condense.py QUIET_TIERS`). The hour of day
+  does not count; only the quiet does.
 - **The cold read lands on a small conversation.** When someone speaks again, the first request reads the summary
   and the kept tail, not the whole history. On the local engine a cold read runs at about 6K tokens a second, so
   every 100K tokens condensed away is about 17 seconds less before her first word.
@@ -472,14 +475,20 @@ So each runs in its own session:
 
 | Side request | Session | Shape |
 |---|---|---|
-| Relevance gate (`attend.py`) | `asuna-attend-<hash>`, one per question, its repairs included (`native_worker.gate_session_id`) | tool-free preset `asuna-attend`, its own short system prompt, the material it needs in one message; keeps no history, never compacts; the group's conversation is not touched |
+| Relevance gate (`attend.py`) | `asuna-attend-<hash>`, one per question, its repairs included (`native_worker.gate_session_id`) | tool-free preset `asuna-attend`, its own short system prompt, the material it needs in one message (her mood as one short paragraph, nothing at a calm band); keeps no history, never compacts; the group's conversation is not touched |
 | Dialogue summary (`dialogue_summary.py`) | `asuna-summary-<hash>`, one per request | tool-free preset `asuna-summary`, on the action route |
-| Affect appraisal | `asuna-appraiser-<persona>` | tool-free preset `asuna-appraiser` |
+| Affect appraisal (an optional route, off unless configured) | `asuna-appraiser-<persona>` | tool-free preset `asuna-appraiser` |
 | Errand copy (section 9) | `asuna-errand-<hash>` | a copy of the destination conversation |
 
 One-shot sessions are retired so the store and the session list do not grow: the launcher's `retireOneShotSessions`
 (`tools/asuna-launch.mjs`) moves `asuna-summary-*`, `asuna-attend-*`, `asuna-errand-*` and `asuna-reflect-*` sessions untouched for a
 day into the profile's archive before DSH starts, and drops archived ones after 14 days.
+
+The gate asks one question of a group line: take it up or let it pass. It is asked for every group wake reason,
+an @ or a reply to her included, except a reply from the person she is waiting on or within her open question's
+wait, which runs the turn at once. A full turn reads the whole group conversation; a gate question reads one short
+message in a fresh session, so letting a line pass at the gate is the cheap way not to answer. A gate that cannot
+answer an addressed line falls back to the full turn.
 
 The size matters as much as the separation. A small request may still park a cache entry; on an engine that keeps
 whole conversation snapshots, many small entries crowd out the few long conversations that are worth keeping. A gate
@@ -568,8 +577,8 @@ shown at the front.
 
 ## 10. Provider differences
 
-Some routes can absorb a change to the system prompt or tools without a full miss; most cannot. In DSH alpha.2 this
-is a capability each model route declares (`@deepseek-ai/dsh-llm`, `LlmResolvedModelInfo.systemPromptUpdate` and
+Some routes can absorb a change to the system prompt or tools without a full miss; most cannot. In DSH this is a
+capability each model route declares (`@deepseek-ai/dsh-llm`, `LlmResolvedModelInfo.systemPromptUpdate` and
 `toolUpdate`):
 
 - `systemPromptUpdate: 'in-history'` lets a changed system prompt be appended after the cached history instead of
@@ -671,14 +680,38 @@ A checklist for review:
 | Compaction | `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `wholeConversation`, `keptRule`, `pressure`, `floorTokens`, `inSteps`; thresholds in `packages/cognition-core/cordis.patch.yml` and each persona package's `cordis.patch.yml` |
 | Carry to a new session | `packages/cognition-core/src/carry.js`: `overflowed`, `lastSummary`, `carrySession`; `src/asuna/native_worker.py`: `BusinessWorker.carry_session` (ADR-028) |
 | Early condensing | `src/asuna/condense.py`; `index.js`: `compactSession`, `conversationSize` (ADR-049) |
-| Relevance gate, summaries | `src/asuna/attend.py`, `packages/cognition-core/src/attend.js`, `summary.js`; `native_worker.gate_session_id` |
+| Relevance gate, summaries | `src/asuna/attend.py` (`GATED`, `ADDRESSED`, `gated`), `channels.group_context` (`answers_her`), `packages/cognition-core/src/attend.js`, `summary.js`; `native_worker.gate_session_id` |
+| Mood text at the tail and in the gate | `src/asuna/affect.py`: `interpret`, `paragraph`; `attend.material` |
+| Asuna's log lines | `packages/cognition-core/src/log-sink.js` → `<data>/restart/host.log` |
 | Retiring one-shot sessions | `tools/asuna-launch.mjs`: `retireOneShotSessions` |
 | Errand copy | `src/asuna/errands.py`; `native_worker.errand_session`; `index.js`: `errandSession`, `completedPrefix`, `ERRAND_ROOM`, `ensureAgent` (`copy`), `retireErrand` (ADR-066) |
 | DSH mechanisms | `@deepseek-ai/dsh-session/fork` `buildForkSeed`; `@deepseek-ai/dsh-llm` `SystemPromptUpdate`, `ToolUpdate`; `@deepseek-ai/dsh-agent-loop` `SystemPromptProjection`; `@deepseek-ai/dsh-compaction-basic` |
-| Decisions | ADR-014 (context budget), ADR-028 (carry), ADR-032 (section places), ADR-038 (fixed tool lists), ADR-049 (quiet-time upkeep), ADR-052 (switches), ADR-055 (fewer tools), ADR-056 (per-turn characters), ADR-063 (context growth defects), ADR-066 (errand carries home), ADR-085 (summary request sends the whole conversation) |
+| Decisions | ADR-014 (context budget), ADR-028 (carry), ADR-032 (section places), ADR-038 (fixed tool lists), ADR-049 (quiet-time upkeep), ADR-052 (switches), ADR-055 (fewer tools), ADR-056 (per-turn characters), ADR-063 (context growth defects), ADR-066 (errand carries home), ADR-084 (mechanical limits removed one at a time),
+ADR-085 (summary request sends the whole conversation), ADR-086 (emotion model: the mood paragraph, addressed lines at the gate) |
 
 ---
 
-## Latest change
+## Changelog
 
-Quiet groups are condensed by how long they have been quiet only; the hour no longer counts as quiet (section 7).
+- **2026-10-21** — ADR-086: an @ or a reply to her in a group goes through the relevance gate first, except a reply
+  from the person she waits on or within her open question's wait; a gate that cannot answer it falls back to the
+  turn (sections 1, 8). The gate and the tail read her mood as one short paragraph, nothing at a calm band; a fixed
+  `called_from_program` line is named unchanged after its first showing (sections 5, 8). The appraiser route is marked
+  optional. Tool budget numbers brought to the budget test (30 definitions, 21,371 characters). The compaction log
+  lines are kept in `restart/host.log` (826115dd). The body now states the present only; what it carried as history
+  (the per-turn tool lists of ADR-011 that ADR-038 replaced, the overflow that led to ADR-028, the moment the fold
+  handles were added) lives here and in those ADRs.
+- **2026-10-20** — ADR-084 step 8 (055bb614): quiet groups are condensed by how long they have been quiet only; the
+  hour no longer counts as quiet. ADR-085 §4 (0e622df6): the summary request thinks at its conversation's own
+  reasoning level, because the local engine matches the level with the tokens. New subsection "A quiet spell is when
+  a compaction costs nothing" (b27fff2f, 59360cdb). ADR-085 §4 (62bc728b): a summary at its cap or missing a section is
+  rejected and no checkpoint is written. A fallback to the span alone writes a log line (cc6d1033). ADR-085
+  (6f5b1d17): the summary request sends the whole conversation and names the kept tail (`keptRule`), so it reads from
+  the cache up to its last message.
+- **2026-10-19** — The current-references pass (35150d29): every mechanism checked against what the code does.
+- **2026-10-15** — Slug, status and date header (8d340b11, owner). First written (bffcb196): the prefix cache and what
+  a miss costs; one system prompt and one tool list per conversation, availability as refusals (ADR-038, replacing
+  ADR-011's per-turn tool lists, measured at 12% against 81% cached); disclosure as text at the tail and the block
+  guide (ADR-056); sending only what the session no longer shows, with fold handles (ADR-063); compaction, restore
+  and carry (ADR-028, ADR-063); condensing quiet conversations (ADR-049); side requests in their own sessions; the
+  errand copy (ADR-066); provider differences.

@@ -155,11 +155,12 @@ def records_page(observations):
 
 
 def observations_of(store, task, shown=lambda value: value):
-    """The task's finished tool calls, each as its tool and an excerpt of its result."""
+    """The task's finished tool calls, each as its tool and an excerpt of its result (a failed one: its error)."""
     return [{'source': item['_id'], 'tool': item['tool'],
-             'result_excerpt': excerpt(json.dumps(shown(item['result']), ensure_ascii=False), OBSERVATION_CHARS)}
+             'result_excerpt': excerpt(item['error'] if item['state'] == 'FAILED' else
+                                       json.dumps(shown(item['result']), ensure_ascii=False), OBSERVATION_CHARS)}
             for item in store.db.artifacts.find({'task_id': task['_id'], 'intent_revision': task.get('intent_revision'),
-                                                 'state': 'DONE'})]
+                                                 'state': {'$in': ['DONE', 'FAILED']}})]
 
 
 def task_pages(store, task, shown=lambda value: value):
@@ -260,6 +261,28 @@ def workspace_file(root, protected, op, args):
     except Exception as exc:
         return {'error': 'TASK_OPERATION_FAILED: ' + workspace_reason(exc, op, given),
                 'execution': {'exit_code': 1, 'stderr': traceback.format_exc(limit=1)}}
+
+
+class ToolFailed(RuntimeError):
+    """A tool call that did not happen, for the reason its tool named: the call's error, in the words its FAILED
+    artifact keeps."""
+
+
+# A tool that answers {'error': …} (the workspace files, generate_image, render_svg, import_integration_artifact) says
+# the operation did not happen. A picture still being drawn has not failed: calling again with its job fetches it.
+NOT_FAILED = frozenset({'IMAGE_JOB_STILL_RUNNING'})
+FAILURE_WORDS = ('error', 'note', 'generated', 'rendered', 'execution')
+
+
+def failure_words(result):
+    """The words of a definite failure a tool answered with, or None: its code, its note, then what else it named."""
+    error = result.get('error') if isinstance(result, dict) else None
+    if not isinstance(error, str) or not error or error in NOT_FAILED:
+        return None
+    named = {key: value for key, value in result.items() if key not in FAILURE_WORDS and value is not None}
+    words = ([result['note']] if isinstance(result.get('note'), str) and result['note'] else []) + (
+        [json.dumps(named, ensure_ascii=False)] if named else [])
+    return error + (': ' + ' '.join(words) if words else '')
 
 
 def workspace_reason(exc, op, given):
@@ -723,6 +746,8 @@ class ToolBroker:
                 if old['input_hash']!=input_hash:
                     raise Denied('CALL_ID_REUSED: 这个调用编号已经用在另一组参数的 %s 调用上；不是参数写错，'
                                  '重新发起一次调用（会换新编号）' % old.get('tool'))
+                if old['state']=='FAILED':
+                    raise ToolFailed(old['error'])
                 if old['state']!='DONE':
                     raise Denied('TOOL_DELIVERY_UNKNOWN: 同一个调用之前开始过但还没有回执（可能还在进行，或中途断过），不知道做没做成；'
                                  '不要盲目重做：先查看它该留下的结果（list_files、读文件等）再决定')
@@ -853,6 +878,12 @@ class ToolBroker:
             # can hold other values (an archived message's original ObjectId).
             result=json.loads(json.dumps(result,ensure_ascii=False,default=str))
             self.service.crash('after_tool_before_receipt')
+            # A definite failure is an error on both layers: the artifact is FAILED and the call's error says the same.
+            failed=failure_words({**result,**({'adjusted':adjusted} if adjusted else {})})
+            if failed:
+                failed=redact_text(failed,self.store.config)
+                self.store.put('artifacts',{**artifact,'state':'FAILED','error':failed,'result':result},expected=artifact['revision'],stream=task['_id'])
+                raise ToolFailed(failed)
             result['evidence_ref']=key
             result['artifact_ref']=key
             if adjusted:result['adjusted']=adjusted

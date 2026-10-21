@@ -15,12 +15,14 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 - def `page_note` — What the end of a page says: where she is, how long the report is, what the pages after it are called, and how to turn the page.
 - def `key_observations` — The tool records the first page keeps: none for a task that changed nothing; for one that did, the latest publish or start/stop receipt and the latest run (its test), else its latest changes.
 - def `records_page` — Every tool record of the task as the report's last page, or None when it made no call.
-- def `observations_of` — The task's finished tool calls, each as its tool and an excerpt of its result.
+- def `observations_of` — The task's finished tool calls, each as its tool and an excerpt of its result (a failed one: its error).
 - def `task_pages` — The pages task op page reads: the report's, then its tool records.
 - def `bounded_result`
 - class `FeedbackStale` — The action result no longer authorizes a pending role continuation.
 - def `require_current_feedback`
 - def `workspace_file` — list_files / read_file / write_file inside the task folder; protected sources stay read-only.
+- class `ToolFailed` — A tool call that did not happen, for the reason its tool named: the call's error, in the words its FAILED artifact keeps.
+- def `failure_words` — The words of a definite failure a tool answered with, or None: its code, its note, then what else it named.
 - def `workspace_reason` — Why a file operation failed and what to do, in her words (the traceback stays in stderr).
 - def `home_env` — What a home task's commands are given besides the sandbox's own: her name on commits, and the database and her time zone for asuna.dbread.
 - def `idle_minutes` — After this long unused, a task's continuation starts a fresh action context (ADR-053): a cost setting of the action route, following how long its provider keeps a cached prefix; a job that ran at 高 uses 高's own (ADR-075).

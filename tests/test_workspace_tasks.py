@@ -8,7 +8,7 @@ from asuna.coordinator import Coordinator
 from asuna.evidence import sha
 from asuna.lanes import FakeLane, FakeTurn, LaneResult
 from asuna.state import Denied
-from asuna.tasks import TaskService, ToolBroker, Executor
+from asuna.tasks import TaskService, ToolBroker, Executor, ToolFailed, failure_words, observations_of
 from asuna.testing import remove_workspace
 
 
@@ -44,8 +44,9 @@ def test_generic_files_protect_sources_and_leave_original_traceback(store):
     try:
         task = service.claim(ep['task_ids'][0])
         broker.bind('workspace', task, work)
-        failed = broker.call('workspace', 'protected', 'write_file', {'path': 'notes/source.txt', 'text': '不应写入', 'overwrite': True})
-        assert failed['error'].startswith('TASK_OPERATION_FAILED: PROTECTED_PATH: notes/source.txt 是只读的原始资料')
+        with pytest.raises(ToolFailed, match='^TASK_OPERATION_FAILED: PROTECTED_PATH: notes/source.txt 是只读的原始资料'):
+            broker.call('workspace', 'protected', 'write_file', {'path': 'notes/source.txt', 'text': '不应写入', 'overwrite': True})
+        failed = store.db.artifacts.find_one({'task_id': task['_id'], 'tool': 'write_file', 'state': 'FAILED'})['result']
         assert 'PROTECTED_PATH' in failed['execution']['stderr']
         assert 'Traceback' in failed['execution']['stderr']
         assert (work / 'notes/source.txt').read_text(encoding='utf-8') == '原文保持不变'
@@ -63,6 +64,42 @@ def test_generic_files_protect_sources_and_leave_original_traceback(store):
         assert (work / 'late.txt').read_text() == 'continued'
     finally:
         broker.close()
+
+
+def test_a_file_operation_that_failed_is_an_error_on_both_layers_in_the_same_words(store):
+    """A definite failure is visible on its state: the call's error (what DSH shows as the tool's error) and the FAILED
+    artifact say the same; the same call again says it again; the task's records still show it; it is no evidence."""
+    from asuna.native_worker import error_text
+    work, ep, service, broker = setup_workspace(store)
+    try:
+        task = service.claim(ep['task_ids'][0])
+        broker.bind('workspace', task, work)
+        with pytest.raises(ToolFailed) as failed:
+            broker.call('workspace', 'outside', 'read_file', {'path': '../outside.txt'})
+        words = str(failed.value)
+        assert words.startswith("TASK_OPERATION_FAILED: PATH_DENIED: path '../outside.txt' 在任务文件夹外")
+        assert error_text('tool', failed.value) == words              # the Host's error reply, as it is
+        row = store.db.artifacts.find_one({'task_id': task['_id'], 'tool': 'read_file'})
+        assert row['state'] == 'FAILED' and row['error'] == words and 'Traceback' in row['result']['execution']['stderr']
+        with pytest.raises(ToolFailed) as again:
+            broker.call('workspace', 'outside', 'read_file', {'path': '../outside.txt'})
+        assert str(again.value) == words
+        assert [item['result_excerpt'] for item in observations_of(store, task)] == [words]
+        done = broker.call('workspace', 'listed', 'list_files', {})
+        assert done['files'] and store.db.artifacts.find_one({'_id': done['evidence_ref']})['state'] == 'DONE'
+    finally:
+        broker.close()
+
+
+def test_failure_words_name_the_code_the_note_and_what_else_the_tool_said():
+    assert failure_words({'written': True}) is None
+    assert failure_words({'error': 'TASK_OPERATION_FAILED: 没有 a.txt', 'execution': {'exit_code': 1}}) == \
+        'TASK_OPERATION_FAILED: 没有 a.txt'
+    assert failure_words({'rendered': False, 'error': 'SVG_NOT_FOUND', 'note': '先用 write_file 写好 .svg。',
+                          'path': 'a.svg'}) == 'SVG_NOT_FOUND: 先用 write_file 写好 .svg。 {"path": "a.svg"}'
+    assert failure_words({'error': 'INVALID_IMPORT_ARGUMENTS'}) == 'INVALID_IMPORT_ARGUMENTS'
+    # A picture still being drawn has not failed: the same job is fetched by calling again.
+    assert failure_words({'generated': False, 'error': 'IMAGE_JOB_STILL_RUNNING', 'prompt_id': 'p-1'}) is None
 
 
 def test_executor_accepts_natural_language_and_attaches_actual_receipts(store):

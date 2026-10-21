@@ -141,3 +141,27 @@ by the owner and Claude; her answer (2026-10-21, agent line) set the shape:
   action-brain conversation in its fixed system prompt; it saves about 4,000 characters of first page and up to four
   tool records in every hand-back her turn reads.
 - Tests: `tests/test_read_report.py`, `tests/test_handover_watchdog.py`.
+
+## Addendum 2026-10-21: a tool call that did not happen is a failure on its state
+
+Found while reading her report of 2026-10-21 (the errand fix's field check): a task file operation that failed,
+`read_file` with a path outside the task folder (`PATH_DENIED`), came back to the action brain as an ordinary result (not an error in its
+DSH session) and its tool record was `DONE`; the failure showed only inside `result.error`. Four action tools answer a
+failure as `{'error': …}` instead of raising: the workspace files (`list_files`, `read_file`, `write_file`:
+`TASK_OPERATION_FAILED: …`), `generate_image`, `render_svg` and `import_integration_artifact` (a code, a note and the
+values it names). Coordinator's decision (B12): a definite failure is visible on its state, on both layers, in the
+same words.
+
+- **One rule, in the broker** (`tasks.ToolBroker.call`, `failure_words`): a result that carries `error` makes the tool
+  record `FAILED` with `error` = its code, its note and the other values it named, and the call raises `ToolFailed`
+  with exactly those words. The worker's error reply carries a coded text as it is (`native_worker.error_text`), so the
+  action brain's DSH tool result is an error saying the same. The result itself stays on the record (for a file
+  operation, its traceback in `execution.stderr`).
+- **Not a failure (D2):** `IMAGE_JOB_STILL_RUNNING`, a picture still being drawn: calling again with its `job` fetches
+  it (`NOT_FAILED`). A command that exits non-zero (`sandbox_run`, `integration_test`) is its result, not a failed call.
+- **The same call again** (same call id, same arguments) raises the same words, as a `DONE` record returns its result.
+- **Records and evidence:** a `FAILED` record is no evidence of the task's result (`artifact_refs`, `evidence_refs` and
+  an orphan's refs take `DONE` only); the report's last page, "工具记录", still shows it, as its error
+  (`observations_of`), so "it says it changed, and did not" stays visible there.
+- Tests: `tests/test_workspace_tasks.py` (read_file `PATH_DENIED` on both layers, the protected write, the words),
+  `tests/test_integration.py` (an unknown import endpoint).

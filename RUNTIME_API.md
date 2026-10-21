@@ -628,6 +628,11 @@ A task's tools are fixed when she hands it over (`src/asuna/coordinator.py` `Coo
 
 - `ask_character` asks her for a judgment and waits for her answer; `report_progress` leaves her a note without waiting. Neither creates a public reply, a task or a grant.
 - A task keeps the grants of the turn that handed it over; her later words never add one.
+- A tool call that did not happen is an error, and its tool record is `FAILED` with the same words (`tasks.py`
+  `failure_words`): a workspace file operation (`TASK_OPERATION_FAILED: …`), and `generate_image`, `render_svg` or
+  `import_integration_artifact` naming a failure code, with its note and the values it names. `IMAGE_JOB_STILL_RUNNING`
+  is not a failure: calling again with `job` fetches the picture. A `FAILED` record is not evidence of the task's
+  result; the report's tool records show it as its error.
 
 ### Web search and fetch
 

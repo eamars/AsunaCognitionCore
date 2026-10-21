@@ -11,7 +11,7 @@ from asuna.lanes import FakeLane, FakeTurn
 from asuna.router import Router
 from asuna.ingress import persist_input
 from asuna.state import Denied
-from asuna.tasks import TaskService, ToolBroker
+from asuna.tasks import TaskService, ToolBroker, ToolFailed
 from asuna import channel_kinds
 
 # The two home lines the narrow grant is about. The kind registry is global and these tests decide
@@ -223,6 +223,15 @@ def test_import_artifact_is_written_into_the_bound_task_workspace(store, runtime
         # 字节由宿主写，路径由这次绑定的工作区决定；换 call_id 才是一次新的取用。
         assert broker.call('granted','import-2','import_integration_artifact',
                            {**args,'target_relative_path':'imports/second.txt'})['imported'] is True
+        # An import that did not happen is an error on both layers, in the same words (its code, note and details).
+        from asuna.integration_import import import_artifact
+        broker.integration.import_artifact=lambda value, **where: import_artifact(value, endpoints=[{'name':'napcat'}],
+                                                                                  fetch=None, **where)
+        with pytest.raises(ToolFailed) as failed:
+            broker.call('granted','import-unknown','import_integration_artifact',{**args,'endpoint':'nowhere'})
+        row=store.db.artifacts.find_one({'tool':'import_integration_artifact','state':'FAILED'})
+        assert str(failed.value)==row['error'] and row['error'].startswith('UNKNOWN_ENDPOINT: 只能读')
+        assert '"configured_endpoints": ["napcat"]' in row['error'] and not (work/'imports'/'report.txt').exists()
         store.config['integration']['enabled']=False
         with pytest.raises(Denied, match='OWNER_REQUIRED'):
             broker.call('granted','import-3','import_integration_artifact',args)

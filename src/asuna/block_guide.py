@@ -33,7 +33,7 @@ def notes():
         'elsewhere_from_program': (places.ELSEWHERE_NOTE,),
         'lines_from_program': (lines.VIEW_NOTE,),
         'peer_asides_from_program': (lines.ASIDES_NOTE,),
-        'stickers_from_program': (stickers.HOME_NOTE, stickers.STICKERS_NOTE),
+        'stickers_from_program': (stickers.HOME_NOTE, stickers.SEND_NOTE),
         'night_from_program': (night.NOTE,),
         'restart_from_program': (restarts.NOTE,),
         'host_from_program': (host_stops.NOTE,),

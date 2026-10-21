@@ -5,7 +5,8 @@ import pytest
 
 from asuna import role_tools, visibility
 from asuna.role_tools import Refused
-from asuna.tasks import REPORT_CHARS, SHORT_REPORT_CHARS, TaskService, bounded_result, report_pages
+from asuna.tasks import (FIRST_PAGE_CHARS, FIRST_PAGE_MOST, RECORDS_TITLE, REPORT_CHARS, TaskService, bounded_result,
+                         key_observations, report_pages)
 
 
 def report(lines=40, width=400):
@@ -16,14 +17,16 @@ def test_pages_end_at_a_line_break_and_together_are_the_report():
     text = report()
     pages = report_pages(text)
     assert len(pages) > 2 and ''.join(pages) == text
-    assert all(len(page) <= REPORT_CHARS and page.endswith('\n') for page in pages)
+    assert len(pages[0]) <= FIRST_PAGE_MOST and all(len(page) <= REPORT_CHARS for page in pages[1:])
+    assert all(page.endswith('\n') for page in pages)
     assert report_pages('短报告') == ['短报告']
-    unbroken = '字' * (REPORT_CHARS * 2 + 5)
-    assert [len(page) for page in report_pages(unbroken)] == [REPORT_CHARS, REPORT_CHARS, 5]
+    assert report_pages('字' * FIRST_PAGE_MOST) == ['字' * FIRST_PAGE_MOST], 'up to the stretch, one page'
+    unbroken = '字' * (FIRST_PAGE_CHARS + REPORT_CHARS + 5)
+    assert [len(page) for page in report_pages(unbroken)] == [FIRST_PAGE_CHARS, REPORT_CHARS, 5]
 
 
 def test_the_hand_back_gives_the_first_page_and_says_how_to_turn_it():
-    text = report()
+    text = '## 结论\n做成了。\n' + report(20, 200) + '## 过程\n' + report(20, 200)
     pages = report_pages(text)
     value = bounded_result({'task_id': 'task-1', 'text': text, 'artifact_refs': ['a', 'b']})
     assert value['text'].startswith(pages[0]) and value['report_pages'] == len(pages) and value['tool_records'] == 2
@@ -31,6 +34,44 @@ def test_the_hand_back_gives_the_first_page_and_says_how_to_turn_it():
     assert 'task 的 page：task 写 task-1，page=2' in value['text']
     short = bounded_result({'task_id': 'task-1', 'text': '短报告'})
     assert short['text'] == '短报告' and 'report_pages' not in short
+
+
+def test_the_first_page_names_the_pages_after_it_and_the_tool_records_come_last():
+    # Her answer (2026-10-21): she knows what she is concluding from, so the first page says what follows.
+    text = '## 结论\n部分做成。\n' + '字\n' * 1200 + '## 改了什么\n' + '改\n' * 2000 + '## 没做到的\n' + '没\n' * 500
+    value = bounded_result({'task_id': 'task-1', 'text': text}, records=3)
+    pages = report_pages(text)
+    assert value['report_pages'] == len(pages) + 1
+    assert '后面：第 2 页「改了什么」' in value['text'] and '「%s」' % RECORDS_TITLE in value['text']
+
+
+def test_the_first_page_stretches_to_the_next_section_or_the_end_of_a_table():
+    # Her conditions (2026-10-21): about 2,000 characters, up to about 3,000 so the result or a table is not cut.
+    head = '## 结论\n' + '字' * 300 + '\n'
+    body = '## 结果\n' + '果\n' * 1100 + '## 过程\n' + '过\n' * 3000
+    pages = report_pages(head + body)
+    assert pages[0] == head + '## 结果\n' + '果\n' * 1100, 'cut at the next section, within the stretch'
+    table = '| 列 | 值 |\n|---|---|\n' + ''.join('| 行%03d | %s |\n' % (n, '值' * 10) for n in range(80))
+    text = '## 读数\n' + '字\n' * 600 + table + '## 后记\n' + '记\n' * 3000
+    first = report_pages(text)[0]
+    assert first.endswith(table) and len(first) <= FIRST_PAGE_MOST, 'the table ends the first page whole'
+    long_table = '| 列 |\n' + ''.join('| %s |\n' % ('值' * 40) for n in range(200))
+    text = '前言\n' + '字\n' * 600 + long_table
+    first = report_pages(text)[0]
+    assert first == '前言\n' + '字\n' * 600, 'a table too long for the stretch starts the next page'
+
+
+def test_tool_records_on_the_first_page_only_for_a_task_that_changed_something():
+    # Her answer: the risk is "it says it changed, and did not"; a read-only task's records are paged.
+    read = [{'tool': 'read_file', 'result_excerpt': 'a'}, {'tool': 'sandbox_run', 'result_excerpt': 'b'}]
+    assert key_observations(read) == []
+    changed = read + [{'tool': 'development_write', 'result_excerpt': 'c'},
+                      {'tool': 'development_run', 'result_excerpt': 'tests 12 passed'},
+                      {'tool': 'development_publish', 'result_excerpt': 'ACTIVE'}]
+    assert [item['tool'] for item in key_observations(changed)] == ['development_publish', 'development_run']
+    wrote = [{'tool': 'write_file', 'result_excerpt': 'x'}, {'tool': 'write_file', 'result_excerpt': 'y'},
+             {'tool': 'write_file', 'result_excerpt': 'z'}]
+    assert [item['result_excerpt'] for item in key_observations(wrote)] == ['y', 'z']
 
 
 def task_row(store, text, scene='dm-a'):
@@ -47,7 +88,7 @@ def test_the_short_hand_back_points_to_the_pages_too(store):
     service.store = store
     event = service._short_event(task, task)
     value = event['trusted_context_events'][0]
-    assert len(value['report'].split('…（只给了开头')[0]) <= SHORT_REPORT_CHARS
+    assert len(value['report'].split('…（只给了第一页')[0]) <= FIRST_PAGE_MOST
     assert '原文 %d 字共 %d 页' % (len(text), len(report_pages(text))) in value['report']
     assert value['report_pages'] == len(report_pages(text))
 
@@ -76,7 +117,7 @@ def test_she_turns_the_pages_of_a_report_in_this_conversation(store):
     ep = {'scene_id': 'dm-a', 'scope_key': 'scene:dm-a', 'policy_epoch': 1}
     second, _ = tools.tool_task_page(ep, 'c1', {'task': 'task-long', 'page': 2})
     assert second['text'] == pages[1] and second['page'] == '第 2/%d 页（原文 %d 字）' % (len(pages), len(text))
-    assert second['more'] == 'page=3 接着读' and second['title'] == '照抄一份长文档'
+    assert second['more'].startswith('page=3 接着读：「第') and second['title'] == '照抄一份长文档'
     last, _ = tools.tool_task_page(ep, 'c2', {'task': 'task-long', 'page': len(pages)})
     assert last['more'] == '报告到这里完了'
     with pytest.raises(Refused, match='共 %d 页' % len(pages)):
@@ -132,9 +173,9 @@ def test_a_page_ends_before_a_section_so_her_judgment_is_not_split():
     judgment = '## 我的判断\n' + ''.join('判断 %d：%s\n' % (n, '断' * 200) for n in range(6))
     text = findings + judgment
     assert len(findings) < REPORT_CHARS < len(text)
-    pages = report_pages(text)
+    pages = report_pages(text, first=REPORT_CHARS, most=REPORT_CHARS)     # pages after the first: REPORT_CHARS each
     assert pages[0] == findings and pages[1].startswith('## 我的判断') and ''.join(pages) == text
-    bold = report_pages('前言\n' + '字\n' * 2000 + '**结论：**\n' + '论\n' * 2000)
+    bold = report_pages('前言\n' + '字\n' * 2000 + '**结论：**\n' + '论\n' * 2000, first=REPORT_CHARS, most=REPORT_CHARS)
     assert bold[1].startswith('**结论：**')
 
 

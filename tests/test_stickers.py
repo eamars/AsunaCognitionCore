@@ -140,6 +140,9 @@ def test_she_keeps_stickers_from_the_group_and_sends_one_as_its_own_message(stor
     assert '这是一张照片' in results[3][4] and 'STICKER_' not in results[3][4] + results[4][4]
     shelf = {row['name']: row for row in stickers.shelf(store, 'P1')}
     assert set(shelf) == {'摸鱼', '臭', '老图'} and shelf['臭']['kind'] == 'market' and 'artifact_id' not in shelf['臭']
+    # Where stickers can go out, every name and no usage notes (her answer 2026-10-21); do=shelf lists the notes.
+    sent = stickers.send_block(store, 'P1')
+    assert set(sent) == {'names', 'shelf', 'note'} and set(sent['names'].split('、')) == {'摸鱼', '臭', '老图'}
     kept = store.db.artifacts.find_one({'_id': shelf['摸鱼']['artifact_id']})
     assert kept['scope_key'] == 'global-safe' and kept['source_ids'] == ['sticker:in-sticker']
     rows = list(store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK'}).sort('scene_seq', 1))

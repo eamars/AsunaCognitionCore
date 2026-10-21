@@ -187,7 +187,8 @@ def sends(scene):
 
 
 def block(store, persona, scene, *, at_home=False):
-    """stickers_from_program: the shelf by name, in a conversation that sends stickers or at home."""
+    """The shelf in full (names, usage notes, how often sent): in the turns that tidy it at home, and for `sticker` op
+    shelf anywhere."""
     rows = shelf(store, persona)
     if at_home and not rows:
         return None
@@ -201,6 +202,17 @@ def block(store, persona, scene, *, at_home=False):
 
 
 NAMES_NOTE = '架子上的名字（你起的）。用法、样子和 ref 在整理架子的回合里列全，别的时候用 sticker 的 shelf 看。'
+SEND_NOTE = ('你收着的表情包的名字（你起的）。能发的地方：speak 里写一个 kind=sticker 的 part（name 照抄这里的名字），作为单独一条发出去；'
+             '你写的用法用 sticker 的 shelf 看。群里别人发的表情包下面标着「表情包 ref：att-…」，喜欢的用 sticker 的 keep 收下；'
+             '你认得的表情包下面标着你给它起的名字。')
+
+
+def send_block(store, persona):
+    """stickers_from_program where stickers can go out: every name on her shelf, her usage notes left to the shelf
+    (her answer, 2026-10-21: the names are hers and few characters; the notes were most of the list)."""
+    rows = shelf(store, persona)
+    return {'names': '、'.join(row['name'] for row in rows), 'shelf': '%d 个，%s' % (len(rows), fullness(len(rows))),
+            'note': SEND_NOTE}
 
 
 def names_block(store, persona):

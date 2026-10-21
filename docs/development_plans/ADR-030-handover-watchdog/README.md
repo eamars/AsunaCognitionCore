@@ -115,3 +115,29 @@ watchdog: it is synchronous, and its failure already reaches the action brain as
   full → short → developer; failed turn → short; orphan; changed scene; task-list phrases).
 - The two finished tasks paused before this change were settled by hand: one as delivered (its continuation reached
   her), one returned to "finished, not yet handed back" for the watchdog.
+
+## Addendum 2026-10-21: a short first page, the result first
+
+From the second week's measurement (`docs/articles/what-she-reads-each-turn.md`): a hand-back carried the report's
+first page of up to 6,000 characters plus four tool records, a median 9,148 characters in her turn, about 11% of all
+she was sent in the week; and in three of that day's reports the result sat 2,500 to 4,000 characters in. Put to her
+by the owner and Claude; her answer (2026-10-21, agent line) set the shape:
+
+- **The first page is about 2,000 characters** (`tasks.FIRST_PAGE_CHARS`), stretched up to 3,000 (`FIRST_PAGE_MOST`)
+  to end at the next section rather than inside one, and never between two rows of a table that fits; a table too long
+  for the stretch starts the next page. Later pages stay at 6,000 (`REPORT_CHARS`). The short hand-back carries the
+  same first page.
+- **The action brain's report leads with the result** (`prompts/executor.md`): a one-line verdict (done / partly
+  done, and which part not / not done); what changed, with files and a sha or commit; for a publish its `state` and
+  `activated`; the result itself; what was not done or not verified. Process and evidence follow, in titled sections.
+  Her rule: order matters more than length, and "not done / not verified" belongs on the first page.
+- **The first page's note names the pages after it** by title (`page_title`), and `task` op page says the next
+  page's title.
+- **Tool records by risk** (`key_observations`): on the first page only for a task that changed or published
+  something (`CHANGING_TOOLS`): its latest publish or start/stop receipt and its latest run, at most two; a read-only
+  task's records are not on the first page. Every record is the report's last page, "工具记录", read with `task` op
+  page (`task_pages`, `records_page`).
+- **Cost:** `executor.md` grows from 586 to 678 characters (budget 680 in `tests/test_tool_budget.py`), once per
+  action-brain conversation in its fixed system prompt; it saves about 4,000 characters of first page and up to four
+  tool records in every hand-back her turn reads.
+- Tests: `tests/test_read_report.py`, `tests/test_handover_watchdog.py`.

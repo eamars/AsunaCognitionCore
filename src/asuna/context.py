@@ -572,13 +572,16 @@ class ContextBuilder:
         task_states=open_tasks+[task for task in task_states if task not in open_tasks][:FINISHED_TASKS_SHOWN]
         paused=any(task['state']=='PAUSED' for task in task_states)
         carried_on=_handover.continuations(self.store,[task['_id'] for task in task_states])
-        from .tasks import REPORT_CHARS, report_pages
+        from .tasks import FIRST_PAGE_CHARS, task_pages
         for task in task_states:
             task.pop('_active',None)
-            # A report longer than a page reached her as its first page; the rest she reads with task op page.
-            if task.pop('_report_chars',0)>REPORT_CHARS:
-                text=((self.store.db.tasks.find_one({'_id':task['_id']},{'result.text':1}) or {}).get('result') or {}).get('text') or ''
-                task['report']='报告 %d 页（原文 %d 字），交回来时只给了第一页；其余用 task 的 page 翻读'%(len(report_pages(text)),len(text))
+            # A report longer than its first page reached her as that page; the rest she reads with task op page.
+            if task.pop('_report_chars',0)>FIRST_PAGE_CHARS:
+                row=self.store.db.tasks.find_one({'_id':task['_id']},{'result.text':1,'intent_revision':1}) or {'_id':task['_id']}
+                text=((row.get('result') or {}).get('text')) or ''
+                pages=task_pages(self.store,row)
+                if len(pages)>1:
+                    task['report']='报告 %d 页（原文 %d 字），交回来时只给了第一页；其余用 task 的 page 翻读'%(len(pages),len(text))
             # A task's title is what she called it; the old goal text only when there is no title.
             if task.get('title'):
                 task.pop('goal',None)
@@ -810,7 +813,7 @@ class ContextBuilder:
         # ADR-016: her sticker shelf where stickers can go out (and at home, to tidy it), the platform's faces.
         from . import stickers as _stickers
         if _stickers.sends(scene):
-            context['stickers_from_program']=_stickers.block(self.store,persona,scene)
+            context['stickers_from_program']=_stickers.send_block(self.store,persona)
             if scene.get('kind')=='group':
                 # Stickers people posted here lately, saved in her candidate pool (owner 2026-10-06).
                 here=_stickers.candidates_block(self.store,moment,scene['_id'])

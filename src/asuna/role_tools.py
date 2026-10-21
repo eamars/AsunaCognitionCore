@@ -2748,7 +2748,7 @@ class RoleTools:
                 'note': note}, False
 
     def tool_task_page(self, ep, call_id, args):
-        from .tasks import report_pages
+        from .tasks import page_title, task_pages
         unknown = sorted(set(args) - {'op', 'task', 'page'})
         if unknown:
             raise Refused('task 的 page 不认识参数 %s：只收 task 和 page。' % '、'.join(unknown))
@@ -2761,22 +2761,23 @@ class RoleTools:
         home = self._cls(ep) == visibility.OWNER_PRIVATE
         where = {'_id': task_id} if home else {'_id': task_id, 'scene_id': ep['scene_id'], 'scope_key': ep['scope_key'],
                                                 'policy_epoch': ep['policy_epoch']}
-        task = self.store.db.tasks.find_one(where, {'result.text': 1, 'title': 1, 'goal': 1})
+        task = self.store.db.tasks.find_one(where, {'result.text': 1, 'title': 1, 'goal': 1, 'intent_revision': 1})
         if not task:
             raise Refused('「%s」不是%s的任务；task 照抄交回来的结果里的 task，或 task_state_from_program 里的 id。'
                           % (task_id, '你' if home else '这个对话里'))
         text = (task.get('result') or {}).get('text')
         if not isinstance(text, str) or not text:
             raise Refused('这个任务还没有报告：它还在跑，或者没交回文字。')
-        pages = report_pages(text)
+        from . import machine_words
+        # The report's pages, then its tool records; outside home nothing of the machine (ADR-050), page by page.
+        pages = task_pages(self.store, task, (lambda value: value) if home else machine_words.clean)
         if not 1 <= page <= len(pages):
             raise Refused('这份报告共 %d 页：page 写 1–%d。' % (len(pages), len(pages)))
-        from . import machine_words
-        # Outside home a report holds nothing of the machine (ADR-050): the hand-back's rule, page by page.
         return {'task': task_id, 'title': task.get('title') or task.get('goal'),
                 'page': '第 %d/%d 页（原文 %d 字）' % (page, len(pages), len(text)),
                 'text': pages[page - 1] if home else machine_words.text(pages[page - 1]),
-                'more': 'page=%d 接着读' % (page + 1) if page < len(pages) else '报告到这里完了'}, False
+                'more': ('page=%d 接着读：「%s」' % (page + 1, page_title(pages[page])) if page < len(pages)
+                         else '报告到这里完了')}, False
 
     def tool_ideas_review(self, ep, call_id, args):
         idea_id = self._text(args, 'id', 200)

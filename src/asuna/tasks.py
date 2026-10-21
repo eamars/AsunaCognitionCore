@@ -35,54 +35,153 @@ MESSAGE_ROUNDS = 3
 TERMINAL={'DONE','RETURNED','PARTIAL','BLOCKED','CANCELLED','STALE','NEEDS_CHARACTER_DECISION','UNKNOWN'}
 
 
-# Per-turn budget for task feedback (the largest context block): the action brain's report and the
-# last few tool observations as evidence. Cuts are marked; the full records stay in the task.
+# The action brain's report as pages: a short first page, which the hand-back carries (her answer, 2026-10-21: the
+# result leads, the rest is paged), then pages of REPORT_CHARS. Cuts are marked; the full records stay in the task.
 REPORT_CHARS = 6000
-SHORT_REPORT_CHARS = 3000        # the short hand-back (ADR-030): the report's words, no tool records
-OBSERVATIONS = 4
+FIRST_PAGE_CHARS = 2000          # the first page's usual length
+FIRST_PAGE_MOST = 3000           # ... stretched to here so its section or a table is not cut in half
 OBSERVATION_CHARS = 600
+# Tool records on the first page: only for a task that changed or published something, the receipts that say whether
+# it took (her answer: the risk is "it says it changed, and did not"); every record is the report's last page.
+KEY_OBSERVATIONS = 2
+CHANGING_TOOLS = ('write_file', 'development_write', 'development_publish', 'integration_start', 'integration_stop',
+                  'import_integration_artifact', 'generate_image', 'persona_job_run')
+KEY_TOOLS = ('development_publish', 'integration_start', 'integration_stop', 'development_run', 'integration_test',
+             'sandbox_run')
+RECORDS_TITLE = '工具记录'
+TITLE_CHARS = 24
 
 
 # A line that starts a section of a report: a Markdown heading, a line that is all bold, 【…】, or 一、/1. numbering.
 SECTION_START = re.compile(r'\n(?=#{1,6} |\*\*[^*\n]+\*\*[：:]?[ \t]*\n|【[^】\n]+】|[一二三四五六七八九十]+[、.．]|\d+[.、．] )')
 
 
-def report_pages(text, size=REPORT_CHARS):
-    """The action brain's report as pages of at most `size` characters. A page ends before the last section that
-    starts in its second half, so a section (her reason to read on) is not split; else at the last blank line, else
-    the last line break, in its last fifth. The hand-back gives her the first page; task op page reads the others."""
+def _row(text, pos):
+    """Whether the line starting at `pos` is a Markdown table row."""
+    end = text.find('\n', pos)
+    return (text[pos:] if end < 0 else text[pos:end]).lstrip().startswith('|')
+
+
+def _outside_table(text, cut, most):
+    """A cut between two rows of a Markdown table moves to the table's end when that is within `most`, else to the
+    table's start (a table cut in half costs more than a longer page, her answer 2026-10-21)."""
+    if not 0 < cut < len(text) or text[cut - 1] != '\n':
+        return cut
+    before = text.rfind('\n', 0, cut - 1) + 1          # the line before the cut
+    if not (_row(text, cut) and _row(text, before)):
+        return cut
+    end = cut
+    while end < len(text) and _row(text, end):
+        newline = text.find('\n', end)
+        end = len(text) if newline < 0 else newline + 1
+    if end <= most:
+        return end
+    start = before
+    while start > 0:
+        above = text.rfind('\n', 0, start - 1) + 1
+        if not _row(text, above):
+            break
+        start = above
+    return start or cut
+
+
+def _cut(text, size, most):
+    """Where a page of at most `size` (stretched to `most`) ends: before the last section that starts in its second
+    half; else, when stretching is allowed, at the next section start before `most`; else at the last blank line, else
+    the last line break, in its last fifth. Never in the middle of a table that fits."""
+    window = text[:size]
+    sections = [m.start() + 1 for m in SECTION_START.finditer(window, size // 2)]
+    later = [m.start() + 1 for m in SECTION_START.finditer(text[:most], size)] if most > size else []
+    if sections:
+        cut = sections[-1]
+    elif later:
+        cut = later[0]
+    else:
+        blank, line = window.rfind('\n\n', int(size * 0.8)), window.rfind('\n', int(size * 0.8))
+        cut = blank + 2 if blank > 0 else line + 1 if line > 0 else size
+    return _outside_table(text, cut, most)
+
+
+def report_pages(text, size=REPORT_CHARS, first=FIRST_PAGE_CHARS, most=FIRST_PAGE_MOST):
+    """The action brain's report as pages: the first about `first` characters (up to `most` so a section or a table is
+    not split), the others at most `size`. A section (her reason to read on) is not split where a page can end before
+    it. The hand-back gives her the first page; task op page reads the others."""
     text, pages = str(text or ''), []
-    while len(text) > size:
-        window = text[:size]
-        sections = [m.start() + 1 for m in SECTION_START.finditer(window, size // 2)]
-        if sections:
-            cut = sections[-1]
-        else:
-            blank, line = window.rfind('\n\n', int(size * 0.8)), window.rfind('\n', int(size * 0.8))
-            cut = blank + 2 if blank > 0 else line + 1 if line > 0 else size
+    limit, cap = first, most
+    while len(text) > cap:
+        cut = _cut(text, limit, cap)
         pages.append(text[:cut])
         text = text[cut:]
+        limit = cap = size
     return pages + [text]
 
 
-def page_note(task_id, page, pages, chars):
-    """What the end of a page says: where she is, how long the report is, and how to turn the page."""
+def page_title(page):
+    """A page's first line as its title, without its Markdown marks."""
+    line = next((row.strip() for row in str(page).splitlines() if row.strip()), '')
+    line = re.sub(r'^#{1,6}\s+', '', line).strip().strip('*【】').strip().rstrip('：:').strip()
+    return line if len(line) <= TITLE_CHARS else line[:TITLE_CHARS] + '…'
+
+
+def page_note(task_id, page, pages, chars, titles=()):
+    """What the end of a page says: where she is, how long the report is, what the pages after it are called, and how
+    to turn the page. `titles`: the titles of the pages after this one."""
     if page >= pages:
         return '（第 %d/%d 页，报告到这里完了）' % (page, pages)
-    return ('…（第 %d/%d 页，原文 %d 字；接着读用 task 的 page：task 写 %s，page=%d）'
-            % (page, pages, chars, task_id, page + 1))
+    after = '；后面：%s' % '、'.join('第 %d 页「%s」' % (page + 1 + i, title) for i, title in enumerate(titles)) if titles else ''
+    return ('…（第 %d/%d 页，原文 %d 字%s；接着读用 task 的 page：task 写 %s，page=%d）'
+            % (page, pages, chars, after, task_id, page + 1))
 
 
-def bounded_result(result):
+def key_observations(observations):
+    """The tool records the first page keeps: none for a task that changed nothing; for one that did, the latest
+    publish or start/stop receipt and the latest run (its test), else its latest changes."""
+    if not any(item['tool'] in CHANGING_TOOLS for item in observations):
+        return []
+    picked = []
+    for tool in KEY_TOOLS:
+        hits = [item for item in observations if item['tool'] == tool]
+        if hits and len(picked) < KEY_OBSERVATIONS:
+            picked.append(hits[-1])
+    return picked or [item for item in observations if item['tool'] in CHANGING_TOOLS][-KEY_OBSERVATIONS:]
+
+
+def records_page(observations):
+    """Every tool record of the task as the report's last page, or None when it made no call."""
+    if not observations:
+        return None
+    return RECORDS_TITLE + '（共 %d 条，每条截到 %d 字）\n' % (len(observations), OBSERVATION_CHARS) + ''.join(
+        '- %s：%s\n' % (item['tool'], item['result_excerpt']) for item in observations)
+
+
+def observations_of(store, task, shown=lambda value: value):
+    """The task's finished tool calls, each as its tool and an excerpt of its result."""
+    return [{'source': item['_id'], 'tool': item['tool'],
+             'result_excerpt': excerpt(json.dumps(shown(item['result']), ensure_ascii=False), OBSERVATION_CHARS)}
+            for item in store.db.artifacts.find({'task_id': task['_id'], 'intent_revision': task.get('intent_revision'),
+                                                 'state': 'DONE'})]
+
+
+def task_pages(store, task, shown=lambda value: value):
+    """The pages task op page reads: the report's, then its tool records."""
+    pages = report_pages(((task.get('result') or {}).get('text')) or '')
+    records = records_page(observations_of(store, task, shown))
+    return pages + [records] if records else pages
+
+
+def bounded_result(result, records=0):
     if isinstance(result, dict) and isinstance(result.get('text'), str):
         # The ids of its tool records are audit, not something she reads: a count says how much was done. `facts`
-        # repeats the report with every record's id (the stored result keeps it).
+        # repeats the report with every record's id (the stored result keeps it). `records`: how many tool records
+        # follow the report as its last page.
         refs = result.get('artifact_refs')
         value = {key: item for key, item in result.items() if key not in ('artifact_refs', 'facts')}
         pages = report_pages(result['text'])
-        text = pages[0] if len(pages) == 1 else pages[0] + page_note(result.get('task_id'), 1, len(pages),
-                                                                       len(result['text']))
-        return {**value, 'text': text, **({'report_pages': len(pages)} if len(pages) > 1 else {}),
+        titles = [page_title(page) for page in pages[1:]] + ([RECORDS_TITLE] if records else [])
+        count = len(pages) + (1 if records else 0)
+        text = pages[0] if count == 1 else pages[0] + page_note(result.get('task_id'), 1, count, len(result['text']),
+                                                                titles)
+        return {**value, 'text': text, **({'report_pages': count} if count > 1 else {}),
                 **({'tool_records': len(refs)} if isinstance(refs, list) else {})}
     return result
 
@@ -412,7 +511,8 @@ class TaskService:
                 raise Denied('FEEDBACK_EPISODE_MISMATCH')
         else:
             depth=original.get('delegation_depth',0)+1
-            event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 task 的 message。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],**_why_then(self.store,task),'value':shown(bounded_result(task.get('result'))) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
+            observations=[] if short else observations_of(self.store,task,shown)
+            event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 task 的 message。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],**_why_then(self.store,task),'value':shown(bounded_result(task.get('result'),len(observations))) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
             source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0], 'scope_key':task['scope_key'], 'policy_epoch':task['policy_epoch']})
             # The session the task belongs to (home's own for one begun on an errand or in a reflection).
             if task.get('native_session_id') or original.get('native_session_id'):
@@ -426,15 +526,13 @@ class TaskService:
             if short:
                 event.update(self._short_event(task,current,shown))
             else:
-                observations=[]
-                for item in self.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE'}):
-                    observations.append({'source':item['_id'],'tool':item['tool'],
-                                         'result_excerpt':excerpt(json.dumps(shown(item['result']),ensure_ascii=False),OBSERVATION_CHARS)})
                 # When it ran (a result handed back late describes that time); stored UTC, her turn shows it local.
+                # Tool records on the first page only where the task changed something (key_observations); all of
+                # them are the report's last page.
                 event['trusted_context_events'][0].update(original_input=(source or {}).get('text'),
                     original_input_id=(source or {}).get('_id'),brief=task.get('brief') or task['goal'],
-                    observations=observations[-OBSERVATIONS:],observations_total=len(observations),
-                    finished_at=current.get('finished_at'))
+                    **({'observations':key} if (key:=key_observations(observations)) else {}),
+                    observations_total=len(observations),finished_at=current.get('finished_at'))
             self.handback(task,'handing',short=short)
             ep=coordinator.ingest(event,persona=original['persona'])
         if ep['state'] in (('FAILED_PROTOCOL',) if continuing else ()) or ep['state'] in ('PREPARED','TURN','SPEAK_ACCEPTED','INTERRUPTED'):
@@ -456,14 +554,14 @@ class TaskService:
         without the tool records."""
         result=current.get('result') or {}
         text=result.get('text') or ''
-        report=shown(report_pages(text,SHORT_REPORT_CHARS)[0])
-        if len(report)<len(text):
-            pages=len(report_pages(text))
-            report+=('…（只给了开头，原文 %d 字共 %d 页；整页读用 task 的 page：task 写 %s，从 page=1 读起）'
-                     % (len(text),pages,task['_id']))
+        pages=task_pages(self.store,task)
+        report=shown(report_pages(text)[0])
+        if len(pages)>1:
+            report+=('…（只给了第一页，原文 %d 字共 %d 页；接着读用 task 的 page：task 写 %s，page=2）'
+                     % (len(text),len(pages),task['_id']))
         value={'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],'short':True,
                **_why_then(self.store,task),'brief':task.get('brief') or task['goal'],'report':report,
-               **({'report_pages':len(report_pages(text))} if len(report)<len(text) else {}),
+               **({'report_pages':len(pages)} if len(pages)>1 else {}),
                'finished_at':current.get('finished_at'),'uncertainties':shown(result.get('uncertainties') or [])}
         return {'event_id':handover.result_event_id(task,True),
                 'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」早就有了结果，但之前没能交到你手上；这是补交的短版：'

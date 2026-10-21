@@ -285,16 +285,19 @@ quadrantChart
 ## What the measurement shows
 
 1. **The action brain's hand-back reports are the largest single cost.** A `task_feedback` turn carries the report in
-   its `event` (`trusted_context_events`): a median of 9,148 characters, 2.5 million in the week, about 11% of
-   everything she is sent. The trigger is always sent, so a report is never left out as unchanged.
+   its `event` (`trusted_context_events`), and the trigger is always sent, so a report is never left out as
+   unchanged. In the measured week this was a median of 9,148 characters, 2.5 million in the week, about 11% of
+   everything she was sent. A hand-back carries the report's first page of about 2,000 characters, which opens with
+   the result, and tool records only for a task that changed something; that form is newer than the measured week.
 2. **Memories are the largest family that changes every turn** (16.7%): about 2,600 characters retrieved per turn,
    45% new to the session. They are used: a memory shown to her shares a run of six characters with what she then
    says 8.9% of the time, against 1.8% for a memory from another turn (chance; measured 2026-10-16). That measure
    cannot rank kinds of memory (it favours text written to be quoted), and a memory used rarely can carry weight.
 3. **The conversation's own catch-up** (`group_continuity`, 9.4%) and **recent experience** at home (6.5%, 12,000
    characters in 7% of turns) are the next largest; both are sent almost every time they are carried.
-4. **The sticker list is costly and almost unused.** It is in every turn (a group's list holds 50 stickers, about 4,000
-   characters), 3.5% of the week, and she sends a sticker in 0.2% of those turns.
+4. **The sticker list was costly for its use.** In the measured week it was in every turn (a group's list held 50
+   stickers with her usage notes, about 4,000 characters), 3.5% of the week, and she sent a sticker in 0.2% of those
+   turns. Where stickers can go out the list is every name, and her usage notes come with `sticker` `do: shelf`.
 5. **The member list** (29 recently active members and the group's admins, 3.7% of the week) is used for
    `find_member` in 0.1% of group turns; mentions written into speech are not counted here.
 6. **Places pay for themselves:** the list of places is 4.2% of the week, carried only in 5% of turns, and she visits
@@ -302,14 +305,7 @@ quadrantChart
 7. **Blocks that change rarely cost little:** her self state (6,916 characters) is in every turn and sent in 7% of
    them; the delivery's leave-out-when-unchanged is doing its work.
 
-## Choices, with what each would change
-
-Each is the owner's to pick; each states what it saves and what it costs her. "Saves" is of the week's sent characters.
-
-| # | Change | Saves | Costs her |
-|---|---|---|---|
-| A | A hand-back carries a shorter first page of the report (what was done, the result, where the rest is; about 2,000 characters), the rest by paging | about 8% | one more read when she wants the detail |
-| B | A group's sticker list shows only the stickers that group has seen her use, with the shelf on asking | up to about 3% | a sticker she has not used there needs `sticker` `do: shelf` first |
+## The budgets
 
 The budgets this works within: the system prompt and the tool list stay fixed per conversation (cache-first,
 `maximize-cache-hit-by-design.md`); everything a turn sends stays in that conversation until compaction; her output is
@@ -325,6 +321,13 @@ conversation. Script: `.runtime/private/articles/measure_week.py` (local, read-o
 
 ## Changelog
 
+- **2026-10-21 (evening)** — Both choices from the re-measurement built, in the shape she set (ADR-030 addendum,
+  ADR-016 §5). A: a hand-back carries a first page of about 2,000 characters (up to 3,000 so a section or a table is
+  not cut), the action brain's report opens with the verdict, what changed, a publish's `state` and `activated`, the
+  result and what was not done or not verified; tool records on the first page only for a task that changed
+  something, all of them as the report's last page. B: where stickers can go out the list is every name, her usage
+  notes on asking (her choice over "only the stickers used in this group": that would narrow with use). Findings 1
+  and 4 describe the new form; the measured numbers are the earlier one's until the next measurement.
 - **2026-10-21** — Re-measured on the week to 2026-10-21 (2,549 turns); every number above replaced. Added the blocks
   the code builds now: `people` (ADR-082), `called` (ADR-086), `map` (ADR-073), `switches` (ADR-052), and `tools_week` and
   `cared` in her weekly self review; `affect` described in its ADR-086 form (one paragraph, nothing at the calm bands, feelings

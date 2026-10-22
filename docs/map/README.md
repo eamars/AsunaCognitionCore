@@ -376,6 +376,7 @@ The DSH plugin (JavaScript): the worker it starts, her sessions, the action brai
 - [`persistence.js`](../../packages/cognition-core/src/persistence.js) — DSH compatibility seam for informational plugin event envelopes.
 - [`persona.js`](../../packages/cognition-core/src/persona.js) — Persona contribution v2 (ADR-009 PERSONA_CONTRACT §2): shape checks at registration.
 - [`preset.js`](../../packages/cognition-core/src/preset.js) — An Asuna agent preset row: DSH's own preset row (@deepseek-ai/dsh-agent-preset) with its name and description declared per language.
+- [`private-words.js`](../../packages/cognition-core/src/private-words.js) — The deployment's "keep out" list (src/asuna/private_words.py keeps it; this reads it the same way) and what it finds in a text that will become public: words on the list, and digit runs shaped like a QQ or group number.
 - [`python-env.js`](../../packages/cognition-core/src/python-env.js) — Builds the worker's Python environment on first start: a venv in the profile's data folder, installed from the package's `requirements.lock` with uv, or with any Python 3.12+ and pip.
 - [`recovery.js`](../../packages/cognition-core/src/recovery.js) — The recovery preset plugin: a repair session limited to the project development tools, which runs through the publication floor even while the cognition worker is down.
 - [`role.js`](../../packages/cognition-core/src/role.js) — The character brain's preset plugin: her role session gets the worker-rendered system prompt and her role tools (`attachRole` in index.js).

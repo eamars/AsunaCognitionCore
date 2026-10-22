@@ -141,15 +141,23 @@ def remove(word):
     return {'removed': True}
 
 
+NUMBERING = '命中报的是名单文件里的行号（注释行也占行号），不是第几条'
+
+
 def summary():
-    """How many entries per category; never the words."""
+    """How many entries per category, beside the file's own lines (her ask: a line number is not an entry count);
+    never the words."""
     entries = load()
     if entries is None:
         return {'configured': False, 'note': '这台机器上还没有名单；第一次 add 会建好它'}
     counts = {}
     for _, category, _, _ in entries:
         counts[category] = counts.get(category, 0) + 1
-    return {'configured': True, 'entries': len(entries), 'by_category': counts}
+    lines = [line.strip() for line in path().read_text(encoding='utf-8').splitlines() if line.strip()]
+    comments = sum(1 for line in lines if line.startswith('#'))
+    return {'configured': True, 'entries': len(entries), 'by_category': counts,
+            'file_lines': {'not_empty': len(lines), 'comments': comments, 'not_entries': len(lines) - comments - len(entries)},
+            'numbering': NUMBERING}
 
 
 def _same(line, word):

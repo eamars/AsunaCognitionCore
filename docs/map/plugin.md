@@ -349,6 +349,17 @@ An Asuna agent preset row: DSH's own preset row (@deepseek-ai/dsh-agent-preset) 
 - class `AsunaPreset`
 - def `words` — The words for a language, else English, else the first given.
 
+## `private-words.js`
+
+[packages/cognition-core/src/private-words.js](../../packages/cognition-core/src/private-words.js)
+
+The deployment's "keep out" list (src/asuna/private_words.py keeps it; this reads it the same way) and what it finds in a text that will become public: words on the list, and digit runs shaped like a QQ or group number. A finding names the line and the category, never the word or the number.
+
+- def `listPath` — The list's path: ASUNA_PRIVATE_WORDS, otherwise <data>/private/personal-words.txt (as private_words.path()).
+- def `load` — [{line, category, word}] of the well-formed entries, or null when the deployment has no list.
+- def `findings` — What a text that will be public carries from the list or in number shape: [{line, kind, category?, entry?, digits?}].
+- def `describe` — Her words for what was found: which line of the text, which category and list line, or how many digits.
+
 ## `python-env.js`
 
 [packages/cognition-core/src/python-env.js](../../packages/cognition-core/src/python-env.js)

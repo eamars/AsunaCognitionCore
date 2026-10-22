@@ -462,5 +462,5 @@ Words that point at real people and places, kept per deployment and never commit
 - def `find` — [(entry line number, category)] of the entries found in a text, each once.
 - def `add` — Keep an entry; the same word is kept once (at home its category and reason are replaced).
 - def `remove`
-- def `summary` — How many entries per category; never the words.
+- def `summary` — How many entries per category, beside the file's own lines (her ask: a line number is not an entry count); never the words.
 - def `run` — The tool, for either brain: what it did, never a listed word.

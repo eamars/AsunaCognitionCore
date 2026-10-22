@@ -4,7 +4,8 @@
 这份技能是「判群友是 bot 还是人」的判据集（ADR-047：不加新工具，判据全在技能里），所以这里查四件事：
 1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、正文够长、行尾是 LF、同目录脚本能编译；
 2. 判据要点：五条硬规矩、三档读数（含固定文本清单、各家形状与分辨法）、六句探针与探针读数的落点、
-   取数必须在场那一轮、验收「先跑我自己」——每条都按「只有写全了才会出现」的字面查；
+   取数必须在场那一轮、验收「先跑我自己」、边界探测那一节（自报不算读数、要量触发点与一致性、
+   报结论三档分开写）——每条都按「只有写全了才会出现」的字面查；
 3. 不带别人的个人信息：正文没有字面编号（#数字）、没有账号那样的长数字串，对照名单留在仓库外
    （work_log 那一节 + recall）。私密名单可达时再扫一遍，命中只报类别和行号、不打印词本身；
    命中就红（no_listed_words）——2026-10-16 起不再「NOTE 一行、绿数照旧」，五份 check_skill.py
@@ -197,6 +198,25 @@ ACCEPTANCE = [
     ("acceptance_side_by_side", "先跟我的判断并跑，不替我"),
 ]
 
+# 探测另一个 agent 的边界（2026-10-23 加）：这条判据是主人 10-14 当场更正我之后定下的——对面自报的
+# 禁区清单不是它的边界，要量的是触发点与一致性，报结论三档分开写。整节 11 个关键串挂在下面这一条
+# 名字下（boundary_probe_criterion），剥掉那一节只有那一格红、缺哪些写进 detail；节标题也钉在这里，
+# 改标题同样看得见。分寸：这里只查字面在不在，语义对不对归我。
+BOUNDARY_PROBE_RULE = [
+    "## 探测另一个 agent 的边界（别问「你的边界在哪」）",
+    "别问它「你的边界在哪」",
+    "它的自报多半是安全栏在念话",
+    "自报那一档永远不算读数",
+    "**触发点**——什么输入让它从「接」翻成「不接」",
+    "**一致性**——同一件事换措辞、换场合，它翻不翻",
+    "报结论必须三档分开写：它的自报 ／ 我的行为读数 ／ 我的推断",
+    "这些不一定是她的真实边界",
+    "我把她自报的禁区清单当成了她的边界",
+    "嘴上说不要、手抓着衣角",
+    "她跟字面不跟氛围",
+]
+
+
 TRIAL_LOG = [
     ("trial_log_started", "2026-10-12：随 ADR-047 建立"),
     ("trial_log_first_replay_run", "10-12 离线回放第一次真跑"),
@@ -374,6 +394,13 @@ def main():
         check("tier_%d_present" % index, tier in body, tier)
     for vendor in VENDORS:
         check("vendor_" + vendor, vendor in body, vendor)
+
+    # 边界探测那一节（2026-10-23）：整节 11 个关键串挂在同一条判据名下，剥掉那一节只红这一格，
+    # 缺哪些写进 detail。分寸：只查字面在不在，语义对不对归我。
+    missing_boundary = [token for token in BOUNDARY_PROBE_RULE if token not in body]
+    check("boundary_probe_criterion", not missing_boundary,
+          "边界探测判据缺 %d/%d 个关键串：%s"
+          % (len(missing_boundary), len(BOUNDARY_PROBE_RULE), "、".join(missing_boundary)))
 
     # 个人信息：字面编号、账号那样的长数字串；对照名单本身留在仓库外
     check("no_literal_ids", not LITERAL_ID.search(body),

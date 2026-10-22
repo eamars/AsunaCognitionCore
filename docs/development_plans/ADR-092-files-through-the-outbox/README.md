@@ -1,7 +1,7 @@
 # ADR-092: Files to a QQ group through the outbox
 
-Status: **Proposed**. Xiaoman's v0 (2026-10-23 09:03 NZDT), reviewed with Claude 09:05–09:07; two decisions are the
-owner's (§6). Not built.
+Status: **Accepted**. Xiaoman's v0 (2026-10-23 09:03 NZDT), reviewed with Claude 09:05–09:07; the owner decided §6 on
+2026-10-23 ~09:35. Building.
 
 ## 1. Why
 
@@ -35,33 +35,38 @@ Pictures become sendable when a task registers them (`outbound_media.register_im
     it to send.
 - **D3 What a conversation may send** follows the pictures' rules (`image_scopes`, `own_only`). In a group, or in
   anyone's chat that is not the owner's, only files her own tasks produced may go.
-- **D4 Type.** The type is detected from the bytes and recorded; there is no allow-list (pending the owner, §6). A
-  type that is not recognized still goes. The receipt and her record say 「类型没认出来」, a note and not a gate (her
-  ask, 09:06).
-- **D5 Size.** Files get their own cap, separate from the pictures' 8 MiB. A file over the cap is refused, with the
-  cap and the actual bytes stated, and is never truncated or compressed.
-  - She proposed 32 MiB. The number is fixed only after one end-to-end send at that size, because the bytes go to
-    NapCat base64-encoded in one WebSocket message and only 1.87 MB has been through.
-- **D6 The adapter.**
-  - It declares `file` on each claim. The part is listed only where a channel declares it (ADR-079 §9.7); a channel
-    that does not (QQ Bot) never shows it.
-  - A file row claimed by an adapter that does not declare it fails with `CHANNEL_DOES_NOT_DECLARE_FILE`.
-  - NapCat is called with `upload_group_file` (`file` as `base64://…`, `name`), the one new action on the adapter's
-    outgoing list.
+- **D4 Type: no limit (owner).** The type is detected from the bytes and recorded. A type that is not recognized
+  still goes; the receipt and her record say 「类型没认出来」, a note and not a gate (her ask, 09:06).
+- **D5 Size: the adapter's limit only (owner).** The program sets no cap of its own.
+  - Each adapter declares the largest file its platform takes, with the `file` capability on its claim.
+  - A file over the declared limit is refused before anything is sent, with the limit and the actual bytes stated.
+  - Nothing is truncated or compressed.
+- **D6 The NapCat adapter.**
+  - It declares `file` with QQ's single-file limit for group files, 4 GiB (§8).
+  - The bytes stream end to end. The Host serves them in pieces from GridFS, and the adapter passes each piece to
+    NapCat's `upload_file_stream` with the whole file's sha256, so no single WebSocket message nears NapCat's 50 MB
+    cap. Then it calls `upload_group_file` with the path NapCat returns.
+  - A file row claimed by an adapter that does not declare `file` fails with `CHANNEL_DOES_NOT_DECLARE_FILE`; the
+    part is listed only where a channel declares it (ADR-079 §9.7).
   - Keys are ours (`artifact_id`, publication, attempt). NapCat's `file_id` is not a key: she measured on 10-21 that
     it changes between two calls of the same interface.
+  - An upload that outlasts its wait is reported as `unknown`, not `failed`: QQ may still finish it.
 - **D7 Receipt and record.**
   - The receipt keeps the artifact id, sha256, size, type, NapCat's response and the time. A download to compare the
     sha is not done by default; she runs one by hand when she checks.
   - Her own record shows the line as 「[文件：名字，大小]」, so her later turns know it was sent.
-  - A failed upload shows as failed, like any other part.
+  - A failed upload shows as failed, like any other part, with the platform's reason (a full group, say).
 - **D8 Her file name passes `private_words`.** A hit warns her and does not block (her ask: she names files freely).
+- **D9 Bytes do not stay forever.** A registered file's bytes are removed from GridFS 7 days after it was last sent,
+  or 7 days after registration if it was never sent; the artifact row stays as the record. A file sent later than
+  that is registered again from its task folder.
 
 Not in v0:
 - files to private chats (`upload_private_file`);
 - a per-group "may receive files" switch (dropped on 09:07: a group's notes hold that, and a switch is a gate she
   would have to remember);
-- files others send her.
+- files others send her;
+- the QQ Bot adapter (§8): it does not declare `file` until a file is seen to arrive in a group through it.
 
 ## 3. Her own route meanwhile
 
@@ -81,20 +86,37 @@ Signature: ____
 
 - **Description:** one more part in `speak`'s description, measured against the tool budget at build time
   (`tests/test_tool_budget.py`).
-- **Capability:** one more name in the adapter's declaration.
-- **Files kept:** files stay in GridFS like pictures.
+- **Capability:** one more name in the adapter's declaration, with its limit.
+- **Storage:** files sit in GridFS until D9 removes them.
 
-## 6. The owner's decisions
+## 6. The owner's decisions (2026-10-23 ~09:35)
 
-1. **Type allow-list.** Claude recommends none, recording the type instead. The risk is in what a file contains, not
-   its type, and the owner said on 10-06 that what goes out from home is her judgement. An allow-list would refuse
-   types she does send (`.7z`, `.py`, `.svg`). Xiaoman withdrew her allow-list on 09:06 and asked only for D4's note.
-2. **The size test.** Choose the group a test file goes to; it is a public act.
+1. "I don't want to limit the type she is allowed to send." → D4.
+2. "Only limit by the adapter, do not implement additional restriction": research each supported adapter's real
+   limit, implement the interface accordingly, error if too big. → D5, D6, §8.
 
 ## 7. Build
 
-1. Core: registration (D2) with the task's file tool, the `file` part (D1, D3, D4, D8), the claim and byte endpoint
-   with the file cap (D5), and the receipt and record (D7). Tests for each, failure paths first.
-2. Adapter: the declaration, `upload_group_file`, and its result as the receipt (D6). Self-test entries.
-3. One end-to-end send at the cap size to the group the owner names; then D5's number is written here.
-4. Install as one batch at her quiet restart, then verify by content.
+1. Core: registration (D2) with the task's file tool, the `file` part (D1, D3, D4, D8), the claim with the adapter's
+   declared limit (D5), a byte endpoint that streams, the receipt and record (D7), and D9's removal. Tests for each,
+   failure paths first.
+2. NapCat adapter: the declaration with its limit, the streamed `upload_file_stream`, `upload_group_file`, and its
+   result as the receipt (D6). Self-test entries.
+3. One real send to a group the owner names, to see the whole path work; then install as one batch at her quiet
+   restart and verify by content.
+
+## 8. The adapters' real limits (researched 2026-10-23)
+
+| Adapter | What limits a file | Limit | Source |
+|---|---|---|---|
+| NapCat (QQ) | QQ group files | "4G" a file (declared as 4 GiB; a refusal by QQ below that shows as failed, with its reason); "10G" and 1,500 files a group, after which uploads fail | Tencent's help page on group file uploads |
+| NapCat (QQ) | NapCat's WebSocket server, one message | 50 MiB (`maxPayload`), so about 37 MiB of file as base64 | NapCatQQ v4.18.0 `network/websocket-server.ts` |
+| NapCat (QQ) | NapCat's `upload_file_stream` | none of its own: pieces over 10 MiB go to disk, a stream is dropped after 10 minutes idle, 5 minutes' retention by default | v4.18.0 `action/stream/UploadFileStream.ts` |
+| NapCat (QQ) | `upload_group_file` | none of its own: it takes a path, a URL or base64 and sends a file element | v4.18.0 `action/go-cqhttp/UploadGroupFile.ts` |
+| QQ Bot (official API) | rich-media upload, `file_type` 4 | 200 MB hard limit; chunked upload in 5 MB parts | the platform's rich-media overview |
+
+So the NapCat adapter's limit is QQ's 4 GiB, reached by streaming; the 50 MiB message cap is why it streams.
+
+The QQ Bot API lists files (`file_type` 4) at 200 MB with no scene restriction. One open-source bot reported HTTP 200
+for `file_type` 4 in groups and private chats, but not that the file arrived. Our QQ Bot bridge does not send files
+today, and it is not deployed for her, so nothing can be tested there now.

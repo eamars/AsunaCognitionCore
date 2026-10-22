@@ -69,14 +69,6 @@ Xiaoman measured on 10-23:
   `recall`) shows the text.
 - **V7 The audio does not stay forever.** Audio bytes leave GridFS 7 days after they arrive, and the transcript stays
   on the line. Her test set (§5) keeps its own copies.
-- **V9 Her name, by its sound.**
-  - The owner's voice of 10-23 came out as 「小曼小曼，你听得见吗？」. He said 小满, and the two sound exactly alike, so
-    no model can tell them apart by ear.
-  - In a transcript, any run of characters whose toneless pinyin equals one of her own names (`People.self_names`,
-    the names the program already knows for her) is written as that name.
-  - The model's own text is kept beside it on the row, so a real 小曼 can be checked.
-  - This uses `pypinyin` 0.55.0 (2025-07-20, pure Python, 840 KB). It applies to voice only; typed text stays as
-    typed.
 - **V8 What it does not touch.** Video soundtracks are not transcribed this round (`vision.py` video path,
   `animated.py`). Nothing is sent anywhere outside this machine.
 
@@ -154,3 +146,6 @@ follow, the evidence file's size, the detector settings in V4).
      word on them counts as made up;
    - both engines (SenseVoice here; whisper-small outside the core as her yardstick), read by her line by line, with
      the wrong characters counted per version.
+   - A word written with a different character of the same sound counts as heard right (the owner, 10-23: his
+     「小满小满」 came out 「小曼小曼」, which sound exactly alike). The transcript is shown as the model wrote it; the
+     reader resolves sound by context, as people reading a voice transcript do.

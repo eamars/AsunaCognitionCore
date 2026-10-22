@@ -130,3 +130,10 @@ whether a reader who checks what it says finds it.
   in the document (6); note places this conversation cannot reach (2); policy keys that do not exist (2); feeling refs
   not in the turn (3). One was a short form (`plan-` and 8 of its 32 characters). Built as written it would not have
   fired once; the owner decides whether to build it anyway.
+
+## Her old-names check (2026-10-22)
+
+Her re-check of old tool and parameter names on 10-26 uses her own script,
+`.runtime/private/old-tool-names/scan_oldname_rejects.py` (5,115 bytes, sha256
+`ee29e3e9c59fc8067ffcb5500e4487c7614397dc0aabc72e52ba472b71584f20`, written 10-19). It lay in a frozen candidate's
+`.tmp`, which now holds nothing past one command (ADR-065), and was moved here, unchanged, on her word.

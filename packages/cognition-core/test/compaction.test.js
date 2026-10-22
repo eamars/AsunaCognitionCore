@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Context } from '@deepseek-ai/cordis';
 import { CONTEXT_WINDOW_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm';
-import RoleCompactionEngine, { ROLE_COMPACTION_INSTRUCTION, ROLE_SECTIONS, hasSections, inSteps } from '../src/compaction.js';
+import RoleCompactionEngine, { ROLE_COMPACTION_INSTRUCTION, ROLE_SECTIONS, compactAtTurnEnd, hasSections, inSteps } from '../src/compaction.js';
 
 const CHECKPOINT = ROLE_SECTIONS.map(head => head + '\n- （无）').join('\n\n');
 
@@ -206,4 +206,40 @@ test('the summary request names the conversation\'s thinking level, else the con
   }
   assert.ok(hasSections(CHECKPOINT));
   assert.equal(ROLE_SECTIONS.length, 6);
+});
+
+// ADR-094: her conversation is compacted at the end of its turn, from the live end, once it is large enough; the
+// in-turn path (compactIfNeeded, tested above: the span alone) stays as the guard.
+test('a conversation is compacted at the end of its turn at turnEndRatio of the window, only hers, only when idle', async t => {
+  const plugins = new Context();
+  t.after(() => plugins.fiber.dispose());
+  const engine = new RoleCompactionEngine(plugins, { maxTokens: 24576, auto: false });
+  assert.equal(engine.turnEndRatio, 0.7, 'the default when the preset names none');
+  assert.equal(RoleCompactionEngine.Config({ turnEndRatio: 0.65 }).turnEndRatio, 0.65);
+  const other = new Context();
+  t.after(() => other.fiber.dispose());
+  assert.equal(new RoleCompactionEngine(other, { turnEndRatio: 0.65, auto: false }).turnEndRatio, 0.65);
+  engine.ctx = { llm: { resolveModelInfo: async () => ({ context: { contextWindow: 262144 } }) } };
+  const agent = { session: { id: 'asuna-role-1', requestHeader: () => ({ config: { provider: 'p', model: 'm' } }) }, options: {} };
+  const due = Math.floor(262144 * 0.7);
+  assert.equal(await engine.turnEndTokens(agent), due);
+
+  let tokens = due, idle = true;
+  const compacted = [];
+  const run = (over = {}) => compactAtTurnEnd({
+    lane: 'character', agent, idle: () => idle, engine, meter: { measure: () => ({ totalTokens: tokens }) },
+    compact: async () => { compacted.push(tokens); return { compacted: true, items: 9, tokens: 1 }; }, ...over });
+  assert.deepEqual(await run(), { tokens: due, due, result: { compacted: true, items: 9, tokens: 1 } }, 'at the ratio: compacted');
+  tokens = due - 1;
+  assert.deepEqual(await run(), { skipped: 'below', tokens: due - 1, due });
+  tokens = due + 5000; idle = false;
+  assert.deepEqual(await run(), { skipped: 'busy', tokens: due + 5000, due }, 'a turn running or queued: left alone');
+  idle = true;
+  assert.equal((await run()).result.compacted, true, 'the next turn end compacts it');
+  assert.deepEqual(await run({ lane: 'executor' }), { skipped: 'not her conversation' });
+  assert.deepEqual(await run({ agent: { ...agent, session: { ...agent.session, id: 'asuna-errand-1' } } }), { skipped: 'not her conversation' });
+  assert.deepEqual(await run({ engine: {} }), { skipped: 'no meter or engine' });
+  engine.ctx.llm.resolveModelInfo = async () => ({});
+  assert.deepEqual(await run(), { skipped: 'no window' });
+  assert.deepEqual(compacted, [due, due + 5000]);
 });

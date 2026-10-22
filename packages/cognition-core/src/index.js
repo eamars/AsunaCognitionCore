@@ -33,6 +33,7 @@ import { applySearch, registerWebSearch } from './search.js';
 import { applyFetch } from './fetch.js';
 import { renderSvg } from './svg.js';
 import { carrySession, lastSummary, overflowed } from './carry.js';
+import { compactAtTurnEnd } from './compaction.js';
 import { languageWords, savedLanguage } from './ui-language.js';
 import { Collab } from './collab.js';
 import { failureClass, restFor, resting } from './tiers.js';
@@ -868,6 +869,25 @@ export class CognitionCore {
     })().catch(error => this.ctx.logger.warn('Asuna: held lines written but not acknowledged: ' + String(error)));
   }
 
+  /** ADR-094: compact her conversation at the end of its turn when it has reached her character preset's
+   * `turnEndRatio` of the window (compaction.js `compactAtTurnEnd`), through DSH's own `/compact` (`compactSession`),
+   * at once: the summary request is then her last request plus the instruction, which the engine resumes from its live
+   * end, and the next turn reads the checkpoint and her last message. A conversation with a turn running or queued is
+   * left for its next turn's end. One log line when it runs or is deferred. */
+  async turnEnd(agent) {
+    const id = agent.session.id;
+    const done = await compactAtTurnEnd({
+      lane: 'character', agent, idle: () => this.idle(id), meter: this.ctx.get('tokenMeter'),
+      engine: this.ctx.get('agentPresets')?.serviceFor(agent, 'compaction'),
+      compact: () => this.compactSession({ session_id: id }),
+    });
+    if (done.skipped && done.skipped !== 'busy') return;
+    const result = done.result ?? {};
+    this.ctx.logger.info('Asuna compaction: turn end of ' + id + ' at ~' + done.tokens + ' tokens (due at ' + done.due + '): '
+      + (done.skipped ? 'busy, left for the next turn end' : result.compacted
+        ? 'compacted ' + result.items + ' items (~' + result.tokens + ' tokens)' : 'not compacted (' + result.reason + ')'));
+  }
+
   /** ADR-049: condense one of her conversations now, on her own earlier choice; the worker picks the quiet moment.
    * Never during a turn there. It runs DSH's own `/compact` for that session through the commands service, as the
    * Web UI does: the compaction service lives in each agent's scope (her character preset), not on this plugin's, and
@@ -1195,10 +1215,13 @@ export class CognitionCore {
       if (lane === 'character' && status === 'idle')
         this.collab.flush(agent.session.id).catch(error => this.ctx.logger.warn(String(error)));
       const state = this.states.get(agent.session.id);
-      if (!state) return;
-      if (status !== 'idle' || !state.current) return;
-      const stage = state.current; state.current = null;
-      this.worker?.call('result', { token: stage.token, error: 'Native turn stopped before stage completion' }).catch(() => {});
+      if (state && status === 'idle' && state.current) {
+        const stage = state.current; state.current = null;
+        this.worker?.call('result', { token: stage.token, error: 'Native turn stopped before stage completion' }).catch(() => {});
+      }
+      // ADR-094: her conversation is compacted at the end of its turn, once it is large enough.
+      if (lane === 'character' && status === 'idle')
+        this.turnEnd(agent).catch(error => this.ctx.logger.warn('Asuna compaction: turn end of ' + agent.session.id + ': ' + String(error)));
     });
     scope.on('agent/disposed', ({ agent }) => this.disposed(agent));
   }

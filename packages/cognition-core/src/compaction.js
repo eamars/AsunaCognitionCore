@@ -17,8 +17,12 @@
  * the engine still matches it against the conversation's cache (a different level matches nothing); a conversation
  * that names no level uses `summaryReasoningEffort` (a persona preset sets it beside the summary cap), when the model
  * offers it. A summary without every section the instruction asks for, in order, is rejected like an empty one: no
- * checkpoint is written and the next step tries again. The action brain keeps DSH's own engineering
- * template. */
+ * checkpoint is written and the next step tries again. Her conversations are compacted at the end of a turn
+ * (`compactAtTurnEnd`, ADR-094): once the conversation is at `turnEndRatio` of the window, the Host runs DSH's own
+ * `/compact` on it while she is idle, so the summary request is her last request plus the instruction, which the
+ * engine resumes from its live end, and the next turn reads the checkpoint and her last message, not a long kept
+ * tail; DSH's in-turn pressure compaction stays as the guard for a turn that grows past the threshold. The action
+ * brain keeps DSH's own engineering template. */
 import z from '@deepseek-ai/schemastery';
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic';
 import { BlockAssembler, LlmError, contentHasImage, createUserMessage } from '@deepseek-ai/dsh-llm';
@@ -88,6 +92,25 @@ const KEPT_QUOTE_CHARS = 40;
  * §4c). A commanded compaction keeps its last message only and still sends the whole conversation, which its cache
  * reads. */
 const automatic = new WeakSet();
+/** Share of the window at which a conversation is compacted at the end of its turn (ADR-094), when the preset names
+ * none: below DSH's in-turn threshold by more than a turn's growth, so the in-turn path stays the exception. */
+const TURN_END_RATIO = 0.70;
+
+/** ADR-094: compact one of her conversations at the end of its turn, from the live end, when it is due. Only her own
+ * conversations (`asuna-role-*` on the character lane), only at or above the engine's `turnEndTokens`, only while
+ * nothing of hers runs or waits there (`idle`); `compact` runs DSH's `/compact` (the Host's `compactSession`). A
+ * conversation that is busy is left for its next turn's end. Returns what was decided, for the Host's log line. */
+export async function compactAtTurnEnd({ lane, agent, idle, meter, engine, compact }) {
+  const id = agent.session.id;
+  if (lane !== 'character' || !id.startsWith('asuna-role-')) return { skipped: 'not her conversation' };
+  if (!meter || typeof engine?.turnEndTokens !== 'function') return { skipped: 'no meter or engine' };
+  const due = await engine.turnEndTokens(agent);
+  if (!due) return { skipped: 'no window' };
+  const tokens = meter.measure(agent.session).totalTokens;
+  if (tokens < due) return { skipped: 'below', tokens, due };
+  if (!idle()) return { skipped: 'busy', tokens, due };
+  return { tokens, due, result: await compact() };
+}
 
 /** The instruction's last rule when the summary request carries the retained tail: how many messages stay as they
  * are, and the opening of the first one with text, quoted only to locate it. */
@@ -116,12 +139,14 @@ function finishError(finish) {
 }
 
 export default class RoleCompactionEngine extends BasicCompactionEngine {
-  static Config = z.intersect([BasicCompactionEngine.Config, z.object({ summaryReasoningEffort: z.string() })]);
+  static Config = z.intersect([BasicCompactionEngine.Config,
+    z.object({ summaryReasoningEffort: z.string(), turnEndRatio: z.number() })]);
 
   constructor(ctx, config = {}) {
-    const { summaryReasoningEffort, ...basic } = config;
+    const { summaryReasoningEffort, turnEndRatio, ...basic } = config;
     super(ctx, basic);
     this.summaryReasoningEffort = summaryReasoningEffort;
+    this.turnEndRatio = turnEndRatio ?? TURN_END_RATIO;
   }
 
   async summarize(input, agent, signal) {
@@ -237,6 +262,17 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
   async floorTokens(agent) {
     const spec = await this.pressure(agent);
     return spec && Math.floor(spec.threshold / 2);
+  }
+
+  /** The size at which one of her conversations is compacted at the end of its turn (ADR-094): `turnEndRatio` of the
+   * conversation's model's window, in DSH's own measure, or undefined when the model declares no window. */
+  async turnEndTokens(agent) {
+    const target = agent.session.requestHeader()?.config
+      ?? (agent.options.provider && agent.options.model ? agent.options : undefined);
+    if (!target) return undefined;
+    const info = await this.ctx.llm.resolveModelInfo(target.provider, target.model);
+    const window = info?.context?.contextWindow;
+    return window ? Math.floor(window * this.turnEndRatio) : undefined;
   }
 }
 

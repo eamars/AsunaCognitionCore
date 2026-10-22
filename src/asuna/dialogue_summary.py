@@ -151,12 +151,14 @@ class DialogueSummarizer:
         scene_id = scene['_id']
         people = People(self.store)
         labels = self._labels(people, scene, rows)
+        from .voice import line_text
+        said = {row['_id']: line_text(row) for row in rows}         # a voice reads as its words (voice.py)
         window = [{'index': index + 1,
                    'speaker_label': labels.get(row['author'], row['author']),
                    'direction': row['direction'],
                    'text': (people.mentions if row['direction'] == 'outbound' else people.heard)(
-                       scene, row['text'])[:self.ROW_CHAR_CAP],
-                   'excerpt_truncated': len(row['text']) > self.ROW_CHAR_CAP}
+                       scene, said[row['_id']])[:self.ROW_CHAR_CAP],
+                   'excerpt_truncated': len(said[row['_id']]) > self.ROW_CHAR_CAP}
                   for index, row in enumerate(rows)]
         source_ids = [row['_id'] for row in rows]
         key = 'summary-' + sha(canonical([scene_id, scene['policy_epoch'], source_ids]))

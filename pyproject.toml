@@ -20,6 +20,9 @@ dependencies = [
     "paramiko==4.0.0",         # her sandbox scripts reach SSH hosts (python3 there is the worker's Python)
     "zstandard==0.25.0",       # her usage readout reads the DSH session logs (zstd, several frames a file)
     "pathspec==0.12.1",        # a plain copy of the tree (a candidate) is read as git would list it (repo_files)
+    "sherpa-onnx==1.13.8",     # transcribes a voice message on this machine (voice.py)
+    "sherpa-onnx-core==1.13.8", # its native libraries; named here because one of its wheels (the lock reads that one) omits it
+    "numpy==2.5.3",            # the samples sherpa-onnx takes
 ]
 
 [project.scripts]

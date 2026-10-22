@@ -87,6 +87,14 @@ class Coordinator:
         self.tools=role_tools.RoleTools(self)
 
     def ingest(self, event: dict, *, persona='P1'):
+        if event.get('channel'):
+            # ADR-093 V6: a voice in the turn's lines still being transcribed gets up to 10 s in all, outside the lock.
+            from . import voice
+            waited,still=voice.await_turn(self.store,event)
+            if waited:
+                scene=self.store.db.scenes.find_one({'_id':event['scene_id']},{'scope_key':1}) or {}
+                self.store.audit('ep-'+sha(canonical([event['scene_id'],event['event_id'],event.get('episode_kind','external')]))[:32],
+                                 'voice.waited',{'seconds':waited,'still_pending':still},scene.get('scope_key','operator'))
         with self.lock:
             scene=self.store.authorize(event['scene_id'],event['person_id'])
             ep_id='ep-'+sha(canonical([event['scene_id'],event['event_id'],event.get('episode_kind','external')]))[:32]

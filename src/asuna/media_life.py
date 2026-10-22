@@ -1,12 +1,14 @@
-"""How long stored media bytes live: every kind of stored picture has an owner or an expiry.
+"""How long stored media bytes live: every kind of stored picture and voice has an owner or an expiry.
 
-A picture is stored in the BlobStore (`artifacts` rows, GridFS bytes) for one of three reasons, named by the prefix
-of its first source id:
+Media is stored in the BlobStore (`artifacts` rows, GridFS bytes) for one of four reasons, named by the prefix of its
+first source id:
 
 - a copy pulled from a platform or a disk (`read_image`, a video's contact sheet): the platform or the disk is the
   source, so the copy expires after `PULLED_DAYS`, which is as long as `read_image` accepts its ref;
 - a candidate in the sticker pool: kept while the pool or her shelf lists it (and for a day after it is stored);
-- her records (a kept sticker, a picture she made or edited, one the owner sent at home): kept.
+- her records (a kept sticker, a picture she made or edited, one the owner sent at home): kept;
+- a voice message's audio: kept only until its text is extracted, then deleted by voice.py, whatever came of it; the
+  sweep leaves it alone.
 
 A copy that a lasting row still names (her shelf, the pool, a message that sent it) is kept whatever its age.
 `sweep` deletes the rest once at start and then daily; it reports what it removed and never raises for one bad row.
@@ -15,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 PULLED_DAYS = 7
 LISTED_GRACE_HOURS = 24          # a candidate's bytes are stored a moment before its pool row
-PULLED, LISTED, RECORD = 'pulled', 'listed', 'record'
+PULLED, LISTED, RECORD, VOICE = 'pulled', 'listed', 'record', 'voice'
 # source id prefix -> life cycle. A new kind of stored picture adds its prefix here (tests/test_media_life.py).
 POLICY = {
     'in-': PULLED,               # read_image of a platform picture or a video (source: the message id)
@@ -25,6 +27,7 @@ POLICY = {
     'integration:': RECORD,      # a picture she made
     'edit:': RECORD,             # a picture she edited
     'local-upload:': RECORD,     # a picture the owner sent her at home
+    'voice:': VOICE,             # a voice message's audio until its text is extracted (voice.SOURCE, voice.drop_audio)
 }
 
 
@@ -55,7 +58,7 @@ def sweep(store, now=None):
     removed = {PULLED: 0, LISTED: 0, 'bytes': 0}
     for row in db.artifacts.find({'storage': 'gridfs'}, {'source_ids': 1, 'created_at': 1, 'gridfs_id': 1, 'size': 1}):
         cycle = life(row)
-        if cycle == RECORD or row['_id'] in keep:
+        if cycle in (RECORD, VOICE) or row['_id'] in keep:
             continue
         if str(row.get('created_at') or '') > cutoff[cycle]:
             continue

@@ -815,7 +815,12 @@ def media_note(message, config):
     # Her own route decides whether she can look herself; the action brain's is what a delegation would use.
     capability = vision_capability(config, 'character')
     items = attachments_of(message, config=config)
-    others = [item for item in (block.get('items') or []) if isinstance(item, dict) and item.get('type') not in ('image', 'video')]
+    # A voice the line already reads as its words (voice.py) is no placeholder any more.
+    voiced = ('record', 'audio') if (message or {}).get('voice') else ()
+    others = [item for item in (block.get('items') or []) if isinstance(item, dict)
+              and item.get('type') not in ('image', 'video', *voiced)]
+    if voiced and not items and not others:
+        return None
     note = {'items': items or None,
             'other_media_placeholders': [_clean(item.get('placeholder'), 120) for item in others][:MAX_ITEMS_PER_MESSAGE] or None,
             'count': block.get('count'), 'truncated': bool(block.get('truncated')),

@@ -315,6 +315,11 @@ class Channels:
         from . import notices
         return notices.home(self.store, self.controller, channel_id, body)
 
+    def voice(self, channel_id, fields, data=None, media_type=None):
+        """One voice of a stored line: its bytes, or why the platform did not give them (voice.py, ADR-093)."""
+        from . import voice
+        return voice.receive(self.store, channel_id, fields, data, media_type)
+
     def own_mute(self, channel_id, body):
         from . import own_mute
         with database_effects_lock(self.store.name):
@@ -674,6 +679,7 @@ class Channels:
 
 
 MEMBERS_BODY_LIMIT = 4 * 1024 * 1024
+JSON_BODY_LIMIT = 262144
 
 
 class ChannelServer:
@@ -692,15 +698,26 @@ class ChannelServer:
                         raise ValueError('UNKNOWN_CHANNEL_ENDPOINT')
                     channel_id = parts[2]
                     _, scoped = channels.authenticate(channel_id, self.headers.get('Authorization', ''))
-                    body = {}
+                    body, audio = {}, None
                     if self.command == 'POST':
                         size = int(self.headers.get('Content-Length', '0'))
-                        # A group's member list (group_members.py) is the one body that may be large.
-                        if not 0 < size <= (MEMBERS_BODY_LIMIT if parts[3:] == ['members'] else 262144):
+                        media_type = (self.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+                        # A voice's bytes come raw (voice.py); every other body is one JSON object. A group's member
+                        # list (group_members.py) is the one JSON body that may be large.
+                        raw_voice = parts[3:] == ['voice'] and media_type != 'application/json'
+                        from .voice import BODY_LIMIT
+                        limit = (BODY_LIMIT if raw_voice else MEMBERS_BODY_LIMIT if parts[3:] == ['members']
+                                 else JSON_BODY_LIMIT)
+                        if not 0 < size <= limit:
                             raise ValueError('INVALID_BODY_SIZE')
-                        body = json.loads(self.rfile.read(size))
-                        if not isinstance(body, dict):
-                            raise ValueError('INVALID_BODY')
+                        if raw_voice:
+                            audio = self.rfile.read(size)
+                            if len(audio) != size:
+                                raise ValueError('INVALID_BODY_SIZE')
+                        else:
+                            body = json.loads(self.rfile.read(size))
+                            if not isinstance(body, dict):
+                                raise ValueError('INVALID_BODY')
                     if scoped:
                         channels.scope_check(channel_id, scoped, self.command, parts[3:], body)
                     if self.command == 'POST' and parts[3:] == ['events']:
@@ -713,6 +730,12 @@ class ChannelServer:
                         value = channels.notices(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['own_mute']:
                         value = channels.own_mute(channel_id, body)
+                    elif self.command == 'POST' and parts[3:] == ['voice']:
+                        if audio is not None:
+                            fields = {key: values[0] for key, values in parse_qs(url.query).items()}
+                            value = channels.voice(channel_id, fields, audio, media_type)
+                        else:
+                            value = channels.voice(channel_id, body)
                     elif self.command == 'GET' and parts[3:] == ['outbox']:
                         query = parse_qs(url.query)
                         owner = []

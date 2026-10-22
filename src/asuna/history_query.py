@@ -107,6 +107,7 @@ def _group_token_local(value):
 
 TEXT_FIELD = "text"
 FORWARD_TEXT_FIELD = "event.raw.asuna_forward.nodes.text"     # forwards.NODE_TEXT
+VOICE_TEXT_FIELD = "voice.text"                                # the words of a line's voices (voice.py)
 EPOCH_FIELD = "policy_epoch"
 DIRECTION_FIELD = "direction"        # ingress.py / coordinator.py 都写这个，取值如下
 INBOUND = "inbound"
@@ -564,8 +565,10 @@ def message_filters(parts, query="", *, author=None, window=None, case_sensitive
         inbound[INBOUND_TIME_FIELD] = dict(bounds)
         outbound[OUTBOUND_TIME_FIELD] = dict(bounds)
     if pattern is not None:
-        # a received line matches by its text or by the messages of a merged forward it carried (forwards.py)
-        inbound["$or"] = [{text_field: dict(pattern)}, {FORWARD_TEXT_FIELD: dict(pattern)}]
+        # a received line matches by its text, by the messages of a merged forward it carried (forwards.py) or by the
+        # words of its voices (voice.py)
+        inbound["$or"] = [{text_field: dict(pattern)}, {FORWARD_TEXT_FIELD: dict(pattern)},
+                          {VOICE_TEXT_FIELD: dict(pattern)}]
         outbound[text_field] = dict(pattern)
     clause = person_filter(parts, person)
     if clause:
@@ -614,9 +617,17 @@ def _forward_text(doc):
     return search_text(doc)
 
 
+def _voice_text(doc):
+    try:
+        from .voice import line_text
+    except ImportError:
+        return doc.get(TEXT_FIELD)
+    return line_text(doc)
+
+
 def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
-    body = doc.get(text_field)
-    full = body if isinstance(body, str) else ""      # 原样，不动空白
+    body = _voice_text(doc) if text_field == TEXT_FIELD and doc.get("voice") else doc.get(text_field)
+    full = body if isinstance(body, str) else ""      # 原样，不动空白；语音读成它的字（voice.py）
     peer, ok, reason = _identity_of(doc)
     author = _text(doc.get("author"), 80)
     stamp = _stamp(doc.get(time_field)) if at is None else _text(at, 32)

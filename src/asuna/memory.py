@@ -200,13 +200,16 @@ class MemoryService:
         scene=self.store.db.scenes.find_one({'_id':scene_id})
         rows=list(self.store.db.messages.find({'scene_id':scene_id,**NOT_CORE_NOTICE,'$or':[{'direction':'inbound'},{'delivery_state':'DELIVERED'}]}).sort('scene_seq',1))
         made=[]
+        from . import voice
         for row in rows:
             if row.get('policy_epoch',1)!=scene['policy_epoch']:continue
             if row.get('memory_chunk_version')==2:continue
+            # A line whose voice is still being transcribed is chunked once its words are on it (voice.py).
+            if voice.unsettled(self.store,row):continue
             # Stable per-message segments: adding another turn cannot regroup
             # old events or drop the last single message. No text is discarded.
             parts=[];part='';size=0
-            for char in row['text']:
+            for char in voice.line_text(row):
                 cost=len(char.encode('utf-8'))
                 if size+cost>900:parts.append(part);part='';size=0
                 part+=char;size+=cost

@@ -23,6 +23,7 @@ from .onebot import OneBot
 from .outbound import Outbound
 from .peers import PeerDirectory
 from .selfrole import SelfRoles
+from .voice import VoiceFetcher
 
 STATUS_EVERY = 60
 HEALTH_EVERY = 5
@@ -87,6 +88,8 @@ class Adapter:
         # notices and requests: every kind projected and counted, the shown ones posted (notices.py)
         self.notice_counts = notices_mod.Counts(data_dir)
         self.home_notices = notices_mod.HomePoster(cfg, self.onebot, self.host, self.counters, log=self.log)
+        # each voice of an accepted line, fetched from NapCat before it clears it and posted to the host (voice.py)
+        self.voices = VoiceFetcher(self.onebot, self.host, self.counters, log=self.log)
         self.onebot.on_up = self._on_up
         self.stop = threading.Event()
         self.wake = threading.Event()
@@ -95,8 +98,8 @@ class Adapter:
         self._last_status = 0.0
         self.identity = None
         # what she may send through reply (ADR-064 phase 2); a poke or reaction NapCat refuses comes back to her
-        # what this bridge carries, told to the host on every claim (ADR-079: the pointer family too)
-        self.capabilities = list(CAPABILITIES) + ["react", "poke", "quote", "quote_in", "react_in", "recall"]
+        # what this bridge carries, told to the host on every claim (ADR-079: the pointer family too; ADR-093: voices)
+        self.capabilities = list(CAPABILITIES) + ["react", "poke", "quote", "quote_in", "react_in", "recall", "voice_in"]
 
     def log(self, msg):
         print("%s %s" % (utc_stamp(), msg), flush=True)
@@ -208,6 +211,8 @@ class Adapter:
                 self.log("INBOUND_%s event_id=%s route=%s episode=%s http=%s"
                          % (res.kind.upper(), envelope.get("event_id"), envelope.get("route_id"),
                             obj.get("episode_id"), res.code))
+                # its voices are fetched on their own thread; a duplicate's too (the host answers each once)
+                self.voices.put(envelope)
                 submitted += 1
             elif res.kind == "retry":
                 tries = self._tries.get(path, 0) + 1
@@ -323,6 +328,7 @@ class Adapter:
             "ws_api_up": self.onebot.api_up,
             "spool_inbound": len(self.journal.spool_list("inbound")),
             "spool_receipts": len(self.journal.spool_list("receipts")),
+            "voice_queue": self.voices.pending(),
             "pending_echo": self.onebot.pending_count(),
             "group_routes": sum(1 for r in self.cfg.routes.values() if r.message_type == "group"),
             "identity": self.identity,
@@ -349,7 +355,7 @@ class Adapter:
                     "up" if snap["ws_api_up"] else "down",
                     snap["spool_inbound"], snap["spool_receipts"], snap["pending_echo"], snap["group_routes"],
                     json.dumps({k: v for k, v in sorted(snap.items())
-                                if k.startswith(("inbound_", "outbox", "send_", "receipt", "frames", "resp", "ws_", "api_", "late_", "peer_", "media_", "attachment_", "catchup_", "members_", "mutes_"))},
+                                if k.startswith(("inbound_", "outbox", "send_", "receipt", "frames", "resp", "ws_", "api_", "late_", "peer_", "media_", "attachment_", "catchup_", "members_", "mutes_", "voice_"))},
                                sort_keys=True)))
 
     # ---- identity -------------------------------------------------------
@@ -410,6 +416,7 @@ class Adapter:
         threading.Thread(target=self.media_keys.loop, args=(self.stop,), name="media_keys", daemon=True).start()
         threading.Thread(target=self.mutes.loop, args=(self.stop,), name="mutes", daemon=True).start()
         threading.Thread(target=self.home_notices.loop, args=(self.stop,), name="home_notices", daemon=True).start()
+        threading.Thread(target=self.voices.loop, args=(self.stop,), name="voice", daemon=True).start()
         self.catchup.request("startup")
         self.mutes.sweep("startup")
         self.log("READY pid=%d identity=%s ws_event=%s ws_api=%s spool_inbound=%d spool_receipts=%d"

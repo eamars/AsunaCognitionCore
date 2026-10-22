@@ -27,7 +27,14 @@ with Core (`registerChannel`).
   segment's fields, the source and the count, never the text.
 - A group or private-chat message that quotes another carries the quoted message's ID as `reply_to`; one that only
   quotes, with no words, also carries `raw.asuna_reply_only`. On every outbox claim the adapter declares what it
-  carries: `image`, `sticker`, `react`, `poke`, `quote`, `quote_in`, `react_in`, `recall`.
+  carries: `image`, `sticker`, `react`, `poke`, `quote`, `quote_in`, `react_in`, `recall`, `voice_in`.
+- A voice message (`record` segment) is fetched as soon as Core accepts its line, because NapCat clears its voice
+  cache: one thread, in order, asks NapCat `get_record` with the segment's `file` and `out_format` `mp3` (30 s), and
+  posts the audio (`base64` in the answer) to Core's `voice` endpoint for that line and segment index. When NapCat
+  gives none (retcode 1200 `file not found` is `gone`; another refusal, a timeout, no connection or no audio in the
+  answer each have their reason), the refusal is posted instead, so her line says why. A host that cannot be reached
+  is tried three times; a refusal from the host is logged once. The log (`VOICE_POSTED`, `VOICE_POST_FAILED`) carries
+  the event, the segment and the byte count, never the file name or the audio; `health.json` shows `voice_queue`.
 - A message she sends quotes a line (a leading `reply` segment) only when the outbox item carries `quote`, in a group
   or a private chat; the item's `reply_to`, the line her words answer, is not shown.
 - A `recall` action in her reply takes back a message of hers (`delete_msg` on its id); the platform's retcode is

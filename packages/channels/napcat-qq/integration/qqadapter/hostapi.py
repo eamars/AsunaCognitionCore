@@ -62,12 +62,17 @@ class HostApi:
         self.timeout = timeout
 
     # ---- plumbing -------------------------------------------------------
-    def _request(self, method, path, body=None, timeout=None):
+    def _request(self, method, path, body=None, timeout=None, raw=None, content_type=None):
+        """A JSON `body`, or `raw` bytes sent as `content_type` (a voice's audio); the answer is JSON either way."""
         url = self.base + path
         data = None
         req = urllib.request.Request(url, method=method)
         req.add_header("Authorization", "Bearer " + self.token)
-        if body is not None:
+        if raw is not None:
+            data = bytes(raw)
+            req.add_header("Content-Type", content_type or "application/octet-stream")
+            req.add_header("Content-Length", str(len(data)))
+        elif body is not None:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
             req.add_header("Content-Type", "application/json")
             req.add_header("Content-Length", str(len(data)))
@@ -133,6 +138,30 @@ class HostApi:
         res = self._request("POST", "/v1/channels/%s/notices" % self.channel_id, body, timeout=15)
         if res.kind == "ok" and isinstance(res.obj, dict) and res.obj.get("status") in ("held", "dropped"):
             res = Result("accepted", res.code, res.obj)
+        return res
+
+    def post_voice(self, route_id, event_id, index, data, content_type="audio/mpeg", occurred_at=None, timeout=60):
+        """One voice of a line the host accepted, as its bytes (voice.py); `accepted` once the host kept them."""
+        query = {"route_id": route_id, "event_id": event_id, "index": str(int(index))}
+        if occurred_at:
+            query["occurred_at"] = occurred_at
+        path = "/v1/channels/%s/voice?%s" % (self.channel_id, urllib.parse.urlencode(query))
+        return self._voice_answer(self._request("POST", path, raw=data, content_type=content_type, timeout=timeout))
+
+    def post_voice_refusal(self, route_id, event_id, index, refused, occurred_at=None):
+        """Why that voice's bytes did not come (`refused`: reason, retcode, message), so her line can say it."""
+        body = {"route_id": route_id, "event_id": event_id, "index": int(index), "refused": refused}
+        if occurred_at:
+            body["occurred_at"] = occurred_at
+        return self._voice_answer(self._request("POST", "/v1/channels/%s/voice" % self.channel_id, body, timeout=15))
+
+    @staticmethod
+    def _voice_answer(res):
+        if res.kind == "ok" and isinstance(res.obj, dict):
+            if res.obj.get("status") in ("stored", "kept"):
+                res = Result("accepted", res.code, res.obj)
+            elif res.obj.get("status") == "duplicate":
+                res = Result("duplicate", res.code, res.obj)
         return res
 
     def claim_outbox(self, wait_seconds=25, timeout=None, supports=CAPABILITIES):

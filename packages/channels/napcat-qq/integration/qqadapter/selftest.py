@@ -25,6 +25,7 @@ from . import fixtures
 from . import faces as faces_mod
 from . import outbound as outbound_mod
 from . import peers as peers_mod
+from . import voice as voice_mod
 from .peers import PEER_KEY, PeerDirectory
 from .config import Config, ConfigError
 from .hostapi import Result
@@ -1412,6 +1413,7 @@ def run(cfg, data_dir, live=True, live_config=True):
     _check_admission(rep, root)
     _check_group_inbound(rep, gcfg)
     _check_media(rep, gcfg, root)
+    _check_voice(rep, gcfg, root)
     _check_spool(rep, root)
     _check_outbound_params(rep, gcfg, root)
     _check_outbound_verify(rep, gcfg, root)
@@ -1897,6 +1899,119 @@ IMG_SEG = {"type": "image",
            "data": {"file": "59A164CFF5F2565F41C6A51948A1D77D.png", "file_id": "fid1",
                     "file_size": "40087", "sub_type": 0, "summary": "",
                     "url": "https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=abc"}}
+
+
+class _VoiceHost:
+    """SUBSTITUTE for the host's voice endpoint: keeps every post, answers the canned results in turn."""
+
+    def __init__(self, *results):
+        self.posts = []
+        self.results = list(results)
+
+    def _answer(self):
+        return self.results.pop(0) if self.results else Result("accepted", 200, {"status": "stored"})
+
+    def post_voice(self, route_id, event_id, index, data, content_type="audio/mpeg", occurred_at=None, timeout=60):
+        self.posts.append({"kind": "bytes", "route_id": route_id, "event_id": event_id, "index": index,
+                           "data": data, "content_type": content_type, "occurred_at": occurred_at})
+        return self._answer()
+
+    def post_voice_refusal(self, route_id, event_id, index, refused, occurred_at=None):
+        self.posts.append({"kind": "refusal", "route_id": route_id, "event_id": event_id, "index": index,
+                           "refused": refused, "occurred_at": occurred_at})
+        return self._answer()
+
+
+def _check_voice(rep, gcfg, root):
+    """ADR-093: a voice is fetched when its line is accepted and posted to the host, or the refusal is.
+
+    Offline only: synthetic events, a substitute NapCat and host; no platform call, nothing reaches a real host.
+    """
+    rep.check("voice_declared", "voice_in" in Adapter(gcfg, os.path.join(root, "voice")).capabilities, "")
+    groups = sorted(gcfg.allowed_groups)
+    grp = groups[0]
+    member = sorted(gcfg.route_for_group(grp).allowed_senders)[0]
+    seen = inbound_mod.SeenLRU(64)
+    record = {"type": "record", "data": {"file": "voice-a.amr", "file_size": "5120"}}
+    res, reason = inbound_mod.classify(_group_event(gcfg, grp, member, 5201, message=[dict(record)]), gcfg, seen)
+    env = res[0] if reason == "accepted" else {}
+    rep.check("voice_line_keeps_its_placeholder", env.get("text") == "[语音（未解析）]", repr(env.get("text")))
+    audio = b"ID3" + bytes(64)
+    bot = StubOneBot(response={"status": "ok", "retcode": 0,
+                               "data": {"file": "/napcat/cache/voice-a.amr.mp3",
+                                        "base64": base64.b64encode(audio).decode()}})
+    host, counters, lines = _VoiceHost(), Counters(), []
+    fetcher = voice_mod.VoiceFetcher(bot, host, counters, log=lines.append, retry_wait=0)
+    queued = fetcher.put(env)
+    rep.check("voice_queued_off_the_receive_path", queued == 1 and bot.calls == [] and host.posts == [],
+              "queued=%d calls=%d" % (queued, len(bot.calls)))
+    fetcher.handle(fetcher.queue.get_nowait())
+    call = bot.calls[0] if bot.calls else {}
+    post = host.posts[0] if host.posts else {}
+    rep.check("voice_fetch_asks_get_record_mp3", call.get("action") == "get_record"
+              and call.get("params") == {"file": "voice-a.amr", "out_format": "mp3"}, json.dumps(call.get("params")))
+    rep.check("voice_bytes_posted_for_that_line", post.get("kind") == "bytes" and post.get("data") == audio
+              and post.get("event_id") == env.get("event_id") and post.get("route_id") == env.get("route_id")
+              and post.get("index") == 0 and post.get("content_type") == "audio/mpeg"
+              and post.get("occurred_at") == env.get("occurred_at"),
+              json.dumps({k: v for k, v in post.items() if k != "data"}))
+    rep.check("voice_log_is_metadata_only", any(line.startswith("VOICE_POSTED") and "bytes=%d" % len(audio) in line
+                                                for line in lines) and not any("voice-a" in line for line in lines),
+              " | ".join(lines)[:200])
+
+    # NapCat already cleared it: the refusal goes to the host so her line can say why
+    gone = StubOneBot(response={"status": "failed", "retcode": 1200, "message": "file not found", "data": None})
+    host = _VoiceHost()
+    fetcher = voice_mod.VoiceFetcher(gone, host, Counters(), log=lambda _l: None, retry_wait=0)
+    fetcher.put(env)
+    fetcher.handle(fetcher.queue.get_nowait())
+    post = host.posts[0] if host.posts else {}
+    rep.check("voice_napcat_refusal_posted", post.get("kind") == "refusal"
+              and post.get("refused") == {"reason": "gone", "retcode": 1200, "message": "file not found"},
+              json.dumps(post.get("refused")))
+    encoder = StubOneBot(response={"status": "failed", "retcode": 1200, "message": "Encoder not found"})
+    audio_none, refused = voice_mod.fetch(encoder, "voice-a.amr")
+    rep.check("voice_other_1200_is_not_gone", audio_none is None and refused["reason"] == "refused", str(refused))
+    audio_none, refused = voice_mod.fetch(StubOneBot(exc=ApiTimeout("x")), "voice-a.amr")
+    rep.check("voice_napcat_timeout_named", audio_none is None and refused["reason"] == "timeout", str(refused))
+
+    # the host refuses (4xx): said once in the log, not retried; a 5xx is tried again
+    host = _VoiceHost(Result("reject", 400, {"error": "VOICE_LINE_NOT_FOUND"}))
+    counters, lines = Counters(), []
+    fetcher = voice_mod.VoiceFetcher(bot, host, counters, log=lines.append, retry_wait=0)
+    fetcher.put(env)
+    res = fetcher.handle(fetcher.queue.get_nowait())
+    rep.check("voice_host_refusal_not_retried", res.kind == "reject" and len(host.posts) == 1
+              and counters.snapshot().get("voice_post_failed") == 1
+              and any("VOICE_POST_FAILED" in line and "VOICE_LINE_NOT_FOUND" in line for line in lines),
+              " | ".join(lines)[:200])
+    host = _VoiceHost(Result("retry", 503, {"error": "HOST_TEMPORARILY_UNAVAILABLE"}))
+    fetcher = voice_mod.VoiceFetcher(bot, host, Counters(), log=lambda _l: None, retry_wait=0)
+    fetcher.put(env)
+    res = fetcher.handle(fetcher.queue.get_nowait())
+    rep.check("voice_host_5xx_retried", res.kind == "accepted" and len(host.posts) == 2, "posts=%d" % len(host.posts))
+
+    # two voices in one message: each fetched by its own file, posted with its own index
+    res, reason = inbound_mod.classify(_group_event(gcfg, grp, member, 5202, message=[
+        dict(record), {"type": "text", "data": {"text": "和"}},
+        {"type": "record", "data": {"file": "voice-b.amr"}}]), gcfg, seen)
+    env2 = res[0] if reason == "accepted" else {}
+    bot2 = StubOneBot(response={"status": "ok", "retcode": 0, "data": {"base64": base64.b64encode(audio).decode()}})
+    host = _VoiceHost()
+    fetcher = voice_mod.VoiceFetcher(bot2, host, Counters(), log=lambda _l: None, retry_wait=0)
+    fetcher.put(env2)
+    while not fetcher.queue.empty():
+        fetcher.handle(fetcher.queue.get_nowait())
+    rep.check("voice_two_in_one_message", env2.get("text") == "[语音（未解析）]和[语音（未解析）]"
+              and [c["params"]["file"] for c in bot2.calls] == ["voice-a.amr", "voice-b.amr"]
+              and [p["index"] for p in host.posts] == [0, 1], repr(env2.get("text")))
+
+    # a line without voices, or one whose media block the host did not take, queues nothing
+    res, reason = inbound_mod.classify(_group_event(gcfg, grp, member, 5203, message=_text("没有语音")), gcfg, seen)
+    stripped = json.loads(json.dumps(env))
+    inbound_mod.strip_media(stripped)
+    rep.check("voice_none_without_a_voice_block", voice_mod.segments(res[0]) == []
+              and voice_mod.segments(stripped) == [], "")
 
 
 def _media_cfg(base, mode):

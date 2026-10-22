@@ -1,6 +1,7 @@
 ---
 name: asuna-running-version
 description: 我想知道「现在跑的是哪一版」「我改的那个东西进没进这一回合」「要不要为这个重排闹钟」时读这一份。判据：先看这一回合 restart_from_program.loaded（commit＋各包 sha＋selections）；缺 loaded 那一格不等于没装，先问一句；比内容别只比包 sha（重启会重新打包、号会变）；主仓合了不等于我这边在跑，跑的是发布过的快照，不 publish 重启也只装程序那半边；查 .runtime/adr008/activation.json 的 state／candidate／published_at／changed_files；回执说「本机检出有 origin/main 没有的提交」＝本机比远端新，不是没装；启动器遇脏工作区是跳过快进不报错，本机可能长期落后一格，这不是故障；新参数进没进看这一回合的工具表。附零依赖探针 version_probe.py 与自检 check_skill.py。
+scene_kinds: [home, group]
 ---
 
 # asuna-running-version

@@ -1,7 +1,7 @@
 """ADR-018 MongoDB tests: notes between her own conversations -- trusted from home; from outside, cautioned and acting
 with the class of where they came from (ADR-088); queued behind a running turn, never shown as a line of the
 conversation they land in."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import threading
 import types
@@ -144,7 +144,10 @@ def test_a_note_from_a_group_opens_a_home_turn_with_the_groups_class(store):
     # While it waits for its own turn, another home turn shows it only as where it came from (ADR-088 §4.4).
     meanwhile, _ = turn(store, service, {'event_id': 'ask-w', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '嗯'}, [], '嗯')
     [waiting] = meanwhile['context']['notes_from_program']['items']
-    assert waiting == {'from': places_title(store, 'g1'), 'at': row['created_at'], 'state': notes.WAITING_OWN_TURN}
+    # It says how long it has waited, so a long wait does not read as still due (her ask, §4.4).
+    assert waiting == {'from': places_title(store, 'g1'), 'at': row['created_at'], 'state': notes.WAITING_OWN_TURN + '（刚送到）'}
+    later = datetime.fromisoformat(row['created_at'].replace('Z', '+00:00')) + timedelta(hours=5)
+    assert notes.waited(row, later) == '（等了 5 小时）'
     assert '聚会' not in json.dumps(meanwhile['context'], ensure_ascii=False)
     # Its own turn: the group's class, her line in place of the gate, nothing that needs home's authority.
     home, lane = turn(store, service, note_turn, [
@@ -579,7 +582,7 @@ def test_a_home_turn_a_note_opened_reads_her_notebook_and_decides_nothing_there(
     tools = set(role_tools._turn_rules(store, ep))
     assert 'ideas.read' in tools and 'ideas.review' not in tools
     assert role_tools.not_now(store, ep, 'ideas.review') == (role_tools.NOT_NOW['ideas.review'] if trust == 'trusted'
-                                                             else role_tools.NOTE_ONLY)
+                                                             else role_tools.OUTSIDE_NEEDS_HOME)
     plan_due = {**ep, '_id': 'ep-plan', 'episode_kind': 'scheduled'}
     assert not {'ideas.read', 'ideas.review'} & set(role_tools._turn_rules(store, plan_due)), 'a plan due: unchanged'
 

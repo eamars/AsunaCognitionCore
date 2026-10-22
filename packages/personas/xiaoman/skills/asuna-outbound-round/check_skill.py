@@ -2,7 +2,7 @@
 """asuna-outbound-round 的零依赖离线自检。
 
 这份技能是「出门那一轮」的规则集，所以这里查四件事：
-1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本能编译；
+1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本能编译、换行是 LF（读字节数 CR，文本模式那把尺看不见 CR）；
 2. 内容要点：开口前五查、回看四条、一条边界的字面要点都在；「这条道上有哪几份技能——别编名字」那一节的
    真名单、两条规矩与「实判读数」这句在（ROSTER 逐条判）；front matter 的 scene_kinds 覆盖 home／group／dm；
 3. 不带别人的个人信息：禁词表（人名／群名／称呼）与字面编号（#数字）都不该出现在正文；
@@ -181,6 +181,23 @@ def read_frontmatter(text):
     return fields, body
 
 
+def cr_bytes(paths):
+    """字节级数 CR。文本模式读（universal newlines）会把 CR 吃掉，查换行永远绿——
+    2026-10-15 实测：真 CRLF 样本 CR=59，同一份用 open(..., encoding="utf-8") 读进来
+    再问 "\r" not in text 仍是 True。只有读字节才看得见。返回带 CR 的文件说明。"""
+    bad = []
+    for target in paths:
+        try:
+            with open(target, "rb") as handle:
+                count = handle.read().count(b"\r")
+        except OSError as exc:                           # noqa: BLE001 读不了也要报出来
+            bad.append("%s（读不了：%s）" % (os.path.basename(target), exc))
+            continue
+        if count:
+            bad.append("%s（%d 个 CR 字节）" % (os.path.basename(target), count))
+    return bad
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
     results = []
@@ -265,6 +282,12 @@ def main():
             check("compiles_" + script, True)
         except Exception as exc:  # noqa: BLE001 编译失败要原样报出来
             check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
+
+    # 换行：必须读字节。文本模式（universal newlines）把 CR 吃掉，"\r" not in text 永远为真——
+    # 2026-10-15 实测真 CRLF 样本 CR=59 照样绿。判据名与另外五份 check_skill.py 逐字一致。
+    cr_files = cr_bytes([path] + [os.path.join(HERE, script) for script in scripts])
+    check("line_endings_are_lf", not cr_files,
+          "有 CR（仓库守卫 test_line_endings 会红）：" + "、".join(cr_files))
 
     stray = [d for d in os.listdir(HERE) if d == "__pycache__"]
     notes = []

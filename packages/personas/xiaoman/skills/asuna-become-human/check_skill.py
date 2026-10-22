@@ -6,7 +6,7 @@
 ::test_a_skill_that_leaves_home_passes_its_own_private_words_scan 会跑它。10-18 晚
 `scene_kinds` 开了 `group`，所以这份脚本同时落地。
 
-只钉两样，不加别的判据（不做风格、字数、形状检查——那份技能管的是说话，读数不给话打分）：
+只钉三样，不加别的判据（不做风格、字数、形状检查——那份技能管的是说话，读数不给话打分）：
 
 1. 10-18 晚新加的三节锚点：「范围」「跑偏判据」（六条齐，第 6 条反向跑偏在）「自查节奏与记录」。
    按节名与关键句钉，**不钉行号**——正文以后插一段话不该让这一格假红。
@@ -14,6 +14,8 @@
    → 从脚本往上找 `.runtime/private/personal-words.txt`）。命中只报类别与名单行号，词本身不打印；
    命中就红（no_listed_words）。名单配不上、或名单在却解析出 0 条有效词，记一条红（leak_scan_ran）：
    「没真查」不许长得像「查过了」。
+
+3. 换行是 LF：读字节数 CR。文本模式那把尺看不见 CR（2026-10-15 撞过一次），判据名与另外几份 check_skill.py 逐字一致。
 
 不联网、不查历史、不写 Mongo、不发 QQ。
 
@@ -130,6 +132,23 @@ def listed_hits(entries, text):
     return hits
 
 
+def cr_bytes(paths):
+    """字节级数 CR。文本模式读（universal newlines）会把 CR 吃掉，查换行永远绿——
+    2026-10-15 实测：真 CRLF 样本 CR=59，同一份用 open(..., encoding="utf-8") 读进来
+    再问 "\r" not in text 仍是 True。只有读字节才看得见。返回带 CR 的文件说明。"""
+    bad = []
+    for target in paths:
+        try:
+            with open(target, "rb") as handle:
+                count = handle.read().count(b"\r")
+        except OSError as exc:                           # noqa: BLE001 读不了也要报出来
+            bad.append("%s（读不了：%s）" % (os.path.basename(target), exc))
+            continue
+        if count:
+            bad.append("%s（%d 个 CR 字节）" % (os.path.basename(target), count))
+    return bad
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
     results = []
@@ -169,6 +188,13 @@ def main():
         check("no_listed_words", not hits,
               ("命中私密名单，人工过一眼是不是真人名／群名："
                + "、".join(hit_label(n, c) for n, c, _w in hits)) if hits else "")
+
+    # 换行：必须读字节。文本模式（universal newlines）把 CR 吃掉，"\r" not in text 永远为真——
+    # 2026-10-15 实测真 CRLF 样本 CR=59 照样绿。判据名与另外五份 check_skill.py 逐字一致。
+    scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
+    cr_files = cr_bytes([path] + [os.path.join(HERE, script) for script in scripts])
+    check("line_endings_are_lf", not cr_files,
+          "有 CR（仓库守卫 test_line_endings 会红）：" + "、".join(cr_files))
 
     total = len(results)
     failed = [name for name, ok, _ in results if not ok]

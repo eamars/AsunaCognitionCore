@@ -9,7 +9,7 @@
 「唯一的例外」是不是 10:59 更正版、10:57 旧措辞有没有被抄回这一节）在不在、
 「往群里发图之前的自检」一节在不在且四条要点（全年龄底线、看群笔记／最近聊天、只发自己做的图、
 不为试功能发图）齐不齐、「本机页面核验」的归属是不是 Claude（不是主人）、示例图路径是不是相对的、
-同目录脚本能不能编译。
+同目录脚本能不能编译、SKILL.md 与同目录脚本的换行是不是 LF（读字节数 CR，文本模式那把尺看不见 CR）。
 
 2026-10-05 起改口径：QQ 私聊发图是那一轮调用 `attach_image` 工具（DECIDE 阶段与它的 `attach`
 字段已退役）。退役说法——`integration_dev`、`/skills` 挂载路径、把 DECIDE 的 `attach` 字段 /
@@ -543,6 +543,23 @@ def section_anchor_check(text, check, notes):
     return "，文档节名锚点核过 %d 条（%s）" % (len(wanted), doc)
 
 
+def cr_bytes(paths):
+    """字节级数 CR。文本模式读（universal newlines）会把 CR 吃掉，查换行永远绿——
+    2026-10-15 实测：真 CRLF 样本 CR=59，同一份用 open(..., encoding="utf-8") 读进来
+    再问 "\r" not in text 仍是 True。只有读字节才看得见。返回带 CR 的文件说明。"""
+    bad = []
+    for target in paths:
+        try:
+            with open(target, "rb") as handle:
+                count = handle.read().count(b"\r")
+        except OSError as exc:                           # noqa: BLE001 读不了也要报出来
+            bad.append("%s（读不了：%s）" % (os.path.basename(target), exc))
+            continue
+        if count:
+            bad.append("%s（%d 个 CR 字节）" % (os.path.basename(target), count))
+    return bad
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
     results, notes = [], []
@@ -676,6 +693,12 @@ def main():
             check("compiles_" + script, True)
         except Exception as exc:  # noqa: BLE001 编译失败要原样报出来
             check("compiles_" + script, False, "%s: %s" % (type(exc).__name__, exc))
+
+    # 换行：必须读字节。文本模式（universal newlines）把 CR 吃掉，"\r" not in text 永远为真——
+    # 2026-10-15 实测真 CRLF 样本 CR=59 照样绿。判据名与另外五份 check_skill.py 逐字一致。
+    cr_files = cr_bytes([path] + [os.path.join(HERE, script) for script in scripts])
+    check("line_endings_are_lf", not cr_files,
+          "有 CR（仓库守卫 test_line_endings 会红）：" + "、".join(cr_files))
 
     stray = [d for d in os.listdir(HERE) if d == "__pycache__"]
     if stray:

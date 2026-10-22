@@ -1,6 +1,6 @@
 # ADR-085: the character's summary request sends the whole conversation
 
-Status: **Built**, 2026-10-20; narrowed 2026-10-22 (§4c): only a commanded compaction sends the whole conversation, an automatic one sends the compacted span alone, because a summarizer that reads a long kept tail restates it. Closing waits on the live reading of §4c (§6). The checkpoint template is trimmed in §7 (2026-10-22; read per merge hop from her install). Found from her own reading of the compaction cache rate, decided by the owner on Claude's recommendation, put to her 2026-10-20 18:4x NZDT and agreed by her with three changes, all taken.
+Status: **Built**, 2026-10-20; narrowed 2026-10-22 (§4c): only a commanded compaction sends the whole conversation, an automatic one sends the compacted span alone, because a summarizer that reads a long kept tail restates it. §4c was read live and closed on 2026-10-22 (§6). The checkpoint template is trimmed in §7 (2026-10-22, installed by her restart at 16:02 NZDT); its per-hop reading and the ~10-24 failure count stay open. Found from her own reading of the compaction cache rate, decided by the owner on Claude's recommendation, put to her 2026-10-20 18:4x NZDT and agreed by her with three changes, all taken.
 
 ## 1. Context
 
@@ -123,7 +123,7 @@ Test: `packages/cognition-core/test/compaction.test.js`.
 - Test: `packages/cognition-core/test/compaction.test.js` (whole conversation and kept rule for a commanded compaction; the span alone for an automatic one; too large; refused; span not the conversation's start; thinking level offered or not; missing sections).
 - Reference: `docs/articles/maximize-cache-hit-by-design.md` §1 and §7.
 
-## 6. Before it closes (2026-10-22)
+## 6. Closed (2026-10-22)
 
 - **§4c read live** on the first automatic compactions after her 10:36 NZDT restart (`bd91dd21`): the Host line
   `span alone (automatic)`, the checkpoint written with all six sections, no cap or window failure.
@@ -135,12 +135,14 @@ Test: `packages/cognition-core/test/compaction.test.js`.
   her other conversations 0, no queue timeout. 13:32, the agent line: 104 s, 112.5k of 134.7k prompt tokens from the
   cache, landed; two action-brain steps overlapped it (88 s and 122 s, against a median of 9 s and a longest of 149 s
   in the hour around it, so how much of that was waiting behind it cannot be told), no queue timeout. Her reading of
-  the first: nothing lost from the span; the losses come from merging the earlier checkpoint (§7). Of the second: due.
+  the first: nothing lost from the span; the losses come from merging the earlier checkpoint (§7). Of the second (15:34,
+  both checkpoints read in full): a real loss, again from the merge, not from the span (§7).
 - **§3 restated:** its cache verdict now covers commanded compactions only; its memory verdict was answered by §4b and
   §4c. The ~10-24 reading becomes: cap and window failures over all compactions since 10-22 10:36, and the kept-tail
   repeat in commanded ones.
-- **Evidence:** `.runtime/private/compaction-study/` (0.5 MB) is reduced to `researcher-audit.md`, `replay/PREREG.md`,
-  `PREREG2.md`, `VERDICT.md`, `VERDICT2.md` and `runs.jsonl` (numbers only) when this closes.
+- **Evidence** (reduced 2026-10-22 from 0.5 MB to 72 KB): `.runtime/private/compaction-study/researcher-audit.md`
+  (24 KB), `replay/PREREG.md`, `replay/PREREG2.md`, `replay/VERDICT.md`, `replay/VERDICT2.md`, `replay/runs.jsonl`
+  (numbers only), and §7's reading `trim_reading.py` with the list of hops already sent to her, `trim_sent.json`.
 - **Not here:** the checkpoint template's own waste and what a merge loses, §7.
 
 ## 7. The checkpoint template trimmed (2026-10-22)

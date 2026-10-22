@@ -27,7 +27,17 @@ with Core (`registerChannel`).
   segment's fields, the source and the count, never the text.
 - A group or private-chat message that quotes another carries the quoted message's ID as `reply_to`; one that only
   quotes, with no words, also carries `raw.asuna_reply_only`. On every outbox claim the adapter declares what it
-  carries: `image`, `sticker`, `react`, `poke`, `quote`, `quote_in`, `react_in`, `recall`.
+  carries: `image`, `sticker`, `file:<bytes>` (4 GiB), `react`, `poke`, `quote`, `quote_in`, `react_in`, `recall`.
+- A file goes to a group alone, up to 4 GiB (QQ's single-file limit for group files); a private target is a
+  `failed` receipt. Its bytes come from Core's attachment endpoint in 4 MiB pieces, each sent to NapCat's
+  `upload_file_stream` (stream id = the attempt id, the whole file's sha256, NapCat's temp file named after the
+  attempt), so one WebSocket message stays under 8 MiB; the adapter checks the sha256 across the pieces and NapCat
+  checks it again when the stream completes. Then `upload_group_file` sends it under her name for it. The receipt
+  carries NapCat's answer (its `file_id` only as data, never as an id) and the file's artifact id, sha256 and size;
+  a refusal carries the platform's words as `response.platform`. Waits grow with the size: 60 s a piece,
+  60 s + size / 32 MiB/s to complete the stream, 120 s + size / 1 MiB/s for the upload (4 GiB: about 70 minutes).
+  An upload that outlasts its wait is `unknown`, and a later answer settles it. The outbox waits while a file is
+  sent.
 - A message she sends quotes a line (a leading `reply` segment) only when the outbox item carries `quote`, in a group
   or a private chat; the item's `reply_to`, the line her words answer, is not shown.
 - A `recall` action in her reply takes back a message of hers (`delete_msg` on its id); the platform's retcode is

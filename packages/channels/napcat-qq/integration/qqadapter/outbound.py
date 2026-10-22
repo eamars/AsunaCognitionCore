@@ -28,6 +28,16 @@ send that reports platform_accepted would claim a picture the peer never
 received.  Whether NapCat renders a `base64://` image data URI is NOT yet
 verified against a real client.
 
+An outbox item may instead declare a file (0.7): it goes to a group alone.  Its
+bytes come from the host in pieces of FILE_PIECE, for that very publication and
+attempt; each piece goes to NapCat's `upload_file_stream` (stream id = the attempt
+id) with the whole file's sha256, which NapCat checks when the stream completes and
+the adapter checks across the pieces; then `upload_group_file` sends the file NapCat
+assembled, under the name she gave it.  One WebSocket message stays far below
+NapCat's 50 MiB cap.  A private target is refused (files go to groups only).  An
+upload that outlasts its wait is `unknown`, not `failed`: QQ may still finish it.
+NapCat's `file_id` is kept in the response as data, never as a key.
+
 After a send the platform accepted, the adapter reads that one message back
 with `get_msg` (0.2.3).  The id queried is always the one this very send
 returned, and the answer is checked against the route we sent to.  It is
@@ -37,10 +47,12 @@ no history).  It answers "did the platform store the segments we submitted, in
 this conversation, as us" -- not "did a client render a mention".
 """
 import base64
+import hashlib
 import re
 import time
 
 from . import faces
+from .hostapi import FILE_MAX_BYTES
 from .onebot import ApiNotConnected, ApiTimeout, ApiTransportError
 
 RETRY_WAITS = (0, 2, 5)
@@ -110,6 +122,50 @@ ALLOWED_OUT_MEDIA_TYPES = ("image/png", "image/jpeg", "image/webp", "image/gif")
 SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 IMAGE_MAGICS = (("image/png", b"\x89PNG\r\n\x1a\n"), ("image/jpeg", b"\xff\xd8\xff"),
                 ("image/gif", b"GIF87a"), ("image/gif", b"GIF89a"))
+
+# 0.7: a file to a group, streamed.  Timeouts are generous and scaled by size (file_timeouts).
+FILE_KEY = "file"
+FILE_PIECE = 4 * 1024 * 1024                # one piece read from the host and passed to NapCat (~5.6 MiB as base64)
+WS_MESSAGE_BOUND = 8 * 1024 * 1024          # what one upload_file_stream message stays under (NapCat takes 50 MiB)
+FILE_PIECE_TIMEOUT = 60.0                   # NapCat keeps one piece in memory or on its disk
+FILE_COMPLETE_BASE, FILE_COMPLETE_RATE = 60.0, 32 * 1024 * 1024      # NapCat joins the pieces and hashes the file
+FILE_UPLOAD_BASE, FILE_UPLOAD_RATE = 120.0, 1024 * 1024              # QQ takes the file, at 1 MiB/s assumed
+FILE_RETENTION_MARGIN = 300.0               # NapCat keeps the assembled file this long past the upload's wait
+
+
+def file_timeouts(size):
+    """(complete, upload) seconds for a file of `size` bytes: 60 s + size / 32 MiB/s for NapCat to assemble it,
+    120 s + size / 1 MiB/s for QQ to take it (4 GiB: about 70 minutes)."""
+    return (FILE_COMPLETE_BASE + size / FILE_COMPLETE_RATE, FILE_UPLOAD_BASE + size / FILE_UPLOAD_RATE)
+
+
+def file_plan(item, target_type, max_bytes=FILE_MAX_BYTES):
+    """(plan, None) when this item's file may be streamed, else (None, reason).  Checked before a byte is asked for."""
+    raw = item.get(FILE_KEY)
+    if not isinstance(raw, dict):
+        return None, "file_descriptor_invalid"
+    if target_type != "group":
+        return None, "file_private_target_not_supported"
+    artifact = raw.get("artifact_id")
+    if not isinstance(artifact, str) or not artifact or len(artifact) > 200:
+        return None, "file_artifact_id_missing"
+    sha256 = str(raw.get("sha256") or "").strip().lower()
+    if not SHA256_HEX.match(sha256):
+        return None, "file_sha256_missing"
+    size = raw.get("size")
+    if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+        return None, "file_size_invalid"
+    if size == 0:
+        return None, "file_empty"
+    if size > int(max_bytes):
+        return None, "file_over_limit"
+    name = raw.get("name")
+    if not isinstance(name, str) or not name.strip() or "/" in name or "\\" in name:
+        return None, "file_name_invalid"
+    media = raw.get("media_type")
+    return {"artifact_id": artifact, "sha256": sha256, "size": size, "name": name,
+            "media_type": media if isinstance(media, str) else None}, None
+
 
 # 0.2.3 read-back verification: one `get_msg` per accepted send, for the id that
 # send returned, after a short settle gap; one retry only when the platform has
@@ -405,6 +461,141 @@ class Outbound:
         self.counters.inc("attachment_fetched")
         return base64.b64encode(bytes(data)).decode("ascii"), meta, None
 
+    # ---- one claimed file (0.7) -------------------------------------------
+    def _stream_call(self, params, timeout, pub, attempt, step):
+        """One upload_file_stream call: (data, None), or (None, (reason, detail)).  Nothing has reached the group yet,
+        so every way it can go wrong is `failed`."""
+        try:
+            resp = self.onebot.api_call("upload_file_stream", params, timeout=timeout,
+                                        meta={"publication_id": pub, "attempt_id": attempt, "file_stream": step})
+        except ApiNotConnected as exc:
+            return None, ("ws_not_connected", {"detail": str(exc)[:200]})
+        except (ApiTransportError, ApiTimeout) as exc:
+            return None, ("file_stream_no_answer", {"step": step, "detail": type(exc).__name__,
+                                                    "timeout_seconds": round(timeout, 1)})
+        if not isinstance(resp, dict) or resp.get("retcode") != 0:
+            answer = resp if isinstance(resp, dict) else {}
+            said = answer.get("wording") or answer.get("message")
+            return None, ("file_stream_refused", {"step": step, "retcode": answer.get("retcode"),
+                                                  "platform": " ".join(str(said or "").split())[:200]})
+        data = resp.get("data")
+        return (data if isinstance(data, dict) else {}), None
+
+    def _stream_reset(self, pub, attempt):
+        """Ask NapCat to drop what it holds of this stream (best effort: it answers a reset with an error)."""
+        try:
+            self.onebot.api_call("upload_file_stream", {"stream_id": attempt, "reset": True}, timeout=10.0,
+                                 meta={"publication_id": pub, "attempt_id": attempt, "file_stream": "reset"})
+        except Exception:
+            pass
+
+    @staticmethod
+    def file_outcome(resp, sent):
+        """upload_group_file's answer, on time or late: (status, tag, response to store)."""
+        response = {"group_file": resp if isinstance(resp, dict) else {"unparsed_response": True}, "file": sent}
+        if isinstance(resp, dict) and resp.get("retcode") == 0:
+            return "platform_accepted", "file_sent", response
+        if platform_send_timed_out(resp):
+            # NapCat stopped waiting for QQ's confirmation: QQ may still finish the upload
+            return "unknown", "platform_send_timeout", dict(response, reason="platform_send_timeout")
+        if platform_muted(resp):
+            return "failed", "platform_muted", dict(response, reason="muted")
+        answer = resp if isinstance(resp, dict) else {}
+        said = answer.get("wording") or answer.get("message")
+        return "failed", "file_upload_failed", dict(response, reason="file_upload_failed", retcode=answer.get("retcode"),
+                                                    platform=" ".join(str(said or "").split())[:200])
+
+    def _file_failed(self, pub, attempt, reason, extra=None, reset=False):
+        if reset:
+            self._stream_reset(pub, attempt)
+        self.counters.inc("file_failed")
+        self.log("FILE pub=%s attempt=%s fail=%s" % (pub, attempt, reason))
+        self.report(pub, receipt_payload("failed", attempt, dict(extra or {}, reason=reason)), reason)
+
+    def handle_file(self, item, pub, attempt, ttype, tid):
+        """Stream one claimed file to NapCat in pieces, then send it to the group."""
+        self.counters.inc("file_claims")
+        plan, reason = file_plan(item, ttype)
+        if reason:
+            return self._file_failed(pub, attempt, reason, {"target_type": ttype})
+        getter = getattr(self.host, "get_file_piece", None)
+        if getter is None:
+            return self._file_failed(pub, attempt, "file_fetch_unsupported")
+        size = plan["size"]
+        total = (size + FILE_PIECE - 1) // FILE_PIECE
+        complete_timeout, upload_timeout = file_timeouts(size)
+        retention_ms = int((upload_timeout + FILE_RETENTION_MARGIN) * 1000)
+        # NapCat writes the stream to its temp folder under this name: ours, never hers (her name is not a path there)
+        stream_name = "asuna-%s.bin" % attempt
+        digest = hashlib.sha256()
+        for index in range(total):
+            offset = index * FILE_PIECE
+            length = min(FILE_PIECE, size - offset)
+            res = getter(pub, attempt, plan["artifact_id"], offset, length)
+            obj = res.obj if isinstance(res.obj, dict) else {}
+            data = obj.get("data") if res.kind == "ok" else None
+            if not isinstance(data, (bytes, bytearray)) or len(data) != length:
+                if res.kind == "ok":
+                    why, detail = "file_fetch_short_piece", "%d of %d bytes" % (len(data or b""), length)
+                else:
+                    detail = str(obj.get("error") or res.error or "http_%s" % res.code)[:80]
+                    why = ("file_fetch_unavailable" if res.kind == "retry"
+                           else "file_fetch_" + "_".join(detail.lower().split())[:60])
+                return self._file_failed(pub, attempt, why, {"piece": index, "fetch_error": detail}, reset=index > 0)
+            digest.update(data)
+            params = {"stream_id": attempt, "chunk_data": base64.b64encode(bytes(data)).decode("ascii"),
+                      "chunk_index": index, "total_chunks": total, "file_size": size,
+                      "expected_sha256": plan["sha256"], "filename": stream_name, "file_retention": retention_ms}
+            _data, problem = self._stream_call(params, FILE_PIECE_TIMEOUT, pub, attempt, index)
+            if problem:
+                return self._file_failed(pub, attempt, problem[0], dict(problem[1], piece=index), reset=True)
+            self.counters.inc("file_pieces")
+        if digest.hexdigest() != plan["sha256"]:
+            return self._file_failed(pub, attempt, "file_sha256_mismatch",
+                                     {"expected": plan["sha256"], "observed": digest.hexdigest()}, reset=True)
+        done, problem = self._stream_call({"stream_id": attempt, "is_complete": True, "file_retention": retention_ms},
+                                          complete_timeout, pub, attempt, "complete")
+        if problem:
+            return self._file_failed(pub, attempt, problem[0], problem[1], reset=True)
+        if done.get("status") != "file_complete" or not isinstance(done.get("file_path"), str) or not done["file_path"]:
+            return self._file_failed(pub, attempt, "file_stream_incomplete",
+                                     {"stream": {k: done.get(k) for k in ("status", "received_chunks", "total_chunks")}},
+                                     reset=True)
+        if done.get("sha256") and str(done["sha256"]).lower() != plan["sha256"]:
+            return self._file_failed(pub, attempt, "file_sha256_mismatch",
+                                     {"expected": plan["sha256"], "observed": str(done["sha256"])[:64]})
+        sent = {"artifact_id": plan["artifact_id"], "name": plan["name"], "media_type": plan["media_type"],
+                "sha256": plan["sha256"], "size": size, "pieces": total, "sha256_verified": True,
+                "assembled_size": done.get("file_size")}
+        meta = {"publication_id": pub, "attempt_id": attempt, "target_type": ttype, "target_id": tid, "file": sent}
+        try:
+            resp = self.onebot.api_call("upload_group_file", {"group_id": str(tid), "file": done["file_path"],
+                                                              "name": plan["name"]},
+                                        timeout=upload_timeout, meta=meta)
+        except ApiNotConnected as exc:
+            return self._file_failed(pub, attempt, "ws_not_connected", {"detail": str(exc)[:200]})
+        except (ApiTransportError, ApiTimeout) as exc:
+            # the upload may still finish on QQ's side: unknown, which is never re-sent
+            self.counters.inc("file_unknown")
+            self.report(pub, receipt_payload("unknown", attempt, {"reason": "file_upload_no_answer", "file": sent,
+                                                                  "detail": type(exc).__name__,
+                                                                  "timeout_seconds": round(upload_timeout, 1)}),
+                        "file_upload_no_answer")
+            return
+        self.settle_file(pub, attempt, resp, meta)
+
+    def settle_file(self, pub, attempt, resp, meta):
+        status, tag, response = self.file_outcome(resp, meta.get("file"))
+        self.counters.inc({"platform_accepted": "file_sent", "unknown": "file_unknown"}.get(status, "file_failed"))
+        retcode = resp.get("retcode") if isinstance(resp, dict) else None
+        self.log("FILE_RESULT pub=%s attempt=%s status=%s retcode=%s bytes=%s sha256=%s"
+                 % (pub, attempt, status, retcode, (meta.get("file") or {}).get("size"),
+                    str((meta.get("file") or {}).get("sha256") or "-")[:12]))
+        self.report(pub, receipt_payload(status, attempt, response), tag)
+        self.muted(tag, meta)
+        self.journal.append("files.jsonl", {"ts": _now(), "publication_id": pub, "attempt_id": attempt,
+                                           "status": status, "retcode": retcode, "file": meta.get("file")})
+
     # ---- one claimed group admin action ---------------------------------
     @staticmethod
     def admin_call(item, own_account):
@@ -575,6 +766,8 @@ class Outbound:
                                             {"reason": "target_not_authorized", "target_type": ttype, "target_id": tid}),
                         "target_not_authorized")
             return
+        if item.get(FILE_KEY) is not None:
+            return self.handle_file(item, pub, attempt, ttype, tid)
         sticker, reason = sticker_plan(item)
         if reason:
             self.report(pub, receipt_payload("failed", attempt, {"reason": reason, "target_type": ttype}), reason)
@@ -783,6 +976,20 @@ class Outbound:
         if not pub or not attempt:
             return
         retcode = response.get("retcode") if isinstance(response, dict) else None
+        if (meta or {}).get("file_stream") is not None:
+            # a piece's late answer: that send already settled as failed without it, and nothing reached the group
+            self.log("LATE_ACK pub=%s attempt=%s file_stream=%s retcode=%s ignored"
+                     % (pub, attempt, meta.get("file_stream"), retcode))
+            return
+        if (meta or {}).get("file") is not None:
+            # the group upload answered after its wait: its receipt replaces the unknown one
+            status, tag, response = self.file_outcome(response, meta["file"])
+            self.muted(tag, meta)
+            self.log("LATE_ACK pub=%s attempt=%s file retcode=%s -> %s" % (pub, attempt, retcode, status))
+            self.journal.append("late_acks.jsonl", {"ts": _now(), "publication_id": pub, "attempt_id": attempt,
+                                                   "retcode": retcode, "file": True})
+            self.report(pub, receipt_payload(status, attempt, response), "late_ack")
+            return
         if (meta or {}).get("admin"):
             # an admin action has no message of its own: the platform's retcode is the whole answer
             status, pmid = ("platform_accepted" if retcode == 0 else "failed"), None

@@ -70,6 +70,15 @@ def test_a_due_plan_is_the_programs_line_once_and_authorization_still_reads_the_
     assert said(store, 'hello', '在吗')['author'] == 'A'                  # a person's own line keeps its author
     with pytest.raises(Denied, match='SCENE_MEMBERSHIP_DENIED'):
         persist_input(store, plan_firing('p2', person='C'))              # who may: the event's person, never the author
+    # Its own turn's header still names who authorized it (her line: the plan's person, never 程序).
+    owner(store)
+    dm = scene(store, 'dm-a')
+    store.db.plans.insert_one({'_id': 'plan-p3', 'scene_id': 'dm-a', 'scope_key': dm['scope_key'], 'person_id': 'A',
+                               'policy_epoch': dm['policy_epoch'], 'status': 'ACTIVE', 'intent': '喝水',
+                               'rule': {'after_seconds': 3600}, 'schema_version': 1, 'revision': 1})
+    ep = Coordinator(store, FakeLane(store, [FakeTurn([('think', {'thought': '到点了。'})], '嗯。')])).ingest(plan_firing('p3'))
+    assert ep['episode_kind'] == 'scheduled' and ep['person_id'] == 'A'
+    assert ep['context']['speaker'] == People(store, ep['persona']).speaker(scene(store, 'dm-a'), 'A') != PROGRAM_LABEL
     # A row stored under the old rule (the requester as author) conflicts: the correction runs before this code.
     store.db.messages.update_one({'_id': row['_id']}, {'$set': {'author': 'A'}})
     with pytest.raises(Denied, match='INPUT_IDENTITY_OR_CONTENT_CONFLICT'):

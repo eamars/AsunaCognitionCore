@@ -228,9 +228,9 @@ class RuntimeHost:
                 self.configure_controller(self)
             self.voice = None
             if self.config.get('channels'):
-                # Voice messages become text in this process, one at a time (voice.py, ADR-093).
+                # A channel's voices become text in this process, within the request that brings them (voice.py).
                 from . import voice
-                self.voice = voice.Service(self.app.store, self.evidence).start()
+                self.voice = voice.Transcriber(self.evidence).start()
                 self.stack.callback(self.voice.close)
             channels = Channels(self.controller)
             channels.recover_sending()

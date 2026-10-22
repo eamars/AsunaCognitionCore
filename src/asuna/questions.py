@@ -468,8 +468,9 @@ def read(store, persona, qid, moment=None, outside=False):
                                 'text': machine_words.text(first) if outside else first,
                                 **({'more': '共 %d 页：task 的 page 接着读' % len(pages)} if len(pages) > 1 else {})})
             elif answer.get('line'):
-                line = store.db.messages.find_one({'_id': answer['line']}, {'text': 1})
-                text = str((line or {}).get('text') or '')
+                line = store.db.messages.find_one({'_id': answer['line']}, {'text': 1, 'event.voice': 1})
+                from .voice import line_text
+                text = line_text(line)                       # a voice reads as its words (voice.py)
                 said = {'by': answer.get('by'), 'at': answer.get('at'), 'line': answer['line'],
                         'event_id': answer.get('event_id'),
                         'text': excerpt(text, ANSWER_CHARS)}

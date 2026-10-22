@@ -396,9 +396,9 @@ class ContextBuilder:
                                                for s in readable_sections(own,session_class)]}
         from .ingress import episode_id
         source = self.store.db.messages.find_one({'_id': 'in-' + episode_id(event)})
-        if source and (source.get('voice') or _voice.expected(self.store, source)):
+        if _voice.entries_of(source):
             # Her turn reads a voice as its words, and her memories are looked up by them (voice.py, ADR-093).
-            event = {**event, 'text': _voice.line_text(source, self.store)}
+            event = {**event, 'text': _voice.line_text(source)}
         history_query = {'scene_id':scene['_id'],'policy_epoch':scene['policy_epoch'],
                          '$or':[{'direction':'inbound'},{'delivery_state':'DELIVERED'}]}
         if source:
@@ -411,7 +411,7 @@ class ContextBuilder:
             'platform_receipt.response.verification':1,   # what of her line the platform really stored
             'event.raw.asuna_notice':1,                   # a platform notice is the program's line (notices.py)
             'recalled_at':1,                              # a line of hers she took back (role_tools._recall_part)
-            'voice':1}                                    # a voice reads as its words (voice.py)
+            'event.voice':1}                              # a voice reads as its words (voice.py)
         if read['linked_scenes']:
             # 只在真联动时多带这几个字段：归并要有可比的时间，行上也要能看出是哪个入口说的。
             history_projection=dict(history_projection,scene_id=1,occurred_at=1,receipt_at=1,
@@ -434,6 +434,7 @@ class ContextBuilder:
             arrived=schedule_rules.line_stamp(zone,got)
             if stamp and arrived and arrived!=stamp:row['arrived']=arrived
         for row in history:
+            row['text']=_voice.line_text(row)
             if ((row.pop('event', None) or {}).get('raw') or {}).get('asuna_notice'):
                 row['notice']=notices.HISTORY_WORD
             if row.pop('recalled_at',None):
@@ -467,8 +468,7 @@ class ContextBuilder:
         for row in history:
             # A native role session leaves out rows (and its own replies) it still shows; it needs the ids.
             row.pop('scene_seq',None)
-            row['text']=excerpt(_voice.line_text(row),HISTORY_ROW_CHARS)
-            row.pop('voice',None)
+            row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
             if row.get('direction')!='outbound':
                 row.pop('episode_id',None)
             if outbound_media is not None:
@@ -703,10 +703,10 @@ class ContextBuilder:
                 '$or': [{'scene_id': {'$in': list(private)}, 'direction': 'inbound'},
                         {'scene_id': {'$in': list(allowed)}, 'delivery_state': 'DELIVERED'}]},
                 {'scene_id':1,'author':1,'direction':1,'text':1,'received_at':1,
-                 'delivery_state':1,'voice':1}).sort('received_at',-1).limit(EXPERIENCE_MESSAGES))
+                 'delivery_state':1,'event.voice':1}).sort('received_at',-1).limit(EXPERIENCE_MESSAGES))
             for row in recent:
                 row['text']=excerpt(_voice.line_text(row),EXPERIENCE_MESSAGE_CHARS)
-                row.pop('voice',None)
+                row.pop('event',None)
             # Headlines (owner, 2026-10-05): titles, states and the start of each report; recall reads more.
             tasks = list(self.store.db.tasks.find({'scene_id': {'$in': list(allowed)}},
                 {'scene_id':1,'state':1,'title':1,'goal':1,'failure_type':1,'result':1,
@@ -961,7 +961,7 @@ class ContextBuilder:
                 'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch']},
                 {'text':1, 'author':1, 'direction':1, 'scene_seq':1, 'delivery_state':1,
                  'platform_reply_to':1, 'event.group_context':1, 'episode_id':1,
-                 'occurred_at':1, 'receipt_at':1, 'received_at':1, 'voice':1}))
+                 'occurred_at':1, 'receipt_at':1, 'received_at':1, 'event.voice':1}))
             # P5：整条话题线（含没@她的旁听行）一并给出——接不上话题就谈不上要不要接话。
             seen = {row['_id'] for row in related}
             if group.get('topic_id'):
@@ -971,18 +971,22 @@ class ContextBuilder:
                         '$or': [{'direction':'inbound'}, {'delivery_state':'DELIVERED'}]},
                         {'text':1, 'author':1, 'direction':1, 'scene_seq':1, 'delivery_state':1,
                          'platform_reply_to':1, 'event.group_context':1, 'episode_id':1,
-                         'occurred_at':1, 'receipt_at':1, 'received_at':1, 'voice':1}
+                         'occurred_at':1, 'receipt_at':1, 'received_at':1, 'event.voice':1}
                         ).sort('scene_seq', -1).limit(12):
                     if row['_id'] not in seen:
                         seen.add(row['_id'])
                         related.append(row)
                 related.sort(key=lambda row: row.get('scene_seq') or 0)
+            for row in related:
+                row['text']=_voice.line_text(row)              # before _reply_context drops the event
             self._reply_context(related, scene)
             speaker_tail = list(self.store.db.messages.find({'scene_id':scene['_id'], 'policy_epoch':scene['policy_epoch'],
                 'author':event['person_id'], 'direction':'inbound', 'scene_seq':{'$lt':source['scene_seq']}},
                 {'text':1,'author':1,'scene_seq':1,'event.group_context':1,
-                 'occurred_at':1,'received_at':1,'voice':1}).sort('scene_seq',-1).limit(3)) \
+                 'occurred_at':1,'received_at':1,'event.voice':1}).sort('scene_seq',-1).limit(3)) \
                 if source and event.get('episode_kind')!='visit' else []
+            for row in speaker_tail:
+                row['text']=_voice.line_text(row)
             self._reply_context(speaker_tail, scene)
             for row in [*related, *speaker_tail]:
                 for key in ('occurred_at', 'receipt_at', 'received_at'):
@@ -990,8 +994,7 @@ class ContextBuilder:
                 # Her own line keeps its turn's id: the Host leaves it out while that turn is still visible.
                 if row.get('direction')!='outbound':
                     row.pop('episode_id', None)
-                row['text']=excerpt(_voice.line_text(row),HISTORY_ROW_CHARS)
-                row.pop('voice',None)
+                row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
             continuity = {**group, 'related_messages': related,
                           'current_speaker_tail': list(reversed(speaker_tail))}
             if str(group.get('wake_reason') or '').startswith('proactive'):

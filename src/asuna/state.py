@@ -48,9 +48,8 @@ INSERT_ONLY = ('audit_events','affect_events','affect_amendments','affect_propos
 
 
 AUDIT_INLINE_LIMIT = 16 * 1024
-# Fields written outside a revision (counters by $inc: scene sequence, retrieval salience; a line's voices, written only by
-# voice.py under its lock); not part of a document's digest.
-COUNTER_FIELDS = {'scenes': ('sequence',), 'memory_units': ('salience',), 'messages': ('voice',),
+# Counters written with $inc outside a revision (scene sequence, retrieval salience); not part of a document's digest.
+COUNTER_FIELDS = {'scenes': ('sequence',), 'memory_units': ('salience',),
                   'watches': ('last_seen_at', 'appeared'),     # every line of a watched person moves these
                   'notes': ('seen_in',)}                       # every turn that shows a note adds itself
 
@@ -131,9 +130,7 @@ class Store:
                          # lookup scans every message.
                          ([('episode_id',1)],{}),
                          # Her errands (the daily cap, what came of them at home): only visit rows carry it.
-                         ([('event.visit.intent',1),('received_at',1)],{'partialFilterExpression':{'event.visit.intent':{'$exists':True}}}),
-                         # Voices still being transcribed, found again at start (voice.py): only voice lines carry it.
-                         ([('voice.state',1)],{'sparse':True})],
+                         ([('event.visit.intent',1),('received_at',1)],{'partialFilterExpression':{'event.visit.intent':{'$exists':True}}})],
             'episodes': [([('scene_id',1),('source_event_id',1),('episode_kind',1)], {'unique':True}),
                          ([('person_id',1),('state',1)],{})],             # familiarity: turns she answered someone
             'tasks': [([('request_key',1)], {'unique':True})],

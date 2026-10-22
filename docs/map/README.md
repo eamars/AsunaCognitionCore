@@ -68,10 +68,10 @@ Two hops, each over a local HTTP API: NapCat ⇄ the QQ adapter ⇄ Asuna's chan
    - The server is `channels.ChannelServer`; `channels.Channels.receive` admits new groups and people
      (`channel_admission.admit`) and hands the line to the queue.
    - `ingress.persist_input` stores it, and the scene's queue takes it in order (`chat.Chat`).
-   - A voice in the line is fetched by the adapter once the line is accepted (`qqadapter/voice.py`: `get_record`,
-     mp3) and posted to `POST /v1/channels/qq/voice`. `voice.receive` keeps the audio until `voice.Service` has turned
-     it into text on this machine, then it is deleted; the line reads as its words (`voice.line_text`). Until then the line waits out of her
-     conversation (`voice.holds_projection`) and a turn on it waits (`voice.await_turn`), 10 s at most.
+   - A voice in the line is fetched by the adapter before the line is posted (`qqadapter/voice.py`: `get_record`,
+     mp3) and posted to `POST /v1/channels/qq/voice`, where `voice.receive` has `voice.Transcriber` turn it into text
+     on this machine within the request; the audio is never stored. The line then arrives with its voices settled
+     (`voice.entries_for`) and reads as their words wherever it is read (`voice.line_text`).
    - In a group, the relevance gate (`attend`) decides whether she joins in: it asks her one question, with her mood
      as one public paragraph, for unaddressed talk and for an @ or a reply to her alike; 不理 on an addressed line
      leaves it in her next catch-up there, and a gate that fails on one falls back to the full turn. In a group
@@ -319,10 +319,10 @@ The channel API, platform kinds, stickers, seeing and sending pictures, voices a
 - [`stickers`](../../src/asuna/stickers.py) — Her sticker shelf and the platform's own faces (ADR-016).
 - [`vision`](../../src/asuna/vision.py) — 入站图片元数据与行动脑 DSH ``read_image`` 接线。
 - [`media_keys`](../../src/asuna/media_keys.py) — Current signatures for a platform's media links (ADR-035).
-- [`media_life`](../../src/asuna/media_life.py) — How long stored media bytes live: every kind of stored picture and voice has an owner or an expiry.
+- [`media_life`](../../src/asuna/media_life.py) — How long stored media bytes live: every kind of stored picture has an owner or an expiry.
 - [`outbound_media`](../../src/asuna/outbound_media.py) — 出站图片附件：她的 attach_image 工具 → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
 - [`animated`](../../src/asuna/animated.py) — Animated pictures as something a still-image model can see: one labelled contact sheet plus words.
-- [`voice`](../../src/asuna/voice.py) — Voice messages arrive as text (ADR-093): a channel adapter that declares `voice_in` fetches each voice when its line arrives and posts the audio (or why the platform did not give it); the program keeps the bytes (BlobStore kind `audio`) onl
+- [`voice`](../../src/asuna/voice.py) — Voice messages arrive as text (ADR-093): a channel adapter fetches each voice of a message before it submits the line and posts the audio to `POST /v1/channels/<id>/voice`; the program turns it into text on this machine within that request 
 
 ### [Work and tools](work.md)
 
@@ -429,7 +429,7 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 - [`napcat-qq/integration/qqadapter/selfrole.py`](../../packages/channels/napcat-qq/integration/qqadapter/selfrole.py) — Her own role in each group (owner / admin / member), so the host knows what she may do there.
 - [`napcat-qq/integration/qqadapter/selftest.py`](../../packages/channels/napcat-qq/integration/qqadapter/selftest.py) — Offline + live self checks.
 - [`napcat-qq/integration/qqadapter/service.py`](../../packages/channels/napcat-qq/integration/qqadapter/service.py) — Wiring: WS reader -> durable spool -> host submitter, host outbox -> send.
-- [`napcat-qq/integration/qqadapter/voice.py`](../../packages/channels/napcat-qq/integration/qqadapter/voice.py) — Voice messages, fetched when they arrive (ADR-093): NapCat clears its voice cache, so a voice not fetched soon is lost.
+- [`napcat-qq/integration/qqadapter/voice.py`](../../packages/channels/napcat-qq/integration/qqadapter/voice.py) — Voice messages, settled before their line goes to the host (ADR-093): NapCat clears its voice cache, so a voice not fetched soon is lost, and a line that reaches her should already carry its words.
 - [`napcat-qq/python/napcat_qq/__init__.py`](../../packages/channels/napcat-qq/python/napcat_qq/__init__.py) — QQ through NapCat, as a channel kind of the Asuna core (asuna/channel_kinds.py).
 - [`napcat-qq/skills/qq-napcat-adapter/decode_log.py`](../../packages/channels/napcat-qq/skills/qq-napcat-adapter/decode_log.py) — 把 qq-napcat-adapter 的日志行翻成人话摘要（离线，只读 stdin 或文件）。
 - [`napcat-qq/src/index.js`](../../packages/channels/napcat-qq/src/index.js) — The QQ channel plugin: registers the channel kind `qq` with Core, with its kind module (`napcat_qq`), the NapCat adapter her integration tools develop and run, and its skills.

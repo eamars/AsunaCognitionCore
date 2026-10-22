@@ -315,8 +315,8 @@ class Channels:
         from . import notices
         return notices.home(self.store, self.controller, channel_id, body)
 
-    def voice(self, channel_id, fields, data=None, media_type=None):
-        """One voice of a stored line: its bytes, or why the platform did not give them (voice.py, ADR-093)."""
+    def voice(self, channel_id, fields, data, media_type=None):
+        """One voice of a line about to be posted, transcribed now; its outcome waits for the line (voice.py)."""
         from . import voice
         return voice.receive(self.store, channel_id, fields, data, media_type)
 
@@ -378,6 +378,10 @@ class Channels:
                  'channel': {'id': channel_id, 'account_id': channel['account_id'],
                              'platform_event_id': body['event_id'], 'target': route['target'], 'sender_id': body['sender_id']}}
         event['raw'] = kept_raw(event, body.get('raw'), body.get('mentioned_account_ids'))
+        from . import voice
+        voices = voice.entries_for(channel_id, event_id, event['raw'])
+        if voices:
+            event['voice'] = voices                        # settled before the line came (voice.py, ADR-093)
         from . import media_keys
         media_keys.saw(event)                              # a signed picture link that just arrived (ADR-035)
         from . import notices
@@ -704,7 +708,7 @@ class ChannelServer:
                         media_type = (self.headers.get('Content-Type') or '').split(';')[0].strip().lower()
                         # A voice's bytes come raw (voice.py); every other body is one JSON object. A group's member
                         # list (group_members.py) is the one JSON body that may be large.
-                        raw_voice = parts[3:] == ['voice'] and media_type != 'application/json'
+                        raw_voice = parts[3:] == ['voice']
                         from .voice import BODY_LIMIT
                         limit = (BODY_LIMIT if raw_voice else MEMBERS_BODY_LIMIT if parts[3:] == ['members']
                                  else JSON_BODY_LIMIT)
@@ -731,11 +735,8 @@ class ChannelServer:
                     elif self.command == 'POST' and parts[3:] == ['own_mute']:
                         value = channels.own_mute(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['voice']:
-                        if audio is not None:
-                            fields = {key: values[0] for key, values in parse_qs(url.query).items()}
-                            value = channels.voice(channel_id, fields, audio, media_type)
-                        else:
-                            value = channels.voice(channel_id, body)
+                        fields = {key: values[0] for key, values in parse_qs(url.query).items()}
+                        value = channels.voice(channel_id, fields, audio, media_type)
                     elif self.command == 'GET' and parts[3:] == ['outbox']:
                         query = parse_qs(url.query)
                         owner = []

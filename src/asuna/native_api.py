@@ -611,8 +611,11 @@ class NativeMemory:
                     result['then'] = reasons.then(self.store, row)       # what she did after this thought
         elif kind == 'source':
             row = self.store.db.messages.find_one({**self.message_query, '_id': key},
-                {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1, 'direction': 1, 'event.raw.asuna_peer': 1})
+                {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1, 'direction': 1, 'event.raw.asuna_peer': 1,
+                 'event.voice': 1})
             if row:
+                from .voice import line_text
+                row['text'] = line_text(row)                 # a voice reads as its words (voice.py)
                 result = {'id': identifier, 'body': row.pop('text', ''), 'interpretation': False,
                           'category': 'source', 'usage': self.cognition.usage(identifier), **row}
         else:
@@ -631,7 +634,8 @@ class NativeMemory:
         result['sources_truncated'] = len(ids) > 12
         ids = ids[:12]
         result['sources'] = list(self.store.db.messages.find({**self.message_query, '_id': {'$in': ids}},
-            {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1, 'event.raw.asuna_peer': 1}).sort([('occurred_at', 1), ('_id', 1)]).limit(12))
+            {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1, 'event.raw.asuna_peer': 1, 'event.voice': 1}
+            ).sort([('occurred_at', 1), ('_id', 1)]).limit(12))
         # Self/relationship revisions can cite interpretation or summary units,
         # not only original messages. Keep the source type and the same scope.
         for source in self.store.db.memory_units.find({**self.unit_query, '_id': {'$in': ids}},
@@ -644,8 +648,9 @@ class NativeMemory:
         result['sources'].sort(key=lambda source: (source.get('occurred_at') or '', source['_id']))
         result['sources_truncated'] |= len(result['sources']) > 12
         result['sources'] = result['sources'][:12]
+        from .voice import line_text
         for source in result['sources']:
-            source['text'] = source.get('text', '')[:8192]
+            source['text'] = line_text(source)[:8192]        # a voice reads as its words (voice.py)
             source['scene_title'] = self.scene_title(source.get('scene_id'))
             source['author'] = speaker_name(self.store.config, source.get('author'), source, self.store.db) if source.get('author') else None
             source.pop('event', None)

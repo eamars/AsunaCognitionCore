@@ -177,8 +177,7 @@ HTTP client for the runtime host channel API (stdlib only).
   - `post_media_keys` — NapCat's current picture-link keys (media_keys.py); `accepted` once the host holds them.
   - `post_own_mute` — Her own mute in one group (mutes.py); `accepted` once the host took it.
   - `post_notice` — A line about her own account for her home session (notices.py); `accepted` once the host took it.
-  - `post_voice` — One voice of a line the host accepted, as its bytes (voice.py); `accepted` once the host kept them.
-  - `post_voice_refusal` — Why that voice's bytes did not come (`refused`: reason, retcode, message), so her line can say it.
+  - `post_voice` — One voice of a line about to be posted, as its bytes (voice.py): the host transcribes it within the request; `accepted` with its outcome (`state`), or `duplicate` when it was settled before.
   - `claim_outbox`
   - `get_attachment` — Fetch the bytes one claimed publication declared, over this same API.
   - `post_receipt`
@@ -415,16 +414,12 @@ Wiring: WS reader -> durable spool -> host submitter, host outbox -> send.
 
 [packages/channels/napcat-qq/integration/qqadapter/voice.py](../../packages/channels/napcat-qq/integration/qqadapter/voice.py)
 
-Voice messages, fetched when they arrive (ADR-093): NapCat clears its voice cache, so a voice not fetched soon is lost.
+Voice messages, settled before their line goes to the host (ADR-093): NapCat clears its voice cache, so a voice not fetched soon is lost, and a line that reaches her should already carry its words.
 
-- def `segments` — [(index, file)] for the voices of an accepted line, in order: only a line whose media block went to the host (its placeholders are what the host fills in).
+- def `segments` — [(index, file)] for the voices of a line, in order: only a line whose media block goes to the host (its placeholders are what the host fills in).
 - def `refusal`
 - def `fetch` — (bytes, None) or (None, refusal) for one voice segment's file.
-- class `VoiceFetcher` — One queue, one thread: voices are fetched and posted in the order their lines were accepted.
-  - `put` — Queue the voices of a line the host accepted; returns how many.
-  - `pending`
-  - `loop`
-  - `handle`
+- def `settle` — Fetch and post each voice of this line before the line is posted; a voice without an outcome gets its reason on its media item.
 
 ## `napcat-qq/python/napcat_qq/__init__.py`
 

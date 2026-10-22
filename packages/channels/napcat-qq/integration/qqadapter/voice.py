@@ -1,35 +1,37 @@
-"""Voice messages, fetched when they arrive (ADR-093): NapCat clears its voice cache, so a voice not fetched soon is
-lost.
+"""Voice messages, settled before their line goes to the host (ADR-093): NapCat clears its voice cache, so a voice not
+fetched soon is lost, and a line that reaches her should already carry its words.
 
-After the host accepts a line that carries `record` (or `audio`) segments, each one is queued here; the `voice`
-thread asks NapCat for it (`get_record` with the segment's `file` and `out_format` mp3, the smaller form) and posts the
-bytes to the host's `voice` endpoint for that line and segment. When NapCat gives no audio (it already cleared the
-voice: retcode 1200 `file not found`), the refusal is posted instead, so the line says why. Nothing here runs on the
-receive path, and only metadata reaches the log.
+On the submit path, before a line with `record` (or `audio`) segments is posted, each voice is fetched from NapCat
+(`get_record` with the segment's `file` and `out_format` mp3, FETCH_TIMEOUT) and its bytes are posted to the host's
+`voice` endpoint, which transcribes it within the request (keyed by the line's event id and the segment's index). When
+there is no outcome -- NapCat refused (retcode 1200 `file not found` is `gone`), timed out or answered no audio, or the
+host call failed -- the reason goes on that voice's media item (`voice_refused`), so the line says why. The line is
+posted either way, after its voices, so lines keep their order. Only metadata reaches the log.
 """
 import base64
-import threading
-from queue import Empty, Queue
 
 from .inbound import MEDIA_KEY
-from .onebot import ApiNotConnected, ApiTimeout, ApiTransportError
 
 VOICE_TYPES = ("record", "audio")
+REFUSED_KEY = "voice_refused"
 OUT_FORMAT = "mp3"
 CONTENT_TYPE = "audio/mpeg"
-FETCH_TIMEOUT = 30.0          # NapCat converts the voice before it answers
-POST_TRIES = 3                # a host that is briefly unreachable (5xx, transport) gets the same post again
-RETRY_WAIT = 2.0
+FETCH_TIMEOUT = 10.0          # NapCat converts the voice before it answers
 MAX_FILE = 300                # the segment's file reference, as NapCat gave it
 
 
-def segments(envelope):
-    """[(index, file)] for the voices of an accepted line, in order: only a line whose media block went to the host
-    (its placeholders are what the host fills in)."""
+def _voice_items(envelope):
     raw = envelope.get("raw") if isinstance(envelope.get("raw"), dict) else {}
     block = raw.get(MEDIA_KEY) if isinstance(raw.get(MEDIA_KEY), dict) else {}
-    if not any(isinstance(item, dict) and item.get("type") in VOICE_TYPES for item in block.get("items") or ()):
+    return [item for item in block.get("items") or () if isinstance(item, dict) and item.get("type") in VOICE_TYPES]
+
+
+def segments(envelope):
+    """[(index, file)] for the voices of a line, in order: only a line whose media block goes to the host (its
+    placeholders are what the host fills in)."""
+    if not _voice_items(envelope):
         return []
+    raw = envelope.get("raw") if isinstance(envelope.get("raw"), dict) else {}
     out = []
     for seg in raw.get("message") if isinstance(raw.get("message"), list) else ():
         if isinstance(seg, dict) and seg.get("type") in VOICE_TYPES:
@@ -48,6 +50,7 @@ def refusal(reason, retcode=None, message=""):
 
 def fetch(onebot, ref, timeout=FETCH_TIMEOUT):
     """(bytes, None) or (None, refusal) for one voice segment's file."""
+    from .onebot import ApiNotConnected, ApiTimeout, ApiTransportError
     if not ref:
         return None, refusal("no_audio", message="the segment names no file")
     try:
@@ -76,69 +79,32 @@ def fetch(onebot, ref, timeout=FETCH_TIMEOUT):
     return audio, None
 
 
-class VoiceFetcher:
-    """One queue, one thread: voices are fetched and posted in the order their lines were accepted."""
-
-    def __init__(self, onebot, host, counters, log=print, retry_wait=RETRY_WAIT):
-        self.onebot, self.host, self.counters, self.log = onebot, host, counters, log
-        self.retry_wait = retry_wait
-        self.queue = Queue()
-        self.wake = threading.Event()
-
-    def put(self, envelope):
-        """Queue the voices of a line the host accepted; returns how many. Never waits."""
-        found = segments(envelope)
-        for index, ref in found:
-            self.queue.put({"route_id": envelope.get("route_id"), "event_id": envelope.get("event_id"),
-                            "occurred_at": envelope.get("occurred_at"), "index": index, "file": ref})
-        if found:
-            self.counters.inc("voice_queued", len(found))
-        return len(found)
-
-    def pending(self):
-        return self.queue.qsize()
-
-    def loop(self, stop):
-        while not stop.is_set():
-            try:
-                job = self.queue.get(timeout=1.0)
-            except Empty:
-                continue
-            try:
-                self.handle(job, stop)
-            except Exception as exc:          # noqa: BLE001 one voice never stops the thread
-                self.counters.inc("voice_errors")
-                self.log("VOICE_ERROR event_id=%s index=%s type=%s" % (job.get("event_id"), job.get("index"),
-                                                                       type(exc).__name__))
-
-    def handle(self, job, stop=None):
-        audio, refused = fetch(self.onebot, job.get("file"))
+def settle(envelope, onebot, host, counters, log=print, fetch_timeout=FETCH_TIMEOUT):
+    """Fetch and post each voice of this line before the line is posted; a voice without an outcome gets its reason
+    on its media item. Returns [(index, state or reason)] for the log."""
+    found = segments(envelope)
+    items = _voice_items(envelope)
+    done = []
+    for index, ref in found:
+        audio, refused = fetch(onebot, ref, fetch_timeout)
         if audio is not None:
-            self.counters.inc("voice_fetched")
-            post = lambda: self.host.post_voice(job["route_id"], job["event_id"], job["index"], audio, CONTENT_TYPE,
-                                                job.get("occurred_at"))
-        else:
-            self.counters.inc("voice_not_fetched")
-            post = lambda: self.host.post_voice_refusal(job["route_id"], job["event_id"], job["index"], refused,
-                                                        job.get("occurred_at"))
-        res = None
-        for attempt in range(POST_TRIES):
-            res = post()
-            if res.kind != "retry":
-                break
-            self.counters.inc("voice_post_retries")
-            if stop is not None and stop.wait(self.retry_wait * (attempt + 1)):
-                break
-        what = ("bytes=%d" % len(audio)) if audio is not None else (
-            "refused=%s retcode=%s" % (refused["reason"], refused.get("retcode", "-")))
-        if res is not None and res.kind in ("accepted", "duplicate"):
-            self.counters.inc("voice_posted")
-            self.log("VOICE_POSTED event_id=%s route=%s index=%d %s result=%s http=%s"
-                     % (job["event_id"], job["route_id"], job["index"], what, res.kind, res.code))
-            return res
-        self.counters.inc("voice_post_failed")
-        error = (res.obj or {}).get("error") if res is not None and isinstance(res.obj, dict) else None
-        self.log("VOICE_POST_FAILED event_id=%s route=%s index=%d %s result=%s http=%s error=%s"
-                 % (job["event_id"], job["route_id"], job["index"], what, getattr(res, "kind", "-"),
-                    getattr(res, "code", "-"), str(error or getattr(res, "error", "") or "-")[:80]))
-        return res
+            res = host.post_voice(envelope.get("route_id"), envelope.get("event_id"), index, audio, CONTENT_TYPE,
+                                  envelope.get("occurred_at"))
+            obj = res.obj if isinstance(res.obj, dict) else {}
+            if res.kind in ("accepted", "duplicate"):
+                counters.inc("voice_settled")
+                done.append((index, obj.get("state")))
+                log("VOICE_SETTLED event_id=%s route=%s index=%d bytes=%d state=%s result=%s http=%s"
+                    % (envelope.get("event_id"), envelope.get("route_id"), index, len(audio), obj.get("state"),
+                       res.kind, res.code))
+                continue
+            code = str(obj.get("error") or "").split(":")[0][:60]
+            refused = refusal("host", None, " ".join(str(part) for part in (res.code or res.error or "-", code) if part))
+        counters.inc("voice_not_settled")
+        if index < len(items):
+            items[index][REFUSED_KEY] = refused
+        done.append((index, refused["reason"]))
+        log("VOICE_NOT_SETTLED event_id=%s route=%s index=%d reason=%s retcode=%s"
+            % (envelope.get("event_id"), envelope.get("route_id"), index, refused["reason"],
+               refused.get("retcode", "-")))
+    return done

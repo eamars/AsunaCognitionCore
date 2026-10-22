@@ -436,8 +436,6 @@ class BusinessWorker:
                 self.projection_start = self.app.store.put('artifacts', {'_id': 'native-channel-projection',
                     'kind': 'native-channel-projection', 'since': now(), 'scope_key': 'operator'}, stream='native-channel-projection')
             self.controller.on_input_received = self.project_input
-            from . import voice
-            voice.attach(self.voice_ready)          # a line held for its voice enters her conversation when it settles
             self.controller.on_episode_finished = self.episode_finished
             self.app.coordinator.native_session_resolver = self.resolve_role_session
             self.app.coordinator.on_collab = self.collab
@@ -878,13 +876,8 @@ class BusinessWorker:
                        'state': (result or {}).get('state'), 'error': error,
                        'task_id': (result or {}).get('task_id')})
 
-    def project_input(self, row, waited=False):
+    def project_input(self, row):
         if not row.get('event', {}).get('channel'):
-            return
-        from . import voice
-        if not waited and voice.holds_projection(self.app.store, row):
-            # Its voice is still being transcribed: the line enters her conversation with its words (voice.Service).
-            voice.SERVICE.hold(row['_id'])
             return
         if not self.navigation_ready.is_set():
             # Called inside Chat.receive's ingress lock. Waiting here for navigation, which the plugin confirms
@@ -893,25 +886,6 @@ class BusinessWorker:
             return
         if not self.app.store.db.sink_receipts.find_one({'_id': 'native-input:' + row['_id']}):
             self.emit({'kind': 'channel_input', **self.channel_input(row)})
-
-    def voice_ready(self, row_id, released=False):
-        """A line's voices settled, or its wait ran out (`released`): it enters her conversation now. One that entered
-        while still being transcribed comes once more with its words (voice.FOLLOW_UP); a line there is never
-        rewritten."""
-        from . import voice
-        row = self.app.store.db.messages.find_one({'_id': row_id})
-        if not row or not row.get('event', {}).get('channel') or not self.navigation_ready.is_set():
-            return
-        if not released and voice.unsettled(self.app.store, row):
-            return
-        if released or not voice.shown_pending(row):
-            self.project_input(row, waited=True)
-            return
-        again = row_id + voice.FOLLOW_UP
-        if self.app.store.db.sink_receipts.find_one({'_id': 'native-input:' + again}):
-            return
-        projected = self.channel_input(row)
-        self.emit({'kind': 'channel_input', **projected, 'input': {**projected['input'], 'id': again}})
 
     def channel_title(self, route):
         """Conversation title a person can read (content only): the configured name, else the group name or
@@ -990,12 +964,8 @@ class BusinessWorker:
                 indexer.summarizer.scene_ids.append(scene['_id'])
                 indexer.summarizer.initialize()
         # Label line + indented message (people.py): a name can't close the label or start a new speaker.
-        text = People(store).transcript(scene, row)
-        from . import voice
-        if voice.unsettled(store, row):
-            voice.mark_shown(store, row['_id'])       # it comes once more when its words are ready (voice_ready)
         return {'session_id': session_id, 'binding': binding, 'input': {
-            'id': row['_id'], 'text': text, 'sender': row['event']['channel']['sender_id'],
+            'id': row['_id'], 'text': People(store).transcript(scene, row), 'sender': row['event']['channel']['sender_id'],
             'received_at': row['received_at'], 'state': row.get('ingress_state', 'ACCEPTED')}}
 
     def dispatch(self, method, args):
@@ -1064,13 +1034,10 @@ class BusinessWorker:
                     pass  # Revoked scenes must not project into a new epoch.
             return {'ready': True}
         if method == 'channel_input.ack':
-            from . import voice
-            # A line projected once more with its voice's words carries its own receipt (voice_ready).
-            base = args['input_id'].removesuffix(voice.FOLLOW_UP)
-            row = self.app.store.db.messages.find_one({'_id': base, 'event.channel': {'$exists': True}})
+            row = self.app.store.db.messages.find_one({'_id': args['input_id'], 'event.channel': {'$exists': True}})
             if not row:
                 raise ValueError('NATIVE_INPUT_NOT_FOUND')
-            receipt_id = 'native-input:' + args['input_id']
+            receipt_id = 'native-input:' + row['_id']
             if not self.app.store.db.sink_receipts.find_one({'_id': receipt_id}):
                 try:
                     self.app.store.put('sink_receipts', {'_id': receipt_id, 'kind': 'native_input_projection',

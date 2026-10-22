@@ -107,7 +107,7 @@ def _group_token_local(value):
 
 TEXT_FIELD = "text"
 FORWARD_TEXT_FIELD = "event.raw.asuna_forward.nodes.text"     # forwards.NODE_TEXT
-VOICE_TEXT_FIELD = "voice.text"                                # the words of a line's voices (voice.py)
+VOICE_TEXT_FIELD = "event.voice.text"                          # the words of a line's voices (voice.py)
 EPOCH_FIELD = "policy_epoch"
 DIRECTION_FIELD = "direction"        # ingress.py / coordinator.py 都写这个，取值如下
 INBOUND = "inbound"
@@ -626,7 +626,8 @@ def _voice_text(doc):
 
 
 def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
-    body = _voice_text(doc) if text_field == TEXT_FIELD and doc.get("voice") else doc.get(text_field)
+    voiced = text_field == TEXT_FIELD and isinstance(doc.get("event"), dict) and doc["event"].get("voice")
+    body = _voice_text(doc) if voiced else doc.get(text_field)
     full = body if isinstance(body, str) else ""      # 原样，不动空白；语音读成它的字（voice.py）
     peer, ok, reason = _identity_of(doc)
     author = _text(doc.get("author"), 80)

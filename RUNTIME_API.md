@@ -137,7 +137,7 @@ When any channel is configured, the worker serves the channel API on `127.0.0.1`
 | `POST /v1/channels/{channel_id}/members` | [Post a group's member list](#post-a-groups-member-list) | 4 MiB |
 | `POST /v1/channels/{channel_id}/media_keys` | [Post the current media-link keys](#post-the-current-media-link-keys) | 256 KiB |
 | `POST /v1/channels/{channel_id}/own_mute` | [Post her own mute in a group](#post-her-own-mute-in-a-group) | 256 KiB |
-| `POST /v1/channels/{channel_id}/voice` | [Post a voice](#post-a-voice) | 64 MiB of audio bytes; 256 KiB as JSON |
+| `POST /v1/channels/{channel_id}/voice` | [Post a voice](#post-a-voice) | 64 MiB of audio bytes |
 
 - Every request carries `Authorization: Bearer <token>`: the channel's token, or a [route key](#route-keys).
 - A POST body is one JSON object, except a voice's audio bytes on `voice`. Unknown fields are refused on `events`, `notices`, `own_mute`, `voice` and `receipt`; `members` and `media_keys` ignore them.
@@ -311,7 +311,6 @@ A recall, a poke, a reaction and the like come as an event from the person who d
 | `poke`, `react`, `recall` | performs that action (`recall` also: her line can be taken back) |
 | `quote` | shows the line she quotes |
 | `quote_in`, `react_in` | passes on what others quote, and reactions |
-| `voice_in` | posts each voice of an accepted line ([post a voice](#post-a-voice)) |
 
 The answer is `{"items": []}` or `{"items": [item]}`. Each claim marks the item `SENDING` under a fresh `attempt_id`; claiming is not delivery.
 
@@ -471,34 +470,25 @@ Keys live only in the worker's memory: never in the database, the audit or a log
 
 ### Post a voice
 
-`POST /v1/channels/{channel_id}/voice` — one voice segment of a line the host accepted: its audio bytes, or why the
-platform did not give them. An adapter that declares `voice_in` posts each voice of each accepted line, once.
+`POST /v1/channels/{channel_id}/voice` — one voice segment of a line, before the line is posted: its audio bytes as
+the body (`Content-Type` the media type, e.g. `audio/mpeg`) and the line's event in the query:
+`…/voice?route_id=g&event_id=5301&index=0&occurred_at=2026-10-23T01%3A00%3A00Z`. The worker transcribes it within
+the request and answers with the outcome; the line, posted to `events` next, is stored with it.
 
-The bytes come as the body with their media type (`Content-Type: audio/mpeg`, `audio/wav` or
-`application/octet-stream`) and the fields in the query:
-`…/voice?route_id=g&event_id=5301&index=0&occurred_at=2026-10-23T01%3A00%3A00Z`. A refusal comes as JSON
-(`Content-Type: application/json`):
-
-```json
-{"route_id": "g", "event_id": "5301", "index": 0, "occurred_at": "2026-10-23T01:00:00Z",
- "refused": {"reason": "gone", "retcode": 1200, "message": "file not found"}}
-```
-
-| Field | Type | Required | Meaning |
-|---|---|---|---|
-| `route_id`, `event_id`, `occurred_at` | string | `occurred_at` only when the event had it | the line's event, as posted to `events` |
-| `index` | integer | yes | which voice of the line, 0 first, in the order of its voice placeholders |
-| `refused.reason` | string | with `refused` | `gone` (the platform no longer has it), `refused`, `timeout`, `unreachable` or `no_audio` |
-| `refused.retcode`, `refused.message` | integer, string | no | the platform's own answer, shown in her line |
+| Query | Required | Meaning |
+|---|---|---|
+| `route_id`, `event_id`, `occurred_at` | `occurred_at` only when the event has it | the line's event, exactly as it will be posted to `events` |
+| `index` | yes | which voice of the line, 0–63, in the order of its voice placeholders |
 
 | Answer or code | Status | Meaning |
 |---|---|---|
-| `{"status": "stored", "state": "pending"}` | 200 | stored until it is transcribed, next in line |
-| `{"status": "kept", "state": "failed" | "not_fetched"}` | 200 | settled at once: bytes that are not WAV or MP3 by their first bytes, or the refusal |
-| `{"status": "duplicate", "state": "…"}` | 200 | this voice came already; nothing changed |
-| `VOICE_LINE_NOT_FOUND`, `VOICE_ROUTE_UNKNOWN`, `VOICE_INDEX_INVALID`, `VOICE_EVENT_ID_INVALID`, `VOICE_OCCURRED_AT_INVALID`, `VOICE_FIELD_DENIED`, `VOICE_BODY_INVALID` | 400 | out of shape, or no stored line with such a voice |
+| `{"status": "settled", "state": "…", "seconds": n}` | 200 | transcribed now; `state` is one of [Voice messages](#voice-messages)' |
+| `{"status": "duplicate", "state": "…"}` | 200 | this voice was settled already (kept 10 minutes for its line); nothing was done again |
+| `VOICE_ROUTE_UNKNOWN`, `VOICE_INDEX_INVALID`, `VOICE_EVENT_ID_INVALID`, `VOICE_OCCURRED_AT_INVALID`, `VOICE_FIELD_DENIED`, `VOICE_BODY_INVALID` | 400 | out of shape |
 
-What becomes of it is in [Voice messages](#voice-messages).
+A voice the adapter has no outcome for (the platform refused or timed out, or this call failed) is told on the line
+instead: its media item carries `voice_refused` (`reason`: `gone`, `refused`, `timeout`, `unreachable`, `no_audio` or
+`host`; optional `retcode` and `message`, the platform's own answer), and her line says why.
 
 ### HTTP outcomes
 
@@ -730,38 +720,32 @@ An adapter puts a message's media in `raw.asuna_media` as `{"items": [...]}`. Th
 ### Voice messages
 
 A voice segment's item has `type` `record` (or `audio`), and the line's text carries `[语音（未解析）]` in its place.
-Where the channel declares `voice_in`, its adapter [posts each voice](#post-a-voice) and the worker turns it into text on
+An adapter that can fetch voices [posts each one](#post-a-voice) before its line, and the worker turns it into text on
 this machine (`src/asuna/voice.py`). Nothing is sent anywhere else.
 
-- **Kept until the text is out.** The bytes go to the blob store as kind `audio` in the line's scope and are deleted
-  as soon as the voice settles, whatever came of it (a voice still pending keeps them, across a restart too; bytes
-  that are not WAV or MP3 are never stored). The message row's `voice` keeps one entry per voice: its state and
-  words, length, sha256, size, first 44 bytes, media type, model, times and when the bytes were deleted
-  (`ENTRY_FIELDS`).
+- **Never stored.** The audio lives in memory for its request. The line is stored with one entry per voice in its event
+  (`event.voice`): state, words, length, sha256, size, first 44 bytes, media type, model and times (`ENTRY_FIELDS`).
+  It does not change afterwards.
 - **Recognized, then normalized.** The container is told by its first bytes (RIFF/WAVE, ID3 or an MPEG audio frame
   header); anything else is refused before any field is read. av decodes it and resamples it to 16 kHz mono PCM16,
   whatever rate and depth came.
-- **Transcribed.** One voice at a time, in arrival order: SenseVoice int8 with Silero voice detection (speech and
-  silence each at least 0.25 s, a piece at most 20 s) through sherpa-onnx, language detected, 4 threads. The model is
-  loaded when a voice comes and released after 10 idle minutes. There is no length limit.
+- **Transcribed.** One voice at a time: SenseVoice int8 with Silero voice detection (speech and silence each at least
+  0.25 s, a piece at most 20 s) through sherpa-onnx, language detected, 4 threads. The model is loaded when a voice
+  comes and released after 10 idle minutes. There is no length limit.
 - **The model files** are `<data>/models/sensevoice-2024-07-17/` `model.int8.onnx`, `tokens.txt` and `silero_vad.onnx`,
-  checked against their sizes and sha256 (`voice.MODEL_FILES`) once when the worker starts; the result is in the
-  evidence as `voice.model_checked`.
-- **What her line shows**, in the voice's place (`voice.words`); the stored text stays as it came:
+  checked against their sizes and sha256 (`voice.MODEL_FILES`) once when the worker starts (evidence
+  `voice.model_checked`). A missing or different file is one line in the Host log, `ASUNA_VOICE_MODEL_UNAVAILABLE`,
+  and every voice then reads `没转出文字：识别模型不在`.
+- **What her line shows**, in the voice's place, wherever the line is read (`voice.line_text`); the stored text stays
+  as it came:
 
 | State | Her line shows |
 |---|---|
 | `transcribed` | `[语音 33 秒] 文字……`; a piece labelled other than speech is named: `[语音 20 秒，听着像背景音乐] ……` |
-| `pending` | `[语音 33 秒，正在转写，转完字会补在这一行]` |
 | `no_voice` (the detector found no speech) | `[语音 5 秒，里面没有人声]` |
 | `no_words` (speech, but no letter or digit in the text) | `[语音 12 秒，有人在说话，但听不出说的什么]` |
-| `failed` | `[语音 33 秒，没转出文字：原因]`, e.g. `识别模型不在` when the model files are missing or different |
-| `not_fetched` | `[语音，没拿到：原因]`, from the adapter's refusal |
-
-- **Waiting for it.** A line with a voice still being transcribed enters her conversation when the voice settles, at
-  most 10 s after it was held; a turn on such lines waits up to 10 s in all (`voice.WAIT_SECONDS`), then runs with
-  whatever state they have. A line that entered her conversation while still `pending` enters once more with its
-  words. Her history, recall and quotes read the words.
+| `failed` | `[语音 33 秒，没转出文字：原因]`, e.g. `识别模型不在`, or bytes that are not WAV or MP3 |
+| `not_fetched` | `[语音，没拿到：原因]`, from the adapter's `voice_refused` |
 
 ### Reading images
 

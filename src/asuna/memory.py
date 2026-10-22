@@ -204,12 +204,10 @@ class MemoryService:
         for row in rows:
             if row.get('policy_epoch',1)!=scene['policy_epoch']:continue
             if row.get('memory_chunk_version')==2:continue
-            # A line whose voice is still being transcribed is chunked once its words are on it (voice.py).
-            if voice.unsettled(self.store,row):continue
             # Stable per-message segments: adding another turn cannot regroup
             # old events or drop the last single message. No text is discarded.
             parts=[];part='';size=0
-            for char in voice.line_text(row):
+            for char in voice.line_text(row):            # a voice reads as its words (voice.py)
                 cost=len(char.encode('utf-8'))
                 if size+cost>900:parts.append(part);part='';size=0
                 part+=char;size+=cost

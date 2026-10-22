@@ -51,7 +51,6 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `action_message` — Her words for a running action session: steered in at its next step (ADR-011 §4).
   - `episode_finished`
   - `project_input`
-  - `voice_ready` — A line's voices settled, or its wait ran out (`released`): it enters her conversation now.
   - `channel_title` — Conversation title a person can read (content only): the configured name, else the group name or peer name the platform last sent with a message in that scene, else, for a private chat, the name this profile keeps for that person (the owner
   - `retitle_scene` — A group's conversation shows its state now (focus.RESTING_MARK): its binding's title, then the Host's.
   - `channel_input` — A real processed platform receipt, including quiet/error outcomes; never a model turn.

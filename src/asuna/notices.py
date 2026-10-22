@@ -74,7 +74,7 @@ def fill(store, scene, block, text, moment=None):
         return text.replace('{line}', '一条消息'), False, None
     moment = moment or datetime.now(timezone.utc)
     since = (moment - timedelta(days=QUOTE_DAYS)).isoformat()
-    fields = {'_id': 1, 'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1}
+    fields = {'_id': 1, 'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1, 'event.voice': 1}
     # Her own line is found however old (its id is her receipt's); anyone's within the last QUOTE_DAYS.
     row = (store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'outbound',
                                        'platform_message_id': line['message_id']}, fields, sort=[('scene_seq', -1)])
@@ -105,7 +105,8 @@ def words(store, scene, text, block):
     row_id = ((block or {}).get('line') or {}).get('row')
     if not template or not row_id:
         return text
-    row = store.db.messages.find_one({'_id': row_id}, {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1})
+    row = store.db.messages.find_one({'_id': row_id}, {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1,
+                                                       'event.voice': 1})
     return _named(store, scene, template, row) if row else text
 
 

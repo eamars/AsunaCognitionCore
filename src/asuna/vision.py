@@ -816,7 +816,8 @@ def media_note(message, config):
     capability = vision_capability(config, 'character')
     items = attachments_of(message, config=config)
     # A voice the line already reads as its words (voice.py) is no placeholder any more.
-    voiced = ('record', 'audio') if (message or {}).get('voice') else ()
+    from .voice import entries_of
+    voiced = ('record', 'audio') if entries_of(message) else ()
     others = [item for item in (block.get('items') or []) if isinstance(item, dict)
               and item.get('type') not in ('image', 'video', *voiced)]
     if voiced and not items and not others:

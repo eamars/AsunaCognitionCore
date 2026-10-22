@@ -554,7 +554,7 @@ class People:
         if row:
             return row, None
         recent = list(self.db.messages.find({'scene_id': scene['_id'], **self.POINTABLE},
-                                            {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1, 'voice': 1})
+                                            {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1, 'event.voice': 1})
                       .sort('scene_seq', -1).limit(self.RECENT_LINES))
         listed = '；'.join(self.pointed(scene, row) for row in reversed(recent)) or '还没有'
         lead = '〔%s〕 不是这里的一行' % text if text.isdigit() else '写编号（只写数字，在每行末尾的〔〕里）或「这条」'
@@ -586,7 +586,7 @@ class People:
         # (a private chat's quote is `event.reply`, ADR-079)
         parent_id = quoted.get('reply_message_id')
         parent = self.db.messages.find_one({'_id': parent_id, 'scene_id': scene['_id']},
-                                           {'author': 1, 'text': 1, 'direction': 1, 'scene_seq': 1, 'voice': 1}) if parent_id else None
+                                           {'author': 1, 'text': 1, 'direction': 1, 'scene_seq': 1, 'event.voice': 1}) if parent_id else None
         if parent:
             lines.append('  > 回复 ' + self.pointed(scene, parent))
             then = self.thought_then(parent, scene['_id'] if once else None)
@@ -595,7 +595,7 @@ class People:
         elif quoted.get('reply_to'):
             lines.append('  > 回复了一条更早的消息')            # a line the program has no record of
         from .voice import line_text
-        body = self.heard(scene, line_text(row, self.store))     # each voice as its state's words (voice.py)
+        body = self.heard(scene, line_text(row))                 # each voice as its words (voice.py)
         notice_then = None
         if (event.get('raw') or {}).get(NOTICE_KEY):
             from .notices import line_row, words

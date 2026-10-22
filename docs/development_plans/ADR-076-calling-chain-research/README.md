@@ -320,10 +320,21 @@ one-request session of its own with a fresh prompt (cache hit 0.9–1.7% over th
 `stageEfforts`, `effortFor`; checked against the levels the model offers, like `attendEffort`). The action brain keeps
 the route's `high`. It is profile configuration; a field on the settings card would be a UI addition and is not made.
 
-**Reading (pre-registered).** The first 150 summaries after install (about a day and a half): **pass** if the median
-output is 280 tokens or less (half of 556) and the slowest tenth takes 20 s or less (step time; 43 s before), and at
-most one summary ends incomplete (`DIALOGUE_SUMMARY_INCOMPLETE`; 0 in the 7 days before), and her own reading of 5
-summaries she picks finds no wrong speaker and no lost fact. **Fail** on any: back to the route's effort, no second
-level tried in the same reading.
+**Reading (pre-registered; her four changes, 2026-10-22 17:0x, folded in).** The first 150 summaries after install
+(about a day and a half). **Pass** only if all of these hold; **fail** on any, back to the route's effort, no second
+level tried in the same reading:
+
+- the median output is 280 tokens or less (half of 556), and the slowest tenth takes 20 s or less (step time; 43 s
+  before);
+- at most one summary ends incomplete (`DIALOGUE_SUMMARY_INCOMPLETE`; 0 in the 7 days before), and that one is shown to
+  her by itself, since an unfinished summary may be exactly the one that dropped a promise;
+- no wrong speaker, counted by machine: every label a summary's text names is checked against the authors of its
+  source lines (`source_by_speaker`), and the mismatches are counted. This also checks ADR-089, installed in the same
+  restart: tokens and seconds read the effort, a wrong speaker reads the author fix, so the two cannot hide each other;
+- no lost fact, by her reading against a control: 10 of the first summaries after install, 2 she picks (ones with
+  names, numbers and times), 3 drawn by script and not named to her in advance, and 5 more, are run again at the
+  route's `high` from the very messages their request sent (taken from the summary sessions), and both versions go to
+  her line side by side. The control is not written to her memory and Claude does not read either version. The extra
+  calls are about 10 short one-request summaries on the owner's engine (his yes, 2026-10-22).
 
 Her review: ______

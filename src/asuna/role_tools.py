@@ -134,11 +134,14 @@ RECALL_NOT_YOURS = '只撤你自己的话；撤别人的用 group_action'
 CANCELLED_BY_HER = 'CANCELLED_BY_HER'           # a line of hers she took back before it left
 QUOTED = '引的是 %s'
 # The parts of her reply, in a conversation whose kind lists them (channel_kinds.reply_parts; ADR-064 phase 2).
-REPLY_KINDS = ('text', 'sticker', 'picture', 'poke', 'react', 'recall')
-# ADR-079 §9.7: a pointer part is listed only where the channel's adapter declared it, and each part's fields.
-PART_NEEDS = {'react': 'react', 'recall': 'recall'}
-PART_FIELDS = {'text': ('text',), 'sticker': ('name',), 'picture': ('artifact_id',), 'poke': ('who',),
-               'react': ('line', 'face'), 'recall': ('line', 'why')}
+REPLY_KINDS = ('text', 'sticker', 'picture', 'file', 'poke', 'react', 'recall')
+# ADR-079 §9.7: a pointer part, or a file, is listed only where the channel's adapter declared it, and each part's
+# fields.
+PART_NEEDS = {'react': 'react', 'recall': 'recall', 'file': 'file'}
+PART_FIELDS = {'text': ('text',), 'sticker': ('name',), 'picture': ('artifact_id',), 'file': ('artifact_id',),
+               'poke': ('who',), 'react': ('line', 'face'), 'recall': ('line', 'why')}
+# Where each part's artifact_id is copied from (ADR-092: a file names a registered file, as a picture names a picture).
+ARTIFACT_FROM = {'picture': 'picture：照抄 image_artifacts_from_program', 'file': 'file：照抄 file_artifacts_from_program'}
 SPEAK_HEAD = 'parts 按顺序，一个 part 是单独的一条消息，kind 选 '
 SPEAK_RECALL = 'recall 只撤你自己的话（还没发出去的就取消），撤别人的用 group_action。'
 SPEAK_TAIL = '有一条不对，这次一条都不发，回执说哪条、为什么。不想说话就不调用。'
@@ -202,7 +205,7 @@ TOOLS = {
                           'kind': _s('哪一种', required=True, enum=list(REPLY_KINDS)),
                           'text': _s('text：这一条消息的话；里面每一行都算进一回合的行数'),
                           'name': _s('sticker：你收着的表情包的名字'),
-                          'artifact_id': _s('picture：照抄 image_artifacts_from_program'),
+                          'artifact_id': _s('；'.join(ARTIFACT_FROM.values())),
                           'who': _s('poke：戳谁，照抄标签；私聊里不写就是对方'),
                           'line': _s(REACT_LINE),
                           'face': _s('react：表情名'),
@@ -596,11 +599,12 @@ def all_specs():
 def speak_kinds(store, scene):
     """The parts speak takes in this conversation: its kind's parts, a pointer part only where the channel's adapter
     declared it (ADR-079 §9.7: not declared is not carried, so it is not shown)."""
-    from . import capabilities, channel_kinds
+    from . import capabilities, channel_kinds, outbound_media
     refused = scene.get('kind') == 'dm' and scene.get('channel_id') in REACT_OFF_IN_DMS
     return tuple(kind for kind in channel_kinds.reply_parts(scene['_id'])
                  if (kind not in PART_NEEDS or capabilities.carries(store, scene, PART_NEEDS[kind]))
-                 and not (kind == 'react' and refused))
+                 and not (kind == 'react' and refused)
+                 and not (kind == 'file' and not outbound_media.group_scene(store.config, scene)))   # v0: groups only
 
 
 def speak_spec(kinds, quotes):
@@ -620,6 +624,8 @@ def speak_spec(kinds, quotes):
     if 'line' in item:
         item['line']['description'] = ''.join(text for kind, text in (('react', REACT_LINE_REACT),
                                                                       ('recall', REACT_LINE_RECALL)) if kind in kinds)
+    if 'artifact_id' in item:
+        item['artifact_id']['description'] = '；'.join(text for kind, text in ARTIFACT_FROM.items() if kind in kinds)
     if not quotes:
         spec['parameters'].pop('quote', None)
     return spec
@@ -1210,8 +1216,8 @@ def spoken(store, ep):
     the platform reports after the call gives its lines back too."""
     rows = store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK', 'reply_part': True,
                                    'delivery_state': {'$nin': list(NEVER_LEFT)}},
-                                  {'text': 1, 'sticker': 1, 'attachment': 1, 'action': 1})
-    words = [row.get('text') or '' for row in rows if not ({'sticker', 'attachment', 'action'} & set(row))]
+                                  {'text': 1, 'sticker': 1, 'attachment': 1, 'action': 1, 'file': 1})
+    words = [row.get('text') or '' for row in rows if not ({'sticker', 'attachment', 'action', 'file'} & set(row))]
     return sum(chat_lines(text) for text in words), [' '.join(text.split()) for text in words]
 
 
@@ -1742,6 +1748,13 @@ class RoleTools:
                 else:
                     planned.append({'kind': 'picture', 'text': '', 'fields': {'attachment': dict(meta)},
                                     'shown': 'picture'})
+            elif kind == 'file':
+                from . import outbound_files
+                meta, why = outbound_files.check(self.store, ep, scene, self._place(ep), str(part.get('artifact_id') or ''))
+                if why:
+                    problems.append('第 %d 条 file %s' % (index, why))
+                else:
+                    planned.append(outbound_files.part(meta))
         wait, quoted = args.get('wait'), None
         from . import capabilities
         if args.get('quote') not in (None, '') and not capabilities.carries(self.store, scene, 'quote'):

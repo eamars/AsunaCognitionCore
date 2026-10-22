@@ -46,6 +46,7 @@ Every turn has a **class**, decided by the program from the conversation and the
     own review: her idea notebook and her night's promotion of a memory
     (`role_tools.RoleTools.tool_promote_memory`).
   - Pictures: in groups and other people's chats she can send only pictures she made (`outbound_media.own_only`).
+  - Files go to groups only, and only those her tasks registered (`outbound_files.offer`).
 - **Her words outside** are checked for program talk (`answers.speech_problem`). At home, tool names are a normal
   topic.
 
@@ -80,7 +81,8 @@ Two hops, each over a local HTTP API: NapCat ⇄ the QQ adapter ⇄ Asuna's chan
    - Her turn runs there (see the next question). The QQ conversation in the Web page is that session, view only.
 4. **Back out.** Her words are stored as an outbound message, an outbox row (`publish.PublishService`).
    - The adapter long-polls `GET /v1/channels/qq/outbox` (`channels.Channels.claim`) and sends through NapCat
-     (`outbound.py`: `send_group_msg`, `send_private_msg`, with pictures and stickers).
+     (`outbound.py`: `send_group_msg`, `send_private_msg`, with pictures and stickers; a file through
+     `upload_file_stream` and `upload_group_file`, its bytes read in pieces, `outbound_files.serve_piece`).
    - It reports the platform's answer with `POST …/receipt` (`channels.Channels.receipt`). Until that receipt her
      words are "not yet confirmed".
 
@@ -302,7 +304,7 @@ The persona package, its model and policies, her skills and ideas.
 
 ### [Channels and pictures](channels.md)
 
-The channel API, platform kinds, stickers, seeing and sending pictures.
+The channel API, platform kinds, stickers, seeing and sending pictures and files.
 
 - [`channels`](../../src/asuna/channels.py) — Authenticated transport-neutral adapter seam.
 - [`channel_kinds`](../../src/asuna/channel_kinds.py) — Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq).
@@ -317,6 +319,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures.
 - [`media_keys`](../../src/asuna/media_keys.py) — Current signatures for a platform's media links (ADR-035).
 - [`media_life`](../../src/asuna/media_life.py) — How long stored media bytes live: every kind of stored picture has an owner or an expiry.
 - [`outbound_media`](../../src/asuna/outbound_media.py) — 出站图片附件：她的 attach_image 工具 → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
+- [`outbound_files`](../../src/asuna/outbound_files.py) — Files she sends to a group through the outbox (ADR-092): registered from a task's folder, offered to her turn, sent as speak's `file` part, read by the adapter in pieces, their bytes kept 7 days after they were last sent.
 - [`animated`](../../src/asuna/animated.py) — Animated pictures as something a still-image model can see: one labelled contact sheet plus words.
 
 ### [Work and tools](work.md)

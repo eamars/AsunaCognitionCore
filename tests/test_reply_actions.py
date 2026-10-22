@@ -23,7 +23,7 @@ def world(store):
     from asuna import capabilities
     setup(store, 'member')
     store.config['channels']['qq']['routes']['g']['members'] = {'20002': {'person_id': 'qq:20002'}}
-    capabilities.declared(store, 'qq', ['image', 'sticker', 'poke', *capabilities.POINTERS])
+    capabilities.declared(store, 'qq', ['image', 'sticker', 'poke', *capabilities.POINTERS, 'file:%d' % (4 * 1024 ** 3)])
 
 
 def turn(store, key, parts):

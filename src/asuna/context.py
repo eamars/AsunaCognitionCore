@@ -80,7 +80,8 @@ BLOCKS = {
                     'scheduled_plan_from_program', 'watching_from_program',
                     'credentials_from_program'),
     'recent_phrasing': ('recent_phrasing_from_program', 'speak_from_program'),
-    'media': ('media_from_program', 'image_artifacts_from_program', 'your_pictures_from_program', 'sticker_candidates_from_program',
+    'media': ('media_from_program', 'image_artifacts_from_program', 'file_artifacts_from_program',
+              'your_pictures_from_program', 'sticker_candidates_from_program',
               'stickers_from_program', 'faces_from_program'),
     'group_continuity': ('group_continuity_from_program', 'watched_from_program', 'waiting_from_program',
                          'peer_asides_from_program'),
@@ -436,10 +437,19 @@ class ContextBuilder:
             # The platform took the line but stored less of it (a face, a quote): she reads which part did not land.
             lost=landing_lost((row.pop('platform_receipt',None) or {}).get('response',{}).get('verification'))
             if lost:row['not_landed']=lost
-        undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1,'platform_receipt.response.reason':1,'platform_receipt.response.retcode':1,'action.kind':1}).sort('scene_seq',-1).limit(4))
+        undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1,'platform_receipt.response.reason':1,'platform_receipt.response.retcode':1,'action.kind':1,
+            'file.name':1,'failure':1,'failure_detail':1,'platform_receipt.response.platform':1}).sort('scene_seq',-1).limit(4))
         for row in undelivered:
             row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
             response=((row.get('platform_receipt') or {}).get('response') or {})
+            if row.pop('file',None) is not None and row.get('delivery_state')=='FAILED':
+                # A file that did not go says why, the program's reason or the platform's (ADR-092 D7).
+                from . import outbound_files
+                why=outbound_files.failure_words(row)
+                for key in ('platform_receipt','failure','failure_detail'):row.pop(key,None)
+                row['delivery_state']=UNDELIVERED_WORDS['FAILED']+('：%s'%why if why else '')
+                continue
+            row.pop('failure',None);row.pop('failure_detail',None)
             if (row.pop('action',None) or {}).get('kind')=='recall' and row.get('delivery_state') in ('FAILED','UNKNOWN'):
                 # Her taking back a line of hers that did not go through, said as such (her ask): never left as "handed over".
                 row.pop('platform_receipt',None)
@@ -795,6 +805,10 @@ class ContextBuilder:
                 from .vision import vision_capability as _vision
                 mine=outbound_media.own_pictures(self.store,moment) if _vision(self.store.config,'character')['supported'] else []
                 if mine:context['your_pictures_from_program']={'items':mine,'note':outbound_media.OWN_PICTURES_NOTE}
+        # ADR-092: the files her tasks registered that this conversation may send (a group whose adapter takes files).
+        from . import outbound_files
+        files=outbound_files.offer(self.store,scene,session_class,event['person_id'])
+        if files:context['file_artifacts_from_program']=files
         # ADR-017: whoever talks to her at home may send her on an errand; where it can go, and what came of the last ones
         # (program words only: nobody's reply comes home this way).
         if session_class==visibility.OWNER_PRIVATE and event.get('episode_kind') not in ('self_development','presence'):

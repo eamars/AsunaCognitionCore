@@ -13,15 +13,20 @@ The pointer family (quote, reply, reaction, recall):
 
 When a channel stops or starts carrying a function she uses herself (quote, react, recall), each of its
 conversations gets one program line at its next turn, naming the leg as the cause (her words).
+
+An entry may carry the largest size the platform takes, in bytes: `file:4096` declares `file` with that limit
+(`limit`). The names are kept as plain names; an entry whose limit is not a whole number is not declared.
 """
 from __future__ import annotations
 
 import logging
+import re
 import threading
 
 from .state import now
 
 KIND = 'channel_capabilities'
+LIMITED = re.compile(r'^([^:]+):(\d{1,20})$')
 POINTERS = ('quote', 'quote_in', 'react', 'react_in', 'recall')
 CHANGE = 'capability_change'
 # What she does herself, in her words (ADR-079 §9.7): a change of one is told to each conversation once.
@@ -32,6 +37,7 @@ log = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 _known = {}                    # channel id -> the declared names, as last kept
+_limits = {}                   # channel id -> {name: the largest size it takes, in bytes}, as last kept
 _warned = set()                # channel ids whose missing pointer capabilities were logged this run
 
 
@@ -39,18 +45,37 @@ def _row_id(channel_id):
     return 'capabilities:' + channel_id
 
 
+def split(supports):
+    """(names, limits) of a declaration: `name` or `name:<bytes>`; an entry whose limit is not a whole number is
+    left out."""
+    names, limits = set(), {}
+    for entry in supports or ():
+        entry = str(entry or '')
+        if not entry:
+            continue
+        if ':' not in entry:
+            names.add(entry)
+            continue
+        found = LIMITED.match(entry)
+        if found:
+            names.add(found.group(1))
+            limits[found.group(1)] = int(found.group(2))
+    return tuple(sorted(names)), limits
+
+
 def declared(store, channel_id, supports):
     """Keep what an adapter declared on a claim; write the row only when it changed. A pointer capability the adapter
     did not declare is logged once per run, naming the channel and the function."""
-    names = tuple(sorted({str(name) for name in supports or () if name}))
+    names, limits = split(supports)
     with _lock:
-        if _known.get(channel_id) == names:
+        if _known.get(channel_id) == names and _limits.get(channel_id) == limits:
             return
         _known[channel_id] = names
+        _limits[channel_id] = limits
         first = channel_id not in _warned
         _warned.add(channel_id)
     row = {'_id': _row_id(channel_id), 'kind': KIND, 'channel_id': channel_id, 'supports': list(names),
-           'declared_at': now(), 'schema_version': 1}
+           **({'limits': limits} if limits else {}), 'declared_at': now(), 'schema_version': 1}
     prior = store.db.artifacts.find_one({'_id': row['_id']}, {'supports': 1})
     _write(store, row)
     if prior is not None:
@@ -98,11 +123,27 @@ def supports(store, channel_id):
     with _lock:
         if channel_id in _known:
             return _known[channel_id]
-    row = store.db.artifacts.find_one({'_id': _row_id(channel_id)}, {'supports': 1}) or {}
+    row = store.db.artifacts.find_one({'_id': _row_id(channel_id)}, {'supports': 1, 'limits': 1}) or {}
     names = tuple(row.get('supports') or ())
     with _lock:
         _known.setdefault(channel_id, names)
+        _limits.setdefault(channel_id, dict(row.get('limits') or {}))
     return names
+
+
+def limit(store, channel_id, name):
+    """The largest size in bytes a channel's adapter declared for one of its functions (`file:<bytes>`); None when
+    it declared none."""
+    if not channel_id:
+        return None
+    with _lock:
+        known = channel_id in _limits
+        value = (_limits.get(channel_id) or {}).get(name)
+    if not known:
+        supports(store, channel_id)
+        with _lock:
+            value = (_limits.get(channel_id) or {}).get(name)
+    return value
 
 
 def carries(store, scene, *names):
@@ -120,4 +161,5 @@ def numbered(store, scene):
 def forget():
     with _lock:
         _known.clear()
+        _limits.clear()
         _warned.clear()

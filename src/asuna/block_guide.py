@@ -12,7 +12,7 @@ from .config import prompt_path
 def notes():
     """block key -> the explanations it may carry (a block worded per place has more than one)."""
     from . import (affect, attend, context, credentials, dice, group_members, host_stops, lines, night, notes as _notes, notices,
-                   outbound_media, places, questions, restarts, self_review, stickers, switches, waiting)
+                   outbound_files, outbound_media, places, questions, restarts, self_review, stickers, switches, waiting)
     return {
         'recent_thoughts_from_program': (context.THOUGHTS_NOTE,),
         'understanding_update_from_program': (context.UNDERSTANDING_NOTE,),
@@ -27,6 +27,7 @@ def notes():
         'questions_from_program': (questions.BLOCK_NOTE,),
         'members_from_program': (group_members.BLOCK_NOTE,),
         'your_pictures_from_program': (outbound_media.OWN_PICTURES_NOTE,),
+        'file_artifacts_from_program': (outbound_files.OFFER_NOTE,),
         'credentials_from_program': (credentials.CREDENTIALS_NOTE,),
         'places_from_program': (places.PLACES_NOTE,),
         'last_visits_from_program': (places.VISITS_NOTE,),

@@ -11,7 +11,7 @@ The interfaces of the Asuna runtime: what a channel adapter, a persona or channe
 - [Channel packages](#channel-packages): [kind module](#kind-module)
 - [Her tools](#her-tools)
 - [Action capabilities](#action-capabilities): [tools a task is given](#tools-a-task-is-given), [web search and fetch](#web-search-and-fetch), [skills](#skills), [sandbox](#sandbox), [credentials](#credentials)
-- [Media and images](#media-and-images): [inbound media](#inbound-media), [reading images](#reading-images), [sending pictures](#sending-pictures)
+- [Media and images](#media-and-images): [inbound media](#inbound-media), [reading images](#reading-images), [sending pictures](#sending-pictures), [sending files](#sending-files)
 - [Schedules](#schedules): [rhythms](#rhythms), [what the owner sees](#what-the-owner-sees)
 - [Integration and self-development](#integration-and-self-development): [integration profile](#integration-profile), [integration tools](#integration-tools), [drawing and rendering](#drawing-and-rendering), [private words](#private-words), [self-development](#self-development)
 
@@ -301,12 +301,13 @@ A recall, a poke, a reaction and the like come as an event from the person who d
 | Query | Meaning |
 |---|---|
 | `wait_seconds` | long-poll up to this many seconds (0–25; default 0) |
-| `supports` | comma-separated capabilities the adapter carries now (below) |
+| `supports` | comma-separated capabilities the adapter carries now (below); an entry `name:<bytes>` also declares the largest size the platform takes, as `file:4096` (4 KiB) |
 
 | `supports` name | Means the adapter |
 |---|---|
 | `image` | sends a picture with a message ([attachment](#fetch-attachment-bytes)) |
 | `sticker` | sends stickers |
+| `file:<bytes>` | sends a file to a group, up to that many bytes ([file pieces](#fetch-attachment-bytes)) |
 | `poke`, `react`, `recall` | performs that action (`recall` also: her line can be taken back) |
 | `quote` | shows the line she quotes |
 | `quote_in`, `react_in` | passes on what others quote, and reactions |
@@ -317,30 +318,35 @@ The answer is `{"items": []}` or `{"items": [item]}`. Each claim marks the item 
 |---|---|
 | `publication_id`, `attempt_id` | what to name in the receipt |
 | `target` | `{"type": "dm" | "group", "id"}` to send to |
-| `text` | her words; her @ of someone reads `@<kind>:<account>` (the kind's `outbound_mention`), `[表情:名字]` is a platform face by name; `""` for a sticker or an action |
+| `text` | her words; her @ of someone reads `@<kind>:<account>` (the kind's `outbound_mention`), `[表情:名字]` is a platform face by name; `""` for a sticker, a file or an action |
 | `reply_to` | platform id of the line her words answer, for a platform that needs a reply token; never shown as a quote |
 | `quote` | platform id of the line she chose to quote, or `null`; shown only by an adapter that declares `quote` |
 | `attachment` | `{artifact_id, media_type, sha256, size}` when `image` is declared and the message carries a picture |
 | `sticker` | `{"kind": "custom"}` (send `attachment` as a picture marked as a sticker) or `{"kind": "market", "emoji_id", "emoji_package_id", "key", "summary"}` (a store sticker, no bytes) |
+| `file` | `{artifact_id, name, media_type, sha256, size}`: a file sent alone to a group, under `name`; `media_type` is `null` when its type was not recognized |
 | `action` | `{"kind": "poke", "account"}`, `{"kind": "react", "message_id", "emoji_id"}` or `{"kind": "recall", "message_id", "line"}` |
 | `admin` | an admin action (publication id `ga-…`, no `text`): `{"kind": "mute", "account", "seconds"}`, `unmute` or `kick` with `account`, `recall` with `message_id`, or a request's `accept` / `decline` |
 
 - **Order.** A claim with the channel's token gets queued admin actions first. Conversations take turns by when their oldest queued message was queued (`queued_at`); within a conversation, messages come in its order. A part with `not_before` waits for its time, and a later part of one reply waits until the part before it is delivered (or she cancelled it); either holds only its own conversation. A part whose earlier part ended without arriving is cancelled when it comes up (`CANCELLED_AFTER_FAILURE`).
 - **Speaking in parts.** Where a kind declares `REPLY_PARTS`, one reply is several items, each sent as its own platform message and confirmed with its own receipt. A part that ends `failed` or `unknown` cancels the parts after it (`CANCELLED_AFTER_FAILURE`). A `recall` action takes back her own delivered line.
-- **Not declared.** An action the claim does not declare fails its row (`CHANNEL_DOES_NOT_DECLARE_POKE`, `…_REACT`, `…_RECALL`); a sticker fails with `CHANNEL_DOES_NOT_DECLARE_STICKER`. A picture without `image` declared: the text goes out and the row records `attachment_skipped`.
+- **Not declared.** An action the claim does not declare fails its row (`CHANNEL_DOES_NOT_DECLARE_POKE`, `…_REACT`, `…_RECALL`); a sticker fails with `CHANNEL_DOES_NOT_DECLARE_STICKER`, a file with `CHANNEL_DOES_NOT_DECLARE_FILE`. A picture without `image` declared: the text goes out and the row records `attachment_skipped`.
+- **Files.** A file row fails at claim time, before anything is sent, with `FILE_OVER_CHANNEL_LIMIT` (over the declared `file:<bytes>`; the row keeps `file_limit` `{bytes, limit}`) or `FILE_BYTES_EXPIRED` (its bytes were removed; the row keeps `source_present`, whether the task folder still holds the original). Both rows carry `failure_detail` in words.
 - **Kept.** The host keeps each channel's last `supports` (`artifacts` kind `channel_capabilities`) across restarts; what she is offered there follows it (`src/asuna/capabilities.py`).
 - A row whose route, member, policy epoch or task changed since it was queued is failed at claim time and not handed out (`PUBLICATION_MEMBER_REVOKED`, `PUBLICATION_CONTEXT_STALE`, `PUBLICATION_EPISODE_STALE`, `PUBLICATION_INTENT_STALE`).
 
 ### Fetch attachment bytes
 
-`GET /v1/channels/{channel_id}/outbox/{publication_id}/attachment?attempt_id=…&artifact_id=…` — the bytes of the picture a claimed item declared, with the channel's token.
+`GET /v1/channels/{channel_id}/outbox/{publication_id}/attachment?attempt_id=…&artifact_id=…` — the bytes of the picture a claimed item declared, with the channel's token. For a claimed `file`, one piece of it: `&offset=…&length=…`.
 
 | Query | Required | Meaning |
 |---|---|---|
 | `attempt_id` | yes | the attempt of the current claim |
 | `artifact_id` | no | narrows the request; a different artifact is refused, never substituted |
+| `offset`, `length` | for a file | the piece: `length` bytes (1 to 8 MiB) from byte `offset`, fewer only at the file's end |
 
 The answer is the bytes with `Content-Type` from their file signature, re-checked against the row's `sha256`. The adapter checks the digest and signature again; only a platform receipt says the picture arrived.
+
+A file's piece is `application/octet-stream`. The host does not hash a piece: the adapter checks the whole file's `sha256` across its pieces. A piece outside the file, or longer than 8 MiB, is 400 `FILE_PIECE_INVALID`. A file's other refusals (403): `FILE_NOT_DECLARED`, `FILE_ARTIFACT_UNAVAILABLE`, `FILE_BYTES_EXPIRED` (its bytes were removed), `FILE_SHA_MISMATCH` (the stored file is not the declared one), `FILE_NOT_HER_OWN`, `FILE_SCOPE_DENIED`.
 
 | Code (all 403, no partial body) | When |
 |---|---|
@@ -355,7 +361,7 @@ The answer is the bytes with `Content-Type` from their file signature, re-checke
 | `ATTACHMENT_OVER_LIMIT` | over 8 MiB |
 | `ATTACHMENT_NOT_AN_IMAGE`, `ATTACHMENT_MEDIA_TYPE_MISMATCH` | not a PNG, JPEG, WebP or GIF, or not the declared type |
 
-Implemented in `src/asuna/outbound_media.py` (`serve`).
+Implemented in `src/asuna/outbound_media.py` (`serve`) and `src/asuna/outbound_files.py` (`serve_piece`).
 
 ### Record a platform receipt
 
@@ -370,7 +376,7 @@ Implemented in `src/asuna/outbound_media.py` (`serve`).
 |---|---|---|---|
 | `attempt_id` | string | yes | the claim's attempt |
 | `status` | string | yes | `platform_accepted`, `failed` or `unknown` |
-| `platform_message_id` | string | for `platform_accepted` of a message | the platform's id of the sent message; not for an action or admin action |
+| `platform_message_id` | string | for `platform_accepted` of a message | the platform's id of the sent message; not for a file, an action or an admin action |
 | `response` | object | yes | the platform's answer; `failed` with `"reason": "muted"` records her mute ([own mute](#post-her-own-mute-in-a-group)) |
 
 | Answer or code | Status | Meaning |
@@ -387,6 +393,7 @@ Implemented in `src/asuna/outbound_media.py` (`serve`).
 - The same receipt again answers the same state. A receipt may still settle an `UNKNOWN` item.
 - Send `unknown` when the result cannot be known. A worker restart turns every `SENDING` item into `UNKNOWN`; the host never claims it again.
 - A delivered `recall` action marks her line as taken back.
+- A delivered file keeps its bytes 7 days from then ([Sending files](#sending-files)). A file's `failed` receipt names the platform's words in `response.platform`; her record shows them.
 
 ### Post a group's member list
 
@@ -574,7 +581,7 @@ The kind module tells the core one platform's id formats and adapter conventions
 | `ROUTE_KEYS` | no | each route has its own key ([Route keys](#route-keys)) |
 | `MARKS_ANSWERS`, `answerer(scene)` | no | who on a line marks the lines that answer her questions |
 | `REQUESTS` | no | its adapter posts friend and group requests ([notices](#post-a-notice-for-her-home)) |
-| `REPLY_PARTS` | no | she speaks there only in these parts (`text`, `sticker`, `picture`, `poke`, `react`, `recall`) |
+| `REPLY_PARTS` | no | she speaks there only in these parts (`text`, `sticker`, `picture`, `file`, `poke`, `react`, `recall`); `file` is offered only in groups whose adapter declares `file` |
 | `OWN_RECALL_SECONDS` | no | how long after delivery she may take back her line (none where she is a group's owner or admin) |
 | `SERVICE_ARGV` | no | the managed adapter's resident command |
 | `MEDIA_KEYS`, `media_key_name`, `media_key_in`, `sign_media`, `media_refusal` | no | signed media links ([media keys](#post-the-current-media-link-keys)) |
@@ -616,7 +623,7 @@ A task's tools are fixed when she hands it over (`src/asuna/coordinator.py` `Coo
 | Group | Defined in | Given to |
 |---|---|---|
 | DSH tools `skill`, `todo_write`, `web_search`, `web_fetch` | `tasks.py` `ACTION_DSH_CAPABILITIES` | every task |
-| workspace: `list_files`, `read_file`, `write_file` | `tasks.py` `WORKSPACE_TOOLS` | every task |
+| workspace: `list_files`, `read_file`, `write_file`, `offer_file` | `tasks.py` `WORKSPACE_TOOLS` (`offer_file`: `outbound_files.py` `OFFER_FILE_TOOL`) | every task |
 | `sandbox_run` | `tasks.py` `SANDBOX_TOOL` | tasks from owner-private conversations, when the Host has a sandbox |
 | history search, discussion digest | `history_query.py` `HISTORY_TOOL`, `discussion_digest.py` `DIGEST_TOOL` | every task |
 | `ask_character`, `report_progress`, `note_idea` | `tasks.py` `ASK_TOOL`, `PROGRESS_TOOL`, `NOTE_IDEA_TOOL` | every task |
@@ -730,6 +737,15 @@ A picture leaves with her words as a message's `attachment` ([Claim public outpu
 - Pictures go to a conversation whose route targets a `dm`, or a group, on a kind that is not `TEXT_ONLY` (`outbound_media.target_allowed`).
 - In a group and in anyone's private chat but the owner's, only pictures she made go out (`outbound_media.own_only`): source `integration:` (drawn, imported or rendered), and her edits of pictures that came from that conversation. A sticker on her shelf goes wherever stickers go. Anything else is refused with `ATTACHMENT_NOT_HER_OWN`.
 - A picture is at most 8 MiB; the registered copy of a PNG has its text chunks removed.
+
+### Sending files
+
+A file goes to a group as its own message: speak's `file` part names a file a task registered ([Claim public output](#claim-public-output), [Fetch attachment bytes](#fetch-attachment-bytes)). Code: `src/asuna/outbound_files.py`.
+
+- **Registration.** The action brain's `offer_file` (`path` inside `/task`, `name` the file name people see, default the file's own) stores the file in the task's own scope as a `file` artifact (source `task-file:<task>:<path>`), streamed into the blob store (`BlobStore.put_stream`). The program computes the sha256, the size and the type from the first bytes (`outbound_files.sniff`); an unrecognized type is recorded as `类型没认出来` and still goes. A name containing a word on her private words list is warned about by category and entry line, never the word, and not refused. The row keeps the task folder and path it came from (`source`).
+- **Offer.** `file_artifacts_from_program` lists, newest first and at most 8, the files this conversation may send, each with `artifact_id`, `name`, a readable `size`, `type` and `registered_at`. It appears in a group whose kind lists `file` in `REPLY_PARTS` and whose adapter declares `file`, under the pictures' rules (`outbound_media.own_only`, `image_scopes`).
+- **Sending.** The part is refused in words when the file is not listed, its bytes are gone, or its size is over the limit the adapter declared; the program has no size or type limit of its own. Her record line is `[文件：名字，大小]`.
+- **Bytes kept.** A file's bytes are removed 7 days after it was last delivered, or 7 days after registration if never delivered, and kept while a message on its way names it (`media_life.sweep`, daily). The artifact row stays, with `storage` `removed` and `bytes_removed_at`. A part or claim naming it then says when the bytes expired and whether the task folder still holds the original unchanged.
 
 ## Schedules
 

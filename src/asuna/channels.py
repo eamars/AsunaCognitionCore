@@ -510,8 +510,9 @@ class Channels:
     def claim(self, channel_id, wait_seconds=0, supports=None, target=None):
         # supports 是领取方声明的能力（napcat-qq 0.5.0 起带 supports=image）。没声明就只给文字，并把
         # 「这条本来带图、图没跟着出去」记在行上：只发文字却报平台已送达，等于声称对方收到一张没到的图。
-        from . import capabilities, group_admin
+        from . import capabilities, group_admin, outbound_files
         capabilities.declared(self.store, channel_id, supports)     # what this adapter carries (ADR-079 §9.7)
+        supports, limits = capabilities.split(supports)             # names as declared; file:<bytes> keeps its limit
         deadline = time.monotonic() + min(25, max(0, wait_seconds))
         while not self.controller.stopping.is_set():
             if self.controller.reconfiguring:
@@ -551,6 +552,19 @@ class Channels:
                         from .publish import PublishService
                         PublishService(self.store).cancel_after(failed)
                         continue
+                    sent_file = row.get(outbound_files.KIND) if isinstance(row.get(outbound_files.KIND), dict) else None
+                    if sent_file:
+                        # A file is the whole message: one this adapter cannot carry, whose bytes are gone or that is over
+                        # the limit it declared is not sent at all (ADR-092).
+                        failing = ({'failure': 'CHANNEL_DOES_NOT_DECLARE_FILE'}
+                                   if outbound_files.CAPABILITY not in supports
+                                   else outbound_files.claim_failure(self.store, row, limits))
+                        if failing:
+                            failed = self.store.put('messages', {**row, 'delivery_state': 'FAILED', **failing},
+                                                    expected=row['revision'], stream=row['episode_id'])
+                            from .publish import PublishService
+                            PublishService(self.store).cancel_after(failed)
+                            continue
                     attempt = uuid.uuid4().hex
                     declared = outbound_media.descriptor(row)
                     carries = bool(declared) and outbound_media.supports_image(supports)
@@ -579,6 +593,10 @@ class Channels:
                         # her row keeps the program's words for her history; the platform gets the action alone
                         item['text'] = ''
                         item['action'] = dict(act)
+                    if sent_file:
+                        # her row keeps 「[文件：名字，大小]」; the platform gets the file alone, its bytes in pieces
+                        item['text'] = ''
+                        item[outbound_files.KIND] = outbound_files.descriptor(sent_file)
                     return {'items': [item]}
             if time.monotonic() >= deadline:
                 break
@@ -593,7 +611,11 @@ class Channels:
         （围栏都在 outbound_media.serve）。行上记着 ``attachment_skipped``（那次领取没声明能收图）
         也算「没声明」：元数据还留在行上只为历史，字节一律 403 ATTACHMENT_NOT_DECLARED。
         返回 ``(data, media_type)``。
+
+        A file row (ADR-092) is served in pieces: ``offset`` and ``length`` (at most outbound_files.PIECE_MAX) name
+        the piece, under the same publication, attempt and artifact fences (outbound_files.serve_piece).
         """
+        from . import outbound_files
         query = query or {}
         attempt_id = (query.get('attempt_id') or [''])[0]
         wanted = (query.get('artifact_id') or [''])[0]
@@ -604,13 +626,16 @@ class Channels:
             if row.get('delivery_state') != 'SENDING' or not row.get('attempt_id') \
                     or row['attempt_id'] != attempt_id:
                 raise Denied('PUBLICATION_ATTEMPT_MISMATCH')
-            declared = outbound_media.declared(row)      # 元数据在 ≠ 声明了：skipped 的行一律拒
-            if not declared:
-                raise Denied('ATTACHMENT_NOT_DECLARED')
-            if wanted and wanted != declared['artifact_id']:
-                raise Denied('ATTACHMENT_ARTIFACT_DENIED')       # 只发这条自己声明的那张，别人给不了
-            from .blobs import BlobStore
-            return outbound_media.serve(self.store, BlobStore(self.store), row, declared)
+            if not isinstance(row.get(outbound_files.KIND), dict):
+                declared = outbound_media.declared(row)      # 元数据在 ≠ 声明了：skipped 的行一律拒
+                if not declared:
+                    raise Denied('ATTACHMENT_NOT_DECLARED')
+                if wanted and wanted != declared['artifact_id']:
+                    raise Denied('ATTACHMENT_ARTIFACT_DENIED')       # 只发这条自己声明的那张，别人给不了
+                from .blobs import BlobStore
+                return outbound_media.serve(self.store, BlobStore(self.store), row, declared)
+        # A file's piece is read outside the effects lock: every claim and receipt would wait behind a GridFS read.
+        return outbound_files.serve_piece(self.store, row, query)
 
     def receipt(self, channel_id, publication_id, body):
         if set(body) - {'attempt_id', 'status', 'platform_message_id', 'response'}:
@@ -628,8 +653,9 @@ class Channels:
                 return group_admin.receipt(self.store, channel_id, publication_id, body)
         with database_effects_lock(self.store.name):
             row = self.store.db.messages.find_one({'_id': publication_id})
-            # A poke or a reaction makes no message of its own: its receipt carries none (ADR-064 phase 2).
-            if (status == 'platform_accepted' and not (row or {}).get('action')
+            # A poke or a reaction makes no message of its own: its receipt carries none (ADR-064 phase 2); nor does a
+            # file, whose platform id is not one of ours (ADR-092 D6).
+            if (status == 'platform_accepted' and not (row or {}).get('action') and not (row or {}).get('file')
                     and (not isinstance(body.get('platform_message_id'), str) or not body['platform_message_id'].strip())):
                 raise ValueError('PLATFORM_MESSAGE_ID_REQUIRED')
             # An already claimed send may have happened before revocation. Preserve
@@ -655,6 +681,9 @@ class Channels:
             if state == 'DELIVERED' and act.get('kind') == 'recall' and act.get('line'):
                 # Her own line taken back: the line itself now says so wherever the program shows it again.
                 self.store.db.messages.update_one({'_id': act['line']}, {'$set': {'recalled_at': now()}})
+            if state == 'DELIVERED' and row.get('file'):
+                from . import outbound_files
+                outbound_files.sent(self.store, row)            # its bytes are kept KEEP_DAYS from now (D9)
             if state != 'DELIVERED':
                 from .publish import PublishService
                 PublishService(self.store).cancel_after({**row, 'delivery_state': state})

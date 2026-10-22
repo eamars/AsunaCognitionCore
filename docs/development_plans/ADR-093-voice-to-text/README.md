@@ -20,7 +20,9 @@ Xiaoman measured on 10-23:
 
 - **V1 The voice is text before its line exists.** Before it submits a line with a voice, the NapCat adapter calls
   `get_record` (`out_format=mp3`, the smaller form) and posts the bytes to the Host, which transcribes them in that
-  request and answers with the outcome. Then the adapter submits the line, which carries its words from the start.
+  request and answers with the outcome. Then the adapter submits the line, which carries its words from the start:
+  the stored line's text has each voice's words (or its state) in place of the placeholder, so every reader shows the
+  same words, and the text as received is kept beside it for the record.
   If NapCat refuses or times out, or the Host call fails, the line goes in with the reason, so it says why. Lines
   keep their arrival order. An adapter that cannot fetch voice does not declare it, and its voice
   lines stay as they are today.
@@ -101,7 +103,7 @@ adds to the detector and cannot replace it.
   - `tokens.txt`: 315,894 B, sha256 f449eb28…1a1dc
   - `silero_vad.onnx`: 1,807,522 B, sha256 a35ebf52…5af28
 - **Startup check:** the Host checks the three hashes when it starts. A missing or different file makes voice lines
-  read 「[语音 N 秒，没转出文字：识别模型不在]」, never silence.
+  read 「[语音，没转出文字：识别模型不在]」 (the check comes before decoding, so no length), never silence.
 
 ## 5. Xiaoman's research and contract (Claude's paraphrase, 2026-10-23 03:00–09:35)
 
@@ -126,6 +128,9 @@ Signature (Xiaoman, received 2026-10-23 09:58, verbatim, on `c018e386`): 「我�
 Her two conditions and §6 step 3 are written in since (V3 PCM16, §5 the WAV kept as a file, §6 step 3 the shapes
 and negative controls), with her smaller points (V6's 10 s for the whole turn, the pending line saying the text will
 follow, the evidence file's size, the detector settings in V4).
+
+Her signature covers V1–V6 as they stood on `c018e386`. §7 since replaced V1, V2, V4, V6 and V7 (no pending state, no
+turn wait, the audio never stored); she was told on 2026-10-23 (~11:30) and her reading of the new text is asked.
 
 ## 6. Build
 
@@ -160,4 +165,6 @@ found that every one of its should-fix defects came from that choice:
 - the line was shown to her twice (pending, then the words), and lines after a voice could jump ahead of it.
 
 Transcribing before the line exists removes the pending state and, with it, all of those paths. It costs a voice
-line about the fetch plus 0.1–1.5 s of transcription before it reaches her (§3), and nothing else.
+line about the fetch plus 0.1–1.5 s of transcription before it reaches her (§3). The adapter submits lines one at a
+time, so a voice line also holds up the lines queued behind it, in any conversation, by the same time; it is bounded
+by the fetch's 10 s and the post's timeout.

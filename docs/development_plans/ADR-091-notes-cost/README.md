@@ -125,6 +125,13 @@ is never marked seen in other home turns, so D1 never skips its turn.
 Saves 30 turns over the record (about 20 under today's rules), 10.2 busy minutes, 181k new and 27k output tokens, 8
 lines said twice. Costs nothing measurable: the note had been read at most 3.5 minutes earlier.
 
+Her review before the install (2026-10-22 21:36 NZDT, on Claude's agent line; Claude's paraphrase): read is not
+done. A turn that had the note in view may have stayed silent, and then the note's own turn never runs; kept, since
+the doubled turns are real. Built after it: the visit such a note made unneeded is not listed among her outings
+(`places.last_visits_block`), and the sender's line for a note read without a reply says so and how to check,
+「读了，没回（读到不等于办了：要确认，再写一张问一句）」 (not "send a `wake`": from a private chat a note goes only
+`next_time`). She writes a note that needs something done as `wake`, its first line asking for an answer.
+
 ### D2: a reply to a group arrives there next time (the owner's decision)
 
 A reply from home to a note from a group is delivered `next_time` by default; `wake` stays her choice. Rule 2 is
@@ -148,6 +155,15 @@ Her conditions (agent line, 2026-10-22 20:12; Claude's paraphrase): `wake` stays
 a hop-limit refusal says where to go next ("this one needs no answer; to send word back later, set a `plan`", now in
 `REPLY_ENDS` and `NOTE_HOP_LIMIT`); she asked whether the reply itself is a hop (yes, hop 2; her chain outside → home →
 group → home no longer hits the limit when the third note comes from a turn something else opened).
+
+With the chain fix a note can no longer pass `MAX_HOP` (a reply at the limit starts a new chain; a turn a note at the
+limit opened stops at `can_send`), so `notes.prepare`'s second `NOTE_HOP_LIMIT` refusal was unreachable and is
+removed; the one that can happen, in a turn a reply opened (`REPLY_ENDS`), is tested, as are a reply home staying
+`wake` and a new chain counting against the day's notes home (her review: these had no assertion).
+
+Tool text: the note tool's `deliver` line names a reply's default (+20 characters), and the character brain's tool
+descriptions are now exactly at their budget (`tests/test_tool_budget.py`, 21,280 with tiered memory off): the next
+word added to any of her tools states its cost in its ADR and raises the budget first.
 
 ### D3: rule 2, outside → home in real time (the owner's decision)
 

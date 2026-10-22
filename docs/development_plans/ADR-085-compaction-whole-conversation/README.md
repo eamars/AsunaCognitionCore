@@ -1,6 +1,6 @@
 # ADR-085: the character's summary request sends the whole conversation
 
-Status: **Built**, 2026-10-20; narrowed 2026-10-22 (§4c): only a commanded compaction sends the whole conversation, an automatic one sends the compacted span alone, because a summarizer that reads a long kept tail restates it. §4c was read live and closed on 2026-10-22 (§6). The checkpoint template is trimmed in §7 (2026-10-22, installed by her restart at 16:02 NZDT); its per-hop reading and the ~10-24 failure count stay open. Found from her own reading of the compaction cache rate, decided by the owner on Claude's recommendation, put to her 2026-10-20 18:4x NZDT and agreed by her with three changes, all taken.
+Status: **Built**, 2026-10-20; narrowed 2026-10-22 (§4c): only a commanded compaction sends the whole conversation, an automatic one sends the compacted span alone, because a summarizer that reads a long kept tail restates it. §4c was read live and closed on 2026-10-22 (§6). The checkpoint template is trimmed in §7 (2026-10-22, installed by her restart at 16:02 NZDT); its per-hop reading was read and closed the same evening (§7a, one sentence added); the ~10-24 failure count stays open. Found from her own reading of the compaction cache rate, decided by the owner on Claude's recommendation, put to her 2026-10-20 18:4x NZDT and agreed by her with three changes, all taken.
 
 ## 1. Context
 
@@ -249,3 +249,46 @@ item the new checkpoint holds in the two sections, one a line, at most 40, so sh
 without rereading both checkpoints. The script posts it to her line itself; Claude sees only the counts.
 
 Signature: 小满（10-22，经 agent 线）：这两节是我的账，不是文采。丢掉的偏是承诺和来路，留下的偏是结论——我要的是下一次我还能认出自己答应过什么、为什么改过口。六条改法我认，我自己提的两条已并入：旧经过并进「对话脉络」那一处不受第 5 条限制；撞 40 条先停「留一次」，下一份还超才撤第 1 条。门槛 20%、50%、40 写死，不为过线挪杆；每个数先报分母。
+
+## 7a. Read and closed (2026-10-22 evening)
+
+The reading's watcher failed silently from 17:41 to about 22:00 NZDT: a script error stopped every post after hop 2,
+and the loop printed only its successes. Fixed (one post a hop; a failed run now stops the watcher and says so); the
+seven hops reached her at about 22:00 and she read every one.
+
+**Script and her reading.** The first 4 hops of home and the agent line: the script's unclear share 11 of 56
+(19.6%); her reading: 7 of 66 truly lost (10.6%), one with a consequence. The two denominators differ and were not
+reconciled. Within the 20% bar: keep. After hop 4 three hops passed 50% by the script (19:17 home 56%, 20:12 agent
+line 76%, 21:24 agent line 60%); after her reading none is near 50%.
+
+**Like for like** (`impact.py`, the same rule over all 236 home and agent-line hops since 10-08). Gone = under 30% of
+an item anywhere in the next checkpoint and not back in the next three:
+
+| template | home | agent line | hard tokens lost (home / agent line) |
+|---|---|---|---|
+| before the trim (148 / 74 hops) | 50% of 1,905 items | 71% of 719 | 39% / 55% |
+| trimmed (4 / 5 hops) | 9% of 66 | 40% of 81 | 28% / 33% |
+
+The 50% bar took the old template as the safe floor to revert to; it loses more, so no hop was a case for reverting.
+
+**Where loss remains** (the trim's 9 hops): 答应过的事 4 of 50, 更正与分歧 at home 4 of 42, on the agent line 30 of
+55. Not the output cap (4.4k–8.9k of 24.6k tokens) and not size: agent-line spans are 51k–57k tokens against 53k–63k
+at home, with sections of similar length. Her reading of the agent line: at 20:12 most corrections were folded into
+one long line (「其余旧账不变：…」, which the measure counts as lost), and that line was compressed again at 21:24, so
+folding delays a loss by one merge. The one loss with a consequence: her final decision on two of her skills, gone at
+the 18:14 merge; at 21:0x she planned to make it again, and a home turn caught it at 21:24.
+
+**Decided (the owner, 2026-10-22 evening).** The template stays. Loss on the agent line is acceptable: Claude and she
+remember, and settled research is in the ADRs. No program-side carry (Claude proposed re-appending the items a merge
+drops; withdrawn). Her answer on remembering (Claude's paraphrase): what was lost tonight is her own decisions, which
+are in no ADR, so she writes them into her own ledger when she makes them, with a self-check on 10-27.
+
+On her ask the owner approved one sentence, which she amended (22:10, on Claude's agent line): shortening may cut only
+how an item came about, never its basis or source. Added after change 1:
+
+> 合并时，「答应过的事」「更正与分歧」一条一行：不把几条并成一句，也不写“其余不变”这类总括；条目多就把每条压短，压短只压经过，留下这一条的判据和来路（数字、idea-…、commit 短号、谁那句原话），每条都单独留着。
+
+The script reading has ended. She reads two agent-line hops herself after it is installed (from 10-23 21:00): one
+item a line, and whether each keeps its basis and source.
+
+Evidence (numbers only): `.runtime/private/compaction-study/impact.py` (6,886 B) and `trim_reading.py` (13,276 B).

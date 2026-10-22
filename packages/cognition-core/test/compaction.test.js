@@ -34,6 +34,8 @@ test('role compaction keeps the replayed prefix and asks for a Chinese role-play
   assert.match(ROLE_COMPACTION_INSTRUCTION, /「答应过的事」「更正与分歧」里的条目逐条原样带过来/);
   assert.match(ROLE_COMPACTION_INSTRUCTION, /前面加「已了结：」、末尾加「（凭：[^」]+）」，留这一次；它里面已经标了「已了结：」的，这次删去/);
   assert.match(ROLE_COMPACTION_INSTRUCTION, /不写“承接上一份检查点”这类指向它的话/);
+  // Folded into one line, a dozen corrections were carried once and lost at the next merge (ADR-085 §7, her reading).
+  assert.match(ROLE_COMPACTION_INSTRUCTION, /一条一行：不把几条并成一句，也不写“其余不变”这类总括；.*压短只压经过，留下这一条的判据和来路/);
   assert.match(ROLE_COMPACTION_INSTRUCTION, /群里的笔记（group_notes_from_program）/);
 
   engine.ctx.llm.stream = async function *() { yield { type: 'finish', reason: { kind: 'max-tokens' } }; };

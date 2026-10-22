@@ -27,7 +27,7 @@ VISIT_INTENTS = ('start_topic', 'share_picture', 'check_in', 'write_notes')     
 OUTCOMES = {'answered': '说了话，有人接了', 'unanswered': '说了话，还没人接', 'sending': '说了话，正在发出去',
             'not_sent': '想说的话没发出去', 'notes': '没说话，写了笔记', 'silent': '看了看，没说话',
             'pending': '那边那一回合还没跑完，结果还没出来', 'failed': '没去成',
-            'seen': '便条在那边别的回合里已经读到了，没再单独去一趟'}
+            'seen': '便条在那边别的回合里读到了，没再单独去一趟；那一回合办没办不知道'}
 SENDING = ('READY', 'QUEUED_EXTERNAL', 'SENDING')
 # Someone called her (channels.group_context): an @, a reply to her, or her name.
 ADDRESSED = ('mentioned_account', 'reply_to_character', 'name_called')
@@ -448,17 +448,24 @@ def places_block(store, persona, model, policy, plan, moment, date):
 
 
 def last_visits_block(store, persona, plan, moment):
-    """Her recent visits, brought home: where, when, what happened."""
+    """Her recent visits, brought home: where, when, what happened. A note read in another turn there was not an
+    outing (ADR-091 D1): what came of it is on the note, in notes_sent_from_program."""
     from .people import People
-    visits = ((plan or {}).get('visits') or [])[-3:]
-    if not visits:
+    shown = []
+    for visit in reversed((plan or {}).get('visits') or []):
+        done = outcome(store, visit)
+        if done != 'seen':
+            shown.append((visit, done))
+        if len(shown) == 3:
+            break
+    if not shown:
         return None
     people = People(store, persona)
     rows = []
-    for visit in reversed(visits):
+    for visit, done in shown:
         scene = store.db.scenes.find_one({'_id': visit['scene_id']})
         rows.append({'group': people.scene_title(scene), 'at': _stamp(_at(visit['at'])),
-                     'went_to': INTENTS.get(visit.get('intent'), ''), 'what': OUTCOMES[outcome(store, visit)]})
+                     'went_to': INTENTS.get(visit.get('intent'), ''), 'what': OUTCOMES[done]})
     return {'items': rows, 'note': VISITS_NOTE}
 
 

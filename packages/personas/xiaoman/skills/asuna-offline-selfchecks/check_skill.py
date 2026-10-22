@@ -6,7 +6,7 @@
    换行是 LF（读字节数 CR，文本模式那把尺看不见 CR）；
 2. 指向：正文指向核心技能，并写明两份不一致时按核心技能办；
 3. 增量与「不回潮」：几条增量（挂错项目的红、单个用例文件与 p3 现行跑法、pytest 不收
-   *_cases.py 的盲区、p5b 退役读法、没收录 ≠ 已退役、适配器自检去处）都还在；通用离线套件
+   *_cases.py 的盲区、p5b 退役读法、没收录 ≠ 已退役、适配器自检去处、候选根临时脚本落点与包内容判据）都还在；通用离线套件
    的命令清单没有回潮到散文里——反引号里的字面量（旧试用记录引用的命令、错误原文）按引用处理，
    不算回潮；
 4. 反引号仓库路径存在性：正文反引号里形如 tests/...、tools/...、docs/... 的仓库路径逐个查
@@ -55,9 +55,21 @@ INCREMENTS = [
     ("increment_adapter_elsewhere", "qq-napcat-adapter"),
 ]
 
+# 「候选根」一节的关键串（2026-10-22）：这一节被删走样就要红。INCREMENTS 同一族写法，逐条判。
+PACKAGING_RULES = [
+    ("rule_tmp_script_not_in_candidate_root", "不许直接写在候选根"),
+    ("rule_tmp_script_goes_to_task", "写到 `/task` 工作区"),
+    ("rule_tmp_script_tmp_subdir", "`.tmp/` 子目录"),
+    ("rule_whitelist_scan_before_publish", "只留 `package.json` 里 `files` 白名单列出的路径"),
+    ("rule_package_content_proof", "只认 artifact 那串 sha256 和 `.tgz` 的文件清单"),
+    ("rule_changed_files_is_not_package", "`changed_files` 反映的是候选树／冻结快照那一格，不等于包内容"),
+    ("rule_provenance_package_sha", "7f54dbd2af14"),
+]
+
 SECTIONS = [
     "## 用途",
     "## 增量",
+    "## 候选根：临时脚本落点与包内容判据",
     "## 版本",
     "## 试用记录",
 ]
@@ -187,6 +199,10 @@ def main():
           "没写明两份不一致时按核心技能办")
 
     for name, token in INCREMENTS:
+        check(name, token in body, token)
+
+    # 「候选根」一节的关键串（临时脚本落点、白名单扫描、包内容判据、来路那串包 sha）
+    for name, token in PACKAGING_RULES:
         check(name, token in body, token)
 
     # 通用清单回潮：命令字面量回到散文 = 又把核心技能抄了一遍

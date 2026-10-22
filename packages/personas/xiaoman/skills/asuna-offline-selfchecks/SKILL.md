@@ -1,6 +1,6 @@
 ---
 name: asuna-offline-selfchecks
-description: 沈小满在核心技能 asuna-self-improvement 的离线自检之上记的增量笔记：「挂错项目」红的读法（xiaoman 候选没有 tools/tests，No such file or directory 是选错项目不是产品坏）、单独跑某个用例文件、p3 用例删除后的现行跑法与 pytest 不收 *_cases.py 的盲区、p5b 退役后「文件不存在 + exit 2」怎么读、「没收录 ≠ 已退役」、适配器自检在 qq-napcat-adapter 技能里不在这套里。通用离线自检的命令清单、退出码读法、__pycache__ 清理、project 归属、发布与重启口径一律以 asuna-self-improvement（随认知核发布）为准，这里不再重复；两份不一致按核心技能办。附零依赖离线自检 check_skill.py。
+description: 沈小满在核心技能 asuna-self-improvement 的离线自检之上记的增量笔记：「挂错项目」红的读法（xiaoman 候选没有 tools/tests，No such file or directory 是选错项目不是产品坏）、单独跑某个用例文件、p3 用例删除后的现行跑法与 pytest 不收 *_cases.py 的盲区、p5b 退役后「文件不存在 + exit 2」怎么读、「没收录 ≠ 已退役」、适配器自检在 qq-napcat-adapter 技能里不在这套里。通用离线自检的命令清单、退出码读法、__pycache__ 清理、project 归属、发布与重启口径一律以 asuna-self-improvement（随认知核发布）为准，这里不再重复；两份不一致按核心技能办。候选根里的一次性脚本写到哪儿、发布前怎么按 `files` 白名单扫候选根、判「文件有没有进到装给 worker 的包里」只认 artifact 那串 sha256 与 `.tgz` 的文件清单（`changed_files` 不等于包内容），都记在「候选根」一节。附零依赖离线自检 check_skill.py。
 ---
 
 # asuna-offline-selfchecks
@@ -76,6 +76,15 @@ asuna-usage-readout 与本技能各删 `compile_probe_writable`，asuna-bot-or-p
 `compile_probe_dir_found`／`compile_probe_outside_skill_dir`／`compile_probe_cleaned_up` 三条；
 `compiles_<脚本>` 那几格名字不动。
 
+## 候选根：临时脚本落点与包内容判据
+
+一次性验证的脚本写到 `/task` 工作区，或候选根的 `.tmp/` 子目录——**不许直接写在候选根**。落到候选根的东西会跟着进冻结快照、进发布回执，清掉它要再花一趟发布。
+
+发布前扫一遍候选根：只留 `package.json` 里 `files` 白名单列出的路径（我这份是 `src`、`skills`、`resources-provenance.json`、`cordis.patch.yml`、`README.md`、`seeds`、`persona-model.json`、`icon.png`、`locale`）。多出来的路径要么删掉，要么在交回来的话里单独点出来。
+
+**判「某个文件有没有进到装给 worker 的包里」，只认 artifact 那串 sha256 和 `.tgz` 的文件清单（这条最重要）。** 发布回执的 `changed_files` 反映的是候选树／冻结快照那一格，不等于包内容：白名单外的路径会出现在 `changed_files` 里，却压根不在 `.tgz` 里。
+来路：10-20 发布清单混进 `.tmp/scan_oldname_rejects.py`；10-22 17:32 又混进 `_tmp_check_runner.py`，第二回是主人看见 `changed_files` 后另花一趟发布清的——实测两笔包 sha 相同（`7f54dbd2af14`）、`.tgz` 里根本没有它。脏的是回执那一格，不是包。
+
 ## 版本
 
 v1（2026-09-24）：首次记录，命令与结论都来自本次实跑。
@@ -128,6 +137,8 @@ v2.7（2026-10-18）：编译那一格换成内存 `compile(源码, 路径, 'exe
 七份 `check_skill.py` 同轮换法，各自删掉不再适用的探针格（本技能 29→28，少的就是 `compile_probe_writable`；
 `compiles_<脚本>` 判据名不动）。措辞分寸：`compile()` 只查语法，不查 import 和运行时，不写成「脚本能跑」。
 正文其余口径、守卫判据未动。
+
+v2.8（2026-10-22）：新增「候选根：临时脚本落点与包内容判据」一节（owner 交代）。三条：一次性验证的脚本写 `/task` 或候选根的 `.tmp/` 子目录、不许直接写候选根；发布前按 `package.json` 的 `files` 白名单扫候选根，多出来的路径删掉或单独点出来；判「某个文件有没有进到装给 worker 的包里」只认 artifact 那串 sha256 与 `.tgz` 的文件清单——发布回执的 `changed_files` 是候选树／冻结快照那一格，不等于包内容。来路：10-20 发布清单混进 `.tmp/scan_oldname_rejects.py`、10-22 17:32 又混进 `_tmp_check_runner.py`，第二回是主人看见 `changed_files` 后另花一趟发布清的，而实测两笔包 sha 相同、`.tgz` 里根本没有那个脚本。`check_skill.py` 加 `PACKAGING_RULES` 七条关键串与这一节的标题锚点（28→36 条）；frontmatter description 补一句这一节的去处。其余口径、增量、判据未动。
 
 ## 试用记录
 
@@ -266,3 +277,11 @@ v2.7（2026-10-18）：编译那一格换成内存 `compile(源码, 路径, 'exe
 - 条数变化（逐份）：本技能 29→28、outbound-round 39→38、image-generation 156→155、render-budget 48→47、
   running-version 56→55、usage-readout 251→250、bot-or-person 139→136。删掉的全是「找不到可写落点」那一族
   探针格（内存 compile 不需要落点，留着就是永远绿的空判据）；`compiles_<脚本>` 那几格名字与条数不动。
+
+2026-10-22（v2.8，只改本技能 `SKILL.md` 与 `check_skill.py`，xiaoman 候选）：
+
+- 这一节的来路自己核过：在跑那两笔快照的包同名同 sha256（`asuna-xiaoman-0.2.0-7f54dbd2af14.tgz`，`7f54dbd2af14fbd05c59da9c99e2413cf43646ff0996f2f01d7d37169ca9d5ca`），`.tgz` 成员 29 条，`_tmp_check_runner.py` 一条都不在——而 17:32 那笔发布回执的 `changed_files` 里有它。包是干净的，脏的是回执那一格；
+- 发布前扫候选根（脚本写在 `/task`，没落候选根）：`files` 白名单 9 项；根上白名单外的目录 5 个（`.tmp`、`_tmpcheck`、`cp_test`、`integration`、`journey`）、文件 3 个（`claude-ref-v1.png`、`package.json`、`xiaoman-official-ref-v2.png`）。前三个是空的临时目录，`integration/`、`journey/` 与两张 png 被 `files` 挡在包外；都不是本趟建的，按「单独点出来」处理（只删自己建的文件，所以没动它们）；
+- 与动手前的候选清单比：35 份文件里只有这一份技能的两份变了——`SKILL.md` 改前 `93cc41fabaab`、`check_skill.py` `5c129efe6723` → `e560d36fe233`；`SKILL.md` 是分两趟写的（先新节与 description 那一句，中间态 `3f57d2f97c56`，再补版本条目与下面这条试用记录），写完的最终 sha 以发布回执为准（写进文件的 sha 会被自己改动，不在此自指）；其余 7 份技能一个字节没动，逐份 `check_skill.py` 重跑全 rc=0（34、136、157、36、38、47、61、294）；
+- 本技能自查 28→36 条（一条节标题锚点＋7 条关键串）：候选内 36/36、rc=0；反证——把新节整段剥掉再跑同一份自检 → 28/36，红的正是节标题与那 7 条关键串（尺子能红才算能用）；cp1252 子进程冒烟 rc=0、stderr 0 字节；`python3 -m asuna.skills skills` → `Skill headers valid.`、rc=0；
+- 换行：本趟写的两份在候选里 CR=0；字节面复看要跑在冻结快照上（快照可能带 CRLF，见 v2.3 那条），发布后另测。

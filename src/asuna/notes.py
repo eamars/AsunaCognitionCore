@@ -37,7 +37,8 @@ PUBLIC_HOME_PER_SCENE = 6        # public -> home, per sending conversation and 
 PUBLIC_PAIR = 3                  # public -> public, per pair of conversations
 PUBLIC_TOTAL = 10                # public -> public, in all
 MAX_HOP = 2                      # a note, its reply, and no more
-REPLY_ENDS = '这一回合是一张回信叫起来的，不能再写便条了（便条、回信，到此为止）；想说的就在这一回合里说。'
+REPLY_ENDS = ('这一回合是一张回信叫起来的，不能再写便条了（便条、回信，到此为止）：这张回信不用再回，想说的就在这一回合里说；'
+              '要晚点递回那边，用 plan 定个时间，到点那一回合能写。')
 KEEP_HOURS = 72                  # unread past this: expired
 SHOWN = 5
 EXCERPT = 60
@@ -58,6 +59,9 @@ MODES = {visibility.OWNER_PRIVATE: {'home': (WAKE, (WAKE, NEXT_TIME)), 'group': 
                                     'dm': (NEXT_TIME, (NEXT_TIME,))},
          # 'dm': only a reply to someone's private chat a note from outside came from (ADR-088 §4.2).
          visibility.PUBLIC: {'home': (WAKE, (WAKE,)), 'group': (WAKE, (WAKE,)), 'dm': (NEXT_TIME, (NEXT_TIME,))}}
+# A reply to a note from a group, from whichever turn (ADR-091 D2): context for her there, read in her next turn there,
+# not a public turn of its own; `wake` stays her choice.
+REPLY_TO_GROUP = (NEXT_TIME, (NEXT_TIME, WAKE))
 KIND_WORDS = {'home': '家里', 'group': '群', 'dm': '私聊'}
 MODE_WORDS = {WAKE: '马上叫醒那边（排在那边手上的事后面）', NEXT_TIME: '那边下次有回合时看到'}
 TRUST_WORDS = {TRUSTED: '你在家里写的', UNTRUSTED: '你在外面写的'}
@@ -293,7 +297,13 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
                                             '① 压到 %d 字以内，删哪段你自己定；② 原样拆成两张接着发，开头标 1/2、2/2，'
                                             '让那边知道是接续（一回合最多 %d 张）。')
                           % (KIND_WORDS[kind], ask, len(text), len(text) - ask, ask, PER_TURN))
-    default, choices = MODES[cls][kind]
+    reply = None if question else first if first and first['from_scene'] == to_scene else store.db.notes.find_one(
+        {'from_scene': to_scene, 'to_scene': ep['scene_id'], 'seen_in': ep['_id']}, sort=[('created_at', -1)])
+    if reply and reply.get('hop', 1) >= MAX_HOP:
+        # A reply shown in a turn something else opened (a person, a task: D2 delivers it next time) ended its chain;
+        # a note from here starts a new one and counts as one (ADR-091). A turn a reply opened stops at can_send.
+        reply = None
+    default, choices = REPLY_TO_GROUP if reply and kind == 'group' else MODES[cls][kind]
     mode = args.get('mode') or default
     if mode not in choices:
         raise NoteRefused('NOTE_MODE_NOT_ALLOWED', '送到%s的便条只能%s：deliver 写 %s，或不写。'
@@ -306,13 +316,12 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
     if not question and sent_here >= PER_TURN:
         raise NoteRefused('NOTE_TURN_LIMIT', '这一回合已经写了 %d 张便条（上限 %d 张），先到这里；还要说的下回合再写。'
                           % (sent_here, PER_TURN))
-    reply = None if question else first if first and first['from_scene'] == to_scene else store.db.notes.find_one(
-        {'from_scene': to_scene, 'to_scene': ep['scene_id'], 'seen_in': ep['_id']}, sort=[('created_at', -1)])
     # A note on from a home turn a note from outside opened continues that note's chain (ADR-088 §4.2).
     onward = first and first.get('trust') == UNTRUSTED and here == visibility.OWNER_PRIVATE
     hop = (reply.get('hop', 1) + 1) if reply else (first.get('hop', 1) + 1) if onward else 1
     if hop > MAX_HOP:
-        raise NoteRefused('NOTE_HOP_LIMIT', '那张便条已经是回信了，不用再回（便条、回信，到此为止）；想说的就在这一回合里说。')
+        raise NoteRefused('NOTE_HOP_LIMIT', '那张便条已经是回信了，不用再回（便条、回信，到此为止）；想说的就在这一回合里说，'
+                                            '要晚点递回那边，用 plan 定个时间，到点那一回合能写。')
     # No cap over all directions: a note is read in real time, so nothing piles up; only what comes from public
     # conversations is counted per day (owner, 2026-10-12). A reply is neither capped nor counted: it answers a note
     # written to here and ends the chain (note, reply, stop), so replies never outnumber notes (owner, 2026-10-19).
@@ -385,6 +394,16 @@ def state(store, row, moment):
     if created and moment - created > timedelta(hours=KEEP_HOURS):
         return 'expired'
     return 'waiting'
+
+
+def read_elsewhere(store, event, episode):
+    """Whether the note that would open this turn was already shown in a finished turn there (ADR-091 D1): it is
+    answered, and a turn of its own would answer it twice. An outside note waiting at home is never marked seen in
+    other home turns (ADR-088 §4.4), so its own turn always runs."""
+    note_id = (event.get('note') or {}).get('id') or (event.get('visit') or {}).get('note')
+    row = store.db.notes.find_one({'_id': note_id}, {'seen_in': 1}) if note_id else None
+    seen = [other for other in (row or {}).get('seen_in') or [] if other != episode]
+    return bool(seen) and store.db.episodes.count_documents({'_id': {'$in': seen}, 'state': {'$in': list(FINISHED)}}) > 0
 
 
 def waited(row, moment):

@@ -421,6 +421,11 @@ class Chat:
                         # An earlier turn here had this line in view: she answered it there, or chose not to.
                         input_state(self.app.store, episode, 'COMPLETE', result_state='SEEN_IN_TURN')
                         continue
+                    from . import notes
+                    if notes.read_elsewhere(self.app.store, event, episode):
+                        # The same for her own note: a finished turn here already read it (ADR-091 D1).
+                        input_state(self.app.store, episode, 'COMPLETE', result_state='SEEN_IN_TURN')
+                        continue
                     if event.get('channel'):
                         from .channels import route_for_scene, route_members
                         route = route_for_scene(self.app.config, event['channel']['id'], event['scene_id'])

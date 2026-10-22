@@ -374,7 +374,7 @@ TOOLS = {
                          '那边的你会读到，那边的人看不到，但可能被照着说，所以只写愿意在那边说的；用你自己的话：'
                          '和这里别人刚说的一长段一样的，写明是谁说的也送不出去；别人托的，用你的话说清是谁的意思。'
                          'deliver：wake 马上叫醒那边（排在那边手上的事后面），next_time 那边下次有回合时看到；能选哪样看从哪写到哪，'
-                         '不写按那边的默认。叫醒一个群算一次出门。家里送家里 %d 字以内，别的 %d 字以内；一回合最多两张。'
+                         '不写按那边的默认（回给群的回信默认 next_time）。叫醒一个群算一次出门。家里送家里 %d 字以内，别的 %d 字以内；一回合最多两张。'
                          % (soft(_notes.HOME_NOTE_CHARS), soft(_notes.NOTE_CHARS))),
         'parameters': {'to': _s('送到哪儿：note_places_from_program 里的 place，或「家里」', required=True),
                        'text': _s('便条，你自己的话', required=True),
@@ -660,7 +660,7 @@ def conversation_class(store, scene, person_id=None):
 # group's question in a home group. So: `deliver` where the class has a choice, `question` in groups, `ideas` with the
 # options the conversation lists. One spec per place and class.
 NOTE_DELIVER = ('deliver：wake 马上叫醒那边（排在那边手上的事后面），next_time 那边下次有回合时看到；能选哪样看从哪写到哪，'
-                '不写按那边的默认。')
+                '不写按那边的默认（回给群的回信默认 next_time）。')
 IDEAS_CHOOSE = '，do 选一样：note '
 IDEAS_OP_WORDS = {'read': 'read 读出还没处理完的，先没处理的、再暂缓的，旧的在前，一页 %d 条。' % IDEAS_PAGE,
                   'review': 'review 对一条写处理结果：adopt 采纳（接着用 delegate 交代行动脑去做）、defer 暂缓、drop 放弃，都写 why。'}

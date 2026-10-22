@@ -26,7 +26,8 @@ INTENTS = {'errand': '家里有人托你办的事', 'start_topic': '起个话头
 VISIT_INTENTS = ('start_topic', 'share_picture', 'check_in', 'write_notes')      # what the visit tool may choose
 OUTCOMES = {'answered': '说了话，有人接了', 'unanswered': '说了话，还没人接', 'sending': '说了话，正在发出去',
             'not_sent': '想说的话没发出去', 'notes': '没说话，写了笔记', 'silent': '看了看，没说话',
-            'pending': '那边那一回合还没跑完，结果还没出来', 'failed': '没去成'}
+            'pending': '那边那一回合还没跑完，结果还没出来', 'failed': '没去成',
+            'seen': '便条在那边别的回合里已经读到了，没再单独去一趟'}
 SENDING = ('READY', 'QUEUED_EXTERNAL', 'SENDING')
 # Someone called her (channels.group_context): an @, a reply to her, or her name.
 ADDRESSED = ('mentioned_account', 'reply_to_character', 'name_called')
@@ -331,6 +332,8 @@ def outcome(store, visit):
     source = store.db.messages.find_one({'_id': 'in-' + ep_id}, {'ingress_state': 1, 'result_state': 1}) or {}
     if source.get('result_state') in ERRAND_ENDS:
         return ERRAND_ENDS[source['result_state']]
+    if source.get('result_state') == 'SEEN_IN_TURN':
+        return 'seen'                                               # her note was read there already (ADR-091 D1)
     if not ep:
         return 'failed' if source.get('ingress_state') == 'FAILED' else 'pending'
     if ep.get('state') not in FINISHED + FAILED:
@@ -361,14 +364,14 @@ def local_date(config, model, policy, moment):
 
 
 def today(store, plan, date):
-    """Visits made on her local date; one that never got there does not count."""
+    """Visits made on her local date; one that never got there, or never needed to, does not count."""
     return sum(1 for visit in (plan or {}).get('visits') or []
-               if visit.get('date') == date and outcome(store, visit) != 'failed')
+               if visit.get('date') == date and outcome(store, visit) not in ('failed', 'seen'))
 
 
 def last_visit(store, plan, scene_id):
     return next((visit for visit in reversed((plan or {}).get('visits') or [])
-                 if visit['scene_id'] == scene_id and outcome(store, visit) != 'failed'), None)
+                 if visit['scene_id'] == scene_id and outcome(store, visit) not in ('failed', 'seen')), None)
 
 
 def eligibility(store, scene, plan, settings, moment, date):

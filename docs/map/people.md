@@ -242,7 +242,7 @@ Her places (ADR-012 §4.2, §4.4): the groups she can visit from home, and what 
 - def `episode_key`
 - def `outcome` — What happened on one visit, read from its turn and the room afterwards.
 - def `local_date` — Her local date (her rhythm's time zone), for the daily counts.
-- def `today` — Visits made on her local date; one that never got there does not count.
+- def `today` — Visits made on her local date; one that never got there, or never needed to, does not count.
 - def `last_visit`
 - def `eligibility` — (can go, words).
 - def `settings`
@@ -359,6 +359,7 @@ Notes between her own conversations (ADR-018, owner 2026-10-07).
 - def `text_limit` — The length the program refuses past: home to home has no boundary to guard.
 - def `result` — What the sending turn reads back.
 - def `state`
+- def `read_elsewhere` — Whether the note that would open this turn was already shown in a finished turn there (ADR-091 D1): it is answered, and a turn of its own would answer it twice.
 - def `waited` — How long a note still waiting has waited, said with its state (her ask, ADR-088 §4.4): waiting a long while must not read as still due; past KEEP_HOURS it is expired.
 - def `opening_block` — note_from_program: the note that opened this turn, its source named, never a line of this conversation.
 - def `answers_tail` — A note that brings a group's answer home (ADR-061 step 2): the program's line on who answered and where the original is; None for any other note.

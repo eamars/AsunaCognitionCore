@@ -1,7 +1,8 @@
 # ADR-091: What notes between her conversations cost, and three changes
 
-Status: **Proposed**, 2026-10-22. D1 is a bug fix (Claude builds it on the owner's yes); D2 and D3 change ADR-018's
-delivery table and are the owner's decisions. Written at the owner's request after the incident of ADR-090 ("for
+Status: **Accepted** by the owner, 2026-10-22 ~20:10 ("All approved"): D1 and D2 built on a branch
+(`claude/notes-once`), not installed; D3 is a reading on 10-29. Xiaoman agreed to D1 without conditions and to D2 with
+two (§8, her conditions). Written at the owner's request after the incident of ADR-090 ("for
 incident 2, a full analysis from cost, effectiveness, cache miss impact and other use cases, based on the survey").
 
 ## 1. The question
@@ -127,8 +128,14 @@ lines said twice. Costs nothing measurable: the note had been read at most 3.5 m
 ### D2: a reply to a group arrives there next time (the owner's decision)
 
 A reply from home to a note from a group is delivered `next_time` by default; `wake` stays her choice. Rule 2 is
-untouched. `notes.prepare` must know a note is a reply before it fixes the mode. A turn that shows a reply cannot send
-a note home in that turn (the hop limit).
+untouched. `notes.prepare` knows a note is a reply before it fixes the mode (`notes.REPLY_TO_GROUP`).
+
+Found while building it: every turn that lists a note marks it seen, so after any reply from home was shown in a group,
+every later turn there for up to 72 hours refused a note home as a third hop, though nothing there was answering the
+reply (some of the 23 `NOTE_HOP_LIMIT` refusals of §6 are this). Now a reply shown in a turn something else opened (a
+person, a task result) has ended its chain, and a note home from that turn starts a new one, counted against the daily
+limit like any first note. A turn the reply itself opened (when she chose `wake`) still stops there (`REPLY_ENDS`).
+Loops stay impossible: such a turn needs a person or a task to open it.
 
 Saves 16 turns, 6.4 busy minutes, 42k new and 22k output tokens, 0 cold starts (replies are warm anyway), 12 public
 lines (5 with nobody there). Costs reading later: median 7.9 min, p90 34 min, longest 16 h; none would have gone
@@ -136,6 +143,11 @@ unread. It returns to what she chose herself 39 times in 42.
 
 **Recommendation: yes.** The saving is small in tokens; what it removes is public speech to nobody, and the turns that
 carried the incident forward.
+
+Her conditions (agent line, 2026-10-22 20:12; Claude's paraphrase): `wake` stays (a reply someone there is waiting on);
+a hop-limit refusal says where to go next ("this one needs no answer; to send word back later, set a `plan`", now in
+`REPLY_ENDS` and `NOTE_HOP_LIMIT`); she asked whether the reply itself is a hop (yes, hop 2; her chain outside → home →
+group → home no longer hits the limit when the third note comes from a turn something else opened).
 
 ### D3: rule 2, outside → home in real time (the owner's decision)
 
@@ -151,8 +163,11 @@ days, mostly cold prefill; 27 of its 118 turns met a refused action and 43 only 
 **Recommendation: a, keep, and read again on 10-29.** The value of rule 2 is that what happens outside reaches home at
 once; b buys little until N is large enough to break that, and c moves the home/public boundary. The cost is real but
 modest and mostly the server's cold prefill, which follows idle gaps, not notes. With D1 and D2 in place, read on
-10-29: note-opened turns' share of busy time (7 days) and outside → home turns per day. If the share passes 12%, bring
-rule 2 back with those numbers.
+10-29: note-opened turns' share of the character brain's busy time over 7 days (model time, the sum of step durations,
+as §4), with their share of turns beside it, labelled; and outside → home turns per day. If the busy-time share passes
+12%, bring rule 2 back with those numbers. (The denominator named in advance: her ask.) In minutes, over the 17.2 busy
+hours of the last 7 days (about 147 a day): 9.7% is about 14 minutes a day of note-opened turns, 12% about 18; the
+line is about 3.5 more minutes a day (her ask: state it in minutes too).
 
 ### Not changed
 

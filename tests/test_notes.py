@@ -181,7 +181,9 @@ def test_a_note_from_a_group_opens_a_home_turn_with_the_groups_class(store):
     onward = store.db.notes.find_one({'from_episode': home['_id'], 'to_scene': 'g2'})
     assert (onward['trust'], onward['hop'], onward['reply_to'], onward['kind']) == ('untrusted', 2, None, 'group')
     reply = store.db.notes.find_one({'from_episode': home['_id'], 'to_scene': 'g1'})
-    assert (reply['reply_to'], reply['hop'], reply['mode'], reply['trust']) == (row['_id'], 2, 'wake', 'untrusted')
+    # A reply to the group arrives there next time, not as a turn of its own (ADR-091 D2).
+    assert (reply['reply_to'], reply['hop'], reply['mode'], reply['trust']) == (row['_id'], 2, 'next_time', 'untrusted')
+    assert not any(offer[1] == 'visit:note:g1:' + reply['_id'] for offer in service.controller.offers)
     # The idea she noted here came from the group, not from home, where the turn ran (ADR-088 step 1).
     [idea] = ideas_block(store, 'P1', datetime.now(timezone.utc))
     assert idea['where'] == role_tools.IDEA_BY_NOTE % (places_title(store, 'g1'), '')
@@ -192,14 +194,17 @@ def test_a_note_from_a_group_opens_a_home_turn_with_the_groups_class(store):
     assert '聚会不办了' in json.dumps(beat['context']['notes_from_program'], ensure_ascii=False)
     assert notes.received_block(store, 'demo', 'dm-a', visibility.OWNER_PRIVATE, 'self_development', 'ep-dev',
                                 datetime.now(timezone.utc))['items'][0]['summary'] == notes.HIDDEN_SUMMARY
-    # In the group: her reply, written as from outside, and her own note's status. The reply ends the chain.
+    # In the group, in a turn someone opened: her reply, written as from outside, and her own note's status. The
+    # reply ended its chain; a note home from here starts a new one, counted like any first note (ADR-091).
     group, lane = turn(store, service, group_line('g-2', '小满在吗'),
                        [('note', {'to': '家里', 'text': '收到家里的回信了。'}), ('stay_silent', {'why': '看看'})])
     [got] = group['context']['notes_from_program']['items']
     assert got['text'] == '知道了，家里这边记下了。' and got['written'] == '你在外面写的'
     assert group['context']['notes_sent_from_program']['items'][0]['state'] == notes.STATE_WORDS['replied']
-    [(stopped, ok)] = results(lane, 'note')
-    assert not ok and '到此为止' in stopped
+    [(sent, ok)] = results(lane, 'note')
+    assert ok, sent
+    again = store.db.notes.find_one({'from_episode': group['_id']})
+    assert (again['hop'], again['reply_to'], again['mode']) == (1, None, 'wake')
     # Her rule: when the note that opened it cannot be found, the place is undetermined, not the likeliest one.
     store.db.messages.update_one({'_id': 'in-' + home['_id']}, {'$unset': {'event.note': ''}})
     [idea] = ideas_block(store, 'P1', datetime.now(timezone.utc))
@@ -219,14 +224,15 @@ def test_nothing_made_in_a_turn_a_note_from_outside_opened_opens_a_turn_with_hom
         ('note', {'to': G2, 'text': '一群有人问起一件事，二群知道吗。'}),
         ('note', {'to': G1, 'text': '家里看了，回头再说。'})], '嗯。')
     assert all(ok for _, ok in results(lane, 'plan') + results(lane, 'note'))
-    onward, back = delivered(service, -2), delivered(service, -1)
+    onward = delivered(service, -1)                     # the reply to the group opens no turn (ADR-091 D2)
+    assert store.db.notes.find_one({'from_episode': home['_id'], 'to_scene': 'g1'})['mode'] == 'next_time'
     [(planned, _)] = results(lane, 'plan')
     plan = store.db.plans.find_one({'_id': planned['plan_id']})
     due = {'event_id': 'schedule:test:1', 'scene_id': plan['scene_id'], 'person_id': plan['person_id'],
            'adapter_id': 'scheduler', 'episode_kind': 'scheduled', 'scheduled_plan_id': plan['_id'], 'scene_tick': True,
            'text': '你之前安排的计划「%s」现在到期了。' % plan['intent'],
            'group_context': {**GROUP, 'wake_reason': 'scheduled_plan', 'topic_id': 'schedule:test:1'}}
-    for opened in (onward, back, due):
+    for opened in (onward, due):
         there, _ = turn(store, service, opened, [('stay_silent', {'why': '看看'})])
         assert there['manifest']['session_class'] == visibility.PUBLIC, opened['event_id']
         assert 'errand' not in there['turn_tools']

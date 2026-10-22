@@ -307,6 +307,8 @@ Changed by ADR-087 §4.4 (2026-10-21): when the group cannot be woken now (muted
 gave no `deliver`, the note goes `next_time` instead of being refused, and the result says it may expire unread after
 72 hours (`notes.NEXT_TIME_INSTEAD`). Asking for `wake` there is still refused with the reason.
 
+Changed by ADR-091 (2026-10-22, owner): a reply to a note from a group arrives there `next_time` by default (`notes.REPLY_TO_GROUP`; `wake` stays her choice), and a note already shown in a finished turn of the conversation it went to opens no turn of its own (`notes.read_elsewhere`). A reply shown in a turn something else opened ends its chain: a note from that turn starts a new one. Rule 2 is unchanged.
+
 ## 13. From anywhere to the owner's own chat (2026-10-17)
 
 The owner's decision, from a wish she had mentioned: she should be able to reach him from anywhere, at any time, and

@@ -3,7 +3,8 @@
 
 这份技能是「出门那一轮」的规则集，所以这里查四件事：
 1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本能编译；
-2. 内容要点：开口前五查、回看四条、一条边界的字面要点都在；
+2. 内容要点：开口前五查、回看四条、一条边界的字面要点都在；「这条道上有哪几份技能——别编名字」那一节的
+   真名单、两条规矩与「实判读数」这句在（ROSTER 逐条判）；front matter 的 scene_kinds 覆盖 home／group／dm；
 3. 不带别人的个人信息：禁词表（人名／群名／称呼）与字面编号（#数字）都不该出现在正文；
    这台机器的私密名单可达就真扫（命中只报类别与名单行号，词本身不打印）；配不上、或名单在却解析出 0 条有效词，都记一条红
    `leak_scan_ran`——2026-10-16 起不再「print 一行 NOTE、绿数照旧」，「没跑」不许长得像「过了」；
@@ -38,6 +39,9 @@ SECTIONS = [
     "## 一条边界",
     "## 版本",
     "## 试用记录",
+    # 2026-10-22 新加的一节追加在末尾，不插在「一条边界」后面：section_0…section_5 这些既有判据名
+    # 是位置生成的，插在中间会让「版本」「试用记录」两格改名字，老的 FAIL 记录就对不上了。
+    "## 这条道上有哪几份技能——别编名字",
 ]
 
 # 开口前几查：每条查一个只有写全了才会出现的字面
@@ -72,6 +76,27 @@ BOUNDARY = [
 TIMING = [
     ("timing_in_scene", "出门那一轮"),
     ("timing_no_dev_db_detour", "别在本机这边绕道翻开发库"),
+]
+
+# 2026-10-22：「这条道上有哪几份技能——别编名字」一节。这份技能是出门那一轮本来就要带的，名单写在这里，
+# 所以真名单（群 6 份里除自己之外的 5 个名字、dm 1 份、家里 12 份里不带出去的那六份之一）、两条规矩、
+# 来路那一格和「实判读数」这句都得在——少了哪条，红的就是哪条，不合并成一条「名单在不在」。
+ROSTER = [
+    ("roster_why_unknown_count", "27 次 unknown"),
+    ("roster_why_invented_names", "asuna-turing"),
+    ("roster_group_count", "群（group）6 份"),
+    ("roster_group_become_human", "asuna-become-human"),
+    ("roster_group_bot_or_person", "asuna-bot-or-person"),
+    ("roster_group_image_generation", "asuna-image-generation-and-display"),
+    ("roster_group_running_version", "asuna-running-version"),
+    ("roster_group_usage_readout", "asuna-usage-readout"),
+    ("roster_dm_count", "别人私聊（dm）1 份"),
+    ("roster_home_count", "12 份全给"),
+    ("roster_home_kept_private", "asuna-credentials"),
+    ("roster_reading_is_measured", "实判读数"),
+    ("roster_rule_real_names_only", "只用表里的真名"),
+    ("roster_rule_no_variant_retry", "别换变体重试"),
+    ("roster_rule_no_name_guessing", "别靠猜名字"),
 ]
 
 # 别人的个人信息不进技能：称呼和场景词。出现即红。
@@ -179,10 +204,18 @@ def main():
     desc = (fields or {}).get("description", "")
     check("description_specific_enough", len(desc) >= 120, "len=%d" % len(desc))
 
+    # 可见场合也是这一份的内容：scene_kinds 掉了 dm，别人的私聊就读不到它，而那一格正是这一份要管的场合
+    # （2026-10-22 就是从 [home, group] 改成 [home, group, dm] 的）。写死在这儿，掉了就红，不等发布闸才发现。
+    kinds_raw = (fields or {}).get("scene_kinds", "")
+    kinds = re.findall(r"[a-z]+", kinds_raw)
+    check("scene_kinds_cover_home_group_dm",
+          all(kind in kinds for kind in ("home", "group", "dm")),
+          "scene_kinds=%s" % (kinds_raw or "没写"))
+
     for name, section in [("section_" + str(i), s) for i, s in enumerate(SECTIONS)]:
         check(name, ("\n" + section) in ("\n" + body), section)
 
-    for group in (TIMING, PRECHECKS, REVIEW, BOUNDARY):
+    for group in (TIMING, PRECHECKS, REVIEW, BOUNDARY, ROSTER):
         for name, token in group:
             check(name, token in body, token)
 

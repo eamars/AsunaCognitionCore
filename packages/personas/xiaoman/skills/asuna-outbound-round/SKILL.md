@@ -1,7 +1,7 @@
 ---
 name: asuna-outbound-round
-description: 沈小满「出门那一轮」（在群／私聊露面）的固定做法。时机：就在我身处的那个场景做，查原话当场能用、群笔记当场落，不在本机这边绕道翻开发库。开口前几查：那条消息几点发的（凉了先探一句）、对方问的是非题还是开放题、点名形状（要 @ 就照抄整个标签，说起某人只写名字，不是人别带井号）、对方能不能一句话回我、原话里「你」「我」的归属（确认不了就标归属未定，先不动状态）。回看：接住和砸的都记，一次至多一条教训，笔记只写下次能照做的规则。一条边界：别拿回看自己发出的出站消息去验 @ 有没有落成提及——存的就是我写出去的原样，形状在发送前写对，落成与否判不了就写判不了。出门开口前、复盘一轮对话时读这一份。附零依赖自检 check_skill.py。
-scene_kinds: [home, group]
+description: 沈小满「出门那一轮」（在群／私聊露面）的固定做法。时机：就在我身处的那个场景做，查原话当场能用、群笔记当场落，不在本机这边绕道翻开发库。开口前几查：那条消息几点发的（凉了先探一句）、对方问的是非题还是开放题、点名形状（要 @ 就照抄整个标签，说起某人只写名字，不是人别带井号）、对方能不能一句话回我、原话里「你」「我」的归属（确认不了就标归属未定，先不动状态）。回看：接住和砸的都记，一次至多一条教训，笔记只写下次能照做的规则。一条边界：别拿回看自己发出的出站消息去验 @ 有没有落成提及——存的就是我写出去的原样，形状在发送前写对，落成与否判不了就写判不了。这条道上有哪几份技能的真名单（群 6 份／别人私聊 1 份／家里 12 份）也写在这里：调 skill 只用真名，别编名字换变体重试。出门开口前、复盘一轮对话时读这一份。附零依赖自检 check_skill.py。
+scene_kinds: [home, group, dm]
 ---
 
 # asuna-outbound-round
@@ -36,13 +36,35 @@ scene_kinds: [home, group]
 - 别拿「回看自己发出去的那条」去验 @ 有没有落成提及——出站消息存的就是我写出去的原样，看不出平台上显示成什么。
 - 形状在发送前写对（第 3 查）；落成与否只能问对方；判不了就写判不了，不装验过。
 
+## 这条道上有哪几份技能——别编名字
+
+来路：2026-10-22 下午一个群的那一轮，`skill` 报了 27 次 unknown，其中只有 7 次要的是真存在的技能，剩下十几次在编名字（`bot-probe`、`asuna-bot-probe`、`bot-detect`、`asuna-turing`、`detect-bots`）。程序侧「unknown 时列当期可用清单」还没装，所以名单先写进这份出门本来就要带的技能里。
+
+- **群（group）6 份**：`asuna-become-human`、`asuna-bot-or-person`、`asuna-image-generation-and-display`、`asuna-outbound-round`、`asuna-running-version`、`asuna-usage-readout`。
+- **别人私聊（dm）1 份**：只有 `asuna-outbound-round`——就是这一份。
+- **家里（home／owner_private，含 peer 线）12 份全给**：上面那 6 份，加 `asuna-offline-selfchecks`、`asuna-render-budget-per-place`、`asuna-credentials`、`asuna-database`、`asuna-self-improvement`、`qq-napcat-adapter` 这六份不带出去的。
+- 这是实判读数（2026-10-22，按在跑的 deployment 判），不是我推的。名单会变——改谁的 `scene_kinds`、新加一份技能都会变，用之前先当它是旧的。
+
+两条规矩：
+
+- 调 `skill` 只用表里的真名；**不在表里就是不存在，别换变体重试**（`bot-probe` 没有，就别再试 `asuna-bot-probe`、`bot-detect`）。
+- 拿不到技能就照现场判：发言模式、命令词之后是不是秒级自动出话、时间戳格式——别靠猜名字。
+
 ## 版本
 
 v1（2026-10-08）：首次固化。内容是在出门轮里反复练出来的同一套错与改法，措辞只留规则本身，剥掉具体的人和群。附零依赖自检 `check_skill.py`：查 frontmatter、章节齐全、五查与回看与边界的字面要点在、没夹进个人信息（人名、群名、字面编号）。
 
 v1.1（2026-10-16）：只改自检 `check_skill.py` 的泄露检查那一格——名单定位加兜底（环境变量都没有时从脚本往上找 `.runtime/private/personal-words.txt`），名单配不上从「print 一行 NOTE、绿数照旧」改成记一条红 `leak_scan_ran`（detail 写「没真查——不是跑过了」）。出门轮的规则一条没动。
 
+v1.2（2026-10-22）：两处。① front matter 的 `scene_kinds` 从 `[home, group]` 改成 `[home, group, dm]`——理由照实写：别人的私聊（`public/dm`）当时一份技能都读不到，而「出门那一轮怎么带话」在别人私聊里同样要用；这份技能只是规矩文本，不读仓库、不花钱、不带别人的数据。② 加一节：按场合列这条道上的真名单（那份数是在跑的 deployment 上判出来的，不是推的），外加两条规矩——只准用表里的名字，查不到就当它不存在、不许换个变体再试一轮；拿不到技能就照现场判。为什么要加（那一轮报了 27 回 unknown、其中真名只占 7 回）写在那一节自己那段。`check_skill.py` 加钉 17 条：新节标题 1 条、那一节的关键串 15 条、front matter 的 `scene_kinds` 必须覆盖三种场合 1 条；判据 38→55。措辞上避开了那 15 条关键串本身——版本条目里再抄一遍，「整段剥掉」的反证就会漏红。出门轮的五查、回看、边界一条没动。
+
 ## 试用记录
 
 - 2026-10-08 v1：候选内首跑 `check_skill.py` → 37/37 全绿、exit 0；反证两种都按名红（删「一条边界」整节红 section_3＋四条 boundary；夹人名＋字面编号红 no_personal_info＋no_literal_ids），变体跑完即删。首跑曾红在 `compiles_check_skill.py`：宿主沙箱拒写系统 Temp 和点开头目录（PermissionError），编译临时目录改落技能目录旁 `_compile-probe-*` 用完即删——读法写在检查器注释里。
 - 2026-10-16 v1.1：只动自检那一格（见版本段）。实跑读数与反证两例（名单配不上 → 红 `leak_scan_ran`；名单里放一个正文里真有的词 → 红 `no_listed_words`、词本身不出现在输出里）见行动报告。
+- 2026-10-22 v1.2：场合从 `[home, group]` 加到 `[home, group, dm]`＋加一节名单。实数都在跑的那套上判（探针读 cordis.patch.yml 里 asuna-core 的 deployment，`asuna` 从安装位置那份 python 包 import，skills.py sha256 6e59bef0…；场景与人＝最近 4000 条 episodes 真出现过的 127 个组合，再给库里 6 个 kind=dm 的真场景各配两个不是家里人的，共 138 个 (场景,人)）：
+  - 别人的私聊（`public/dm`）：改前 0 份 → 改后 1 份，多的就是这一份；6 个组合、3 个私聊场景判得一致，没有例外。
+  - 群（`public/group`）：改前改后都是同样那 6 份，不多不少（118 个组合、15 个群场景）。
+  - 家里（`owner_private`：本机私聊、认成家的人的 QQ 私聊、peer 线、home group 那一格）：改前改后都是全 12 份，没受影响。
+  - dm 那一格为什么这么薄：真在跑的「别人的私聊」最近只有一条 episode（local-dm-b 那个人），其余配对是拿真场景配合成的人——合成配对这一点照实留在这儿，别说成全是真样本。
+  - 自证读数：`check_skill.py` 候选内 55/55、rc=0；反证一——把新加那一节整段（1481 字节、14 行）剥掉再跑同一份自检 → 39/55，红的正是新加的那 16 条（节标题 1＋关键串 15），一条不多一条不少；反证二——只把 `scene_kinds` 退回 `[home, group]` → 54/55，红的只有 `scene_kinds_cover_home_group_dm`；`python3 -m asuna.skills skills` → `Skill headers valid.`、rc=0，另外拿一份把头写坏的复制喂同一道闸 → rc=1 并写出该怎么改。cp1252 子进程冒烟 rc=0、stderr 0 字节；两份都 LF、无 BOM（CR=0）。名单钉的关键串在版本条目和这条记录里都刻意错开写法，否则反证一就不干净。

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { resolvePersona } from './persona.js';
 import { resolveChannel } from './channel.js';
 import { dataRoot, floorState } from './paths.js';
+import * as privateWords from './private-words.js';
 
 export const name = 'asuna-publication-floor';
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -434,6 +435,11 @@ export class PublicationFloor {
       throw new Error(`DEVELOPMENT_PUBLISH_WAITING_RESTART: 项目 ${project.id} 上一次发布的改动还在等宿主重启，`
         + '重启前没人在场的自我开发回合不能再往它发布，免得没验过的改动叠上去；重试也一样：这次改动留在候选里，'
         + '这一段做别的项目或只读检查，重启生效、验过以后再发布');
+    // The reason becomes the commit message of a public repository: nothing on her list and no number shaped like
+    // a QQ or group number goes into it. Refused before anything is frozen, packed or selected.
+    const leaks = privateWords.findings(reason, privateWords.load(this.dataRoot));
+    if (leaks.length) throw new Error(`PUBLISH_REASON_NAMES_PRIVATE: 发布说明会成为公开仓库的提交信息，${privateWords.describe(leaks)}；`
+      + '改写成「某个群」「那一条私聊」这样的说法，细节记在你自己的流水里，再发布；这次什么都没发布');
     // Anything else in the candidate (logs, scratch folders, a tool's own install) is work, not the project.
     const current = new Map([...await files(project.candidate)].filter(([name]) => inProject(project, name))), hashes = {};
     for (const [name, file] of current) {

@@ -34,6 +34,32 @@ test('actual npm artifact freezes a bounded candidate; edits do not change activ
   await assert.rejects(floor.call('development_write', { path: 'src/floor.js', text: 'denied', overwrite: true }), /PATH_DENIED/);
 });
 
+test('a publication reason naming a listed word or a QQ-shaped number is refused before anything is published', async t => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/reason-check-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  await fs.mkdir(path.join(workspace, 'private'));
+  await fs.writeFile(path.join(workspace, 'private', 'personal-words.txt'), '# list\ngroup|示例交流群|a placeholder group\n');
+  const saved = process.env.ASUNA_PRIVATE_WORDS; delete process.env.ASUNA_PRIVATE_WORDS;
+  t.after(() => { if (saved === undefined) delete process.env.ASUNA_PRIVATE_WORDS; else process.env.ASUNA_PRIVATE_WORDS = saved; });
+  const source = path.join(workspace, 'source'); await fs.mkdir(source);
+  await fs.writeFile(path.join(source, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', files: ['README.md'], type: 'module' }));
+  await fs.writeFile(path.join(source, 'README.md'), 'Before');
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'persona', projects: [{ id: 'persona', root: source, format: 'package' }] });
+  await floor.call('development_write', { path: 'README.md', text: 'After', overwrite: true });
+  for (const [reason, words] of [['只改 README：在示例交流群里试过', /第 1 行有名单上的词（group 类，名单第 2 行）/],
+    ['只改 README\n主人私聊 qq:1234567890:dm:987654321', /第 2 行有一串 10 位数字.*第 2 行有一串 9 位数字/]]) {
+    const refused = await floor.call('development_publish', { reason }).then(() => null, error => error);
+    assert.match(String(refused?.message), /PUBLISH_REASON_NAMES_PRIVATE/);
+    assert.match(refused.message, words);
+    assert.doesNotMatch(refused.message, /示例交流群|1234567890|987654321/);
+  }
+  assert.equal(await fs.readFile(path.join(source, 'README.md'), 'utf8'), 'Before');     // nothing written back
+  assert.equal((await floor.selected()).projects?.persona, undefined);                    // nothing selected
+  const result = await floor.call('development_publish', { reason: '只改 README（1870321 B，sha256 c71f0ce0，restart-20261022104708）' });
+  assert.equal(result.state, 'APPLIED', JSON.stringify(result));
+});
+
 test('a publication whose package is byte for byte the running one is active at once: nothing to load, no restart', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/same-package-probe-'));

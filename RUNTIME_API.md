@@ -830,6 +830,7 @@ Her development tools work on persistent candidates of a project (the selected p
 
 - The development grant needs `self_development.enabled` and the sandbox, and comes only in owner-private conversations: a turn woken by someone's words there, her self-improvement turn, a plan of hers coming due there, or a trusted note from another home conversation (`src/asuna/grants.py` `development_granted`).
 - A publication probes the candidate's boot, packs it and commits its files in the project's source under `character_git` (else the checkout's identity), only those paths; a failed commit is reported as `commit_error` and does not undo the publication. The receipt's fields are the record built in `PublicationFloor.publish` plus the result of `commitPublished`.
+- The publication's reason becomes the commit message. A reason carrying a word from the deployment's private list (`private_words`) or a run of 7–11 digits shaped like a QQ or group number is refused first, with `PUBLISH_REASON_NAMES_PRIVATE` naming the line, the category and the list line (never the word or the number); nothing is published (`packages/cognition-core/src/private-words.js`).
 
 | Publication state | When | Takes effect |
 |---|---|---|

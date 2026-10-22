@@ -37,9 +37,13 @@ Xiaoman measured on 10-23:
   |---|---|
   | transcribed | 「[语音 33 秒] 文字……」 |
   | still being transcribed | 「[语音 33 秒，正在转写]」 |
-  | no speech found | 「[语音 5 秒，几乎没声音，听不出话]」 |
+  | no voice in it: the detector found no speech | 「[语音 5 秒，里面没有人声]」 |
+  | a voice, but no words came out | 「[语音 12 秒，有人在说话，但听不出说的什么]」 |
   | transcription failed | 「[语音 33 秒，没转出文字：原因]」 |
   | audio not fetched | 「[语音，没拿到：原因]」 (NapCat had already cleared it, say) |
+
+  The two middle states ask different things of her (her ask, 09:45): no voice means nobody spoke, while a voice
+  without words is something she may ask about.
 
   There is no "too long" state: the program sets no length limit of its own, and with voice detection a long voice
   takes about 2.5% of its length.

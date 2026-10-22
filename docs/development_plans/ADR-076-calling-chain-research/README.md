@@ -337,4 +337,26 @@ level tried in the same reading:
   her line side by side. The control is not written to her memory and Claude does not read either version. The extra
   calls are about 10 short one-request summaries on the owner's engine (his yes, 2026-10-22).
 
+**Verdict: fail on lost facts; back to the route's effort (2026-10-23).** The control ran twice:
+- **10-23 03:00: void.** The replay kept only the last of each request's two user messages (the environment note, not
+  the conversation), so every `high` version said there was no conversation. The script now counts the user messages
+  from the raw lines and checks that the real side was written at `low` before it sends anything.
+- **10-23 09:56: the counted run.** It used 10 summaries written after the 10-22 23:48 install. Each version carried
+  its own code, and each pair came with the conversation it summarized.
+
+Her blind count, key opened only after all ten:
+- **Lost facts:** `low` missed 12 important items (times, commits, numbers, promises, whose correction), `high` missed
+  3. `low` missed more in pairs 1, 3 and 7, `high` in pair 5; the other six were level.
+- **Made-up facts:** all 7 statements she found that the source does not support are on the `low` side, including
+  the three written as fact: an empty line turned into "sent a picture", a contract's owner changed, and her
+  conclusion stated as the record.
+
+By the pre-registered rule (`low` misses one or more than `high`), it fails. `summaryEffort: low` was removed from the
+profile and took effect at her restart of 10-23 11:15. No second level is tried.
+
+Her two rules for any later control:
+- count a made-up statement marked as a guess (似乎, 像是) apart from one written as fact;
+- draw only pairs whose source has at least 5 lines from at least 2 speakers. In this run 6 of 10 pairs could not
+  tell the versions apart.
+
 Her review: ______

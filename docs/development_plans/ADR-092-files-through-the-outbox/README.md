@@ -1,7 +1,7 @@
 # ADR-092: Files to a QQ group through the outbox
 
-Status: **Accepted**. Xiaoman's v0 (2026-10-23 09:03 NZDT), reviewed with Claude 09:05–09:07; the owner decided §6 on
-2026-10-23 ~09:35. Building.
+Status: **Accepted**. Xiaoman's v0 (2026-10-23 09:03 NZDT), reviewed with Claude 09:05–09:07; the owner decided §6 on the
+morning of 2026-10-23. Building.
 
 ## 1. Why
 
@@ -89,7 +89,7 @@ Signature: ____
 - **Capability:** one more name in the adapter's declaration, with its limit.
 - **Storage:** files sit in GridFS until D9 removes them.
 
-## 6. The owner's decisions (2026-10-23 ~09:35)
+## 6. The owner's decisions (2026-10-23, morning)
 
 1. "I don't want to limit the type she is allowed to send." → D4.
 2. "Only limit by the adapter, do not implement additional restriction": research each supported adapter's real

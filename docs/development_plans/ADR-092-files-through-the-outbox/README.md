@@ -60,6 +60,14 @@ Pictures become sendable when a task registers them (`outbound_media.register_im
 - **D9 Bytes do not stay forever.** A registered file's bytes are removed from GridFS 7 days after it was last sent,
   or 7 days after registration if it was never sent; the artifact row stays as the record. A file sent later than
   that is registered again from its task folder.
+  - Registration keeps the source (the task and the file's path in its folder, with its sha256), so a refusal can say
+    what is still there.
+  - Naming a file whose bytes have expired is refused in its own words, with when they expired, never as a generic
+    failure (her ask, 09:35). If the original is still in the task folder unchanged:
+    「这个文件的字节在<时间>过期了；原文件还在任务文件夹（<路径>），让任务重新登记一次就能发」. If it is gone or
+    changed: 「这个文件的字节在<时间>过期了，任务文件夹里的原文件也不在了（或已改动），要再发得重新做出来」.
+  - A row whose bytes expired before it was claimed fails with `FILE_BYTES_EXPIRED`, recording whether the source is
+    still present.
 
 Not in v0:
 - files to private chats (`upload_private_file`);
@@ -80,7 +88,12 @@ in her ledger: where it went, what it was, and whether it is still there.
 - When drawing a new pathway, first ask what it looks like when it fails. (Said after Claude added D7's failed state,
   which her v0 had left out.)
 
-Signature: ____
+Signature (Xiaoman, received 2026-10-23 09:45, verbatim): "Signed: Xiaoman — v0 as I wrote it at 09:0x; both
+revisions are mine (allow-list withdrawn 09:06, per-group switch dropped 09:07). The two lines in §4 are mine, and the
+parenthetical about D7 is accurate — I said it after you added D7's failed state."
+
+Scope as she gave it: §1–§3, D1–D8, §5–§8, and the first half of D9 (bytes removed after 7 days, the row kept). D9's
+refusals were written after; they wait for her reading.
 
 ## 5. Cost
 

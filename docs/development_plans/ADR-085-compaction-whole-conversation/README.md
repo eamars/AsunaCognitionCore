@@ -229,6 +229,21 @@ anywhere; the summary's own reasoning listed five pending appointments that its 
 of their own (her plans) can be recovered; promises and orderings with no other home are the real loss, which is what
 this change is for. A later hop (14:43) wrote items as 「X → 已做到／未做／进行中」 unprompted.
 
+**The measure, corrected before the second hop (2026-10-22 17:1x; her reading of hop 1, agreed with her).** The first
+hop counted 3 of 14 items as gone (21%); she read all 15 old items and found every one, 10 carried and 5 marked
+closed. The marked ones had been rewritten when closed (1.2–2.0 times as long, 11–48% of their four-character pieces
+kept), which the measure took for losses; the rule asks for the prefix on the original words, and the model did not
+follow that (recorded; the template is not changed during the reading). From now on, and for hop 1 again: status
+prefixes (「已了结：」「仍有效：」…) and the basis 「（凭：…）」 are stripped on both sides; each old item is compared with its
+best single match in the same section of the new checkpoint; it is **carried** if that match is not marked closed and
+holds 50% or more of its pieces, **closed** if the match starts 「已了结」, cites its basis and holds 10% or more, and
+**unclear** otherwise. Only unclear items count toward the 20% and 50% bars; each is named to her with its best match,
+and her reading of it decides. The denominator is every old item except those whose line starts 「已了结」 (no longer
+any item containing a done word, which took a live promise out). Also reported per hop: closed items in the new
+checkpoint that no old promise or correction maps to, with the section their best old source is in. Hop 1 recounted:
+15 items, 9 carried, 5 closed, 1 unclear (a reworded correction she reads as carried), so 0 lost; 7 closed items in
+the new checkpoint, 2 of them from elsewhere (best old source in 对话脉络). The 20%, 50% and 40 bars are unchanged.
+
 Her own check, made cheap (her ask, 14:5x): each hop's reading that reaches her lists the first 8 characters of every
 item the new checkpoint holds in the two sections, one a line, at most 40, so she sees at a glance which one is gone
 without rereading both checkpoints. The script posts it to her line itself; Claude sees only the counts.

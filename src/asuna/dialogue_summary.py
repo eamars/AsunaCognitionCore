@@ -151,12 +151,11 @@ class DialogueSummarizer:
         scene_id = scene['_id']
         people = People(self.store)
         labels = self._labels(people, scene, rows)
-        account = scene.get('channel_account_id')
         window = [{'index': index + 1,
                    'speaker_label': labels.get(row['author'], row['author']),
                    'direction': row['direction'],
                    'text': (people.mentions if row['direction'] == 'outbound' else people.heard)(
-                       scene, row['text'], account)[:self.ROW_CHAR_CAP],
+                       scene, row['text'])[:self.ROW_CHAR_CAP],
                    'excerpt_truncated': len(row['text']) > self.ROW_CHAR_CAP}
                   for index, row in enumerate(rows)]
         source_ids = [row['_id'] for row in rows]

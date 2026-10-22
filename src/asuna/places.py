@@ -240,7 +240,7 @@ def room(store, scene, moment):
         {'received_at': 1}).sort('scene_seq', -1).limit(1)), None)
     mine = next(iter(store.db.messages.find({'scene_id': scene['_id'], 'direction': 'outbound', 'author': me,
         'delivery_state': 'DELIVERED'}, {'receipt_at': 1, 'claimed_at': 1, 'scene_seq': 1}).sort('scene_seq', -1).limit(1)), None)
-    called = store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'inbound',
+    called = store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'inbound', **NOT_CORE_NOTICE,
         'scene_seq': {'$gt': (mine or {}).get('scene_seq') or 0},
         'event.group_context.wake_reason': {'$in': list(ADDRESSED)}}, {'_id': 1})
     return {'lines': len(lines), 'voices': len({row.get('author') for row in lines}),
@@ -342,7 +342,8 @@ def outcome(store, visit):
     said = max((row for row in spoken if row.get('delivery_state') == 'DELIVERED'),
                key=lambda row: row.get('scene_seq') or 0, default=None)
     if said:
-        answered = store.db.messages.find_one({'scene_id': visit['scene_id'], 'direction': 'inbound',
+        from .ingress import NOT_CORE_NOTICE                        # a task result there is nobody's answer
+        answered = store.db.messages.find_one({'scene_id': visit['scene_id'], 'direction': 'inbound', **NOT_CORE_NOTICE,
                                                'scene_seq': {'$gt': said['scene_seq']}}, {'_id': 1})
         return 'answered' if answered else 'unanswered'
     if spoken:

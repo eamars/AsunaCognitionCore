@@ -20,6 +20,7 @@ from .config import DATA,prompt_path,redact_text,excerpt
 from .render import action_values
 from . import answers, handover, machine_words, sandbox_backend, visibility
 from .evidence import canonical,sha
+from .ingress import program_group_context
 from .sandbox import Sandbox, run_seconds
 from .state import Store,Denied,Conflict,now
 from .queue import database_effects_lock,RuntimeLease
@@ -551,12 +552,12 @@ class TaskService:
                 event['native_session_id']=task.get('native_session_id') or original['native_session_id']
             if task.get('errand_place'):
                 event['text']+='这件是差事带出来的，托话的那边是 %s（errand 的 place 照抄它）。'%task['errand_place']
-            if source and source.get('event', {}).get('group_context'):
-                event['group_context'] = source['event']['group_context']
+            if group := program_group_context(source):
+                event['group_context'] = group
             # 原样回传那个值：窄授权任务的反馈回合也要拿得到它，否则 task 的 message 会被判成授权不一致。
             if task.get('integration_profile'): event['integration_profile'] = task['integration_profile']
             if short:
-                event.update(self._short_event(task,current,shown))
+                event.update(self._short_event(task,current,shown,source))
             else:
                 # When it ran (a result handed back late describes that time); stored UTC, her turn shows it local.
                 # Tool records on the first page only where the task changed something (key_observations); all of
@@ -581,9 +582,9 @@ class TaskService:
             self.store.put('episodes',{**original,'state':'COMMITTED','feedback_episode':ep['_id']},expected=original['revision'],stream=original['_id'])
         return ep
 
-    def _short_event(self,task,current,shown=lambda value:value):
-        """The short hand-back (ADR-030 D4): her brief, the report's words (a cut says so) and when the run finished,
-        without the tool records."""
+    def _short_event(self,task,current,shown=lambda value:value,source=None):
+        """The short hand-back (ADR-030 D4): her brief, the request it answers, the report's words (a cut says so) and
+        when the run finished, without the tool records."""
         result=current.get('result') or {}
         text=result.get('text') or ''
         pages=task_pages(self.store,task)
@@ -592,12 +593,13 @@ class TaskService:
             report+=('…（只给了第一页，原文 %d 字共 %d 页；接着读用 task 的 page：task 写 %s，page=2）'
                      % (len(text),len(pages),task['_id']))
         value={'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],'short':True,
-               **_why_then(self.store,task),'brief':task.get('brief') or task['goal'],'report':report,
+               **_why_then(self.store,task),'brief':task.get('brief') or task['goal'],
+               'original_input':(source or {}).get('text'),'original_input_id':(source or {}).get('_id'),'report':report,
                **({'report_pages':len(pages)} if len(pages)>1 else {}),
                'finished_at':current.get('finished_at'),'uncertainties':shown(result.get('uncertainties') or [])}
         return {'event_id':handover.result_event_id(task,True),
                 'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」早就有了结果，但之前没能交到你手上；这是补交的短版：'
-                       '只有你的交代、它的报告原文和跑完的时间，没有工具记录。报告写的是跑完那时的情况，不一定是现在；工具记录才是执行事实，'
+                       '只有托付那句、你的交代、它的报告原文和跑完的时间，没有工具记录。报告写的是跑完那时的情况，不一定是现在；工具记录才是执行事实，'
                        '要核实或接着做就用 task 的 message。',
                 'trusted_context_events':[value]}
 

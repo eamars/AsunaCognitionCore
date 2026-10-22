@@ -26,7 +26,9 @@ ELSEWHERE = {
                  '（content.sections 是正文）',
     'monologues': '心里话在 memory_units，kind 是 monologue',
     'summaries': '交流摘要在 memory_units，kind 是 dialogue_summary',
-    'people': '群里的人在 scene_people（每个群里一人一条：person、handle、card、nickname）；账号在 identities',
+    'people': '群里的人在 scene_people（每个群里一人一条：person、handle、card、nickname）；账号在 identities。'
+              '你自己的发言是 messages 里 direction 为 outbound 的行，author 是你的角色 id，不在 scene_people 的任何编号下；'
+              '你在一个群里用的号是那个群 scenes 的 channel_account_id',
     'archive': '群的旧历史在 messages 里：scene_id 是 archive:<scene_id>，direction 是 archived（见 history）',
 }
 WRITERS = ('$out', '$merge')

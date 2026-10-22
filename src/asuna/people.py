@@ -142,8 +142,19 @@ class People:
         from .scene_links import canonical_person_id
         return canonical_person_id(self.config, self.db, person_id) or person_id
 
+    def own_account(self, scene_id):
+        """The platform account she speaks with in this conversation: its channel's, kept on the scene by the host."""
+        cache = self.__dict__.setdefault('_own_accounts', {})
+        if scene_id not in cache:
+            doc = self.db.scenes.find_one({'_id': scene_id}, {'channel_account_id': 1}) if scene_id else None
+            cache[scene_id] = str((doc or {}).get('channel_account_id') or '') or None
+        return cache[scene_id]
+
     def account_person(self, scene_id, number, platform=None):
-        """The person_id the host keeps for a platform account number in this scene's platform."""
+        """The person_id the host keeps for a platform account number in this scene's platform. Her own account there
+        is her: every reader turns an account into a person here, so none files her as someone else."""
+        if scene_id and str(number) == self.own_account(scene_id):
+            return self.self_id
         platform = platform or channel_kinds.of(scene_id)
         row = self.db.identities.find_one({'account_id': str(number)}, {'person_id': 1})
         return (row or {}).get('person_id') or (platform.person_id(number) if platform else str(number))
@@ -196,6 +207,10 @@ class People:
         key = scene['_id'] + '|' + person
         roster = self.roster(scene['_id'])
         doc = roster.get(key) or self.db.scene_people.find_one({'_id': key})
+        if person == self.self_id:
+            # Hers is number 0, kept from what the adapter reports of her (note_self); never a new number or names.
+            return doc or {'_id': key, 'scene_id': scene['_id'], 'person': person, 'author': person, 'handle': 0,
+                           'card': '', 'nickname': '', 'role': '', 'previous': []}
         for _ in range(8):
             if doc:
                 break
@@ -345,21 +360,21 @@ class People:
         notes = self.notes(scene_id, doc, moment)
         return self.label(doc) + ('（%s）' % '；'.join(notes) if notes else '')
 
-    def heard(self, scene, text, account=None):
+    def heard(self, scene, text):
         """Someone's own text as she reads it: a label they typed made plain, then their real @ as labels."""
-        return self.mentions(scene, typed(text), account)
+        return self.mentions(scene, typed(text))
 
-    def mentions(self, scene, text, account=None):
+    def mentions(self, scene, text):
         """The adapter's real @<number> of a known person (or of her own account) reads as their label."""
         platform = channel_kinds.of(scene['_id'])
         if not platform:
             return text or ''
 
         def swap(match):
-            number = match.group(1)
-            if account and number == str(account):
+            person = self.person(self.account_person(scene['_id'], match.group(1)))
+            if person == self.self_id:
                 return '@' + self.self_name
-            doc = self.roster(scene['_id']).get(scene['_id'] + '|' + self.person(self.account_person(scene['_id'], number)))
+            doc = self.roster(scene['_id']).get(scene['_id'] + '|' + person)
             return '@' + self.label(doc) if doc else match.group(0)
         return platform.INBOUND_MENTION.sub(swap, text or '')
 
@@ -495,7 +510,7 @@ class People:
         from .caught_up import CATCHUP_KEY, said_at
         from .schedule_rules import line_stamp, scene_timezone
         said = self.mentions if row.get('direction') == 'outbound' else self.heard
-        words = ' '.join(said(scene, row.get('text'), scene.get('channel_account_id')).split())
+        words = ' '.join(said(scene, row.get('text')).split())
         number = '〔%d〕 ' % row['scene_seq'] if row.get('scene_seq') and numbered(self.store, scene) else ''
         if not (row.get('received_at') or row.get('receipt_at')) and row.get('_id'):
             row = {**row, **(self.db.messages.find_one({'_id': row['_id']}, {
@@ -549,11 +564,9 @@ class People:
         `once`: her thought under a line of hers comes once a turn (False for a view outside her conversation)."""
         event = row.get('event') or {}
         group = event.get('group_context') or {}
-        account = (event.get('channel') or {}).get('account_id')
         for number in group.get('mentioned_account_ids') or []:
-            if str(number) != str(account):
-                profile = self.mentioned(row, number)
-                self.entry(scene, self.account_person(scene['_id'], number), row if profile else None, profile)
+            profile = self.mentioned(row, number)
+            self.entry(scene, self.account_person(scene['_id'], number), row if profile else None, profile)
         self.note_self(scene, row)
         doc = self.entry(scene, row['author'], row)
         # When it was said, on her clock face: the conversation keeps every line, so its age must be readable.
@@ -580,7 +593,7 @@ class People:
                 lines.append('  > ' + then)
         elif quoted.get('reply_to'):
             lines.append('  > 回复了一条更早的消息')            # a line the program has no record of
-        body = self.heard(scene, row.get('text') or '', account)
+        body = self.heard(scene, row.get('text') or '')
         notice_then = None
         if (event.get('raw') or {}).get(NOTICE_KEY):
             from .notices import line_row, words
@@ -684,7 +697,6 @@ class People:
             return row
         here = scene
         scene = self._scene(row['scene_id']) if row.get('scene_id') and row.get('scene_id') != (scene or {}).get('_id') else scene
-        account = (scene or {}).get('channel_account_id')
         if 'scene_id' in row:
             # Which conversation a row came from, by name, only when it is not this one.
             if row.pop('scene_id') != (here or {}).get('_id'):
@@ -696,11 +708,11 @@ class People:
             row['speaker'] = self._author(scene, row.pop('author'))
         if 'mentioned_account_ids' in row:
             ids = row.pop('mentioned_account_ids') or []
-            row['mentions'] = ['你' if str(n) == str(account) else
+            row['mentions'] = ['你' if self.account_person((scene or {}).get('_id'), n) == self.self_id else
                                self._author(scene, self.account_person((scene or {}).get('_id'), n)) for n in ids]
         if isinstance(row.get('text'), str) and scene:
             said = self.mentions if row.get('direction') == 'outbound' else self.heard
-            row['text'] = said(scene, row['text'], account)
+            row['text'] = said(scene, row['text'])
         return row
 
     def relabel(self, context, scene, author):
@@ -735,7 +747,7 @@ class People:
             for row in experience.get('messages') or []:
                 self._row(scene, row)
         if isinstance(context.get('event'), dict) and isinstance(context['event'].get('text'), str):
-            context['event']['text'] = self.heard(scene, context['event']['text'], scene.get('channel_account_id'))
+            context['event']['text'] = self.heard(scene, context['event']['text'])
         for fact in context.get('memories') or []:
             self._memory(fact, current, scene)
         return context
@@ -749,7 +761,7 @@ class People:
         if 'speaker' in fact:
             fact['speaker'] = self._author(scene, fact['speaker'])
         if isinstance(fact.get('body_markdown'), str) and scene:
-            fact['body_markdown'] = self.mentions(scene, fact['body_markdown'], scene.get('channel_account_id'))
+            fact['body_markdown'] = self.mentions(scene, fact['body_markdown'])
         participants = fact.pop('participants', None)
         fact.pop('source_by_speaker', None)
         attribution = fact.pop('attribution', None) or {}
@@ -770,7 +782,7 @@ class People:
             whom = self._author(scene, item.get('target_author')) if item.get('target_author') else None
             said = ' '.join(str(item.get('snippet') or '').split())
             if scene:
-                said = self.heard(scene, said, scene.get('channel_account_id'))
+                said = self.heard(scene, said)
             out.append(('%s 更正了自己' % who if item.get('self_correction') else
                         '%s 更正了 %s' % (who, whom) if whom else '%s 提出了更正' % who)
                        + ('：「%s」' % excerpt(said, REPLY_EXCERPT) if said else ''))

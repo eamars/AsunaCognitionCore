@@ -1,8 +1,8 @@
 # ADR-089: A line's author is who wrote it
 
-Status: **Built on a branch, not installed** (`claude/author-is-who-wrote`), 2026-10-22. Proposed by Claude after a
+Status: **Accepted, built, installed 2026-10-22 17:53 NZDT** (correction audited 04:52:07Z). Proposed by Claude after a
 read-only study; the coordinating Claude session accepted it. Xiaoman agreed to the build with conditions (§7). It
-installs after she reads the diff, in the order of §6.
+was installed in the order of §6.
 
 ## 1. The problem
 

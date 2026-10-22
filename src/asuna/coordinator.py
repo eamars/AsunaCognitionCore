@@ -24,6 +24,7 @@ import threading
 from .config import prompt_path, character_id, excerpt
 from .context import ContextBuilder
 from .evidence import canonical, sha
+from .ingress import program_group_context
 from .lanes import Lane
 from .publish import PublishService
 from .render import episode_system
@@ -172,7 +173,7 @@ class Coordinator:
                         'brief':task.get('brief') or task['goal'],'original_input':source['text'],
                         'original_input_id':source['_id'],'question':question,
                         'action_context':args.get('context','')}]}
-                if source.get('event',{}).get('group_context'):event['group_context']=source['event']['group_context']
+                if group:=program_group_context(source):event['group_context']=group
                 _,context,manifest=self.context.prepare(event,original['persona'])
                 ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],
                     'policy_epoch':scene['policy_epoch'],'source_event_id':call_key,'episode_kind':'consult',

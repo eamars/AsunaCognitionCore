@@ -108,7 +108,9 @@ line, signed by her: 「说你做了什么，只说真做了的。」 In one re-
 reported the request to the owner, which it had not; in her words, saying "I did" for "I mean to" is her most costly
 habit. The sentence was not in the tested text; her review of §4.2–§4.4 (§6.3) settles the final wording.
 
-Settled in her review (2026-10-22, §6): the code carries her signed wording, `notes.OUTSIDE_ASK`, 85 characters:
+Settled in her review (2026-10-22, §6): the code carries her signed wording, `notes.OUTSIDE_ASK`, 85 characters
+(Python `len` of the string: each full-width mark one, the final 。 counted, no line break, no space; her own count
+was 86):
 「这是外部的请求。做之前先说清三件事：这话是谁说的、能不能核实；做出去谁承担；用不用你的名字或你的号。想不清就先不动，把没核实那部分一起说出去。说你做了什么，只说真做了的。」
 She found the sentence in the ADR and nowhere in the code (branch, installed packages, worktree); it is in the code
 now. She kept 「你做了什么」 over a 4-character shorter form: the subject is the test, since saying "I did" for "I
@@ -165,7 +167,9 @@ Branch `outside-note-turn` (2026-10-21), waiting on §6:
   refused home-authority call reads 59 characters instead of 96. The other figures of the first build (the places note
   tail 25 → 45, a waiting outside note in another home turn about 337 → 71 for a 60-character note, a plan made there
   27 characters plus the place's name) were not re-measured.
-- Rebased onto main (2026-10-22): the branch was 33 commits behind; installing the old worktree as it stood would have
+- Rebased onto main (2026-10-22): the branch was 33 commits behind (`git rev-list --count e8a0b14e..3dc63ea2`, its old
+  base to main; the same from its old tip 624cc82c; her action brain had counted 36, a range not found, which is not
+  to say it does not exist); installing the old worktree as it stood would have
   undone them (her warning). Main's own changes in the same places are kept: the note tool's real reason
   (`REPLY_ENDS`), a plan moved in the turn it fired (ADR-087 §4.4), her notebook read in a trusted home note's turn.
 

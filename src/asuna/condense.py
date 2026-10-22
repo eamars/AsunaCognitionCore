@@ -287,9 +287,10 @@ def _phrases(text):
 
 
 def _speakers(rows, me, days=None):
+    from .ingress import PROGRAM_AUTHOR
     seen = defaultdict(set)
     for row in rows:
-        if row.get('author') and row.get('author') != me:
+        if row.get('author') and row.get('author') not in (me, PROGRAM_AUTHOR):
             stamp = str(row.get('received_at') or '')[:10]
             for phrase in _phrases(row.get('text')):
                 seen[phrase].add(row['author'])

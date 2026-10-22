@@ -15,6 +15,7 @@ from .evidence import canonical, sha
 from .config import redact_text, character_id
 from .queue import database_effects_lock
 from .state import Denied, now
+from .ingress import PROGRAM_AUTHOR
 from .people import People
 
 try:                                  # 出站图片附件：元数据、字节端点的围栏都在 outbound_media
@@ -112,7 +113,7 @@ def addressees(store, scene, line):
     found = {people.person(doc.get('person')) for doc in people.roster(scene['_id']).values()
              if str(doc.get('handle')) in handles and doc.get('person')}
     answered = store.db.messages.find_one({'_id': line.get('reply_to')}, {'author': 1, 'direction': 1}) or {}
-    if answered.get('direction') == 'inbound' and answered.get('author'):
+    if answered.get('direction') == 'inbound' and answered.get('author') and answered['author'] != PROGRAM_AUTHOR:
         found.add(people.person(answered['author']))
     return found
 

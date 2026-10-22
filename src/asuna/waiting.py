@@ -26,6 +26,7 @@ def _excerpt(text):
 def pending(store, scene_ids, moment, persona=None):
     """[{scene_id, person (None: anyone), doc, at, text}] newest first: who she still waits for in these groups."""
     from .config import character_id
+    from .ingress import NOT_CORE_NOTICE
     from .people import LABEL_MENTION, People
     people, me, since = People(store, persona), character_id(store.config), (moment - HORIZON).isoformat()
     found = []
@@ -55,7 +56,8 @@ def pending(store, scene_ids, moment, persona=None):
                 if person in settled:
                     continue                    # a newer line to them is already listed, or they answered it
                 settled.add(person)
-                after = {'scene_id': scene_id, 'direction': 'inbound', 'scene_seq': {'$gt': line.get('scene_seq') or 0}}
+                after = {'scene_id': scene_id, 'direction': 'inbound', 'scene_seq': {'$gt': line.get('scene_seq') or 0},
+                         **NOT_CORE_NOTICE}         # a task result or a due plan answers nobody's wait
                 if person is not None:
                     after['author'] = {'$in': people.authors_of(person, [scene_id]) or [person]}
                 if not store.db.messages.find_one(after, {'_id': 1}):

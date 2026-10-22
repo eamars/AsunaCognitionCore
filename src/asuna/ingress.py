@@ -11,7 +11,16 @@ INTERNAL_SCENE_KIND = {'visit': 'group'}
 # Core notices queued in a person's scene (task results, due plans). They wake the role but are not
 # that person's words, so memory, summaries and the source list never treat them as speech.
 CORE_NOTICE_KINDS = ('task_feedback', 'scheduled', 'note')
-NOT_CORE_NOTICE = {'event.episode_kind': {'$nin': list(CORE_NOTICE_KINDS)}}
+# A line's author is who wrote it (ADR-089): the program for every row it makes. Who authorizes the turn stays on the
+# event (`person_id`).
+PROGRAM_AUTHOR = 'asuna:internal'
+NOT_CORE_NOTICE = {'author': {'$ne': PROGRAM_AUTHOR}}
+
+
+def author_of(event):
+    """Who wrote this input: the program for its own moments and notices, else the person on the event."""
+    kind = event.get('episode_kind')
+    return PROGRAM_AUTHOR if kind in INTERNAL_KINDS or kind in CORE_NOTICE_KINDS else event['person_id']
 
 
 def episode_id(event):
@@ -36,7 +45,7 @@ def persist_input(store, event, *, managed=False):
     key = episode_id(event)
     previous = store.db.messages.find_one({'_id': 'in-' + key})
     if previous:
-        if (previous['author'] != ('asuna:internal' if internal else event['person_id']) or previous['text'] != event['text']
+        if (previous['author'] != author_of(event) or previous['text'] != event['text']
                 or previous['policy_epoch'] != scene['policy_epoch']
                 or previous.get('event', {}).get('integration_profile') != event.get('integration_profile')):
             raise Denied('INPUT_IDENTITY_OR_CONTENT_CONFLICT')
@@ -47,7 +56,7 @@ def persist_input(store, event, *, managed=False):
                'adapter_id': event.get('adapter_id', 'fixture'),
                'platform_event_id': event['event_id'], 'scene_id': scene['_id'],
                'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
-               'scene_seq': sequence, 'text': event['text'], 'author': event['person_id'],
+               'scene_seq': sequence, 'text': event['text'], 'author': author_of(event),
                'direction': 'inbound', 'delivery_state': 'RECEIVED',
                'occurred_at': event.get('occurred_at', now()), 'received_at': now(),
                'character_context': scene.get('character_context', 'initial'),
@@ -56,7 +65,6 @@ def persist_input(store, event, *, managed=False):
                **({'ingress_state': 'ACCEPTED'} if managed else {})}
     if internal:
         message['direction'] = 'internal'
-        message['author'] = 'asuna:internal'
     try:
         return store.put('messages', message, stream=key), True
     except Conflict:

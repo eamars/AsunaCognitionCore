@@ -64,6 +64,11 @@ except Exception:
         peer_from_message = verify_peer = channel_of = None
 
 try:
+    from .ingress import PROGRAM_AUTHOR
+except Exception:
+    PROGRAM_AUTHOR = "asuna:internal"      # 平铺加载（离线自检）：与 ingress.py 同值
+
+try:
     from .state import Denied
 except Exception:
     try:
@@ -470,6 +475,8 @@ def build_digest(hits, docs, meta, *, snippet=SNIPPET):
     participants, corrections, opinions, open_items, replies = {}, [], [], [], []
     undated = 0
     for row in rows:
+        if row["author"] == PROGRAM_AUTHOR:
+            continue                       # 程序的行（任务结果、到期的计划）不是谁的发言：不算参与者
         key = _key(row)
         person = participants.get(key)
         if person is None:

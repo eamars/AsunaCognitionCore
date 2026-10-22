@@ -121,6 +121,7 @@ def exchanges(store, persona, zone_name, moment=None):
     """Her lines since this was last shown (at most WINDOW_DAYS), each beside the thought she wrote in that turn and
     what followed it; records the showing. A sample chosen by the day keeps at least half the places."""
     from . import reasons, visibility
+    from .ingress import PROGRAM_AUTHOR
     from .people import People
     from .schedule_rules import line_stamp
     moment = moment or datetime.now(timezone.utc)
@@ -149,7 +150,8 @@ def exchanges(store, persona, zone_name, moment=None):
         ours = {row['_id'] for row in lines}
         for index, line in enumerate(lines):
             seq = line.get('scene_seq') or 0
-            following = [r for r in rows if (r.get('scene_seq') or 0) > seq and r['direction'] == 'inbound']
+            following = [r for r in rows if (r.get('scene_seq') or 0) > seq and r['direction'] == 'inbound'
+                         and r.get('author') != PROGRAM_AUTHOR]
             nxt = next((r.get('scene_seq') for r in rows if (r.get('scene_seq') or 0) > seq and r['_id'] in ours), None)
             replies = [r for r in following if ((r.get('event') or {}).get('group_context') or {}).get('reply_message_id')
                        == line['_id']]

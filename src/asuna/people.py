@@ -20,6 +20,7 @@ import unicodedata
 
 from . import channel_kinds
 from .config import excerpt
+from .ingress import NOT_CORE_NOTICE, PROGRAM_AUTHOR
 from .peer_context import channel_of, peer_from_message, verify_peer
 from .state import Conflict, now
 
@@ -53,6 +54,9 @@ def typed(text):
 
 
 UNKNOWN_NAME = '还不知道名字'
+# The program is never a person (ADR-089): its lines read by this word, and it takes no label or number. A stored record
+# of it keeps its number taken (a new number is the highest + 1) and stays out of every roster.
+PROGRAM_LABEL = '程序'
 REPLY_EXCERPT = 60
 POINTED_CHARS = 40                  # the first words of a line something points at: one length everywhere (her choice)
 THOUGHT_ANCHOR = 60                 # her thought under a line of hers someone points at: about this long, cut at a sentence end
@@ -175,7 +179,8 @@ class People:
     # ---- records ----------------------------------------------------------
     def roster(self, scene_id):
         if scene_id not in self._rosters:
-            self._rosters[scene_id] = {doc['_id']: doc for doc in self.db.scene_people.find({'scene_id': scene_id})}
+            self._rosters[scene_id] = {doc['_id']: doc for doc in self.db.scene_people.find(
+                {'scene_id': scene_id, 'person': {'$ne': PROGRAM_AUTHOR}})}
         return self._rosters[scene_id]
 
     def entry(self, scene, person_id, row=None, profile=None, looked_up=False):
@@ -184,6 +189,9 @@ class People:
         `profile`: their names from a message that @-mentions them (`mentioned`); `row` is then that message.
         `looked_up`: she found them in the group's member list to address them (find_member); the record says so
         until a message by or about them arrives here."""
+        if person_id == PROGRAM_AUTHOR:
+            return {'_id': scene['_id'] + '|' + PROGRAM_AUTHOR, 'scene_id': scene['_id'], 'person': PROGRAM_AUTHOR,
+                    'author': PROGRAM_AUTHOR, 'handle': None, 'card': '', 'nickname': '', 'role': '', 'previous': []}
         person = self.person(person_id)
         key = scene['_id'] + '|' + person
         roster = self.roster(scene['_id'])
@@ -288,6 +296,8 @@ class People:
         """[name #n]; the owner's label starts with the persona's word for them; herself is her name."""
         if doc.get('person') == self.self_id:
             return self.self_name
+        if doc.get('person') == PROGRAM_AUTHOR:
+            return PROGRAM_LABEL
         name = self.shown(doc)
         if self.is_owner(doc) and not name:
             return self.owner_label
@@ -299,7 +309,7 @@ class People:
 
     def notes(self, scene_id, doc, moment=None):
         """What the program noticed about this person, in words: group role, look-alike names, a recent rename."""
-        if doc.get('person') == self.self_id:
+        if doc.get('person') in (self.self_id, PROGRAM_AUTHOR):
             return []
         out = []
         role = ROLE_NOTES.get(doc.get('role'))
@@ -512,7 +522,7 @@ class People:
         return THOUGHT_THEN % anchor(' '.join(then.split())) if then else None
 
     # A line she can point at: anyone's in this conversation, hers once delivered; a program notice is not one.
-    POINTABLE = {'$or': [{'direction': 'inbound', 'event.raw.asuna_notice': {'$exists': False}},
+    POINTABLE = {'$or': [{'direction': 'inbound', 'event.raw.asuna_notice': {'$exists': False}, **NOT_CORE_NOTICE},
                          {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}
     RECENT_LINES = 6
 
@@ -663,6 +673,8 @@ class People:
         """A stored author as she reads it; her own rows read 你, the owner reads by the persona's word."""
         if author == self.self_id:
             return '你'
+        if author == PROGRAM_AUTHOR:
+            return PROGRAM_LABEL
         if scene is None:
             return self.owner_label if self.person(author) == self.owner else '某人'
         return self.speaker(scene, author)

@@ -261,7 +261,7 @@ class NativeMemory:
         """The last ten people who spoke in this conversation, each with how she sees them here (or nothing yet)."""
         from . import understanding
         latest = {}
-        for message in self.store.db.messages.find({'scene_id': self.scene['_id'], 'direction': 'inbound'},
+        for message in self.store.db.messages.find({'scene_id': self.scene['_id'], 'direction': 'inbound', **NOT_CORE_NOTICE},
                                                    {'author': 1, 'occurred_at': 1}).sort('occurred_at', -1).limit(2000):
             if message.get('author') and message['author'] not in latest:
                 latest[message['author']] = message.get('occurred_at')

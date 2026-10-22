@@ -1050,11 +1050,13 @@ class ContextBuilder:
             for key in ('relationship','relationship_shared_from_program'):
                 context.pop(key,None)
             # Whose own lines this turn shows (ids, before the rows read as labels): whom recall and understand_person
-            # may name here.
+            # may name here; the program's lines are nobody's.
             # A visit's event person only authorizes the visit; it is not someone in the room.
+            from .ingress import PROGRAM_AUTHOR
             manifest['present']=list(dict.fromkeys([*([] if event.get('episode_kind')=='visit' else [event['person_id']]),
                                                     *(row.get('author') for row in history
-                                                                          if row.get('direction')!='outbound' and row.get('author'))]))
+                                                                          if row.get('direction')!='outbound' and row.get('author')
+                                                                          and row.get('author')!=PROGRAM_AUTHOR)]))
             if event.get('episode_kind','external')=='external':
                 items,shown=_understanding.group_people(self.store,scene,event,persona,source)
                 if items:

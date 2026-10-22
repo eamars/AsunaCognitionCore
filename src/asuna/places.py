@@ -231,10 +231,11 @@ def zones(store, persona, moment):
 
 def room(store, scene, moment):
     """The room as it is now, from stored rows only."""
+    from .ingress import NOT_CORE_NOTICE
     since = (moment - HOUR).isoformat()
     me = character_id(store.config)
     lines = list(store.db.messages.find({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
-        'direction': 'inbound', 'received_at': {'$gte': since}}, {'author': 1}))
+        'direction': 'inbound', 'received_at': {'$gte': since}, **NOT_CORE_NOTICE}, {'author': 1}))
     last_in = next(iter(store.db.messages.find({'scene_id': scene['_id'], 'direction': 'inbound'},
         {'received_at': 1}).sort('scene_seq', -1).limit(1)), None)
     mine = next(iter(store.db.messages.find({'scene_id': scene['_id'], 'direction': 'outbound', 'author': me,

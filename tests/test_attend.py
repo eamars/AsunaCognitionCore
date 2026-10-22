@@ -1,5 +1,7 @@
 """The relevance gate (attend.py): a group turn nobody addressed to her asks 接话 or 不理 before any recall."""
 
+import re
+
 from asuna import attend
 from asuna.channels import called_by_name
 from asuna.coordinator import Coordinator
@@ -80,6 +82,23 @@ def test_join_runs_the_full_turn_with_her_reason(store):
     assert ep['attend']['choice'] == 'join' and ep['context']['attend_from_program'].endswith('有人提到我')
     assert '有人提到我' in character.calls[0]['messages'][-1]['content']
     assert store.db.messages.find_one({'_id': 'in-' + ep['_id']})['processing_outcome'] == 'ATTEND_JOIN'
+
+
+def test_her_next_turn_there_lists_once_the_lines_she_let_pass_with_her_reason(store):
+    """ADR-086 §16 (her ask): the line is already in her conversation, so the list says she looked and let it pass."""
+    setup(store)
+    character = FakeLane(store, [FakeTurn([('think', {'thought': '有人叫我。'})]), FakeTurn([('think', {'thought': '再看看。'})])])
+    coordinator = Coordinator(store, character)
+    coordinator.attend = FakeLane(store, [LaneResult('不理：他们在聊游戏'), LaneResult('接话：有人提到我'),
+                                          LaneResult('接话：又有人提到我')])
+    coordinator.ingest(gated_event(20002, '今晚开黑吗'), persona='P1')
+    ep = coordinator.ingest(gated_event(20003, '演示 你怎么看', 'name_called', at='2026-10-04T01:05:00+00:00'), persona='P1')
+    [item] = ep['context']['passed_from_program']['items']
+    assert re.fullmatch(r'\[阿杰 #1\] \d{1,2}/\d{1,2} \d{2}:\d{2}：看过，没接（他们在聊游戏）', item), item
+    assert '20002' not in item
+    again = coordinator.ingest(gated_event(20003, '演示 还在吗', 'name_called', at='2026-10-04T01:06:00+00:00'), persona='P1')
+    assert 'passed_from_program' not in again['context'], 'listed once'
+    assert not store.db.artifacts.count_documents({'kind': attend.PASSED_KIND})
 
 
 class Chunked:

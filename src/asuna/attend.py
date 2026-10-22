@@ -10,6 +10,11 @@ question has everything it needs, so the gate keeps no history of earlier questi
 that cannot decide (the model failed, or never answered 接话 or 不理) is the program's failure, recorded as
 `failed`, never as her 不理; on an addressed line it falls back to the full turn.
 
+Her conversation there already holds every line the gate looks at (it is written in as it arrives), so a line she lets
+pass reads like any other in her next turn. Each 不理 is kept (`hold_passed`, an `artifacts` row of kind
+`passed_line`) until her next turn there lists it once (`take_passed`): who, when, and her one-line reason, newest
+PASSED_MAX, the rest counted. A Host restart keeps what was not shown yet.
+
 The gate reads words only: why she is being asked, who is talking and how well she knows them, what was
 said here since she last spoke (bounded), and her mood as one public paragraph (ADR-086 D6; `affect.gate:
 none` leaves it out). Nothing is recalled, and the group's own conversation is not touched, so its cached
@@ -45,6 +50,47 @@ CHOICES = {'接话': 'join', '不理': 'quiet'}
 WINDOW_MIN_MINUTES, WINDOW_MAX_MINUTES = 10, 60
 MAX_LINES, MAX_CHARS = 40, 4000
 REASON_LIMIT = 60
+PASSED_KIND = 'passed_line'
+PASSED_MAX, PASSED_KEPT = 10, 50             # listed in one turn; kept per conversation before the oldest go
+PASSED_NOTE = '上回合以后，你在这个群看过、当时没接的话：谁、什么时候，括号里是你当时的理由；只给这一次。'
+
+
+def hold_passed(store, scene_id, message_id, received_at):
+    """A line she let pass, kept until her next turn there lists it (ADR-086 §16, her condition)."""
+    import uuid
+    store.db.artifacts.insert_one({'_id': 'passed-' + uuid.uuid4().hex, 'kind': PASSED_KIND, 'scene_id': scene_id,
+                                   'message_id': message_id, 'received_at': received_at, 'schema_version': 1})
+    extra = list(store.db.artifacts.find({'kind': PASSED_KIND, 'scene_id': scene_id}, {'_id': 1})
+                 .sort('received_at', -1).skip(PASSED_KEPT))
+    if extra:
+        store.db.artifacts.delete_many({'_id': {'$in': [doc['_id'] for doc in extra]}})
+
+
+def take_passed(store, scene, persona=None):
+    """The lines she let pass here since her last turn, once: {'items': [...], 'more': ...} or None."""
+    held = list(store.db.artifacts.find({'kind': PASSED_KIND, 'scene_id': scene['_id']}).sort('received_at', 1))
+    if not held:
+        return None
+    store.db.artifacts.delete_many({'_id': {'$in': [doc['_id'] for doc in held]}})
+    from .people import People
+    from .schedule_rules import line_stamp, scene_timezone
+    rows = {row['_id']: row for row in store.db.messages.find(
+        {'_id': {'$in': [doc['message_id'] for doc in held]}},
+        {'author': 1, 'attend': 1, 'occurred_at': 1, 'received_at': 1, 'event': 1})}
+    people, zone, items = People(store, persona), scene_timezone(store.config, scene), []
+    for doc in held:
+        row = rows.get(doc['message_id'])
+        if not row or (row.get('attend') or {}).get('choice') != 'quiet':
+            continue
+        reason = ' '.join(str(row['attend'].get('reason') or '').split())
+        items.append('%s %s：看过，没接%s' % (people.speaker(scene, row['author'], row), line_stamp(zone, said_at(row)) or '',
+                                         '（%s）' % reason if reason else ''))
+    if not items:
+        return None
+    out = {'items': items[-PASSED_MAX:]}
+    if len(items) > PASSED_MAX:
+        out['more'] = '还有 %d 条更早的没列出' % (len(items) - PASSED_MAX)
+    return out
 
 
 def gated(scene, event):

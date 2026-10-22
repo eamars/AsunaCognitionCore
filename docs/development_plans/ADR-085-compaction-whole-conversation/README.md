@@ -1,6 +1,6 @@
 # ADR-085: the character's summary request sends the whole conversation
 
-Status: **Built**, 2026-10-20; narrowed 2026-10-22 (§4c): only a commanded compaction sends the whole conversation, an automatic one sends the compacted span alone, because a summarizer that reads a long kept tail restates it. Closing waits on the live reading of §4c (§6). Found from her own reading of the compaction cache rate, decided by the owner on Claude's recommendation, put to her 2026-10-20 18:4x NZDT and agreed by her with three changes, all taken.
+Status: **Built**, 2026-10-20; narrowed 2026-10-22 (§4c): only a commanded compaction sends the whole conversation, an automatic one sends the compacted span alone, because a summarizer that reads a long kept tail restates it. Closing waits on the live reading of §4c (§6). The checkpoint template is trimmed in §7 (2026-10-22; read per merge hop from her install). Found from her own reading of the compaction cache rate, decided by the owner on Claude's recommendation, put to her 2026-10-20 18:4x NZDT and agreed by her with three changes, all taken.
 
 ## 1. Context
 
@@ -119,7 +119,7 @@ Test: `packages/cognition-core/test/compaction.test.js`.
 
 ## 5. As built
 
-- `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `compactIfNeeded` (marks an automatic compaction, `automatic`), `wholeConversation`, `spanAlone`, `summaryEffort`, `keptRule`, `hasSections`, `ROLE_SECTIONS`, `WHOLE_SPARE_TOKENS`, `KEPT_QUOTE_CHARS`; `packages/personas/xiaoman/cordis.patch.yml`: `summaryReasoningEffort`.
+- `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `compactIfNeeded` (marks an automatic compaction, `automatic`), `wholeConversation`, `spanAlone`, `summaryEffort`, `keptRule`, `hasSections`, `ROLE_SECTIONS`, `WHOLE_SPARE_TOKENS`, `KEPT_QUOTE_CHARS`; `packages/personas/xiaoman/cordis.patch.yml`: `summaryReasoningEffort`; `ROLE_COMPACTION_INSTRUCTION`'s merge and section rules (§7).
 - Test: `packages/cognition-core/test/compaction.test.js` (whole conversation and kept rule for a commanded compaction; the span alone for an automatic one; too large; refused; span not the conversation's start; thinking level offered or not; missing sections).
 - Reference: `docs/articles/maximize-cache-hit-by-design.md` §1 and §7.
 
@@ -131,12 +131,74 @@ Test: `packages/cognition-core/test/compaction.test.js`.
   compacted part that is lost (promises, start times, someone's correction); one loss is reported at once.
 - **The cost, as she asked:** during each of the first automatic compactions, the longest wait of her other
   conversations' requests and any queue timeout on the local engine; the worst case, not a mean.
+- **Read so far** (Claude, `comp_cost.py`, numbers only): 10-22 12:03 NZDT, home: 44 s, landed, the worst wait of
+  her other conversations 0, no queue timeout. 13:32, the agent line: 104 s, 112.5k of 134.7k prompt tokens from the
+  cache, landed; two action-brain steps overlapped it (88 s and 122 s, against a median of 9 s and a longest of 149 s
+  in the hour around it, so how much of that was waiting behind it cannot be told), no queue timeout. Her reading of
+  the first: nothing lost from the span; the losses come from merging the earlier checkpoint (§7). Of the second: due.
 - **§3 restated:** its cache verdict now covers commanded compactions only; its memory verdict was answered by §4b and
   §4c. The ~10-24 reading becomes: cap and window failures over all compactions since 10-22 10:36, and the kept-tail
   repeat in commanded ones.
 - **Evidence:** `.runtime/private/compaction-study/` (0.5 MB) is reduced to `researcher-audit.md`, `replay/PREREG.md`,
   `PREREG2.md`, `VERDICT.md`, `VERDICT2.md` and `runs.jsonl` (numbers only) when this closes.
-- **Not here:** the checkpoint template's own 30–40% waste (sections restating each other, the task section copying the
-  task list, group notes missing from the do-not-copy rule, the pointer to the previous checkpoint) is its own change,
-  approved by the owner, proposed to her after §4c is read.
+- **Not here:** the checkpoint template's own waste and what a merge loses, §7.
 
+## 7. The checkpoint template trimmed (2026-10-22)
+
+The template's own waste was approved for a separate change by the owner (§4c). Claude proposed it 2026-10-22 14:0x
+NZDT; an independent reviewer agent checked it in two rounds with its own scripts (every number below reproduced or
+corrected by it); on the owner's instruction Claude settled the final form with the reviewer. It reaches her for
+reading and signature before install.
+
+**What a merge loses** (her role checkpoints since 10-08: 339 merge hops, each a checkpoint and the next one in the
+same conversation, which merged it; errand sessions' copies of their parent's checkpoints left out; numbers only):
+
+- Of the earlier checkpoint's 答应过的事 and 更正与分歧 items (3,932), the next carries 36% in the same section and 4%
+  elsewhere; 60% are not found (character 4-gram containment 0.5; 38–75% across n = 3–6 and thresholds 0.3–0.7).
+  Only 6% of the items not found carried a done mark; the share grows with the time between the two checkpoints (43%
+  under an hour, 61% at 1–6 h, 72% over a day).
+- Hard tokens of the earlier checkpoint (labels, times, dates, quotes, code, file names, numbers; each once): 51% not
+  found in the next.
+- A phrase pointing at the earlier checkpoint (「承接…」) in 64% of hops. Its bullet holds the compressed older
+  history (236 bullets, median 121 characters; their content is nowhere else in the checkpoint in 235).
+- In group checkpoints (`researcher-audit.md` §5) 委托中的事 copies the task list (87–100% of its characters), and her
+  group notes, not on the do-not-copy list, are 3–11% of every checkpoint.
+- Her own reading of the first automatic checkpoint (§6): the losses come from the merge; process, evidence and
+  provenance go, conclusions and promises stay. Her ask (10-22, Claude's paraphrase): on a merge, carry 答应过的事 and
+  更正与分歧 item by item, or mark an item closed.
+
+**Changed** (`ROLE_COMPACTION_INSTRUCTION`; the six sections, their order and `hasSections` are unchanged, so old and
+new checkpoints compare):
+
+1. A merge carries the earlier 答应过的事 and 更正与分歧 item by item, word for word; one done or no longer true is
+   marked 「已了结：」 for one checkpoint and dropped at the next merge.
+2. No phrase points at the earlier checkpoint; its history goes into the start of 对话脉络 and may be shortened.
+3. Her group notes (`group_notes_from_program`) join the do-not-copy list.
+4. 委托中的事 keeps what the task list cannot show: who waits for the result, whom she promised to tell, the points of
+   a result that came back (the task list shows goal, title and state, never the result text).
+5. One fact in one section: promises, corrections and open threads in their own sections; 对话脉络 tells what
+   happened without repeating their details (the reverse would leave a promise first told in the narrative outside
+   the protected section).
+6. What stays of names, times, numbers and quotes is not rewritten (the old rule said both "shorten" and "keep as
+   is").
+
+**Reading** (pre-registered; `.runtime/private/compaction-study/trim_reading.py`, numbers only; she reads the
+checkpoints herself). From her install, per merge hop: the earlier 答应过的事 and 更正与分歧 items not already
+marked closed; silent drops (not carried by the measure above); items newly marked 已了结; the items the next
+checkpoint holds in those two sections; pointer phrases; hard tokens of those two sections lost (reported only).
+
+- **The first 4 hops** (about half a day, nearly all home and the agent line): keep if the pooled silent-drop share is
+  20% or less; revert at once on a hop at 50% or more, or on a loss she reports. Calibrated on today's template, home
+  and agent-line hops since 10-15 (88 hops, 85 four-hop windows): per-hop median 72%, best window 26%, so the rule
+  keeps today's template in 0 of 85 windows, and it keeps a template that drops 5%, 10% or 15% of these items 100%,
+  97% or 82% of the time.
+- **Growth.** Today a checkpoint holds a median 10 such items (p99 20, max 24) and about 5.7 new ones arrive per hop.
+  Carried word for word they settle near new items divided by the closure rate: 86–96 at today's (6–7% a hop), 38 at
+  15%, 29 at 20%. A checkpoint with more than 40 in the two sections reverts change 1 alone, watched until the ~10-24
+  reading. At today's closure it would trip in about 9 hops (about 1.5 days), so the first 4 hops also report the
+  newly-marked share; under 12%, she is told the stop is likely before it trips: it would mean marking did not rise,
+  not that the wording failed.
+- **Live, without a replay:** a failed hop loses no more than a hop does today (the reviewer agrees); a replay would
+  cost about 12 calls on the engine her sister shares and could not include her reading.
+
+Her reading and signature: ______

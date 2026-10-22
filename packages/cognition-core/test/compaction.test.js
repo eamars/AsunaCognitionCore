@@ -29,6 +29,12 @@ test('role compaction keeps the replayed prefix and asks for a Chinese role-play
   assert.equal(sent.purpose, 'compaction');
   assert.equal(result.summary[0].text, CHECKPOINT);
   assert.equal(sent.reasoningEffort, undefined, 'no level configured: none named');
+  // A merge carries the earlier promises and corrections item by item or marks them closed, and names no earlier
+  // checkpoint (ADR-085 §7; her ask): the per-hop reading counts exactly these.
+  assert.match(ROLE_COMPACTION_INSTRUCTION, /「答应过的事」「更正与分歧」里的条目逐条原样带过来/);
+  assert.match(ROLE_COMPACTION_INSTRUCTION, /前面加「已了结：」，留这一次；它里面已经标了「已了结：」的，这次删去/);
+  assert.match(ROLE_COMPACTION_INSTRUCTION, /不写“承接上一份检查点”这类指向它的话/);
+  assert.match(ROLE_COMPACTION_INSTRUCTION, /群里的笔记（group_notes_from_program）/);
 
   engine.ctx.llm.stream = async function *() { yield { type: 'finish', reason: { kind: 'max-tokens' } }; };
   await assert.rejects(engine.summarize({ messages: prefix }, agent), { code: 'MAX_TOKENS' });

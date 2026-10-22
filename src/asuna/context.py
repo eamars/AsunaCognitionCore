@@ -1148,6 +1148,10 @@ class ContextBuilder:
             held=notices.take(self.store,scene,persona)
             if held:
                 context['notices_from_program']=held
+            # The lines she let pass at the gate since her last turn here, once (attend.py).
+            passed=attend.take_passed(self.store,scene,persona)
+            if passed:
+                context['passed_from_program']=passed
             # Muted there: every turn in that group says so before she speaks (own_mute.py).
             muted=own_mute.line(self.store,scene,schedule_zone,moment)
             if muted:

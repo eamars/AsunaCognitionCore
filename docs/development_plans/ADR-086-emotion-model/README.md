@@ -1,7 +1,8 @@
 # ADR-086: A psychological emotion model for her agentic loop
 
 Status: **Stage 1 built and installed** 2026-10-21 13:18:51 NZDT (main 5fff9161, reviewed by Claude; her persona
-values published by her, 72830d0a); the 7-day reading is §9, stage 2 waits for it. Written by the research agent
+values published by her, 72830d0a); the 7-day reading is §9, stage 2 waits for it. §16 (2026-10-22): the lines she lets pass at the gate are listed
+once in her next turn there. Written by the research agent
 (Claude Fable 5.1) at the owner's request, from the brief Claude prepared; the owner's decisions are in §11, her
 review in §15. Every number says where it came from.
 
@@ -742,5 +743,34 @@ She read the source herself and signs D1–D7 and E1–E3 with these changes, fo
   first); 「笑着推掉…不用解释太多」 → 「你可以推，怎么推由你」; 「顺手帮点不费劲的小忙」 kept; the low slot's 「除了主人」 in a
   later batch. The core build does not touch `packages/personas/`; the persona diff she would publish (the `about:
   person` marks, her D2 half-lives, the D3 arousal defaults) is written for her apart from the code.
+
+Signature: ______
+
+## 16. The lines she let pass, listed in her next turn (2026-10-22)
+
+Her question (10-22, Claude's paraphrase): a line she lets pass at the gate is recorded only on the program's side
+(the audit's `attend.verdict`, the episode's 「不理：…」), so her next turn there cannot tell that she already looked
+at it and why she passed. Her condition (13:30): only in a turn she opens anyway; no new turn, no wake. Proposed by
+Claude, checked by an independent reviewer agent (its own scripts), settled with it on the owner's instruction.
+
+**Evidence** (read-only, numbers only). Since stage 1 (10-21 13:18 NZDT) the gate let 56 group lines pass in about 27
+hours (about 49 a day), 5 of them @s to her. Every one was still in her conversation at her next turn there, because
+each platform line is written into her group conversation as it arrives (`recordChannelInput`,
+`packages/cognition-core/src/navigation.js`), 1.4–89 s before the gate's verdict (median 5.5 s). So no line was lost
+and the catch-up window needs no change (§13.4 still counts lost lines), but a mark on the line's history row would
+never be shown: her turn leaves out rows the conversation still shows (re-sent 0 times in 44). No harm can be seen in
+the data yet (she quote-replies in 5% of group turns, so 0 of 5 says nothing either way); it is built because the gate
+decides in a session of its own, and her turn otherwise does not know that it decided.
+
+**Built.** A 不理 keeps the line (`attend.hold_passed`, an `artifacts` row of kind `passed_line`) until her next turn in
+that group lists it once (`attend.take_passed`, block `passed_from_program`): 「[label 时刻]：看过，没接（her reason）」,
+the label and time by the same helpers as held platform notices (a poke or a reaction reads the same way), newest 10
+and a count of the rest, kept across a Host restart, at most 50 per conversation. Not for a gate failure (that is the
+program's, shown at home), not in the gate's own material. Cost: an entry is a median 38 characters, at most 54; in the
+same 27 hours 34 later turns would have carried the block, a median 1 entry and at most 4 (most in one group in one
+hour: 9); it sits in the turn's tail, so the cached prefix is untouched; the block's note is said once in her system
+prompt (`block_guide.py`). Test: `tests/test_attend.py`.
+
+Stage 2 (§10, §14.3) is unchanged and waits for the §9 reading.
 
 Signature: ______

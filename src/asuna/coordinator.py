@@ -507,6 +507,8 @@ class Coordinator:
             from . import notices
             if verdict['choice']=='quiet':
                 notices.drop_seen(self.store,ep['scene_id'])    # the notices the gate showed were seen once
+                if row:                                         # her next turn there lists it once (her ask)
+                    attend.hold_passed(self.store,ep['scene_id'],row['_id'],row.get('received_at'))
             return self._update(ep,state='COMMITTED',attend=verdict,
                                 silent_reason=verdict['reason'] if verdict['choice']=='failed' else '不理：'+verdict['reason'])
         _,context,manifest=self.context.prepare(event,ep['persona'])

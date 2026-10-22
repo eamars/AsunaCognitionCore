@@ -50,9 +50,13 @@ HELPER_LOCK_CHILD = (
     "from qqadapter.journal import _lock\n"
     "fd=os.open(sys.argv[1],os.O_CREAT|os.O_RDWR,0o644)\n"
     "_lock(fd)\n"
-    "print('LOCKED',flush=True)\n"
+    "print('LOCKED %d'%os.getpid(),flush=True)\n"
     "time.sleep(float(sys.argv[2]))\n"
 )
+# The helper runs on the interpreter itself, so the process the check kills and waits for is the holder: a Windows
+# venv's python.exe is a redirector that starts the interpreter as a second process, which is still dying after the
+# redirector has been killed and waited for (multiprocessing bypasses it the same way). It needs only the stdlib.
+HELPER_PYTHON = getattr(sys, "_base_executable", sys.executable)
 
 
 class Report:
@@ -1788,7 +1792,7 @@ def _check_lock_and_spool(rep, cfg, root):
     # a live holder is refused, and a holder that dies releases the lock so the
     # leftover file never blocks a restart
     holder.release_lock()
-    child = subprocess.Popen([sys.executable, "-c", HELPER_LOCK_CHILD, path, "30", os.path.dirname(HERE)],
+    child = subprocess.Popen([HELPER_PYTHON, "-c", HELPER_LOCK_CHILD, path, "30", os.path.dirname(HERE)],
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                              universal_newlines=True)
     try:
@@ -1800,13 +1804,13 @@ def _check_lock_and_spool(rep, cfg, root):
         ready = bool(said)
         line = said[0].strip() if said else ""
         refused = None
-        if line == "LOCKED":
+        if line == "LOCKED %d" % child.pid:        # the holder is the process killed below, not a grandchild
             try:
                 Journal(root + "/lockdir").acquire_lock()
             except RuntimeError as exc:
                 refused = str(exc)[:70]
         rep.check("lock_other_process_refused", refused is not None,
-                  refused or "child=%r ready=%s" % (line, bool(ready)))
+                  refused or "child=%r pid=%d ready=%s" % (line, child.pid, bool(ready)))
         child.kill()
         child.wait()
         try:

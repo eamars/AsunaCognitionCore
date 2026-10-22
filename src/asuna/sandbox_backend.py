@@ -68,7 +68,7 @@ def confine(config, argv, root):
 
 
 SITE = Path(__file__).with_name('sandbox_site')   # sitecustomize for the Pythons a confined command starts
-TEMP_FOLDER = '.tmp'                             # inside the command's own folder: the only place it may write
+TEMP_FOLDER = '.tmp'                             # inside the command's own folder: one folder in it per command
 # Windows gives a restricted token no SSPI credentials, so Schannel (Git for Windows' default TLS) fails there with
 # SEC_E_NO_CREDENTIALS: git uses its bundled OpenSSL and CA file instead. Its credential helpers start through sh.exe,
 # which cannot start there either: the list is emptied (her commands log in through git_login). Elsewhere git may
@@ -77,9 +77,60 @@ GIT_CONFIG = ({'GIT_CONFIG_COUNT': '2', 'GIT_CONFIG_KEY_0': 'http.sslBackend', '
                'GIT_CONFIG_KEY_1': 'credential.helper', 'GIT_CONFIG_VALUE_1': ''} if sys.platform == 'win32' else {})
 
 
-def environment(extra=None, cwd=None):
-    """What a confined command inherits: enough for Windows and Python to start, no credentials. Its temporary folder
-    is one inside its own folder (the system's is not writable there), and its Pythons make folders it can use."""
+def command_temp(cwd):
+    """A new temporary folder for one command, inside `.tmp` of its own folder (the system's is not writable there).
+    Made with the default mode: the worker's own Python would give a 0o700 folder (mkdtemp) a protected ACL that the
+    confined command could not write (ADR-065). The caller removes it when the command ends (remove_temp)."""
+    import uuid
+    temp = Path(cwd) / TEMP_FOLDER / uuid.uuid4().hex[:12]
+    temp.mkdir(parents=True)
+    return temp
+
+
+TEMP_REMOVED = '这条命令的临时文件夹（TMPDIR）随它结束删了：里面有 %d 个文件，最上层是 %s；两条命令之间要留的写进%s'
+TEMP_NAMES = 10
+
+
+def temp_removed(temp, keep_in):
+    """What a command's temporary folder held, in her words, for a command that failed or was stopped (her ask
+    2026-10-22: know what was deleted), or None when it held nothing. ``keep_in``: where she keeps things instead."""
+    import os
+
+    def count(folder):                                   # never through a link or junction the command made
+        total = 0
+        for entry in os.scandir(folder):
+            if entry.is_symlink() or entry.is_junction():
+                continue
+            total += count(entry.path) if entry.is_dir() else entry.is_file()
+        return total
+    files = count(temp)
+    if not files:
+        return None
+    names = sorted(path.name for path in Path(temp).iterdir())
+    shown = '、'.join(names[:TEMP_NAMES]) + ('等 %d 项' % len(names) if len(names) > TEMP_NAMES else '')
+    return TEMP_REMOVED % (files, shown, keep_in)
+
+
+def remove_temp(temp):
+    """Removes a command's temporary folder, read-only files too (git's objects are). A file it still cannot remove
+    (held open for a moment by another program) stays: the command itself has ended and its result stands."""
+    import os, shutil, stat
+
+    def writable(function, path, _):
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            function(path)
+        except OSError:
+            pass
+    shutil.rmtree(temp, onexc=writable)
+
+
+def environment(extra=None, temp=None):
+    """What a confined command inherits: enough for Windows and Python to start, no credentials, and its Pythons make
+    folders it can use. ``temp``: its own temporary folder (command_temp) as TMPDIR, which Python's tempfile, pip and
+    pytest read first. TEMP and TMP stay the folder that holds it, shared by one place's commands: on Windows DSH's
+    runner keeps its ACL lock files under TMP (one per protected folder, so two runners on one folder take turns) and
+    gives the command a private TEMP and TMP of its own, which it removes."""
     import os
     keep = ('SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'PATH', 'TEMP', 'TMP', 'SYSTEMDRIVE', 'PROGRAMDATA',
             'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'LANG', 'HOME', 'USERPROFILE')
@@ -90,10 +141,8 @@ def environment(extra=None, cwd=None):
                PYTHON_MANAGER_AUTOMATIC_INSTALL='false',
                # Nobody can answer a prompt here: git fails at once instead of waiting out the command's time.
                GIT_TERMINAL_PROMPT='0', GCM_INTERACTIVE='never', PYTHONPATH=str(SITE), **GIT_CONFIG)
-    if cwd is not None:
-        temp = Path(cwd) / TEMP_FOLDER
-        temp.mkdir(parents=True, exist_ok=True)
-        env.update(TEMP=str(temp), TMP=str(temp), TMPDIR=str(temp))
+    if temp is not None:
+        env.update(TEMP=str(temp.parent), TMP=str(temp.parent), TMPDIR=str(temp))
     env.update(extra or {})
     return env
 

@@ -103,13 +103,27 @@ class Sandbox:
         if value['timed_out']:
             out['stopped'] = ('命令跑满 %d 秒还没结束，被停下；上面是它停下前的输出。要更久就把 timeout 写大（最多 %d 秒），'
                               '或把活拆小、进度写进 /task 的文件' % (timeout, RUN_SECONDS_MOST))
+        if value.get('temp_removed'):
+            out['temp_removed'] = value['temp_removed']
         return out
 
 
 def run_bounded(command, cwd, timeout, *, stdin=None, env=None, limit=OUTPUT_LIMIT):
     """Run a wrapped command: its output capped, its time bounded, stdin never the worker's own (the Host's request
-    pipe). Killing the wrapper ends the confined command (DSH's runner holds it in a kill-on-close job)."""
-    process = subprocess.Popen(command, cwd=str(cwd), env=sandbox_backend.environment(env, cwd),
+    pipe), its temporary folder its own and gone when it ends. Killing the wrapper ends the confined command (DSH's
+    runner holds it in a kill-on-close job)."""
+    temp = sandbox_backend.command_temp(cwd)
+    try:
+        value = _run_bounded(command, cwd, timeout, stdin, sandbox_backend.environment(env, temp), limit)
+        if value['exit_code'] != 0 or value['timed_out']:
+            value['temp_removed'] = sandbox_backend.temp_removed(temp, ' /task')
+        return value
+    finally:
+        sandbox_backend.remove_temp(temp)
+
+
+def _run_bounded(command, cwd, timeout, stdin, env, limit):
+    process = subprocess.Popen(command, cwd=str(cwd), env=env,
                                stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     buffers, state = [bytearray(), bytearray()], {'limit': False}

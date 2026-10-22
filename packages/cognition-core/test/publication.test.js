@@ -340,6 +340,37 @@ test('a refused development call says what was wrong, with the values, and what 
   assert.equal(tls.stdout.trim(), process.platform === 'win32' ? 'http.sslBackend=openssl' : 'undefined=undefined');
 });
 
+test('a core candidate command has its own temporary folder, gone when it ends', async t => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/command-temp-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  const source = path.join(workspace, 'source'); await fs.mkdir(path.join(source, 'src'), { recursive: true });
+  await fs.writeFile(path.join(source, 'src/x.py'), 'x = 1\n');
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'probe', projects: [{ id: 'probe', root: source, format: 'repository' }] });
+  floor.sandbox = () => ({ confine: async argv => ({ argv }) });
+  const write = 'const fs = require("node:fs"), p = require("node:path"); fs.mkdirSync(p.join(process.env.TMPDIR, "d"));'
+    + ' fs.writeFileSync(p.join(process.env.TMPDIR, "d", "x"), "1"); fs.chmodSync(p.join(process.env.TMPDIR, "d", "x"), 0o444);'
+    + ' console.log(process.env.TEMP + "|" + process.env.TMP + "|" + process.env.TMPDIR)';
+  const first = await floor.call('development_run', { argv: [process.execPath, '-e', write] });
+  const second = await floor.call('development_run', { argv: [process.execPath, '-e', write] });
+  const [shared, tmp, temp] = first.stdout.trim().split('|');
+  const candidate = path.join(workspace, 'work/self-development/probe');
+  assert.equal(shared, path.join(candidate, '.tmp')); assert.equal(tmp, shared);   // the runner's lock root stays shared
+  assert.equal(path.dirname(temp), shared);
+  assert.notEqual(second.stdout.trim().split('|')[2], temp);                  // each command its own
+  assert.deepEqual(await fs.readdir(path.join(candidate, '.tmp')), []);        // read-only files too
+  assert.equal(first.temp_removed, undefined);
+  // A failed command says what its folder held (her ask); a link in it is removed, never what it points at.
+  await fs.mkdir(path.join(candidate, 'kept')); await fs.writeFile(path.join(candidate, 'kept/report.md'), 'mine');
+  const failed = await floor.call('development_run', { argv: [process.execPath, '-e', 'const fs = require("node:fs"), p = require("node:path");'
+    + ' fs.writeFileSync(p.join(process.env.TMPDIR, "half.json"), "{}");'
+    + ` fs.symlinkSync(${JSON.stringify(path.join(candidate, 'kept'))}, p.join(process.env.TMPDIR, "link"), "junction"); process.exit(3)`] });
+  assert.equal(failed.exit_code, 3);
+  assert.equal(failed.temp_removed, '这条命令的临时文件夹（TMPDIR）随它结束删了：里面有 1 个文件，最上层是 half.json、link；两条命令之间要留的写进候选');
+  assert.equal(await fs.readFile(path.join(candidate, 'kept/report.md'), 'utf8'), 'mine');
+  assert.deepEqual(await fs.readdir(path.join(candidate, '.tmp')), []);
+});
+
 test('a repository candidate publishes only the project paths, not what a command left beside them', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/publication-scope-'));

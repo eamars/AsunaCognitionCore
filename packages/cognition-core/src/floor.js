@@ -117,16 +117,38 @@ async function mirrorReferences(project, sourceFiles, candidate) {
     if (isReference(project, relative) && !sourceFiles.has(relative)) await fs.unlink(path.join(candidate, relative));
 }
 const PYTHONS = new Set(['python3', 'python', 'python3.exe', 'python.exe']);
+/** A new temporary folder for one command in a core candidate, inside its `.tmp` (the system's is not writable there;
+ * `.tmp` is outside what publishes), removed when the command ends (as sandbox_backend.command_temp). */
+async function commandTemp(candidate) {
+  const temp = path.join(candidate, '.tmp', randomUUID().replaceAll('-', '').slice(0, 12));
+  await fs.mkdir(temp, { recursive: true });
+  return temp;
+}
+/** What a failed or stopped command's temporary folder held, in her words, or undefined when nothing (as
+ * sandbox_backend.temp_removed). */
+async function tempRemoved(temp) {
+  const entries = await fs.readdir(temp, { recursive: true, withFileTypes: true }).catch(() => []);
+  const files = entries.filter(entry => entry.isFile()).length;
+  if (!files) return undefined;
+  const names = (await fs.readdir(temp)).sort();
+  const shown = names.slice(0, 10).join('、') + (names.length > 10 ? `等 ${names.length} 项` : '');
+  return `这条命令的临时文件夹（TMPDIR）随它结束删了：里面有 ${files} 个文件，最上层是 ${shown}；两条命令之间要留的写进候选`;
+}
+/** Removes a command's temporary folder; a file still held open by another program stays, the result stands. */
+async function removeTemp(temp) {
+  await fs.rm(temp, { recursive: true, force: true, maxRetries: 2 }).catch(() => {});
+}
 /** What a sandboxed command inherits: enough for Windows and Python to start, no credentials (as sandbox_backend.py). */
-function commandEnvironment(candidate) {
+function commandEnvironment(candidate, temp) {
   const keep = ['SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'PATH', 'TEMP', 'TMP', 'SYSTEMDRIVE', 'PROGRAMDATA',
     'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'LANG', 'HOME', 'USERPROFILE'];
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => keep.includes(key.toUpperCase())));
-  // A core candidate's commands get a temporary folder inside the candidate (the system's is not writable there; the
-  // folder is outside what publishes) and its Pythons make folders they can use (src/asuna/sandbox_site).
+  // A core candidate's commands get their own temporary folder (commandTemp) as TMPDIR, and their Pythons make folders
+  // they can use (src/asuna/sandbox_site). TEMP and TMP stay the candidate's `.tmp`, where DSH's Windows runner keeps
+  // its shared ACL lock files (as sandbox_backend.environment).
   const site = candidate && path.join(candidate, 'src', 'asuna', 'sandbox_site');
-  const own = site ? { TEMP: path.join(candidate, '.tmp'), TMP: path.join(candidate, '.tmp'),
-    TMPDIR: path.join(candidate, '.tmp'), PYTHONPATH: site } : {};
+  const shared = temp && path.dirname(temp);
+  const own = site ? { TEMP: shared, TMP: shared, TMPDIR: temp, PYTHONPATH: site } : {};
   // A nested `python3` falls through PATH to the Windows Python install manager, which would install a whole
   // Python into the candidate (it has no LOCALAPPDATA here); it answers "no runtimes" instead.
   // As sandbox_backend.GIT_CONFIG: on Windows git uses its bundled OpenSSL (Schannel has no credentials under the
@@ -385,11 +407,18 @@ export class PublicationFloor {
           : arg === '/task' || arg.startsWith('/task/') ? root + arg.slice(5) : arg);
         const confined = await sandbox.confine(argv, { mode: 'workspace-write', workspaceRoot: project.candidate });
         const core = project.format === 'repository';
-        if (core) await fs.mkdir(path.join(project.candidate, '.tmp'), { recursive: true });
-        const result = await run(confined.argv[0], confined.argv.slice(1), { cwd: project.candidate, runMs: seconds * 1000,
-          env: commandEnvironment(core ? project.candidate : undefined) });
+        const temp = core ? await commandTemp(project.candidate) : undefined;
+        let result, removed;
+        try {
+          result = await run(confined.argv[0], confined.argv.slice(1), { cwd: project.candidate, runMs: seconds * 1000,
+            env: commandEnvironment(core ? project.candidate : undefined, temp) });
+          if (temp && (result.exit_code !== 0 || result.timed_out)) removed = await tempRemoved(temp);
+        } finally {
+          if (temp) await removeTemp(temp);
+        }
         return { ...result, argv: args.argv, sandbox: 'dsh', writes: 'candidate only', ...(result.timed_out ? { stopped:
-          `命令跑满 ${seconds} 秒还没结束，被停下；上面是它停下前的输出。要更久就把 timeout 写大（最多 600 秒），或把活拆小` } : {}) };
+          `命令跑满 ${seconds} 秒还没结束，被停下；上面是它停下前的输出。要更久就把 timeout 写大（最多 600 秒），或把活拆小` } : {}),
+          ...(removed ? { temp_removed: removed } : {}) };
       }
       if (tool === 'development_publish') return this.publish(project, args.reason ?? '', origin, author);
       throw new Error(`UNKNOWN_DEVELOPMENT_TOOL: 发布底座不认识 ${given(tool)}——程序两边对不上，不是参数的问题；`

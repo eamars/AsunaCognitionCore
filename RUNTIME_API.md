@@ -656,7 +656,7 @@ Every command the worker does not run itself (`sandbox_run`, `development_run`, 
 | output | 256 KiB; past it `sandbox_run` keeps nothing (`TOOL_OUTPUT_LIMIT`) and `development_run` returns what came (`limited`) |
 | `python3`, `python` | the worker's own Python |
 | `/task` in an argument | the task folder |
-| temporary folder | `TEMP`, `TMP`, `TMPDIR` = `.tmp` inside its own folder (for `development_run`, only in a core candidate) |
+| temporary folder | `TMPDIR` (Python's `tempfile` reads it first) = a new folder inside `.tmp` of its own folder, removed when the command ends; a failed or stopped command's result says what it held (`temp_removed`); `TEMP`, `TMP` = `.tmp` (on Windows DSH's runner gives the command private ones); for `development_run`, only in a core candidate |
 | git | nothing prompts (`GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`; not set for `development_run`); with `character_git` set, a home task's commits carry her name as author and committer |
 | home task's commands | also `ASUNA_MONGO_URI`, `ASUNA_DATABASE`, `ASUNA_TIMEZONE` for `asuna.dbread` (`src/asuna/dbread.py`; skill `asuna-database`) |
 | working copy | each home place's folder holds `working-copy`, a full clone of the checkout whose `origin` is the checkout's origin; made at start when missing, never changed after (`packages/cognition-core/src/working-copy.js`) |

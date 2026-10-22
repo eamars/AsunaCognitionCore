@@ -163,7 +163,7 @@ A task's commands, run under DSH's sandbox (sandbox_backend.py): writes stay in 
 - class `Sandbox`
   - `native` — Her argv as this machine runs it: python3 is the worker's Python, /task is the task folder.
   - `run` — ``env``: extra variables for this one command (her credentials, credentials.environment).
-- def `run_bounded` — Run a wrapped command: its output capped, its time bounded, stdin never the worker's own (the Host's request pipe).
+- def `run_bounded` — Run a wrapped command: its output capped, its time bounded, stdin never the worker's own (the Host's request pipe), its temporary folder its own and gone when it ends.
 
 ## `sandbox_backend`
 
@@ -177,7 +177,10 @@ Where commands the worker does not write itself run: DSH's own sandbox (owner 20
 - def `available`
 - def `require`
 - def `confine` — The Host's wrapped argv that runs `argv` with writes confined to `root`.
-- def `environment` — What a confined command inherits: enough for Windows and Python to start, no credentials.
+- def `command_temp` — A new temporary folder for one command, inside `.tmp` of its own folder (the system's is not writable there).
+- def `temp_removed` — What a command's temporary folder held, in her words, for a command that failed or was stopped (her ask 2026-10-22: know what was deleted), or None when it held nothing.
+- def `remove_temp` — Removes a command's temporary folder, read-only files too (git's objects are).
+- def `environment` — What a confined command inherits: enough for Windows and Python to start, no credentials, and its Pythons make folders it can use.
 - def `git_login` — How git in her own commands (sandbox_run) logs in to an HTTPS remote: with the Host user's login (owner 2026-10-13).
 - def `git_identity` — The character's own name on what her commands commit (`character_git` {name, email} in local config), or {}.
 

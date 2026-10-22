@@ -129,3 +129,36 @@ Decisions for the build:
 
 Cost: no new tool and no per-turn line; `sandbox_run`'s description is unchanged (it already said git uses the Host
 user's logins).
+
+## One temporary folder per command, removed when it ends (owner, 2026-10-22)
+
+Measured 10-22: the `.tmp` a confined command was given was the same folder for every command in a place and nothing
+cleared it. Six such folders held about 7 MB, the largest 4.0 MB in one day on an agent line's place (pytest's
+`pytest-of-unknown`, 33 `b7-import-*`, pip's build and wheel folders, her `skillcheck` and `xb10v-*` folders), one
+inside a frozen candidate. Also measured, on Windows: DSH's runner points the command's `TEMP` and `TMP` at a private
+`dsh-*` folder of its own, which it removes after the command, and keeps its ACL lock files (one per protected folder,
+so two runners on one folder take turns) under its own `TMP` (`dsh-sandbox-windows-acl` `runner.js`,
+`lockFilePath`). Only `TMPDIR` reached the command as ours, and Python's `tempfile` reads it first, so pip, pytest and
+her scripts all wrote the one `.tmp`.
+
+Decision:
+
+- Each command gets a new folder inside `.tmp` as `TMPDIR` (`sandbox_backend.command_temp`, `floor.js`
+  `commandTemp`), removed when the command ends, read-only files too, never through a link or junction it made. A
+  file still held open by another program stays and the command's result stands. The folder is made with the default
+  mode (a 0o700 one from the worker's own Python would carry the protected ACL above).
+- `TEMP` and `TMP` stay `.tmp` itself: the runner's lock root stays shared by a place's commands. On Windows the
+  command sees the runner's private ones; elsewhere `TMPDIR` is what programs read.
+- A command that fails or is stopped says what its folder held before it went (her ask, 10-22: know what was deleted):
+  `temp_removed`, the file count and the top names, and that what two commands share goes in `/task` or the candidate.
+  Nothing when it held nothing or the command succeeded.
+
+She was told before it was built; she keeps nothing across commands in `.tmp`, and her skill brief says to keep such
+things in `/task` (her own note).
+
+Considered: clearing `.tmp` when a task ends (keeps a temporary file across a task's commands, but more code and no
+cover for home commands outside a task); a per-command `TEMP`/`TMP` too (splits the runner's lock). Cost: no tool or
+prompt change; one line in a failed command's result when its folder held files. Tests:
+`test_a_commands_temporary_folder_is_its_own_and_gone_when_it_ends` (real sandbox; fails on the old single folder) and
+`a core candidate command has its own temporary folder, gone when it ends` (`publication.test.js`). The folders left
+from before are removed once after the install; the one in a frozen candidate (one file) was listed to her first.

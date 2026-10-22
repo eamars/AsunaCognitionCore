@@ -144,6 +144,47 @@ def test_a_command_can_use_temporary_folders_inside_its_own_folder():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_a_commands_temporary_folder_is_its_own_and_gone_when_it_ends():
+    """Each command's TMPDIR was the same `.tmp`, never cleared: 4 MB in one place in a day (ADR-065, 2026-10-22). Now
+    a new folder in it per command, removed when the command ends, read-only files too. Python's tempfile (pip,
+    pytest) reads TMPDIR first; TEMP and TMP stay the shared `.tmp` (DSH's Windows runner keeps its lock files there and
+    gives the command private ones of its own)."""
+    import shutil, uuid
+    from pathlib import Path
+    from asuna.config import DATA
+    root = DATA / 'work' / ('temp-' + uuid.uuid4().hex)
+    box = Sandbox(root / 't1', config={'_host_sandbox': {'available': True}})
+    code = ("import os, pathlib, stat, tempfile\n"
+            "d = pathlib.Path(tempfile.gettempdir(), 'kept-by-git'); d.mkdir(); (d / 'object').write_text('x')\n"
+            "os.chmod(d / 'object', stat.S_IREAD)\n"
+            "print(tempfile.gettempdir() == os.environ['TMPDIR'], os.environ['TMPDIR'])")
+    try:
+        first, second = box.run(['python3', '-c', code]), box.run(['python3', '-c', code])
+        same, temp = first['stdout'].split()
+        assert first['exit_code'] == 0 and same == 'True', first
+        assert Path(temp).parent == box.task_dir / '.tmp' and second['stdout'].split()[1] != temp
+        assert not Path(temp).exists() and not Path(second['stdout'].split()[1]).exists()
+        assert 'temp_removed' not in first
+        # A failed command says what its folder held (her ask); a link in it is removed, never what it points at.
+        kept = box.task_dir / 'kept'
+        kept.mkdir()
+        (kept / 'report.md').write_text('mine', encoding='utf-8')
+        link = ("import os, pathlib, sys, tempfile\n"
+                "t = pathlib.Path(tempfile.gettempdir()); (t / 'half.json').write_text('{}')\n"
+                "if sys.platform == 'win32':\n"
+                "    import _winapi; _winapi.CreateJunction(sys.argv[1], str(t / 'link'))\n"
+                "else:\n"
+                "    os.symlink(sys.argv[1], t / 'link')\n"
+                "print(t)\n"
+                "sys.exit(3)")
+        failed = box.run(['python3', '-c', link, '/task/kept'])
+        assert failed['exit_code'] == 3 and failed['temp_removed'] == (
+            '这条命令的临时文件夹（TMPDIR）随它结束删了：里面有 1 个文件，最上层是 half.json、link；两条命令之间要留的写进 /task'), failed
+        assert (kept / 'report.md').read_text(encoding='utf-8') == 'mine' and not Path(failed['stdout'].strip()).exists()
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_git_in_a_command_uses_a_tls_and_a_login_that_work_inside_the_sandbox():
     """Her git over HTTPS failed in the sandbox: Windows gives a restricted token no SSPI credentials, so Git for
     Windows' Schannel says SEC_E_NO_CREDENTIALS, and git starts credential helpers through sh.exe, which cannot start

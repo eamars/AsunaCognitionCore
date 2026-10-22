@@ -359,23 +359,37 @@ must be acted on, keep its handle on screen.
 
 ### Compaction resets the prefix
 
-When a conversation passes its threshold, DSH's compaction (`dsh-compaction-basic`, with Asuna's
-`RoleCompactionEngine` in `compaction.js` writing the character's summary) replaces the older part with one summary
-and keeps a recent tail. The surface is now different from its start: **the first request after a compaction is
-always a full miss.** Compacting less often is a cache gain in itself, which is one reason notices are kept small
-(sections 5 and 6).
+A compaction (DSH's `dsh-compaction-basic`, with Asuna's `RoleCompactionEngine` in `compaction.js` writing the
+character's summary) replaces the older part of a conversation with one summary and keeps what comes after it. The
+surface is now different from its start: **the first request after a compaction reads the checkpoint, and everything
+kept after it, cold**, because they are new bytes at new positions. So two things decide what a compaction costs:
+where its summary request ends, and how much is kept after the checkpoint. Compacting less often is a gain in itself,
+which is one reason notices are kept small (sections 5 and 6).
 
-Two details in `compaction.js` are cache-aware:
+**Her conversations are compacted at the end of a turn, from the live end** (`compactAtTurnEnd` in `compaction.js`,
+`index.js` `turnEnd`; ADR-094). When her turn ends and the conversation is at `turnEndRatio` of the window (0.70 in
+the deployed character's preset, `turnEndTokens`), the Host runs DSH's `/compact` on it at once (`compactSession`,
+the path ADR-049 uses for quiet groups). DSH's `/compact` keeps the last message, so the summary request is her last
+request plus the instruction: it extends the state the engine holds at the live end and reads only the instruction,
+on the local engine and at any hosted API alike, and the summarizer never sees a kept tail. The next turn's first
+request reads the checkpoint and her last message (about 5k tokens) besides its own notice. A line that arrives while
+the summary runs waits for it; a conversation with a turn running or queued is left for its next turn's end.
+
+**DSH's in-turn compaction stays as the guard** for a turn that grows past `thresholdRatio` before its end (step
+pressure at `agent/pre-step`, or a context overflow). It keeps a tail of `retainRatio` of the budget, which for the
+deployed character is about 100k real tokens (DSH measures characters ÷ 4; her Chinese runs about 1.9 real tokens
+per estimated one), and it pays two cold reads: its summary request sends the compacted span alone, which ends where
+the local engine holds no state (the engine keeps the live end, the prompt ends of its last few steps and the end of
+the system prompt, nothing in between), and the step after it re-reads the whole tail behind the new checkpoint. The
+span goes alone because a summary request that carries a long kept tail restates it in the checkpoint, however the
+instruction names the boundary.
+
+Other details in `compaction.js`:
 
 - A commanded compaction (`/compact`, which keeps the last message) sends the whole conversation, the kept message
-  included, with the same tools, and then the instruction. The request extends exactly what was last read, so it
-  reads from the cache up to its last message; a request that sent only the compacted span would stop mid-history
-  (section 1). The instruction's last rule (`keptRule`) names the kept part: how many messages stay after the
-  checkpoint, and the opening of the first one, quoted only to locate it. DSH still chooses what is compacted and
-  what is kept.
-- An automatic compaction (step pressure or context overflow) sends the compacted span alone and pays the cold read:
-  a summary request that carries a long kept tail restates it in the checkpoint, however the instruction names the
-  boundary.
+  included, with the same tools, and then the instruction. The instruction's last rule (`keptRule`) names the kept
+  part: how many messages stay after the checkpoint, and the opening of the first one, quoted only to locate it. DSH
+  still chooses what is compacted and what is kept.
 - The whole conversation is sent only when it fits the window beside the summary cap (`wholeConversation`).
   Otherwise, or when the model refuses it for its window, the compacted span alone is sent, and a span too large for
   one request is summarized in steps (`inSteps`). Each fallback writes one log line with its reason and the sizes
@@ -685,7 +699,7 @@ A checklist for review:
 | Turn ceiling and limits | `src/asuna/context_budget.py` (ADR-014, ADR-063) |
 | Local clock at the tail | `src/asuna/local_time.py`: `for_model` |
 | Lines appended, held lines | `packages/cognition-core/src/navigation.js`: `recordChannelInput`; `pairing.js` |
-| Compaction | `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `wholeConversation`, `keptRule`, `pressure`, `floorTokens`, `inSteps`; thresholds in `packages/cognition-core/cordis.patch.yml` and each persona package's `cordis.patch.yml` |
+| Compaction | `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `wholeConversation`, `keptRule`, `pressure`, `floorTokens`, `turnEndTokens`, `compactAtTurnEnd`, `inSteps`; `index.js`: `turnEnd`, `compactSession`; thresholds in `packages/cognition-core/cordis.patch.yml` and each persona package's `cordis.patch.yml` (`turnEndRatio`) |
 | Carry to a new session | `packages/cognition-core/src/carry.js`: `overflowed`, `lastSummary`, `carrySession`; `src/asuna/native_worker.py`: `BusinessWorker.carry_session` (ADR-028) |
 | Early condensing | `src/asuna/condense.py`; `index.js`: `compactSession`, `conversationSize` (ADR-049) |
 | Relevance gate, summaries | `src/asuna/attend.py` (`GATED`, `ADDRESSED`, `gated`), `channels.group_context` (`answers_her`), `packages/cognition-core/src/attend.js`, `summary.js`; `native_worker.gate_session_id` |
@@ -695,12 +709,15 @@ A checklist for review:
 | Errand copy | `src/asuna/errands.py`; `native_worker.errand_session`; `index.js`: `errandSession`, `completedPrefix`, `ERRAND_ROOM`, `ensureAgent` (`copy`), `retireErrand` (ADR-066) |
 | DSH mechanisms | `@deepseek-ai/dsh-session/fork` `buildForkSeed`; `@deepseek-ai/dsh-llm` `SystemPromptUpdate`, `ToolUpdate`; `@deepseek-ai/dsh-agent-loop` `SystemPromptProjection`; `@deepseek-ai/dsh-compaction-basic` |
 | Decisions | ADR-014 (context budget), ADR-028 (carry), ADR-032 (section places), ADR-038 (fixed tool lists), ADR-049 (quiet-time upkeep), ADR-052 (switches), ADR-055 (fewer tools), ADR-056 (per-turn characters), ADR-063 (context growth defects), ADR-066 (errand carries home), ADR-084 (mechanical limits removed one at a time),
-ADR-085 (summary request: the whole conversation for a commanded compaction, the span alone for an automatic one), ADR-086 (emotion model: the mood paragraph, addressed lines at the gate) |
+ADR-085 (summary request: the whole conversation for a commanded compaction, the span alone for an automatic one), ADR-086 (emotion model: the mood paragraph, addressed lines at the gate), ADR-094 (compaction at the turn's end) |
 
 ---
 
 ## Changelog
 
+- **2026-10-23** — ADR-094: her conversations are compacted at the end of a turn, from the live end, through DSH's
+  `/compact` once they reach `turnEndRatio` of the window; DSH's in-turn compaction stays as the guard (section
+  "Compaction resets the prefix").
 - **2026-10-22** — ADR-085 §4c: an automatic compaction sends the compacted span alone again; a commanded one keeps
   the whole conversation (section "Compaction resets the prefix").
 - **2026-10-21** — A block is named unchanged only when its newest copy on the surface matches; an older copy no

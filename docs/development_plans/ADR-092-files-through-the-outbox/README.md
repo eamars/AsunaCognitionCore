@@ -42,7 +42,10 @@ Pictures become sendable when a task registers them (`outbound_media.register_im
   - A file over the declared limit is refused before anything is sent, with the limit and the actual bytes stated.
   - Nothing is truncated or compressed.
 - **D6 The NapCat adapter.**
-  - It declares `file` with QQ's single-file limit for group files, 4 GiB (§8).
+  - It declares `file` with a limit from its own setting, `max_file_mb`, 50 MB by default (owner, 2026-10-23; §8).
+    The adapter is the bottleneck: it sends one thing at a time, so a long upload holds every other QQ line back;
+    NapCat assembles the streamed file in memory; and uploads from outside China to QQ's servers are slow, so the
+    threshold is kept small on purpose. QQ's own 4G is the ceiling a larger setting could reach.
   - The bytes stream end to end. The Host serves them in pieces from GridFS, and the adapter passes each piece to
     NapCat's `upload_file_stream` with the whole file's sha256, so no single WebSocket message nears NapCat's 50 MB
     cap. Then it calls `upload_group_file` with the path NapCat returns.
@@ -128,7 +131,8 @@ refusals were written after; they wait for her reading.
 | NapCat (QQ) | `upload_group_file` | none of its own: it takes a path, a URL or base64 and sends a file element | v4.18.0 `action/go-cqhttp/UploadGroupFile.ts` |
 | QQ Bot (official API) | rich-media upload, `file_type` 4 | 200 MB hard limit; chunked upload in 5 MB parts | the platform's rich-media overview |
 
-So the NapCat adapter's limit is QQ's 4 GiB, reached by streaming; the 50 MiB message cap is why it streams.
+So the NapCat adapter declares its own setting, 50 MB by default (D6), below QQ's 4G. It still streams, because the
+base64 of a file over about 37 MiB exceeds NapCat's 50 MiB message cap.
 
 The QQ Bot API lists files (`file_type` 4) at 200 MB with no scene restriction. One open-source bot reported HTTP 200
 for `file_type` 4 in groups and private chats, but not that the file arrived. Our QQ Bot bridge does not send files

@@ -44,6 +44,33 @@ def test_her_home_turns_say_it_for_a_day_in_words(store):
     assert host_stops.block(store, ZONE, moment + timedelta(hours=24)) is None
 
 
+def test_a_host_that_exited_on_its_own_is_recorded_as_a_crash_with_its_code(store, tmp_path):
+    """Her finding (2026-10-22): a crash was recorded and shown as an outside kill. The supervisor's record of the
+    start under way says the Host exited on its own, with its code; the next start reads it."""
+    import json
+    alive = datetime(2026, 10, 22, 9, 3, 20, tzinfo=timezone.utc)
+    folder = tmp_path / 'restart'
+    folder.mkdir()
+    def supervisor(**record):
+        (folder / 'last.json').write_text(json.dumps({'asked': 'nobody', 'down_at': '2026-10-22T09:03:52.165Z',
+                                                      'exit_code': 3221225477, 'result': 'not_back', **record}))
+    supervisor()
+    assert host_stops.crash_code(alive, tmp_path) == 3221225477
+    for other in ({'back_at': '2026-10-22T09:04:16Z'},              # an earlier restart already back: not this one
+                  {'asked': 'home'}, {'exit_code': None},
+                  {'down_at': '2026-10-22T10:30:00Z'}):              # far from the lease's last renewal
+        supervisor(**other)
+        assert host_stops.crash_code(alive, tmp_path) is None, other
+    (folder / 'last.json').unlink()
+    assert host_stops.crash_code(alive, tmp_path) is None
+    host_stops.record(store, alive, back_at='2026-10-22T09:04:16+00:00', exit_code=3221225477)
+    row = store.db.host_stops.find_one()
+    assert (row['how'], row['exit_code']) == ('crashed', 3221225477)
+    said = host_stops.block(store, ZONE, datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc))
+    assert said['what'] == '宿主上次是自己崩掉退出的（不是被谁停的，也不是正常停下）'
+    assert said['when'].startswith('最后确认还在运行约是 10/22 09:03，重新起来是 10/22 09:04')
+
+
 def test_failed_gate_looks_are_counted_for_a_day_and_kept_a_week(store):
     moment = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
     store.db.missed_looks.insert_many([{'_id': 'ep-a', 'scene_id': 'g1', 'at': '2026-10-14T09:00:00+00:00', 'cause': 'clash'},

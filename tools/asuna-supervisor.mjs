@@ -185,7 +185,10 @@ export async function supervise(d) {
     // Ctrl+C reaches DSH too (one console on Windows): an exit right before the stop is the owner's, not a crash.
     await d.sleep(1000);
     if (d.stopped()) break;
-    record = begin({ asked: 'nobody', why: 'the Host exited on its own (code ' + event.code + ')' });
+    record = begin({ asked: 'nobody', why: 'the Host exited on its own (code ' + event.code + ')', exit_code: event.code,
+                     result: 'not_back' });
+    // Written before the next start: that start's worker reads it to record the stop as a crash, not an outside kill.
+    try { await d.writeRecord(record); } catch (error) { d.note('Asuna supervisor: record not written: ' + error.message); }
     d.note('Asuna supervisor: the Host exited on its own (code ' + event.code + '); starting it again');
   }
 }

@@ -77,3 +77,11 @@ Her usage-readout skill gets its own reading script; that part is hers (her mess
   publication test. Her gate was checked both ways on her image skill with `[home, group]` written in a scratch copy:
   green with the private list, red without it.
 - No skill opts in yet: she declares hers after this is installed.
+
+## 7. The probe names the skills offered at home only (2026-10-22, her ask)
+
+A valid header without `scene_kinds` means home only, so a skill left out of groups by forgetting the line looked
+the same as one kept home on purpose. The publication probe (`python -m asuna.skills`) still passes such a set and
+now names those skills on a second line of its output, 「只在家里可用（头里没写 scene_kinds）：…」, which reaches her in the
+receipt's `boot_probe`. A report, not a refusal. At the time two of her skills are home only. Test:
+`tests/test_skill_scenes.py`.

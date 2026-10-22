@@ -140,6 +140,9 @@ test('a Host that exits on its own is started again, asked by nobody; a stop end
   assert.equal(w.records.length, 2);
   assert.equal(w.records[1].asked, 'nobody');
   assert.match(w.records[1].why, /exited on its own/);
+  assert.equal(w.records[1].exit_code, 1);
+  // Written once before the next start, so that start's worker records the stop as a crash (host_stops).
+  assert.deepEqual(w.interim.map(r => [r.asked, r.exit_code, r.result, r.back_at]), [['nobody', 1, 'not_back', undefined]]);
   assert.deepEqual(w.prepared, [0, 0]);
 });
 

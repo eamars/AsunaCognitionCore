@@ -139,6 +139,8 @@ facts take the place of limits).
   「长不少」, 1 「差不多」; 8 have too few lines for a line.
 - Tests: `tests/test_group_pace.py` (each band, too few lines on either side, another group's lines and lines older
   than 7 days not counted, no digit in the words).
+- **Removed 2026-10-22 (night)**, with her: it read 「长很多」 in 107 of 110 sends. Her own line in the member list
+  says when she last spoke there and how much today instead (ADR-090 §8).
 
 
 ## 10. A task stopped at the stage time limit says so and names what it left (2026-10-22)

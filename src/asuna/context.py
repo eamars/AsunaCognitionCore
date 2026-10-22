@@ -1145,7 +1145,7 @@ class ContextBuilder:
         if scene.get('kind')=='group':
             # How old the talk is and how much was said since (owner 2026-10-06): an old line must read as old.
             from . import places
-            context['pace_from_program']=places.pace(self.store,scene,moment,schedule_zone)
+            context['pace_from_program']=places.pace(self.store,scene,schedule_zone)
             # Platform notices held for this group since its last turn, once (notices.py).
             held=notices.take(self.store,scene,persona)
             if held:

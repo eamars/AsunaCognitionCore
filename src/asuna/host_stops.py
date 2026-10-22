@@ -4,7 +4,9 @@ leaves its own lease behind. The next start finds it, records one row in `host_s
 last alive (the lease's expiry less its length, within one renewal) and when the new one came up — and her home
 turns for the next day carry it in words. Nothing about the process tree or who stopped it: only that it did not
 stop by itself, and for how long nothing ran. A stop marked beforehand as a planned restart
-(`python -m asuna.host_stops planned`, before a deploy kills the Host) is recorded as `planned` and not shown.
+(`python -m asuna.host_stops planned`, before a deploy kills the Host) is recorded as `planned` and not shown. A Host
+that exited on its own is recorded as `crashed` with its exit code: the supervisor writes that exit to its restart
+record before it starts the next Host (restarts.last), and the next start reads it.
 """
 from __future__ import annotations
 
@@ -13,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 SHOWN_HOURS = 24
 WHAT = '宿主上次是被外部终止的（不是正常停下）'
+CRASHED = '宿主上次是自己崩掉退出的（不是被谁停的，也不是正常停下）'
 # Looks in a group the relevance gate could not decide (her ask, 2026-10-14): the program's failure, never her 不理.
 MISSED = '过去一天里，群里有该让你判断接不接话的时候，程序没判出来（出错了，不是你选的不理），那几句你没看到：%s'
 NOTE = ('这段时间宿主没在运行：你没有收到、也没有处理任何东西。之后补进来的消息不代表你当时在场；'
@@ -23,12 +26,26 @@ def _aware(value):
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-def record(store, alive_until, back_at=None, planned=False):
+def crash_code(alive_until, root=None):
+    """The exit code of a Host that exited on its own, when the supervisor's record of this start says so: a restart
+    nobody asked for, not back yet, that went down within one planned-stop window of the lease's last renewal."""
+    from .host_lease import PLANNED_SECONDS
+    from .restarts import last
+    record = last(root) or {}
+    code = record.get('exit_code')
+    if record.get('asked') != 'nobody' or record.get('back_at') or not isinstance(code, int) or not record.get('down_at'):
+        return None
+    down = datetime.fromisoformat(str(record['down_at']).replace('Z', '+00:00'))
+    return code if abs((down - _aware(alive_until)).total_seconds()) <= PLANNED_SECONDS else None
+
+
+def record(store, alive_until, back_at=None, planned=False, exit_code=None):
     """One stop that left the lease behind, found at startup: alive_until is the old Host's last known moment."""
     from .state import now
     back_at = back_at or now()
-    row = {'_id': 'stop-' + uuid.uuid4().hex[:16], 'how': 'planned' if planned else 'killed', 'alive_until': _aware(alive_until).isoformat(),
-           'back_at': back_at, 'scope_key': 'operator'}
+    how = 'planned' if planned else 'crashed' if exit_code is not None else 'killed'
+    row = {'_id': 'stop-' + uuid.uuid4().hex[:16], 'how': how, 'alive_until': _aware(alive_until).isoformat(),
+           'back_at': back_at, 'scope_key': 'operator', **({'exit_code': exit_code} if how == 'crashed' else {})}
     store.put('host_stops', row, stream=row['_id'])
     return row
 
@@ -89,16 +106,17 @@ def missed_looks(store, persona, since):
 
 
 def block(store, zone, moment=None, persona=None):
-    """host_from_program for a home turn: the latest external termination of the last day and the gate's failed
-    looks of the last day, or None."""
+    """host_from_program for a home turn: the latest stop of the last day that was not planned (killed from outside
+    or crashed) and the gate's failed looks of the last day, or None."""
     from .schedule_rules import line_stamp
     moment = moment or datetime.now(timezone.utc)
     since = (moment - timedelta(hours=SHOWN_HOURS)).isoformat()
     out = {}
-    row = store.db.host_stops.find_one({'how': 'killed', 'back_at': {'$gte': since}}, sort=[('back_at', -1)])
+    row = store.db.host_stops.find_one({'how': {'$in': ['killed', 'crashed']}, 'back_at': {'$gte': since}},
+                                       sort=[('back_at', -1)])
     if row:
         gone = (datetime.fromisoformat(row['back_at']) - datetime.fromisoformat(row['alive_until'])).total_seconds()
-        out = {'what': WHAT,
+        out = {'what': CRASHED if row['how'] == 'crashed' else WHAT,
                'when': '最后确认还在运行约是 %s，重新起来是 %s，中间约 %s宿主没有运行'
                        % (line_stamp(zone, row['alive_until']), line_stamp(zone, row['back_at']), _span(gone)),
                'note': NOTE}

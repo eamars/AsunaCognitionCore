@@ -428,7 +428,8 @@ class BusinessWorker:
             self.app, self.controller = host.app, host.controller
             if lease.left_behind:                  # the last Host did not stop by itself (host_stops)
                 from . import host_stops
-                host_stops.record(self.app.store, lease.left_behind, planned=lease.planned)
+                host_stops.record(self.app.store, lease.left_behind, planned=lease.planned,
+                                  exit_code=None if lease.planned else host_stops.crash_code(lease.left_behind))
             self.navigation = self.prepare_navigation(native_sessions or [])
             self.projection_start = self.app.store.db.artifacts.find_one({'_id': 'native-channel-projection'})
             if not self.projection_start:

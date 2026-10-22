@@ -321,6 +321,9 @@ conversation. Script: `.runtime/private/articles/measure_week.py` (local, read-o
 
 ## Changelog
 
+- **2026-10-22 (night)** — `pace` no longer carries `your_length` (it read the same band in 107 of 110 sends);
+  the member list's `you` line says when she last spoke there and how much today, in bands (ADR-090 §8), about
+  24 characters, so a group turn is about 10–25 characters shorter.
 - **2026-10-21 (night)** — A group's `pace` block carries `your_length` where there are enough lines: how long her
   recent lines here run against the others' usual length here, as words (ADR-084 §9), 35–50 characters more when the
   block is sent. The `pace` row above is the earlier form's until the next measurement.

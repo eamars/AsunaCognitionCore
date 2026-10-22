@@ -71,6 +71,12 @@ def problems(root):
     return found
 
 
+def home_only(root):
+    """The skill folders under a skills root whose header names no scene kinds: offered at home only."""
+    return [skill.parent.name for skill in sorted(Path(root).glob('*/SKILL.md'))
+            if FIELD not in header(skill.read_text(encoding='utf-8'))]
+
+
 def _roots(config):
     roots = []
     for value in config.get('_skill_directories', []):
@@ -106,8 +112,11 @@ def skill_directories(config, scene_id, person_id, db=None):
 
 
 if __name__ == '__main__':
-    # The publication probe: every skill header under the given skills roots, or exit with what to fix.
+    # The publication probe: every skill header under the given skills roots, or exit with what to fix. A skill with
+    # no scene kinds is valid and offered at home only; the receipt names it (her ask, 2026-10-22: a report, not a
+    # refusal), so a skill left out of groups is never left out by accident.
     failed = [(name, words) for root in sys.argv[1:] for name, words in problems(root)]
     if failed:
         sys.exit('；'.join('技能 %s：%s' % item for item in failed) + '。照这个改 SKILL.md 的头再发布')
-    print('Skill headers valid.')
+    home = [name for root in sys.argv[1:] for name in home_only(root)]
+    print('Skill headers valid.' + ('\n只在家里可用（头里没写 %s）：%s' % (FIELD, '、'.join(home)) if home else ''))

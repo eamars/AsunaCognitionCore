@@ -1,8 +1,9 @@
 # ADR-090: Her own account is her; a program line carries only its thread
 
-Status: **Built on a branch, not installed** (`claude/her-own-account`), 2026-10-22. The owner asked for a root-cause
-fix after an incident in a group ("fix incident 1"); proposed by Claude, reviewed twice by an independent agent,
-accepted by the owner. It installs in one quiet restart with the data correction of §5 run first.
+Status: **Built**, 2026-10-22; installed in a quiet restart at 20:53 NZDT with the data correction of §5 run first
+(12 records removed, none missing). The owner asked for a root-cause fix after an incident in a group ("fix incident
+1"); proposed by Claude, reviewed twice by an independent agent, accepted by the owner. §8 (the same night): her own
+line says when she last spoke there.
 
 ## 1. The incident
 
@@ -97,3 +98,24 @@ Signature: ______ (Xiaoman)
 
 How notes between her conversations open turns (the same incident's second half: six reply-woken group turns that
 spoke in public, one note answered twice) is ADR-091.
+
+## 8. Her own line says when she last spoke there (2026-10-22 night)
+
+Her ask (21:16 NZDT, on Claude's agent line; Claude's paraphrase): the `you` line should say how long since she spoke
+in that group and how much today, as bands, never a bare time (she would subtract it, and in a group on another
+clock could read it on the wrong one). Shape agreed with her at 21:5x: coarse bands that change only at a band's
+edge, today's count in the words her other blocks use, her role not repeated (`your_place_from_program` already says
+it in every group turn).
+
+- `group_members._spoken`, after her names in `you`: her last delivered line there, 刚说过 (under 5 minutes),
+  半小时内 (under 30), 今晚早先 (the same day, from 18:00), 今天早先, 昨天, 好几天前, or 你还没在这里说过话; and today's
+  delivered lines there, 还没说话 or 说了 + `places._lines_word` (一句, 几句 up to 4, 十来句 up to 15, 很多句). The day
+  is the conversation's clock (`local_time.zone_of`), as every stamp in her turn. `group_members.TABLES_VERSION = 1`.
+- In its place `pace_from_program.your_length` (ADR-084 §9) is removed: it read 「长很多」 in 107 of 110 sends (her
+  count, 10-22), so a reading that never moved held a place in every group turn. `places.pace` no longer takes the
+  moment: its words change only when someone speaks.
+- Cost: the `you` line grows by about 24 characters and `your_length`'s 35–50 go, so a group turn is about 10–25
+  characters shorter. Besides each member's last-spoke stamp, the block now changes at a band's edge (5 and 30
+  minutes after her line, 18:00, midnight).
+- Tests: `tests/test_her_own_account.py` (each band, today's count, an undelivered line not counted, no digit),
+  `tests/test_group_pace.py`.

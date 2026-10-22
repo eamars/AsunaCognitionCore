@@ -73,7 +73,7 @@ def test_the_member_list_names_her_as_herself_and_find_member_says_it_is_her(sto
         {'user_id': '20077', 'nickname': '沈小满姐姐', 'card': '', 'role': 'member', 'last_sent_time': NOW - 3600}]
     group_members.receive(store, 'qq', {'group_id': GROUP, 'members': [mine] + others})
     block = group_members.block(store, scene, 'demo')
-    assert block['you'] == '你自己在这个群里的号：昵称「沈小满」，没设群名片；你的发言在这里标作「演示」。'
+    assert block['you'] == '你自己在这个群里的号：昵称「沈小满」，没设群名片；你的发言在这里标作「演示」。你还没在这里说过话。'
     assert all('沈小满」' not in item['who'] and item['who'] != '沈小满' for item in block['items'])
     assert len(block['items']) == 4 and 'not_shown' not in block                 # five members, she is not one shown
     found = group_members.find(store, scene, 'demo', '小满')
@@ -82,6 +82,42 @@ def test_the_member_list_names_her_as_herself_and_find_member_says_it_is_her(sto
     alone = group_members.find(store, scene, 'demo', '沈小满')
     assert alone['note'] == '名单里叫这个名字的有 1 人，列了最近说过话的 1 个。'           # the sister; she is told apart
     assert not store.db.scene_people.find_one({'person': 'qq:' + BOT})
+
+
+def test_her_own_line_says_when_she_last_spoke_here_and_how_much_today_in_words(store):
+    """Her shape (2026-10-22): bands, never a bare time; the day on the conversation's clock; today's count in the
+    same words as elsewhere. Only her delivered lines count."""
+    from asuna.local_time import zone_of
+    setup(store)
+    tz = zone_of(store, SCENE)['tz']
+    now = datetime(2026, 10, 22, 21, 0, tzinfo=tz).astimezone(timezone.utc)
+
+    def said(*local_times, state='DELIVERED'):
+        for at in local_times:
+            seq = store.db.messages.count_documents({}) + 1
+            store.db.messages.insert_one({'_id': 'out-%d' % seq, 'schema_version': 1, 'scene_id': SCENE,
+                                          'direction': 'outbound', 'delivery_state': state, 'scene_seq': seq,
+                                          'receipt_at': at.astimezone(timezone.utc).isoformat()})
+
+    def heard():
+        return group_members._spoken(store, SCENE, now)
+
+    local = lambda *at: datetime(*at, tzinfo=tz)
+    assert heard() == '你还没在这里说过话。'
+    said(local(2026, 10, 19, 9, 0))
+    assert heard() == '你上次在这里说话：好几天前；今天在这里还没说话。'
+    said(local(2026, 10, 21, 22, 30))
+    assert heard() == '你上次在这里说话：昨天；今天在这里还没说话。'
+    said(local(2026, 10, 22, 10, 0))
+    assert heard() == '你上次在这里说话：今天早先；今天在这里说了一句。'
+    said(local(2026, 10, 22, 19, 0), local(2026, 10, 22, 19, 5))
+    assert heard() == '你上次在这里说话：今晚早先；今天在这里说了几句。'
+    said(local(2026, 10, 22, 20, 45))
+    assert heard() == '你上次在这里说话：半小时内；今天在这里说了几句。'
+    said(local(2026, 10, 22, 20, 58))
+    said(local(2026, 10, 22, 20, 59, 30), state='FAILED')                      # not delivered: not a line here
+    assert heard() == '你上次在这里说话：刚说过；今天在这里说了十来句。'
+    assert not any(ch.isdigit() for ch in heard()), 'no number reaches her'
 
 
 # ---- a program line carries only its thread -------------------------------------------------------------------

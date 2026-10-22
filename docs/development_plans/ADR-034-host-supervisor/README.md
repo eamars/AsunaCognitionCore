@@ -114,3 +114,21 @@ fetches, and `loaded.commit` names what runs. Her block says 「启动：从启�
 and came up (`restarts.ASKED_WORDS`, `LAUNCHED_WHEN`). `--once` runs no supervisor and writes no record, as before.
 Tests: `packages/cognition-core/test/supervisor.test.js`, `tests/test_restarts.py`.
 
+## Addendum 2026-10-22 (night): a crash is recorded as a crash
+
+At 22:03:52 NZDT the Host exited on its own (code 3221225477, an access violation, no log line, no dump) and was back
+24 seconds later. The next start found the lease it left behind and recorded the stop the only way it knew,
+`host_stops` `how: killed`, so her home turns read 「宿主上次是被外部终止的」. Her check found the gap: the exit code
+was only in the record's `why`, written after the next start was already up, and `host_stops` had no kind for a
+crash (her suggestion: record the exit code where it can be queried).
+
+- The supervisor writes the record of a crash before it starts the next Host, with `exit_code` and `result:
+  not_back`; it is completed when the Host is back, as before. Her block shows no record until it is back.
+- The next start's worker reads it (`host_stops.crash_code`: a restart nobody asked for, not back yet, that went down
+  within the 600-second planned-stop window of the lease's last renewal) and records `how: crashed` with
+  `exit_code`. Her home turns for a day read 「宿主上次是自己崩掉退出的（不是被谁停的，也不是正常停下）」.
+- A restart Claude or a deploy makes by killing the process tree is marked first with `python -m asuna.host_stops
+  planned` (RUN_ASUNA.md); three restarts that evening were not, and read to her as outside terminations.
+- Tests: `supervisor.test.js` (the crash's record written before the next start, with its code),
+  `tests/test_host_stops.py` (the conditions, the row, her words).
+

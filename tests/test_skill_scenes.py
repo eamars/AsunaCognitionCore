@@ -61,6 +61,12 @@ def test_home_gets_every_root_and_elsewhere_only_the_skills_that_list_that_kind(
     run = subprocess.run([sys.executable, '-m', 'asuna.skills', str(root)], capture_output=True, text=True,
                          encoding='utf-8', env={**os.environ, 'PYTHONPATH': str(ROOT / 'src'), 'PYTHONUTF8': '1'})
     assert run.returncode != 0 and 'broken' in run.stderr and 'everywhere' in run.stderr
+    # Fixed, it passes and names the skills offered at home only (a report, not a refusal).
+    (root / 'broken' / 'SKILL.md').unlink()
+    run = subprocess.run([sys.executable, '-m', 'asuna.skills', str(root)], capture_output=True, text=True,
+                         encoding='utf-8', env={**os.environ, 'PYTHONPATH': str(ROOT / 'src'), 'PYTHONUTF8': '1'})
+    assert run.returncode == 0 and run.stdout.splitlines() == [
+        'Skill headers valid.', '只在家里可用（头里没写 scene_kinds）：%s' % home_only.name]
 
 
 @pytest.mark.parametrize('path', TRACKED, ids=lambda path: path.parent.name)

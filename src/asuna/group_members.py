@@ -23,6 +23,15 @@ BLOCK_NOTE = ('这个群的成员名单（程序定时从平台拉的，不是�
 # Her own row in the list (the account her channel speaks with here): her names here, never a member to @.
 YOU_HERE = '你自己在这个群里的号：%s；你的发言在这里标作「%s」。'
 FIND_YOU = '这是你自己（%s）。'
+# When she last spoke here and how much today (her shape, 2026-10-22): words that change only at a band's edge, never
+# a bare time she would have to subtract, on the conversation's clock like every stamp in her turn. Today's count
+# shares places' words (one meaning of 几句 in all her blocks).
+TABLES_VERSION = 1
+SPOKE_RECENT = ((5, '刚说过'), (30, '半小时内'))         # minutes since her last line here
+EVENING_HOUR = 18
+SPOKE_DAYS = {'evening': '今晚早先', 'today': '今天早先', 'yesterday': '昨天', 'older': '好几天前'}
+YOU_SPOKE = '你上次在这里说话：%s；今天在这里%s。'
+NEVER_SPOKE = '你还没在这里说过话。'
 
 
 def _int(value):
@@ -85,6 +94,27 @@ def _yours(member):
     return '，'.join(names + ['群名片「%s」' % member['card'] if member.get('card') else '没设群名片'])
 
 
+def _spoken(store, scene_id, moment):
+    """Her last line here and today's count, in words (SPOKE_RECENT, SPOKE_DAYS, places' line words)."""
+    from .local_time import zone_of
+    from .places import _at, _lines_word
+    mine = {'scene_id': scene_id, 'direction': 'outbound', 'delivery_state': 'DELIVERED', 'receipt_at': {'$exists': True}}
+    last = store.db.messages.find_one(mine, {'receipt_at': 1}, sort=[('receipt_at', -1)])
+    if not last:
+        return NEVER_SPOKE
+    tz = zone_of(store, scene_id)['tz']
+    at, here = _at(last['receipt_at']).astimezone(tz), moment.astimezone(tz)
+    minutes = (moment - at).total_seconds() / 60
+    words = next((words for limit, words in SPOKE_RECENT if minutes < limit), None)
+    if not words:
+        day = 'older' if (here.date() - at.date()).days > 1 else 'yesterday' if at.date() < here.date() else \
+              'evening' if at.hour >= EVENING_HOUR else 'today'
+        words = SPOKE_DAYS[day]
+    start = here.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
+    today = store.db.messages.count_documents({**mine, 'receipt_at': {'$gte': start}})
+    return YOU_SPOKE % (words, '说了' + _lines_word(today) if today else '还没说话')
+
+
 def _label(people, scene, member):
     """The label she copies to @ someone she found (ADR-024 amendment, 2026-10-09): a member not yet in this group's
     roster is placed there, marked as looked up, with the names the list has; nothing is ever dropped from it."""
@@ -140,7 +170,8 @@ def block(store, scene, persona, moment=None):
     leaders = ['%s（%s）' % (_name(m), ROLE_WORDS[m['role']]) for m in members if m['role'] in ROLE_WORDS]
     fetched = doc.get('fetched_at') or doc.get('received_at') or ''
     left = doc['count'] - len(items) - (1 if own else 0)
-    return {'count': '群里一共 %d 人' % doc['count'], **({'you': YOU_HERE % (_yours(own), people.self_name)} if own else {}),
+    you = YOU_HERE % (_yours(own), people.self_name) + _spoken(store, scene['_id'], moment) if own else None
+    return {'count': '群里一共 %d 人' % doc['count'], **({'you': you} if you else {}),
             **({'leaders': leaders[:12]} if leaders else {}),
             'items': items, **({'not_shown': '另有 %d 人没列出' % left} if left > 0 else {}),
             **({'list_fetched_at': fetched} if fetched else {}), 'note': BLOCK_NOTE}

@@ -259,13 +259,14 @@ Her restarts (ADR-034): the worker side of the Host supervisor (tools/asuna-supe
 
 [src/asuna/host_stops.py](../../src/asuna/host_stops.py)
 
-When the Host was taken away from outside, she should not have to infer from a gap in the logs whether she was away. A clean stop deletes the database lease (host_lease); a Host killed from outside leaves its own lease behind. The next start finds it, records one row in `host_stops` — about when the old Host was last alive (the lease's expiry less its length, within one renewal) and when the new one came up — and her home turns for the next day carry it in words. Nothing about the process tree or who stopped it: only that it did not stop by itself, and for how long nothing ran. A stop marked beforehand as a planned restart (`python -m asuna.host_stops planned`, before a deploy kills the Host) is recorded as `planned` and not shown.
+When the Host was taken away from outside, she should not have to infer from a gap in the logs whether she was away. A clean stop deletes the database lease (host_lease); a Host killed from outside leaves its own lease behind. The next start finds it, records one row in `host_stops` — about when the old Host was last alive (the lease's expiry less its length, within one renewal) and when the new one came up — and her home turns for the next day carry it in words. Nothing about the process tree or who stopped it: only that it did not stop by itself, and for how long nothing ran. A stop marked beforehand as a planned restart (`python -m asuna.host_stops planned`, before a deploy kills the Host) is recorded as `planned` and not shown. A Host that exited on its own is recorded as `crashed` with its exit code: the supervisor writes that exit to its restart record before it starts the next Host (restarts.last), and the next start reads it.
 
+- def `crash_code` — The exit code of a Host that exited on its own, when the supervisor's record of this start says so: a restart nobody asked for, not back yet, that went down within one planned-stop window of the lease's last renewal.
 - def `record` — One stop that left the lease behind, found at startup: alive_until is the old Host's last known moment.
 - def `missed_cause` — The cause code of a look the gate could not decide.
 - def `missed_look` — One look the gate could not decide, in its own small collection (the home turn counts them).
 - def `missed_looks` — '某群 3 次、某群 1 次' for the gate's failed looks since then, or None.
-- def `block` — host_from_program for a home turn: the latest external termination of the last day and the gate's failed looks of the last day, or None.
+- def `block` — host_from_program for a home turn: the latest stop of the last day that was not planned (killed from outside or crashed) and the gate's failed looks of the last day, or None.
 - def `main` — `python -m asuna.host_stops planned [--by NAME]`: mark the running Host's coming stop as a planned restart.
 
 ## `host_lease`

@@ -642,7 +642,7 @@ A task's tools are fixed when she hands it over (`src/asuna/coordinator.py` `Coo
 
 ### Skills
 
-A task sees skills by where it came from (`src/asuna/skills.py`): from an owner-private conversation every skill root; otherwise only skills whose `SKILL.md` header lists that place in `scene_kinds` (`home`, `group`, `dm`; absent means `home` only). A header with an unknown key or kind is refused at publication (`python -m asuna.skills`).
+A task sees skills by where it came from (`src/asuna/skills.py`): from an owner-private conversation every skill root; otherwise only skills whose `SKILL.md` header lists that place in `scene_kinds` (`home`, `group`, `dm`; absent means `home` only). A header with an unknown key or kind is refused at publication (`python -m asuna.skills`); a valid set passes, and the probe names the skills whose header has no `scene_kinds` (offered at home only).
 
 ### Sandbox
 

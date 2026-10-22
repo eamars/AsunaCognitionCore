@@ -140,3 +140,20 @@ facts take the place of limits).
 - Tests: `tests/test_group_pace.py` (each band, too few lines on either side, another group's lines and lines older
   than 7 days not counted, no digit in the words).
 
+
+## 10. A task stopped at the stage time limit says so and names what it left (2026-10-22)
+
+`workflow_timeout_seconds` (1,800 s) fences one native stage. Seven of her tasks ended BLOCKED with `TimeoutError`
+since 10-10 (counts from `tasks`); two on 10-22, both read-only reviews that had finished their work and written their
+report to `/task`, then stopped at the step that writes the report for her (`NATIVE_STAGE_TIMEOUT`, after 89 and 116
+tool steps). The receipt read 「行动运行失败，原目标仍未完成。」, 15 characters; only her memory of the report's file
+name and sha saved a rerun (her ask, on Claude's agent line, Claude's paraphrase).
+
+Built (`tasks.files_left`, `Executor._run_owned`): a task that stops lists the files it changed in its folder since it
+started, newest first, as `/task/<path>，<bytes> 字节，sha256 <first 16 hex>`, at most 20 and the rest counted, the walk
+bounded at 20,000 files and without `.git`, `node_modules`, `__pycache__`, `.venv`; a file over 64 MiB is listed
+without its sha. A stop at the stage limit says that in words (「行动这一段跑到了时间上限（30 分钟），还没交报告就停了；原目标有没有做完没有确认。」)
+instead of "failed". Test: `tests/test_engineering_m11.py`.
+
+Open, the owner's: the limit itself, a mechanical limit on long work (§7's rule: one at a time, where she sees the
+fact). This change is the fact; the limit is unchanged.

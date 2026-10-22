@@ -51,6 +51,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
   - `bind`
   - `call`
   - `close`
+- def `files_left` — The files in a task's folder changed since it started, newest first, as she reads them: path under /task, size, the first 16 hex digits of the sha256.
 - def `workspace_lock_path` — The lease file that keeps two task workers out of one workspace.
 - class `Executor`
   - `run`

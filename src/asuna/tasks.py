@@ -4,7 +4,9 @@ checks and runs every tool call a task makes, and `Executor` runs one task in it
 A hand-back shows her the report's first page (`report_pages`); she reads the rest with `task` op `page`.
 """
 from __future__ import annotations
+import hashlib
 import json
+import os
 import re
 from pathlib import Path
 import secrets
@@ -904,6 +906,59 @@ class ToolBroker:
         self.bindings.clear()
 
 
+# A stopped task's receipt names what it left in its folder (her ask, 2026-10-22: twice a report already on disk read
+# as "not done", and only her memory of its file name saved a rerun).
+LEFT_SHOWN, LEFT_SCAN, LEFT_HASH_BYTES = 20, 20000, 64 * 1024 * 1024
+LEFT_SKIP = frozenset(('.git', 'node_modules', '__pycache__', '.venv'))
+STAGE_TIMEOUT = 'NATIVE_STAGE_TIMEOUT'
+STOPPED_AT_LIMIT = ('行动这一段跑到了时间上限（%d 分钟），还没交报告就停了；原目标有没有做完没有确认。'
+                    '它在 /task 里留下的文件列在 files，先看这些再决定要不要重做。')
+LEFT_NOTE = '它在 /task 里改过的文件列在 files。'
+
+
+def files_left(workspace, since):
+    """The files in a task's folder changed since it started, newest first, as she reads them: path under /task, size,
+    the first 16 hex digits of the sha256. At most LEFT_SHOWN, the rest counted; the walk stops after LEFT_SCAN files."""
+    from datetime import datetime
+    try:
+        start = datetime.fromisoformat(str(since).replace('Z', '+00:00')).timestamp()
+    except ValueError:
+        return []
+    found, seen = [], 0
+    for root, dirs, names in os.walk(workspace):
+        dirs[:] = [name for name in dirs if name not in LEFT_SKIP]
+        for name in names:
+            seen += 1
+            path = os.path.join(root, name)
+            try:
+                stat = os.stat(path)
+            except OSError:
+                continue
+            if stat.st_mtime >= start:
+                found.append((stat.st_mtime, path, stat.st_size))
+        if seen >= LEFT_SCAN:
+            break
+    found.sort(reverse=True)
+    out = []
+    for _, path, size in found[:LEFT_SHOWN]:
+        where = '/task/' + Path(os.path.relpath(path, workspace)).as_posix()
+        out.append('%s，%s 字节，%s' % (where, format(size, ','), _sha16(path) if size <= LEFT_HASH_BYTES else '太大，没算 sha'))
+    if len(found) > LEFT_SHOWN:
+        out.append('另有 %d 个更早改的没列出' % (len(found) - LEFT_SHOWN))
+    return out
+
+
+def _sha16(path):
+    digest = hashlib.sha256()
+    try:
+        with open(path, 'rb') as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+                digest.update(chunk)
+    except OSError:
+        return '读不了'
+    return 'sha256 ' + digest.hexdigest()[:16]
+
+
 def workspace_lock_path(workspace):
     """The lease file that keeps two task workers out of one workspace."""
     return DATA/'locks'/('workspace-'+sha(str(Path(workspace).resolve()).casefold().encode())+'.lock')
@@ -924,11 +979,17 @@ class Executor:
             with self.service.keepalive(task) as healthy:
                 return self._run_claimed(task,workspace,healthy)
         except Exception as exc:
+            left=files_left(workspace,task.get('started_at')) if task.get('started_at') else []   # walked before the lock
             with self.service.lock:
                 current=self.service.store.db.tasks.find_one({'_id':task_id})
                 if current and current['state']=='RUNNING' and current['intent_revision']==task['intent_revision'] and current['fencing_token']==task['fencing_token']:
                     error=redact_text(traceback.format_exc(),self.service.store.config)
-                    result={'status':'blocked','text':'行动运行失败，原目标仍未完成。','error':error,'uncertainties':['已发起而没有回执的操作须先核实，不可盲目重做。']}
+                    if isinstance(exc,TimeoutError) and STAGE_TIMEOUT in str(exc):
+                        text=STOPPED_AT_LIMIT%(self.service.store.config['workflow_timeout_seconds']//60)
+                    else:
+                        text='行动运行失败，原目标仍未完成。'+(LEFT_NOTE if left else '')
+                    result={'status':'blocked','text':text,'error':error,'uncertainties':['已发起而没有回执的操作须先核实，不可盲目重做。'],
+                            **({'files':left} if left else {})}
                     return self.service.store.put('tasks',{**current,'state':'BLOCKED','failure_type':type(exc).__name__,'result':result,'feedback_state':'READY'},expected=current['revision'],stream=task_id)
             raise
 

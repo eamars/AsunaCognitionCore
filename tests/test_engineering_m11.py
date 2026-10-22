@@ -72,3 +72,26 @@ def test_E19_rollback_rejects_other_scope_and_preserves_source_accounting(store)
     assert back['content']==old['content'] and back['processed_source_ids']==new['processed_source_ids']
 
 
+
+
+def test_a_task_stopped_at_the_stage_limit_names_what_it_left_in_its_folder(store):
+    """Live 10-22, twice: the report was already on disk and the receipt read 「行动运行失败」 with 15 characters. A stopped
+    task says it hit the time limit and lists the files it changed in /task (path, size, sha256), not older ones."""
+    import os, re, time
+    service,router=route(store)
+    task_id=router.receive({'event_id':'long','scene_id':'dm-a','person_id':'A','text':'核实'})['task_ids'][0]
+    work=Path(store.config['channels']['fixture']['routes']['dm-a']['workspace']);work.mkdir(parents=True,exist_ok=True)
+    old=work/'old.txt';old.write_text('昨天的',encoding='utf-8');os.utime(old,(time.time()-86400,)*2)
+    class SlowLane:
+        def generate(self,*args,**kwargs):
+            (work/'out').mkdir(exist_ok=True);(work/'out'/'report.md').write_text('报告'*100,encoding='utf-8')
+            raise TimeoutError('NATIVE_STAGE_TIMEOUT')
+    broker=ToolBroker(service)
+    try:
+        Executor(service,SlowLane(),broker).run(task_id,work)
+    finally:broker.close()
+    task=store.db.tasks.find_one({'_id':task_id})
+    assert task['state']=='BLOCKED' and task['failure_type']=='TimeoutError'
+    assert task['result']['text'].startswith('行动这一段跑到了时间上限（%d 分钟）'%(store.config['workflow_timeout_seconds']//60))
+    [left]=task['result']['files']
+    assert re.fullmatch(r'/task/out/report\.md，600 字节，sha256 [0-9a-f]{16}',left),left

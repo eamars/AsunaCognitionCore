@@ -29,7 +29,9 @@ Xiaoman measured on 10-23:
 - **V4 Transcribe in the background, on this machine.**
   - Engine: SenseVoice int8 with Silero voice detection, through the sherpa-onnx Python package 1.13.8. The detector is
     needed (§3). No DSH plugin and no Node bridge.
-  - One model is loaded in the Host's worker and released after 10 idle minutes, since reloading takes under a second.
+  - One model is loaded in the Host's Python worker process, about 300 MiB (§3). It is released after 10 minutes with
+    no voice, because reloading takes under a second. It gives way to other services when it sits idle, not only
+    at a restart (her question, 09:47).
   - One voice is transcribed at a time, in arrival order. Language is detected automatically.
 - **V5 What she reads.** Each state has its own words; none is an empty string, which she would read as "nobody spoke":
 
@@ -43,13 +45,24 @@ Xiaoman measured on 10-23:
   | audio not fetched | 「[语音，没拿到：原因]」 (NapCat had already cleared it, say) |
 
   The two middle states ask different things of her (her ask, 09:45): no voice means nobody spoke, while a voice
-  without words is something she may ask about.
+  without words is something she may ask about. The line between them is the detector's: no speech found at all is
+  "no voice"; speech found, but the text has no letter or character in it, is "a voice but no words".
+
+  SenseVoice also labels each piece of audio with an event: speech, background music, laughter, applause and the like.
+  When a piece is labelled as anything but speech, her line names it, e.g. 「[语音 20 秒，听着像背景音乐] ……」, so
+  words read off music do not pass as speech.
+
+  Made-up words are still possible with the detector on. Noise that passes the detector gets labelled as speech by the
+  model (measured, §3), so no label catches every case, and her line cannot say it for certain. Her test set (§5)
+  measures how often it happens on real voices.
 
   There is no "too long" state: the program sets no length limit of its own, and with voice detection a long voice
   takes about 2.5% of its length.
 - **V6 A turn waits briefly for its own voice.** When a turn is about to start and a line in it is still being
   transcribed, the turn waits up to 10 seconds, then starts with whatever state the line has. A 60-second voice takes
-  about 1.5 s here (§3), so this wait is rarely reached.
+  about 1.5 s here (§3), so this wait is rarely reached. If it is, that turn reads 「正在转写」; nothing interrupts a
+  running turn. When the text is ready it goes onto the line, and every later reading of that line (her next turn,
+  `recall`) shows the text.
 - **V7 The audio does not stay forever.** Audio bytes leave GridFS 7 days after they arrive, and the transcript stays
   on the line. Her test set (§5) keeps its own copies.
 - **V8 What it does not touch.** Video soundtracks are not transcribed this round (`vision.py` video path,
@@ -69,7 +82,8 @@ Evidence: `.runtime/private/voice/measure-2026-10-23.md` (3 KB), with the config
 Without voice detection a long clip loses text: 62 of 70 characters at 30 s, 246 of 324 in English. Two languages
 in one clip collapsed to 7 characters. On 5 s of noise the model alone wrote a stray syllable, while the detector found
 no speech. That is why the detector is in V4, and why "no speech found" in V5 is the detector's verdict, not an empty
-text.
+text. The model's event label read a 440 Hz tone as background music, but read the noise as speech, so the label
+adds to the detector and cannot replace it.
 
 ## 4. Dependencies and files
 

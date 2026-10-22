@@ -27,15 +27,17 @@ with Core (`registerChannel`).
   segment's fields, the source and the count, never the text.
 - A group or private-chat message that quotes another carries the quoted message's ID as `reply_to`; one that only
   quotes, with no words, also carries `raw.asuna_reply_only`. On every outbox claim the adapter declares what it
-  carries: `image`, `sticker`, `file:<bytes>` (4 GiB), `react`, `poke`, `quote`, `quote_in`, `react_in`, `recall`.
-- A file goes to a group alone, up to 4 GiB (QQ's single-file limit for group files); a private target is a
+  carries: `image`, `sticker`, `file:<bytes>` (`adapter_config.napcat.max_file_mb`), `react`, `poke`, `quote`,
+  `quote_in`, `react_in`, `recall`.
+- A file goes to a group alone, up to `adapter_config.napcat.max_file_mb` (default 50 MiB); a private target is a
   `failed` receipt. Its bytes come from Core's attachment endpoint in 4 MiB pieces, each sent to NapCat's
   `upload_file_stream` (stream id = the attempt id, the whole file's sha256, NapCat's temp file named after the
   attempt), so one WebSocket message stays under 8 MiB; the adapter checks the sha256 across the pieces and NapCat
   checks it again when the stream completes. Then `upload_group_file` sends it under her name for it. The receipt
   carries NapCat's answer (its `file_id` only as data, never as an id) and the file's artifact id, sha256 and size;
   a refusal carries the platform's words as `response.platform`. Waits grow with the size: 60 s a piece,
-  60 s + size / 32 MiB/s to complete the stream, 120 s + size / 1 MiB/s for the upload (4 GiB: about 70 minutes).
+  60 s + size / 32 MiB/s to complete the stream, 120 s + size / 1 MiB/s for the upload (at 50 MiB: about 62 s and
+  170 s).
   An upload that outlasts its wait is `unknown`, and a later answer settles it. The outbox waits while a file is
   sent.
 - A message she sends quotes a line (a leading `reply` segment) only when the outbox item carries `quote`, in a group
@@ -111,6 +113,9 @@ own account ([Running several characters](../../../RUN_ASUNA.md#running-several-
      Core's channel API (`127.0.0.1`, `channel_port`, default 8766);
    - `adapter_config.napcat`: `{"transport": "websocket_forward", "url": "ws://127.0.0.1:<alias port>", "token": "<NapCat
      access token>"}`;
+   - optional `adapter_config.napcat.max_file_mb`: the largest file the adapter sends to a group, in MiB (an integer
+     1–4096, default 50); it declares it to Core as `file:<bytes>`, and Core refuses a larger file before sending. A
+     value it cannot use is the default, said once in the log (`CONFIG_NOTE`);
    - `adapter_config.host`: `{"base_url": "http://127.0.0.1:<alias port>", "channel_id": "qq"}`;
    - optional `adapter_config.catchup`: `{"routes": ["<route id>", …] or "all", "lookback_hours": 6}` turns on
      catch-up after a gap for those routes (the keys of `channels.qq.routes`; under automatic admission a group or DM

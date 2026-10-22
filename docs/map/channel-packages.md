@@ -170,6 +170,7 @@ Merged forwards (合并转发): the messages a forward carried, brought to the h
 
 HTTP client for the runtime host channel API (stdlib only).
 
+- def `file_capability` — The `file` entry of a claim's declaration: the largest file this adapter sends (adapter.napcat.max_file_mb), so the host refuses a larger one before anything is sent.
 - class `Result`
 - class `HostApi`
   - `post_event`
@@ -314,7 +315,7 @@ Host outbox -> OneBot send_private_msg / send_group_msg -> receipt.
 - def `platform_send_timed_out` — NapCat's retcode 1200 for sendMsg whose own confirmation event never came: the send's outcome is unknown.
 - def `platform_muted` — NapCat's retcode 1200 for sendMsg whose QQ result is 120: she is muted in that group.
 - def `send_outcome` — A send's answer, on time or late: (status, platform_message_id, tag, response object to store).
-- def `file_timeouts` — (complete, upload) seconds for a file of `size` bytes: 60 s + size / 32 MiB/s for NapCat to assemble it, 120 s + size / 1 MiB/s for QQ to take it (4 GiB: about 70 minutes).
+- def `file_timeouts` — (complete, upload) seconds for a file of `size` bytes: 60 s + size / 32 MiB/s for NapCat to assemble it, 120 s + size / 1 MiB/s for QQ to take it.
 - def `file_plan` — (plan, None) when this item's file may be streamed, else (None, reason).
 - def `encode_group_text` — Split host group text into text/at segments, promoting @qq:<digits>.
 - def `encode_faces` — Split text into text/face segments: each `[表情:名字]` whose name is in faces.json becomes a real QQ face at that position (0.6); an unknown name stays text.

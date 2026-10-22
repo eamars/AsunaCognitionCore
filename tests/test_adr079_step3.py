@@ -18,7 +18,7 @@ channel_kinds.load([{'python': ROOT / 'packages' / 'channels' / 'qq-bot' / 'pyth
                     {'python': ROOT / 'packages' / 'channels' / 'napcat-qq' / 'python', 'module': 'napcat_qq'}])
 APP, GROUP = '1000000001', '0B1C2D3E4F5A6B7C8D9E0F1A2B3C4D5E'
 BOT_SCENE = 'qqbot:%s:group:%s' % (APP, GROUP)
-EVERYTHING = ['image', 'sticker', 'poke', *capabilities.POINTERS, 'file:%d' % (4 * 1024 ** 3)]
+EVERYTHING = ['image', 'sticker', 'poke', *capabilities.POINTERS, 'file:%d' % (50 * 1024 * 1024)]
 
 
 def speak_of(specs):

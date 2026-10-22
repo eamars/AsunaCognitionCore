@@ -52,7 +52,7 @@ import re
 import time
 
 from . import faces
-from .hostapi import FILE_MAX_BYTES
+from .config import DEFAULT_MAX_FILE_MB
 from .onebot import ApiNotConnected, ApiTimeout, ApiTransportError
 
 RETRY_WAITS = (0, 2, 5)
@@ -135,11 +135,12 @@ FILE_RETENTION_MARGIN = 300.0               # NapCat keeps the assembled file th
 
 def file_timeouts(size):
     """(complete, upload) seconds for a file of `size` bytes: 60 s + size / 32 MiB/s for NapCat to assemble it,
-    120 s + size / 1 MiB/s for QQ to take it (4 GiB: about 70 minutes)."""
+    120 s + size / 1 MiB/s for QQ to take it.  A file over the configured limit is never sent, so the limit sets the
+    longest wait (the default 50 MiB: about 62 s and 170 s)."""
     return (FILE_COMPLETE_BASE + size / FILE_COMPLETE_RATE, FILE_UPLOAD_BASE + size / FILE_UPLOAD_RATE)
 
 
-def file_plan(item, target_type, max_bytes=FILE_MAX_BYTES):
+def file_plan(item, target_type, max_bytes=DEFAULT_MAX_FILE_MB * 1024 * 1024):
     """(plan, None) when this item's file may be streamed, else (None, reason).  Checked before a byte is asked for."""
     raw = item.get(FILE_KEY)
     if not isinstance(raw, dict):
@@ -515,7 +516,7 @@ class Outbound:
     def handle_file(self, item, pub, attempt, ttype, tid):
         """Stream one claimed file to NapCat in pieces, then send it to the group."""
         self.counters.inc("file_claims")
-        plan, reason = file_plan(item, ttype)
+        plan, reason = file_plan(item, ttype, self.cfg.napcat.get("max_file_bytes") or DEFAULT_MAX_FILE_MB * 1024 * 1024)
         if reason:
             return self._file_failed(pub, attempt, reason, {"target_type": ttype})
         getter = getattr(self.host, "get_file_piece", None)

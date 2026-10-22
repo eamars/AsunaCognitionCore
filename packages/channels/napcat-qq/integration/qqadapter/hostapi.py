@@ -24,10 +24,13 @@ import urllib.request
 # never queues a publication this adapter could only half-send.  An older host
 # ignores an unknown query parameter (the channel server reads only
 # `wait_seconds`), so declaring is safe before the host learns about it.
-# QQ's single-file limit for group files ("4G" a file), declared with `file` so the host refuses a larger one
-# before anything is sent.
-FILE_MAX_BYTES = 4 * 1024 * 1024 * 1024
-CAPABILITIES = ("image", "sticker", "file:%d" % FILE_MAX_BYTES)
+CAPABILITIES = ("image", "sticker")
+
+
+def file_capability(max_bytes):
+    """The `file` entry of a claim's declaration: the largest file this adapter sends (adapter.napcat.max_file_mb),
+    so the host refuses a larger one before anything is sent."""
+    return "file:%d" % int(max_bytes)
 
 # One attachment's bytes.  QQ photos are commonly 1-6 MiB; this is the
 # adapter's own ceiling, not the host's, and it is enforced while reading.

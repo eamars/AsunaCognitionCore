@@ -17,7 +17,7 @@ from . import notices as notices_mod
 from .catchup import Catchup
 from .media_keys import MediaKeys
 from .members import Members
-from .hostapi import CAPABILITIES, HostApi
+from .hostapi import CAPABILITIES, HostApi, file_capability
 from .journal import Counters, Journal
 from .onebot import OneBot
 from .outbound import Outbound
@@ -96,7 +96,8 @@ class Adapter:
         self.identity = None
         # what she may send through reply (ADR-064 phase 2); a poke or reaction NapCat refuses comes back to her
         # what this bridge carries, told to the host on every claim (ADR-079: the pointer family too)
-        self.capabilities = list(CAPABILITIES) + ["react", "poke", "quote", "quote_in", "react_in", "recall"]
+        self.capabilities = list(CAPABILITIES) + [file_capability(cfg.napcat["max_file_bytes"]),
+                                                  "react", "poke", "quote", "quote_in", "react_in", "recall"]
 
     def log(self, msg):
         print("%s %s" % (utc_stamp(), msg), flush=True)
@@ -387,6 +388,8 @@ class Adapter:
         self.onebot.start()
         api_up = self.onebot.wait_up("/api", 20)
         self.log("CONFIG %s" % self.cfg.describe())
+        for note in self.cfg.notes:
+            self.log("CONFIG_NOTE %s" % note)
         if not api_up:
             self.log("FATAL api websocket did not connect within 20s (no identity check possible)")
             self.onebot.stop()

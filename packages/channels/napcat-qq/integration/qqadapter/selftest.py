@@ -26,7 +26,7 @@ from . import faces as faces_mod
 from . import outbound as outbound_mod
 from . import peers as peers_mod
 from .peers import PEER_KEY, PeerDirectory
-from .config import Config, ConfigError
+from .config import MAX_FILE_MB_MOST, Config, ConfigError
 from .hostapi import Result
 from .journal import Counters, Journal
 from .onebot import ApiTimeout, ApiTransportError
@@ -1264,8 +1264,9 @@ def _check_outbound_files(rep, cfg, root):
                   max(napcat.sizes) < outbound_mod.WS_MESSAGE_BOUND < 50 * 1024 * 1024,
                   "largest=%d bound=%d" % (max(napcat.sizes), outbound_mod.WS_MESSAGE_BOUND))
 
-    # an empty file, and a private target: refused before a byte is asked for
+    # an empty file, one over the declared limit, and a private target: refused before a byte is asked for
     for name, data, over, want in (("empty", b"", {}, "file_empty"),
+                                   ("over", b"x" * 10, {"size": cfg.napcat["max_file_bytes"] + 1}, "file_over_limit"),
                                    ("private", b"x" * 10, {"target": {"type": "dm", "id": OWNER}},
                                     "file_private_target_not_supported")):
         napcat, host, _c, _o = run(name, data, **over)
@@ -1316,8 +1317,9 @@ def _check_outbound_files(rep, cfg, root):
                     {"status": "ok", "retcode": 0})
     rep.check("file_late_piece_answer_ignored", len(host.receipts) == before, str(len(host.receipts) - before))
     rep.check("file_timeouts_scale_with_size",
-              outbound_mod.file_timeouts(4 * 1024 ** 3)[1] > outbound_mod.file_timeouts(1024 ** 2)[1] > 120,
-              json.dumps([round(x) for x in outbound_mod.file_timeouts(4 * 1024 ** 3)]))
+              outbound_mod.file_timeouts(cfg.napcat["max_file_bytes"])[1] > outbound_mod.file_timeouts(1024 ** 2)[1] > 120
+              and outbound_mod.file_timeouts(cfg.napcat["max_file_bytes"])[1] <= 180,
+              json.dumps([round(x) for x in outbound_mod.file_timeouts(cfg.napcat["max_file_bytes"])]))
 
     # the host refuses a piece (its bytes gone): failed, and the stream is reset once pieces were sent
     napcat, host, _c, _o = run("gone", data, host=StubFileHost(data, served=Result(
@@ -1380,14 +1382,43 @@ def _check_file_http(rep, cfg):
             res = api.get_file_piece("file-http", name, "blob-1", 0, 100)
             rep.check("file_http_%s" % name, res.kind == want_kind and (res.obj or {}).get("error") == want_error,
                       repr(res)[:160])
-        api.claim_outbox(0, timeout=5)
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
-    rep.check("file_claim_declares_its_limit",
-              "file:%d" % hostapi_mod.FILE_MAX_BYTES in hostapi_mod.CAPABILITIES
-              and hostapi_mod.FILE_MAX_BYTES == 4 * 1024 ** 3, json.dumps(hostapi_mod.CAPABILITIES))
+
+
+def _check_file_limit_config(rep, root):
+    """adapter.napcat.max_file_mb: the default, a configured value, and invalid ones (the default, said once)."""
+    mib = 1024 * 1024
+    default = fixtures.load_config()
+    claims = Adapter(default, os.path.join(root, "file_limit_default")).capabilities
+    rep.check("file_limit_default_50_mib",
+              default.napcat["max_file_mb"] == 50 and default.napcat["max_file_bytes"] == 50 * mib
+              and "file:%d" % (50 * mib) in claims and default.notes == [] and "max_file_mb=50" in default.describe(),
+              json.dumps([c for c in claims if c.startswith("file:")]))
+    raw = fixtures.raw_config()
+    raw["adapter"]["napcat"]["max_file_mb"] = 8
+    configured = Config(raw, "fixture:max-file-8")
+    claims = Adapter(configured, os.path.join(root, "file_limit_8")).capabilities
+    stub, host = StubFileNapCat(), StubFileHost(b"")
+    outbound_mod.Outbound(configured, host, stub, Journal(os.path.join(root, "file_limit_8_out")), Counters(),
+                          log=lambda _m: None, verify=False).handle_item(
+        {"publication_id": "file-limit", "attempt_id": "attemptlimit", "target": {"type": "group", "id": fixtures.GROUPS[0]},
+         "text": "", "file": {"artifact_id": "blob-x", "name": "big.bin", "sha256": "0" * 64, "size": 8 * mib + 1}})
+    rep.check("file_limit_configured_is_declared_and_kept",
+              configured.napcat["max_file_bytes"] == 8 * mib and "file:%d" % (8 * mib) in claims
+              and not any(c.startswith("file:%d" % (50 * mib)) for c in claims) and configured.notes == []
+              and stub.calls == [] and host.piece_calls == []
+              and ((host.last().get("payload") or {}).get("response") or {}).get("reason") == "file_over_limit",
+              json.dumps([c for c in claims if c.startswith("file:")]))
+    for value in ("50", 0, True, MAX_FILE_MB_MOST + 1, 2.5):
+        raw = fixtures.raw_config()
+        raw["adapter"]["napcat"]["max_file_mb"] = value
+        bad = Config(raw, "fixture:max-file-bad")
+        rep.check("file_limit_invalid_%s_is_default" % str(value).lower().replace(".", "_"),
+                  bad.napcat["max_file_mb"] == 50 and len(bad.notes) == 1 and "max_file_mb" in bad.notes[0],
+                  json.dumps(bad.notes))
 
 
 def _check_attachment_http(rep, cfg):
@@ -1681,6 +1712,7 @@ def run(cfg, data_dir, live=True, live_config=True):
     _check_attachment_http(rep, gcfg)
     _check_outbound_files(rep, gcfg, root)
     _check_file_http(rep, gcfg)
+    _check_file_limit_config(rep, root)
     _check_peer_timekeeping(rep, gcfg, root)
     _check_peers(rep, gcfg, root)
     _check_lock_and_spool(rep, gcfg, root)

@@ -34,8 +34,9 @@ The copied envelope did more than make her a stranger: the copied wake reason se
 gate (`attend.gated` reads only the reason), 11 of them since 10-07, 4 as 「有人 @ 了你」 with the requester as speaker;
 a 不理 there would have committed the turn with the result read as delivered and its content never shown. Task results
 also counted as 「有人叫过你」 in her places view, as people present in a group turn, and as answers to her questions
-(56 program rows in groups carry a copied reply link). 153 inbound program rows in groups carry a copied "she was
-called" reason.
+(57 program rows in groups carry a copied reply link). Of the inbound program rows in groups (author `asuna:internal`),
+154 carry a copied `mentioned_account` reason and 5 `name_called`, counted at the stop that installed this (the latest
+arrived two minutes before it).
 
 ## 3. Decisions
 

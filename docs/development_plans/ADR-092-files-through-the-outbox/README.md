@@ -38,7 +38,8 @@ Pictures become sendable when a task registers them (`outbound_media.register_im
 - **D4 Type: no limit (owner).** The type is detected from the bytes and recorded. A type that is not recognized
   still goes; the receipt and her record say 「类型没认出来」, a note and not a gate (her ask, 09:06).
 - **D5 Size: the adapter's limit only (owner).** The program sets no cap of its own.
-  - Each adapter declares the largest file its platform takes, with the `file` capability on its claim.
+  - Each adapter declares the largest file it takes, with the `file` capability on its claim (D6: NapCat's own
+    setting).
   - A file over the declared limit is refused before anything is sent, with the limit and the actual bytes stated.
   - Nothing is truncated or compressed.
 - **D6 The NapCat adapter.**
@@ -125,7 +126,7 @@ refusals were written after; they wait for her reading.
 
 | Adapter | What limits a file | Limit | Source |
 |---|---|---|---|
-| NapCat (QQ) | QQ group files | "4G" a file (declared as 4 GiB; a refusal by QQ below that shows as failed, with its reason); "10G" and 1,500 files a group, after which uploads fail | Tencent's help page on group file uploads |
+| NapCat (QQ) | QQ group files | "4G" a file, the ceiling of the adapter's own `max_file_mb` setting (D6); "10G" and 1,500 files a group, after which uploads fail | Tencent's help page on group file uploads |
 | NapCat (QQ) | NapCat's WebSocket server, one message | 50 MiB (`maxPayload`), so about 37 MiB of file as base64 | NapCatQQ v4.18.0 `network/websocket-server.ts` |
 | NapCat (QQ) | NapCat's `upload_file_stream` | none of its own: pieces over 10 MiB go to disk, a stream is dropped after 10 minutes idle, 5 minutes' retention by default | v4.18.0 `action/stream/UploadFileStream.ts` |
 | NapCat (QQ) | `upload_group_file` | none of its own: it takes a path, a URL or base64 and sends a file element | v4.18.0 `action/go-cqhttp/UploadGroupFile.ts` |

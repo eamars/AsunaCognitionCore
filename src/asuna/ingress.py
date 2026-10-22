@@ -23,6 +23,16 @@ def author_of(event):
     return PROGRAM_AUTHOR if kind in INTERNAL_KINDS or kind in CORE_NOTICE_KINDS else event['person_id']
 
 
+def program_group_context(source):
+    """The group context of the program's line about another line (a task result, a consult's question): the thread
+    it belongs to, nothing of that line's own envelope. Nobody @'d her in it, it calls and answers nobody (ADR-089)."""
+    group = ((source or {}).get('event') or {}).get('group_context')
+    if not group:
+        return None
+    return {'wake_reason': None, 'topic_id': group.get('topic_id'), 'reply_to': None, 'reply_message_id': None,
+            'mentioned_account_ids': []}
+
+
 def episode_id(event):
     return 'ep-' + sha(canonical([event['scene_id'], event['event_id'],
                                 event.get('episode_kind', 'external')]))[:32]

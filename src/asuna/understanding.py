@@ -147,7 +147,8 @@ def group_people(store, scene, event, persona, source):
     people = People(store, persona)
     ids = [event['person_id']]
     if source:
-        for row in store.db.messages.find({'scene_id': scene['_id'], 'direction': 'inbound',
+        from .ingress import NOT_CORE_NOTICE                        # the program's lines are nobody waiting
+        for row in store.db.messages.find({'scene_id': scene['_id'], 'direction': 'inbound', **NOT_CORE_NOTICE,
                                            'scene_seq': {'$gt': source['scene_seq']},
                                            'event.group_context.wake_reason': {'$in': list(EXPLICIT)}},
                                           {'author': 1}).sort('scene_seq', 1).limit(ENTRY_MAX * 4):

@@ -149,8 +149,7 @@ def take(store, scene, persona=None, keep=False):
     for row in rows:
         _place(people, scene, row)
         block = row['event']['raw'][KEY]
-        body = words(store, scene, people.heard(scene, row['text'], (row['event'].get('channel') or {}).get('account_id')),
-                     block)
+        body = words(store, scene, people.heard(scene, row['text']), block)
         kind = block['kind']
         then = people.thought_then(line_row(store, block), scene['_id'])
         if then:
@@ -182,11 +181,9 @@ def drop_seen(store, scene_id):
 
 def _place(people, scene, row):
     """The people a notice names get their labels here, as a message's @ do."""
-    account = (row['event'].get('channel') or {}).get('account_id')
     for number in (row['event'].get('group_context') or {}).get('mentioned_account_ids') or []:
-        if str(number) != str(account):
-            profile = people.mentioned(row, number)
-            people.entry(scene, people.account_person(scene['_id'], number), row if profile else None, profile)
+        profile = people.mentioned(row, number)
+        people.entry(scene, people.account_person(scene['_id'], number), row if profile else None, profile)
 
 
 def forget():

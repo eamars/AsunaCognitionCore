@@ -20,6 +20,9 @@ ROLES = ('owner', 'admin', 'member')
 ROLE_WORDS = {'owner': '群主', 'admin': '管理员'}
 BLOCK_NOTE = ('这个群的成员名单（程序定时从平台拉的，不是谁都跟你说过话）。这里只列一部分：你在这里认识的人、最近说过话的、'
               '刚被 @ 过的；带标签的可以照抄标签 @ 他。找名单里别的人用 find_member，它给的也是标签。')
+# Her own row in the list (the account her channel speaks with here): her names here, never a member to @.
+YOU_HERE = '你自己在这个群里的号：%s；你的发言在这里标作「%s」。'
+FIND_YOU = '这是你自己（%s）。'
 
 
 def _int(value):
@@ -76,6 +79,12 @@ def _name(member):
     return member.get('card') or member.get('nickname') or ''
 
 
+def _yours(member):
+    """Her own row's names, in words."""
+    names = ['昵称「%s」' % member['nickname']] if member.get('nickname') else []
+    return '，'.join(names + ['群名片「%s」' % member['card'] if member.get('card') else '没设群名片'])
+
+
 def _label(people, scene, member):
     """The label she copies to @ someone she found (ADR-024 amendment, 2026-10-09): a member not yet in this group's
     roster is placed there, marked as looked up, with the names the list has; nothing is ever dropped from it."""
@@ -115,7 +124,9 @@ def block(store, scene, persona, moment=None):
                                        'event.group_context.mentioned_account_ids.0': {'$exists': True}},
                                       {'event.group_context.mentioned_account_ids': 1}):
         mentioned.update(str(a) for a in row['event']['group_context']['mentioned_account_ids'])
-    members = sorted(doc['members'], key=lambda m: -(m.get('last_sent_time') or 0))
+    mine = people.own_account(scene['_id'])
+    own = next((m for m in doc['members'] if m['user_id'] == mine), None) if mine else None
+    members = sorted((m for m in doc['members'] if m is not own), key=lambda m: -(m.get('last_sent_time') or 0))
     recent = {m['user_id'] for m in members[:RECENT_ACTIVE]}
     chosen = [m for m in members if m['user_id'] in known or m['user_id'] in recent or m['user_id'] in mentioned]
     items = []
@@ -128,8 +139,10 @@ def block(store, scene, persona, moment=None):
         items.append(item)
     leaders = ['%s（%s）' % (_name(m), ROLE_WORDS[m['role']]) for m in members if m['role'] in ROLE_WORDS]
     fetched = doc.get('fetched_at') or doc.get('received_at') or ''
-    return {'count': '群里一共 %d 人' % doc['count'], **({'leaders': leaders[:12]} if leaders else {}),
-            'items': items, **({'not_shown': '另有 %d 人没列出' % (doc['count'] - len(items))} if doc['count'] > len(items) else {}),
+    left = doc['count'] - len(items) - (1 if own else 0)
+    return {'count': '群里一共 %d 人' % doc['count'], **({'you': YOU_HERE % (_yours(own), people.self_name)} if own else {}),
+            **({'leaders': leaders[:12]} if leaders else {}),
+            'items': items, **({'not_shown': '另有 %d 人没列出' % left} if left > 0 else {}),
             **({'list_fetched_at': fetched} if fetched else {}), 'note': BLOCK_NOTE}
 
 
@@ -143,10 +156,13 @@ def find(store, scene, persona, query, moment=None):
     hits = [m for m in doc['members'] if needle in m.get('nickname', '').casefold() or needle in m.get('card', '').casefold()]
     hits.sort(key=lambda m: -(m.get('last_sent_time') or 0))
     people = People(store, persona)
+    mine = people.own_account(scene['_id'])
+    you = next((m for m in hits if m['user_id'] == mine), None) if mine else None
+    hits = [m for m in hits if m is not you]
     found = [{'who': _label(people, scene, m), **_active(m, moment),
               **({'role': ROLE_WORDS[m['role']]} if m['role'] in ROLE_WORDS else {}),
               **({'also': '群名片「%s」，昵称「%s」' % (m['card'], m['nickname'])} if m.get('card') and m.get('nickname')
                  and m['card'] != m['nickname'] else {})} for m in hits[:FIND_LIMIT]]
-    return {'query': query, 'found': found, 'count': len(hits),
+    return {'query': query, 'found': found, 'count': len(hits), **({'you': FIND_YOU % _yours(you)} if you else {}),
             'note': ('名单里叫这个名字的有 %d 人，列了最近说过话的 %d 个。' % (len(hits), len(found))) if hits
-            else '名单里没有名字带「%s」的人。' % query}
+            else '名单里叫这个名字的只有你自己。' if you else '名单里没有名字带「%s」的人。' % query}

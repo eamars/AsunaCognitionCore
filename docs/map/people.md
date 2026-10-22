@@ -112,6 +112,7 @@ Who is who in a scene, as the character reads it.
 - def `name_key` — What a name looks like, for spotting look-alikes: its letters only (no digits, spaces, symbols or case).
 - class `People` — Labels for the people of this store's scenes.
   - `person` — The canonical person behind an author id (configuration decides; a name never does).
+  - `own_account` — The platform account she speaks with in this conversation: its channel's, kept on the scene by the host.
   - `account_person` — The person_id the host keeps for a platform account number in this scene's platform.
   - `is_owner`
   - `self_role` — Her role in this group as the adapter last reported it (owner/admin/member), else None.

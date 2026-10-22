@@ -177,7 +177,9 @@ def _group_answers(store, source, line):
                                         'direction': 'outbound', 'phase': 'SPEAK'}, {'_id': 1, 'platform_message_id': 1}))
     ids = [row['_id'] for row in mine]
     platform = [row['platform_message_id'] for row in mine if row.get('platform_message_id')]
-    query = {'scene_id': source['scene_id'], 'direction': 'inbound', 'scene_seq': {'$gt': line.get('scene_seq') or 0},
+    from .ingress import NOT_CORE_NOTICE                            # the program's lines answer nothing
+    query = {'scene_id': source['scene_id'], 'direction': 'inbound', **NOT_CORE_NOTICE,
+             'scene_seq': {'$gt': line.get('scene_seq') or 0},
              '$or': [{'event.group_context.reply_message_id': {'$in': ids}},
                      {'event.group_context.wake_reason': 'question_wait'},
                      {'event.raw.asuna_notice.kind': 'reaction', 'event.raw.asuna_notice.line.message_id': {'$in': platform}}]}

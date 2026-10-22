@@ -6,7 +6,7 @@
    换行是 LF（读字节数 CR，文本模式那把尺看不见 CR）；
 2. 指向：正文指向核心技能，并写明两份不一致时按核心技能办；
 3. 增量与「不回潮」：几条增量（挂错项目的红、单个用例文件与 p3 现行跑法、pytest 不收
-   *_cases.py 的盲区、p5b 退役读法、没收录 ≠ 已退役、适配器自检去处、候选根临时脚本落点与包内容判据）都还在；通用离线套件
+   *_cases.py 的盲区、p5b 退役读法、没收录 ≠ 已退役、适配器自检去处、候选根临时脚本落点与包内容判据、发布前私密词扫描的常设判据）都还在；通用离线套件
    的命令清单没有回潮到散文里——反引号里的字面量（旧试用记录引用的命令、错误原文）按引用处理，
    不算回潮；
 4. 反引号仓库路径存在性：正文反引号里形如 tests/...、tools/...、docs/... 的仓库路径逐个查
@@ -64,6 +64,23 @@ PACKAGING_RULES = [
     ("rule_package_content_proof", "只认 artifact 那串 sha256 和 `.tgz` 的文件清单"),
     ("rule_changed_files_is_not_package", "`changed_files` 反映的是候选树／冻结快照那一格，不等于包内容"),
     ("rule_provenance_package_sha", "7f54dbd2af14"),
+]
+
+# 「发布前自检（私密词扫描）」一节的常设判据（2026-10-23，主人 10-14 拍的那条）。
+# 一条判据名底下挂 11 个关键串：整节被剥走样就红这一条，detail 列出缺哪几个串——
+# 剥一节只红对应那一条，不连带红别的（主人交代）。不按名单序号写，序号会漂（10-23 凌晨名单加过条目）。
+PREPUB_SCAN_RULES = [
+    ("prepub_section_title", "## 发布前自检（私密词扫描）"),
+    ("prepub_pass_zero_new", "零新增命中"),
+    ("prepub_pass_only_envoy", "命中**全部**落在 `integration/envoy_meters_read.py`"),
+    ("prepub_stop_head", "停下来报主人"),
+    ("prepub_stop_other_file", "命中冒出"),
+    ("prepub_stop_list_count", "名单条目数跟上一份报告对不上"),
+    ("prepub_stop_envoy_changed", "本身在这次改动里被改"),
+    ("prepub_provenance_owner_words", "定成常设判据，以后照这条自己走"),
+    ("prepub_why_rubber_stamp", "把「停」练成橡皮章"),
+    ("prepub_no_entry_index", "不按序号引用名单条目"),
+    ("prepub_three_way_wording", "可判的三岔"),
 ]
 
 SECTIONS = [
@@ -204,6 +221,11 @@ def main():
     # 「候选根」一节的关键串（临时脚本落点、白名单扫描、包内容判据、来路那串包 sha）
     for name, token in PACKAGING_RULES:
         check(name, token in body, token)
+
+    # 「发布前自检（私密词扫描）」一节：一条判据名，缺哪些关键串写进 detail。
+    missing_prepub = [name + "（" + token + "）" for name, token in PREPUB_SCAN_RULES
+                      if token not in body]
+    check("prepublish_private_word_criterion", not missing_prepub, "、".join(missing_prepub))
 
     # 通用清单回潮：命令字面量回到散文 = 又把核心技能抄了一遍
     regressed = [token for token in GENERIC_SUITE_TOKENS if token in prose]

@@ -1931,6 +1931,7 @@ def _check_voice(rep, gcfg, root):
 
     Offline only: synthetic events, a substitute NapCat and host; no platform call, nothing reaches a real host.
     """
+    rep.check("voice_declared", "voice_in" in Adapter(gcfg, os.path.join(root, "voice-claim")).capabilities, "")
     groups = sorted(gcfg.allowed_groups)
     grp = groups[0]
     member = sorted(gcfg.route_for_group(grp).allowed_senders)[0]

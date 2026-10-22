@@ -311,6 +311,7 @@ A recall, a poke, a reaction and the like come as an event from the person who d
 | `poke`, `react`, `recall` | performs that action (`recall` also: her line can be taken back) |
 | `quote` | shows the line she quotes |
 | `quote_in`, `react_in` | passes on what others quote, and reactions |
+| `voice_in` | settles each voice of a line before posting the line ([post a voice](#post-a-voice)) |
 
 The answer is `{"items": []}` or `{"items": [item]}`. Each claim marks the item `SENDING` under a fresh `attempt_id`; claiming is not delivery.
 
@@ -720,8 +721,9 @@ An adapter puts a message's media in `raw.asuna_media` as `{"items": [...]}`. Th
 ### Voice messages
 
 A voice segment's item has `type` `record` (or `audio`), and the line's text carries `[语音（未解析）]` in its place.
-An adapter that can fetch voices [posts each one](#post-a-voice) before its line, and the worker turns it into text on
-this machine (`src/asuna/voice.py`). Nothing is sent anywhere else.
+An adapter that can fetch voices declares `voice_in` and [posts each one](#post-a-voice) before its line; the worker
+turns it into text on this machine (`src/asuna/voice.py`). Nothing is sent anywhere else. A line from an adapter that
+posts none keeps its placeholder.
 
 - **Never stored.** The audio lives in memory for its request. The line is stored with one entry per voice in its event
   (`event.voice`): state, words, length, sha256, size, first 44 bytes, media type, model and times (`ENTRY_FIELDS`).

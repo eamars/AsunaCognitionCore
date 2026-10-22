@@ -27,7 +27,7 @@ with Core (`registerChannel`).
   segment's fields, the source and the count, never the text.
 - A group or private-chat message that quotes another carries the quoted message's ID as `reply_to`; one that only
   quotes, with no words, also carries `raw.asuna_reply_only`. On every outbox claim the adapter declares what it
-  carries: `image`, `sticker`, `react`, `poke`, `quote`, `quote_in`, `react_in`, `recall`.
+  carries: `image`, `sticker`, `react`, `poke`, `quote`, `quote_in`, `react_in`, `recall`, `voice_in`.
 - A voice message (`record` segment) is settled before its line is posted, because NapCat clears its voice cache and
   a line should reach her with its words: on the submit path each voice is asked of NapCat (`get_record` with the
   segment's `file` and `out_format` `mp3`, 10 s) and its audio (`base64` in the answer) is posted to Core's `voice`

@@ -171,7 +171,9 @@ same conversation, which merged it; errand sessions' copies of their parent's ch
 new checkpoints compare):
 
 1. A merge carries the earlier 答应过的事 and 更正与分歧 item by item, word for word; one done or no longer true is
-   marked 「已了结：」 for one checkpoint and dropped at the next merge.
+   marked 「已了结：」 with its basis at the end, 「（凭：谁在什么时候说的或做的那一句）」, for one checkpoint, and dropped at
+   the next merge (the basis is her change after reading the 13:34 hop, where most items that looked closed were
+   another matter standing in for this one).
 2. No phrase points at the earlier checkpoint; its history goes into the start of 对话脉络 and may be shortened; that
    part is exempt from change 5 (her change: otherwise the two rules cancel each other there).
 3. Her group notes (`group_notes_from_program`) join the do-not-copy list.
@@ -184,12 +186,19 @@ new checkpoints compare):
    is").
 
 **Reading** (pre-registered; `.runtime/private/compaction-study/trim_reading.py`, numbers only; she reads the
-checkpoints herself). From her install, per merge hop: the earlier 答应过的事 and 更正与分歧 items not already
+checkpoints herself). The measure allows rewording: an item counts as carried when half of its four-character pieces
+are found in the next checkpoint (near word for word, six-character pieces at 90% or more, only 18% of the 339 hops'
+items are carried, so a reworded carry is already lossy; the change is to stop whole items going). From her install,
+per merge hop: the earlier 答应过的事 and 更正与分歧 items not already
 marked closed; silent drops (not carried by the measure above); items newly marked 已了结; the items the next
 checkpoint holds in those two sections; pointer phrases; hard tokens of those two sections lost (reported only).
 
 - **The first 4 hops** (about half a day, nearly all home and the agent line): keep if the pooled silent-drop share is
-  20% or less; revert at once on a hop at 50% or more, or on a loss she reports. Calibrated on today's template, home
+  20% or less; revert at once on a hop at 50% or more, or on a loss she reports. Any hop over 20% is reported to her at
+  once with its numbers and the first 8 characters of each of its items (a share alone she cannot judge), so a bad hop is never hidden by a good one in the pool (her
+  concern; she asked for a per-hop 20% bar, and the pooled verdict stays because with 8–14 items a hop a per-hop bar
+  would revert a template that truly drops 10% in about half of the readings). Marks without their basis are counted
+  per hop. Calibrated on today's template, home
   and agent-line hops since 10-15 (88 hops, 85 four-hop windows): per-hop median 72%, best window 26%, so the rule
   keeps today's template in 0 of 85 windows, and it keeps a template that drops 5%, 10% or 15% of these items 100%,
   97% or 82% of the time.
@@ -208,6 +217,13 @@ three stops, with two changes folded in above (change 2 exempt from change 5; at
 goes before change 1). The thresholds do not move to pass a reading. Her own 12:22 count (40 → 40 items) and Claude's
 (13 of 14) differ in their denominator, all six sections against the two: every count says its denominator first. She
 reads the 13:34 checkpoints herself and says whether its items were closed or lost.
+
+Her reading of the 13:34 hop (15:34, Claude's paraphrase; she read both checkpoints in full): a real loss, not
+closure. Of the earlier 8 items in the two sections (Claude's script counts 7: it leaves out one that already carried a
+done word), none survived word for word and one in rewritten form; of 34 sub-items, 30 not found and 24 with no trace
+anywhere; the summary's own reasoning listed five pending appointments that its text then left out. Items with a block
+of their own (her plans) can be recovered; promises and orderings with no other home are the real loss, which is what
+this change is for. A later hop (14:43) wrote items as 「X → 已做到／未做／进行中」 unprompted.
 
 Her own check, made cheap (her ask, 14:5x): each hop's reading that reaches her lists the first 8 characters of every
 item the new checkpoint holds in the two sections, one a line, at most 40, so she sees at a glance which one is gone

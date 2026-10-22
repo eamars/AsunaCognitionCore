@@ -294,3 +294,36 @@ scene with a `channel_id` (QQ, the peer line and the agent lines), from 10-14 11
 
 The appendix `.runtime/private/adr076/` is reduced to `usage-30d.json` (13 KB, counts per lane over the 30 days before the
 study), which the effort proposal compares against; the rest is removed.
+
+### 11.4 R5's next step: her background summaries think at `low` (2026-10-22)
+
+The owner asked where a summary's cost goes. Measured on the last day of summary sessions (the ones kept on disk: 125
+requests over 1.01 days; tokens and times only, `scratchpad/cost_split.py`, `summary_overlap.py`, `summary_spend.py`):
+
+- **Not context:** 155,608 new input tokens in the day, a median 604 per request (p90 2,599), nothing cached; under
+  half a minute of prefill at about 6k tokens a second.
+- **Not the wait:** 11 minutes before first tokens (median 1.6 s, p90 11.8 s), nearly all of it queueing behind other
+  requests.
+- **Generation:** 230,717 output tokens, 23 minutes of engine time (median 3.4 s, p90 31 s, about 158 tokens a second).
+  87% of a summary's output characters are thinking (median; p90 92%): about 811 characters of thinking for 166 of
+  summary. So most of the 23 minutes write nothing that is kept.
+- **For scale, the same day:** the action brain 161 minutes of generation (1.41M output tokens), the character brain
+  98 minutes and 12.5M uncached input tokens; summaries are about 7% of the engine's time. 33 of 1,384 character-brain
+  steps (2.4%) started while a summary ran, with a median 4.6 s of it left (p90 33 s, longest 54 s).
+
+**The cache is not touched.** The local engine writes the effort as a sentence at the top of the prompt, so within a
+conversation one level is kept (ADR-048) and compaction follows its conversation's level (ADR-085 §4). A summary is a
+one-request session of its own with a fresh prompt (cache hit 0.9–1.7% over the 30 days of `usage-30d.json`, a median
+0 tokens cached in the last day): no earlier request shares its prefix, so its level costs no cache.
+
+**Decided (owner, 2026-10-22):** `summaryEffort: low` on the action route (`packages/cognition-core/src/index.js`
+`stageEfforts`, `effortFor`; checked against the levels the model offers, like `attendEffort`). The action brain keeps
+the route's `high`. It is profile configuration; a field on the settings card would be a UI addition and is not made.
+
+**Reading (pre-registered).** The first 150 summaries after install (about a day and a half): **pass** if the median
+output is 280 tokens or less (half of 556) and the slowest tenth takes 20 s or less (step time; 43 s before), and at
+most one summary ends incomplete (`DIALOGUE_SUMMARY_INCOMPLETE`; 0 in the 7 days before), and her own reading of 5
+summaries she picks finds no wrong speaker and no lost fact. **Fail** on any: back to the route's effort, no second
+level tried in the same reading.
+
+Her review: ______

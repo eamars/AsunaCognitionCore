@@ -19,6 +19,18 @@ test('the gate and group turns take the efforts chosen on the card; empty is the
   assert.equal(plain.effortFor('attend'), undefined, 'nothing chosen: the route effort');
 });
 
+test('her background summaries take the action route\'s summaryEffort; other action work keeps the route effort', async () => {
+  const core = new CognitionCore(offering('low', 'medium', 'high'),
+    { routes: { character: route, action: { ...route, summaryEffort: 'low' } }, deployment: {} });
+  core.efforts = await core.stageEfforts();
+  assert.equal(core.effortFor('summary'), 'low');
+  assert.equal(core.effortFor('executor'), undefined, 'the action brain keeps the route effort');
+  assert.equal(core.effortFor('attend'), undefined);
+  const refused = new CognitionCore(offering('high'),
+    { routes: { character: route, action: { ...route, summaryEffort: 'low' } }, deployment: {} });
+  await assert.rejects(refused.stageEfforts(), /INVALID_REASONING_EFFORT: action summaryEffort/);
+});
+
 test('an effort the model does not offer is refused, not dropped', async () => {
   const core = new CognitionCore(offering('off', 'high', 'max'),
     { routes: { character: { ...route, groupEffort: 'medium' } }, deployment: {} });

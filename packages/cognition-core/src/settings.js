@@ -6,6 +6,7 @@ export function nativeRoute(route) {
   const value = { ...route };
   if (!value.reasoningEffort) delete value.reasoningEffort;
   delete value.attendEffort; delete value.groupEffort;        // Asuna's own stage choices, not part of a request
+  delete value.summaryEffort;
   delete value.idleMinutes;                                   // Asuna's own (ADR-053), not part of a request
   // An empty output limit is the model's own (resolveRoutes); it never overrides a request's limit with nothing.
   if (value.maxTokens === undefined) delete value.maxTokens;

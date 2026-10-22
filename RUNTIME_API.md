@@ -67,6 +67,7 @@ Each route picks a DSH provider and model from DSH's catalog. Asuna has no model
 | `maxTokens` | all | output limit; empty: the model's default; must be ≥ 1 and below the context window |
 | `attendEffort` | `character` | effort of the relevance gate; empty: the route's own |
 | `groupEffort` | `character` | effort of her group turns; empty: the route's own |
+| `summaryEffort` | `action` | effort of her background dialogue summaries (one-request sessions); empty: the route's own |
 | `idleMinutes` | `action`, `actionHigh` | after this long unused, a task's continuation starts a fresh action context (empty: 30); on `actionHigh` also how long the tier rests after its line fails |
 
 | Refusal | When |

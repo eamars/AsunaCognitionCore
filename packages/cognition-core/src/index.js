@@ -66,12 +66,14 @@ export const inject = ['agents', 'agentPresets', 'sessionPersistence', 'sessions
   'sessionController', 'sessionProjections', 'sessionProjectionCache', 'workspaceController', 'workspaceRegistry', 'storageDomain', 'tools', 'asunaFloor', 'llm', 'subagents'];
 
 // attendEffort and groupEffort (character route only): the effort of her relevance gate and of her group turns, one of
-// the levels the model offers; empty is the route's own effort.
+// the levels the model offers; empty is the route's own effort. summaryEffort (action route only): the effort of her
+// background dialogue summaries, each a one-request session of its own, so no conversation's cache depends on its level
+// (ADR-076 §11.4); empty is the route's own.
 // idleMinutes (action routes only): after this long unused, a task's continuation starts a fresh action context
 // (ADR-053); empty is 30. A cost setting: it follows how long the route's provider keeps a cached prefix. On actionHigh
 // (ADR-075) it is also how long 高 rests after its line failed: by then its cache is gone anyway.
 const Route = z.object({ provider: z.string(), model: z.string(), reasoningEffort: z.string(), maxTokens: z.number(),
-  attendEffort: z.string(), groupEffort: z.string(), idleMinutes: z.number() });
+  attendEffort: z.string(), groupEffort: z.string(), summaryEffort: z.string(), idleMinutes: z.number() });
 export const Config = z.object({ python: z.string().volatile(), persona: z.string().volatile(),
   // D-6: mount DSH Schedule when the Host has none (default). By DSH design its schedule_* tools are
   // visible to every root agent; Asuna's role and action presets already restrict their own tools.
@@ -303,7 +305,7 @@ export class CognitionCore {
       this.lifecycle.state = 'starting';
       const models = await this.resolveRoutes();
       this.efforts = await this.stageEfforts();
-      this.ctx.logger.info('Asuna stage efforts on the character route: ' + JSON.stringify(this.efforts));
+      this.ctx.logger.info('Asuna stage efforts: ' + JSON.stringify(this.efforts));
       const schedule = await this.attachSchedule();
       this.worker = new BusinessWorker({ ...this.config, python, dataRoot: this.ctx.asunaFloor.dataRoot,
         pythonPath: await this.ctx.asunaFloor.workerPath() },
@@ -411,14 +413,18 @@ export class CognitionCore {
   /** Per-stage effort on the character route, as chosen on the settings card from the levels its model offers:
    * the relevance gate (attendEffort) and her group turns (groupEffort). Empty is the route's own effort. */
   async stageEfforts() {
-    const route = this.routeFor('character');
-    const model = await this.ctx.llm.resolveModelInfo(route.provider, route.model);
-    const offered = new Set((model.reasoning?.efforts ?? []).map(effort => effort.id));
     const efforts = {};
-    for (const [stage, key] of [['attend', 'attendEffort'], ['group', 'groupEffort']]) {
-      if (!route[key]) continue;
-      if (!offered.has(route[key])) throw new Error('INVALID_REASONING_EFFORT: character ' + key);
-      efforts[stage] = route[key];
+    for (const [name, stages] of [['character', [['attend', 'attendEffort'], ['group', 'groupEffort']]],
+                                  ['action', [['summary', 'summaryEffort']]]]) {
+      const route = this.routeFor(name);
+      if (!route || !stages.some(([, key]) => route[key])) continue;
+      const model = await this.ctx.llm.resolveModelInfo(route.provider, route.model);
+      const offered = new Set((model.reasoning?.efforts ?? []).map(effort => effort.id));
+      for (const [stage, key] of stages) {
+        if (!route[key]) continue;
+        if (!offered.has(route[key])) throw new Error('INVALID_REASONING_EFFORT: ' + name + ' ' + key);
+        efforts[stage] = route[key];
+      }
     }
     return efforts;
   }
@@ -461,6 +467,7 @@ export class CognitionCore {
   effortFor(lane, stage) {
     if (lane === 'attend') return this.efforts?.attend;
     if (lane === 'character' && stage?.scene_kind === 'group') return this.efforts?.group;
+    if (lane === 'summary') return this.efforts?.summary;
     return undefined;
   }
 

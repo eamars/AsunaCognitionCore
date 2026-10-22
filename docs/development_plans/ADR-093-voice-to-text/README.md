@@ -67,8 +67,11 @@ Xiaoman measured on 10-23:
   about 1.5 s here (§3), so this wait is rarely reached. If it is, that turn reads 「正在转写」; nothing interrupts a
   running turn. When the text is ready it goes onto the line, and every later reading of that line (her next turn,
   `recall`) shows the text.
-- **V7 The audio does not stay forever.** Audio bytes leave GridFS 7 days after they arrive, and the transcript stays
-  on the line. Her test set (§5) keeps its own copies.
+- **V7 The audio goes once the text is out (owner, 2026-10-23).** Like a video, the audio is deleted right after its
+  text is extracted, whatever the outcome (transcribed, no voice, a voice without words, a failure). The row keeps
+  the record: the state and its words, the length, sha256, size, first 44 bytes, media type, model and times, and
+  when the audio was removed. A voice still pending keeps its bytes until it is transcribed; after a Host restart
+  the pending ones are finished first. Her test set (§5) keeps its own copies.
 - **V8 What it does not touch.** Video soundtracks are not transcribed this round (`vision.py` video path,
   `animated.py`). Nothing is sent anywhere outside this machine.
 
@@ -136,7 +139,7 @@ follow, the evidence file's size, the detector settings in V4).
    - the transcriber with the model check (V4, §4);
    - the line's words (V5);
    - the turn's wait (V6);
-   - the 7-day sweep (V7).
+   - removal right after transcription (V7).
    Tests for each state, failure paths first.
 3. Her test set, the gate before the install is called done. Each clip is kept as a file with its sha256 and first 44
    bytes, and the configuration (engine, voice detection or not, rate, model) is recorded with every result:

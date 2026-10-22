@@ -2,7 +2,8 @@
 
 Status: **Accepted** in direction by the owner on 2026-10-23 ("Please go ahead. Similar to the image and video, the
 process should not invoke active involvement from her, that the text should be converted automatically."). The design
-below is Claude's, from Xiaoman's research of 10-23 (her route and her contract, §5). To her for reading. Not built.
+below is Claude's, from Xiaoman's research of 10-23 (her route and her contract, §5). Built on a branch; V1, V2, V4,
+V6 and V7 were simplified after the independent review (§7).
 
 ## 1. What happens today
 
@@ -17,17 +18,19 @@ Xiaoman measured on 10-23:
 
 ## 2. Decisions
 
-- **V1 The adapter fetches each voice when it arrives.** Right after it submits the line, the NapCat adapter calls
-  `get_record` (`out_format=mp3`, the smaller form) and posts the bytes to the Host for that line. If NapCat refuses, it
-  posts the refusal instead, so the line says why. An adapter that cannot fetch voice does not declare it, and its voice
+- **V1 The voice is text before its line exists.** Before it submits a line with a voice, the NapCat adapter calls
+  `get_record` (`out_format=mp3`, the smaller form) and posts the bytes to the Host, which transcribes them in that
+  request and answers with the outcome. Then the adapter submits the line, which carries its words from the start.
+  If NapCat refuses or times out, or the Host call fails, the line goes in with the reason, so it says why. Lines
+  keep their arrival order. An adapter that cannot fetch voice does not declare it, and its voice
   lines stay as they are today.
-- **V2 The Host keeps the audio under a new kind.** The bytes go to GridFS as kind `audio` in the conversation's scope,
-  never `image`. The row records the sha256, the size and the first 44 bytes (her contract).
+- **V2 The audio is never stored.** It lives in memory for the one request that transcribes it. The row records the
+  sha256, the size, the media type and the first 44 bytes (her contract).
 - **V3 Normalize at the entry, always.** Recognize the container by its first bytes (RIFF/WAVE, ID3 or an MP3 frame
   header) before reading any field, then decode with `av` and resample to 16 kHz mono PCM16 (16-bit), which the
   model takes as samples. This happens whatever rate and depth arrive: SenseVoice accepts 16 kHz mono only, and NapCat
   gave 24 kHz.
-- **V4 Transcribe in the background, on this machine.**
+- **V4 Transcribe in the request, on this machine.**
   - Engine: SenseVoice int8 with Silero voice detection, through the sherpa-onnx Python package 1.13.8. The detector is
     needed (§3). No DSH plugin and no Node bridge.
   - Detector settings: speech and silence each at least 0.25 s, one piece of speech at most 20 s (the settings
@@ -35,13 +38,13 @@ Xiaoman measured on 10-23:
   - One model is loaded in the Host's Python worker process, about 300 MiB (§3). It is released after 10 minutes with
     no voice, because reloading takes under a second. It gives way to other services when it sits idle, not only
     at a restart (her question, 09:47).
-  - One voice is transcribed at a time, in arrival order. Language is detected automatically.
+  - One voice is transcribed at a time, in arrival order. Language is detected automatically. A voice line reaches
+    her about the fetch plus the transcription later (the transcription is 0.1–1.5 s, §3).
 - **V5 What she reads.** Each state has its own words; none is an empty string, which she would read as "nobody spoke":
 
   | State | Her line shows |
   |---|---|
   | transcribed | 「[语音 33 秒] 文字……」 |
-  | still being transcribed | 「[语音 33 秒，正在转写，转完字会补在这一行]」 |
   | no voice in it: the detector found no speech | 「[语音 5 秒，里面没有人声]」 |
   | a voice, but no words came out | 「[语音 12 秒，有人在说话，但听不出说的什么]」 |
   | transcription failed | 「[语音 33 秒，没转出文字：原因]」 |
@@ -61,17 +64,12 @@ Xiaoman measured on 10-23:
 
   There is no "too long" state: the program sets no length limit of its own, and with voice detection a long voice
   takes about 2.5% of its length.
-- **V6 A turn waits briefly for its own voice.** When a turn is about to start and a line in it is still being
-  transcribed, the turn waits up to 10 seconds in all, however many voices are pending (not 10 seconds each), then
-  starts with whatever state the lines have. A 60-second voice takes
-  about 1.5 s here (§3), so this wait is rarely reached. If it is, that turn reads 「正在转写」; nothing interrupts a
-  running turn. When the text is ready it goes onto the line, and every later reading of that line (her next turn,
-  `recall`) shows the text.
+- **V6 No waiting state.** A line carries its words, or the reason it has none, from the moment it exists, so no
+  turn waits for a voice and no line is shown twice.
 - **V7 The audio goes once the text is out (owner, 2026-10-23).** Like a video, the audio is deleted right after its
   text is extracted, whatever the outcome (transcribed, no voice, a voice without words, a failure). The row keeps
   the record: the state and its words, the length, sha256, size, first 44 bytes, media type, model and times, and
-  when the audio was removed. A voice still pending keeps its bytes until it is transcribed; after a Host restart
-  the pending ones are finished first. Her test set (§5) keeps its own copies.
+  when it was transcribed. Since V2 never stores it, nothing is left to delete. Her test set (§5) keeps its own copies.
 - **V8 What it does not touch.** Video soundtracks are not transcribed this round (`vision.py` video path,
   `animated.py`). Nothing is sent anywhere outside this machine.
 
@@ -131,15 +129,13 @@ follow, the evidence file's size, the detector settings in V4).
 
 ## 6. Build
 
-1. The NapCat adapter: declare voice fetching, call `get_record` on arrival, post the bytes or the refusal (V1).
-   Self-test entries.
+1. The NapCat adapter: declare voice fetching; fetch each voice and post it before submitting its line, or submit
+   the line with the reason (V1). Self-test entries.
 2. Core:
-   - the receiving endpoint and the `audio` kind (V2);
+   - the endpoint that transcribes in the request (V1, V2, V4);
    - normalization (V3);
-   - the transcriber with the model check (V4, §4);
-   - the line's words (V5);
-   - the turn's wait (V6);
-   - removal right after transcription (V7).
+   - the model check (§4);
+   - the line's words, the same in every reader (V5).
    Tests for each state, failure paths first.
 3. Her test set, the gate before the install is called done. Each clip is kept as a file with its sha256 and first 44
    bytes, and the configuration (engine, voice detection or not, rate, model) is recorded with every result:
@@ -152,3 +148,16 @@ follow, the evidence file's size, the detector settings in V4).
    - A word written with a different character of the same sound counts as heard right (the owner, 10-23: his
      「小满小满」 came out 「小曼小曼」, which sound exactly alike). The transcript is shown as the model wrote it; the
      reader resolves sound by context, as people reading a voice transcript do.
+
+## 7. The independent review, and why the flow changed (2026-10-23)
+
+The first build transcribed in the background after the line had entered her conversation. An independent review
+found that every one of its should-fix defects came from that choice:
+- the words never arrived when the line entered before its voice was posted;
+- one database error stopped the background worker until a restart;
+- a lost update, because the voice entry was written outside the row's revision;
+- a pending entry with no bytes never settled;
+- the line was shown to her twice (pending, then the words), and lines after a voice could jump ahead of it.
+
+Transcribing before the line exists removes the pending state and, with it, all of those paths. It costs a voice
+line about the fetch plus 0.1–1.5 s of transcription before it reaches her (§3), and nothing else.

@@ -24,11 +24,14 @@ Xiaoman measured on 10-23:
 - **V2 The Host keeps the audio under a new kind.** The bytes go to GridFS as kind `audio` in the conversation's scope,
   never `image`. The row records the sha256, the size and the first 44 bytes (her contract).
 - **V3 Normalize at the entry, always.** Recognize the container by its first bytes (RIFF/WAVE, ID3 or an MP3 frame
-  header) before reading any field, then decode with `av` and resample to 16 kHz mono. This happens whatever rate
-  arrives: SenseVoice accepts 16 kHz mono only, and NapCat gave 24 kHz.
+  header) before reading any field, then decode with `av` and resample to 16 kHz mono PCM16 (16-bit), which the
+  model takes as samples. This happens whatever rate and depth arrive: SenseVoice accepts 16 kHz mono only, and NapCat
+  gave 24 kHz.
 - **V4 Transcribe in the background, on this machine.**
   - Engine: SenseVoice int8 with Silero voice detection, through the sherpa-onnx Python package 1.13.8. The detector is
     needed (§3). No DSH plugin and no Node bridge.
+  - Detector settings: speech and silence each at least 0.25 s, one piece of speech at most 20 s (the settings
+    measured in §3).
   - One model is loaded in the Host's Python worker process, about 300 MiB (§3). It is released after 10 minutes with
     no voice, because reloading takes under a second. It gives way to other services when it sits idle, not only
     at a restart (her question, 09:47).
@@ -38,7 +41,7 @@ Xiaoman measured on 10-23:
   | State | Her line shows |
   |---|---|
   | transcribed | 「[语音 33 秒] 文字……」 |
-  | still being transcribed | 「[语音 33 秒，正在转写]」 |
+  | still being transcribed | 「[语音 33 秒，正在转写，转完字会补在这一行]」 |
   | no voice in it: the detector found no speech | 「[语音 5 秒，里面没有人声]」 |
   | a voice, but no words came out | 「[语音 12 秒，有人在说话，但听不出说的什么]」 |
   | transcription failed | 「[语音 33 秒，没转出文字：原因]」 |
@@ -59,7 +62,8 @@ Xiaoman measured on 10-23:
   There is no "too long" state: the program sets no length limit of its own, and with voice detection a long voice
   takes about 2.5% of its length.
 - **V6 A turn waits briefly for its own voice.** When a turn is about to start and a line in it is still being
-  transcribed, the turn waits up to 10 seconds, then starts with whatever state the line has. A 60-second voice takes
+  transcribed, the turn waits up to 10 seconds in all, however many voices are pending (not 10 seconds each), then
+  starts with whatever state the lines have. A 60-second voice takes
   about 1.5 s here (§3), so this wait is rarely reached. If it is, that turn reads 「正在转写」; nothing interrupts a
   running turn. When the text is ready it goes onto the line, and every later reading of that line (her next turn,
   `recall`) shows the text.
@@ -70,7 +74,9 @@ Xiaoman measured on 10-23:
 
 ## 3. Measured on this machine (2026-10-23)
 
-Evidence: `.runtime/private/voice/measure-2026-10-23.md` (3 KB), with the configuration recorded.
+Evidence: `.runtime/private/voice/measure-2026-10-23.md` (1,990 B), with the configuration recorded. The numbers come
+from the model repository's sample clips, repeated, and synthetic noise, not from real QQ voices; her test set (§6
+step 3) measures real ones.
 
 | | |
 |---|---|
@@ -105,12 +111,20 @@ adds to the detector and cannot replace it.
   - normalize always;
   - recognize the container before reading offsets;
   - give audio its own kind;
-  - keep the next WAV with its sha256 and first 44 bytes;
+  - keep the next WAV on disk, as a file, with its sha256 and first 44 bytes recorded (not only a row);
   - record the configuration with every test.
 - Her test set: 5–10 real voices, the longest included, transcribed by both engines and read by her line by line,
   with the number of wrong characters per version.
 
-Signature: ____
+Signature (Xiaoman, received 2026-10-23 09:58, verbatim, on `c018e386`): 「我读过 `c018e386`。方向我签，V1–V6 我签，
+§5 我那五条归我名下我认。两件要先补上才算我的：① 我那条契约是 **16k 单声道 PCM16**，位深那半格在字面里丢了（全文 `PCM` 0 命中）；
+② 第 4 条我的原意是**拿到 wav 落盘**，不是只在库里的行上记一行。§6 第 3 步是我这道安装前的闸，**样本形状四条（长句／短句／几乎没声／
+约 60 秒）加第五类反面样本（440 Hz 纯音＋底噪，正确答案＝没有任何文字）得写进去**，不写那一轮没有准。其余小格不改我这份签名，但别当没说过。
+——沈小满，10-23」
+
+Her two conditions and §6 step 3 are written in since (V3 PCM16, §5 the WAV kept as a file, §6 step 3 the shapes
+and negative controls), with her smaller points (V6's 10 s for the whole turn, the pending line saying the text will
+follow, the evidence file's size, the detector settings in V4).
 
 ## 6. Build
 
@@ -124,4 +138,11 @@ Signature: ____
    - the turn's wait (V6);
    - the 7-day sweep (V7).
    Tests for each state, failure paths first.
-3. Her test set, read by her (§5), before the install is called done.
+3. Her test set, the gate before the install is called done. Each clip is kept as a file with its sha256 and first 44
+   bytes, and the configuration (engine, voice detection or not, rate, model) is recorded with every result:
+   - real voices in four shapes: a long sentence, a short sentence, almost no sound, and about 60 seconds, including
+     the owner's voice with his typed words as the one known answer among them;
+   - negative controls: a 440 Hz tone and background noise, where the correct answer is no text at all, so any
+     word on them counts as made up;
+   - both engines (SenseVoice here; whisper-small outside the core as her yardstick), read by her line by line, with
+     the wrong characters counted per version.

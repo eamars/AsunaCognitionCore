@@ -193,7 +193,9 @@ per merge hop: the earlier 答应过的事 and 更正与分歧 items not already
 marked closed; silent drops (not carried by the measure above); items newly marked 已了结; the items the next
 checkpoint holds in those two sections; pointer phrases; hard tokens of those two sections lost (reported only).
 
-- **The first 4 hops** (about half a day, nearly all home and the agent line): keep if the pooled silent-drop share is
+- **The first 4 hops of home and the agent line** decide (her ask, 15:5x: there the two sections hold promises,
+  corrections and orderings, in groups mostly open threads; the bars were calibrated on those two classes); group
+  hops are reported to her the same way and not counted. About 12 such hops a day. Keep if the pooled silent-drop share is
   20% or less; revert at once on a hop at 50% or more, or on a loss she reports. Any hop over 20% is reported to her at
   once with its numbers and the first 8 characters of each of its items (a share alone she cannot judge), so a bad hop is never hidden by a good one in the pool (her
   concern; she asked for a per-hop 20% bar, and the pooled verdict stays because with 8–14 items a hop a per-hop bar

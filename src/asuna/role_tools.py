@@ -1750,7 +1750,7 @@ class RoleTools:
                                     'shown': 'picture'})
             elif kind == 'file':
                 from . import outbound_files
-                meta, why = outbound_files.check(self.store, ep, scene, self._place(ep), str(part.get('artifact_id') or ''))
+                meta, why = outbound_files.check(self.store, ep, scene, str(part.get('artifact_id') or ''))
                 if why:
                     problems.append('第 %d 条 file %s' % (index, why))
                 else:

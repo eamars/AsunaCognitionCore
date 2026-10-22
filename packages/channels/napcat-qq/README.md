@@ -35,9 +35,10 @@ with Core (`registerChannel`).
   attempt), so one WebSocket message stays under 8 MiB; the adapter checks the sha256 across the pieces and NapCat
   checks it again when the stream completes. Then `upload_group_file` sends it under her name for it. The receipt
   carries NapCat's answer (its `file_id` only as data, never as an id) and the file's artifact id, sha256 and size;
-  a refusal carries the platform's words as `response.platform`. Waits grow with the size: 60 s a piece,
-  60 s + size / 32 MiB/s to complete the stream, 120 s + size / 1 MiB/s for the upload (at 50 MiB: about 62 s and
-  170 s).
+  a refusal carries the platform's words as `response.platform`. Each wait has a bound: a piece up to 60 s to fetch
+  from Core and 60 s for NapCat to take it (a failed piece ends the send after a reset of up to 10 s), completing the
+  stream 60 s + size / 32 MiB/s, the upload 120 s + size / 1 MiB/s. At 50 MiB a whole send is bounded by about
+  30 minutes (13 pieces × 120 s, then 62 s and 170 s).
   An upload that outlasts its wait is `unknown`, and a later answer settles it. The outbox waits while a file is
   sent.
 - A message she sends quotes a line (a leading `reply` segment) only when the outbox item carries `quote`, in a group

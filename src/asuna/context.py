@@ -445,9 +445,8 @@ class ContextBuilder:
             if row.pop('file',None) is not None and row.get('delivery_state')=='FAILED':
                 # A file that did not go says why, the program's reason or the platform's (ADR-092 D7).
                 from . import outbound_files
-                why=outbound_files.failure_words(row)
+                row['delivery_state']=outbound_files.failure_words(row)
                 for key in ('platform_receipt','failure','failure_detail'):row.pop(key,None)
-                row['delivery_state']=UNDELIVERED_WORDS['FAILED']+('：%s'%why if why else '')
                 continue
             row.pop('failure',None);row.pop('failure_detail',None)
             if (row.pop('action',None) or {}).get('kind')=='recall' and row.get('delivery_state') in ('FAILED','UNKNOWN'):
@@ -807,7 +806,7 @@ class ContextBuilder:
                 if mine:context['your_pictures_from_program']={'items':mine,'note':outbound_media.OWN_PICTURES_NOTE}
         # ADR-092: the files her tasks registered that this conversation may send (a group whose adapter takes files).
         from . import outbound_files
-        files=outbound_files.offer(self.store,scene,session_class,event['person_id'])
+        files=outbound_files.offer(self.store,scene)
         if files:context['file_artifacts_from_program']=files
         # ADR-017: whoever talks to her at home may send her on an errand; where it can go, and what came of the last ones
         # (program words only: nobody's reply comes home this way).

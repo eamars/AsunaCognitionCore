@@ -514,7 +514,10 @@ class Channels:
         capabilities.declared(self.store, channel_id, supports)     # what this adapter carries (ADR-079 §9.7)
         supports, limits = capabilities.split(supports)             # names as declared; file:<bytes> keeps its limit
         deadline = time.monotonic() + min(25, max(0, wait_seconds))
+        expired = []                      # file rows failed with FILE_BYTES_EXPIRED: their originals are looked at unlocked
         while not self.controller.stopping.is_set():
+            while expired:
+                outbound_files.expired_source(self.store, expired.pop())
             if self.controller.reconfiguring:
                 return {'items': []}
             with database_effects_lock(self.store.name):
@@ -564,6 +567,8 @@ class Channels:
                                                     expected=row['revision'], stream=row['episode_id'])
                             from .publish import PublishService
                             PublishService(self.store).cancel_after(failed)
+                            if failing['failure'] == 'FILE_BYTES_EXPIRED':
+                                expired.append(row['_id'])
                             continue
                     attempt = uuid.uuid4().hex
                     declared = outbound_media.descriptor(row)
@@ -601,6 +606,8 @@ class Channels:
             if time.monotonic() >= deadline:
                 break
             self.controller.stopping.wait(min(.2, max(0, deadline - time.monotonic())))
+        while expired:
+            outbound_files.expired_source(self.store, expired.pop())
         return {'items': []}
 
     def attachment(self, channel_id, publication_id, query=None):

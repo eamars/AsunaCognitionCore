@@ -31,7 +31,6 @@ POLICY = {
     'local-upload:': RECORD,     # a picture the owner sent her at home
     'task-file:': OFFERED,       # a file a task registered to send (outbound_files)
 }
-ON_ITS_WAY = ('READY', 'QUEUED_EXTERNAL', 'SENDING')
 
 
 def life(row):
@@ -53,6 +52,7 @@ def sweep(store, now=None):
     {'pulled': n, 'listed': n, 'files': n, 'bytes': n}."""
     from bson import ObjectId
     from gridfs import GridFSBucket
+    from .channels import Channels
     from .outbound_files import KEEP_DAYS, REMOVED
     db = store.db
     bucket = GridFSBucket(db, bucket_name='artifact_blobs')
@@ -62,7 +62,7 @@ def sweep(store, now=None):
               OFFERED: (moment - timedelta(days=KEEP_DAYS)).isoformat()}
     keep = named(store)
     going = set(db.messages.distinct('file.artifact_id', {'file.artifact_id': {'$exists': True},
-                                                          'delivery_state': {'$in': list(ON_ITS_WAY)}}))
+                                                          'delivery_state': {'$in': list(Channels.PART_ON_ITS_WAY)}}))
     removed = {PULLED: 0, LISTED: 0, 'files': 0, 'bytes': 0}
     for row in db.artifacts.find({'storage': 'gridfs'}, {'source_ids': 1, 'created_at': 1, 'gridfs_id': 1, 'size': 1,
                                                          'last_sent_at': 1}):

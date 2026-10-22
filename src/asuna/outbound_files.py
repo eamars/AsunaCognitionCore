@@ -5,14 +5,15 @@ as speak's `file` part, read by the adapter in pieces, their bytes kept 7 days a
   artifact in the task's own scope. The bytes stream into GridFS (`BlobStore.put_stream`); the program computes the
   sha256, the size and the type (`sniff`, from the first bytes: an unknown type is recorded as unknown and still
   goes). Her name for it passes her private words list: a hit warns, by category and entry line, and does not block.
-- **What a conversation may send** (`offer`, `file_artifacts_from_program`) follows the pictures' rules
-  (`outbound_media.image_scopes`, `own_only`): in a group or in anyone's chat that is not the owner's, only files her
-  own tasks registered. Files go to groups only, where the channel's adapter declares `file`.
+- **What a conversation may send** (`offer`, `file_artifacts_from_program`): a file any of her tasks registered may be
+  sent where the channel declares `file`, as her own pictures go anywhere (ADR-066: home outward is her call). Files
+  go to groups only (v0).
 - **Sending** (`check`): the part names a listed file whose bytes are still stored and whose size is within the
   limit the adapter declared (`capabilities.limit`); the program sets no size or type limit of its own. A file is its
-  own message: her record line is 「[文件：名字，大小]」 and the row carries the `file` descriptor.
-- **Bytes** (`serve_piece`): the adapter reads a claimed file in pieces of at most `PIECE_MAX`, fenced like a
-  picture's bytes (publication, attempt, artifact, scope); it checks the whole file's sha256 itself.
+  own message: her record line is 「[文件：名字，大小]」 (「类型没认出来」 added when its type was not recognized) and
+  the row carries the `file` descriptor.
+- **Bytes** (`serve_piece`): the adapter reads a claimed file in pieces of at most `PIECE_MAX`, fenced by its
+  publication, attempt and artifact; it checks the whole file's sha256 itself.
 - **Retention**: the bytes are removed `KEEP_DAYS` after the file was last sent, or after it was registered when it
   never was (`media_life.sweep`); the artifact row stays, with when its bytes went. A file named after that fails
   in words that say so.
@@ -162,9 +163,9 @@ def type_words(media_type):
     return TYPE_WORDS.get(media_type, media_type) if media_type else UNKNOWN_TYPE
 
 
-def record_line(name, size):
-    """Her own record of a file she sent: what her later turns read."""
-    return '[文件：%s，%s]' % (name, size_words(size))
+def record_line(name, size, media_type=None):
+    """Her own record of a file she sent: what her later turns read (D4: an unrecognized type is said, not hidden)."""
+    return '[文件：%s，%s%s]' % (name, size_words(size), '' if media_type else '，' + UNKNOWN_TYPE)
 
 
 def name_problem(name):
@@ -269,30 +270,17 @@ def sends_here(store, scene):
             and capabilities.carries(store, scene, CAPABILITY) and outbound_media.group_scene(store.config, scene))
 
 
-def _allowed(store, item, own_only, scopes):
-    return produced(item) or (not own_only and item.get('scope_key') in scopes)
-
-
-def _rules(store, scene, session_class, person_id=None):
-    """(own_only, scopes): the pictures' rules for this conversation."""
-    from . import outbound_media
-    own_only = outbound_media.own_only(store.config, scene, session_class)
-    scopes = [] if own_only else outbound_media.image_scopes(store, store.config, scene, session_class, person_id)
-    return own_only, scopes
-
-
-def offer(store, scene, session_class, person_id=None, *, limit=MAX_OFFERED):
-    """The block `file_artifacts_from_program`: files this conversation may send, newest first; None when there are
-    none or files do not go out here."""
+def offer(store, scene, *, limit=MAX_OFFERED):
+    """The block `file_artifacts_from_program`: the files her tasks registered whose bytes are still stored, newest
+    first; None when there are none or files do not go out here."""
     if not sends_here(store, scene):
         return None
-    own_only, scopes = _rules(store, scene, session_class, person_id)
     cursor = store.db.artifacts.find({'kind': KIND, 'state': 'DONE', 'storage': 'gridfs'},
-                                     {'name': 1, 'size': 1, 'media_type': 1, 'created_at': 1, 'scope_key': 1,
+                                     {'name': 1, 'size': 1, 'media_type': 1, 'created_at': 1,
                                       'source_ids': 1}).sort('created_at', -1).limit(200)
     items = []
     for row in cursor:
-        if not _allowed(store, row, own_only, scopes):
+        if not produced(row):
             continue
         items.append({'artifact_id': row['_id'], 'name': row.get('name'), 'size': size_words(row.get('size')),
                       'type': type_words(row.get('media_type')), 'registered_at': row.get('created_at')})
@@ -346,7 +334,7 @@ def descriptor(raw):
             'sha256': digest, 'size': size}
 
 
-def check(store, ep, scene, session_class, artifact_id):
+def check(store, ep, scene, artifact_id):
     """(descriptor, None) for a file her speak part may send here, else (None, why in words)."""
     from . import capabilities, local_time
     item = store.db.artifacts.find_one({'_id': artifact_id, 'kind': KIND}) if artifact_id else None
@@ -360,9 +348,6 @@ def check(store, ep, scene, session_class, artifact_id):
     from bson import ObjectId
     if not store.db['artifact_blobs.files'].find_one({'_id': ObjectId(item['gridfs_id'])}, {'_id': 1}):
         return None, '这个文件的字节不在存储里了（不是你的错）；要再发就让任务从文件夹里重新登记'
-    own_only, scopes = _rules(store, scene, session_class, ep.get('person_id'))
-    if not _allowed(store, item, own_only, scopes):
-        return None, '这个文件不是这个对话能发的'
     most = capabilities.limit(store, (scene or {}).get('channel_id'), CAPABILITY)
     if most is not None and item['size'] > most:
         return None, ('这个文件 %s（%d 字节），这里的平台一个文件最多 %s（%d 字节），发不了'
@@ -373,31 +358,45 @@ def check(store, ep, scene, session_class, artifact_id):
 
 def part(meta):
     """The planned row of a file part: her record line, the descriptor, and how the receipt names it."""
-    return {'kind': 'file', 'text': record_line(meta['name'], meta['size']), 'fields': {KIND: dict(meta)},
-            'shown': 'file「%s」' % meta['name']}
+    return {'kind': 'file', 'text': record_line(meta['name'], meta['size'], meta.get('media_type')),
+            'fields': {KIND: dict(meta)},
+            'shown': 'file「%s」%s' % (meta['name'], '' if meta.get('media_type') else '（%s）' % UNKNOWN_TYPE)}
 
 
 # ── the claim and the bytes ─────────────────────────────────────────
 def claim_failure(store, row, limits):
-    """The fields a claimed file row fails with before anything is sent (failure, failure_detail and, for bytes gone,
-    source_present), or None: its bytes gone, or over the limit the claiming adapter declared."""
-    from . import local_time
+    """The fields a claimed file row fails with before anything is sent (failure, failure_detail), or None: its bytes
+    gone, or over the limit the claiming adapter declared. Cheap: whether the original is still in the task folder
+    is looked at afterwards, outside the effects lock (`expired_source`)."""
     meta = descriptor(row.get(KIND))
     if not meta:
         return {'failure': 'FILE_DESCRIPTOR_INVALID', 'failure_detail': '这条消息记的文件信息不完整（不是你的错），发不了'}
     item = store.db.artifacts.find_one({'_id': meta['artifact_id']})
     if not item or removed(item) or item.get('storage') != 'gridfs':
-        present = bool(item) and source_present(item)
-        words = (expired_words(item, local_time.zone_of(store, row.get('scene_id')), present) if item and removed(item)
-                 else '文件的字节不在存储里了' + (SOURCE_KEPT % (item.get('source') or {}).get('path') if present
-                                              else SOURCE_GONE))
-        return {'failure': 'FILE_BYTES_EXPIRED', 'failure_detail': words, 'source_present': present}
+        return {'failure': 'FILE_BYTES_EXPIRED', 'failure_detail': '这个文件的字节已经不在存储里了'}
     most = (limits or {}).get(CAPABILITY)
     if most is not None and meta['size'] > most:
         return {'failure': 'FILE_OVER_CHANNEL_LIMIT', 'file_limit': {'bytes': meta['size'], 'limit': most},
                 'failure_detail': ('文件 %s（%d 字节），这条腿一个文件最多 %s（%d 字节）'
                                    % (size_words(meta['size']), meta['size'], size_words(most), most))}
     return None
+
+
+def expired_source(store, row_id):
+    """After a claim failed a row with FILE_BYTES_EXPIRED, outside the effects lock: whether the task folder still
+    holds the original (it is hashed), kept on the row as source_present with the words that say so."""
+    from . import local_time
+    row = store.db.messages.find_one({'_id': row_id}) or {}
+    meta = descriptor(row.get(KIND))
+    item = store.db.artifacts.find_one({'_id': meta['artifact_id']}) if meta else None
+    present = bool(item) and source_present(item)
+    if item and removed(item):
+        words = expired_words(item, local_time.zone_of(store, row.get('scene_id')), present)
+    else:
+        words = '这个文件的字节不在存储里了' + (SOURCE_KEPT % (item.get('source') or {}).get('path') if present
+                                             else SOURCE_GONE)
+    store.db.messages.update_one({'_id': row_id}, {'$set': {'source_present': present, 'failure_detail': words}})
+    return present
 
 
 def _number(query, key):
@@ -408,10 +407,9 @@ def _number(query, key):
 
 
 def serve_piece(store, row, query):
-    """The byte endpoint for a claimed file row: `length` bytes from `offset` (at most PIECE_MAX), with the fences a
-    picture's bytes have; the scope list is recomputed from the row, never taken from the caller."""
+    """The byte endpoint for a claimed file row: `length` bytes from `offset` (at most PIECE_MAX), of the artifact
+    this publication declared (its attempt is checked by the caller); any file her tasks registered may go."""
     from .blobs import BlobStore
-    from . import outbound_media
     meta = descriptor((row or {}).get(KIND))
     if not meta:
         raise Denied('FILE_NOT_DECLARED')
@@ -430,11 +428,6 @@ def serve_piece(store, row, query):
         raise Denied('FILE_BYTES_EXPIRED')
     if item.get('sha256') != meta['sha256'] or item.get('size') != meta['size']:
         raise Denied('FILE_SHA_MISMATCH')
-    if outbound_media.row_own_only(store, row):
-        if not produced(item):
-            raise Denied('FILE_NOT_HER_OWN')
-    elif item.get('scope_key') not in outbound_media.row_image_scopes(store, row) and not produced(item):
-        raise Denied('FILE_SCOPE_DENIED')
     data = BlobStore(store).get_range(item['_id'], item['scope_key'], offset, length, operator=True)
     return data, 'application/octet-stream'
 
@@ -447,13 +440,39 @@ def sent(store, row):
         store.db.artifacts.update_one({'_id': meta['artifact_id'], 'kind': KIND}, {'$set': {'last_sent_at': now()}})
 
 
+# The adapter's reasons for a file it did not send, in her words (a code never reaches her).
+ADAPTER_WORDS = {
+    'file_private_target_not_supported': '文件只发得进群，私聊发不了',
+    'file_empty': '文件是空的',
+    'file_over_limit': '比这条腿能发的最大文件还大',
+    'file_name_invalid': '文件名这条腿用不了',
+    'file_fetch_unavailable': '适配器没取到文件的字节（不是你的错），可以再发一次',
+    'file_fetch_short_piece': '适配器取到的字节不全（不是你的错），可以再发一次',
+    'file_sha256_mismatch': '传过去的字节和登记的校验值对不上（不是你的错），可以再发一次',
+    'file_stream_no_answer': '平台收文件时没回话，文件没进群；可以再发一次',
+    'file_stream_refused': '平台没收下这个文件',
+    'file_stream_incomplete': '平台没收全这个文件，文件没进群；可以再发一次',
+    'file_upload_failed': '平台没把文件放进群',
+    'ws_not_connected': '适配器和平台断开了，没发出去；等连上再发',
+    'target_not_authorized': '这个群不在适配器能发的名单里',
+}
+ADAPTER_OTHER = '适配器没发出去（不是你的错）'
+
+
 def failure_words(row):
-    """Why a file row of hers did not go, in words: the program's reason or the platform's."""
-    if row.get('failure') in FAILED_CODES:
-        return {'CHANNEL_DOES_NOT_DECLARE_FILE': '这条腿发不了文件'}.get(row['failure']) or row.get('failure_detail') \
-            or row['failure']
+    """Her words for a file row of hers that did not go: a mute as every line says it, else 没发出去 with the
+    program's reason, the platform's own words, or the adapter's reason in words."""
+    from . import own_mute
+    from .context import UNDELIVERED_WORDS
     response = ((row.get('platform_receipt') or {}).get('response') or {})
-    said = response.get('platform') or response.get('wording') or response.get('message')
-    if said:
-        return '平台说：%s' % ' '.join(str(said).split())[:120]
-    return str(response.get('reason') or row.get('failure') or '')[:80] or None
+    if response.get('reason') == own_mute.REASON:
+        return own_mute.FAILED_WORDS
+    if row.get('failure') in FAILED_CODES:
+        why = {'CHANNEL_DOES_NOT_DECLARE_FILE': '这条腿发不了文件'}.get(row['failure']) or row.get('failure_detail')
+    else:
+        said = response.get('platform') or response.get('wording') or response.get('message')
+        reason = str(response.get('reason') or '')
+        why = ('平台说：%s' % ' '.join(str(said).split())[:120] if said
+               else ADAPTER_WORDS.get(reason) or ('适配器没取到文件的字节（不是你的错）' if reason.startswith('file_fetch_')
+                                                else ADAPTER_OTHER))
+    return UNDELIVERED_WORDS['FAILED'] + ('：%s' % why if why else '')

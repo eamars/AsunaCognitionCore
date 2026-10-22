@@ -346,7 +346,7 @@ The answer is `{"items": []}` or `{"items": [item]}`. Each claim marks the item 
 
 The answer is the bytes with `Content-Type` from their file signature, re-checked against the row's `sha256`. The adapter checks the digest and signature again; only a platform receipt says the picture arrived.
 
-A file's piece is `application/octet-stream`. The host does not hash a piece: the adapter checks the whole file's `sha256` across its pieces. A piece outside the file, or longer than 8 MiB, is 400 `FILE_PIECE_INVALID`. A file's other refusals (403): `FILE_NOT_DECLARED`, `FILE_ARTIFACT_UNAVAILABLE`, `FILE_BYTES_EXPIRED` (its bytes were removed), `FILE_SHA_MISMATCH` (the stored file is not the declared one), `FILE_NOT_HER_OWN`, `FILE_SCOPE_DENIED`.
+A file's piece is `application/octet-stream`. The host does not hash a piece: the adapter checks the whole file's `sha256` across its pieces. A piece outside the file, or longer than 8 MiB, is 400 `FILE_PIECE_INVALID`. A file's other refusals (403): `FILE_NOT_DECLARED`, `FILE_ARTIFACT_UNAVAILABLE`, `FILE_BYTES_EXPIRED` (its bytes were removed), `FILE_SHA_MISMATCH` (the stored file is not the declared one).
 
 | Code (all 403, no partial body) | When |
 |---|---|
@@ -743,8 +743,8 @@ A picture leaves with her words as a message's `attachment` ([Claim public outpu
 A file goes to a group as its own message: speak's `file` part names a file a task registered ([Claim public output](#claim-public-output), [Fetch attachment bytes](#fetch-attachment-bytes)). Code: `src/asuna/outbound_files.py`.
 
 - **Registration.** The action brain's `offer_file` (`path` inside `/task`, `name` the file name people see, default the file's own) stores the file in the task's own scope as a `file` artifact (source `task-file:<task>:<path>`), streamed into the blob store (`BlobStore.put_stream`). The program computes the sha256, the size and the type from the first bytes (`outbound_files.sniff`); an unrecognized type is recorded as `类型没认出来` and still goes. A name containing a word on her private words list is warned about by category and entry line, never the word, and not refused. The row keeps the task folder and path it came from (`source`).
-- **Offer.** `file_artifacts_from_program` lists, newest first and at most 8, the files this conversation may send, each with `artifact_id`, `name`, a readable `size`, `type` and `registered_at`. It appears in a group whose kind lists `file` in `REPLY_PARTS` and whose adapter declares `file`, under the pictures' rules (`outbound_media.own_only`, `image_scopes`).
-- **Sending.** The part is refused in words when the file is not listed, its bytes are gone, or its size is over the limit the adapter declared; the program has no size or type limit of its own. Her record line is `[文件：名字，大小]`.
+- **Offer.** A file any of her tasks registered may be sent where the channel declares `file`, as her own pictures go anywhere. `file_artifacts_from_program` lists them, newest first and at most 8, each with `artifact_id`, `name`, a readable `size`, `type` and `registered_at`; it appears in a group whose kind lists `file` in `REPLY_PARTS` and whose adapter declares `file`.
+- **Sending.** The part is refused in words when the file is not listed, its bytes are gone, or its size is over the limit the adapter declared; the program has no size or type limit of its own. Her record line is `[文件：名字，大小]`, with `，类型没认出来` when its type was not recognized.
 - **Bytes kept.** A file's bytes are removed 7 days after it was last delivered, or 7 days after registration if never delivered, and kept while a message on its way names it (`media_life.sweep`, daily). The artifact row stays, with `storage` `removed` and `bytes_removed_at`. A part or claim naming it then says when the bytes expired and whether the task folder still holds the original unchanged.
 
 ## Schedules

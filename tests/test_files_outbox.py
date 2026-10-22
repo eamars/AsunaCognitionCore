@@ -7,6 +7,8 @@ import json
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+import re
+
 import pytest
 
 from asuna import capabilities, media_life, outbound_files, role_tools
@@ -147,6 +149,15 @@ def test_a_task_file_becomes_a_file_artifact_in_the_tasks_scope(store, tmp_path,
     assert store.db.artifacts.find_one({'_id': unknown['artifact_id']}).get('media_type') is None
 
 
+def test_a_file_whose_type_was_not_recognized_still_goes_and_her_record_says_so(store, tmp_path):
+    world(store)
+    unknown = register(store, tmp_path, file='blob.bin', data=bytes([0, 1, 2]) + b'binary')
+    _, result, ok, rows, _ = turn(store, 'f-unknown', [{'kind': 'file', 'artifact_id': unknown['artifact_id']}])
+    assert ok and 'file「blob.bin」（类型没认出来）' in result['note'], result
+    assert [row['text'] for row in rows] == ['[文件：blob.bin，9 字节，类型没认出来]']
+    assert rows[0]['file']['media_type'] is None
+
+
 def test_the_type_comes_from_the_bytes():
     sniff = outbound_files.sniff
     docx = b'PK\x03\x04' + b'\x00' * 26 + b'[Content_Types].xml' + b'\x00' * 40 + b'word/document.xml'
@@ -255,7 +266,7 @@ def test_the_offer_lists_the_newest_eight_with_bytes(store, tmp_path):
         store.db.artifacts.update_one({'_id': artifact}, {'$set': {'created_at': '2026-10-01T00:%02d:00+00:00' % n}})
     store.db.artifacts.update_one({'_id': made[9]}, {'$set': {'storage': 'removed'}})
     scene = store.db.scenes.find_one({'_id': SCENE})
-    listed = [item['artifact_id'] for item in outbound_files.offer(store, scene, 'public')['items']]
+    listed = [item['artifact_id'] for item in outbound_files.offer(store, scene)['items']]
     assert listed == made[8::-1][:8]
 
 
@@ -267,7 +278,7 @@ def test_files_go_to_groups_only(store):
                                                      'person_id': 'qq:20002', 'target': {'type': 'dm', 'id': '20002'}}
     dm = store.db.scenes.find_one({'_id': 'qq:%s:dm:20002' % BOT})
     assert 'file' not in role_tools.speak_kinds(store, dm)
-    assert outbound_files.offer(store, dm, 'public') is None
+    assert outbound_files.offer(store, dm) is None
     assert 'file' in role_tools.speak_kinds(store, store.db.scenes.find_one({'_id': SCENE}))
 
 
@@ -300,7 +311,13 @@ def test_a_file_over_the_limit_declared_at_claim_time_fails_with_both_numbers(st
 
 @pytest.mark.parametrize('present', [True, False])
 def test_a_claimed_file_whose_bytes_vanished_fails_as_expired_saying_whether_the_original_is_there(store, tmp_path,
-                                                                                                    present):
+                                                                                                    present,
+                                                                                                    monkeypatch):
+    from asuna.queue import database_effects_lock
+    looked = []
+    original = outbound_files.source_present
+    monkeypatch.setattr(outbound_files, 'source_present', lambda item: looked.append(
+        database_effects_lock(store.name).depth) or original(item))
     world(store)
     registered, rows = queued_file(store, tmp_path, 'f-claim-gone-%s' % present)
     item = store.db.artifacts.find_one({'_id': registered['artifact_id']})
@@ -314,6 +331,7 @@ def test_a_claimed_file_whose_bytes_vanished_fails_as_expired_saying_whether_the
     assert row['delivery_state'] == 'FAILED' and row['failure'] == 'FILE_BYTES_EXPIRED'
     assert row['source_present'] is present
     assert ('原文件还在任务文件夹（report.pdf）' if present else '原文件也不在了') in row['failure_detail']
+    assert looked == [0], 'the original is hashed outside the effects lock'
 
 
 def piece_url(server, item, offset, length, artifact=None):
@@ -396,8 +414,20 @@ def test_a_failed_upload_shows_the_platforms_reason_in_her_next_turn(store, tmp_
     ep, _, _, _, _ = turn(store, 'f-failed-next', [{'kind': 'text', 'text': '嗯'}])
     said = json.dumps(ep['context'], ensure_ascii=False)
     assert '没发出去：平台说：群文件空间不足' in said
-    assert outbound_files.failure_words({'failure': 'FILE_BYTES_EXPIRED', 'failure_detail': '字节过期了'}) == '字节过期了'
-    assert outbound_files.failure_words({'failure': 'CHANNEL_DOES_NOT_DECLARE_FILE'}) == '这条腿发不了文件'
+
+
+def test_a_file_that_did_not_go_says_why_in_her_words_never_in_a_code():
+    from asuna import own_mute
+    words = outbound_files.failure_words
+    receipt = lambda **response: {'platform_receipt': {'response': response}}
+    assert words(receipt(reason=own_mute.REASON, platform='sendMsg result 120')) == own_mute.FAILED_WORDS
+    assert words({'failure': 'FILE_BYTES_EXPIRED', 'failure_detail': '字节过期了'}) == '没发出去：字节过期了'
+    assert words({'failure': 'CHANNEL_DOES_NOT_DECLARE_FILE'}) == '没发出去：这条腿发不了文件'
+    assert words(receipt(reason='file_private_target_not_supported')) == '没发出去：文件只发得进群，私聊发不了'
+    assert words(receipt(reason='file_fetch_file_bytes_expired')) == '没发出去：适配器没取到文件的字节（不是你的错）'
+    for reason in [*outbound_files.ADAPTER_WORDS, 'file_something_new', '']:
+        said = words(receipt(reason=reason))
+        assert said.startswith('没发出去：') and not re.search(r'[a-z]+_[a-z_]+', said), (reason, said)
 
 
 # ── retention ───────────────────────────────────────────────────────
@@ -438,3 +468,18 @@ def test_offer_file_is_a_tool_of_every_task_and_registers_in_the_tasks_own_scope
             broker.call('s-test', 'escape', 'offer_file', {'path': '../outside.txt'})
     finally:
         broker.close()
+
+
+def test_a_file_any_of_her_tasks_registered_goes_to_a_group_wherever_the_task_ran(store, tmp_path):
+    world(store)
+    elsewhere = store.db.scenes.find_one({'_id': {'$ne': SCENE}, 'scope_key': {'$exists': True}})['scope_key']
+    (tmp_path / 'home.pdf').write_bytes(PDF)
+    made = outbound_files.register(store, {'_id': 'task-home', 'scope_key': elsewhere}, tmp_path, {'path': 'home.pdf'})
+    assert store.db.artifacts.find_one({'_id': made['artifact_id']})['scope_key'] == elsewhere != 'scene:' + SCENE
+    _, result, ok, rows, _ = turn(store, 'f-home', [{'kind': 'file', 'artifact_id': made['artifact_id']}])
+    assert ok, result
+    [item] = bridge(store).claim('qq', supports=DECLARED)['items']
+    row = store.db.messages.find_one({'_id': item['publication_id']})
+    data, kind = outbound_files.serve_piece(store, row, {'artifact_id': [made['artifact_id']], 'offset': ['0'],
+                                                         'length': ['100']})
+    assert data == PDF[:100] and kind == 'application/octet-stream'

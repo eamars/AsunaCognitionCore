@@ -291,23 +291,24 @@ Files she sends to a group through the outbox (ADR-092): registered from a task'
 - def `sniff` — The media type of a file from its first bytes (`whole`: they are the whole file); None when not recognized.
 - def `size_words` — A size for reading: 820 字节, 12.3 KB, 4.5 MB, 1.25 GB.
 - def `type_words`
-- def `record_line` — Her own record of a file she sent: what her later turns read.
+- def `record_line` — Her own record of a file she sent: what her later turns read (D4: an unrecognized type is said, not hidden).
 - def `name_problem` — Why a file name cannot be one, in words; None when it can.
 - def `register` — offer_file: register a file of this task's folder in the task's own scope (its binding, never a parameter).
 - def `name_check` — What her private words list says about a file name: a warning by category and entry line, never the word.
 - def `produced` — A file one of her tasks registered.
 - def `removed`
 - def `sends_here` — Files go out here: a group (v0), whose kind lists the file part and whose adapter declares `file`.
-- def `offer` — The block `file_artifacts_from_program`: files this conversation may send, newest first; None when there are none or files do not go out here.
+- def `offer` — The block `file_artifacts_from_program`: the files her tasks registered whose bytes are still stored, newest first; None when there are none or files do not go out here.
 - def `source_present` — Whether the task folder still holds the file it was registered from, byte for byte (its size, then its sha256, read in pieces).
 - def `expired_words` — Why a file named after its bytes went cannot go: when, and whether its original is still in the task folder (her asks: never a generic failure).
 - def `descriptor` — A row's or a claim's `file` descriptor, checked; None when its shape is wrong.
 - def `check` — (descriptor, None) for a file her speak part may send here, else (None, why in words).
 - def `part` — The planned row of a file part: her record line, the descriptor, and how the receipt names it.
-- def `claim_failure` — The fields a claimed file row fails with before anything is sent (failure, failure_detail and, for bytes gone, source_present), or None: its bytes gone, or over the limit the claiming adapter declared.
-- def `serve_piece` — The byte endpoint for a claimed file row: `length` bytes from `offset` (at most PIECE_MAX), with the fences a picture's bytes have; the scope list is recomputed from the row, never taken from the caller.
+- def `claim_failure` — The fields a claimed file row fails with before anything is sent (failure, failure_detail), or None: its bytes gone, or over the limit the claiming adapter declared.
+- def `expired_source` — After a claim failed a row with FILE_BYTES_EXPIRED, outside the effects lock: whether the task folder still holds the original (it is hashed), kept on the row as source_present with the words that say so.
+- def `serve_piece` — The byte endpoint for a claimed file row: `length` bytes from `offset` (at most PIECE_MAX), of the artifact this publication declared (its attempt is checked by the caller); any file her tasks registered may go.
 - def `sent` — A delivered file row: its bytes are kept KEEP_DAYS from now.
-- def `failure_words` — Why a file row of hers did not go, in words: the program's reason or the platform's.
+- def `failure_words` — Her words for a file row of hers that did not go: a mute as every line says it, else 没发出去 with the program's reason, the platform's own words, or the adapter's reason in words.
 
 ## `animated`
 

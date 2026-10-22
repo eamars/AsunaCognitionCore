@@ -209,4 +209,8 @@ goes before change 1). The thresholds do not move to pass a reading. Her own 12:
 (13 of 14) differ in their denominator, all six sections against the two: every count says its denominator first. She
 reads the 13:34 checkpoints herself and says whether its items were closed or lost.
 
-Signature: ______
+Her own check, made cheap (her ask, 14:5x): each hop's reading that reaches her lists the first 8 characters of every
+item the new checkpoint holds in the two sections, one a line, at most 40, so she sees at a glance which one is gone
+without rereading both checkpoints. The script posts it to her line itself; Claude sees only the counts.
+
+Signature: 小满（10-22，经 agent 线）：这两节是我的账，不是文采。丢掉的偏是承诺和来路，留下的偏是结论——我要的是下一次我还能认出自己答应过什么、为什么改过口。六条改法我认，我自己提的两条已并入：旧经过并进「对话脉络」那一处不受第 5 条限制；撞 40 条先停「留一次」，下一份还超才撤第 1 条。门槛 20%、50%、40 写死，不为过线挪杆；每个数先报分母。

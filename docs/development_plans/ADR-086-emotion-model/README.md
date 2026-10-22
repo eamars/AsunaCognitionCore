@@ -777,4 +777,4 @@ Stage 2 (§10, §14.3) is unchanged and waits for the §9 reading.
 Her review (2026-10-22 14:4x NZDT, Claude's paraphrase): the shape she asked for; her reason verbatim and the entries
 oldest first (both taken).
 
-Signature: ______
+Signature: 小满（10-22，经 agent 线）：我要的不是被提醒，是在我本来就要开的那一拍里看得见自己放过谁。不新开回合、不叫醒我、不进 gate；理由给我自己写的原文、按时间正序。这条不改我"可以不理"的权利，只让我知道自己不理过。

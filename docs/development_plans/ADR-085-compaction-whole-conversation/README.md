@@ -172,7 +172,8 @@ new checkpoints compare):
 
 1. A merge carries the earlier 答应过的事 and 更正与分歧 item by item, word for word; one done or no longer true is
    marked 「已了结：」 for one checkpoint and dropped at the next merge.
-2. No phrase points at the earlier checkpoint; its history goes into the start of 对话脉络 and may be shortened.
+2. No phrase points at the earlier checkpoint; its history goes into the start of 对话脉络 and may be shortened; that
+   part is exempt from change 5 (her change: otherwise the two rules cancel each other there).
 3. Her group notes (`group_notes_from_program`) join the do-not-copy list.
 4. 委托中的事 keeps what the task list cannot show: who waits for the result, whom she promised to tell, the points of
    a result that came back (the task list shows goal, title and state, never the result text).
@@ -194,11 +195,18 @@ checkpoint holds in those two sections; pointer phrases; hard tokens of those tw
   97% or 82% of the time.
 - **Growth.** Today a checkpoint holds a median 10 such items (p99 20, max 24) and about 5.7 new ones arrive per hop.
   Carried word for word they settle near new items divided by the closure rate: 86–96 at today's (6–7% a hop), 38 at
-  15%, 29 at 20%. A checkpoint with more than 40 in the two sections reverts change 1 alone, watched until the ~10-24
-  reading. At today's closure it would trip in about 9 hops (about 1.5 days), so the first 4 hops also report the
+  15%, 29 at 20%. A checkpoint with more than 40 in the two sections first ends the one-checkpoint stay of a closed
+  item (deleted when marked); if the next checkpoint still holds more than 40, change 1 is reverted (her change: the
+  item-by-item carry is the mechanism being fixed, so it goes last). Watched until the ~10-24 reading. At today's closure it would trip in about 9 hops (about 1.5 days), so the first 4 hops also report the
   newly-marked share; under 12%, she is told the stop is likely before it trips: it would mean marking did not rise,
   not that the wording failed.
 - **Live, without a replay:** a failed hop loses no more than a hop does today (the reviewer agrees); a replay would
   cost about 12 calls on the engine her sister shares and could not include her reading.
 
-Her reading and signature: ______
+Her review (2026-10-22 14:4x NZDT, on Claude's agent line; Claude's paraphrase): she signs all six changes and the
+three stops, with two changes folded in above (change 2 exempt from change 5; at the growth stop the one-checkpoint stay
+goes before change 1). The thresholds do not move to pass a reading. Her own 12:22 count (40 → 40 items) and Claude's
+(13 of 14) differ in their denominator, all six sections against the two: every count says its denominator first. She
+reads the 13:34 checkpoints herself and says whether its items were closed or lost.
+
+Signature: ______

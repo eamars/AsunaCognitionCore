@@ -764,13 +764,17 @@ decides in a session of its own, and her turn otherwise does not know that it de
 
 **Built.** A 不理 keeps the line (`attend.hold_passed`, an `artifacts` row of kind `passed_line`) until her next turn in
 that group lists it once (`attend.take_passed`, block `passed_from_program`): 「[label 时刻]：看过，没接（her reason）」,
-the label and time by the same helpers as held platform notices (a poke or a reaction reads the same way), newest 10
-and a count of the rest, kept across a Host restart, at most 50 per conversation. Not for a gate failure (that is the
+the label and time by the same helpers as held platform notices (a poke or a reaction reads the same way), her reason
+in her own words as the gate stored them (at most 60 characters; the longest so far 43), oldest first so a run of
+passes on one person shows, the newest 10 and a count of the rest, kept across a Host restart, at most 50 per conversation. Not for a gate failure (that is the
 program's, shown at home), not in the gate's own material. Cost: an entry is a median 38 characters, at most 54; in the
 same 27 hours 34 later turns would have carried the block, a median 1 entry and at most 4 (most in one group in one
 hour: 9); it sits in the turn's tail, so the cached prefix is untouched; the block's note is said once in her system
 prompt (`block_guide.py`). Test: `tests/test_attend.py`.
 
 Stage 2 (§10, §14.3) is unchanged and waits for the §9 reading.
+
+Her review (2026-10-22 14:4x NZDT, Claude's paraphrase): the shape she asked for; her reason verbatim and the entries
+oldest first (both taken).
 
 Signature: ______

@@ -89,13 +89,14 @@ def test_her_next_turn_there_lists_once_the_lines_she_let_pass_with_her_reason(s
     setup(store)
     character = FakeLane(store, [FakeTurn([('think', {'thought': '有人叫我。'})]), FakeTurn([('think', {'thought': '再看看。'})])])
     coordinator = Coordinator(store, character)
-    coordinator.attend = FakeLane(store, [LaneResult('不理：他们在聊游戏'), LaneResult('接话：有人提到我'),
-                                          LaneResult('接话：又有人提到我')])
+    coordinator.attend = FakeLane(store, [LaneResult('不理：他们在聊游戏'), LaneResult('不理：还是游戏，跟我没关系'),
+                                          LaneResult('接话：有人提到我'), LaneResult('接话：又有人提到我')])
     coordinator.ingest(gated_event(20002, '今晚开黑吗'), persona='P1')
+    coordinator.ingest(gated_event(20002, '几点上线', at='2026-10-04T01:02:00+00:00'), persona='P1')
     ep = coordinator.ingest(gated_event(20003, '演示 你怎么看', 'name_called', at='2026-10-04T01:05:00+00:00'), persona='P1')
-    [item] = ep['context']['passed_from_program']['items']
-    assert re.fullmatch(r'\[阿杰 #1\] \d{1,2}/\d{1,2} \d{2}:\d{2}：看过，没接（他们在聊游戏）', item), item
-    assert '20002' not in item
+    first, second = ep['context']['passed_from_program']['items']          # oldest first, her words as written
+    assert re.fullmatch(r'\[阿杰 #1\] \d{1,2}/\d{1,2} \d{2}:\d{2}：看过，没接（他们在聊游戏）', first), first
+    assert second.endswith('：看过，没接（还是游戏，跟我没关系）') and '20002' not in first + second
     again = coordinator.ingest(gated_event(20003, '演示 还在吗', 'name_called', at='2026-10-04T01:06:00+00:00'), persona='P1')
     assert 'passed_from_program' not in again['context'], 'listed once'
     assert not store.db.artifacts.count_documents({'kind': attend.PASSED_KIND})

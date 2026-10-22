@@ -67,7 +67,7 @@ def hold_passed(store, scene_id, message_id, received_at):
 
 
 def take_passed(store, scene, persona=None):
-    """The lines she let pass here since her last turn, once: {'items': [...], 'more': ...} or None."""
+    """The lines she let pass here since her last turn, oldest first, once: {'items': [...], 'more': ...} or None."""
     held = list(store.db.artifacts.find({'kind': PASSED_KIND, 'scene_id': scene['_id']}).sort('received_at', 1))
     if not held:
         return None
@@ -82,7 +82,8 @@ def take_passed(store, scene, persona=None):
         row = rows.get(doc['message_id'])
         if not row or (row.get('attend') or {}).get('choice') != 'quiet':
             continue
-        reason = ' '.join(str(row['attend'].get('reason') or '').split())
+        # Her words as the gate stored them; a non-answer's stand-in is the program's, not hers.
+        reason = '' if 'unparsed' in row['attend'] else str(row['attend'].get('reason') or '').strip()
         items.append('%s %s：看过，没接%s' % (people.speaker(scene, row['author'], row), line_stamp(zone, said_at(row)) or '',
                                          '（%s）' % reason if reason else ''))
     if not items:

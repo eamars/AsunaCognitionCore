@@ -140,7 +140,7 @@ class HostApi:
             res = Result("accepted", res.code, res.obj)
         return res
 
-    def post_voice(self, route_id, event_id, index, data, content_type="audio/mpeg", occurred_at=None, timeout=120):
+    def post_voice(self, route_id, event_id, index, data, content_type="audio/mpeg", occurred_at=None, timeout=30):
         """One voice of a line about to be posted, as its bytes (voice.py): the host transcribes it within the
         request; `accepted` with its outcome (`state`), or `duplicate` when it was settled before."""
         query = {"route_id": route_id, "event_id": event_id, "index": str(int(index))}

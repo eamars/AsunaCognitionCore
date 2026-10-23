@@ -94,6 +94,34 @@ What each channel needs, field by field, is in its README: [QQ](packages/channel
 Check: the Plugins page lists the channel, the card's status line is `ready`, and a message on the platform appears
 in the channel's workspace on the Web page.
 
+### Voice messages
+
+A channel that fetches voices (QQ through NapCat) has them transcribed on this machine
+([Voice messages](RUNTIME_API.md#voice-messages)). The worker needs three model files in
+`<data>/models/sensevoice-2024-07-17/`, where `<data>` is the profile's data folder (the worker's
+`ASUNA_DATA_ROOT`; by default `$DSH_HOME/asuna/<profile>/`). They are the pins of DSH's own SenseVoice package:
+
+| File | Bytes | sha256 | Source |
+|---|---|---|---|
+| `model.int8.onnx` | 239,233,841 | `c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51` | <https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/2365baeacb507f821a0c8120fcee3d484dba7a07/model.int8.onnx> |
+| `tokens.txt` | 315,894 | `f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc` | <https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/2365baeacb507f821a0c8120fcee3d484dba7a07/tokens.txt> |
+| `silero_vad.onnx` | 1,807,522 | `a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28` | <https://huggingface.co/csukuangfj/vad/resolve/fba88cd2e921609e7675c3aaf51e0b9b295da4bc/silero_vad.onnx> |
+
+```bash
+dir="<data>/models/sensevoice-2024-07-17"; mkdir -p "$dir"
+base=https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/2365baeacb507f821a0c8120fcee3d484dba7a07
+curl -fL -o "$dir/model.int8.onnx" "$base/model.int8.onnx"
+curl -fL -o "$dir/tokens.txt" "$base/tokens.txt"
+curl -fL -o "$dir/silero_vad.onnx" https://huggingface.co/csukuangfj/vad/resolve/fba88cd2e921609e7675c3aaf51e0b9b295da4bc/silero_vad.onnx
+sha256sum "$dir"/*        # each must match the table
+```
+
+Then restart the profile: the worker checks the files once when it starts.
+
+Check: the worker's log has no `ASUNA_VOICE_MODEL_UNAVAILABLE` line (that line names the file that is missing or
+different), and a voice message on the platform reads as its words. Without the files every voice reads
+`[语音，没转出文字：识别模型不在]`.
+
 ## 6. Optional: the private list
 
 Words that point at real people and places in this deployment (names, group names, account numbers, host names,

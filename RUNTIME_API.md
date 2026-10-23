@@ -474,22 +474,25 @@ Keys live only in the worker's memory: never in the database, the audit or a log
 `POST /v1/channels/{channel_id}/voice` — one voice segment of a line, before the line is posted: its audio bytes as
 the body (`Content-Type` the media type, e.g. `audio/mpeg`) and the line's event in the query:
 `…/voice?route_id=g&event_id=5301&index=0&occurred_at=2026-10-23T01%3A00%3A00Z`. The worker transcribes it within
-the request and answers with the outcome; the line, posted to `events` next, is stored with it.
+the request and answers with the outcome; the line, posted to `events` next with the same `route_id`, `event_id` and
+`occurred_at`, is stored with it. The query, and a route key's refusal, are answered before the body is read.
 
 | Query | Required | Meaning |
 |---|---|---|
-| `route_id`, `event_id`, `occurred_at` | `occurred_at` only when the event has it | the line's event, exactly as it will be posted to `events` |
+| `route_id`, `event_id`, `occurred_at` | `occurred_at` only when the event has it | the line's event, exactly as it will be posted to `events` (a route admitted by that event counts) |
 | `index` | yes | which voice of the line, 0–63, in the order of its voice placeholders |
 
 | Answer or code | Status | Meaning |
 |---|---|---|
 | `{"status": "settled", "state": "…", "seconds": n}` | 200 | transcribed now; `state` is one of [Voice messages](#voice-messages)' |
 | `{"status": "duplicate", "state": "…"}` | 200 | this voice was settled already (kept 10 minutes for its line); nothing was done again |
-| `VOICE_ROUTE_UNKNOWN`, `VOICE_INDEX_INVALID`, `VOICE_EVENT_ID_INVALID`, `VOICE_OCCURRED_AT_INVALID`, `VOICE_FIELD_DENIED`, `VOICE_BODY_INVALID` | 400 | out of shape |
+| `VOICE_ROUTE_ID_INVALID`, `VOICE_EVENT_ID_INVALID`, `VOICE_OCCURRED_AT_INVALID`, `VOICE_INDEX_INVALID`, `VOICE_FIELD_DENIED`, `VOICE_BODY_INVALID` | 400 | out of shape |
+| `ROUTE_KEY_ENDPOINT_DENIED` | 403 | a route key may not post voices |
 
 A voice the adapter has no outcome for (the platform refused or timed out, or this call failed) is told on the line
 instead: its media item carries `voice_refused` (`reason`: `gone`, `refused`, `timeout`, `unreachable`, `no_audio` or
-`host`; optional `retcode` and `message`, the platform's own answer), and her line says why.
+`host`; optional `retcode` and `message`, the platform's own answer, kept on the item for the record), and her line
+says why in words.
 
 ### HTTP outcomes
 
@@ -723,7 +726,7 @@ An adapter puts a message's media in `raw.asuna_media` as `{"items": [...]}`. Th
 A voice segment's item has `type` `record` (or `audio`), and the line's text carries `[语音（未解析）]` in its place.
 An adapter that can fetch voices declares `voice_in` and [posts each one](#post-a-voice) before its line; the worker
 turns it into text on this machine (`src/asuna/voice.py`). Nothing is sent anywhere else. A line from an adapter that
-posts none keeps its placeholder.
+does not declare `voice_in` keeps its placeholder.
 
 - **Never stored.** The audio lives in memory for its request. The line is stored with one entry per voice in its event
   (`event.voice`): state, words, length, sha256, size, first 44 bytes, media type, model and times (`ENTRY_FIELDS`).
@@ -738,16 +741,17 @@ posts none keeps its placeholder.
   checked against their sizes and sha256 (`voice.MODEL_FILES`) once when the worker starts (evidence
   `voice.model_checked`). A missing or different file is one line in the Host log, `ASUNA_VOICE_MODEL_UNAVAILABLE`,
   and every voice then reads `没转出文字：识别模型不在`.
-- **What her line shows**, in the voice's place, wherever the line is read (`voice.line_text`); the stored text stays
-  as it came:
+- **What her line shows.** The line is stored with each voice's words in its place (`voice.read_text`), so every
+  reader shows the same words; the text as it came is kept in `event.received_text`, and a line posted again is the
+  same line when that text is the same:
 
 | State | Her line shows |
 |---|---|
 | `transcribed` | `[语音 33 秒] 文字……`; a piece labelled other than speech is named: `[语音 20 秒，听着像背景音乐] ……` |
 | `no_voice` (the detector found no speech) | `[语音 5 秒，里面没有人声]` |
 | `no_words` (speech, but no letter or digit in the text) | `[语音 12 秒，有人在说话，但听不出说的什么]` |
-| `failed` | `[语音 33 秒，没转出文字：原因]`, e.g. `识别模型不在`, or bytes that are not WAV or MP3 |
-| `not_fetched` | `[语音，没拿到：原因]`, from the adapter's `voice_refused` |
+| `failed` | `[语音 33 秒，没转出文字：原因]`, e.g. `识别模型不在`, bytes that are not WAV or MP3, or `交给本机识别时出了错` (the adapter's `voice_refused` `host`) |
+| `not_fetched` | `[语音，没拿到：原因]`, from the adapter's other `voice_refused` reasons, or `这段语音没随消息一起送来` on a `voice_in` channel whose line came with neither an outcome nor a reason |
 
 ### Reading images
 

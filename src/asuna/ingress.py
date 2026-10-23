@@ -55,7 +55,10 @@ def persist_input(store, event, *, managed=False):
     key = episode_id(event)
     previous = store.db.messages.find_one({'_id': 'in-' + key})
     if previous:
-        if (previous['author'] != author_of(event) or previous['text'] != event['text']
+        # The same line is the same text as received: a voice re-posted may settle differently the second time
+        # (voice.py), and the first stored reading stands.
+        received = (previous.get('event') or {}).get('received_text', previous['text'])
+        if (previous['author'] != author_of(event) or received != event.get('received_text', event['text'])
                 or previous['policy_epoch'] != scene['policy_epoch']
                 or previous.get('event', {}).get('integration_profile') != event.get('integration_profile')):
             raise Denied('INPUT_IDENTITY_OR_CONTENT_CONFLICT')

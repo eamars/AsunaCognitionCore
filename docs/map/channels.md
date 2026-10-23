@@ -301,7 +301,7 @@ Voice messages arrive as text (ADR-093): a channel adapter fetches each voice of
 - def `media_items`
 - def `entries_of` — A stored line's voices (`event.voice`).
 - def `words` — One voice as her line shows it (ADR-093 V5); never empty.
-- def `line_text` — The line's text as she reads it: each voice placeholder, in order, replaced by its voice's words; a line without voices reads as it arrived.
+- def `read_text` — The line's text as it is stored and read: each voice placeholder, in order, replaced by its voice's words; a voice whose placeholder is not in the text (cut for length) is added at the end.
 - def `sniff` — The container by its first bytes, before any field is read: 'audio/wav', 'audio/mpeg' or None.
 - def `pcm16` — The audio as 16 kHz mono PCM16 samples (numpy int16), whatever rate and depth arrived; the container is parsed by av (a WAV's chunks may come in any order).
 - def `outcome` — Entry fields from a transcription: no speech found is no_voice; speech whose text has no letter or digit is no_words; else transcribed.
@@ -316,6 +316,6 @@ Voice messages arrive as text (ADR-093): a channel adapter fetches each voice of
   - `start`
   - `close`
   - `transcribe` — One voice's bytes -> its entry (ENTRY_FIELDS without `index`); never raises.
-- def `event_key` — The event id Channels.receive gives a channel event (`channel-…`), from what the adapter posts.
+- def `fields` — The query of one voice post, checked before its body is read: the line's event exactly as the adapter will post it to `events` (route_id, event_id, occurred_at when the event has one) and the segment's index.
 - def `receive` — One voice of a line about to be posted, as its bytes: transcribed now, its outcome kept for the line and answered.
-- def `entries_for` — A channel line's voices as it is stored (`event.voice`): for each voice segment, the outcome posted for it, else the adapter's reason for not having one; a segment with neither has no entry and reads as its placeholder.
+- def `entries_for` — A channel line's voices as it is stored (`event.voice`), looked up by the event's own route_id, event_id and occurred_at: for each voice segment, the outcome posted for it, else the adapter's reason for not having one, else, when the channe

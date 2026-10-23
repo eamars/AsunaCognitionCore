@@ -2,19 +2,22 @@
 line and posts the audio to `POST /v1/channels/<id>/voice`; the program turns it into text on this machine within that
 request and answers with the outcome; the line, posted after, is stored with its voices already settled.
 
-- `receive` is the endpoint: one voice segment of a line not yet posted, keyed by the channel's event id and the
-  segment's index. The container is recognized by its first bytes (RIFF/WAVE, ID3 or an MPEG audio frame header)
+- `receive` is the endpoint: one voice segment of a line not yet posted, keyed by exactly what the adapter posts
+  (`fields`: the channel, route_id, the platform's event_id, occurred_at and the segment's index), checked before a
+  byte of audio is read. The container is recognized by its first bytes (RIFF/WAVE, ID3 or an MPEG audio frame header)
   before anything else is read. The audio is never stored: it lives in memory for the request, and the outcome keeps
   its sha256, size, first 44 bytes and media type. The outcome waits in memory for its line (KEEP_SECONDS).
 - `Transcriber` decodes with av, resamples to 16 kHz mono PCM16 and hands the model float samples: SenseVoice int8 with
   Silero voice detection through sherpa-onnx, one voice at a time, loaded when a voice comes and released after
   IDLE_SECONDS without one. The model files are checked against their pins (MODEL_FILES) once at the Host's start;
   missing or different, that is said in one Host log line, and every voice reads 「没转出文字：识别模型不在」.
-- `entries_for` gives a line its voices when the channel event arrives (channels.py): the outcome posted for each
-  segment, or the adapter's reason for not getting it (`REFUSED_KEY` on the segment's media item). They are stored
-  with the line, in its event (`event.voice`, one entry per voice, ENTRY_FIELDS), and never change afterwards.
-- `line_text` is a line as she reads it: each voice placeholder replaced, in order, by its voice's words (`words`);
-  the stored text stays as it arrived.
+- `entries_for` gives a line its voices when the channel event arrives (channels.py), looked up by the same fields of
+  the event: the outcome posted for each segment, else the adapter's reason for not having one (`REFUSED_KEY` on the
+  segment's media item, which keeps the adapter's own answer for the record), else, on a channel that declares
+  `voice_in`, that no outcome came with the line. They are stored in its event (`event.voice`, one entry per voice,
+  ENTRY_FIELDS) and never change afterwards.
+- `read_text` is the line's text as it is stored and read everywhere: each voice placeholder replaced, in order, by
+  its voice's words (`words`); the text as received is kept beside it (`event.received_text`).
 """
 from __future__ import annotations
 
@@ -40,7 +43,8 @@ STATES = (TRANSCRIBED, NO_VOICE, NO_WORDS, FAILED, NOT_FETCHED)
 ENTRY_FIELDS = {
     'index': 'its place among the line\'s voices (0 first)', 'state': 'one of STATES',
     'seconds': 'length of the audio', 'text': 'the words, as the model wrote them',
-    'events': 'its event labels other than speech', 'reason': 'why it failed or was not fetched, in words',
+    'events': 'its event labels other than speech',
+    'reason': 'why it failed or was not fetched, in her words (the adapter\'s own answer stays on the media item)',
     'sha256': 'of the bytes as they came', 'size': 'bytes', 'head': 'the first 44 bytes, hex',
     'media_type': 'what the adapter declared', 'model': 'MODEL_ID',
     'arrived_at': 'when the bytes came', 'finished_at': 'when its outcome was settled',
@@ -76,13 +80,18 @@ EVENT_WORDS = {'BGM': '背景音乐', 'Laughter': '笑声', 'Applause': '掌声'
                'Breath': '呼吸声', 'Cough': '咳嗽声', 'Sing': '唱歌', 'Speech_Noise': '嘈杂声', 'GBG': '杂音',
                'Event_UNK': '认不出的声音'}
 OTHER_SOUND = '别的声音'
-# Why the adapter has no outcome for a voice, as her line says it: the adapter sends one of these reasons.
+# Why the adapter has no outcome for a voice, as her line says it: the adapter sends one of these reasons. Only these
+# words reach her line; the adapter's retcode and message stay on the media item.
 REFUSAL_WORDS = {'gone': '平台上已经没有这条语音了', 'refused': '平台没给出音频', 'timeout': '向平台取音频超时了',
-                 'unreachable': '连不上平台', 'no_audio': '平台的回话里没有音频',
-                 'host': '交给本机识别时出了错'}
+                 'unreachable': '连不上平台', 'no_audio': '平台的回话里没有音频'}
+# The adapter had the audio, but handing it over for transcription failed: a failed voice, not an unfetched one.
+HOST_REFUSAL, HOST_WORDS = 'host', '交给本机识别时出了错'
+# A channel that declares `voice_in` posts every voice before its line; one with no outcome and no reason.
+NO_OUTCOME = '这段语音没随消息一起送来'
+CAPABILITY = 'voice_in'
 
 TRANSCRIBER = None                    # the Host's Transcriber, while it runs
-_outcomes = {}                        # (channel id, event key, index) -> (monotonic time, entry)
+_outcomes = {}                        # (channel id, route_id, event_id, occurred_at, index) -> (monotonic time, entry)
 _outcomes_lock = threading.Lock()
 
 
@@ -132,11 +141,11 @@ def words(entry):
     return '[语音%s，没转出文字：%s]' % (length, entry.get('reason') or '原因没记下')
 
 
-def line_text(row):
-    """The line's text as she reads it: each voice placeholder, in order, replaced by its voice's words; a line
-    without voices reads as it arrived."""
-    text = str((row or {}).get('text') or '')
-    said = {entry.get('index'): words(entry) for entry in entries_of(row)}
+def read_text(text, entries):
+    """The line's text as it is stored and read: each voice placeholder, in order, replaced by its voice's words; a
+    voice whose placeholder is not in the text (cut for length) is added at the end."""
+    text = str(text or '')
+    said = {entry.get('index'): words(entry) for entry in entries or () if isinstance(entry, dict)}
     if not said:
         return text
     pieces = text.split(PLACEHOLDER)
@@ -415,15 +424,33 @@ class Transcriber:
 
 
 # ---- the endpoint and the line ------------------------------------------------------------------------------------
-def event_key(store, channel_id, route_id, event_id, occurred_at=None):
-    """The event id Channels.receive gives a channel event (`channel-…`), from what the adapter posts."""
-    from .evidence import canonical, sha
-    channel = (store.config.get('channels') or {}).get(channel_id) or {}
-    route = (channel.get('routes') or {}).get(route_id)
-    if not route:
-        raise ValueError('VOICE_ROUTE_UNKNOWN: 这个通道没有路由 %s' % str(route_id)[:40])
-    identity = [channel_id, channel['account_id'], route['scene_id'], event_id] + ([occurred_at] if occurred_at else [])
-    return 'channel-' + sha(canonical(identity)), route
+FIELDS = ('route_id', 'event_id', 'occurred_at', 'index')
+
+
+def fields(query):
+    """The query of one voice post, checked before its body is read: the line's event exactly as the adapter will post
+    it to `events` (route_id, event_id, occurred_at when the event has one) and the segment's index."""
+    unknown = set(query) - set(FIELDS)
+    if unknown:
+        raise ValueError('VOICE_FIELD_DENIED: 不认识的字段 %s' % '、'.join(sorted(unknown)))
+    route_id, event_id, occurred_at = query.get('route_id'), query.get('event_id'), query.get('occurred_at')
+    if not isinstance(route_id, str) or not 1 <= len(route_id) <= 200:
+        raise ValueError('VOICE_ROUTE_ID_INVALID: route_id 要是 1–200 字的字符串，和事件里的一样')
+    if not isinstance(event_id, str) or not 1 <= len(event_id) <= 200:
+        raise ValueError('VOICE_EVENT_ID_INVALID: event_id 要是 1–200 字的字符串，和事件里的一样')
+    if occurred_at is not None and not isinstance(occurred_at, str):
+        raise ValueError('VOICE_OCCURRED_AT_INVALID: occurred_at 要是字符串，和事件里的一样')
+    try:
+        index = int(query.get('index'))
+    except (TypeError, ValueError):
+        index = -1
+    if not 0 <= index <= MAX_INDEX:
+        raise ValueError('VOICE_INDEX_INVALID: index 是这条消息里第几段语音（0–%d）' % MAX_INDEX)
+    return {'route_id': route_id, 'event_id': event_id, 'occurred_at': occurred_at or None, 'index': index}
+
+
+def _key(channel_id, route_id, event_id, occurred_at, index):
+    return (channel_id, route_id, event_id, occurred_at or None, index)
 
 
 def _keep(key, entry):
@@ -440,61 +467,50 @@ def _kept(key):
     return dict(found[1]) if found and time.monotonic() - found[0] <= KEEP_SECONDS else None
 
 
-FIELDS = ('route_id', 'event_id', 'occurred_at', 'index')
-
-
-def receive(store, channel_id, fields, data, media_type=None, transcriber=None):
+def receive(channel_id, query, data, media_type=None, transcriber=None):
     """One voice of a line about to be posted, as its bytes: transcribed now, its outcome kept for the line and
     answered. The same voice posted again answers what was settled the first time."""
-    unknown = set(fields) - set(FIELDS)
-    if unknown:
-        raise ValueError('VOICE_FIELD_DENIED: 不认识的字段 %s' % '、'.join(sorted(unknown)))
-    event_id, occurred_at = fields.get('event_id'), fields.get('occurred_at')
-    if not isinstance(event_id, str) or not 1 <= len(event_id) <= 200:
-        raise ValueError('VOICE_EVENT_ID_INVALID: event_id 要是 1–200 字的字符串，和事件里的一样')
-    if occurred_at is not None and not isinstance(occurred_at, str):
-        raise ValueError('VOICE_OCCURRED_AT_INVALID: occurred_at 要是字符串，和事件里的一样')
-    try:
-        index = int(fields.get('index'))
-    except (TypeError, ValueError):
-        index = -1
-    if not 0 <= index <= MAX_INDEX:
-        raise ValueError('VOICE_INDEX_INVALID: index 是这条消息里第几段语音（0–%d）' % MAX_INDEX)
+    asked = fields(query)
     if not data:
         raise ValueError('VOICE_BODY_INVALID: 请求体要是这段语音的字节，给的是空的')
-    key, _ = event_key(store, channel_id, fields.get('route_id'), event_id, occurred_at)
-    kept = _kept((channel_id, key, index))
+    key = _key(channel_id, asked['route_id'], asked['event_id'], asked['occurred_at'], asked['index'])
+    kept = _kept(key)
     if kept:
         return {'status': 'duplicate', 'state': kept['state']}
     transcriber = transcriber or TRANSCRIBER
     if transcriber is None:
         raise RuntimeError('VOICE_TRANSCRIBER_NOT_RUNNING')
     entry = transcriber.transcribe(data, media_type)
-    _keep((channel_id, key, index), entry)
+    _keep(key, entry)
     return {'status': 'settled', 'state': entry['state'], **({'seconds': entry['seconds']} if 'seconds' in entry else {})}
 
 
-def _reason(refused):
-    why = REFUSAL_WORDS.get(str(refused.get('reason') or ''), REFUSAL_WORDS['refused'])
-    detail = []
-    if isinstance(refused.get('retcode'), int) and not isinstance(refused.get('retcode'), bool):
-        detail.append('retcode %d' % refused['retcode'])
-    message = ' '.join(str(refused.get('message') or '').split())[:120]
-    if message:
-        detail.append(message)
-    return why + ('（%s）' % '：'.join(detail) if detail else '')
+def _refused(refused):
+    """An adapter's reason as entry fields, in her words only."""
+    reason = str(refused.get('reason') or '')
+    if reason == HOST_REFUSAL:
+        return {'state': FAILED, 'reason': HOST_WORDS}
+    return {'state': NOT_FETCHED, 'reason': REFUSAL_WORDS.get(reason, REFUSAL_WORDS['refused'])}
 
 
-def entries_for(channel_id, key, raw):
-    """A channel line's voices as it is stored (`event.voice`): for each voice segment, the outcome posted for it, else
-    the adapter's reason for not having one; a segment with neither has no entry and reads as its placeholder."""
-    out = []
+def entries_for(store, channel_id, body, raw):
+    """A channel line's voices as it is stored (`event.voice`), looked up by the event's own route_id, event_id and
+    occurred_at: for each voice segment, the outcome posted for it, else the adapter's reason for not having one, else,
+    when the channel declares `voice_in`, that none came; on a channel that does not, a segment with neither has no
+    entry and keeps its placeholder."""
     voices = [item for item in media_items(raw) if item.get('type') in VOICE_TYPES]
+    if not voices:
+        return []
+    from . import capabilities
+    posts = CAPABILITY in capabilities.supports(store, channel_id)
+    out = []
     for index, item in enumerate(voices):
-        entry = _kept((channel_id, key, index))
+        entry = _kept(_key(channel_id, body.get('route_id'), body.get('event_id'), body.get('occurred_at'), index))
         refused = item.get(REFUSED_KEY)
         if entry is None and isinstance(refused, dict):
-            entry = {'state': NOT_FETCHED, 'reason': _reason(refused), 'finished_at': now()}
+            entry = {**_refused(refused), 'finished_at': now()}
+        elif entry is None and posts:
+            entry = {'state': NOT_FETCHED, 'reason': NO_OUTCOME, 'finished_at': now()}
         if entry is not None:
             out.append({**entry, 'index': index})
     return out

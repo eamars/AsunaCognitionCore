@@ -509,9 +509,8 @@ class People:
         from .capabilities import numbered
         from .caught_up import CATCHUP_KEY, said_at
         from .schedule_rules import line_stamp, scene_timezone
-        from .voice import line_text
         said = self.mentions if row.get('direction') == 'outbound' else self.heard
-        words = ' '.join(said(scene, line_text(row)).split())          # a voice reads as its words (voice.py)
+        words = ' '.join(said(scene, row.get('text')).split())
         number = '〔%d〕 ' % row['scene_seq'] if row.get('scene_seq') and numbered(self.store, scene) else ''
         if not (row.get('received_at') or row.get('receipt_at')) and row.get('_id'):
             row = {**row, **(self.db.messages.find_one({'_id': row['_id']}, {
@@ -554,7 +553,7 @@ class People:
         if row:
             return row, None
         recent = list(self.db.messages.find({'scene_id': scene['_id'], **self.POINTABLE},
-                                            {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1, 'event.voice': 1})
+                                            {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1})
                       .sort('scene_seq', -1).limit(self.RECENT_LINES))
         listed = '；'.join(self.pointed(scene, row) for row in reversed(recent)) or '还没有'
         lead = '〔%s〕 不是这里的一行' % text if text.isdigit() else '写编号（只写数字，在每行末尾的〔〕里）或「这条」'
@@ -586,7 +585,7 @@ class People:
         # (a private chat's quote is `event.reply`, ADR-079)
         parent_id = quoted.get('reply_message_id')
         parent = self.db.messages.find_one({'_id': parent_id, 'scene_id': scene['_id']},
-                                           {'author': 1, 'text': 1, 'direction': 1, 'scene_seq': 1, 'event.voice': 1}) if parent_id else None
+                                           {'author': 1, 'text': 1, 'direction': 1, 'scene_seq': 1}) if parent_id else None
         if parent:
             lines.append('  > 回复 ' + self.pointed(scene, parent))
             then = self.thought_then(parent, scene['_id'] if once else None)
@@ -594,8 +593,7 @@ class People:
                 lines.append('  > ' + then)
         elif quoted.get('reply_to'):
             lines.append('  > 回复了一条更早的消息')            # a line the program has no record of
-        from .voice import line_text
-        body = self.heard(scene, line_text(row))                 # each voice as its words (voice.py)
+        body = self.heard(scene, row.get('text') or '')
         notice_then = None
         if (event.get('raw') or {}).get(NOTICE_KEY):
             from .notices import line_row, words

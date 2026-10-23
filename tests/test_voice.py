@@ -7,6 +7,7 @@ model files are present, and skips saying where it looked when they are not."""
 import hashlib
 import io
 import json
+import socket
 import struct
 import threading
 import time
@@ -23,6 +24,7 @@ from asuna.config import DATA, ROOT
 from asuna.ingress import persist_input
 from asuna.people import People
 from test_people import BOT, GROUP, SCENE, setup as people_setup
+from test_native_product import envelope as auto_envelope, product  # noqa: F401  (fixture: automatic admission)
 
 np = pytest.importorskip('numpy')
 av = pytest.importorskip('av')
@@ -238,13 +240,14 @@ def test_the_model_gives_way_when_idle():
     assert engine.released >= 1 and not engine.is_loaded
 
 
-def test_two_voices_in_one_line_read_in_order_and_the_stored_text_stays():
-    row = {'text': '[语音（未解析）]和[语音（未解析）]', 'event': {'voice': [
-        {'index': 1, 'state': 'no_voice', 'seconds': 2}, {'index': 0, 'state': 'transcribed', 'seconds': 3,
-                                                          'text': '你好'}]}}
-    assert voice.line_text(row) == '[语音 3 秒] 你好和[语音 2 秒，里面没有人声]'
-    assert row['text'] == '[语音（未解析）]和[语音（未解析）]'
-    assert voice.line_text({'text': '[语音（未解析）]'}) == '[语音（未解析）]', 'no voice posted: the line as today'
+def test_two_voices_in_one_line_read_in_order():
+    text = '[语音（未解析）]和[语音（未解析）]'
+    entries = [{'index': 1, 'state': 'no_voice', 'seconds': 2},
+               {'index': 0, 'state': 'transcribed', 'seconds': 3, 'text': '你好'}]
+    assert voice.read_text(text, entries) == '[语音 3 秒] 你好和[语音 2 秒，里面没有人声]'
+    assert voice.read_text(voice.PLACEHOLDER, []) == voice.PLACEHOLDER, 'no voice posted: the line as today'
+    assert voice.read_text('只剩文字', [{'index': 0, 'state': 'no_voice', 'seconds': 2}]) == \
+        '只剩文字 [语音 2 秒，里面没有人声]', 'a placeholder cut for length: the voice is added at the end'
 
 
 # ---- the endpoint, the line and her readings (MongoDB) ------------------------------------------------------------
@@ -254,37 +257,38 @@ def world(store):
     store.config['channels'] = {'qq': {'account_id': BOT, 'token': TOKEN, 'routes': {'g': {
         'scene_id': SCENE, 'target': {'type': 'group', 'id': GROUP},
         'members': {sender: {'person_id': person} for sender, person in MEMBERS.items()}}}}}
+    handed = []
 
     def receive(event):
+        handed.append(event)
         row, created = persist_input(store, event, managed=True)
         return {'status': 'accepted' if created else 'duplicate', 'episode_id': row['episode_id']}
     controller = SimpleNamespace(app=SimpleNamespace(store=store, config=store.config,
                                                      evidence=SimpleNamespace(record=lambda *args, **kwargs: None)),
                                  stopping=threading.Event(), reconfiguring=False, ingress_lock=threading.RLock(),
                                  receive=receive, emit=lambda text: None)
-    return Channels(controller)
+    channels = Channels(controller)
+    channels.handed = handed                     # the events handed to her queue, as her turn reads them
+    return channels
 
 
 OCCURRED = '2026-10-23T01:00:00Z'
 
 
-def line(channels, event_id, voices=1, text=None, refused=None, sender='20002'):
+def line(channels, event_id, voices=1, text=None, refused=None, sender='20002', status='accepted'):
     """Post the line after its voices, as the adapter does; `refused`: index -> the adapter's reason."""
     items = [{'type': 'record', 'placeholder': voice.PLACEHOLDER, 'file': 'v%d.amr' % n} for n in range(voices)]
     for index, reason in (refused or {}).items():
         items[index][voice.REFUSED_KEY] = reason
     body = {'route_id': 'g', 'account_id': BOT, 'sender_id': sender, 'event_id': event_id,
             'text': text or '和'.join([voice.PLACEHOLDER] * voices), 'group_id': GROUP, 'mentioned_account_ids': [],
-            'raw': {'asuna_media': {'count': voices, 'items': items}}, 'occurred_at': OCCURRED}
-    assert channels.receive('qq', body)['status'] == 'accepted'
-    from asuna.ingress import episode_id
-    key, route = voice.event_key(channels.store, 'qq', 'g', event_id, OCCURRED)
-    return channels.store.db.messages.find_one({'_id': 'in-' + episode_id({'scene_id': route['scene_id'],
-                                                                             'event_id': key})})
+            'raw': {'asuna_media': {'count': voices, 'items': items}} if voices else {}, 'occurred_at': OCCURRED}
+    assert channels.receive('qq', body)['status'] == status
+    return channels.store.db.messages.find_one({'scene_id': SCENE, 'event.channel.platform_event_id': event_id})
 
 
-def post(port, event_id, data, index=0):
-    query = 'route_id=g&event_id=%s&index=%d&occurred_at=2026-10-23T01%%3A00%%3A00Z' % (event_id, index)
+def post(port, event_id, data, index=0, query=None):
+    query = query or 'route_id=g&event_id=%s&index=%d&occurred_at=2026-10-23T01%%3A00%%3A00Z' % (event_id, index)
     request = urllib.request.Request('http://127.0.0.1:%d/v1/channels/qq/voice?%s' % (port, query), data=data,
                                      method='POST', headers={'Authorization': 'Bearer ' + TOKEN,
                                                              'Content-Type': 'audio/mpeg'})
@@ -293,6 +297,22 @@ def post(port, event_id, data, index=0):
             return answer.status, json.loads(answer.read())
     except urllib.error.HTTPError as exc:
         return exc.code, json.loads(exc.read())
+
+
+def head_only(port, query, size=10_000_000):
+    """A voice post whose headers promise `size` bytes that never come: answered only if the body is not read."""
+    with socket.create_connection(('127.0.0.1', port), timeout=5) as conn:
+        conn.sendall(('POST /v1/channels/qq/voice?%s HTTP/1.1\r\nHost: test\r\nAuthorization: Bearer %s\r\n'
+                      'Content-Type: audio/mpeg\r\nContent-Length: %d\r\nConnection: close\r\n\r\n'
+                      % (query, TOKEN, size)).encode())
+        answer = b''
+        while True:
+            part = conn.recv(65536)
+            if not part:
+                break
+            answer += part
+    head, _, payload = answer.partition(b'\r\n\r\n')
+    return int(head.split(b' ', 2)[1]), json.loads(payload)
 
 
 @pytest.fixture
@@ -307,7 +327,7 @@ def server():
         one.close()
 
 
-def test_a_voice_is_settled_in_its_request_and_its_line_is_stored_with_the_words_and_no_audio(store, server):
+def test_a_voice_is_settled_in_its_request_and_its_line_is_stored_as_it_reads_with_no_audio(store, server):
     engine = FakeEngine({'speech_seconds': 1, 'pieces': [{'text': '下周去爬山'}]})
     transcriber(engine)
     channels = world(store)
@@ -320,21 +340,39 @@ def test_a_voice_is_settled_in_its_request_and_its_line_is_stored_with_the_words
     row = line(channels, '5301')
     [entry] = row['event']['voice']
     recorded(entry, data)
-    assert entry['index'] == 0 and row['text'] == voice.PLACEHOLDER
-    assert voice.line_text(row) == '[语音 1 秒] 下周去爬山'
+    said = '[语音 1 秒] 下周去爬山'
+    assert entry['index'] == 0 and row['text'] == said and row['event']['received_text'] == voice.PLACEHOLDER
+    assert channels.handed[-1]['text'] == said, 'her turn reads the words'
     assert store.db.artifacts.count_documents({'kind': 'audio'}) == 0
     assert store.db['artifact_blobs.files'].count_documents({}) == blobs, 'the audio is never stored'
     assert store.db.audit_events.find_one({'payload.document._id': row['_id'], 'type': 'state.commit',
+                                           'payload.document.text': said,
                                            'payload.document.event.voice.0.state': 'transcribed'}), \
         'the words are in the row as it was committed'
 
 
-def test_the_adapters_reason_is_shown_when_there_is_no_outcome(store):
+def test_a_line_posted_again_is_the_same_line_whatever_its_voice_settles_to(store, server):
+    transcriber(FakeEngine({'speech_seconds': 1, 'pieces': [{'text': '第一次'}]}))
     channels = world(store)
-    row = line(channels, '5302', refused={0: {'reason': 'gone', 'retcode': 1200, 'message': 'file not found'}})
-    assert voice.line_text(row) == '[语音，没拿到：平台上已经没有这条语音了（retcode 1200：file not found）]'
+    post(server(channels), '5308', wav())
+    first = line(channels, '5308')
+    voice._outcomes.clear()                       # the outcome expired, or the worker restarted, before the re-post
+    again = line(channels, '5308', refused={0: {'reason': 'gone', 'retcode': 1200, 'message': 'file not found'}},
+                 status='duplicate')
+    assert again['_id'] == first['_id'] and again['text'] == '[语音 1 秒] 第一次', 'the first stored reading stands'
+
+
+def test_the_adapters_reason_is_shown_in_words_and_its_own_answer_kept_for_the_record(store):
+    channels = world(store)
+    answer = {'reason': 'gone', 'retcode': 1200, 'message': 'file not found'}
+    row = line(channels, '5302', refused={0: answer})
+    assert row['text'] == '[语音，没拿到：平台上已经没有这条语音了]'
+    assert row['event']['raw']['asuna_media']['items'][0][voice.REFUSED_KEY] == answer
     row = line(channels, '5303', refused={0: {'reason': 'host', 'message': '503 HOST_TEMPORARILY_UNAVAILABLE'}})
-    assert voice.line_text(row) == '[语音，没拿到：交给本机识别时出了错（503 HOST_TEMPORARILY_UNAVAILABLE）]'
+    assert row['text'] == '[语音，没转出文字：交给本机识别时出了错]', 'the audio was fetched: not "没拿到"'
+    assert row['event']['voice'][0]['state'] == voice.FAILED
+    row = line(channels, '5309', refused={0: {'reason': 'timeout', 'message': 'get_record gave no answer in 10 s'}})
+    assert row['text'] == '[语音，没拿到：向平台取音频超时了]'
 
 
 def test_two_voices_in_one_line_each_carry_their_own_outcome(store, server):
@@ -344,7 +382,7 @@ def test_two_voices_in_one_line_each_carry_their_own_outcome(store, server):
     assert post(port, '5304', wav(), index=0)[1]['state'] == 'transcribed'
     row = line(channels, '5304', voices=2, refused={1: {'reason': 'timeout', 'message': 'get_record gave no answer'}})
     assert [entry['index'] for entry in row['event']['voice']] == [0, 1]
-    assert voice.line_text(row) == '[语音 1 秒] 一句和[语音，没拿到：向平台取音频超时了（get_record gave no answer）]'
+    assert row['text'] == '[语音 1 秒] 一句和[语音，没拿到：向平台取音频超时了]'
 
 
 def test_the_endpoint_refuses_what_is_out_of_shape(store, server):
@@ -352,16 +390,68 @@ def test_the_endpoint_refuses_what_is_out_of_shape(store, server):
     port = server(world(store))
     assert post(port, '5305', b'')[0] == 400
     assert post(port, '5305', wav(), index=99)[1]['error'].startswith('VOICE_INDEX_INVALID')
-    request = urllib.request.Request('http://127.0.0.1:%d/v1/channels/qq/voice?route_id=nope&event_id=1&index=0' % port,
-                                     data=wav(), method='POST', headers={'Authorization': 'Bearer ' + TOKEN})
-    with pytest.raises(urllib.error.HTTPError) as refused:
-        urllib.request.urlopen(request, timeout=10)
-    assert json.loads(refused.value.read())['error'].startswith('VOICE_ROUTE_UNKNOWN')
+    assert post(port, '5305', wav(), query='event_id=1&index=0')[1]['error'].startswith('VOICE_ROUTE_ID_INVALID')
+    assert post(port, '5305', wav(), query='route_id=g&event_id=1&index=0&x=1')[1]['error'].startswith(
+        'VOICE_FIELD_DENIED')
 
 
-def test_a_line_from_an_adapter_that_posts_no_voices_reads_as_today(store):
+def test_the_query_and_a_route_key_are_answered_before_the_body_is_read(store, server):
+    channels = world(store)
+    port = server(channels)
+    status, answer = head_only(port, 'route_id=g&event_id=1&index=99')
+    assert status == 400 and answer['error'].startswith('VOICE_INDEX_INVALID')
+    channels.authenticate = lambda channel_id, authorization: (None, 'g')      # as a route key of route g
+    status, answer = head_only(port, 'route_id=g&event_id=1&index=0')
+    assert (status, answer['error']) == (403, 'ROUTE_KEY_ENDPOINT_DENIED')
+
+
+def test_a_line_from_a_channel_without_voice_in_reads_as_today(store):
     row = line(world(store), '5306')
-    assert 'voice' not in row['event'] and voice.line_text(row) == voice.PLACEHOLDER
+    assert 'voice' not in row['event'] and 'received_text' not in row['event'] and row['text'] == voice.PLACEHOLDER
+
+
+def test_a_voice_in_channel_never_shows_the_bare_placeholder(store):
+    from asuna import capabilities
+    capabilities.declared(store, 'qq', ['image', voice.CAPABILITY])
+    row = line(world(store), '5310', voices=2)
+    assert row['text'] == '[语音，没拿到：这段语音没随消息一起送来]和[语音，没拿到：这段语音没随消息一起送来]'
+    assert [entry['state'] for entry in row['event']['voice']] == [voice.NOT_FETCHED] * 2
+
+
+def test_a_voice_on_a_route_its_own_line_admits(product):
+    """Automatic admission: the route of a new chat exists only once its first line arrives; a voice posted before it
+    is still found by what the adapter posted."""
+    running = transcriber(FakeEngine({'speech_seconds': 1, 'pieces': [{'text': '你好呀'}]}))
+    asked = {'route_id': 'auto-dm-11110000', 'event_id': 'v-1', 'index': '0'}
+    assert 'auto-dm-11110000' not in product.config['channels']['qq']['routes']
+    assert voice.receive('qq', asked, wav(), 'audio/wav', running)['state'] == 'transcribed'
+    product.channel.receive('qq', auto_envelope(mid='v-1', text=voice.PLACEHOLDER, raw={'asuna_media': {
+        'count': 1, 'items': [{'type': 'record', 'placeholder': voice.PLACEHOLDER, 'file': 'v.amr'}]}}))
+    row = product.store.db.messages.find_one({'event.channel.platform_event_id': 'v-1'})
+    assert row['text'] == '[语音 1 秒] 你好呀' and row['event']['received_text'] == voice.PLACEHOLDER
+
+
+def test_a_voice_that_says_her_name_calls_her_as_typed_words_do(store, server):
+    channels = world(store)
+    name = next(name for name in People(store).self_names if len(name) >= 2)
+    transcriber(FakeEngine({'speech_seconds': 1, 'pieces': [{'text': name + '你在吗'}]}))
+    post(server(channels), '5311', wav())
+    spoken = line(channels, '5311')['event']['group_context']
+    typed = line(channels, '5312', voices=0, text=name + '你在吗')['event']['group_context']
+    assert (typed.get('wake_reason') or typed.get('resting')) == 'name_called'
+    assert (spoken.get('wake_reason') or spoken.get('resting')) == 'name_called'
+
+
+def test_the_copied_words_check_sees_a_voices_words(store, server):
+    from datetime import datetime, timezone
+    from asuna import notes
+    channels = world(store)
+    said = '我们下周六早上八点在山脚下的停车场集合然后一起去爬山记得带水'
+    transcriber(FakeEngine({'speech_seconds': 1, 'pieces': [{'text': said}]}))
+    post(server(channels), '5313', wav())
+    line(channels, '5313')
+    match = notes.borrowed(store, SCENE, said, datetime.now(timezone.utc))
+    assert match and match['author'] == 'qq:20002'
 
 
 def test_every_reading_of_the_line_shows_the_same_words(store, server):
@@ -388,27 +478,6 @@ def test_every_reading_of_the_line_shows_the_same_words(store, server):
     assert media_note(row, store.config) is None, 'a voice read as words is no placeholder in the media note'
     from asuna.attend import recent
     assert any(said in text for text in recent(store, scene, row['scene_seq'])[0]), 'the relevance gate'
-
-
-def test_her_turn_reads_the_words_in_its_event_and_in_her_history(store):
-    from asuna.coordinator import Coordinator
-    from asuna.lanes import FakeLane, FakeTurn
-    from test_adr009_p2 import THINK
-    from test_group_admin import SCENE as ADMIN_SCENE
-    from test_reply_actions import mention, world as reply_world
-    reply_world(store)
-    store.put('messages', {'_id': 'line-voice', 'scene_id': ADMIN_SCENE, 'scope_key': 'scene:' + ADMIN_SCENE,
-                           'policy_epoch': 1, 'direction': 'inbound', 'author': 'qq:20002', 'text': voice.PLACEHOLDER,
-                           'scene_seq': 1, 'received_at': voice.now(), 'occurred_at': voice.now(),
-                           'event': {'channel': {'platform_event_id': 'pe-voice'}, 'voice': [
-                               {'index': 0, 'state': 'transcribed', 'seconds': 4, 'text': '先前那句'}]}})
-    store.db.scenes.update_one({'_id': ADMIN_SCENE}, {'$max': {'sequence': 1}})
-    event = {**mention('v-1'), 'text': '@演示 ' + voice.PLACEHOLDER,
-             'voice': [{'index': 0, 'state': 'transcribed', 'seconds': 3, 'text': '你听得见吗'}]}
-    lane = FakeLane(store, [FakeTurn([THINK, ('speak', {'parts': [{'kind': 'text', 'text': '听得见'}]})])])
-    ep = Coordinator(store, lane).ingest(event, persona='P1')
-    assert ep['context']['event']['text'].endswith('[语音 3 秒] 你听得见吗')
-    assert any(row.get('text') == '[语音 4 秒] 先前那句' for row in ep['context']['delivered_history'])
 
 
 # ---- the real model ---------------------------------------------------------------------------------------------

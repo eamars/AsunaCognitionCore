@@ -71,7 +71,8 @@ Two hops, each over a local HTTP API: NapCat ⇄ the QQ adapter ⇄ Asuna's chan
    - A voice in the line is fetched by the adapter before the line is posted (`qqadapter/voice.py`: `get_record`,
      mp3) and posted to `POST /v1/channels/qq/voice`, where `voice.receive` has `voice.Transcriber` turn it into text
      on this machine within the request; the audio is never stored. The line then arrives with its voices settled
-     (`voice.entries_for`) and reads as their words wherever it is read (`voice.line_text`).
+     (`voice.entries_for`) and is stored with their words in its text (`voice.read_text`; the text as received stays
+     in `event.received_text`), so every reader has the words.
    - In a group, the relevance gate (`attend`) decides whether she joins in: it asks her one question, with her mood
      as one public paragraph, for unaddressed talk and for an @ or a reply to her alike; 不理 on an addressed line
      leaves it in her next catch-up there, and a gate that fails on one falls back to the full turn. In a group

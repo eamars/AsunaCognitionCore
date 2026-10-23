@@ -1908,9 +1908,10 @@ class _VoiceHost:
         self.calls = []
         self.results = list(results)
 
-    def post_voice(self, route_id, event_id, index, data, content_type="audio/mpeg", occurred_at=None, timeout=120):
+    def post_voice(self, route_id, event_id, index, data, content_type="audio/mpeg", occurred_at=None, timeout=30):
         self.calls.append({"kind": "voice", "route_id": route_id, "event_id": event_id, "index": index,
-                           "data": data, "content_type": content_type, "occurred_at": occurred_at})
+                           "data": data, "content_type": content_type, "occurred_at": occurred_at,
+                           "timeout": timeout})
         return self.results.pop(0) if self.results else Result("accepted", 200, {"status": "settled",
                                                                                  "state": "transcribed"})
 
@@ -1964,7 +1965,7 @@ def _check_voice(rep, gcfg, root):
     rep.check("voice_bytes_posted_for_that_line", voice_call.get("data") == audio
               and voice_call.get("event_id") == env.get("event_id") and voice_call.get("route_id") == env.get("route_id")
               and voice_call.get("index") == 0 and voice_call.get("content_type") == "audio/mpeg"
-              and voice_call.get("occurred_at") == env.get("occurred_at"),
+              and voice_call.get("occurred_at") == env.get("occurred_at") and voice_call.get("timeout") == 30.0,
               json.dumps({k: v for k, v in voice_call.items() if k != "data"}))
     posted = host.calls[-1]["envelope"] if host.calls else {}
     rep.check("voice_settled_line_carries_no_refusal", _voice_refused(posted) is None, "")

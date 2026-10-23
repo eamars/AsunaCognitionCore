@@ -318,7 +318,7 @@ class Channels:
     def voice(self, channel_id, fields, data, media_type=None):
         """One voice of a line about to be posted, transcribed now; its outcome waits for the line (voice.py)."""
         from . import voice
-        return voice.receive(self.store, channel_id, fields, data, media_type)
+        return voice.receive(channel_id, fields, data, media_type)
 
     def own_mute(self, channel_id, body):
         from . import own_mute
@@ -379,9 +379,12 @@ class Channels:
                              'platform_event_id': body['event_id'], 'target': route['target'], 'sender_id': body['sender_id']}}
         event['raw'] = kept_raw(event, body.get('raw'), body.get('mentioned_account_ids'))
         from . import voice
-        voices = voice.entries_for(channel_id, event_id, event['raw'])
+        voices = voice.entries_for(self.store, channel_id, body, event['raw'])
         if voices:
-            event['voice'] = voices                        # settled before the line came (voice.py, ADR-093)
+            # Settled before the line came (voice.py, ADR-093): the line is stored as it reads, each voice's words in
+            # its place, so every reader (and the wake checks below) has the words; what came is kept beside it.
+            event.update(voice=voices, received_text=body['text'], text=voice.read_text(body['text'], voices))
+            body = {**body, 'text': event['text']}
         from . import media_keys
         media_keys.saw(event)                              # a signed picture link that just arrived (ADR-035)
         from . import notices
@@ -702,15 +705,20 @@ class ChannelServer:
                         raise ValueError('UNKNOWN_CHANNEL_ENDPOINT')
                     channel_id = parts[2]
                     _, scoped = channels.authenticate(channel_id, self.headers.get('Authorization', ''))
-                    body, audio = {}, None
+                    body, audio, voice_fields = {}, None, None
                     if self.command == 'POST':
                         size = int(self.headers.get('Content-Length', '0'))
                         media_type = (self.headers.get('Content-Type') or '').split(';')[0].strip().lower()
                         # A voice's bytes come raw (voice.py); every other body is one JSON object. A group's member
                         # list (group_members.py) is the one JSON body that may be large.
                         raw_voice = parts[3:] == ['voice']
-                        from .voice import BODY_LIMIT
-                        limit = (BODY_LIMIT if raw_voice else MEMBERS_BODY_LIMIT if parts[3:] == ['members']
+                        from . import voice
+                        if raw_voice:
+                            # Who may post it and what it is about are settled before a byte of audio is read.
+                            if scoped:
+                                channels.scope_check(channel_id, scoped, self.command, parts[3:], body)
+                            voice_fields = voice.fields({key: values[0] for key, values in parse_qs(url.query).items()})
+                        limit = (voice.BODY_LIMIT if raw_voice else MEMBERS_BODY_LIMIT if parts[3:] == ['members']
                                  else JSON_BODY_LIMIT)
                         if not 0 < size <= limit:
                             raise ValueError('INVALID_BODY_SIZE')
@@ -735,8 +743,7 @@ class ChannelServer:
                     elif self.command == 'POST' and parts[3:] == ['own_mute']:
                         value = channels.own_mute(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['voice']:
-                        fields = {key: values[0] for key, values in parse_qs(url.query).items()}
-                        value = channels.voice(channel_id, fields, audio, media_type)
+                        value = channels.voice(channel_id, voice_fields, audio, media_type)
                     elif self.command == 'GET' and parts[3:] == ['outbox']:
                         query = parse_qs(url.query)
                         owner = []

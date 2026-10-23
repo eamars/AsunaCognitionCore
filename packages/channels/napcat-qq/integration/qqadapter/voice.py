@@ -7,6 +7,10 @@ On the submit path, before a line with `record` (or `audio`) segments is posted,
 there is no outcome -- NapCat refused (retcode 1200 `file not found` is `gone`), timed out or answered no audio, or the
 host call failed -- the reason goes on that voice's media item (`voice_refused`), so the line says why. The line is
 posted either way, after its voices, so lines keep their order. Only metadata reaches the log.
+
+Lines are submitted one at a time, so a voice holds up its line and the lines queued behind it, in any conversation:
+at most FETCH_TIMEOUT + POST_TIMEOUT (40 s) per voice, which is the bound per line for QQ, whose voice message carries
+one voice; a few seconds in the usual case (NapCat's conversion, then 0.1-1.5 s of transcription).
 """
 import base64
 
@@ -17,6 +21,7 @@ REFUSED_KEY = "voice_refused"
 OUT_FORMAT = "mp3"
 CONTENT_TYPE = "audio/mpeg"
 FETCH_TIMEOUT = 10.0          # NapCat converts the voice before it answers
+POST_TIMEOUT = 30.0           # the host transcribes within the request: a minute of speech is about 1.5 s
 MAX_FILE = 300                # the segment's file reference, as NapCat gave it
 
 
@@ -79,7 +84,7 @@ def fetch(onebot, ref, timeout=FETCH_TIMEOUT):
     return audio, None
 
 
-def settle(envelope, onebot, host, counters, log=print, fetch_timeout=FETCH_TIMEOUT):
+def settle(envelope, onebot, host, counters, log=print, fetch_timeout=FETCH_TIMEOUT, post_timeout=POST_TIMEOUT):
     """Fetch and post each voice of this line before the line is posted; a voice without an outcome gets its reason
     on its media item. Returns [(index, state or reason)] for the log."""
     found = segments(envelope)
@@ -89,7 +94,7 @@ def settle(envelope, onebot, host, counters, log=print, fetch_timeout=FETCH_TIME
         audio, refused = fetch(onebot, ref, fetch_timeout)
         if audio is not None:
             res = host.post_voice(envelope.get("route_id"), envelope.get("event_id"), index, audio, CONTENT_TYPE,
-                                  envelope.get("occurred_at"))
+                                  envelope.get("occurred_at"), timeout=post_timeout)
             obj = res.obj if isinstance(res.obj, dict) else {}
             if res.kind in ("accepted", "duplicate"):
                 counters.inc("voice_settled")

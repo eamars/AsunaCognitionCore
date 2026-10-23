@@ -423,6 +423,7 @@ class Outbound:
         self.verify_timeout = float(verify_timeout)
         self.on_muted = None          # (group id): a send refused because she is muted there (mutes.py looks)
         self.receipts_waiting = threading.Event()     # a receipt was spooled: the receipt thread posts it now
+        self.faults = None            # the adapter's lane faults (faults.py), when it counts them
 
     # ---- one claimed publication's image attachment ---------------------
     def fetch_attachment(self, pub, attempt, plan):
@@ -932,6 +933,7 @@ class Outbound:
             self.journal.append("receipts_rejected.jsonl",
                                 {"ts": _now(), "publication_id": pub, "payload": payload,
                                  "http": res.code, "body": res.obj})
+            self._fault("receipts", "post", "rejected:%s" % res.code)
             return False
         self.counters.inc("receipts_spooled")
         self.journal.spool_add("receipts", {"publication_id": pub, "payload": payload, "why": why, "tries": 1},
@@ -939,6 +941,10 @@ class Outbound:
         self.log("RECEIPT_SPOOLED pub=%s status=%s why=%s" % (pub, payload["status"], why))
         self.receipts_waiting.set()
         return False
+
+    def _fault(self, lane, stage, error):
+        if self.faults is not None:
+            self.faults.add(lane, stage, error)
 
     def report_later(self, pub, payload, why):
         """A receipt from NapCat's reader thread (a late answer): spooled, and posted by the receipt thread, so a host
@@ -955,6 +961,7 @@ class Outbound:
                 blob = self.journal.read_json(path)
             except Exception:
                 self.journal.spool_move(path, "receipts_unreadable.jsonl", {"reason": "unreadable"})
+                self._fault("receipts", "spool", "unreadable")
                 continue
             pub = str(blob.get("publication_id") or "")
             payload = blob.get("payload") or {}
@@ -969,6 +976,7 @@ class Outbound:
                 self.counters.inc("receipts_rejected")
                 self.journal.spool_move(path, "receipts_rejected.jsonl",
                                         {"reason": "host_rejected", "http": res.code, "body": res.obj})
+                self._fault("receipts", "replay", "rejected:%s" % res.code)
                 self.log("RECEIPT_REPLAY_REJECT pub=%s http=%s" % (pub, res.code))
             else:
                 # the host away (no answer, or its whole-host 503) is no try of this receipt (ADR-095 §5.4)
@@ -976,6 +984,7 @@ class Outbound:
                 tries = int(blob.get("tries") or 0) + (0 if away else 1)
                 if tries > MAX_SPOOL_TRIES:
                     self.journal.spool_move(path, "receipts_abandoned.jsonl", {"reason": "host_unreachable_too_long"})
+                    self._fault("receipts", "replay", "abandoned:%s" % res.code)
                     self.log("RECEIPT_ABANDONED pub=%s" % pub)
                 else:
                     blob["tries"] = tries

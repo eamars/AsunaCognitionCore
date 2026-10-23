@@ -135,6 +135,19 @@ QQ's own faces (小黄脸): id <-> name, from faces.json next to this file.
 - def `clean_name` — NapCat writes a face's name as '/汪汪' or '[捂脸]'; the bare name, or ''.
 - def `name_of` — A face segment's name: what NapCat said it is, else the table's name for its id, else ''.
 
+## `napcat-qq/integration/qqadapter/faults.py`
+
+[packages/channels/napcat-qq/integration/qqadapter/faults.py](../../packages/channels/napcat-qq/integration/qqadapter/faults.py)
+
+This adapter's lane faults, counted by signature and hour and posted to the host (ADR-095 §5.6, step 1).
+
+- def `name` — A class name from any value: only A-Z a-z 0-9 _ .
+- def `code` — An error's code alone (`CODE` of `CODE: words`), never its words.
+- class `Faults`
+  - `add` — Count one fault of this signature in the current UTC hour.
+  - `post` — Post the pending counts; the host's answer takes them off.
+  - `loop`
+
 ## `napcat-qq/integration/qqadapter/fixtures.py`
 
 [packages/channels/napcat-qq/integration/qqadapter/fixtures.py](../../packages/channels/napcat-qq/integration/qqadapter/fixtures.py)
@@ -175,6 +188,7 @@ HTTP client for the runtime host channel API (stdlib only).
 - class `HostApi`
   - `post_event`
   - `post_members` — One group's member list (members.py); `accepted` once the host stored it.
+  - `post_faults` — This adapter's lane faults by signature and hour (faults.py, ADR-095); `accepted` once the host counted them.
   - `post_media_keys` — NapCat's current picture-link keys (media_keys.py); `accepted` once the host holds them.
   - `post_own_mute` — Her own mute in one group (mutes.py); `accepted` once the host took it.
   - `post_notice` — A line about her own account for her home session (notices.py); `accepted` once the host took it.

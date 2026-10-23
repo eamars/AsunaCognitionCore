@@ -311,6 +311,11 @@ class Channels:
         from . import media_keys
         return media_keys.receive(channel_id, body)
 
+    def faults(self, channel_id, body):
+        """The adapter's lane faults, counted by signature and hour (lane_faults.py, ADR-095)."""
+        from . import lane_faults
+        return lane_faults.receive(self.store, channel_id, body)
+
     def notices(self, channel_id, body):
         from . import notices
         return notices.home(self.store, self.controller, channel_id, body)
@@ -833,6 +838,8 @@ class ChannelServer:
                         value = channels.members(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['media_keys']:
                         value = channels.media_keys(channel_id, body)
+                    elif self.command == 'POST' and parts[3:] == ['faults']:
+                        value = channels.faults(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['notices']:
                         value = channels.notices(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['own_mute']:

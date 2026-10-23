@@ -179,7 +179,19 @@ Every review brief for I/O work asks: what does a slow, hung or failing item do 
 Built in the order 2, 3, 1, 4, 5, 6 (Claude, 2026-10-23: the owner wanted the clog fixed the same day; a set-aside
 line is in the adapter's journal meanwhile, so nothing waits on step 1).
 
-1. The fault counts and the endpoint (no behaviour change): the place every later step reports to.
+1. The fault counts and the endpoint (no behaviour change): the place every later step reports to. **Built:** the
+   Host's `lane_faults.py` (`receive`, `record`; collection `lane_faults`, one document per channel, signature and
+   hour, its count raised with `$inc`) behind `POST /v1/channels/<id>/faults`; the adapter's `faults.py` (napcat-qq
+   0.13.0) counts each set-aside line, refused or abandoned receipt and send exception where it happens, keeps the
+   counts the host has not taken in `faults_pending.json`, and posts them every 5 minutes. Tests:
+   `tests/test_lane_faults.py`; self-test `_check_faults`. Independent review: the project map lacked the module
+   (fixed); signatures could carry the host's words (now names only, `CLASS_CHARS` at the host, the code alone at the
+   adapter), which would also have split one fault class into many signatures; nothing removed the documents (now a
+   TTL of `KEEP_DAYS` = 30 on `hour_at`, the hour's start as a date); a refused batch blocked the rest (now journaled
+   and dropped); a damaged pending file could raise into a lane (now checked on load, `add` never raises); loose hours
+   (now canonical, within the 30 days, at most an hour ahead); a post written row by row (now one `bulk_write`; counts
+   are at least once). Not counted as lane faults, on purpose: an outbound send whose platform answer is `failed` or
+   `unknown` — that is the platform's outcome, already on the line, not a fault of a lane.
 2. Inbound dispatch and per-conversation workers, with tests 1, 3, 4, 6. **Built:** `service.py` `submit_pending`
    (groups the spool by route, at most `INBOUND_LANES` = 8 lanes, the conversation with the oldest line first),
    `_lane` (a conversation's lines in order; a line not in yet is tried again after `RETRY_WAITS` 2, 5, 15, 30, 60 s),

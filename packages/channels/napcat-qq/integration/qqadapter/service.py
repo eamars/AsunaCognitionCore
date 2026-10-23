@@ -27,6 +27,8 @@ from .outbound import Outbound
 from .peers import PeerDirectory
 from .selfrole import SelfRoles
 from . import voice as voice_mod
+from . import faults as faults_mod
+from .faults import Faults
 
 STATUS_EVERY = 60
 HEALTH_EVERY = 5
@@ -91,6 +93,9 @@ class Adapter:
         self.members = Members(cfg, data_dir, self.onebot, self.host, self.counters, log=self.log)
         # the current picture-link keys, posted to the host every few minutes (media_keys.py)
         self.media_keys = MediaKeys(self.onebot, self.host, self.counters, log=self.log)
+        # the lane faults, by signature and hour, posted to the host every few minutes (faults.py, ADR-095)
+        self.faults = Faults(data_dir, self.host, self.counters, log=self.log, journal=self.journal)
+        self.out.faults = self.faults
         # her own mute in each admitted group: notices about her, refused sends, a look at start (mutes.py)
         self.mutes = mutes_mod.Mutes(cfg, data_dir, self.onebot, self.host, self.counters, self.members.groups,
                                      log=self.log)
@@ -237,6 +242,7 @@ class Adapter:
                     continue                  # held open a moment (Windows): the next pass reads it
                 if not isinstance(blob, dict) or not isinstance(blob.get("envelope"), dict):
                     self.journal.spool_move(path, "inbound_unreadable.jsonl", {"reason": "unreadable"})
+                    self.faults.add("inbound", "spool", "unreadable")
                     continue
                 route = self._spooled[path] = str(blob["envelope"].get("route_id") or "")
             routes.setdefault(route, []).append(path)
@@ -304,6 +310,7 @@ class Adapter:
             return False                      # held open a moment: tried again after its wait
         if not isinstance(blob, dict) or not isinstance(blob.get("envelope"), dict):
             self.journal.spool_move(path, "inbound_unreadable.jsonl", {"reason": "unreadable"})
+            self.faults.add("inbound", "spool", "unreadable")
             return True
         envelope = blob["envelope"]
         if not blob.get("prepared"):
@@ -345,6 +352,8 @@ class Adapter:
             return self._count(path, envelope, res, "host_error")
         self.journal.spool_move(path, "inbound_rejected.jsonl",
                                 {"reason": "host_rejected", "http": res.code, "body": res.obj})
+        self.faults.add("inbound", "post", "host_rejected:%s:%s" % (res.code, faults_mod.code(
+            res.obj.get("error") if isinstance(res.obj, dict) else None)))
         self._settled(path)
         self.log("INBOUND_REJECTED %s http=%s body=%s"
                  % (where, res.code, json.dumps(res.obj, ensure_ascii=False)[:300]))
@@ -359,6 +368,7 @@ class Adapter:
         if tries >= HOST_ERROR_TRIES:
             self.journal.spool_move(path, "inbound_failed.jsonl",
                                     {"reason": reason, "tries": tries, "http": res.code, "body": res.obj})
+            self.faults.add("inbound", "post", "%s:%s" % (reason, res.code))
             self._settled(path)
             self.log("INBOUND_FAILED %s tries=%d http=%s reason=%s" % (where, tries, res.code, reason))
             return True
@@ -380,6 +390,7 @@ class Adapter:
                                     {"reason": "adapter_error", "tries": tries, "error": type(exc).__name__})
         except Exception:
             return False
+        self.faults.add("inbound", "post", "adapter_error:" + type(exc).__name__)
         self._settled(path)
         return True
 
@@ -588,6 +599,7 @@ class Adapter:
         threading.Thread(target=self.catchup.loop, args=(self.stop,), name="catchup", daemon=True).start()
         threading.Thread(target=self.members.loop, args=(self.stop,), name="members", daemon=True).start()
         threading.Thread(target=self.media_keys.loop, args=(self.stop,), name="media_keys", daemon=True).start()
+        threading.Thread(target=self.faults.loop, args=(self.stop,), name="faults", daemon=True).start()
         threading.Thread(target=self.mutes.loop, args=(self.stop,), name="mutes", daemon=True).start()
         threading.Thread(target=self.home_notices.loop, args=(self.stop,), name="home_notices", daemon=True).start()
         self.catchup.request("startup")
@@ -663,6 +675,7 @@ class Adapter:
             self.out.handle_item(item, stopping=self.stop.is_set())
         except Exception as exc:
             self.counters.inc("send_error")
+            self.faults.add("chat", "send", "adapter_error:" + type(exc).__name__)
             self.log("SEND_ERROR pub=%s type=%s" % (item.get("publication_id"), type(exc).__name__))
         finally:
             with self._sends_lock:
@@ -688,6 +701,7 @@ class Adapter:
                     self.out.handle_item(item, stopping=self.stop.is_set())
                 except Exception as exc:
                     self.counters.inc("send_error")
+                    self.faults.add("bulk", "send", "adapter_error:" + type(exc).__name__)
                     self.log("SEND_ERROR pub=%s type=%s lane=bulk" % (item.get("publication_id"), type(exc).__name__))
             elif res.kind == "retry":
                 self.counters.inc("outbox_errors")

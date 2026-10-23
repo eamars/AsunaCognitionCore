@@ -125,6 +125,13 @@ class HostApi:
             res = Result("accepted", res.code, res.obj)
         return res
 
+    def post_faults(self, body):
+        """This adapter's lane faults by signature and hour (faults.py, ADR-095); `accepted` once the host counted them."""
+        res = self._request("POST", "/v1/channels/%s/faults" % self.channel_id, body, timeout=15)
+        if res.kind == "ok" and isinstance(res.obj, dict) and res.obj.get("status") == "recorded":
+            res = Result("accepted", res.code, res.obj)
+        return res
+
     def post_media_keys(self, body):
         """NapCat's current picture-link keys (media_keys.py); `accepted` once the host holds them."""
         res = self._request("POST", "/v1/channels/%s/media_keys" % self.channel_id, body, timeout=15)

@@ -32,6 +32,7 @@ from .hostapi import Result
 from .journal import Counters, Journal
 from .onebot import ApiTimeout, ApiTransportError
 from . import service as service_mod
+from . import faults as faults_mod
 from .service import Adapter
 
 ALLOWED_ENVELOPE_KEYS = inbound_mod.PRIVATE_ENVELOPE_KEYS
@@ -1717,6 +1718,7 @@ def run(cfg, data_dir, live=True, live_config=True):
     _check_voice(rep, gcfg, root)
     _check_lanes(rep, gcfg, root)
     _check_outbound_lanes(rep, gcfg, root)
+    _check_faults(rep, gcfg, root)
     _check_spool(rep, root)
     _check_outbound_params(rep, gcfg, root)
     _check_outbound_verify(rep, gcfg, root)
@@ -2654,6 +2656,98 @@ def _check_outbound_lanes(rep, gcfg, root):
     stop(adapter, threads)
     rep.check("outbound_old_host_one_send_at_a_time", went and adapter.chat_lanes == 1 and not threads[1].is_alive(),
               "chat_lanes=%d" % adapter.chat_lanes)
+
+
+class _FaultsHost(_LaneHost):
+    """SUBSTITUTE for the host's lines and its faults endpoint: the counts it was posted, in order; `take_faults`
+    False answers like a host that does not take them now."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fault_posts, self.take_faults = [], True
+
+    def post_faults(self, body):
+        if not self.take_faults:
+            return Result("retry", None, None, "timeout")
+        self.fault_posts.append(json.loads(json.dumps(body)))
+        return Result("accepted", 200, {"status": "recorded", "rows": len(body["counts"])})
+
+
+def _check_faults(rep, gcfg, root):
+    """ADR-095 step 1: a line set aside is counted under its signature (lane, stage, error class; never the line);
+    the counts the host has not taken survive a restart; the host's answer takes them off.
+
+    Offline only: a substitute host; nothing reaches a real one.
+    """
+    groups = sorted(gcfg.allowed_groups)
+    ga = groups[0]
+    ma = sorted(gcfg.route_for_group(ga).allowed_senders)[0]
+    host = _FaultsHost({"8001": [Result("retry", 500, {"error": "HOST_REQUEST_FAILED"})]})
+    adapter = Adapter(gcfg, os.path.join(root, "faults"), peer_mode="off")
+    adapter.onebot, adapter.host, adapter.faults.host = StubOneBot(), host, host
+    adapter.retry_waits = (0.02,)
+    adapter.log = lambda line: None
+    adapter.on_event(_group_event(gcfg, ga, ma, 8001))
+    adapter.submit_pending()
+    _until(lambda: not adapter._lanes)
+    rows = list(adapter.faults.pending.values())
+    rep.check("faults_set_aside_line_counted_by_signature",
+              [(r["lane"], r["stage"], r["error"], r["count"]) for r in rows] == [("inbound", "post", "host_error:500", 1)]
+              and "8001" not in json.dumps(rows), json.dumps(rows, ensure_ascii=False))
+    host.take_faults = False
+    rep.check("faults_kept_while_the_host_does_not_take_them", adapter.faults.post() is False
+              and len(adapter.faults.pending) == 1, str(len(adapter.faults.pending)))
+    reopened = faults_mod.Faults(os.path.join(root, "faults"), host, Counters())
+    rep.check("faults_pending_survive_a_restart", list(reopened.pending.values()) == rows, json.dumps(
+        list(reopened.pending.values())))
+    host.take_faults = True
+    posted = reopened.post()
+    rep.check("faults_posted_and_taken_off", posted and reopened.pending == {}
+              and host.fault_posts and host.fault_posts[-1]["counts"][0]["error"] == "host_error:500"
+              and faults_mod.Faults(os.path.join(root, "faults"), host, Counters()).pending == {},
+              json.dumps(host.fault_posts))
+
+    # A line the host refuses with words: only the code is counted (never the answer's words, which may quote input).
+    host = _FaultsHost({"8101": [Result("reject", 400, {"error": "INVALID_X: Expecting ',' delimiter: line 1 column 345"})]})
+    adapter = Adapter(gcfg, os.path.join(root, "faults-words"), peer_mode="off")
+    adapter.onebot, adapter.host, adapter.faults.host = StubOneBot(), host, host
+    adapter.log = lambda line: None
+    adapter.on_event(_group_event(gcfg, ga, ma, 8101))
+    adapter.submit_pending()
+    _until(lambda: not adapter._lanes)
+    errors = [r["error"] for r in adapter.faults.pending.values()]
+    rep.check("faults_signature_is_a_code_never_words", errors == ["host_rejected:400:INVALID_X"], json.dumps(errors))
+
+    # A batch the host refuses as it is: kept in the journal and dropped, so the counts after it still go.
+    class _Refusing(_FaultsHost):
+        def post_faults(self, body):
+            self.fault_posts.append(json.loads(json.dumps(body)))
+            return Result("reject", 400, {"error": "FAULTS_FIELD_INVALID: words"})
+    refusing = _Refusing()
+    journal = Journal(os.path.join(root, "faults-refused"))
+    counts = faults_mod.Faults(os.path.join(root, "faults-refused"), refusing, Counters(), log=lambda _m: None,
+                               journal=journal)
+    counts.add("inbound", "post", "host_error:500")
+    dropped = counts.post()
+    kept = open(os.path.join(journal.jdir, "faults_rejected.jsonl"), encoding="utf-8").read() if os.path.exists(
+        os.path.join(journal.jdir, "faults_rejected.jsonl")) else ""
+    rep.check("faults_refused_batch_journaled_not_blocking", dropped and counts.pending == {}
+              and '"FAULTS_FIELD_INVALID"' in kept and "words" not in kept, kept[:160])
+
+    # A damaged pending file is ignored on load, and counting never raises into a lane.
+    folder = os.path.join(root, "faults-damaged")
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, "faults_pending.json"), "w", encoding="utf-8") as handle:
+        json.dump([{"lane": "inbound", "stage": "post"}, "x", {"lane": "chat", "stage": "send", "error": "e",
+                                                              "hour": "2026-10-23T05", "count": 1}], handle)
+    damaged = faults_mod.Faults(folder, _FaultsHost(), Counters())
+    raised = None
+    try:
+        damaged.add("inbound", object(), "x" * 500)
+    except Exception as exc:  # noqa: BLE001 the check is that nothing escapes
+        raised = exc
+    rep.check("faults_damaged_pending_ignored_and_add_never_raises", raised is None and len(damaged.pending) == 2
+              and all(len(k[2]) <= faults_mod.NAME_CHARS for k in damaged.pending), str(raised))
 
 
 def _check_voice(rep, gcfg, root):

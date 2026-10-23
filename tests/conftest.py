@@ -159,7 +159,7 @@ def install_world(db):
         else:
             db.db.create_collection(name,**({'validator':options['validator']} if options.get('validator') else {}))
             if indexes:
-                db.db[name].create_indexes([IndexModel(spec['key'],name=index,**{k:spec[k] for k in ('unique','partialFilterExpression') if k in spec})
+                db.db[name].create_indexes([IndexModel(spec['key'],name=index,**{k:spec[k] for k in ('unique','partialFilterExpression','expireAfterSeconds') if k in spec})
                                             for index,spec in indexes.items()])
         if documents:
             db.db[name].insert_many(copy.deepcopy(documents),ordered=True)

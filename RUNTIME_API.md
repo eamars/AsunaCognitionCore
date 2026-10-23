@@ -136,11 +136,12 @@ When any channel is configured, the worker serves the channel API on `127.0.0.1`
 | `POST /v1/channels/{channel_id}/outbox/{publication_id}/receipt` | [Record a platform receipt](#record-a-platform-receipt) | 256 KiB |
 | `POST /v1/channels/{channel_id}/members` | [Post a group's member list](#post-a-groups-member-list) | 4 MiB |
 | `POST /v1/channels/{channel_id}/media_keys` | [Post the current media-link keys](#post-the-current-media-link-keys) | 256 KiB |
+| `POST /v1/channels/{channel_id}/faults` | [Post the lanes' fault counts](#post-the-lanes-fault-counts) | 256 KiB |
 | `POST /v1/channels/{channel_id}/own_mute` | [Post her own mute in a group](#post-her-own-mute-in-a-group) | 256 KiB |
 | `POST /v1/channels/{channel_id}/voice` | [Post a voice](#post-a-voice) | 64 MiB of audio bytes |
 
 - Every request carries `Authorization: Bearer <token>`: the channel's token, or a [route key](#route-keys).
-- A POST body is one JSON object, except a voice's audio bytes on `voice`. Unknown fields are refused on `events`, `notices`, `own_mute`, `voice` and `receipt`; `members` and `media_keys` ignore them.
+- A POST body is one JSON object, except a voice's audio bytes on `voice`. Unknown fields are refused on `events`, `notices`, `own_mute`, `voice`, `faults` and `receipt`; `members` and `media_keys` ignore them.
 - A refusal is `{"error": "<CODE>"}`, often followed by `: ` and words for the reader; the status is in [HTTP outcomes](#http-outcomes).
 
 ### Channels and routes
@@ -449,6 +450,24 @@ What she reads of it is in `src/asuna/group_members.py` (`block`, `find`).
 | `MEDIA_KEYS_INVALID`, `MEDIA_KEY_NAME_DENIED`, `MEDIA_KEY_INVALID`, `MEDIA_KEY_SECONDS_INVALID` | 400 | out of shape |
 
 Keys live only in the worker's memory: never in the database, the audit or a log. A key within 30 seconds of its end is not used. A signed link in an inbound event also gives its key for 300 seconds (`media_keys.LINK_KEY_SECONDS`), unless the adapter's key of that name still lasts. Post the keys again after a restart.
+
+### Post the lanes' fault counts
+
+`POST /v1/channels/{channel_id}/faults` — how often each kind of fault happened in the adapter's lanes, by signature and hour; never the line or the item itself.
+
+```json
+{"counts": [{"lane": "inbound", "stage": "post", "error": "host_error:500", "hour": "2026-10-23T05", "count": 2}]}
+```
+
+| Field | Meaning |
+|---|---|
+| `lane` | `inbound`, `chat`, `bulk` or `receipts` |
+| `stage` | where in the lane (`post`, `spool`, `send`, `replay`) |
+| `error` | the class of the fault (a reason, a status and an error code, an exception's class), never words |
+| `hour` | the UTC hour it happened in, `YYYY-MM-DDTHH`, within the last 30 days |
+| `count` | 1–100000 |
+
+`lane`, `stage` and `error` are names: 1–80 characters of `A–Z a–z 0–9 _ . : -`. At most 200 rows a post, counted all together or not at all. The answer is `{"status": "recorded", "rows": n}`; the counts are added to what the hour already has (`src/asuna/lane_faults.py`), and an hour's counts are kept 30 days. Counts are at least once: a post re-sent after its answer was lost counts again in the same hour.
 
 ### Post her own mute in a group
 

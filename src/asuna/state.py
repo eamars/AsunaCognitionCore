@@ -42,7 +42,9 @@ COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memo
                # Her running records, one row per entry, each change kept beside its entry (documents.JOURNALS).
                'journal_entries','journal_revisions',
                # Her questions, each to one or more places, with what came back (questions.py, ADR-061).
-               'questions')
+               'questions',
+               # Faults of the channel lanes, by signature and hour (lane_faults.py, ADR-095).
+               'lane_faults')
 # Append-only ledgers (ADR-009 §6): written by insert only, through affect.AffectLedger.
 INSERT_ONLY = ('audit_events','affect_events','affect_amendments','affect_proposals')
 
@@ -118,6 +120,7 @@ class Store:
         for name in COLLECTIONS:
             if name not in existing:
                 self.db.create_collection(name, validator={'$jsonSchema':{'bsonType':'object','required':['_id','schema_version'],'properties':{'schema_version':{'enum':[1]}}}})
+        from . import lane_faults
         specs = {
             'identities': [([('platform',1),('account_id',1)], {'unique':True})],
             'messages': [([('adapter_id',1),('scene_id',1),('platform_event_id',1)], {'unique':True,'partialFilterExpression':{'platform_event_id':{'$type':'string'}}}),
@@ -159,6 +162,9 @@ class Store:
             'host_stops': [([('how',1),('back_at',-1)],{})],
             'switches': [([('state',1),('kind',1),('until',1)],{}), ([('persona',1),('state',1)],{})],
             'own_mutes': [([('muted',1)],{})],
+            # a fault count leaves after lane_faults.KEEP_DAYS days of its hour (ADR-095)
+            'lane_faults': [([('channel_id',1),('hour',1)],{}), ([('lane',1),('stage',1),('error',1),('hour',1)],{}),
+                            ([('hour_at',1)],{'expireAfterSeconds': lane_faults.KEEP_DAYS * 86400})],
             'journal_entries': [([('persona',1),('slug',1),('seq',1)],{'unique':True}),
                                 ([('persona',1),('slug',1),('sid',1)],{'unique':True}), ([('last_mutation',1)],{})],
             'journal_revisions': [([('mutation_id',1)],{'unique':True}), ([('persona',1),('slug',1),('created_at',-1)],{}),

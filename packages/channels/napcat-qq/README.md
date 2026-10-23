@@ -86,6 +86,11 @@ with Core (`registerChannel`).
   and `qq-private` (appid 1406) with the seconds each still lasts. Core signs a stored link again with them before
   fetching it. The keys are never logged or written to disk; the log says which names were posted, for how long,
   and which action answered.
+- Each lane fault — a line set aside (`inbound_failed`, `inbound_rejected`, unreadable), a receipt refused or given
+  up, an exception in a send — is counted by signature (lane, stage, error class; never the line) and hour, kept in
+  `faults_pending.json` until Core takes it, and posted to Core's `faults` endpoint every 5 minutes (a minute after a
+  failed post). An error is counted by its code alone, never its words. A batch Core refuses as it is goes to
+  `journal/faults_rejected.jsonl` and is dropped, so it never holds the counts after it.
 - Her own role in each group (asked with `get_group_member_info` for the logged-in account, cached ten minutes)
   rides on group events as `raw.asuna_self`. Admin actions the host queues (mute, unmute, kick, recall) become
   `set_group_ban`, `set_group_kick` and `delete_msg`, and nothing else; the platform's retcode is the receipt.

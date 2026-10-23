@@ -327,6 +327,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures and files
 - [`outbound_files`](../../src/asuna/outbound_files.py) — Files she sends to a group through the outbox (ADR-092): registered from a task's folder, offered to her turn, sent as speak's `file` part, read by the adapter in pieces, their bytes kept 7 days after they were last sent.
 - [`animated`](../../src/asuna/animated.py) — Animated pictures as something a still-image model can see: one labelled contact sheet plus words.
 - [`voice`](../../src/asuna/voice.py) — Voice messages arrive as text (ADR-093): a channel adapter fetches each voice of a message before it submits the line and posts the audio to `POST /v1/channels/<id>/voice`; the program turns it into text on this machine within that request 
+- [`lane_faults`](../../src/asuna/lane_faults.py) — Faults of the channel lanes, counted by signature and hour (ADR-095 §5.6, step 1).
 
 ### [Work and tools](work.md)
 
@@ -419,6 +420,7 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 - [`napcat-qq/integration/qqadapter/catchup.py`](../../packages/channels/napcat-qq/integration/qqadapter/catchup.py) — Catch-up after a gap: the messages she missed while this adapter or its event socket was down.
 - [`napcat-qq/integration/qqadapter/config.py`](../../packages/channels/napcat-qq/integration/qqadapter/config.py) — Load and validate /integration/config.json.
 - [`napcat-qq/integration/qqadapter/faces.py`](../../packages/channels/napcat-qq/integration/qqadapter/faces.py) — QQ's own faces (小黄脸): id <-> name, from faces.json next to this file.
+- [`napcat-qq/integration/qqadapter/faults.py`](../../packages/channels/napcat-qq/integration/qqadapter/faults.py) — This adapter's lane faults, counted by signature and hour and posted to the host (ADR-095 §5.6, step 1).
 - [`napcat-qq/integration/qqadapter/fixtures.py`](../../packages/channels/napcat-qq/integration/qqadapter/fixtures.py) — Built-in placeholder fixtures for the offline self checks.
 - [`napcat-qq/integration/qqadapter/forward.py`](../../packages/channels/napcat-qq/integration/qqadapter/forward.py) — Merged forwards (合并转发): the messages a forward carried, brought to the host as raw.asuna_forward.
 - [`napcat-qq/integration/qqadapter/hostapi.py`](../../packages/channels/napcat-qq/integration/qqadapter/hostapi.py) — HTTP client for the runtime host channel API (stdlib only).

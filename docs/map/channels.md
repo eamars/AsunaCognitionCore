@@ -28,6 +28,7 @@ Authenticated transport-neutral adapter seam. Platform protocol belongs to the a
   - `scope_check` — A route key posts as its own route, claims and confirms its own line's words, and nothing else.
   - `members`
   - `media_keys`
+  - `faults` — The adapter's lane faults, counted by signature and hour (lane_faults.py, ADR-095).
   - `notices`
   - `voice` — One voice of a line about to be posted, transcribed now; its outcome waits for the line (voice.py).
   - `own_mute`
@@ -350,3 +351,13 @@ Voice messages arrive as text (ADR-093): a channel adapter fetches each voice of
 - def `fields` — The query of one voice post, checked before its body is read: the line's event exactly as the adapter will post it to `events` (route_id, event_id, occurred_at when the event has one) and the segment's index.
 - def `receive` — One voice of a line about to be posted, as its bytes: transcribed now, its outcome kept for the line and answered.
 - def `entries_for` — A channel line's voices as it is stored (`event.voice`), looked up by the event's own route_id, event_id and occurred_at: for each voice segment, the outcome posted for it, else the adapter's reason for not having one, else, when the channe
+
+## `lane_faults`
+
+[src/asuna/lane_faults.py](../../src/asuna/lane_faults.py)
+
+Faults of the channel lanes, counted by signature and hour (ADR-095 §5.6, step 1).
+
+- def `hour_of` — The UTC hour a fault is counted in, as `YYYY-MM-DDTHH`.
+- def `receive` — An adapter's counts: {'counts': [{'lane', 'stage', 'error', 'hour', 'count'}]}, at most MAX_ROWS rows; all of them or none are counted.
+- def `record` — Count `count` faults of one signature in its hour (the current one unless `moment` is given).

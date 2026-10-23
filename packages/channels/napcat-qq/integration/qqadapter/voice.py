@@ -9,9 +9,10 @@ host call failed -- the reason goes on that voice's media item (`voice_refused`)
 posted either way, after its voices, so lines keep their order. Only metadata reaches the log.
 
 Each conversation's lines go from a lane of their own, one at a time (service.py, ADR-095), so a voice holds up its
-line and the lines behind it in that conversation only: at most FETCH_TIMEOUT + POST_TIMEOUT (40 s) per voice, which is
-the bound per line for QQ, whose voice message carries one voice; a few seconds in the usual case (NapCat's conversion,
-then 0.1-1.5 s of transcription).
+line and the lines behind it in that conversation only: at most FETCH_TIMEOUT + POST_TIMEOUT per voice, which is the
+bound per line for QQ, whose voice message carries one voice; a few seconds in the usual case (NapCat's conversion,
+then 0.1-1.5 s of transcription). POST_TIMEOUT is longer than the host's budget for one voice (180 s: waiting behind
+other voices, a start, two tries of at most 90 s), so a retry there never reads as a host that is away.
 """
 import base64
 
@@ -22,7 +23,7 @@ REFUSED_KEY = "voice_refused"
 OUT_FORMAT = "mp3"
 CONTENT_TYPE = "audio/mpeg"
 FETCH_TIMEOUT = 10.0          # NapCat converts the voice before it answers
-POST_TIMEOUT = 30.0           # the host transcribes within the request: a minute of speech is about 1.5 s
+POST_TIMEOUT = 200.0          # the host transcribes within the request, within its 180 s budget for one voice
 MAX_FILE = 300                # the segment's file reference, as NapCat gave it
 
 

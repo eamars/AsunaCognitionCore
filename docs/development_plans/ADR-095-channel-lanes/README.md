@@ -119,7 +119,8 @@ be considered."
   started at once (warm for the next job), and that job is tried once more. The adapter's wait for a voice answer is
   longer than two deadlines, so a retry never looks like a Host that is away.
 - **No process outlives the Host**: on Windows each child sits in a job object that kills it when the Host goes; on
-  Linux it gets a parent-death signal. A child that has been killed is always waited for, so none is left over.
+  every system the child exits when its input closes or the Host's pid is gone, even in the middle of a job. A child
+  that has been killed is always waited for, so none is left over.
 - **Stage times** of each job (queued, started, decoded, done) go into its evidence record (`voice.settled` and the
   video's), so a slow job shows where it was slow (two 3-second voices took 65 s right after a start, 2026-10-23,
   cause not on record).
@@ -130,7 +131,7 @@ be considered."
 |---|---|---|---|---|
 | The setting is off | the owner's choice | voice: 「没转出文字：语音转写关着」; video: decoding is off | no | nothing |
 | A package or model file is missing or not its pin, found at start | this machine's setup, not the job | voice: 「没转出文字：这台机器上的语音识别没装好」; video: the same for video | no | one Host log line and the Host's status, at start; not a fault per job |
-| The child will not start (it exits or fails at load) | setup or the machine, not the job | as missing, with "没能启动" | the start: again at the next job, at most once a minute | one fault (lane `voice`/`video`, stage `start`) |
+| The child will not start (it exits or fails at load) | setup or the machine, not the job | as missing, with "没能启动" | the start: again at the next job, at most once a minute | one fault (lane `transcriber`/`video`, stage `start`) |
 | The job runs past its deadline | the child or the machine | after the retry: 「没转出文字：识别超时了」 / video decoding timed out | once, in a fresh child | one fault per kill (stage `decode`, error `deadline`) |
 | The child dies or answers garbage mid-job | the child | after the retry: 「没转出文字：识别程序出错了」 / the same for video | once, in a fresh child | one fault per death (error `exited` or `protocol`) |
 | The bytes are not audio or video it can read (unknown container, empty, a decode error) | this job's own content | the reason, as today | no (it would fail the same) | nothing: an outcome, like a platform's `failed` |
@@ -271,7 +272,31 @@ line is in the adapter's journal meanwhile, so nothing waits on step 1).
    count now); all fixed with a check each. NapCat's one write lock (a 4 MiB file piece under it) stays: a shared
    dependency, waited on.
 4. The media children (§5.3.1), with test 9: the shared supervisor, the voice and video children, the two plugin
-   settings, the failure states and their words, the adapter's longer wait for a voice answer.
+   settings, the failure states and their words, the adapter's longer wait for a voice answer. **Built** (2026-10-24):
+   `src/asuna/media_children.py` (`Child`: started on the base interpreter with `-P` and only the package root and
+   site-packages on its path, frames on stdin/stdout, one job at a time; each call has a budget from when it was asked
+   (`VOICE_BUDGET` 180 s, `VIDEO_BUDGET` 240 s) for the wait behind its kind, a start and the tries, each try ending at
+   `VOICE_DEADLINE` 90 s / `VIDEO_DEADLINE` 120 s or the budget, the write included; a timeout or death killed, reaped
+   and tried once more in a fresh child; a failed start tried again after `RESTART_WAIT` 60 s; `close` ends a hung
+   job at once; a Windows job object; `video_snapshot`, `start_video` in the background), `src/asuna/media_worker.py`
+   (the child: voice loads `SenseVoice` and does decode and transcription, video `animated.video_snapshot`; a program
+   error answered apart from a content error, with its trace's tail; exits when the Host's pid is gone), `voice.Transcriber` (off, not set up, or the warm child; the
+   state `not_transcribed` for the machine's own state; stage times in `voice.settled`), `vision.py` (the video goes
+   through `media_children.video_snapshot`), plugin settings `voiceToText` and `videoDecoding` (`index.js`, passed in
+   `initialize` as `media`), lane `video` in `lane_faults` (the Host counts a child's faults in a thread of its own, as
+   channel `host`), adapter 0.15.1 (`POST_TIMEOUT` 200 s, above the 180 s budget). Tests: `tests/test_media_children.py`
+   (real child processes: deadline, one retry, deaths, garbage, a program error, a child that stops reading, start
+   failures and their wait, the budget behind a hung job, proof test 9 (one kind hung, the other answers), close
+   during a hung job, a child started from a thread that ends, a Host killed hard in the middle of a job takes its
+   child, the real video child), `tests/test_voice.py` (every state's words, off, not set up, the child's failures). Measured with
+   the real model: the child is ready 1.2–2.0 s after start, a 2-second voice 0.2–0.3 s. Review (2026-10-24), fixed: a
+   Linux parent-death signal set from the starting thread would have killed the child when that thread ended (now the
+   worker watches the Host's pid); the queue behind a hung voice had no bound (now the budget); the video child
+   started in the Host's start (now in the background); `close` waited for a hung job; the write had no deadline; a
+   program error in the child read as the voice's content; no Host log line when video is not set up. Found by the
+   full test run: a Host `sys.path` holding the package folder put `asuna/queue.py` in front of the standard library's
+   `queue` in the child (now `-P` and only site-packages). Not built: stage times of a video (no evidence record
+   there), a size-based deadline (fixed deadlines first).
 5. The watchdog and visible state.
 6. The digest in her night stage, with test 10 — talked through with her before it reaches her.
 

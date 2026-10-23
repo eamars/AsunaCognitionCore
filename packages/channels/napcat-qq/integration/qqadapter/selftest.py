@@ -2803,7 +2803,7 @@ def _check_voice(rep, gcfg, root):
     rep.check("voice_bytes_posted_for_that_line", voice_call.get("data") == audio
               and voice_call.get("event_id") == env.get("event_id") and voice_call.get("route_id") == env.get("route_id")
               and voice_call.get("index") == 0 and voice_call.get("content_type") == "audio/mpeg"
-              and voice_call.get("occurred_at") == env.get("occurred_at") and voice_call.get("timeout") == 30.0,
+              and voice_call.get("occurred_at") == env.get("occurred_at") and voice_call.get("timeout") == voice_mod.POST_TIMEOUT,
               json.dumps({k: v for k, v in voice_call.items() if k != "data"}))
     posted = host.calls[-1]["envelope"] if host.calls else {}
     rep.check("voice_settled_line_carries_no_refusal", _voice_refused(posted) is None, "")

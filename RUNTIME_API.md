@@ -45,6 +45,8 @@ The core plugin's settings in the DSH profile (`packages/cognition-core/src/inde
 | `persona` | — | the persona package that runs (its `id`) |
 | `python` | — | the Python that runs the worker |
 | `mountSchedule` | `true` | `false`: without DSH's Schedule service her plans and rhythms are off; otherwise the worker waits for that service ([Schedules](#schedules)) |
+| `voiceToText` | `true` | `false`: nothing is loaded and every voice reads `没转出文字：语音转写关着` ([Voice messages](#voice-messages)) |
+| `videoDecoding` | `true` | `false`: nothing is loaded and `read_image` of a video says decoding is off ([Reading images](#reading-images)) |
 | `channelAdmission` | `explicit` | `explicit` or `automatic` ([Admission](#admission)) |
 | `deployment` | — | the worker's settings ([Deployment settings](#deployment-settings)) |
 | `routes` | — | each brain's model ([Model routes](#model-routes)) |
@@ -764,13 +766,19 @@ does not declare `voice_in` keeps its placeholder.
 - **Recognized, then normalized.** The container is told by its first bytes (RIFF/WAVE, ID3 or an MPEG audio frame
   header); anything else is refused before any field is read. av decodes it and resamples it to 16 kHz mono PCM16,
   whatever rate and depth came.
-- **Transcribed.** One voice at a time: SenseVoice int8 with Silero voice detection (speech and silence each at least
-  0.25 s, a piece at most 20 s) through sherpa-onnx, language detected, 4 threads. The model is loaded when a voice
-  comes and released after 10 idle minutes. There is no length limit.
+- **Transcribed in a child process.** With `voiceToText` on, a child process of its own (`media_children.py`,
+  `media_worker.py`) starts with the worker, loads the model (about 310 MB) and keeps it, and takes one voice at a
+  time: av decodes it and SenseVoice int8 with Silero voice detection (speech and silence each at least 0.25 s, a
+  piece at most 20 s) through sherpa-onnx transcribes it, language detected, 4 threads. A voice has 180 s in all,
+  waiting behind other voices included; a try past 90 s is killed and the voice tried once more in a fresh child; a
+  second timeout or crash, or the 180 s spent, fails the voice. Each kill, death, failed
+  start or program error in the child is a lane fault (`lane_faults`, lane `transcriber`); a voice the child was
+  working on when the worker stops is answered `503 HOST_STOPPING`, so the adapter posts it again. No child outlives the worker. There is no length limit.
 - **The model files** are `<data>/models/sensevoice-2024-07-17/` `model.int8.onnx`, `tokens.txt` and `silero_vad.onnx`,
-  checked against their sizes and sha256 (`voice.MODEL_FILES`) once when the worker starts (evidence
-  `voice.model_checked`). A missing or different file is one line in the Host log, `ASUNA_VOICE_MODEL_UNAVAILABLE`,
-  and every voice then reads `没转出文字：识别模型不在`.
+  checked against their sizes and sha256 (`voice.MODEL_FILES`), with the packages (numpy, sherpa_onnx, av), once
+  when the worker starts (evidence `voice.model_checked`). A missing or different file or package is one line in the
+  Host log, `ASUNA_VOICE_MODEL_UNAVAILABLE`, no child is started, and every voice then reads
+  `没转出文字：这台机器上的语音识别没装好`.
 - **What her line shows.** The line is stored with each voice's words in its place (`voice.read_text`), so every
   reader shows the same words; the text as it came is kept in `event.received_text`, and a line posted again is the
   same line when that text is the same:
@@ -780,7 +788,8 @@ does not declare `voice_in` keeps its placeholder.
 | `transcribed` | `[语音 33 秒] 文字……`; a piece labelled other than speech is named: `[语音 20 秒，听着像背景音乐] ……` |
 | `no_voice` (the detector found no speech) | `[语音 5 秒，里面没有人声]` |
 | `no_words` (speech, but no letter or digit in the text) | `[语音 12 秒，有人在说话，但听不出说的什么]` |
-| `failed` | `[语音 33 秒，没转出文字：原因]`, e.g. `识别模型不在`, bytes that are not WAV or MP3, or `交给本机识别时出了错` (the adapter's `voice_refused` `host`) |
+| `failed` | `[语音 33 秒，没转出文字：原因]`: bytes that are not WAV or MP3 or do not decode, `识别超时了` (two tries past 90 s, or the voice's 180 s spent, waiting behind other voices included), `识别程序出错了` (the child died twice) or `识别程序出错（类名）` (the child's own code failed), or `交给本机识别时出了错` (the adapter's `voice_refused` `host`) |
+| `not_transcribed` (the machine, not the voice) | `[语音，没转出文字：原因]`: `语音转写关着`, `这台机器上的语音识别没装好`, or `这台机器上的语音识别没能启动` (the child would not start; tried again at most once a minute) |
 | `not_fetched` | `[语音，没拿到：原因]`, from the adapter's other `voice_refused` reasons, or `这段语音没随消息一起送来` on a `voice_in` channel whose line came with neither an outcome nor a reason |
 
 ### Reading images
@@ -795,7 +804,7 @@ does not declare `voice_in` keeps its placeholder.
 | `image_dirs` | none | local folders a bare file name is read from |
 | `allow_insecure_http` | `false` | allow `http` links |
 
-- Bytes are accepted as PNG, JPEG, WebP or GIF by file signature. A video (at most 32 MB, `VIDEO_MAX_MB`) is read as a contact sheet and not kept; an animated picture is read as a contact sheet too (`src/asuna/animated.py`).
+- Bytes are accepted as PNG, JPEG, WebP or GIF by file signature. A video (at most 32 MB, `VIDEO_MAX_MB`) is read as a contact sheet and not kept, cut in a child process of its own that starts with the worker and stays loaded while `videoDecoding` is on (`media_children.video_snapshot`): a video has 240 s in all, a try past 120 s is killed and the video tried once more in a fresh child, and a second timeout, a crash or a program error in the child (`拆视频的程序出错了`), the decoder not installed (`ASUNA_VIDEO_DECODER_UNAVAILABLE` in the Host log at start), or the setting off each says so in its own words; an animated picture is read as a contact sheet too, in the worker (`src/asuna/animated.py`).
 - A link its platform signs is signed again with the current [media key](#post-the-current-media-link-keys) before the fetch.
 - Pulled bytes are stored in the scoped blob store; how long each kind of stored picture lives is `src/asuna/media_life.py` (`POLICY`).
 

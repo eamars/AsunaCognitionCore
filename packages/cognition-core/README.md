@@ -17,6 +17,8 @@ bytecode or Node dependencies are distributed.
   independent native provider/model routes: `routes.character`, `routes.action`, and the optional `routes.actionHigh`
   and `routes.appraiser`. Core uses the Host's Schedule service for her plans; on a Host without one,
   `mountSchedule: false` (default `true`) turns plans off, and otherwise Core waits up to 60 s for the service.
+  `voiceToText` and `videoDecoding` (both default `true`) turn voice transcription and video contact sheets off; on,
+  each runs in a child process of its own that stays loaded.
 - **`asuna-publication-floor`:** the authorized writable source projects, Python path and recovery route.
 - **Data folder:** everything Asuna writes for a profile goes to the floor's `dataRoot`, by default
   `$DSH_HOME/asuna/<profile>/`. The installed package is never written.

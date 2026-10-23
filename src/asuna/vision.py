@@ -21,7 +21,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-from . import animated, channel_kinds, visibility
+from . import animated, channel_kinds, media_children, visibility
 from .evidence import canonical, sha
 from .scene_links import message_times, read_scope
 from .state import Denied
@@ -625,7 +625,7 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
     video = None
     if entry['type'] == 'video':
         # The video becomes its contact sheet now and its bytes are dropped: only the sheet is stored (media_life).
-        sheet, words = animated.video_snapshot(data)
+        sheet, words = media_children.video_snapshot(data)       # in the video child while the Host runs
         if sheet is None:
             raise ValueError(words['error'] + '；' + GIVE_UP)
         video = {'media_type': media_type, 'bytes': len(data), 'sha256': sha(data)}

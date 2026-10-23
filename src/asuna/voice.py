@@ -7,10 +7,14 @@ request and answers with the outcome; the line, posted after, is stored with its
   byte of audio is read. The container is recognized by its first bytes (RIFF/WAVE, ID3 or an MPEG audio frame header)
   before anything else is read. The audio is never stored: it lives in memory for the request, and the outcome keeps
   its sha256, size, first 44 bytes and media type. The outcome waits in memory for its line (KEEP_SECONDS).
-- `Transcriber` decodes with av, resamples to 16 kHz mono PCM16 and hands the model float samples: SenseVoice int8 with
-  Silero voice detection through sherpa-onnx, one voice at a time, loaded when a voice comes and released after
-  IDLE_SECONDS without one. The model files are checked against their pins (MODEL_FILES) once at the Host's start;
-  missing or different, that is said in one Host log line, and every voice reads 「没转出文字：识别模型不在」.
+- `Transcriber` is the Host's voice side (ADR-095 §5.3.1). With the profile's `voiceToText` off nothing is loaded and
+  every voice reads 「没转出文字：语音转写关着」. On, the model files are checked against their pins (MODEL_FILES) and the
+  packages looked for once at the Host's start; missing or different, that is said in one Host log line and every voice
+  reads 「没转出文字：这台机器上的语音识别没装好」 (`not_transcribed`: the machine, not the voice). Set up, a warm child
+  process (media_children.Child, media_worker.py) holds the model and takes one voice at a time: av decodes and
+  resamples to 16 kHz mono PCM16, SenseVoice int8 with Silero voice detection through sherpa-onnx transcribes. Past
+  VOICE_DEADLINE the child is killed and the voice tried once more in a fresh one; a second timeout or crash is the
+  voice's failure, in its own words.
 - `entries_for` gives a line its voices when the channel event arrives (channels.py), looked up by the same fields of
   the event: the outcome posted for each segment, else the adapter's reason for not having one (`REFUSED_KEY` on the
   segment's media item, which keeps the adapter's own answer for the record), else, on a channel that declares
@@ -38,7 +42,8 @@ PLACEHOLDER = '[语音（未解析）]'        # what the adapter writes in the 
 REFUSED_KEY = 'voice_refused'         # on a voice's media item: why the adapter did not get its outcome
 
 TRANSCRIBED, NO_VOICE, NO_WORDS, FAILED, NOT_FETCHED = 'transcribed', 'no_voice', 'no_words', 'failed', 'not_fetched'
-STATES = (TRANSCRIBED, NO_VOICE, NO_WORDS, FAILED, NOT_FETCHED)
+NOT_TRANSCRIBED = 'not_transcribed'   # the machine could not: voice to text is off, not set up, or would not start
+STATES = (TRANSCRIBED, NO_VOICE, NO_WORDS, FAILED, NOT_FETCHED, NOT_TRANSCRIBED)
 # One entry per voice of a line, in its event (`event.voice`); nothing else of the audio is kept:
 ENTRY_FIELDS = {
     'index': 'its place among the line\'s voices (0 first)', 'state': 'one of STATES',
@@ -50,7 +55,6 @@ ENTRY_FIELDS = {
     'arrived_at': 'when the bytes came', 'finished_at': 'when its outcome was settled',
 }
 
-IDLE_SECONDS = 600                    # the model is released after this long with no voice
 KEEP_SECONDS = 600                    # an outcome waits this long in memory for its line
 MAX_INDEX = 63                        # a message's voices, counted from 0
 HEAD_BYTES = 44
@@ -73,7 +77,11 @@ ENGINE = {'engine': 'sherpa-onnx 1.13.8', 'model': MODEL_ID + ' int8', 'language
           'rate': RATE, 'pcm': 's16 mono', 'vad': 'silero %(min_speech_duration)s/%(min_silence_duration)s/'
           '%(max_speech_duration)s s' % VAD}
 
-MODEL_MISSING = '识别模型不在'
+MODEL_MISSING = '这台机器上的语音识别没装好'
+VOICE_OFF = '语音转写关着'
+NOT_STARTED = '这台机器上的语音识别没能启动'
+TIMED_OUT = '识别超时了'
+CRASHED = '识别程序出错了'
 UNKNOWN_CONTAINER = '不是认得的音频格式（按开头的字节看不是 WAV 或 MP3）'
 # A label the model gives a piece of audio other than speech, as her line names it.
 EVENT_WORDS = {'BGM': '背景音乐', 'Laughter': '笑声', 'Applause': '掌声', 'Cry': '哭声', 'Sneeze': '打喷嚏',
@@ -270,7 +278,7 @@ class SenseVoice:
             elif _file_sha256(path) != digest:
                 problems.append('%s 内容和登记的不一样' % name)
         import importlib.util
-        for package in ('numpy', 'sherpa_onnx'):
+        for package in ('numpy', 'sherpa_onnx', 'av'):
             if importlib.util.find_spec(package) is None:
                 problems.append('识别程序包没装（%s）' % package)
         self.ok, self.problems = not problems, problems
@@ -328,16 +336,17 @@ class SenseVoice:
 
 
 class Transcriber:
-    """The Host's one transcriber: checks the model files once when it starts (a missing or different file is one
-    Host log line), transcribes one voice at a time, and releases the model after `idle_seconds` without a voice."""
+    """The Host's voice side: off, not set up, or a warm child that holds the model (the module docstring). The files
+    and packages are checked once when the Host starts, in the background; a voice waits for that check. `in_process`
+    runs the engine in this process instead of a child, and `child` hands in the child to use (tests and tools)."""
 
-    def __init__(self, evidence=None, engine=None, *, idle_seconds=IDLE_SECONDS):
+    def __init__(self, evidence=None, engine=None, *, enabled=True, fault=None, in_process=False, child=None):
         self.evidence = evidence
         self.engine = engine if engine is not None else SenseVoice()
-        self.idle_seconds = idle_seconds
+        self.enabled, self.fault, self.in_process = bool(enabled), fault, in_process
         self.lock = threading.Lock()
         self.checked = threading.Event()
-        self.idle = None
+        self.given = self.child = child
 
     def start(self):
         global TRANSCRIBER
@@ -349,10 +358,8 @@ class Transcriber:
         global TRANSCRIBER
         if TRANSCRIBER is self:
             TRANSCRIBER = None
-        with self.lock:
-            if self.idle is not None:
-                self.idle.cancel()
-            self.engine.release()
+        if self.child is not None:
+            self.child.close()
 
     def _record(self, kind, payload):
         if self.evidence is not None:
@@ -362,62 +369,88 @@ class Transcriber:
                 pass
 
     def _check(self):
+        if not self.enabled:
+            self._record('voice.off', {})
+            self.checked.set()
+            return
         try:
             checked = self.engine.check()
         except Exception as exc:            # noqa: BLE001 a check that cannot run leaves the model unusable, said so
             checked = {'ok': False, 'problems': ['检查出错（%s）' % type(exc).__name__]}
         if not checked['ok']:
-            # The one Host log line: every voice then reads 「没转出文字：识别模型不在」.
+            # The one Host log line: every voice then reads 「没转出文字：这台机器上的语音识别没装好」.
             print('ASUNA_VOICE_MODEL_UNAVAILABLE %s: %s; voices read 没转出文字：%s'
                   % (checked.get('directory') or model_dir(), '; '.join(checked['problems']), MODEL_MISSING),
                   file=sys.stderr, flush=True)
+        elif not self.in_process and self.given is None:
+            from .media_children import Child
+            self.child = Child('voice', [str(self.engine.directory)], fault=self.fault)
+            self.child.start()
         self._record('voice.model_checked', checked)
         self.checked.set()
 
-    def _idle(self):
-        with self.lock:
-            if self.engine.loaded():
-                self.engine.release()
-                self._record('voice.model_released', {'idle_seconds': self.idle_seconds})
+    def _run(self, data, container):
+        """(result, samples, stages) for one voice; VoiceError for its own content, media_children's errors for the
+        child's (JobError with `program` when the child's code failed)."""
+        if self.in_process:
+            samples = pcm16(data, container)
+            if not len(samples):
+                raise VoiceError('音频是空的')
+            with self.lock:
+                return self.engine.transcribe(samples.astype('float32') / 32768.0), len(samples), {}
+        from .media_children import JobError, StartFailed, VOICE_BUDGET, VOICE_DEADLINE
+        if self.child is None:
+            raise StartFailed('no child')
+        try:
+            answer, _ = self.child.call({'container': container}, data, VOICE_DEADLINE, VOICE_BUDGET)
+        except JobError as exc:
+            if exc.program:
+                raise
+            raise VoiceError(str(exc) or CRASHED) from exc
+        return answer['result'], int(answer['samples']), {**(answer.get('stages') or {}), **(answer.get('times') or {})}
 
     def transcribe(self, data, media_type=None):
-        """One voice's bytes -> its entry (ENTRY_FIELDS without `index`); never raises."""
+        """One voice's bytes -> its entry (ENTRY_FIELDS without `index`); raises only media_children.Closed, when the
+        Host stops while the voice is in its child."""
+        from . import media_children
         started = time.monotonic()
         entry = {'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data), 'head': data[:HEAD_BYTES].hex(),
                  'media_type': str(media_type or '')[:40], 'arrived_at': now()}
-        detail = {}
+        detail, stages = {}, {}
         container = sniff(data)
-        if container is None:
+        if not self.enabled:
+            entry.update(state=NOT_TRANSCRIBED, reason=VOICE_OFF)
+        elif container is None:
             entry.update(state=FAILED, reason=UNKNOWN_CONTAINER)
         else:
             self.checked.wait(120)
             if not self.engine.ready():
-                entry.update(state=FAILED, reason=MODEL_MISSING)
+                entry.update(state=NOT_TRANSCRIBED, reason=MODEL_MISSING)
             else:
                 try:
-                    samples = pcm16(data, container)
-                    if not len(samples):
-                        raise VoiceError('音频是空的')
-                    with self.lock:
-                        if self.idle is not None:
-                            self.idle.cancel()
-                        try:
-                            result = self.engine.transcribe(samples.astype('float32') / 32768.0)
-                        finally:
-                            self.idle = threading.Timer(self.idle_seconds, self._idle)
-                            self.idle.daemon = True
-                            self.idle.start()
-                    fields = outcome(len(samples) / RATE, result)
+                    result, samples, stages = self._run(data, container)
+                    fields = outcome(samples / RATE, result)
                     detail = {key: fields.pop(key) for key in ('speech_seconds', 'lang')}
                     entry.update(fields, model=MODEL_ID)
                 except VoiceError as exc:
                     entry.update(state=FAILED, reason=str(exc))
+                except media_children.Closed:
+                    raise                           # the Host stops: no outcome; `receive` answers that it is away
+                except media_children.StartFailed:
+                    entry.update(state=NOT_TRANSCRIBED, reason=NOT_STARTED)
+                except media_children.Timeout:
+                    entry.update(state=FAILED, reason=TIMED_OUT)
+                except media_children.Died:
+                    entry.update(state=FAILED, reason=CRASHED)
+                except media_children.JobError as exc:  # the child's own code failed: its words, its trace
+                    entry.update(state=FAILED, reason=str(exc) or CRASHED)
+                    self._record('voice.fault', {'traceback': exc.trace[-800:]})
                 except Exception as exc:    # noqa: BLE001 a program fault is this voice's failure, with its class
                     entry.update(state=FAILED, reason='识别程序出错（%s）' % type(exc).__name__)
                     self._record('voice.fault', {'traceback': traceback.format_exc()[-800:]})
         entry['finished_at'] = now()
         self._record('voice.settled', {'state': entry['state'], 'seconds': entry.get('seconds'),
-                                       'chars': len(entry.get('text') or ''), **detail,
+                                       'chars': len(entry.get('text') or ''), **detail, 'stages': stages,
                                        'engine': dict(getattr(self.engine, 'engine', ENGINE)),
                                        'took_seconds': round(time.monotonic() - started, 2)})
         return entry
@@ -480,7 +513,11 @@ def receive(channel_id, query, data, media_type=None, transcriber=None):
     transcriber = transcriber or TRANSCRIBER
     if transcriber is None:
         raise RuntimeError('VOICE_TRANSCRIBER_NOT_RUNNING')
-    entry = transcriber.transcribe(data, media_type)
+    from .media_children import Closed
+    try:
+        entry = transcriber.transcribe(data, media_type)
+    except Closed:
+        raise RuntimeError('HOST_STOPPING') from None     # a whole-Host state (503): the adapter posts the voice again
     _keep(key, entry)
     return {'status': 'settled', 'state': entry['state'], **({'seconds': entry['seconds']} if 'seconds' in entry else {})}
 

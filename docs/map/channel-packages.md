@@ -239,6 +239,16 @@ Disk-backed spool, journals and counters.
   - `acquire_lock` — Refuse to run twice against the same data dir.
   - `release_lock` — Unlock and close.
 
+## `napcat-qq/integration/qqadapter/mdflat.py`
+
+[packages/channels/napcat-qq/integration/qqadapter/mdflat.py](../../packages/channels/napcat-qq/integration/qqadapter/mdflat.py)
+
+Flatten a QQ `markdown` message element into the plain text a reader wants (0.15.0).
+
+- def `flatten` — Markdown string -> plain text.
+- def `norm` — Letters, digits and CJK only (case-folded): the comparison key for 'is this the same words'.
+- def `covers` — True when a `text` segment is already inside the markdown rendering (so it is dropped).
+
 ## `napcat-qq/integration/qqadapter/media_keys.py`
 
 [packages/channels/napcat-qq/integration/qqadapter/media_keys.py](../../packages/channels/napcat-qq/integration/qqadapter/media_keys.py)

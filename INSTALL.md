@@ -122,7 +122,8 @@ Then restart the profile: the worker checks the files once when it starts.
 
 Check: the worker's log has no `ASUNA_VOICE_MODEL_UNAVAILABLE` line (that line names the file that is missing or
 different), and a voice message on the platform reads as its words. Without the files every voice reads
-`[语音，没转出文字：识别模型不在]`.
+`[语音，没转出文字：这台机器上的语音识别没装好]`. Voice to text keeps the model loaded in a child process (about
+310 MB); the core plugin's `voiceToText: false` turns it off.
 
 ## 6. Optional: the private list
 

@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 from pymongo import UpdateOne
 
-LANES = ('inbound', 'chat', 'bulk', 'receipts', 'transcriber', 'watchdog')
+LANES = ('inbound', 'chat', 'bulk', 'receipts', 'transcriber', 'video', 'watchdog')
 CLASS_CHARS = re.compile(r'[A-Za-z0-9_.:-]{1,80}')
 MAX_ROWS = 200
 MAX_COUNT = 100000

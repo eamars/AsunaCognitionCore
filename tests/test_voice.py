@@ -93,7 +93,7 @@ class FakeEngine:
 
 
 def transcriber(engine=None, **kwargs):
-    made = voice.Transcriber(None, engine or FakeEngine(), **kwargs).start()
+    made = voice.Transcriber(None, engine or FakeEngine(), in_process=True, **kwargs).start()
     assert made.checked.wait(5)
     return made
 
@@ -158,15 +158,17 @@ def test_every_state_has_its_own_words_and_none_is_empty():
         voice.TRANSCRIBED: voice.words({'state': 'transcribed', 'seconds': 33.4, 'text': '今天 下雨'}),
         voice.NO_VOICE: voice.words({'state': 'no_voice', 'seconds': 5}),
         voice.NO_WORDS: voice.words({'state': 'no_words', 'seconds': 12}),
-        voice.FAILED: voice.words({'state': 'failed', 'seconds': 33, 'reason': voice.MODEL_MISSING}),
+        voice.FAILED: voice.words({'state': 'failed', 'seconds': 33, 'reason': voice.TIMED_OUT}),
         voice.NOT_FETCHED: voice.words({'state': 'not_fetched', 'reason': '平台上已经没有这条语音了'}),
+        voice.NOT_TRANSCRIBED: voice.words({'state': 'not_transcribed', 'reason': voice.VOICE_OFF}),
     }
     assert said == {
         'transcribed': '[语音 33 秒] 今天 下雨',
         'no_voice': '[语音 5 秒，里面没有人声]',
         'no_words': '[语音 12 秒，有人在说话，但听不出说的什么]',
-        'failed': '[语音 33 秒，没转出文字：识别模型不在]',
-        'not_fetched': '[语音，没拿到：平台上已经没有这条语音了]'}
+        'failed': '[语音 33 秒，没转出文字：识别超时了]',
+        'not_fetched': '[语音，没拿到：平台上已经没有这条语音了]',
+        'not_transcribed': '[语音，没转出文字：语音转写关着]'}
     assert all(voice.words({'state': state}) for state in (*voice.STATES, None))
     assert not any('正在转写' in text for text in said.values())
 
@@ -224,19 +226,57 @@ def test_model_files_missing_or_different_are_named_once_in_the_host_log_and_in_
     log = capfd.readouterr().err
     assert log.count('ASUNA_VOICE_MODEL_UNAVAILABLE') == 1 and 'model.int8.onnx 不在' in log
     for _ in range(2):
-        assert voice.words(lost.transcribe(wav(seconds=2.0), 'audio/wav')) == '[语音，没转出文字：识别模型不在]'
+        entry = lost.transcribe(wav(seconds=2.0), 'audio/wav')
+        # The machine's setup, not this voice: its own state, never a failure.
+        assert entry['state'] == voice.NOT_TRANSCRIBED
+        assert voice.words(entry) == '[语音，没转出文字：这台机器上的语音识别没装好]'
     assert 'ASUNA_VOICE_MODEL_UNAVAILABLE' not in capfd.readouterr().err, 'one line, at start'
 
 
-def test_the_model_gives_way_when_idle():
+def test_voice_to_text_off_loads_nothing_and_says_so():
     engine = FakeEngine()
-    worker = transcriber(engine, idle_seconds=0.2)
-    worker.transcribe(wav(), 'audio/wav')
-    assert engine.is_loaded
-    deadline = time.monotonic() + 5
-    while engine.is_loaded and time.monotonic() < deadline:
-        time.sleep(0.05)
-    assert engine.released >= 1 and not engine.is_loaded
+    off = transcriber(engine, enabled=False)
+    entry = off.transcribe(wav(), 'audio/wav')
+    assert entry['state'] == voice.NOT_TRANSCRIBED and voice.words(entry) == '[语音，没转出文字：语音转写关着]'
+    assert engine.calls == [] and off.child is None
+
+
+class FakeChild:
+    """SUBSTITUTE for media_children.Child: raises or answers what it is given, records each call."""
+
+    def __init__(self, *outcomes):
+        self.outcomes, self.calls = list(outcomes), []
+
+    def call(self, header, payload=b'', deadline=60, budget=None):
+        self.calls.append((header, len(payload), deadline, budget))
+        made = self.outcomes.pop(0)
+        if isinstance(made, Exception):
+            raise made
+        return made, b''
+
+    def close(self):
+        pass
+
+
+def test_the_childs_failures_have_their_own_words_and_states():
+    from asuna import media_children
+    answer = {'ok': True, 'samples': 32000, 'result': {'speech_seconds': 1.0, 'pieces': [{'text': '你好'}]},
+              'stages': {'decode_s': 0.01, 'transcribe_s': 0.2}, 'times': {'waited_s': 0.0, 'started_s': 0.0, 'tries': 1}}
+    cases = [(media_children.Timeout(), voice.FAILED, '[语音，没转出文字：识别超时了]'),
+             (media_children.Died('exited'), voice.FAILED, '[语音，没转出文字：识别程序出错了]'),
+             (media_children.StartFailed('x'), voice.NOT_TRANSCRIBED, '[语音，没转出文字：这台机器上的语音识别没能启动]'),
+             (media_children.JobError('音频解不开（x）'), voice.FAILED, '[语音，没转出文字：音频解不开（x）]'),
+             (media_children.JobError('识别程序出错（KeyError）', program=True, trace='Traceback'), voice.FAILED,
+              '[语音，没转出文字：识别程序出错（KeyError）]'),
+             (answer, voice.TRANSCRIBED, '[语音 2 秒] 你好')]
+    for made, state, said in cases:
+        worker = voice.Transcriber(None, FakeEngine(), child=FakeChild(made)).start()
+        assert worker.checked.wait(5)
+        entry = worker.transcribe(wav(seconds=2.0), 'audio/wav')
+        assert (entry['state'], voice.words(entry)) == (state, said), made
+        assert worker.child.calls[0][0] == {'container': 'audio/wav'}
+        assert worker.child.calls[0][2:] == (media_children.VOICE_DEADLINE, media_children.VOICE_BUDGET)
+        worker.close()
 
 
 def test_two_voices_in_one_line_read_in_order():
@@ -538,3 +578,14 @@ def test_the_whole_host_unavailable_is_503_and_one_request_failing_is_500(store,
     assert post_event(port, body) == (500, {'error': 'HOST_REQUEST_FAILED'})
     channels.receive = real
     assert post_event(port, body)[0] == 200
+
+
+def test_a_voice_cut_off_by_the_host_stopping_is_the_host_away_not_a_failure():
+    from asuna import media_children
+    worker = voice.Transcriber(None, FakeEngine(), child=FakeChild(media_children.Closed())).start()
+    assert worker.checked.wait(5)
+    fields = {'route_id': 'r1', 'event_id': 'e-stop', 'index': '0'}
+    with pytest.raises(RuntimeError) as away:
+        voice.receive('qq', fields, wav(), 'audio/wav', transcriber=worker)
+    assert str(away.value) == 'HOST_STOPPING' and not voice._outcomes, 'no outcome kept: the voice is posted again'
+    worker.close()

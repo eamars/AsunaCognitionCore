@@ -370,7 +370,7 @@ class BusinessWorker:
     def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, native_sessions=None,
                    deployment=None, secrets=None, admission='explicit', apply_integrations=False,
                    schedule=True, channels=None, sandbox=None, ui_titles=None, action_idle_minutes=None,
-                   action_high_idle_minutes=None):
+                   action_high_idle_minutes=None, media=None):
         # Worker initialization is managed by the native Host.
         if self.app:
             return self.status()
@@ -393,6 +393,8 @@ class BusinessWorker:
         take_persona(config, persona)
         config['_skill_directories'] = skill_directories or persona.get('skill_directories', [])
         config['_native_routes'] = routes or {}
+        # Voice to text and video decoding, each on unless the profile's settings turn it off (ADR-095 §5.3.1).
+        config['media'] = {kind: bool((media or {}).get(kind, True)) for kind in ('voice', 'video')}
         if action_idle_minutes:
             config['action_idle_minutes'] = action_idle_minutes
         # ADR-075: her action brain has a 高 only when the owner configured its route; its idle minutes are its own.

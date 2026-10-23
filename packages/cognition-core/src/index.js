@@ -79,6 +79,10 @@ export const Config = z.object({ python: z.string().volatile(), persona: z.strin
   // D-6: mount DSH Schedule when the Host has none (default). By DSH design its schedule_* tools are
   // visible to every root agent; Asuna's role and action presets already restrict their own tools.
   mountSchedule: z.boolean().default(true),
+  // ADR-095 §5.3.1: voices become text, and videos contact sheets, each in a child process of its own that stays
+  // loaded while on; off, nothing is loaded and her lines say it is off.
+  voiceToText: z.boolean().default(true),
+  videoDecoding: z.boolean().default(true),
   deployment: z.transform(z.dict(z.any()), value => assertSecretReferences(value)).volatile(),
   channelAdmission: z.union(['explicit', 'automatic']).default('explicit').volatile(),
   routes: z.object({ character: Route.required(false), action: Route.required(false), appraiser: Route.required(false),
@@ -333,6 +337,7 @@ export class CognitionCore {
           .map(lane => [lane, nativeRoute(this.routeFor(lane))])), models,
         action_idle_minutes: this.routeFor('action')?.idleMinutes,
         action_high_idle_minutes: this.routeFor('actionHigh')?.idleMinutes,
+        media: { voice: this.config.voiceToText !== false, video: this.config.videoDecoding !== false },
         // Her integration_* tools work on the development copy of the adapter its channel plugin ships.
         integration_project: await this.ctx.asunaFloor.integrationProject(
           [...this.channels.values()].find(channel => channel.integration_directory)),

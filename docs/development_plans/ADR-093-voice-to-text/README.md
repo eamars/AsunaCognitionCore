@@ -169,3 +169,13 @@ line about the fetch plus 0.1–1.5 s of transcription before it reaches her (§
 time, so a voice line also holds up the lines queued behind it, in any conversation, by the same time; it is bounded
 by the fetch's 10 s and the post's timeout. (Since ADR-095 step 2 each conversation has a lane of its own: a voice
 holds only the lines behind it in its own conversation.)
+
+## Changes after build
+
+- **2026-10-24, ADR-095 step 4:** the transcription runs in a child process of its own that keeps the model loaded
+  (no idle release); a voice past 90 s is tried once more in a fresh child. The adapter's wait for the voice endpoint
+  (`POST_TIMEOUT`, `qqadapter/voice.py`) is 200 s, up from 30 s, longer than two tries. A machine that cannot
+  transcribe (the profile's `voiceToText` off, a model file or package missing, the child not starting) is the new
+  state `not_transcribed`, never `failed`. Voice detection: speech and silence each at least 0.25 s, a piece at most
+  20 s (`voice.VAD`), as before; a count of errors in transcripts must name these with the model's date, since a
+  22 ms shift of a cut changes the words (her finding, 2026-10-23).

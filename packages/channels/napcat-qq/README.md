@@ -69,8 +69,8 @@ with Core (`registerChannel`).
   Core call failing each have their reason), the reason rides on that voice's media item as `voice_refused`, so her
   line says why. The line is posted after its voices either way, so lines keep their order; a voice line, and those
   queued behind it in the same conversation, wait for NapCat's conversion and the transcription (about 1.5 s for a
-  minute of speech, under a second more when the model was idle), at most 40 s per voice (the fetch's 10 s and
-  the Core call's 30 s; a QQ voice message carries one voice). The log (`VOICE_SETTLED`, `VOICE_NOT_SETTLED`) carries the
+  minute of speech), at most 210 s per voice (the fetch's 10 s and the Core call's 200 s, longer than Core's 180 s
+  for one voice; a QQ voice message carries one voice). The log (`VOICE_SETTLED`, `VOICE_NOT_SETTLED`) carries the
   event, the segment, the byte count and the outcome, never the file name, the audio or the words.
 - A message she sends quotes a line (a leading `reply` segment) only when the outbox item carries `quote`, in a group
   or a private chat; the item's `reply_to`, the line her words answer, is not shown.

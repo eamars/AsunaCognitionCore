@@ -227,11 +227,24 @@ class RuntimeHost:
             if self.configure_controller:
                 self.configure_controller(self)
             self.voice = None
+            # Voice and video are decoded in child processes of their own, each on or off by the profile's settings
+            # (ADR-095 §5.3.1, media_children.py); a child that is killed, dies or will not start is a lane fault.
+            from . import lane_faults, media_children
+            media = self.config.get('media') or {}
+            store = self.app.store
+
+            def fault(kind):
+                # Counted in a thread of its own: a slow database never holds a voice or a video.
+                return lambda stage, error: threading.Thread(target=lane_faults.record, daemon=True, args=(
+                    store, 'host', media_children.FAULT_LANES[kind], stage, error)).start()
             if self.config.get('channels'):
-                # A channel's voices become text in this process, within the request that brings them (voice.py).
+                # A channel's voices become text within the request that brings them (voice.py).
                 from . import voice
-                self.voice = voice.Transcriber(self.evidence).start()
+                self.voice = voice.Transcriber(self.evidence, enabled=media.get('voice', True),
+                                               fault=fault('voice')).start()
                 self.stack.callback(self.voice.close)
+            media_children.start_video(enabled=media.get('video', True), fault=fault('video'))
+            self.stack.callback(media_children.stop_video)
             channels = Channels(self.controller)
             channels.recover_sending()
             self._recover_tasks()

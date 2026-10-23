@@ -344,10 +344,10 @@ Voice messages arrive as text (ADR-093): a channel adapter fetches each voice of
   - `loaded`
   - `transcribe` — float32 samples at RATE -> {'speech_seconds', 'pieces': [{'text', 'lang', 'event'}]}: each piece the detector found, decoded on its own.
   - `release`
-- class `Transcriber` — The Host's one transcriber: checks the model files once when it starts (a missing or different file is one Host log line), transcribes one voice at a time, and releases the model after `idle_seconds` without a voice.
+- class `Transcriber` — The Host's voice side: off, not set up, or a warm child that holds the model (the module docstring).
   - `start`
   - `close`
-  - `transcribe` — One voice's bytes -> its entry (ENTRY_FIELDS without `index`); never raises.
+  - `transcribe` — One voice's bytes -> its entry (ENTRY_FIELDS without `index`); raises only media_children.Closed, when the Host stops while the voice is in its child.
 - def `fields` — The query of one voice post, checked before its body is read: the line's event exactly as the adapter will post it to `events` (route_id, event_id, occurred_at when the event has one) and the segment's index.
 - def `receive` — One voice of a line about to be posted, as its bytes: transcribed now, its outcome kept for the line and answered.
 - def `entries_for` — A channel line's voices as it is stored (`event.voice`), looked up by the event's own route_id, event_id and occurred_at: for each voice segment, the outcome posted for it, else the adapter's reason for not having one, else, when the channe
@@ -361,3 +361,35 @@ Faults of the channel lanes, counted by signature and hour (ADR-095 §5.6, step 
 - def `hour_of` — The UTC hour a fault is counted in, as `YYYY-MM-DDTHH`.
 - def `receive` — An adapter's counts: {'counts': [{'lane', 'stage', 'error', 'hour', 'count'}]}, at most MAX_ROWS rows; all of them or none are counted.
 - def `record` — Count `count` faults of one signature in its hour (the current one unless `moment` is given).
+
+## `media_children`
+
+[src/asuna/media_children.py](../../src/asuna/media_children.py)
+
+Voice and video decoding in child processes (ADR-095 §5.3.1): one long-lived child per kind, each on its own, so a hang or a crash in native decoding holds only its own kind of work and never the Host.
+
+- class `StartFailed` — The child exited, or did not say it was ready, while starting.
+- class `Closed` — The kind is closing (the Host stops): a job it ended is not the job's failure.
+- class `Timeout` — The job's try ran past its deadline, or the call's budget ran out.
+- class `Died` — The child exited, or answered something that is not a frame, during the job.
+- class `JobError` — The job could not be done; `program` when the child's own code failed (not the job's content).
+- def `write_frame`
+- def `read_frame` — (header, payload); EOFError at the end of the stream, ValueError for something that is not a frame.
+- class `Child` — One kind's child process: started warm, one job at a time, killed and replaced past a deadline.
+  - `fault` — One lane fault; counting never reaches the job.
+  - `start` — Start the child now (warm for the first job); a failure is kept for the next job to see.
+  - `start_in_background`
+  - `close` — Stop the kind now: a job that is running ends (its process is killed), no child starts again.
+  - `call` — One job: (answer header, payload).
+- def `video_missing` — The packages a contact sheet needs that are not installed.
+- def `start_video` — The Host's video side: off, not set up (one Host log line), or a child started in the background.
+- def `stop_video` — The video side stops: a video asked for afterwards says the decoder is not running.
+- def `video_snapshot` — (png bytes, words) for a video, or (None, {'error': words}): as `animated.video_snapshot`, cut in the video child while the Host runs (in this process only where no Host ever started one: tests and tools).
+
+## `media_worker`
+
+[src/asuna/media_worker.py](../../src/asuna/media_worker.py)
+
+The child process of one media kind (media_children.py): `python -P -m asuna.media_worker voice <host pid> <model directory>` or `... video <host pid>`. It loads its decoder, says it is ready, then answers one job at a time on stdout in media_children's frames. stdout carries frames only; anything else the libraries print goes to stderr.
+
+- def `main`

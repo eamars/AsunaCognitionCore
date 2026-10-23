@@ -328,6 +328,8 @@ The channel API, platform kinds, stickers, seeing and sending pictures and files
 - [`animated`](../../src/asuna/animated.py) — Animated pictures as something a still-image model can see: one labelled contact sheet plus words.
 - [`voice`](../../src/asuna/voice.py) — Voice messages arrive as text (ADR-093): a channel adapter fetches each voice of a message before it submits the line and posts the audio to `POST /v1/channels/<id>/voice`; the program turns it into text on this machine within that request 
 - [`lane_faults`](../../src/asuna/lane_faults.py) — Faults of the channel lanes, counted by signature and hour (ADR-095 §5.6, step 1).
+- [`media_children`](../../src/asuna/media_children.py) — Voice and video decoding in child processes (ADR-095 §5.3.1): one long-lived child per kind, each on its own, so a hang or a crash in native decoding holds only its own kind of work and never the Host.
+- [`media_worker`](../../src/asuna/media_worker.py) — The child process of one media kind (media_children.py): `python -P -m asuna.media_worker voice <host pid> <model directory>` or `...
 
 ### [Work and tools](work.md)
 
@@ -426,6 +428,7 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 - [`napcat-qq/integration/qqadapter/hostapi.py`](../../packages/channels/napcat-qq/integration/qqadapter/hostapi.py) — HTTP client for the runtime host channel API (stdlib only).
 - [`napcat-qq/integration/qqadapter/inbound.py`](../../packages/channels/napcat-qq/integration/qqadapter/inbound.py) — OneBot message event -> host envelope, with the authorization gate.
 - [`napcat-qq/integration/qqadapter/journal.py`](../../packages/channels/napcat-qq/integration/qqadapter/journal.py) — Disk-backed spool, journals and counters.
+- [`napcat-qq/integration/qqadapter/mdflat.py`](../../packages/channels/napcat-qq/integration/qqadapter/mdflat.py) — Flatten a QQ `markdown` message element into the plain text a reader wants (0.15.0).
 - [`napcat-qq/integration/qqadapter/media_keys.py`](../../packages/channels/napcat-qq/integration/qqadapter/media_keys.py) — The current picture-link signatures for the host (ADR-035).
 - [`napcat-qq/integration/qqadapter/members.py`](../../packages/channels/napcat-qq/integration/qqadapter/members.py) — Group member lists for the host (0.7.1): who is in each admitted group, not only who spoke.
 - [`napcat-qq/integration/qqadapter/mutes.py`](../../packages/channels/napcat-qq/integration/qqadapter/mutes.py) — Her own mute in each admitted group, told to the host (`POST /v1/channels/<id>/own_mute`).

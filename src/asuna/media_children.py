@@ -186,7 +186,7 @@ class Child:
         env = {**os.environ, 'PYTHONPATH': os.pathsep.join(dict.fromkeys([here, *_installed()]))}
         windows = os.name == 'nt'
         proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                env=env, cwd=here, creationflags=0x08000000 if windows else 0)  # CREATE_NO_WINDOW
+                                env=env, cwd=here, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         self.job = _job_object(proc) if windows else None
         self.proc, self.replies = proc, queue.Queue()
         threading.Thread(target=self._read, args=(proc, self.replies), name='asuna-media-' + self.kind,

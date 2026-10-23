@@ -9,6 +9,8 @@ from asuna import repo_files
 
 ALLOWED = {
     'src/asuna/queue.py': 'cross-process byte locks: msvcrt on Windows, fcntl elsewhere',
+    'src/asuna/media_children.py': 'a job object kills a Windows child with its Host; CREATE_NO_WINDOW',
+    'src/asuna/media_worker.py': "the Host's pid is watched with OpenProcess on Windows, getppid elsewhere",
     'packages/cognition-core/src/python-env.js': 'venv layout (Scripts/python.exe or bin/python) and Python launcher names',
     'packages/cognition-core/src/floor.js': 'npm pack goes through cmd.exe as npm.cmd on Windows; git TLS in the '
                                             'sandbox as in sandbox_backend.py',

@@ -33,6 +33,7 @@
 | `PEER_CHANGED person=qq:号 scene=.. field=nickname\|card\|role\|title from='旧' to='新'` | 改名 / 换名片 / 身份变了。`person_id` 不变，所以还是同一个人；旧名字留在 `aliases` 里，换名片只影响那一个群 |
 | `PEER_FIELD_DENIED` + `PEER_REPOST event_id=..` | 宿主不收 `raw` 里那块身份，同一条事件已剥掉身份块重投（入站没丢，等价于 0.2.3 的信封） |
 | `MEDIA_REPOST event_id=..` | 宿主不收 `raw.asuna_media` 那块，同一条事件已剥掉媒体块重投（入站没丢，占位符正文还在；等价于 `--media-mode off` 的形状） |
+| `VOICE_SETTLED event_id=.. route=.. index=N bytes=N state=transcribed\|no_voice\|no_words\|failed result=accepted\|duplicate http=200` / `VOICE_NOT_SETTLED event_id=.. index=N reason=gone\|refused\|timeout\|unreachable\|no_audio\|host retcode=..` | 一段语音在消息提交前交给宿主转好了 / 没有结果，原因写在那段语音的媒体项上，消息照常提交。只有元数据，没有文件名、音频和字 |
 | `STATUS ... group_routes=N counters={...}` | 每 60 秒一次心跳摘要（0.3 起 counters 里多 `peer_enriched` / `peer_api_calls` / `peer_api_errors` / `peer_changes` / `peer_field_denied`；0.4 起多 `inbound_media_only` / `media_field_denied`） |
 | `SHUTDOWN spool_inbound=N` | 退出时还有 N 条没提交完，下次启动继续 |
 

@@ -28,7 +28,7 @@ with Core (`registerChannel`).
 - A group or private-chat message that quotes another carries the quoted message's ID as `reply_to`; one that only
   quotes, with no words, also carries `raw.asuna_reply_only`. On every outbox claim the adapter declares what it
   carries: `image`, `sticker`, `file:<bytes>` (`adapter_config.napcat.max_file_mb`), `react`, `poke`, `quote`,
-  `quote_in`, `react_in`, `recall`.
+  `quote_in`, `react_in`, `recall`, `voice_in`.
 - A file goes to a group alone, up to `adapter_config.napcat.max_file_mb` (default 50 MiB); a private target is a
   `failed` receipt. Its bytes come from Core's attachment endpoint in 4 MiB pieces, each sent to NapCat's
   `upload_file_stream` (stream id = the attempt id, the whole file's sha256, NapCat's temp file named after the
@@ -41,6 +41,17 @@ with Core (`registerChannel`).
   30 minutes (13 pieces × 120 s, then 62 s and 170 s).
   An upload that outlasts its wait is `unknown`, and a later answer settles it. The outbox waits while a file is
   sent.
+- A voice message (`record` segment) is settled before its line is posted, because NapCat clears its voice cache and
+  a line should reach her with its words: on the submit path each voice is asked of NapCat (`get_record` with the
+  segment's `file` and `out_format` `mp3`, 10 s) and its audio (`base64` in the answer) is posted to Core's `voice`
+  endpoint for that line and segment index, which transcribes it within the request. When there is no outcome
+  (retcode 1200 `file not found` is `gone`; another refusal, a timeout, no connection, no audio in the answer, or the
+  Core call failing each have their reason), the reason rides on that voice's media item as `voice_refused`, so her
+  line says why. The line is posted after its voices either way, so lines keep their order; a voice line, and those
+  queued behind it in any conversation, wait for NapCat's conversion and the transcription (about 1.5 s for a
+  minute of speech, under a second more when the model was idle), at most 40 s per voice (the fetch's 10 s and
+  the Core call's 30 s; a QQ voice message carries one voice). The log (`VOICE_SETTLED`, `VOICE_NOT_SETTLED`) carries the
+  event, the segment, the byte count and the outcome, never the file name, the audio or the words.
 - A message she sends quotes a line (a leading `reply` segment) only when the outbox item carries `quote`, in a group
   or a private chat; the item's `reply_to`, the line her words answer, is not shown.
 - A `recall` action in her reply takes back a message of hers (`delete_msg` on its id); the platform's retcode is

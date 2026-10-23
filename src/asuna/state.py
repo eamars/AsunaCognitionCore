@@ -191,7 +191,8 @@ class Store:
         if len(BSON.encode(document)) > 1024*1024:
             raise ValueError('DOCUMENT_TOO_LARGE_USE_ARTIFACT')
 
-    def put(self, collection: str, document: dict, *, expected: int | None = None, stream: str='state') -> dict:
+    def put(self, collection: str, document: dict, *, expected: int | None = None, stream: str='state',
+            reset_counters: bool=False) -> dict:
         if collection not in COLLECTIONS or collection in INSERT_ONLY:
             raise Denied('COLLECTION_NOT_WRITABLE')
         doc = copy.deepcopy(document)
@@ -208,7 +209,15 @@ class Store:
             if expected is None:
                 self.db[collection].insert_one(doc)
             else:
-                result = self.db[collection].replace_one({'_id':doc['_id'],'revision':expected},doc)
+                # The document comes from an earlier read: its counters (COUNTER_FIELDS) keep the values they reached
+                # since, in the same write. Only a put that starts the record over (reset_counters) writes them.
+                kept = () if reset_counters else COUNTER_FIELDS.get(collection, ())
+                match = {'_id':doc['_id'],'revision':expected}
+                if kept:
+                    fields = {k:{'$literal':v} for k,v in doc.items() if k not in kept and k != '_id'}
+                    result = self.db[collection].update_one(match,[{'$project':{**fields,**{k:1 for k in kept}}}])
+                else:
+                    result = self.db[collection].replace_one(match,doc)
                 if result.modified_count != 1:
                     self.audit(stream,'state.conflict',{'operation':operation,'collection':collection,'id':doc['_id'],'expected':expected,'reason':'STALE_REVISION'},doc.get('scope_key','operator'))
                     raise Conflict('STALE_REVISION: 这条记录刚被别处改过，这次没有写进去；不是参数的问题：读一次最新的再做')

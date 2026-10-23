@@ -315,6 +315,11 @@ class Channels:
         from . import notices
         return notices.home(self.store, self.controller, channel_id, body)
 
+    def voice(self, channel_id, fields, data, media_type=None):
+        """One voice of a line about to be posted, transcribed now; its outcome waits for the line (voice.py)."""
+        from . import voice
+        return voice.receive(channel_id, fields, data, media_type)
+
     def own_mute(self, channel_id, body):
         from . import own_mute
         with database_effects_lock(self.store.name):
@@ -373,6 +378,13 @@ class Channels:
                  'channel': {'id': channel_id, 'account_id': channel['account_id'],
                              'platform_event_id': body['event_id'], 'target': route['target'], 'sender_id': body['sender_id']}}
         event['raw'] = kept_raw(event, body.get('raw'), body.get('mentioned_account_ids'))
+        from . import voice
+        voices = voice.entries_for(self.store, channel_id, body, event['raw'])
+        if voices:
+            # Settled before the line came (voice.py, ADR-093): the line is stored as it reads, each voice's words in
+            # its place, so every reader (and the wake checks below) has the words; what came is kept beside it.
+            event.update(voice=voices, received_text=body['text'], text=voice.read_text(body['text'], voices))
+            body = {**body, 'text': event['text']}
         from . import media_keys
         media_keys.saw(event)                              # a signed picture link that just arrived (ADR-035)
         from . import notices
@@ -710,6 +722,7 @@ class Channels:
 
 
 MEMBERS_BODY_LIMIT = 4 * 1024 * 1024
+JSON_BODY_LIMIT = 262144
 
 
 class ChannelServer:
@@ -718,8 +731,27 @@ class ChannelServer:
             def log_message(self, *args):
                 pass
 
+            def drop_body(self):
+                """A body refused before it was read is read and dropped before the answer, so the client gets the
+                answer, not a reset connection; one larger than any endpoint takes (a voice's) closes the connection
+                instead."""
+                from .voice import BODY_LIMIT
+                try:
+                    left = int(self.headers.get('Content-Length', '0'))
+                except ValueError:
+                    left = -1
+                if not 0 <= left <= BODY_LIMIT:
+                    self.close_connection = True
+                    return
+                while left > 0:
+                    chunk = self.rfile.read(min(left, 65536))
+                    if not chunk:
+                        break
+                    left -= len(chunk)
+
             def handle_request(self):
                 status = 200
+                self.body_read = False
                 raw = None                      # (bytes, content_type)：只有附件端点走这一条
                 try:
                     url = urlsplit(self.path)
@@ -728,15 +760,34 @@ class ChannelServer:
                         raise ValueError('UNKNOWN_CHANNEL_ENDPOINT')
                     channel_id = parts[2]
                     _, scoped = channels.authenticate(channel_id, self.headers.get('Authorization', ''))
-                    body = {}
+                    body, audio, voice_fields = {}, None, None
                     if self.command == 'POST':
                         size = int(self.headers.get('Content-Length', '0'))
-                        # A group's member list (group_members.py) is the one body that may be large.
-                        if not 0 < size <= (MEMBERS_BODY_LIMIT if parts[3:] == ['members'] else 262144):
+                        media_type = (self.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+                        # A voice's bytes come raw (voice.py); every other body is one JSON object. A group's member
+                        # list (group_members.py) is the one JSON body that may be large.
+                        raw_voice = parts[3:] == ['voice']
+                        from . import voice
+                        if raw_voice:
+                            # Who may post it and what it is about are settled before a byte of audio is read.
+                            if scoped:
+                                channels.scope_check(channel_id, scoped, self.command, parts[3:], body)
+                            voice_fields = voice.fields({key: values[0] for key, values in parse_qs(url.query).items()})
+                        limit = (voice.BODY_LIMIT if raw_voice else MEMBERS_BODY_LIMIT if parts[3:] == ['members']
+                                 else JSON_BODY_LIMIT)
+                        if not 0 < size <= limit:
                             raise ValueError('INVALID_BODY_SIZE')
-                        body = json.loads(self.rfile.read(size))
-                        if not isinstance(body, dict):
-                            raise ValueError('INVALID_BODY')
+                        if raw_voice:
+                            audio = self.rfile.read(size)
+                            self.body_read = True
+                            if len(audio) != size:
+                                raise ValueError('INVALID_BODY_SIZE')
+                        else:
+                            data = self.rfile.read(size)
+                            self.body_read = True
+                            body = json.loads(data)
+                            if not isinstance(body, dict):
+                                raise ValueError('INVALID_BODY')
                     if scoped:
                         channels.scope_check(channel_id, scoped, self.command, parts[3:], body)
                     if self.command == 'POST' and parts[3:] == ['events']:
@@ -749,6 +800,8 @@ class ChannelServer:
                         value = channels.notices(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['own_mute']:
                         value = channels.own_mute(channel_id, body)
+                    elif self.command == 'POST' and parts[3:] == ['voice']:
+                        value = channels.voice(channel_id, voice_fields, audio, media_type)
                     elif self.command == 'GET' and parts[3:] == ['outbox']:
                         query = parse_qs(url.query)
                         owner = []
@@ -779,6 +832,8 @@ class ChannelServer:
                     channels.controller.app.evidence.record('host.channel_error', {'traceback': error})
                     channels.controller.emit('[系统] 通道接口未完成：\n' + error)
                     status, value = 503, {'error': 'HOST_TEMPORARILY_UNAVAILABLE'}
+                if self.command == 'POST' and not self.body_read:
+                    self.drop_body()
                 if raw is not None and status == 200:
                     data, media_type = raw
                     self.send_response(200)

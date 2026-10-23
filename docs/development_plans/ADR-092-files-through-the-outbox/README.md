@@ -138,3 +138,20 @@ base64 of a file over about 37 MiB exceeds NapCat's 50 MiB message cap.
 The QQ Bot API lists files (`file_type` 4) at 200 MB with no scene restriction. One open-source bot reported HTTP 200
 for `file_type` 4 in groups and private chats, but not that the file arrived. Our QQ Bot bridge does not send files
 today, and it is not deployed for her, so nothing can be tested there now.
+
+## 9. The real send (2026-10-23, the XP group the owner named; her check, as Claude reports it)
+
+- **45 MB, sent.** A neutral file of 45,000,000 bytes went in 11 pieces (`sha256_verified`, `upload_group_file`
+  retcode 0) at 11:23. At 11:47 she downloaded it back from the group: the same bytes and the same sha256 as the
+  registered file. The owner saw it in the group.
+- **The `file_id` moved.** The id NapCat answered at the upload no longer resolved 24 minutes later
+  (`get_group_file_url`: retcode 1200, "real fileUUID not found!"); `get_group_root_files` found the file by name under
+  a new id, and that one downloaded. This is the second measurement for D6's "not a key" (10-21: it changed between two
+  calls). The Host keeps no `file_id`, and nothing needs one: a download or a delete reads the current id by name then.
+- **56 MB, refused before NapCat.** The speak was refused by the program, with no outbound row: 「这次一条都没发：第 3 条
+  file 这个文件 53.4 MB（56000000 字节），这里的平台一个文件最多 50.0 MB（52428800 字节），发不了。改好再调用一次
+  speak。」 That call also carried text and the 45 MB file, and nothing of it was sent: a speak goes whole or not at
+  all, and the refusal names the part and both sizes. She dropped her idea of comparing sizes herself first: re-calling
+  after the refusal is that step.
+- **QQ's own limit near 50 MB was not tried.** Our limit is below it and refuses before any upload, which is the
+  intended behaviour; a try waits until the setting is raised.

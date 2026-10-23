@@ -25,6 +25,7 @@ from . import fixtures
 from . import faces as faces_mod
 from . import outbound as outbound_mod
 from . import peers as peers_mod
+from . import voice as voice_mod
 from .peers import PEER_KEY, PeerDirectory
 from .config import MAX_FILE_MB_MOST, Config, ConfigError
 from .hostapi import Result
@@ -49,9 +50,13 @@ HELPER_LOCK_CHILD = (
     "from qqadapter.journal import _lock\n"
     "fd=os.open(sys.argv[1],os.O_CREAT|os.O_RDWR,0o644)\n"
     "_lock(fd)\n"
-    "print('LOCKED',flush=True)\n"
+    "print('LOCKED %d'%os.getpid(),flush=True)\n"
     "time.sleep(float(sys.argv[2]))\n"
 )
+# The helper runs on the interpreter itself, so the process the check kills and waits for is the holder: a Windows
+# venv's python.exe is a redirector that starts the interpreter as a second process, which is still dying after the
+# redirector has been killed and waited for (multiprocessing bypasses it the same way). It needs only the stdlib.
+HELPER_PYTHON = getattr(sys, "_base_executable", sys.executable)
 
 
 class Report:
@@ -1705,6 +1710,7 @@ def run(cfg, data_dir, live=True, live_config=True):
     _check_admission(rep, root)
     _check_group_inbound(rep, gcfg)
     _check_media(rep, gcfg, root)
+    _check_voice(rep, gcfg, root)
     _check_spool(rep, root)
     _check_outbound_params(rep, gcfg, root)
     _check_outbound_verify(rep, gcfg, root)
@@ -1786,7 +1792,7 @@ def _check_lock_and_spool(rep, cfg, root):
     # a live holder is refused, and a holder that dies releases the lock so the
     # leftover file never blocks a restart
     holder.release_lock()
-    child = subprocess.Popen([sys.executable, "-c", HELPER_LOCK_CHILD, path, "30", os.path.dirname(HERE)],
+    child = subprocess.Popen([HELPER_PYTHON, "-c", HELPER_LOCK_CHILD, path, "30", os.path.dirname(HERE)],
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                              universal_newlines=True)
     try:
@@ -1798,13 +1804,13 @@ def _check_lock_and_spool(rep, cfg, root):
         ready = bool(said)
         line = said[0].strip() if said else ""
         refused = None
-        if line == "LOCKED":
+        if line == "LOCKED %d" % child.pid:        # the holder is the process killed below, not a grandchild
             try:
                 Journal(root + "/lockdir").acquire_lock()
             except RuntimeError as exc:
                 refused = str(exc)[:70]
         rep.check("lock_other_process_refused", refused is not None,
-                  refused or "child=%r ready=%s" % (line, bool(ready)))
+                  refused or "child=%r pid=%d ready=%s" % (line, child.pid, bool(ready)))
         child.kill()
         child.wait()
         try:
@@ -2193,6 +2199,120 @@ IMG_SEG = {"type": "image",
            "data": {"file": "59A164CFF5F2565F41C6A51948A1D77D.png", "file_id": "fid1",
                     "file_size": "40087", "sub_type": 0, "summary": "",
                     "url": "https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=abc"}}
+
+
+class _VoiceHost:
+    """SUBSTITUTE for the host's voice and events endpoints: keeps every call in order, answers the canned results."""
+
+    def __init__(self, *results):
+        self.calls = []
+        self.results = list(results)
+
+    def post_voice(self, route_id, event_id, index, data, content_type="audio/mpeg", occurred_at=None, timeout=30):
+        self.calls.append({"kind": "voice", "route_id": route_id, "event_id": event_id, "index": index,
+                           "data": data, "content_type": content_type, "occurred_at": occurred_at,
+                           "timeout": timeout})
+        return self.results.pop(0) if self.results else Result("accepted", 200, {"status": "settled",
+                                                                                 "state": "transcribed"})
+
+    def post_event(self, envelope):
+        self.calls.append({"kind": "event", "envelope": json.loads(json.dumps(envelope))})
+        return Result("accepted", 200, {"status": "accepted", "episode_id": "ep-x"})
+
+
+def _voice_refused(envelope, index=0):
+    items = [item for item in ((envelope.get("raw") or {}).get(inbound_mod.MEDIA_KEY) or {}).get("items") or []
+             if item.get("type") in voice_mod.VOICE_TYPES]
+    return items[index].get(voice_mod.REFUSED_KEY) if index < len(items) else None
+
+
+def _check_voice(rep, gcfg, root):
+    """ADR-093: a line's voices are fetched and settled by the host before the line is posted; a voice without an
+    outcome carries its reason on its media item, and the line is posted either way.
+
+    Offline only: synthetic events, a substitute NapCat and host; no platform call, nothing reaches a real host.
+    """
+    rep.check("voice_declared", "voice_in" in Adapter(gcfg, os.path.join(root, "voice-claim")).capabilities, "")
+    groups = sorted(gcfg.allowed_groups)
+    grp = groups[0]
+    member = sorted(gcfg.route_for_group(grp).allowed_senders)[0]
+    seen = inbound_mod.SeenLRU(64)
+    record = {"type": "record", "data": {"file": "voice-a.amr", "file_size": "5120"}}
+
+    def voice_line(mid, message):
+        res, reason = inbound_mod.classify(_group_event(gcfg, grp, member, mid, message=message), gcfg, seen)
+        return res[0] if reason == "accepted" else {}
+    env = voice_line(5201, [dict(record)])
+    rep.check("voice_line_keeps_its_placeholder", env.get("text") == "[语音（未解析）]", repr(env.get("text")))
+    audio = b"ID3" + bytes(64)
+    good = {"status": "ok", "retcode": 0, "data": {"file": "/napcat/cache/voice-a.amr.mp3",
+                                                   "base64": base64.b64encode(audio).decode()}}
+
+    # the adapter's own submit path: the voice is settled by the host before the line goes, in that order
+    adapter = Adapter(gcfg, os.path.join(root, "voice"), peer_mode="off")
+    adapter.onebot = StubOneBot(response=good)
+    adapter.host = host = _VoiceHost()
+    lines = []
+    adapter.log = lines.append
+    res = adapter._submit_event(json.loads(json.dumps(env)))
+    kinds = [call["kind"] for call in host.calls]
+    voice_call = host.calls[0] if host.calls else {}
+    rep.check("voice_settled_before_the_line", res.kind == "accepted" and kinds[:1] == ["voice"]
+              and kinds[-1:] == ["event"], ",".join(kinds))
+    rep.check("voice_fetch_asks_get_record_mp3_10s", any(call["action"] == "get_record"
+              and call["params"] == {"file": "voice-a.amr", "out_format": "mp3"} and call["timeout"] == 10.0
+              for call in adapter.onebot.calls), json.dumps([c["action"] for c in adapter.onebot.calls]))
+    rep.check("voice_bytes_posted_for_that_line", voice_call.get("data") == audio
+              and voice_call.get("event_id") == env.get("event_id") and voice_call.get("route_id") == env.get("route_id")
+              and voice_call.get("index") == 0 and voice_call.get("content_type") == "audio/mpeg"
+              and voice_call.get("occurred_at") == env.get("occurred_at") and voice_call.get("timeout") == 30.0,
+              json.dumps({k: v for k, v in voice_call.items() if k != "data"}))
+    posted = host.calls[-1]["envelope"] if host.calls else {}
+    rep.check("voice_settled_line_carries_no_refusal", _voice_refused(posted) is None, "")
+    rep.check("voice_log_is_metadata_only", any(line.startswith("VOICE_SETTLED") and "state=transcribed" in line
+                                                for line in lines) and not any("voice-a" in line for line in lines),
+              " | ".join(line for line in lines if "VOICE" in line)[:200])
+
+    # NapCat already cleared it: no post to the host, the reason rides on the line, the line still goes
+    adapter.onebot = StubOneBot(response={"status": "failed", "retcode": 1200, "message": "file not found", "data": None})
+    adapter.host = host = _VoiceHost()
+    adapter._submit_event(json.loads(json.dumps(env)))
+    posted = host.calls[-1]["envelope"] if host.calls else {}
+    rep.check("voice_napcat_refusal_on_the_line", [call["kind"] for call in host.calls] == ["event"]
+              and _voice_refused(posted) == {"reason": "gone", "retcode": 1200, "message": "file not found"},
+              json.dumps(_voice_refused(posted)))
+    audio_none, refused = voice_mod.fetch(StubOneBot(response={"status": "failed", "retcode": 1200,
+                                                               "message": "Encoder not found"}), "voice-a.amr")
+    rep.check("voice_other_1200_is_not_gone", audio_none is None and refused["reason"] == "refused", str(refused))
+    audio_none, refused = voice_mod.fetch(StubOneBot(exc=ApiTimeout("x")), "voice-a.amr")
+    rep.check("voice_napcat_timeout_named", audio_none is None and refused["reason"] == "timeout", str(refused))
+
+    # the host call fails: the line goes anyway, saying so
+    adapter.onebot = StubOneBot(response=good)
+    adapter.host = host = _VoiceHost(Result("retry", 503, {"error": "HOST_TEMPORARILY_UNAVAILABLE"}))
+    adapter._submit_event(json.loads(json.dumps(env)))
+    posted = host.calls[-1]["envelope"] if host.calls else {}
+    rep.check("voice_host_failure_on_the_line", [call["kind"] for call in host.calls] == ["voice", "event"]
+              and _voice_refused(posted) == {"reason": "host", "message": "503 HOST_TEMPORARILY_UNAVAILABLE"},
+              json.dumps(_voice_refused(posted)))
+
+    # two voices in one message: each fetched by its own file, posted with its own index, then the line
+    env2 = voice_line(5202, [dict(record), {"type": "text", "data": {"text": "和"}},
+                             {"type": "record", "data": {"file": "voice-b.amr"}}])
+    adapter.onebot = bot = StubOneBot(response=good)
+    adapter.host = host = _VoiceHost()
+    adapter._submit_event(json.loads(json.dumps(env2)))
+    rep.check("voice_two_in_one_message", env2.get("text") == "[语音（未解析）]和[语音（未解析）]"
+              and [c["params"]["file"] for c in bot.calls if c["action"] == "get_record"] == ["voice-a.amr", "voice-b.amr"]
+              and [(c["kind"], c.get("index")) for c in host.calls] == [("voice", 0), ("voice", 1), ("event", None)],
+              repr(env2.get("text")))
+
+    # a line without voices, or one whose media block the host would not take, fetches nothing
+    plain = voice_line(5203, _text("没有语音"))
+    stripped = json.loads(json.dumps(env))
+    inbound_mod.strip_media(stripped)
+    rep.check("voice_none_without_a_voice_block", voice_mod.segments(plain) == []
+              and voice_mod.segments(stripped) == [], "")
 
 
 def _media_cfg(base, mode):

@@ -6,12 +6,12 @@ The interfaces of the Asuna runtime: what a channel adapter, a persona or channe
 
 - [Process layout](#process-layout)
 - [Configuration](#configuration): [plugin settings](#plugin-settings), [model routes](#model-routes), [secrets](#secrets), [deployment settings](#deployment-settings)
-- [Channel API](#channel-api): [server and endpoints](#server-and-endpoints), [channels and routes](#channels-and-routes), [admission](#admission), [route keys](#route-keys), [receive an event](#receive-an-event), [platform notices](#platform-notices), [post a notice for her home](#post-a-notice-for-her-home), [claim public output](#claim-public-output), [fetch attachment bytes](#fetch-attachment-bytes), [record a platform receipt](#record-a-platform-receipt), [post a group's member list](#post-a-groups-member-list), [post the current media-link keys](#post-the-current-media-link-keys), [post her own mute in a group](#post-her-own-mute-in-a-group), [HTTP outcomes](#http-outcomes)
+- [Channel API](#channel-api): [server and endpoints](#server-and-endpoints), [channels and routes](#channels-and-routes), [admission](#admission), [route keys](#route-keys), [receive an event](#receive-an-event), [platform notices](#platform-notices), [post a notice for her home](#post-a-notice-for-her-home), [claim public output](#claim-public-output), [fetch attachment bytes](#fetch-attachment-bytes), [record a platform receipt](#record-a-platform-receipt), [post a group's member list](#post-a-groups-member-list), [post the current media-link keys](#post-the-current-media-link-keys), [post her own mute in a group](#post-her-own-mute-in-a-group), [post a voice](#post-a-voice), [HTTP outcomes](#http-outcomes)
 - [Persona packages](#persona-packages): [persona model](#persona-model)
 - [Channel packages](#channel-packages): [kind module](#kind-module)
 - [Her tools](#her-tools)
 - [Action capabilities](#action-capabilities): [tools a task is given](#tools-a-task-is-given), [web search and fetch](#web-search-and-fetch), [skills](#skills), [sandbox](#sandbox), [credentials](#credentials)
-- [Media and images](#media-and-images): [inbound media](#inbound-media), [reading images](#reading-images), [sending pictures](#sending-pictures), [sending files](#sending-files)
+- [Media and images](#media-and-images): [inbound media](#inbound-media), [voice messages](#voice-messages), [reading images](#reading-images), [sending pictures](#sending-pictures), [sending files](#sending-files)
 - [Schedules](#schedules): [rhythms](#rhythms), [what the owner sees](#what-the-owner-sees)
 - [Integration and self-development](#integration-and-self-development): [integration profile](#integration-profile), [integration tools](#integration-tools), [drawing and rendering](#drawing-and-rendering), [private words](#private-words), [self-development](#self-development)
 
@@ -137,9 +137,10 @@ When any channel is configured, the worker serves the channel API on `127.0.0.1`
 | `POST /v1/channels/{channel_id}/members` | [Post a group's member list](#post-a-groups-member-list) | 4 MiB |
 | `POST /v1/channels/{channel_id}/media_keys` | [Post the current media-link keys](#post-the-current-media-link-keys) | 256 KiB |
 | `POST /v1/channels/{channel_id}/own_mute` | [Post her own mute in a group](#post-her-own-mute-in-a-group) | 256 KiB |
+| `POST /v1/channels/{channel_id}/voice` | [Post a voice](#post-a-voice) | 64 MiB of audio bytes |
 
 - Every request carries `Authorization: Bearer <token>`: the channel's token, or a [route key](#route-keys).
-- A POST body is one JSON object. Unknown fields are refused on `events`, `notices`, `own_mute` and `receipt`; `members` and `media_keys` ignore them.
+- A POST body is one JSON object, except a voice's audio bytes on `voice`. Unknown fields are refused on `events`, `notices`, `own_mute`, `voice` and `receipt`; `members` and `media_keys` ignore them.
 - A refusal is `{"error": "<CODE>"}`, often followed by `: ` and words for the reader; the status is in [HTTP outcomes](#http-outcomes).
 
 ### Channels and routes
@@ -311,6 +312,7 @@ A recall, a poke, a reaction and the like come as an event from the person who d
 | `poke`, `react`, `recall` | performs that action (`recall` also: her line can be taken back) |
 | `quote` | shows the line she quotes |
 | `quote_in`, `react_in` | passes on what others quote, and reactions |
+| `voice_in` | settles each voice of a line before posting the line ([post a voice](#post-a-voice)) |
 
 The answer is `{"items": []}` or `{"items": [item]}`. Each claim marks the item `SENDING` under a fresh `attempt_id`; claiming is not delivery.
 
@@ -473,6 +475,32 @@ Keys live only in the worker's memory: never in the database, the audit or a log
 - One row per group in `own_mutes`. A notice that lifts one kind (hers, the whole group's) leaves the other; the row ends by itself when `until` passes.
 - A `failed` receipt with `response.reason` `muted` records a mute when none is known; a `platform_accepted` receipt in that group clears it.
 - A send is always attempted, muted or not. What she reads of it is in `src/asuna/own_mute.py`.
+
+### Post a voice
+
+`POST /v1/channels/{channel_id}/voice` — one voice segment of a line, before the line is posted: its audio bytes as
+the body (`Content-Type` the media type, e.g. `audio/mpeg`) and the line's event in the query:
+`…/voice?route_id=g&event_id=5301&index=0&occurred_at=2026-10-23T01%3A00%3A00Z`. The worker transcribes it within
+the request and answers with the outcome; the line, posted to `events` next with the same `route_id`, `event_id` and
+`occurred_at`, is stored with it. The query and a route key are checked before the audio is read; a refused post's
+body is read and dropped, then answered.
+
+| Query | Required | Meaning |
+|---|---|---|
+| `route_id`, `event_id`, `occurred_at` | `occurred_at` only when the event has it | the line's event, exactly as it will be posted to `events` (a route admitted by that event counts) |
+| `index` | yes | which voice of the line, 0–63, in the order of its voice placeholders |
+
+| Answer or code | Status | Meaning |
+|---|---|---|
+| `{"status": "settled", "state": "…", "seconds": n}` | 200 | transcribed now; `state` is one of [Voice messages](#voice-messages)' |
+| `{"status": "duplicate", "state": "…"}` | 200 | this voice was settled already (kept 10 minutes for its line); nothing was done again |
+| `VOICE_ROUTE_ID_INVALID`, `VOICE_EVENT_ID_INVALID`, `VOICE_OCCURRED_AT_INVALID`, `VOICE_INDEX_INVALID`, `VOICE_FIELD_DENIED`, `VOICE_BODY_INVALID` | 400 | out of shape |
+| `ROUTE_KEY_ENDPOINT_DENIED` | 403 | a route key may not post voices |
+
+A voice the adapter has no outcome for (the platform refused or timed out, or this call failed) is told on the line
+instead: its media item carries `voice_refused` (`reason`: `gone`, `refused`, `timeout`, `unreachable`, `no_audio` or
+`host`; optional `retcode` and `message`, the platform's own answer, kept on the item for the record), and her line
+says why in words.
 
 ### HTTP outcomes
 
@@ -700,6 +728,38 @@ An adapter puts a message's media in `raw.asuna_media` as `{"items": [...]}`. Th
 
 - At most 8 items of a message are listed (`MAX_ITEMS_PER_MESSAGE`). Each gets a reference `att-…`; a reference stays readable for 7 days (`REF_DAYS`).
 - A picture the owner attaches in her local chat is stored by the core plugin as an image artifact and recorded on the input as `raw.asuna_media` with `origin: local_upload`. Only the program's own input can carry that origin.
+
+### Voice messages
+
+A voice segment's item has `type` `record` (or `audio`), and the line's text carries `[语音（未解析）]` in its place.
+An adapter that can fetch voices declares `voice_in` and [posts each one](#post-a-voice) before its line; the worker
+turns it into text on this machine (`src/asuna/voice.py`). Nothing is sent anywhere else. A line from an adapter that
+does not declare `voice_in` keeps its placeholder.
+
+- **Never stored.** The audio lives in memory for its request. The line is stored with one entry per voice in its event
+  (`event.voice`): state, words, length, sha256, size, first 44 bytes, media type, model and times (`ENTRY_FIELDS`).
+  It does not change afterwards.
+- **Recognized, then normalized.** The container is told by its first bytes (RIFF/WAVE, ID3 or an MPEG audio frame
+  header); anything else is refused before any field is read. av decodes it and resamples it to 16 kHz mono PCM16,
+  whatever rate and depth came.
+- **Transcribed.** One voice at a time: SenseVoice int8 with Silero voice detection (speech and silence each at least
+  0.25 s, a piece at most 20 s) through sherpa-onnx, language detected, 4 threads. The model is loaded when a voice
+  comes and released after 10 idle minutes. There is no length limit.
+- **The model files** are `<data>/models/sensevoice-2024-07-17/` `model.int8.onnx`, `tokens.txt` and `silero_vad.onnx`,
+  checked against their sizes and sha256 (`voice.MODEL_FILES`) once when the worker starts (evidence
+  `voice.model_checked`). A missing or different file is one line in the Host log, `ASUNA_VOICE_MODEL_UNAVAILABLE`,
+  and every voice then reads `没转出文字：识别模型不在`.
+- **What her line shows.** The line is stored with each voice's words in its place (`voice.read_text`), so every
+  reader shows the same words; the text as it came is kept in `event.received_text`, and a line posted again is the
+  same line when that text is the same:
+
+| State | Her line shows |
+|---|---|
+| `transcribed` | `[语音 33 秒] 文字……`; a piece labelled other than speech is named: `[语音 20 秒，听着像背景音乐] ……` |
+| `no_voice` (the detector found no speech) | `[语音 5 秒，里面没有人声]` |
+| `no_words` (speech, but no letter or digit in the text) | `[语音 12 秒，有人在说话，但听不出说的什么]` |
+| `failed` | `[语音 33 秒，没转出文字：原因]`, e.g. `识别模型不在`, bytes that are not WAV or MP3, or `交给本机识别时出了错` (the adapter's `voice_refused` `host`) |
+| `not_fetched` | `[语音，没拿到：原因]`, from the adapter's other `voice_refused` reasons, or `这段语音没随消息一起送来` on a `voice_in` channel whose line came with neither an outcome nor a reason |
 
 ### Reading images
 

@@ -226,6 +226,12 @@ class RuntimeHost:
             self.controller.restart_pending = self.restart_pending
             if self.configure_controller:
                 self.configure_controller(self)
+            self.voice = None
+            if self.config.get('channels'):
+                # A channel's voices become text in this process, within the request that brings them (voice.py).
+                from . import voice
+                self.voice = voice.Transcriber(self.evidence).start()
+                self.stack.callback(self.voice.close)
             channels = Channels(self.controller)
             channels.recover_sending()
             self._recover_tasks()

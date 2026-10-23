@@ -178,6 +178,7 @@ HTTP client for the runtime host channel API (stdlib only).
   - `post_media_keys` — NapCat's current picture-link keys (media_keys.py); `accepted` once the host holds them.
   - `post_own_mute` — Her own mute in one group (mutes.py); `accepted` once the host took it.
   - `post_notice` — A line about her own account for her home session (notices.py); `accepted` once the host took it.
+  - `post_voice` — One voice of a line about to be posted, as its bytes (voice.py): the host transcribes it within the request; `accepted` with its outcome (`state`), or `duplicate` when it was settled before.
   - `claim_outbox`
   - `get_attachment` — Fetch the bytes one claimed publication declared, over this same API.
   - `get_file_piece` — One piece of a claimed file: `length` bytes from `offset` (fewer only at its end), over this same API.
@@ -420,6 +421,17 @@ Wiring: WS reader -> durable spool -> host submitter, host outbox -> send.
   - `maybe_status`
   - `verify_identity`
   - `run`
+
+## `napcat-qq/integration/qqadapter/voice.py`
+
+[packages/channels/napcat-qq/integration/qqadapter/voice.py](../../packages/channels/napcat-qq/integration/qqadapter/voice.py)
+
+Voice messages, settled before their line goes to the host (ADR-093): NapCat clears its voice cache, so a voice not fetched soon is lost, and a line that reaches her should already carry its words.
+
+- def `segments` — [(index, file)] for the voices of a line, in order: only a line whose media block goes to the host (its placeholders are what the host fills in).
+- def `refusal`
+- def `fetch` — (bytes, None) or (None, refusal) for one voice segment's file.
+- def `settle` — Fetch and post each voice of this line before the line is posted; a voice without an outcome gets its reason on its media item.
 
 ## `napcat-qq/python/napcat_qq/__init__.py`
 

@@ -23,6 +23,7 @@ from .onebot import OneBot
 from .outbound import Outbound
 from .peers import PeerDirectory
 from .selfrole import SelfRoles
+from . import voice as voice_mod
 
 STATUS_EVERY = 60
 HEALTH_EVERY = 5
@@ -95,9 +96,10 @@ class Adapter:
         self._last_status = 0.0
         self.identity = None
         # what she may send through reply (ADR-064 phase 2); a poke or reaction NapCat refuses comes back to her
-        # what this bridge carries, told to the host on every claim (ADR-079: the pointer family too)
+        # what this bridge carries, told to the host on every claim (ADR-079: the pointer family too; ADR-093: it
+        # settles each voice before its line)
         self.capabilities = list(CAPABILITIES) + [file_capability(cfg.napcat["max_file_bytes"]),
-                                                  "react", "poke", "quote", "quote_in", "react_in", "recall"]
+                                                  "react", "poke", "quote", "quote_in", "react_in", "recall", "voice_in"]
 
     def log(self, msg):
         print("%s %s" % (utc_stamp(), msg), flush=True)
@@ -277,6 +279,13 @@ class Adapter:
             except Exception as exc:
                 self.counters.inc("self_role_errors")
                 self.log("SELF_ROLE_ERROR type=%s" % type(exc).__name__)
+        try:
+            # Its voices first: fetched from NapCat and settled by the host, so the line arrives with its words, in
+            # its place among the lines (voice.py).
+            voice_mod.settle(envelope, self.onebot, self.host, self.counters, log=self.log)
+        except Exception as exc:
+            self.counters.inc("voice_errors")
+            self.log("VOICE_ERROR event_id=%s type=%s" % (envelope.get("event_id"), type(exc).__name__))
         res = self.host.post_event(envelope)
         if res.kind == "reject":
             # any 4xx with an injected block on board gets one clean retry: the
@@ -350,7 +359,7 @@ class Adapter:
                     "up" if snap["ws_api_up"] else "down",
                     snap["spool_inbound"], snap["spool_receipts"], snap["pending_echo"], snap["group_routes"],
                     json.dumps({k: v for k, v in sorted(snap.items())
-                                if k.startswith(("inbound_", "outbox", "send_", "receipt", "frames", "resp", "ws_", "api_", "late_", "peer_", "media_", "attachment_", "catchup_", "members_", "mutes_"))},
+                                if k.startswith(("inbound_", "outbox", "send_", "receipt", "frames", "resp", "ws_", "api_", "late_", "peer_", "media_", "attachment_", "catchup_", "members_", "mutes_", "voice_"))},
                                sort_keys=True)))
 
     # ---- identity -------------------------------------------------------

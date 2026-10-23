@@ -409,14 +409,14 @@ Offline + live self checks. Nothing here invents an inbound message: synthetic e
 
 [packages/channels/napcat-qq/integration/qqadapter/service.py](../../packages/channels/napcat-qq/integration/qqadapter/service.py)
 
-Wiring: WS reader -> durable spool -> host submitter, host outbox -> send.
+Wiring: WS reader -> durable spool -> one lane per conversation -> host, host outbox -> send.
 
 - def `utc_stamp`
 - class `Adapter`
   - `log`
   - `on_event`
   - `on_notice` — A notice, request or meta event: counted by kind; her own mute to its state; a shown kind posted.
-  - `submit_pending`
+  - `submit_pending` — Hand each conversation with lines in the spool to a lane of its own, at most INBOUND_LANES at once, the conversation with the oldest line first.
   - `health_snapshot`
   - `maybe_status`
   - `verify_identity`
@@ -428,6 +428,7 @@ Wiring: WS reader -> durable spool -> host submitter, host outbox -> send.
 
 Voice messages, settled before their line goes to the host (ADR-093): NapCat clears its voice cache, so a voice not fetched soon is lost, and a line that reaches her should already carry its words.
 
+- def `host_refused` — Whether a voice of this line could not be handed to the host (its reason `host`): the host's state, so the line is prepared again on its next try rather than posted with the refusal kept.
 - def `segments` — [(index, file)] for the voices of a line, in order: only a line whose media block goes to the host (its placeholders are what the host fills in).
 - def `refusal`
 - def `fetch` — (bytes, None) or (None, refusal) for one voice segment's file.

@@ -8,9 +8,10 @@ there is no outcome -- NapCat refused (retcode 1200 `file not found` is `gone`),
 host call failed -- the reason goes on that voice's media item (`voice_refused`), so the line says why. The line is
 posted either way, after its voices, so lines keep their order. Only metadata reaches the log.
 
-Lines are submitted one at a time, so a voice holds up its line and the lines queued behind it, in any conversation:
-at most FETCH_TIMEOUT + POST_TIMEOUT (40 s) per voice, which is the bound per line for QQ, whose voice message carries
-one voice; a few seconds in the usual case (NapCat's conversion, then 0.1-1.5 s of transcription).
+Each conversation's lines go from a lane of their own, one at a time (service.py, ADR-095), so a voice holds up its
+line and the lines behind it in that conversation only: at most FETCH_TIMEOUT + POST_TIMEOUT (40 s) per voice, which is
+the bound per line for QQ, whose voice message carries one voice; a few seconds in the usual case (NapCat's conversion,
+then 0.1-1.5 s of transcription).
 """
 import base64
 
@@ -29,6 +30,12 @@ def _voice_items(envelope):
     raw = envelope.get("raw") if isinstance(envelope.get("raw"), dict) else {}
     block = raw.get(MEDIA_KEY) if isinstance(raw.get(MEDIA_KEY), dict) else {}
     return [item for item in block.get("items") or () if isinstance(item, dict) and item.get("type") in VOICE_TYPES]
+
+
+def host_refused(envelope):
+    """Whether a voice of this line could not be handed to the host (its reason `host`): the host's state, so the line
+    is prepared again on its next try rather than posted with the refusal kept."""
+    return any((item.get(REFUSED_KEY) or {}).get("reason") == "host" for item in _voice_items(envelope))
 
 
 def segments(envelope):

@@ -243,7 +243,8 @@ A channel kind that declares `ROUTE_KEYS` (the `agent` kind) also accepts a key 
 | `CHANNEL_IDENTITY_DENIED` | 403 | unknown route or member, or the wrong `account_id` |
 | `CHANNEL_GROUP_DENIED` | 403 | `group_id` is not the route's group |
 | `INPUT_IDENTITY_OR_CONTENT_CONFLICT` | 403 | an event id reused with other content |
-| `HOST_RECONFIGURING`, `HOST_STOPPING` | 503 | settings are being applied, or the worker is stopping |
+| `HOST_RECONFIGURING`, `HOST_STOPPING`, `HOST_DATABASE_UNAVAILABLE` | 503 | the whole Host: settings are being applied, the worker is stopping, or its database is out of reach; ask again later, it is no fault of the request |
+| `HOST_REQUEST_FAILED` | 500 | this request failed in the worker; a redacted diagnostic is recorded (`host.channel_error`) |
 
 - **Identity.** An event is the channel, account, route scene and `event_id`, plus `occurred_at` when given: the same id and time again is a redelivery; the same id at another time is a new message.
 - **Quotes.** `reply_to` binds, within the conversation and its policy epoch, to the newest received line with that platform id, or her delivered line with that platform message id, no later than `occurred_at`.
@@ -510,7 +511,8 @@ says why in words.
 | 400 | malformed JSON, a body size outside its limit, a field out of shape, or a path outside `/v1/channels/{channel_id}/…` |
 | 403 | authentication (an unknown channel included), route, identity, capability or receipt refused |
 | 404 | an unknown endpoint of an authenticated channel |
-| 503 | the worker is reconfiguring or stopping, or failed; it records a redacted diagnostic (`host.channel_error`) |
+| 500 | this request failed in the worker (`HOST_REQUEST_FAILED`); it records a redacted diagnostic (`host.channel_error`) |
+| 503 | the whole Host is unavailable for a while (reconfiguring, stopping, its database out of reach); not a fault of the request |
 
 ## Persona packages
 

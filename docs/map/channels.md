@@ -36,6 +36,7 @@ Authenticated transport-neutral adapter seam. Platform protocol belongs to the a
   - `attachment` — 字节端点：GET /v1/channels/<id>/outbox/<pub>/attachment?attempt_id=…&artifact_id=…
   - `receipt`
   - `recover_sending`
+- def `whole_host_state` — The name of a state of the whole Host an exception reports (applying settings, stopping, its database out of reach), or None when it is this request's own failure.
 - class `ChannelServer`
   - `close`
 

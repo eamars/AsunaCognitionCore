@@ -218,7 +218,7 @@ class PeerDirectory:
         self._lock = threading.RLock()
         self._people = {}
         self._last_call = {}
-        self._changes_now = []
+        self._tls = threading.local()
         os.makedirs(self.dir, exist_ok=True)
         os.makedirs(self.journal_dir, exist_ok=True)
         self._load()
@@ -246,6 +246,16 @@ class PeerDirectory:
         for key, rec in people.items():
             if isinstance(rec, dict) and isinstance(rec.get("scenes"), dict):
                 self._people[str(key)] = rec
+
+    # The changes the current observation made, kept per thread: lines of different conversations are observed at
+    # once, each on its own lane (ADR-095).
+    @property
+    def _changes_now(self):
+        return self._tls.__dict__.setdefault("changes", [])
+
+    @_changes_now.setter
+    def _changes_now(self, value):
+        self._tls.changes = value
 
     def _save(self):
         blob = {"version": 1, "updated_at": iso(), "people": self._people}

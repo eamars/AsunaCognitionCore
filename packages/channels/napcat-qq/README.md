@@ -41,6 +41,19 @@ with Core (`registerChannel`).
   30 minutes (13 pieces × 120 s, then 62 s and 170 s).
   An upload that outlasts its wait is `unknown`, and a later answer settles it. The outbox waits while a file is
   sent.
+- Inbound lines go to Core in their order within each conversation, from a lane of that conversation's own (up to
+  8 conversations at once; a lane gives its place after 20 lines, and the conversation that waited longest since its
+  last lane goes first). A line is
+  prepared once (its lookups, forward and voices; the prepared line is written back to the spool) and posted as often
+  as it takes, tried again after 2, 5, 15, 30 and then every 60 s; a line that is slow to prepare or that Core does
+  not take holds only its own conversation. An answer about Core itself (no answer, a dropped connection, 503 for the
+  whole Core, `CHANNEL_AUTH_REQUIRED`) makes the line wait. A 503 Core names (applying settings, stopping, its
+  database) and `CHANNEL_AUTH_REQUIRED` never count; no answer counts only when other lines went in since the line's
+  previous try (then Core is there and that line is the one not getting in). A voice that could not be handed to Core
+  is fetched and handed over again on the next try. A line Core fails on its own (500 and other 5xx), or one whose try fails
+  in the adapter, is set aside after five counted tries in `journal/inbound_failed.jsonl` and its conversation goes
+  on; a 4xx goes to `journal/inbound_rejected.jsonl` at once; a 2xx settles it (accepted, a duplicate, or held,
+  dropped or passed over by Core, its status in `journal/inbound_sent.jsonl`).
 - A voice message (`record` segment) is settled before its line is posted, because NapCat clears its voice cache and
   a line should reach her with its words: on the submit path each voice is asked of NapCat (`get_record` with the
   segment's `file` and `out_format` `mp3`, 10 s) and its audio (`base64` in the answer) is posted to Core's `voice`
@@ -48,7 +61,7 @@ with Core (`registerChannel`).
   (retcode 1200 `file not found` is `gone`; another refusal, a timeout, no connection, no audio in the answer, or the
   Core call failing each have their reason), the reason rides on that voice's media item as `voice_refused`, so her
   line says why. The line is posted after its voices either way, so lines keep their order; a voice line, and those
-  queued behind it in any conversation, wait for NapCat's conversion and the transcription (about 1.5 s for a
+  queued behind it in the same conversation, wait for NapCat's conversion and the transcription (about 1.5 s for a
   minute of speech, under a second more when the model was idle), at most 40 s per voice (the fetch's 10 s and
   the Core call's 30 s; a QQ voice message carries one voice). The log (`VOICE_SETTLED`, `VOICE_NOT_SETTLED`) carries the
   event, the segment, the byte count and the outcome, never the file name, the audio or the words.

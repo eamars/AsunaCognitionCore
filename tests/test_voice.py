@@ -508,3 +508,33 @@ def test_the_real_model_transcribes_its_own_sample_clips_and_finds_no_voice_in_n
             box.mux(packet)
     quiet = worker.transcribe(buffer.getvalue(), 'audio/wav')
     assert quiet['state'] == voice.NO_VOICE and voice.words(quiet) == '[语音 5 秒，里面没有人声]'
+
+
+def post_event(port, body):
+    request = urllib.request.Request('http://127.0.0.1:%d/v1/channels/qq/events' % port,
+                                     data=json.dumps(body).encode(), method='POST',
+                                     headers={'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as answer:
+            return answer.status, json.loads(answer.read())
+    except urllib.error.HTTPError as exc:
+        return exc.code, json.loads(exc.read())
+
+
+def test_the_whole_host_unavailable_is_503_and_one_request_failing_is_500(store, server):
+    """ADR-095 §5.4: a client waits on a state of the whole Host and counts only its own request's failure."""
+    from pymongo.errors import AutoReconnect
+    channels = world(store)
+    port = server(channels)
+    body = {'route_id': 'g', 'account_id': BOT, 'sender_id': '20002', 'event_id': '7001', 'text': 'hi',
+            'group_id': GROUP, 'mentioned_account_ids': []}
+    channels.controller.reconfiguring = True
+    assert post_event(port, body) == (503, {'error': 'HOST_RECONFIGURING'})
+    channels.controller.reconfiguring = False
+    real = channels.receive
+    channels.receive = lambda channel_id, posted: (_ for _ in ()).throw(AutoReconnect('down'))
+    assert post_event(port, body) == (503, {'error': 'HOST_DATABASE_UNAVAILABLE'})
+    channels.receive = lambda channel_id, posted: {}['missing']
+    assert post_event(port, body) == (500, {'error': 'HOST_REQUEST_FAILED'})
+    channels.receive = real
+    assert post_event(port, body)[0] == 200

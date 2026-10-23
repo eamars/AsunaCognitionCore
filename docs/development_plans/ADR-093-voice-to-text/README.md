@@ -167,4 +167,5 @@ found that every one of its should-fix defects came from that choice:
 Transcribing before the line exists removes the pending state and, with it, all of those paths. It costs a voice
 line about the fetch plus 0.1–1.5 s of transcription before it reaches her (§3). The adapter submits lines one at a
 time, so a voice line also holds up the lines queued behind it, in any conversation, by the same time; it is bounded
-by the fetch's 10 s and the post's timeout.
+by the fetch's 10 s and the post's timeout. (Since ADR-095 step 2 each conversation has a lane of its own: a voice
+holds only the lines behind it in its own conversation.)

@@ -13,6 +13,7 @@ publication is already claimed (SENDING), so a host restart would call it UNKNOW
 The byte paths read in chunks against their own ceiling and say which check failed.
 """
 import hashlib
+import http.client
 import json
 import socket
 import urllib.error
@@ -92,7 +93,7 @@ class HostApi:
                 raw = exc.read(65536)
             except Exception:
                 raw = b""
-        except (urllib.error.URLError, socket.timeout, ConnectionError, OSError) as exc:
+        except (urllib.error.URLError, socket.timeout, ConnectionError, OSError, http.client.HTTPException) as exc:
             return Result("retry", code=None, error=type(exc).__name__)
         obj = None
         if raw:

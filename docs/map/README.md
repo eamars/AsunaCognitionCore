@@ -433,7 +433,7 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 - [`napcat-qq/integration/qqadapter/peers.py`](../../packages/channels/napcat-qq/integration/qqadapter/peers.py) — Peer identity: who is speaking, and whether it is still the same person.
 - [`napcat-qq/integration/qqadapter/selfrole.py`](../../packages/channels/napcat-qq/integration/qqadapter/selfrole.py) — Her own role in each group (owner / admin / member), so the host knows what she may do there.
 - [`napcat-qq/integration/qqadapter/selftest.py`](../../packages/channels/napcat-qq/integration/qqadapter/selftest.py) — Offline + live self checks.
-- [`napcat-qq/integration/qqadapter/service.py`](../../packages/channels/napcat-qq/integration/qqadapter/service.py) — Wiring: WS reader -> durable spool -> host submitter, host outbox -> send.
+- [`napcat-qq/integration/qqadapter/service.py`](../../packages/channels/napcat-qq/integration/qqadapter/service.py) — Wiring: WS reader -> durable spool -> one lane per conversation -> host, host outbox -> send.
 - [`napcat-qq/integration/qqadapter/voice.py`](../../packages/channels/napcat-qq/integration/qqadapter/voice.py) — Voice messages, settled before their line goes to the host (ADR-093): NapCat clears its voice cache, so a voice not fetched soon is lost, and a line that reaches her should already carry its words.
 - [`napcat-qq/python/napcat_qq/__init__.py`](../../packages/channels/napcat-qq/python/napcat_qq/__init__.py) — QQ through NapCat, as a channel kind of the Asuna core (asuna/channel_kinds.py).
 - [`napcat-qq/skills/qq-napcat-adapter/decode_log.py`](../../packages/channels/napcat-qq/skills/qq-napcat-adapter/decode_log.py) — 把 qq-napcat-adapter 的日志行翻成人话摘要（离线，只读 stdin 或文件）。

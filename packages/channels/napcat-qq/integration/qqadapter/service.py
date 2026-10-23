@@ -1,8 +1,11 @@
-"""Wiring: WS reader -> durable spool -> host submitter, host outbox -> send.
+"""Wiring: WS reader -> durable spool -> one lane per conversation -> host, host outbox -> send.
 
 The /event callback only writes a spool file.  Submission to the host happens on
-a separate thread, so a slow or unreachable host cannot stall the WebSocket
-reader, and a spool backlog cannot lose an authorized message.
+other threads, so a slow or unreachable host cannot stall the WebSocket reader,
+and a spool backlog cannot lose an authorized message.  Each conversation's lines
+go to the host in their order from a lane of their own (ADR-095): a line that is
+slow to prepare (a voice, a forward, a lookup) or does not go in holds only its
+own conversation.
 """
 import json
 import os
@@ -27,7 +30,11 @@ from . import voice as voice_mod
 
 STATUS_EVERY = 60
 HEALTH_EVERY = 5
-MAX_EVENT_TRIES = 10
+INBOUND_LANES = 8             # conversations whose lines are prepared and posted at once (ADR-095)
+WHOLE_HOST = ("HOST_RECONFIGURING", "HOST_STOPPING", "HOST_DATABASE_UNAVAILABLE")   # the host's 503 names
+LANE_BATCH = 20               # lines a lane posts before it gives its place to a conversation that waits
+HOST_ERROR_TRIES = 5          # a line that fails on its own is tried this often, then set aside
+RETRY_WAITS = (2, 5, 15, 30, 60)   # seconds before a conversation's first line is tried again; the last repeats
 
 
 def utc_stamp():
@@ -92,7 +99,17 @@ class Adapter:
         self.stop = threading.Event()
         self.wake = threading.Event()
         self.claim_wait = claim_wait
-        self._tries = {}
+        self._tries = {}              # spool path -> times the host answered it with an error
+        self._attempts = {}           # spool path -> times it did not go in (its backoff)
+        self._lanes = {}              # route id -> the lane posting that conversation's lines
+        self._spooled = {}            # spool path -> its route id, each file read once (submit_pending)
+        self._tried_at = {}           # spool path -> when its last try was posted
+        self._lane_started = {}       # route id -> when a lane for it last started (submit_pending's order)
+        self._last_in = 0.0           # when a line last went in, any conversation
+        self._lanes_lock = threading.Lock()
+        self.retry_waits = RETRY_WAITS
+        self.lane_batch = LANE_BATCH
+        self.inbound_lanes = INBOUND_LANES
         self._last_status = 0.0
         self.identity = None
         # what she may send through reply (ADR-064 phase 2); a poke or reaction NapCat refuses comes back to her
@@ -188,56 +205,193 @@ class Adapter:
         self.log("NOTICE_SPOOLED kind=%s route=%s event_id=%s" % (kind, envelope["route_id"], envelope["event_id"]))
         self.wake.set()
 
-    # ---- inbound submitter (own thread) --------------------------------
+    # ---- inbound lanes (ADR-095) -------------------------------------------
     def submit_pending(self):
-        submitted = 0
-        for path in self.journal.spool_list("inbound"):
-            try:
-                blob = self.journal.read_json(path)
-            except Exception:
-                self.journal.spool_move(path, "inbound_unreadable.jsonl", {"reason": "unreadable"})
-                continue
-            envelope = blob.get("envelope") or {}
-            res = self._submit_event(envelope)
-            if res.kind in ("accepted", "duplicate"):
-                obj = res.obj if isinstance(res.obj, dict) else {}
-                self.counters.inc("inbound_" + res.kind)
-                self.journal.append("inbound_sent.jsonl",
-                                    {"ts": utc_stamp(), "event_id": envelope.get("event_id"),
-                                     "route_id": envelope.get("route_id"), "result": res.kind,
-                                     "episode_id": obj.get("episode_id"), "http": res.code})
-                self.journal.spool_remove(path)
-                self._tries.pop(path, None)
-                self.log("INBOUND_%s event_id=%s route=%s episode=%s http=%s"
-                         % (res.kind.upper(), envelope.get("event_id"), envelope.get("route_id"),
-                            obj.get("episode_id"), res.code))
-                submitted += 1
-            elif res.kind == "retry":
-                tries = self._tries.get(path, 0) + 1
-                self._tries[path] = tries
-                self.counters.inc("inbound_retries")
-                if tries > MAX_EVENT_TRIES:
-                    self.journal.spool_move(path, "inbound_failed.jsonl",
-                                            {"reason": "host_unreachable_too_long", "tries": tries})
-                    self.log("INBOUND_FAILED event_id=%s tries=%d reason=host_unreachable_too_long"
-                             % (envelope.get("event_id"), tries))
-                else:
-                    self.log("INBOUND_RETRY event_id=%s tries=%d error=%s"
-                             % (envelope.get("event_id"), tries, res.error or res.code))
-            else:
-                self.journal.spool_move(path, "inbound_rejected.jsonl",
-                                        {"reason": "host_rejected", "http": res.code, "body": res.obj})
-                self.log("INBOUND_REJECTED event_id=%s http=%s body=%s"
-                         % (envelope.get("event_id"), res.code, json.dumps(res.obj, ensure_ascii=False)[:300]))
-        return submitted
+        """Hand each conversation with lines in the spool to a lane of its own, at most INBOUND_LANES at once, the
+        conversation with the oldest line first. A lane posts its conversation's lines one at a time, in their order;
+        a line that is slow or does not go in holds only its own conversation. Each spool file is read once here (its
+        route is remembered), so a lane can remove it without a reader in the way. Returns how many lanes started."""
+        listed = self.journal.spool_list("inbound")
+        current = set(listed)
+        for path in [path for path in self._spooled if path not in current]:
+            del self._spooled[path]
+        routes = {}
+        for path in listed:
+            route = self._spooled.get(path)
+            if route is None:
+                try:
+                    blob = self.journal.read_json(path)
+                except FileNotFoundError:
+                    continue                  # posted by its lane meanwhile
+                except ValueError:
+                    blob = None               # not JSON
+                except OSError:
+                    continue                  # held open a moment (Windows): the next pass reads it
+                if not isinstance(blob, dict) or not isinstance(blob.get("envelope"), dict):
+                    self.journal.spool_move(path, "inbound_unreadable.jsonl", {"reason": "unreadable"})
+                    continue
+                route = self._spooled[path] = str(blob["envelope"].get("route_id") or "")
+            routes.setdefault(route, []).append(path)
+        started = []
+        with self._lanes_lock:
+            # A conversation that never had a lane, or had one longest ago, first; among equals the oldest line first.
+            for route in sorted(routes, key=lambda route: self._lane_started.get(route, 0.0)):
+                if route in self._lanes or len(self._lanes) >= self.inbound_lanes:
+                    continue
+                lane = threading.Thread(target=self._lane, args=(route, routes[route][:self.lane_batch]),
+                                        name="inbound-" + route[:40], daemon=True)
+                self._lanes[route] = lane
+                self._lane_started[route] = time.monotonic()
+                started.append(lane)
+        for lane in started:
+            lane.start()
+        return len(started)
+
+    def _lane(self, route, paths):
+        """One conversation's lines, in order: each is tried until it is settled (in, set aside or gone); the next
+        waits for it. After LANE_BATCH lines the lane ends and the dispatcher starts it again behind the
+        conversations that wait. A line still waiting at shutdown stays in the spool for the next start."""
+        try:
+            for path in paths:
+                while True:
+                    try:
+                        done = self._submit_one(path)
+                    except Exception as exc:
+                        done = self._lane_error(route, path, exc)
+                    if done:
+                        break
+                    if self.stop.is_set():
+                        return
+                    tried = self._attempts.get(path, 1)
+                    self.stop.wait(self.retry_waits[min(tried, len(self.retry_waits)) - 1])
+        finally:
+            with self._lanes_lock:
+                self._lanes.pop(route, None)
+            self.wake.set()
+
+    @staticmethod
+    def _host_away(res):
+        """Whether an answer is about the host, not this line: no answer, the whole host unavailable (503), or this
+        adapter's key no longer taken (the host's settings changed). Such answers wait; they don't count."""
+        if res.kind == "retry" and (res.code is None or res.code == 503):
+            return True
+        error = res.obj.get("error") if isinstance(res.obj, dict) else None
+        return res.kind == "reject" and res.code == 403 and error == "CHANNEL_AUTH_REQUIRED"
+
+    def _submit_one(self, path):
+        """Prepare one spooled line once (the prepared line is written back), then post it. True when it is settled
+        (in, set aside or gone); False when it waits for another try (ADR-095 §5.4):
+        - any 2xx settles it: accepted, a duplicate, or held, dropped or passed over by the host;
+        - an answer about the host (`_host_away`) never counts while other lines get in meanwhile; once they do, the
+          host is there and this line is the one not getting in, so it counts;
+        - any other 5xx counts; HOST_ERROR_TRIES counted tries set the line aside (`inbound_failed.jsonl`);
+        - a 4xx refuses it (`inbound_rejected.jsonl`), after the one repost without the injected blocks."""
+        try:
+            blob = self.journal.read_json(path)
+        except FileNotFoundError:
+            return True
+        except ValueError:
+            blob = None
+        except OSError:
+            return False                      # held open a moment: tried again after its wait
+        if not isinstance(blob, dict) or not isinstance(blob.get("envelope"), dict):
+            self.journal.spool_move(path, "inbound_unreadable.jsonl", {"reason": "unreadable"})
+            return True
+        envelope = blob["envelope"]
+        if not blob.get("prepared"):
+            self._prepare(envelope)
+            # A retry posts what was prepared: the platform is not asked again (a voice it has cleared is not
+            # fetched twice) and a lookup is counted once. Not when a voice could not be handed to the host: that
+            # is the host's state, so the next try fetches and hands it over again.
+            if not voice_mod.host_refused(envelope):
+                self.journal.write_json(path, dict(blob, envelope=envelope, prepared=True))
+        started = time.monotonic()
+        res = self._post(envelope)
+        where = "event_id=%s route=%s" % (envelope.get("event_id"), envelope.get("route_id"))
+        if res.kind in ("accepted", "duplicate", "ok"):
+            obj = res.obj if isinstance(res.obj, dict) else {}
+            result = res.kind if res.kind != "ok" else str(obj.get("status") or "ok")
+            self.counters.inc("inbound_" + (res.kind if res.kind != "ok" else "settled"))
+            self.journal.append("inbound_sent.jsonl",
+                                {"ts": utc_stamp(), "event_id": envelope.get("event_id"),
+                                 "route_id": envelope.get("route_id"), "result": result,
+                                 "episode_id": obj.get("episode_id"), "http": res.code})
+            self.journal.spool_remove(path)
+            self._settled(path)
+            self._last_in = time.monotonic()
+            self.log("INBOUND_%s %s episode=%s http=%s" % (result.upper(), where, obj.get("episode_id"), res.code))
+            return True
+        self._attempts[path] = self._attempts.get(path, 0) + 1
+        if self._host_away(res):
+            previous, self._tried_at[path] = self._tried_at.get(path), started
+            said = res.error or (res.obj.get("error") if isinstance(res.obj, dict) else None)
+            # A state the host names (applying settings, stopping, its database) and a key it does not take are the
+            # host's whatever else happens. No answer, or an unnamed 503 (an older host), is this line's only when
+            # other lines went in since its previous try.
+            if said in WHOLE_HOST or said == "CHANNEL_AUTH_REQUIRED" or previous is None or self._last_in <= previous:
+                self.counters.inc("inbound_waits")
+                self.log("INBOUND_WAIT %s http=%s error=%s (the host is not taking lines)" % (where, res.code, said))
+                return False
+            return self._count(path, envelope, res, "not_taken_while_others_go_in")
+        if res.kind == "retry":
+            return self._count(path, envelope, res, "host_error")
+        self.journal.spool_move(path, "inbound_rejected.jsonl",
+                                {"reason": "host_rejected", "http": res.code, "body": res.obj})
+        self._settled(path)
+        self.log("INBOUND_REJECTED %s http=%s body=%s"
+                 % (where, res.code, json.dumps(res.obj, ensure_ascii=False)[:300]))
+        return True
+
+    def _count(self, path, envelope, res, reason):
+        """One counted try of a line that fails on its own; the last one sets it aside."""
+        self.counters.inc("inbound_retries")
+        tries = self._tries.get(path, 0) + 1
+        self._tries[path] = tries
+        where = "event_id=%s route=%s" % (envelope.get("event_id"), envelope.get("route_id"))
+        if tries >= HOST_ERROR_TRIES:
+            self.journal.spool_move(path, "inbound_failed.jsonl",
+                                    {"reason": reason, "tries": tries, "http": res.code, "body": res.obj})
+            self._settled(path)
+            self.log("INBOUND_FAILED %s tries=%d http=%s reason=%s" % (where, tries, res.code, reason))
+            return True
+        self.log("INBOUND_RETRY %s tries=%d http=%s reason=%s" % (where, tries, res.code, reason))
+        return False
+
+    def _lane_error(self, route, path, exc):
+        """A try that raised in this adapter (a journal write, a lookup's bug): counted like a failed try, with the
+        same backoff, and the line set aside after HOST_ERROR_TRIES of them."""
+        self.counters.inc("submitter_error")
+        self._attempts[path] = self._attempts.get(path, 0) + 1
+        tries = self._tries.get(path, 0) + 1
+        self._tries[path] = tries
+        self.log("SUBMITTER_ERROR route=%s tries=%d type=%s" % (route, tries, type(exc).__name__))
+        if tries < HOST_ERROR_TRIES:
+            return False
+        try:
+            self.journal.spool_move(path, "inbound_failed.jsonl",
+                                    {"reason": "adapter_error", "tries": tries, "error": type(exc).__name__})
+        except Exception:
+            return False
+        self._settled(path)
+        return True
+
+    def _settled(self, path):
+        self._tries.pop(path, None)
+        self._attempts.pop(path, None)
+        self._tried_at.pop(path, None)
 
     def _submit_event(self, envelope):
-        """Post one authorized event, carrying the peer profile inside `raw`.
+        """Prepare one authorized event and post it (the self-test's way in; a lane prepares a line once and posts
+        it as often as it takes)."""
+        self._prepare(envelope)
+        return self._post(envelope)
 
-        The identity lookup is bounded and optional: if the platform does not
-        answer, the message still goes to the host with whatever is already
-        known.  If a host ever refuses the injected block, the same event is
-        posted once more without it, so an observation can never eat a turn.
+    def _prepare(self, envelope):
+        """Everything a line asks the platform for before it goes to the host: the peer profile inside `raw`, the
+        people it mentions, a merged forward, her own role, its voices.
+
+        Each lookup is bounded and optional: if the platform does not answer, the message still goes to the host with
+        whatever is already known.
         """
         if self.peers is not None:
             try:
@@ -286,8 +440,11 @@ class Adapter:
         except Exception as exc:
             self.counters.inc("voice_errors")
             self.log("VOICE_ERROR event_id=%s type=%s" % (envelope.get("event_id"), type(exc).__name__))
+    def _post(self, envelope):
+        """Post one prepared event. If the host ever refuses the injected block, the same event is posted once more
+        without it, so an observation can never eat a turn."""
         res = self.host.post_event(envelope)
-        if res.kind == "reject":
+        if res.kind == "reject" and not self._host_away(res):
             # any 4xx with an injected block on board gets one clean retry: the
             # second post is byte-for-byte the envelope this adapter sent before
             # the observation existed, so an observation cannot eat a turn
@@ -440,10 +597,6 @@ class Adapter:
         finally:
             self.stop.set()
             self.onebot.stop()
-            try:
-                self.submit_pending()
-            except Exception:
-                pass
             try:
                 self.journal.write_health(self.health_snapshot())
             except Exception:

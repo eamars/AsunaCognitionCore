@@ -721,6 +721,20 @@ class Channels:
             PublishService(self.store).cancel_after(unknown)
 
 
+WHOLE_HOST_STATES = ('HOST_RECONFIGURING', 'HOST_STOPPING')
+
+
+def whole_host_state(exc):
+    """The name of a state of the whole Host an exception reports (applying settings, stopping, its database out of
+    reach), or None when it is this request's own failure."""
+    if isinstance(exc, RuntimeError) and str(exc) in WHOLE_HOST_STATES:
+        return str(exc)
+    from pymongo.errors import AutoReconnect, ServerSelectionTimeoutError
+    if isinstance(exc, (AutoReconnect, ServerSelectionTimeoutError)):
+        return 'HOST_DATABASE_UNAVAILABLE'
+    return None
+
+
 MEMBERS_BODY_LIMIT = 4 * 1024 * 1024
 JSON_BODY_LIMIT = 262144
 
@@ -826,12 +840,18 @@ class ChannelServer:
                     status, value = 403, {'error': str(exc)}
                 except (ValueError, TypeError) as exc:
                     status, value = 400, {'error': str(exc)}
-                except Exception:
-                    # Database addresses/credentials never cross the adapter boundary.
-                    error = redact_text(traceback.format_exc(), channels.store.config)
-                    channels.controller.app.evidence.record('host.channel_error', {'traceback': error})
-                    channels.controller.emit('[系统] 通道接口未完成：\n' + error)
-                    status, value = 503, {'error': 'HOST_TEMPORARILY_UNAVAILABLE'}
+                except Exception as exc:
+                    whole = whole_host_state(exc)
+                    if whole:
+                        # The whole Host, not this request: a client waits and asks again; it is no fault of the
+                        # request (RUNTIME_API, ADR-095 §5.4).
+                        status, value = 503, {'error': whole}
+                    else:
+                        # Database addresses/credentials never cross the adapter boundary.
+                        error = redact_text(traceback.format_exc(), channels.store.config)
+                        channels.controller.app.evidence.record('host.channel_error', {'traceback': error})
+                        channels.controller.emit('[系统] 通道接口未完成：\n' + error)
+                        status, value = 500, {'error': 'HOST_REQUEST_FAILED'}
                 if self.command == 'POST' and not self.body_read:
                     self.drop_body()
                 if raw is not None and status == 200:

@@ -115,11 +115,15 @@ class Journal:
         return [os.path.join(directory, n) for n in names if n.endswith(".json")]
 
     def spool_remove(self, path):
-        try:
-            os.unlink(path)
-            return True
-        except FileNotFoundError:
-            return False
+        for _ in range(20):
+            try:
+                os.unlink(path)
+                return True
+            except FileNotFoundError:
+                return False
+            except PermissionError:      # Windows: another thread is reading it this moment
+                time.sleep(0.05)
+        return False
 
     def spool_move(self, path, journal_name, extra=None):
         """Remove a spool item after recording it (with reason) in a journal."""

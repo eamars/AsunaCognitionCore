@@ -31,6 +31,7 @@ from .config import MAX_FILE_MB_MOST, Config, ConfigError
 from .hostapi import Result
 from .journal import Counters, Journal
 from .onebot import ApiTimeout, ApiTransportError
+from . import service as service_mod
 from .service import Adapter
 
 ALLOWED_ENVELOPE_KEYS = inbound_mod.PRIVATE_ENVELOPE_KEYS
@@ -1711,6 +1712,7 @@ def run(cfg, data_dir, live=True, live_config=True):
     _check_group_inbound(rep, gcfg)
     _check_media(rep, gcfg, root)
     _check_voice(rep, gcfg, root)
+    _check_lanes(rep, gcfg, root)
     _check_spool(rep, root)
     _check_outbound_params(rep, gcfg, root)
     _check_outbound_verify(rep, gcfg, root)
@@ -2224,6 +2226,251 @@ def _voice_refused(envelope, index=0):
     items = [item for item in ((envelope.get("raw") or {}).get(inbound_mod.MEDIA_KEY) or {}).get("items") or []
              if item.get("type") in voice_mod.VOICE_TYPES]
     return items[index].get(voice_mod.REFUSED_KEY) if index < len(items) else None
+
+
+class _LaneHost:
+    """SUBSTITUTE for the host's voice and events endpoints, safe across lanes: each event answers from its script (a
+    list of Results or exceptions, the last one repeating; none: accepted), optionally after a delay; what went in is
+    kept in order."""
+
+    def __init__(self, scripts=None, delays=None, voices=None):
+        self.lock = threading.Lock()
+        self.scripts = {key: list(value) for key, value in (scripts or {}).items()}
+        self.delays = dict(delays or {})
+        self.voices = {key: list(value) for key, value in (voices or {}).items()}
+        self.posted, self.tried, self.envelopes = [], [], {}
+
+    def post_voice(self, route_id, event_id, index, data, content_type="audio/mpeg", occurred_at=None, timeout=30):
+        with self.lock:
+            script = self.voices.get(str(event_id))
+            if script:
+                return script.pop(0) if len(script) > 1 else script[0]
+        return Result("accepted", 200, {"status": "settled", "state": "transcribed"})
+
+    def post_event(self, envelope):
+        eid = str(envelope.get("event_id"))
+        if eid in self.delays:
+            time.sleep(self.delays[eid])
+        with self.lock:
+            self.tried.append(eid)
+            script = self.scripts.get(eid)
+            res = (script.pop(0) if len(script) > 1 else script[0]) if script else Result(
+                "accepted", 200, {"status": "accepted", "episode_id": "ep-" + eid})
+            if isinstance(res, Exception):
+                raise res
+            if res.kind in ("accepted", "ok"):
+                self.posted.append(eid)
+                self.envelopes[eid] = json.loads(json.dumps(envelope))
+        return res
+
+
+class _HangingOneBot(StubOneBot):
+    """SUBSTITUTE for NapCat whose get_record of one file does not answer until `release` is set."""
+
+    def __init__(self, response, hang_file):
+        super().__init__(response=response)
+        self.hang_file = hang_file
+        self.release = threading.Event()
+
+    def api_call(self, action, params=None, timeout=15.0, meta=None):
+        if action == "get_record" and (params or {}).get("file") == self.hang_file:
+            self.release.wait(10)
+        return super().api_call(action, params, timeout, meta)
+
+
+def _until(test, seconds=5.0):
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        if test():
+            return True
+        time.sleep(0.02)
+    return test()
+
+
+def _check_lanes(rep, gcfg, root):
+    """ADR-095: each conversation's lines go to the host in their order from a lane of their own. A slow line holds
+    only its own conversation; an answer about the host (no answer, 503, a key no longer taken) never sets a line
+    aside while nothing else gets in; a line that fails on its own (a 500, an exception here, not taken while others
+    are) is set aside after its tries and its conversation goes on; a line is prepared once however often it is posted.
+
+    Offline only: synthetic events, a substitute NapCat and host; no platform call, nothing reaches a real host.
+    """
+    groups = sorted(gcfg.allowed_groups)
+    if len(groups) < 2:
+        rep.skip("lanes_two_conversations", "the fixture has one group")
+        return
+    ga, gb = groups[0], groups[1]
+    ma = sorted(gcfg.route_for_group(ga).allowed_senders)[0]
+    mb = sorted(gcfg.route_for_group(gb).allowed_senders)[0]
+    audio = b"ID3" + bytes(64)
+    good = {"status": "ok", "retcode": 0, "data": {"file": "/napcat/cache/x.mp3",
+                                                   "base64": base64.b64encode(audio).decode()}}
+
+    def record(name):
+        return {"type": "record", "data": {"file": name, "file_size": "5120"}}
+
+    def adapter_with(name, host, bot, waits=(0.02,), peer_mode="off"):
+        adapter = Adapter(gcfg, os.path.join(root, name), peer_mode=peer_mode)
+        adapter.onebot, adapter.host = bot, host
+        adapter.retry_waits = waits
+        adapter.log = lambda line: None
+        return adapter
+
+    def journal_of(adapter, name):
+        path = os.path.join(adapter.journal.jdir, name)
+        return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+
+    accepted = Result("accepted", 200, {"status": "accepted", "episode_id": "ep"})
+    away = Result("retry", None, None, "timeout")
+
+    # 1. A voice NapCat does not give yet, in A: B's line goes in meanwhile; A's next line waits for A's voice.
+    bot = _HangingOneBot(good, "voice-hang.amr")
+    host = _LaneHost()
+    adapter = adapter_with("lanes-slow", host, bot)
+    adapter.on_event(_group_event(gcfg, ga, ma, 6101, message=[record("voice-hang.amr")]))
+    adapter.on_event(_group_event(gcfg, ga, ma, 6102))
+    adapter.on_event(_group_event(gcfg, gb, mb, 6201))
+    adapter.submit_pending()
+    b_in = _until(lambda: "6201" in host.posted)
+    rep.check("lanes_slow_voice_holds_only_its_conversation", b_in and "6101" not in host.posted
+              and "6102" not in host.posted, json.dumps(host.posted))
+    bot.release.set()
+    _until(lambda: not adapter._lanes)
+    rep.check("lanes_keep_order_within_a_conversation", [e for e in host.posted if e in ("6101", "6102")]
+              == ["6101", "6102"] and adapter.journal.spool_list("inbound") == [], json.dumps(host.posted))
+
+    # 2. A's first line not taken (no answer) and waiting: B goes in while A waits; A's next line does not overtake.
+    host = _LaneHost({"6301": [away, away, accepted]})
+    adapter = adapter_with("lanes-order", host, StubOneBot(), waits=(0.3,))
+    adapter.on_event(_group_event(gcfg, ga, ma, 6301))
+    adapter.on_event(_group_event(gcfg, ga, ma, 6302))
+    adapter.on_event(_group_event(gcfg, gb, mb, 6401))
+    adapter.submit_pending()
+    b_first = _until(lambda: "6401" in host.posted, 1.0) and not host.posted.count("6301")
+    _until(lambda: not adapter._lanes)
+    rep.check("lanes_retried_line_not_overtaken", b_first and [e for e in host.posted if e in ("6301", "6302")]
+              == ["6301", "6302"], json.dumps(host.posted))
+
+    # 3. The host away (no answer, or 503 for the whole host), many times: the line waits, never set aside.
+    for name, answer in (("no-answer", away), ("reconfiguring", Result("retry", 503, {"error": "HOST_RECONFIGURING"}))):
+        host = _LaneHost({"6501": [answer] * 12 + [accepted]})
+        adapter = adapter_with("lanes-away-" + name, host, StubOneBot())
+        adapter.on_event(_group_event(gcfg, ga, ma, 6501))
+        adapter.submit_pending()
+        _until(lambda: not adapter._lanes)
+        rep.check("lanes_host_away_never_sets_aside_" + name, host.posted == ["6501"]
+                  and not journal_of(adapter, "inbound_failed.jsonl"),
+                  "tried=%d posted=%s" % (host.tried.count("6501"), host.posted))
+
+    # 4. This adapter's key not taken (the host's settings changed): the line waits, it is not refused.
+    host = _LaneHost({"6551": [Result("reject", 403, {"error": "CHANNEL_AUTH_REQUIRED"})] * 3 + [accepted]})
+    adapter = adapter_with("lanes-auth", host, StubOneBot())
+    adapter.on_event(_group_event(gcfg, ga, ma, 6551))
+    adapter.submit_pending()
+    _until(lambda: not adapter._lanes)
+    rep.check("lanes_key_not_taken_waits", host.posted == ["6551"] and not journal_of(adapter, "inbound_rejected.jsonl")
+              and host.tried.count("6551") == 4, "tried=%d posted=%s" % (host.tried.count("6551"), host.posted))
+
+    # 5. A line the host fails on its own (500): set aside after its tries; its conversation goes on.
+    host = _LaneHost({"6601": [Result("retry", 500, {"error": "HOST_REQUEST_FAILED"})]})
+    adapter = adapter_with("lanes-poison", host, StubOneBot())
+    adapter.on_event(_group_event(gcfg, ga, ma, 6601))
+    adapter.on_event(_group_event(gcfg, ga, ma, 6602))
+    adapter.submit_pending()
+    _until(lambda: not adapter._lanes)
+    rep.check("lanes_poison_line_set_aside_conversation_goes_on",
+              host.tried.count("6601") == service_mod.HOST_ERROR_TRIES and host.posted == ["6602"]
+              and '"host_error"' in journal_of(adapter, "inbound_failed.jsonl"),
+              "tried=%d posted=%s" % (host.tried.count("6601"), host.posted))
+
+    # 6. A line never taken while other lines keep going in: it is this line, so it counts and is set aside. Each
+    # try counts only when others went in since its previous try (a host just back for a moment does not count).
+    others = [str(mid) for mid in range(6751, 6791)]
+    host = _LaneHost({"6651": [away]}, delays={eid: 0.03 for eid in others})
+    adapter = adapter_with("lanes-not-taken", host, StubOneBot(), waits=(0.15,))
+    adapter.lane_batch = len(others)
+    adapter.on_event(_group_event(gcfg, ga, ma, 6651))
+    for mid in others:
+        adapter.on_event(_group_event(gcfg, gb, mb, int(mid)))
+    adapter.submit_pending()
+    _until(lambda: not adapter._lanes)
+    rep.check("lanes_line_not_taken_while_others_go_in_set_aside", host.posted == others
+              and '"not_taken_while_others_go_in"' in journal_of(adapter, "inbound_failed.jsonl"),
+              "tried=%d posted=%s" % (host.tried.count("6651"), host.posted))
+
+    # 7. A try that raises here: counted with its backoff (no hot loop), set aside after its tries; the next goes in.
+    host = _LaneHost({"6801": [RuntimeError("broken")]})
+    adapter = adapter_with("lanes-raise", host, StubOneBot())
+    adapter.on_event(_group_event(gcfg, ga, ma, 6801))
+    adapter.on_event(_group_event(gcfg, ga, ma, 6802))
+    adapter.submit_pending()
+    _until(lambda: not adapter._lanes)
+    rep.check("lanes_exception_counted_not_a_hot_loop", host.tried.count("6801") == service_mod.HOST_ERROR_TRIES
+              and host.posted == ["6802"] and '"adapter_error"' in journal_of(adapter, "inbound_failed.jsonl"),
+              "tried=%d posted=%s" % (host.tried.count("6801"), host.posted))
+
+    # 8. A line the host keeps but does not take as an input (held, dropped, a closed line): settled, not refused.
+    host = _LaneHost({"6851": [Result("ok", 200, {"status": "held"})]})
+    adapter = adapter_with("lanes-held", host, StubOneBot())
+    adapter.on_event(_group_event(gcfg, ga, ma, 6851))
+    adapter.submit_pending()
+    _until(lambda: not adapter._lanes)
+    rep.check("lanes_held_is_settled", '"held"' in journal_of(adapter, "inbound_sent.jsonl")
+              and not journal_of(adapter, "inbound_rejected.jsonl") and adapter.journal.spool_list("inbound") == [],
+              journal_of(adapter, "inbound_sent.jsonl")[-120:])
+
+    # 9. Prepared once: a voice line posted three times is fetched from NapCat once; peers on, two lanes at once.
+    bot = StubOneBot(response=good)
+    host = _LaneHost({"6901": [away, away, accepted]})
+    adapter = adapter_with("lanes-prepared", host, bot, peer_mode="full")
+    adapter.on_event(_group_event(gcfg, ga, ma, 6901, message=[record("voice-once.amr")]))
+    adapter.on_event(_group_event(gcfg, gb, mb, 6951))
+    adapter.submit_pending()
+    _until(lambda: not adapter._lanes)
+    fetched = sum(1 for call in bot.calls if call["action"] == "get_record")
+    rep.check("lanes_line_prepared_once", host.tried.count("6901") == 3 and fetched == 1
+              and sorted(host.posted) == ["6901", "6951"], "posted=%d fetched=%d" % (host.tried.count("6901"), fetched))
+
+    # 10. A state the host names (503 HOST_RECONFIGURING) never counts, even after other lines went in meanwhile.
+    named = Result("retry", 503, {"error": "HOST_RECONFIGURING"})
+    host = _LaneHost({"7001": [named] * 10 + [accepted]}, delays={"7051": 0.05})
+    adapter = adapter_with("lanes-named", host, StubOneBot())
+    adapter.on_event(_group_event(gcfg, ga, ma, 7001))
+    adapter.on_event(_group_event(gcfg, gb, mb, 7051))
+    adapter.submit_pending()
+    _until(lambda: not adapter._lanes)
+    rep.check("lanes_named_host_state_never_counts", sorted(host.posted) == ["7001", "7051"]
+              and not journal_of(adapter, "inbound_failed.jsonl"), "tried=%d posted=%s"
+              % (host.tried.count("7001"), host.posted))
+
+    # 11. A voice that could not be handed to the host (it was away): fetched and handed over again on the next try,
+    # so the line goes in with its words, not with the refusal.
+    bot = StubOneBot(response=good)
+    host = _LaneHost({"7101": [away, accepted]}, voices={"7101": [away, Result("accepted", 200, {
+        "status": "settled", "state": "transcribed"})]})
+    adapter = adapter_with("lanes-voice-away", host, bot)
+    adapter.on_event(_group_event(gcfg, ga, ma, 7101, message=[record("voice-away.amr")]))
+    adapter.submit_pending()
+    _until(lambda: not adapter._lanes)
+    fetched = sum(1 for call in bot.calls if call["action"] == "get_record")
+    posted = host.envelopes.get("7101") or {}
+    rep.check("lanes_voice_not_taken_is_fetched_again", host.posted == ["7101"] and fetched == 2
+              and _voice_refused(posted) is None, "fetched=%d refused=%s" % (fetched, _voice_refused(posted)))
+
+    # 12. A lane gives its place: with one lane and batches of two, B's line goes in after A's first batch, not
+    # after A's whole backlog.
+    host = _LaneHost()
+    adapter = adapter_with("lanes-fair", host, StubOneBot())
+    adapter.inbound_lanes, adapter.lane_batch = 1, 2
+    for mid in range(7201, 7207):
+        adapter.on_event(_group_event(gcfg, ga, ma, mid))
+    adapter.on_event(_group_event(gcfg, gb, mb, 7301))
+    for _ in range(12):
+        adapter.submit_pending()
+        _until(lambda: not adapter._lanes)
+    at = host.posted.index("7301") if "7301" in host.posted else -1
+    rep.check("lanes_a_waiting_conversation_gets_its_turn", 0 <= at <= 2 and len(host.posted) == 7,
+              json.dumps(host.posted))
 
 
 def _check_voice(rep, gcfg, root):

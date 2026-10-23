@@ -64,7 +64,7 @@ voice until a restart.
 
 1. **Receive** — unchanged.
 2. **Dispatch** — reads the spool and groups it by conversation (route). At most one line per conversation is in
-   progress; a pool of workers (4) serves conversations, the oldest waiting conversation first.
+   progress; a pool of workers (8, `INBOUND_LANES`) serves conversations, the oldest waiting conversation first.
 3. **Prepare** — in that conversation's worker: peer and mentions, forward, her role, voices. Each step has its
    deadline (as today). A step that fails or runs out is marked on the line and the line goes on (rule 7); for a
    voice that is the existing reason on its media item.
@@ -106,6 +106,14 @@ voice until a restart.
 - A failure of this item (its fetch, its send, its post) is retried with backoff; after 5 tries it is set aside.
 - A failure of a shared dependency (the Host unreachable, NapCat disconnected, the network) **never counts against an
   item**: everything waits durably until it is back. Only the item's own failures count.
+- As built for inbound (step 2, after its review): the Host answers a state of the whole Host with 503 and its name
+  (`HOST_RECONFIGURING`, `HOST_STOPPING`, `HOST_DATABASE_UNAVAILABLE`) and one request's own failure with 500
+  (`HOST_REQUEST_FAILED`). No answer, a dropped connection, a 503 and `CHANNEL_AUTH_REQUIRED` are about the Host:
+  they wait. A 503 the Host names and `CHANNEL_AUTH_REQUIRED` never count; no answer (and an unnamed 503, from an
+  older Host) counts only when other lines went in since that line's previous try. A 500, another 5xx, or a try
+  that raises in the adapter counts. Any 2xx settles the line. A line is prepared once and written back, so a retry
+  posts it again without asking the platform again, except when a voice could not be handed to the Host (then the
+  next try prepares it again).
 - Set aside means: moved to the dead-letter record with its reason and tries (`inbound_failed`, `inbound_rejected`,
   `receipts_rejected` exist), counted as a fault (5.6), and its conversation goes on. Outbound: the receipt is
   `failed`, as today, so her line shows it didn't go. Inbound: there is no mark in her conversation — the Host is
@@ -168,8 +176,27 @@ Every review brief for I/O work asks: what does a slow, hung or failing item do 
 
 ## 7. Build order (each its own review and restart)
 
+Built in the order 2, 3, 1, 4, 5, 6 (Claude, 2026-10-23: the owner wanted the clog fixed the same day; a set-aside
+line is in the adapter's journal meanwhile, so nothing waits on step 1).
+
 1. The fault counts and the endpoint (no behaviour change): the place every later step reports to.
-2. Inbound dispatch and per-conversation workers, with tests 1, 3, 4, 6.
+2. Inbound dispatch and per-conversation workers, with tests 1, 3, 4, 6. **Built:** `service.py` `submit_pending`
+   (groups the spool by route, at most `INBOUND_LANES` = 8 lanes, the conversation with the oldest line first),
+   `_lane` (a conversation's lines in order; a line not in yet is tried again after `RETRY_WAITS` 2, 5, 15, 30, 60 s),
+   `_submit_one` and `_host_away` (the answers as §5.4 says; `HOST_ERROR_TRIES` = 5 counted tries, then
+   `inbound_failed.jsonl`; a line prepared once, `_prepare`/`_post`), `_lane_error` (an exception is a counted try
+   with its backoff), each spool file read once by the dispatcher (`_spooled`; an OS error while reading waits for
+   the next pass), lanes yield after `LANE_BATCH` = 20 and the conversation whose lane started longest ago goes first,
+   no pass at shutdown (the spool waits for the next start); the Host's `whole_host_state` (503 versus 500);
+   `HostApi` takes a dropped connection as no answer; the journal removes a file another thread has open a moment
+   later; `peers.py` keeps an observation's changes per thread. Self-test `_check_lanes` (11 checks: a voice NapCat
+   does not give holds only its conversation; order kept; B goes in while A waits and A's next line does not overtake;
+   no answer or a 503 never sets aside; a key not taken waits; a 500 line set aside and its conversation goes on; a
+   line not taken while others go in set aside; an exception counted, no hot loop; held settles; prepared once with
+   peers on; a named 503 never counts; a voice the Host was away for is fetched again; a waiting conversation gets
+   its turn after one batch). The first check fails on the single submitter. Independent review: one high (the
+   Host's own 503 counted against a line) and five medium findings, fixed; a second verifier: three medium (a stale
+   first-answer time, prepare-once keeping a voice's refusal, the batch not letting others in) and two low, fixed.
 3. Outbound lanes, the Host's SENDING hold and the receipt thread, with tests 2, 5, 7, 8.
 4. The transcriber child, with test 9.
 5. The watchdog and visible state.

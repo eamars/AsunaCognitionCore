@@ -60,3 +60,5 @@
 
 - 现在表情包那行声明的是发出去的那份（存档去掉文字块后）的 sha 和大小（`stickers.leaving`），跟 `accept_artifact` 给普通图声明的一样。架子上的记录不动（身份照旧按存档 sha 去重）。
 - 测试：`tests/test_stickers.py::test_a_kept_png_with_text_goes_out_without_it`（改之前的代码上会失败）。
+
+2026-10-24：277 显示名 汪汪→狗头，`汪汪` 留在 aliases

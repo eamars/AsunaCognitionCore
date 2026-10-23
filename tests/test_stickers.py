@@ -24,7 +24,7 @@ MARKET = {'emoji_id': 'a' * 32, 'emoji_package_id': '237184', 'key': 'k' * 16}
 # ── the adapter ─────────────────────────────────────────────────────
 def test_the_adapter_names_faces_and_tells_stickers_from_photos():
     face = _media_item('face', {'id': '277', 'raw': {'faceText': '/汪汪', 'faceType': 2}})
-    assert face['placeholder'] == '[表情:汪汪]' and face['face_id'] == '277'
+    assert face['placeholder'] == '[表情:狗头]' and face['face_id'] == '277'   # NapCat still says `/汪汪` there; the alias shows the current name
     classic = _media_item('face', {'id': '14', 'raw': {'faceType': 1}})      # no name from NapCat: the table's
     assert classic['placeholder'] == '[表情:微笑]'
     custom = _media_item('image', {'file': 'A' * 32 + '.jpg', 'url': STICKER_URL, 'sub_type': '1', 'summary': '[动画表情]'})
@@ -40,7 +40,7 @@ def test_the_adapter_names_faces_and_tells_stickers_from_photos():
 
 
 def test_the_adapter_sends_faces_in_the_words_and_a_sticker_alone():
-    _, params = build_send_params('group', GROUP, '笑死[表情:汪汪] @qq:20002 [表情:没这个]', quote='9')
+    _, params = build_send_params('group', GROUP, '笑死[表情:狗头] @qq:20002 [表情:没这个]', quote='9')
     assert [seg['type'] for seg in params['message']] == ['reply', 'text', 'face', 'text', 'at', 'text']
     assert params['message'][2]['data'] == {'id': '277'} and params['message'][-1]['data']['text'] == ' [表情:没这个]'
     _, params = build_send_params('dm', '20001', '[表情:微笑]好')
@@ -106,7 +106,7 @@ def group_world(store, monkeypatch):
             'photo': media_line(store, 'in-photo', '[图片（未解析）]', {'file': 'C' * 32 + '.jpg', 'url': PHOTO_URL,
                                                                      'sub_type': '0'}, 4)}
     store.put('messages', {'_id': 'in-faces', 'scene_id': SCENE, 'author': 'qq:20003', 'direction': 'inbound',
-                           'text': '哈哈[表情:汪汪][表情:汪汪][表情:大怨种]', 'received_at': '2026-10-06T01:05:00+00:00',
+                           'text': '哈哈[表情:狗头][表情:狗头][表情:大怨种]', 'received_at': '2026-10-06T01:05:00+00:00',
                            'policy_epoch': 1, 'scene_seq': 105})
     return refs
 
@@ -134,7 +134,7 @@ def test_she_keeps_stickers_from_the_group_and_sends_one_as_its_own_message(stor
     assert ep['state'] in ('COMMITTED', 'WAITING_TASK'), ep.get('failure')
     assert 'sticker' in lane.calls[0]['tools']
     assert ep['context']['stickers_from_program']['shelf'] == '0 个，宽裕'
-    assert ep['context']['faces_from_program']['seen_here'] == ['汪汪', '大怨种']
+    assert ep['context']['faces_from_program']['seen_here'] == ['狗头', '大怨种']
     results = [row for row in lane.tool_results if row[2] == 'sticker']
     assert [row[5] for row in results] == [True, True, True, False, False], results
     assert '这是一张照片' in results[3][4] and 'STICKER_' not in results[3][4] + results[4][4]
@@ -199,7 +199,7 @@ def test_an_adapter_that_cannot_send_stickers_sends_none(store, monkeypatch):
 def test_what_she_says_is_checked_for_stickers_and_faces(store, monkeypatch):
     group_world(store, monkeypatch)
     ep = {'scene_id': SCENE, 'persona': 'P1'}
-    assert stickers.speech_problem(store, ep, '好[表情:汪汪]') is None
+    assert stickers.speech_problem(store, ep, '好[表情:狗头]') is None
     assert '架子上没有' in stickers.speech_problem(store, ep, '[表情包:不存在]')
     assert '不是 QQ 的小黄脸' in stickers.speech_problem(store, ep, '[表情:乱编的]')
     store.put('stickers', {'_id': 'stk-a', 'persona': 'P1', 'name': 'a', 'identity': 'x:a'})

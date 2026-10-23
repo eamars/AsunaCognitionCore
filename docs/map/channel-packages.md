@@ -132,7 +132,7 @@ Load and validate /integration/config.json.
 
 QQ's own faces (小黄脸): id <-> name, from faces.json next to this file.
 
-- def `clean_name` — NapCat writes a face's name as '/汪汪' or '[捂脸]'; the bare name, or ''.
+- def `clean_name` — NapCat writes a face's name as '/狗头' or '[捂脸]' (upstream may still say a renamed face's old '/汪汪'); the bare name, or ''.
 - def `name_of` — A face segment's name: what NapCat said it is, else the table's name for its id, else ''.
 
 ## `napcat-qq/integration/qqadapter/faults.py`

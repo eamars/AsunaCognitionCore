@@ -67,7 +67,7 @@ The DSH services, hooks, events, APIs, UI facilities and file formats the core p
 | `@deepseek-ai/dsh-session/fork` (`buildForkSeed`) | an errand's copy of a conversation | `index.js` `openAgent` |
 | `@deepseek-ai/dsh-session-persistence`, `@deepseek-ai/dsh-session-persistence-jsonl` | the persistence service Asuna wraps to mark its events | `persistence.js` |
 | `@deepseek-ai/dsh-session-projection-cache` (`projectionCacheDomainSpec`) | the checkpoint a cold write waits for | `navigation.js` |
-| `@deepseek-ai/dsh-compaction-basic` | base of her compaction engine (`floorTokens`, `turnEndTokens`; `compactNow` with `options.keepFrom` at her turn's end, when it takes one) | `compaction.js` `RoleCompactionEngine`, `compactAtTurnEnd`; `index.js` `turnEnd` |
+| `@deepseek-ai/dsh-compaction-basic` | base of her compaction engine (`floorTokens`, `turnEndTokens`; `compactNow` with `options.keepFrom` at her turn's end, when it takes one) | `compaction.js` `RoleCompactionEngine`, `compactAtTurnEnd`, `TurnEnds`; `index.js` `turnEnd` |
 | `@deepseek-ai/dsh-tools` (`defineTool`, `validateArgs`) | tool definitions; argument refusals in DSH's own terms | `index.js`; `tool-args.js`; `search.js` |
 | `@deepseek-ai/dsh-system-prompt` (`PERSONA_PREFIX_SECTION`) | her persona section's place | `index.js`; `recovery.js` |
 | `@deepseek-ai/dsh-skill`, `dsh-skill-filesystem`, `dsh-tool-skill`, `dsh-tool-todo`, `dsh-tool-web` | the action brain's `skill`, `todo_write`, `web_search`, `web_fetch` | `index.js`; `search.js` `registerWebSearch` |

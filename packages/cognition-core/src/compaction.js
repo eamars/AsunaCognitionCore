@@ -21,12 +21,13 @@
  * (`compactAtTurnEnd`, ADR-094): once the conversation is at `turnEndRatio` of the window, the Host compacts it while
  * she is idle, keeping her whole last turn as it is (`compactTurnEnd`, DSH's `compactNow` with a keep-from point); the
  * summary request carries the span before that turn alone, and the next turn reads the checkpoint and her last turn,
- * not a long kept tail. On a DSH whose `compactNow` keeps no turn nothing is compacted at the turn's end. DSH's
- * in-turn pressure compaction stays as the guard for a turn that grows past the threshold. The action brain keeps
- * DSH's own engineering template. */
+ * not a long kept tail. Her turn takes precedence: a stage starting in that conversation stops its turn-end compaction,
+ * which also stops at a deadline (`TurnEnds`), and a stopped one leaves the conversation as it was. On a DSH whose
+ * `compactNow` keeps no turn nothing is compacted at the turn's end. DSH's in-turn pressure compaction stays as the
+ * guard for a turn that grows past the threshold. The action brain keeps DSH's own engineering template. */
 import z from '@deepseek-ai/schemastery';
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic';
-import { BlockAssembler, LlmError, contentHasImage, createUserMessage } from '@deepseek-ai/dsh-llm';
+import { BlockAssembler, LlmError, contentHasImage, createUserMessage, errorChain } from '@deepseek-ai/dsh-llm';
 import { overflowed } from './carry.js';
 
 export const ROLE_COMPACTION_INSTRUCTION = [
@@ -118,13 +119,119 @@ export async function compactAtTurnEnd({ lane, agent, idle, meter, engine, compa
   return { tokens, due, result: await compact() };
 }
 
-/** ADR-094 §8: the first surface node of her last turn — the first one after the turn end before it, so the line that
- * opened the turn stays with it — or undefined when the conversation has no earlier turn to compact. */
+/** The longest a turn-end compaction runs (ADR-094): past it, it stops and the next turn end tries again. Above the
+ * summaries measured (46–69 s median, plus ~20 s when the span is read cold). */
+export const TURN_END_DEADLINE_MS = 180_000;
+
+/** ADR-094: this Host's turn-end compactions of her conversations. Her turn takes precedence: a stage starting in a
+ * conversation (`begin`) stops its running turn-end compaction and keeps a new one from starting until the stage is
+ * handed to DSH; each one also stops at `deadline`. A stopped one leaves the conversation as it was (DSH closes its
+ * compaction with an error), so the next turn end tries again; the in-turn guard is DSH's and unchanged. One that did
+ * not commit cleanly stops them in its conversation until it is opened again (a new agent); one after which her last
+ * turn is not right after the checkpoint stops them for the rest of this run. One log line each. */
+export class TurnEnds {
+  constructor(ctx, deadline = TURN_END_DEADLINE_MS) {
+    this.ctx = ctx;
+    this.deadline = deadline;
+    /** Session id → the AbortController of its running turn-end compaction. */
+    this.running = new Map();
+    /** Session id → how many of her stages are being started there. */
+    this.starting = new Map();
+    /** Agents whose turn-end compaction did not commit cleanly. */
+    this.broken = new WeakSet();
+    /** Why turn-end compaction is off for this run, once it is. */
+    this.off = '';
+    this.saidNoTurnKept = false;
+  }
+
+  /** Her stage is about to start in this conversation: stop its turn-end compaction, start none until the returned
+   * function is called (once the stage is handed to DSH, or refused). */
+  begin(id) {
+    this.running.get(id)?.abort(new Error('her turn came first'));
+    this.starting.set(id, (this.starting.get(id) ?? 0) + 1);
+    let ended = false;
+    return () => {
+      if (ended) return;
+      ended = true;
+      const left = this.starting.get(id) - 1;
+      if (left) this.starting.set(id, left); else this.starting.delete(id);
+    };
+  }
+
+  /** The end of one of her turns (`compactAtTurnEnd`, with `idle` the Host's own test). Returns what was decided, or
+   * undefined when turn-end compaction is off for the conversation or the run. */
+  async run({ agent, engine, meter, idle }) {
+    const id = agent.session.id;
+    if (this.off || this.broken.has(agent)) return undefined;
+    const own = new AbortController();
+    const done = await compactAtTurnEnd({ lane: 'character', agent, meter, engine,
+      idle: () => idle() && !this.starting.has(id),
+      compact: () => {
+        this.running.set(id, own);
+        return engine.compactTurnEnd(agent, AbortSignal.any([own.signal, AbortSignal.timeout(this.deadline)]))
+          .finally(() => { if (this.running.get(id) === own) this.running.delete(id); });
+      } });
+    const logger = this.ctx.logger;
+    if (done.skipped === 'dsh keeps no turn') {
+      if (!this.saidNoTurnKept) logger.info('Asuna compaction: this DSH keeps no turn at compaction (compactNow has no'
+        + ' keepFrom), so her conversations are compacted only in a turn, at the threshold (ADR-094 §8)');
+      this.saidNoTurnKept = true;
+      return done;
+    }
+    if (done.skipped && done.skipped !== 'busy') return done;
+    const head = 'Asuna compaction: turn end of ' + id + ' at ~' + done.tokens + ' tokens (due at ' + done.due + '): ';
+    const result = done.result ?? {};
+    if (done.skipped) logger.info(head + 'busy, left for the next turn end');
+    else if (result.code === 'aborted') logger.info(head + 'stopped, ' + (result.compacted ? 'after it was written' : 'nothing changed')
+      + ' (' + (own.signal.aborted ? own.signal.reason.message : 'over its ' + this.deadline / 1000 + ' s deadline') + ')');
+    else if (result.code === 'commit') {
+      this.broken.add(agent);
+      logger.warn(head + 'did not commit cleanly; none here until the conversation is opened again (' + result.reason + ')');
+    } else if (result.code === 'persistence') logger.warn(head + 'compacted, but not yet written to disk (' + result.reason + ')');
+    else if (!result.compacted) logger.info(head + 'not compacted (' + (result.code ? result.code + ': ' : '') + result.reason + ')');
+    else logger.info(head + 'compacted ' + result.items + ' items (~' + result.tokens + ' tokens)');
+    if (result.compacted && result.keptTurn === false) {
+      this.off = 'her last turn was not kept';
+      logger.warn('Asuna compaction: after the turn-end compaction of ' + id + ' her last turn is not right after the'
+        + ' checkpoint, so this DSH does not keep it as asked; turn-end compaction is off until this Host restarts (ADR-094 §8)');
+    }
+    return done;
+  }
+}
+
+/** ADR-094 §8: the first surface node of her last turn, by place on the surface: the one after the last node from
+ * before the end of her turn before it, so the line that opened her turn stays with it. A turn that left nothing on
+ * the surface (rejected, or its message removed) does not count. Undefined when there is no earlier turn to compact.
+ * Seq order is not surface order: a replacement (a checkpoint, a pruned result, a new system head) takes a new seq at
+ * an old place. */
 export function lastTurnStart(session) {
-  const ends = session.snapshotEvents().filter(event => event.type === 'turn/end');
+  const nodes = session.surface.nodes, onSurface = new Set(nodes), ends = [];
+  let holds = false;
+  for (const event of session.snapshotEvents()) {
+    if (event.type === 'turn/start') holds = false;
+    else if (event.type === 'turn/end') { if (holds) ends.push(event.seq); holds = false; }
+    else if (onSurface.has(event.seq)) holds = true;
+  }
   if (ends.length < 2) return undefined;
-  const before = ends[ends.length - 2].seq;
-  return session.surface.nodes.find(seq => seq > before);
+  const before = ends.at(-2);
+  const last = nodes.findLastIndex(seq => seq <= before);
+  return last < 0 ? undefined : nodes[last + 1];
+}
+
+/** The compaction committed in the session after `seq`: the id of a `compaction/end` there without an error. */
+function committedAfter(session, seq) {
+  return session.snapshotEvents().findLast(event => event.seq > seq && event.type === 'compaction/end'
+    && !event.data?.error)?.data?.compactionId;
+}
+
+/** Whether the surface node right after compaction `compactionId`'s checkpoint is `keepFrom`. */
+function keptAfterCheckpoint(session, compactionId, keepFrom) {
+  const nodes = session.surface.nodes;
+  const at = nodes.findIndex(seq => {
+    const event = session.snapshotEvents(seq, seq + 1)[0];
+    return event?.type === 'user/message' && event.data?.source?.compactionId === compactionId;
+  });
+  return at >= 0 && nodes[at + 1] === keepFrom;
 }
 
 /** The instruction's last rule when the summary request carries the retained tail: how many messages stay as they
@@ -214,17 +321,26 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
   }
 
   /** ADR-094: her conversation compacted at the end of its turn, her whole last turn kept as it is, the summary
-   * request carrying the span alone. Returns { compacted, items, tokens } or { compacted: false, reason }. */
+   * request carrying the span alone. Returns { compacted, items, tokens, keptTurn }: `keptTurn` whether her turn's
+   * first node is right after the new checkpoint. Or, when it failed or `signal` stopped it, { compacted, code,
+   * reason } with DSH's code ('aborted' for `signal`) and the cause chain; `compacted` says whether it committed all
+   * the same (an abort during its durability flush, or a failed flush). */
   async compactTurnEnd(agent, signal) {
-    const keepFrom = lastTurnStart(agent.session);
+    const session = agent.session;
+    const keepFrom = lastTurnStart(session);
     if (keepFrom === undefined) return { compacted: false, reason: 'no earlier turn' };
+    const from = session.snapshotEvents().at(-1)?.seq ?? -1;
     turnEnding.add(agent);
     try {
       const result = await this.compactNow(agent, signal, undefined, { keepFrom });
       return result === null ? { compacted: false, reason: 'nothing to compact' }
-        : { compacted: true, items: result.shadowedSeqs.length, tokens: result.shadowedTokenCount };
+        : { compacted: true, items: result.shadowedSeqs.length, tokens: result.shadowedTokenCount,
+          keptTurn: keptAfterCheckpoint(session, result.compactionId, keepFrom) };
     } catch (error) {
-      return { compacted: false, reason: String(error?.code ?? error?.message ?? error).slice(0, 200) };
+      const committed = committedAfter(session, from);
+      return { compacted: committed !== undefined, ...(committed === undefined ? {}
+        : { keptTurn: keptAfterCheckpoint(session, committed, keepFrom) }),
+      code: signal?.aborted ? 'aborted' : error?.code, reason: errorChain(signal?.aborted ? signal.reason : error) };
     } finally { turnEnding.delete(agent); }
   }
 

@@ -33,7 +33,7 @@ import { applySearch, registerWebSearch } from './search.js';
 import { applyFetch } from './fetch.js';
 import { renderSvg } from './svg.js';
 import { carrySession, lastSummary, overflowed } from './carry.js';
-import { compactAtTurnEnd } from './compaction.js';
+import { TurnEnds } from './compaction.js';
 import { languageWords, savedLanguage } from './ui-language.js';
 import { Collab } from './collab.js';
 import { failureClass, restFor, resting } from './tiers.js';
@@ -178,6 +178,8 @@ export class CognitionCore {
     this.handles = new Map();
     // Platform lines that arrived while a tool call of hers waited for its result (pairing.js).
     this.held = new Map();
+    // Her conversations' compactions at the end of a turn, which her next turn there stops (ADR-094).
+    this.turnEnds = new TurnEnds(ctx);
     // Conversations open when settings were last applied: each is reopened at its next idle moment (ensureAgent).
     this.reopen = new Set();
     // Agents closed to reopen their conversation: their last events must not touch the conversation's stage state,
@@ -728,6 +730,8 @@ export class CognitionCore {
       const waiter = state.waiter; state.waiter = null; waiter.resolve(event); return;
     }
     if (event.kind !== 'stage') return;
+    // Her turn takes precedence: a turn-end compaction there stops, and none starts while this stage starts (ADR-094).
+    const started = this.turnEnds.begin(event.session_id);
     try {
       if (event.lane !== 'character' && event.binding?.parent_session_id) {
         await this.children.start(event);
@@ -753,7 +757,7 @@ export class CognitionCore {
       agent.followup(this.message(event, agent.session, agent.inbox.nextStep));
     } catch (error) {
       await this.worker.call('result', { token: event.token, error: String(error) });
-    }
+    } finally { started(); }
   }
 
   /** A conversation's agent is gone: its stage state goes with it, unless it was closed to reopen the conversation. */
@@ -870,27 +874,13 @@ export class CognitionCore {
   }
 
   /** ADR-094: compact her conversation at the end of its turn when it has reached her character preset's
-   * `turnEndRatio` of the window (compaction.js `compactAtTurnEnd`), keeping that whole turn as it is (the engine's
-   * `compactTurnEnd`): the next turn reads the checkpoint and her last turn. A conversation with a turn running or
-   * queued is left for its next turn's end. One log line when it runs or is deferred, and one the first time the DSH
-   * keeps no turn (then nothing is compacted at a turn's end). */
+   * `turnEndRatio` of the window, keeping that whole turn as it is (compaction.js `TurnEnds`, the engine's
+   * `compactTurnEnd`): the next turn reads the checkpoint and her last turn. A conversation with a turn running, queued
+   * or starting is left for its next turn's end; her next stage there stops a running one. */
   async turnEnd(agent) {
     const id = agent.session.id;
-    const engine = this.ctx.get('agentPresets')?.serviceFor(agent, 'compaction');
-    const done = await compactAtTurnEnd({
-      lane: 'character', agent, idle: () => this.idle(id), meter: this.ctx.get('tokenMeter'), engine,
-      compact: () => engine.compactTurnEnd(agent, new AbortController().signal),
-    });
-    if (done.skipped === 'dsh keeps no turn' && !this.saidNoTurnKept) {
-      this.saidNoTurnKept = true;
-      this.ctx.logger.info('Asuna compaction: this DSH keeps no turn at compaction (compactNow has no keepFrom), so her'
-        + ' conversations are compacted only in a turn, at the threshold (ADR-094 §8)');
-    }
-    if (done.skipped && done.skipped !== 'busy') return;
-    const result = done.result ?? {};
-    this.ctx.logger.info('Asuna compaction: turn end of ' + id + ' at ~' + done.tokens + ' tokens (due at ' + done.due + '): '
-      + (done.skipped ? 'busy, left for the next turn end' : result.compacted
-        ? 'compacted ' + result.items + ' items (~' + result.tokens + ' tokens)' : 'not compacted (' + result.reason + ')'));
+    await this.turnEnds.run({ agent, engine: this.ctx.get('agentPresets')?.serviceFor(agent, 'compaction'),
+      meter: this.ctx.get('tokenMeter'), idle: () => this.idle(id) });
   }
 
   /** ADR-049: condense one of her conversations now, on her own earlier choice; the worker picks the quiet moment.

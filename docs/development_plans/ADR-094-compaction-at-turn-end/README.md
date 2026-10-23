@@ -64,6 +64,10 @@ there the waste is the ~100k re-read after every compaction and the compaction c
 
 ## 3. Decision
 
+*Superseded in part by §7 and §8 (as built): the turn end keeps her whole last turn (`compactNow` with a keep-from
+point, not `/compact`), the summary request sends the span before it alone, and her next turn there stops a running
+one. Items 1, 2 and 5 and the expected numbers below are the decision as first made.*
+
 1. **Trigger (ours).** When a character-lane conversation's agent goes idle after a turn (`agent/status` in
    `packages/cognition-core/src/index.js`, `turnEnd`) and DSH's measure of it is at or above `turnEndRatio × window`
    (`RoleCompactionEngine.turnEndTokens`), the Host runs DSH's own `/compact` on it at once through `compactSession`
@@ -94,9 +98,11 @@ compaction 2–4 s of re-read instead of ~17 s, and no summary inside her turn.
   and her 10-22 reading rules are what makes that hold; fewer compactions mean fewer merges, and each merge loses
   items (§7a: 9–40% after the trim).
 - Compaction comes at ~183k instead of ~210k, but about half as often.
-- A line arriving during the summary (~46 s) waits for it; today every compaction is a longer wait inside the turn. In
-  the replayed days the next turn came within 45 s of a turn-end compaction 1 time in 19 at home and 6 in 24 on the
-  agent line (where it is Claude).
+- Nothing waits for the summary: her next turn in that conversation (a stage or a consult) stops it, and the
+  conversation stays as it was until the next turn end (§7). As first decided, a line arriving during the summary
+  (~46 s) waited for it, and with it every other conversation of hers, since her turns run one at a time (the
+  worker's coordinator lock). In the replayed days the next turn came within 45 s of a turn-end compaction 1 time in
+  19 at home and 6 in 24 on the agent line (where it is Claude).
 - The `/compact` command and its result are in her session log where it happens (`command/run`, `command/done`), as
   the groups' condensing is today. The `restored_from_program` follow-ups after a compaction mostly disappear: the
   next notice is composed from the new surface.
@@ -147,13 +153,33 @@ has run live 18 times at 99.3–99.6%, and the next request's size after it is m
   turn, so the line that opened it stays), `keepsTurns` (whether DSH's `compactNow` takes a fourth parameter,
   `options`), `compactTurnEnd` (`compactNow(agent, signal, undefined, { keepFrom })`, marked so `summarize` sends the
   span alone, like an automatic compaction).
+- Her turn takes precedence (review of 2026-10-23, owner's decision): `TurnEnds` in `compaction.js` keeps an
+  `AbortController` for each running turn-end compaction; a stage starting in that conversation (`stage` in
+  `index.js`, which a consult also is) aborts it first and keeps a new one from starting until the stage is handed to
+  DSH; each one also stops at `TURN_END_DEADLINE_MS` (180 s, `AbortSignal.any` with `AbortSignal.timeout`). An abort
+  cannot leave DSH's compaction half-open: `compactSurfaceRegion` writes `compaction/end` with the error on every
+  failure before the summary commits, and the commit itself is synchronous; an abort that lands during the
+  durability flush comes after the commit and is reported as compacted. Tested on the installed (pinned) DSH, whose
+  compaction transaction the keep-from branch leaves as it is.
+- `lastTurnStart` goes by place on the surface, not by seq (a replacement takes a new seq at an old place): the node
+  after the last one from before the end of her turn before it; a turn that left no surface node (rejected, or its
+  message removed) does not count.
+- Errors keep DSH's code and the cause chain (`errorChain`). `commit` and `persistence` are logged as warnings; after
+  a `commit` error turn-end compaction stops in that conversation until it is opened again (a new agent).
+- After a commit, the node right after the new checkpoint must be her turn's first node; if it is not, the Host warns
+  and turns turn-end compaction off for the rest of its run. A walk-back to an earlier balanced place (which keeps
+  more) would turn it off too; it is not expected at the start of a turn, and the in-turn guard is unchanged.
 - `packages/cognition-core/src/index.js`: `turnEnd`, called from the `agent/status` idle hook of the character lane,
-  calls the engine's `compactTurnEnd` (not `/compact`); on a DSH that keeps no turn it compacts nothing and says so
-  once in the Host log; `compactSession` unchanged.
+  runs `TurnEnds` (the engine's `compactTurnEnd`, not `/compact`); on a DSH that keeps no turn it compacts nothing and
+  says so once in the Host log; `compactSession` unchanged.
 - Test: `packages/cognition-core/test/compaction.test.js` (the ratio and its default; the pinned DSH keeps no turn, so
   nothing runs; fires at the ratio, not below; busy is left for the next turn end; only her conversations on the
-  character lane; her last turn found from the turn ends; `keepFrom` passed; the span sent alone; nothing to
-  compact, busy and a single turn reported; the in-turn guard's test stands).
+  character lane; her last turn found from the turn ends, by surface place past a replaced span, a rejected last turn
+  and a replaced system head; `keepFrom` passed; the span sent alone; nothing to compact, a commit error with its
+  cause chain and a single turn reported; on the installed DSH, a preempted and a timed-out compaction closed and the
+  surface unchanged, the kept-turn check both ways, an abort after the commit reported as compacted; her stage stops
+  a running one and holds off a new one; the deadline; a commit error stops them in that conversation until it is
+  opened again, a persistence error warns, a turn not kept stops them for the run; the in-turn guard's test stands).
 - DSH (the owner's fork, his local copy): branch `asuna/0.2.1-rc.2-keepfrom`, one commit `4000a552ce` on the pin
   `5713aab796`, three files: `compaction-basic/src/region.ts` (`selectCompactableRange` takes an optional `keepFrom`,
   the existing balanced-cut walk-back unchanged), `compaction-basic/src/index.ts` (`compactNow`'s optional `options`),

@@ -33,8 +33,8 @@
                   # Compact at 80% of the window: a compaction leaves her at about 35%, and one turn can add
                   # ~45k tokens at once while the summary request replays the prefix plus this cap.
                   thresholdRatio: 0.80
-                  # Compacted at the end of a turn from this share of the window, her whole last turn kept
-                  # (ADR-094); the threshold above is the guard inside a turn.
+                  # On a DSH whose compactNow keeps a turn: compacted at the end of a turn from this share of
+                  # the window, her whole last turn kept (ADR-094); the threshold above is the guard inside a turn.
                   turnEndRatio: 0.70
                   headroomTokens: 6144
               - id: command-compact

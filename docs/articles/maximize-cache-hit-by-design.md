@@ -375,8 +375,9 @@ request sends the span before that turn alone, so the summarizer never sees the 
 previous turn ended, which the local engine still holds while her last turn had at most four steps (it keeps the
 prompt ends of its last few steps); a longer turn reads the span cold, outside anyone's turn. At a hosted API the
 span is a prefix of what was last sent and reads from the cache. The next turn's first request reads the
-checkpoint and her last turn besides its own notice. A line that arrives while the summary runs waits for it; a
-conversation with a turn running or queued is left for its next turn's end.
+checkpoint and her last turn besides its own notice. Her turn takes precedence: a stage or a consult starting in that
+conversation stops the summary, which also stops after 180 s, and the conversation stays as it was until its next
+turn's end; a conversation with a turn running, queued or starting is left for its next turn's end (`TurnEnds`).
 
 This needs a DSH whose `compactNow` takes the keep-from point (`options.keepFrom`). On one that doesn't
 (`keepsTurns` is false) nothing is compacted at a turn's end, the Host says so once in its log, and only the
@@ -706,7 +707,7 @@ A checklist for review:
 | Turn ceiling and limits | `src/asuna/context_budget.py` (ADR-014, ADR-063) |
 | Local clock at the tail | `src/asuna/local_time.py`: `for_model` |
 | Lines appended, held lines | `packages/cognition-core/src/navigation.js`: `recordChannelInput`; `pairing.js` |
-| Compaction | `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `wholeConversation`, `keptRule`, `pressure`, `floorTokens`, `turnEndTokens`, `compactAtTurnEnd`, `inSteps`; `index.js`: `turnEnd`, `compactSession`; thresholds in `packages/cognition-core/cordis.patch.yml` and each persona package's `cordis.patch.yml` (`turnEndRatio`) |
+| Compaction | `packages/cognition-core/src/compaction.js`: `RoleCompactionEngine.summarize`, `wholeConversation`, `keptRule`, `pressure`, `floorTokens`, `turnEndTokens`, `compactAtTurnEnd`, `TurnEnds`, `inSteps`; `index.js`: `turnEnd`, `compactSession`; thresholds in `packages/cognition-core/cordis.patch.yml` and each persona package's `cordis.patch.yml` (`turnEndRatio`) |
 | Carry to a new session | `packages/cognition-core/src/carry.js`: `overflowed`, `lastSummary`, `carrySession`; `src/asuna/native_worker.py`: `BusinessWorker.carry_session` (ADR-028) |
 | Early condensing | `src/asuna/condense.py`; `index.js`: `compactSession`, `conversationSize` (ADR-049) |
 | Relevance gate, summaries | `src/asuna/attend.py` (`GATED`, `ADDRESSED`, `gated`), `channels.group_context` (`answers_her`), `packages/cognition-core/src/attend.js`, `summary.js`; `native_worker.gate_session_id` |

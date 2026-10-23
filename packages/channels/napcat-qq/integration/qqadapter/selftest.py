@@ -867,9 +867,22 @@ def _check_outbound_verify(rep, gcfg, root):
     rep.check("face_inbound_shows_current_name",
               faces_mod.name_of({"id": "424"}) == "不对头" and
               faces_mod.name_of({"id": "424", "raw": {"faceText": "/续标识"}}) == "不对头" and
-              faces_mod.name_of({"id": "277", "raw": {"faceText": "/汪汪"}}) == "汪汪",
+              faces_mod.name_of({"id": "277", "raw": {"faceText": "/汪汪"}}) == "狗头",
               json.dumps([faces_mod.name_of({"id": "424"}),
-                          faces_mod.name_of({"id": "424", "raw": {"faceText": "/续标识"}})], ensure_ascii=False))
+                          faces_mod.name_of({"id": "424", "raw": {"faceText": "/续标识"}}),
+                          faces_mod.name_of({"id": "277", "raw": {"faceText": "/汪汪"}})], ensure_ascii=False))
+    # 277 was renamed 汪汪 -> 狗头 (owner 2026-10-15). Upstream's literal did not change: NapCat still
+    # writes /汪汪, she sees the table's current name, and her own old words still send 277.
+    rep.check("face_277_renamed_inbound_shows_new_name",
+              faces_mod.BY_ID.get("277") == "狗头" and faces_mod.name_of({"id": "277"}) == "狗头" and
+              faces_mod.name_of({"id": "277", "raw": {"faceText": "/汪汪"}}) == "狗头",
+              json.dumps([faces_mod.BY_ID.get("277"),
+                          faces_mod.name_of({"id": "277", "raw": {"faceText": "/汪汪"}})], ensure_ascii=False))
+    rep.check("face_277_renamed_old_name_still_sends",
+              faces_mod.BY_NAME.get("汪汪") == "277" and faces_mod.BY_NAME.get("狗头") == "277" and
+              outbound_mod.encode_faces("哈[表情:汪汪]") == [T("哈"), F("277")] and
+              outbound_mod.encode_faces("哈[表情:狗头]") == [T("哈"), F("277")],
+              json.dumps([outbound_mod.encode_faces("哈[表情:汪汪]")], ensure_ascii=False))
 
     stub, host, counters, _ob = run("shape", item("shape", GRP, "正文"),
                                     verify_responses=[{"status": "ok", "retcode": 0, "data": {"message_id": 990001}}])

@@ -169,8 +169,9 @@ def _media_item(stype, data):
         # than "there was a picture here"
         name = _clean(data.get("summary"), MAX_LABEL).strip("[]【】 ")
     elif stype == "face":
-        # NapCat names a face in raw.faceText ('/汪汪'); classic faces carry no
-        # name there, and then the id is looked up in faces.json (0.6)
+        # NapCat names a face in raw.faceText ('/狗头'; a face we renamed may still
+        # arrive there as '/汪汪'); classic faces carry no name, and then the id is
+        # looked up in faces.json (0.6)
         name = faces.name_of(data)
     elif stype == "location":
         name = _clean(data.get("name") or data.get("address"), MAX_LABEL)

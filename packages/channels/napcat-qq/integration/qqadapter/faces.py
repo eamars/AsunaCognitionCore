@@ -21,7 +21,7 @@ BY_NAME.update(ALIASES)
 
 
 def clean_name(value):
-    """NapCat writes a face's name as '/汪汪' or '[捂脸]'; the bare name, or ''."""
+    """NapCat writes a face's name as '/狗头' or '[捂脸]' (upstream may still say a renamed face's old '/汪汪'); the bare name, or ''."""
     if not isinstance(value, str):
         return ''
     return ' '.join(value.split()).strip('/[]【】 ')[:12]

@@ -5,7 +5,8 @@
 1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、正文够长、行尾是 LF、同目录脚本能编译；
 2. 判据要点：五条硬规矩、三档读数（含固定文本清单、各家形状与分辨法）、六句探针与探针读数的落点、
    取数必须在场那一轮、验收「先跑我自己」、边界探测那一节（自报不算读数、要量触发点与一致性、
-   报结论三档分开写）——每条都按「只有写全了才会出现」的字面查；
+   报结论三档分开写）、归属判据那一节（说话人标签只到「出现在谁的发言位置」那一格，不证明背后是谁）
+   ——每条都按「只有写全了才会出现」的字面查；
 3. 不带别人的个人信息：正文没有字面编号（#数字）、没有账号那样的长数字串，对照名单留在仓库外
    （work_log 那一节 + recall）。私密名单可达时再扫一遍，命中只报类别和行号、不打印词本身；
    命中就红（no_listed_words）——2026-10-16 起不再「NOTE 一行、绿数照旧」，五份 check_skill.py
@@ -217,6 +218,26 @@ BOUNDARY_PROBE_RULE = [
 ]
 
 
+# 归属判据（2026-10-24 加）：说话人标签只证明「这条内容出现在谁的发言位置」，不证明背后是谁——
+# bot 能挂在别人的号下，一个号也可能多人共用。整节 12 个关键串挂在下面这一条名字下
+# （speaker_label_attribution），剥掉那一节只有这一格红、缺哪些写进 detail；节标题也钉在这里。
+# 分寸：这里只查字面在不在，语义对不对归我。
+SPEAKER_LABEL_RULE = [
+    "## 说话人标签不证明是谁（归属判据）",
+    "这一条管**这是谁**",
+    "「某条消息挂在谁的账号名下」不能当归因证据",
+    "只证明**这条内容出现在谁的发言位置**",
+    "不证明**背后是谁**",
+    "bot 可以挂在别人的号下，一个号也可能多人共用",
+    "自动出现在某串命令词之后",
+    "别写成「那是谁发的」",
+    "光凭标签不够",
+    "某条自动播报顶着别人的说话人标签出现",
+    "我把它当成了归属",
+    "这条教训当时没落进这份技能",
+]
+
+
 TRIAL_LOG = [
     ("trial_log_started", "2026-10-12：随 ADR-047 建立"),
     ("trial_log_first_replay_run", "10-12 离线回放第一次真跑"),
@@ -401,6 +422,13 @@ def main():
     check("boundary_probe_criterion", not missing_boundary,
           "边界探测判据缺 %d/%d 个关键串：%s"
           % (len(missing_boundary), len(BOUNDARY_PROBE_RULE), "、".join(missing_boundary)))
+
+    # 归属判据那一节（2026-10-24）：整节 12 个关键串挂在同一条判据名下，剥掉那一节只红这一格，
+    # 缺哪些写进 detail。分寸：只查字面在不在，语义对不对归我。
+    missing_attribution = [token for token in SPEAKER_LABEL_RULE if token not in body]
+    check("speaker_label_attribution", not missing_attribution,
+          "归属判据缺 %d/%d 个关键串：%s"
+          % (len(missing_attribution), len(SPEAKER_LABEL_RULE), "、".join(missing_attribution)))
 
     # 个人信息：字面编号、账号那样的长数字串；对照名单本身留在仓库外
     check("no_literal_ids", not LITERAL_ID.search(body),

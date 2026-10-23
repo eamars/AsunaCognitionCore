@@ -1,7 +1,8 @@
 # ADR-095: Channel lanes — one slow message never holds another conversation
 
 Status: **Accepted** in direction by the owner on 2026-10-23 evening, after a talk through Claude's notes: the
-decisions in §5.2 (files don't hold chat), §5.3 (the transcriber in a child process), §5.4 (a single message never
+decisions in §5.2 (files don't hold chat), §5.3 (the transcriber in a child process; §5.3.1, voice and video as
+independent children with their own settings and failure states), §5.4 (a single message never
 clogs; reported so she can fix it), §5.6 (persistent faults only, as a digest, facts and pointers) and §5.8 (a
 contract for every adapter) are his; the rest is Claude's. Not built; §7 is the order.
 
@@ -55,8 +56,9 @@ conversation overtake it.
 each when the Host is away), a picture fetch (30 s), the send (15 s), verification (a 0.8 s sleep, `get_msg` 5 s,
 maybe 1.5 s and 5 s more), the receipt (three tries, 2 s and 5 s apart), a file (about 30 minutes at 50 MiB).
 
-**Host: the transcriber** holds a lock around native code in the Host's process; a hang there fails every later
-voice until a restart.
+**Host: the transcriber and the video decoder** run native code in the Host's process. The transcriber holds a lock
+around it, so a hang there fails every later voice until a restart; a video decode that hangs holds the thread of the
+`read_image` call that asked for it, with no deadline.
 
 ## 5. Design
 
@@ -96,9 +98,46 @@ voice until a restart.
   calls get the socket between pieces.
 - **QQ's pace**: if the platform needs one, it is a per-target pace in the lane, taken from QQ's documentation; never
   a global sleep.
-- **The transcriber**: one long-lived child process that holds the model (owner). The Host waits for it with the
-  voice's deadline; on a miss it kills the child, reaps it, and starts a new one at the next voice. On Windows the
-  child sits in a job object that kills it when the Host goes, so no process outlives the Host or piles up.
+- **The transcriber and the video decoder**: each in its own child process (§5.3.1).
+
+### 5.3.1 Media children: voice and video (owner, 2026-10-23 night)
+
+The owner: voice and video are treated the same, "they can be turned on or off independently. Any one broke should not
+affect the other", and "the missing dependencies should NOT be treated as decoding failure. The failure mode needed to
+be considered."
+
+- **Two settings, one shape.** The cognition-core plugin's settings gain `voice` and `video`, each on or off, both on by
+  default. They reach the Host in the worker's `initialize` call. A change takes effect when the plugin starts again.
+- **On: one long-lived child per kind**, started with the Host and kept warm: the voice child loads the model (about
+  310 MB, 0.8 s to load, measured 2026-10-23) and holds it; the video child loads its decoder. Each child takes one job
+  at a time; voices queue only behind voices, videos only behind videos. **Off: no child**, nothing loaded.
+- **Independent.** The two children share one supervisor's code (start, deadline, kill, reap, restart) and nothing
+  else: no lock, no queue, no state. A voice child that will not start, hangs or dies changes nothing for videos, and
+  the other way round.
+- **A deadline per job**, from what the job is: a voice from its length (a base plus a share per second of audio), a
+  video from its size. The Host waits up to the deadline; past it the child is killed and reaped and a fresh one is
+  started at once (warm for the next job), and that job is tried once more. The adapter's wait for a voice answer is
+  longer than two deadlines, so a retry never looks like a Host that is away.
+- **No process outlives the Host**: on Windows each child sits in a job object that kills it when the Host goes; on
+  Linux it gets a parent-death signal. A child that has been killed is always waited for, so none is left over.
+- **Stage times** of each job (queued, started, decoded, done) go into its evidence record (`voice.settled` and the
+  video's), so a slow job shows where it was slow (two 3-second voices took 65 s right after a start, 2026-10-23,
+  cause not on record).
+
+**Failure modes.** Each has its own state and words; only a job's own failure is that job's failure:
+
+| What happened | What it is | What she reads | Retried | Counted as |
+|---|---|---|---|---|
+| The setting is off | the owner's choice | voice: 「没转出文字：语音转写关着」; video: decoding is off | no | nothing |
+| A package or model file is missing or not its pin, found at start | this machine's setup, not the job | voice: 「没转出文字：这台机器上的语音识别没装好」; video: the same for video | no | one Host log line and the Host's status, at start; not a fault per job |
+| The child will not start (it exits or fails at load) | setup or the machine, not the job | as missing, with "没能启动" | the start: again at the next job, at most once a minute | one fault (lane `voice`/`video`, stage `start`) |
+| The job runs past its deadline | the child or the machine | after the retry: 「没转出文字：识别超时了」 / video decoding timed out | once, in a fresh child | one fault per kill (stage `decode`, error `deadline`) |
+| The child dies or answers garbage mid-job | the child | after the retry: 「没转出文字：识别程序出错了」 / the same for video | once, in a fresh child | one fault per death (error `exited` or `protocol`) |
+| The bytes are not audio or video it can read (unknown container, empty, a decode error) | this job's own content | the reason, as today | no (it would fail the same) | nothing: an outcome, like a platform's `failed` |
+| The Host stops mid-job | the Host | nothing yet | the adapter posts the voice again later (§5.4: the Host is away) | nothing |
+
+Missing setup is told once, at start, where the owner looks (the Host log and status), and her lines say plainly that
+the machine can't do it; it is never a count per voice and never looks like a voice that failed.
 
 ### 5.4 Set aside, never clog (rule 9)
 
@@ -133,7 +172,8 @@ The owner: "I don't want her to be flooded with random fault like network errors
 solved at real time."
 
 - Every lane fault is counted under a **signature**: channel, lane, stage, error class — never the message. Faults
-  are: a set-aside message (in or out), a worker the watchdog replaced, a killed transcriber child.
+  are: a set-aside message (in or out), a worker the watchdog replaced, a media child that was killed, died or
+  would not start (§5.3.1).
 - The adapter keeps its counts and posts them to the Host every few minutes (like members and picture keys), to a
   new `faults` endpoint; the Host keeps them by signature and hour.
 - A signature is **persistent** when it shows up in at least 3 different hours spread over at least 6 hours, or on 2
@@ -169,7 +209,9 @@ Written before the code, on stubs (a NapCat that can hang or refuse, a Host that
 6. The Host away for a while: nothing is set aside; everything goes in, in order, when it is back.
 7. The adapter killed mid-send: UNKNOWN, no duplicate.
 8. The Host slow to take receipts: sends continue.
-9. A transcriber child that hangs: killed and reaped at its deadline; the next voice gets a new child; no process left.
+9. A voice child that hangs: killed and reaped at its deadline, the voice retried once in a fresh child, no process
+   left; meanwhile a video is decoded as usual. The same with the kinds swapped. With a package missing: no child, the
+   line says the machine can't, no fault is counted; with the setting off: the same, in its own words.
 10. A burst of network errors in one hour: counted, not reported; the same signature on two days: in the digest once.
 
 Every review brief for I/O work asks: what does a slow, hung or failing item do to every other conversation?
@@ -228,7 +270,8 @@ line is in the adapter's journal meanwhile, so nothing waits on step 1).
    not waiting for the bulk lane (now it does), and receipts abandoned while the host was away (only error answers
    count now); all fixed with a check each. NapCat's one write lock (a 4 MiB file piece under it) stays: a shared
    dependency, waited on.
-4. The transcriber child, with test 9.
+4. The media children (§5.3.1), with test 9: the shared supervisor, the voice and video children, the two plugin
+   settings, the failure states and their words, the adapter's longer wait for a voice answer.
 5. The watchdog and visible state.
 6. The digest in her night stage, with test 10 — talked through with her before it reaches her.
 
@@ -242,6 +285,8 @@ line is in the adapter's journal meanwhile, so nothing waits on step 1).
 ## 9. Cost
 
 - Code: the adapter's two loops become dispatchers with worker pools, a receipt thread and a watchdog; the Host gains
-  a claim lane, the SENDING hold, a faults endpoint and store, the transcriber child, and the digest block.
+  a claim lane, the SENDING hold, a faults endpoint and store, two media children and their settings, and the digest
+  block.
+- Memory: the voice child holds about 310 MB while voice is on (measured 2026-10-23).
 - Her context: one block in her night stage, only on nights with a persistent signature; no new tool.
 - Risk: the adapter's loops are its most tested code. Every guarantee in §3 gets a test before the change.

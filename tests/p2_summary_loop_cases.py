@@ -230,6 +230,21 @@ class FakeCollection:
         self.rows[flt['_id']] = dict(doc)
         return SimpleNamespace(modified_count=1)
 
+    def update_one(self, flt, pipeline):
+        """Enough for Store.put's revisioned write with counters: one $project of literals and kept fields."""
+        current = self.rows.get(flt.get('_id'))
+        if current is None or ('revision' in flt and current.get('revision') != flt['revision']):
+            return SimpleNamespace(modified_count=0)
+        (stage,) = pipeline
+        doc = {'_id': current['_id']}
+        for key, value in stage['$project'].items():
+            if isinstance(value, dict) and '$literal' in value:
+                doc[key] = value['$literal']
+            elif key in current:
+                doc[key] = current[key]
+        self.rows[flt['_id']] = doc
+        return SimpleNamespace(modified_count=1)
+
 
 class FakeDB:
     def __init__(self, rows_by_collection):

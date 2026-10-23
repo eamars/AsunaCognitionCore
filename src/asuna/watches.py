@@ -104,7 +104,8 @@ def add(store, ep, persona, cls, args):
            'set_in': scene['_id'], 'set_class': cls, 'why': why, 'mode': mode, 'state': 'on',
            'created_at': now(), 'until': (moment + timedelta(hours=hours)).isoformat(),
            'appeared': 0, 'last_seen_at': None}
-    store.put('watches', doc, expected=current and current['revision'], stream='watches:' + persona)
+    # A new watch on the same person replaces the old one and counts its sightings from nothing.
+    store.put('watches', doc, expected=current and current['revision'], stream='watches:' + persona, reset_counters=True)
     return {'watching': doc['name'], 'id': _id, 'how': MODE_WORDS[mode], 'for': '%d 小时' % hours}
 
 

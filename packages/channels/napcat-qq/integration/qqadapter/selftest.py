@@ -1729,6 +1729,7 @@ def run(cfg, data_dir, live=True, live_config=True):
     _check_group_inbound(rep, gcfg)
     _check_media(rep, gcfg, root)
     _check_voice(rep, gcfg, root)
+    _check_markdown(rep, gcfg, root)
     _check_lanes(rep, gcfg, root)
     _check_outbound_lanes(rep, gcfg, root)
     _check_faults(rep, gcfg, root)
@@ -3067,3 +3068,151 @@ def _check_media(rep, gcfg, root):
     rep.check("media_over_limit_still_reported_as_is",
               reason == "accepted" and res[1]["over_host_limit"] is True
               and "media_shrunk_for_limit" not in res[1], reason)
+
+
+# Real element shapes pulled with get_msg / get_group_msg_history from NapCat on 2026-10-24 (22/22 had this
+# shape: a `markdown` element whose data has only `content`, plus 3-6 `text` segments that are QQ's lossy
+# rendering of the same words).  The sample ids (platform message ids, mention tinyid) are replaced by
+# placeholders from the fixtures 900000xxx block and left out of the comments (the release scan reads any
+# 7+ digit run as an account id); the segment shapes and the words are exactly what the machine had.
+MD_MENTION_ME = "[@示例角色](mqqapi://markdown/mention?at_type=1&at_tinyid=900000000)"
+MD_REAL_UNDERSCORE = [        # machine sample: file name with underscores, backticked paths
+    {"type": "markdown", "data": {"content": MD_MENTION_ME + " 妹妹，路径再勘一次：`.agents/demo/` 这台机上【不存在】——刚才 ls 现证，`.agents/` 下只有 anime、devices.json、skills、taste。唯一的门是 `.agents/skills/demo/handoff`，货已经在那间里了：group_log_7d_1024.jsonl（158 条）＋ MANIFEST.sha256 ＋ README。你 00:59 探到的那个\"真门\"多半是探浅又落空的第二级，别拿它当门牌。照 skills 那条路径再推一次，清单对 sha。——姐姐"}},
+    {"type": "text", "data": {"text": "@示例角色"}},
+    {"type": "text", "data": {"text": " "}},
+    {"type": "text", "data": {"text": "妹妹，路径再勘一次：.agents/demo/ 这台机上【不存在】——刚才 ls 现证，.agents/ 下只有 anime、devices.json、skills、taste。唯一的门是 .agents/skills/demo/handoff，货已经在那间里了：grouplog7d_1024.jsonl（158 条）＋ MANIFEST.sha256 ＋ README。你 00:59 探到的那个\"真门\"多半是探浅又落空的第二级，别拿它当门牌。照 skills 那条路径再推一次，清单对 sha。——姐姐"}},
+]
+MD_REAL_SHORT = [             # machine sample: short markdown
+    {"type": "markdown", "data": {"content": MD_MENTION_ME + " 就该不算验过——\"自洽不等于验过\"这刀砍得对，参照值本来就只有参照的份，验的那一半在你手里：行数、逐文件 sha、你那边窗口两端各自取过的原始时刻，三样对上才叫闭环。我这边正本随时敞开配合第四样。等你签字。——姐姐"}},
+    {"type": "text", "data": {"text": "@示例角色"}},
+    {"type": "text", "data": {"text": " "}},
+    {"type": "text", "data": {"text": "就该不算验过——\"自洽不等于验过\"这刀砍得对，参照值本来就只有参照的份，验的那一半在你手里：行数、逐文件 sha、你那边窗口两端各自取过的原始时刻，三样对上才叫闭环。我这边正本随时敞开配合第四样。等你签字。——姐姐"}},
+]
+MD_REAL_BOLD = [              # machine sample: **bold** in the markdown, stripped in the text segments
+    {"type": "markdown", "data": {"content": MD_MENTION_ME + " 收到，这格收讫。你这次重加的是我给你的两个本地端点——**这算端点复算，不算第二源**，云端那行你若真读了才算双源。不催不吵，纯口径互校，午间交格见。——姐姐"}},
+    {"type": "text", "data": {"text": "@示例角色"}},
+    {"type": "text", "data": {"text": " "}},
+    {"type": "text", "data": {"text": "收到，这格收讫。你这次重加的是我给你的两个本地端点——这算端点复算，不算第二源，云端那行你若真读了才算双源。不催不吵，纯口径互校，午间交格见。——姐姐"}},
+]
+MD_PLACEHOLDER = "[markdown消息（未解析）]"
+
+
+def _check_markdown(rep, gcfg, root):
+    """0.15.0: a `markdown` element is read (data.content, flattened), and the lossy text twins are dropped."""
+    import copy
+    parse = inbound_mod.parse_message
+    flat = inbound_mod.mdflat.flatten
+
+    # (a) real duplicate shape: markdown,text,text,text
+    parsed = parse(copy.deepcopy(MD_REAL_UNDERSCORE))
+    t = parsed["text_with_at"]
+    rep.check("md_a_duplicate_shape_once", t.count("妹妹，路径再勘一次") == 1 and MD_PLACEHOLDER not in t
+              and parsed["markdown_segments"] == 1 and parsed["markdown_text_dropped"] == 3
+              and parsed["media"] == [] and parsed["other_segments"] == 0, t[:80])
+    rep.check("md_a_underscores_verbatim", "group_log_7d_1024.jsonl" in t and "grouplog7d" not in t
+              and "MANIFEST.sha256" in t and "devices.json" in t, t[40:140])
+    rep.check("md_a_mention_rendered", t.startswith("@示例角色 妹妹") and "mqqapi" not in t and "](" not in t, t[:30])
+    rep.check("md_a_backticks_removed_paths_kept", "`" not in t and ".agents/demo/ 这台机上" in t
+              and ".agents/skills/demo/handoff，" in t, "")
+    # msg_id is the other underscore name the owner saw eaten; same mechanism, synthetic carrier text
+    rep.check("md_a_msg_id_underscore_kept", "msg_id" in flat("字段 `msg_id` 和 msg_id、reply_to_id 都要在"), "")
+
+    # (b) markdown element alone
+    parsed = parse(copy.deepcopy(MD_REAL_SHORT[:1]))
+    rep.check("md_b_markdown_only_flattened", parsed["text"].startswith("@示例角色 就该不算验过")
+              and parsed["text"].endswith("——姐姐") and parsed["markdown_text_dropped"] == 0
+              and parsed["media"] == [], parsed["text"][:30])
+    # (c) no usable content -> today's placeholder, media item and all
+    for label, data in (("missing", {}), ("empty", {"content": ""}), ("blank", {"content": "  \n "}),
+                        ("not_str", {"content": 5}), ("null_data", None)):
+        parsed = parse([{"type": "markdown", "data": data}])
+        item = (parsed["media"] or [{}])[0]
+        rep.check("md_c_%s_keeps_placeholder" % label,
+                  parsed["text_with_media"] == MD_PLACEHOLDER and parsed["other_segments"] == 1
+                  and item.get("type") == "markdown" and item.get("placeholder") == MD_PLACEHOLDER
+                  and parsed["text"] == "", parsed["text_with_media"])
+    parsed = parse([{"type": "markdown", "data": {"content": ""}}] + _text("旁边的字"))
+    rep.check("md_c_empty_markdown_leaves_text_alone",
+              parsed["text"] == "旁边的字" and parsed["text_with_media"] == MD_PLACEHOLDER + "旁边的字"
+              and parsed["markdown_text_dropped"] == 0, parsed["text_with_media"])
+
+    # (d) a text segment the markdown does not contain stays
+    extra = copy.deepcopy(MD_REAL_SHORT) + _text("另外补一句：晚点再说")
+    parsed = parse(extra)
+    t = parsed["text_with_at"]
+    rep.check("md_d_extra_text_kept", t.count("另外补一句：晚点再说") == 1 and t.endswith("\n另外补一句：晚点再说")
+              and t.count("就该不算验过") == 1 and parsed["markdown_text_dropped"] == 3, t[-30:])
+    parsed = parse(_text("前缀话") + copy.deepcopy(MD_REAL_SHORT))
+    rep.check("md_d_extra_text_before_markdown_kept", parsed["text"].startswith("前缀话\n@示例角色 就该")
+              and parsed["text"].count("就该不算验过") == 1, parsed["text"][:20])
+
+    # (e) bold removed, line breaks kept, non-mention links keep their url
+    parsed = parse(copy.deepcopy(MD_REAL_BOLD))
+    t = parsed["text"]
+    rep.check("md_e_real_bold_removed_text_twin_dropped", "**" not in t and "这算端点复算，不算第二源" in t
+              and t.count("端点复算") == 1 and parsed["markdown_text_dropped"] == 3, t[:60])
+    synth = "# 标题\n- 一项 [文档](https://example.com/a?x=1&y=2) 在此\n* 二项 [裸](https://example.com/b) \n\\[转义\\] \\* 星 \\_下划线\\_\n**粗**和__粗二__与__init__.py"
+    t = flat(synth)
+    rep.check("md_e_flatten_rules", t == "标题\n- 一项 文档 (https://example.com/a?x=1&y=2) 在此\n* 二项 裸 (https://example.com/b) \n[转义] * 星 _下划线_\n粗和粗二与__init__.py", repr(t))
+    rep.check("md_e_newlines_kept", flat("甲\n\n乙\r\n丙").split("\n") == ["甲", "", "乙", "丙"], repr(flat("甲\n\n乙\r\n丙")))
+    rep.check("md_e_link_same_text_as_url_no_dup", flat("[https://a.io/x](https://a.io/x)") == "https://a.io/x", "")
+    rep.check("md_e_mqqapi_link_not_shown", flat("[点我](mqqapi://something/else?a=1)") == "点我", "")
+    rep.check("md_e_code_fence_untouched", flat("看：\n```py\nmy_var = a**b\n```\n完") == "看：\nmy_var = a**b\n\n完", repr(flat("看：\n```py\nmy_var = a**b\n```\n完")))
+    rep.check("md_e_non_string_is_empty", flat(None) == "" and flat({"a": 1}) == "", "")
+
+    # dedup keys: only letters, digits, CJK count
+    cov = inbound_mod.mdflat.covers
+    mdn = inbound_mod.mdflat.norm("group_log_7d_1024.jsonl 和 **粗体**")
+    rep.check("md_dedup_ignores_underscores_spaces_markup", cov("grouplog7d1024.jsonl 和 粗体", mdn, "") is True
+              and cov("group log 7d 1024", mdn, "") is True and cov("完全不同的话", mdn, "") is False, "")
+    rep.check("md_dedup_punct_only_segment", cov("？", mdn, "好吗？") is True and cov("！", mdn, "好吗？") is False
+              and cov("   ", mdn, "") is True, "")
+
+    # wake: mention/wake must survive.  The host wakes on real `at` segments (mentioned_account_ids) or on
+    # her name in the body (name_called).  Adopting the markdown keeps `@示例角色` in the body even though the
+    # text twin carrying it was dropped; real at ids stay exactly what the at segments say.
+    groups = sorted(gcfg.allowed_groups)
+    if groups:
+        grp = groups[0]
+        member = sorted(gcfg.route_for_group(grp).allowed_senders)[0]
+        seen = inbound_mod.SeenLRU(16)
+        res, reason = inbound_mod.classify(_group_event(gcfg, grp, member, 5301,
+                                                       message=copy.deepcopy(MD_REAL_UNDERSCORE)), gcfg, seen)
+        env, meta = (res if res else ({}, {}))
+        rep.check("md_wake_body_still_carries_the_name",
+                  reason == "accepted" and env.get("text", "").startswith("@示例角色 妹妹")
+                  and env.get("mentioned_account_ids") == [] and meta.get("media_segments") == 0
+                  and meta.get("media_only") is False
+                  and inbound_mod.MEDIA_KEY not in env.get("raw", {}), "%s %r" % (reason, env.get("text", "")[:20]))
+        real_at = [{"type": "at", "data": {"qq": gcfg.napcat["account_id"]}}] + copy.deepcopy(MD_REAL_SHORT)
+        res, reason = inbound_mod.classify(_group_event(gcfg, grp, member, 5302, message=real_at), gcfg, seen)
+        rep.check("md_wake_real_at_segment_still_mentions",
+                  reason == "accepted" and res[0]["mentioned_account_ids"] == [gcfg.napcat["account_id"]]
+                  and res[0]["text"].count("就该不算验过") == 1, reason)
+        res, reason = inbound_mod.classify(_group_event(gcfg, grp, member, 5303,
+                                                       message=[{"type": "markdown", "data": {}}]), gcfg, seen)
+        rep.check("md_empty_markdown_still_a_media_turn",
+                  reason == "accepted" and res[0]["text"] == MD_PLACEHOLDER and res[1]["media_segments"] == 1
+                  and res[0]["raw"][inbound_mod.MEDIA_KEY]["items"][0]["placeholder"] == MD_PLACEHOLDER, reason)
+        res, reason = inbound_mod.classify(_group_event(gcfg, grp, member, 5304,
+                                                       message=copy.deepcopy(MD_REAL_UNDERSCORE)),
+                                           _media_cfg(gcfg, "off"), inbound_mod.SeenLRU(4))
+        rep.check("md_media_mode_off_still_reads_markdown_as_text",
+                  reason == "accepted" and "group_log_7d_1024.jsonl" in res[0]["text"], reason)
+
+    # regression: every other placeholder family is byte-for-byte what it was
+    fam = [({"type": "image", "data": {"file": "A.png", "summary": "[动画表情]"}}, "[图片:动画表情（未解析）]"),
+           ({"type": "image", "data": {"file": "A.png", "summary": "", "sub_type": 1}}, "[表情包]"),
+           ({"type": "image", "data": {"file": "A.png"}}, "[图片（未解析）]"),
+           ({"type": "json", "data": {"data": json.dumps({"app": 0, "prompt": "网页链接"})}}, "[卡片消息:网页链接（未解析）]"),
+           ({"type": "record", "data": {}}, "[语音（未解析）]"),
+           ({"type": "video", "data": {}}, "[视频（未解析）]"),
+           ({"type": "forward", "data": {}}, "[合并转发（未解析）]"),
+           ({"type": "poke", "data": {}}, "[戳一戳]"),
+           ({"type": "mystery", "data": {}}, "[mystery消息（未解析）]")]
+    bad = [(seg["type"], parse([seg])["text_with_media"]) for seg, want in fam if parse([seg])["text_with_media"] != want]
+    rep.check("md_regression_other_placeholders_unchanged", not bad, repr(bad))
+    mixed = parse(_text("前") + [fam[0][0]] + copy.deepcopy(MD_REAL_SHORT) + [fam[4][0]])
+    rep.check("md_regression_markdown_does_not_disturb_neighbours",
+              mixed["text_with_media"].startswith("前[图片:动画表情（未解析）]\n@示例角色 就该")
+              and mixed["text_with_media"].endswith("[语音（未解析）]") and len(mixed["media"]) == 2, mixed["text_with_media"][-12:])

@@ -41,7 +41,7 @@ import re
 import threading
 from datetime import datetime, timezone
 
-from . import faces
+from . import faces, mdflat
 
 MAX_TEXT = 16000
 MEDIA_KEY = "asuna_media"
@@ -252,7 +252,8 @@ def parse_message(message):
     """
     out = {"text": "", "text_with_at": "", "text_with_media": "", "text_with_at_media": "",
            "at_ids": [], "at_all": 0, "at_other": 0, "reply_to": None, "reply_extra": 0,
-           "other_segments": 0, "media": [], "media_extra": 0}
+           "other_segments": 0, "media": [], "media_extra": 0,
+           "markdown_segments": 0, "markdown_text_dropped": 0}
     if isinstance(message, str):
         out["text"] = message
         out["text_with_at"] = message
@@ -262,7 +263,32 @@ def parse_message(message):
     if not isinstance(message, list):
         return out
     parts, shown, pmedia, gmedia = [], [], [], []
-    for seg in message:
+    # markdown (0.15.0): `data.content` is the lossless original of the words; the text segments that
+    # ride along are QQ's lossy rendering of the same words.  Flatten it first so each text segment
+    # can be judged against it; one with nothing to flatten falls through to the placeholder as before.
+    md_flat = {}
+    for idx, seg in enumerate(message):
+        if isinstance(seg, dict) and seg.get("type") == "markdown" and isinstance(seg.get("data"), dict):
+            flat = mdflat.flatten(seg["data"].get("content"))
+            if flat:
+                md_flat[idx] = flat
+    md_norm = "".join(mdflat.norm(v) for v in md_flat.values())
+    md_plain = "\n".join(md_flat.values())
+    last_md = [False]
+    placed = [False]
+
+    def put(piece, is_md):
+        # a markdown block and a text segment next to it are separate paragraphs, not one run
+        if placed[0] and (is_md or last_md[0]) and not piece.startswith("\n"):
+            piece = "\n" + piece
+        placed[0] = True
+        last_md[0] = is_md
+        parts.append(piece)
+        shown.append(piece)
+        pmedia.append(piece)
+        gmedia.append(piece)
+
+    for idx, seg in enumerate(message):
         if not isinstance(seg, dict):
             out["other_segments"] += 1
             continue
@@ -270,13 +296,16 @@ def parse_message(message):
         data = seg.get("data") or {}
         if not isinstance(data, dict):
             data = {}
-        if stype == "text":
+        if stype == "markdown" and idx in md_flat:
+            out["markdown_segments"] += 1
+            put(md_flat[idx], True)
+        elif stype == "text":
             val = data.get("text")
             if isinstance(val, str):
-                parts.append(val)
-                shown.append(val)
-                pmedia.append(val)
-                gmedia.append(val)
+                if md_flat and mdflat.covers(val, md_norm, md_plain):
+                    out["markdown_text_dropped"] += 1
+                else:
+                    put(val, False)
         elif stype == "at":
             target = data.get("qq")
             if target is None:

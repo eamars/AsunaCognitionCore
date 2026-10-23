@@ -19,7 +19,7 @@ and make proposal of the systematic fix. Noted the design must satisfy both loca
 if the strata server discards the cache there is nothing to help, but the design of Xiaoman should NOT be the failure
 point. We should do whatever the optimization we should do before blaming the model server."
 
-## 2. What was found (role sessions since 10-18; numbers only; `.runtime/private/compaction-review/scripts/`)
+## 2. What was found (role sessions since 10-18; numbers only; read by review scripts since retired, whose readings `.agents/skills/asuna-cache-readout` now gives)
 
 The deployed character: window 262,144; `thresholdRatio` 0.80 (compaction at 209,715 tokens); `retainRatio` 0.16, a
 kept tail of 36,700 tokens in DSH's measure (characters ÷ 4), which for her Chinese is about 100k real tokens and
@@ -120,7 +120,7 @@ conversation (more merges, a second store); a separate summarizer session (no sh
 **The owner's, only if wanted later:** DSH's `compactNow` with a retention option (keep the last turn verbatim), if her
 reading of the first checkpoints says one message is too thin.
 
-## 6. Reading after install (`.runtime/private/compaction-review/scripts/turn_end_reading.py`)
+## 6. Reading after install (`.agents/skills/asuna-cache-readout`: `compactions`, and `hits` for the next requests)
 
 The window starts at the `back_at` of the restart that installs it (`<data>/restart/last.json`; the script reads it
 when given no time), and that restart carries no other change (her condition, §8). The first 20 compactions of her
@@ -191,7 +191,7 @@ has run live 18 times at 99.3–99.6%, and the next request's size after it is m
 - References: `docs/articles/maximize-cache-hit-by-design.md` §7 and §13; `packages/cognition-core/DSH_API.md`.
 - Her preset (`packages/personas/xiaoman/cordis.patch.yml`): `turnEndRatio: 0.70` beside `thresholdRatio`, and the
   note on DSH's kept tail.
-- Evidence: `.runtime/private/compaction-review/` (report.md 19 KB, scripts 35 KB; numbers only).
+- Evidence: `.runtime/private/compaction-review/report.md` (19 KB; numbers only).
 
 ## 8. Her conditions (2026-10-23, on Claude's agent line; Claude's paraphrase)
 

@@ -12,7 +12,7 @@ described in [RUN_ASUNA.md](../../RUN_ASUNA.md). Everything Docker-specific is i
   1. clones the repository into the empty volume (once);
   2. installs Node dependencies whenever `package-lock.json` changes, and syncs the Python environment from `uv.lock`;
   3. applies the LAN login patch (`lan-login.mjs`, below);
-  4. builds the native rendering extension (`tools/dsh-inline`) from the DSH fork branch named in `tools/dsh-inline/source.json` when it is missing
+  4. builds the DSH patches (`tools/dsh-inline`: the rendering extension and the compaction engine) from the DSH fork branch named in `tools/dsh-inline/source.json` when it is missing
      or out of date;
   5. installs the profile when it has never been installed, or when the stack names other packages than the ones
      recorded in its `launch.json`;

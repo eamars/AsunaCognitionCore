@@ -33,8 +33,10 @@ def test_every_dsh_pin_is_the_root_pin():
 
 
 def test_the_inline_build_follows_the_pinned_dsh():
+    """The fork's branch for this DSH: `asuna/<version>`, or one built on it (`asuna/<version>-<what it adds>`)."""
     source = json.loads((ROOT / 'tools/dsh-inline/source.json').read_text(encoding='utf-8'))
-    assert (source['dsh'], source['branch']) == (DSH, 'asuna/' + DSH)
+    assert source['dsh'] == DSH
+    assert source['branch'] == 'asuna/' + DSH or source['branch'].startswith('asuna/' + DSH + '-'), source['branch']
 
 
 def test_the_core_and_its_channels_share_one_version_and_every_package_accepts_it():

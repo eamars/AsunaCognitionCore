@@ -179,9 +179,9 @@ def main():
         subprocess.run([*dsh, '--profile', args.profile, '--from-default-profile', 'web', '--help'],
                        env=env, cwd=ROOT, check=True, capture_output=True)
     packed = json.loads((ROOT / '.runtime/adr008/packages/manifest.json').read_text(encoding='utf-8'))
-    # The reviewed native rendering extension (tools/dsh-inline) is installed with the plugins it serves.
+    # The reviewed DSH patches (tools/dsh-inline) are installed with the plugins they serve.
     names = {'@asuna/cognition-core', persona['name'], *(c['name'] for c in channels),
-             *(a['name'] for a in packed if a.get('kind') == 'native-rendering-extension')}
+             *(a['name'] for a in packed if a.get('kind') == 'dsh-inline')}
     manifest = [a for a in packed if a['name'] in names]
     if {a['name'] for a in manifest} != names:
         raise ValueError('PACKED_ARTIFACT_MISSING: run tools/pack_plugins.py --persona ' + str(args.persona_package)
@@ -245,7 +245,7 @@ def main():
     selected = json.loads(activation_path.read_text(encoding='utf-8')) if activation_path.exists() else {'projects': {}, 'active': {}}
     projects = {persona['name']: persona['project'], **{c['name']: c['project'] for c in channels}}
     for artifact in manifest:
-        if artifact.get('kind') == 'native-rendering-extension':
+        if artifact.get('kind') == 'dsh-inline':
             continue                        # a profile dependency, not a development project
         project = 'core' if artifact['name'] == '@asuna/cognition-core' else projects[artifact['name']]
         installed = home / 'profiles' / args.profile / 'node_modules' / artifact['name']

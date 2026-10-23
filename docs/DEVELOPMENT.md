@@ -29,7 +29,7 @@ Ignored and local: `.runtime/`, `.venv/`, `node_modules/`, `reports/`, `config/l
   the deployment.
 - **`.runtime/adr008/`** (profile `asuna-native`; another profile uses `.runtime/adr008/profiles/<name>/`):
   - `packages/`: packed `.tgz` files (packing removes those that no manifest, installed profile or `activation.json`
-    names), `manifest.json`, and `native-inline-manifest.json` when the inline extension is built;
+    names), `manifest.json`, and `native-inline-manifest.json` when the DSH patches (`tools/dsh-inline`) are built;
   - `launch.json`: the config, the profile, its Web port when one was given, the installed package list (`setup`) and
     digests (`installed`);
   - `activation.json`: the selected artifact per development project, and the last one that ran;

@@ -1,4 +1,6 @@
-/** Build the reviewed native rendering extension from the pinned commit of the Asuna branch on the DSH fork. */
+/** Build the reviewed DSH patches from the pinned commit of the Asuna branch on the DSH fork: the native rendering
+ * extension (two client packages) and the compaction engine (`dsh-compaction-basic`, whose `compactNow` takes a
+ * keep-from point, ADR-094). */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -69,7 +71,30 @@ for (const name of ['ui-chat', 'ui-renderer']) {
   const artifact = original.replace(/\.tgz$/, '-' + sha256.slice(0, 12) + '.tgz');
   await fs.copyFile(original, artifact);
   artifacts.push({ name: packageName, path: artifact, sha256, integrity: packed.integrity,
-    kind: 'native-rendering-extension', sourceRepository: pin.repository, sourceBranch: pin.branch, sourceCommit: pin.commit,
+    kind: 'dsh-inline', sourceRepository: pin.repository, sourceBranch: pin.branch, sourceCommit: pin.commit,
+    files: packed.files.map(row => row.path) });
+}
+// The compaction engine: the released package as installed (its manifest, readmes, locale), with the fork's built
+// `lib` in place of the released one. Its DSH dependencies are peers, so the profile's copy uses DSH's own.
+{
+  const packageName = '@deepseek-ai/dsh-compaction-basic';
+  const released = path.join(root, 'node_modules', packageName);
+  const built = path.join(source, 'packages/compaction/compaction-basic/lib');
+  const folder = path.join(staging, 'compaction-basic');
+  await fs.cp(released, folder, { recursive: true });
+  const manifest = JSON.parse(await fs.readFile(path.join(folder, 'package.json'), 'utf8'));
+  if (manifest.version !== pin.dsh) throw new Error('Installed DSH differs from the pinned release ' + pin.dsh);
+  manifest.version = version;
+  await fs.writeFile(path.join(folder, 'package.json'), JSON.stringify(manifest, null, 2));
+  await fs.rm(path.join(folder, 'lib'), { recursive: true });
+  await fs.cp(built, path.join(folder, 'lib'), { recursive: true });
+  const packed = JSON.parse(await run('npm', ['pack', '--json', '--pack-destination', destination], folder, 'inline-pack-compaction-basic'))[0];
+  const original = path.join(destination, packed.filename);
+  const sha256 = digest(await fs.readFile(original));
+  const artifact = original.replace(/\.tgz$/, '-' + sha256.slice(0, 12) + '.tgz');
+  await fs.copyFile(original, artifact);
+  artifacts.push({ name: packageName, path: artifact, sha256, integrity: packed.integrity,
+    kind: 'dsh-inline', sourceRepository: pin.repository, sourceBranch: pin.branch, sourceCommit: pin.commit,
     files: packed.files.map(row => row.path) });
 }
 await fs.writeFile(path.join(destination, 'native-inline-manifest.json'), JSON.stringify(artifacts, null, 2));

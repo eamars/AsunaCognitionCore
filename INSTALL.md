@@ -61,17 +61,19 @@ ends with the sandbox (`Sandbox: DSH sandbox`, or `Sandbox: none (<reason>): run
 Everything the profile writes goes to its data folder, `$DSH_HOME/asuna/<profile>/` by default (the floor's
 `dataRoot` setting moves it). Nothing is written into the installed packages.
 
-## 4. Optional: the action brain's work shown inline
+## 4. Optional: the patched DSH packages
 
-By default the action brain's work opens in DSH's own subagent view (the work row's "Open the full record in the sidebar" button).
-Showing it inline in the main conversation needs two patched DSH UI packages, built locally — they are not published:
+By default the action brain's work opens in DSH's own subagent view (the work row's "Open the full record in the sidebar" button),
+and her conversations are compacted only within a turn. Showing the work inline in the main conversation needs two
+patched DSH UI packages, and compacting at the end of a turn with her last turn kept needs a patched compaction
+engine; all three are built locally — they are not published ([tools/dsh-inline/README.md](tools/dsh-inline/README.md)):
 
 1. Clone the branch and commit named in [`tools/dsh-inline/source.json`](tools/dsh-inline/source.json) (DSH with
-   the two patch commits) into a dedicated folder.
+   the patch commits) into a dedicated folder.
 2. In a checkout of this repository: `node tools/build_dsh_inline.mjs --source <that folder>`. It refuses any other
-   commit or local changes and writes, to `.runtime/adr008/packages/`, each of the two packages as a `.tgz`
+   commit or local changes and writes, to `.runtime/adr008/packages/`, each of the three packages as a `.tgz`
    and as a copy named with its digest (`…-<sha256 first 12>.tgz`), plus `native-inline-manifest.json`.
-3. `dsh plugin --profile <name> add <the two digest-named .tgz files>`, then restart the profile.
+3. `dsh plugin --profile <name> add <the three digest-named .tgz files>`, then restart the profile.
 
 Check: an action brain's work row expands to its tool calls in place. Asuna detects the patched Chat by itself;
 removing the packages returns it to the subagent view without errors.

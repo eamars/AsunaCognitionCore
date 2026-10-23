@@ -67,7 +67,7 @@ The Host supervisor (ADR-034): the launcher stays as DSH's parent, restarts it w
 
 [tools/build_dsh_inline.mjs](../../tools/build_dsh_inline.mjs)
 
-Build the reviewed native rendering extension from the pinned commit of the Asuna branch on the DSH fork.
+Build the reviewed DSH patches from the pinned commit of the Asuna branch on the DSH fork: the native rendering extension (two client packages) and the compaction engine (`dsh-compaction-basic`, whose `compactNow` takes a keep-from point, ADR-094).
 
 
 ## `check_dsh_release.py`

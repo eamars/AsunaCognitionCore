@@ -148,7 +148,7 @@ def main():
                         help='channel package directory (e.g. packages/channels/napcat-qq) to pack alongside the core (repeatable)')
     args = parser.parse_args()
     DESTINATION.mkdir(parents=True, exist_ok=True)
-    # The native inline extension (tools/dsh-inline) is optional and built separately; pack only a current build.
+    # The DSH patches (tools/dsh-inline) are optional and built separately; pack only a current build.
     built = DESTINATION / 'native-inline-manifest.json'
     native = json.loads(built.read_text(encoding='utf-8')) if built.exists() else []
     pinned = json.loads((ROOT / 'tools/dsh-inline/source.json').read_text(encoding='utf-8'))['commit']

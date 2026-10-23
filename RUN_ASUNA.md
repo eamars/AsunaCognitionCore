@@ -12,7 +12,7 @@ Asuna runs as plugins in one native DSH **0.2.1-rc.2** Web Host:
 - `@asuna/cognition-core` (`packages/cognition-core`) supplies cognition, task/channel authorization, the business worker, and publication tools. It names no persona and no platform.
 - **One persona package** (`packages/personas/*`) supplies the persona baseline, selected skills and its role preset. Any persona package can replace another; `tests/fixtures/personas/demo` is a synthetic one.
 - **Any number of channel packages** (`packages/channels/*`) supply a platform's id formats and, where the platform needs one, its adapter: `napcat-qq` for QQ through NapCat (with the adapter's skill), `qq-bot` for QQ through the official QQ Bot open platform (either or both), `dsh-peer` for an agent in another DSH, `agent-line` for coding agents' lines (no adapter: an agent posts through the channel API itself).
-- Optionally, the **inline rendering extension** (`tools/dsh-inline`): two patched DSH UI packages, built locally, that show the action brain's work inside the main conversation.
+- Optionally, the **patched DSH packages** (`tools/dsh-inline`), built locally: two UI packages that show the action brain's work inside the main conversation, and the compaction engine that lets her conversation be compacted at the end of a turn with that turn kept.
 
 DSH owns model requests, agents, Chat, Trajectory, attachments, compaction and scheduling. One Python worker owns the Mongo state, queues, memory, summaries, channel receipts and integration supervision. Brain names describe responsibilities; both routes may use one model.
 

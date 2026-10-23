@@ -350,7 +350,7 @@ def check(store, ep, scene, artifact_id):
         return None, '这个文件的字节不在存储里了（不是你的错）；要再发就让任务从文件夹里重新登记'
     most = capabilities.limit(store, (scene or {}).get('channel_id'), CAPABILITY)
     if most is not None and item['size'] > most:
-        return None, ('这个文件 %s（%d 字节），这里的平台一个文件最多 %s（%d 字节），发不了'
+        return None, ('这个文件 %s（%d 字节），这里一个文件最多 %s（%d 字节），发不了'
                       % (size_words(item['size']), item['size'], size_words(most), most))
     return {'artifact_id': item['_id'], 'name': item.get('name') or item['_id'], 'media_type': item.get('media_type'),
             'sha256': item['sha256'], 'size': item['size']}, None
@@ -377,7 +377,7 @@ def claim_failure(store, row, limits):
     most = (limits or {}).get(CAPABILITY)
     if most is not None and meta['size'] > most:
         return {'failure': 'FILE_OVER_CHANNEL_LIMIT', 'file_limit': {'bytes': meta['size'], 'limit': most},
-                'failure_detail': ('文件 %s（%d 字节），这条腿一个文件最多 %s（%d 字节）'
+                'failure_detail': ('文件 %s（%d 字节），这里一个文件最多 %s（%d 字节）'
                                    % (size_words(meta['size']), meta['size'], size_words(most), most))}
     return None
 

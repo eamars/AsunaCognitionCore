@@ -16,6 +16,12 @@ import re
 from urllib.parse import urlparse
 
 
+# The largest file the adapter sends to a group (adapter.napcat.max_file_mb, in MiB), declared to the host as
+# file:<bytes>.  A missing value is the default; an invalid one is the default too, said once in CONFIG_NOTE.
+DEFAULT_MAX_FILE_MB = 50
+MAX_FILE_MB_MOST = 4096           # QQ's own single-file limit for group files
+
+
 class ConfigError(Exception):
     pass
 
@@ -107,6 +113,7 @@ class Config:
         if not isinstance(raw, dict):
             raise ConfigError("config root must be an object")
         self.raw = raw
+        self.notes = []                  # a setting that fell back to its default, logged once at start
         self.endpoints = self._endpoints(raw.get("endpoints"))
         adapter = raw.get("adapter")
         if not isinstance(adapter, dict):
@@ -206,6 +213,11 @@ class Config:
         account = node.get("account_id")
         if not isinstance(account, str) or not DIGITS.match(account):
             raise ConfigError("adapter.napcat.account_id must be a digit string")
+        most = node.get("max_file_mb", DEFAULT_MAX_FILE_MB)
+        if isinstance(most, bool) or not isinstance(most, int) or not 1 <= most <= MAX_FILE_MB_MOST:
+            self.notes.append("adapter.napcat.max_file_mb %r unsupported (need an integer 1..%d): using %d"
+                              % (most, MAX_FILE_MB_MOST, DEFAULT_MAX_FILE_MB))
+            most = DEFAULT_MAX_FILE_MB
         return {
             "url": url.rstrip("/"),
             "scheme": parsed.scheme,
@@ -216,6 +228,8 @@ class Config:
             "account_id": account,
             "shared_account": bool(node.get("shared_account")),
             "transport": transport,
+            "max_file_mb": most,
+            "max_file_bytes": most * 1024 * 1024,
         }
 
     def _host(self, node):
@@ -335,7 +349,7 @@ class Config:
         group_routes = [r for r in self.routes.values() if r.message_type == "group"]
         return (
             "account=%s shared_account=%s napcat=%s(%s) host=%s(%s) channel=%s "
-            "routes=%s allowed_private=%s allowed_groups=%s group_members=%s media_mode=%s catchup=%s"
+            "routes=%s allowed_private=%s allowed_groups=%s group_members=%s media_mode=%s catchup=%s max_file_mb=%d"
             % (
                 self.napcat["account_id"],
                 self.napcat["shared_account"],
@@ -352,6 +366,7 @@ class Config:
                 ("all/%dh" % self.catchup_lookback_hours if self.catchup_every
                  else "%s/%dh" % (",".join(sorted(self.catchup_routes)), self.catchup_lookback_hours)
                  if self.catchup_routes else "off"),
+                self.napcat["max_file_mb"],
             )
         )
 

@@ -27,7 +27,7 @@ from . import outbound as outbound_mod
 from . import peers as peers_mod
 from . import voice as voice_mod
 from .peers import PEER_KEY, PeerDirectory
-from .config import Config, ConfigError
+from .config import MAX_FILE_MB_MOST, Config, ConfigError
 from .hostapi import Result
 from .journal import Counters, Journal
 from .onebot import ApiTimeout, ApiTransportError
@@ -1129,6 +1129,299 @@ def _check_outbound_attachments(rep, cfg, root):
               json.dumps(sorted(actions)))
 
 
+class StubFileNapCat:
+    """SUBSTITUTE for NapCat's stream and group-file actions, as v4.18.0 answers them: each piece is kept, the stream
+    completes with the assembled file's path and sha256 (a mismatch is NapCat's own error), and upload_group_file
+    answers as told.  Records every message's size as it would go on the wire."""
+
+    def __init__(self, upload=None, upload_exc=None, refuse_complete=False):
+        self.calls, self.sizes, self.pieces = [], [], {}
+        self.upload = upload if upload is not None else {"status": "ok", "retcode": 0, "data": {"file_id": "/f-1"}}
+        self.upload_exc, self.refuse_complete = upload_exc, refuse_complete
+
+    def api_call(self, action, params=None, timeout=15.0, meta=None):
+        params = params or {}
+        self.calls.append({"action": action, "params": params, "timeout": timeout, "meta": meta})
+        self.sizes.append(len(json.dumps({"action": action, "params": params, "echo": "asuna-" + "0" * 32},
+                                         ensure_ascii=False).encode("utf-8")))
+        if action == "upload_file_stream":
+            if params.get("reset"):
+                return {"status": "failed", "retcode": 1200, "message": "Stream reset completed", "data": None}
+            if params.get("chunk_data") is not None:
+                self.pieces[params["chunk_index"]] = base64.b64decode(params["chunk_data"])
+                self.total, self.expected = params["total_chunks"], params.get("expected_sha256")
+                return {"status": "ok", "retcode": 0, "stream": "stream-action",
+                        "data": {"type": "stream", "status": "chunk_received", "received_chunks": len(self.pieces),
+                                 "total_chunks": params["total_chunks"]}}
+            whole = b"".join(self.pieces[i] for i in range(self.total))
+            digest = hashlib.sha256(whole).hexdigest()
+            if self.refuse_complete or digest != self.expected:
+                return {"status": "failed", "retcode": 1200, "stream": "stream-action",
+                        "message": "SHA256 mismatch. Expected: %s, Got: %s" % (self.expected, digest),
+                        "data": {"type": "error", "data_type": "error"}}
+            return {"status": "ok", "retcode": 0, "stream": "stream-action",
+                    "data": {"type": "response", "status": "file_complete", "received_chunks": self.total,
+                             "total_chunks": self.total, "file_path": "/napcat/temp/" + params["stream_id"] + ".bin",
+                             "file_size": len(whole), "sha256": digest}}
+        if action == "upload_group_file":
+            if self.upload_exc is not None:
+                raise self.upload_exc
+            return self.upload
+        return {"status": "failed", "retcode": 1404, "message": "unexpected action " + action}
+
+    def actions(self):
+        return [c["action"] for c in self.calls]
+
+
+class StubFileHost(StubHost):
+    """SUBSTITUTE for the host's piece endpoint: serves `data` by offset and length, records each call."""
+
+    def __init__(self, data, served=None):
+        StubHost.__init__(self)
+        self.data, self.served, self.piece_calls = data, served, []
+
+    def get_file_piece(self, publication_id, attempt_id, artifact_id, offset, length, timeout=60.0):
+        self.piece_calls.append({"publication_id": publication_id, "attempt_id": attempt_id,
+                                 "artifact_id": artifact_id, "offset": offset, "length": length})
+        if self.served is not None:
+            return self.served
+        piece = self.data[offset:offset + length]
+        return Result("ok", 200, {"data": piece, "bytes": len(piece)})
+
+
+def _check_outbound_files(rep, cfg, root):
+    """Files to a group (0.7) against StubFileNapCat/StubFileHost: the bytes come in pieces from the stubbed host,
+    each piece goes to the stubbed stream, then upload_group_file; nothing reaches QQ."""
+    grp = {"type": "group", "id": fixtures.GROUPS[0]}
+    piece = outbound_mod.FILE_PIECE
+    actions = set()
+
+    pattern = bytes((i * 31 + 7) % 251 for i in range(4093))      # a period that does not divide the piece size
+
+    def body(size):
+        return (pattern * (size // len(pattern) + 1))[:size]
+
+    def item(name, data, target=grp, sha=None, **over):
+        desc = {"artifact_id": "blob-selftest-file", "name": "报告 %s.pdf" % name, "media_type": "application/pdf",
+                "sha256": sha or hashlib.sha256(data).hexdigest(), "size": len(data)}
+        desc.update(over)
+        return {"publication_id": "file-%s" % name, "attempt_id": "attempt%s" % name, "target": target, "text": "",
+                "reply_to": None, "quote": None, "file": desc}
+
+    def run(name, data, napcat=None, host=None, **over):
+        napcat = napcat or StubFileNapCat()
+        host = host or StubFileHost(data)
+        counters = Counters()
+        out = outbound_mod.Outbound(cfg, host, napcat, Journal(root + "/file_" + name), counters,
+                                    log=lambda _m: None, ack_timeout=5.0, verify=False)
+        out.handle_item(item(name, data, **over))
+        actions.update(napcat.actions())
+        return napcat, host, counters, out
+
+    def payload(host):
+        return host.last().get("payload") or {}
+
+    def reason(host):
+        return (payload(host).get("response") or {}).get("reason")
+
+    # one piece: the stream, its completion, then the group upload, and a receipt with no message id
+    data = b"%PDF-1.4 selftest file body\n" * 40
+    napcat, host, counters, _o = run("one", data)
+    sent = payload(host)
+    upload = [c for c in napcat.calls if c["action"] == "upload_group_file"]
+    rep.check("file_one_piece_streams_then_uploads",
+              napcat.actions() == ["upload_file_stream", "upload_file_stream", "upload_group_file"]
+              and napcat.calls[0]["params"]["total_chunks"] == 1 and napcat.calls[1]["params"].get("is_complete") is True
+              and upload and upload[0]["params"] == {"group_id": str(fixtures.GROUPS[0]),
+                                                     "file": "/napcat/temp/attemptone.bin", "name": "报告 one.pdf"},
+              json.dumps(napcat.actions()))
+    rep.check("file_one_piece_receipt_accepted_without_message_id",
+              sent.get("status") == "platform_accepted" and "platform_message_id" not in sent
+              and (sent.get("response") or {}).get("group_file", {}).get("data", {}).get("file_id") == "/f-1"
+              and (sent.get("response") or {}).get("file", {}).get("sha256") == hashlib.sha256(data).hexdigest()
+              and (sent.get("response") or {}).get("file", {}).get("sha256_verified") is True,
+              json.dumps(sent, ensure_ascii=False)[:240])
+    first = napcat.calls[0]["params"]
+    rep.check("file_stream_carries_whole_sha_and_our_name",
+              first["stream_id"] == "attemptone" and first["expected_sha256"] == hashlib.sha256(data).hexdigest()
+              and first["filename"] == "asuna-attemptone.bin" and first["file_size"] == len(data)
+              and first["file_retention"] > 0,
+              json.dumps({k: v for k, v in first.items() if k != "chunk_data"}, ensure_ascii=False)[:240])
+
+    # an exact multiple of the piece size, and one with a remainder
+    for name, size, pieces in (("exact", 2 * piece, 2), ("rest", 2 * piece + 123, 3)):
+        data = body(size)
+        napcat, host, counters, _o = run(name, data)
+        chunks = [c["params"] for c in napcat.calls if c["params"].get("chunk_data") is not None]
+        asked = [(c["offset"], c["length"]) for c in host.piece_calls]
+        want = [(i * piece, min(piece, size - i * piece)) for i in range(pieces)]
+        rep.check("file_%s_pieces" % name,
+                  len(chunks) == pieces and [c["chunk_index"] for c in chunks] == list(range(pieces))
+                  and all(c["total_chunks"] == pieces for c in chunks) and asked == want
+                  and b"".join(napcat.pieces[i] for i in range(pieces)) == data
+                  and payload(host).get("status") == "platform_accepted",
+                  "pieces=%d asked=%s status=%s" % (len(chunks), asked, payload(host).get("status")))
+        rep.check("file_%s_ws_messages_bounded" % name,
+                  max(napcat.sizes) < outbound_mod.WS_MESSAGE_BOUND < 50 * 1024 * 1024,
+                  "largest=%d bound=%d" % (max(napcat.sizes), outbound_mod.WS_MESSAGE_BOUND))
+
+    # an empty file, one over the declared limit, and a private target: refused before a byte is asked for
+    for name, data, over, want in (("empty", b"", {}, "file_empty"),
+                                   ("over", b"x" * 10, {"size": cfg.napcat["max_file_bytes"] + 1}, "file_over_limit"),
+                                   ("private", b"x" * 10, {"target": {"type": "dm", "id": OWNER}},
+                                    "file_private_target_not_supported")):
+        napcat, host, _c, _o = run(name, data, **over)
+        rep.check("file_%s_refused" % name,
+                  napcat.calls == [] and host.piece_calls == [] and payload(host).get("status") == "failed"
+                  and reason(host) == want, "%s fetches=%d" % (reason(host), len(host.piece_calls)))
+
+    # NapCat reports a sha mismatch at completion: failed, with its words, and no group upload
+    data = b"%PDF-1.4 mismatch body\n" * 10
+    napcat, host, _c, _o = run("napcatsha", data, napcat=StubFileNapCat(refuse_complete=True))
+    rep.check("file_napcat_sha_mismatch_fails",
+              "upload_group_file" not in napcat.actions() and payload(host).get("status") == "failed"
+              and reason(host) == "file_stream_refused"
+              and "SHA256 mismatch" in (payload(host).get("response") or {}).get("platform", ""),
+              json.dumps(payload(host).get("response"), ensure_ascii=False)[:240])
+    # the bytes the host served are not the file the claim declared: the adapter's own check stops it
+    napcat, host, _c, _o = run("ownsha", data, sha="0" * 64)
+    rep.check("file_adapter_checks_the_whole_sha",
+              "upload_group_file" not in napcat.actions()
+              and not any(c["params"].get("is_complete") for c in napcat.calls)
+              and any(c["params"].get("reset") for c in napcat.calls)
+              and reason(host) == "file_sha256_mismatch", "%s %s" % (reason(host), napcat.actions()))
+
+    # upload_group_file refused by the platform: failed, with the platform's reason
+    napcat, host, _c, _o = run("full", data, napcat=StubFileNapCat(upload={"status": "failed", "retcode": 1200,
+                                                                           "message": "群文件空间不足"}))
+    response = payload(host).get("response") or {}
+    rep.check("file_upload_failure_keeps_platform_reason",
+              payload(host).get("status") == "failed" and response.get("reason") == "file_upload_failed"
+              and response.get("platform") == "群文件空间不足" and response.get("retcode") == 1200,
+              json.dumps(response, ensure_ascii=False)[:240])
+
+    # the upload outlasts its wait: unknown, never failed; its late answer then settles it
+    napcat, host, counters, out = run("late", data, napcat=StubFileNapCat(upload_exc=ApiTimeout("upload")))
+    upload = [c for c in napcat.calls if c["action"] == "upload_group_file"][0]
+    complete, waited = outbound_mod.file_timeouts(len(data))
+    rep.check("file_upload_timeout_is_unknown",
+              payload(host).get("status") == "unknown" and reason(host) == "file_upload_no_answer"
+              and upload["timeout"] == waited and waited >= outbound_mod.FILE_UPLOAD_BASE,
+              "%s timeout=%s" % (payload(host).get("status"), upload["timeout"]))
+    out.on_late_ack(upload["meta"], {"status": "ok", "retcode": 0, "data": {"file_id": "/f-late"}})
+    rep.check("file_late_answer_settles_it",
+              payload(host).get("status") == "platform_accepted" and "platform_message_id" not in payload(host)
+              and (payload(host).get("response") or {}).get("group_file", {}).get("data", {}).get("file_id") == "/f-late",
+              json.dumps(payload(host), ensure_ascii=False)[:200])
+    before = len(host.receipts)
+    out.on_late_ack({"publication_id": "file-late", "attempt_id": "attemptlate", "file_stream": 0},
+                    {"status": "ok", "retcode": 0})
+    rep.check("file_late_piece_answer_ignored", len(host.receipts) == before, str(len(host.receipts) - before))
+    rep.check("file_timeouts_scale_with_size",
+              outbound_mod.file_timeouts(cfg.napcat["max_file_bytes"])[1] > outbound_mod.file_timeouts(1024 ** 2)[1] > 120
+              and outbound_mod.file_timeouts(cfg.napcat["max_file_bytes"])[1] <= 180,
+              json.dumps([round(x) for x in outbound_mod.file_timeouts(cfg.napcat["max_file_bytes"])]))
+
+    # the host refuses a piece (its bytes gone): failed, and the stream is reset once pieces were sent
+    napcat, host, _c, _o = run("gone", data, host=StubFileHost(data, served=Result(
+        "reject", 403, {"error": "FILE_BYTES_EXPIRED"})))
+    rep.check("file_host_refusal_sends_nothing",
+              napcat.calls == [] and payload(host).get("status") == "failed"
+              and reason(host) == "file_fetch_file_bytes_expired", reason(host) or "-")
+    rep.check("file_api_surface_bounded",
+              actions == {"upload_file_stream", "upload_group_file"}, json.dumps(sorted(actions)))
+
+
+def _check_file_http(rep, cfg):
+    """The real HostApi piece path against a loopback HTTP server: the query names the piece, and anything that is
+    not the asked bytes is refused."""
+    import http.server
+    import threading
+    import urllib.parse as parse
+    data = bytes(range(256)) * 64
+    seen = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def _send(self, code, payload, ctype):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def do_GET(self):
+            if "/attachment" not in self.path:
+                return self._send(200, b'{"items": []}', "application/json")
+            query = parse.parse_qs(parse.urlsplit(self.path).query)
+            seen.append(query)
+            attempt = query.get("attempt_id", [""])[0]
+            if attempt == "gone":
+                return self._send(403, b'{"error": "FILE_BYTES_EXPIRED"}', "application/json")
+            if attempt == "json":
+                return self._send(200, b'{"items": []}', "application/json")
+            offset, length = int(query["offset"][0]), int(query["length"][0])
+            extra = b"!" if attempt == "long" else b""
+            return self._send(200, data[offset:offset + length] + extra, "application/octet-stream")
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        api = hostapi_mod.HostApi({"base_url": "http://127.0.0.1:%d" % server.server_address[1],
+                                   "token": cfg.host["token"], "channel_id": "qq"}, timeout=10)
+        res = api.get_file_piece("file-http", "ok", "blob-1", 1000, 3000)
+        rep.check("file_http_piece_by_offset_and_length",
+                  res.kind == "ok" and res.obj.get("data") == data[1000:4000]
+                  and seen[-1].get("offset") == ["1000"] and seen[-1].get("length") == ["3000"]
+                  and seen[-1].get("artifact_id") == ["blob-1"], repr(res)[:160])
+        for name, want_kind, want_error in (("gone", "reject", "FILE_BYTES_EXPIRED"),
+                                            ("json", "reject", "unexpected_content_type"),
+                                            ("long", "reject", "over_length")):
+            res = api.get_file_piece("file-http", name, "blob-1", 0, 100)
+            rep.check("file_http_%s" % name, res.kind == want_kind and (res.obj or {}).get("error") == want_error,
+                      repr(res)[:160])
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def _check_file_limit_config(rep, root):
+    """adapter.napcat.max_file_mb: the default, a configured value, and invalid ones (the default, said once)."""
+    mib = 1024 * 1024
+    default = fixtures.load_config()
+    claims = Adapter(default, os.path.join(root, "file_limit_default")).capabilities
+    rep.check("file_limit_default_50_mib",
+              default.napcat["max_file_mb"] == 50 and default.napcat["max_file_bytes"] == 50 * mib
+              and "file:%d" % (50 * mib) in claims and default.notes == [] and "max_file_mb=50" in default.describe(),
+              json.dumps([c for c in claims if c.startswith("file:")]))
+    raw = fixtures.raw_config()
+    raw["adapter"]["napcat"]["max_file_mb"] = 8
+    configured = Config(raw, "fixture:max-file-8")
+    claims = Adapter(configured, os.path.join(root, "file_limit_8")).capabilities
+    stub, host = StubFileNapCat(), StubFileHost(b"")
+    outbound_mod.Outbound(configured, host, stub, Journal(os.path.join(root, "file_limit_8_out")), Counters(),
+                          log=lambda _m: None, verify=False).handle_item(
+        {"publication_id": "file-limit", "attempt_id": "attemptlimit", "target": {"type": "group", "id": fixtures.GROUPS[0]},
+         "text": "", "file": {"artifact_id": "blob-x", "name": "big.bin", "sha256": "0" * 64, "size": 8 * mib + 1}})
+    rep.check("file_limit_configured_is_declared_and_kept",
+              configured.napcat["max_file_bytes"] == 8 * mib and "file:%d" % (8 * mib) in claims
+              and not any(c.startswith("file:%d" % (50 * mib)) for c in claims) and configured.notes == []
+              and stub.calls == [] and host.piece_calls == []
+              and ((host.last().get("payload") or {}).get("response") or {}).get("reason") == "file_over_limit",
+              json.dumps([c for c in claims if c.startswith("file:")]))
+    for value in ("50", 0, True, MAX_FILE_MB_MOST + 1, 2.5):
+        raw = fixtures.raw_config()
+        raw["adapter"]["napcat"]["max_file_mb"] = value
+        bad = Config(raw, "fixture:max-file-bad")
+        rep.check("file_limit_invalid_%s_is_default" % str(value).lower().replace(".", "_"),
+                  bad.napcat["max_file_mb"] == 50 and len(bad.notes) == 1 and "max_file_mb" in bad.notes[0],
+                  json.dumps(bad.notes))
+
+
 def _check_attachment_http(rep, cfg):
     """The real HostApi byte path against a real loopback HTTP server: no QQ, no
     host, nothing claimed.  This is the check that a 1.5 MiB image survives the
@@ -1419,6 +1712,9 @@ def run(cfg, data_dir, live=True, live_config=True):
     _check_outbound_verify(rep, gcfg, root)
     _check_outbound_attachments(rep, gcfg, root)
     _check_attachment_http(rep, gcfg)
+    _check_outbound_files(rep, gcfg, root)
+    _check_file_http(rep, gcfg)
+    _check_file_limit_config(rep, root)
     _check_peer_timekeeping(rep, gcfg, root)
     _check_peers(rep, gcfg, root)
     _check_lock_and_spool(rep, gcfg, root)

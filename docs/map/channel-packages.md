@@ -170,6 +170,7 @@ Merged forwards (合并转发): the messages a forward carried, brought to the h
 
 HTTP client for the runtime host channel API (stdlib only).
 
+- def `file_capability` — The `file` entry of a claim's declaration: the largest file this adapter sends (adapter.napcat.max_file_mb), so the host refuses a larger one before anything is sent.
 - class `Result`
 - class `HostApi`
   - `post_event`
@@ -180,6 +181,7 @@ HTTP client for the runtime host channel API (stdlib only).
   - `post_voice` — One voice of a line about to be posted, as its bytes (voice.py): the host transcribes it within the request; `accepted` with its outcome (`state`), or `duplicate` when it was settled before.
   - `claim_outbox`
   - `get_attachment` — Fetch the bytes one claimed publication declared, over this same API.
+  - `get_file_piece` — One piece of a claimed file: `length` bytes from `offset` (fewer only at its end), over this same API.
   - `post_receipt`
   - `probe_auth` — Reachability check that cannot consume a real publication.
 
@@ -314,6 +316,8 @@ Host outbox -> OneBot send_private_msg / send_group_msg -> receipt.
 - def `platform_send_timed_out` — NapCat's retcode 1200 for sendMsg whose own confirmation event never came: the send's outcome is unknown.
 - def `platform_muted` — NapCat's retcode 1200 for sendMsg whose QQ result is 120: she is muted in that group.
 - def `send_outcome` — A send's answer, on time or late: (status, platform_message_id, tag, response object to store).
+- def `file_timeouts` — (complete, upload) seconds for a file of `size` bytes: 60 s + size / 32 MiB/s for NapCat to assemble it, 120 s + size / 1 MiB/s for QQ to take it.
+- def `file_plan` — (plan, None) when this item's file may be streamed, else (None, reason).
 - def `encode_group_text` — Split host group text into text/at segments, promoting @qq:<digits>.
 - def `encode_faces` — Split text into text/face segments: each `[表情:名字]` whose name is in faces.json becomes a real QQ face at that position (0.6); an unknown name stays text.
 - def `sticker_plan` — (sticker, None) when this item is a sticker this build can send, (None, None) when it is not a sticker, else (None, reason).
@@ -324,6 +328,9 @@ Host outbox -> OneBot send_private_msg / send_group_msg -> receipt.
 - def `receipt_payload`
 - class `Outbound`
   - `fetch_attachment` — (base64 text, meta, None) when these bytes may be sent, else (None, meta, reason).
+  - `file_outcome` — upload_group_file's answer, on time or late: (status, tag, response to store).
+  - `handle_file` — Stream one claimed file to NapCat in pieces, then send it to the group.
+  - `settle_file`
   - `admin_call` — (OneBot action, params) for a host-queued admin action, or (None, reason).
   - `handle_admin`
   - `action_call` — (OneBot action, params) for a poke, a reaction or a recall of her own line in her reply, or (None, reason).
@@ -386,6 +393,11 @@ Offline + live self checks. Nothing here invents an inbound message: synthetic e
   - `api_call`
 - class `StubImageOneBot` — SUBSTITUTE answering both the send and the one `get_msg` read-back.
   - `api_call`
+- class `StubFileNapCat` — SUBSTITUTE for NapCat's stream and group-file actions, as v4.18.0 answers them: each piece is kept, the stream completes with the assembled file's path and sha256 (a mismatch is NapCat's own error), and upload_group_file answers as told.
+  - `api_call`
+  - `actions`
+- class `StubFileHost` — SUBSTITUTE for the host's piece endpoint: serves `data` by offset and length, records each call.
+  - `get_file_piece`
 - def `run` — `cfg` is the config actually in hand; `live_config` says whether it came from a real file (then it is cross-checked) or from the built-in fixtures (then that section is skipped).
 - class `StubIdentityApi` — SUBSTITUTE for the platform identity lookups: records the exact action and params, answers from a canned per-person blob, never touches QQ.
   - `api_call`

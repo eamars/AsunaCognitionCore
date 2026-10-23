@@ -519,12 +519,14 @@ def elsewhere(store, persona, moment, home, private=()):
     places = {}
     for row in store.db.messages.find({'direction': 'outbound', 'author': me, 'delivery_state': 'DELIVERED',
                                        'receipt_at': {'$gte': since}, 'scene_id': {'$nin': list(home)}},
-                                      {'scene_id': 1, 'receipt_at': 1, 'attachment': 1, 'sticker': 1, 'errand': 1}):
-        place = places.setdefault(row['scene_id'], {'lines': 0, 'pictures': 0, 'stickers': 0, 'tasks': [], 'last': None,
-                                                    'errand': 0})
+                                      {'scene_id': 1, 'receipt_at': 1, 'attachment': 1, 'sticker': 1, 'errand': 1, 'file': 1}):
+        place = places.setdefault(row['scene_id'], {'lines': 0, 'pictures': 0, 'stickers': 0, 'files': 0, 'tasks': [],
+                                                    'last': None, 'errand': 0})
         place['errand'] += 1 if row.get('errand') else 0
         if isinstance(row.get('sticker'), dict):
             place['stickers'] += 1
+        elif isinstance(row.get('file'), dict):
+            place['files'] += 1
         elif row.get('attachment'):
             place['pictures'] += 1
         else:
@@ -550,6 +552,8 @@ def elsewhere(store, persona, moment, home, private=()):
             did.append('发了%d张你自己画的图' % place['pictures'])
         if place['stickers']:
             did.append('发了%d个表情包' % place['stickers'])
+        if place['files']:
+            did.append('发了%d个文件' % place['files'])
         if place['errand']:
             did.append('其中%d条是家里托你去说的（差事）' % place['errand'])
         item = {'where': people.scene_title(scene) + ('（家里）' if scene_id in private else ''), 'you': '，'.join(did) or '没说话',

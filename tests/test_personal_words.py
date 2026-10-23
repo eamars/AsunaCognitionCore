@@ -51,7 +51,13 @@ def test_the_list_keeps_entries_without_ever_showing_them(private_list):
     assert private_words.add('group', '示例测试群', 'reworded')['replaced'] is True
     shown = repr([private_words.summary(), private_words.add('host', 'fixture-host', 'a fixture host')])
     assert '示例测试群' not in shown and '10001234' not in shown and 'fixture-host' not in shown
-    assert private_words.summary() == {'configured': True, 'entries': 3, 'by_category': {'group': 1, 'account': 1, 'host': 1}}
+    comments = sum(1 for line in private_list.read_text(encoding='utf-8').splitlines() if line.startswith('#'))
+    assert private_words.summary() == {'configured': True, 'entries': 3, 'by_category': {'group': 1, 'account': 1, 'host': 1},
+                                       'file_lines': {'not_empty': 3 + comments, 'comments': comments, 'not_entries': 0},
+                                       'numbering': private_words.NUMBERING}
+    with private_list.open('a', encoding='utf-8') as handle:
+        handle.write('a line that is not an entry\n')
+    assert private_words.summary()['file_lines']['not_entries'] == 1, 'a malformed line is counted, not hidden'
     assert private_list.read_text(encoding='utf-8').startswith('# Words that point at real people')
     assert private_words.remove('10001234') == {'removed': True}
     assert private_words.remove('10001234')['removed'] is False

@@ -27,6 +27,7 @@ from .queue import database_effects_lock,RuntimeLease
 from .integration import INTEGRATION_TOOLS, INTEGRATION_TOOL_BY_PROFILE, agent_home_profile, owner_profile
 from .integration_import import IMPORT_TOOL_NAME, integration_gated
 from . import outbound_media   # 导入图片时顺手登记成这一轮可引用的 image artifact（B7）
+from . import outbound_files   # offer_file: a file of the task folder registered to send (ADR-092)
 from .history_query import HISTORY_TOOL, HISTORY_TOOL_NAME
 from .discussion_digest import DIGEST_TOOL, DIGEST_TOOL_NAME
 from .development import DEVELOPMENT_TOOLS, DEVELOPMENT_NAMES, PERSONA_JOB_TOOLS
@@ -47,7 +48,7 @@ OBSERVATION_CHARS = 600
 # Tool records on the first page: only for a task that changed or published something, the receipts that say whether
 # it took (her answer: the risk is "it says it changed, and did not"); every record is on the report's last pages.
 KEY_OBSERVATIONS = 2
-CHANGING_TOOLS = ('write_file', 'development_write', 'development_publish', 'integration_start', 'integration_stop',
+CHANGING_TOOLS = ('write_file', 'offer_file', 'development_write', 'development_publish', 'integration_start', 'integration_stop',
                   'import_integration_artifact', 'generate_image', 'persona_job_run')
 KEY_TOOLS = ('development_publish', 'integration_start', 'integration_stop', 'development_run', 'integration_test',
              'sandbox_run')
@@ -335,6 +336,7 @@ WORKSPACE_TOOLS = [
     {'name': 'list_files', 'description': 'List files inside the authorized workspace /task.', 'parameters': {}},
     {'name': 'read_file', 'description': 'Read a UTF-8 file inside /task (up to 32 KiB), or page this action session’s native tool spill using byte offset/limit.', 'parameters': {'path': {'type': 'string', 'required': True}, 'offset': {'type': 'integer'}, 'limit': {'type': 'integer'}}},
     {'name': 'write_file', 'description': 'Create a UTF-8 file inside /task. Existing files require explicit overwrite=true. Protected paths are read-only.', 'parameters': {'path': {'type': 'string', 'required': True}, 'text': {'type': 'string', 'required': True}, 'overwrite': {'type': 'boolean'}}},
+    outbound_files.OFFER_FILE_TOOL,
     SANDBOX_TOOL,
 ]
 
@@ -771,7 +773,7 @@ class ToolBroker:
         # and every cancellation needs it. A later cancellation still fences new calls; recording this accepted
         # call cannot revive the task.
         with (nullcontext() if integration_gated(tool) or tool in DEVELOPMENT_NAMES or tool=='ask_character'
-                  or tool in ('generate_image','render_svg','private_words','sandbox_run') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
+                  or tool in ('generate_image','render_svg','private_words','sandbox_run','offer_file') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
             if not integration_gated(tool):self.service.valid(task)
             if tool=='persona_job_run':
                 if not task.get('development_grant'):raise Denied(capability_refusal(self.store,task,tool))
@@ -868,6 +870,11 @@ class ToolBroker:
             elif tool in ('list_files','read_file','write_file'):
                 # Fixed file operations need no sandbox: the worker does them, inside the task folder only.
                 result=workspace_file(sandbox.task_dir,sandbox.protected_paths,tool,args)
+            elif tool=='offer_file':
+                # The bytes stream into storage in the task's own scope (its binding, not a parameter); a large file
+                # takes a while, so no lock is held across the copy.
+                result=outbound_files.register(self.store,task,sandbox.task_dir,args)
+                with self.service.lock:self.service.valid(task)
             elif tool=='sandbox_run':
                 if args.get('credentials'):
                     # Owner 2026-10-07: a credential's variables reach one sandboxed command of a home task, nothing else.

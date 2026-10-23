@@ -6,11 +6,11 @@ Every call returns a Result whose `kind` is one of:
   retry                      -> 5xx or transport failure, same payload may be retried
   reject                     -> 4xx, retrying the same payload will not help
 
-`get_attachment` is the only call that returns bytes, and it deliberately does
-not share `_request`: that JSON path caps what it reads at 256 KiB, which would
-silently truncate an image into an unparsable body -- by then the publication is
-already claimed (SENDING), so a host restart would call it UNKNOWN.  The byte
-path reads in chunks against its own ceiling and says which check failed.
+`get_attachment` and `get_file_piece` are the calls that return bytes, and they
+deliberately do not share `_request`: that JSON path caps what it reads at 256 KiB,
+which would silently truncate an image into an unparsable body -- by then the
+publication is already claimed (SENDING), so a host restart would call it UNKNOWN.
+The byte paths read in chunks against their own ceiling and say which check failed.
 """
 import hashlib
 import json
@@ -25,6 +25,12 @@ import urllib.request
 # ignores an unknown query parameter (the channel server reads only
 # `wait_seconds`), so declaring is safe before the host learns about it.
 CAPABILITIES = ("image", "sticker")
+
+
+def file_capability(max_bytes):
+    """The `file` entry of a claim's declaration: the largest file this adapter sends (adapter.napcat.max_file_mb),
+    so the host refuses a larger one before anything is sent."""
+    return "file:%d" % int(max_bytes)
 
 # One attachment's bytes.  QQ photos are commonly 1-6 MiB; this is the
 # adapter's own ceiling, not the host's, and it is enforced while reading.
@@ -238,6 +244,54 @@ class HostApi:
             return Result("reject", code, {"error": "sha256_mismatch", "expected": str(expect_sha256)[:64],
                                            "observed": digest})
         return Result("ok", code, {"data": body, "bytes": len(body), "sha256": digest, "content_type": ctype})
+
+    def get_file_piece(self, publication_id, attempt_id, artifact_id, offset, length, timeout=60.0):
+        """One piece of a claimed file: `length` bytes from `offset` (fewer only at its end), over this same API.
+
+        GET /v1/channels/{channel}/outbox/{publication}/attachment?attempt_id=..&artifact_id=..&offset=..&length=..
+        Result kinds as get_attachment: `ok` (obj carries `data`), `retry` (5xx or transport), `reject` (4xx, not
+        bytes, or not the size asked for).  The whole file's sha256 is the caller's to check across the pieces.
+        """
+        query = urllib.parse.urlencode({"attempt_id": str(attempt_id), "artifact_id": str(artifact_id),
+                                        "offset": int(offset), "length": int(length)})
+        path = "/v1/channels/%s/outbox/%s/attachment?%s" % (
+            self.channel_id, urllib.parse.quote(str(publication_id), safe=""), query)
+        req = urllib.request.Request(self.base + path, method="GET")
+        req.add_header("Authorization", "Bearer " + self.token)
+        limit = int(length)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                code = resp.status
+                ctype = str(resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                chunks, total = [], 0
+                while total <= limit:
+                    part = resp.read(min(ATTACHMENT_CHUNK, limit + 1 - total))
+                    if not part:
+                        break
+                    total += len(part)
+                    chunks.append(part)
+        except urllib.error.HTTPError as exc:
+            code = exc.code
+            try:
+                excerpt = exc.read(2048).decode("utf-8", "replace")
+            except Exception:
+                excerpt = ""
+            error = "http_%s" % code
+            try:
+                error = str(json.loads(excerpt).get("error") or error)
+            except (ValueError, AttributeError):
+                pass
+            return Result("retry" if 500 <= code < 600 else "reject", code,
+                          {"error": error.split(":")[0][:80], "excerpt": " ".join(excerpt.split())[:200]})
+        except (urllib.error.URLError, socket.timeout, ConnectionError, OSError) as exc:
+            return Result("retry", code=None, error=type(exc).__name__)
+        if ctype != "application/octet-stream":
+            return Result("reject", code, {"error": "unexpected_content_type", "content_type": ctype[:80]})
+        if total > limit:
+            return Result("reject", code, {"error": "over_length", "read_bytes": total, "length": limit})
+        if not total:
+            return Result("reject", code, {"error": "empty_body"})
+        return Result("ok", code, {"data": b"".join(chunks), "bytes": total})
 
     def post_receipt(self, publication_id, payload):
         path = "/v1/channels/%s/outbox/%s/receipt" % (self.channel_id, urllib.parse.quote(publication_id, safe=""))

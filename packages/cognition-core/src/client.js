@@ -45,7 +45,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'tool.errand': '差事', 'tool.find_member': '找群友', 'tool.group_focus': '群里的心思', 'tool.note': '便条', 'tool.peer_line': '旧居的线',
       'tool.place_timezone': '地方的时区', 'tool.private_words': '私密名单', 'tool.restart': '重启',
       'tool.sticker': '表情包架子', 'tool.watch': '盯人',
-      'speak.sticker': '［贴纸：{name}］', 'speak.picture': '［图片］', 'speak.poke': '［戳了 {who}］', 'speak.react': '［给 {line} 点了「{face}」］',
+      'speak.sticker': '［贴纸：{name}］', 'speak.picture': '［图片］', 'speak.file': '［文件］', 'speak.poke': '［戳了 {who}］', 'speak.react': '［给 {line} 点了「{face}」］',
       'speak.recall': '［撤回 {line}：{why}］', 'speak.other': '［{kind}］', 'tool.recall': '回想', 'tool.delegate': '交给行动脑', 'tool.message_action': '给行动脑补话',
       'tool.stop_action': '叫停', 'tool.answer_action': '回答行动脑', 'tool.task': '行动脑的事', 'tool.ideas': '想法本', 'tool.stay_silent': '不说话',
       'tool.attach_image': '配图', 'tool.write_document': '写文档', 'tool.update_self': '更新自我',
@@ -212,7 +212,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'tool.credential': 'Vault', 'tool.errand': 'Errand', 'tool.find_member': 'Find a member', 'tool.group_focus': 'Group focus',
       'tool.note': 'Note', 'tool.peer_line': 'Peer line', 'tool.place_timezone': 'Place time zone', 'tool.private_words': 'Private words',
       'tool.restart': 'Restart', 'tool.sticker': 'Sticker shelf', 'tool.watch': 'Watch someone',
-      'speak.sticker': '[sticker: {name}]', 'speak.picture': '[picture]', 'speak.poke': '[poked {who}]', 'speak.react': '[reacted {face} to {line}]',
+      'speak.sticker': '[sticker: {name}]', 'speak.picture': '[picture]', 'speak.file': '[file]', 'speak.poke': '[poked {who}]', 'speak.react': '[reacted {face} to {line}]',
       'speak.recall': '[recalled {line}: {why}]', 'speak.other': '[{kind}]', 'tool.recall': 'Recall', 'tool.delegate': 'Hand to the action brain',
       'tool.message_action': 'Message the action brain', 'tool.stop_action': 'Stop a task', 'tool.answer_action': 'Answer the action brain', 'tool.task': 'A task', 'tool.ideas': 'Her ideas',
       'tool.stay_silent': 'Stay silent', 'tool.attach_image': 'Attach a picture', 'tool.write_document': 'Write document',
@@ -715,7 +715,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
   };
   // A part of hers that is not words, named the way her history names it.
   const partLine = (t, part) => part.kind === 'text' ? String(part.text ?? '')
-    : t('speak.' + (['sticker', 'picture', 'poke', 'react', 'recall'].includes(part.kind) ? part.kind : 'other'),
+    : t('speak.' + (['sticker', 'picture', 'file', 'poke', 'react', 'recall'].includes(part.kind) ? part.kind : 'other'),
       { name: part.name ?? '', who: part.who ?? '', line: part.line ?? '', face: part.face ?? '', why: part.why ?? '',
         kind: part.kind ?? '' });
 

@@ -46,6 +46,7 @@ Every turn has a **class**, decided by the program from the conversation and the
     own review: her idea notebook and her night's promotion of a memory
     (`role_tools.RoleTools.tool_promote_memory`).
   - Pictures: in groups and other people's chats she can send only pictures she made (`outbound_media.own_only`).
+  - Files go to groups only, and only those her tasks registered (`outbound_files.offer`).
 - **Her words outside** are checked for program talk (`answers.speech_problem`). At home, tool names are a normal
   topic.
 
@@ -85,7 +86,8 @@ Two hops, each over a local HTTP API: NapCat ⇄ the QQ adapter ⇄ Asuna's chan
    - Her turn runs there (see the next question). The QQ conversation in the Web page is that session, view only.
 4. **Back out.** Her words are stored as an outbound message, an outbox row (`publish.PublishService`).
    - The adapter long-polls `GET /v1/channels/qq/outbox` (`channels.Channels.claim`) and sends through NapCat
-     (`outbound.py`: `send_group_msg`, `send_private_msg`, with pictures and stickers).
+     (`outbound.py`: `send_group_msg`, `send_private_msg`, with pictures and stickers; a file through
+     `upload_file_stream` and `upload_group_file`, its bytes read in pieces, `outbound_files.serve_piece`).
    - It reports the platform's answer with `POST …/receipt` (`channels.Channels.receipt`). Until that receipt her
      words are "not yet confirmed".
 
@@ -307,7 +309,7 @@ The persona package, its model and policies, her skills and ideas.
 
 ### [Channels and pictures](channels.md)
 
-The channel API, platform kinds, stickers, seeing and sending pictures, voices as text.
+The channel API, platform kinds, stickers, seeing and sending pictures and files, voices as text.
 
 - [`channels`](../../src/asuna/channels.py) — Authenticated transport-neutral adapter seam.
 - [`channel_kinds`](../../src/asuna/channel_kinds.py) — Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq).
@@ -322,6 +324,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures, voices a
 - [`media_keys`](../../src/asuna/media_keys.py) — Current signatures for a platform's media links (ADR-035).
 - [`media_life`](../../src/asuna/media_life.py) — How long stored media bytes live: every kind of stored picture has an owner or an expiry.
 - [`outbound_media`](../../src/asuna/outbound_media.py) — 出站图片附件：她的 attach_image 工具 → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
+- [`outbound_files`](../../src/asuna/outbound_files.py) — Files she sends to a group through the outbox (ADR-092): registered from a task's folder, offered to her turn, sent as speak's `file` part, read by the adapter in pieces, their bytes kept 7 days after they were last sent.
 - [`animated`](../../src/asuna/animated.py) — Animated pictures as something a still-image model can see: one labelled contact sheet plus words.
 - [`voice`](../../src/asuna/voice.py) — Voice messages arrive as text (ADR-093): a channel adapter fetches each voice of a message before it submits the line and posts the audio to `POST /v1/channels/<id>/voice`; the program turns it into text on this machine within that request 
 
@@ -382,6 +385,7 @@ The DSH plugin (JavaScript): the worker it starts, her sessions, the action brai
 - [`persistence.js`](../../packages/cognition-core/src/persistence.js) — DSH compatibility seam for informational plugin event envelopes.
 - [`persona.js`](../../packages/cognition-core/src/persona.js) — Persona contribution v2 (ADR-009 PERSONA_CONTRACT §2): shape checks at registration.
 - [`preset.js`](../../packages/cognition-core/src/preset.js) — An Asuna agent preset row: DSH's own preset row (@deepseek-ai/dsh-agent-preset) with its name and description declared per language.
+- [`private-words.js`](../../packages/cognition-core/src/private-words.js) — The deployment's "keep out" list (src/asuna/private_words.py keeps it; this reads it the same way) and what it finds in a text that will become public: words on the list, and digit runs shaped like a QQ or group number.
 - [`python-env.js`](../../packages/cognition-core/src/python-env.js) — Builds the worker's Python environment on first start: a venv in the profile's data folder, installed from the package's `requirements.lock` with uv, or with any Python 3.12+ and pip.
 - [`recovery.js`](../../packages/cognition-core/src/recovery.js) — The recovery preset plugin: a repair session limited to the project development tools, which runs through the publication floor even while the cognition worker is down.
 - [`role.js`](../../packages/cognition-core/src/role.js) — The character brain's preset plugin: her role session gets the worker-rendered system prompt and her role tools (`attachRole` in index.js).

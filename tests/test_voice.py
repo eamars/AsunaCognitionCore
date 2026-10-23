@@ -7,7 +7,6 @@ model files are present, and skips saying where it looked when they are not."""
 import hashlib
 import io
 import json
-import socket
 import struct
 import threading
 import time
@@ -299,22 +298,6 @@ def post(port, event_id, data, index=0, query=None):
         return exc.code, json.loads(exc.read())
 
 
-def head_only(port, query, size=10_000_000):
-    """A voice post whose headers promise `size` bytes that never come: answered only if the body is not read."""
-    with socket.create_connection(('127.0.0.1', port), timeout=5) as conn:
-        conn.sendall(('POST /v1/channels/qq/voice?%s HTTP/1.1\r\nHost: test\r\nAuthorization: Bearer %s\r\n'
-                      'Content-Type: audio/mpeg\r\nContent-Length: %d\r\nConnection: close\r\n\r\n'
-                      % (query, TOKEN, size)).encode())
-        answer = b''
-        while True:
-            part = conn.recv(65536)
-            if not part:
-                break
-            answer += part
-    head, _, payload = answer.partition(b'\r\n\r\n')
-    return int(head.split(b' ', 2)[1]), json.loads(payload)
-
-
 @pytest.fixture
 def server():
     made = []
@@ -395,14 +378,21 @@ def test_the_endpoint_refuses_what_is_out_of_shape(store, server):
         'VOICE_FIELD_DENIED')
 
 
-def test_the_query_and_a_route_key_are_answered_before_the_body_is_read(store, server):
+def test_a_refused_post_is_answered_and_its_audio_never_used(store, server):
+    """Who may post a voice and what it is about are settled before its audio is used; a refused post's body is read
+    and dropped, so the client gets the refusal, not a reset connection."""
     channels = world(store)
     port = server(channels)
-    status, answer = head_only(port, 'route_id=g&event_id=1&index=99')
-    assert status == 400 and answer['error'].startswith('VOICE_INDEX_INVALID')
+    engine = FakeEngine()
+    transcriber(engine)
+    big = wav() + bytes(8 * 1024 * 1024)
+    for _ in range(3):
+        status, answer = post(port, '5307', big, index=99)
+        assert status == 400 and answer['error'].startswith('VOICE_INDEX_INVALID')
     channels.authenticate = lambda channel_id, authorization: (None, 'g')      # as a route key of route g
-    status, answer = head_only(port, 'route_id=g&event_id=1&index=0')
+    status, answer = post(port, '5307', big)
     assert (status, answer['error']) == (403, 'ROUTE_KEY_ENDPOINT_DENIED')
+    assert engine.calls == [] and voice._outcomes == {}
 
 
 def test_a_line_from_a_channel_without_voice_in_reads_as_today(store):

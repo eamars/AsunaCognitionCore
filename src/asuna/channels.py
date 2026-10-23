@@ -731,8 +731,27 @@ class ChannelServer:
             def log_message(self, *args):
                 pass
 
+            def drop_body(self):
+                """A body refused before it was read is read and dropped before the answer, so the client gets the
+                answer, not a reset connection; one larger than any endpoint takes (a voice's) closes the connection
+                instead."""
+                from .voice import BODY_LIMIT
+                try:
+                    left = int(self.headers.get('Content-Length', '0'))
+                except ValueError:
+                    left = -1
+                if not 0 <= left <= BODY_LIMIT:
+                    self.close_connection = True
+                    return
+                while left > 0:
+                    chunk = self.rfile.read(min(left, 65536))
+                    if not chunk:
+                        break
+                    left -= len(chunk)
+
             def handle_request(self):
                 status = 200
+                self.body_read = False
                 raw = None                      # (bytes, content_type)：只有附件端点走这一条
                 try:
                     url = urlsplit(self.path)
@@ -760,10 +779,13 @@ class ChannelServer:
                             raise ValueError('INVALID_BODY_SIZE')
                         if raw_voice:
                             audio = self.rfile.read(size)
+                            self.body_read = True
                             if len(audio) != size:
                                 raise ValueError('INVALID_BODY_SIZE')
                         else:
-                            body = json.loads(self.rfile.read(size))
+                            data = self.rfile.read(size)
+                            self.body_read = True
+                            body = json.loads(data)
                             if not isinstance(body, dict):
                                 raise ValueError('INVALID_BODY')
                     if scoped:
@@ -810,6 +832,8 @@ class ChannelServer:
                     channels.controller.app.evidence.record('host.channel_error', {'traceback': error})
                     channels.controller.emit('[系统] 通道接口未完成：\n' + error)
                     status, value = 503, {'error': 'HOST_TEMPORARILY_UNAVAILABLE'}
+                if self.command == 'POST' and not self.body_read:
+                    self.drop_body()
                 if raw is not None and status == 200:
                     data, media_type = raw
                     self.send_response(200)

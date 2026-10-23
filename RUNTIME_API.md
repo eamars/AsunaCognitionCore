@@ -482,7 +482,8 @@ Keys live only in the worker's memory: never in the database, the audit or a log
 the body (`Content-Type` the media type, e.g. `audio/mpeg`) and the line's event in the query:
 `…/voice?route_id=g&event_id=5301&index=0&occurred_at=2026-10-23T01%3A00%3A00Z`. The worker transcribes it within
 the request and answers with the outcome; the line, posted to `events` next with the same `route_id`, `event_id` and
-`occurred_at`, is stored with it. The query, and a route key's refusal, are answered before the body is read.
+`occurred_at`, is stored with it. The query and a route key are checked before the audio is read; a refused post's
+body is read and dropped, then answered.
 
 | Query | Required | Meaning |
 |---|---|---|

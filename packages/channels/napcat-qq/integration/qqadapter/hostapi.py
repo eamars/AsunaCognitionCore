@@ -165,8 +165,9 @@ class HostApi:
                 res = Result("duplicate", res.code, res.obj)
         return res
 
-    def claim_outbox(self, wait_seconds=25, timeout=None, supports=CAPABILITIES):
-        path = "/v1/channels/%s/outbox?wait_seconds=%d" % (self.channel_id, int(wait_seconds))
+    def claim_outbox(self, wait_seconds=25, timeout=None, supports=CAPABILITIES, lane="chat"):
+        """One outbox item for `lane` (ADR-095): `chat` (everything but files) or `bulk` (files)."""
+        path = "/v1/channels/%s/outbox?wait_seconds=%d&lane=%s" % (self.channel_id, int(wait_seconds), lane)
         caps = [str(c) for c in (supports or ()) if c]
         if caps:
             path += "&supports=" + urllib.parse.quote(",".join(caps), safe="")

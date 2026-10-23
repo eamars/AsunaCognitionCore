@@ -179,7 +179,7 @@ HTTP client for the runtime host channel API (stdlib only).
   - `post_own_mute` — Her own mute in one group (mutes.py); `accepted` once the host took it.
   - `post_notice` — A line about her own account for her home session (notices.py); `accepted` once the host took it.
   - `post_voice` — One voice of a line about to be posted, as its bytes (voice.py): the host transcribes it within the request; `accepted` with its outcome (`state`), or `duplicate` when it was settled before.
-  - `claim_outbox`
+  - `claim_outbox` — One outbox item for `lane` (ADR-095): `chat` (everything but files) or `bulk` (files).
   - `get_attachment` — Fetch the bytes one claimed publication declared, over this same API.
   - `get_file_piece` — One piece of a claimed file: `length` bytes from `offset` (fewer only at its end), over this same API.
   - `post_receipt`
@@ -339,7 +339,8 @@ Host outbox -> OneBot send_private_msg / send_group_msg -> receipt.
   - `settle`
   - `muted`
   - `verify_send` — Ask the platform for the message this send just created, by that id.
-  - `report`
+  - `report` — Post a receipt once; one the host does not take now is spooled at once and posted by the receipt thread (`replay_receipts`, ADR-095), so a host slow to take receipts never holds a send.
+  - `report_later` — A receipt from NapCat's reader thread (a late answer): spooled, and posted by the receipt thread, so a host slow to take it never holds the reader and with it every other send's answer (ADR-095).
   - `replay_receipts`
   - `on_late_ack`
 

@@ -303,7 +303,7 @@ def test_a_file_row_on_an_adapter_that_does_not_declare_files_fails_and_cancels_
 def test_a_file_over_the_limit_declared_at_claim_time_fails_with_both_numbers(store, tmp_path):
     world(store)
     _, rows = queued_file(store, tmp_path, 'f-claim-limit')
-    assert bridge(store).claim('qq', supports=['file:100'])['items'] == []
+    assert bridge(store).claim('qq', supports=['file:100'], lane='bulk')['items'] == []
     row = store.db.messages.find_one({'_id': rows[0]['_id']})
     assert row['delivery_state'] == 'FAILED' and row['failure'] == 'FILE_OVER_CHANNEL_LIMIT'
     assert row['file_limit'] == {'bytes': len(PDF), 'limit': 100} and '最多 100 字节（100 字节）' in row['failure_detail']
@@ -326,7 +326,7 @@ def test_a_claimed_file_whose_bytes_vanished_fails_as_expired_saying_whether_the
     store.db.artifacts.update_one({'_id': item['_id']}, {'$set': {'storage': 'removed', 'bytes_removed_at': '2026-10-20T01:00:00+00:00'}})
     if not present:
         (tmp_path / 'report.pdf').unlink()
-    assert bridge(store).claim('qq', supports=DECLARED)['items'] == []
+    assert bridge(store).claim('qq', supports=DECLARED, lane='bulk')['items'] == []
     row = store.db.messages.find_one({'_id': rows[0]['_id']})
     assert row['delivery_state'] == 'FAILED' and row['failure'] == 'FILE_BYTES_EXPIRED'
     assert row['source_present'] is present
@@ -354,7 +354,7 @@ def test_the_bytes_go_in_pieces_under_the_publication_fences(store, tmp_path):
     data = bytes(range(256)) * 300                                  # 76,800 bytes
     registered, rows = queued_file(store, tmp_path, 'f-pieces', file='data.bin', data=data)
     channels = bridge(store)
-    [item] = channels.claim('qq', supports=DECLARED)['items']
+    [item] = channels.claim('qq', supports=DECLARED, lane='bulk')['items']
     assert item['text'] == '' and item['file']['artifact_id'] == registered['artifact_id']
     assert item['file']['size'] == len(data) and item['file']['name'] == 'data.bin' and item['file']['media_type'] is None
     server = ChannelServer(channels)
@@ -385,7 +385,7 @@ def test_a_delivered_file_needs_no_message_id_and_keeps_its_bytes_seven_days_fro
     world(store)
     registered, rows = queued_file(store, tmp_path, 'f-receipt')
     channels = bridge(store)
-    [item] = channels.claim('qq', supports=DECLARED)['items']
+    [item] = channels.claim('qq', supports=DECLARED, lane='bulk')['items']
     done = channels.receipt('qq', item['publication_id'], {'attempt_id': item['attempt_id'], 'status': 'platform_accepted',
                                                            'response': {'group_file': {'retcode': 0, 'data': {'file_id': '/x'}}}})
     assert done == {'status': 'DELIVERED'}
@@ -406,7 +406,7 @@ def test_a_failed_upload_shows_the_platforms_reason_in_her_next_turn(store, tmp_
     world(store)
     _, rows = queued_file(store, tmp_path, 'f-failed')
     channels = bridge(store)
-    [item] = channels.claim('qq', supports=DECLARED)['items']
+    [item] = channels.claim('qq', supports=DECLARED, lane='bulk')['items']
     assert channels.receipt('qq', item['publication_id'], {
         'attempt_id': item['attempt_id'], 'status': 'failed',
         'response': {'reason': 'file_upload_failed', 'retcode': 1200, 'platform': '群文件空间不足'}}) == {'status': 'FAILED'}
@@ -478,8 +478,75 @@ def test_a_file_any_of_her_tasks_registered_goes_to_a_group_wherever_the_task_ra
     assert store.db.artifacts.find_one({'_id': made['artifact_id']})['scope_key'] == elsewhere != 'scene:' + SCENE
     _, result, ok, rows, _ = turn(store, 'f-home', [{'kind': 'file', 'artifact_id': made['artifact_id']}])
     assert ok, result
-    [item] = bridge(store).claim('qq', supports=DECLARED)['items']
+    [item] = bridge(store).claim('qq', supports=DECLARED, lane='bulk')['items']
     row = store.db.messages.find_one({'_id': item['publication_id']})
     data, kind = outbound_files.serve_piece(store, row, {'artifact_id': [made['artifact_id']], 'offset': ['0'],
                                                          'length': ['100']})
     assert data == PDF[:100] and kind == 'application/octet-stream'
+
+
+# ── ADR-095: the chat and bulk lanes ─────────────────────────────────
+def test_a_file_holds_nothing_and_comes_on_the_bulk_lane_only(store, tmp_path):
+    """Files don't hold chat, even the later parts of their own reply (owner 2026-10-23); the file waits for the parts
+    before it like any part, and only a bulk claim gets it."""
+    world(store)
+    registered, rows = queued_file(store, tmp_path, 'f-lanes')
+    channels = bridge(store)
+    [chat] = channels.claim('qq', supports=DECLARED)['items']
+    assert chat['publication_id'] == rows[1]['_id'] and chat['text'] == '看看', 'the text after the file goes first'
+    [bulk] = channels.claim('qq', supports=DECLARED, lane='bulk')['items']
+    assert bulk['publication_id'] == rows[0]['_id'] and bulk['file']['artifact_id'] == registered['artifact_id']
+    assert channels.claim('qq', supports=DECLARED)['items'] == [] and channels.claim(
+        'qq', supports=DECLARED, lane='bulk')['items'] == []
+
+
+def test_a_chat_line_out_holds_its_conversation_until_settled_or_its_lease_ends(store, tmp_path):
+    """Several chat sends at once never take two lines of one conversation; a line out past CHAT_LEASE_SECONDS (an
+    adapter that died mid-send) no longer holds it, and stays SENDING for its receipt or the Host's recovery."""
+    from asuna import channels as channels_mod
+    world(store)
+    _, _, ok, first, _ = turn(store, 'c-1', [{'kind': 'text', 'text': '一'}])
+    _, _, ok2, second, _ = turn(store, 'c-2', [{'kind': 'text', 'text': '二'}])
+    assert ok and ok2
+    channels = bridge(store)
+    [one] = channels.claim('qq', supports=DECLARED)['items']
+    assert one['publication_id'] == first[0]['_id']
+    assert channels.claim('qq', supports=DECLARED)['items'] == [], 'its conversation is held while the first is out'
+    old = (datetime.now(timezone.utc) - timedelta(seconds=channels_mod.CHAT_LEASE_SECONDS + 5)).isoformat()
+    store.db.messages.update_one({'_id': first[0]['_id']}, {'$set': {'claimed_at': old}})
+    [two] = channels.claim('qq', supports=DECLARED)['items']
+    assert two['publication_id'] == second[0]['_id']
+    assert store.db.messages.find_one({'_id': first[0]['_id']})['delivery_state'] == 'SENDING'
+    with pytest.raises(ValueError, match='OUTBOX_LANE_INVALID'):
+        server = ChannelServer(channels, 0)
+        try:
+            raise ValueError(json.loads(urllib.request.urlopen(urllib.request.Request(
+                'http://127.0.0.1:%d/v1/channels/qq/outbox?wait_seconds=0&lane=x' % server.server.server_port,
+                headers={'Authorization': 'Bearer ' + store.config['channels']['qq']['token']})).read()))
+        except urllib.error.HTTPError as exc:
+            raise ValueError(json.loads(exc.read())['error'])
+        finally:
+            server.close()
+
+
+def test_a_failed_file_cancels_the_parts_after_it_that_have_not_gone(store, tmp_path):
+    """A file holds nothing while it is on its way, but one that failed cancels what follows, as any failed part."""
+    world(store)
+    _, rows = queued_file(store, tmp_path, 'f-fails', data=PDF * 20)
+    channels = bridge(store)
+    assert channels.claim('qq', supports=['file:100'], lane='bulk')['items'] == []      # over the limit: failed
+    assert store.db.messages.find_one({'_id': rows[0]['_id']})['delivery_state'] == 'FAILED'
+    store.db.messages.update_one({'_id': rows[1]['_id']}, {'$set': {'delivery_state': 'QUEUED_EXTERNAL'}})
+    assert channels.claim('qq', supports=['file:100'])['items'] == []
+    assert store.db.messages.find_one({'_id': rows[1]['_id']})['delivery_state'] == 'CANCELLED_AFTER_FAILURE'
+
+
+def test_a_claim_naming_no_lane_is_one_lane_for_everything_and_the_answer_names_its_lane(store, tmp_path):
+    """An adapter from before ADR-095 names no lane: it gets files on its one lane as before; a new adapter can tell
+    a host from before ADR-095 by the missing lane in the answer."""
+    world(store)
+    registered, rows = queued_file(store, tmp_path, 'f-one-lane')
+    channels = bridge(store)
+    first = channels.claim('qq', supports=DECLARED, lane='one')
+    assert first['lane'] == 'one' and first['items'][0]['publication_id'] == rows[0]['_id']
+    assert channels.claim('qq', supports=DECLARED, lane='bulk') == {'items': [], 'lane': 'bulk'}

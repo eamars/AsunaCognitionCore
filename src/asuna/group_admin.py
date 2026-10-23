@@ -170,6 +170,12 @@ def notes_block(docs, scene):
 def claim(store, channel_id):
     """One queued action for this channel's adapter, or None; it is marked SENDING with a fresh attempt."""
     import uuid
+    from datetime import datetime, timedelta, timezone
+    from .channels import CHAT_LEASE_SECONDS
+    lease = (datetime.now(timezone.utc) - timedelta(seconds=CHAT_LEASE_SECONDS)).isoformat()
+    if store.db.artifacts.find_one({'kind': 'group_action', 'channel_id': channel_id, 'state': 'SENDING',
+                                    'claimed_at': {'$gte': lease}}, {'_id': 1}):
+        return None                     # ADR-095: one out at a time, so they happen in the order she chose them
     row = store.db.artifacts.find_one({'kind': 'group_action', 'channel_id': channel_id, 'state': 'QUEUED'},
                                       sort=[('created_at', 1)])
     if not row:

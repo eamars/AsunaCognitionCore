@@ -85,13 +85,13 @@ def test_T5_4_parts_pacing_claim_and_failure(store, monkeypatch):
     bridge = channels(store)
     first = bridge.claim('replay')['items'][0]
     assert first['publication_id'] == rows[0]['_id']
-    assert bridge.claim('replay') == {'items': []}, 'part 2 is not due yet'
+    assert bridge.claim('replay')['items'] == [], 'part 2 is not due yet'
     release(store, rows[1:2])
-    assert bridge.claim('replay') == {'items': []}, 'part 2 waits for part 1 to settle'
+    assert bridge.claim('replay')['items'] == [], 'part 2 waits for part 1 to settle'
     receipt(bridge, first, 'failed')
     states = [r['delivery_state'] for r in outbound(store, ep['_id'])]
     assert states == ['FAILED', 'CANCELLED_AFTER_FAILURE', 'CANCELLED_AFTER_FAILURE']
-    assert bridge.claim('replay') == {'items': []}
+    assert bridge.claim('replay')['items'] == []
 
 
 def test_T5_4_paced_parts_deliver_in_order_and_hold_the_line(store, monkeypatch):
@@ -140,7 +140,7 @@ def test_a_part_queued_after_an_earlier_part_failed_is_cancelled_when_it_comes_u
     store.put('messages', {**first, 'delivery_state': 'FAILED', 'failure': 'PLATFORM_REFUSED'},
               expected=first['revision'], stream=first['episode_id'])
     release(store, rows[1:])
-    assert channels(store).claim('replay') == {'items': []}
+    assert channels(store).claim('replay')['items'] == []
     assert [r['delivery_state'] for r in outbound(store, ep['_id'])] == [
         'FAILED', 'CANCELLED_AFTER_FAILURE', 'CANCELLED_AFTER_FAILURE']
 

@@ -83,8 +83,8 @@ voice until a restart.
 3. **Files don't hold chat**, even in their own conversation (owner): the parts of a reply before a file keep their
    order (the file part waits for them, as any part does); the file goes out when its upload finishes; nothing waits
    for it — not her later replies, and not the later parts of its own reply. In the Host's part rule a file part in
-   flight therefore doesn't count as an earlier part still on its way; a file that fails still cancels nothing after
-   it (files stand alone).
+   flight therefore doesn't count as an earlier part still on its way. A file that fails cancels the parts after it
+   that have not gone yet, as any failed part does (as built; the earlier draft said it cancels nothing).
 4. **Execute** — in the worker: fetch, send, verify. Verification stays on the send path; in a per-conversation
    worker it costs only that conversation.
 5. **Receipts** — their own queue and thread. The spool already exists; `report` enqueues, a receipt thread posts.
@@ -197,7 +197,25 @@ line is in the adapter's journal meanwhile, so nothing waits on step 1).
    its turn after one batch). The first check fails on the single submitter. Independent review: one high (the
    Host's own 503 counted against a line) and five medium findings, fixed; a second verifier: three medium (a stale
    first-answer time, prepare-once keeping a voice's refusal, the batch not letting others in) and two low, fixed.
-3. Outbound lanes, the Host's SENDING hold and the receipt thread, with tests 2, 5, 7, 8.
+3. Outbound lanes, the Host's SENDING hold and the receipt thread, with tests 2, 5, 7, 8. **Built:** the Host's
+   `claim` takes `lane` (`chat` default, `bulk` files; an adapter not declaring `file` meets file rows on chat and
+   fails them as before), `_next` holds a conversation with a chat line `SENDING` claimed within
+   `CHAT_LEASE_SECONDS` = 300 (past it the line holds nothing and stays `SENDING` for its receipt or the Host's
+   recovery: no state change), and a file is no earlier part on its way. The adapter (napcat-qq 0.12.0): `_main_loop`
+   claims while fewer than `CHAT_LANES` = 4 sends are out and gives each a thread (`_send`); `_bulk_loop` claims files;
+   `_receipt_loop` posts spooled receipts; `Outbound.report` tries once and spools; a stop waits up to 20 s for the
+   sends on their way. Tests: Host `test_a_file_holds_nothing_and_comes_on_the_bulk_lane_only`,
+   `test_a_chat_line_out_holds_its_conversation_until_settled_or_its_lease_ends`; self-test `_check_outbound_lanes`
+   (a file upload that does not finish holds no chat send, in its own conversation either; a send that does not finish
+   holds only its conversation; a host not taking receipts holds no send). Independent review: one medium-high (a late
+   platform answer posted its receipt on NapCat's reader thread, so a slow host could turn other sends `unknown`; now
+   it is spooled, `report_later`), a regression (a failed file did not cancel the parts after it; the part rule now
+   cancels on any earlier part not on its way and holds only on an earlier chat part on its way), admin actions out
+   several at once (now one per channel, `group_admin.claim`), mixed versions (a claim naming no lane is one lane for
+   everything; the answer names its lane and a new adapter on an older host goes back to one send at a time), the stop
+   not waiting for the bulk lane (now it does), and receipts abandoned while the host was away (only error answers
+   count now); all fixed with a check each. NapCat's one write lock (a 4 MiB file piece under it) stays: a shared
+   dependency, waited on.
 4. The transcriber child, with test 9.
 5. The watchdog and visible state.
 6. The digest in her night stage, with test 10 — talked through with her before it reaches her.

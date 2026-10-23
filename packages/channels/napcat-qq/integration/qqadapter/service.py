@@ -35,6 +35,9 @@ WHOLE_HOST = ("HOST_RECONFIGURING", "HOST_STOPPING", "HOST_DATABASE_UNAVAILABLE"
 LANE_BATCH = 20               # lines a lane posts before it gives its place to a conversation that waits
 HOST_ERROR_TRIES = 5          # a line that fails on its own is tried this often, then set aside
 RETRY_WAITS = (2, 5, 15, 30, 60)   # seconds before a conversation's first line is tried again; the last repeats
+CHAT_LANES = 4                # chat sends at once, one conversation each: the host holds a conversation with one out
+RECEIPT_EVERY = 5             # seconds between the receipt thread's passes when nothing wakes it
+SHUTDOWN_SEND_WAIT = 20       # seconds a stop waits for the sends already on their way (chat and bulk)
 
 
 def utc_stamp():
@@ -108,6 +111,11 @@ class Adapter:
         self._last_in = 0.0           # when a line last went in, any conversation
         self._lanes_lock = threading.Lock()
         self.retry_waits = RETRY_WAITS
+        self.chat_lanes = CHAT_LANES
+        self._sends = set()           # the chat sends on their way (threads)
+        self._sends_lock = threading.Lock()
+        self._send_done = threading.Event()
+        self._bulk = None
         self.lane_batch = LANE_BATCH
         self.inbound_lanes = INBOUND_LANES
         self._last_status = 0.0
@@ -573,6 +581,9 @@ class Adapter:
         if not self.onebot.wait_up("/event", 20):
             self.log("WARN event websocket is down; inbound will start after the retry loop reconnects")
         threading.Thread(target=self._submitter_loop, name="submitter", daemon=True).start()
+        self._bulk = threading.Thread(target=self._bulk_loop, name="bulk", daemon=True)
+        self._bulk.start()
+        threading.Thread(target=self._receipt_loop, name="receipts", daemon=True).start()
         threading.Thread(target=self._health_loop, name="health", daemon=True).start()
         threading.Thread(target=self.catchup.loop, args=(self.stop,), name="catchup", daemon=True).start()
         threading.Thread(target=self.members.loop, args=(self.stop,), name="members", daemon=True).start()
@@ -596,6 +607,12 @@ class Adapter:
             code = 1
         finally:
             self.stop.set()
+            # the chat sends already on their way finish (their receipts are spooled if the host is gone)
+            end = time.monotonic() + SHUTDOWN_SEND_WAIT
+            with self._sends_lock:
+                sends = list(self._sends)
+            for send in sends + ([self._bulk] if self._bulk is not None else []):
+                send.join(max(0.0, end - time.monotonic()))
             self.onebot.stop()
             try:
                 self.journal.write_health(self.health_snapshot())
@@ -615,23 +632,78 @@ class Adapter:
                         json.dumps(self.counters.snapshot(), sort_keys=True)))
         return code
 
+    # ---- outbound lanes (ADR-095) ------------------------------------------
     def _main_loop(self):
+        """The chat lane: claim while fewer than `chat_lanes` sends are on their way and hand each item to a send of
+        its own. The host never hands out two chat items of one conversation at once (it holds a conversation with a
+        chat line out), so a slow send holds only its conversation. Files come on the bulk lane (`_bulk_loop`)."""
         while not self.stop.is_set():
             self.onebot.prune()
+            self.maybe_status()
+            with self._sends_lock:
+                full = len(self._sends) >= self.chat_lanes
+            if full:
+                self._send_done.wait(1.0)
+                self._send_done.clear()
+                continue
+            res = self.host.claim_outbox(self.claim_wait, supports=self.capabilities, lane="chat")
+            if res.kind == "items":
+                item = (res.obj.get("items") or [])[0]
+                send = threading.Thread(target=self._send, args=(item,), name="send", daemon=True)
+                with self._sends_lock:
+                    self._sends.add(send)
+                send.start()
+            elif res.kind == "retry":
+                self.counters.inc("outbox_errors")
+                self.log("OUTBOX_ERROR %s" % json.dumps({"error": res.error, "http": res.code, "lane": "chat"}))
+                self.stop.wait(3)
+
+    def _send(self, item):
+        try:
+            self.out.handle_item(item, stopping=self.stop.is_set())
+        except Exception as exc:
+            self.counters.inc("send_error")
+            self.log("SEND_ERROR pub=%s type=%s" % (item.get("publication_id"), type(exc).__name__))
+        finally:
+            with self._sends_lock:
+                self._sends.discard(threading.current_thread())
+            self._send_done.set()
+
+    def _bulk_loop(self):
+        """The bulk lane: files, one at a time, on their own claim; a file upload holds no chat send, not even the
+        later parts of its own reply (ADR-095 §5.2, owner)."""
+        while not self.stop.is_set():
+            res = self.host.claim_outbox(self.claim_wait, supports=self.capabilities, lane="bulk")
+            if res.kind in ("items", "empty") and (res.obj or {}).get("lane") != "bulk":
+                # a host from before ADR-095 does not know lanes: what it handed out is any item, so this lane
+                # sends it and stops, and the chat lane goes back to one send at a time
+                self.chat_lanes = 1
+                self.log("OUTBOX_LANES off: the host does not name lanes; one send at a time")
+                if res.kind == "items":
+                    self._send((res.obj.get("items") or [])[0])
+                return
+            if res.kind == "items":
+                item = (res.obj.get("items") or [])[0]
+                try:
+                    self.out.handle_item(item, stopping=self.stop.is_set())
+                except Exception as exc:
+                    self.counters.inc("send_error")
+                    self.log("SEND_ERROR pub=%s type=%s lane=bulk" % (item.get("publication_id"), type(exc).__name__))
+            elif res.kind == "retry":
+                self.counters.inc("outbox_errors")
+                self.log("OUTBOX_ERROR %s" % json.dumps({"error": res.error, "http": res.code, "lane": "bulk"}))
+                self.stop.wait(3)
+
+    def _receipt_loop(self):
+        """Receipts the host did not take at once, posted from their own thread (ADR-095)."""
+        while not self.stop.is_set():
             try:
                 self.out.replay_receipts()
             except Exception as exc:
                 self.counters.inc("receipt_replay_error")
                 self.log("RECEIPT_REPLAY_ERROR type=%s" % type(exc).__name__)
-            res = self.host.claim_outbox(self.claim_wait, supports=self.capabilities)
-            if res.kind == "items":
-                items = res.obj.get("items") or []
-                self.out.handle_item(items[0], stopping=self.stop.is_set())
-            elif res.kind == "retry":
-                self.counters.inc("outbox_errors")
-                self.log("OUTBOX_ERROR %s" % json.dumps({"error": res.error, "http": res.code}))
-                self.stop.wait(3)
-            self.maybe_status()
+            self.out.receipts_waiting.wait(RECEIPT_EVERY)
+            self.out.receipts_waiting.clear()
 
     def _on_signal(self, signum, _frame):
         if not self.stop.is_set():

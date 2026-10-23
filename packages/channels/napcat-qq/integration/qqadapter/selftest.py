@@ -933,6 +933,7 @@ def _check_outbound_verify(rep, gcfg, root):
                              verify_responses=[_stored_msg([T("正文")], group_id=grp, account=account)])
     ob.on_late_ack({"publication_id": "vfy-late", "attempt_id": "a-late"},
                    {"retcode": 0, "data": {"message_id": 990002}})
+    ob.replay_receipts()                          # a late answer's receipt is spooled; the receipt thread posts it
     late = host.receipts[-1].get("payload", {})
     rep.check("verify_late_ack_path_unchanged",
               late.get("status") == "platform_accepted" and "verification" not in (late.get("response") or {}),
@@ -940,6 +941,7 @@ def _check_outbound_verify(rep, gcfg, root):
     ob.on_late_ack({"publication_id": "vfy-late-tmo", "attempt_id": "a-late-tmo"},
                    {"status": "failed", "retcode": 1200, "data": None,
                     "message": "Timeout: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg"})
+    ob.replay_receipts()
     late = host.receipts[-1].get("payload", {})
     rep.check("late_platform_send_timeout_stays_unknown",
               late.get("status") == "unknown" and (late.get("response") or {}).get("reason") == "platform_send_timeout",
@@ -1314,6 +1316,7 @@ def _check_outbound_files(rep, cfg, root):
               and upload["timeout"] == waited and waited >= outbound_mod.FILE_UPLOAD_BASE,
               "%s timeout=%s" % (payload(host).get("status"), upload["timeout"]))
     out.on_late_ack(upload["meta"], {"status": "ok", "retcode": 0, "data": {"file_id": "/f-late"}})
+    out.replay_receipts()
     rep.check("file_late_answer_settles_it",
               payload(host).get("status") == "platform_accepted" and "platform_message_id" not in payload(host)
               and (payload(host).get("response") or {}).get("group_file", {}).get("data", {}).get("file_id") == "/f-late",
@@ -1713,6 +1716,7 @@ def run(cfg, data_dir, live=True, live_config=True):
     _check_media(rep, gcfg, root)
     _check_voice(rep, gcfg, root)
     _check_lanes(rep, gcfg, root)
+    _check_outbound_lanes(rep, gcfg, root)
     _check_spool(rep, root)
     _check_outbound_params(rep, gcfg, root)
     _check_outbound_verify(rep, gcfg, root)
@@ -2471,6 +2475,185 @@ def _check_lanes(rep, gcfg, root):
     at = host.posted.index("7301") if "7301" in host.posted else -1
     rep.check("lanes_a_waiting_conversation_gets_its_turn", 0 <= at <= 2 and len(host.posted) == 7,
               json.dumps(host.posted))
+
+
+class _LaneNapCat(StubFileNapCat):
+    """SUBSTITUTE for NapCat for the outbound lanes: files as StubFileNapCat, messages answered with an id; a send to
+    `hang_group`, or the group file upload when `hang_upload`, does not answer until `release` is set."""
+
+    def __init__(self, hang_group=None, hang_upload=False):
+        super().__init__()
+        self.hang_group, self.hang_upload = hang_group, hang_upload
+        self.release = threading.Event()
+        self.lock = threading.Lock()
+        self.sent = []
+        self.api_up = self.event_up = True
+
+    def prune(self):
+        pass
+
+    def pending_count(self):
+        return 0
+
+    def api_call(self, action, params=None, timeout=15.0, meta=None):
+        params = params or {}
+        if action == "send_group_msg":
+            if self.hang_group is not None and str(params.get("group_id")) == str(self.hang_group):
+                self.release.wait(10)
+            with self.lock:
+                self.sent.append(str(params.get("group_id")))
+                return {"status": "ok", "retcode": 0, "data": {"message_id": 880000 + len(self.sent)}}
+        if action == "upload_group_file" and self.hang_upload:
+            self.release.wait(10)
+        with self.lock:
+            return super().api_call(action, params, timeout, meta)
+
+
+class _LaneOutbox(StubFileHost):
+    """SUBSTITUTE for the host's outbox by lane (chat, bulk), its receipts (answered as `receipts` says: ok, or
+    retry for a host that does not take them) and its file pieces."""
+
+    def __init__(self, chat=(), bulk=(), data=b"", receipts="ok", names_lanes=True):
+        StubFileHost.__init__(self, data)
+        self.queues = {"chat": list(chat), "bulk": list(bulk)}
+        self.receipts_mode = receipts
+        self.names_lanes = names_lanes
+        self.lock = threading.Lock()
+
+    def claim_outbox(self, wait_seconds=25, timeout=None, supports=None, lane="chat"):
+        with self.lock:
+            queue = self.queues[lane] if self.names_lanes else self.queues["chat"] + self.queues["bulk"]
+            item = queue.pop(0) if queue else None
+            if item is not None and not self.names_lanes:
+                for each in self.queues.values():
+                    if item in each:
+                        each.remove(item)
+        named = {"lane": lane} if self.names_lanes else {}
+        if item is not None:
+            return Result("items", 200, dict(named, items=[item]))
+        time.sleep(0.02)
+        return Result("empty", 200, dict(named, items=[]))
+
+    def post_receipt(self, publication_id, payload):
+        if self.receipts_mode != "ok":
+            return Result("retry", None, None, "timeout")
+        with self.lock:
+            self.receipts.append({"publication_id": publication_id, "payload": payload})
+        return Result("ok", 200, {"status": "accepted"})
+
+    def got(self, pub):
+        with self.lock:
+            return any(r["publication_id"] == pub for r in self.receipts)
+
+
+def _check_outbound_lanes(rep, gcfg, root):
+    """ADR-095 step 3: chat sends on lanes of their own, files on the bulk lane, receipts on their own thread. A file
+    upload that does not finish holds no chat send (not even in its own conversation); a send that does not finish in
+    one conversation holds no other; a host that does not take receipts holds no send.
+
+    Offline only: a substitute NapCat and host; nothing reaches QQ or a real host.
+    """
+    groups = sorted(gcfg.allowed_groups)
+    if len(groups) < 2:
+        rep.skip("outbound_lanes_two_conversations", "the fixture has one group")
+        return
+    ga, gb = groups[0], groups[1]
+
+    def text(pub, group):
+        return {"publication_id": pub, "attempt_id": "att-" + pub, "target": {"type": "group", "id": group},
+                "text": "话 " + pub}
+
+    def running(name, host, bot):
+        adapter = Adapter(gcfg, os.path.join(root, name), peer_mode="off", verify=False, claim_wait=0)
+        adapter.host, adapter.onebot = host, bot
+        adapter.out.host, adapter.out.onebot = host, bot
+        adapter.log = adapter.out.log = lambda line: None
+        threads = [threading.Thread(target=loop, daemon=True)
+                   for loop in (adapter._main_loop, adapter._bulk_loop, adapter._receipt_loop)]
+        for thread in threads:
+            thread.start()
+        return adapter, threads
+
+    def stop(adapter, threads):
+        adapter.stop.set()
+        adapter.out.receipts_waiting.set()
+        for thread in threads:
+            thread.join(5)
+
+    # 1. A file upload that does not finish, in A: a reply in B and a reply in A go out meanwhile.
+    data = b"lanes file body\n" * 64
+    file_item = {"publication_id": "f-1", "attempt_id": "attf1", "target": {"type": "group", "id": ga}, "text": "",
+                 "file": {"artifact_id": "blob-lanes", "name": "lanes.txt", "media_type": "text/plain",
+                          "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}}
+    bot = _LaneNapCat(hang_upload=True)
+    host = _LaneOutbox(chat=[text("a-1", ga), text("b-1", gb)], bulk=[file_item], data=data)
+    adapter, threads = running("out-lanes-file", host, bot)
+    chats = _until(lambda: host.got("a-1") and host.got("b-1"))
+    rep.check("outbound_file_upload_holds_no_chat", chats and not host.got("f-1"), json.dumps(
+        [r["publication_id"] for r in host.receipts]))
+    bot.release.set()
+    filed = _until(lambda: host.got("f-1"))
+    stop(adapter, threads)
+    rep.check("outbound_file_goes_on_the_bulk_lane", filed, json.dumps([r["publication_id"] for r in host.receipts]))
+
+    # 2. A send that does not finish in A: B's reply goes out meanwhile.
+    bot = _LaneNapCat(hang_group=ga)
+    host = _LaneOutbox(chat=[text("a-2", ga), text("b-2", gb)])
+    adapter, threads = running("out-lanes-send", host, bot)
+    b_out = _until(lambda: host.got("b-2"))
+    rep.check("outbound_slow_send_holds_only_its_conversation", b_out and not host.got("a-2"),
+              json.dumps([r["publication_id"] for r in host.receipts]))
+    bot.release.set()
+    a_out = _until(lambda: host.got("a-2"))
+    stop(adapter, threads)
+    rep.check("outbound_slow_send_settles_after", a_out, "")
+
+    # 3. A host that does not take receipts: the sends go on (receipts spooled at once), and the receipt thread posts
+    # them when the host takes them again.
+    bot = _LaneNapCat()
+    host = _LaneOutbox(chat=[text("r-%d" % n, ga if n % 2 else gb) for n in range(4)], receipts="away")
+    adapter, threads = running("out-lanes-receipts", host, bot)
+    sent = _until(lambda: len(bot.sent) == 4, 3.0)
+    spooled = _until(lambda: len(adapter.journal.spool_list("receipts")) == 4, 3.0)
+    host.receipts_mode = "ok"
+    adapter.out.receipts_waiting.set()
+    posted = _until(lambda: all(host.got("r-%d" % n) for n in range(4)))
+    stop(adapter, threads)
+    rep.check("outbound_receipts_slow_hold_no_send", sent and spooled and posted,
+              "sent=%d spooled=%s posted=%s" % (len(bot.sent), spooled, posted))
+
+    # 4. A late platform answer (on NapCat's reader thread) never posts to the host itself: it is spooled at once, so a
+    # host slow to take receipts does not hold the reader, and with it every other send's answer.
+    class _SlowReceipts(_LaneOutbox):
+        def post_receipt(self, publication_id, payload):
+            time.sleep(2.0)
+            return _LaneOutbox.post_receipt(self, publication_id, payload)
+    host = _SlowReceipts()
+    out = outbound_mod.Outbound(gcfg, host, _LaneNapCat(), Journal(os.path.join(root, "out-late-ack")), Counters(),
+                                log=lambda _m: None, verify=False)
+    began = time.monotonic()
+    out.on_late_ack({"publication_id": "late-1", "attempt_id": "attlate"},
+                    {"status": "ok", "retcode": 0, "data": {"message_id": 990123}})
+    took = time.monotonic() - began
+    rep.check("outbound_late_answer_spools_its_receipt", took < 0.5 and len(out.journal.spool_list("receipts")) == 1
+              and out.receipts_waiting.is_set(), "took=%.2fs spooled=%d" % (took, len(out.journal.spool_list("receipts"))))
+
+    # 5. A receipt is not given up while the host is away (no answer): only the host's own error answers count.
+    for _ in range(outbound_mod.MAX_SPOOL_TRIES + 5):
+        out.host = _LaneOutbox(receipts="away")
+        out.replay_receipts()
+    rep.check("outbound_receipt_kept_while_host_away", len(out.journal.spool_list("receipts")) == 1,
+              str(len(out.journal.spool_list("receipts"))))
+
+    # 6. A host from before ADR-095 (its claims name no lane): the bulk lane sends what it got and stops, and the chat
+    # lane goes back to one send at a time.
+    bot = _LaneNapCat()
+    host = _LaneOutbox(chat=[text("o-1", ga), text("o-2", gb)], names_lanes=False)
+    adapter, threads = running("out-old-host", host, bot)
+    went = _until(lambda: host.got("o-1") and host.got("o-2"))
+    stop(adapter, threads)
+    rep.check("outbound_old_host_one_send_at_a_time", went and adapter.chat_lanes == 1 and not threads[1].is_alive(),
+              "chat_lanes=%d" % adapter.chat_lanes)
 
 
 def _check_voice(rep, gcfg, root):

@@ -488,14 +488,25 @@ class Channels:
     PART_ON_ITS_WAY = ('READY', 'QUEUED_EXTERNAL', 'SENDING')
     PART_SETTLED = ('DELIVERED', 'CANCELLED_BY_HER')            # one she took back is settled
 
-    def _next(self, query):
+    def _next(self, query, chat=True):
         """The next line to hand out: the first queued one whose conversation is not waiting. A paced part holds its
         conversation until its time and until the parts before it are delivered, so later lines there never overtake
         it (ADR-009 §11.1); it holds no other conversation. A part whose earlier part will never arrive is cancelled
         here, whenever it was queued: cancel_after reaches only the parts that existed when that one failed.
         Conversations take turns by when their oldest queued line was queued (scene_seq counts within one conversation
-        only); within one, lines go in their order."""
+        only); within one, lines go in their order.
+
+        ADR-095: for the chat lane (`chat`), a conversation with a chat line out (SENDING, claimed within
+        CHAT_LEASE_SECONDS) is held too, so an adapter running several sends at once never has two of one conversation
+        out. A file is no earlier part on its way for anyone: it goes on the bulk lane and holds nothing (files don't
+        hold chat, owner 2026-10-23); a file waits for the chat parts before it like any part."""
+        from .outbound_files import KIND
         held, rows, first = set(), list(self.store.db.messages.find(query)), {}
+        if chat and rows:
+            lease = (datetime.now(timezone.utc) - timedelta(seconds=CHAT_LEASE_SECONDS)).isoformat()
+            held.update(self.store.db.messages.distinct('scene_id', {
+                'channel_id': query['channel_id'], 'delivery_state': 'SENDING', KIND: {'$exists': False},
+                'claimed_at': {'$gte': lease}}))
         for row in rows:
             first[row['scene_id']] = min(first.get(row['scene_id'], '~'), str(row.get('queued_at') or ''))
         rows.sort(key=lambda row: (first[row['scene_id']], row['scene_seq']))
@@ -503,14 +514,15 @@ class Channels:
             if row['scene_id'] in held:
                 continue
             if row.get('segment_index'):
-                earlier = [part['delivery_state'] for part in self.store.db.messages.find(
+                earlier = list(self.store.db.messages.find(
                     {'episode_id': row['episode_id'], 'phase': 'SPEAK', 'segment_index': {'$lt': row['segment_index']},
-                     'delivery_state': {'$nin': list(self.PART_SETTLED)}}, {'delivery_state': 1})]
-                if any(state not in self.PART_ON_ITS_WAY for state in earlier):
+                     'delivery_state': {'$nin': list(self.PART_SETTLED)}}, {'delivery_state': 1, KIND: 1}))
+                if any(part['delivery_state'] not in self.PART_ON_ITS_WAY for part in earlier):
                     self.store.put('messages', {**row, 'delivery_state': 'CANCELLED_AFTER_FAILURE'},
                                    expected=row['revision'], stream=row['episode_id'])
                     continue
-                if earlier:
+                # a file on its way holds nothing (the bulk lane); a chat part on its way holds the parts after it
+                if any(part['delivery_state'] in self.PART_ON_ITS_WAY and not part.get(KIND) for part in earlier):
                     held.add(row['scene_id'])
                     continue
             if row.get('not_before') and row['not_before'] > now():
@@ -519,7 +531,7 @@ class Channels:
             return row
         return None
 
-    def claim(self, channel_id, wait_seconds=0, supports=None, target=None):
+    def claim(self, channel_id, wait_seconds=0, supports=None, target=None, lane='chat'):
         # supports 是领取方声明的能力（napcat-qq 0.5.0 起带 supports=image）。没声明就只给文字，并把
         # 「这条本来带图、图没跟着出去」记在行上：只发文字却报平台已送达，等于声称对方收到一张没到的图。
         from . import capabilities, group_admin, outbound_files
@@ -533,13 +545,21 @@ class Channels:
             if self.controller.reconfiguring:
                 return {'items': []}
             with database_effects_lock(self.store.name):
-                action = None if target else group_admin.claim(self.store, channel_id)   # an admin action goes first
+                # an admin action goes first, on the chat lane (or the one lane of an adapter that names none)
+                action = None if target or lane == 'bulk' else group_admin.claim(self.store, channel_id)
                 if action:
-                    return {'items': [action]}
+                    return {'items': [action], 'lane': lane}
                 query = {'channel_id': channel_id, 'delivery_state': 'QUEUED_EXTERNAL'}
+                # ADR-095: files on the bulk lane, everything else on the chat lane. An adapter that declares no
+                # files has no bulk lane: its chat claims meet the file rows and fail them, as before; one that names
+                # no lane (from before ADR-095) gets everything on its one lane.
+                if lane == 'bulk':
+                    query[outbound_files.KIND] = {'$exists': True}
+                elif lane == 'chat' and outbound_files.CAPABILITY in (supports or ()):
+                    query[outbound_files.KIND] = {'$exists': False}
                 if target:                       # a route key claims only its own line's words (ADR-033)
                     query.update({'target.type': target['type'], 'target.id': target['id']})
-                row = self._next(query)
+                row = self._next(query, chat=lane != 'bulk')
                 if row:
                     try:
                         self._valid_publication(row, channel_id)
@@ -614,13 +634,13 @@ class Channels:
                         # her row keeps 「[文件：名字，大小]」; the platform gets the file alone, its bytes in pieces
                         item['text'] = ''
                         item[outbound_files.KIND] = outbound_files.descriptor(sent_file)
-                    return {'items': [item]}
+                    return {'items': [item], 'lane': lane}
             if time.monotonic() >= deadline:
                 break
             self.controller.stopping.wait(min(.2, max(0, deadline - time.monotonic())))
         while expired:
             outbound_files.expired_source(self.store, expired.pop())
-        return {'items': []}
+        return {'items': [], 'lane': lane}
 
     def attachment(self, channel_id, publication_id, query=None):
         """字节端点：GET /v1/channels/<id>/outbox/<pub>/attachment?attempt_id=…&artifact_id=…
@@ -735,6 +755,9 @@ def whole_host_state(exc):
     return None
 
 
+# ADR-095: a chat line out longer than this no longer holds its conversation (an adapter that died mid-send); it
+# stays SENDING until its receipt or the Host's start (recover_sending) says what became of it.
+CHAT_LEASE_SECONDS = 300
 MEMBERS_BODY_LIMIT = 4 * 1024 * 1024
 JSON_BODY_LIMIT = 262144
 
@@ -823,9 +846,14 @@ class ChannelServer:
                             value = {'items': [], 'line': 'closed'}    # her words wait while she keeps it closed
                         else:
                             owner = channels.owner_lines(channel_id, scoped) if scoped else []
+                            # no lane named: an adapter from before ADR-095, one lane for everything
+                            lane = query.get('lane', ['one'])[0]
+                            if lane not in ('chat', 'bulk', 'one'):
+                                raise ValueError('OUTBOX_LANE_INVALID: lane 是 chat 或 bulk')
                             value = channels.claim(channel_id, 0 if owner else int(query.get('wait_seconds', ['0'])[0]),
                                                    supports=outbound_media.parse_supports(query),
-                                                   target=channels.route_target(channel_id, scoped) if scoped else None)
+                                                   target=channels.route_target(channel_id, scoped) if scoped else None,
+                                                   lane=lane)
                         if owner:
                             value = {**value, 'owner_lines': owner}
                     elif self.command == 'GET' and len(parts) == 6 and parts[3] == 'outbox' and parts[5] == 'attachment':

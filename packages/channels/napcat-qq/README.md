@@ -39,8 +39,15 @@ with Core (`registerChannel`).
   from Core and 60 s for NapCat to take it (a failed piece ends the send after a reset of up to 10 s), completing the
   stream 60 s + size / 32 MiB/s, the upload 120 s + size / 1 MiB/s. At 50 MiB a whole send is bounded by about
   30 minutes (13 pieces × 120 s, then 62 s and 170 s).
-  An upload that outlasts its wait is `unknown`, and a later answer settles it. The outbox waits while a file is
-  sent.
+  An upload that outlasts its wait is `unknown`, and a later answer settles it. Files come on a lane of their own
+  (`lane=bulk`, one upload at a time), so an upload holds no message, not even the later parts of its own reply.
+- Messages, stickers, pictures, reactions and admin actions come on the chat lane: up to four sends at once, each
+  of another conversation (Core never hands out two of one conversation at once), so a slow send holds only its own
+  conversation. A receipt Core does not take at once, and every receipt of a late platform answer, is spooled and
+  posted from a thread of its own, so a Core slow to take receipts holds no send and never NapCat's reader; a spooled
+  receipt is not given up while Core is away (no answer or its whole-Core 503), only after 20 error answers. At a stop
+  the sends already on their way, the bulk lane's included, get up to 20 s to finish. A Core that names no lane in its
+  claim answers (from before ADR-095) gets one send at a time, as before.
 - Inbound lines go to Core in their order within each conversation, from a lane of that conversation's own (up to
   8 conversations at once; a lane gives its place after 20 lines, and the conversation that waited longest since its
   last lane goes first). A line is

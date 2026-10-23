@@ -236,3 +236,16 @@ def test_a_turn_can_act_and_keep_notes_and_she_hears_the_result(store):
     assert written['sections'][0]['visibility'] == 'public' and written['sections'][0]['body'] == '刷屏的先禁言一分钟。'
     spoken = [row['text'] for row in store.db.messages.find({'episode_id': ep['_id'], 'direction': 'outbound'})]
     assert spoken == ['先禁言一分钟哦']
+
+
+def test_one_admin_action_is_out_at_a_time_so_they_happen_in_her_order(store):
+    """ADR-095: several sends may be out at once, but a mute and the unmute after it never are."""
+    setup(store, 'admin')
+    group_admin.queue(store, episode(store), 0, {'kind': 'mute', 'who': '#2', 'duration': 10, 'reason': '刷屏'})
+    group_admin.queue(store, episode(store), 1, {'kind': 'unmute', 'who': '#2', 'reason': '好了'})
+    first = group_admin.claim(store, 'qq')
+    assert first['admin']['kind'] == 'mute'
+    assert group_admin.claim(store, 'qq') is None, 'the unmute waits while the mute is out'
+    body = {'attempt_id': first['attempt_id'], 'status': 'platform_accepted', 'response': {'retcode': 0}}
+    group_admin.receipt(store, 'qq', first['publication_id'], body)
+    assert group_admin.claim(store, 'qq')['admin']['kind'] == 'unmute'

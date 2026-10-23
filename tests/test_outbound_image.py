@@ -291,6 +291,9 @@ def test_T_B7_4_endpoint_fences_and_the_link_is_read_at_serve_time(store, tmp_pa
     with pytest.raises(Denied) as skipped:                               # 图没跟着出去，就不给字节
         server.attachment('replay', first['publication_id'], {'attempt_id': [first['attempt_id']]})
     assert 'ATTACHMENT_NOT_DECLARED' in str(skipped.value)
+    # the first line settles before the next one of this conversation is handed out (ADR-095: one chat line out each)
+    server.receipt('replay', first['publication_id'], {'attempt_id': first['attempt_id'], 'status': 'platform_accepted',
+                                                       'platform_message_id': 'pm-b7a', 'response': {}})
 
     second = server.claim('replay', supports=['image'])['items'][0]      # 下一条：声明了能力
     assert second['attachment']['artifact_id'] == art['artifact_id'], second

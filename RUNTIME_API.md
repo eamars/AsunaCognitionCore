@@ -303,6 +303,7 @@ A recall, a poke, a reaction and the like come as an event from the person who d
 | Query | Meaning |
 |---|---|
 | `wait_seconds` | long-poll up to this many seconds (0–25; default 0) |
+| `lane` | `chat`: every item but files; `bulk`: files only; none named: one lane for everything (an adapter that claims one item at a time). An adapter that declares `file` and claims `chat` and `bulk` sends files on a lane of their own, so an upload holds no message; one that does not declare `file` meets file rows on `chat` and fails them (`CHANNEL_DOES_NOT_DECLARE_FILE`). The answer names the lane it served (`"lane"`) |
 | `supports` | comma-separated capabilities the adapter carries now (below); an entry `name:<bytes>` also declares the largest size the platform takes, as `file:4096` (4 KiB) |
 
 | `supports` name | Means the adapter |
@@ -315,7 +316,7 @@ A recall, a poke, a reaction and the like come as an event from the person who d
 | `quote_in`, `react_in` | passes on what others quote, and reactions |
 | `voice_in` | settles each voice of a line before posting the line ([post a voice](#post-a-voice)) |
 
-The answer is `{"items": []}` or `{"items": [item]}`. Each claim marks the item `SENDING` under a fresh `attempt_id`; claiming is not delivery.
+The answer is `{"items": [], "lane": …}` or `{"items": [item], "lane": …}`. Each claim marks the item `SENDING` under a fresh `attempt_id`; claiming is not delivery. An adapter may claim again before the last item settles: on the `chat` lane a conversation with a chat item `SENDING` is held (claimed within the last 300 s, `CHAT_LEASE_SECONDS`; one out longer stays `SENDING` for its receipt but holds nothing), so two chat items of one conversation are never out at once. A file holds nothing while it is on its way: the parts of a reply after it are handed out without waiting for its upload; it waits for the parts before it; one that failed cancels the parts after it that have not gone, as any failed part does. Group admin actions go one at a time per channel, in the order they were chosen.
 
 | Item field | Meaning |
 |---|---|

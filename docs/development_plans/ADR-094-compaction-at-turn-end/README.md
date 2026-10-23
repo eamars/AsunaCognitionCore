@@ -216,3 +216,17 @@ has run live 18 times at 99.3–99.6%, and the next request's size after it is m
    time but shows the summarizer the kept turn. With the last message kept (this version) the hit is by construction.
 2. **Her mechanical counts** on the first two checkpoints: §6 (h).
 3. **A restart of its own, and the reading window from `last.json` `back_at`:** the status line and §6.
+
+## 9. First readings after install (2026-10-24, `.agents/skills/asuna-cache-readout`)
+
+10-23 17:57 to 10-24 11:00, her home conversation and agent line, numbers only:
+
+- Turn-end summaries read 99.4–99.5% from cache when her last turn had at most four steps (3 of 3) and 8.3–9.3% when
+  it had five or more (4 of 5; one six-step turn still hit); one more stopped for her turn. On a hit the summary read
+  exactly the previous turn's last request's input less 5 tokens; on a miss, 16.5–16.6k tokens, the system prompt and
+  tools her conversations share. That is §8's prediction: the span ends after the previous turn's last reply, which
+  the local engine holds only while her last turn had at most four steps.
+- No turn waited on any of them; a miss makes the summary take 93–131 s instead of 67–94 s, inside nobody's turn.
+- Owner, 10-24: accepted as the engine's capacity, the span alone stays (the whole conversation would hit every time
+  but shows the summarizer her kept turn, ADR-085 §4c). On a provider whose cache serves any prefix of a cached prompt
+  the span alone would hit; whether a given API does is read from its documentation when the move to it is made.

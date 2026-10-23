@@ -156,7 +156,8 @@ has run live 18 times at 99.3–99.6%, and the next request's size after it is m
 - Her turn takes precedence (review of 2026-10-23, owner's decision): `TurnEnds` in `compaction.js` keeps an
   `AbortController` for each running turn-end compaction; a stage starting in that conversation (`stage` in
   `index.js`, which a consult also is) aborts it first and keeps a new one from starting until the stage is handed to
-  DSH; each one also stops at `TURN_END_DEADLINE_MS` (180 s, `AbortSignal.any` with `AbortSignal.timeout`). An abort
+  DSH; any message put into her inbox there (DSH's `agent/inbox/inserted`, the owner's Web chat as well) aborts it
+  too (`preempt`), so no message waits for a summary; each one also stops at `TURN_END_DEADLINE_MS` (180 s, `AbortSignal.any` with `AbortSignal.timeout`). An abort
   cannot leave DSH's compaction half-open: `compactSurfaceRegion` writes `compaction/end` with the error on every
   failure before the summary commits, and the commit itself is synchronous; an abort that lands during the
   durability flush comes after the commit and is reported as compacted. Tested on the installed (pinned) DSH, whose

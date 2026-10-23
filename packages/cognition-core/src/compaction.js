@@ -144,10 +144,16 @@ export class TurnEnds {
     this.saidNoTurnKept = false;
   }
 
+  /** A message for her arrived in this conversation (any source: DSH's `agent/inbox/inserted`): stop its running
+   * turn-end compaction, so the message never waits for the summary. */
+  preempt(id) {
+    this.running.get(id)?.abort(new Error('her turn came first'));
+  }
+
   /** Her stage is about to start in this conversation: stop its turn-end compaction, start none until the returned
    * function is called (once the stage is handed to DSH, or refused). */
   begin(id) {
-    this.running.get(id)?.abort(new Error('her turn came first'));
+    this.preempt(id);
     this.starting.set(id, (this.starting.get(id) ?? 0) + 1);
     let ended = false;
     return () => {

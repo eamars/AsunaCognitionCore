@@ -1070,7 +1070,10 @@ export class CognitionCore {
       scope.systemPrompt.section({ name, order: scope.systemPrompt.getSectionOrder(order), text: '' });
     // Steer into her running turn waits as the next turn instead of failing it (steer.js).
     if (lane === 'character') scope.on('agent/inbox/inserted', ({ agent, message }) => {
-      if (agent) queueMicrotask(() => holdSteeredInput(agent, message, Boolean(this.state(agent.session.id).current)));
+      if (!agent) return;
+      // Any message for her (the Web chat too, not only a stage of ours) stops a turn-end compaction there (ADR-094).
+      this.turnEnds.preempt(agent.session.id);
+      queueMicrotask(() => holdSteeredInput(agent, message, Boolean(this.state(agent.session.id).current)));
     });
     // A platform line that waited for the conversation's first turn (navigation.js) is history, not local input.
     scope.on('agent/inbox/claimed', ({ agent, message }) => {

@@ -126,6 +126,7 @@ Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoi
 - def `compactAtTurnEnd` — ADR-094: compact one of her conversations at the end of its turn, keeping that whole turn as it is, when it is due.
 - def `TURN_END_DEADLINE_MS` — The longest a turn-end compaction runs (ADR-094): past it, it stops and the next turn end tries again.
 - class `TurnEnds` — ADR-094: this Host's turn-end compactions of her conversations.
+  - `preempt` — A message for her arrived in this conversation (any source: DSH's `agent/inbox/inserted`): stop its running turn-end compaction, so the message never waits for the summary.
   - `begin` — Her stage is about to start in this conversation: stop its turn-end compaction, start none until the returned function is called (once the stage is handed to DSH, or refused).
   - `run` — The end of one of her turns (`compactAtTurnEnd`, with `idle` the Host's own test).
 - def `lastTurnStart` — ADR-094 §8: the first surface node of her last turn, by place on the surface: the one after the last node from before the end of her turn before it, so the line that opened her turn stays with it.

@@ -463,6 +463,15 @@ test('her turn takes precedence over a turn-end compaction, which also stops at 
   assert.equal(timed.result.code, 'aborted');
   assert.match(logged.at(-1)[1], /stopped, nothing changed \(over its 0\.05 s deadline\)/);
   assert.equal(ends.running.size, 0);
+  // A message from any source (DSH's agent/inbox/inserted: the Web chat too) stops it the same way.
+  const again = ends.run({ agent, engine: waits, meter, idle: () => true });
+  await new Promise(resolve => setImmediate(resolve));
+  ends.preempt('asuna-role-2');
+  assert.equal(seen.aborted, false, 'a message in another conversation leaves it running');
+  ends.preempt('asuna-role-1');
+  assert.equal(seen.aborted, true);
+  await again;
+  assert.match(logged.at(-1)[1], /stopped, nothing changed \(her turn came first\)/);
 });
 
 test('a turn-end compaction that did not commit cleanly stops them in its conversation; a turn not kept stops them all', async () => {

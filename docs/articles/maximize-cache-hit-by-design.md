@@ -366,14 +366,21 @@ kept after it, cold**, because they are new bytes at new positions. So two thing
 where its summary request ends, and how much is kept after the checkpoint. Compacting less often is a gain in itself,
 which is one reason notices are kept small (sections 5 and 6).
 
-**Her conversations are compacted at the end of a turn, from the live end** (`compactAtTurnEnd` in `compaction.js`,
-`index.js` `turnEnd`; ADR-094). When her turn ends and the conversation is at `turnEndRatio` of the window (0.70 in
-the deployed character's preset, `turnEndTokens`), the Host runs DSH's `/compact` on it at once (`compactSession`,
-the path ADR-049 uses for quiet groups). DSH's `/compact` keeps the last message, so the summary request is her last
-request plus the instruction: it extends the state the engine holds at the live end and reads only the instruction,
-on the local engine and at any hosted API alike, and the summarizer never sees a kept tail. The next turn's first
-request reads the checkpoint and her last message (about 5k tokens) besides its own notice. A line that arrives while
-the summary runs waits for it; a conversation with a turn running or queued is left for its next turn's end.
+**Her conversations are compacted at the end of a turn, keeping that turn whole** (`compactAtTurnEnd` and
+`compactTurnEnd` in `compaction.js`, `index.js` `turnEnd`; ADR-094). When her turn ends and the conversation is at
+`turnEndRatio` of the window (0.70 in the deployed character's preset, `turnEndTokens`), the Host calls the
+engine's `compactNow` with a keep-from point: the first surface node after the turn end before hers
+(`lastTurnStart`), so the line that opened her last turn, her steps and her reply stay as they are. The summary
+request sends the span before that turn alone, so the summarizer never sees the kept turn. It ends where her
+previous turn ended, which the local engine still holds while her last turn had at most four steps (it keeps the
+prompt ends of its last few steps); a longer turn reads the span cold, outside anyone's turn. At a hosted API the
+span is a prefix of what was last sent and reads from the cache. The next turn's first request reads the
+checkpoint and her last turn besides its own notice. A line that arrives while the summary runs waits for it; a
+conversation with a turn running or queued is left for its next turn's end.
+
+This needs a DSH whose `compactNow` takes the keep-from point (`options.keepFrom`). On one that doesn't
+(`keepsTurns` is false) nothing is compacted at a turn's end, the Host says so once in its log, and only the
+in-turn guard below compacts.
 
 **DSH's in-turn compaction stays as the guard** for a turn that grows past `thresholdRatio` before its end (step
 pressure at `agent/pre-step`, or a context overflow). It keeps a tail of `retainRatio` of the budget, which for the
@@ -715,9 +722,9 @@ ADR-085 (summary request: the whole conversation for a commanded compaction, the
 
 ## Changelog
 
-- **2026-10-23** — ADR-094: her conversations are compacted at the end of a turn, from the live end, through DSH's
-  `/compact` once they reach `turnEndRatio` of the window; DSH's in-turn compaction stays as the guard (section
-  "Compaction resets the prefix").
+- **2026-10-23** — ADR-094: her conversations are compacted at the end of a turn once they reach `turnEndRatio`
+  of the window, her whole last turn kept, on a DSH whose `compactNow` takes a keep-from point; DSH's in-turn
+  compaction stays as the guard (section "Compaction resets the prefix").
 - **2026-10-22** — ADR-085 §4c: an automatic compaction sends the compacted span alone again; a commanded one keeps
   the whole conversation (section "Compaction resets the prefix").
 - **2026-10-21** — A block is named unchanged only when its newest copy on the surface matches; an older copy no

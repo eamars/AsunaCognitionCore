@@ -1,10 +1,11 @@
 # ADR-094: Compaction at the turn's end
 
-Status: **Built 2026-10-23, not installed.** Decided by the owner on 2026-10-23 (~11:45 NZDT) on the recommendation
-of a review of the whole compaction design run on Fable 5.1 at his instruction (`.runtime/private/compaction-review/
-report.md`, 2026-10-23 10:30–10:50 NZDT). Xiaoman agreed the same day with three conditions (§8): the first needs a
-DSH change and is the owner's; the other two are folded into §6. It installs in a restart of its own, with nothing
-else, and is read as §6 says from that restart's `back_at`.
+Status: **Built 2026-10-23, not installed; waits on the owner's DSH pin.** Decided by the owner on 2026-10-23
+(~11:45 NZDT) on the recommendation of a review of the whole compaction design run on Fable 5.1 at his instruction
+(`.runtime/private/compaction-review/report.md`, 2026-10-23 10:30–10:50 NZDT). Xiaoman agreed the same day with
+three conditions (§8). The first (keep her whole last turn) is built on both sides (§7): DSH's part is a branch of
+the owner's fork, and until the pin moves to it the turn end compacts nothing. It installs in a restart of its
+own, with nothing else, and is read as §6 says from that restart's `back_at`.
 
 ## 1. The owner's words
 
@@ -142,32 +143,43 @@ has run live 18 times at 99.3–99.6%, and the next request's size after it is m
 ## 7. As built
 
 - `packages/cognition-core/src/compaction.js`: `TURN_END_RATIO` (0.70), `turnEndRatio` in `RoleCompactionEngine.Config`,
-  `turnEndTokens`, `compactAtTurnEnd`.
-- `packages/cognition-core/src/index.js`: `turnEnd`, called from the `agent/status` idle hook of the character lane;
-  `compactSession` unchanged.
-- Test: `packages/cognition-core/test/compaction.test.js` (the ratio and its default; fires at the ratio, not below;
-  busy is left for the next turn end; only her conversations on the character lane; the in-turn guard's test stands).
+  `turnEndTokens`, `compactAtTurnEnd`, `lastTurnStart` (the first surface node after the turn end before her last
+  turn, so the line that opened it stays), `keepsTurns` (whether DSH's `compactNow` takes a fourth parameter,
+  `options`), `compactTurnEnd` (`compactNow(agent, signal, undefined, { keepFrom })`, marked so `summarize` sends the
+  span alone, like an automatic compaction).
+- `packages/cognition-core/src/index.js`: `turnEnd`, called from the `agent/status` idle hook of the character lane,
+  calls the engine's `compactTurnEnd` (not `/compact`); on a DSH that keeps no turn it compacts nothing and says so
+  once in the Host log; `compactSession` unchanged.
+- Test: `packages/cognition-core/test/compaction.test.js` (the ratio and its default; the pinned DSH keeps no turn, so
+  nothing runs; fires at the ratio, not below; busy is left for the next turn end; only her conversations on the
+  character lane; her last turn found from the turn ends; `keepFrom` passed; the span sent alone; nothing to
+  compact, busy and a single turn reported; the in-turn guard's test stands).
+- DSH (the owner's fork, his local copy): branch `asuna/0.2.1-rc.2-keepfrom`, one commit `4000a552ce` on the pin
+  `5713aab796`, three files: `compaction-basic/src/region.ts` (`selectCompactableRange` takes an optional `keepFrom`,
+  the existing balanced-cut walk-back unchanged), `compaction-basic/src/index.ts` (`compactNow`'s optional `options`),
+  and a new test file (five cases, among them: without `options` exactly today's result). Not pushed; additive, so his
+  dedicated deployment on the same fork behaves as before; the abstract `CompactionEngine` type is left as it is
+  (owner: the smaller diff, fewer upstream conflicts). Moving Asuna's pin to it is the owner's (`tools/dsh-inline/
+  source.json`).
 - References: `docs/articles/maximize-cache-hit-by-design.md` §7 and §13; `packages/cognition-core/DSH_API.md`.
-- **Her preset** (`packages/personas/xiaoman/cordis.patch.yml`, her file, not edited here): beside `thresholdRatio`
-  add `turnEndRatio: 0.70` with the comment "Compacted at the end of a turn from this share of the window (ADR-094);
-  the in-turn threshold below is the guard", and the comment "a short tail keeps the re-prefill after each compaction
-  small" becomes "DSH's kept tail is read again only after an in-turn compaction, the guard (ADR-094)".
+- Her preset (`packages/personas/xiaoman/cordis.patch.yml`): `turnEndRatio: 0.70` beside `thresholdRatio`, and the
+  note on DSH's kept tail.
 - Evidence: `.runtime/private/compaction-review/` (report.md 19 KB, scripts 35 KB; numbers only).
 
 ## 8. Her conditions (2026-10-23, on Claude's agent line; Claude's paraphrase)
 
 1. **Keep her whole last turn verbatim, not only its last message.** One turn of hers is often several parts (words
    and a file, words and a sticker and a picture); a promise made in its first part must not go into the checkpoint.
-   **Not possible from our side today.** Between turns the only compaction DSH offers is `compactNow` (the path of
+   **Not possible from our side alone.** Between turns the only compaction DSH offers is `compactNow` (the path of
    `/compact`), whose retained tail is fixed at 0 tokens, which keeps the last message; `compactRegion`, which takes a
    range, refuses to run outside an open turn (`compactRegion: no open turn`); the range selection and the compaction
    transaction (`region.ts`) are not exported by `@deepseek-ai/dsh-compaction-basic` (its `lib/index.js` exports the
-   engine class alone). So this version keeps the last message, and the condition waits on **the owner's DSH change**:
+   engine class alone). So the condition needed **the owner's DSH change**:
    `CompactionEngine.compactNow(agent, signal, sourceCommandId?, options?)` with `options.keepFrom: SessionSeq`, the
    first surface node to keep; `BasicCompactionEngine.compactNow` passes it to `selectCompactableRange` as the index
    to keep from (the cut still walks back to a tool-pairing-balanced place, as today), instead of the fixed 0-token
-   tail; `/compact` itself unchanged. Our side then (not built): `turnEnd` finds her last turn's first surface node
-   (the first node after the session's last `turn/start`) and calls the engine's `compactNow` with it, marks that
+   tail; `/compact` itself unchanged. Our side (built, §7): `turnEnd` finds her last turn's first surface node
+   (the first node after the turn end before it, so the line that opened the turn stays) and calls the engine's `compactNow` with it, marks that
    compaction so `summarize` sends the span alone (as for an automatic one: a summarizer that reads the kept turn
    would restate it, ADR-085 §4b–§4c), and the reading tells the two apart by the Host log line, not by
    `sourceCommandId`. **Its cost on the local engine, from §2's data:** the span then ends after the previous turn's

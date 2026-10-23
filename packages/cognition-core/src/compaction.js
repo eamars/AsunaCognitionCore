@@ -18,11 +18,12 @@
  * that names no level uses `summaryReasoningEffort` (a persona preset sets it beside the summary cap), when the model
  * offers it. A summary without every section the instruction asks for, in order, is rejected like an empty one: no
  * checkpoint is written and the next step tries again. Her conversations are compacted at the end of a turn
- * (`compactAtTurnEnd`, ADR-094): once the conversation is at `turnEndRatio` of the window, the Host runs DSH's own
- * `/compact` on it while she is idle, so the summary request is her last request plus the instruction, which the
- * engine resumes from its live end, and the next turn reads the checkpoint and her last message, not a long kept
- * tail; DSH's in-turn pressure compaction stays as the guard for a turn that grows past the threshold. The action
- * brain keeps DSH's own engineering template. */
+ * (`compactAtTurnEnd`, ADR-094): once the conversation is at `turnEndRatio` of the window, the Host compacts it while
+ * she is idle, keeping her whole last turn as it is (`compactTurnEnd`, DSH's `compactNow` with a keep-from point); the
+ * summary request carries the span before that turn alone, and the next turn reads the checkpoint and her last turn,
+ * not a long kept tail. On a DSH whose `compactNow` keeps no turn nothing is compacted at the turn's end. DSH's
+ * in-turn pressure compaction stays as the guard for a turn that grows past the threshold. The action brain keeps
+ * DSH's own engineering template. */
 import z from '@deepseek-ai/schemastery';
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic';
 import { BlockAssembler, LlmError, contentHasImage, createUserMessage } from '@deepseek-ai/dsh-llm';
@@ -92,24 +93,38 @@ const KEPT_QUOTE_CHARS = 40;
  * §4c). A commanded compaction keeps its last message only and still sends the whole conversation, which its cache
  * reads. */
 const automatic = new WeakSet();
+/** Agents in a turn-end compaction (ADR-094): as for an automatic one, the summary request carries the compacted span
+ * alone, so the summarizer never sees the turn that stays as it is. */
+const turnEnding = new WeakSet();
 /** Share of the window at which a conversation is compacted at the end of its turn (ADR-094), when the preset names
  * none: below DSH's in-turn threshold by more than a turn's growth, so the in-turn path stays the exception. */
 const TURN_END_RATIO = 0.70;
 
-/** ADR-094: compact one of her conversations at the end of its turn, from the live end, when it is due. Only her own
- * conversations (`asuna-role-*` on the character lane), only at or above the engine's `turnEndTokens`, only while
- * nothing of hers runs or waits there (`idle`); `compact` runs DSH's `/compact` (the Host's `compactSession`). A
- * conversation that is busy is left for its next turn's end. Returns what was decided, for the Host's log line. */
+/** ADR-094: compact one of her conversations at the end of its turn, keeping that whole turn as it is, when it is due.
+ * Only her own conversations (`asuna-role-*` on the character lane), only on a DSH that can keep a turn
+ * (`keepsTurns`), only at or above the engine's `turnEndTokens`, only while nothing of hers runs or waits there
+ * (`idle`); `compact` runs the engine's `compactTurnEnd`. A conversation that is busy is left for its next turn's end.
+ * Returns what was decided, for the Host's log line. */
 export async function compactAtTurnEnd({ lane, agent, idle, meter, engine, compact }) {
   const id = agent.session.id;
   if (lane !== 'character' || !id.startsWith('asuna-role-')) return { skipped: 'not her conversation' };
   if (!meter || typeof engine?.turnEndTokens !== 'function') return { skipped: 'no meter or engine' };
+  if (!engine.keepsTurns?.()) return { skipped: 'dsh keeps no turn' };
   const due = await engine.turnEndTokens(agent);
   if (!due) return { skipped: 'no window' };
   const tokens = meter.measure(agent.session).totalTokens;
   if (tokens < due) return { skipped: 'below', tokens, due };
   if (!idle()) return { skipped: 'busy', tokens, due };
   return { tokens, due, result: await compact() };
+}
+
+/** ADR-094 §8: the first surface node of her last turn — the first one after the turn end before it, so the line that
+ * opened the turn stays with it — or undefined when the conversation has no earlier turn to compact. */
+export function lastTurnStart(session) {
+  const ends = session.snapshotEvents().filter(event => event.type === 'turn/end');
+  if (ends.length < 2) return undefined;
+  const before = ends[ends.length - 2].seq;
+  return session.surface.nodes.find(seq => seq > before);
 }
 
 /** The instruction's last rule when the summary request carries the retained tail: how many messages stay as they
@@ -181,7 +196,8 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
       return { summary, rawOutput, llmStreamCall: true, provider: options.provider, model: options.model,
         maxTokens: this.config.maxTokens, ...(assembler.usage === undefined ? {} : { usage: assembler.usage }) };
     };
-    const whole = automatic.has(agent) ? { reason: 'automatic' } : await this.wholeConversation(input, agent, target, signal);
+    const whole = automatic.has(agent) ? { reason: 'automatic' } : turnEnding.has(agent) ? { reason: 'turn end' }
+      : await this.wholeConversation(input, agent, target, signal);
     if (whole?.messages) {
       try { return await once(whole.messages, whole.tail); }
       catch (error) { if (!overflowed(error)) throw error; this.spanAlone(agent, 'refused for the window', whole); }
@@ -189,6 +205,27 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
     const [head, body] = input.messages[0]?.role === 'system'
       ? [input.messages.slice(0, 1), input.messages.slice(1)] : [[], input.messages];
     return inSteps(head, body, messages => once(messages));
+  }
+
+  /** Whether this DSH's `compactNow` takes a keep-from point (its fourth parameter, `options.keepFrom`). Without one it
+   * keeps only the last message, which she declined (ADR-094 §8), so the turn end compacts nothing. */
+  keepsTurns() {
+    return this.compactNow.length >= 4;
+  }
+
+  /** ADR-094: her conversation compacted at the end of its turn, her whole last turn kept as it is, the summary
+   * request carrying the span alone. Returns { compacted, items, tokens } or { compacted: false, reason }. */
+  async compactTurnEnd(agent, signal) {
+    const keepFrom = lastTurnStart(agent.session);
+    if (keepFrom === undefined) return { compacted: false, reason: 'no earlier turn' };
+    turnEnding.add(agent);
+    try {
+      const result = await this.compactNow(agent, signal, undefined, { keepFrom });
+      return result === null ? { compacted: false, reason: 'nothing to compact' }
+        : { compacted: true, items: result.shadowedSeqs.length, tokens: result.shadowedTokenCount };
+    } catch (error) {
+      return { compacted: false, reason: String(error?.code ?? error?.message ?? error).slice(0, 200) };
+    } finally { turnEnding.delete(agent); }
   }
 
   /** DSH's automatic compaction, marked for `summarize` while it runs. */

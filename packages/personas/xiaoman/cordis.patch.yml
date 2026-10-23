@@ -21,8 +21,8 @@
               toolResultPruner: true
             config:
               # DSH's basic engine with a Chinese role-play checkpoint (core). The summary
-              # cap leaves room for the character route's reasoning; a short tail keeps
-              # the re-prefill after each compaction small.
+              # cap leaves room for the character route's reasoning; DSH's kept tail is
+              # read again only after an in-turn compaction, the guard (ADR-094).
               - id: compaction-basic
                 name: '@asuna/cognition-core/compaction'
                 config:
@@ -33,6 +33,9 @@
                   # Compact at 80% of the window: a compaction leaves her at about 35%, and one turn can add
                   # ~45k tokens at once while the summary request replays the prefix plus this cap.
                   thresholdRatio: 0.80
+                  # Compacted at the end of a turn from this share of the window, her whole last turn kept
+                  # (ADR-094); the threshold above is the guard inside a turn.
+                  turnEndRatio: 0.70
                   headroomTokens: 6144
               - id: command-compact
                 name: '@deepseek-ai/dsh-command-compact'

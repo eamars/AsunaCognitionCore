@@ -870,17 +870,22 @@ export class CognitionCore {
   }
 
   /** ADR-094: compact her conversation at the end of its turn when it has reached her character preset's
-   * `turnEndRatio` of the window (compaction.js `compactAtTurnEnd`), through DSH's own `/compact` (`compactSession`),
-   * at once: the summary request is then her last request plus the instruction, which the engine resumes from its live
-   * end, and the next turn reads the checkpoint and her last message. A conversation with a turn running or queued is
-   * left for its next turn's end. One log line when it runs or is deferred. */
+   * `turnEndRatio` of the window (compaction.js `compactAtTurnEnd`), keeping that whole turn as it is (the engine's
+   * `compactTurnEnd`): the next turn reads the checkpoint and her last turn. A conversation with a turn running or
+   * queued is left for its next turn's end. One log line when it runs or is deferred, and one the first time the DSH
+   * keeps no turn (then nothing is compacted at a turn's end). */
   async turnEnd(agent) {
     const id = agent.session.id;
+    const engine = this.ctx.get('agentPresets')?.serviceFor(agent, 'compaction');
     const done = await compactAtTurnEnd({
-      lane: 'character', agent, idle: () => this.idle(id), meter: this.ctx.get('tokenMeter'),
-      engine: this.ctx.get('agentPresets')?.serviceFor(agent, 'compaction'),
-      compact: () => this.compactSession({ session_id: id }),
+      lane: 'character', agent, idle: () => this.idle(id), meter: this.ctx.get('tokenMeter'), engine,
+      compact: () => engine.compactTurnEnd(agent, new AbortController().signal),
     });
+    if (done.skipped === 'dsh keeps no turn' && !this.saidNoTurnKept) {
+      this.saidNoTurnKept = true;
+      this.ctx.logger.info('Asuna compaction: this DSH keeps no turn at compaction (compactNow has no keepFrom), so her'
+        + ' conversations are compacted only in a turn, at the threshold (ADR-094 §8)');
+    }
     if (done.skipped && done.skipped !== 'busy') return;
     const result = done.result ?? {};
     this.ctx.logger.info('Asuna compaction: turn end of ' + id + ' at ~' + done.tokens + ' tokens (due at ' + done.due + '): '

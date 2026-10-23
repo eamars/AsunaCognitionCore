@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Context } from '@deepseek-ai/cordis';
 import { CONTEXT_WINDOW_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm';
-import RoleCompactionEngine, { ROLE_COMPACTION_INSTRUCTION, ROLE_SECTIONS, compactAtTurnEnd, hasSections, inSteps } from '../src/compaction.js';
+import RoleCompactionEngine, { ROLE_COMPACTION_INSTRUCTION, ROLE_SECTIONS, compactAtTurnEnd, hasSections, inSteps, lastTurnStart } from '../src/compaction.js';
 
 const CHECKPOINT = ROLE_SECTIONS.map(head => head + '\n- （无）').join('\n\n');
 
@@ -224,8 +224,13 @@ test('a conversation is compacted at the end of its turn at turnEndRatio of the 
   const due = Math.floor(262144 * 0.7);
   assert.equal(await engine.turnEndTokens(agent), due);
 
+  assert.equal(engine.keepsTurns(), false, 'the pinned DSH: compactNow takes no keep-from point');
   let tokens = due, idle = true;
   const compacted = [];
+  assert.deepEqual(await compactAtTurnEnd({ lane: 'character', agent, idle: () => true, engine,
+    meter: { measure: () => ({ totalTokens: due }) }, compact: async () => assert.fail('never on that DSH') }),
+  { skipped: 'dsh keeps no turn' }, 'nothing compacted at a turn end: the last-message-only version never runs');
+  engine.keepsTurns = () => true;
   const run = (over = {}) => compactAtTurnEnd({
     lane: 'character', agent, idle: () => idle, engine, meter: { measure: () => ({ totalTokens: tokens }) },
     compact: async () => { compacted.push(tokens); return { compacted: true, items: 9, tokens: 1 }; }, ...over });
@@ -242,4 +247,51 @@ test('a conversation is compacted at the end of its turn at turnEndRatio of the 
   engine.ctx.llm.resolveModelInfo = async () => ({});
   assert.deepEqual(await run(), { skipped: 'no window' });
   assert.deepEqual(compacted, [due, due + 5000]);
+});
+
+test('a turn-end compaction keeps her whole last turn and sends the span before it alone', async () => {
+  const text = (role, value) => ({ role, content: [{ type: 'text', text: value }] });
+  const system = { role: 'system', content: [{ type: 'text', text: 'render' }] };
+  const events = [{ type: 'user/message', seq: 0 }, { type: 'turn/start', seq: 1 }, { type: 'agent/message', seq: 2 },
+    { type: 'turn/end', seq: 3 }, { type: 'user/message', seq: 4 }, { type: 'turn/start', seq: 5 },
+    { type: 'agent/message', seq: 6 }, { type: 'agent/message', seq: 7 }, { type: 'turn/end', seq: 8 }];
+  const surface = { nodes: [0, 2, 4, 6, 7] };
+  const session = { id: 's', requestHeader: () => ({ config: { provider: 'p', model: 'm' } }), toolHistory: () => [],
+    snapshotEvents: () => events, surface };
+  assert.equal(lastTurnStart(session), 4, 'the line that opened her last turn stays with it');
+  assert.equal(lastTurnStart({ ...session, snapshotEvents: () => events.slice(0, 4) }), undefined, 'one turn: nothing before it');
+
+  const sent = [], logged = [], calls = [];
+  const engine = Object.create(RoleCompactionEngine.prototype);
+  engine.config = { summarizationProvider: '', summarizationModel: '', maxTokens: 24576 };
+  engine.ctx = { logger: { info: line => logged.push(line) }, llm: {
+    resolveModelInfo: async () => ({ context: { contextWindow: 262144 } }),
+    async *stream(options) {
+      sent.push(options.messages);
+      yield { type: 'text-delta', index: 0, text: CHECKPOINT };
+      yield { type: 'finish', reason: { kind: 'stop' } };
+    } } };
+  const agent = { session, options: {} };
+  const input = { messages: [system, text('user', '周末去哪'), text('assistant', '去海边')] };
+  let answer = { shadowedSeqs: [0, 2], shadowedTokenCount: 50 };
+  engine.compactNow = async function (owner, signal, sourceCommandId, options) {
+    calls.push({ sourceCommandId, options });
+    await this.summarize(input, owner, signal);
+    if (answer instanceof Error) throw answer;
+    return answer;
+  };
+  assert.equal(engine.keepsTurns(), true, 'a DSH whose compactNow takes options');
+  assert.deepEqual(await engine.compactTurnEnd(agent), { compacted: true, items: 2, tokens: 50 });
+  assert.deepEqual(calls, [{ sourceCommandId: undefined, options: { keepFrom: 4 } }]);
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0].slice(0, -1), input.messages, 'the span alone, never the turn that stays');
+  assert.equal(sent[0].at(-1).content[0].text, ROLE_COMPACTION_INSTRUCTION);
+  assert.match(logged.at(-1), /span alone \(turn end\) in s$/);
+
+  answer = null;
+  assert.deepEqual(await engine.compactTurnEnd(agent), { compacted: false, reason: 'nothing to compact' });
+  answer = Object.assign(new Error('agent not idle'), { code: 'busy' });
+  assert.deepEqual(await engine.compactTurnEnd(agent), { compacted: false, reason: 'busy' });
+  assert.deepEqual(await engine.compactTurnEnd({ ...agent, session: { ...session, snapshotEvents: () => events.slice(0, 4) } }),
+    { compacted: false, reason: 'no earlier turn' });
 });

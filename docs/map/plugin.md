@@ -123,10 +123,13 @@ Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoi
 - def `ROLE_COMPACTION_INSTRUCTION`
 - def `ROLE_SECTIONS` — The checkpoint's sections, in the order the instruction asks for them.
 - def `hasSections` — Whether a summary carries every section, in order.
-- def `compactAtTurnEnd` — ADR-094: compact one of her conversations at the end of its turn, from the live end, when it is due.
+- def `compactAtTurnEnd` — ADR-094: compact one of her conversations at the end of its turn, keeping that whole turn as it is, when it is due.
+- def `lastTurnStart` — ADR-094 §8: the first surface node of her last turn — the first one after the turn end before it, so the line that opened the turn stays with it — or undefined when the conversation has no earlier turn to compact.
 - def `keptRule` — The instruction's last rule when the summary request carries the retained tail: how many messages stay as they are, and the opening of the first one with text, quoted only to locate it.
 - class `RoleCompactionEngine`
   - `summarize`
+  - `keepsTurns` — Whether this DSH's `compactNow` takes a keep-from point (its fourth parameter, `options.keepFrom`).
+  - `compactTurnEnd` — ADR-094: her conversation compacted at the end of its turn, her whole last turn kept as it is, the summary request carrying the span alone.
   - `compactIfNeeded` — DSH's automatic compaction, marked for `summarize` while it runs.
   - `wholeConversation` — The whole conversation as the next request would send it, split after the replayed span, when the span is its start and the whole of it fits the window beside the summary cap; otherwise why not (`reason`), or undefined when there is no mete
   - `summaryEffort` — The summary request's thinking level: the conversation's own (its latest request's), else the configured one, when the model offers it; otherwise none.
@@ -259,7 +262,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `ensureAgent` — The conversation's agent, loaded after any write or load of it that began before (one opener at a time).
   - `openAgent`
   - `written` — Held platform lines were written into their conversation (pairing.js release): acknowledge their receipts once the conversation is durable.
-  - `turnEnd` — ADR-094: compact her conversation at the end of its turn when it has reached her character preset's `turnEndRatio` of the window (compaction.js `compactAtTurnEnd`), through DSH's own `/compact` (`compactSession`), at once: the summary reque
+  - `turnEnd` — ADR-094: compact her conversation at the end of its turn when it has reached her character preset's `turnEndRatio` of the window (compaction.js `compactAtTurnEnd`), keeping that whole turn as it is (the engine's `compactTurnEnd`): the next 
   - `compactSession` — ADR-049: condense one of her conversations now, on her own earlier choice; the worker picks the quiet moment.
   - `errandSession` — ADR-066: an errand's own session, a copy of the destination's conversation at its last completed turn, so the model server resumes from that conversation's cached prefix (same system prompt, same tools).
   - `retireErrand` — An errand's turn ended: its copy leaves the session list (archived) and memory once it is idle.

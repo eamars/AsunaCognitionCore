@@ -13,6 +13,7 @@ in [NATIVE_PLUGIN.md](../NATIVE_PLUGIN.md), and the contracts in [RUNTIME_API.md
 | `packages/channels/<name>/` | A channel package: `src/index.js` (`registerChannel`), `python/<module>/` (the kind module), `cordis.patch.yml`, `locale/`, and where it has them `integration/` (a managed adapter), `skills/`, `test/`. |
 | `packages/personas/<name>/` | A persona package: `src/index.js` (`registerPersona`), `persona-model.json`, `seeds/`, `skills/`, `cordis.patch.yml` (its role preset), `locale/`, `icon.*`. |
 | `tests/` | pytest suites (`test_*.py`); case modules shared with the offline checks (`*_cases.py`); fixtures (`fixtures/world.json`, the synthetic persona `fixtures/personas/demo`); `dsh_sandbox.mjs`, which wraps test commands in DSH's sandbox. |
+| `.agents/skills/` | Skills for coding agents, never published to a character: `asuna-cache-readout` (numbers-only readout of model traffic and cache hits from the DSH sessions). |
 | `tools/` | Install, launch, pack and build scripts, repository checks and diagnostics: see [tools/README.md](../tools/README.md). |
 | `config/` | Tracked templates (`*.example.*`). Real configuration (`local.json`, `*.local.json`) is ignored. |
 | `deploy/docker/` | The Docker stack; the only place that knows about Docker. |

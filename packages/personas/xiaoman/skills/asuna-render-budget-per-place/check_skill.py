@@ -43,6 +43,7 @@ SECTIONS = [
     "## 三、怎么跑（不用找人跑）",
     "## 四、加东西之前",
     "## 五、技能里引用代码只写「文件＋名字」，不写行号",
+    "## 六、两份口径、自我层、锚点形状",
     "## 版本",
     "## 试用记录",
 ]
@@ -72,7 +73,25 @@ RULES = [
     ("rule_import_is_checkout", "不是 worker 正在跑那份"),
     ("rule_points_running_version", "asuna-running-version"),
     ("rule_anchor_rule", "行号每次有人改那个文件就漂，名字不会"),
+    # v2（2026-10-25）：两份口径、自我层、锚点形状
+    ("rule_two_calibres", "两种口径"),
+    ("rule_placed_is_the_carried_one", "memory_tiers.py:placed"),
+    ("rule_gate_which_copy_undecided", "待读码"),
+    ("rule_self_layer_outside_6144", "不受 6144 管"),
+    ("rule_self_saved_is_not_budget_saved", "不等于「预算省了 N」"),
+    ("rule_anchor_is_shape", "自证锚点认形状，不认绝对数"),
 ]
+
+# 账本脚本源码里必须有的字面（只查字面在不在，不查跑通；跑通看试用记录里的实跑）：
+# 同时输出两份口径、逐节说为什么不一样、自我层单独一格且明写不受 6144 管、锚点是形状。
+LEDGER_BOTH_CALIBRES = ["预算口径", "带出门", "memory_tiers.placed", "doc 里怎么说 vs memory_tiers 排成哪一档",
+                        "没解释掉的", "inject=%s／visibility=%s／tags=%s"]
+LEDGER_SELF_LAYER = ["自我层（单独一格", "不受 %s 管", "memory_tiers.SELF_DOC"]
+LEDGER_ANCHOR_SHAPE = ["ANCHOR = (", "形状", "只出现在一个场合的节数", 'd["group"] == 0 and d["home"] > 0']
+# 绝对值锚点的旧写法：任何一处（脚本、正文、frontmatter description）再出现就红。description 那一行每一拍进技能目录、被当触发依据读，
+# 所以它与正文同口径一起扫。
+STALE_ABSOLUTE_ANCHOR = ["home≈", "≈733", "733"]
+DESC_MUST_SAY = ["两种口径", "memory_tiers.placed", "不受 6144 管", "形状"]
 
 # 代码锚点：`文件:名字`。行号每次有人改那个文件就漂，名字不会——所以锚点只准写文件里真有的标识符。
 CODE_ANCHOR = re.compile(r"^([\w./-]+\.(?:py|mjs|js|json|md|yml)):([A-Za-z_][A-Za-z0-9_.]*)$")
@@ -280,6 +299,29 @@ def main():
     check("skill_body_not_thin", len(body) >= 1500, "body_chars=%d" % len(body))
     check("selfcheck_documented", "check_skill.py" in body)
     check("ledger_shipped", "budget_per_place.py" in body)
+
+    # v2（2026-10-25）：账本脚本必须同时输出两份口径、自我层单独一格、锚点是形状不是绝对值。
+    # 这里只查脚本源码里的字面（这份自检不碰数据库），绝不等于「脚本跑得通」。
+    ledger_src = ""
+    try:
+        with open(os.path.join(HERE, "budget_per_place.py"), "rb") as handle:
+            ledger_src = handle.read().decode("utf-8")
+    except OSError as exc:                                 # noqa: BLE001 读不到也要报出来
+        check("ledger_readable", False, str(exc))
+    for name, tokens in (("ledger_prints_both_calibres", LEDGER_BOTH_CALIBRES),
+                         ("ledger_self_layer_marked_outside_budget", LEDGER_SELF_LAYER),
+                         ("ledger_anchor_is_shape", LEDGER_ANCHOR_SHAPE)):
+        missing = [token for token in tokens if token not in ledger_src]
+        check(name, ledger_src and not missing, "脚本里缺：" + "、".join(missing))
+    # 旧绝对值锚点三处各一条：脚本、正文（去掉反引号里的引用）、frontmatter description
+    prose = re.sub(r"`[^`\n]*`", "", body)
+    for name, where in (("no_absolute_anchor_in_ledger", ledger_src), ("no_absolute_anchor_in_body", prose),
+                        ("no_absolute_anchor_in_frontmatter", desc)):
+        hit = [token for token in STALE_ABSOLUTE_ANCHOR if token in where]
+        check(name, not hit, "还写着绝对值锚点：" + "、".join(hit))
+    desc_missing = [token for token in DESC_MUST_SAY if token not in desc]
+    check("frontmatter_description_current", not desc_missing,
+          "frontmatter description 没写到（那一行每一拍进我的技能目录）：" + "、".join(desc_missing))
 
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
     check("check_script_shipped", os.path.basename(__file__) in scripts, ",".join(scripts))

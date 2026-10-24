@@ -193,6 +193,24 @@ solved at real time."
   (ADR-017 unchanged). The same digest goes to the developer inbox, as `faults.py` does for failed turns.
 - Thresholds are generous on purpose: when in doubt, a fault stays a count.
 
+**Refinement for step 6 (owner agreed, 2026-10-24; designed against a week of real faults under napcat-qq 0.16.0,
+about 10-31).** Four rules on top of the thresholds above, from the same counts, the dead-letter records and the
+publication receipts (no new collection):
+
+1. **Consequences, not attempts.** The digest is built from what ended badly for a message — set aside for good, a
+   send left `unknown`, a voice never transcribed, an item stuck — not from error events. A shared-dependency outage
+   makes lines wait and go in later (§5.4 never counts that against them), so a surge leaves no consequence and
+   filters itself out. (The first entry in `lane_faults`, 10-24: two inbound lines the Host refused with
+   `INPUT_IDENTITY_OR_CONTENT_CONFLICT` and set aside — a consequence, not noise; looked into on its own.)
+2. **Shared causes collapse.** Many unrelated signatures rising in the same minutes across lanes are one cause in the
+   environment (NapCat restarting, the network, the Host away): one environment event with its start and end, to
+   the developer inbox only and only when long; never to her, who can't fix it.
+3. **New after a change.** A signature never seen before that first appears after a publication or a restart is
+   reported the next night even if seen once, with the change it followed — a regression is caught in a day, not
+   after the persistence test. She publishes her own code, so this is the case she can act on fastest.
+4. **To whoever can fix it.** A fault in her own packages (her channel or persona work) goes to her; one in the core
+   or the environment (a Host refusal, a media child, an outage) to the developer inbox.
+
 ### 5.7 Visible state (rule 10)
 
 The STATUS line and the health snapshot gain, per lane: depth, the oldest item's age, in-flight items and their ages;
@@ -329,7 +347,8 @@ line is in the adapter's journal meanwhile, so nothing waits on step 1).
    `forward.MAX_FETCHES` = 6 per message, the inbound base 120 s); a lane whose line was stuck kept its place on
    return (now it ends after that line); with a Host that names no lanes nothing gives its place up and a file on
    the chat lane gets a file's budget; a failing log in the watchdog pass could skip the bulk replacement. 12 checks.
-6. The digest in her night stage, with test 10 — talked through with her before it reaches her.
+6. The digest in her night stage, with test 10 — talked through with her before it reaches her. With the refinement
+   in §5.6 (owner, 2026-10-24); the design note after a week of faults under 0.16.0 (about 10-31).
 
 ## 8. Rejected
 

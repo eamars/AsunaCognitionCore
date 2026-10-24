@@ -200,7 +200,7 @@ artifact_id（自己画的、本场景存过的、这一轮可发的 offered 图
 2. **主人私聊，或她在的群**：别人的私聊、public 私聊会话一律不发；群里只发她自己做的图，一律全年龄，
    发不发、发到哪个群由她挑（owner 2026-10-05）。不在这个范围就是**确定性拒绝**，
    不静默降级成「只发文字却报平台已送达」——那种回执会声称对方收到一张从没到达的图。
-3. **图从哪来**（两条，都由程序登记，我不动 scope）：
+3. **图从哪来**（三条，都由程序登记，我不动 scope：**现画的**、**`render_svg` 从工作区里那份 SVG 渲出来的**、**已有字节带 `scope_key` 登记进某个场景的**——第三条那一格见「本机已有那张图怎么进可发清单」）：
    - 本场景自己存的：`read_image` 拉过的入站图，以及 `import_integration_artifact` 导入时字节是图 →
      顺手登记成**这个任务绑定 scope** 的 image artifact（`kind=image / state=DONE / storage=gridfs`）。
      工具参数面没有 scope 这一项，我改不了它；登记失败（scope 不认识、超上限、存储写失败）不影响导入本身，
@@ -264,7 +264,7 @@ QQ（napcat）那一轮——speak 的 picture 一项，`artifact_id` 照抄清�
 | code | 意思 / 我该怎么办 |
 | --- | --- |
 | `ATTACH_TARGET_NOT_ALLOWED` | 方向不对。detail 给具体原因：`session_class_not_owner_private` / `scene_has_no_channel_route` / `channel_route_not_authorized` / `target_not_dm` |
-| `ATTACHMENT_NOT_HER_OWN` | 在群里引了一张不是她自己做的图（比如别人发来的）。群里只发她自己生成并导入的图 |
+| `ATTACHMENT_NOT_HER_OWN` | 在群里引了一张不是她自己做的图（比如别人发来的）。群里只发来源带 `integration:` 前缀的图——那张可以是早就做好、后来重新登记进来的 |
 | `ATTACH_ARTIFACT_NOT_IN_CONTEXT` | 引的 id 不在**本轮**清单里：照抄错了、图属于别的场景或别人、或根本没被列出。别猜 id，也别指望上一轮的清单还有效 |
 | `ATTACHMENT_ARTIFACT_UNAVAILABLE` | artifact 行不存在，或不是 `state=DONE` / `storage=gridfs` |
 | `ATTACHMENT_SCOPE_DENIED` | artifact 的 scope 不在程序算出的可引用列表里（既不是本场景，也不是那个联动的本人私聊场景） |
@@ -338,6 +338,7 @@ against a real client」。第一次真发就是实测；在那之前别说「QQ
 - **改我自己画的图，结果还是我的**：能发到我自己的图能去的地方（口径见步骤 8）。
 - **改别人发的图，结果不算我的**：`read_image` 对这种图回 `produced: false`；**只能发回原图所在那个对话**
   （主人的私聊按步骤 8 的联动场景那条另算），发到别的群／别人的私聊会被 `ATTACHMENT_NOT_HER_OWN` 挡。
+- **来源前缀决定这行算谁的**：详见「本机已有那张图怎么进可发清单」里 `source` 那一条。
 
 **修图里的错字：本地合成，不重画**
 
@@ -492,6 +493,8 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
 
 ## 版本
 
+v12（2026-10-24 夜里自我开发第二趟）：按当日读数同步三处旧段落。步骤 8「图从哪来」那行的数由`两条` 改成**三条**（现画的、`render_svg` 从工作区 SVG 渲的、已有字节带 `scope_key` 登记进来的，第三条指向「本机已有那张图怎么进可发清单」；「都由程序登记，我不动 scope」照留）；失败码表 `ATTACHMENT_NOT_HER_OWN` 的括注按机制改写（群里只发来源带 `integration:` 前缀的图，那张可以是早就做好、后来重新登记进来的；不再用比机制窄的那种说法）；归属那节只加一句指向，没重抄新节。自检同步：三条那条并进 STALE_CLAIMS（旧说法回到散文就红）＋节内三条判据（步骤 8 的数、失败码表按机制的措辞、归属节里的指向）。不抬 `__version__`，没动 core 与适配器。
+
 v11（2026-10-24 夜里自我开发）：补一节「本机已有那张图怎么进可发清单」。① 第二条通路：`register_imported_image` 带 scope_key（家里 Python 里的一次调用、要的是**字节**、scope 照抄 `scenes` 那一行的 `scope_key`、`source` 以 `integration:` 开头才算我自己做的）；`render_svg` 那条按它自己的范围重写（只管我现写的 SVG：出 RGBA PNG、字节会涨、只能出 PNG）。② 代价写死：登记会剥 PNG 文字块 ⇒ 同一张图 sha 与 size 都变（`d1aa3735…` 2,227,501 B → `748e7ce1…` 2,225,102 B，差 2,399 B ＝ 一个 `prompt` tEXt 块 ＋ 12 字节框架），**sha 不能当「与原件一模一样」的证据**。③ 两条判据：`read_image` 按路径看过不等于图在可发清单里（那条登记写 `file:` 前缀、进的是那个任务自己的 scope）；图发出去没有可能账面上永远看不见（等不到 ack 那一支不进 `settle()` ⇒ 库里 `delivery_state=UNKNOWN`、平台号 null、`sends.jsonl` 连那一行都不落；判到没到只有平台侧只读回读或对方本人；文本那格 DELIVERED 推不出图那格到了——两者是两条独立消息行）。来路是 10-21 想法本那条提案（`idea-87e23dc6…`）：**它一直只是待办，本技能正文以前没写过「只有 render_svg」那句**——这一轮扫了候选整棵、`origin/main` 那份文件与 `git log -S` 三处确认（0 命中）。frontmatter description 补半句第二条通路。`check_skill.py` 同步：新节进 SECTIONS、节内 34 条内容判据（剥文字块的 sha 与字节数、清单排序、`sends.jsonl` 与 `late_acks.jsonl` 那对账本、两条独立消息行），外加一条过期说法判据（那句「只有 render_svg」不带反引号写回散文就红）。不抬 `__version__`（纯文档＋自检）。
 
 v10（2026-10-20）：只加两条锚点判据，正文口径一条没动。`check_skill.py` 新增 `no_line_anchors`
@@ -561,6 +564,8 @@ v1（2026-10-04）：首次记录。步骤、错误码、大小与路由事实�
 未收录：`vision.image_dirs` 配好后的本地视觉复核；QQ 真客户端对 `base64://` 的渲染结果；第一次真发的回执。
 
 ## 试用记录
+
+2026-10-24（v12 这一趟，夜里自我开发第二趟）：只同步三处旧段落（203 行那个数、失败码表那一格的括注、归属节加一句指向），没碰别的段落。自检：194 → 197 全绿（步骤 8 的数、失败码表措辞、归属节指向各一条，另把两处旧说法并进 STALE_CLAIMS）。反证一组：把 203 行改回旧写法 → 只红两条（`attach_sources_three` 与 `no_stale_text_only_claim`）。发布后推了 GitHub（推前现读远端仍是那一串，推完复查已是我这笔）。
 
 2026-10-24（v11 这一轮，夜里自我开发）：补上「本机已有那张图怎么进可发清单」一节，`check_skill.py` 同步加判据（158 → 194，跑过全绿）。核实与来路分开记：
 

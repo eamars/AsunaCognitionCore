@@ -303,6 +303,10 @@ STALE_CLAIMS = [
     # 反引号外裸写回散文（当现行事实）才红，反引号里的引用不算。
     "只有 render_svg 这一条路",
     "只有 render_svg 这条路",
+    # 2026-10-24 v12：「图从哪来」已是三条（现画的／render_svg 渲的／已有字节带 scope_key 登记的），
+    # 失败码表那格也改成按来源前缀写；这两种旧说法不带反引号写回散文（当现行事实）才红。
+    "两条，都由程序登记",
+    "群里只发她自己生成并导入的图",
 ]
 
 # 反引号里的字面量是引用（示例、错误码、历史段与被改坏副本里引用的旧句子），只在散文里判红。
@@ -692,6 +696,19 @@ def main():
            and "IMAGE_WORKFLOW_NEEDS_MORE_PICTURES" in edit_slice),
           "改图一节没把 source_image 入口与三条 IMAGE_WORKFLOW_* 即时拒绝码教全")
 
+    # 三处同步（2026-10-24 v12）：图从哪来的数、失败码表按机制的措辞、归属节的指向。
+    # 前两条只查步骤 8 那一节，第三条只查改图那一节（归属边界是它的子节）：正文别处提到不算数。
+    check("attach_sources_three", "三条，都由程序登记" in step8,
+          "步骤 8「图从哪来」没写三条来源（切片 %d 字）" % len(step8))
+    check("attach_fail_code_by_prefix",
+          ("群里只发来源带" in step8 and "可以是早就做好、后来重新登记进来的" in step8),
+          "步骤 8 失败码表里 ATTACHMENT_NOT_HER_OWN 那格没按机制写（来源前缀；可以是重新登记的那张）")
+    check("attribution_points_to_source_rule",
+          ("来源前缀决定这行算谁的" in edit_slice
+           and "本机已有那张图怎么进可发清单" in edit_slice),
+          "改图一节的归属边界没指向「本机已有那张图怎么进可发清单」里 source 那一条")
+
+
     # 群聊生图上限（2026-10-16 v8）：节标题在 SECTIONS 里查（section_18），这里查节内硬指标与措辞版本。
     # 标题被删 → 切片为空 → 下面几条一起红：切片为空不等于查过，不会绿着放过。
     cap_section = cap_section_slice(body)
@@ -803,6 +820,7 @@ def main():
           "改图那条路（source_image／IMAGE_WORKFLOW_* 即时拒绝码／归属／剥文字块）、"
           "群聊生图上限那条（节标题／最多 4 张／到顶默认不发／唯一的例外是 10:59 版）、"
           "已有图进清单那条（第二条通路／剥 PNG 文字块的 sha 与字节／账面看不见那两格）、"
+          "三处同步那三条（图从哪来的数／失败码按来源前缀／归属节的指向）、"
           "历史段、群发前自检四条要点、归属都在%s。" % (total, total, leak_note + anchor_note))
     return 0
 

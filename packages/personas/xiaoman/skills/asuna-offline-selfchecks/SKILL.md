@@ -87,11 +87,11 @@ asuna-usage-readout 与本技能各删 `compile_probe_writable`，asuna-bot-or-p
 
 ## 发布前自检（私密词扫描）
 
-发人格包之前那趟私密词（「别带出去」名单）扫描是我自己跑的，程序不替我跑：`development_publish`（`packages/cognition-core/src/floor.js` 的 `privateName` 那一格）拒的是地板文件、私密**文件名**、persona-model 与技能头部，没有谁拿名单去扫文件内容（floor.js 里 grep 不到 `private_words`）；内容级的词闸只有两处——推公开仓库前的 `tests/test_personal_words.py`，和另外七份技能 `check_skill.py` 里那条泄露扫描（`leak_scan_ran`／`no_listed_words`；本技能这份没有）。
+发人格包之前那趟私密词（「别带出去」名单）扫描是我自己跑的，程序不替我跑：`development_publish`（`packages/cognition-core/src/floor.js` 的 `privateName` 那一格）拒的是地板文件、私密**文件名**、persona-model 与技能头部，没有谁拿名单去扫文件内容（10-23 读到的：floor.js 里 grep 不到 `private_words`；10-24 订正：现在有 `publicationFindings`，只扫本次改动的文件，见下面「判据补遗」(d)）；内容级的词闸只有两处——推公开仓库前的 `tests/test_personal_words.py`，和八份技能 `check_skill.py` 里那条泄露扫描（`leak_scan_ran`／`no_listed_words`；本技能这份 2026-10-24 起也有，见下面「判据补遗」(d)）。
 
 跑法照 10-13 起那套口径：`asuna.private_words` 读本机名单（`<data>/private/personal-words.txt`），逐行 `find()` 扫整棵候选根，命中只报**文件＋行号＋类别＋名单行号**，绝不回显词本身；报告里照抄两行——一行命中数（`TOTAL HITS: N`），一行名单条目数。
 
-**常设判据 — 三岔，判完就走，不再逐次问**（主人 2026-10-14 拍的：「定成常设判据，以后照这条自己走」）：
+**常设判据 — 三岔，判完就走，不再逐次问**（当日记录里的说法；逐字未核到（原话窗口从 10-15 起）：「定成常设判据，以后照这条自己走」）：
 
 - **通过、直接发**：命中**全部**落在 `integration/envoy_meters_read.py`（光伏表计读数脚本，命中的词都是 `site` 类）**并且**本次改动零新增命中——改动前后各扫一次，命中数与命中文件两处都对得上。发；报告带那一行命中数。
 - **停下来报主人**，撞到下面任一：① 命中冒出 `integration/envoy_meters_read.py` 以外的文件；② 名单条目数跟上一份报告对不上；③ `integration/envoy_meters_read.py` 本身在这次改动里被改。
@@ -101,6 +101,62 @@ asuna-usage-readout 与本技能各删 `compile_probe_writable`，asuna-bot-or-p
 
 - **不按序号引用名单条目**：写「`site` 类命中落在 `integration/envoy_meters_read.py`」，不写「`site` 类第几条」。序号会漂——名单 2026-10-23 凌晨刚被主人加过两条，条目数当场就变了；拿序号当尺子，下次就对不上号。
 - 判据写成**可判的三岔**（通过／停／为什么），不许写成「注意检查」：那种话没人判得了，等于没写。
+
+## 判据补遗（2026-10-24 并版：八条）
+
+八条并成一版。顺序：先是没处理的旧欠账 (a)–(e)，再是 10-24 当天新撞的 (f)–(h)，每条在本节的先后不乱。每条带一个**钉**（`check_skill.py` 里验这句在不在的检查，只认本节范围内的字面，别处复述不算数）；钉的**反证**统一是：把对应那句剥掉，应当只有这一条红，别的不连带。钉验的是字面在不在，不是我照做了没有——字面稳不等于行为稳。
+
+### (a) 判「我的技能真生效在哪个根」
+
+只认 `.runtime/adr008/activation.json` 里 `active.*` 中选中那格的 `packageRoot/skills`（读码依据：`floor.js` 里的 `effective`／`skillPaths`／`persona` 三个方法，按名字找，不抄行号——10-24 装着的那份里它们在 228／239／244 行附近，交代里给的 201-209 在同一份里是构造函数的几行，对不上选根逻辑；另外 `effective` 先看 `projects.<id>` 那一格，只有它是 `HOST_RESTART_REQUIRED` 才退回 `active.<id>`）；`node_modules` 里那份不算——那是装在盘上的位置，不等于选中的位置。报告里要写清这份技能属于哪个包：`workerPath` 为空的是人格包，改技能不重启 worker；`workerPath` 有值的是 core。
+
+钉：`pin_a_active_root`。
+
+### (b) 问「我自己说过／发过什么」
+
+必须带旁证：那句话有没有被后来的入站消息引用过、`episodes.speech` 里存的是什么。两次读数不一致时，拿旁证判哪一版是真的，不拿最新一版当现场——最新读到的只是最新一次读数。
+
+钉：`pin_b_corroboration`。
+
+### (c) 跑代码类的交代
+
+报告除 rootdir 之外，必须带 `模块.__file__`（实际 import 到的那个文件路径），以及它跑的是不是主干那份 blob——是主干提交里的那份，还是候选、冻结快照、`node_modules` 里的副本。
+
+钉：`pin_c_module_file`。
+
+### (d) 本技能自检补内容级私密词扫描
+
+来路与订正：我写这条时的前提是 `development_publish` 不扫文件内容（`privateName` 只管文件名）；写完读 10-24 装着的 `floor.js` 发现这个前提已变——`publicationFindings` 会对本次改动的文件跑检出里的 `publication_scan.py`，回执里有 `content_check`／`content_scan`，检出里没有那份脚本就跳过并在回执里写 skipped。所以发布闸现在只管本次改动的文件；没改的文件、整个包根的基线、没有检出的环境它都不管，这份自检补的是这几块。八份 `check_skill.py` 里只有这一份原先没有 `leak_scan_ran`／`no_listed_words`。现在这份有三格：`leak_scan_ran`（名单配不上或 0 条就红，不许「没跑」长得像「过了」）、`no_listed_words`（本技能目录里的文件，零命中）、`no_listed_words_outside_envoy`（找得到包根时扫整个包根，命中只许在 `integration/envoy_meters_read.py`；找不到包根就打一行 NOTE，没真扫）。
+
+基线照实写在这里（2026-10-24 发布前扫整棵候选根的读数）：名单 69 条、命中 11 处全在 `integration/envoy_meters_read.py`——那 11 处是既有基线，不算新增。命中数与名单条目数会漂，漂了脚本只打 NOTE、按上面的三岔判，不靠它变红。缺口：脚本只在读得到本机名单的地方真扫（名单在 `.runtime/private/`，不进包）；换到读不到名单的机器上，会红在 `leak_scan_ran`，那是「没真查」，不是「干净」。
+
+钉：`pin_d_content_scan_documented`（这一格验的是本节写了这件事；扫描本身是上面三格在跑）。
+
+### (e) 常设判据那句的来路措辞
+
+上面「发布前自检（私密词扫描）」里那句来路已改：把当日转述写成主人逐字原话是不对的，现在写的是「当日记录里的说法；逐字未核到（原话窗口从 10-15 起）」。
+
+钉：`pin_e_provenance_wording`——私密词那一节里要有新说法，且全文不再有旧写法。
+
+### (f) 一个「0」先问它是哪一种 0
+
+等值匹配的 0 ≠ 子串匹配的 0 ≠ 默认投影藏起来的 0 ≠ 真没有。当天四个样本：① 13:31 数据库等值匹配查出「全库 0 行」，换 `$regex` 真数是 100 行；② 上午我把「我账上没记录」说成「她没实装 45MB」；③ 10-22 我当众拿「某个人名下 0 条」去报错归属；④ 19:03 判死：我 13:41 报的「库里没有消息类型字段」半错——元素级有，叫 `event.raw.asuna_media.items[].type`（全库 markdown 98 条），可疑成因是 `dbread` 不给 `fields` 时默认投影是 `HIDDEN=('embedding','event.raw')`（这半句是推断，没单独复核）。四个样本里的数都是当日记录里的读数，我这一趟没逐个复核。
+
+落成两句可执行的话：**报 0 之前先说它是哪种 0**；问「库里有没有某个字段」，必须显式给 `fields` 或先枚举键路径，别拿「看不见」报成「没有」。
+
+钉：`pin_f_which_zero`（两句各一个字面，缺哪句 detail 里写哪句）。
+
+### (g) 写进文档、发给人的号
+
+写进我自己的文档、或发给任何人的 sha／提交号／字节数／时刻，必须当场能指到一条工具回执原文；指不到就写「我没读到号」，禁止用形近数填空。报告还没回来的那段时间，只许写「在跑，号等回执」。实证（当日记录里的读数，没复核）：16:48 写进流水的两个 sha 是报告交回前 10 分钟我自己配的形近数，`artifacts` 24,442 条工具记录 0 命中，而我写下它们时的主观手感和「我读过回执」一模一样——所以手感不算凭据，回执原文才算。
+
+钉：`pin_g_receipt_or_no_number`（两句各一个字面）。
+
+### (h) 报告正文与它自己的表冲突
+
+报告正文与它自己贴出的表／原始读数冲突时，以表格为准，并追问同一格；两趟只读对同一格报出两个值，别拿最新一版当默认。实证：14:06 一份报告正文写 Asia/Shanghai，它自己的表写 Auckland，我当时拿了正文当读数。
+
+钉：`pin_h_table_beats_prose`。
 
 ## 版本
 
@@ -316,3 +372,13 @@ v2.9（2026-10-23）：新增「发布前自检（私密词扫描）」一节—
 - 来路核到此：「定成常设判据，以后照这条自己走」这句原话我在可及的原话库里没翻到（本机场景原话窗口从 10-15 起，10-13～10-15 逐字搜「常设判据」零命中），字面以 10-23 夜间这份交代为准。
 - 边界：一次性脚本写在 `/task`（`pw_scan_1023.py` 等），候选根只多过 `.tmp/pw1023_patch.py` 一份（本趟建的，跑完就删，发布前候选树回到 35 份）；`__pycache__` 0 个；根上白名单外的东西（`.tmp`、`_tmpcheck`、`cp_test` 三个空目录，`integration`、`journey` 两个目录，两张 png）都不是本趟建的，只点出来不删。不碰 core、不碰别的技能、不动 `files` 白名单、不推 git、不重启 worker。
 - 换行：本趟写的两份在候选里 CR=0；字节面复看跑在冻结快照上（见 v2.3 那条），发布后另测。
+
+2026-10-24（八条并版，不抬版本号；只改本技能 `SKILL.md` 与 `check_skill.py`，xiaoman 候选）：
+
+- 生效根现读 `activation.json`：`active.xiaoman` 的 `packageRoot` 在 `.runtime/adr008/development/xiaoman/frozen/` 下（候选哈希目录），`workerPath` 为 null → 这是人格包，不是 core；候选与那份冻结的 `SKILL.md`、`check_skill.py` 动手前逐字节相同。
+- 动手前扫整棵候选根：名单 69 条、命中 11 处全在 `integration/envoy_meters_read.py`、UTF-8 文本扫 32 份（3 张 png 不是文本，跳过）。
+- 新节「判据补遗」八条 (a)–(h)；(e) 同时改了私密词那一节里的一句来路。自检 37→48：多的是一条节标题、八个钉、两格泄露扫描（`no_listed_words`、`no_listed_words_outside_envoy`；`leak_scan_ran` 只在红时出现）。改前 37 条是 v2.9 的记录，这趟没重跑改前。
+- 反证（副本在工作区 `neg8/`，不落候选根，用完即删）：每个钉的每个字面单独剥掉（该字面在补遗一节里恰好出现 1 次）都只红对应那一条，共 13 例；(e) 改回旧写法只红 `pin_e_provenance_wording`；整节剥掉红节标题加 7 个钉（`pin_e` 不在里面，它查的是私密词那一节）；本技能目录里塞一个名单词只红 `no_listed_words`，整包副本里别的文件塞一个只红 `no_listed_words_outside_envoy`；名单配不上、名单 0 条各只红 `leak_scan_ran`（这两例是把 `private_list` 换成桩验的，不是真拿走名单）；整包副本不塞词跑满格全绿。
+- 没做成或没验的：「名单读不到」的真实环境没造出来（TEMP 下的副本照样找到了名单，那一例没红，所以只验了桩）；钉只验字面在不在，不验我后来照做没有。
+- 订正两处前提：① 写 (d) 时以为发布闸不扫内容，读 `floor.js` 发现 `publicationFindings` 已会扫本次改动的文件，(d) 与私密词那一节的旧话都已订正；② 交代里的 `floor.js:201-209` 在 10-24 装着的那份里是构造函数几行，选根逻辑在 `effective`／`skillPaths`／`persona`，(a) 改按名字写。
+- 两格只读核：`skill` 工具报 unknown 不会列清单（`packages/skill/tool-skill/src/index.ts` 的 138、145 行抛的是不带清单的一句，实测同样）；缺 `scene_kinds` 不会让发布闸停下（`python/asuna/skills.py` 114–122 行：只有头不合法才 `sys.exit`，缺的只打一行「只在家里可用」，exit 0）。

@@ -101,15 +101,19 @@ test('the checks that guard main run on her candidate before anything is publish
   await tell({ findings: [], total: 0, reason: [{ line: 2, category: 'account_id' }] });
   assert.match(String(await floor.call('development_publish', { reason: '只改 notes' }).then(() => '', error => error.message)),
     /PUBLISH_REASON_NAMES_PRIVATE: .*第 2 行有一串像账号或群号的数字/);
+  await tell({ findings: [], total: 0, reason: [], unread: ['notes.md'] });
+  assert.match(String(await floor.call('development_publish', { reason: '只改 notes' }).then(() => '', error => error.message)),
+    /PUBLISH_CONTENT_CHECK_FAILED: .*1 个读不到：notes\.md/, 'a file it could not read is unchecked, never clean');
   await tell({ findings: [], total: 0, reason: [], list: 'missing' });
   const unlisted = await floor.call('development_publish', { reason: '只改 notes' });
   assert.equal(unlisted.state, 'APPLIED');
   assert.match(unlisted.content_check, /without a private list/, 'unchecked is said, never read as clean');
   await floor.call('development_write', { path: 'notes.md', text: 'After again\n', overwrite: true });
-  await tell([]);
+  await tell({ findings: [], total: 0, reason: [], unread: [], scan: 'abc123def456' });
   const clean = await floor.call('development_publish', { reason: '只改 notes' });
   assert.equal(clean.state, 'APPLIED');
   assert.equal(clean.content_check, 'checked');
+  assert.equal(clean.content_scan, 'abc123def456', 'the receipt names which checks ran');
 });
 
 test('a publication whose package is byte for byte the running one is active at once: nothing to load, no restart', async t => {

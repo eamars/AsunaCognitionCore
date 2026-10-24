@@ -523,7 +523,7 @@ export class PublicationFloor {
       artifact: addressed, sha256: hash(bytes), state: same ? 'ACTIVE' : restartRequired ? 'HOST_RESTART_REQUIRED' : 'APPLIED',
       project: project.id, changed_files: changed, deleted_files: deleted, reason,
       receipt_id: 'self-publish-' + identity.slice(0, 32) + '-' + published.replace(/[-:.]/g, ''), origin,
-      content_check: scanned.check,
+      content_check: scanned.check, ...(scanned.scan && { content_scan: scanned.scan }),
       published_at: published, boot_probe: prepared.boot_probe };
     // No rollback pointer. The next successful publication advances this record.
     // The last selection that actually ran: the launcher returns to it when this one never starts (§6.4).
@@ -559,8 +559,9 @@ export class PublicationFloor {
   /** The checks that guard main, on the files her candidate changes and on her reason, before anything is published
    * (tools/publication_scan.py: the private list in every file and name; the release's personal-data and persona-name
    * checks in what it ships). Returns { found: her words for each hit (file, line, category, never the word),
-   * reasonFound, check: what the receipt says was checked }. A source outside this Host's checkout, or a checkout
-   * without the scan, is skipped and the receipt says so; a scan that is there but cannot run refuses the publication. */
+   * reasonFound, check: what the receipt says was checked, scan: which version of the checks ran }. A source outside
+   * this Host's checkout, or a checkout without the scan, is skipped and the receipt says so; a scan that is there but
+   * cannot run, or cannot read a changed file, refuses the publication. */
   async publicationFindings(project, changed, reason) {
     const checkout = this.checkout();
     if (!checkout) return { found: [], reasonFound: [], check: 'skipped: this Host has no checkout' };
@@ -584,6 +585,9 @@ export class PublicationFloor {
     try { answer = JSON.parse(result.stdout); } catch { answer = undefined; }
     if (result.exit_code !== 0 || !Array.isArray(answer?.findings))
       throw failed(String(result.stderr || '').trim().split('\n').pop().slice(0, 200) || '没有回答');
+    // A changed file it could not read is unchecked, never clean.
+    if (Array.isArray(answer.unread) && answer.unread.length)
+      throw failed(`改动的文件里有 ${answer.unread.length} 个读不到：${answer.unread.slice(0, 5).join('、')}`);
     const words = { account_id: '有一串像账号或群号的数字', private_address: '有内网地址', denylist: '有不公开清单上的东西',
       timezone: '有时区名', persona_name: '有人格的名字（这里的文件要跟人格无关）' };
     const say = item => (String(item.category).startsWith('listed:')
@@ -592,6 +596,7 @@ export class PublicationFloor {
       + say(item));
     if (answer.total > found.length) found.push(`一共 ${answer.total} 处，上面是前 ${found.length} 处`);
     return { found, reasonFound: (answer.reason ?? []).map(item => `第 ${item.line} 行${say(item)}`),
+      ...(typeof answer.scan === 'string' && { scan: answer.scan }),
       check: answer.list === 'missing' ? 'checked without a private list (not configured on this machine): the release checks ran, the list did not'
         : 'checked' };
   }

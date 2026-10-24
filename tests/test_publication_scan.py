@@ -104,6 +104,18 @@ def test_the_reason_is_checked_too_and_the_answer_is_capped_and_says_when_the_li
     assert told['list'] == 'missing' and told['total'] == 80, 'the release checks still ran; the list check did not'
 
 
+def test_a_changed_file_it_cannot_read_is_unread_never_clean_and_the_answer_names_the_scan(lists):
+    root = candidate(lists, {'src/asuna/x.py': 'x = 1\n'})
+    request = lists / 'request.json'
+    request.write_text(json.dumps({'root': str(root), 'prefix': '', 'paths': ['src/asuna/x.py', 'src/asuna/gone.py']}),
+                       encoding='utf-8')
+    done = subprocess.run([sys.executable, str(ROOT / 'tools/publication_scan.py'), str(request)], capture_output=True,
+                          text=True, encoding='utf-8', timeout=120)
+    told = json.loads(done.stdout)
+    assert told['unread'] == ['src/asuna/gone.py'] and told['findings'] == [], told
+    assert told['scan'] == publication_scan.scan_version() and len(told['scan']) == 12
+
+
 def test_what_main_holds_passes_its_own_scan():
     """Nothing main accepts is refused: the shipped files of the checkout, scanned as one candidate, have no hit
     beyond what tests/test_release_scan.py and test_personal_words.py would already fail on."""

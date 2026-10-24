@@ -39,7 +39,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ANCHORS = [
     # 范围
     ("section_scope", "## 范围"),
-    ("scope_one_group_named", "群聊「dsh插件(DeepSeek harness)」（place `g68847c`）里成立"),
+    ("scope_one_group_named", "这一个群聊场合（place `g68847c`；群名不带出去，正文只留这个 place 号）里成立"),
     ("scope_ordinary_member_with_tools", "当一个会用工具的普通群友"),
     ("scope_other_groups_not_applied", "**别的群不套用**"),
     ("scope_persona_unchanged", "**不改整体人设**"),

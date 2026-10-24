@@ -131,7 +131,7 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 
 运行时契约只看认知核根目录的 `RUNTIME_API.md`（宿主会往开发目录放一份当时的副本）。
 
-**发布时不用管候选里那份 `RUNTIME_API.md` 副本（旧规矩作废）**：宿主每次装配会把它重抄进通道包候选根，那条路径被仓库 `.gitignore` 排除。发布自己会剔被排除的路径——不复制进源、不进提交、不过扫描，回执里给 `ignored_files` 和一句 `ignored_note`。**别再手工删它，留着读。**
+**发布时不用管候选里那份 `RUNTIME_API.md` 副本（旧规矩作废）**：宿主每次装配会把它重抄进通道包候选根，那条路径被仓库 `.gitignore` 排除。发布自己会剔被排除的路径——不复制进源、不进提交、不过扫描，回执**可能**带 `ignored_files`／`ignored_note` 这两格，但**别依赖它**——实测 10-24 两笔就地生效的发布（16:28、16:37），回执里**都没有这两格**；**哪一路才给，两条读码结论相反、都没实测**。判"新的发布代码在跑"看下一行那句（`content_scan`）。**别再手工删它，留着读。**
 **判"新的发布代码在跑"看回执的 `content_scan`**（实测 16:28 那笔：`content_scan: 8b6ebfdf2f01`，我拿 `publication_scan.py`＋`check_staged_secrets.py` 自己算了一遍 sha256 前 12 位，对上 ⇒ 那次跑的规则没被人动过）。**别拿 `ignored_files` 当判据**：技能／文档这类改动是**当场就地生效**，那一路上**回执里没有 `ignored_files`／`ignored_note` 这两格**（16:28 实测：不是空数组，是没有这格）——**剔除照做**（同一笔里 `changed_files` 只有我改的那一个文件、`baseline.json` 55 个键里没有那条路径、提交 `c1a02c45` 只有 1 个文件）。**没出现 ≠ 没生效，先想这一路给不给这格。**
 
 宿主 profile（端点/adapter 配置）变化后，恢复会被要求显式启动一次，返回 `PROFILE_CHANGED_RESTART_REQUIRES_EXPLICIT_START` 时按运维流程重新 start。

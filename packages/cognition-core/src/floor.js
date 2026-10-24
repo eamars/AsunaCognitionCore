@@ -477,7 +477,7 @@ export class PublicationFloor {
       + '没有发布，也不进提交，留在你的候选里' } : {};
     if (!changed.length && !deleted.length) return { state: 'NO_CHANGES', project: project.id, ...left };
     // What she changes becomes part of a public repository: the checks that guard main, refused before anything is
-    // frozen, packed, selected or committed.
+    // frozen, packed, selected or committed. They cover what is committed; an ignored path never leaves her machine.
     const scanned = await this.publicationFindings(project, changed, reason);
     if (scanned.reasonFound.length) throw new Error(`PUBLISH_REASON_NAMES_PRIVATE: 发布说明会成为公开仓库的提交信息，`
       + `${scanned.reasonFound.join('；')}；改写成「某个群」「那一条私聊」这样的说法再发布；这次什么都没发布`);

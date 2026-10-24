@@ -112,6 +112,15 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 - 0.3.0 新增身份行：`PEERS`（启动时目录快照）、`PEER person= scene= group= display= nick= card= role= source= verified= msgs= changed=`（每条已授权入站识别到的人）、`PEER_CHANGED person= scene= field= from= to=`（改名/换名片，同一个人）、`PEER_FIELD_DENIED` + `PEER_REPOST`（宿主还不收这块，已去块重投，入站没丢）、`PEER_ERROR`。0.4 起同类的媒体行是 `MEDIA_REPOST`（去掉 `raw.asuna_media` 重投，占位符正文保留），计数多 `inbound_media_only`（纯图/纯表情落盘数）与 `media_field_denied`。`source=api` 是查过平台的，`event_sender` 是这条消息自带的，`api_error:*` 是没查到——不要把未核实的当成确认过的事实
 - 日志读法：`python3 decode_log.py <日志文件>`（离线，把日志行翻成状态摘要；0.3 起认得身份行）
 
+## QQ 适配器 STATUS 里 `lanes:` 那段怎么读（0.16.0 起，60 秒一行）
+
+- 空位一律写 `-`，**不是空串**：看到 `-` 是"这里没有东西在等"，不是"没读到"。
+- 判"某个群那段话晚到"分两支：**`in_slots=8/8` 且 `queued>0` ⇒ 位子不够**（慢在排队，不是那条消息本身）；**没占满而某个会话还在等 ⇒ 它自己那一段慢**（`oldest_wait` 的 `where` 会写 slot／retry／具体阶段名）。
+- **`longest_running` 很大而 `chat_slots` 没满 ⇒ 是一个会话卡住，不是全局慢**，别拿它当全局信号。
+- `stuck` 只由看门狗记（每一步都有自己的超时，触发≈有 bug）；`journal/stuck.jsonl` 一行 stuck、回来一行 ended（带用时）。**卡住那条不丢**：留在 spool，线程回来照常进宿主；一直不回来下次启动补交。
+- 卡住的一多，多出来的会重新占位 ⇒ 会看到 `in_slots` 满＋`queued` 涨＋`stuck` 在跳，**跟"真的很忙"长得一样**；`paused=<原因>` 要到 0.16.1 才有，在那之前这两件只能靠 `stuck` 分。
+- 还有一条关于我自己发布的：**发布当场那道隐私检查跑的是主检出工作树里的 `tools/publication_scan.py`（装上的包里根本没有它）**，所以"我被拦了"不一定是我改的东西有问题——**先看回执的 `content_scan`（两份脚本合并 sha 前 12 位），对得上就说明规则没被人动过**。
+
 ## 重新部署
 
 适配器代码、技能、文档都只通过 `development_publish`（带 `project: "napcat-qq"`）生效：冻结候选、过启动探针、激活快照。`integration_start` 只运行**已发布**的适配器（冻结成 `/app`），未发布的候选改动不会在这里上线，宿主重启后恢复的也是当时已发布的版本。所以换新版本的顺序是：先自检，再 `development_publish`，再让新版本跑起来。两种回合能做的不一样：
@@ -119,7 +128,11 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 - 主人的工作区（有 `integration_test`、`integration_stop`）：`integration_test` 在只读 `/app` 跑 `--selftest --offline` → `development_publish` → `integration_stop` → `integration_start ["python3","/app/adapter.py","--service"]`。
 - 家里（窄授权，只有 `integration_start`、`integration_status`）：把候选的 `integration/` 拷到 `/task` 下，用 `sandbox_run` 跑 `python3 adapter.py --selftest --offline`（拷完逐文件比哈希）→ `development_publish` → 排一次安静重启，宿主重启时恢复的就是刚发布的快照；起来后用 `integration_status` 核版本。
 
-运行时契约只看认知核根目录的 `RUNTIME_API.md`（宿主会往开发目录放一份当时的副本）；通道包里不留副本，发布也不带它。宿主 profile（端点/adapter 配置）变化后，恢复会被要求显式启动一次，返回 `PROFILE_CHANGED_RESTART_REQUIRES_EXPLICIT_START` 时按运维流程重新 start。
+运行时契约只看认知核根目录的 `RUNTIME_API.md`（宿主会往开发目录放一份当时的副本）。
+
+**发布时不用管候选里那份 `RUNTIME_API.md` 副本（旧规矩作废）**：宿主每次装配会把它重抄进通道包候选根，那条路径被仓库 `.gitignore` 排除。发布自己会剔被排除的路径——不复制进源、不进提交、不过扫描，回执里给 `ignored_files` 和一句 `ignored_note`。**别再手工删它，留着读。判"新的发布代码在不在跑"看回执里有没有 `ignored_files` 那格。**
+
+宿主 profile（端点/adapter 配置）变化后，恢复会被要求显式启动一次，返回 `PROFILE_CHANGED_RESTART_REQUIRES_EXPLICIT_START` 时按运维流程重新 start。
 
 ## 版本
 

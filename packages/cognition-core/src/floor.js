@@ -178,6 +178,9 @@ async function run(command, args, options = {}) {
   });
 }
 
+// The publication scan's own time: it reads every changed file, at about ten thousand lines a second.
+const SCAN_MS = 300000;
+
 export class PublicationFloor {
   constructor(config, root = dataRoot(null, config)) {
     this.config = config;
@@ -436,7 +439,8 @@ export class PublicationFloor {
         + '重启前没人在场的自我开发回合不能再往它发布，免得没验过的改动叠上去；重试也一样：这次改动留在候选里，'
         + '这一段做别的项目或只读检查，重启生效、验过以后再发布');
     // The reason becomes the commit message of a public repository: nothing on her list and no number shaped like
-    // a QQ or group number goes into it. Refused before anything is frozen, packed or selected.
+    // a QQ or group number goes into it. Refused before anything is frozen, packed or selected. (Where the publication
+    // scan runs, it checks the reason again with the release's own rules, publicationFindings.)
     const leaks = privateWords.findings(reason, privateWords.load(this.dataRoot));
     if (leaks.length) throw new Error(`PUBLISH_REASON_NAMES_PRIVATE: 发布说明会成为公开仓库的提交信息，${privateWords.describe(leaks)}；`
       + '改写成「某个群」「那一条私聊」这样的说法，细节记在你自己的流水里，再发布；这次什么都没发布');
@@ -454,6 +458,13 @@ export class PublicationFloor {
     const changed =Object.keys(hashes).filter(name => hashes[name] !== project.baseline[name]);
     const deleted = Object.keys(project.baseline).filter(name => !(name in hashes));
     if (!changed.length && !deleted.length) return { state: 'NO_CHANGES', project: project.id };
+    // What she changes becomes part of a public repository: the checks that guard main, refused before anything is
+    // frozen, packed, selected or committed.
+    const scanned = await this.publicationFindings(project, changed, reason);
+    if (scanned.reasonFound.length) throw new Error(`PUBLISH_REASON_NAMES_PRIVATE: 发布说明会成为公开仓库的提交信息，`
+      + `${scanned.reasonFound.join('；')}；改写成「某个群」「那一条私聊」这样的说法再发布；这次什么都没发布`);
+    if (scanned.found.length) throw new Error(`PUBLISH_CONTENT_NAMES_PRIVATE: 候选里改动的文件会进公开仓库：${scanned.found.join('；')}`
+      + '；换成占位（测试夹具里那套 900000xxx 号码、「这个人格」这样的说法）再发布；这次什么都没发布');
     for (const name of [...changed, ...deleted]) {
       if (protectedPaths.has(name)) throw new Error(`DEVELOPMENT_FLOOR_PROTECTED: ${name} 是发布底座的文件，候选里它被改了或删了，`
         + '发布不能替换它；撤销对它的改动（删了的恢复原样）再发布，做不到就写进报告，请 owner 处理');
@@ -494,6 +505,7 @@ export class PublicationFloor {
       artifact: addressed, sha256: hash(bytes), state: same ? 'ACTIVE' : restartRequired ? 'HOST_RESTART_REQUIRED' : 'APPLIED',
       project: project.id, changed_files: changed, deleted_files: deleted, reason,
       receipt_id: 'self-publish-' + identity.slice(0, 32) + '-' + published.replace(/[-:.]/g, ''), origin,
+      content_check: scanned.check,
       published_at: published, boot_probe: prepared.boot_probe };
     // No rollback pointer. The next successful publication advances this record.
     // The last selection that actually ran: the launcher returns to it when this one never starts (§6.4).
@@ -510,6 +522,46 @@ export class PublicationFloor {
     // (`unchanged`); a persona or channel one becomes it in the Host's in-place apply (index.js applyInPlace).
     return { ...value, activated: same, ...(same && { unchanged: true }),
       ...await this.commitPublished(project, [...changed, ...deleted], reason, identity, author) };
+  }
+
+  /** The checks that guard main, on the files her candidate changes and on her reason, before anything is published
+   * (tools/publication_scan.py: the private list in every file and name; the release's personal-data and persona-name
+   * checks in what it ships). Returns { found: her words for each hit (file, line, category, never the word),
+   * reasonFound, check: what the receipt says was checked }. A source outside this Host's checkout, or a checkout
+   * without the scan, is skipped and the receipt says so; a scan that is there but cannot run refuses the publication. */
+  async publicationFindings(project, changed, reason) {
+    const checkout = this.checkout();
+    if (!checkout) return { found: [], reasonFound: [], check: 'skipped: this Host has no checkout' };
+    const relative = path.relative(checkout, path.resolve(project.source));
+    if (relative.startsWith('..') || path.isAbsolute(relative))
+      return { found: [], reasonFound: [], check: 'skipped: the source is not in this Host\'s checkout' };
+    const python = this.config.python ?? this.workerPython, tool = path.join(checkout, 'tools', 'publication_scan.py');
+    const failed = why => new Error(`PUBLISH_CONTENT_CHECK_FAILED: 发布前的隐私检查没跑成（${why}）——不是你改动的问题；`
+      + '这次什么都没发布，重试也一样的话写进报告，请 owner 看');
+    if (!await exists(tool)) return { found: [], reasonFound: [], check: 'skipped: this checkout has no tools/publication_scan.py' };
+    if (!python) throw failed('不知道用哪个 Python 跑它');
+    const request = path.join(this.base, 'development', project.id, 'publication-scan.json');
+    await fs.mkdir(path.dirname(request), { recursive: true });
+    await fs.writeFile(request, JSON.stringify({ root: path.resolve(project.candidate),
+      prefix: relative.split(path.sep).join('/'), paths: changed, reason }));
+    const result = await run(python, [tool, request], { runMs: SCAN_MS,
+      env: { ...process.env, ASUNA_DATA_ROOT: this.dataRoot } });
+    if (result.timed_out) throw failed(`${SCAN_MS / 1000} 秒内没扫完`);
+    if (result.limited) throw failed('它的输出超过了上限');
+    let answer;
+    try { answer = JSON.parse(result.stdout); } catch { answer = undefined; }
+    if (result.exit_code !== 0 || !Array.isArray(answer?.findings))
+      throw failed(String(result.stderr || '').trim().split('\n').pop().slice(0, 200) || '没有回答');
+    const words = { account_id: '有一串像账号或群号的数字', private_address: '有内网地址', denylist: '有不公开清单上的东西',
+      timezone: '有时区名', persona_name: '有人格的名字（这里的文件要跟人格无关）' };
+    const say = item => (String(item.category).startsWith('listed:')
+      ? `有名单上的词（${item.category.slice(7)} 类，名单第 ${item.entry} 行）` : words[item.category] ?? '有不该进公开仓库的东西');
+    const found = answer.findings.map(item => `${item.path ?? '一个文件的名字里'}${item.line ? ` 第 ${item.line} 行` : '（文件名）'}`
+      + say(item));
+    if (answer.total > found.length) found.push(`一共 ${answer.total} 处，上面是前 ${found.length} 处`);
+    return { found, reasonFound: (answer.reason ?? []).map(item => `第 ${item.line} 行${say(item)}`),
+      check: answer.list === 'missing' ? 'checked without a private list (not configured on this machine): the release checks ran, the list did not'
+        : 'checked' };
   }
 
   /** Her publication committed where it was copied, under her name (`author` {name, email}, the character's git name),

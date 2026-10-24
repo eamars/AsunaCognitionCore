@@ -256,6 +256,17 @@ Write the project map (docs/map): what each module owns and what it offers, from
 - def `readme_with`
 - def `main`
 
+## `publication_scan.py`
+
+[tools/publication_scan.py](../../tools/publication_scan.py)
+
+The checks that guard main, run on a candidate before it is published (`PublicationFloor.publish`, packages/cognition-core/src/floor.js), so a publication is refused where it can still be fixed:
+
+- def `shipped` — Whether the release packs this repository path (tests/test_release_scan.py `shipped`).
+- def `scan` — Findings for the changed files: the private list in every file of text up to TEXT_LIMIT and in every name (as tests/test_personal_words.py), and, in what the release ships, the release's checks on its UTF-8 text of any size (as check_staged
+- def `scan_reason` — The publication's reason, which becomes a public commit message: the private list and the release's personal-data checks (not persona names: she may say who she is in her own commit).
+- def `main`
+
 ## `refusal_probe.py`
 
 [tools/refusal_probe.py](../../tools/refusal_probe.py)

@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / 'tools'))
 import release  # noqa: E402
 from asuna import repo_files
 
-RELEASED = ['packages/cognition-core', 'packages/channels/napcat-qq']
+RELEASED = release.RELEASED
 
 
 def shipped():

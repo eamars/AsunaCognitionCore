@@ -28,6 +28,11 @@ ROOT = Path(__file__).resolve().parents[1]
 PACKAGES = ROOT / '.runtime/adr008/packages'
 
 
+# The packages a release ships (the core and the NapCat channel); tests/test_release_scan.py and
+# tools/publication_scan.py check what these pack.
+RELEASED = ['packages/cognition-core', 'packages/channels/napcat-qq']
+
+
 def persona_names():
     names = set()
     for model in ROOT.glob('packages/personas/*/persona-model.json'):

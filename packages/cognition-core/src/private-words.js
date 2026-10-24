@@ -37,8 +37,10 @@ function pattern(word) {
 
 // A QQ number or group number is 5–11 digits; 7–11 standing alone are flagged. Longer runs (restart ids, epoch
 // milliseconds), runs inside a hex token (hashes, short commit ids) and runs followed by a unit (byte counts, times)
-// are not numbers of anyone.
+// are not numbers of anyone; nor are the documentation placeholders the release scan accepts
+// (tools/check_staged_secrets.py PLACEHOLDER: 900000 and one to three digits, the test fixtures' numbers).
 const DIGITS = /(?<![0-9A-Za-z.])(\d{7,11})(?![0-9A-Za-z.])(?!\s*(?:B|KB|KiB|MB|MiB|GB|bytes?|字节|ms|秒|s\b|%))/g;
+const PLACEHOLDER = /^900000\d{1,3}$/;
 
 /** What a text that will be public carries from the list or in number shape: [{line, kind, category?, entry?, digits?}]. */
 export function findings(text, entries) {
@@ -47,7 +49,8 @@ export function findings(text, entries) {
     for (const entry of entries ?? []) {
       if (pattern(entry.word).test(line)) found.push({ line: index + 1, kind: 'listed', category: entry.category, entry: entry.line });
     }
-    for (const match of line.matchAll(DIGITS)) found.push({ line: index + 1, kind: 'number', digits: match[1].length });
+    for (const match of line.matchAll(DIGITS))
+      if (!PLACEHOLDER.test(match[1])) found.push({ line: index + 1, kind: 'number', digits: match[1].length });
   });
   return found;
 }

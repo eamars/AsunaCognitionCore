@@ -60,6 +60,58 @@ test('a publication reason naming a listed word or a QQ-shaped number is refused
   assert.equal(result.state, 'APPLIED', JSON.stringify(result));
 });
 
+test('the checks that guard main run on her candidate before anything is published, in her words', async t => {
+  const { checkoutPython } = await import('../../../tools/asuna-launch.mjs');
+  const python = checkoutPython(path.resolve('.'), process.platform);
+  try { await fs.access(python); } catch { t.skip('no checkout Python to run the scan'); return; }
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/content-check-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  // A checkout whose scan (tools/publication_scan.py, tested on its own) answers what this test tells it to.
+  const checkout = path.join(workspace, 'checkout'), channel = path.join(checkout, 'packages/channels/demo');
+  await fs.mkdir(path.join(checkout, 'tools'), { recursive: true }); await fs.mkdir(channel, { recursive: true });
+  const answer = path.join(workspace, 'answer.json');
+  await fs.writeFile(path.join(checkout, 'tools/publication_scan.py'), 'import json, sys\n'
+    + `answer = json.load(open(${JSON.stringify(answer)}, encoding="utf-8"))\n`
+    + 'request = json.load(open(sys.argv[1], encoding="utf-8"))\n'
+    + 'if answer == "fail":\n    sys.exit("broken scan")\n'
+    + 'assert request["prefix"] == "packages/channels/demo" and request["paths"] == ["notes.md"], request\n'
+    + 'print(json.dumps(answer if isinstance(answer, dict) else {"findings": answer, "total": len(answer)}))\n');
+  await fs.writeFile(path.join(channel, 'package.json'), JSON.stringify({ name: '@asuna/probe-demo', version: '0.0.0', files: ['notes.md'], type: 'module' }));
+  await fs.writeFile(path.join(channel, 'notes.md'), 'Before\n');
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'demo', python, projects: [
+    { id: 'core', root: checkout, format: 'repository' }, { id: 'demo', root: channel, format: 'package' }] });
+  await floor.call('development_write', { path: 'notes.md', text: 'After\n', overwrite: true });
+  const tell = value => fs.writeFile(answer, JSON.stringify(value));
+  await tell([{ path: 'notes.md', line: 2, category: 'listed:group', entry: 4 }, { path: 'notes.md', line: 3, category: 'account_id' },
+    { path: null, line: 0, category: 'persona_name' }]);
+  const refused = await floor.call('development_publish', { reason: '只改 notes' }).then(() => null, error => error);
+  assert.match(String(refused?.message), /PUBLISH_CONTENT_NAMES_PRIVATE/);
+  assert.match(refused.message, /notes\.md 第 2 行有名单上的词（group 类，名单第 4 行）/);
+  assert.match(refused.message, /notes\.md 第 3 行有一串像账号或群号的数字/);
+  assert.match(refused.message, /一个文件的名字里（文件名）有人格的名字/);
+  await tell('fail');
+  assert.match(String(await floor.call('development_publish', { reason: '只改 notes' }).then(() => '', error => error.message)),
+    /PUBLISH_CONTENT_CHECK_FAILED: .*broken scan/);
+  assert.equal(await fs.readFile(path.join(channel, 'notes.md'), 'utf8'), 'Before\n');       // nothing written back
+  assert.equal((await floor.selected()).projects?.demo, undefined);                          // nothing selected
+  await tell({ findings: [{ path: 'notes.md', line: 9, category: 'timezone' }], total: 120 });
+  assert.match(String(await floor.call('development_publish', { reason: '只改 notes' }).then(() => '', error => error.message)),
+    /notes\.md 第 9 行有时区名；一共 120 处，上面是前 1 处/);
+  await tell({ findings: [], total: 0, reason: [{ line: 2, category: 'account_id' }] });
+  assert.match(String(await floor.call('development_publish', { reason: '只改 notes' }).then(() => '', error => error.message)),
+    /PUBLISH_REASON_NAMES_PRIVATE: .*第 2 行有一串像账号或群号的数字/);
+  await tell({ findings: [], total: 0, reason: [], list: 'missing' });
+  const unlisted = await floor.call('development_publish', { reason: '只改 notes' });
+  assert.equal(unlisted.state, 'APPLIED');
+  assert.match(unlisted.content_check, /without a private list/, 'unchecked is said, never read as clean');
+  await floor.call('development_write', { path: 'notes.md', text: 'After again\n', overwrite: true });
+  await tell([]);
+  const clean = await floor.call('development_publish', { reason: '只改 notes' });
+  assert.equal(clean.state, 'APPLIED');
+  assert.equal(clean.content_check, 'checked');
+});
+
 test('a publication whose package is byte for byte the running one is active at once: nothing to load, no restart', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/same-package-probe-'));

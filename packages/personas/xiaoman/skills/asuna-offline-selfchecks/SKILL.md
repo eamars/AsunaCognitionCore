@@ -87,7 +87,7 @@ asuna-usage-readout 与本技能各删 `compile_probe_writable`，asuna-bot-or-p
 
 ## development_publish 撞 EFFECTIVE_PROJECT_CHANGED 的处置
 
-实证：10-24 02:3x（task-55ff3e57… 报告第 5 节，连拒五回才走通）。被点 stale 的通常不是你自己的文件，而是**宿主托管拷贝**（`integration/RUNTIME_API.md`、其他技能的 `skills/*/SKILL.md`）。条件在 `floor.js:287-302`：只有候选里那份**逐字等于基线**，下一次 `development_*` 才会换新源。
+实证：10-24 02:3x（task-55ff3e57… 报告第 5 节，连拒五回才走通）。被点 stale 的通常不是你自己的文件，而是**宿主托管拷贝**（`integration/RUNTIME_API.md`、其他技能的 `skills/*/SKILL.md`）。条件在 `floor.js` 的 `ensure()` 内（现跑 750 行版约在 313–317 行，抛错在 491；**行号会漂，以函数名为准**）：只有候选里那份**逐字等于基线**，下一次 `development_*` 才会换新源。
 
 处置三步：
 1. 从**上一份 frozen 快照**取该文件的基线字节放回候选，让候选那份逐字等于基线；
@@ -393,3 +393,5 @@ v2.9（2026-10-23）：新增「发布前自检（私密词扫描）」一节—
 - 没做成或没验的：「名单读不到」的真实环境没造出来（TEMP 下的副本照样找到了名单，那一例没红，所以只验了桩）；钉只验字面在不在，不验我后来照做没有。
 - 订正两处前提：① 写 (d) 时以为发布闸不扫内容，读 `floor.js` 发现 `publicationFindings` 已会扫本次改动的文件，(d) 与私密词那一节的旧话都已订正；② 交代里的 `floor.js:201-209` 在 10-24 装着的那份里是构造函数几行，选根逻辑在 `effective`／`skillPaths`／`persona`，(a) 改按名字写。
 - 两格只读核：`skill` 工具报 unknown 不会列清单（`packages/skill/tool-skill/src/index.ts` 的 138、145 行抛的是不带清单的一句，实测同样）；缺 `scene_kinds` 不会让发布闸停下（`python/asuna/skills.py` 114–122 行：只有头不合法才 `sys.exit`，缺的只打一行「只在家里可用」，exit 0）。
+
+2026-10-25（加守卫 `guard_effective_project_changed`，本技能自检 48→49；同一趟把「处置」一节里那处按行号写的定位改成按函数名写，行号会漂；不抬 `__version__`，只改本技能这一份文件，读数见当趟行动报告）

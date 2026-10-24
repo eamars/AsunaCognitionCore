@@ -85,6 +85,17 @@ asuna-usage-readout 与本技能各删 `compile_probe_writable`，asuna-bot-or-p
 **判「某个文件有没有进到装给 worker 的包里」，只认 artifact 那串 sha256 和 `.tgz` 的文件清单（这条最重要）。** 发布回执的 `changed_files` 反映的是候选树／冻结快照那一格，不等于包内容：白名单外的路径会出现在 `changed_files` 里，却压根不在 `.tgz` 里。
 来路：10-20 发布清单混进 `.tmp/scan_oldname_rejects.py`；10-22 17:32 又混进 `_tmp_check_runner.py`，第二回是主人看见 `changed_files` 后另花一趟发布清的——实测两笔包 sha 相同（`7f54dbd2af14`）、`.tgz` 里根本没有它。脏的是回执那一格，不是包。
 
+## development_publish 撞 EFFECTIVE_PROJECT_CHANGED 的处置
+
+实证：10-24 02:3x（task-55ff3e57… 报告第 5 节，连拒五回才走通）。被点 stale 的通常不是你自己的文件，而是**宿主托管拷贝**（`integration/RUNTIME_API.md`、其他技能的 `skills/*/SKILL.md`）。条件在 `floor.js:287-302`：只有候选里那份**逐字等于基线**，下一次 `development_*` 才会换新源。
+
+处置三步：
+1. 从**上一份 frozen 快照**取该文件的基线字节放回候选，让候选那份逐字等于基线；
+2. 下一次调用换上新源；
+3. **换源前先比"拷贝与检出谁旧"**——新源会跟着检出的走。10-24 晚那份 napcat SKILL.md 的拷贝比检出旧（缺 0.10.0–0.13.0 四条），先同步成检出版才没被新源吃掉。
+
+反面：只改候选里别的东西想绕过去，错误会一直跟着你，直到拷贝对齐那天。
+
 ## 发布前自检（私密词扫描）
 
 发人格包之前那趟私密词（「别带出去」名单）扫描是我自己跑的，程序不替我跑：`development_publish`（`packages/cognition-core/src/floor.js` 的 `privateName` 那一格）拒的是地板文件、私密**文件名**、persona-model 与技能头部，没有谁拿名单去扫文件内容（10-23 读到的：floor.js 里 grep 不到 `private_words`；10-24 订正：现在有 `publicationFindings`，只扫本次改动的文件，见下面「判据补遗」(d)）；内容级的词闸只有两处——推公开仓库前的 `tests/test_personal_words.py`，和八份技能 `check_skill.py` 里那条泄露扫描（`leak_scan_ran`／`no_listed_words`；本技能这份 2026-10-24 起也有，见下面「判据补遗」(d)）。

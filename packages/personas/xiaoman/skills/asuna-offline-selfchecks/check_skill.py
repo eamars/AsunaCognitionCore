@@ -6,7 +6,7 @@
    换行是 LF（读字节数 CR，文本模式那把尺看不见 CR）；
 2. 指向：正文指向核心技能，并写明两份不一致时按核心技能办；
 3. 增量与「不回潮」：几条增量（挂错项目的红、单个用例文件与 p3 现行跑法、pytest 不收
-   *_cases.py 的盲区、p5b 退役读法、没收录 ≠ 已退役、适配器自检去处、候选根临时脚本落点与包内容判据、发布前私密词扫描的常设判据）都还在；通用离线套件
+   *_cases.py 的盲区、p5b 退役读法、没收录 ≠ 已退役、适配器自检去处、候选根临时脚本落点与包内容判据、发布前私密词扫描的常设判据、发布撞 EFFECTIVE_PROJECT_CHANGED 那一节的字面守卫）都还在；通用离线套件
    的命令清单没有回潮到散文里——反引号里的字面量（旧试用记录引用的命令、错误原文）按引用处理，
    不算回潮；
 4. 反引号仓库路径存在性：正文反引号里形如 tests/...、tools/...、docs/... 的仓库路径逐个查
@@ -71,6 +71,13 @@ PACKAGING_RULES = [
     ("rule_package_content_proof", "只认 artifact 那串 sha256 和 `.tgz` 的文件清单"),
     ("rule_changed_files_is_not_package", "`changed_files` 反映的是候选树／冻结快照那一格，不等于包内容"),
     ("rule_provenance_package_sha", "7f54dbd2af14"),
+]
+
+# 「development_publish 撞 EFFECTIVE_PROJECT_CHANGED 的处置」一节的字面守卫（2026-10-25 主人交代）：
+# 那一节整节只有标题带这个错误名，哪天它被顺手删掉、或标题被改写得认不出，就红这一条——防这节无声消失。
+# 反证：把标题里那个词删掉再跑一次，应当只红 guard_effective_project_changed，别的不连带。
+PUBLISH_CLASH_GUARDS = [
+    ("guard_effective_project_changed", "EFFECTIVE_PROJECT_CHANGED"),
 ]
 
 # 「发布前自检（私密词扫描）」一节的常设判据（2026-10-23，主人 10-14 拍的那条）。
@@ -348,6 +355,10 @@ def main():
 
     # 「候选根」一节的关键串（临时脚本落点、白名单扫描、包内容判据、来路那串包 sha）
     for name, token in PACKAGING_RULES:
+        check(name, token in body, token)
+
+    # 发布撞 EFFECTIVE_PROJECT_CHANGED 那一节的字面守卫（同上：验字面在不在，不验我照做没有）
+    for name, token in PUBLISH_CLASH_GUARDS:
         check(name, token in body, token)
 
     # 「发布前自检（私密词扫描）」一节：一条判据名，缺哪些关键串写进 detail。

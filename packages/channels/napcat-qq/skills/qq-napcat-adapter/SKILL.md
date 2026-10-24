@@ -120,6 +120,7 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 - `stuck` 只由看门狗记（每一步都有自己的超时，触发≈有 bug）；`journal/stuck.jsonl` 一行 stuck、回来一行 ended（带用时）。**卡住那条不丢**：留在 spool，线程回来照常进宿主；一直不回来下次启动补交。
 - 卡住的一多，多出来的会重新占位 ⇒ 会看到 `in_slots` 满＋`queued` 涨＋`stuck` 在跳，**跟"真的很忙"长得一样**；`paused=<原因>` 要到 0.16.1 才有，在那之前这两件只能靠 `stuck` 分。
 - 还有一条关于我自己发布的：**发布当场那道隐私检查跑的是主检出工作树里的 `tools/publication_scan.py`（装上的包里根本没有它）**，所以"我被拦了"不一定是我改的东西有问题——**先看回执的 `content_scan`（两份脚本合并 sha 前 12 位），对得上就说明规则没被人动过**。
+- **我自己在哪儿读**：`.runtime\integration\owner\runs\<run_id>\logs.json` 是 STATUS 行的本体（有界尾部，不是全量）；`integration_status` 返回同一份有界 stdout 和 `run_id`；`.runtime\owner` 侧的 `…\integration\owner\service-data\health.json` 是同一份数据的 JSON 版（5 秒一份，`lanes` 表在这儿：`conversations` 按路由 id 列 `lines`／`oldest_s`／`where`，`in_hand` 一件是 `lane`／`stage`／`conversation`／`item`／`age_s`／`budget_s`／`stuck`）——**目录是 `service-data\`，不是 `data\`**。60 秒一行已实测（相邻两条 03:23:24Z／03:24:24Z）。**`decode_log.py` 还认不出 `lanes:` 段**（它只打 `ws_event`／`ws_api`／`spool_inbound`／`spool_receipts`／`group_routes`），别指望它替我翻这段。
 
 ## 重新部署
 
@@ -130,7 +131,8 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 
 运行时契约只看认知核根目录的 `RUNTIME_API.md`（宿主会往开发目录放一份当时的副本）。
 
-**发布时不用管候选里那份 `RUNTIME_API.md` 副本（旧规矩作废）**：宿主每次装配会把它重抄进通道包候选根，那条路径被仓库 `.gitignore` 排除。发布自己会剔被排除的路径——不复制进源、不进提交、不过扫描，回执里给 `ignored_files` 和一句 `ignored_note`。**别再手工删它，留着读。判"新的发布代码在不在跑"看回执里有没有 `ignored_files` 那格。**
+**发布时不用管候选里那份 `RUNTIME_API.md` 副本（旧规矩作废）**：宿主每次装配会把它重抄进通道包候选根，那条路径被仓库 `.gitignore` 排除。发布自己会剔被排除的路径——不复制进源、不进提交、不过扫描，回执里给 `ignored_files` 和一句 `ignored_note`。**别再手工删它，留着读。**
+**判"新的发布代码在跑"看回执的 `content_scan`**（实测 16:28 那笔：`content_scan: 8b6ebfdf2f01`，我拿 `publication_scan.py`＋`check_staged_secrets.py` 自己算了一遍 sha256 前 12 位，对上 ⇒ 那次跑的规则没被人动过）。**别拿 `ignored_files` 当判据**：技能／文档这类改动是**当场就地生效**，那一路上**回执里没有 `ignored_files`／`ignored_note` 这两格**（16:28 实测：不是空数组，是没有这格）——**剔除照做**（同一笔里 `changed_files` 只有我改的那一个文件、`baseline.json` 55 个键里没有那条路径、提交 `c1a02c45` 只有 1 个文件）。**没出现 ≠ 没生效，先想这一路给不给这格。**
 
 宿主 profile（端点/adapter 配置）变化后，恢复会被要求显式启动一次，返回 `PROFILE_CHANGED_RESTART_REQUIRES_EXPLICIT_START` 时按运维流程重新 start。
 

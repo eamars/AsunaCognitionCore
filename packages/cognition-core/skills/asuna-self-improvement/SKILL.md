@@ -64,6 +64,14 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 - 这些覆盖不到真 Mongo、DSH 原生定时和界面实点；那些由主人在宿主侧跑 `tests/test_*.py`。
 - 已知坑：离线夹具把真文件复制进临时包；真文件新加一条同包 import，夹具的复制清单也要加，否则只会红在 `ModuleNotFoundError`。
 
+### 私密词有两道闸，别混（2026-10-25 本机实测）
+
+- **闸一管「发布说明本身」**：`development_publish` 当场扫我写的那段 reason——`packages/cognition-core/src/private-words.js` 的 `findings`，由 `floor.js` 在冻结候选之前调；命中就抛 `PUBLISH_REASON_NAMES_PRIVATE`，**这次什么都没发布**（候选里的改动留着，改写重发就行）。报错只报位数不报那串数字本身，也不印名单上的词：`packages/cognition-core/test/publication.test.js:55` 断言的就是号码不许进回执（同一个用例还断言词本身不许进）。同一份 reason 在 `publicationFindings`（`tools/publication_scan.py`）里会按发布版规则再扫一遍，两道都在冻结之前。
+- **闸二管「整仓已提交的文件」**：`tests/test_personal_words.py::test_no_committed_file_names_a_real_person_or_place` 扫仓库里每一份文本文件（在认知核候选里跑时，`packages/personas/`、`packages/channels/` 那些只读镜像也一起扫），命中只报**文件、行号、类别、名单行号**，不印词。名单没配上时它 skip 并写出找过的路径——skip 不等于干净。这条闸红的是主干里早就提交下来的东西，不一定今天谁带进去的：先 `git log` 那一行看它哪天进的，再决定改不改。
+- **数字形状第一条（今天量到的）**：一串**裸着的 7–11 位数字**算账号形状；**紧跟字母／数字／点的不算**，所以 sha 前缀里的数字段安全（`8b6ebfdf2f01` 整体是一个 token）；**超过 11 位的整串也不算**（重启 id、epoch 毫秒）。判据在 `private-words.js` 的 `DIGITS`，`PLACEHOLDER` 放行测试夹具那套 `900000` 加 1–3 位。
+- **数字形状第二条（今天量到的）**：**后面带单位的放过**（`B`／`KB`／`KiB`／`MB`／`MiB`／`GB`／`byte(s)`／`字节`／`ms`／`秒`／`s`／`%`，单位前有没有空格都算带单位；单位表是大小写敏感的，小写 `b` 不在表里，但数字紧跟字母本来就切不成一串，所以数字后面直接黏一个小写 b 也放过）；**带千分位的放过**（逗号把 `2,227,501` 切成 1 位＋3 位＋3 位，凑不满 7 位）。
+- ⇒ **发布说明里写字节数一律带单位或加千分位**。来路：本机 2026-10-25 那趟人格包（默认项目）的发布（08:33 生效那一版），第一次的 reason 里两个字节数都是裸的，被闸一当场拦下——报错四处命中，就是那两个数各命中两次（reason 里各出现过两次；「四处」这一格是主人读完那趟回报给我的，我这一趟没复现那次失败，只用 `node` 拿 `private-words.js` 的 `findings` 复算了上面那两条形状规则）。同一趟改动落在默认那个人格包项目，它的 `skills/` 不在 release 打包清单里，所以发布闸对人格包只跑名单与内网地址那两样，不跑账号形状——账号形状这条只红 core 的文件。
+
 ## 发布
 
 - `development_publish` 冻结候选，跑启动探针（JS 真正 import 一次插件入口，Python 能解析，人格包和通道包的结构能读），通过才选中。失败会原样返回诊断，候选保留，修了再发。
@@ -106,6 +114,8 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 来路：2026-10-20 12:13 那笔 `ede4e2b0` 是发布自动提交，父提交 `f9bc5f20`（`git merge-base --is-ancestor f9bc5f20 ede4e2b0` → rc=0），`--stat` 显示这一笔改的是 `packages/personas/<name>/persona-model.json`（1 增 1 删），而它自己的提交正文写着「没动 packages/personas/<name>/ 镜像」——正文与 `--stat` 打架的就是这一格。发布任务：`task-2a3c346e608f1837268c9a1421d9b66d`。
 
 ## 版本
+
+v3（2026-10-25）：「发布前自检」里加「私密词有两道闸，别混」一小节：闸一＝发布说明在 `development_publish` 当场被扫（`private-words.js`／`floor.js`，报 `PUBLISH_REASON_NAMES_PRIVATE`，回执只报位数）；闸二＝整仓已提交文件由 `tests/test_personal_words.py` 扫（只报类别与名单行号）。再写死两条量到的数字形状规则（裸 7–11 位算账号形状、紧跟字母／数字／点或带单位／带千分位的放过），推论是发布说明里字节数一律带单位或加千分位。旧内容一条没删。
 
 v2（写就 2026-10-20 17:27 UTC+13）：加「读自己发布产生的 git 提交」一节——只信 `--stat`；判在不在跑用 `git merge-base --is-ancestor` ＋ 在运行时那份文件里 grep 那一笔才带进来的新符号；再写清重启回执里「not behind」／「本机检出有 origin/main 没有的提交」该怎么读。来路是 2026-10-20 那笔发布自动提交 `ede4e2b0`（发布任务 `task-2a3c346e608f1837268c9a1421d9b66d`）：提交正文与 `--stat` 打架；「not behind」这一格容易被读成「没装」，这里写死该怎么读。旧内容一条没删。
 

@@ -751,6 +751,12 @@ def main():
     stale = [item for item in STALE_CLAIMS if item in prose]
     check("no_stale_text_only_claim", not stale, ",".join(stale))
 
+    # frontmatter 的 description 也扫（2026-10-25 补）：那一行每一拍进技能目录、被当触发依据读，
+    # 正文改对了、那一行还窄着就是天天拿旧判断挑技能。判法与正文同一口径：反引号里的引用剥掉再判。
+    stale_desc = [item for item in STALE_CLAIMS if item in PROSE.sub(" ", desc)]
+    check("no_stale_claim_in_frontmatter", not stale_desc, ",".join(stale_desc))
+
+
     # 行号锚点：反引号里的 `文件.md:123`／`文件.py:45-60` 一律红（判法照 asuna-usage-readout 那份，
     # 没有白名单）。代码位置写 `文件:函数名`——行号每次有人改那个文件就漂，名字不会。
     line_anchor_hits = [hit.group(0) for hit in LINE_ANCHOR.finditer(body)]
@@ -821,6 +827,7 @@ def main():
           "群聊生图上限那条（节标题／最多 4 张／到顶默认不发／唯一的例外是 10:59 版）、"
           "已有图进清单那条（第二条通路／剥 PNG 文字块的 sha 与字节／账面看不见那两格）、"
           "三处同步那三条（图从哪来的数／失败码按来源前缀／归属节的指向）、"
+          "退役那族连 frontmatter 的 description 一起扫（no_stale_claim_in_frontmatter）、"
           "历史段、群发前自检四条要点、归属都在%s。" % (total, total, leak_note + anchor_note))
     return 0
 

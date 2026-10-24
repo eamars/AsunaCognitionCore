@@ -564,3 +564,45 @@ test('her publication is committed where it lands, under her name, and only its 
   assert.equal(git('diff', '--cached', '--name-only').trim(), 'other.txt');        // someone else's staged work, untouched
   assert.equal(git('status', '--porcelain', '--', 'packages').trim(), '');
 });
+
+test('a path the repository ignores is neither published nor committed, and the receipt names it', async t => {
+  const workspace = await fs.mkdtemp(path.join((await import('node:os')).tmpdir(), 'asuna-ignored-probe-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  const repo = path.join(workspace, 'repo'), source = path.join(repo, 'packages/channel'), hidden = path.join(repo, 'private/persona');
+  for (const root of [source, hidden]) {
+    await fs.mkdir(root, { recursive: true });
+    await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', files: ['integration'], type: 'module' }));
+  }
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=Owner', '-c', 'user.email=owner@example.com', ...args], { cwd: repo, encoding: 'utf8' });
+  git('init', '-q', '-b', 'main');
+  await fs.writeFile(path.join(repo, '.gitignore'), 'packages/*/integration/MANUAL.md\nprivate/\n');
+  git('add', '-A'); git('commit', '-q', '-m', 'start');
+  const floor = new PublicationFloor({ dataRoot: path.join(workspace, 'data'), defaultProject: 'channel',
+    projects: [{ id: 'channel', root: source, format: 'package' }, { id: 'hidden', root: hidden, format: 'package' }] });
+  const her = { name: 'Character', email: 'character@example.com' };
+  // A copy the Host writes into her candidate, next to a change of hers: one `git add` used to refuse both.
+  await floor.call('development_write', { path: 'integration/MANUAL.md', text: 'the manual\n' });
+  await floor.call('development_write', { path: 'integration/a.py', text: 'x = 1\n' });
+  const result = await floor.call('development_publish', { reason: '改一行' }, {}, her);
+  assert.ok(result.commit, JSON.stringify(result));
+  assert.deepEqual(result.changed_files, ['integration/a.py']);
+  assert.deepEqual(result.ignored_files, ['integration/MANUAL.md']);
+  assert.equal(git('show', '--name-only', '--format=', 'HEAD').trim(), 'packages/channel/integration/a.py');
+  assert.equal(await fs.stat(path.join(source, 'integration/MANUAL.md')).catch(() => null), null, 'not copied into the source');
+  assert.equal(git('status', '--porcelain').trim(), '');
+  // Only the ignored copy is left: nothing to publish, and it says why.
+  const again = await floor.call('development_publish', { reason: 'again' }, {}, her);
+  assert.equal(again.state, 'NO_CHANGES'); assert.deepEqual(again.ignored_files, ['integration/MANUAL.md']);
+  // A source in an ignored folder is not git's: all of it publishes, nothing is committed.
+  await floor.call('development_write', { project: 'hidden', path: 'integration/MANUAL.md', text: 'kept here\n' });
+  const hiddenResult = await floor.call('development_publish', { project: 'hidden', reason: '私下的' }, {}, her);
+  assert.deepEqual(hiddenResult.changed_files, ['integration/MANUAL.md']);
+  assert.equal(hiddenResult.ignored_files, undefined); assert.equal(hiddenResult.commit, undefined);
+  assert.equal(await fs.readFile(path.join(hidden, 'integration/MANUAL.md'), 'utf8'), 'kept here\n');
+  // A commit that fails leaves the index as it was, so nobody else's commit takes her paths in.
+  await fs.writeFile(path.join(repo, '.git/hooks/pre-commit'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  await floor.call('development_write', { path: 'integration/a.py', text: 'x = 2\n', overwrite: true });
+  const refused = await floor.call('development_publish', { reason: '再改' }, {}, her);
+  assert.ok(refused.commit_error !== undefined && refused.commit === undefined, JSON.stringify(refused));
+  assert.equal(git('diff', '--cached', '--name-only').trim(), '');
+});

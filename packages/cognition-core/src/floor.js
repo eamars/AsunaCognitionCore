@@ -161,8 +161,9 @@ function commandEnvironment(candidate, temp) {
 }
 async function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const { runMs, ...spawnOptions } = options;
-    const child = spawn(command, args, { windowsHide: true, ...spawnOptions, stdio: ['ignore', 'pipe', 'pipe'] });
+    const { runMs, input, ...spawnOptions } = options;
+    const child = spawn(command, args, { windowsHide: true, ...spawnOptions, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
+    if (input !== undefined) child.stdin.end(input);
     let stdout = '', stderr = '', limited = false;
     const collect = (key, data) => {
       if (stdout.length + stderr.length + data.length > 262144) { limited = true; child.kill(); return; }
@@ -180,6 +181,17 @@ async function run(command, args, options = {}) {
 
 // The publication scan's own time: it reads every changed file, at about ten thousand lines a second.
 const SCAN_MS = 300000;
+
+/** The git checkout that keeps a project's source: { prefix, git } (prefix: the source inside it, '' or ending in /),
+ * or undefined when git does not keep it (no repository, or the source lies in an ignored folder). */
+async function repositoryOf(source) {
+  const top = await run('git', ['rev-parse', '--show-toplevel'], { cwd: source });
+  if (top.exit_code !== 0) return undefined;
+  const root = top.stdout.trim(), git = (args, env = {}) => run('git', args, { cwd: root, env: { ...process.env, ...env } });
+  const inside = path.relative(root, path.resolve(source)).split(path.sep).join('/');
+  if (inside && (await git(['check-ignore', '-q', '--', inside])).exit_code === 0) return undefined;
+  return { prefix: inside ? inside + '/' : '', git, root };
+}
 
 export class PublicationFloor {
   constructor(config, root = dataRoot(null, config)) {
@@ -455,9 +467,15 @@ export class PublicationFloor {
       }
       hashes[name] = hash(bytes);
     }
-    const changed =Object.keys(hashes).filter(name => hashes[name] !== project.baseline[name]);
-    const deleted = Object.keys(project.baseline).filter(name => !(name in hashes));
-    if (!changed.length && !deleted.length) return { state: 'NO_CHANGES', project: project.id };
+    const touched = Object.keys(hashes).filter(name => hashes[name] !== project.baseline[name]);
+    const gone = Object.keys(project.baseline).filter(name => !(name in hashes));
+    // What the source's repository ignores is not the project (a copy the Host writes into her candidate, generated
+    // files): it is neither published nor committed, so what lands in the source is what is committed.
+    const ignored = new Set(await this.ignoredPaths(project, [...touched, ...gone]));
+    const changed = touched.filter(name => !ignored.has(name)), deleted = gone.filter(name => !ignored.has(name));
+    const left = ignored.size ? { ignored_files: [...ignored], ignored_note: '这几个路径被仓库的 .gitignore 排除，不算项目的文件：'
+      + '没有发布，也不进提交，留在你的候选里' } : {};
+    if (!changed.length && !deleted.length) return { state: 'NO_CHANGES', project: project.id, ...left };
     // What she changes becomes part of a public repository: the checks that guard main, refused before anything is
     // frozen, packed, selected or committed.
     const scanned = await this.publicationFindings(project, changed, reason);
@@ -493,7 +511,7 @@ export class PublicationFloor {
     const addressed = path.join(destination, packageInfo.filename.replace('.tgz', '-' + hash(bytes).slice(0, 12) + '.tgz'));
     await fs.copyFile(artifact, addressed);
     // A channel plugin's python/ is imported once by the worker, like the plugin's own JavaScript.
-    const restartRequired = [...changed, ...deleted].some(name => /(^|\/)(package(?:-lock)?\.json|cordis\.patch\.yml|uv\.lock|pyproject\.toml)$/.test(name)
+    const restartRequired = [...touched, ...gone].some(name => /(^|\/)(package(?:-lock)?\.json|cordis\.patch\.yml|uv\.lock|pyproject\.toml)$/.test(name)
       || /\.(?:js|mjs|ts|tsx|jsx)$/.test(name) || project.format === 'package' && name.startsWith('python/'));
     const selected = await this.selected();
     // A package byte for byte the one running (her change lay outside its `files`, docs/ for one) has nothing new to
@@ -517,11 +535,25 @@ export class PublicationFloor {
     for (const name of deleted) await fs.unlink(path.join(project.source, name));
     for (const name of changed) { const target = path.join(project.source, name);
       await fs.mkdir(path.dirname(target), { recursive: true }); await fs.copyFile(current.get(name), target); }
+    // An ignored path keeps the baseline the source gave it: the source did not take her copy.
+    for (const name of ignored) { if (name in project.baseline) hashes[name] = project.baseline[name]; else delete hashes[name]; }
     await atomic(project.baselineFile, hashes);
     // `activated`: this publication is what runs now. A package byte for byte the running one is, with nothing swapped
     // (`unchanged`); a persona or channel one becomes it in the Host's in-place apply (index.js applyInPlace).
-    return { ...value, activated: same, ...(same && { unchanged: true }),
+    return { ...value, activated: same, ...(same && { unchanged: true }), ...left,
       ...await this.commitPublished(project, [...changed, ...deleted], reason, identity, author) };
+  }
+
+  /** The names (relative to the project) that the repository keeping its source ignores; none where git does not keep
+   * it. A tracked file is never ignored. NUL-separated both ways, so any file name comes back as it is. */
+  async ignoredPaths(project, names) {
+    const repository = names.length ? await repositoryOf(project.source).catch(() => undefined) : undefined;
+    if (!repository) return [];
+    const asked = await run('git', ['check-ignore', '--stdin', '-z'], { cwd: repository.root,
+      input: names.map(name => repository.prefix + name + '\0').join('') });
+    // 0: some are ignored, 1: none; anything else is git failing, and the commit then says what went wrong.
+    if (asked.exit_code !== 0) return [];
+    return asked.stdout.split('\0').filter(Boolean).map(name => name.slice(repository.prefix.length));
   }
 
   /** The checks that guard main, on the files her candidate changes and on her reason, before anything is published
@@ -567,22 +599,23 @@ export class PublicationFloor {
   /** Her publication committed where it was copied, under her name (`author` {name, email}, the character's git name),
    * so the checkout holds no change of hers waiting for someone to commit it. Only the published paths are committed
    * (others' staged work stays as it was); a source git does not track is left alone. A commit that fails is reported
-   * in the receipt and never fails the publication, which is already selected. */
+   * in the receipt and never fails the publication, which is already selected; her paths are unstaged again, so
+   * nobody else's commit takes them in. */
   async commitPublished(project, names, reason, identity, author) {
     try {
-      const top = await run('git', ['rev-parse', '--show-toplevel'], { cwd: project.source });
-      if (top.exit_code !== 0) return {};
-      const root = top.stdout.trim(), git = (args, env = {}) => run('git', args, { cwd: root, env: { ...process.env, ...env } });
-      const inside = path.relative(root, path.resolve(project.source)).split(path.sep).join('/');
-      if (inside && (await git(['check-ignore', '-q', '--', inside])).exit_code === 0) return {};
-      const paths = names.map(name => (inside ? inside + '/' : '') + name);
+      const repository = await repositoryOf(project.source);
+      if (!repository) return {};
+      const { git } = repository, paths = names.map(name => repository.prefix + name);
       const who = author?.name && author?.email ? { GIT_AUTHOR_NAME: author.name, GIT_AUTHOR_EMAIL: author.email,
         GIT_COMMITTER_NAME: author.name, GIT_COMMITTER_EMAIL: author.email } : {};
       const message = (reason.trim() || 'Self-development publication')
         + `\n\nPublished from her candidate (${project.id} ${identity.slice(0, 12)}).`;
       const added = await git(['add', '-A', '--', ...paths]);
       const made = added.exit_code === 0 ? await git(['commit', '-q', '--only', '-m', message, '--', ...paths], who) : added;
-      if (made.exit_code !== 0) return { commit_error: (made.stderr || made.stdout).trim().slice(0, 300) };
+      if (made.exit_code !== 0) {
+        await git(['reset', '-q', '--', ...paths]);
+        return { commit_error: (made.stderr || made.stdout).trim().slice(0, 300) };
+      }
       return { commit: (await git(['rev-parse', '--short', 'HEAD'])).stdout.trim() };
     } catch (error) { return { commit_error: String(error.message ?? error).slice(0, 300) }; }
   }

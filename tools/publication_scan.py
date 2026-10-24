@@ -1,7 +1,8 @@
 """The checks that guard main, run on a candidate before it is published (`PublicationFloor.publish`,
 packages/cognition-core/src/floor.js), so a publication is refused where it can still be fixed:
 
-- every file: no word of the deployment's private list (as tests/test_personal_words.py, `asuna.private_words`);
+- every file: no word of the deployment's private list (as tests/test_personal_words.py, `asuna.private_words`) and
+  no private address (check_staged_secrets.py `private_address`, as tests/test_release_scan.py);
 - a file the release ships (tools/release.py `RELEASED`: each package's `files`, and src/asuna): no personal data
   (tools/check_staged_secrets.py --personal: account numbers, private addresses, the denylist, time zones, a persona's
   name in the core) and no persona's name (tools/release.py `persona_names`), as tests/test_release_scan.py.
@@ -76,8 +77,8 @@ def _checks():
 
 
 def scan(root, prefix, paths, checks=None):
-    """Findings for the changed files: the private list in every file of text up to TEXT_LIMIT and in every name (as
-    tests/test_personal_words.py), and, in what the release ships, the release's checks on its UTF-8 text of any size
+    """Findings for the changed files: the private list and private addresses in every file of text up to TEXT_LIMIT
+    and in every name (as tests/test_personal_words.py and tests/test_release_scan.py), and, in what the release ships, the release's checks on its UTF-8 text of any size
     (as check_staged_secrets.py --personal) and the persona names (as tests/test_release_scan.py)."""
     secrets, allow, deny, entries, names = checks or _checks()
     findings = []
@@ -89,6 +90,8 @@ def scan(root, prefix, paths, checks=None):
         def listed(text, line):
             for entry, category in private_words.find(entries or [], text):
                 found.add((line, 'listed:' + category, entry))
+            if not ships and secrets.private_address(text, allow):     # what ships gets it with the release's checks
+                found.add((line, 'private_address', None))
 
         def released(text, line):
             for _number, category in secrets.scan_lines(text, key, allow, deny):

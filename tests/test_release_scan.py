@@ -1,7 +1,8 @@
 """What a release ships passes the release's own checks every day, not only on release night.
 
 tools/release.py refuses a tarball with a personal-data hit or a persona's name in it; these tests run the same
-checks over the tracked files that the released packages (the core and the NapCat channel) are packed from.
+checks over the tracked files that the released packages (the core and the NapCat channel) are packed from. A private
+address is checked in every committed file, shipped or not.
 """
 import json
 import re
@@ -11,6 +12,7 @@ import sys
 from asuna.config import ROOT
 
 sys.path.insert(0, str(ROOT / 'tools'))
+import check_staged_secrets  # noqa: E402
 import release  # noqa: E402
 from asuna import repo_files
 
@@ -46,3 +48,27 @@ def test_the_released_files_name_no_persona():
         found += ['%s:%d' % (path, number) for number, line in enumerate(text.splitlines(), 1)
                   if any(name in line for name in names)]
     assert not found, found
+
+
+def committed_lines(path):
+    """The lines of a committed file as the release scan reads them: none for a lock file or a binary one."""
+    if path.rsplit('/', 1)[-1] in check_staged_secrets.LOCKFILES:
+        return []
+    try:
+        data = (ROOT / path).read_bytes()
+    except OSError:
+        return []
+    return [] if b'\0' in data else data.decode('utf-8', 'replace').split('\n')
+
+
+def test_no_committed_file_holds_a_private_address():
+    allow = set(check_staged_secrets.load_list('ASUNA_PERSONAL_ALLOWLIST', ROOT / 'tools' / 'personal_scan_allow.txt'))
+    found = []
+    for path in repo_files.files(ROOT):
+        if check_staged_secrets.SKIP.search(path):
+            continue
+        if check_staged_secrets.private_address(path, allow):
+            found.append(path + ':0')
+        found += ['%s:%d' % (path, number) for number, line in enumerate(committed_lines(path), 1)
+                  if check_staged_secrets.private_address(line, allow)]
+    assert not found, 'path:line (0 is the name) %s' % found

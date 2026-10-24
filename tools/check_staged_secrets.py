@@ -10,7 +10,9 @@ Hits are deduplicated per path, line and category. The last line is ``personal-s
 
 Categories:
   account_id       >=7 consecutive ASCII digits in content or file name.
-  private_address  RFC 1918 dotted quads (10/8, 172.16/12, 192.168/16), word-bounded, each octet 0-255.
+  private_address  RFC 1918 dotted quads (10/8, 172.16/12, 192.168/16), word-bounded, each octet 0-255. Also checked
+                   in every committed file, shipped or not (`private_address`: tests/test_release_scan.py,
+                   tools/publication_scan.py).
   denylist         entries of <data>/private/personal-denylist.txt (<data>: ASUNA_DATA_ROOT, else .runtime;
                    override: ASUNA_PERSONAL_DENYLIST); one
                    case-insensitive literal per line, ``re:`` prefix for a regex, ``#`` comments. Absent file:
@@ -125,12 +127,16 @@ def account_id(line,allow):
         return True
     return False
 
+def private_address(line,allow):
+    """A private address in this line (the marker and the allow list exempt it): checked in every committed file."""
+    return OK_MARK not in line and any(m.group() not in allow for m in PRIVATE.finditer(line))
+
 def scan_lines(text,key,allow,deny):
     persona=key.startswith(CORE)
     for no,line in enumerate(text.split('\n'),1):
         if OK_MARK in line:continue
         if account_id(line,allow):yield no,'account_id'
-        if any(m.group() not in allow for m in PRIVATE.finditer(line)):yield no,'private_address'
+        if private_address(line,allow):yield no,'private_address'
         if any(p.search(line) for p in deny):yield no,'denylist'
         if any(m.group() not in allow for m in TZ.finditer(line)):yield no,'timezone'
         if persona and PERSONA.search(line):yield no,'persona_name'

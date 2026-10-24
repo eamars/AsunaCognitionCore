@@ -1,5 +1,6 @@
-"""The publication scan (tools/publication_scan.py) runs the checks that guard main on a candidate: the private list in
-every file, the release's personal-data and persona-name checks in what the release ships, a file's name too; it
+"""The publication scan (tools/publication_scan.py) runs the checks that guard main on a candidate: the private list and
+private addresses in every file, the release's personal-data and persona-name checks in what the release ships, a
+file's name too; it
 accepts what main accepts (the allow list, the marker, the fixtures' placeholders, lock files, unshipped paths) and
 never prints a word or a number."""
 import json
@@ -51,13 +52,16 @@ def test_a_channel_candidate_is_checked_as_the_release_checks_it(lists):
             'group = 900000001',                        # 6 a fixtures' placeholder
             'qq = 1234567890  # personal-scan: ok',     # 7 the marker
         ]) + '\n',
-        'test/b.py': 'speaker = %r\nin 示例交流群\n' % persona,   # not shipped: the private list only
+        # not shipped: the private list and private addresses only (the address is put together here, so this file
+        # holds none)
+        'test/b.py': 'speaker = %r\nin 示例交流群\nhost = "%s"\n' % (persona, '192.168.' + '0.20'),
         'uv.lock': 'hash = 12345678901234567890\n',            # a lock file: lines not scanned
     })
     found = publication_scan.scan(str(root), 'packages/channels/napcat-qq',
                                   ['integration/a.py', 'test/b.py', 'uv.lock'])
     assert categories(found) == [('integration/a.py', 2, 'listed:group'), ('integration/a.py', 3, 'account_id'),
-                                 ('integration/a.py', 4, 'persona_name'), ('test/b.py', 2, 'listed:group')], found
+                                 ('integration/a.py', 4, 'persona_name'), ('test/b.py', 2, 'listed:group'),
+                                 ('test/b.py', 3, 'private_address')], found
     assert [item.get('entry') for item in found if item['category'].startswith('listed')] == [2, 2]
 
 

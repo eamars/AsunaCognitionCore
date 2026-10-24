@@ -51,6 +51,15 @@ SKILL.md 的行号与那一行原文）。那份文档的找法不绑死环境�
 pyproject.toml）取根下那份，再退 core 候选根那份；两处都没有就报 UNCHECKED（没查），
 不算过也不判红。这两条不进仓库共用测试：共用测试一红会卡住改文档节名的人（Claude 与主人 10-20 定的）。
 
+2026-10-24 v11 再补一节判据（「本机已有那张图怎么进可发清单」）：第二条通路 register_imported_image 带
+scope_key 那一格在不在（scope 字面值从 `scenes` 读、`source` 前缀决定这行算谁的、清单新的在前最多 6 张、
+群那条从最新 200 行里筛、超 8 MiB 拒绝）、登记剥 PNG 文字块这条代价在不在（同一张图像素没动但 sha 与 size
+都变：`d1aa3735…` 2,227,501 B → `748e7ce1…` 2,225,102 B，差 2,399 B ⇒ sha 不能当「与原件一模一样」的证据），
+以及两条账面判据（`read_image` 按路径看过 ≠ 图在可发清单里；等不到 ack 那一支不进 `settle()` ⇒ 库里 UNKNOWN、
+`sends.jsonl` 连那一行都不落，判到没到只有平台侧只读回读或对方本人；文本那格 DELIVERED 推不出图那格到了——
+库里是两条独立消息行）。「只有 render_svg 这一条路」是 10-21 想法本里的待提案、本技能正文从没写过（本轮扫过
+候选整棵、origin/main 那份文件与 `git log -S`，三处 0 命中）——它进 STALE_CLAIMS：不带反引号写回散文才红。
+
 不联网、不调生图服务、不生成图、不写 Mongo、不发 QQ。
 
 用法：
@@ -268,6 +277,7 @@ SECTIONS = [
     "### 往群里发图之前的自检",   # 步骤 8 下的子节；同样追加在末尾，老编号不动
     "## 改图与 `generate_image`（2026-10-16 实测）",   # 2026-10-16 追加在末尾，老编号不动
     "## 群聊生图上限（2026-10-16 主人提、小满定标准）",   # 2026-10-16 v8 追加在末尾，老编号不动
+    "## 本机已有那张图怎么进可发清单（2026-10-24 实测）",   # 2026-10-24 v11 追加在末尾，老编号不动
 ]
 
 # 归属：本机页面那次核验是 Claude 做的，主人那晚在睡。写回「主人核过」就是假事实。
@@ -289,6 +299,10 @@ STALE_CLAIMS = [
     "那一轮调用 attach_image",
     # 2026-10-16：改图路线已上线（list_routes 11 条、含 edit）；反引号外裸写回这句（当现行事实）才红
     "九条路线全是 t2i",
+    # 2026-10-24：「只有 render_svg 这一条路」是 10-21 想法本里的待提案，本技能正文从没写过；
+    # 反引号外裸写回散文（当现行事实）才红，反引号里的引用不算。
+    "只有 render_svg 这一条路",
+    "只有 render_svg 这条路",
 ]
 
 # 反引号里的字面量是引用（示例、错误码、历史段与被改坏副本里引用的旧句子），只在散文里判红。
@@ -373,6 +387,64 @@ def cap_override_slice(cap_section):
         if line.startswith("**唯一的例外**"):
             taking = True
         elif taking and not line.strip():
+            break
+        if taking:
+            out.append(line)
+    return "\n".join(out)
+
+
+REGISTER_HEADING = "## 本机已有那张图怎么进可发清单（2026-10-24 实测）"
+
+# 这一节教「本机／GridFS 已有的那张图怎么进某个指定场景的可发清单」（2026-10-24 实测走通）。
+# 字面量只在它自己那一节切片里查：那条路走没走通，看的是这一节有没有写清入口函数、scope 的字面值从哪读、
+# `source` 前缀决定这行算谁的、清单怎么排、登记会剥 PNG 文字块（同一张图像素没动但 sha 与 size 都变：
+# d1aa3735… 2,227,501 B → 748e7ce1… 2,225,102 B，差 2,399 B），以及两条账面判据（read_image 按路径看过
+# ≠ 图在清单里；等不到 ack 那一支不进 settle() ⇒ sends.jsonl 不落那一行，只剩 late_acks.jsonl 与平台侧回读）。
+REGISTER_SECTION = [
+    ("reg_svg_scope_tool", "render_svg"),
+    ("reg_svg_only_png", "只能出 PNG"),
+    ("reg_svg_rgba_grows", "RGBA"),
+    ("reg_route_function", "register_imported_image"),
+    ("reg_route_scope_arg", "scope_key"),
+    ("reg_route_wants_bytes", "字节"),
+    ("reg_scope_from_db", "scenes"),
+    ("reg_scope_shape", "scene:qq:<账号>:dm:<对方>"),
+    ("reg_scope_unknown", "ARTIFACT_SCOPE_UNKNOWN"),
+    ("reg_new_row_id", "blob-"),
+    ("reg_no_dedup", "put_once"),
+    ("reg_source_prefix_decides", "integration:"),
+    ("reg_group_refuses_other_source", "ATTACHMENT_NOT_HER_OWN"),
+    ("reg_offer_six", "最多 6 张"),
+    ("reg_group_list_200", "200 行"),
+    ("reg_over_limit", "ATTACHMENT_OVER_LIMIT"),
+    ("reg_cap_8mib", "8 MiB"),
+    ("reg_jpeg_enters_list", "JPEG"),
+    ("reg_strip_sha_new", "748e7ce1"),
+    ("reg_strip_sha_old", "d1aa3735"),
+    ("reg_strip_size_new", "2,225,102"),
+    ("reg_strip_size_old", "2,227,501"),
+    ("reg_strip_delta", "2,399"),
+    ("reg_sha_not_identity", "别拿 sha 当"),
+    ("reg_path_image_function", "path_image"),
+    ("reg_path_source_prefix", "file:"),
+    ("reg_seen_not_offered", "ATTACH_ARTIFACT_NOT_IN_CONTEXT"),
+    ("reg_delivery_unknown", "delivery_state=UNKNOWN"),
+    ("reg_unknown_retcode", "retcode 1200"),
+    ("reg_timeout_reason", "platform_send_timeout"),
+    ("reg_sends_journal_missing", "sends.jsonl"),
+    ("reg_late_ack_journal", "late_acks.jsonl"),
+    ("reg_platform_readback", "get_friend_msg_history"),
+    ("reg_two_independent_rows", "两条独立"),
+]
+
+
+def register_section_slice(body):
+    """「## 本机已有那张图…」标题下、下一个二级标题之前的正文（2026-10-24 起的第二条通路一节）。"""
+    out, taking = [], False
+    for line in body.splitlines():
+        if line.startswith("## 本机已有那张图"):
+            taking = True
+        elif taking and line.startswith("## "):
             break
         if taking:
             out.append(line)
@@ -634,6 +706,18 @@ def main():
     stale_cap = [item for item in CAP_OVERRIDE_STALE if item in cap_section]
     check("cap_section_no_stale_count_line", not stale_cap, ",".join(stale_cap))
 
+    # 本机已有那张图怎么进可发清单（2026-10-24 v11）：节标题在 SECTIONS 里查（section_19），
+    # 这里查节内硬指标。标题被删 → 切片为空 → 下面几条一起红：切片为空不等于查过，不会绿着放过。
+    reg_section = register_section_slice(body)
+    for name, token in REGISTER_SECTION:
+        check(name, token in reg_section,
+              "「%s」不在「本机已有那张图怎么进可发清单」这一节里（切片 %d 字）"
+              % (token, len(reg_section)))
+    # 那一节是讲「怎么把已有图送进清单」的，出现盘符开头的绝对路径就是越界（包要发出去）
+    check("register_no_absolute_image_path", not ABSOLUTE_IMAGE.search(reg_section),
+          "「本机已有那张图…」那一节里有盘符开头的绝对路径")
+
+
     check("display_relative_markdown_image", bool(RELATIVE_IMAGE.search(body)))
     check("display_no_absolute_image_path", not ABSOLUTE_IMAGE.search(body))
     check("selfcheck_documented", "check_skill.py" in body)
@@ -718,6 +802,7 @@ def main():
     print("%d/%d 通过：技能文件、工具名、发图那条路（QQ speak 的 picture／别处 attach_image）的清单与失败码、"
           "改图那条路（source_image／IMAGE_WORKFLOW_* 即时拒绝码／归属／剥文字块）、"
           "群聊生图上限那条（节标题／最多 4 张／到顶默认不发／唯一的例外是 10:59 版）、"
+          "已有图进清单那条（第二条通路／剥 PNG 文字块的 sha 与字节／账面看不见那两格）、"
           "历史段、群发前自检四条要点、归属都在%s。" % (total, total, leak_note + anchor_note))
     return 0
 

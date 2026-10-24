@@ -1,6 +1,6 @@
 ---
 name: asuna-image-generation-and-display
-description: 一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（2026-10-16 实测 list_routes 共 11 条：qwen-image-2.1-edit 必填 source_image、九条可选、t2i 不收原图，配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发，2026-10-16 小满定标准）；QQ（napcat）那一轮看上下文 image_artifacts_from_program，要发图就用 speak 的 picture 那一项（artifact_id 照抄清单、可以不带话、正文不写路径/文件名/见图）；没声明 reply parts 的对话仍调用 attach_image 工具（一回合至多一张、再调用换成新的那张），对 owner_private + dm 路由和她在的群开放（群里只发她自己生成并导入的图、全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（列着它的对话；工具错误、同回合可改）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
+description: 一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore；盘上已有的图另有一条：家里 Python 里用 register_imported_image 带 scope_key 登记进指定场景，代价是剥 PNG 文字块），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（2026-10-16 实测 list_routes 共 11 条：qwen-image-2.1-edit 必填 source_image、九条可选、t2i 不收原图，配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发，2026-10-16 小满定标准）；QQ（napcat）那一轮看上下文 image_artifacts_from_program，要发图就用 speak 的 picture 那一项（artifact_id 照抄清单、可以不带话、正文不写路径/文件名/见图）；没声明 reply parts 的对话仍调用 attach_image 工具（一回合至多一张、再调用换成新的那张），对 owner_private + dm 路由和她在的群开放（群里只发她自己生成并导入的图、全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（列着它的对话；工具错误、同回合可改）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
 scene_kinds: [home, group]
 ---
 
@@ -382,6 +382,53 @@ against a real client」。第一次真发就是实测；在那之前别说「QQ
 
 **交回时必带**：抽了几张、每张过没过哪一道、发的是哪张（或为什么一张都不发）。
 
+## 本机已有那张图怎么进可发清单（2026-10-24 实测）
+
+来路先钉清：**「家里只有 `render_svg` 这一条路能给出 `integration:` 来源」这句话从来没进过本技能正文**——它是 10-21 我记在想法本里的一条待补提案（`idea-87e23dc6…`），正文当时只写了「群里只发自己做的图」。10-24 我把第二条路走通了（把一张 10-14 的旧图补进主人那条 QQ 私聊）。这一节写两条路各自的范围、一条代价、两条判据。
+
+### 第一条 `render_svg`：管的是「我现写的 SVG」，不是盘上已有那张
+- 输入只有**本任务工作区里的 `.svg`**（别的扩展名直接 `INVALID_SVG_PATH`）；宿主用 resvg 渲成 PNG，写进 images/ 下（不覆盖已有文件），并登记成我自己的图，来源是 `integration:svg:<路径>` —— 群那一拍因此认它。SVG 外链的图不会加载，要带就内嵌 data: URI。
+- 两条实测代价（10-21 的读数，这一族没重测过）：输出是 RGBA PNG、**字节会涨**（1,027,746→1,278,948；753,038→1,000,777）；**只能出 PNG**——盘上那张 JPEG 想进清单，它帮不上。
+- 要 1:1 保像素，就把成品以 data: URI 原样嵌进 SVG 再渲（10-21 那样逐像素核到 0 差），代价还是上面那两条。
+
+### 第二条：`register_imported_image` 带 scope_key，把已有字节登记进指定那个场景
+这不是工具，是家里 Python 里的一次函数调用（10-24 实测的形状）：
+
+```python
+from asuna.state import Store                      # 家里沙箱里 asuna 能 import（跑的是主检出那份）
+store = Store({"mongo_uri": os.environ["ASUNA_MONGO_URI"], "database": os.environ["ASUNA_DATABASE"],
+               "allowed_databases": [os.environ["ASUNA_DATABASE"]]})
+outbound_media.register_imported_image(store, scope_key, data, source="integration:…")
+```
+
+- 第二个位置参数就是 scope，`data` 要的是**字节**：盘上的文件读成 bytes；GridFS 里已有的那份自己走 `pymongo` / `GridFSBucket` 取 —— `dbread` 取不回字节原样（它把 bytes 摊成 str 给人看，10-24 实测九段拼回去 6,392,442 字节 ≠ 原件 2,227,501）。脚本里不写地址：URI 与库名由宿主给家里那条命令。
+- **scope 的字面值去库里读，别拼**：取 `scenes` 那一行的 `scope_key`（形状 `scene:qq:<账号>:dm:<对方>`，＝ `scene:` ＋ `scene_id`）。scope 不在 `scenes` 里就是 `registered: false / reason=ARTIFACT_SCOPE_UNKNOWN`，重试也一样。
+- 出来是一条**新**的 `blob-…` 行（`kind=image / state=DONE / storage=gridfs / created_at=now`）。底层 `put()` 每次给新 key、**不去重**（去重只在 `put_once`）⇒ 同一张图登记两次＝两行两个 id，要重登记先查一遍库里有没有（10-24 那份脚本先查同 sha 才写）。
+- **`source` 决定这行算谁的**：以 `integration:` 开头才算我自己做的，主人私聊和群两边都进得了清单；不传或传别的，只有那个 scope（和同一主人的另一个私人入口）能引，拿去群里会被 `ATTACHMENT_NOT_HER_OWN` 挡。10-24 我是照抄旧行的 `source_ids[0]`。
+- 清单怎么排（10-24 照核侧源码读通）：**新的在前、一轮最多 6 张**。主人自己的私聊那一拍按 scope 取（本场景 ＋ 配置联动的另一个本人 dm）；群那一拍只列 `integration:` 那批，从**最新 200 行 image** 里筛。所以「被挤掉排名」只在群那条清单上成立，私聊那条看的是 scope 对不对；`created_at=now` 让它排第 1，也顺手把最旧的挤出那 6 张 ⇒ **发之前别先画一张新的**。
+- 上限 `0 < size ≤ 8 MiB`，超了回执 `registered: false / reason=ATTACHMENT_OVER_LIMIT`（文件照旧在工作区）；魔数认 png／jpeg／webp／gif ⇒ **JPEG 走这条进得了清单**；字节根本不是图就返回 `None` —— 那是「没东西可登记」，不是失败。
+
+### 代价：登记会剥掉 PNG 的文字块，sha 跟着变
+- 像素和其余块一个字节不动，但 `tEXt`／`iTXt`／`zTXt` 被剥 ⇒ **sha 变了、size 少了**。10-24 实测：`d1aa3735…`（2,227,501 B，身上带一个 key=`prompt` 的 tEXt，2,387 B）→ `748e7ce1…`（2,225,102 B，少 2,399 B ＝ 那一块 ＋ 12 字节块框架）。我这一轮拿那份源件按同一条规则自己剥了一遍，剥出来的 sha 与库里那行逐位相同。
+- ⇒ **别拿 sha 当「跟原件一模一样」的证据**，也别据此说「图被换过」。要证内容没动：按块比（除文字块外逐块一致）＋ `read_image` 亲眼看过画面。
+- 登记时剥一次，真发出去时 `accept_artifact` 还会再剥一次：存进去时带着文字块也带不出去（口径见「改图与 `generate_image`」那条）。
+
+### 判据：`read_image` 按路径看过 ≠ 它在可发清单里
+- 按**路径**读盘上的图时，`vision.py` 的 `path_image` 也会登记一条，但来源前缀是 `file:<路径>`、scope 是**那个任务自己的** scope —— 它不算我做的图。
+- 10-23 13:22 现场（当日记录里的说法，这一轮没重跑）：那一拍 `read_image` 真看了图，同一拍 speak 的 picture 仍被退「picture 不在 `image_artifacts_from_program` 里」——`ATTACH_ARTIFACT_NOT_IN_CONTEXT` 只认**这一轮列出的那些 id**。
+- 所以要发哪张，就照抄**这一轮**清单里的 `artifact_id`；「我刚才看过它」不是依据，上一轮的 id 也可能已经掉出那 6 张。
+
+### 判据：图发出去没有，账面上可能永远看不见
+- 适配器**等不到自己那声 ack** 那一支会先按 `unknown` 交回就直接 return，**不进 `settle()`**：库里那行留 `delivery_state=UNKNOWN / platform_message_id=null / delivery_basis=unknown`，**`sends.jsonl` 连这一行都不落**。NapCat 事后回的那格（`retcode 1200 / reason=platform_send_timeout`）走的是迟到回执那条：`late_acks.jsonl` 里会留下一条带 publication 与 attempt 的记录，并把库里那行的回执补成 1200，`platform_message_id` 仍然是 null。契约照旧：`unknown` 不重发、不读回。
+- 10-24 21:30 那趟实测：`sends.jsonl` 全文 4,354 行里只有**文本那格**那一行（retcode 0、带平台号），图那格在里面 0 命中，只在 `late_acks.jsonl` 留下一条 retcode 1200。
+- ⇒ 判「图到底进没进平台」只有两条路：**平台侧只读回读**（私聊 `get_friend_msg_history`），或**对方本人看见**。今晚那张的平台号与 file_size 只有回读拿得到 —— 这两个值我库里和适配器 journal 里都 0 命中。
+- **别拿同一次出声里文本那格 DELIVERED 去推定图那格到了**：QQ 的 reply parts 把图和话拆成**两条独立的消息行**（同一次出声的两个 segment，各有各的 `delivery_state`、各有各的平台号）。今晚正是文本 DELIVERED、图 UNKNOWN 并存。
+
+### 这一节里没重测、没核到的
+- `render_svg` 那两个字节数是 10-21 的读数，10-24 与这一轮都没重测。
+- 「`file:` 来源拿去群里会被 `ATTACHMENT_NOT_HER_OWN` 挡」：这一轮只核到源码那一半（`path_image` 写 `file:` 前缀、群里只列 `integration:`），没重跑一次群回合现场。
+- 今晚那趟没验「真那一轮」的清单（是独立进程按同一份代码＋同一份配置复算的 `offer()`）；图那格最后是发出去了、平台侧回读对上，才算成立。
+
 ## 边界（硬）
 
 - 生图、导入只在本机 owner 任务里做；本机私聊用报告里的相对路径图，QQ 私聊用 speak 的 picture（列着 attach_image 的会话用它）。
@@ -444,6 +491,8 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
   所以「图没发出去」有好几种形状，看红在哪一层。
 
 ## 版本
+
+v11（2026-10-24 夜里自我开发）：补一节「本机已有那张图怎么进可发清单」。① 第二条通路：`register_imported_image` 带 scope_key（家里 Python 里的一次调用、要的是**字节**、scope 照抄 `scenes` 那一行的 `scope_key`、`source` 以 `integration:` 开头才算我自己做的）；`render_svg` 那条按它自己的范围重写（只管我现写的 SVG：出 RGBA PNG、字节会涨、只能出 PNG）。② 代价写死：登记会剥 PNG 文字块 ⇒ 同一张图 sha 与 size 都变（`d1aa3735…` 2,227,501 B → `748e7ce1…` 2,225,102 B，差 2,399 B ＝ 一个 `prompt` tEXt 块 ＋ 12 字节框架），**sha 不能当「与原件一模一样」的证据**。③ 两条判据：`read_image` 按路径看过不等于图在可发清单里（那条登记写 `file:` 前缀、进的是那个任务自己的 scope）；图发出去没有可能账面上永远看不见（等不到 ack 那一支不进 `settle()` ⇒ 库里 `delivery_state=UNKNOWN`、平台号 null、`sends.jsonl` 连那一行都不落；判到没到只有平台侧只读回读或对方本人；文本那格 DELIVERED 推不出图那格到了——两者是两条独立消息行）。来路是 10-21 想法本那条提案（`idea-87e23dc6…`）：**它一直只是待办，本技能正文以前没写过「只有 render_svg」那句**——这一轮扫了候选整棵、`origin/main` 那份文件与 `git log -S` 三处确认（0 命中）。frontmatter description 补半句第二条通路。`check_skill.py` 同步：新节进 SECTIONS、节内 34 条内容判据（剥文字块的 sha 与字节数、清单排序、`sends.jsonl` 与 `late_acks.jsonl` 那对账本、两条独立消息行），外加一条过期说法判据（那句「只有 render_svg」不带反引号写回散文就红）。不抬 `__version__`（纯文档＋自检）。
 
 v10（2026-10-20）：只加两条锚点判据，正文口径一条没动。`check_skill.py` 新增 `no_line_anchors`
 （反引号里的行号锚一律红，判法照 `asuna-usage-readout` 那份搬、没有白名单）与
@@ -512,6 +561,14 @@ v1（2026-10-04）：首次记录。步骤、错误码、大小与路由事实�
 未收录：`vision.image_dirs` 配好后的本地视觉复核；QQ 真客户端对 `base64://` 的渲染结果；第一次真发的回执。
 
 ## 试用记录
+
+2026-10-24（v11 这一轮，夜里自我开发）：补上「本机已有那张图怎么进可发清单」一节，`check_skill.py` 同步加判据（158 → 194，跑过全绿）。核实与来路分开记：
+
+- **这一轮我自己复算过的**：① 剥 PNG 文字块这一格——拿那张源件（2,227,501 B、sha `d1aa3735…`、身上带一个 key=`prompt` 的 tEXt 2,387 B）按同一条剥块规则自己剥了一遍，得 2,225,102 B、sha `748e7ce1…`，与库里那行逐位相同；② 登记与清单的形状是照 `outbound_media.py` 现读的（`produced()` 认的是来源前缀 `integration:`、一轮最多 6 张、群那条从最新 200 行 image 里筛、清单按 `created_at` 倒序、超 8 MiB 拒登）；③ 账面那两格是读库和适配器 journal 读出来的：同一次出声里文本那格 DELIVERED 并带平台号，图那格 `delivery_state=UNKNOWN`、平台号 null、retcode 1200／`platform_send_timeout`；`sends.jsonl` 全文 4,354 行只有文本那一行，图那格只出现在 `late_acks.jsonl`（retcode 1200，21:30:35）。
+- **沿用当晚记录、这一轮没重跑的**：`read_image` 按路径看过仍被退（10-23 13:22 的字面）；`render_svg` 那两个字节数（10-21）；那条提案（`idea-87e23dc6…`）里其余没写的部分。
+- **一处更正**：交代叫我照 `scenes.scene_id` 抄 scope，实际那条线要的是 `scenes.scope_key`（＝ `scene:` ＋ `scene_id`）；正文与自检都按后者写，正文只给形状不给号码。
+- **反证**（副本改坏再跑同一脚本）：删掉新节标题 → 35 条红（`section_19` ＋ 节内 34 条；切片为空不绿着放过）；标题只改坏后半段、开头那几字留着 → 只红 `section_19`（切片仍非空）；把「2,399」写成「2399」→ 只红 `reg_strip_delta`；把那句历史说法的反引号去掉写成裸散文 → 只红 `no_stale_text_only_claim`；对照组 194/194、exit 0。
+- **这一趟没做**：没跑真群回合、没验「真那一轮」的清单、没为这一趟发任何消息；`__version__` 没抬、没 push、没动 core 与适配器。
 
 2026-10-16（v8 这一轮，**没生成图、没发 QQ、没改 core 与适配器；`check_skill.py` 同改，补上这一节的判据与泄露检查**）：
 

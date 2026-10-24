@@ -163,9 +163,15 @@ the machine can't do it; it is never a count per voice and never looks like a vo
 ### 5.5 Watchdog (rule 8)
 
 Each worker records its item and when it started. A watchdog thread checks every few seconds: an item past its
-budget (the sum of its steps' deadlines plus a margin) is marked stuck, its worker is abandoned and replaced, and the
-item goes the way of 5.4. A Python thread can't be killed, so every call keeps its own socket timeout; the watchdog
-covers what slipped past one.
+budget (the sum of its steps' deadlines plus a margin) is marked stuck — one log line, one fault — and its place in
+the pool is freed, so the other conversations keep their workers. The item itself is held, not set aside or tried
+again, while its thread lives: its conversation waits until the thread returns (owner, 2026-10-24). A Python thread
+can't be killed, so a stuck thread may still finish; setting its item aside would let an inbound line arrive after
+the lines behind it, or mark failed a line that QQ shows. Every call keeps its own socket timeout, so every step
+already ends (2026-10-24: an inbound try within its post and 210 s per voice, a chat send within about 100 s, a file
+within about 2 minutes per 4 MiB piece); the watchdog covers what slipped past one, which only a bug can be.
+Budgets: an inbound try 60 s plus 210 s per voice, a chat send 150 s (below the Host's 300 s hold), a file 120 s per
+piece plus 60 s, a receipt 15 s.
 
 ### 5.6 Faults she should know about: persistent, not random (owner)
 
@@ -297,7 +303,11 @@ line is in the adapter's journal meanwhile, so nothing waits on step 1).
    full test run: a Host `sys.path` holding the package folder put `asuna/queue.py` in front of the standard library's
    `queue` in the child (now `-P` and only site-packages). Not built: stage times of a video (no evidence record
    there), a size-based deadline (fixed deadlines first).
-5. The watchdog and visible state.
+5. The watchdog and visible state. Designed 2026-10-24 (owner chose "free the slot, hold the item", §5.5): the
+   adapter's STATUS line gains one block (inbound lanes busy, the oldest waiting line's age, the longest in flight,
+   chat sends busy, the bulk upload's age and size, receipts waiting); the health snapshot the full table per lane and
+   per conversation; each line's journal entry its stage times; the watchdog marks and frees as §5.5 says. No Host
+   change, no change to her context.
 6. The digest in her night stage, with test 10 — talked through with her before it reaches her.
 
 ## 8. Rejected

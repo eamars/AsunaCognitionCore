@@ -410,7 +410,7 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 - 上限 `0 < size ≤ 8 MiB`，超了回执 `registered: false / reason=ATTACHMENT_OVER_LIMIT`（文件照旧在工作区）；魔数认 png／jpeg／webp／gif ⇒ **JPEG 走这条进得了清单**；字节根本不是图就返回 `None` —— 那是「没东西可登记」，不是失败。
 
 ### 代价：登记会剥掉 PNG 的文字块，sha 跟着变
-- 像素和其余块一个字节不动，但 `tEXt`／`iTXt`／`zTXt` 被剥 ⇒ **sha 变了、size 少了**。10-24 实测：`d1aa3735…`（2,227,501 B，身上带一个 key=`prompt` 的 tEXt，2,387 B）→ `748e7ce1…`（2,225,102 B，少 2,399 B ＝ 那一块 ＋ 12 字节块框架）。我这一轮拿那份源件按同一条规则自己剥了一遍，剥出来的 sha 与库里那行逐位相同。
+- 像素和其余块一个字节不动，但 `tEXt`／`iTXt`／`zTXt` 被剥 ⇒ **sha 变了、size 少了**。10-24 机器写过的是三格：源件 2,227,501 B、sha `d1aa3735…`（stdout 字面 `BYTES 2227501`），身上那个 key=`prompt` 的 tEXt 块长 2,387 B（`TEXT_CHUNKS [('tEXt', 2387)]`），剥完 2,225,102 B、sha `748e7ce1…`（`WITHOUT_TEXT_BYTES 2225102`）。**少的 2,399 B 机器没写过，是我自己减出来的**：`2227501 − 2225102 = 2399 = 2387 + 12`，那 12 是那一块的块头／块尾开销（4 字节长度＋4 字节类型＋4 字节 CRC）。我这一轮拿那份源件按同一条规则自己剥了一遍，剥出来的 sha 与库里那行逐位相同。
 - ⇒ **别拿 sha 当「跟原件一模一样」的证据**，也别据此说「图被换过」。要证内容没动：按块比（除文字块外逐块一致）＋ `read_image` 亲眼看过画面。
 - 登记时剥一次，真发出去时 `accept_artifact` 还会再剥一次：存进去时带着文字块也带不出去（口径见「改图与 `generate_image`」那条）。
 

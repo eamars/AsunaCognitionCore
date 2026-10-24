@@ -307,7 +307,28 @@ line is in the adapter's journal meanwhile, so nothing waits on step 1).
    adapter's STATUS line gains one block (inbound lanes busy, the oldest waiting line's age, the longest in flight,
    chat sends busy, the bulk upload's age and size, receipts waiting); the health snapshot the full table per lane and
    per conversation; each line's journal entry its stage times; the watchdog marks and frees as §5.5 says. No Host
-   change, no change to her context.
+   change, no change to her context. Her asks (agent line, 15:2x): tell "places full, conversations queued" from
+   "one conversation slow on its own"; name the oldest item's conversation and stage; seconds with units; `stuck` on
+   the STATUS line itself; keys fixed, new ones only at the end. **Built** (napcat-qq 0.16.0): `qqadapter/watch.py`
+   (`Watch`: `begin`/`stage`/`end` per worker thread, `check` marks once, `stuck.jsonl` rows `stuck` and `ended`;
+   `inbound_budget`, `duration`), `outbound.file_budget` (the sum of a file's own deadlines), the service's
+   `_inbound_busy`/`_chat_busy` (a stuck item's place is free; its conversation stays held by `_lanes` and the
+   Host's chat hold), a bulk lane replaced by generation when its file is stuck (the old one ends after it),
+   receipts marked only (no send waits for them), the pass in the health loop (`watchdog`), `lanes_state` in
+   `health.json`, `lanes_status` at the end of STATUS, `stages` in `inbound_sent.jsonl` and `sends.jsonl`. Self-test
+   `_check_watchdog` (9 checks: a full pool shows `queued`; a stuck inbound line frees its place, B goes in, A's next
+   line waits and A is posted once in order; STATUS names the stuck; a stuck send frees its place and is sent once;
+   a stuck file gets a new bulk lane; durations; the file budget). Each place-freeing undone makes its check fail.
+   Independent review (2026-10-24), fixed: the Host's chat hold ends after its 300 s lease, so a later line of a
+   stuck send's conversation could be claimed and overtake it (now a send waits for an earlier send of its
+   conversation still on its way; check `watchdog_stuck_send_keeps_its_conversation_order`, red without the wait);
+   a shared hang would have turned freed places into endless claims (now at most a pool's worth of stuck items give
+   their places up, one replacement bulk lane at most); a line not yet read by the dispatcher had no conversation and
+   could crash STATUS (now `-`, sorted by age, STATUS never raises); `begin` outside its `try` could leak a place or
+   end the bulk lane (now inside, sizes coerced); nested forwards had no bound on their fetches (now
+   `forward.MAX_FETCHES` = 6 per message, the inbound base 120 s); a lane whose line was stuck kept its place on
+   return (now it ends after that line); with a Host that names no lanes nothing gives its place up and a file on
+   the chat lane gets a file's budget; a failing log in the watchdog pass could skip the bulk replacement. 12 checks.
 6. The digest in her night stage, with test 10 — talked through with her before it reaches her.
 
 ## 8. Rejected

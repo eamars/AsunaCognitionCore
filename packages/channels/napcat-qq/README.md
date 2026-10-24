@@ -86,8 +86,29 @@ with Core (`registerChannel`).
   and `qq-private` (appid 1406) with the seconds each still lasts. Core signs a stored link again with them before
   fetching it. The keys are never logged or written to disk; the log says which names were posted, for how long,
   and which action answered.
+- Every item in hand (an inbound line's try, a chat send, a file, a pass of receipts) has a budget: the sum of its
+  own steps' deadlines plus a margin (an inbound try 120 s, 3 s per person it mentions and 210 s per voice; a chat
+  send 150 s; a file 120 s per 4 MiB piece plus its joining and QQ's taking it plus 60 s; 15 s per receipt), so only
+  a bug reaches it. Past it the item is marked stuck — a `STUCK` log line, a lane fault (lane, the stage it is in,
+  `stuck`), a row in `journal/stuck.jsonl` — and gives its place up, so other conversations keep their lanes; a
+  stuck file gets a new bulk lane (one at most). At most a pool's worth of stuck items give their places up; more stuck
+  at once is a shared cause, and those hold their places. The item itself is held, never posted or sent twice: its
+  conversation waits for it (a later send there waits for it too, after the Core's hold has ended), a lane whose line
+  was stuck ends after that line, and `STUCK_ENDED` with a second row tells when it came back. The check runs with the
+  health snapshot. A message's forwards are read with at most 6 fetches, nested ones included; a forward past that
+  keeps its placeholder.
+- The `STATUS` line (every minute) ends with a `lanes:` block, keys in this order: `in_slots` (inbound places taken /
+  places), `queued` (conversations waiting for a place), `oldest_wait` (the oldest line waiting, its conversation and
+  where it is: `slot`, `retry` or its stage), `longest_running` (the oldest inbound try in hand, its conversation and
+  stage), `chat_slots`, `longest_send` (publication and stage), `bulk` (the file's time, size and stage, or `idle`),
+  `receipts` and `oldest_receipt`, `stuck` (how many since start) and `last_stuck` (lane/item/stage). Places full
+  with conversations queued means too few places; places free while one conversation waits means that
+  conversation is slow on its own. `health.json` `lanes` has the whole table: every conversation with lines waiting
+  (how many, the oldest's age, where), every item in hand with its stage, age and budget. Each line's journal row
+  carries its stage times: `inbound_sent.jsonl` `stages` (peer, mentions, forward, role, voice, host_in) and
+  `since_spooled_s`; `sends.jsonl` `stages` (fetch, send, verify, receipt).
 - Each lane fault — a line set aside (`inbound_failed`, `inbound_rejected`, unreadable), a receipt refused or given
-  up, an exception in a send — is counted by signature (lane, stage, error class; never the line) and hour, kept in
+  up, an exception in a send, an item stuck past its budget — is counted by signature (lane, stage, error class; never the line) and hour, kept in
   `faults_pending.json` until Core takes it, and posted to Core's `faults` endpoint every 5 minutes (a minute after a
   failed post). An error is counted by its code alone, never its words. A batch Core refuses as it is goes to
   `journal/faults_rejected.jsonl` and is dropped, so it never holds the counts after it.

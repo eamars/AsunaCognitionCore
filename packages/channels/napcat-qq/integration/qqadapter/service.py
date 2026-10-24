@@ -24,11 +24,14 @@ from .hostapi import CAPABILITIES, HostApi, file_capability
 from .journal import Counters, Journal
 from .onebot import OneBot
 from .outbound import Outbound
+from . import outbound as outbound_mod
 from .peers import PeerDirectory
 from .selfrole import SelfRoles
 from . import voice as voice_mod
 from . import faults as faults_mod
 from .faults import Faults
+from . import watch as watch_mod
+from .watch import Watch, duration
 
 STATUS_EVERY = 60
 HEALTH_EVERY = 5
@@ -66,6 +69,30 @@ def _echo_shape(event):
     return (",".join(types) or "-"), (",".join(ats) or "-")
 
 
+def spooled_at(path):
+    """When a spool file was written, from its name (milliseconds first, journal.spool_add); None if not there."""
+    stamp = os.path.basename(path)[:13]
+    return int(stamp) / 1000.0 if stamp.isdigit() else None
+
+
+def since_spooled(path, now=None):
+    at = spooled_at(path)
+    return None if at is None else round((now or time.time()) - at, 1)
+
+
+def _size(value):
+    """A file's size as a number of bytes (0 when it is not one)."""
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _target(item):
+    target = item.get("target") if isinstance(item.get("target"), dict) else {}
+    return "%s:%s" % (target.get("type"), target.get("id"))
+
+
 class Adapter:
     def __init__(self, cfg, data_dir, claim_wait=20, ack_timeout=15.0, verify=True, verify_delay=0.8,
                  peer_mode="full"):
@@ -96,6 +123,9 @@ class Adapter:
         # the lane faults, by signature and hour, posted to the host every few minutes (faults.py, ADR-095)
         self.faults = Faults(data_dir, self.host, self.counters, log=self.log, journal=self.journal)
         self.out.faults = self.faults
+        # who is doing what, and the watchdog over it (watch.py, ADR-095 §5.5, §5.7)
+        self.watch = Watch(self.journal, self.faults, self.counters, log=lambda line: self.log(line))
+        self.out.watch = self.watch
         # her own mute in each admitted group: notices about her, refused sends, a look at start (mutes.py)
         self.mutes = mutes_mod.Mutes(cfg, data_dir, self.onebot, self.host, self.counters, self.members.groups,
                                      log=self.log)
@@ -121,6 +151,9 @@ class Adapter:
         self._sends_lock = threading.Lock()
         self._send_done = threading.Event()
         self._bulk = None
+        self._bulk_generation = 0     # a bulk lane whose file is stuck is replaced; the old one ends after its file
+        self._send_targets = {}       # chat send thread -> its conversation (a send waits for an earlier one there)
+        self._host_lanes = True       # False with a host that names no lanes (one send at a time)
         self.lane_batch = LANE_BATCH
         self.inbound_lanes = INBOUND_LANES
         self._last_status = 0.0
@@ -250,7 +283,7 @@ class Adapter:
         with self._lanes_lock:
             # A conversation that never had a lane, or had one longest ago, first; among equals the oldest line first.
             for route in sorted(routes, key=lambda route: self._lane_started.get(route, 0.0)):
-                if route in self._lanes or len(self._lanes) >= self.inbound_lanes:
+                if route in self._lanes or self._inbound_busy() >= self.inbound_lanes:
                     continue
                 lane = threading.Thread(target=self._lane, args=(route, routes[route][:self.lane_batch]),
                                         name="inbound-" + route[:40], daemon=True)
@@ -261,6 +294,12 @@ class Adapter:
             lane.start()
         return len(started)
 
+    def _inbound_busy(self):
+        """Inbound lanes holding a place: a lane whose line is stuck has given its place up (ADR-095 §5.5), at most
+        `inbound_lanes` of them; more stuck at once is a shared cause, and those hold their places again."""
+        stuck = sum(1 for route in list(self._lanes) if self.watch.conversation_stuck("inbound", route))
+        return len(self._lanes) - min(stuck, self.inbound_lanes)
+
     def _lane(self, route, paths):
         """One conversation's lines, in order: each is tried until it is settled (in, set aside or gone); the next
         waits for it. After LANE_BATCH lines the lane ends and the dispatcher starts it again behind the
@@ -268,10 +307,16 @@ class Adapter:
         try:
             for path in paths:
                 while True:
+                    was_stuck = False
                     try:
                         done = self._submit_one(path)
                     except Exception as exc:
                         done = self._lane_error(route, path, exc)
+                    finally:
+                        was_stuck = self.watch.thread_stuck(threading.get_ident())
+                        self.watch.end()
+                    if was_stuck:
+                        return            # its place went to another lane; the rest of its lines wait in the spool
                     if done:
                         break
                     if self.stop.is_set():
@@ -313,6 +358,9 @@ class Adapter:
             self.faults.add("inbound", "spool", "unreadable")
             return True
         envelope = blob["envelope"]
+        voices = 0 if blob.get("prepared") else len(voice_mod.segments(envelope))
+        self.watch.begin("inbound", envelope.get("route_id"), envelope.get("event_id"),
+                         watch_mod.inbound_budget(envelope, voices))
         if not blob.get("prepared"):
             self._prepare(envelope)
             # A retry posts what was prepared: the platform is not asked again (a voice it has cleared is not
@@ -321,6 +369,7 @@ class Adapter:
             if not voice_mod.host_refused(envelope):
                 self.journal.write_json(path, dict(blob, envelope=envelope, prepared=True))
         started = time.monotonic()
+        self.watch.stage("host_in")
         res = self._post(envelope)
         where = "event_id=%s route=%s" % (envelope.get("event_id"), envelope.get("route_id"))
         if res.kind in ("accepted", "duplicate", "ok"):
@@ -330,7 +379,8 @@ class Adapter:
             self.journal.append("inbound_sent.jsonl",
                                 {"ts": utc_stamp(), "event_id": envelope.get("event_id"),
                                  "route_id": envelope.get("route_id"), "result": result,
-                                 "episode_id": obj.get("episode_id"), "http": res.code})
+                                 "episode_id": obj.get("episode_id"), "http": res.code,
+                                 "stages": self.watch.stages(), "since_spooled_s": since_spooled(path)})
             self.journal.spool_remove(path)
             self._settled(path)
             self._last_in = time.monotonic()
@@ -413,6 +463,7 @@ class Adapter:
         whatever is already known.
         """
         if self.peers is not None:
+            self.watch.stage("peer")
             try:
                 profile = self.peers.observe(envelope, self.onebot)
             except Exception as exc:
@@ -428,6 +479,7 @@ class Adapter:
                             profile["role"], profile["source"], profile["verified"],
                             profile["seen_messages"], ",".join(profile.get("changed") or []) or "-"))
         if self.peers is not None and envelope.get("group_id") and envelope.get("mentioned_account_ids"):
+            self.watch.stage("mentions")
             try:
                 mentioned = self.peers.observe_mentions(envelope, self.onebot)
             except Exception as exc:
@@ -439,6 +491,7 @@ class Adapter:
                 self.log("PEER_MENTION person=%s group=%s display=%r verified=%s"
                          % (profile["person_id"], profile.get("group_id", "-"), profile["display"],
                             profile["verified"]))
+        self.watch.stage("forward")
         try:
             # a merged forward's messages, inline or fetched once, bounded (forward.py)
             forward_mod.attach(envelope, lambda action, params: self.onebot.api_call(
@@ -447,11 +500,13 @@ class Adapter:
             self.counters.inc("forward_errors")
             self.log("FORWARD_ERROR type=%s" % type(exc).__name__)
         if envelope.get("group_id"):
+            self.watch.stage("role")
             try:
                 self.self_roles.attach(envelope, self.onebot)
             except Exception as exc:
                 self.counters.inc("self_role_errors")
                 self.log("SELF_ROLE_ERROR type=%s" % type(exc).__name__)
+        self.watch.stage("voice")
         try:
             # Its voices first: fetched from NapCat and settled by the host, so the line arrives with its words, in
             # its place among the lines (voice.py).
@@ -514,15 +569,96 @@ class Adapter:
             "identity": self.identity,
             "peers": self.peers.summary() if self.peers is not None else None,
             "notices": self.notice_counts.summary(),
+            "lanes": self.lanes_state(),
         })
         return snap
+
+    def lanes_state(self, now=None):
+        """Per lane and per conversation (ADR-095 §5.7): places taken, conversations waiting for a place, every line
+        waiting with its conversation and where it is (`slot`: no place yet; `retry`: waiting for its next try; else
+        the stage it is in), what is in hand, receipts waiting, stuck items."""
+        now = now or time.time()
+        spooled = {}
+        for path in self.journal.spool_list("inbound"):
+            spooled[path] = self._spooled.get(path) or "-"
+        with self._lanes_lock:
+            lanes, inbound_busy = set(self._lanes), self._inbound_busy()
+        in_hand = self.watch.view()
+        stage_of = {job["conversation"]: job["stage"] for job in in_hand if job["lane"] == "inbound"}
+        conversations = {}
+        for path, route in spooled.items():
+            entry = conversations.setdefault(route, {"lines": 0, "oldest_s": None})
+            entry["lines"] += 1
+            age = since_spooled(path, now)
+            if age is not None and (entry["oldest_s"] is None or age > entry["oldest_s"]):
+                entry["oldest_s"] = age
+        for route, entry in conversations.items():
+            entry["where"] = stage_of.get(route) or ("retry" if route in lanes else "slot")
+        receipts = self.journal.spool_list("receipts")
+        with self._sends_lock:
+            chat_busy = self._chat_busy()
+        return {"inbound_slots": [inbound_busy, self.inbound_lanes],
+                "queued": sum(1 for route in conversations if route != "-" and route not in lanes),
+                "conversations": conversations, "in_hand": in_hand,
+                "chat_slots": [chat_busy, self.chat_lanes],
+                "receipts": {"waiting": len(receipts),
+                             "oldest_s": since_spooled(receipts[0], now) if receipts else None},
+                "stuck_total": self.watch.stuck_total}
+
+    def _lanes_status_safe(self, snap):
+        try:
+            return self.lanes_status(snap["lanes"])
+        except Exception as exc:              # the STATUS line is never what stops the adapter
+            return "unavailable(%s)" % type(exc).__name__
+
+    def lanes_status(self, lanes):
+        """The STATUS line's lanes block: whether the inbound places are full and conversations wait for one, or a
+        conversation is slow on its own; the oldest item of each kind with its conversation and stage. Keys stay as
+        they are; a new one goes at the end."""
+        def oldest(rows):
+            return rows[0] if rows else None
+        waiting = sorted(((entry["oldest_s"] or 0.0, route, entry["where"])
+                          for route, entry in lanes["conversations"].items()), key=lambda row: row[0], reverse=True)
+        wait = ("%s(conversation=%s,where=%s)" % (duration(waiting[0][0]), waiting[0][1], waiting[0][2])
+                if waiting else "-")
+        running = oldest([job for job in lanes["in_hand"] if job["lane"] == "inbound"])
+        send = oldest([job for job in lanes["in_hand"] if job["lane"] == "chat"])
+        bulk = oldest([job for job in lanes["in_hand"] if job["lane"] == "bulk"])
+        last = self.watch.last_stuck
+        return ("in_slots=%d/%d queued=%d oldest_wait=%s longest_running=%s chat_slots=%d/%d longest_send=%s bulk=%s"
+                " receipts=%d oldest_receipt=%s stuck=%d last_stuck=%s"
+                % (lanes["inbound_slots"][0], lanes["inbound_slots"][1], lanes["queued"], wait,
+                   "%s(conversation=%s,stage=%s)" % (duration(running["age_s"]), running["conversation"],
+                                                     running["stage"]) if running else "-",
+                   lanes["chat_slots"][0], lanes["chat_slots"][1],
+                   "%s(pub=%s,stage=%s)" % (duration(send["age_s"]), send["item"], send["stage"]) if send else "-",
+                   "%s(%.1fMiB,stage=%s)" % (duration(bulk["age_s"]), _size(bulk.get("bytes")) / 1048576.0,
+                                             bulk["stage"]) if bulk else "idle",
+                   lanes["receipts"]["waiting"],
+                   duration(lanes["receipts"]["oldest_s"]) if lanes["receipts"]["oldest_s"] is not None else "-",
+                   lanes["stuck_total"], "%s/%s/%s" % (last[0], last[2], last[3]) if last else "-"))
 
     def _health_loop(self):
         while not self.stop.wait(HEALTH_EVERY):
             try:
+                self.watchdog()
                 self.journal.write_health(self.health_snapshot())
             except Exception as exc:
                 self.log("HEALTH_ERROR type=%s" % type(exc).__name__)
+
+    def watchdog(self):
+        """One pass (ADR-095 §5.5): items past their budget are marked stuck and give their place up. A stuck file
+        holds the one bulk lane, so a new bulk lane starts; the old one ends when its file comes back."""
+        stuck = self.watch.check()
+        if (any(job.lane == "bulk" for job in stuck) and self._bulk is not None and not self.stop.is_set()
+                and self.watch.stuck_count("bulk") <= 1):
+            self._bulk_generation += 1
+            self._bulk = threading.Thread(target=self._bulk_loop, args=(self._bulk_generation,), name="bulk",
+                                          daemon=True)
+            self._bulk.start()
+        if stuck:
+            self._send_done.set()
+            self.wake.set()
 
     def maybe_status(self, force=False):
         now = time.time()
@@ -536,7 +672,7 @@ class Adapter:
                     snap["spool_inbound"], snap["spool_receipts"], snap["pending_echo"], snap["group_routes"],
                     json.dumps({k: v for k, v in sorted(snap.items())
                                 if k.startswith(("inbound_", "outbox", "send_", "receipt", "frames", "resp", "ws_", "api_", "late_", "peer_", "media_", "attachment_", "catchup_", "members_", "mutes_", "voice_"))},
-                               sort_keys=True)))
+                               sort_keys=True)) + " lanes: " + self._lanes_status_safe(snap))
 
     # ---- identity -------------------------------------------------------
     def verify_identity(self):
@@ -653,7 +789,7 @@ class Adapter:
             self.onebot.prune()
             self.maybe_status()
             with self._sends_lock:
-                full = len(self._sends) >= self.chat_lanes
+                full = self._chat_busy() >= self.chat_lanes
             if full:
                 self._send_done.wait(1.0)
                 self._send_done.clear()
@@ -670,27 +806,52 @@ class Adapter:
                 self.log("OUTBOX_ERROR %s" % json.dumps({"error": res.error, "http": res.code, "lane": "chat"}))
                 self.stop.wait(3)
 
+    def _chat_busy(self):
+        """Chat sends holding a place: a stuck send has given its place up (ADR-095 §5.5), at most `chat_lanes` of
+        them; more stuck at once is a shared cause, and those hold their places again. With a host that names no
+        lanes (one send at a time, no hold per conversation) none gives its place up. Under `_sends_lock`."""
+        if not self._host_lanes:
+            return len(self._sends)
+        stuck = sum(1 for send in self._sends if self.watch.thread_stuck(send.ident))
+        return len(self._sends) - min(stuck, self.chat_lanes)
+
     def _send(self, item):
         try:
+            target = _target(item)
+            with self._sends_lock:
+                self._send_targets[threading.current_thread()] = target
+                earlier = [send for send, where in self._send_targets.items()
+                           if where == target and send is not threading.current_thread() and send.is_alive()]
+            # The host holds a conversation with a send out only for its lease (300 s); a send still on its way
+            # past that (stuck) is waited for here, so the conversation's lines go out in their order.
+            for send in earlier:
+                send.join()
+            size = _size((item.get("file") or {}).get("size")) if isinstance(item.get("file"), dict) else None
+            self.watch.begin("chat", target, item.get("publication_id"), watch_mod.CHAT_BUDGET if size is None
+                             else outbound_mod.file_budget(size, watch_mod.FILE_MARGIN), size=size)
             self.out.handle_item(item, stopping=self.stop.is_set())
         except Exception as exc:
             self.counters.inc("send_error")
             self.faults.add("chat", "send", "adapter_error:" + type(exc).__name__)
             self.log("SEND_ERROR pub=%s type=%s" % (item.get("publication_id"), type(exc).__name__))
         finally:
+            self.watch.end()
             with self._sends_lock:
                 self._sends.discard(threading.current_thread())
+                self._send_targets.pop(threading.current_thread(), None)
             self._send_done.set()
 
-    def _bulk_loop(self):
+    def _bulk_loop(self, generation=0):
         """The bulk lane: files, one at a time, on their own claim; a file upload holds no chat send, not even the
-        later parts of its own reply (ADR-095 §5.2, owner)."""
-        while not self.stop.is_set():
+        later parts of its own reply (ADR-095 §5.2, owner). A lane whose file is stuck is replaced (`watchdog`); it
+        ends when that file comes back."""
+        while not self.stop.is_set() and generation == self._bulk_generation:
             res = self.host.claim_outbox(self.claim_wait, supports=self.capabilities, lane="bulk")
             if res.kind in ("items", "empty") and (res.obj or {}).get("lane") != "bulk":
                 # a host from before ADR-095 does not know lanes: what it handed out is any item, so this lane
                 # sends it and stops, and the chat lane goes back to one send at a time
                 self.chat_lanes = 1
+                self._host_lanes = False
                 self.log("OUTBOX_LANES off: the host does not name lanes; one send at a time")
                 if res.kind == "items":
                     self._send((res.obj.get("items") or [])[0])
@@ -698,11 +859,16 @@ class Adapter:
             if res.kind == "items":
                 item = (res.obj.get("items") or [])[0]
                 try:
+                    size = _size((item.get("file") or {}).get("size")) if isinstance(item.get("file"), dict) else 0
+                    self.watch.begin("bulk", _target(item), item.get("publication_id"),
+                                     outbound_mod.file_budget(size, watch_mod.FILE_MARGIN), size=size)
                     self.out.handle_item(item, stopping=self.stop.is_set())
                 except Exception as exc:
                     self.counters.inc("send_error")
                     self.faults.add("bulk", "send", "adapter_error:" + type(exc).__name__)
                     self.log("SEND_ERROR pub=%s type=%s lane=bulk" % (item.get("publication_id"), type(exc).__name__))
+                finally:
+                    self.watch.end()
             elif res.kind == "retry":
                 self.counters.inc("outbox_errors")
                 self.log("OUTBOX_ERROR %s" % json.dumps({"error": res.error, "http": res.code, "lane": "bulk"}))
@@ -711,11 +877,16 @@ class Adapter:
     def _receipt_loop(self):
         """Receipts the host did not take at once, posted from their own thread (ADR-095)."""
         while not self.stop.is_set():
+            waiting = len(self.journal.spool_list("receipts"))
+            if waiting:
+                self.watch.begin("receipts", None, "replay", watch_mod.RECEIPT_BUDGET * waiting)
             try:
                 self.out.replay_receipts()
             except Exception as exc:
                 self.counters.inc("receipt_replay_error")
                 self.log("RECEIPT_REPLAY_ERROR type=%s" % type(exc).__name__)
+            finally:
+                self.watch.end()
             self.out.receipts_waiting.wait(RECEIPT_EVERY)
             self.out.receipts_waiting.clear()
 

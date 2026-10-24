@@ -20,6 +20,7 @@ PREVIEW = 3
 PREVIEW_CHARS = 40
 DEPTH = 2
 TIMEOUT = 8.0
+MAX_FETCHES = 6           # get_forward_msg calls per message, nested ones included: a line's wait has a bound
 
 
 def ref_of(forward_id):
@@ -121,10 +122,18 @@ def attach(envelope, call, log=None):
     if not found or FORWARD_KEY in raw:
         return 0
     blocks, text = [], envelope.get("text") or ""
+    fetched = [0]
+
+    def bounded(action, params):
+        # past MAX_FETCHES a forward without its messages inline stays as its placeholder (nested: left out)
+        if fetched[0] >= MAX_FETCHES:
+            raise ValueError("fetch limit")
+        fetched[0] += 1
+        return call(action, params)
     for data in found:
         ref = ref_of(data.get("id") or repr(sorted(data)))
         try:
-            nodes, source = read(data, call)
+            nodes, source = read(data, bounded if call is not None else None)
         except Exception as exc:
             if log:
                 log("FORWARD_UNREAD event_id=%s ref=%s keys=%s reason=%s"

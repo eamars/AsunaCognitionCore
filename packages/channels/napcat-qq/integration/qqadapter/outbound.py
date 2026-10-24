@@ -140,6 +140,14 @@ def file_timeouts(size):
     return (FILE_COMPLETE_BASE + size / FILE_COMPLETE_RATE, FILE_UPLOAD_BASE + size / FILE_UPLOAD_RATE)
 
 
+def file_budget(size, margin):
+    """The longest one file can take while each of its steps keeps its deadline: each piece read from the host (60 s)
+    and given to NapCat (FILE_PIECE_TIMEOUT), NapCat joining them, QQ taking the file, plus `margin` (ADR-095 §5.5)."""
+    pieces = max(1, (int(size or 0) + FILE_PIECE - 1) // FILE_PIECE)
+    complete, upload = file_timeouts(int(size or 0))
+    return pieces * (60.0 + FILE_PIECE_TIMEOUT) + complete + upload + margin
+
+
 def file_plan(item, target_type, max_bytes=DEFAULT_MAX_FILE_MB * 1024 * 1024):
     """(plan, None) when this item's file may be streamed, else (None, reason).  Checked before a byte is asked for."""
     raw = item.get(FILE_KEY)
@@ -531,6 +539,7 @@ class Outbound:
         # NapCat writes the stream to its temp folder under this name: ours, never hers (her name is not a path there)
         stream_name = "asuna-%s.bin" % attempt
         digest = hashlib.sha256()
+        self._stage("piece")
         for index in range(total):
             offset = index * FILE_PIECE
             length = min(FILE_PIECE, size - offset)
@@ -556,6 +565,7 @@ class Outbound:
         if digest.hexdigest() != plan["sha256"]:
             return self._file_failed(pub, attempt, "file_sha256_mismatch",
                                      {"expected": plan["sha256"], "observed": digest.hexdigest()}, reset=True)
+        self._stage("complete")
         done, problem = self._stream_call({"stream_id": attempt, "is_complete": True, "file_retention": retention_ms},
                                           complete_timeout, pub, attempt, "complete")
         if problem:
@@ -572,6 +582,7 @@ class Outbound:
                 "assembled_size": done.get("file_size")}
         meta = {"publication_id": pub, "attempt_id": attempt, "target_type": ttype, "target_id": tid, "file": sent}
         try:
+            self._stage("upload")
             resp = self.onebot.api_call("upload_group_file", {"group_id": str(tid), "file": done["file_path"],
                                                               "name": plan["name"]},
                                         timeout=upload_timeout, meta=meta)
@@ -658,6 +669,7 @@ class Outbound:
             return
         meta = {"publication_id": pub, "attempt_id": attempt, "admin": True, "action": action}
         try:
+            self._stage("send")
             resp = self.onebot.api_call(action, params, timeout=self.ack_timeout, meta=meta)
         except ApiNotConnected as exc:
             self.report(pub, receipt_payload("failed", attempt, {"reason": "ws_not_connected", "detail": str(exc)[:200]}),
@@ -795,6 +807,7 @@ class Outbound:
                                             {"reason": reason, "target_type": ttype}), reason)
             return
         if plan is not None:
+            self._stage("fetch")
             image_b64, attachment, reason = self.fetch_attachment(pub, attempt, plan)
             if image_b64 is None:
                 self.counters.inc("attachment_failed")
@@ -818,6 +831,7 @@ class Outbound:
         if attachment is not None:
             meta["attachment"] = attachment
         try:
+            self._stage("send")
             resp = self.onebot.api_call(action, params, timeout=self.ack_timeout, meta=meta)
         except ApiNotConnected as exc:
             self.counters.inc("send_not_connected")
@@ -850,6 +864,7 @@ class Outbound:
         if status == "platform_accepted" and self.verify:
             # the read-back runs before the receipt so the host can keep it in
             # the raw response object it already stores; it cannot move `status`
+            self._stage("verify")
             verification = self.verify_send(pmid, meta, stopping=stopping)
             response = dict(response)
             response["verification"] = verification
@@ -875,7 +890,7 @@ class Outbound:
                                            "platform_message_id": pmid, "chars": meta.get("chars"),
                                            "segments": meta.get("segments"),
                                            "attachment": meta.get("attachment"),
-                                           "verification": verification})
+                                           "verification": verification, "stages": self._stages()})
 
     def muted(self, tag, meta):
         if tag == "platform_muted" and (meta or {}).get("target_type") == "group" and self.on_muted is not None:
@@ -918,9 +933,20 @@ class Outbound:
         return checked
 
     # ---- receipts -------------------------------------------------------
+    def _stage(self, name):
+        """The send in this thread enters a stage (watch.py; nothing without a watch)."""
+        watch = getattr(self, "watch", None)
+        if watch is not None:
+            watch.stage(name)
+
+    def _stages(self):
+        watch = getattr(self, "watch", None)
+        return watch.stages() if watch is not None else None
+
     def report(self, pub, payload, why):
         """Post a receipt once; one the host does not take now is spooled at once and posted by the receipt thread
         (`replay_receipts`, ADR-095), so a host slow to take receipts never holds a send."""
+        self._stage("receipt")
         res = self.host.post_receipt(pub, payload)
         if res.kind in ("ok", "accepted", "duplicate"):
             self.counters.inc("receipts_reported")

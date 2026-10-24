@@ -341,6 +341,7 @@ Host outbox -> OneBot send_private_msg / send_group_msg -> receipt.
 - def `platform_muted` — NapCat's retcode 1200 for sendMsg whose QQ result is 120: she is muted in that group.
 - def `send_outcome` — A send's answer, on time or late: (status, platform_message_id, tag, response object to store).
 - def `file_timeouts` — (complete, upload) seconds for a file of `size` bytes: 60 s + size / 32 MiB/s for NapCat to assemble it, 120 s + size / 1 MiB/s for QQ to take it.
+- def `file_budget` — The longest one file can take while each of its steps keeps its deadline: each piece read from the host (60 s) and given to NapCat (FILE_PIECE_TIMEOUT), NapCat joining them, QQ taking the file, plus `margin` (ADR-095 §5.5).
 - def `file_plan` — (plan, None) when this item's file may be streamed, else (None, reason).
 - def `encode_group_text` — Split host group text into text/at segments, promoting @qq:<digits>.
 - def `encode_faces` — Split text into text/face segments: each `[表情:名字]` whose name is in faces.json becomes a real QQ face at that position (0.6); an unknown name stays text.
@@ -437,12 +438,17 @@ Offline + live self checks. Nothing here invents an inbound message: synthetic e
 Wiring: WS reader -> durable spool -> one lane per conversation -> host, host outbox -> send.
 
 - def `utc_stamp`
+- def `spooled_at` — When a spool file was written, from its name (milliseconds first, journal.spool_add); None if not there.
+- def `since_spooled`
 - class `Adapter`
   - `log`
   - `on_event`
   - `on_notice` — A notice, request or meta event: counted by kind; her own mute to its state; a shown kind posted.
   - `submit_pending` — Hand each conversation with lines in the spool to a lane of its own, at most INBOUND_LANES at once, the conversation with the oldest line first.
   - `health_snapshot`
+  - `lanes_state` — Per lane and per conversation (ADR-095 §5.7): places taken, conversations waiting for a place, every line waiting with its conversation and where it is (`slot`: no place yet; `retry`: waiting for its next try; else the stage it is in), what
+  - `lanes_status` — The STATUS line's lanes block: whether the inbound places are full and conversations wait for one, or a conversation is slow on its own; the oldest item of each kind with its conversation and stage.
+  - `watchdog` — One pass (ADR-095 §5.5): items past their budget are marked stuck and give their place up.
   - `maybe_status`
   - `verify_identity`
   - `run`
@@ -458,6 +464,26 @@ Voice messages, settled before their line goes to the host (ADR-093): NapCat cle
 - def `refusal`
 - def `fetch` — (bytes, None) or (None, refusal) for one voice segment's file.
 - def `settle` — Fetch and post each voice of this line before the line is posted; a voice without an outcome gets its reason on its media item.
+
+## `napcat-qq/integration/qqadapter/watch.py`
+
+[packages/channels/napcat-qq/integration/qqadapter/watch.py](../../packages/channels/napcat-qq/integration/qqadapter/watch.py)
+
+Who is doing what, and the watchdog (ADR-095 §5.5, §5.7).
+
+- def `inbound_budget` — One try of an inbound line: its base, its mentions and its voices.
+- def `duration` — Seconds for reading: 42s, 1m40s, 2h5m.
+- class `Job`
+- class `Watch`
+  - `begin` — The calling thread takes up an item; `end` puts it down.
+  - `stage` — The calling thread's item enters a stage (nothing when it has none).
+  - `stages` — How long each stage of the calling thread's item took so far, in seconds.
+  - `end` — The calling thread puts its item down; returns its stage times.
+  - `check` — The watchdog pass: each item past its budget is marked stuck, once.
+  - `thread_stuck` — Whether the item of this thread is stuck (its place in the pool is free).
+  - `stuck_count`
+  - `conversation_stuck`
+  - `view` — The items in hand, oldest first: dicts with lane, conversation, item, stage, age_s, budget_s, stuck.
 
 ## `napcat-qq/python/napcat_qq/__init__.py`
 

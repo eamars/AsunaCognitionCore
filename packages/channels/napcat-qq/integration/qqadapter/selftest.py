@@ -33,6 +33,7 @@ from .journal import Counters, Journal
 from .onebot import ApiTimeout, ApiTransportError
 from . import service as service_mod
 from . import faults as faults_mod
+from . import watch as watch_mod
 from .service import Adapter
 
 ALLOWED_ENVELOPE_KEYS = inbound_mod.PRIVATE_ENVELOPE_KEYS
@@ -1732,6 +1733,7 @@ def run(cfg, data_dir, live=True, live_config=True):
     _check_markdown(rep, gcfg, root)
     _check_lanes(rep, gcfg, root)
     _check_outbound_lanes(rep, gcfg, root)
+    _check_watchdog(rep, gcfg, root)
     _check_faults(rep, gcfg, root)
     _check_spool(rep, root)
     _check_outbound_params(rep, gcfg, root)
@@ -2560,6 +2562,190 @@ class _LaneOutbox(StubFileHost):
     def got(self, pub):
         with self.lock:
             return any(r["publication_id"] == pub for r in self.receipts)
+
+
+def _check_watchdog(rep, gcfg, root):
+    """ADR-095 step 5: an item past its budget is marked stuck (a log line, a fault, a row in stuck.jsonl) and gives
+    its place up, so another conversation gets it; the item itself is held: never posted or sent twice, and its own
+    conversation waits for it and keeps its order. The STATUS block tells a full pool from a slow conversation.
+
+    Offline only: the budgets are made tiny for the check and put back; substitute NapCat and host.
+    """
+    groups = sorted(gcfg.allowed_groups)
+    if len(groups) < 2:
+        rep.skip("watchdog_two_conversations", "the fixture has one group")
+        return
+    ga, gb = groups[0], groups[1]
+    ma = sorted(gcfg.route_for_group(ga).allowed_senders)[0]
+    mb = sorted(gcfg.route_for_group(gb).allowed_senders)[0]
+    audio = b"ID3" + bytes(64)
+    good = {"status": "ok", "retcode": 0, "data": {"file": "/napcat/cache/x.mp3",
+                                                   "base64": base64.b64encode(audio).decode()}}
+    saved = (watch_mod.INBOUND_BASE, watch_mod.PER_VOICE, watch_mod.CHAT_BUDGET, watch_mod.FILE_MARGIN)
+    watch_mod.INBOUND_BASE, watch_mod.PER_VOICE, watch_mod.CHAT_BUDGET = 0.2, 0.0, 0.2
+    try:
+        # 1. Inbound, one place: A's voice hangs. B waits for the place (a full pool, not a slow B); once A is stuck
+        # B gets the place; A's next line waits for A, and A is posted once, in order, when it comes back.
+        bot = _HangingOneBot(good, "watch-hang.amr")
+        host = _LaneHost()
+        adapter = Adapter(gcfg, os.path.join(root, "watch-inbound"), peer_mode="off")
+        adapter.onebot, adapter.host, adapter.retry_waits, adapter.inbound_lanes = bot, host, (0.02,), 1
+        adapter.log = lambda line: None
+        adapter.on_event(_group_event(gcfg, ga, ma, 7101, message=[{"type": "record",
+                                                                    "data": {"file": "watch-hang.amr"}}]))
+        adapter.on_event(_group_event(gcfg, ga, ma, 7102))
+        adapter.on_event(_group_event(gcfg, gb, mb, 7201))
+        adapter.submit_pending()
+        _until(lambda: any(job["lane"] == "inbound" for job in adapter.watch.view()))
+        adapter.submit_pending()
+        state = adapter.lanes_state()
+        status = adapter.lanes_status(state)
+        rep.check("watchdog_full_pool_shows_queued", state["inbound_slots"] == [1, 1] and state["queued"] == 1
+                  and "in_slots=1/1 queued=1 " in status and "where=" in status, status)
+        time.sleep(0.3)
+        adapter.watchdog()
+        adapter.submit_pending()
+        b_in = _until(lambda: "7201" in host.posted)
+        rows = [json.loads(line) for line in open(os.path.join(adapter.journal.jdir, "stuck.jsonl"), encoding="utf-8")]
+        rep.check("watchdog_stuck_inbound_frees_its_place", b_in and "7101" not in host.posted
+                  and "7102" not in host.posted and rows and rows[0]["event"] == "stuck"
+                  and rows[0]["lane"] == "inbound" and rows[0]["stage"] == "voice"
+                  and adapter.counters.snapshot().get("lane_stuck") == 1, json.dumps([host.posted, rows]))
+        status = adapter.lanes_status(adapter.lanes_state())
+        rep.check("watchdog_status_names_the_stuck", " stuck=1 last_stuck=inbound/7101/voice" in status, status)
+        bot.release.set()
+        # the lane whose line was stuck ends after that line; the dispatcher takes A's next line
+        _until(lambda: adapter.submit_pending() is None or (not adapter._lanes
+                                                            and not adapter.journal.spool_list("inbound")))
+        rows = [json.loads(line) for line in open(os.path.join(adapter.journal.jdir, "stuck.jsonl"), encoding="utf-8")]
+        rep.check("watchdog_held_line_posted_once_in_order", [e for e in host.posted if e in ("7101", "7102")]
+                  == ["7101", "7102"] and host.posted.count("7101") == 1 and rows[-1]["event"] == "ended",
+                  json.dumps([host.posted, rows]))
+
+        # 2. Chat, one place: a send to A hangs; once stuck, B's reply takes the place; A is sent once, when it comes back.
+        def text(pub, group):
+            return {"publication_id": pub, "attempt_id": "att-" + pub, "target": {"type": "group", "id": group},
+                    "text": "话 " + pub}
+        bot = _LaneNapCat(hang_group=ga)
+        host = _LaneOutbox(chat=[text("wa-1", ga), text("wb-1", gb)])
+        adapter = Adapter(gcfg, os.path.join(root, "watch-chat"), peer_mode="off", verify=False, claim_wait=0)
+        adapter.host, adapter.onebot = host, bot
+        adapter.out.host, adapter.out.onebot = host, bot
+        adapter.log = adapter.out.log = lambda line: None
+        adapter.chat_lanes = 1
+        loop = threading.Thread(target=adapter._main_loop, daemon=True)
+        loop.start()
+        _until(lambda: any(job["lane"] == "chat" for job in adapter.watch.view()))
+        held = not _until(lambda: host.got("wb-1"), 0.3)
+        adapter.watchdog()
+        b_out = _until(lambda: host.got("wb-1")) and _until(lambda: len(adapter._sends) == 1)
+        status = adapter.lanes_status(adapter.lanes_state())
+        rep.check("watchdog_stuck_send_frees_its_place", held and b_out and not host.got("wa-1")
+                  and " chat_slots=0/1 " in status and "longest_send=" in status and "stage=send" in status, status)
+        bot.release.set()
+        a_out = _until(lambda: host.got("wa-1"))
+        adapter.stop.set()
+        loop.join(5)
+        rep.check("watchdog_stuck_send_settles_once", a_out and bot.sent.count(str(ga)) == 1,
+                  json.dumps(bot.sent))
+
+        # 2b. The host's hold on A ends after its lease, so A's next line can be claimed while A's stuck send is
+        # out (this substitute holds nothing): it waits for that send, and A's lines go out in their order; B
+        # meanwhile takes the other place.
+        class _FirstSendHangs(_LaneNapCat):
+            """Only the first send to A waits for `release`; the next goes at once (so a send that did not wait
+            for it would overtake it)."""
+            def api_call(self, action, params=None, timeout=15.0, meta=None):
+                first_to_a = (action == "send_group_msg" and str((params or {}).get("group_id")) == str(ga)
+                              and not getattr(self, "a_hung", False))
+                if first_to_a:
+                    self.a_hung = True
+                    self.release.wait(10)
+                elif action == "send_group_msg":
+                    with self.lock:
+                        self.sent.append(str((params or {}).get("group_id")))
+                        return {"status": "ok", "retcode": 0, "data": {"message_id": 880000 + len(self.sent)}}
+                return _LaneNapCat.api_call(self, action, params, timeout, meta)
+        bot = _FirstSendHangs()
+        host = _LaneOutbox(chat=[text("wa-3", ga), text("wa-4", ga), text("wb-3", gb)])
+        adapter = Adapter(gcfg, os.path.join(root, "watch-chat-order"), peer_mode="off", verify=False, claim_wait=0)
+        adapter.host, adapter.onebot = host, bot
+        adapter.out.host, adapter.out.onebot = host, bot
+        adapter.log = adapter.out.log = lambda line: None
+        adapter.chat_lanes = 2
+        loop = threading.Thread(target=adapter._main_loop, daemon=True)
+        loop.start()
+        _until(lambda: any(job["lane"] == "chat" and job["item"] == "wa-3" for job in adapter.watch.view()))
+        time.sleep(0.3)
+        adapter.watchdog()
+        b_out = _until(lambda: host.got("wb-3"))
+        bot.release.set()
+        both = _until(lambda: host.got("wa-3") and host.got("wa-4"))
+        adapter.stop.set()
+        loop.join(5)
+        order = [r["publication_id"] for r in host.receipts if r["publication_id"] in ("wa-3", "wa-4")]
+        rep.check("watchdog_stuck_send_keeps_its_conversation_order", b_out and both and order == ["wa-3", "wa-4"],
+                  json.dumps(order))
+
+        # 3. Bulk: a file upload stuck past its budget; a new bulk lane takes the next file; the first lane ends
+        # when its file comes back.
+        watch_mod.FILE_MARGIN = -100000.0
+        data = b"watch file body\n" * 64
+
+        def file_item(pub):
+            return {"publication_id": pub, "attempt_id": "att" + pub, "target": {"type": "group", "id": ga},
+                    "text": "", "file": {"artifact_id": "blob-" + pub, "name": pub + ".txt",
+                                         "media_type": "text/plain", "sha256": hashlib.sha256(data).hexdigest(),
+                                         "size": len(data)}}
+        bot = _LaneNapCat(hang_upload=True)
+        host = _LaneOutbox(bulk=[file_item("wf-1"), file_item("wf-2")], data=data)
+        adapter = Adapter(gcfg, os.path.join(root, "watch-bulk"), peer_mode="off", verify=False, claim_wait=0)
+        adapter.host, adapter.onebot = host, bot
+        adapter.out.host, adapter.out.onebot = host, bot
+        adapter.log = adapter.out.log = lambda line: None
+        adapter._bulk = threading.Thread(target=adapter._bulk_loop, daemon=True)
+        first = adapter._bulk
+        first.start()
+        _until(lambda: any(job["lane"] == "bulk" for job in adapter.watch.view()))
+        adapter.watchdog()
+        second_claimed = _until(lambda: not host.queues["bulk"])
+        replaced = adapter._bulk is not first and adapter._bulk_generation == 1
+        bot.release.set()
+        both = _until(lambda: host.got("wf-1") and host.got("wf-2"))
+        first.join(5)
+        adapter.stop.set()
+        adapter._bulk.join(5)
+        rep.check("watchdog_stuck_file_gets_a_new_bulk_lane", second_claimed and replaced and both
+                  and not first.is_alive(), json.dumps([r["publication_id"] for r in host.receipts]))
+    finally:
+        watch_mod.INBOUND_BASE, watch_mod.PER_VOICE, watch_mod.CHAT_BUDGET, watch_mod.FILE_MARGIN = saved
+
+    # 4. Forwards: at most MAX_FETCHES fetches per message, nested ones included.
+    from . import forward as forward_mod
+    calls = []
+
+    def fetch(action, params):
+        calls.append(params.get("id"))
+        inner = [{"type": "forward", "data": {"id": "n%d-%d" % (len(calls), k)}} for k in range(3)]
+        return {"retcode": 0, "data": {"messages": [{"sender": {"nickname": "某人", "user_id": 1}, "time": 1,
+                                                      "message": inner}]}}
+    envelope = {"event_id": "fw", "text": "", "raw": {"message": [
+        {"type": "forward", "data": {"id": "top%d" % k}} for k in range(3)]}}
+    forward_mod.attach(envelope, fetch)
+    rep.check("watchdog_forward_fetches_bounded", len(calls) == forward_mod.MAX_FETCHES, json.dumps(calls))
+
+    # 5. The STATUS block never raises: a snapshot it can't read says so.
+    probe = Adapter(gcfg, os.path.join(root, "watch-status"), peer_mode="off")
+    rep.check("watchdog_status_never_raises", probe._lanes_status_safe({"lanes": {}}).startswith("unavailable(")
+              and probe.lanes_status(probe.lanes_state()).startswith("in_slots=0/8 queued=0 "), "")
+
+    # 6. Readable times and a budget a working file can't reach (the sum of its own deadlines).
+    rep.check("watchdog_durations_read_with_units", [watch_mod.duration(s) for s in (42, 100, 7500)]
+              == ["42s", "1m40s", "2h5m"], "")
+    size = 45 * 1024 * 1024
+    complete, upload = outbound_mod.file_timeouts(size)
+    rep.check("watchdog_file_budget_is_its_deadlines", outbound_mod.file_budget(size, watch_mod.FILE_MARGIN)
+              == 12 * (60.0 + outbound_mod.FILE_PIECE_TIMEOUT) + complete + upload + watch_mod.FILE_MARGIN, "")
 
 
 def _check_outbound_lanes(rep, gcfg, root):

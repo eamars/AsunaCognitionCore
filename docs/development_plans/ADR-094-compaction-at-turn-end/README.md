@@ -324,12 +324,46 @@ model is 8,192 (the provider's `thinkingBudgets`): the cap the summary has is th
 Her conversation's summaries do not fail this way: Asuna's engine names the conversation's own level
 (`summaryEffort`, `0e622df6`), so a budget is sent, and the cap (24,576) leaves the text its room; they run 9.4k–16.7k.
 
-**The broken invariant:** a summary's cap must hold the summary after the thinking it is allowed; with no budget no cap
-holds it. Raising the cap alone moves the edge. **The rule restored:** every brain's summary request thinks at its
-conversation's own level, so it carries that level's budget, and its cap is that budget plus the room its template's
-text takes. For the action brain that means the level rule of `summaryEffort` for its engine too (DSH's template
-unchanged); its cap then follows from the rule (high's 8,192 plus the 4–5k tokens its summaries' text took), not from a
-picked number.
+**The same mistake as 10-20, a second time** (owner, 2026-10-25). Then her conversation's summary named one fixed level
+(`medium`) instead of its conversation's, and every `high` conversation reused nothing (`0e622df6`); now the action
+brain's summary names none. The class: a request that replays a conversation is one more request of that conversation
+and must be sent as the conversation's own requests are. Three presets still run DSH's plain engine with no level and
+the 8,192 cap: `asuna-action`, `asuna-summary` (background summaries) and `asuna-recovery`; only the action brain has
+compacted since install, the other two would fail the same way the day their conversations grow that long.
+
+**The broken invariant:** a summary's cap must hold the summary after the thinking it is allowed; with no level no
+budget is sent, and no cap holds it. Raising the cap alone moves the edge (the owner: not even for now). **The rule
+restored:** a summary request is sent as the next request of its conversation would be: the same provider, model,
+level and output limit, decided in the one place that decides them for its turns, never put together from different
+sources. Its thinking is then bounded as the conversation's is, and its cap is the conversation's own output limit (the
+route's `maxTokens`, 32,768 on both local routes), within which every one of its turns already fits thinking and text.
+
+**Two tiers make this a per-instance rule** (owner: track the thinking effort of the instance, not of the brain). The
+action brain runs 低 on the local model (`asuna-action`, `high`, a thinking budget of 8,192 declared per level) and 高 on
+`claude-sonnet-5-5` (`anthropic`, `medium`, 1M window, 128,000 output by default), chosen per request
+(`tierRoute`); a 高 job can fall to 低 mid-run (`fall`, `mid_run`). The failure modes to design against:
+
+- **Level and model from different sources.** A level taken from a route's settings and a model from the session (or
+  the reverse) can pair 高's `medium` with the local model after a fall: valid, but a level its turns did not use, so the
+  cache misses (10-20); or a level the other model does not offer.
+- **The summary bypasses the route decision.** DSH's engine takes its target from the session's latest logged request
+  header (`summarizeWithLlm`: configured, else latest, else the agent's options) and calls `ctx.llm.stream` directly, not
+  through `agent/request`, where Asuna picks the tier. Its pressure threshold reads the same header. The compaction runs
+  in `agent/pre-step`, before the step's request is routed, so in the first step after a fall the header still names
+  高: the summary would go to the model the job just fell from (often because it is resting), and the threshold would be
+  that model's (750k of 1M) while the next request goes to a 262k window.
+- **No thinking budget on 高.** Sonnet 5.5 thinks adaptively and takes no thinking budget, only `effort`; `max_tokens`
+  bounds thinking and text together (Claude API docs, `claude-api` skill). A cap of "budget plus text" cannot be computed
+  there, which is why the cap is the instance's own output limit, not a sum.
+- **The cache on 高.** On the Claude API a change of `thinking` or `effort` invalidates the messages cache (`claude-api`
+  skill, prompt caching, invalidation hierarchy), as the local engine's level does: the same rule holds on both.
+- **A level the local catalog offers without a budget.** The local model offers `xhigh` (`reasoningEfforts`) but declares
+  budgets only for `minimal`, `low`, `medium` and `high` (`thinkingBudgets`): a conversation at `xhigh` would send no
+  budget and think unbounded, this failure again. Not in use today (both local routes run `high`); a catalog gap in the
+  profile's provider settings, to close with the fix.
+- **No level at all** (a first request, or the first after a carry). Asuna's `summaryEffort` falls back to the preset's
+  level and, when the model does not offer it, to none; on a model that thinks by default "none" is this failure. The
+  fallback must be a level the instance offers, never none.
 
 **The cache, measured for this choice.** The level rule exists because the local engine matches the level with the
 tokens: on 10-20 three summaries named a level other than their conversation's and reused nothing (`0e622df6`). For the

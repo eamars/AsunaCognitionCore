@@ -137,6 +137,15 @@ Create the ignored demo config (ADR-009 §0.3) from config/demo.example.json.
 - def `build`
 - def `main`
 
+## `memory_fires_report.py`
+
+[tools/memory_fires_report.py](../../tools/memory_fires_report.py)
+
+ADR-097: the reading of what came back, from the count rows (memory_fires), in counts only (no text, word, heading, query, id or place name).
+
+- def `compactions` — {DSH session id: [the end times (ms) of its compactions]}, from the profile's session logs.
+- def `main`
+
 ## `memory_pilot_report.py`
 
 [tools/memory_pilot_report.py](../../tools/memory_pilot_report.py)

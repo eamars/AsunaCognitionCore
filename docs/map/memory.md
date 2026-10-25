@@ -82,6 +82,7 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
   - `used` — Her use of items by `doc:slug#sid` refs: recall returned them, or she cited them in a tool call.
   - `surfaced` — Items a turn surfaced: memorable only when a second, different conversation brings one up.
   - `things` — things_from_program: her items by store and place in words, and the moves since this conversation was last told, each once, with its clock time.
+  - `came_back` — Once a local day in each conversation: what came back in the last day, each kind in words, and the notes readable here that came back most (never which place it was).
 - def `signing` — Why this write may not make the item a fact (her own judgment signed by herself), or None.
 - def `gist_refusal` — Why her rewrite may not be taken as the gist of a listed item, or None: it keeps the claim and drops the basis its verbatim had (her rule: a claim without its basis is loss, not fading).
 - def `claim_chars` — A gist's length without its basis lines: the basis is never what the 160 characters squeeze out.
@@ -150,8 +151,11 @@ What she learned elsewhere comes back when she asks (ADR-097 D3, D4): lines from
 - def `versions` — `history` of one document, kept while its ledger has no newer revision (one small read to check).
 - def `history` — Every past text of each section of one of her documents, oldest first: {sid: [(body, written_at, replaced_at, reason of the change that replaced it)]}; the current text is not among them.
 - def `before` — recall: past versions of her notes readable here that have a word of the query that may cross, which their section no longer has; one per section, newest change first, at most SHOWN.
-- def `cue` — A group turn's one line of presence, or None: the word of this line that her other groups say most often, when it may cross, this place says it at most `said_here` times, the turn's delivered lines do not have it, no cue named it here withi
+- def `cue` — A group turn's one line of presence, or None.
+- def `fired` — One count row: what came back (FIRE_KINDS), in which conversation and turn (`episode`, else the event's), at which line (the turn's line's scene_seq) and when.
+- def `recalled` — A recall's count rows: each line from elsewhere and past version it returned, and W6 when it brought back something the turn's own memories had not (`returned`: the ids of its memories).
 - def `prune` — At settlement: fire rows older than FIRES_DAYS go.
+- def `report` — ADR-097's reading from the count rows since `since` (ISO), per place and in all: her turns from someone's line, cues and cues a turn, her recalls in a cue's turn or the next one there (and those whose query has the cue's word), her notes ba
 
 ## `retrieval`
 

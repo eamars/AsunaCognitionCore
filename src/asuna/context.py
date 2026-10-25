@@ -473,6 +473,8 @@ class ContextBuilder:
                                                        'scene_seq':{'$gte':source['scene_seq']}},
                                                       {'platform_event_id':1}):
                 tail_sources.update((queued['_id'], queued.get('platform_event_id')))
+        # The lines this turn delivers, for the presence cue (ADR-097 D2), before their numbers are dropped.
+        history_lines=[(row.get('scene_seq'),row.get('text') or '',row.get('direction')) for row in history]
         for row in history:
             # A native role session leaves out rows (and its own replies) it still shows; it needs the ids.
             row.pop('scene_seq',None)
@@ -530,12 +532,18 @@ class ContextBuilder:
                 if own:
                     memories=memories[:memory_tiers.SLOTS-len(own)]
                 brought_up=[item['_id'] for item in own]
-                if not recall and len(own)<memory_tiers.OWN_SLOTS:
-                    # ADR-097 D2: one line of presence for a word her other groups know, in a free own-item slot.
+                if not recall:
+                    # ADR-097: what came back is counted (D5), and one line of presence for a word her other groups
+                    # know may take a free own-item slot (D2).
                     try:
                         from . import crossing as _crossing
-                        _cue=_crossing.cue(self.store,persona,scene,event,[row.get('text') or '' for row in history],own,
-                                           schedule_rules.scene_timezone(self.store.config,scene))
+                        for item in own:
+                            word=item['why'][len(memory_tiers.BROUGHT_BY.split('%s')[0]):-1] if item.get('why') else None
+                            _crossing.fired(self.store,persona,'note',scene,event,ref=item['_id'],word=word,
+                                            by='word' if word else 'meaning')
+                        _cue=_crossing.cue(self.store,persona,scene,event,history_lines,own,
+                                           schedule_rules.scene_timezone(self.store.config,scene),
+                                           free=len(own)<memory_tiers.OWN_SLOTS)
                     except Exception:
                         _cue=None
                     if _cue:

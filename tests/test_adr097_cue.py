@@ -66,7 +66,26 @@ def test_no_cue_on_a_template_or_for_a_word_already_in_view(turn):
     from datetime import datetime, timezone
     line(store, 40, '破甲来了', False, scene='g1')
     store.db.messages.update_one({'_id': 'm-g1-40'}, {'$set': {'received_at': datetime.now(timezone.utc).isoformat()}})
-    assert not cues(prepare('e-2', '破甲是什么')), 'already in the lines she sees'
+    assert not cues(prepare('e-2', '破甲是什么')), 'in the lines this turn delivers'
+    rules(path, {'cue_lines': 'new'})
+    store.db[crossing.FIRES].update_one({'_id': 'seen:P1:g1'}, {'$set': {'seq': 40}}, upsert=True)
+    assert not cues(prepare('e-3', '破甲是什么')), 'with cue_lines new: an earlier turn delivered it already'
+
+
+def test_a_word_in_any_line_new_to_the_turn_brings_the_cue_and_the_mark_moves(turn):
+    """The 23:19 case: the word was in a line before the one her turn came for, new to this turn."""
+    store, builder, prepare, path = turn
+    from datetime import datetime, timezone
+    line(store, 40, '有人问破甲', False, scene='g1')
+    store.db.messages.update_one({'_id': 'm-g1-40'}, {'$set': {'received_at': datetime.now(timezone.utc).isoformat()}})
+    assert not cues(prepare('e-0', '在吗')), 'by default only the line the turn is for'
+    store.db[crossing.FIRES].delete_many({'_id': 'seen:P1:g1'})
+    rules(path, {'cue_lines': 'new'})
+    store.db.messages.update_one({'_id': 'm-g1-40'}, {'$set': {'received_at': datetime.now(timezone.utc).isoformat()}})
+    [cue] = cues(prepare('e-1', '在吗'))
+    assert cue.startswith('破甲：'), 'with cue_lines new, every line new to the turn'
+    assert store.db[crossing.FIRES].find_one({'kind': 'cue'})['line_seq'] == 40, 'the line the word was in'
+    assert store.db[crossing.FIRES].find_one({'_id': 'seen:P1:g1'})['seq'] >= 40
 
 
 def test_no_cue_for_a_word_this_place_says_itself(turn):
@@ -92,3 +111,45 @@ def test_her_own_note_on_the_word_comes_first_and_takes_its_place(turn):
     context = prepare('e-1', '破甲是什么')
     assert [m.get('kind') for m in context['memories'] if m.get('kind') in ('own_item', 'cue')] == ['own_item']
     assert json.dumps(context, ensure_ascii=False).count('这个词你在别的群见过') == 0
+
+
+def test_what_came_back_is_counted_and_told_once_a_day_in_words(turn):
+    store, builder, prepare, path = turn
+    docs = DocumentStore(store, 'P1')
+    slug = notes_slug('g1')
+    sid = write(docs, slug, '破甲', '绕过安全锁的意思')
+    tiers = Tiers(store, 'P1')
+    tiers.sync()
+    tiers.rows.update_one({'_id': tiers.item(slug, sid)['_id']}, {'$set': {'place': AT_HAND}})
+    builder.pilot.sync()
+    told = prepare('e-1', '破甲是什么')['things_from_program']['came_back']
+    row = store.db[crossing.FIRES].find_one({'kind': 'note'})
+    assert (row['ref'], row['word'], row['by']) == ('doc:%s#%s' % (slug, sid), '破甲', 'word') and 'at' in row
+    assert told.startswith('最近一天：你的笔记回来 一次（「破甲」一次）；别的群见过的词提醒 没有')
+    assert 'came_back' not in prepare('e-2', '今天好')['things_from_program'], 'once a day here'
+
+
+def test_a_recall_counts_its_lines_from_elsewhere_and_w6(turn):
+    store, builder, prepare, path = turn
+    from test_adr097_crossing import recall
+    found = recall(store, builder, {'query': '破甲'})
+    assert found['elsewhere']
+    kinds = [row['kind'] for row in store.db[crossing.FIRES].find({'kind': {'$in': list(crossing.FIRE_KINDS)}})]
+    assert kinds.count('elsewhere_hers') == 1 and kinds.count('w6') == 1, 'a line the turn itself had not brought'
+
+
+def test_the_reading_counts_per_place_and_joins_the_compactions(turn):
+    store, builder, prepare, path = turn
+    from datetime import datetime, timedelta, timezone
+    prepare('e-1', '破甲是什么')
+    cue_row = store.db[crossing.FIRES].find_one({'kind': 'cue'})
+    store.db.episodes.update_one({'_id': cue_row['episode_id']}, {'$set': {'native_session_id': 'session-1'},
+                                 '$setOnInsert': {'schema_version': 1, 'scene_id': 'g1', 'episode_kind': 'external'}},
+                                 upsert=True)
+    at = datetime.fromisoformat(cue_row['at']).timestamp() * 1000
+    since = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    read = crossing.report(store, since, {'session-1': [at - 10 * 60000, at + 60000]})
+    assert read['all']['cues'] == 1
+    assert read['all']['since_compaction'] == {'fires': 1, 'no_compaction_before': 0, 'within_30_minutes': 1,
+                                               'median_minutes': 10}, 'the last compaction before the cue'
+    assert 'g1' not in json.dumps(read, ensure_ascii=False), 'places by number, never their ids'

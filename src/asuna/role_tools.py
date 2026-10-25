@@ -1572,6 +1572,11 @@ class RoleTools:
             result['elsewhere'], result['elsewhere_how'] = crossed, crossing.HOW
         if before:
             result['before'] = before
+        if query and memory_tiers.ENABLED:
+            # ADR-097 D5: what this recall brought back, and whether it found what the turn itself had not (W6).
+            from . import crossing
+            crossing.recalled(self.store, ep['persona'], ep, here, [m.get('_id') for m in result['memories']],
+                              crossed, before)
         if memory_tiers.ENABLED:
             # ADR-062: what she reads back is used; she sees which places were searched, and what else exists there.
             tiers = memory_tiers.Tiers(self.store, ep['persona'])

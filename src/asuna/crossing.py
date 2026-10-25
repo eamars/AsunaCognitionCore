@@ -53,12 +53,18 @@ SHOWN = 3                            # past versions a recall returns
 ELSEWHERE_SHOWN = 2                  # lines from elsewhere a recall returns
 WORDS = 'crossing_words'             # the word index of her groups' lines (program-derived, rebuildable)
 OTHERS_KEPT = 20                     # others' lines kept per word, the newest
-FIRES = 'memory_fires'               # what came back and when (cues), for the readings; kept FIRES_DAYS
+FIRES = 'memory_fires'               # what came back and when, for the readings; kept FIRES_DAYS
 FIRES_DAYS = 30
+# What a fire row counts: her note by its word or its meaning (note), a cue, recall's lines from elsewhere (hers,
+# theirs), a past version (before), and a recall that brought back what the turn itself had not (w6).
+FIRE_KINDS = ('note', 'cue', 'elsewhere_hers', 'elsewhere_theirs', 'before', 'w6')
 # The deployment's numbers (memory-crossing.json), with these defaults and bounds.
 NUMBERS = {'window_days': (14, 1, 90), 'said_here': (2, 0, 100), 'seen_elsewhere': (5, 1, 1000),
            'repeat_minutes': (60, 0, 1440)}
 CUE = '%s：这个词你在别的群见过 %d 次，最近 %s%s；recall 写上它能找到'
+# Which lines a cue's words come from (`cue_lines`): the line the turn is for, and the turn's delivered lines are in
+# view; or every inbound line new to the turn, and only lines an earlier turn delivered are in view.
+CUE_LINES = ('trigger', 'new')
 EXCERPT = 200
 AROUND = 2                           # lines before and after the one fetched
 LATER = 30                           # lines after a line that may correct it
@@ -102,8 +108,9 @@ def settings(path=None):
                     if isinstance(pair, list) and len(pair) == 2 and all(isinstance(d, str) for d in pair)]
         numbers = {name: raw[name] if type(raw.get(name)) is int and low <= raw[name] <= high else default_value
                    for name, (default_value, low, high) in NUMBERS.items()}
+        lines = raw.get('cue_lines') if raw.get('cue_lines') in CUE_LINES else CUE_LINES[0]
         _cache.update(mtime=(path, mtime), value={'default': default, 'places': places, 'kinds': kinds,
-                                                  'history_excluded': excluded, **numbers})
+                                                  'history_excluded': excluded, 'cue_lines': lines, **numbers})
     return _cache['value']
 
 
@@ -552,28 +559,52 @@ def before(store, persona, here, cls, query, zone):
 
 
 # ── the presence cue (D2) ─────────────────────────────────────────
-def cue(store, persona, scene, event, delivered, own, zone, moment=None):
-    """A group turn's one line of presence, or None: the word of this line that her other groups say most often, when
-    it may cross, this place says it at most `said_here` times, the turn's delivered lines do not have it, no cue named
-    it here within `repeat_minutes`, and her own items this turn do not have it. The fire is written as a row."""
+def cue(store, persona, scene, event, history, own, zone, moment=None, *, free=True):
+    """A group turn's one line of presence, or None. Its words come from the line the turn is for, and the turn's
+    delivered lines are in view; with `cue_lines` new, from every inbound line new to this turn (after those an earlier
+    turn here delivered, and those claimed into it), and only earlier turns' lines are in view. A word that may cross,
+    that this place says at most `said_here` times, that no line in view and none of her own items this turn
+    have, and that no cue named here within `repeat_minutes`; of these, the one her other groups say most often, if
+    at least `seen_elsewhere` times. `history` is the turn's delivered lines, [(scene_seq, text, direction)]. Every
+    group turn moves the place's mark of what was delivered; only a turn from someone's line with a free own-item slot
+    (`free`) gets a cue. The fire is written as a row."""
     from datetime import timedelta
     from .memory_tiers import Tiers
-    if scene.get('kind') != 'group' or (event.get('episode_kind') or 'external') != 'external':
+    if scene.get('kind') != 'group':
+        return None
+    seq = _line_seq(store, event)
+    mark = store.db[FIRES].find_one({'_id': 'seen:%s:%s' % (persona, scene['_id'])}) or {}
+    upto = mark.get('seq') or 0
+    reached = max([upto, seq or 0, *[s for s, _, _ in history if isinstance(s, int)]])
+    store.db[FIRES].update_one({'_id': 'seen:%s:%s' % (persona, scene['_id'])}, {'$max': {'seq': reached},
+                               '$set': {'kind': 'seen', 'persona': persona, 'scene_id': scene['_id']}}, upsert=True)
+    if not free or (event.get('episode_kind') or 'external') != 'external':
         return None
     text = event.get('text') if isinstance(event.get('text'), str) else ''
+    every = settings().get('cue_lines') == 'new'
+    new = [(s, t) for s, t, direction in history if every and direction == 'inbound' and isinstance(s, int) and s > upto]
+    new.append((seq, text))
+    if every and isinstance(seq, int):
+        # Lines that came after the one the turn is for, claimed into it before its context was built.
+        new += [(row['scene_seq'], row.get('text') or '') for row in store.db.messages.find(
+            {'scene_id': scene['_id'], 'direction': 'inbound', 'scene_seq': {'$gt': seq}}, {'scene_seq': 1, 'text': 1})]
+    earlier = [t for s, t, _ in history if not every or not isinstance(s, int) or s <= upto]
     tiers = Tiers(store, persona)
-    if not text or key_words.templated(text, tiers.openings(scene['_id'])):
-        return None
     vocabulary(store)
-    said = tiers.said(scene['_id'])
+    repeated, said = tiers.openings(scene['_id']), tiers.said(scene['_id'])
     shown = [own_item.get('heading', '') + '\n' + own_item.get('body_markdown', '') for own_item in own]
-    words = [word for word in key_words.cross_words(text, _mention(scene['_id'])) if word not in said
-             and not any(key_words.found(word, line) for line in [*delivered, *shown])]
-    if not words:
+    first = {}                                   # word -> (the new line's scene_seq, its spelling there)
+    for line_seq, line in new:
+        if not line or key_words.templated(line, repeated):
+            continue
+        for word in key_words.cross_words(line, _mention(scene['_id'])):
+            if word not in said and word not in first and not any(key_words.found(word, t) for t in [*earlier, *shown]):
+                first[word] = (line_seq, key_words.found(word, line) or word)
+    if not first:
         return None
     moment = moment or datetime.now(timezone.utc)
     recent = (moment - timedelta(minutes=number('repeat_minutes'))).isoformat()
-    words = [word for word in words if not store.db[FIRES].find_one(
+    words = [word for word in first if not store.db[FIRES].find_one(
         {'kind': 'cue', 'scene_id': scene['_id'], 'word': word, 'at': {'$gte': recent}}, {'_id': 1})]
     if not words:
         return None
@@ -590,14 +621,44 @@ def cue(store, persona, scene, event, delivered, own, zone, moment=None):
         return None
     word, lines, (scope, _, latest) = best
     place_kind = kind(groups[scope])
-    line = CUE % (key_words.found(word, text) or word, lines, _month_day(latest, zone),
-                  '，' + place_kind if place_kind else '')
-    source = store.db.messages.find_one({'_id': 'in-' + _episode(event)}, {'scene_seq': 1}) or {}
-    store.db[FIRES].insert_one({'kind': 'cue', 'persona': persona, 'scene_id': scene['_id'], 'word': word,
-                                'event_id': event.get('event_id'), 'episode_id': _episode(event),
-                                'scene_seq': source.get('scene_seq'), 'at': moment.isoformat(), 'lines': lines,
-                                'latest': latest, 'kind_set': bool(place_kind)})
+    line = CUE % (first[word][1], lines, _month_day(latest, zone), '，' + place_kind if place_kind else '')
+    fired(store, persona, 'cue', scene, event, moment, word=word, line_seq=first[word][0], lines=lines, latest=latest,
+          kind_set=bool(place_kind))
     return {'kind': 'cue', 'cue': line}
+
+
+def _line_seq(store, event):
+    """The scene_seq of the line a turn is for, or None (a turn from no line)."""
+    return (store.db.messages.find_one({'_id': 'in-' + _episode(event)}, {'scene_seq': 1}) or {}).get('scene_seq')
+
+
+def fired(store, persona, what, scene, event, moment=None, *, episode=None, **fields):
+    """One count row: what came back (FIRE_KINDS), in which conversation and turn (`episode`, else the event's), at
+    which line (the turn's line's scene_seq) and when."""
+    import uuid
+    episode = episode or _episode(event)
+    line = store.db.messages.find_one({'_id': 'in-' + episode}, {'scene_seq': 1}) or {}
+    store.db[FIRES].insert_one({'_id': 'fire:' + uuid.uuid4().hex, 'kind': what, 'persona': persona,
+                                'scene_id': scene['_id'], 'event_id': event.get('event_id'), 'episode_id': episode,
+                                'scene_seq': line.get('scene_seq'), 'at': (moment or datetime.now(timezone.utc)).isoformat(),
+                                **fields})
+
+
+def recalled(store, persona, ep, here, returned, crossed, before):
+    """A recall's count rows: each line from elsewhere and past version it returned, and W6 when it brought back
+    something the turn's own memories had not (`returned`: the ids of its memories)."""
+    event = {'event_id': ep.get('source_event_id')}
+    for entry in crossed:
+        hers = entry['line'].startswith(tuple(MARKS[(True, corrected)].split('%s')[0] for corrected in (False, True)))
+        fired(store, persona, 'elsewhere_hers' if hers else 'elsewhere_theirs', here, event, episode=ep['_id'],
+              ref=entry['ref'])
+    for entry in before:
+        fired(store, persona, 'before', here, event, episode=ep['_id'], ref=entry.get('now'))
+    automatic = {m.get('_id') for m in (ep.get('context') or {}).get('memories') or [] if isinstance(m, dict)}
+    new = [key for key in [*returned, *(e['ref'] for e in crossed), *(e.get('now') for e in before)]
+           if key and key not in automatic]
+    if new:
+        fired(store, persona, 'w6', here, event, episode=ep['_id'], new=len(set(new)))
 
 
 def _episode(event):
@@ -618,4 +679,86 @@ def prune(store, moment=None):
     """At settlement: fire rows older than FIRES_DAYS go. Returns how many."""
     from datetime import timedelta
     cutoff = ((moment or datetime.now(timezone.utc)) - timedelta(days=FIRES_DAYS)).isoformat()
-    return store.db[FIRES].delete_many({'at': {'$lt': cutoff}}).deleted_count
+    return store.db[FIRES].delete_many({'kind': {'$in': list(FIRE_KINDS)}, 'at': {'$lt': cutoff}}).deleted_count
+
+
+# ── the reading (tools/memory_fires_report.py), counts only ─────────
+def report(store, since, compactions=None):
+    """ADR-097's reading from the count rows since `since` (ISO), per place and in all: her turns from someone's line,
+    cues and cues a turn, her recalls in a cue's turn or the next one there (and those whose query has the cue's word),
+    her notes back by word and by meaning, recall's lines from elsewhere (hers, others') and past versions, W6. With
+    `compactions` ({DSH session id: [compaction end, ms]}), the minutes from the last compaction of the turn's session
+    to each cue and note. Places are numbered by their turns and shown with their kind when set: never ids or names."""
+    db = store.db
+    fires = list(db[FIRES].find({'kind': {'$in': list(FIRE_KINDS)}, 'at': {'$gte': since}}))
+    groups = set(_groups(store))
+    episodes = {ep['_id']: ep for ep in db.episodes.find({'episode_kind': 'external', 'scene_id': {'$in': sorted(groups)}},
+                                                          {'scene_id': 1, 'native_session_id': 1})}
+    lines = {}
+    ids = ['in-' + key for key in episodes]
+    for start in range(0, len(ids), 1000):
+        for row in db.messages.find({'_id': {'$in': ids[start:start + 1000]}, 'received_at': {'$gte': since}},
+                                    {'scene_seq': 1}):
+            lines[row['_id'][len('in-'):]] = row.get('scene_seq') or 0
+    turns = {}
+    for key, seq in lines.items():
+        turns.setdefault(episodes[key]['scene_id'], []).append((seq, key))
+    for scene_turns in turns.values():
+        scene_turns.sort()
+    following = {key: (scene_turns[i + 1][1] if i + 1 < len(scene_turns) else None)
+                 for scene_turns in turns.values() for i, (_, key) in enumerate(scene_turns)}
+    recalls = {}
+    for row in db.audit_events.find({'type': 'recall.read', 'occurred_at': {'$gte': since}},
+                                    {'stream_id': 1, 'payload.query': 1}):
+        recalls.setdefault(row['stream_id'], []).append((row.get('payload') or {}).get('query') or '')
+    order = sorted({*turns, *(f['scene_id'] for f in fires if f['scene_id'] in groups)},
+                   key=lambda scene_id: (-len(turns.get(scene_id, [])), scene_id))
+    label = {scene_id: 'group %d' % (n + 1) for n, scene_id in enumerate(order)}
+
+    def blank():
+        return {'turns': 0, 'cues': 0, 'recalls_after_a_cue': 0, 'recalls_with_the_cue_word': 0, 'notes_by_word': 0,
+                'notes_by_meaning': 0, 'elsewhere_hers': 0, 'elsewhere_theirs': 0, 'before': 0, 'w6': 0,
+                'w6_new_items': 0, 'since_compaction': []}
+    places = {scene_id: blank() for scene_id in order}
+    places['elsewhere (home, private chats)'] = blank()
+    every = blank()
+    for scene_id, scene_turns in turns.items():
+        places[scene_id]['turns'] = len(scene_turns)
+        every['turns'] += len(scene_turns)
+    for fire in fires:
+        entry = places.get(fire['scene_id']) or places['elsewhere (home, private chats)']
+        kind_ = fire['kind']
+        counted = ({'cue': 'cues', 'note': 'notes_by_word' if fire.get('by') == 'word' else 'notes_by_meaning',
+                    'w6': 'w6'}).get(kind_, kind_)
+        for target in (entry, every):
+            target[counted] += 1
+            if kind_ == 'w6':
+                target['w6_new_items'] += int(fire.get('new') or 0)
+        if kind_ == 'cue':
+            asked = [q for key in (fire.get('episode_id'), following.get(fire.get('episode_id'))) if key
+                     for q in recalls.get(key, [])]
+            for target in (entry, every):
+                target['recalls_after_a_cue'] += bool(asked)
+                target['recalls_with_the_cue_word'] += any(key_words.found(fire.get('word') or '', q) for q in asked)
+        if kind_ in ('cue', 'note') and compactions is not None:
+            session = (episodes.get(fire.get('episode_id')) or {}).get('native_session_id') or (
+                db.episodes.find_one({'_id': fire.get('episode_id')}, {'native_session_id': 1}) or {}).get('native_session_id')
+            at = datetime.fromisoformat(fire['at'].replace('Z', '+00:00')).timestamp() * 1000
+            ends = [end for end in compactions.get(session, []) if end <= at]
+            minutes = (at - max(ends)) / 60000 if ends else None
+            for target in (entry, every):
+                target['since_compaction'].append(minutes)
+
+    def finish(entry):
+        out = {k: v for k, v in entry.items() if k != 'since_compaction'}
+        out['cues_a_turn'] = round(entry['cues'] / entry['turns'], 3) if entry['turns'] else None
+        if compactions is not None:
+            known = sorted(m for m in entry['since_compaction'] if m is not None)
+            out['since_compaction'] = {'fires': len(entry['since_compaction']), 'no_compaction_before': sum(
+                1 for m in entry['since_compaction'] if m is None), 'within_30_minutes': sum(1 for m in known if m < 30),
+                'median_minutes': round(known[len(known) // 2]) if known else None}
+        return out
+    return {'since': since, 'all': finish(every),
+            'places': {'%s%s' % (label.get(key, key), ' (%s)' % kind(key) if kind(key) else ''): finish(value)
+                       for key, value in places.items() if value['turns'] or any(
+                           value[k] for k in ('cues', 'notes_by_word', 'notes_by_meaning', 'w6'))}}

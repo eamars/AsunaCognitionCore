@@ -126,7 +126,13 @@ def told_text(config):
     return effective((config or {}).get('persona_model') or {}, 'memory.tiers_told')
 THINGS_NOTE = ('你的东西在哪：每份随身还能放多少，手边、收着各有几条；moved 是程序挪过的，每件只说一次（又用到、改写出变化就回来）；'
                'identity_room 是各处每回合随身带的（%s 合起来）用了上限的多少：%s；变了才说；'
+               'came_back 是最近一天里各样东西按词回来过几次，每天说一次；'
                'self_items 是把 current_self 拆成条的提议。')
+# What came back in the last day (ADR-097 D5), each kind in words; told once a day in each conversation.
+CAME_BACK_KINDS = (('note', '你的笔记回来'), ('cue', '别的群见过的词提醒'), ('elsewhere_hers', 'recall 找到你在别处说过的'),
+                   ('elsewhere_theirs', 'recall 找到别人提过的'), ('before', 'recall 找到你以前记过的'))
+TIMES_WORDS = ((0, '没有'), (1, '一次'), (3, '两三次'), (9, '好几次'), (None, '很多次'))
+CAME_BACK_ITEMS = 3
 
 
 def _things_note():
@@ -638,7 +644,40 @@ class Tiers:
                                   {'$addToSet': {'told_in': scene['_id']}})
         if home and not self.rows.find_one({'row': 'item', 'persona': self.persona, 'doc': SELF_DOC}):
             block['self_items'] = SELF_OFFER
+        came = self.came_back(here, scene, zone, moment)
+        if came:
+            block['came_back'] = came
         return block
+
+    def came_back(self, here, scene, zone, moment):
+        """Once a local day in each conversation: what came back in the last day, each kind in words, and the notes
+        readable here that came back most (never which place it was)."""
+        from . import crossing
+        day = moment.astimezone(zone['tz'] if isinstance(zone, dict) else timezone.utc).date().isoformat()
+        key = 'came_back:%s:%s' % (self.persona, scene['_id'])
+        if (self.rows.find_one({'_id': key}, {'day': 1}) or {}).get('day') == day:
+            return None
+        since = _iso(moment - timedelta(days=1))
+        rows = list(self.store.db[crossing.FIRES].find({'persona': self.persona, 'kind': {'$in': [k for k, _ in CAME_BACK_KINDS]},
+                                                        'at': {'$gte': since}}, {'kind': 1, 'ref': 1}))
+        tally = {kind: sum(1 for row in rows if row['kind'] == kind) for kind, _ in CAME_BACK_KINDS}
+        notes = {}
+        for row in rows:
+            if row['kind'] == 'note' and row.get('ref'):
+                notes[row['ref']] = notes.get(row['ref'], 0) + 1
+        named = []
+        for ref_, n in sorted(notes.items(), key=lambda pair: -pair[1]):
+            doc, _, sid = ref_[len('doc:'):].partition('#')
+            item = self.item(doc, sid)
+            if item and here(item):
+                named.append('「%s」%s' % (item.get('heading') or sid, words(TIMES_WORDS, n)))
+            if len(named) == CAME_BACK_ITEMS:
+                break
+        parts = ['%s %s' % (label, words(TIMES_WORDS, tally[kind])) + ('（%s）' % '、'.join(named) if kind == 'note' and named else '')
+                 for kind, label in CAME_BACK_KINDS]
+        self.rows.update_one({'_id': key}, {'$set': {'row': 'told', 'persona': self.persona, 'scene_id': scene['_id'],
+                                                     'day': day}}, upsert=True)
+        return '最近一天：' + '；'.join(parts)
 
 
 def signing(row, intent, body=None):

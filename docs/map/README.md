@@ -472,6 +472,7 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`import_native_credentials.mjs`](../../tools/import_native_credentials.mjs) — One-time private migration through DSH's credential provider; never logs values.
 - [`integration_import_offline_check.py`](../../tools/integration_import_offline_check.py) — 集成产物导入的离线自检：不需要 Mongo、不需要 pytest、不需要 WSL，直接跑同一套用例。
 - [`make_demo_config.py`](../../tools/make_demo_config.py) — Create the ignored demo config (ADR-009 §0.3) from config/demo.example.json.
+- [`memory_fires_report.py`](../../tools/memory_fires_report.py) — ADR-097: the reading of what came back, from the count rows (memory_fires), in counts only (no text, word, heading, query, id or place name).
 - [`memory_pilot_report.py`](../../tools/memory_pilot_report.py) — ADR-062 phase 1: the shadow pilot's daily reading, in counts only (no text, no headings, no queries).
 - [`outbound_image_offline_check.py`](../../tools/outbound_image_offline_check.py) — 出站图片附件（QQ 私聊 B 阶段第一步）的离线自检：不需要 Mongo、不需要 pytest、不联网、不发 QQ。
 - [`p1c_offline_check.py`](../../tools/p1c_offline_check.py) — ADR-005 P1-c 离线自检：不需要 Mongo、不需要 pytest，直接跑同一套整理用例。

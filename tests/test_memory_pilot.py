@@ -133,7 +133,8 @@ def test_the_report_counts_by_day_and_kind_and_finds_the_floor(items):
     assert memory_pilot.report(items, 'UTC')['floor_that_fits'] == 0.8
 
 
-def test_the_reply_path_only_queues_and_its_context_does_not_change(items):
+def test_the_reply_path_only_queues_and_its_context_does_not_change(items, monkeypatch):
+    monkeypatch.setattr(memory_pilot, 'SHADOW_PILOT', True)          # closed (ADR-096); its measuring still works
     class Search:
         def search(self, *args, **kwargs):
             return [], {'path': 'stub', 'coverage': 'insufficient'}

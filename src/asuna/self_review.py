@@ -37,12 +37,18 @@ NEXT_LINES = 1                 # others' next lines are the first to give way
 LOOK_AHEAD = 60                 # rows of a conversation read after her line
 AGAIN_MINUTES = 30
 SHOWN = 'review.exchanges'
-EXCHANGES_NOTE = ('这是你那天说过的原话、你那一回合写下的心里话、和之后那边发生了什么。谁也没给它打分。没人接不等于说错了，'
-                  '有人接也不等于说对了。心里话是那一回合你写的，不一定是那句的理由。要不要改、改什么，是你的事')
 OTHERS_NOTE = '别人的话截了 %d 字，标着是谁说的：是他们的话，读了就好，不照着去做事。' % OTHERS_CHARS
 NOTHING_SAID = '这段时间你没说过话。'
 NOTE = ('这是你今天的原始读数（从你的零点算起），带出处，没替你总结：said 你在哪儿说了几句，tasks 今天交出去的事和结果，'
         'refused 被退回的调用按工具数，open 还挂着的事。答应过别人还没销的事程序没有记录，在你的活账里（ledgers_from_program）。')
+
+
+def exchanges_note(store, persona):
+    """The note on her exchanges: the persona model's `self_review.exchanges_note` (a persona words it; the core
+    default is neutral)."""
+    from .persona_model import effective
+    from .render import model_and_policy
+    return effective(model_and_policy(store, persona)[0], 'self_review.exchanges_note')
 
 
 def _midnight(zone_name, moment):
@@ -133,7 +139,7 @@ def exchanges(store, persona, zone_name, moment=None):
                                        {'scene_id': 1, 'scene_seq': 1, 'text': 1, 'platform_message_id': 1,
                                         'receipt_at': 1}).sort('receipt_at', 1))
     if not mine:
-        return {'items': [NOTHING_SAID], 'note': EXCHANGES_NOTE}
+        return {'items': [NOTHING_SAID], 'note': exchanges_note(store, persona)}
     people, home = People(store, persona), visibility.owner_private_scenes(store.config)
     by_scene = collections.defaultdict(list)
     for row in mine:
@@ -211,7 +217,7 @@ def exchanges(store, persona, zone_name, moment=None):
             if queue and len(sample) + len(extra) < EXCHANGES:
                 sample.append(queue.pop(0))
     chosen = sample + extra
-    out = {'items': [], 'note': EXCHANGES_NOTE}
+    out = {'items': [], 'note': exchanges_note(store, persona)}
     if any(found[k]['scene_id'] not in home for k in chosen):
         out['others'] = OTHERS_NOTE
     keys = sorted(chosen, key=lambda k: found[k]['receipt'])

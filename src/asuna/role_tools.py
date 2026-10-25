@@ -273,8 +273,8 @@ TOOLS = {
         'description': ('写你自己的文档（人格、口吻、活账、工作文档；群笔记只在那个群里）。do 选一样：replace_section 写修订后的整节；'
                          'append_section 加新的一节；correction 给活账写更正（原条目不改）；set_tags 只改 visibility、when_shown、tags；'
                          'adopt_seed 接收人格包里更新的种子。正文写在 content。visibility：public 你所有回合读得到，'
-                         'owner_private（默认）只在家里。每回合自动带上的只有 persona 和 voice 里 when_shown=always 的节，'
-                         '有上限：不常用的改成 on_demand（recall 还读得到）；只在某类回合用的，tags 加 place:group、place:home、place:peer 或 place:dm，'
+                         'owner_private（默认）只在家里。每回合随身带上的 persona、voice、self、core 节，'
+                         '每处合起来有上限：不常用的改成 on_demand（recall 还读得到）；只在某类回合用的，tags 加 place:group、place:home、place:peer 或 place:dm，'
                          '就只在那里带上。工作文档和人格用 replace_section。只写发生过的事，不写对人说的台词。'),
         'parameters': {
             'doc': _s('文档，如 persona、voice、group_notes', required=True),
@@ -287,6 +287,7 @@ TOOLS = {
             'visibility': _s('哪些回合读得到：public＝你所有的回合（包括在群里的）；owner_private＝只在家里的回合（自动带上只限 persona、voice 的 always 节）', enum=['public', 'owner_private']),
             'inject': _s('什么时候放进上下文', enum=['always', 'on_demand', 'never']),
             'kind': _s('新建文档时：ledger 活账，每回合带上；journal 流水；working 工作文档，默认', enum=['ledger', 'journal', 'working']),
+            'pinned': _s('群笔记：yes 置顶（超长时不折叠）', enum=['yes', 'no']),
         },
     },
     'understand_person': {
@@ -1089,7 +1090,7 @@ WORDS = {
     'BASE_REVISION_STALE': '要改的东西刚被别处改过。',
     'VOID_REQUIRES_WHY': 'void 要写 why：为什么这一笔的前提不成立。',
     'SOURCE_IDENTITY_REQUIRED': '这一笔要写 source_identity（它来自哪条记录）。',
-    'PERSONA_RENDER_OVER_BUDGET': '这样写完，每回合自动带上的人格和口吻会超出上限。',
+    'PERSONA_RENDER_OVER_BUDGET': '这样写完，那个地方每回合随身带的身份部分（人格、口吻、自我、core）会超出上限。',
     'POLICY_SET_REQUIRES_OWNER_PRIVATE': '参数只能在家里（家里·私聊、主人私聊这类可信的对话）改。',
     'PROMOTE_ONLY_IN_SETTLEMENT': '提升长期记忆只在夜间沉淀时做。',
     'PROMOTION_QUOTA': '今天提升长期记忆的配额用完了。',
@@ -2106,6 +2107,10 @@ class RoleTools:
             item = {**item, 'visibility': 'public'}
             if item['op'] == 'append_section' or 'inject' in item:
                 item['inject'] = item['inject'] if item.get('inject') in ('always', 'on_demand') else 'always'
+        if 'pinned' in item and not item['doc'].startswith('group:'):
+            raise Refused('pinned 只用于群笔记（doc=group_notes）：别的文档没有折叠，置顶不起作用。')
+        if 'pinned' in item and not isinstance(item['pinned'], bool):
+            raise Refused('pinned 写 yes 或 no%s。' % _given(item, 'pinned'))
         docs = DocumentStore(self.store, ep['persona'])
         slug = item['doc']
         base, before = docs.read(slug)
@@ -2143,10 +2148,10 @@ class RoleTools:
             if row and row['place'] != memory_tiers.CARRIED:
                 item = {k: v for k, v in item.items() if k != 'inject'}
                 kept_away = 'when_shown 没改。' + memory_tiers.NOT_BACK % row['place']
-                if not any(field in item for field in ('visibility', 'tags')) and not memory_tiers.declared_nature(item):
+                if not any(field in item for field in ('visibility', 'tags', 'pinned')) and not memory_tiers.declared_nature(item):
                     return {'doc': slug, 'op': 'set_tags', 'sid': item['sid'], 'note': kept_away}, False
         if (memory_tiers.ENABLED and item.get('op') == 'set_tags' and memory_tiers.declared_nature(item)
-                and not any(field in item for field in ('visibility', 'inject', 'tags'))):
+                and not any(field in item for field in ('visibility', 'inject', 'tags', 'pinned'))):
             # Only what an item is, or where it came from: kept beside it; the document is not written.
             from .documents import missing_section, named_section
             listed = (before or {}).get('sections') or []
@@ -2167,7 +2172,8 @@ class RoleTools:
                 raise DocumentError('DOC_SEED_NOT_FOUND', '「%s」没有种子；有种子的文档：%s'
                                     % (slug, '、'.join(filter(None, seeds)) or '（人格包没带种子）'))
             outcome = docs.adopt_seed(slug, kind, text, base_revision_id=base, author='character',
-                                      mutation_id=mutation_id, reason=item.get('reason') or 'adopt package seed')
+                                      mutation_id=mutation_id, reason=item.get('reason') or 'adopt package seed',
+                                      budget=budget_gate(self.store, ep['persona']))
             return {'doc': slug, 'op': 'adopt_seed', **{k: v for k, v in outcome.items() if k != 'revision'}}, False
         body = args.get('body') if item.get('op') in WRITE_STAGE_OPS else None
         revision = docs.apply(slug, item, body, base_revision_id=base, author='character', mutation_id=mutation_id,
@@ -2195,7 +2201,23 @@ class RoleTools:
             # What the section is now, tags included: she checks a place tag took, not just that the write did.
             result['now'] = {'visibility': written['visibility'], 'inject': written['inject'], 'tags': written.get('tags') or [],
                              'places': visibility.section_places(written) or '到处都带'}
+            self._carried_lines(ep, slug, written, result)
+            if 'pinned' in item:
+                from .context_budget import NOTE_CHARS, PIN_NOTE, UNPIN_NOTE
+                result['pinned'] = (PIN_NOTE % (NOTE_CHARS['group_notes'], memory_tiers.CAPS['group_notes'])
+                                    if item['pinned'] is True else UNPIN_NOTE)
         return result, False
+
+    def _carried_lines(self, ep, slug, section, result):
+        """ADR-096: a write to her identity, or a let_go, says the section's weight and each place's room, in exact
+        numbers; a section whose `inject` and tier differ says both."""
+        from . import carried
+        room = carried.room_line(self.store, ep['persona'], slug, section)
+        if room:
+            result['room'] = room
+        tier = carried.tier_line(self.store, ep['persona'], slug, section)
+        if tier and 'place' not in result:
+            result['tier'] = tier
 
     def _let_go(self, ep, slug, sid, content):
         """ADR-062: her let_go of one item: one place down now; nothing of its text changes."""
@@ -2209,8 +2231,10 @@ class RoleTools:
         tiers = memory_tiers.Tiers(self.store, ep['persona'])
         tiers.sync()
         move = tiers.let_go(slug, sid, scene_id=ep['scene_id'])
-        return {'doc': slug, 'op': 'let_go', 'sid': sid,
-                'note': memory_tiers.told(move) if move else '它已经收着了，再放就没有更下面的地方了；什么都没改。'}
+        result = {'doc': slug, 'op': 'let_go', 'sid': sid,
+                  'note': memory_tiers.told(move) if move else '它已经收着了，再放就没有更下面的地方了；什么都没改。'}
+        self._carried_lines(ep, slug, found, result)
+        return result
 
     def tool_update_self(self, ep, call_id, args):
         from .self_state import SelfState
@@ -3129,7 +3153,10 @@ def read_sections(store, ep, items, cls):
         else:
             out.append({'doc': item['doc'], 'sid': section['sid'], 'heading': section['heading'],
                         'body': section['body'], 'visibility': section['visibility']})
-            from . import memory_tiers
+            from . import carried, memory_tiers
+            tier = carried.tier_line(store, ep['persona'], item['doc'], section)
+            if tier:
+                out[-1]['tier'] = tier                  # ADR-096: what she wrote and where it is, when they differ
             if memory_tiers.ENABLED:
                 # A gist reads with the verbatim it stands for.
                 verbatim = memory_tiers.detail(store, ep['persona'], memory_tiers.Tiers(store, ep['persona']).item(

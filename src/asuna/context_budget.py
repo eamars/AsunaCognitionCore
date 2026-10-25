@@ -4,7 +4,8 @@ The program adds most of a turn's context by itself, so it also bounds it: a ver
 block it adds, a ceiling for what a turn sends (applied by the Host to the notice it composes, `ceiling`, or here to a
 context sent whole, `trim_turn`), and the words for how full her own notes are. Nothing is cut
 silently and nothing is lost: what a turn leaves out is counted and said, and stays readable through recall.
-Her notes are hers to tidy. Over its limit a note shows its newest sections and names the rest; far over it, it
+Her notes are hers to tidy. Over its limit a group's notes fold the section that surfaced longest ago to its heading
+first (a pinned one never folds), any other note shows its newest sections and names the rest; far over it, a note
 takes no new text until she tidies it. Her nightly settlement lists the notes due for tidying.
 """
 from __future__ import annotations
@@ -27,6 +28,13 @@ STICKER_REVIEW = 6                  # stickers listed for her weekly look at the
 MEMBER_LINES = 80                   # group members a turn names (group_members.py); find_member reaches the rest
 CARRIED_CHARS = 12000               # the summary a new session carries from one that no longer fit (ADR-028)
 
+# A group's notes over their limit (ADR-096): what folded, and when her pins alone are over it.
+FOLD_LINE = ('这份笔记超过了每回合的上限：最久没被用到的 %d 节这里只列标题（还在：recall 读得到，聊到它时也会带出来）。'
+             '整理一下就能都放进来。')
+PINS_OVER = '置顶的节加起来就有 %d 字，超过了上限 %d 字：置顶的节照常都在，没置顶的都只列标题。'
+PIN_NOTE = ('置顶了：笔记超过每回合上限时，这一节不折成标题，它仍算在 %d 字里。置顶不让它留在随身：一阵子没用到，'
+            '它照样会放到手边，也照样占随身的名额（每个群的笔记随身最多 %d 条）。')
+UNPIN_NOTE = '取消置顶了：笔记超长时，它和别的节一样按多久没用到折叠。'
 # How full a note is, in words (share of its limit).
 FULLNESS = ((0.5, '宽裕'), (0.8, '用了一大半'), (1.0, '快满了'), (None, '超了'))
 # How long ago a feeling was stirred, in words coarse enough to stay the same for a while.
@@ -71,15 +79,50 @@ def note_chars(sections):
     return sum(len(s.get('heading') or '') + len(s.get('body') or '') for s in shown(sections))
 
 
-def note_view(sections, limit):
-    """(sections to show, words about the note). Within its limit a note shows whole; over it, the newest sections
-    that fit, in their own order, and the rest by heading. A section is never cut inside."""
+def _cost(section):
+    return len(section.get('heading') or '') + len(section.get('body') or '')
+
+
+def _fold(always, limit, order):
+    """Over its limit, a group's notes fold by `order` (the section that surfaced longest ago first; one not in it
+    folds last) until the rest fit; a pinned section never folds and still counts. Returns (kept, folded)."""
+    from .config import excerpt
+    rank = {sid: index for index, sid in enumerate(order)}
+    candidates = sorted((s for s in always if not s.get('pinned')),
+                        key=lambda s: (rank.get(s['sid'], len(rank)), always.index(s)))
+    used, folded = sum(map(_cost, always)), []
+    for section in candidates:
+        if used <= limit:
+            break
+        folded.append(section)
+        used -= _cost(section)
+    gone = {s['sid'] for s in folded}
+    kept = [s for s in always if s['sid'] not in gone]
+    if not kept and folded:                         # the last one alone is over: show its start
+        last = folded.pop()
+        kept = [{**last, 'body': excerpt(last.get('body'), max(limit, 200))}]
+    gone = {s['sid'] for s in folded}
+    return kept, [s for s in always if s['sid'] in gone]
+
+
+def note_view(sections, limit, order=None):
+    """(sections to show, words about the note). Within its limit a note shows whole; over it, a group's notes fold
+    by `order` (pins never fold), any other note shows the newest sections that fit, in their own order, and the
+    rest by heading. A section is never cut inside."""
     from .config import excerpt
     always = shown(sections)
     total = note_chars(sections)
     about = {'fullness': fullness(total, limit)}
     kept = always
-    if total > limit:
+    if total > limit and order is not None:
+        kept, folded = _fold(always, limit, order)
+        about['not_shown'] = [{'sid': s['sid'], 'heading': s.get('heading') or s['sid']}
+                              for s in folded[:FOLDED_HEADINGS]]
+        about['over_limit'] = FOLD_LINE % len(folded)
+        pins = sum(_cost(s) for s in always if s.get('pinned'))
+        if pins > limit:
+            about['pinned_over'] = PINS_OVER % (pins, limit)
+    elif total > limit:
         kept, used = [], 0
         for section in reversed(always):
             cost = len(section.get('heading') or '') + len(section.get('body') or '')
@@ -110,7 +153,8 @@ def note_limit(slug, content):
 
 
 def note_gate(slug, before, after):
-    """Refuse growth of a note already far over its limit (DocumentStore.apply's budget hook)."""
+    """Refuse growth of a note already far over its limit (DocumentStore.apply's budget hook, through carried.gate,
+    which passes both as her turns carry them)."""
     from .documents import DocumentError
     limit = note_limit(slug, after)
     if not limit:
@@ -235,9 +279,10 @@ def review_block(store, persona, moment):
     tidy = {row['_id'] for row in store.db.episodes.find({'episode_kind': 'settlement'}, {'_id': 1})}
     names = {notes_slug(scene['_id']): people.scene_title(scene) + '的笔记'
              for scene in store.db.scenes.find({'kind': 'group'}, {'_id': 1, 'kind': 1})}
+    from .carried import placed
     due = []
     for slug in docs.slugs():
-        _, content = docs.read(slug)
+        content = placed(store, persona, slug, docs.read(slug)[1])         # as her turns carry it (ADR-096)
         limit = note_limit(slug, content)
         if not limit or not content:
             continue

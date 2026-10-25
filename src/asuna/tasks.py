@@ -1013,8 +1013,10 @@ class Executor:
         grant=workspace_grant(self.service.store.config,task['scene_id'],task['requester_id'])
         store=self.service.store
         # Who she is, at the class of the conversation the task came from (render.action_persona).
-        cls=visibility.session_class(store.config,store.db,store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']},task['requester_id'])
-        system=prompt_path(store.config,'executor.md').read_text(encoding='utf-8')+action_values(store,cls=cls)
+        scene=store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']}
+        cls=visibility.session_class(store.config,store.db,scene,task['requester_id'])
+        system=(prompt_path(store.config,'executor.md').read_text(encoding='utf-8')
+                +action_values(store,cls=cls,place=visibility.place_of(store.config,scene,cls)))
         # ADR-011 §4: her brief is the first message (a continuation: her new words in the same session);
         # the program's facts follow it, marked as the program's.
         text=opening_text(store,task)

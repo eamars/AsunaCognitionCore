@@ -196,12 +196,12 @@ def material(store, scene, event, row, persona):
 def system(store, persona):
     """Shared rules, then who she is: her core sentences (public), not her persona's rules for talking; small, so a cold
     read is cheap (owner 2026-10-14: the gate only answers whether to join, she judges in her turn)."""
-    from .documents import DocumentStore, render_markdown
-    from .render import common_text, readable_sections
+    from .carried import carried
+    from .documents import render_markdown
+    from .render import common_text
     from . import visibility
     name = (store.config.get('chat') or {}).get('display_name') or persona
-    _, content = DocumentStore(store, persona).read('core')
-    sections = readable_sections(content, visibility.PUBLIC)
+    sections = carried(store, persona, visibility.PUBLIC, 'group')['core']        # as a group turn carries it
     return common_text(store.config) + '\n你是' + name + '。' + ('\n' + render_markdown(sections) if sections else '')
 
 
@@ -217,13 +217,14 @@ def _cut(text, limit):
 
 
 def group_notes(store, persona, scene):
-    """Her notes about this group: the always-shown sections in their order, headings and bodies, the first
+    """Her notes about this group: the sections her turns there carry, in their order, headings and bodies, the first
     NOTES_CHARS characters."""
+    from .carried import note_sections
     from .context_budget import shown
     from .documents import DocumentStore
     from .group_admin import notes_slug
-    _, content = DocumentStore(store, persona).read(notes_slug(scene['_id']))
-    sections = shown((content or {}).get('sections') or [])
+    slug = notes_slug(scene['_id'])
+    sections = shown(note_sections(store, persona, slug, DocumentStore(store, persona).read(slug)[1]))
     text = '\n'.join('%s：%s' % (s.get('heading') or s['sid'], ' '.join(str(s.get('body') or '').split())) for s in sections)
     return _cut(text, NOTES_CHARS) if text else None
 

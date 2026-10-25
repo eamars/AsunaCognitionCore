@@ -37,25 +37,21 @@ def test_an_undeclared_policy_key_lists_the_writable_ones_and_a_bad_value_its_ra
         policy.validate([{'key': 'heartbeat.visits_per_beat', 'value': 5, 'what': 'x'}])
 
 
-def test_an_over_budget_write_says_by_how_much_and_the_largest_sections():
-    section = lambda sid, body: {'sid': sid, 'heading': sid, 'body': body, 'visibility': 'public', 'inject': 'always'}
-    proposed = {'persona': {'sections': [section('big', '字' * 300), section('small', '字' * 10)]},
-                'voice': {'sections': [section('tone', '字' * 100)]}}
-    said = render.over_budget_words(proposed, 400, 420, 410)
-    assert '约 420 token，上限 410，超出 10' in said and said.index('persona#big') < said.index('voice#tone')
-    assert 'when_shown=on_demand' in said
-
-
-def test_an_over_budget_write_names_the_place_and_only_that_place_s_sections():
+def test_an_over_budget_write_says_by_how_much_in_which_place_and_only_that_place_s_sections(store):
     # Her finding (2026-10-21): a home rule over the budget pointed her at a group rule, which is not in the home render.
-    def section(sid, body, place, visibility='public'):
-        return {'sid': sid, 'heading': sid, 'body': body, 'visibility': visibility, 'inject': 'always',
-                'tags': ['place:' + place]}
-    proposed = {'persona': {'sections': [section('home_rule', '字' * 300, 'home', 'owner_private'),
-                                         section('group_rule', '字' * 250, 'group')]},
-                'voice': {'sections': []}}
-    said = render.over_budget_words(proposed, 400, 420, 410)
-    assert '家里那一份' in said and 'home_rule' in said and 'group_rule' not in said
+    from asuna import carried, visibility
+
+    def section(sid, body, **extra):
+        return {'sid': sid, 'heading': sid, 'body': body, 'visibility': 'public', 'inject': 'always', **extra}
+    docs = {'persona': {'sections': [section('big', '字' * 300), section('small', '字' * 10),
+                                     section('group_rule', '字' * 250, tags=['place:group'])]},
+            'voice': {'sections': [section('tone', '字' * 100)]}, 'self': None, 'core': None}
+    said = carried.over_words(store, 'P1', ('home', visibility.OWNER_PRIVATE), 400, 420, 410, docs, {})
+    assert said.startswith('写完家里') and '约 420 token，上限 410，超出 10（写之前是 400' in said
+    assert said.index('persona#big') < said.index('voice#tone') and 'group_rule' not in said
+    assert 'let_go' in said
+    group = carried.over_words(store, 'P1', ('group', visibility.PUBLIC), 400, 420, 410, docs, {})
+    assert group.startswith('写完群里') and 'group_rule' in group
 
 
 def test_a_missing_section_lists_the_sids_there_are():

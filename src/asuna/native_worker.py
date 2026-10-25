@@ -636,7 +636,8 @@ class BusinessWorker:
 
     def audit_retention(self):
         """ADR-074: the audit, bounded by time and by size, is pruned once at start and then daily; stored pictures
-        are swept by their life cycle (media_life) on the same beat."""
+        are swept by their life cycle (media_life) on the same beat, the days she carried are counted
+        (carried.count_days) and the shadow pilot's old turn rows go (memory_pilot.prune)."""
         from .audit import prune
         while True:
             try:
@@ -652,6 +653,16 @@ class BusinessWorker:
                     self.app.evidence.record('media.swept', removed)
             except Exception as exc:
                 self.app.evidence.record('media.sweep_failed', {'error': redact_text(str(exc), self.app.config)[:300]})
+            try:
+                # ADR-096: what she carried, per section × place × day (carried_counts, 30 days), and the closed
+                # shadow pilot's turn rows past 30 days.
+                from . import carried, memory_pilot
+                persona = (self.app.config.get('chat') or {}).get('persona')
+                counted = carried.count_days(self.app.store, persona) if persona else {}
+                self.app.evidence.record('carried.counted', {**counted,
+                                                             'pilot_rows_deleted': memory_pilot.prune(self.app.store)})
+            except Exception as exc:
+                self.app.evidence.record('carried.count_failed', {'error': redact_text(str(exc), self.app.config)[:300]})
             if self.stopping.wait(24 * 3600):
                 return
 

@@ -234,13 +234,28 @@ def test_her_self_description_and_understanding_have_a_length_limit(store):
     assert not refused[5] and '要求 %d 字以内' % (budget.SINGLE_BODY_CHARS * 4 // 5) in refused[4]
 
 
-def test_the_persona_render_has_a_fixed_budget_she_can_only_raise_so_far():
-    from asuna.persona_model import CORE_DEFAULTS, key_spec
-    assert CORE_DEFAULTS['render']['budget_tokens'] == 6144
-    assert key_spec({}, 'render.budget_tokens')['max'] == 12288
+def test_the_identity_ceiling_is_the_owners_and_a_stored_legacy_budget_binds_nothing(store):
+    """ADR-096: one ceiling per (place, class) pair, an owner-only key; her stored render.budget_tokens (a probe of
+    hers) is read by nothing."""
+    from asuna import render
+    from asuna.persona_model import CORE_DEFAULTS, OWNER_KEYS, key_spec, writable_keys
+    from asuna.policy import PolicyStore
+    from asuna.state import Denied
+    assert CORE_DEFAULTS['render']['identity_tokens'] == 12288 and 'budget_tokens' not in CORE_DEFAULTS['render']
+    assert 'render.identity_tokens' in OWNER_KEYS and key_spec({}, 'render.identity_tokens') is None
+    assert 'render.budget_tokens' not in writable_keys({}) and 'render.identity_tokens' not in writable_keys({})
+    with pytest.raises(Denied, match='POLICY_KEY_UNDECLARED'):
+        PolicyStore(store, 'P1', {}).validate([{'key': 'render.identity_tokens', 'value': 30000, 'what': '多带点'}])
+    before = render.budget_limit(store, 'P1')
+    store.put('state_revisions', {'_id': 'policy-legacy', 'entity_key': 'policy:P1|global-safe', 'scope_key': 'global-safe',
+                                  'content': {'params': {'render.budget_tokens': {'value': 6144, 'what': '探一下',
+                                                                                  'class': 'param'}}}})
+    store.put('state_heads', {'_id': 'policy:P1|global-safe', 'scope_key': 'global-safe', 'revision_id': 'policy-legacy'})
+    assert PolicyStore(store, 'P1', {}).params()['render.budget_tokens']['value'] == 6144
+    assert render.budget_limit(store, 'P1') == before >= 12288, 'the stored 6144 does not bind'
 
 
-def test_the_render_limit_follows_the_package_seeds_up_to_the_window_share(tmp_path, monkeypatch):
+def test_the_identity_limit_gives_a_package_s_seeds_room_on_top_up_to_the_window_share(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from asuna import render
     monkeypatch.setattr(render, 'model_and_policy', lambda store, persona: ({}, {}))
@@ -253,9 +268,9 @@ def test_the_render_limit_follows_the_package_seeds_up_to_the_window_share(tmp_p
         store = SimpleNamespace(config={'character': {'context_window': window}, 'persona_contribution': {'seeds': seeds}})
         return render.budget_limit(store, 'p'), render.seed_estimate(store, 'p')
 
-    assert limit(800)[0] == 6144                                  # little seed text: the core budget
-    big, seeded = limit(9000)
-    assert seeded > 9000 and big == -(-seeded * 5 // 4)           # more seed text: its own size and a quarter more
+    assert limit(800)[0] == 12288                                 # little seed text: the core ceiling
+    big, seeded = limit(9000, window=200000)
+    assert seeded > 9000 and big == 12288 + -(-seeded * 5 // 4) - 6144, 'seeds and a quarter, above the persona share'
     assert limit(9000, window=16000)[0] == 4000                   # never past the window share
     assert render.estimate_tokens('一之瀬アスナ') == 6 and render.estimate_tokens('hello world!') == 3
 

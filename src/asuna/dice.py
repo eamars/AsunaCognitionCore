@@ -49,8 +49,8 @@ HINTS = {
     'self_evaluation': 'self_review_from_program 是你今天的原始读数，带出处，没替你总结。',
     'review_dice': 'dice_review_from_program 是上次复盘以来每一掷的原始读数和你现在的两张表；要调就 set_policy。',
     'reach_out': '从家里写便条（note）到你的一条线（%s），找谁、说不说，由你。',
-    'idle': '这一拍什么都不必换。看一眼就行，愿意说就说一句，不说也行；不用记账，不用挂闹钟，不用给它找个产出。',
 }
+# The idle beat's hint is the persona model's `heartbeat.idle_hint` (a persona words it; the core default is neutral).
 REVIEW_ROLLS = 60
 REVIEW_DAYS = 14
 QUIET_CHARS = 80
@@ -129,9 +129,12 @@ def roll(occurrence, weights):
     return OUTCOMES[-1]
 
 
-def line(outcome, period, weights, homes=()):
-    """The one line her heartbeat opens with; `homes` names her lines for a reach_out."""
-    hint = HINTS[outcome] % '、'.join(homes) if outcome == 'reach_out' else HINTS[outcome]
+def line(outcome, period, weights, homes=(), model=None):
+    """The one line her heartbeat opens with; `homes` names her lines for a reach_out, `model` (the persona model)
+    words the idle beat."""
+    from .persona_model import effective
+    hint = (HINTS[outcome] % '、'.join(homes) if outcome == 'reach_out'
+            else effective(model or {}, 'heartbeat.idle_hint') if outcome == 'idle' else HINTS[outcome])
     return ('这一拍掷到：%s（%s的分布：%s）。%s照做、换一件、或者不理，都行。'
             % (NAMES[outcome], PERIOD_WORDS[period], words(weights), hint))
 

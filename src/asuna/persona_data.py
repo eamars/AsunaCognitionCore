@@ -137,8 +137,7 @@ class PersonaDataAPI:
         if args.get('dry_run'):
             return {**result, 'action': action, 'dry_run': True, 'sections': len(sections)}
         from .render import budget_gate
-        if slug in ('persona', 'voice'):
-            budget_gate(self.store, self.persona)(slug, content)
+        budget_gate(self.store, self.persona)(slug, content)      # what an import adds is carried as her writes are
         revision = self.docs._commit(slug, content, base_revision_id=revision_id, reason=f'import from {origin}',
                                      author='persona_job:' + self.job_id, mutation_id=mutation_id)
         return {**result, 'action': action, 'revision_id': revision['_id'], 'sections': len(sections)}
@@ -167,6 +166,8 @@ class PersonaDataAPI:
         content['sections'].append(section)
         if args.get('dry_run'):
             return {'action': 'appended', 'slug': slug, 'dry_run': True, 'visibility_defaulted': defaulted}
+        from .render import budget_gate
+        budget_gate(self.store, self.persona)(slug, content)
         revision = self.docs._commit(slug, content, base_revision_id=revision_id, reason=f'append from {origin}',
                                      author='persona_job:' + self.job_id,
                                      mutation_id=f"append:{self.persona}:{origin}:{args['source_identity']}")
@@ -292,7 +293,8 @@ class PersonaDataAPI:
         return {'items': items, **{key: manifest.get(key) for key in ('coverage', 'coverage_score', 'coverage_basis')}}
 
     def probe_context(self, args):
-        from .render import render_system, readable_sections
+        from .carried import placed, sections
+        from .render import render_system
         cls = args.get('as')
         if cls not in visibility.VISIBILITIES:
             raise DataError('PROBE_CLASS_INVALID', cls)
@@ -303,7 +305,7 @@ class PersonaDataAPI:
         blocks = {}
         for slug in self.docs.slugs():
             _, content = self.docs.read(slug)
-            shown = readable_sections(content, cls, place=place)
+            shown = sections(placed(self.store, self.persona, slug, content), cls, place)     # as a turn there carries it
             if shown and (not args.get('blocks') or slug in args['blocks']):
                 blocks[slug] = [{'sid': s['sid'], 'heading': s['heading']} for s in shown]
         return {'render_sha256': ref['render_sha256'], 'system_ref': ref, 'blocks': blocks}

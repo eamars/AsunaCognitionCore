@@ -47,7 +47,7 @@ def test_an_exchange_is_her_line_the_turns_thought_and_what_followed_as_facts(st
     assert item['said'] == '我说的一句' and item['thought_that_turn'] == '那一回合没有留下心里话'
     assert item['after'][0].startswith('回了这句的：') and len(item['after'][0]) < 100, 'others cut to 60 in public'
     assert any(line.startswith('对这句点了反应的') for line in item['after'])
-    assert out['note'] == self_review.EXCHANGES_NOTE and 'others' in out and 'reply_message_id' in out['sources']
+    assert out['note'] == self_review.exchanges_note(store, 'P1') and 'others' in out and 'reply_message_id' in out['sources']
     assert not any(word in str(out) for word in ('被无视', '好评', '差评', '分数')), 'nothing judges'
 
 

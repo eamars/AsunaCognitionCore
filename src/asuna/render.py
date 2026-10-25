@@ -1,13 +1,13 @@
 """Role system prompt rendering (ADR-009 §8.1).
 
-Rendered text = neutral core header (common.md) + the persona document's
-``inject=always`` sections readable in this session class (public first, then
-owner-private) + the voice document's. It is the complete system prompt of a
-role session. Episodes keep only ``system_ref`` (revisions, class and hashes)
-and every stage re-renders from it; results are cached by ``render_sha256``.
-The render is never truncated: an over-budget render is still complete, and is
-reported (audit + red status) instead. The limit follows the package's own seeds: a persona that ships more seed
-text gets room for it (budget_limit).
+Rendered text = neutral core header (common.md) + the carried sections of the persona document readable in this
+session class and place (public first, then owner-private) + the voice document's: what is carried is carried.py's
+(each section where its tier puts it, its `place:` tags honoured). It is the complete system prompt of a role
+session. Episodes keep only ``system_ref`` (revisions, class, place, the carried section ids and hashes) and every
+stage re-renders exactly those sections from it; results are cached by ``render_sha256``. The render is never
+truncated: a pair whose identity layer is over its limit is reported (audit + red status) instead, and a write that
+grows it is refused (budget_gate). The limit follows the package's own seeds: a persona that ships more seed text
+gets room for it (budget_limit).
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import threading
 
 from .config import prompt_path
 from .documents import DocumentStore, render_markdown
-from .evidence import sha
+from .evidence import canonical, sha
 from . import visibility
 
 _CACHE: OrderedDict = OrderedDict()
@@ -65,7 +65,8 @@ def role_text(config, rendered, speaks=False):
 
 
 def largest(common, persona_content, voice_content):
-    """(estimated tokens, text) of the largest render over the places: the one the budget bounds."""
+    """(estimated tokens, text) of the largest render over the places of raw documents, as written: what seed_estimate
+    measures of a package's own seeds. What is carried is carried.py's."""
     renders = [compose(common, persona_content, voice_content, cls, place) for place, cls in visibility.PLACE_CLASS.items()]
     text = max(renders, key=estimate_tokens)
     return estimate_tokens(text), text
@@ -118,122 +119,109 @@ def seed_estimate(store, persona):
 
 
 def budget_limit(store, persona):
-    """The larger of render.budget_tokens and the package's seeds with room to grow, never above the character
-    context window × render.max_window_share; None when nothing bounds it."""
-    from .persona_model import effective
-    model, policy = model_and_policy(store, persona)
-    budget = effective(model, 'render.budget_tokens', policy)
-    share = effective(model, 'render.max_window_share', policy)
-    window = (store.config.get('character') or {}).get('context_window')
-    seeded = seed_estimate(store, persona)
-    wanted = [value for value in (budget, math.ceil(seeded * SEED_ROOM) if seeded else None) if value]
-    cap = int(window * share) if window and share else None
-    limit = max(wanted) if wanted else None
-    return min(limit, cap) if limit and cap else limit or cap
+    """Each (place, class) pair's identity ceiling (carried.limit): render.identity_tokens, plus room for a package's
+    own seeds, never above the character context window × render.max_window_share; None when nothing bounds it."""
+    from .carried import limit
+    return limit(store, persona)
 
 
 def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE, place=None, speaks=False):
     """Render the current role system prompt for a session class and place, and whether its conversation speaks only
-    through speak; returns (text, system_ref)."""
+    through speak; returns (text, system_ref). The ref records which sections were carried, so a re-render is the
+    same prompt (system_for)."""
+    from .carried import placed, sections, system_text
     docs = DocumentStore(store, persona)
     persona_rev, persona_doc = docs.read('persona')
     if persona_doc is None:
         raise ValueError('REQUIRED_PERSONA_MISSING')
     voice_rev, voice_doc = docs.read('voice')
     common = common_text(store.config)
-    from .memory_tiers import placed                 # ADR-062: what is carried follows its place when tiers are on
-    text = role_text(store.config, compose(common, placed(store, persona, 'persona', persona_doc),
-                                           placed(store, persona, 'voice', voice_doc), cls, place), speaks)
+    contents = {'persona': persona_doc, 'voice': voice_doc}
+    found = {slug: sections(placed(store, persona, slug, content), cls, place) for slug, content in contents.items()}
+    text = role_text(store.config, system_text(common, found, contents), speaks)
     ref = {'persona_doc_revision': persona_rev, 'voice_doc_revision': voice_rev, 'session_class': cls, 'place': place,
-           'speaks': bool(speaks), 'common_sha256': sha(common.encode()), 'render_sha256': _remember(text)}
+           'speaks': bool(speaks), 'common_sha256': sha(common.encode()), 'render_sha256': _remember(text),
+           'carried': {slug: [s['sid'] for s in found[slug]] for slug in found}}
     report_budget(store, persona, persona_doc, voice_doc, common)
     return text, ref
 
 
 def render_status(store, persona) -> dict:
-    """The largest render over the places against the budget, for the settings card and memory tab."""
-    docs = DocumentStore(store, persona)
-    _, persona_doc = docs.read('persona')
-    _, voice_doc = docs.read('voice')
-    estimate = largest(common_text(store.config), persona_doc, voice_doc)[0]
+    """Each pair's identity layer against its limit, for the settings card and memory tab: the largest one's estimate,
+    whether any pair is over, and every pair's size."""
+    from .carried import identity
+    sizes = identity(store, persona)
     limit = budget_limit(store, persona)
-    return {'estimate_tokens': estimate, 'limit_tokens': limit, 'over_budget': bool(limit and estimate > limit)}
+    return {'estimate_tokens': max(sizes.values()), 'limit_tokens': limit,
+            'over_budget': bool(limit and any(size > limit for size in sizes.values())),
+            'pairs': [{'place': place, 'class': cls, 'tokens': size} for (place, cls), size in sizes.items()]}
 
 
-def report_budget(store, persona, persona_doc, voice_doc, common):
-    estimate, text = largest(common, persona_doc, voice_doc)
+def report_budget(store, persona, persona_doc=None, voice_doc=None, common=None):
+    """Audit, once for each state of it, a pair whose identity layer is over its limit."""
+    from .carried import contents, identity
     limit = budget_limit(store, persona)
-    digest = sha(text.encode())
-    if limit and estimate > limit and digest not in _REPORTED:
+    if not limit:
+        return
+    docs = contents(store, persona)
+    docs.update({slug: doc for slug, doc in (('persona', persona_doc), ('voice', voice_doc)) if doc is not None})
+    sizes = identity(store, persona, docs=docs, common=common)
+    over = {'%s/%s' % pair: size for pair, size in sizes.items() if size > limit}
+    digest = sha(canonical([over, limit]))
+    if over and digest not in _REPORTED:
         _REPORTED.add(digest)
-        store.audit('render:' + persona, 'render.over_budget', {'estimate_tokens': estimate, 'limit_tokens': limit,
-                    'render_sha256': digest}, 'global-safe')
+        store.audit('render:' + persona, 'render.over_budget', {'pairs': over, 'limit_tokens': limit}, 'global-safe')
 
 
 def budget_gate(store, persona):
-    """For DocumentStore.apply: refuse a persona/voice change that grows an over-budget render, and growth of a
-    note already far over its limit (context_budget.note_gate)."""
-    from .documents import DocumentError
-    from .context_budget import note_gate
-    docs = DocumentStore(store, persona)
-
-    def check(slug, new_content):
-        if slug not in ('persona', 'voice'):
-            note_gate(slug, docs.read(slug)[1], new_content)
-            return
-        limit = budget_limit(store, persona)
-        if not limit:
-            return
-        common = common_text(store.config)
-        current = {'persona': docs.read('persona')[1], 'voice': docs.read('voice')[1]}
-        proposed = {**current, slug: new_content}
-        before = largest(common, current['persona'], current['voice'])[0]
-        after = largest(common, proposed['persona'], proposed['voice'])[0]
-        if after > before and after > limit:
-            raise DocumentError('PERSONA_RENDER_OVER_BUDGET', over_budget_words(proposed, before, after, limit, common))
-    return check
+    """For DocumentStore.apply, adopt_seed and promote_memory: refuse a write that grows her identity layer in a pair
+    over its limit, and growth of a note already far over its own (carried.gate)."""
+    from .carried import gate
+    return gate(store, persona)
 
 
-# Each place has its own render, bounded on its own (largest): a section pinned to one place never fills another's.
+# Each pair has its own identity layer, bounded on its own: a section pinned to one place never fills another's.
 PLACE_WORDS = {'home': '家里', 'peer': '另一个自己那条线', 'group': '群里', 'dm': '私聊'}
 
 
-def over_budget_words(proposed, before, after, limit, common=''):
-    """By how much a write overshoots, in which place's render, and the largest always-injected sections there she
-    could tuck away or trim (a section pinned to another place is not in that render, so tucking it frees nothing)."""
-    place, cls = max(visibility.PLACE_CLASS.items(), key=lambda item: estimate_tokens(
-        compose(common, proposed['persona'], proposed['voice'], item[1], item[0])))
-    sizes = sorted(((estimate_tokens(s['heading'] + s['body']), slug, s['sid'])
-                    for slug in ('persona', 'voice')
-                    for s in readable_sections((proposed[slug] or {}).get('sections') and proposed[slug],
-                                               cls, place=place)), reverse=True)[:3]
-    largest = '、'.join('%s#%s（约 %d）' % (slug, sid, tokens) for tokens, slug, sid in sizes)
-    return ('写完%s那一份约 %d token，上限 %d，超出 %d（写之前最大的一份是 %d；每个地方各算各的）；%s先把不常用的 always 节用 '
-            'set_tags 改成 when_shown=on_demand 收起来（recall 还读得到），或把这次写的改短'
-            % (PLACE_WORDS.get(place, place), after, limit, after - limit, before,
-               '那里最大的 always 节：%s。' % largest if largest else ''))
+def over_budget_words(store, persona, pair, before, after, limit, docs=None, placements=None):
+    """By how much a write overshoots, in which pair, with that pair's own numbers before and after, and the largest
+    carried sections there she could let go or trim (carried.over_words)."""
+    from .carried import contents, over_words
+    return over_words(store, persona, pair, before, after, limit, docs if docs is not None else contents(store, persona),
+                      placements or {})
 
 
 def system_for(store, ref: dict, *, stream: str | None = None, scope: str = 'operator') -> str:
-    """Re-render the system prompt an episode fixed at preparation time.
+    """Re-render the system prompt an episode fixed at preparation time: the sections its ref recorded as carried, from
+    the revisions it names.
 
     A published core prompt change between stages yields a fresh render; the
     drift is audited rather than failing the turn.
     """
+    from .carried import placed, sections, system_text
     with _LOCK:
         cached = _CACHE.get(ref['render_sha256'])
     if cached is not None:
         return cached
-    revisions = []
-    for field in ('persona_doc_revision', 'voice_doc_revision'):
+    revisions = {}
+    for slug, field in (('persona', 'persona_doc_revision'), ('voice', 'voice_doc_revision')):
         revision = store.db.state_revisions.find_one({'_id': ref[field]}) if ref.get(field) else None
         if ref.get(field) and not revision:
             raise ValueError('SYSTEM_REF_REVISION_MISSING')
-        revisions.append(revision['content'] if revision else None)
+        revisions[slug] = revision['content'] if revision else None
+    cls, place = ref.get('session_class', visibility.OWNER_PRIVATE), ref.get('place')
+    if ref.get('carried') is not None:
+        found = {}
+        for slug, content in revisions.items():
+            by_sid = {s['sid']: s for s in (content or {}).get('sections') or []}
+            found[slug] = [by_sid[sid] for sid in ref['carried'].get(slug) or [] if sid in by_sid]
+    else:                                   # a ref from before it recorded what it carried: as carried now
+        persona = (store.config.get('chat') or {}).get('persona')
+        found = {slug: sections(placed(store, persona, slug, content) if persona else content, cls, place)
+                 for slug, content in revisions.items()}
     common = common_text(store.config)
-    text = role_text(store.config, compose(common, revisions[0], revisions[1],
-                                           ref.get('session_class', visibility.OWNER_PRIVATE), ref.get('place')),
-                     ref.get('speaks', False))
+    text = role_text(store.config, system_text(common, found, revisions), ref.get('speaks', False))
     digest = _remember(text)
     if digest != ref['render_sha256'] and stream:
         store.audit(stream, 'system.render_drift', {'expected': ref['render_sha256'], 'actual': digest,
@@ -246,7 +234,7 @@ def episode_system(store, ep: dict) -> str:
     return system_for(store, ep['system_ref'], stream=ep.get('_id'), scope=ep.get('scope_key', 'operator'))
 
 
-def action_values(store, persona=None, cls=visibility.PUBLIC) -> str:
+def action_values(store, persona=None, cls=visibility.PUBLIC, place=None) -> str:
     """Action-brain system suffix (ADR-009 §8.3, revised by the owner 2026-10-04).
 
     ``render.action_persona``:
@@ -256,6 +244,8 @@ def action_values(store, persona=None, cls=visibility.PUBLIC) -> str:
     - ``values``: public persona sections tagged ``render.values_tag``, else the name alone;
     - ``persona``: who she is — the persona document's every-turn sections readable in the class of the
       conversation the task came from. Never memory, relationships, emotion or other state.
+
+    What is carried is carried.py's, for the class and place of the conversation the task came from.
     """
     name = (store.config.get('chat') or {}).get('display_name') or 'character'
     persona = persona or (store.config.get('chat') or {}).get('persona')
@@ -264,14 +254,15 @@ def action_values(store, persona=None, cls=visibility.PUBLIC) -> str:
     from .persona_model import effective
     model, policy = model_and_policy(store, persona)
     mode = effective(model, 'render.action_persona', policy)
+    from .carried import placed, sections as carried_sections
     if mode == 'core':
         _, core = DocumentStore(store, persona).read('core')
-        sections = readable_sections(core, cls)
+        sections = carried_sections(placed(store, persona, 'core', core), cls, place)
         text = '\n你是' + name + '。下面是你自己写的「我是谁」，里面的「我」就是你：照它做事、写汇报；上面的规则优先，它不扩大授权。'
         return text + ('\n' + '\n'.join(' '.join(str(s.get('body') or '').split()) for s in sections) if sections else '')
     _, content = DocumentStore(store, persona).read('persona')
     if mode == 'persona':
-        sections = readable_sections(content, cls)
+        sections = carried_sections(placed(store, persona, 'persona', content), cls, place)
         text = '\n你是' + name + '。下面是你人设里每回合带上的几节（你自己写的）：照它做事、写汇报；上面的规则优先，人设不扩大授权。'
         return text + ('\n' + render_markdown(sections) if sections else '')
     tag = effective(model, 'render.values_tag', policy) or 'values'

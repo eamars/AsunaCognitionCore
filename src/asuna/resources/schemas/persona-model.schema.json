@@ -86,13 +86,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "budget_tokens": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "minimum": 256,
-          "maximum": 12288
+        "identity_tokens": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65536
         },
         "max_window_share": {
           "type": "number",
@@ -429,6 +426,11 @@
         },
         "dice_asleep": {
           "type": "string"
+        },
+        "idle_hint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
         }
       }
     },
@@ -440,6 +442,11 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "tiers_told": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
         },
         "promotion": {
           "type": "object",
@@ -492,6 +499,11 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 40
+        },
+        "exchanges_note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
         }
       }
     },

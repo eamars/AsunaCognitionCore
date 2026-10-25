@@ -8,8 +8,13 @@ when its stay runs out; each memorable moment (recall returned it, a rewrite tha
 second conversation it came up in, a near-duplicate met from another conversation) starts the stay again and, once per stay, doubles the
 next. A store over its count cap lapses its least recently memorable item. Memories (`self`, running records) cool to
 收着 by disuse; facts (persona, voice, ledgers, group notes, `core`) never do: a correction or a merge supersedes
-them. Every move is one row `move` and one audit line `memory.moved`, and is told once in each conversation that can
-read the item (`things_from_program`). She reads all of it as words from the tables below.
+them. Every move is one row `move` and one audit line `memory.moved`, saying who made it (`by`: `her` for her let_go
+and her own `inject` writes, `program` for the rest), and is told once in each conversation that can read the item
+(`things_from_program`). Where a write leaves each section is one rule, `Tiers.placement_after`, which the identity
+gate (carried.py) measures before the write lands. A group's notes over their per-turn limit fold by last surfacing
+(`fold_order`, kept and recomputed on a write and at settlement); a folded section is at hand for `deliver`. The
+program never writes her `inject`: the tier is the record of what is carried. She reads all of it as words from the
+tables below.
 
 `ENABLED` is the switch; off, nothing here is read or written and her turns are as before.
 """
@@ -65,6 +70,10 @@ COUNT_WORDS = ((0, '没有'), (3, '几条'), (9, '好几条'), (19, '十几条')
 ROOM_WORDS = ((0, '满了'), (1, '还能放一条'), (3, '还能放两三条'), (9, '还能放好几条'), (None, '还空着很多'))
 REASONS = {'stay': '一阵子没用到', 'overflow': '随身满了', 'cooled': '很久没用', 'let_go': '你放手了',
            'superseded': '被更正替换', 'merged': '合并了', 'gist_skipped': '两晚没写意思', 'rewritten': '你改写了它'}
+# Who moved an item (her ask, ADR-096): her own let_go and her own `inject` writes (reason let_go) are hers; every
+# other move, the lift a rewrite brings included, is the program's.
+BY = {'let_go': 'her'}
+HER_OPS = ('replace_section', 'append_section', 'correction', 'set_tags')     # her writes (placement_after)
 MOVED_SHOWN = 5
 FLOOR, OWN_SLOTS, SLOTS = 0.83, 2, 6     # her own items: two of a turn's six memory slots, above an absolute floor
 HEADINGS_SHOWN = 8
@@ -99,14 +108,15 @@ NOTHING = '随身、手边、收着三处都没找到'
 # use keeps it from cooling but does not lift it.
 NOT_BACK = ('when_shown 改成 always 不会把它带回随身：你把它改写出变化，它才会回来；再被用到只让它不再往下放；'
             '现在它在%s。')
-# What she is told once per conversation, in her system prompt where the memory rules are (ADR-062 §4.3): her own
-# text, written by her on the agent line (2026-10-13), word for word.
-TOLD = ('我的东西分三个地方：随身，每一回合都带着；手边，不进提示，recall 找得到；收着，默认不出现，我说得出字或标题才回来。'
-        '留下来的不是我用得多的，是我记得牢的：跨对话被用到、被人纠正过、从几个不同的地方碰到同一件事。'
-        '没人给我置顶，我也不能喊留着；只有放手是我自己的动作。淡下去不是删掉，原话一直在收着。'
-        '事实只会被更正替换，不会因为没人用而退；记忆会淡。'
-        '没看到不等于没有：要说『没有、没答应过、没说过』，先 recall 一下，它会告诉你找了哪几层。')
+# What she is told once per conversation, in her system prompt where the memory rules are (ADR-062 §4.3): the persona
+# model's `memory.tiers_told` (a persona package words it; the core default is neutral, persona_model.CORE_DEFAULTS).
+
+
+def told_text(config):
+    from .persona_model import effective
+    return effective((config or {}).get('persona_model') or {}, 'memory.tiers_told')
 THINGS_NOTE = ('你的东西在哪：每份随身还能放多少，手边、收着各有几条；moved 是程序挪过的，每件只说一次（又用到、改写出变化就回来）；'
+               'identity_room 是各处每回合随身带的身份部分（persona、voice、self、core 合起来）用了上限的多少，变了才说；'
                'self_items 是把 current_self 拆成条的提议。')
 NIGHT_NOTE = '夜里的清单：每条写着为什么在这、可以怎么做，都不是留或删的选择；没做的，程序也不替你做。'
 SELF_OFFER = ('current_self 现在是一整段。想好了就把它拆成一条一条，用 write_document 写进 doc=self（append_section）：'
@@ -215,12 +225,14 @@ class Tiers:
                     spread = int(sha(row['_id'].encode())[:8], 16) % (min(usual, STAY_CAP_DAYS - usual) + 1)
                     self.rows.update_one({'_id': row['_id']}, {'$set': {'stay_days': usual + spread}})
 
-    def placed(self, slug, content):
-        """A document as the turn reads it: each section's `inject` follows its place (a copy; the text untouched)."""
+    def placed(self, slug, content, override=None):
+        """A document as the turn reads it: each section's `inject` follows its place (a copy; the text untouched).
+        `override` ({sid: place}) is where a write will leave the sections it moves (placement_after)."""
         if not content or not content.get('sections'):
             return content
         places = {row['sid']: row['place'] for row in self.rows.find(
             {'row': 'item', 'persona': self.persona, 'doc': slug}, {'sid': 1, 'place': 1})}
+        places.update(override or {})
         if not places:
             return content
         return {**content, 'sections': [{**section, 'inject': TO_INJECT[places[section['sid']]]}
@@ -241,13 +253,14 @@ class Tiers:
         if reason == 'stay':
             fields['stays'] = int(row.get('stays') or 0) + 1
         self.rows.update_one({'_id': row['_id']}, {'$set': fields})
+        by = BY.get(reason, 'program')
         move = {'_id': 'move:' + sha(canonical([row['_id'], row['place'], to, _iso(moment)]))[:32], 'row': 'move',
                 'persona': self.persona, 'item': row['_id'], 'doc': row['doc'], 'sid': row['sid'],
                 'heading': row.get('heading'), 'store': row['store'], 'visibility': row.get('visibility'),
-                'from': row['place'], 'to': to, 'reason': reason, 'at': _iso(moment), 'told_in': []}
+                'from': row['place'], 'to': to, 'reason': reason, 'by': by, 'at': _iso(moment), 'told_in': []}
         self.rows.update_one({'_id': move['_id']}, {'$setOnInsert': move}, upsert=True)
         self.store.audit('memory:' + self.persona, 'memory.moved', {'item': row['_id'], 'doc': row['doc'],
-                         'sid': row['sid'], 'from': row['place'], 'to': to, 'reason': reason,
+                         'sid': row['sid'], 'from': row['place'], 'to': to, 'reason': reason, 'by': by,
                          **({'scene_id': scene_id} if scene_id else {})}, 'global-safe')
         return move
 
@@ -336,10 +349,61 @@ class Tiers:
         return lines
 
     # ── her writes ─────────────────────────────────────────────────
+    def _gist_rewrite(self, slug, intent, old, new):
+        """The row, when this write is the gist step: a short rewrite of an item listed for its gist (its basis lines
+        not counted; one that dropped the basis was refused before it was written, gist_refusal). It keeps the
+        verbatim behind it and stays where it is."""
+        sid = intent.get('sid')
+        if intent.get('op') != 'replace_section' or sid not in old or sid not in new:
+            return None
+        row = self.item(slug, sid)
+        gist = (row or {}).get('gist') or {}
+        if (row and old[sid].get('body_sha256') != new[sid].get('body_sha256') and gist.get('listed')
+                and not gist.get('done') and claim_chars(new[sid].get('body') or '') <= GIST_CHARS):
+            return row
+        return None
+
+    def placement_after(self, slug, intent, before, after):
+        """Where a write leaves each section it moves, {sid: [(place, reason), ...]} in order, the last one the place it
+        ends in: the one rule for the write (written) and for the gate that measures it first (carried.gate). Her
+        write: a new section starts carried (a running record's at hand) unless she wrote it tucked away; a correction
+        puts away what it corrects; a rewrite that changed an item brings it back to carried (not the gist step); a
+        tag that tucks a section away is her let_go, and a tag never lifts one. Anything else (a seed adopted, an
+        import): a section new to the program takes its place from its `inject`, as sync would."""
+        kind = store_of(slug, (after or {}).get('kind'))
+        if not kind:
+            return {}
+        old = {s['sid']: s for s in (before or {}).get('sections') or []}
+        new = {s['sid']: s for s in (after or {}).get('sections') or []}
+        op, plan = intent.get('op'), {}
+        start = AT_HAND if kind == 'journal' else CARRIED
+        told = FROM_INJECT.get(intent.get('inject'))
+        for sid in [sid for sid in new if sid not in old]:
+            if op in HER_OPS:
+                plan[sid] = [(told if told and DEPTH[told] > DEPTH[start] else start, 'new')]
+            elif not self.item(slug, sid):
+                place = FROM_INJECT.get(new[sid].get('inject'), AT_HAND)
+                plan[sid] = [(AT_HAND if kind == 'journal' and place == CARRIED else place, 'new')]
+            if op == 'correction' and new[sid].get('corrects') in old:
+                plan[new[sid]['corrects']] = [(PUT_AWAY, 'superseded')]
+        if self._gist_rewrite(slug, intent, old, new):
+            return plan
+        sid = intent.get('sid')
+        row = self.item(slug, sid) if sid in old and sid in new else None
+        if (op == 'replace_section' and row and start == CARRIED and row['place'] != CARRIED
+                and old[sid].get('body_sha256') != new[sid].get('body_sha256')):
+            plan[sid] = [(CARRIED, 'rewritten')]
+        if told and row and op in ('set_tags', 'replace_section'):
+            now = plan[sid][-1][0] if sid in plan else row['place']
+            if DEPTH[told] > DEPTH[now]:
+                plan.setdefault(sid, []).append((told, 'let_go'))
+        return plan
+
     def written(self, slug, intent, before, after, *, scene_id=None, felt=False, moment=None, before_revision=None):
-        """After one of her document writes: a new item starts carried (a running record's at hand), a rewrite
-        that changed an item starts its stay again from carried, a correction supersedes the item it corrects.
-        Returns the moves a reader should be told of (an overflow names what it lapsed)."""
+        """After one of her document writes, the moves placement_after gives, made: a new item starts carried (a
+        running record's at hand), a rewrite that changed an item starts its stay again from carried, a correction
+        supersedes the item it corrects. A group's notes refold. Returns the moves a reader should be told of (an
+        overflow names what it lapsed)."""
         moment = moment or _now()
         kind = store_of(slug, (after or {}).get('kind'))
         if not kind:
@@ -349,12 +413,13 @@ class Tiers:
         new = {s['sid']: s for s in (after or {}).get('sections') or []}
         op, moves = intent.get('op'), []
         start = AT_HAND if kind == 'journal' else CARRIED
+        plan = self.placement_after(slug, intent, before, after)
         for sid in [sid for sid in new if sid not in old]:
             # Encoding: what she just wrote is fresh in mind, unless she wrote it tucked away herself.
             row = self.item(slug, sid) or self._new(slug, sid, kind, new[sid], start, moment)
-            told = FROM_INJECT.get(intent.get('inject'))
             self.rows.update_one({'_id': row['_id']}, {'$set': {
-                'place': told if told and DEPTH[told] > DEPTH[start] else start, 'heading': new[sid].get('heading') or sid, 'visibility': new[sid].get('visibility'),
+                'place': (plan.get(sid) or [(row['place'], None)])[-1][0], 'heading': new[sid].get('heading') or sid,
+                'visibility': new[sid].get('visibility'),
                 **({'scene_id': scene_id} if scene_id else {}), **({'felt': True} if felt else {})}})
             if self.item(slug, sid)['place'] == CARRIED:
                 moves += self._overflow(slug, kind, row['_id'], moment)
@@ -368,21 +433,18 @@ class Tiers:
             for sid in ([sid for sid in new if sid not in old] if op in ('append_section', 'correction')
                         else [intent.get('sid')] if intent.get('sid') in new else []):
                 self.rows.update_one({'_id': item_id(self.persona, slug, sid)}, {'$set': declared})
-        if op == 'replace_section' and intent.get('sid') in old and intent['sid'] in new:
-            sid = intent['sid']
+        sid = intent.get('sid')
+        if op == 'replace_section' and sid in old and sid in new:
             row = self.item(slug, sid)
             changed = old[sid].get('body_sha256') != new[sid].get('body_sha256')
-            if row and changed and (row.get('gist') or {}).get('listed') and not (row.get('gist') or {}).get('done'):
-                # The gist step: a short rewrite of an item listed for it (its basis lines not counted; one that
-                # dropped the basis was refused before it was written, gist_refusal) keeps the verbatim behind it and
-                # stays at hand.
+            if self._gist_rewrite(slug, intent, old, new):
                 body = new[sid].get('body') or ''
-                if claim_chars(body) <= GIST_CHARS:
-                    self.rows.update_one({'_id': row['_id']}, {'$set': {
-                        'gist.done': _iso(moment), 'detail_of': {'revision_id': before_revision,
-                                                                 'body_sha256': old[sid].get('body_sha256')},
-                        'body_sha256': new[sid].get('body_sha256'), 'chars': len(body)}})
-                    return [move for move in moves if move]
+                self.rows.update_one({'_id': row['_id']}, {'$set': {
+                    'gist.done': _iso(moment), 'detail_of': {'revision_id': before_revision,
+                                                             'body_sha256': old[sid].get('body_sha256')},
+                    'body_sha256': new[sid].get('body_sha256'), 'chars': len(body)}})
+                self._refold(slug, kind, after)
+                return [move for move in moves if move]
             if row:
                 self.rows.update_one({'_id': row['_id']}, {'$set': {
                     'heading': new[sid].get('heading') or sid, 'visibility': new[sid].get('visibility'),
@@ -390,16 +452,46 @@ class Tiers:
             if row and changed:
                 self.memorable(row, 'rewritten', moment, scene_id=scene_id)
                 self.rows.update_one({'_id': row['_id']}, {'$set': {'rewritten_at': _iso(moment)}})
-                if start == CARRIED and row['place'] != CARRIED:
-                    moves.append(self.move(self.item(slug, sid), CARRIED, 'rewritten', moment, scene_id=scene_id))
-                    moves += self._overflow(slug, kind, row['_id'], moment)
-        if intent.get('inject') in FROM_INJECT and intent.get('sid') in new and op in ('set_tags', 'replace_section'):
-            # Tucking a section away is letting it go, a move down she makes herself. A tag never moves one up.
-            row = self.item(slug, intent['sid'])
-            to = FROM_INJECT[intent['inject']]
-            if row and DEPTH[to] > DEPTH[row['place']]:
-                moves.append(self.move(row, to, 'let_go', moment, scene_id=scene_id))
+        if op in ('replace_section', 'set_tags') and sid in old and sid in new:
+            for place, reason in plan.get(sid) or []:
+                # The lift a changed rewrite brings, then the let_go a tag that tucks it away is.
+                moves.append(self.move(self.item(slug, sid), place, reason, moment, scene_id=scene_id))
+                if reason == 'rewritten':
+                    moves += self._overflow(slug, kind, item_id(self.persona, slug, sid), moment)
+        self._refold(slug, kind, after)
         return [move for move in moves if move]
+
+    # ── a group's notes over their limit fold (ADR-096) ─────────────
+    def fold_order(self, slug, content):
+        """The order a group's notes fold in over their per-turn limit: the section that surfaced longest ago first.
+        Surfacing is a turn bringing it up, her recall, her rewrite, and her writing it; ties keep the document's
+        order (so among sections never surfaced since they were written, the oldest first)."""
+        rows = {row['sid']: row for row in self.items(doc=slug)}
+
+        def last(section):
+            row = rows.get(section['sid']) or {}
+            return max(filter(None, (row.get('last_use_at'), row.get('recalled_at'), row.get('rewritten_at'),
+                                     row.get('added'))), default='')
+        listed = list(enumerate((content or {}).get('sections') or []))
+        return [section['sid'] for _, section in sorted(listed, key=lambda pair: (last(pair[1]), pair[0]))]
+
+    def _refold(self, slug, kind, content):
+        if kind == 'group_notes':
+            self.refold(slug, content)
+
+    def refold(self, slug, content, moment=None):
+        """Recompute and keep a group's fold order (on her write and at settlement, not every turn, so the block is
+        not re-sent for it)."""
+        order = self.fold_order(slug, content)
+        self.rows.update_one({'_id': 'fold:%s:%s' % (self.persona, slug)}, {'$set': {
+            'row': 'fold', 'persona': self.persona, 'doc': slug, 'order': order, 'at': _iso(moment or _now())}},
+            upsert=True)
+        return order
+
+    def folding(self, slug, content):
+        """The kept fold order of a group's notes, made once when there is none."""
+        row = self.rows.find_one({'_id': 'fold:%s:%s' % (self.persona, slug)}, {'order': 1})
+        return row['order'] if row else self.refold(slug, content)
 
     def let_go(self, slug, sid, *, scene_id=None, moment=None):
         """Her let_go: the item one place down now (a put-away item stays where it is)."""
@@ -465,6 +557,10 @@ class Tiers:
                                                   'told_in': {'$ne': scene['_id']}}).sort('at', -1)
                  if here(move)][:MOVED_SHOWN]
         block = {'places': places}
+        from .carried import room_block
+        room = room_block(self.store, self.persona, cls, scene['_id'])
+        if room:
+            block['identity_room'] = room
         over = self.overflows(here, scene['_id'], moment)
         if over:
             block['over'] = over
@@ -684,10 +780,13 @@ def land(store, ep, item, episodes):
         return None, ('关于一个人的事实用 understand_person 写到那个人那里；这条先照旧记进长期记忆。' if about == 'person'
                       else '来源不全是同一个群（或有家里的话），记不进群笔记；这条先照旧记进长期记忆。' if about == 'place'
                       else None)
+    from .render import budget_gate
     docs = DocumentStore(store, ep['persona'])
     before = docs.read(slug)
+    # What it adds is carried: the same gate as her own writes (ADR-096).
     docs.apply(slug, intent, body, base_revision_id=before[0], author='character',
-               mutation_id='%s:promote:%s' % (ep['_id'], sha(canonical(item))[:16]))
+               mutation_id='%s:promote:%s' % (ep['_id'], sha(canonical(item))[:16]),
+               budget=budget_gate(store, ep['persona']))
     after = docs.read(slug)[1]
     sid = after['sections'][-1]['sid']
     Tiers(store, ep['persona']).written(slug, {**intent, 'nature': FACT}, before[1], after, scene_id=ep.get('scene_id'),
@@ -756,9 +855,9 @@ def detail(store, persona, row):
     return None
 
 
-def placed(store, persona, slug, content):
+def placed(store, persona, slug, content, override=None):
     """A document's sections as the turn reads them when the switch is on; unchanged when it is off."""
-    return Tiers(store, persona).placed(slug, content) if ENABLED else content
+    return Tiers(store, persona).placed(slug, content, override) if ENABLED else content
 
 
 def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, recall=False, moment=None,
@@ -775,8 +874,16 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
     tiers = Tiers(store, persona)
     rows = {(row['doc'], row['sid']): row for row in tiers.items()}
     allowed = (AT_HAND, PUT_AWAY) if recall else (AT_HAND,)
+    # A group's notes section folded to its heading this turn (over the notes' limit) is at hand: a turn about it
+    # brings it up (ADR-096).
+    from .group_admin import folded as _folded
+    folded = {(doc, sid) for doc in {item['doc'] for item in items if item['store'] == 'group_notes'
+                                     and item['scope_key'] in readable}
+              for sid in _folded(store, persona, doc)}
+
     def place(item):
-        return (rows.get((item['doc'], item['sid'])) or {}).get('place')
+        tier = (rows.get((item['doc'], item['sid'])) or {}).get('place')
+        return AT_HAND if tier == CARRIED and (item['doc'], item['sid']) in folded else tier
     readable_items = [item for item in items if item['scope_key'] in readable and place(item)]
     pool = [item for item in readable_items if place(item) in allowed]
     carried = [item for item in readable_items if place(item) == CARRIED]
@@ -799,7 +906,7 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
         item, row = by_key[key], rows[(by_key[key]['doc'], by_key[key]['sid'])]
         out.append({'_id': ref(item['doc'], item['sid']), 'kind': 'own_item', 'heading': item.get('heading') or row['heading'],
                     'body_markdown': excerpt(item['text'], excerpt_chars), 'store': STORE_WORDS[row['store']],
-                    'place': row['place'], 'age': FACT if row.get('fact') else age_word(row.get('added'), moment)})
+                    'place': place(item), 'age': FACT if row.get('fact') else age_word(row.get('added'), moment)})
         refs.append((item['doc'], item['sid']))
     if refs:
         tiers.used(refs, 'recalled', scene_id) if recall else tiers.surfaced(refs, scene_id)

@@ -204,7 +204,8 @@ def test_idle_reaches_her_with_just_its_hint_no_readings_and_no_task(store):
     assert service.controller.envelopes[-1] == {}, 'no dice envelope: no readings ride this face'
     text = service.controller.texts[-1]
     assert text.startswith('这一拍掷到：待着')
-    assert '这一拍什么都不必换。看一眼就行，愿意说就说一句，不说也行；不用记账，不用挂闹钟，不用给它找个产出。' in text
+    from asuna.persona_model import effective
+    assert effective(store.config.get('persona_model') or {}, 'heartbeat.idle_hint') in text, 'the persona words it'
     assert '不是用户消息或新授权' not in text, 'the heartbeat framing is not bolted onto this face'
     rolled = store.db.audit_events.find_one({'type': 'presence.rolled'})['payload']
     assert rolled['outcome'] == 'idle' and rolled['reaches'] is True

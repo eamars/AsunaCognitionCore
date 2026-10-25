@@ -12,7 +12,7 @@ import re
 
 from .config import ago, character_id
 from .state import Denied
-from . import channel_kinds, scene_links
+from . import carried, channel_kinds, scene_links
 from .ingress import NOT_CORE_NOTICE
 from .native_cognition import CognitionView
 from .peer_context import speaker_name
@@ -180,7 +180,7 @@ class NativeMemory:
             return self._self_documents
         docs, found = DocumentStore(self.store, self.persona), {}
         for name, slug in (('current_self', memory_tiers.SELF_DOC), ('character_core', memory_tiers.CORE_DOC)):
-            content = memory_tiers.placed(self.store, self.persona, slug, docs.read(slug)[1])
+            content = carried.placed(self.store, self.persona, slug, docs.read(slug)[1])
             if content and content.get('sections'):
                 found[name] = (slug, content)
         self._self_documents = found
@@ -204,13 +204,12 @@ class NativeMemory:
 
     def group_note_rows(self, search=''):
         """This group's notes, item by item (only in a group's own conversation)."""
-        from . import memory_tiers
         from .documents import DocumentStore
         from .group_admin import notes_slug
         if self.scene.get('kind') != 'group':
             return []
         slug = notes_slug(self.scene['_id'])
-        content = memory_tiers.placed(self.store, self.persona, slug, DocumentStore(self.store, self.persona).read(slug)[1])
+        content = carried.placed(self.store, self.persona, slug, DocumentStore(self.store, self.persona).read(slug)[1])
         return self.item_rows(slug, content, 'group_notes', None, search) if content and content.get('sections') else []
 
     # -- people: her written understanding of each person (understanding.py) --
@@ -329,9 +328,9 @@ class NativeMemory:
     def document_rows(self):
         """Operator view of the persona's documents, each by its name, with how many of its sections are in each
         place (every turn, when relevant, put away)."""
-        from . import memory_tiers
         from .documents import DocumentStore
         from .group_admin import notes_slug
+        from .carried import IDENTITY
         from .render import render_status
         docs = DocumentStore(self.store, self.persona)
         if any(pair and pair[1] is None for pair in map(docs.head, docs.slugs())):
@@ -344,13 +343,13 @@ class NativeMemory:
                 continue                      # a group's notes are listed in that group's own conversation
             head, stored = docs.head(slug)
             revision = head['revision_id']
-            content = memory_tiers.placed(self.store, self.persona, slug, stored['content'])
+            content = carried.placed(self.store, self.persona, slug, stored['content'])
             counts = {}
             for inject in ('always', 'on_demand', 'never'):
                 n = sum(1 for section in content['sections'] if section.get('inject') == inject)
                 if n:
                     counts[inject] = n
-            red = status and status['over_budget'] and slug in ('persona', 'voice')
+            red = status and status['over_budget'] and slug in IDENTITY        # what each place carries of her (ADR-096)
             rows.append({'id': 'doc:' + slug, 'kind': 'document', 'title': self.document_name(slug, groups),
                          'excerpt': [part for index, (inject, count) in enumerate(counts.items())
                                      for part in ([' · '] if index else []) + [label('doc.sections', label=label('inject.' + inject), n=count)]]
@@ -533,9 +532,8 @@ class NativeMemory:
             if pair and pair[1] is None:
                 raise Denied('MEMORY_REVISION_UNAVAILABLE')
             revision_id, content = (pair[0]['revision_id'], pair[1]['content']) if pair else (None, None)
-            from . import memory_tiers
             # Each section as her turns read it: the place it is in now, not the label it was written with.
-            content = row = memory_tiers.placed(self.store, self.persona, key, content)
+            content = row = carried.placed(self.store, self.persona, key, content)
             if row:
                 lines = []
                 for section in content['sections']:
@@ -549,11 +547,10 @@ class NativeMemory:
                           'scope_key': 'global-safe', 'source_ids': [],
                           'usage': self.cognition.usage(identifier, revision=revision_id)}
         elif kind == 'item':
-            from . import memory_tiers
             from .documents import DocumentStore
             from .group_admin import notes_slug
             slug, _, sid = key.partition('#')
-            content = memory_tiers.placed(self.store, self.persona, slug, DocumentStore(self.store, self.persona).read(slug)[1])
+            content = carried.placed(self.store, self.persona, slug, DocumentStore(self.store, self.persona).read(slug)[1])
             row = next((section for section in (content or {}).get('sections', ()) if section['sid'] == sid), None)
             if row:
                 result = {'id': identifier, 'interpretation': True, 'scope_key': 'doc:' + slug, 'source_ids': [],

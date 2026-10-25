@@ -1,15 +1,15 @@
-"""The shadow pilot of tiered memory (ADR-062 phase 1): which of her own items a turn would surface, measured only.
+"""The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
 
-Her own items (persona sections, the lines of `current_self`, journal rows, each group's notes sections) are embedded
-on the memory route into one collection of their own, `memory_shadow`, never the index her turns read. After each
-character turn's context is prepared, a background thread scores them against the turn's query the way retrieval
-scores memories (vector and lexical ranks fused; the vector score is the index's own, (1 + cosine) / 2), keeps at
-most `OWN_SLOTS` of `SLOTS` above the absolute `FLOOR`, and writes one row: ids, scores, the turn's kind, the
-conversation and its kind. Nothing is delivered and nothing reaches a prompt. A `recall` writes a row of its own.
-Near-duplicate pairs within a store are written as they are found. `tools/memory_pilot_report.py` reads the rows.
+Her own items (persona and voice sections, the lines of `current_self`, journal rows, ledgers, `self` and `core`,
+each group's notes sections) are embedded on the memory route into one collection of their own, `memory_shadow` (rows
+`item`), never the index her turns read; near-duplicate pairs within a store are written as they are found (rows
+`pair`). Tiered memory reads both: `memory_tiers.deliver` and `recall` bring her items up from these vectors, and the
+night list takes its merge pairs from them, so dropping the collection takes that away until the index is rebuilt.
 
-`SHADOW_PILOT` is the switch: off, the Host starts no pilot and nothing is written. Dropping the collection removes
-everything the pilot wrote (its index goes with it).
+The pilot measured, after each character turn, which items the turn would have surfaced (rows `turn`, and `recall`
+for a recall); its readings set the floor and the slots (ADR-062) and `tools/memory_pilot_report.py` still reads them.
+`SHADOW_PILOT` is off: the index runs while tiered memory is on, and no turn rows are written. The audit retention
+thread deletes turn rows older than `TURN_ROWS_DAYS` (`prune`).
 """
 from __future__ import annotations
 
@@ -26,7 +26,8 @@ from .retrieval import EMBED_OPENING_CHARS, refused, terms
 from .state import now
 
 TIERS_VERSION = 1
-SHADOW_PILOT = True               # the switch (ADR-062 phase 1)
+SHADOW_PILOT = False              # the pilot's turn rows (ADR-062 phase 1, closed); the index runs without it
+TURN_ROWS_DAYS = 30               # turn rows older than this go (prune)
 COLLECTION = 'memory_shadow'
 FLOOR = 0.83                      # absolute floor on the vector score, from ADR-062 §1.1
 OWN_SLOTS, SLOTS = 2, 6           # her own items may take at most two of a turn's six memory slots
@@ -58,8 +59,9 @@ def own_items(store, persona):
     def scope_of(section):
         return 'global-safe' if section.get('visibility') == 'public' else private
 
-    for section in (docs.read('persona')[1] or {}).get('sections') or []:
-        add('persona', 'persona', section, scope_of(section))
+    for slug in ('persona', 'voice'):
+        for section in (docs.read(slug)[1] or {}).get('sections') or []:
+            add(slug, slug, section, scope_of(section))
     # current_self as it is split today: its list lines of some length (ADR-062 §1.1).
     head = store.head('current_self:' + persona, 'global-safe')
     for line in ((head[1]['content'].get('body') or '') if head else '').splitlines():
@@ -80,6 +82,15 @@ def own_items(store, persona):
         for section in (content or {}).get('sections') or []:
             add('group_notes', notes_slug(scene['_id']), section, scene['scope_key'])
     return out
+
+
+def prune(store, moment=None, days=TURN_ROWS_DAYS):
+    """Delete the pilot's turn rows (and recall and failure rows) older than `days`; items and pairs stay. Their `at` is
+    an ISO string, so a TTL index cannot do it. Returns how many went."""
+    from datetime import datetime, timedelta, timezone
+    cutoff = ((moment or datetime.now(timezone.utc)) - timedelta(days=days)).isoformat()
+    return store.db[COLLECTION].delete_many({'row': {'$in': ['turn', 'recall', 'failure']},
+                                             'at': {'$lt': cutoff}}).deleted_count
 
 
 def _unit(vector):

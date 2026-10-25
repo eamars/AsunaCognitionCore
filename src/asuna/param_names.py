@@ -32,7 +32,7 @@ RENAMED = {
 NESTED = {('recall', 'sections'): {'section': 'sid'}, ('feel', 'edit'): {'feeling': 'kind', 'unresolved': 'open'}}
 # (tool, shown name) taking yes/no as words; the handler reads a boolean.
 YES_NO = {('feel', 'unresolved'), ('speak', 'force'), ('errand', 'exactly'), ('generate_image', 'list_routes'), ('write_file', 'overwrite'),
-          ('development_write', 'overwrite')}
+          ('development_write', 'overwrite'), ('write_document', 'pinned')}
 # (tool, object parameter, shown name inside it) taking yes/no as words, as YES_NO for a top-level one.
 NESTED_YES_NO = {('feel', 'edit', 'unresolved')}
 # feel's decision on a proposal is a `do` of its own (ADR-060 item 8).

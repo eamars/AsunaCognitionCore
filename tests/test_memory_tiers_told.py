@@ -13,13 +13,14 @@ def test_off_her_system_prompt_is_as_before_and_on_it_tells_her_once(store, monk
     owner(store)
     monkeypatch.setattr(memory_tiers, 'ENABLED', False)
     off = render_system(store, 'P1')[0]
-    assert memory_tiers.TOLD not in off and 'things_from_program' not in off
+    told = memory_tiers.told_text(store.config)
+    assert told not in off and 'things_from_program' not in off
     monkeypatch.setattr(memory_tiers, 'ENABLED', True)
     on = render_system(store, 'P1')[0]
-    assert on.count(memory_tiers.TOLD) == 1
-    assert memory_tiers.TOLD.startswith('我的东西分三个地方') and memory_tiers.TOLD.endswith('找了哪几层。'), 'her text'
+    assert on.count(told) == 1
+    assert told.endswith('找了哪几层。'), 'the persona words it; the core default is neutral'
     assert '- things_from_program：' + memory_tiers.THINGS_NOTE in on
-    assert len(on) - len(off) == len('\n\n# 记忆放在哪\n' + memory_tiers.TOLD) + sum(
+    assert len(on) - len(off) == len('\n\n# 记忆放在哪\n' + told) + sum(
         len('\n- %s：%s' % pair) for pair in (('things_from_program', memory_tiers.THINGS_NOTE),
                                                ('night_list_from_program', memory_tiers.NIGHT_NOTE),
                                                ('memory_week_from_program', memory_tiers.WEEK_NOTE)))

@@ -24,7 +24,6 @@ PRIVATE_KEYS = {
 }
 # Core-writable keys: a package may default them without declaring them.
 CORE_WRITABLE_KEYS = {
-    'render.budget_tokens': {'type': 'integer', 'min': 256, 'max': 12288, 'what': '人格渲染的绝对 token 预算'},
     # Her heartbeat's pace is hers; the heartbeat itself belongs to the program (ADR-012 §4.3).
     'heartbeat.every_min': {'type': 'integer', 'min': 15, 'max': 240, 'what': '心跳间隔（分钟）'},
     'heartbeat.min_gap_min': {'type': 'integer', 'min': 0, 'max': 720,
@@ -45,31 +44,46 @@ CORE_WRITABLE_KEYS = {
     'self_development.night_every_min': {'type': 'integer', 'min': 20, 'max': 120,
                                          'what': '夜里两段自我开发之间隔多久（分钟）'},
 }
-# Only the owner turns her heartbeat on or off: a package may default it, never offer it to her as a policy key.
-OWNER_KEYS = {'heartbeat.enabled'}
+# Only the owner turns her heartbeat on or off, and sets the ceiling of what each place carries of her identity: a
+# package may default them, never offer them to her as policy keys.
+OWNER_KEYS = {'heartbeat.enabled', 'render.identity_tokens'}
 HEARTBEAT_EVERY_MIN = (15, 240)
+# The core's neutral words where a persona words its own (persona-model keys, not hers to set_policy).
+TIERS_TOLD = ('你的东西分三个地方：随身，每一回合都带着；手边，不进提示，聊到相关的事或用 recall 能找到；'
+              '收着，默认不出现，recall 用字或标题才找得回来。'
+              '被用到会让一条在随身多留一阵，改写出变化会把它带回随身，一阵子没用到就往下放；放手（let_go）是你自己的动作。'
+              '群笔记的节可以置顶：笔记超长时置顶的节不折成标题，但它照样会因为一阵子没用到离开随身，也照样占随身的名额。'
+              '往下放不是删掉，原话一直都在。事实只会被更正替换，不会因为没人用而退；记忆会淡。'
+              '要说「没有、没答应过、没说过」之前，先 recall 一下，它会告诉你找了哪几层。')
+EXCHANGES_NOTE = '这是你那天说过的原话、你那一回合写下的心里话，和之后那边发生了什么；程序没有给它打分，也没有替你下结论。'
+IDLE_HINT = '这一拍没有指定的事。'
 CORE_DEFAULTS = {
-    # The persona and voice render every turn: a budget (estimated tokens, about 6k Chinese characters) bounds it
-    # even when the window is large (context_budget.py, owner 2026-10-06). A package whose own seeds are longer
-    # gets room for them (render.budget_limit, owner 2026-10-07).
-    'render': {'budget_tokens': 6144, 'max_window_share': 0.25, 'values_tag': 'values', 'action_persona': 'core'},
+    # What each (place, class) pair carries of her identity every turn (common.md, persona, voice, self and core as
+    # sent) has one ceiling in estimated tokens, each pair its own (carried.py, ADR-096). A package whose own seeds are
+    # longer gets room for them on top (render.budget_limit).
+    'render': {'identity_tokens': 12288, 'max_window_share': 0.25, 'values_tag': 'values', 'action_persona': 'core'},
     'recall_protocol': {'order': None},
     'affect': {'enabled': False, 'close_mode': 'from_close', 'require_cost': False, 'allow_untyped': True,
                'max_delta': {'val': 100, 'arl': 100}, 'proposal_ttl_h': 24, 'kind_floor': 0,
                'kinds': {}, 'bands': [], 'policy': []},
     'rhythm': {'settle_at': None, 'timezone': None, 'sleep_window': None, 'public_clock': False},
     'heartbeat': {'enabled': False, 'every_min': 60, 'min_gap_min': 120, 'pause_min': 0,
-                  'visits': False, 'visits_per_day': 4,
+                  'visits': False, 'visits_per_day': 4, 'idle_hint': IDLE_HINT,
                   'visits_per_beat': 1, 'dice_awake': '歇着 40、有趣 31、自我开发 10、自我评估 12、复盘 2、找人 5、待着 0',
                   'dice_asleep': '歇着 66、自我开发 20、自我评估 8、复盘 2、找人 4、待着 0'},
     'memory': {'forgetting': {'half_life_days': 30, 'half_life_messages': 1500, 'step_back_below': 0.1}, 'coverage_floor': 0,
-               'promotion': {'daily_quota': 0, 'min_roots': 2, 'min_dates': 2, 'window_days': 7}},
+               'promotion': {'daily_quota': 0, 'min_roots': 2, 'min_dates': 2, 'window_days': 7},
+               # How her memory's places are told once per conversation (block_guide); a persona words it.
+               'tiers_told': TIERS_TOLD},
     'speak': {'max_messages': 1, 'chars_per_second': 12, 'min_gap_s': 1, 'max_gap_s': 5},
     'phrasing': {'window': 20},
     'self_development': {'every_min': None, 'night_start_hour': 1, 'night_hours': 5, 'night_every_min': 30},
     # How people read in group and private chats (people.py): her word for the owner, and other names she answers to;
     # familiarity.py names how well she knows someone, and a persona may word each level and give its stance.
     'people': {'owner_label': '本机用户', 'self_names': [], 'familiarity': {}},
+    # Words a persona gives the core's readings (the way people.familiarity words its levels): her self-evaluation's
+    # note on her exchanges (self_review.py) and the hint of an idle heartbeat (dice.py).
+    'self_review': {'exchanges_note': EXCHANGES_NOTE},
 }
 SELF_DEVELOPMENT_DEFAULT_MIN = 1440
 

@@ -149,18 +149,39 @@ def notes_slug(scene_id):
     return 'group:' + sha(str(scene_id).encode())[:16]
 
 
+def notes_view(store, persona, slug, content):
+    """(sections shown, words about the note) of a group's notes this turn: the carried sections (carried.py), within
+    the per-turn limit; over it, the section that surfaced longest ago folds to its heading first (the kept order,
+    memory_tiers.Tiers.folding) and a pinned one never folds."""
+    from . import memory_tiers
+    from .carried import note_sections
+    from .context_budget import NOTE_CHARS, note_view
+    sections = note_sections(store, persona, slug, content)
+    order = memory_tiers.Tiers(store, persona).folding(slug, content) if memory_tiers.ENABLED and sections else None
+    return note_view(sections, NOTE_CHARS['group_notes'], order=order)
+
+
+def folded(store, persona, slug):
+    """The sids of a group's notes folded to their headings this turn (at hand for memory_tiers.deliver)."""
+    from .carried import note_sections
+    from .context_budget import shown
+    from .documents import DocumentStore
+    content = DocumentStore(store, persona).read(slug)[1]
+    if not content:
+        return set()
+    kept, _ = notes_view(store, persona, slug, content)
+    return {s['sid'] for s in shown(note_sections(store, persona, slug, content))} - {s['sid'] for s in kept}
+
+
 def notes_block(docs, scene):
     """Her own notes about this group (who is who, its customs, how she acts here), as a context block, within
     its per-turn limit (context_budget.py): how full it is in words, and the sections it does not show by heading."""
-    from .context_budget import NOTE_CHARS, note_view
-    from .memory_tiers import placed
     revision, content = docs.read(notes_slug(scene['_id']))
-    content = placed(docs.store, docs.persona, notes_slug(scene['_id']), content)
-    kept, about = note_view((content or {}).get('sections', []), NOTE_CHARS['group_notes'])
+    kept, about = notes_view(docs.store, docs.persona, notes_slug(scene['_id']), content)
     sections = [{k: s[k] for k in ('sid', 'heading', 'body') if k in s} for s in kept]
     note = ('你自己写的这个群的笔记：谁是谁、群里的规矩、你在这里的做法。要记新东西或改一节，用 write_document，'
             'doc 写 group_notes（do 用 append_section 或 replace_section；不常用的节用 set_tags 把 when_shown 改成 '
-            'on_demand 收起来）。这是你的笔记，不是群规的权威来源。')
+            'on_demand 收起来；pinned=yes 置顶一节，笔记超长时它不折成标题）。这是你的笔记，不是群规的权威来源。')
     if not (content or {}).get('sections'):
         return revision, {'sections': [], 'note': '你还没写过这个群的笔记。' + note}
     return revision, {'sections': sections, **about, 'note': note}

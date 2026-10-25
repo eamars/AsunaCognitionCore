@@ -34,7 +34,7 @@ JOURNALS = ('work_log',)
 # What she may make a new document (ADR-062): a ledger reaches every turn where it is readable (ledgers_from_program),
 # a journal is a running record like work_log (rows), a working document is read by recall.
 NEW_KINDS = ('ledger', 'journal', 'working')
-SECTION_KEYS = ('sid', 'heading', 'body', 'body_sha256', 'visibility', 'inject', 'tags', 'entry_date', 'corrects')
+SECTION_KEYS = ('sid', 'heading', 'body', 'body_sha256', 'visibility', 'inject', 'tags', 'entry_date', 'corrects', 'pinned')
 
 
 class DocumentError(ValueError):
@@ -98,6 +98,15 @@ def _checked_tags(tags):
             raise DocumentError('DOC_TAGS_INVALID', '「%s」不是地方：place: 后面只能写 %s（home 家里、peer 旧居那类桥接线、'
                                 'group 群里、dm 别人的私聊）；不写 place: 就是到处都带' % (tag, '、'.join(PLACES)))
     return tags
+
+
+def _pin(section, intent):
+    """A group-notes section she pins never folds when the notes are over their limit (ADR-096); unpinned, the field
+    goes."""
+    if intent.get('pinned') is True:
+        section['pinned'] = True
+    elif intent.get('pinned') is False:
+        section.pop('pinned', None)
 
 
 def _section(sid, heading, body, *, visibility, inject, tags=(), entry_date=None):
@@ -361,7 +370,8 @@ class DocumentStore:
         return revision
 
     def apply(self, slug, intent, body=None, *, base_revision_id, author, mutation_id, budget=None):
-        """One write intent. ``budget(slug, new_content)`` may refuse growth (PERSONA_RENDER_OVER_BUDGET)."""
+        """One write intent. ``budget(slug, new_content, intent)`` may refuse growth (PERSONA_RENDER_OVER_BUDGET,
+        NOTE_OVER_LIMIT); it sees the intent, so it measures what the write will carry (carried.gate)."""
         op = intent.get('op')
         if op not in OPS or op == 'adopt_seed':
             raise DocumentError('DOC_OP_UNKNOWN', ('没写 do' if op is None else 'do「%s」不认识' % op)
@@ -420,6 +430,7 @@ class DocumentStore:
                     target[field] = intent[field]
             if intent.get('tags') is not None:
                 target['tags'] = _checked_tags(intent['tags'])
+            _pin(target, intent)
         elif op in ('append_section', 'correction'):
             heading = intent.get('heading') or ''
             if op == 'correction':
@@ -446,6 +457,7 @@ class DocumentStore:
                                inject=inject, tags=tags, entry_date=intent.get('entry_date'))
             if op == 'correction':
                 section['corrects'] = original['sid']
+            _pin(section, intent)
             sections.append(section)
         elif op == 'set_tags':
             target = named_section(sections, intent.get('sid'))
@@ -458,13 +470,16 @@ class DocumentStore:
                     target[field] = intent[field]
             if 'tags' in intent:
                 target['tags'] = _checked_tags(intent['tags'])
+            _pin(target, intent)
         if budget:
-            budget(slug, content)
+            budget(slug, content, intent)
         return self._commit(slug, content, base_revision_id=base_revision_id, reason=reason, author=author,
                             mutation_id=mutation_id)
 
-    def adopt_seed(self, slug, kind, text, *, base_revision_id, author, mutation_id, reason='adopt package seed'):
-        """Merge a newer package seed by sid; sections both sides changed are listed, never overwritten."""
+    def adopt_seed(self, slug, kind, text, *, base_revision_id, author, mutation_id, reason='adopt package seed',
+                   budget=None):
+        """Merge a newer package seed by sid; sections both sides changed are listed, never overwritten. ``budget``
+        is the same gate as apply's."""
         revision_id, content = self.read(slug)
         if content is None:
             return {'state': 'seeded', 'revision': self.seed(slug, kind, text)}
@@ -488,6 +503,8 @@ class DocumentStore:
                 conflicts.append(section['sid'])
         if not changed:
             return {'state': 'unchanged', 'conflicts': conflicts}
+        if budget:
+            budget(slug, content, {'op': 'adopt_seed'})
         revision = self._commit(slug, content, base_revision_id=base_revision_id, reason=reason, author=author,
                                 mutation_id=mutation_id)
         return {'state': 'updated', 'changed': changed, 'conflicts': conflicts, 'revision_id': revision['_id']}

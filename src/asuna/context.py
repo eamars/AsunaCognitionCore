@@ -195,14 +195,14 @@ def _section_view(section):
 
 def ledger_block(docs, cls):
     """Every ledger she can read here, each within its per-turn limit (context_budget.note_view)."""
+    from .carried import placed, sections as carried_sections
     from .context_budget import NOTE_CHARS, note_view
-    from .memory_tiers import placed
     out = []
     for slug in docs.slugs():
         revision, content = docs.read(slug)
         if not content or content.get('kind') != 'ledger':
             continue
-        sections = readable_sections(placed(docs.store, docs.persona, slug, content), cls)
+        sections = carried_sections(placed(docs.store, docs.persona, slug, content), cls)
         if sections:
             kept, about = note_view(sections, NOTE_CHARS['ledger'])
             out.append({'doc': slug, 'revision': revision, 'title': content.get('title'),
@@ -387,13 +387,18 @@ class ContextBuilder:
         person_head=self.store.head(person_entity,_understanding.PERSON_SCOPE)
         from .self_state import SelfState
         self_state=SelfState(self.store).read(persona,scope)
+        # ADR-096: what this turn carries of her identity, for its (place, class) pair: one function for every reader.
+        from . import carried as _carried
+        identity=_carried.contents(self.store,persona)
+        carried_here=_carried.carried(self.store,persona,session_class,place,docs=identity)
+        carried_here.update({slug:[s for sid in system_ref['carried'][slug]
+                                   for s in (identity.get(slug) or {}).get('sections') or [] if s['sid']==sid]
+                             for slug in system_ref['carried']})     # persona and voice exactly as the system rendered
         if memory_tiers.ENABLED:
             # ADR-062: once she has written herself as items, the carried ones are what she reads of herself.
-            for name,slug in (('current_self',memory_tiers.SELF_DOC),('character_core',memory_tiers.CORE_DOC)):
-                own=memory_tiers.placed(self.store,persona,slug,docs.read(slug)[1])
-                if own and own.get('sections'):
-                    self_state[name]={'items':[{'heading':s['heading'],'body':s['body'],'ref':'doc:%s#%s'%(slug,s['sid'])}
-                                               for s in readable_sections(own,session_class)]}
+            for name,slug in _carried.SELF_BLOCKS:
+                if (identity.get(slug) or {}).get('sections'):
+                    self_state[name]=_carried.self_block(slug,carried_here[slug])
         from .ingress import episode_id
         source = self.store.db.messages.find_one({'_id': 'in-' + episode_id(event)})
         history_query = {'scene_id':scene['_id'],'policy_epoch':scene['policy_epoch'],
@@ -480,6 +485,7 @@ class ContextBuilder:
                 if slot:row['attachment']=slot
                 else:row.pop('attachment',None)
         own=[]
+        brought_up=[]                    # her own items this turn's retrieval brought up (ADR-096)
         if self.retrieval:
             try:
                 from .persona_model import effective as _effective
@@ -522,6 +528,7 @@ class ContextBuilder:
                     own=[]
                 if own:
                     memories=memories[:memory_tiers.SLOTS-len(own)]
+                brought_up=[item['_id'] for item in own]
         else:
             readable=[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}]
             if session_class==visibility.OWNER_PRIVATE:
@@ -1053,8 +1060,7 @@ class ContextBuilder:
         context['ref_index']=['in-'+_episode_id(event)]
         doc_refs=list(dict.fromkeys([
             *['doc:%s#%s'%(item['doc'],section['sid']) for item in ledgers for section in item['sections']],
-            *['doc:persona#'+section['sid'] for section in readable_sections(
-                memory_tiers.placed(self.store,persona,'persona',persona_doc),session_class)]]))
+            *['doc:persona#'+section['sid'] for section in carried_here['persona']]]))
         if doc_refs:context['doc_refs_from_program']=doc_refs
         manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'person_revision':person_head[0]['revision_id'] if person_head else None,'person_entity_key':person_entity+'|'+_understanding.PERSON_SCOPE,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
         if scene['kind']=='group':
@@ -1282,6 +1288,10 @@ class ContextBuilder:
                 'note':'夜间沉淀：挂着的事可以 close / void（写理由）或保留；值得长期记住的可以 promote（fact/appraisal/signal + source_ids），配额与来源要求由程序检查。'}
             # Her notes that show every turn and are due for tidying (owner 2026-10-06, context_budget.py).
             if memory_tiers.ENABLED:
+                # ADR-096: each group's notes refold at settlement (and on her writes), not every turn.
+                _folds=memory_tiers.Tiers(self.store,persona)
+                for _slug in docs.slugs('group:'):
+                    _folds.refold(_slug,docs.read(_slug)[1],moment)
                 # ADR-062: the night list replaces the notes review (no tidy-three framing, no keep or drop).
                 listed=memory_tiers.night_list(self.store,persona,moment)
                 if listed:
@@ -1310,4 +1320,10 @@ class ContextBuilder:
         context=order_context(context,effective(model,'recall_protocol.order',policy))
         manifest['context_sha256']=sha(canonical(context))
         manifest['system_ref']=system_ref
+        # ADR-096: what this turn carried, counted nightly (carried_counts): its pair's sections, the group-notes
+        # sections shown, and what its own retrieval brought up.
+        manifest['carried']=_carried.manifest(carried_here,system_ref['place'],session_class,moment,
+            notes=['doc:%s#%s'%(group_admin.notes_slug(scene['_id']),s['sid'])
+                   for s in (context.get('group_notes_from_program') or {}).get('sections') or []],
+            brought_up=brought_up)
         return system,context,manifest

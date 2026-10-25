@@ -745,7 +745,7 @@ class ScheduleService:
                          plan['scope_key'])
         if not reaches:
             return 'SKIPPED:DICE_NOTHING'
-        opening = dice.line(outcome, period, weights, homes)
+        opening = dice.line(outcome, period, weights, homes, model)
         # 'idle' (the seventh face, 2026-10-14, her own): this beat carries only its line and hint — no heartbeat
         # framing, no readings (no dice envelope), no task. The six older faces keep the text byte for byte.
         text = opening + ('' if outcome == 'idle' else '\n' + HEARTBEAT_TEXT) + (HEARTBEAT_EARLY if forced else '')

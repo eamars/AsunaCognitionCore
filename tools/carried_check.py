@@ -13,7 +13,8 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'src'))
 from asuna import carried                     # noqa: E402
 from asuna.dbread import Reader               # noqa: E402
 
@@ -34,7 +35,8 @@ class ReadOnly:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--config', default='config/local.json', help='settings with home_groups (read if present)')
+    parser.add_argument('--config', default=str(ROOT / 'config' / 'local.json'),
+                        help='settings with home_groups (default: the checkout\'s config/local.json, wherever it runs)')
     parser.add_argument('--model', help="the persona package's persona-model.json (its render keys)")
     args = parser.parse_args()
     for stream in (sys.stdout, sys.stderr):
@@ -51,6 +53,10 @@ def main():
         print('FAIL persona: %d personas have tier rows, expected one' % len(personas))
         return 1
     failed = 0
+    if not path.exists():
+        # Without the settings the home groups are unknown and their pair is never measured: say so, and not green.
+        print('SKIP home_group_pair %s' % json.dumps({'config': str(path), 'found': False}, ensure_ascii=False))
+        failed += 1
     for name, passed, seen in carried.install_checks(store, personas[0]):
         failed += not passed
         print('%s %s %s' % ('PASS' if passed else 'FAIL', name, json.dumps(seen, ensure_ascii=False)))

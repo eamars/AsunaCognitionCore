@@ -1,6 +1,7 @@
 # ADR-094: Compaction at the turn's end
 
-Status: **Built 2026-10-23, not installed; waits on the owner's DSH pin.** Decided by the owner on 2026-10-23
+Status: **Built and installed 2026-10-23 17:57 NZDT; closure reading 2026-10-25 (§10) found two causes left, with
+fixes proposed.** Decided by the owner on 2026-10-23
 (~11:45 NZDT) on the recommendation of a review of the whole compaction design run on Fable 5.1 at his instruction
 (`.runtime/private/compaction-review/report.md`, 2026-10-23 10:30–10:50 NZDT). Xiaoman agreed the same day with
 three conditions (§8). The first (keep her whole last turn) is built on both sides (§7): DSH's part is a branch of
@@ -230,6 +231,42 @@ has run live 18 times at 99.3–99.6%, and the next request's size after it is m
 - Owner, 10-24: accepted as the engine's capacity, the span alone stays (the whole conversation would hit every time
   but shows the summarizer her kept turn, ADR-085 §4c). On a provider whose cache serves any prefix of a cached prompt
   the span alone would hit; whether a given API does is read from its documentation when the move to it is made.
+
+## 10. Closure reading (2026-10-25 17:50, from install, 10-23 17:57; numbers only)
+
+`.agents/skills/asuna-cache-readout` `compactions --brain all`, the Host log's `Asuna compaction` lines, and
+`.runtime/private/compaction-closure-1025/` (two scripts; session numbers, turn sizes and DSH's error words only).
+
+| §6 | Reading | Verdict |
+|---|---|---|
+| (a) turn-end summary reuse | 29 turn-end compactions, median 99.1% (a miss when her last turn had five or more steps, §9) | met |
+| (b) next request's prompt | home 55–65k, agent line 69k (was 118k); groups after `/compact` 36–43k | better, not ≤ 40k |
+| (c) in-turn guards | character 9 (median 10.9% reuse, each followed by a ~120k request at ~11%); action brain 5 | **not met** (≤ 2) |
+| (d) turns that waited | 3, each a turn-end compaction stopped for her turn (`Request was aborted`) | – |
+| (f) failed ends | character 3 (the stops above); action brain 3 | see below |
+
+**Cause 1: the turn end is not idle on a busy line.** Every one of the 9 character guards fired at the first or
+second step of a turn whose first request was already over the turn-end mark (183,500 at 0.70): 202,902 to 249,779;
+none was a turn that grew past the guard from below. The turn end had come, but `compactAtTurnEnd` runs only when
+nothing waits (`idle`), and a message arriving stops one already running (`TurnEnds.preempt`): since install 22 turn
+ends were "busy, left for the next turn end" and 3 were "stopped, nothing changed (her turn came first)", one at 206,517
+after 123 s of summary, two minutes before the guard fired anyway. In the last 12 hours all three guards were on the
+agent line, where agents' messages arrive back to back. The broken invariant: a due compaction happens at a turn end;
+on a line where the next message is always waiting, no turn end is idle, so the guard takes over in the costly shape
+§2 measured. The guard costs her the same wait inside her turn (~100 s) plus a cold ~120k re-read; a turn-end
+compaction that holds the waiting message costs the wait alone (~70–100 s, warm) and a ~60k next request.
+
+Fix proposed (to her first: her turn's precedence is the rule it changes): once a conversation is due and a turn end
+was already left busy, or it is within one turn's growth of the guard (p90 16k, §2), the next turn end compacts even
+with a message waiting, and a message arriving no longer stops it; the waiting message is answered after.
+
+**Cause 2: the action brain's summary cap.** The action brain keeps DSH's engineering template with `maxTokens`
+8,192 (`packages/cognition-core/cordis.patch.yml`, `asuna-action`). Its 5 compactions in her long tasks (10-24 02:40,
+10-25 02:27–02:42) ended: 2 "summarization truncated at the token cap (incomplete checkpoint)", 1 "summarization
+produced no text summary content", 2 ok at 8,071 and 7,898 output tokens, on the cap. Each failure is retried by the
+next step (one task took three tries in three minutes). Her character summaries, with a 24,576 cap, run 9.4k–16.7k.
+Fix proposed: the action preset's cap to 24,576, as the character's (a 0.75 threshold leaves 196k + 24.6k inside the
+window).
 
 ## Carried from ADR-085 (archived, git 0fd844ad): automatic compactions, the template, her signature
 

@@ -285,6 +285,17 @@ exemptions and no second threshold.
 | groups | 5 / 2 / 0 | 1 |
 | others' private chats | 0 / 0 / 0 | 0 |
 
+**Her decision (2026-10-25 18:4x, on Claude's agent line; Claude's paraphrase): signed; 2 in two days is not a
+batch.** The turn-end path is a corner for groups, which are compacted at quiet times; the cost is on the agent line,
+where 14 turn ends left busy fed 6 guards; and the stall she feared in groups already happens under the old rule, in the
+costlier shape (the 249,779 turn, a whole batch of group messages waiting cold). Whether the 2 group skips fed the 1
+group guard cannot be told from counts without ids: recorded as a guess, not evidence. **Revisit condition:** if busy
+turn ends in groups rise clearly (a dozen or more a day), groups are no longer compacted at quiet times and the rule is
+discussed again, as a changed premise, not an exemption. **After install:** the same count again by line (agent-line
+guards from 6, home 2, groups 1), read by Claude; she adds from her side whether fewer guards mean fewer half-turn
+boundaries in her checkpoints. For 10.2 she asks the summary's length per section, not only in total: DSH's
+engineering template has no section check, so a whole section can go missing while the total looks fine.
+
 Groups are compacted mostly by the quiet-time `/compact` (18 since install), not at a turn end. Under the rule the 2
 busy group turn ends would each have held one group message for a warm summary; the 1 group guard held one for a cold
 one, its turn's first request already at 249,779 after it claimed many waiting group messages at once. Her decision:

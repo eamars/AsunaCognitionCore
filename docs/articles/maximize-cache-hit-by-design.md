@@ -406,9 +406,15 @@ Other details in `compaction.js`:
   it judged by (`spanAlone`), and each summary one line with its reasoning level and where the level came from; both
   are kept in `restart/host.log`.
 - A summary that reaches its cap, or lacks any section the instruction asks for, is rejected: no checkpoint is
-  written, and the next step tries again. The summary request thinks at its conversation's own reasoning level
-  (`summaryEffort`): the local engine matches the level with the tokens, so a request at a different level matches
-  none of the conversation's cache, not even the system prompt.
+  written, and the next step tries again.
+- Every summary request of her sessions, from any engine (DSH's own in the action, background-summary and recovery
+  presets too), goes out as its conversation's next request would (`summaryAsNextRequest`, the Host's
+  `summaryInstance`): that request's provider and model (for an action job, the tier it is on now, 高 or 低), its
+  reasoning level and its output limit. The local engine matches the level with the tokens, so a request at a
+  different level matches none of the conversation's cache, not even the system prompt; the level also carries the
+  thinking budget, so the summary's thinking is bounded as its turns' is, and the output limit gives it the room they
+  have. A route that names no level takes the engine's `summaryReasoningEffort` when the model offers it, else the
+  model's default level, never none (a model that thinks by default reads none as thinking without a budget).
 
 ### Thresholds leave room for the summary
 

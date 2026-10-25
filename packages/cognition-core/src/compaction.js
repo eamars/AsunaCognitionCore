@@ -13,10 +13,13 @@
  * halving again while a part does not fit. `floorTokens` is the size past which
  * a quiet group's conversation is condensed without her mark (ADR-049): half of
  * this engine's own compaction threshold for the conversation's model. The
- * summary request thinks at the conversation's own reasoning level, so it carries that level's thinking budget and
- * the engine still matches it against the conversation's cache (a different level matches nothing); a conversation
- * that names no level uses `summaryReasoningEffort` (a persona preset sets it beside the summary cap), when the model
- * offers it. A summary without every section the instruction asks for, in order, is rejected like an empty one: no
+ * summary request goes out as the conversation's next request would (the Host's `summaryInstance`, ADR-094 §10.2):
+ * its provider and model, its level, so it carries that level's thinking budget and the engine still matches it
+ * against the conversation's cache (a different level matches nothing), and its output limit; a route that names no
+ * level takes `summaryReasoningEffort` (a persona preset sets it), when the model offers it, else the model's default.
+ * On a Host without `summaryInstance` it goes as the last request went (`summaryEffort`, the summary cap). The
+ * summaries of DSH's own engine in her other presets go the same way (`summaryAsNextRequest`). A summary without every
+ * section the instruction asks for, in order, is rejected like an empty one: no
  * checkpoint is written and the next step tries again. Her conversations are compacted at the end of a turn
  * (`compactAtTurnEnd`, ADR-094): once the conversation is at `turnEndRatio` of the window, the Host compacts it while
  * she is idle, keeping her whole last turn as it is (`compactTurnEnd`, DSH's `compactNow` with a keep-from point); the
@@ -266,6 +269,44 @@ function finishError(finish) {
   return undefined;
 }
 
+/** One log line for each summary request sent as its conversation's next request (ADR-094 §10.2): its level and where
+ * that came from, its output limit and its model, so a reading of compactions can tell them apart. */
+function summaryLine(logger, agent, instance) {
+  logger?.info?.('Asuna compaction: summary request thinks at ' + (instance.reasoningEffort
+    ? '"' + instance.reasoningEffort + '" (' + instance.from + ')' : 'no named level (the model offers none)')
+    + ', output limit ' + (instance.maxTokens ?? "the model's own") + ', on ' + instance.provider + '/' + instance.model
+    + ' (' + instance.lane + ') in ' + agent.session.id);
+}
+
+/** Marks a summary request this listener has sent itself, so it passes through when it comes round again. */
+const AS_NEXT = Symbol('asuna.summaryAsNextRequest');
+
+/** ADR-094 §10.2: every compaction summary request of her sessions, from any engine (DSH's own engine in the action,
+ * background-summary and recovery presets sends one with no level and its config's cap), goes out as the
+ * conversation's next request would (`core.summaryInstance`): that request's provider, model, level and output limit,
+ * so its thinking has the budget its turns have and the summary the room they have. Through DSH's `llm/stream`
+ * waterfall: a request that already matches passes on; another is sent again with those fields. */
+export function summaryAsNextRequest(core) {
+  const { ctx } = core;
+  ctx.on('llm/stream', (options, next) => {
+    if (options?.purpose !== 'compaction' || options[AS_NEXT] || !options.sessionId) return next();
+    const agent = ctx.agents?.get(options.sessionId);
+    if (!agent) return next();
+    return (async function* () {
+      const instance = await core.summaryInstance(agent);
+      const same = !instance || ['provider', 'model', 'reasoningEffort', 'maxTokens']
+        .every(key => options[key] === instance[key]);
+      if (same) { yield* next(); return; }
+      summaryLine(ctx.logger, agent, instance);
+      const { lane, from, ...fields } = instance;
+      const request = { ...options, provider: fields.provider, model: fields.model, maxTokens: fields.maxTokens,
+        [AS_NEXT]: true };
+      if (fields.reasoningEffort) request.reasoningEffort = fields.reasoningEffort; else delete request.reasoningEffort;
+      yield* ctx.llm.stream(request);
+    })();
+  }, { global: true });
+}
+
 export default class RoleCompactionEngine extends BasicCompactionEngine {
   static Config = z.intersect([BasicCompactionEngine.Config,
     z.object({ summaryReasoningEffort: z.string(), turnEndRatio: z.number() })]);
@@ -278,13 +319,18 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
   }
 
   async summarize(input, agent, signal) {
+    // ADR-094 §10.2: the summary goes as the conversation's next request would (the Host's summaryInstance); on a
+    // Host without one, as the conversation's last request went.
+    const instance = await this.ctx.get?.('asuna')?.summaryInstance?.(agent);
+    if (instance) summaryLine(this.ctx.logger, agent, instance);
     const latest = agent.session.requestHeader()?.config;
     const configured = this.config.summarizationProvider
       ? { provider: this.config.summarizationProvider, model: this.config.summarizationModel } : undefined;
-    const target = configured ?? latest ?? (agent.options.provider && agent.options.model
+    const target = instance ?? configured ?? latest ?? (agent.options.provider && agent.options.model
       ? { provider: agent.options.provider, model: agent.options.model } : undefined);
     if (!target) throw new Error('no provider/model available for summarization');
-    const effort = await this.summaryEffort(agent, target, signal);
+    const effort = instance ? instance.reasoningEffort : await this.summaryEffort(agent, target, signal);
+    const cap = instance?.maxTokens ?? this.config.maxTokens;
     const once = async (messages, kept) => {
       const instruction = kept ? ROLE_COMPACTION_INSTRUCTION + '\n' + keptRule(kept) : ROLE_COMPACTION_INSTRUCTION;
       const options = {
@@ -292,7 +338,7 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
         messages: [...messages, { role: 'user', content: [{ type: 'text', text: instruction }] }],
         toolHistory: agent.session.toolHistory(),
         ...(input.tools === undefined ? {} : { tools: [...input.tools] }),
-        maxTokens: this.config.maxTokens, sessionId: agent.session.id, purpose: 'compaction',
+        maxTokens: cap, sessionId: agent.session.id, purpose: 'compaction',
         ...(effort === undefined ? {} : { reasoningEffort: effort }),
         ...(signal === undefined ? {} : { signal }),
       };
@@ -307,10 +353,10 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
       if (!hasSections(summary.map(block => block.text).join('\n')))
         throw new Error('summary lacks sections of the checkpoint (cut short, or thinking spilled into it)');
       return { summary, rawOutput, llmStreamCall: true, provider: options.provider, model: options.model,
-        maxTokens: this.config.maxTokens, ...(assembler.usage === undefined ? {} : { usage: assembler.usage }) };
+        maxTokens: cap, ...(assembler.usage === undefined ? {} : { usage: assembler.usage }) };
     };
     const whole = automatic.has(agent) ? { reason: 'automatic' } : turnEnding.has(agent) ? { reason: 'turn end' }
-      : await this.wholeConversation(input, agent, target, signal);
+      : await this.wholeConversation(input, agent, target, signal, cap);
     if (whole?.messages) {
       try { return await once(whole.messages, whole.tail); }
       catch (error) { if (!overflowed(error)) throw error; this.spanAlone(agent, 'refused for the window', whole); }
@@ -359,7 +405,7 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
   /** The whole conversation as the next request would send it, split after the replayed span, when the span is its
    * start and the whole of it fits the window beside the summary cap; otherwise why not (`reason`), or undefined when
    * there is no meter or window to judge by. */
-  async wholeConversation(input, agent, target, signal) {
+  async wholeConversation(input, agent, target, signal, cap = this.config.maxTokens) {
     const session = agent.session;
     const meter = this.ctx.tokenMeter;
     if (!session.surface?.nodes || !meter || !this.ctx.llm.resolveModelInfo) return undefined;
@@ -367,7 +413,7 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
     const window = info?.context?.contextWindow;
     if (!window) return undefined;
     const size = { tokens: meter.measure(session).totalTokens, window };
-    if (size.tokens + WHOLE_SPARE_TOKENS + this.config.maxTokens > window) return { ...size, reason: 'too large' };
+    if (size.tokens + WHOLE_SPARE_TOKENS + cap > window) return { ...size, reason: 'too large' };
     const messages = session.surface.nodes.map(seq => session.deriveEventMessage(session.eventAt(seq)))
       .filter(message => message !== null);
     const span = input.messages.length;

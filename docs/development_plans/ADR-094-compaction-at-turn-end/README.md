@@ -391,6 +391,23 @@ thinking off is not proposed.
 
 Both fixes are designs, not built: 10.1 goes to her first; 10.2 is built after her and the owner have read it.
 
+**10.2 as built (2026-10-25 evening, owner: build 1 then 2, read in about two days).** One decision for a request's
+route, `requestRoute` (a native selection, else 高 for a job sent there, else the lane's route, at the stage's own
+effort), serves both the turn's `agent/request` and the summary; `tierRoute(..., { quiet })` decides 高 without
+recording or falling, since the summary asks before the step's request does. `summaryInstance` adds the level fallback
+(the route's, else the engine's `summaryReasoningEffort` when the model offers it, else the model's default; never
+none) and the output limit (the route's, else the instance's own model's default, never another model's from the
+last header). `summaryAsNextRequest` is one `llm/stream` listener (global, as DSH's own session-title listener is) for
+every request with `purpose: 'compaction'` from a session of hers: one that matches passes on; another is sent again
+with those four fields and a marker, so it passes the second time. Asuna's own engine asks `summaryInstance` itself, so
+its fit check uses the same limit and its log line says what was sent; the summaries of DSH's engine are logged by the
+listener in the same words (`summary request thinks at "<level>" (<from>), output limit N, on <provider>/<model>
+(<lane>) in <session>`). The presets' `maxTokens: 8192` stay as DSH's required field, used only on a Host without the
+listener. Left open: the local catalog's `xhigh` has no thinking budget (the profile's provider settings, the
+owner's), and a 高 job whose conversation outgrows 低's window cannot fall mid-run without overflowing (ADR-075's fall
+rule, not this one). Tests: `packages/cognition-core/test/summary-instance.test.js` (a job on 高, after a fall, with 高
+resting; a group stage's level; the level fallbacks; the listener's resend and pass-through; her engine asking the Host).
+
 ## Carried from ADR-085 (archived, git 0fd844ad): automatic compactions, the template, her signature
 
 Copied as written; her signed sentences are hers word for word.

@@ -39,6 +39,8 @@
                   # large step plus the summary request, which replays the prefix.
                   thresholdRatio: 0.75
                   headroomTokens: 6144
+                  # DSH requires a summary cap; her summaries go out with their conversation's own output
+                  # limit instead (compaction.js summaryAsNextRequest, ADR-094 §10.2).
                   maxTokens: 8192
                   retainRatio: 0.32
               - id: command-compact
@@ -71,6 +73,8 @@
               - id: compaction-basic
                 name: '@deepseek-ai/dsh-compaction-basic'
                 config:
+                  # DSH requires a summary cap; her summaries go out with their conversation's own output
+                  # limit instead (compaction.js summaryAsNextRequest, ADR-094 §10.2).
                   maxTokens: 8192
                   retainRatio: 0.32
               - id: command-compact
@@ -150,6 +154,8 @@
                   # large step plus the summary request, which replays the prefix.
                   thresholdRatio: 0.75
                   headroomTokens: 6144
+                  # DSH requires a summary cap; her summaries go out with their conversation's own output
+                  # limit instead (compaction.js summaryAsNextRequest, ADR-094 §10.2).
                   maxTokens: 8192
                   retainRatio: 0.32
               - id: command-compact

@@ -33,7 +33,7 @@ import { applySearch, registerWebSearch } from './search.js';
 import { applyFetch } from './fetch.js';
 import { renderSvg } from './svg.js';
 import { carrySession, lastSummary, overflowed } from './carry.js';
-import { TurnEnds } from './compaction.js';
+import { TurnEnds, summaryAsNextRequest } from './compaction.js';
 import { languageWords, savedLanguage } from './ui-language.js';
 import { Collab } from './collab.js';
 import { failureClass, restFor, resting } from './tiers.js';
@@ -106,6 +106,8 @@ async function toolReply(call) {
 export const DSH_DEVELOPER_SECTIONS = [['harness:source', 'HARNESS_SOURCE'],
   ['ui:deliverable-file-references', 'DELIVERABLE_FILE_REFERENCES'], ['app:web-surface', 'WEB_SURFACE']];
 const PRESETS = { executor: 'asuna-action', summary: 'asuna-summary', appraiser: 'asuna-appraiser', attend: 'asuna-attend' };
+/** The recovery preset's id (cordis.patch.yml); its sessions route by the publication floor's own route. */
+const RECOVERY_PRESET = 'asuna-recovery';
 const textOf = message => (message?.content ?? []).filter(x => x.type === 'text').map(x => x.text).join('\n');
 
 /** What one stage of her turn said and saw, from her session's log (coordinator: her speech, and the lines it
@@ -438,15 +440,58 @@ export class CognitionCore {
   }
 
   /** ADR-075: the route of a request in a job she sent to 高, while it has not fallen and 高 is not resting; else
-   * undefined (the action route). A job that meets 高 resting falls here, before its first request. */
-  tierRoute(agent, stage) {
+   * undefined (the action route). A job that meets 高 resting falls here, before its first request. `quiet` decides the
+   * same without recording anything: a summary request asks before the step's own request does (ADR-094 §10.2). */
+  tierRoute(agent, stage, { quiet = false } = {}) {
     const state = this.state(agent.session.id);
-    state.onHigh = false;
+    if (!quiet) state.onHigh = false;
     const high = this.routeFor('actionHigh');
     if (stage?.task?.tier !== 'high' || state.fell || !high?.provider) return undefined;
-    if (resting(this.highRest)) { this.fall(agent, stage.task, this.highRest.reason); return undefined; }
-    state.onHigh = true;
+    if (resting(this.highRest)) { if (!quiet) this.fall(agent, stage.task, this.highRest.reason); return undefined; }
+    if (!quiet) state.onHigh = true;
     return high;
+  }
+
+  /** The provider, model, level and output limit the next request of this conversation takes (before nativeRoute): a
+   * deliberate native model selection stays authoritative for its session; otherwise 高 for a job she sent there, else
+   * the lane's route, at the stage's own effort when it has one. One decision for a turn's request and for its
+   * summary request (ADR-094 §10.2). */
+  requestRoute(agent, lane, stage, { quiet = false } = {}) {
+    const selected = agent.session.snapshotEvents().findLast(event => event.type === 'model/selection')?.data;
+    if (lane === 'recovery') return selected ?? this.ctx.asunaFloor?.config?.route;
+    const route = selected ?? (lane === 'executor' ? this.tierRoute(agent, stage, { quiet }) : undefined)
+      ?? this.routeFor(routeOf(lane));
+    const effort = selected ? undefined : this.effortFor(lane, stage);
+    return { ...route, reasoningEffort: effort ?? route?.reasoningEffort };
+  }
+
+  /** The lane of one of her sessions, by the preset it was opened with; undefined for a session not hers. */
+  laneOf(agent) {
+    const preset = agent?.session?.header?.agentPreset;
+    if (!preset) return undefined;
+    if (preset === this.personas.get(this.config.persona)?.preset) return 'character';
+    if (preset === RECOVERY_PRESET) return 'recovery';
+    return Object.entries(PRESETS).find(([, id]) => id === preset)?.[0];
+  }
+
+  /** ADR-094 §10.2: a compaction summary of this conversation is sent as its next request would be: that request's
+   * provider and model, its level (else the compaction engine's `summaryReasoningEffort` when the model offers it,
+   * else the model's default level: never none, which a model that thinks by default reads as thinking without a
+   * budget) and its output limit (else the model's own), so its thinking is bounded as its turns' is and the summary
+   * has the room its turns have. Undefined for a session not hers or a route not configured. */
+  async summaryInstance(agent) {
+    const lane = this.laneOf(agent);
+    if (!lane) return undefined;
+    const route = nativeRoute(this.requestRoute(agent, lane, this.states.get(agent.session.id)?.current, { quiet: true }));
+    if (!route?.provider || !route.model) return undefined;
+    const info = await this.ctx.llm.resolveModelInfo(route.provider, route.model);
+    const offered = (info?.reasoning?.efforts ?? []).map(effort => effort.id);
+    const preset = this.ctx.get('agentPresets')?.serviceFor(agent, 'compaction')?.summaryReasoningEffort;
+    const [level, from] = route.reasoningEffort ? [route.reasoningEffort, "the conversation's"]
+      : offered.includes(preset) ? [preset, "the preset's"] : [info?.reasoning?.defaultEffort, "the model's default"];
+    const maxTokens = route.maxTokens ?? info?.defaultMaxTokens;
+    return { lane, from, provider: route.provider, model: route.model, ...(level ? { reasoningEffort: level } : {}),
+      ...(maxTokens ? { maxTokens } : {}) };
   }
 
   /** The job falls to 低 for good; the worker records it on the task, said to her in capability words. */
@@ -1140,12 +1185,7 @@ export class CognitionCore {
       // its actual lane, even when both lanes use the same model.
       if (stage) agent.session.append('asuna/stage', { turn, step,
         operation: stage.token, lane: stage.lane, phase: stage.phase });
-      // A deliberate native model selection remains authoritative for this
-      // session. The plugin routes are defaults for sessions without one.
-      const selected = agent.session.snapshotEvents().findLast(event => event.type === 'model/selection')?.data;
-      const route = selected ?? (lane === 'executor' ? this.tierRoute(agent, stage) : undefined) ?? this.routeFor(routeOf(lane));
-      const effort = selected ? undefined : this.effortFor(lane, stage);
-      return nativeRoute({ ...request, ...route, reasoningEffort: effort ?? route?.reasoningEffort });
+      return nativeRoute({ ...request, ...this.requestRoute(agent, lane, stage) });
     });
     scope.on('agent/pre-step', async ({ agent }, next) => {
       const state = this.state(agent.session.id);
@@ -1368,6 +1408,8 @@ export function apply(ctx, config = {}) {
   ctx.on('agent/request-error', imageRefusalListener(text => ctx.logger.warn('Asuna: ' + text)));
   // Platform lines held while a compaction ran on their conversation join it as the compaction ends (pairing.js).
   releaseAfterCompaction(core);
+  // A compaction summary is sent as its conversation's next request would be (compaction.js, ADR-094 §10.2).
+  summaryAsNextRequest(core);
   ctx.on('dispose', () => {
     if (ctx.asunaFloor.activateRecovery === activateRecovery) delete ctx.asunaFloor.activateRecovery;
     return core.dispose();

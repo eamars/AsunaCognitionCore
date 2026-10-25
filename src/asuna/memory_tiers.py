@@ -123,8 +123,16 @@ def told_text(config):
     from .persona_model import effective
     return effective((config or {}).get('persona_model') or {}, 'memory.tiers_told')
 THINGS_NOTE = ('你的东西在哪：每份随身还能放多少，手边、收着各有几条；moved 是程序挪过的，每件只说一次（又用到、改写出变化就回来）；'
-               'identity_room 是各处每回合随身带的身份部分（persona、voice、self、core 合起来）用了上限的多少，变了才说；'
+               'identity_room 是各处每回合随身带的（%s 合起来）用了上限的多少：%s；变了才说；'
                'self_items 是把 current_self 拆成条的提议。')
+
+
+def _things_note():
+    from .carried import SCOPE_WORDS, room_ranges
+    return THINGS_NOTE % (SCOPE_WORDS, room_ranges())
+
+
+THINGS_NOTE = _things_note()
 NIGHT_NOTE = '夜里的清单：每条写着为什么在这、可以怎么做，都不是留或删的选择；没做的，程序也不替你做。'
 SELF_OFFER = ('current_self 现在是一整段。想好了就把它拆成一条一条，用 write_document 写进 doc=self（append_section）：'
               '一条是一个说法连同它的依据（样本、来源、证据），不按行拆；原来那段留作历史，程序不替你拆。')
@@ -260,7 +268,7 @@ class Tiers:
         if reason == 'stay':
             fields['stays'] = int(row.get('stays') or 0) + 1
         self.rows.update_one({'_id': row['_id']}, {'$set': fields})
-        by = BY.get(reason, 'program')
+        by = moved_by({'reason': reason})
         move = {'_id': 'move:' + sha(canonical([row['_id'], row['place'], to, _iso(moment)]))[:32], 'row': 'move',
                 'persona': self.persona, 'item': row['_id'], 'doc': row['doc'], 'sid': row['sid'],
                 'heading': row.get('heading'), 'store': row['store'], 'visibility': row.get('visibility'),

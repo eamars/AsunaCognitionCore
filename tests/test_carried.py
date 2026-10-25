@@ -168,9 +168,11 @@ def test_her_write_says_its_weight_and_each_place_s_room_and_a_tier_that_differs
     result = lane.tool_results[1][4]
     sizes, ceiling = carried.identity(store, 'P1'), carried.limit(store, 'P1')
     weight = carried.weight('persona', DocumentStore(store, 'P1').read('persona')[1]['sections'][-1])
-    assert result['room'] == '这节约 %s token。带它的地方：%s' % (carried.number(weight), '｜'.join(
-        '%s 剩 %s' % (carried.PAIR_WORDS[pair], carried.number(ceiling - sizes[pair]))
+    assert result['room'] == '这节约 %s。%s' % (carried.number(weight), '｜'.join(
+        '%s %s（剩 %s）' % (carried.PAIR_WORDS[pair], carried.number(sizes[pair]), carried.number(ceiling - sizes[pair]))
         for pair in carried.ordered(sizes))), 'exact numbers, in her order, only where it is carried'
+    assert carried.room_word(carried.limit(store, 'P1'), carried.limit(store, 'P1')) == '快满了', 'at the limit, not over'
+    assert '还宽裕 不到 50%' in memory_tiers.THINGS_NOTE and carried.SCOPE_WORDS in memory_tiers.THINGS_NOTE
     sid = result['sid']
     let = ('write_document', {'doc': 'persona', 'do': 'let_go', 'section': sid, 'why': '少带一点'})
     read = ('recall', {'sections': [{'doc': 'persona', 'section': sid}]})
@@ -319,20 +321,6 @@ def test_carried_counts_are_a_replay_of_what_the_turns_recorded(store):
     carried.count_days(store, 'P1', tomorrow + timedelta(days=60))
     assert not store.db.carried_counts.find_one({'day': day.isoformat()}), 'the day rows keep 30 days'
     assert store.db.carried_sections.find_one({'section': scored}), 'first and last stay past them'
-
-
-def test_a_move_from_before_moves_said_who_reads_with_who_from_its_reason(store):
-    from asuna.dbread import Reader
-    store.db.memory_tiers.insert_many([{'_id': 'move:old-her', 'row': 'move', 'reason': 'let_go'},
-                                       {'_id': 'move:old-program', 'row': 'move', 'reason': 'stay'},
-                                       {'_id': 'move:new', 'row': 'move', 'reason': 'stay', 'by': 'program'}])
-    reader = Reader(store.db, store.db.name)
-    rows = {row['_id']: row['by'] for row in reader.find('memory_tiers', {'row': 'move'})['rows']}
-    assert rows == {'move:old-her': 'her', 'move:old-program': 'program', 'move:new': 'program'}
-    assert reader.count('memory_tiers', {'row': 'move', 'by': 'her'})['found'] == 1
-    assert {row['_id'] for row in reader.find('memory_tiers', {'by': 'program'})['rows']} == {'move:old-program',
-                                                                                              'move:new'}
-    assert not store.db.memory_tiers.find_one({'_id': 'move:old-her'}).get('by'), 'old rows are not rewritten'
 
 
 # ---- her install checks ------------------------------------------------------------------

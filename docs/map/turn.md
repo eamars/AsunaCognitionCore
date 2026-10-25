@@ -142,6 +142,8 @@ What she carries: one function says it for every reader (ADR-096).
 - def `laid_out` — {(place, class): (carried sections by slug, estimated tokens)} of each pair: what `identity` counts.
 - def `ordered` — Pairs in her order (PAIR_WORDS).
 - def `room_line` — What a write to her identity, or a let_go, returns: the section's weight and, for each pair that carries it, the room left (or how far over), from the number the gate uses; None when nothing bounds it.
+- def `room_word` — The coarse word for a pair's share of its limit (ROOM_WORDS; the limit itself is still 快满了).
+- def `room_ranges` — ROOM_WORDS as the ranges the program uses, for the note that explains them.
 - def `tier_line` — When a section's `inject` and its tier differ: both, and its last move (when, who, why) on the next line; None when they agree or tiers are off.
 - def `over_words` — A refusal: the pair, how far over it is (or would be), the way out, and the three largest sections it carries now; every number is that pair's own (laid_out, as carried counts it).
 - def `gate` — For DocumentStore.apply and adopt_seed: refuse a write that grows the identity layer in a pair over its limit (each pair on its own, measured as the write will carry it), and growth of a note far over its own limit.

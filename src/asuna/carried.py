@@ -27,17 +27,21 @@ from .evidence import canonical, sha
 IDENTITY = ('persona', 'voice', 'self', 'core')
 SELF_BLOCKS = (('current_self', 'self'), ('character_core', 'core'))    # the context names of the self and core blocks
 PERSONA_SHARE = 0.5          # the share of the ceiling a package's own seeds may fill before they get room on top
-ROOM_VERSION = 1
+ROOM_VERSION = 2
 # The pairs in her words (her choice, 2026-10-25), in the order she lists them: each place has one class, and a group
 # the owner configured as home is a group read at home.
 PAIR_WORDS = {('home', visibility.OWNER_PRIVATE): '家里', ('group', visibility.OWNER_PRIVATE): '家里那个群',
               ('group', visibility.PUBLIC): '外面的群', ('peer', visibility.OWNER_PRIVATE): '线',
               ('dm', visibility.PUBLIC): '私聊'}
-# How full a pair's identity layer is, as the share of its limit (things_from_program, when it changes).
+# How full a pair's identity layer is, as the share of its limit (things_from_program, when it changes): a share under
+# the bound takes the word; at the limit itself it is still 快满了, past it 超了.
 ROOM_WORDS = ((0.5, '还宽裕'), (0.8, '用了一大半'), (1.0, '快满了'), (None, '超了'))
-# Her wording (2026-10-25): the room line lists only the pairs that carry the section.
-ROOM_LINE = '这节约 %s token。带它的地方：%s'
-ROOM_LEFT, ROOM_OVER, ROOM_SEPARATOR, ROOM_NOWHERE = '%s 剩 %s', '%s 超 %s', '｜', '无'
+# What the per-place limit covers, said the same everywhere (the room line counts exactly these).
+SCOPE_WORDS = '程序的开头说明、persona、voice、self、core'
+# Her wording (2026-10-25): the room line lists, for the pairs that carry the section, each pair's total and its room.
+ROOM_LINE = '这节约 %s。%s'
+ROOM_PAIR, ROOM_LEFT, ROOM_OVER, ROOM_SEPARATOR = '%s %s（%s）', '剩 %s', '超 %s', '｜'
+ROOM_NOWHERE = '带它的地方：无'
 TIER_LINE = '这一节的真带是 %s；你写的 when_shown 是 %s'      # her inject, by the name she is shown
 TIER_LAST = '上一次挪档：%s · %s · %s'
 TIER_NONE = '挪档史：无记录'
@@ -204,8 +208,28 @@ def room_line(store, persona, slug, section):
         found, size = laid[pair]
         if any(s['sid'] == section['sid'] for s in found[slug]):
             left = ceiling - size
-            parts.append((ROOM_LEFT if left >= 0 else ROOM_OVER) % (PAIR_WORDS[pair], number(abs(left))))
+            parts.append(ROOM_PAIR % (PAIR_WORDS[pair], number(size),
+                                      (ROOM_LEFT if left >= 0 else ROOM_OVER) % number(abs(left))))
     return ROOM_LINE % (number(weight(slug, section)), ROOM_SEPARATOR.join(parts) or ROOM_NOWHERE)
+
+
+def room_word(size, ceiling):
+    """The coarse word for a pair's share of its limit (ROOM_WORDS; the limit itself is still 快满了)."""
+    share = size / ceiling
+    for bound, word in ROOM_WORDS:
+        if bound is None or share < bound or (bound == 1.0 and share <= bound):
+            return word
+    return ROOM_WORDS[-1][1]
+
+
+def room_ranges():
+    """ROOM_WORDS as the ranges the program uses, for the note that explains them."""
+    out, low = [], 0
+    for bound, word in ROOM_WORDS:
+        out.append('%s %s' % (word, '不到 %d%%' % (bound * 100) if not low else
+                              '%d%%–%d%%' % (low * 100, bound * 100) if bound else '过了 %d%%' % (low * 100)))
+        low = bound
+    return '，'.join(out)
 
 
 def _local(store, persona, moment):
@@ -274,12 +298,11 @@ def gate(store, persona):
 def room_block(store, persona, cls, scene_id):
     """things_from_program: how full each pair readable here is, in coarse words, only when the words changed since
     this conversation was last told; None otherwise."""
-    from .context_budget import _tier
     from .memory_tiers import COLLECTION
     ceiling = limit(store, persona)
     if not ceiling:
         return None
-    words = {PAIR_WORDS[pair]: _tier(ROOM_WORDS, size / ceiling)
+    words = {PAIR_WORDS[pair]: room_word(size, ceiling)
              for pair, size in identity(store, persona).items() if visibility.readable(pair[1], cls)}
     key = 'room:%s:%s' % (persona, sha(str(scene_id).encode())[:24])
     told = store.db[COLLECTION].find_one({'_id': key})

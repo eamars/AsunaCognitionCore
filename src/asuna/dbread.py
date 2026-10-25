@@ -89,31 +89,6 @@ def _plain(value):
     return json.loads(json.dumps(value, ensure_ascii=False, default=str))
 
 
-# Tier moves (memory_tiers `move` rows) say who made them in `by`; a row from before they did is read with the same
-# rule from its reason, so every move reads in one shape and a filter on `by` finds the old rows too.
-MOVES = 'memory_tiers'
-
-
-def _moves_query(name, query):
-    from .memory_tiers import BY
-    if name != MOVES or not isinstance(query, dict) or not isinstance(query.get('by'), str):
-        return query
-    hers = sorted(reason for reason, who in BY.items() if who == 'her')
-    rest = {k: v for k, v in query.items() if k != 'by'}
-    old = {'by': {'$exists': False}, 'reason': {'$in': hers} if query['by'] == 'her' else {'$nin': hers}}
-    either = [{'by': query['by']}, old]
-    return {**rest, '$or': either} if '$or' not in rest else {'$and': [rest, {'$or': either}]}
-
-
-def _moves_rows(name, rows):
-    from .memory_tiers import moved_by
-    if name == MOVES:
-        for row in rows:
-            if isinstance(row, dict) and row.get('row') == 'move' and 'by' not in row and 'reason' in row:
-                row['by'] = moved_by(row)
-    return rows
-
-
 class Reader:
     def __init__(self, db, name):
         self.db, self.name = db, name
@@ -192,17 +167,17 @@ class Reader:
     def find(self, name, query=None, fields=None, sort=None, limit=LIMIT, skip=0):
         limit = max(1, min(int(limit or LIMIT), MOST))
         projection = ({field: 1 for field in fields} if fields else {field: 0 for field in HIDDEN})
-        cursor = self.collection(name).find(_moves_query(name, query) or {}, projection)
+        cursor = self.collection(name).find(query or {}, projection)
         if sort:
             cursor = cursor.sort(list(sort))
-        rows = _moves_rows(name, list(cursor.skip(int(skip or 0)).limit(limit + 1)))
+        rows = list(cursor.skip(int(skip or 0)).limit(limit + 1))
         more = len(rows) > limit
         return self._answer(name, query, rows[:limit], **({'sort': _plain(list(sort))} if sort else {}),
                             **({'skip': int(skip)} if skip else {}), limit=limit,
                             **({'more': '还有更多：缩小过滤，或按 scene_seq/时间分段，不要用大 skip'} if more else {}))
 
     def count(self, name, query=None):
-        return self._answer(name, query, self.collection(name).count_documents(_moves_query(name, query) or {}))
+        return self._answer(name, query, self.collection(name).count_documents(query or {}))
 
     def distinct(self, name, field, query=None):
         values = self.collection(name).distinct(field, query or {})
@@ -212,7 +187,7 @@ class Reader:
         if any(stage in WRITERS for step in pipeline for stage in step):
             raise ValueError('aggregate 只读：$out 和 $merge 会写库，这里不做')
         limit = max(1, min(int(limit or LIMIT), MOST))
-        rows = _moves_rows(name, list(self.collection(name).aggregate(list(pipeline) + [{'$limit': limit + 1}])))
+        rows = list(self.collection(name).aggregate(list(pipeline) + [{'$limit': limit + 1}]))
         first = next((step['$match'] for step in pipeline if '$match' in step), {})
         # Cut at the limit as find is, and said as find says it (her ask, 2026-10-20: 50 groups read as all of them).
         return self._answer(name, first, rows[:limit], pipeline=_plain(pipeline), limit=limit,

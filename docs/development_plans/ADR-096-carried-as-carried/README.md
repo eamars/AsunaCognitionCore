@@ -140,7 +140,7 @@ section's `first_carried_at` and `last_carried_at` in `carried_sections`, outsid
 
 - Cost: no tool added. Write results grow by one line when a carried document changes; `things_from_program` by a
   coarse word when it changes; the manifest by about 1 KB a turn; `carried_counts` about 150 rows a day. Her tool
-  descriptions grow by 44 characters (`write_document`'s `pin`, and the sentence on what each place carries; the
+  descriptions grow by 49 characters (`write_document`'s `pin`, and the sentence on what each place carries; the
   `visibility` parameter no longer restates it), with or without tiered memory (`tests/test_tool_budget.py`). The gate's
   work per write: five composes of carried text plus the self/core JSON per class, a few milliseconds. Prompt text
   changes only where the program now honours what she wrote: self/core `place:` tags (one section at home today) and the

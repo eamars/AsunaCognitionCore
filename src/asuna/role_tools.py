@@ -273,7 +273,7 @@ TOOLS = {
         'description': ('写你自己的文档（人格、口吻、活账、工作文档；群笔记只在那个群里）。do 选一样：replace_section 写修订后的整节；'
                          'append_section 加新的一节；correction 给活账写更正（原条目不改）；set_tags 只改 visibility、when_shown、tags；'
                          'adopt_seed 接收人格包里更新的种子。正文写在 content。visibility：public 你所有回合读得到，'
-                         'owner_private（默认）只在家里。每回合随身带上的 persona、voice、self、core 节，'
+                         'owner_private（默认）只在家里。每回合随身带的（程序的开头说明、persona、voice、self、core）'
                          '每处合起来有上限：不常用的改成 on_demand（recall 还读得到）；只在某类回合用的，tags 加 place:group、place:home、place:peer 或 place:dm，'
                          '就只在那里带上。工作文档和人格用 replace_section。只写发生过的事，不写对人说的台词。'),
         'parameters': {
@@ -1090,7 +1090,7 @@ WORDS = {
     'BASE_REVISION_STALE': '要改的东西刚被别处改过。',
     'VOID_REQUIRES_WHY': 'void 要写 why：为什么这一笔的前提不成立。',
     'SOURCE_IDENTITY_REQUIRED': '这一笔要写 source_identity（它来自哪条记录）。',
-    'PERSONA_RENDER_OVER_BUDGET': '这样写完，那个地方每回合随身带的身份部分（人格、口吻、自我、core）会超出上限。',
+    'PERSONA_RENDER_OVER_BUDGET': '这样写完，那个地方每回合随身带的（程序的开头说明、persona、voice、self、core）会超出上限。',
     'POLICY_SET_REQUIRES_OWNER_PRIVATE': '参数只能在家里（家里·私聊、主人私聊这类可信的对话）改。',
     'PROMOTE_ONLY_IN_SETTLEMENT': '提升长期记忆只在夜间沉淀时做。',
     'PROMOTION_QUOTA': '今天提升长期记忆的配额用完了。',

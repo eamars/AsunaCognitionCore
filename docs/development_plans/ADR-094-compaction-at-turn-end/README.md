@@ -1,8 +1,9 @@
 # ADR-094: Compaction at the turn's end
 
 Status: **Built and installed 2026-10-23 17:57 NZDT; closure reading 2026-10-25 (§10) found two broken invariants
-left: precedence for her turn sends due compactions to the guard, and the action brain's summary thinks without a
-budget. Fixes designed, not built.** Decided by the owner on 2026-10-23
+left: a due compaction held back by the wrong "busy", and summaries sent without their conversation's level and
+limit. Both fixed and installed 2026-10-25 19:48:45 NZDT (core `30cb48a08350`, main `91fcc43a`); read about two days
+from that start, by line (§10.1 "After install").** Decided by the owner on 2026-10-23
 (~11:45 NZDT) on the recommendation of a review of the whole compaction design run on Fable 5.1 at his instruction
 (`.runtime/private/compaction-review/report.md`, 2026-10-23 10:30–10:50 NZDT). Xiaoman agreed the same day with
 three conditions (§8). The first (keep her whole last turn) is built on both sides (§7): DSH's part is a branch of

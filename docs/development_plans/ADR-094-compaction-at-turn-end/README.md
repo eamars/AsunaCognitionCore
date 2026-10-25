@@ -1,7 +1,8 @@
 # ADR-094: Compaction at the turn's end
 
-Status: **Built and installed 2026-10-23 17:57 NZDT; closure reading 2026-10-25 (§10) found two causes left, with
-fixes proposed.** Decided by the owner on 2026-10-23
+Status: **Built and installed 2026-10-23 17:57 NZDT; closure reading 2026-10-25 (§10) found two broken invariants
+left: precedence for her turn sends due compactions to the guard, and the action brain's summary thinks without a
+budget. Fixes designed, not built.** Decided by the owner on 2026-10-23
 (~11:45 NZDT) on the recommendation of a review of the whole compaction design run on Fable 5.1 at his instruction
 (`.runtime/private/compaction-review/report.md`, 2026-10-23 10:30–10:50 NZDT). Xiaoman agreed the same day with
 three conditions (§8). The first (keep her whole last turn) is built on both sides (§7): DSH's part is a branch of
@@ -232,10 +233,11 @@ has run live 18 times at 99.3–99.6%, and the next request's size after it is m
   but shows the summarizer her kept turn, ADR-085 §4c). On a provider whose cache serves any prefix of a cached prompt
   the span alone would hit; whether a given API does is read from its documentation when the move to it is made.
 
-## 10. Closure reading (2026-10-25 17:50, from install, 10-23 17:57; numbers only)
+## 10. Closure reading (2026-10-25, from install, 10-23 17:57; numbers only)
 
-`.agents/skills/asuna-cache-readout` `compactions --brain all`, the Host log's `Asuna compaction` lines, and
-`.runtime/private/compaction-closure-1025/` (two scripts; session numbers, turn sizes and DSH's error words only).
+`.agents/skills/asuna-cache-readout` `compactions --brain all`, the Host log's `Asuna compaction` lines, DSH's code
+(`dsh-agent-loop`, `dsh-compaction-basic`, `dsh-llm-pi-ai`) and `.runtime/private/compaction-closure-1025/` (scripts
+printing session numbers, sizes, level words and DSH's error words only).
 
 | §6 | Reading | Verdict |
 |---|---|---|
@@ -243,30 +245,72 @@ has run live 18 times at 99.3–99.6%, and the next request's size after it is m
 | (b) next request's prompt | home 55–65k, agent line 69k (was 118k); groups after `/compact` 36–43k | better, not ≤ 40k |
 | (c) in-turn guards | character 9 (median 10.9% reuse, each followed by a ~120k request at ~11%); action brain 5 | **not met** (≤ 2) |
 | (d) turns that waited | 3, each a turn-end compaction stopped for her turn (`Request was aborted`) | – |
-| (f) failed ends | character 3 (the stops above); action brain 3 | see below |
+| (f) failed ends | character 3 (the stops above); action brain 3 | below |
 
-**Cause 1: the turn end is not idle on a busy line.** Every one of the 9 character guards fired at the first or
-second step of a turn whose first request was already over the turn-end mark (183,500 at 0.70): 202,902 to 249,779;
-none was a turn that grew past the guard from below. The turn end had come, but `compactAtTurnEnd` runs only when
-nothing waits (`idle`), and a message arriving stops one already running (`TurnEnds.preempt`): since install 22 turn
-ends were "busy, left for the next turn end" and 3 were "stopped, nothing changed (her turn came first)", one at 206,517
-after 123 s of summary, two minutes before the guard fired anyway. In the last 12 hours all three guards were on the
-agent line, where agents' messages arrive back to back. The broken invariant: a due compaction happens at a turn end;
-on a line where the next message is always waiting, no turn end is idle, so the guard takes over in the costly shape
-§2 measured. The guard costs her the same wait inside her turn (~100 s) plus a cold ~120k re-read; a turn-end
-compaction that holds the waiting message costs the wait alone (~70–100 s, warm) and a ~60k next request.
+### 10.1 Her conversations: precedence for her turn is what sends them to the guard
 
-Fix proposed (to her first: her turn's precedence is the rule it changes): once a conversation is due and a turn end
-was already left busy, or it is within one turn's growth of the guard (p90 16k, §2), the next turn end compacts even
-with a message waiting, and a message arriving no longer stops it; the waiting message is answered after.
+**What DSH does with a message that arrives** (`dsh-agent-loop`): it goes into the conversation's inbox. A turn that
+ends with something in the inbox is followed by the next turn at once, so the conversation is never idle between them.
+At each step DSH first claims the waiting messages into the turn (`preStep`), then runs the `agent/pre-step` hook, where
+`dsh-compaction-basic` runs its pressure compaction (`compactIfNeeded(agent, "pressure")`), then sends the request. So a
+message that arrives before an in-turn compaction is already in her turn and waits for all of it.
 
-**Cause 2: the action brain's summary cap.** The action brain keeps DSH's engineering template with `maxTokens`
-8,192 (`packages/cognition-core/cordis.patch.yml`, `asuna-action`). Its 5 compactions in her long tasks (10-24 02:40,
-10-25 02:27–02:42) ended: 2 "summarization truncated at the token cap (incomplete checkpoint)", 1 "summarization
-produced no text summary content", 2 ok at 8,071 and 7,898 output tokens, on the cap. Each failure is retried by the
-next step (one task took three tries in three minutes). Her character summaries, with a 24,576 cap, run 9.4k–16.7k.
-Fix proposed: the action preset's cap to 24,576, as the character's (a 0.75 threshold leaves 196k + 24.6k inside the
-window).
+**What the records show.** Every one of the 9 character guards fired at the first or second step of a turn whose first
+request was already past the turn-end mark (183,500 at 0.70): 202,902 to 249,779. None was a turn that grew past the
+guard from below. The turn end had been reached and passed by: `compactAtTurnEnd` runs only when nothing waits
+(`idle`), and a message arriving stops one that runs (`TurnEnds.preempt`). Since install 22 turn ends were "busy, left
+for the next turn end" and 3 were "stopped, nothing changed (her turn came first)", one at 206,517 after 123 s of
+summary, two minutes before the guard fired anyway. In the last 12 hours all three guards were on the agent line,
+where agents' messages arrive back to back.
+
+**The broken invariant.** Her turn's precedence was meant to keep a message from waiting for a summary. It cannot:
+once a conversation is due, every turn end left for a waiting message moves it closer to the guard, and on a line
+where a message is always waiting the guard is where it ends, with the message (that one or the next) inside the turn,
+waiting for an in-turn compaction (about 100 s, the span read cold) and then a ~120k request read cold. Leaving a due
+compaction for a message does not save the wait; it moves it into the turn and adds the cold reads. The rule restored:
+**a due compaction happens at the first turn end that reaches it, whether or not a message waits.**
+
+**Fix proposed** (to her first: it removes the precedence she was promised): at a turn end at or above the mark,
+compact; a message that arrives during it waits, as it would for the guard, and is answered right after (warm: 67–94 s
+for a hit, §9). `idle` and `preempt` go; the 180 s deadline stays as the bound. Below the mark nothing changes. No
+exemptions and no second threshold.
+
+### 10.2 The action brain: its summary thinks without a budget
+
+The action brain keeps DSH's engineering template through DSH's own engine (`dsh-compaction-basic`), with `maxTokens`
+8,192 (`packages/cognition-core/cordis.patch.yml`, `asuna-action`). Its 5 compactions, in her long tasks (10-24
+02:40, 10-25 02:27–02:42): 2 "summarization truncated at the token cap (incomplete checkpoint)", 1 "summarization
+produced no text summary content", 2 ended at 8,071 and 7,898 output tokens, on the cap. A failed one is retried by the
+next step (one task took three tries in three minutes); the step continues at ~198k meanwhile.
+
+**Why.** DSH's engine sends the summary request with no reasoning level (`summarize`: `maxTokens` only). For this
+provider (`dsh-llm-pi-ai`, `resolveReasoningLevel`: no level and no profile default) no level and no
+`thinking_token_budget` are sent, so the model server thinks by its own default, with no budget, and the thinking comes
+out of the same 8,192 tokens as the summary. In the two that ended, thinking was 12,266 and 6,800 characters beside
+13,470 and 15,233 of summary. "No text" is thinking that used the whole cap; "truncated" is thinking and text that did
+not fit together. Her action turns themselves run at `high` (their request headers), whose thinking budget on this
+model is 8,192 (the provider's `thinkingBudgets`): the cap the summary has is the size of one turn's thinking.
+
+Her conversation's summaries do not fail this way: Asuna's engine names the conversation's own level
+(`summaryEffort`, `0e622df6`), so a budget is sent, and the cap (24,576) leaves the text its room; they run 9.4k–16.7k.
+
+**The broken invariant:** a summary's cap must hold the summary after the thinking it is allowed; with no budget no cap
+holds it. Raising the cap alone moves the edge. **The rule restored:** every brain's summary request thinks at its
+conversation's own level, so it carries that level's budget, and its cap is that budget plus the room its template's
+text takes. For the action brain that means the level rule of `summaryEffort` for its engine too (DSH's template
+unchanged); its cap then follows from the rule (high's 8,192 plus the 4–5k tokens its summaries' text took), not from a
+picked number.
+
+**The cache, measured for this choice.** The level rule exists because the local engine matches the level with the
+tokens: on 10-20 three summaries named a level other than their conversation's and reused nothing (`0e622df6`). For the
+action brain, of its two summaries with records, the one at 02:42 named no level and reused 73,910 of 73,915 tokens
+from a `high` conversation; the one at 02:28 reused 6,794 of 83,890 (the system prompt and tools; the span ended where
+the engine held nothing, as in §9). Naming the conversation's own level makes the summary request match its turns'
+requests, as her conversation's summaries do (99.1%); naming `off` (no thinking at all) would be a different level,
+which reused nothing every time it was measured. So the rule's own level is the one that keeps the cache; turning
+thinking off is not proposed.
+
+Both fixes are designs, not built: 10.1 goes to her first; 10.2 is built after her and the owner have read it.
 
 ## Carried from ADR-085 (archived, git 0fd844ad): automatic compactions, the template, her signature
 

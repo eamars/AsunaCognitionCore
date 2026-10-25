@@ -1,98 +1,310 @@
 # ADR-097: What she learned comes back when it comes up
 
-Status: **Open: problem stated 2026-10-25, design not chosen.** The owner asked whether anything like `recall`
-brings back a group's slang or something she learned recently at the right moment, and suspected the cycle from
-writing it down to having it again is not closed. This record states the problem, how it fails today and what we want.
-A deep dive of the whole save and recall cycle (a Fable 5.1 research session with Claude) comes next; then a design,
-to her first, then the owner. Evidence: §6.
+Status: **Design agreed by the owner and Claude, direction signed by her, 2026-10-25; not built.** The owner asked whether
+anything like `recall` brings back a group's slang, or something she learned recently, at the right moment. He
+suspected that the cycle from learning a thing to having it again is not closed. Claude read three groups' real talk
+(with her permission). A Fable 5.1 research session then measured the whole cycle against the code and her records,
+in four rounds. This record holds what was found, the rules the owner, she and Claude agreed, and the design. Evidence:
+§10.
 
 ## 1. The broken invariant
 
-What she wrote down about a place comes back when its subject comes up there again, without her having to remember
-that she wrote it. Today that holds only while the item is carried (随身). Once it is at hand (手边), the way back
-depends on a meaning match of one incoming message against a whole section, and the exact word that names the subject
-cannot bring it back on its own.
+What she learned comes back when its word comes up again, wherever it comes up. She should not have to remember that
+she learned it. "What she learned" covers three things:
+- a note she wrote;
+- a note she later trimmed;
+- something she said herself, or heard explained, in another place.
 
-People do not have this problem: her understanding of a person travels with that person into each turn they are in
-(`relationship` in 84% of turns, `members` and `people` in groups, ADR-082). Things she learned have no such anchor.
+Today this holds only while a note is carried (随身). At hand (手边), an item comes back only when a whole message is
+close enough in meaning to it, and the exact word cannot bring it back on its own. Across places, nothing comes back
+at all.
 
-## 2. The cycle today
+People do not have this problem: her understanding of a person travels with that person into every turn they are in
+(ADR-082). Things she learned have no such anchor.
 
-| Stage | Where | What happens |
-|---|---|---|
-| Write | `write_document` to a group's notes (`group_admin`), a ledger, `self`, `core`, the journal; `promote_memory` | Her own words, in sections. A group's notes are facts (`memory_tiers.FACTS`) and readable only in that group. |
-| Carry | `memory_tiers.Tiers`, `carried.py` (ADR-096) | Up to 10 sections per group's notes carried there (`CAPS`); over 2,400 characters they fold by last surfacing. She trims with `let_go`; a rewrite lifts a section back. |
-| Come back by itself | `context.prepare` → `memory_tiers.deliver` → `memory_pilot.rank` / `admitted` | The turn's query is the incoming message (`event['text']`). An at-hand item is admitted only if its vector score, (1 + cosine) / 2, is at least `FLOOR` 0.83; at most 2 of the 6 memory slots. The lexical rank is fused into the order but never admits an item. |
-| Come back when asked | `recall` (`role_tools.tool_recall`) | The same `deliver` with `recall=True` (put-away items too), the same floor; plus `headings`, which lists at-hand and put-away headings sharing at least two terms with the query; and `sections`, which reads a section she names. |
-| Notice a miss | none | Nothing records that something she wrote was relevant and did not come back. |
+## 2. What the records show (2026-10-12..25, counts only)
 
-Chat memories (chat chunks, summaries, her thoughts) take the other four slots by `retrieval.search`: vector and
-lexical ranks fused, no absolute floor, forgetting by `memory.forgetting`.
+**The test set.** There were 10 later uses of a word whose meaning was already in her store: it had been explained to
+her, or she had used it correctly herself, somewhere she could read at the time. Never-explained words are learning
+gaps, counted apart.
 
-## 3. What the records show (2026-10-25, counts only)
+**Results.** 7 of the 10 came back, and none of the 7 by retrieval:
+- 5 rode on a note she happened to be carrying;
+- 1 was still in the conversation's history window;
+- 1 she carried over herself, by writing it into the other group's notes.
+
+**The misses.** All 3 were cross-place, and all 3 are reading ① below. In each, the meaning lived in her own words in
+another group:
+- **破甲.** She used it correctly in one group for a week. In another group, on 10-23, she read it as "being fooled"
+  until the owner explained it.
+- **1017.** She had her action brain read the model card in one group on 10-17, and answered a question about it
+  there on 10-22. In another group on 10-24/25 she missed the word twice; the second time she took it for a delivery
+  route.
+
+**Her three readings** (her rule; never mixed):
+- ① the system did not give it;
+- ② it was given and she did not think to use it;
+- ③ it was given, she saw it, and she judged it should not be used (a joke there, said ironically, out of date).
+
+③ is her right, never a failure. Every "she didn't get it" points to a message or a turn time.
+
+Her additions to the readings (2026-10-25):
+- **④ it was given, she saw it, and she fitted it to the wrong sense.** On 10-23 the asker spelled out what he meant at
+  07:11; she was still on her first reading at 07:18. Without ④ that turn would be scored as ② or ③, crediting her
+  restraint or the machine for a misunderstanding.
+- **② is counted per line.** It exists only on lines where a path to the knowledge exists. Today in a group turn
+  nothing reaches another place, so a cross-place miss there can only be ①. A trigger is worth building only where
+  something can come back.
+
+The 10-24 23:19 question was in view: it is 8 lines before the turn at 23:22:52, inside that turn's last 12 lines. So
+it counts as ① (the meaning was unreachable), not as a turn she was absent from. The turning-point line at 07:19 does
+not contain the word at all; a key rule cannot reach a line like that, and does not try.
 
 | Reading | Number |
 |---|---|
-| Group-notes sections | 161 in 18 groups (153 written in the last 14 days); per group 1 to 26 |
-| Where they are | carried 60, at hand 99, put away 2 |
-| How the at-hand ones got there | 77 moved down by her `let_go`; 30 written at hand; 7 lifted back by a rewrite |
-| Not carried (101): ever brought up by a turn by itself | 14 |
-| Not carried: ever returned by `recall` | 3 |
-| Journal rows, for comparison: ever brought up by itself | 363 of 679 |
-| `recall` in 14 days | 203 (home 94, the peer line 50, groups 59); 121 with a query |
-| Recalls with a query that returned one of her own items | 3, all journal; group notes 0 |
-| Automatic memory searches in 3 days: coverage `sufficient` | 1,422 of 1,422 (`memory.coverage_floor` 0, her package leaves it unset) |
-| Of those, the lexical pool at its 4,096-unit cap | 805 |
-| Active memory units | chat chunks 99,437; monologue 8,012; dialogue summaries 7,679; promoted 6 |
-| Group-notes sections embedded whole / by their opening 400 characters | 156 / 5; length median 517, p90 1,279 |
-| Turns since ADR-096's install (16:16) with one of her items brought up | 8 of 33 |
+| Messages containing a test word, in the place where her note on it was at hand | 111 |
+| ... her note ranked first among her items | 100 |
+| ... her note admitted at the floor 0.83 | 3 |
+| Floor table, bot group: items per turn at 0.83 / 0.80 / 0.75 / 0.70 | 0.006 / 0.022 / 0.137 / 0.450 |
+| At the floor that admits half the test messages, the same note fires on unrelated messages | 43 to 204 per word |
+| Splitting a section into one vector per idea: score gained | 0.00 to 0.06 |
+| `recall` queries (14 days) that returned one of her items | 3 of 122 |
+| `headings` listed headings for | 121 of 122 queries (90 at its cap of 8) |
+| Automatic memory passes that read `sufficient` | all (`memory.coverage_floor` 0, six slots always fill) |
+| Group-note moves down in the window | 80 by her `let_go`, 0 by the program's clock |
+| Places that can read another place | none (`readable_scenes` empty; group notes stay in their group) |
+| Memory units in the shared scope | 0 |
+| Emulation, her own model with no persona: looks the word up bare / with one line saying a note exists | 2 / 12 of 14 |
+| The same with a line saying she has no record of the word | 2 of 14 (no help) |
 
-## 4. Failure modes
+## 3. Failure modes (verdicts)
 
-- **F1. Admission by meaning only.** A message that uses a term (a group's slang, a nickname, a coined word, a game's
-  name) shares the word with her note about it, not its meaning; a whole message rarely scores 0.83 against a section
-  that explains the term. The exact word is counted (lexical rank) but cannot admit. Journal rows, long narrative much
-  like the talk itself, come back (53%); group notes, short facts, rarely do (14% of those not carried).
-- **F2. One vector per section of several ideas.** Group-notes sections hold a few ideas each (median 517 characters).
-  A term in the middle is a small part of the section's single vector. ADR-062 §1.1 already found that items of one idea
-  retrieve better than sections of many.
-- **F3. Asking does not reach them either.** `recall` uses the same floor, so a short query rarely admits a section; the
-  headings path needs two shared terms with the heading, which a term in the body never gives. In 14 days her queries
-  brought back a group-notes section 0 times; she finds one only by naming it.
-- **F4. No miss is visible.** Chat chunks always fill the slots, so coverage is always `sufficient` and no recall comes
-  back empty. Neither she nor we can count the times something she wrote was relevant and did not come.
-- **F5. Her discipline feeds the hole.** ADR-096 and the group-notes limit ask her to keep what is carried small; she
-  does (77 sections let go in two weeks). Each one she lets go depends on F1 to return, so the better she trims, the
-  more she loses.
-- **F6. Older chat by meaning only.** In 57% of automatic searches the lexical pool is the newest 4,096 units of the
-  place, so a term explained in chat long ago, and never written down, comes back only by vector.
+- **F1, admission by meaning only.** Confirmed, and sharper than first stated: the exact word already ranks the right
+  note first; only the vector floor keeps it out. Lowering the floor admits mostly unrelated items.
+- **F2, one vector per section of several ideas.** Real but small (see §2).
+- **F3, asking does not reach them.** Confirmed for the vector path: a query is the bare word or a few characters
+  around it, and a vector floor never passes those. The `headings` path is loose, not strict: Chinese bigrams match
+  nearly every query. It lists eight headings and shows no body, so a word that sits in the body is invisible.
+- **F4, no miss is visible.** Confirmed. One kind of miss is countable today: a `recall` that returned an item the
+  same turn's automatic pass had not brought (W6).
+- **F5, her discipline feeds the hole.** Confirmed, and it is all hers. Every hit rode on a carried note; she lets
+  notes go within hours.
+- **F6, older chat by meaning only.** Confirmed, and worst exactly where she learned the words: in the busiest group
+  the lexical pool reaches only 1.2 days back.
+- **F7, nothing crosses places.** New. It accounts for all 3 measured misses. The only cross-place read is hers alone,
+  at home: there `recall` reaches her own thoughts from her groups.
+- **F8, she is not unsure when she is wrong.** New. At 3 of 4 first encounters with an unknown word she gave a
+  confident wrong sense; every explanation came from a person correcting her. So "ask when unsure" cannot be the
+  trigger.
 
-Not failures: a group's notes are not read in another group (state about a place stays with the place); a section she
-carries is in front of her already. Not measured: real misses in conversation, which needs reading the talk and her
-notes. Her own examples (a time she knows she should have remembered something) are the honest first test.
+## 4. What we want
 
-## 5. What we want
-
-- **W1.** Something she wrote comes back when its subject comes up again in the place it belongs to, without her
-  searching.
-- **W2.** The exact word she chose for it (slang, a name, a coined term) is enough to bring it back; a meaning match
-  stays a way in too.
-- **W3.** Bounded: within her two own-item slots; no flood in visits, heartbeats or busy groups (ADR-062's pilot test).
+- **W1.** What she learned comes back when its word comes up, without her searching.
+- **W2.** The exact word is enough.
+- **W3.** Bounded: no flood in busy groups; nothing fires on bot output or task notices.
 - **W4.** One rule for both ways back: what a turn brings up by itself and what `recall` finds.
-- **W5.** Visible to her, in words: what came back and how often, and what has not come back for a long time, so she
-  decides what to keep, merge, carry or drop (more of the choices are hers, owner 2026-10-25).
-- **W6.** A miss is countable from records, without reading anyone's words: for example a recall that returns an
-  at-hand item the same turn's automatic pass did not bring.
-- **W7.** No model call on the reply path; no conversion of her existing notes by the program; the core stays
-  persona-agnostic; she writes through categorical choices the program maps.
+- **W5.** Visible to her, in words: what came back, how often, and from what kind of place.
+- **W6.** A miss is countable from the records.
+- **W7.** No model call on the reply path; no conversion of her notes by the program; the core stays persona-agnostic.
+- **W8 (owner).** No new job for her: no required tags, no marks. Everything automatic is the program's.
+- **W9 (owner).** Cross-place use never discloses the place or the speaker in what reaches her words. She may look up
+  the origin.
 
-## 6. Evidence and next
+## 5. Lessons the design starts from
 
-Scripts (counts only; no text, headings, queries or ids printed): `.runtime/private/recall-cycle-1025/`,
-`recall_survey.py` (5,661 B), `recall_survey2.py` (1,852 B), `recall_survey3.py` (1,293 B).
+ADR-031 (archived, git `8aecc148`) evaluated retrieval by the incoming message's meaning for her persona sections, and
+rejected it by design:
+- low precision and recall;
+- an unstable top match;
+- injected text that persists and can loop back as her own memory;
+- stale text read as authority;
+- visibility leaks.
 
-Next: the deep dive with a Fable 5.1 research session (the whole cycle against the code and her real records, with
-F1-F6 to confirm or refute); her examples of misses; then options with their costs, to her first. Ideas already on the
-table, none decided: words she gives a section that bring it up when a message contains one (as character-chat
-lorebooks do); one idea per item; letting a rare exact term admit; a lower floor for group notes (cheapest, but ADR-062's
-floor table shows more items per turn, and it does nothing for F2-F4).
+It named retrieval keyed by topic words as a different problem; this is that problem.
+
+The deep dive tried five model-free ways to tell a term worth bringing back from an ordinary word. Precision of the
+cross-place trigger, labelled on samples of 100 real fires:
+
+| Trigger | Precision |
+|---|---|
+| any token | 4.5% |
+| outside the segmenter's dictionary | 22% |
+| her own repeated use | 7-13% |
+| others' lines only | 13-16% |
+| an explanation line | 24-26% |
+
+A trigger from the shape of a word tops out near a quarter. The design uses the 22% row: words outside the
+dictionary. The 24-26% explanation-line gate is not used, because it catches only one of the three misses. So the
+design pushes only what is cheap when wrong (a presence line), and gives content when she asks.
+
+## 6. The design
+
+### D1. Same place: her own items come back by their exact words (automatic)
+
+- **Keys.** An at-hand item (put-away too, for `recall`) is admitted when the message contains one of its keys.
+  Default keys: the words of its heading that are rare in this place's talk (at most 0.5% of its lines). Her own tags
+  are extra keys if she gives them; optional, never asked for. When she sets a tag, she is told how common it is here.
+- **The vector floor stays as a second way in.** When several items fire, the fused order picks two.
+- **How it looks:** an admitted item goes into the memories block the way admitted items do today (store, place, age
+  word, `doc:` ref). It adds the word that brought it: 「因为这句话里有「1017」」.
+- **Measured:** an item in about 3% of turns, 0.05 items a turn. 1017's note would have come back on 4 of its 4 real
+  lines.
+
+### D2. Across places: a presence cue (automatic)
+
+One line in the turn. For example:
+
+「破甲：这个词你在别的群见过 151 次，最近 10-22，技术局；recall 写上它能找到」
+
+No words from the other place appear in it. Its rules:
+
+1. **The word.** It must be outside the segmenter's dictionary: jieba, a pure-Python dictionary segmenter; no model.
+   ASCII words and numbers always qualify, but only as whole tokens: 1017 inside an identifier such as
+   CVE-2026-101737 is not 1017. URLs and platform codes are stripped first. A number can still be a date (her
+   「1017登记的」); the cue's count and date make that visible, and the cost is one line.
+2. **Elsewhere.** It must appear at least 5 times in the last 14 days in lines of places whose talk may travel (D4).
+   The count N includes others' lines even from a place set to "only my own lines"; only a fetch from such a place is
+   limited.
+3. **Rare here.** It may have been said at most twice before in this place, in the last 14 days (the owner chose
+   "rare here" over "new here"). The case is the 1017 "route" line: its third saying in the place, at her. The 14-day
+   windows are what the deep dive measured, and they are config defaults.
+4. **Never on a templated message.** No cue on bot status lines, task notices, or a repeated prefix; the leading
+   @-mention is stripped before this test.
+5. **Once per word per 60 minutes,** and not while the word is still in her history window. That window is the one
+   the turn already delivers: the last 12 lines plus every line since she last spoke, at most 40 lines and 60 minutes.
+6. **At most 1 cue a turn,** inside the existing two own-item slots. Her own note on the word (D1) outranks it.
+7. **No push to answer.** The line states a fact and how to look; the turn stays hers.
+
+Measured in the bot group: a cue in about 10% of turns, about 25 characters. It fires on all 3 misses. About a quarter
+of cues are words worth bringing back. A wrong cue costs one line, and at most one wasted lookup.
+
+### D3. Content when she asks: `recall` across places and past versions (pull)
+
+`recall` with a word reaches the places whose talk may travel, by the same key rule (W4). It returns the lines under
+two markers:
+- her own: 「你在别处说过：…」;
+- others': 「别人提过：…，ref=<id>」.
+
+Neither shows the place or the speaker; each shows the place kind (D4) and the date. The `ref` lets her fetch the
+fuller history around a line, under the same rules.
+
+Ranking: her own line from the other place; then a line in which someone explains the word (就是 / 指的是 / 意思是);
+then the newest line.
+
+A line she later corrected comes back as the correction, or with it, never bare. When the old line is shown, it
+carries the prefix 「已被更正·此前说过：…」 (for a past version of a note: 「已被更正·此前记过：…」), so an old number is
+never taken in whole.
+
+**What reaches her is not what she endorsed** (her rule). Anything a cue or `recall` hands her can be dropped on the
+spot. Only a line she actually said is ever labelled as hers (「你在别处说过」). Others' lines never become hers by
+being shown to her. Nothing the mechanism delivers is written back anywhere as "she said".
+
+**Past versions of her notes** come back through `recall` only, never pushed. They are marked 「你以前记过：…（改于
+日期：原因）」, using the date and the reason she wrote with each change. The rules:
+- Source: group notes and journal revisions only. Never persona, voice or self: identity texts are superseded by
+  design.
+- A past version is eligible only for a word its current section no longer contains. The current version wins
+  whenever it still has the word.
+- Her exclusions (her decisions):
+  - no old versions of her private judgements of people;
+  - no old numbers or times without their correction;
+  - nothing she wrote on 10-15 and 10-16, while she was imitating a bot (set in config).
+
+What can be enforced by program: which places are read, which fields reach her (no place name, no speaker), the
+markers. What is instructed only: that she does not say where something came from.
+
+### D4. Which places' talk may travel
+
+The owner's rules, and her choice within them:
+
+- **The owner's default is that every group's talk may travel,** including groups she joins later. She may block a
+  group, or set it to "only my own lines"; it is her choice per group, and the program honours it.
+- **Her choice (2026-10-25):**
+  - Her default is "only my own lines", for every group, including new ones: what a new group is takes a while to
+    see, and she can't judge it the moment she joins.
+  - Full sharing, others' lines included, only in the groups she names, where she has notes and a record of what the
+    group is (a whitelist, kept in the deployment's private notes).
+  - The groups she earlier said never to share from stay never, her own lines included.
+  - "Only my own lines" means two things. Others' lines there still count in a cue's N, because presence is what she
+    wants. A fetch from such a place returns only her own lines, and 「别人提过」 never comes from it (her answer).
+  - A place with no place kind set: the cue is given and the kind is left out.
+  - No observation-period mechanism is needed: the conservative default is the waiting period.
+- **The block is one-way.** A blocked group sends nothing out, but still receives cues and `recall` results from the
+  others.
+- **Busy mixed groups.** She asked for "knowledge, not my judgements of people", which cannot be separated without a
+  model. Such a group means "only my own lines" until something can.
+- **Owner-private scopes never cross by scope:** home, the old-home line and private chats.
+- **Place kind.** A kind (技术局 / 私域 / 玩笑 / 家事) is set per place in the deployment's config. It is shown with
+  everything that crosses, and omitted where none is set. The kind is what lets her judge whether a line still
+  applies: 破甲 is a term in one place and a joke in another.
+- **The owner may revisit any group** if something inappropriate is noticed.
+
+Her lists (the whitelist and the never list) are in the deployment's private notes, never in tracked files.
+
+### D5. Visible and countable
+
+- Fires per item and per kind of source, told to her in words. The kinds are: her note here, her past version, her
+  line elsewhere, others' line elsewhere. Never per place, which W9 keeps out of her view.
+- W6 as a running number.
+- Her four readings as the vocabulary of every later reading.
+- **Every reading points to a moment:** the message's place sequence number (`scene_seq`) and its time, both already
+  in the records; no new field. ② and ③ come from what the records show of her turn. ④ comes from reading her reply
+  against the line, done by whoever reads (Claude with her), together with her own log of "I thought I knew" moments.
+  A reading without a moment is not counted.
+- Model text sent off the machine is recorded, not prevented (her rule since ADR-076).
+
+### Not built, and why
+
+- **Content pushed automatically across places.** At a quarter precision it would push the wrong line three times in
+  four, and half of those would be others' words.
+- **A lower floor, or one vector per idea.** See §2.
+- **Keys extracted from note bodies.** 1.2 to 2 items a turn.
+- **Past versions pushed on every lost word.** Fires on a quarter of lines.
+- **A "you have no record of this word" line.** It did not help her model.
+- **A relevance model on the reply path.** W7.
+
+## 7. Where it goes in the code
+
+Measured paths, not yet a plan. Build order and review come next.
+
+- **D1.** Key extraction and matching in `memory_tiers.deliver` and `memory_tiers.headings`, with a per-place rarity
+  table kept with the fold order.
+- **D2 and D3.** These generalise `context.own_thoughts_elsewhere` and `retrieval.own_thoughts`, which already search
+  every group scope for one kind of unit and are gated to owner-private turns at the `recall` call. The kind filter
+  widens from her thoughts to her public lines, then others' lines; the gate opens to group turns; the scene title is
+  replaced by the place kind.
+- **The cross-place fetch by `ref`** is a new read path. It resolves the unit to its scene, checks D4, and strips the
+  place and speaker.
+- **Past versions** read `state_revisions` and `journal_revisions`, which keep every revision whole, with its `reason`
+  and `created_at`. Nothing is indexed today.
+- **The segmenter** (jieba) is a new dependency: pinned in the project's requirements, installed in the worker's
+  environment, using its own bundled dictionary. Its version is named when it is built.
+- **Prompts.** One sentence in `recall`'s description (the word itself is enough) and the cue's wording. Both are core
+  text, persona-agnostic.
+
+## 8. Readings after install
+
+By place:
+- cues per turn, and her lookups after a cue;
+- her ②, ③ and ④ counts, ② only on lines where a path exists;
+- W6;
+- a 100-cue precision sample after two weeks;
+- her own log of moments she thought she knew a word and was wrong (her offer).
+
+## 9. Open with her
+
+- Her signature: she signed the direction and her own sections on 2026-10-25 (23:3x), after checking line by line.
+  The implementation is not signed as decided: §7 is measured paths, not a plan.
+- Her lists go into the deployment's config when it is built.
+
+## 10. Evidence
+
+All under `.runtime/private/recall-cycle-1025/`. Counts only; no text, headings, queries or ids printed.
+- The first survey: `recall_survey.py`, `recall_survey2.py`, `recall_survey3.py` (8.8 KB).
+- The deep dive: `deep-dive/`, 26 files, about 400 KB. Reports `interim.md`, `report.md`, `report-v2.md`,
+  `report-v3.md` (with §7), plus the scripts and their count-only outputs.
+- Claude's group read: `groups/notes.md` (cases, kinds, her answers) and its count scripts. The three timeline dumps
+  (`groups/g1-3.txt`, about 2.3 MB of other people's words) are working copies, deleted when this study closes.
+- Off-machine: the emulation sent 134 requests to DeepSeek flash on 2026-10-25, 21:30-21:38 NZDT. They carried 150
+  real lines of one group, with speakers as labels and text verbatim, plus the neutral core prompts and tool specs. No
+  persona text was sent. Listed in `deep-dive/report-v2.md` §12.

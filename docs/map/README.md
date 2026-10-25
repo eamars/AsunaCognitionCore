@@ -461,6 +461,7 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`asuna-launch.mjs`](../../tools/asuna-launch.mjs) — Stable entry: native Web and repair tools boot without importing Python code.
 - [`asuna-supervisor.mjs`](../../tools/asuna-supervisor.mjs) — The Host supervisor (ADR-034): the launcher stays as DSH's parent, restarts it when she asks or when it exits on its own, and brings it back down a fallback ladder when a start fails.
 - [`build_dsh_inline.mjs`](../../tools/build_dsh_inline.mjs) — Build the reviewed DSH patches from the pinned commit of the Asuna branch on the DSH fork: the native rendering extension (two client packages) and the compaction engine (`dsh-compaction-basic`, whose `compactNow` takes a keep-from point, A
+- [`carried_check.py`](../../tools/carried_check.py) — ADR-096's install checks, read only: what the turns carry is what carried() says, in numbers only.
 - [`check_dsh_release.py`](../../tools/check_dsh_release.py) — Read the public release tag without changing the project or global runtime.
 - [`check_staged_secrets.py`](../../tools/check_staged_secrets.py) — Report paths only; never print configured secret values or matching bytes.
 - [`cleanup_test_databases.py`](../../tools/cleanup_test_databases.py) — Inventory or remove only explicitly inventoried Asuna test databases.

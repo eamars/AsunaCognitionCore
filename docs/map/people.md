@@ -17,7 +17,7 @@ The relevance gate (owner direction 2026-10-04): may she let a group message pas
 - def `recent` — (lines as she reads them, words for how long since she spoke here and how much came since).
 - def `material` — Everything the gate reads, in words.
 - def `system` — Shared rules, then who she is: her core sentences (public), not her persona's rules for talking; small, so a cold read is cheap (owner 2026-10-14: the gate only answers whether to join, she judges in her turn).
-- def `group_notes` — Her notes about this group: the sections her turns there carry, in their order, headings and bodies, the first NOTES_CHARS characters.
+- def `group_notes` — Her notes about this group as her turn there shows them (group_admin.notes_view: carried, folded over the limit), in their order, headings and bodies, the first NOTES_CHARS characters.
 - def `speaker_understanding` — Her lines about the speaker (ADR-082): the person layer's short, then this group's, each the body while it has no short; cut at UNDERSTANDING_CHARS.
 - def `instruction`
 - def `check` — The verdict of an answer whose first line starts with 接话 or 不理; anything else is a mistake the gate tells back to her (answers.py).

@@ -51,6 +51,7 @@ The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
 
 Tiered memory (ADR-062): where each of her items lives, kept up by what is memorable, moved down by the program.
 
+- def `moved_by` — Who made a move: its `by`, or for a row written before moves said it, the same rule from its reason.
 - def `told_text`
 - def `words`
 - def `age_word`

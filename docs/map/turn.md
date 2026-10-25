@@ -114,7 +114,7 @@ Role system prompt rendering (ADR-009 §8.1).
 - def `render_status` — Each pair's identity layer against its limit, for the settings card and memory tab: the largest one's estimate, whether any pair is over, and every pair's size.
 - def `report_budget` — Audit, once for each state of it, a pair whose identity layer is over its limit.
 - def `budget_gate` — For DocumentStore.apply, adopt_seed and promote_memory: refuse a write that grows her identity layer in a pair over its limit, and growth of a note already far over its own (carried.gate).
-- def `over_budget_words` — By how much a write overshoots, in which pair, with that pair's own numbers before and after, and the largest carried sections there she could let go or trim (carried.over_words).
+- def `over_budget_words` — How far a pair is over (or a write would take it), the way out, and the largest sections it carries now (carried.over_words).
 - def `system_for` — Re-render the system prompt an episode fixed at preparation time: the sections its ref recorded as carried, from the revisions it names.
 - def `episode_system` — Stage system prompt, re-rendered from the episode's system_ref (drift is audited).
 - def `action_values` — Action-brain system suffix (ADR-009 §8.3, revised by the owner 2026-10-04).
@@ -139,15 +139,17 @@ What she carries: one function says it for every reader (ADR-096).
 - def `limit` — Each pair's identity ceiling: render.identity_tokens (owner-only), plus what a package's own seeds need above the persona share with a quarter to grow (render.SEED_ROOM), never above the character window × render.max_window_share; None when
 - def `placements_after` — {sid: tier} where this write leaves the sections it moves (memory_tiers.Tiers.placement_after).
 - def `weight` — Estimated tokens of one section as it is carried.
-- def `room_parts`
-- def `room_line` — What a write to her identity, or a let_go, returns: the section's weight and each pair's size and room, from the number the gate uses; None when nothing bounds it.
-- def `tier_line` — When a section's `inject` and its tier differ: both, said once (None when they agree or tiers are off).
-- def `over_words` — A refusal: the pair that is over, with that pair's own numbers before and after, and its largest carried sections.
+- def `laid_out` — {(place, class): (carried sections by slug, estimated tokens)} of each pair: what `identity` counts.
+- def `ordered` — Pairs in her order (PAIR_WORDS).
+- def `room_line` — What a write to her identity, or a let_go, returns: the section's weight and, for each pair that carries it, the room left (or how far over), from the number the gate uses; None when nothing bounds it.
+- def `tier_line` — When a section's `inject` and its tier differ: both, and its last move (when, who, why) on the next line; None when they agree or tiers are off.
+- def `over_words` — A refusal: the pair, how far over it is (or would be), the way out, and the three largest sections it carries now; every number is that pair's own (laid_out, as carried counts it).
 - def `gate` — For DocumentStore.apply and adopt_seed: refuse a write that grows the identity layer in a pair over its limit (each pair on its own, measured as the write will carry it), and growth of a note far over its own limit.
 - def `room_block` — things_from_program: how full each pair readable here is, in coarse words, only when the words changed since this conversation was last told; None otherwise.
-- def `manifest` — What a turn carried, for its episode manifest: the section refs of its pair, the group-notes sections shown, and the sections its own retrieval brought up.
-- def `day_counts` — The carried_counts rows of one local day: per section × pair, the turns that carried it, the pair's turns that day, when it was last carried, and in how many of its turns the program's retrieval brought it up.
-- def `count_days` — The nightly count (the audit retention thread): each whole local day not counted yet, back to when the tiers went on and at most COUNT_DAYS; rows older than COUNT_DAYS go.
+- def `manifest` — What a turn carried, for its episode manifest: the section refs of its pair, the group-notes sections shown, the sections its own retrieval brought up, and the carried ones it would have brought up had they not been carried (together, the p
+- def `day_counts` — The carried_counts rows of one local day, per section × pair: the turns that carried it, the pair's turns that day, her recalls of it there, and in how many turns the program's retrieval scored it above the floor (program_score: brought up,
+- def `count_days` — The nightly count (the audit retention thread): each whole local day not counted yet (carried_days), back to when the tiers went on and at most COUNT_DAYS; day rows older than COUNT_DAYS go, carried_sections (each section's first and last t
+- def `install_checks` — The four checks she runs after an install, reading only: [(check, passed, what it saw, in numbers)].
 
 ## `role_tools`
 

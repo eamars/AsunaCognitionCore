@@ -130,10 +130,18 @@ pins and what the field is called; the columns of `carried_counts` and how long 
 (no deadline from us); whether, when and how the "in effect" study runs (§5). Not hers: the ceiling and the per-pair
 gate (the owner's discipline).
 
+**Her rules** (2026-10-25; hers to keep, not coded): self and core together take at most half of a pair (6,144); at
+most 3 pins per group; when trimming, the sections carried only in that pair go first. Her choices as built: the
+room line, tier line and refusal in her words, the pair names 家里 / 家里那个群 / 外面的群 / 线 / 私聊, the field `pin`,
+and the `carried_counts` columns (`section, pair, day, turns_carried, pair_turns, recall_hits, program_score`; each
+section's `first_carried_at` and `last_carried_at` in `carried_sections`, outside the 30-day prune; no "used" column).
+
 ## 5. Cost, proof, readings
 
 - Cost: no tool added. Write results grow by one line when a carried document changes; `things_from_program` by a
-  coarse word when it changes; the manifest by about 1 KB a turn; `carried_counts` about 150 rows a day. The gate's
+  coarse word when it changes; the manifest by about 1 KB a turn; `carried_counts` about 150 rows a day. Her tool
+  descriptions grow by 44 characters (`write_document`'s `pin`, and the sentence on what each place carries; the
+  `visibility` parameter no longer restates it), with or without tiered memory (`tests/test_tool_budget.py`). The gate's
   work per write: five composes of carried text plus the self/core JSON per class, a few milliseconds. Prompt text
   changes only where the program now honours what she wrote: self/core `place:` tags (one section at home today) and the
   notes' fold order; `system_for` stops re-rendering a different prompt after a restart.

@@ -70,6 +70,17 @@ The Host supervisor (ADR-034): the launcher stays as DSH's parent, restarts it w
 Build the reviewed DSH patches from the pinned commit of the Asuna branch on the DSH fork: the native rendering extension (two client packages) and the compaction engine (`dsh-compaction-basic`, whose `compactNow` takes a keep-from point, ADR-094).
 
 
+## `carried_check.py`
+
+[tools/carried_check.py](../../tools/carried_check.py)
+
+ADR-096's install checks, read only: what the turns carry is what carried() says, in numbers only.
+
+- class `ReadOnly` — What carried() needs of a store, with no way to write.
+  - `head`
+  - `audit`
+- def `main`
+
 ## `check_dsh_release.py`
 
 [tools/check_dsh_release.py](../../tools/check_dsh_release.py)

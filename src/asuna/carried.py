@@ -49,6 +49,7 @@ BY_WORDS = {'her': '你', 'program': '程序'}
 OVER_WORDS = '%s 现在超 %s token，这次改动会让它更长。要腾地方：let_go 一节，或者把它写短。现在带得最多的是：%s'
 # A write that takes a pair from within its limit to over it: the same words, from the number it would reach.
 OVER_PAST = '%s 这次改动会让它超 %s token。要腾地方：let_go 一节，或者把它写短。现在带得最多的是：%s'
+OVER_ALSO = '这一节会让 %d 处变长：%s'    # her wording: a public section can push several pairs over at once
 COUNTS = 'carried_counts'          # section × pair × day, COUNT_DAYS kept
 COUNTED = 'carried_days'           # the days counted
 SECTIONS = 'carried_sections'      # each section's first and last time carried, never pruned
@@ -290,8 +291,12 @@ def gate(store, persona):
         over = [(then[pair] - ceiling, pair) for pair in then if then[pair] > now[pair] and then[pair] > ceiling]
         if over:
             pair = max(over)[1]
-            raise DocumentError('PERSONA_RENDER_OVER_BUDGET', over_words(store, persona, pair, now[pair], then[pair],
-                                                                          ceiling, current))
+            said = over_words(store, persona, pair, now[pair], then[pair], ceiling, current)
+            if len(over) > 1:     # every pair this write takes or keeps over, so trimming one is not refused again
+                pairs = [p for p in then if any(p == q for _, q in over)]
+                said += '\n' + OVER_ALSO % (len(pairs), '｜'.join('%s 超 %s' % (PAIR_WORDS[p], number(then[p] - ceiling))
+                                                                  for p in pairs))
+            raise DocumentError('PERSONA_RENDER_OVER_BUDGET', said)
     return check
 
 

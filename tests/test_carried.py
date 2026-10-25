@@ -127,6 +127,20 @@ def test_each_pair_has_its_own_ceiling_and_a_group_only_write_over_the_group_s_i
     assert shorter == [] and carried.identity(store, 'P1')[HOME] < home, 'a write that shrinks an over pair goes through'
 
 
+def test_a_write_that_pushes_several_pairs_over_names_them_all(store, monkeypatch):
+    # Her finding (2026-10-25): a public section grows both groups; naming only the worst sends her back a second time.
+    owner(store)
+    sizes = carried.identity(store, 'P1')
+    ceiling_at(monkeypatch, max(sizes.values()) + 10)
+    with pytest.raises(DocumentError) as refused:
+        write(store, 'persona', {'op': 'append_section', 'heading': '到处都带', 'visibility': 'public',
+                                 'inject': 'always'}, '到' * 500, mutation='p1')
+    first, also = refused.value.detail.split('\n')
+    assert 'let_go 一节，或者把它写短' in first
+    assert also.startswith('这一节会让 %d 处变长：' % also.count('超 ')) and also.count('超 ') >= 2, also
+    assert '外面的群 超 ' in also and '私聊 超 ' in also, 'a public section grows every pair it is carried in'
+
+
 def test_a_rewrite_that_brings_a_section_back_is_measured_before_it_lands(store, monkeypatch):
     owner(store)
     write(store, 'persona', {'op': 'append_section', 'heading': '收起来的', 'visibility': 'public', 'inject': 'always'},

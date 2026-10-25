@@ -1,6 +1,6 @@
 # ADR-097: What she learned comes back when it comes up
 
-Status: **Design agreed by the owner and Claude, direction signed by her, 2026-10-25; not built.** The owner asked whether
+Status: **Built 2026-10-26 (merged f77cab7d), not yet installed.** Design agreed by the owner and Claude, signed by her. The owner asked whether
 anything like `recall` brings back a group's slang, or something she learned recently, at the right moment. He
 suspected that the cycle from learning a thing to having it again is not closed. Claude read three groups' real talk
 (with her permission). A Fable 5.1 research session then measured the whole cycle against the code and her records,
@@ -144,13 +144,18 @@ design pushes only what is cheap when wrong (a presence line), and gives content
 ### D1. Same place: her own items come back by their exact words (automatic)
 
 - **Keys.** An at-hand item (put-away too, for `recall`) is admitted when the message contains one of its keys.
-  Default keys: the words of its heading that are rare in this place's talk (at most 0.5% of its lines). Her own tags
-  are extra keys if she gives them; optional, never asked for. When she sets a tag, she is told how common it is here.
+  Default keys come from **group notes only**: the words of a note's heading that are rare in this place's talk (at
+  most 0.5% of its newest 10,000 lines of 14 days, at least 5) and not everyday words (jieba dictionary frequency
+  under 500). Other stores (persona, voice, self, core, ledgers, journal) give no default keys: measured with all of
+  them, groups fired 0.095 items a line and home 1.35, the journal's running-record titles hitting nearly every one of
+  the owner's lines. Her own tags are keys on any item, optional and never asked for, when they too are rare here: her
+  old tags were written for sorting, and without that test they brought a journal row on a third of the owner's lines.
+  When she sets a tag she is told how common it is here, and that a common one does not bring the section back.
 - **The vector floor stays as a second way in.** When several items fire, the fused order picks two.
 - **How it looks:** an admitted item goes into the memories block the way admitted items do today (store, place, age
   word, `doc:` ref). It adds the word that brought it: 「因为这句话里有「1017」」.
-- **Measured:** an item in about 3% of turns, 0.05 items a turn. 1017's note would have come back on 4 of its 4 real
-  lines.
+- **Measured as built** (14 days, her real lines): groups 0.016 items a line, on 1.3% of lines, every one a group
+  note; home and private chats 0.035, all by her tags. If the embedding route is down, the exact word still admits.
 
 ### D2. Across places: a presence cue (automatic)
 
@@ -169,8 +174,9 @@ No words from the other place appear in it. Its rules:
    limited.
 3. **Rare here.** It may have been said at most twice before in this place, in the last 14 days (the owner chose
    "rare here" over "new here"). The case is the 1017 "route" line: its third saying in the place, at her. The 14-day
-   windows are what the deep dive measured. They, the 5 and the 2, and the 60-minute repeat test below become
-   config keys with these defaults when D2 is built; none of them is a key yet.
+   windows are what the deep dive measured. They, the 5, the 2 and the 60-minute repeat test below are keys of the
+   deployment's `<data>/private/memory-crossing.json` (`window_days`, `seen_elsewhere`, `said_here`,
+   `repeat_minutes`), with these defaults, read when the file changes.
 4. **Never on a templated message.** No cue on bot status lines, task notices, or a repeated prefix; the leading
    @-mention is stripped before this test.
 5. **Once per word per 60 minutes,** and not while the word is in the lines this turn delivers: the last 12 lines
@@ -180,8 +186,19 @@ No words from the other place appear in it. Its rules:
 6. **At most 1 cue a turn,** inside the existing two own-item slots. Her own note on the word (D1) outranks it.
 7. **No push to answer.** The line states a fact and how to look; the turn stays hers.
 
-Measured in the bot group: a cue in about 10% of turns, about 25 characters. It fires on all 3 misses. About a quarter
-of cues are words worth bringing back. A wrong cue costs one line, and at most one wasted lookup.
+**Which lines are read** (`cue_lines`): by default only the line that woke the turn. Measured as built over 2,607 group
+turns: a cue on 14.8% of turns (the bot group 20.7%), on 2 of the 3 misses; 1017 at 10-24 23:19 woke no turn of its
+own. Reading every line new to the turn (`"cue_lines": "new"`) catches all 3 but cues 30.5% of turns, so it is a
+switch, off. The cue adds 3.6-7.9 ms a turn at the median. About a quarter of cues are words worth bringing back
+(§5). A wrong cue costs one line, and at most one wasted lookup.
+
+**Consistent cuts.** jieba guesses new words by gluing a rare word to its neighbours (「破甲来了」 → 破甲来 + 了), so
+counts by word missed a median 17% of the lines that contain it. Each night the words that cross in 3+ lines are
+learned into a second tokenizer (a candidate is dropped when a shorter candidate inside it is said in as many lines,
+so 破甲来 goes and 大肥鱼 stays): the median miss is 0%. The OOV test still reads jieba's own dictionary.
+
+**A limit of the word rule:** a prefix on a dictionary word (小 + a dictionary noun) is never out of vocabulary, so it
+never crosses or cues.
 
 ### D3. Content when she asks: `recall` across places and past versions (pull)
 
@@ -190,8 +207,12 @@ two markers:
 - her own: 「你在别处说过：…」;
 - others': 「别人提过：…，ref=<id>」.
 
-Neither shows the place or the speaker; each shows the place kind (D4) and the date. The `ref` lets her fetch the
-fuller history around a line, under the same rules.
+Neither shows the place or the speaker; each shows the place kind (D4) and the date. At most 2 such lines a recall,
+her own first. The `ref` lets her fetch at most 5 lines around it, speakers as 你 or 别人, with the place rule checked
+again at fetch time. Only spoken lines of groups cross, never her thoughts and never owner-private scopes. Lines are
+found through `crossing_words`, a program-derived index (word → units, hers or others', scope; no text; about 13 MB),
+rebuilt each night and topped up at each recall: a recall takes 95 ms at the median. Measured on her 121 real recalls
+of 14 days: a line from elsewhere on 21 of 41 group recalls and 25 of 80 at home, all her own under her default.
 
 Ranking: her own line from the other place; then a line in which someone explains the word (就是 / 指的是 / 意思是);
 then the newest line.
@@ -250,7 +271,12 @@ Her lists (the whitelist and the never list) are in the deployment's private not
 
 - Fires per item and per kind of source, told to her in words. The kinds are: her note here, her past version, her
   line elsewhere, others' line elsewhere. Never per place, which W9 keeps out of her view.
-- W6 as a running number.
+- W6 as a running number: a recall that returned something the same turn's automatic pass did not bring (counted
+  within one turn).
+- Every fire is a row in `memory_fires` with its `scene_seq`, time and episode; she is told once a day per
+  conversation, in words (没有 / 一次 / 两三次 / 好几次 / 很多次), a quiet day included, never a place.
+  `tools/memory_fires_report.py` is the reading: per place, cues per turn, recalls after a cue, W6, and the time
+  since the conversation's last compaction (joined offline from DSH's session logs).
 - Her four readings as the vocabulary of every later reading.
 - **Every reading points to a moment:** the message's place sequence number (`scene_seq`) and its time, both already
   in the records; no new field. ② and ③ come from what the records show of her turn. ④ comes from reading her reply
@@ -268,9 +294,12 @@ Her lists (the whitelist and the never list) are in the deployment's private not
 - **A "you have no record of this word" line.** It did not help her model.
 - **A relevance model on the reply path.** W7.
 
-## 7. Where it goes in the code
+## 7. Where it is in the code
 
-Measured paths, not yet a plan. Build order and review come next.
+Built in four reviewed steps (a291d931 D1, a8e08864 D3/D4, 3e71eea6 D2, e1f600a9 D5): `key_words.py` (segmenter,
+keys, place tables, the learned vocabulary), `crossing.py` (place rules, `elsewhere`, fetch, past versions, the cue,
+`crossing_words`, `memory_fires`), `memory_tiers.deliver` and `headings`, `role_tools.tool_recall`. The paths as the
+deep dive mapped them:
 
 - **D1.** Key extraction and matching in `memory_tiers.deliver` and `memory_tiers.headings`, with a per-place rarity
   table kept with the fold order.
@@ -282,9 +311,8 @@ Measured paths, not yet a plan. Build order and review come next.
   place and speaker.
 - **Past versions** read `state_revisions` and `journal_revisions`, which keep every revision whole, with its `reason`
   and `created_at`. Nothing is indexed today.
-- **The segmenter** (jieba) is a new dependency: to be pinned in the project's requirements (0.42.1 on the build
-  branch, on main when it merges), installed in the worker's
-  environment, using its own bundled dictionary. Its version is named when it is built.
+- **The segmenter** (jieba 0.42.1) is pinned in pyproject, uv.lock and the packer's worker dependencies, using its
+  own bundled dictionary. It ships as a source package; a scratch install built it in about 2 s, offline once cached.
 - **Prompts.** One sentence in `recall`'s description (the word itself is enough) and the cue's wording. Both are core
   text, persona-agnostic.
 

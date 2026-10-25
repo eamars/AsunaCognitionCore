@@ -77,7 +77,10 @@ word.
    section's weight and the room left in each pair, from the same number the gate uses, as exact numbers (as refusals
    do today). `things_from_program` says it only when it changes and only in coarse words from a versioned table, the
    way `ROOM_WORDS` does (AGENTS.md). When a section's `inject` and its tier differ, the write result and every read of
-   that section say both. The refusal names the pair that is over and points at `let_go`. The exact wording is hers.
+   that section say both. The refusal names the pair that is over, with
+   that pair's own numbers before and after (today's refusal gives the largest place's number before and the written
+   place's after, so the two can be different places: her "6,126 at home" was the group's), and points at `let_go`.
+   The exact wording: Claude drafts it neutral for the core; she reads and amends it before install.
 4. **The program never writes her `inject`** (owner). The tier is the one record of what is carried; her `inject` is
    what she wrote and stays as she wrote it until she changes it. Her own `inject` writes already act on the tier
    downward (`memory_tiers.py:396-401`) and never lift it (owner, 2026-10-13), so once every reader goes through
@@ -88,6 +91,10 @@ word.
      revision history fills with entries she did not write; and the program becomes an author in her own document for
      the first time, which the project has not done for any of her files.
    - A third shape, also not taken: with tiers on, show only the tier. It hides what she wrote.
+   - Who moved it, answerable (her ask): every tier move already leaves a permanent `move` row (`Tiers.move`: section,
+     from, to, reason, time; kept with the tiers, not pruned with the audit). Each row also says `by`: `her` for her own
+     acts (`let_go`, her own `inject` writes), `program` for the rest (stay lapse, overflow, cooling, supersession,
+     merge, gist, the rewrite that lifts an item). She reads them with `asuna.dbread`.
 5. **What was carried, hers to query.** The episode manifest records what each turn carried: the section refs from
    `carried()` and the group-notes sections actually shown, and the sections the turn's own retrieval brought up
    (`deliver` already computes them). A nightly job in the audit retention thread writes `carried_counts`: section ×
@@ -101,7 +108,8 @@ word.
    rewrites count as surfacing, and among sections never surfaced the oldest folds first. The order is recomputed on a
    write and at settlement, not every turn, so the block is not re-sent for it. A folded section counts as at hand for
    `deliver`, so a turn about it brings it up. A section she pins never folds and still counts inside the 2,400; if the
-   pins alone exceed it, the fold line says so. A pin does not stop a tier's stay lapse or the 10-item cap; she is told
+   pins alone exceed it, the fold line says so. Her first pins: four kinds of identity anchor (what this group is, how
+   she talks here, who is a bot, who is the same person). A pin does not stop a tier's stay lapse or the 10-item cap; she is told
    so. Which sections she pins, and the field's name, are hers. 4,800 hard stays.
    The other option, not taken: no pin. Simpler and consistent with the tiers; its cost is that the anchors she named
    (what this group is, how she talks here, who is a bot, who is the same person) surface rarely by nature and would

@@ -80,7 +80,7 @@ Status: **Active** (an ongoing routine or plan), **Open** (built, with a named p
 | 051 | Owner on agent lines | Archived | The owner can speak on an agent line, labelled as his | archived, git 0fd844ad |
 | 052 | Switches at home | Archived | Mute, block, tools off for a while; every switch ends by itself or says where it is on | archived, git 0fd844ad |
 | 053 | Action brains | Archived | A context per task, an idle limit, and she is told at hand-over; §3 holds the per-endpoint cache table | archived, git 0fd844ad |
-| 054 | Tool wording from her mistakes | Built | Each confusable tool says when to use it rather than its sibling; the soft text budget: she reads the ask, the program refuses only past the hard limit (notes 300 / 1,500 characters in `notes.py`, the ask at four-fifths, ADR-084 step 3) | [folder](ADR-054-tool-wording-from-her-mistakes/README.md) |
+| 054 | Tool wording from her mistakes | Built | Each confusable tool says when to use it rather than its sibling; the soft text budget: she reads the ask, the program refuses only past the hard limit (a note between home and outside 300 characters, `NOTE_CHARS`, and from home to home 1,500, `HOME_NOTE_CHARS`, in `notes.py`; the ask at four-fifths, ADR-084 step 3) | [folder](ADR-054-tool-wording-from-her-mistakes/README.md) |
 | 055 | Fewer tools, same abilities | Archived | `task` and `ideas` merge the follow-up and notebook tools | archived, git 0fd844ad |
 | 056 | Per-turn characters | Archived | Fixed text once in the system prompt; clock times in blocks; only what changed | archived, git 0fd844ad |
 | 057 | Group labels | Built | Nothing typed can pass for a label; the number authenticates nothing, so the plan is closed; random ids parked | [folder](ADR-057-group-labels/README.md) |

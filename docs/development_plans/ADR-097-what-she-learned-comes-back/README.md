@@ -43,7 +43,7 @@ another group:
   there on 10-22. In another group on 10-24/25 she missed the word twice; the second time she took it for a delivery
   route.
 
-**Her three readings** (her rule; never mixed):
+**Her readings** (her rule; never mixed; ④ is below):
 - ① the system did not give it;
 - ② it was given and she did not think to use it;
 - ③ it was given, she saw it, and she judged it should not be used (a joke there, said ironically, out of date).
@@ -169,11 +169,13 @@ No words from the other place appear in it. Its rules:
    limited.
 3. **Rare here.** It may have been said at most twice before in this place, in the last 14 days (the owner chose
    "rare here" over "new here"). The case is the 1017 "route" line: its third saying in the place, at her. The 14-day
-   windows are what the deep dive measured, and they are config defaults.
+   windows are what the deep dive measured. They, the 5 and the 2, and the 60-minute repeat test below become
+   config keys with these defaults when D2 is built; none of them is a key yet.
 4. **Never on a templated message.** No cue on bot status lines, task notices, or a repeated prefix; the leading
    @-mention is stripped before this test.
 5. **Once per word per 60 minutes,** and not while the word is in the lines this turn delivers: the last 12 lines
-   plus every line since she last spoke, at most 40 lines and 60 minutes. This is a cheap repeat test only. What she
+   plus every line since she last spoke, reaching back at least 10 and at most 60 minutes, at most 40 lines and
+   4,000 characters (`attend.py` WINDOW_*, MAX_*). This is a cheap repeat test only. What she
    actually has in view reaches further back, through the session's context until its next compaction.
 6. **At most 1 cue a turn,** inside the existing two own-item slots. Her own note on the word (D1) outranks it.
 7. **No push to answer.** The line states a fact and how to look; the turn stays hers.
@@ -280,7 +282,8 @@ Measured paths, not yet a plan. Build order and review come next.
   place and speaker.
 - **Past versions** read `state_revisions` and `journal_revisions`, which keep every revision whole, with its `reason`
   and `created_at`. Nothing is indexed today.
-- **The segmenter** (jieba) is a new dependency: pinned in the project's requirements, installed in the worker's
+- **The segmenter** (jieba) is a new dependency: to be pinned in the project's requirements (0.42.1 on the build
+  branch, on main when it merges), installed in the worker's
   environment, using its own bundled dictionary. Its version is named when it is built.
 - **Prompts.** One sentence in `recall`'s description (the word itself is enough) and the cue's wording. Both are core
   text, persona-agnostic.
@@ -293,11 +296,14 @@ By place:
 - W6;
 - a 100-cue precision sample after two weeks;
 - her own log of moments she thought she knew a word and was wrong (her offer).
+- with every cue and every hit, the time since that conversation's last compaction: "in view" lasts until
+  a compaction, so a hit soon after one may be the session's context, not the mechanism (her point). Her own
+  log adds what she answered from (in view / carried / carried over by her / looked up).
 
 ## 9. Open with her
 
-- Her signature: she signed the direction and her own sections on 2026-10-25 (23:3x), after checking line by line.
-  The implementation is not signed as decided: §7 is measured paths, not a plan.
+- Her signature: she signed this record on 2026-10-26 (00:1x), after checking it line by line; four small fixes
+  she asked for are in. The implementation is not signed as decided: §7 is measured paths, not a plan.
 - Her lists go into the deployment's config when it is built.
 
 ## 10. Evidence

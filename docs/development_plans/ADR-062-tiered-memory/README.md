@@ -690,3 +690,15 @@ the latest headings that fit 8,000 characters (`LISTED_HEADINGS_CHARS`), after o
 there are and how to reach them with what `recall` already has: a query searches headings, `sections` with a section
 reads one (`EARLIER_HEADINGS`). No new tool or option; nothing changes for a document that fits. Coordinator's decision
 on the coder's proposal (B15). Test: `tests/test_memory_tiers_delivery.py`.
+
+## Phase 1 pilot closed (2026-10-25, ADR-096 decision 8)
+
+The shadow pilot ran from 2026-10-13 to 2026-10-25 (4,583 turn and recall rows; read with
+`tools/memory_pilot_report.py`, counts only). Items indexed: persona 51, self 55, core 12, group notes 160, journal
+671 (voice 0 until ADR-096 indexed it). Own items per turn by floor: 0.80 → 0.854, 0.83 (in use) → 0.525, 0.85 →
+0.278, 0.88 → 0.049, 0.90 → 0.005; in 105 heartbeat turns 185 items at 0.83, none from 0.88. The pilot's own test (at
+most one own item per turn, none in heartbeats) is first met at 0.88; the floor stays 0.83, since tiers now decide
+what is carried and the floor only ranks what is at hand. Her own items still take at most 2 of the 6 memory slots.
+Surfaced in two or more conversations: journal 67, persona 8, self 3. Recall: 93, 6 with a hit at the floor; 47 reads
+by heading. Cost: a job 24 ms median (875 ms p90), the reply path 0.028 ms median. `SHADOW_PILOT` is off; the item
+index stays (the tiers need it); turn rows past 30 days are deleted by the retention thread.

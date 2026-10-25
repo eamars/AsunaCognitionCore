@@ -1,6 +1,7 @@
 # ADR-096: What she carries is measured as it is carried
 
-Status: **Decided 2026-10-25**, not built; revised the same day after an independent review against the code. The
+Status: **Built and installed 2026-10-25** (her restart at 16:16 NZDT; commits `3be6fbdf`..`a07149bd`, then
+`ed228587`, a let_go says what it freed, waiting for the next restart). Decided 2026-10-25, revised the same day after an independent review against the code. The
 owner asked for measured limits, not picked ones, and gave the numbers to the research session (Fable 5.1), Claude and
 her ("you weigh more than I do"; his one requirement: discipline, a reasonable budget she may want to exceed), and
 wants more of the choices to be hers. The owner decided the pin and the `inject` question below. Evidence:
@@ -163,3 +164,17 @@ section's `first_carried_at` and `last_carried_at` in `carried_sections`, outsid
 
 The study: `.runtime/private/context-study-1025/` (REPORT.md and seven scripts with outputs, about 120 KB, counts only).
 The review's scripts (`combos.py`, `drift.py`, `pol.py`, `shadow.py`, counts only) are copied there as `review/`.
+
+## 7. Installed (2026-10-25)
+
+Her four install checks (`tools/carried_check.py`, read only) passed three times, from two working folders, right
+after a turn: the latest turn's `system_ref` sections equal `carried()` (no tier move since that turn); each pair's
+refusal says `carried()`'s number; the room line is there; 21 sections whose `inject` and tier differ, 21 said. The
+program's own `render.over_budget` record at start, `carried_check` and her own script gave the same five numbers:
+home 14,476, peer line 12,492, home group 15,042, public group 12,491 (over), private chat 9,941 (within). Her three
+wording keys were published from her package at 16:38 and are the ones running. Her finding on the check tool (run
+outside the checkout it read no settings and skipped the home-group pair while passing) was fixed in `043c068d`.
+
+Readings left: the first `move` rows written with `by` (her trims tonight); the first nightly `carried_counts`
+(with the reconstructed days from 2026-10-14); her trims under the ceiling, at her pace, re-measured by her; the
+let_go line of `ed228587` at the next restart.

@@ -184,12 +184,11 @@ def budget_gate(store, persona):
 PLACE_WORDS = {'home': '家里', 'peer': '另一个自己那条线', 'group': '群里', 'dm': '私聊'}
 
 
-def over_budget_words(store, persona, pair, before, after, limit, docs=None, placements=None):
-    """By how much a write overshoots, in which pair, with that pair's own numbers before and after, and the largest
-    carried sections there she could let go or trim (carried.over_words)."""
-    from .carried import contents, over_words
-    return over_words(store, persona, pair, before, after, limit, docs if docs is not None else contents(store, persona),
-                      placements or {})
+def over_budget_words(store, persona, pair, before, after, limit, docs=None):
+    """How far a pair is over (or a write would take it), the way out, and the largest sections it carries now
+    (carried.over_words)."""
+    from .carried import over_words
+    return over_words(store, persona, pair, before, after, limit, docs)
 
 
 def system_for(store, ref: dict, *, stream: str | None = None, scope: str = 'operator') -> str:

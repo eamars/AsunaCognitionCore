@@ -34,7 +34,7 @@ JOURNALS = ('work_log',)
 # What she may make a new document (ADR-062): a ledger reaches every turn where it is readable (ledgers_from_program),
 # a journal is a running record like work_log (rows), a working document is read by recall.
 NEW_KINDS = ('ledger', 'journal', 'working')
-SECTION_KEYS = ('sid', 'heading', 'body', 'body_sha256', 'visibility', 'inject', 'tags', 'entry_date', 'corrects', 'pinned')
+SECTION_KEYS = ('sid', 'heading', 'body', 'body_sha256', 'visibility', 'inject', 'tags', 'entry_date', 'corrects', 'pin')
 
 
 class DocumentError(ValueError):
@@ -103,10 +103,10 @@ def _checked_tags(tags):
 def _pin(section, intent):
     """A group-notes section she pins never folds when the notes are over their limit (ADR-096); unpinned, the field
     goes."""
-    if intent.get('pinned') is True:
-        section['pinned'] = True
-    elif intent.get('pinned') is False:
-        section.pop('pinned', None)
+    if intent.get('pin') is True:
+        section['pin'] = True
+    elif intent.get('pin') is False:
+        section.pop('pin', None)
 
 
 def _section(sid, heading, body, *, visibility, inject, tags=(), entry_date=None):

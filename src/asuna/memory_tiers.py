@@ -73,6 +73,13 @@ REASONS = {'stay': '一阵子没用到', 'overflow': '随身满了', 'cooled': '
 # Who moved an item (her ask, ADR-096): her own let_go and her own `inject` writes (reason let_go) are hers; every
 # other move, the lift a rewrite brings included, is the program's.
 BY = {'let_go': 'her'}
+# A group-notes section carried but folded to its heading this turn, when a turn brings it up (deliver).
+FOLDED = CARRIED + '（折叠了）'
+
+
+def moved_by(move):
+    """Who made a move: its `by`, or for a row written before moves said it, the same rule from its reason."""
+    return move.get('by') or BY.get(move.get('reason'), 'program')
 HER_OPS = ('replace_section', 'append_section', 'correction', 'set_tags')     # her writes (placement_after)
 MOVED_SHOWN = 5
 FLOOR, OWN_SLOTS, SLOTS = 0.83, 2, 6     # her own items: two of a turn's six memory slots, above an absolute floor
@@ -864,41 +871,46 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
             excerpt_chars=800):
     """Her own items a turn brings up by itself (手边; a recall also reaches 收着), scored as memories are, at most
     OWN_SLOTS above FLOOR, as memory entries with their store, place and age words and a doc ref. What is carried
-    (随身) is already in front of her and is never brought up again. Each one surfaced is marked: recalled, or
-    surfaced in this conversation."""
+    (随身) is already in front of her and is never brought up again, except a group-notes section folded to its
+    heading this turn (ADR-096), which comes up labelled as carried and folded. Each one surfaced is marked: recalled,
+    or surfaced in this conversation. Returns (the entries, the refs of carried items the turn would have brought up
+    had they not been carried: the program's score for what she carries)."""
     from .config import excerpt
     from .memory_pilot import admitted, rank
     items = list(getattr(pilot, 'items', None) or [])
     if not items:
-        return []
+        return [], []
     tiers = Tiers(store, persona)
     rows = {(row['doc'], row['sid']): row for row in tiers.items()}
     allowed = (AT_HAND, PUT_AWAY) if recall else (AT_HAND,)
-    # A group's notes section folded to its heading this turn (over the notes' limit) is at hand: a turn about it
-    # brings it up (ADR-096).
     from .group_admin import folded as _folded
     folded = {(doc, sid) for doc in {item['doc'] for item in items if item['store'] == 'group_notes'
                                      and item['scope_key'] in readable}
               for sid in _folded(store, persona, doc)}
 
-    def place(item):
-        tier = (rows.get((item['doc'], item['sid'])) or {}).get('place')
-        return AT_HAND if tier == CARRIED and (item['doc'], item['sid']) in folded else tier
-    readable_items = [item for item in items if item['scope_key'] in readable and place(item)]
-    pool = [item for item in readable_items if place(item) in allowed]
-    carried = [item for item in readable_items if place(item) == CARRIED]
+    def tier(item):
+        return (rows.get((item['doc'], item['sid'])) or {}).get('place')
+
+    def is_folded(item):
+        return tier(item) == CARRIED and (item['doc'], item['sid']) in folded
+    readable_items = [item for item in items if item['scope_key'] in readable and tier(item)]
+    pool = [item for item in readable_items if tier(item) in allowed or is_folded(item)]
+    carried = [item for item in readable_items if tier(item) == CARRIED and not is_folded(item)]
     if not pool and not carried:
-        return []
+        return [], []
     vector = retrieval.query_vector(query) or retrieval.embed([query], 'query')[0]
     moment = moment or _now()
+    would = []
     if carried and not recall:
         # A carried item is never brought up (it is in front of her), so it cannot show use that way: one the turn
         # would have brought up above the floor, had it not been carried, is used in this conversation.
         order, scores, _ = rank(pool + carried, query, vector)
-        would = admitted([(key, scores[key]) for key in order], FLOOR, OWN_SLOTS)
-        tiers.surfaced([(item['doc'], item['sid']) for item in carried if item['key'] in would], scene_id, moment)
+        above = admitted([(key, scores[key]) for key in order], FLOOR, OWN_SLOTS)
+        hits = [(item['doc'], item['sid']) for item in carried if item['key'] in above]
+        tiers.surfaced(hits, scene_id, moment)
+        would = [ref(*hit) for hit in hits]
     if not pool:
-        return []
+        return [], would
     order, scores, _ = rank(pool, query, vector)
     by_key = {item['key']: item for item in pool}
     out, refs = [], []
@@ -906,11 +918,12 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
         item, row = by_key[key], rows[(by_key[key]['doc'], by_key[key]['sid'])]
         out.append({'_id': ref(item['doc'], item['sid']), 'kind': 'own_item', 'heading': item.get('heading') or row['heading'],
                     'body_markdown': excerpt(item['text'], excerpt_chars), 'store': STORE_WORDS[row['store']],
-                    'place': place(item), 'age': FACT if row.get('fact') else age_word(row.get('added'), moment)})
+                    'place': FOLDED if is_folded(item) else row['place'],
+                    'age': FACT if row.get('fact') else age_word(row.get('added'), moment)})
         refs.append((item['doc'], item['sid']))
     if refs:
         tiers.used(refs, 'recalled', scene_id) if recall else tiers.surfaced(refs, scene_id)
-    return out
+    return out, would
 
 
 def headings(store, persona, pilot, query, readable, cls, shown=()):

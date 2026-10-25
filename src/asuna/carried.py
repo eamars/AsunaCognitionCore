@@ -11,7 +11,9 @@ Each pair has its own identity budget (`render.identity_tokens`, owner-only): `c
 and core blocks as sent, in estimated tokens. A write that grows the layer in a pair over it is refused (`gate`); one
 that shrinks it or keeps it the same goes through. A write returns the exact numbers (`room_line`);
 `things_from_program` says how full each pair is in coarse words when they change (`room_block`). `count_days` keeps
-per section × pair × day how many turns carried it (`carried_counts`, 30 days).
+per section × pair × day how many turns carried it, her recalls of it and the program's score (`carried_counts`, 30
+days), and each section's first and last time carried (`carried_sections`). `install_checks` are her four checks
+after an install, read only (`tools/carried_check.py`).
 """
 from __future__ import annotations
 
@@ -26,20 +28,26 @@ IDENTITY = ('persona', 'voice', 'self', 'core')
 SELF_BLOCKS = (('current_self', 'self'), ('character_core', 'core'))    # the context names of the self and core blocks
 PERSONA_SHARE = 0.5          # the share of the ceiling a package's own seeds may fill before they get room on top
 ROOM_VERSION = 1
-# The pairs in her words: each place has one class, and a group the owner configured as home is a group read at home.
-PAIR_WORDS = {('home', visibility.OWNER_PRIVATE): '家里', ('peer', visibility.OWNER_PRIVATE): '另一个自己那条线',
-              ('group', visibility.PUBLIC): '群里', ('group', visibility.OWNER_PRIVATE): '算作家里的群',
+# The pairs in her words (her choice, 2026-10-25), in the order she lists them: each place has one class, and a group
+# the owner configured as home is a group read at home.
+PAIR_WORDS = {('home', visibility.OWNER_PRIVATE): '家里', ('group', visibility.OWNER_PRIVATE): '家里那个群',
+              ('group', visibility.PUBLIC): '外面的群', ('peer', visibility.OWNER_PRIVATE): '线',
               ('dm', visibility.PUBLIC): '私聊'}
 # How full a pair's identity layer is, as the share of its limit (things_from_program, when it changes).
 ROOM_WORDS = ((0.5, '还宽裕'), (0.8, '用了一大半'), (1.0, '快满了'), (None, '超了'))
-ROOM_LINE = ('这一节约 %s token。各处每回合随身带的身份部分（程序的开头说明、persona、voice、self、core 合起来，每个地方各算各的，'
-             '上限 %s）：%s。')
-TIER_LINE = '你写的 when_shown 是 %s，它现在在%s：每回合带不带看它在哪；when_shown 照你写的留着，程序不改它。'
-INJECT_WORDS = {'always': 'always（每回合都带）', 'on_demand': 'on_demand（用到才带）', 'never': 'never（不自动带）'}
-OVER_WORDS = ('写完%s随身带的身份部分约 %s token，上限 %s，超出 %s（写之前是 %s；每个地方各算各的）；%s'
-              '先用 let_go 把不常用的随身节放到手边（recall 还读得到），或把这次写的改短')
-OVER_LARGEST = '那里最大的随身节：%s。'
-COUNTS = 'carried_counts'
+# Her wording (2026-10-25): the room line lists only the pairs that carry the section.
+ROOM_LINE = '这节约 %s token。带它的地方：%s'
+ROOM_LEFT, ROOM_OVER, ROOM_SEPARATOR, ROOM_NOWHERE = '%s 剩 %s', '%s 超 %s', '｜', '无'
+TIER_LINE = '这一节的真带是 %s；你写的 when_shown 是 %s'      # her inject, by the name she is shown
+TIER_LAST = '上一次挪档：%s · %s · %s'
+TIER_NONE = '挪档史：无记录'
+BY_WORDS = {'her': '你', 'program': '程序'}
+OVER_WORDS = '%s 现在超 %s token，这次改动会让它更长。要腾地方：let_go 一节，或者把它写短。现在带得最多的是：%s'
+# A write that takes a pair from within its limit to over it: the same words, from the number it would reach.
+OVER_PAST = '%s 这次改动会让它超 %s token。要腾地方：let_go 一节，或者把它写短。现在带得最多的是：%s'
+COUNTS = 'carried_counts'          # section × pair × day, COUNT_DAYS kept
+COUNTED = 'carried_days'           # the days counted
+SECTIONS = 'carried_sections'      # each section's first and last time carried, never pruned
 COUNT_DAYS = 30
 
 
@@ -125,12 +133,8 @@ def tokens(common, found, docs):
 
 def identity(store, persona, *, docs=None, placements=None, common=None):
     """{(place, class): estimated tokens} of each pair's identity layer."""
-    from .render import common_text
-    docs = docs if docs is not None else contents(store, persona)
-    common = common if common is not None else common_text(store.config)
-    laid = {slug: placed(store, persona, slug, docs.get(slug), (placements or {}).get(slug)) for slug in IDENTITY}
-    return {pair: tokens(common, {slug: sections(laid[slug], pair[1], pair[0]) for slug in IDENTITY}, docs)
-            for pair in pairs(store.config)}
+    return {pair: size for pair, (_, size) in laid_out(store, persona, docs=docs, placements=placements,
+                                                        common=common).items()}
 
 
 def limit(store, persona):
@@ -169,43 +173,75 @@ def weight(slug, section):
     return estimate_tokens(render_markdown([section]))
 
 
-def room_parts(store, persona, sizes, ceiling):
-    parts = []
-    for pair, size in sizes.items():
-        left = ceiling - size
-        parts.append('%s %s（%s %s）' % (PAIR_WORDS[pair], number(size), '还剩' if left >= 0 else '超出', number(abs(left))))
-    return '、'.join(parts)
+def laid_out(store, persona, *, docs=None, placements=None, common=None):
+    """{(place, class): (carried sections by slug, estimated tokens)} of each pair: what `identity` counts."""
+    from .render import common_text
+    docs = docs if docs is not None else contents(store, persona)
+    common = common if common is not None else common_text(store.config)
+    laid = {slug: placed(store, persona, slug, docs.get(slug), (placements or {}).get(slug)) for slug in IDENTITY}
+    out = {}
+    for pair in pairs(store.config):
+        found = {slug: sections(laid[slug], pair[1], pair[0]) for slug in IDENTITY}
+        out[pair] = (found, tokens(common, found, docs))
+    return out
+
+
+def ordered(pairs_found):
+    """Pairs in her order (PAIR_WORDS)."""
+    order = list(PAIR_WORDS)
+    return sorted(pairs_found, key=lambda pair: order.index(pair) if pair in order else len(order))
 
 
 def room_line(store, persona, slug, section):
-    """What a write to her identity, or a let_go, returns: the section's weight and each pair's size and room, from the
-    number the gate uses; None when nothing bounds it."""
+    """What a write to her identity, or a let_go, returns: the section's weight and, for each pair that carries it, the
+    room left (or how far over), from the number the gate uses; None when nothing bounds it."""
     ceiling = limit(store, persona)
     if not ceiling or slug not in IDENTITY or not section:
         return None
-    return ROOM_LINE % (number(weight(slug, section)), number(ceiling),
-                        room_parts(store, persona, identity(store, persona), ceiling))
+    laid = laid_out(store, persona)
+    parts = []
+    for pair in ordered(laid):
+        found, size = laid[pair]
+        if any(s['sid'] == section['sid'] for s in found[slug]):
+            left = ceiling - size
+            parts.append((ROOM_LEFT if left >= 0 else ROOM_OVER) % (PAIR_WORDS[pair], number(abs(left))))
+    return ROOM_LINE % (number(weight(slug, section)), ROOM_SEPARATOR.join(parts) or ROOM_NOWHERE)
+
+
+def _local(store, persona, moment):
+    try:
+        when = datetime.fromisoformat(str(moment).replace('Z', '+00:00'))
+    except ValueError:
+        return str(moment)
+    return when.astimezone(_zone(store, persona)).strftime('%Y-%m-%d %H:%M')
 
 
 def tier_line(store, persona, slug, section):
-    """When a section's `inject` and its tier differ: both, said once (None when they agree or tiers are off)."""
+    """When a section's `inject` and its tier differ: both, and its last move (when, who, why) on the next line; None
+    when they agree or tiers are off."""
     from . import memory_tiers
     if not memory_tiers.ENABLED or not section:
         return None
-    row = memory_tiers.Tiers(store, persona).item(slug, section['sid'])
+    tiers = memory_tiers.Tiers(store, persona)
+    row = tiers.item(slug, section['sid'])
     if not row or memory_tiers.TO_INJECT[row['place']] == section.get('inject'):
         return None
-    return TIER_LINE % (INJECT_WORDS.get(section.get('inject'), section.get('inject')), row['place'])
+    last = tiers.rows.find_one({'row': 'move', 'item': row['_id']}, sort=[('at', -1)])
+    history = (TIER_LAST % (_local(store, persona, last['at']), BY_WORDS[memory_tiers.moved_by(last)],
+                            memory_tiers.REASONS.get(last['reason'], last['reason'])) if last else TIER_NONE)
+    return TIER_LINE % (row['place'], section.get('inject')) + '\n' + history
 
 
-def over_words(store, persona, pair, before, after, ceiling, docs, placements):
-    """A refusal: the pair that is over, with that pair's own numbers before and after, and its largest carried
-    sections."""
-    found = carried(store, persona, pair[1], pair[0], docs=docs, placements=placements)
-    sizes = sorted(((weight(slug, s), slug, s['sid']) for slug in IDENTITY for s in found[slug]), reverse=True)[:3]
-    largest = '、'.join('%s#%s（约 %s）' % (slug, sid, number(size)) for size, slug, sid in sizes)
-    return OVER_WORDS % (PAIR_WORDS[pair], number(after), number(ceiling), number(after - ceiling), number(before),
-                         OVER_LARGEST % largest if largest else '')
+def over_words(store, persona, pair, before, after, ceiling, docs=None):
+    """A refusal: the pair, how far over it is (or would be), the way out, and the three largest sections it carries
+    now; every number is that pair's own (laid_out, as carried counts it)."""
+    found = laid_out(store, persona, docs=docs)[pair][0]
+    sizes = sorted(((weight(slug, s), s.get('heading') or s['sid']) for slug in IDENTITY for s in found[slug]),
+                   reverse=True)[:3]
+    largest = '、'.join('「%s」%s' % (heading, number(size)) for size, heading in sizes)
+    if before > ceiling:
+        return OVER_WORDS % (PAIR_WORDS[pair], number(before - ceiling), largest)
+    return OVER_PAST % (PAIR_WORDS[pair], number(after - ceiling), largest)
 
 
 def gate(store, persona):
@@ -231,7 +267,7 @@ def gate(store, persona):
         if over:
             pair = max(over)[1]
             raise DocumentError('PERSONA_RENDER_OVER_BUDGET', over_words(store, persona, pair, now[pair], then[pair],
-                                                                          ceiling, proposed, placements))
+                                                                          ceiling, current))
     return check
 
 
@@ -256,12 +292,13 @@ def room_block(store, persona, cls, scene_id):
 
 
 # ── what was carried, counted (carried_counts) ─────────────────────
-def manifest(found, place, cls, moment, notes=(), brought_up=()):
+def manifest(found, place, cls, moment, notes=(), brought_up=(), would_surface=()):
     """What a turn carried, for its episode manifest: the section refs of its pair, the group-notes sections shown,
-    and the sections its own retrieval brought up."""
+    the sections its own retrieval brought up, and the carried ones it would have brought up had they not been
+    carried (together, the program's score)."""
     return {'at': moment.isoformat() if hasattr(moment, 'isoformat') else moment, 'place': place, 'class': cls,
             'refs': ['doc:%s#%s' % (slug, s['sid']) for slug in IDENTITY for s in found.get(slug) or []],
-            'notes': list(notes), 'brought_up': list(brought_up)}
+            'notes': list(notes), 'brought_up': list(brought_up), 'would_surface': list(would_surface)}
 
 
 def _zone(store, persona):
@@ -315,7 +352,7 @@ class _Past:
     def refs(self, moment, scene_id, cls, place):
         from . import memory_tiers
         from .group_admin import notes_slug
-        out, notes = [], []
+        out = []
         for row in self.items.values():
             kind = row['store']
             if kind not in (*IDENTITY, 'group_notes') or self.tier_at(row, moment) != memory_tiers.CARRIED:
@@ -328,26 +365,14 @@ class _Past:
             pins = visibility.section_places(section)
             if kind != 'group_notes' and pins and place not in pins:
                 continue
-            (notes if kind == 'group_notes' else out).append('doc:%s#%s' % (row['doc'], row['sid']))
-        return out, notes
+            out.append('doc:%s#%s' % (row['doc'], row['sid']))
+        return out
 
 
-def _entry(rows, ref, pair):
-    return rows.setdefault((ref, pair), {'turns': 0, 'brought_up': 0, 'last_carried': None, 'reconstructed': False})
-
-
-def day_counts(store, persona, day, zone=None):
-    """The carried_counts rows of one local day: per section × pair, the turns that carried it, the pair's turns that
-    day, when it was last carried, and in how many of its turns the program's retrieval brought it up."""
-    zone = zone or _zone(store, persona)
-    start, end = _bounds(day, zone)
-    turns = []
-    for ep in store.db.episodes.find({'persona': persona, 'manifest.carried.at': {'$gte': start, '$lt': end}},
-                                     {'manifest.carried': 1}):
-        mark = ep['manifest']['carried']
-        turns.append((mark['at'], (mark['place'], mark['class']), [*mark['refs'], *(mark.get('notes') or [])],
-                      mark.get('brought_up') or [], False))
-    past, seen = None, set()
+def _turns(store, persona, start, end):
+    """The day's turns, found through their `turn.output` audit rows (indexed by type and time): (time, pair, refs
+    carried, refs the program scored, reconstructed)."""
+    past, seen, out = None, set(), []
     for row in store.db.audit_events.find({'type': 'turn.output', 'occurred_at': {'$gte': start, '$lt': end}},
                                           {'stream_id': 1, 'occurred_at': 1}).sort('occurred_at', 1):
         if row['stream_id'] in seen:
@@ -356,54 +381,187 @@ def day_counts(store, persona, day, zone=None):
         ep = store.db.episodes.find_one({'_id': row['stream_id']}, {'persona': 1, 'scene_id': 1,
                                                                    'manifest.session_class': 1, 'manifest.carried': 1,
                                                                    'context.memories': 1})
-        if not ep or ep.get('persona') != persona or (ep.get('manifest') or {}).get('carried'):
+        if not ep or ep.get('persona') != persona:
+            continue
+        mark = (ep.get('manifest') or {}).get('carried')
+        if mark:
+            out.append((mark['at'], (mark['place'], mark['class']), [*mark['refs'], *(mark.get('notes') or [])],
+                        [*(mark.get('brought_up') or []), *(mark.get('would_surface') or [])], False))
             continue
         scene = store.db.scenes.find_one({'_id': ep.get('scene_id')}, {'kind': 1}) or {}
         cls = (ep.get('manifest') or {}).get('session_class') or visibility.PUBLIC
         place = visibility.place_of(store.config, {**scene, '_id': ep.get('scene_id')}, cls)
         past = past or _Past(store, persona)
-        refs, notes = past.refs(row['occurred_at'], ep.get('scene_id'), cls, place)
         brought = [m.get('_id') for m in (ep.get('context') or {}).get('memories') or [] if m.get('kind') == 'own_item']
-        turns.append((row['occurred_at'], (place, cls), [*refs, *notes], brought, True))
+        out.append((row['occurred_at'], (place, cls), past.refs(row['occurred_at'], ep.get('scene_id'), cls, place),
+                    brought, True))
+    return out
+
+
+def _recalls(store, persona, start, end):
+    """Her recalls of her sections that day: [(pair, ref)], from `recall.read` (the sections she read and her own
+    items that came back), the pair from the turn's place and class."""
+    out = []
+    for row in store.db.audit_events.find({'type': 'recall.read', 'occurred_at': {'$gte': start, '$lt': end}},
+                                          {'stream_id': 1, 'payload': 1}):
+        payload = row.get('payload') or {}
+        ep = store.db.episodes.find_one({'_id': row.get('stream_id')}, {'persona': 1, 'manifest.session_class': 1})
+        if not ep or ep.get('persona') != persona:
+            continue
+        cls = (ep.get('manifest') or {}).get('session_class') or visibility.PUBLIC
+        refs = {'doc:%s#%s' % (item.get('doc'), item.get('sid')) for item in payload.get('sections_read') or []}
+        refs |= {m for m in payload.get('memories') or [] if isinstance(m, str) and m.startswith('doc:')}
+        out += [((payload.get('place'), cls), ref) for ref in sorted(refs)]
+    return out
+
+
+def _entry(rows, ref, pair):
+    return rows.setdefault((ref, pair), {'turns_carried': 0, 'program_score': 0, 'recall_hits': 0, 'first': None,
+                                         'last': None, 'reconstructed': False})
+
+
+def day_counts(store, persona, day, zone=None):
+    """The carried_counts rows of one local day, per section × pair: the turns that carried it, the pair's turns that
+    day, her recalls of it there, and in how many turns the program's retrieval scored it above the floor
+    (program_score: brought up, or would have been had it not been carried). Also returns, per section, the first and
+    last time it was carried that day (for carried_sections)."""
+    zone = zone or _zone(store, persona)
+    start, end = _bounds(day, zone)
     pair_turns, rows = {}, {}
-    for at, pair, refs, brought, rebuilt in turns:
+    for at, pair, refs, scored, rebuilt in _turns(store, persona, start, end):
         pair_turns[pair] = pair_turns.get(pair, 0) + 1
         for ref in refs:
             entry = _entry(rows, ref, pair)
-            entry['turns'] += 1
-            entry['last_carried'] = max(filter(None, (entry['last_carried'], at)))
+            entry['turns_carried'] += 1
+            entry['first'] = min(filter(None, (entry['first'], at)))
+            entry['last'] = max(filter(None, (entry['last'], at)))
             entry['reconstructed'] |= rebuilt
-        for ref in brought:
+        for ref in set(scored):
             entry = _entry(rows, ref, pair)
-            entry['brought_up'] += 1
+            entry['program_score'] += 1
             entry['reconstructed'] |= rebuilt
-    return [{'_id': 'count:' + sha(canonical([persona, day.isoformat(), ref, list(pair)]))[:32], 'persona': persona,
-             'day': day.isoformat(), 'section': ref, 'place': pair[0], 'class': pair[1], **entry,
-             'pair_turns': pair_turns[pair]} for (ref, pair), entry in sorted(rows.items())]
+    for pair, ref in _recalls(store, persona, start, end):
+        if pair in PAIR_WORDS:
+            _entry(rows, ref, pair)['recall_hits'] += 1
+    out, spans = [], {}
+    for (ref, pair), entry in sorted(rows.items()):
+        out.append({'_id': 'count:' + sha(canonical([persona, day.isoformat(), ref, list(pair)]))[:32],
+                    'persona': persona, 'section': ref, 'pair': PAIR_WORDS.get(pair, '%s/%s' % pair),
+                    'day': day.isoformat(), 'turns_carried': entry['turns_carried'],
+                    'pair_turns': pair_turns.get(pair, 0), 'recall_hits': entry['recall_hits'],
+                    'program_score': entry['program_score'], 'reconstructed': entry['reconstructed']})
+        if entry['first']:
+            first, last = spans.get(ref, (entry['first'], entry['last']))
+            spans[ref] = (min(first, entry['first']), max(last, entry['last']))
+    return out, spans
 
 
 def count_days(store, persona, moment=None):
-    """The nightly count (the audit retention thread): each whole local day not counted yet, back to when the tiers
-    went on and at most COUNT_DAYS; rows older than COUNT_DAYS go. Returns {'days', 'rows', 'deleted'}."""
+    """The nightly count (the audit retention thread): each whole local day not counted yet (carried_days), back to
+    when the tiers went on and at most COUNT_DAYS; day rows older than COUNT_DAYS go, carried_sections (each
+    section's first and last time carried) stays. Returns {'days', 'rows', 'deleted'}."""
     from . import memory_tiers
     moment = moment or datetime.now(timezone.utc)
     zone = _zone(store, persona)
     today = moment.astimezone(zone).date()
     oldest = today - timedelta(days=COUNT_DAYS)
-    rows = store.db[COUNTS]
+    rows, counted, spans = store.db[COUNTS], store.db[COUNTED], store.db[SECTIONS]
     deleted = rows.delete_many({'persona': persona, 'day': {'$lt': oldest.isoformat()}}).deleted_count
+    counted.delete_many({'persona': persona, 'day': {'$lt': oldest.isoformat()}})
     first = store.db[memory_tiers.COLLECTION].find_one({'row': 'item', 'persona': persona}, {'added': 1},
                                                        sort=[('added', 1)])
     if not first or not first.get('added'):
         return {'days': 0, 'rows': 0, 'deleted': deleted}
     began = datetime.fromisoformat(str(first['added']).replace('Z', '+00:00')).astimezone(zone).date()
-    done = set(rows.distinct('day', {'persona': persona}))
+    done = set(counted.distinct('day', {'persona': persona}))
     day, days, written = max(oldest, began), 0, 0
     while day < today:
         if day.isoformat() not in done:
-            found = day_counts(store, persona, day, zone)
+            found, carried_at = day_counts(store, persona, day, zone)
             for row in found:
                 rows.replace_one({'_id': row['_id']}, row, upsert=True)
+            for ref, (start, end) in carried_at.items():
+                spans.update_one({'_id': 'section:' + sha(canonical([persona, ref]))[:32]},
+                                 {'$set': {'persona': persona, 'section': ref},
+                                  '$min': {'first_carried_at': start}, '$max': {'last_carried_at': end}}, upsert=True)
+            counted.replace_one({'_id': 'day:%s:%s' % (persona, day.isoformat())},
+                                {'persona': persona, 'day': day.isoformat(), 'rows': len(found),
+                                 'at': moment.isoformat()}, upsert=True)
             days, written = days + 1, written + len(found)
         day += timedelta(days=1)
     return {'days': days, 'rows': written, 'deleted': deleted}
+
+
+
+# ── install checks (hers, read only) ───────────────────────────────
+# A section that would grow one pair only, to see that pair's refusal: (visibility, place tag).
+PROBE = {('home', visibility.OWNER_PRIVATE): ('owner_private', 'home'),
+         ('peer', visibility.OWNER_PRIVATE): ('owner_private', 'peer'),
+         ('group', visibility.OWNER_PRIVATE): ('owner_private', 'group'),
+         ('group', visibility.PUBLIC): ('public', 'group'), ('dm', visibility.PUBLIC): ('public', 'dm')}
+
+
+def _named(text):
+    """The pair a refusal names (the longest pair word it starts with)."""
+    words = sorted(PAIR_WORDS.items(), key=lambda item: -len(item[1]))
+    return next((pair for pair, word in words if (text or '').startswith(word + ' ')), None)
+
+
+def install_checks(store, persona):
+    """The four checks she runs after an install, reading only: [(check, passed, what it saw, in numbers)].
+    1. The latest turn's system_ref section list is what carried() gives its pair now.
+    2. Each pair's refusal says carried()'s number for the pair it names (a write that would grow it, never made).
+    3. A write to her identity gets its room line.
+    4. Every section whose inject and tier differ is said."""
+    import re
+    from . import memory_tiers
+    from .documents import DocumentError
+    out, ep = [], None
+    for row in store.db.audit_events.find({'type': 'turn.output'}, {'stream_id': 1}).sort('occurred_at', -1).limit(50):
+        ep = store.db.episodes.find_one({'_id': row['stream_id'], 'persona': persona,
+                                         'system_ref.carried': {'$exists': True}}, {'system_ref': 1})
+        if ep:
+            break
+    if ep:
+        ref = ep['system_ref']
+        now = carried(store, persona, ref['session_class'], ref.get('place'))
+        same = all(ref['carried'].get(slug) == [s['sid'] for s in now[slug]] for slug in ('persona', 'voice'))
+        out.append(('system_ref_is_carried', same, {'pair': PAIR_WORDS.get((ref.get('place'), ref['session_class']))}))
+    else:
+        out.append(('system_ref_is_carried', False, {'turns_with_carried_ref': 0}))
+    ceiling, docs = limit(store, persona), contents(store, persona)
+    sizes, check = identity(store, persona, docs=docs), gate(store, persona)
+    persona_doc = docs.get('persona') or {'sections': []}
+    for pair in [pair for pair in ordered(sizes) if pair in PROBE]:
+        shown, (seen, tag) = None, PROBE[pair]
+        probe = {'sid': 'install-check', 'heading': 'install-check', 'visibility': seen, 'inject': 'always',
+                 'tags': ['place:' + tag], 'body': '字' * (max((ceiling or 0) - sizes[pair], 0) + 200),
+                 'body_sha256': 'install-check'}
+        proposed = {**persona_doc, 'sections': [*persona_doc.get('sections', []), probe]}
+        try:
+            check('persona', proposed, None)
+        except DocumentError as exc:
+            shown = exc.detail
+        named, then = _named(shown), identity(store, persona, docs={**docs, 'persona': proposed})
+        expected = None
+        if named and ceiling:
+            expected = sizes[named] - ceiling if sizes[named] > ceiling else then[named] - ceiling
+        said = re.search(r'超 ([\d,]+) token', shown or '')
+        got = int(said.group(1).replace(',', '')) if said else None
+        out.append(('refusal_is_carried_number', bool(named and got == expected),
+                    {'pair': PAIR_WORDS[pair], 'named': PAIR_WORDS.get(named), 'carried': sizes[pair],
+                     'limit': ceiling, 'said': got, 'expected': expected}))
+    home = carried(store, persona, visibility.OWNER_PRIVATE, 'home', docs=docs)
+    sample = next(((slug, s) for slug in IDENTITY for s in home[slug]), None)
+    line = room_line(store, persona, *sample) if sample else None
+    out.append(('room_line', bool(line and line.startswith('这节约 ')),
+                {'sections_carried_at_home': sum(len(found) for found in home.values())}))
+    tiers, differ, said = memory_tiers.Tiers(store, persona), 0, 0
+    for slug in IDENTITY:
+        for section in (docs.get(slug) or {}).get('sections') or []:
+            row = tiers.item(slug, section['sid'])
+            if row and memory_tiers.TO_INJECT[row['place']] != section.get('inject'):
+                differ += 1
+                said += (tier_line(store, persona, slug, section) or '').startswith('这一节的真带是')
+    out.append(('tier_line', said == differ, {'differ': differ, 'said': said}))
+    return out

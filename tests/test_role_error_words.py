@@ -37,7 +37,7 @@ def test_an_undeclared_policy_key_lists_the_writable_ones_and_a_bad_value_its_ra
         policy.validate([{'key': 'heartbeat.visits_per_beat', 'value': 5, 'what': 'x'}])
 
 
-def test_an_over_budget_write_says_by_how_much_in_which_place_and_only_that_place_s_sections(store):
+def test_an_over_budget_write_names_the_pair_its_gap_the_way_out_and_only_that_pair_s_sections(store):
     # Her finding (2026-10-21): a home rule over the budget pointed her at a group rule, which is not in the home render.
     from asuna import carried, visibility
 
@@ -46,12 +46,11 @@ def test_an_over_budget_write_says_by_how_much_in_which_place_and_only_that_plac
     docs = {'persona': {'sections': [section('big', '字' * 300), section('small', '字' * 10),
                                      section('group_rule', '字' * 250, tags=['place:group'])]},
             'voice': {'sections': [section('tone', '字' * 100)]}, 'self': None, 'core': None}
-    said = carried.over_words(store, 'P1', ('home', visibility.OWNER_PRIVATE), 400, 420, 410, docs, {})
-    assert said.startswith('写完家里') and '约 420 token，上限 410，超出 10（写之前是 400' in said
-    assert said.index('persona#big') < said.index('voice#tone') and 'group_rule' not in said
-    assert 'let_go' in said
-    group = carried.over_words(store, 'P1', ('group', visibility.PUBLIC), 400, 420, 410, docs, {})
-    assert group.startswith('写完群里') and 'group_rule' in group
+    said = carried.over_words(store, 'P1', ('home', visibility.OWNER_PRIVATE), 420, 430, 410, docs)
+    assert said.startswith('家里 现在超 10 token，这次改动会让它更长。要腾地方：let_go 一节，或者把它写短。')
+    assert said.index('「big」') < said.index('「tone」') and 'group_rule' not in said
+    group = carried.over_words(store, 'P1', ('group', visibility.PUBLIC), 400, 420, 410, docs)
+    assert group.startswith('外面的群 这次改动会让它超 10 token。') and '「group_rule」' in group
 
 
 def test_a_missing_section_lists_the_sids_there_are():

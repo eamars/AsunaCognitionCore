@@ -284,10 +284,10 @@ TOOLS = {
             'heading': _s('新节的标题（append_section 用）'),
             'body': _s('这一节的正文（markdown，不要标题行）'),
             'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': '标签'},
-            'visibility': _s('哪些回合读得到：public＝你所有的回合（包括在群里的）；owner_private＝只在家里的回合（自动带上只限 persona、voice 的 always 节）', enum=['public', 'owner_private']),
+            'visibility': _s('哪些回合读得到：public＝你所有的回合（包括在群里的）；owner_private＝只在家里的回合', enum=['public', 'owner_private']),
             'inject': _s('什么时候放进上下文', enum=['always', 'on_demand', 'never']),
             'kind': _s('新建文档时：ledger 活账，每回合带上；journal 流水；working 工作文档，默认', enum=['ledger', 'journal', 'working']),
-            'pinned': _s('群笔记：yes 置顶（超长时不折叠）', enum=['yes', 'no']),
+            'pin': _s('群笔记：yes 置顶（超长时不折叠）', enum=['yes', 'no']),
         },
     },
     'understand_person': {
@@ -2107,10 +2107,10 @@ class RoleTools:
             item = {**item, 'visibility': 'public'}
             if item['op'] == 'append_section' or 'inject' in item:
                 item['inject'] = item['inject'] if item.get('inject') in ('always', 'on_demand') else 'always'
-        if 'pinned' in item and not item['doc'].startswith('group:'):
-            raise Refused('pinned 只用于群笔记（doc=group_notes）：别的文档没有折叠，置顶不起作用。')
-        if 'pinned' in item and not isinstance(item['pinned'], bool):
-            raise Refused('pinned 写 yes 或 no%s。' % _given(item, 'pinned'))
+        if 'pin' in item and not item['doc'].startswith('group:'):
+            raise Refused('pin 只用于群笔记（doc=group_notes）：别的文档没有折叠，置顶不起作用。')
+        if 'pin' in item and not isinstance(item['pin'], bool):
+            raise Refused('pin 写 yes 或 no%s。' % _given(item, 'pin'))
         docs = DocumentStore(self.store, ep['persona'])
         slug = item['doc']
         base, before = docs.read(slug)
@@ -2148,10 +2148,10 @@ class RoleTools:
             if row and row['place'] != memory_tiers.CARRIED:
                 item = {k: v for k, v in item.items() if k != 'inject'}
                 kept_away = 'when_shown 没改。' + memory_tiers.NOT_BACK % row['place']
-                if not any(field in item for field in ('visibility', 'tags', 'pinned')) and not memory_tiers.declared_nature(item):
+                if not any(field in item for field in ('visibility', 'tags', 'pin')) and not memory_tiers.declared_nature(item):
                     return {'doc': slug, 'op': 'set_tags', 'sid': item['sid'], 'note': kept_away}, False
         if (memory_tiers.ENABLED and item.get('op') == 'set_tags' and memory_tiers.declared_nature(item)
-                and not any(field in item for field in ('visibility', 'inject', 'tags', 'pinned'))):
+                and not any(field in item for field in ('visibility', 'inject', 'tags', 'pin'))):
             # Only what an item is, or where it came from: kept beside it; the document is not written.
             from .documents import missing_section, named_section
             listed = (before or {}).get('sections') or []
@@ -2202,10 +2202,10 @@ class RoleTools:
             result['now'] = {'visibility': written['visibility'], 'inject': written['inject'], 'tags': written.get('tags') or [],
                              'places': visibility.section_places(written) or '到处都带'}
             self._carried_lines(ep, slug, written, result)
-            if 'pinned' in item:
+            if 'pin' in item:
                 from .context_budget import NOTE_CHARS, PIN_NOTE, UNPIN_NOTE
-                result['pinned'] = (PIN_NOTE % (NOTE_CHARS['group_notes'], memory_tiers.CAPS['group_notes'])
-                                    if item['pinned'] is True else UNPIN_NOTE)
+                result['pin'] = (PIN_NOTE % (NOTE_CHARS['group_notes'], memory_tiers.CAPS['group_notes'])
+                                 if item['pin'] is True else UNPIN_NOTE)
         return result, False
 
     def _carried_lines(self, ep, slug, section, result):

@@ -115,9 +115,13 @@ def test_each_pair_has_its_own_ceiling_and_a_group_only_write_over_the_group_s_i
         write(store, 'persona', {'op': 'append_section', 'heading': '群里才用', 'visibility': 'public',
                                  'inject': 'always', 'tags': ['place:group']}, '群' * (home - group), mutation='g1')
     said = refused.value.detail
-    assert refused.value.code == 'PERSONA_RENDER_OVER_BUDGET' and said.startswith('写完群里')
-    assert '写之前是 %s' % carried.number(group) in said and '上限 %s' % carried.number(home - 10) in said
-    assert 'let_go' in said
+    assert refused.value.code == 'PERSONA_RENDER_OVER_BUDGET' and said.startswith('外面的群 这次改动会让它超 ')
+    assert 'let_go 一节，或者把它写短' in said and '现在带得最多的是：「' in said
+    with pytest.raises(DocumentError) as refused:
+        write(store, 'persona', {'op': 'append_section', 'heading': '家里再加', 'visibility': 'owner_private',
+                                 'inject': 'always', 'tags': ['place:home']}, '再' * 50, mutation='h3')
+    assert refused.value.detail.startswith('家里 现在超 %s token，这次改动会让它更长。' % carried.number(10)), \
+        "the number is carried()'s for that pair"
     shorter = write(store, 'persona', {'op': 'replace_section', 'sid': sid_of(store, 'persona', '家里的规矩')}, '家' * 100,
                     mutation='h2')
     assert shorter == [] and carried.identity(store, 'P1')[HOME] < home, 'a write that shrinks an over pair goes through'
@@ -163,17 +167,19 @@ def test_her_write_says_its_weight_and_each_place_s_room_and_a_tier_that_differs
     Coordinator(store, lane).ingest(event('room-1'))
     result = lane.tool_results[1][4]
     sizes, ceiling = carried.identity(store, 'P1'), carried.limit(store, 'P1')
-    assert result['room'].startswith('这一节约 ') and '上限 %s' % carried.number(ceiling) in result['room']
-    for pair in (HOME, GROUP):
-        assert '%s %s（还剩 %s）' % (carried.PAIR_WORDS[pair], carried.number(sizes[pair]),
-                                   carried.number(ceiling - sizes[pair])) in result['room'], 'exact numbers per pair'
+    weight = carried.weight('persona', DocumentStore(store, 'P1').read('persona')[1]['sections'][-1])
+    assert result['room'] == '这节约 %s token。带它的地方：%s' % (carried.number(weight), '｜'.join(
+        '%s 剩 %s' % (carried.PAIR_WORDS[pair], carried.number(ceiling - sizes[pair]))
+        for pair in carried.ordered(sizes))), 'exact numbers, in her order, only where it is carried'
     sid = result['sid']
     let = ('write_document', {'doc': 'persona', 'do': 'let_go', 'section': sid, 'why': '少带一点'})
     read = ('recall', {'sections': [{'doc': 'persona', 'section': sid}]})
     lane = FakeLane(store, [FakeTurn([THINK, let, read], '好。')])
     Coordinator(store, lane).ingest(event('room-2'))
     gone, recalled = lane.tool_results[1][4], lane.tool_results[2][4]
-    assert gone['room'] and gone['tier'] == carried.TIER_LINE % (carried.INJECT_WORDS['always'], AT_HAND)
+    first, last = gone['tier'].splitlines()
+    assert first == '这一节的真带是 手边；你写的 when_shown 是 always' and gone['room'].endswith('带它的地方：无')
+    assert last.startswith('上一次挪档：') and last.endswith(' · 你 · 你放手了')
     assert recalled['documents'][0]['tier'] == gone['tier'], 'every read of that section says both'
     assert DocumentStore(store, 'P1').read('persona')[1]['sections'][-1]['inject'] == 'always', 'never written for her'
     moved = store.db.memory_tiers.find_one({'row': 'move', 'sid': sid})
@@ -192,7 +198,7 @@ def test_things_says_how_full_each_place_is_in_words_only_when_it_changes(store,
     again = tiers.things(visibility.OWNER_PRIVATE, scene, 'UTC', home=True)
     assert set(again['identity_room'].values()) == {'超了'}
     public = tiers.things(visibility.PUBLIC, store.db.scenes.find_one({'_id': 'g1'}), 'UTC')
-    assert set(public['identity_room']) == {'群里', '私聊'}, 'a public turn hears only its own pairs'
+    assert set(public['identity_room']) == {'外面的群', '私聊'}, 'a public turn hears only its own pairs'
 
 
 # ---- a group's notes fold -----------------------------------------------------------
@@ -201,14 +207,14 @@ def note(sid, chars, **extra):
 
 
 def test_over_the_limit_what_surfaced_longest_ago_folds_first_and_a_pin_never_folds():
-    sections = [note('anchor', 900, pinned=True), note('a', 900), note('b', 900), note('c', 900)]
+    sections = [note('anchor', 900, pin=True), note('a', 900), note('b', 900), note('c', 900)]
     kept, about = context_budget.note_view(sections, 2400, order=['anchor', 'a', 'c', 'b'])
     assert [s['sid'] for s in kept] == ['anchor', 'b'], 'a then c folded; the pin, longest unused, stays'
     assert [s['sid'] for s in about['not_shown']] == ['a', 'c'] and '2 节' in about['over_limit']
-    assert 'pinned_over' not in about
-    pins = [note('p1', 1500, pinned=True), note('p2', 1500, pinned=True), note('x', 100)]
+    assert 'pins_over' not in about
+    pins = [note('p1', 1500, pin=True), note('p2', 1500, pin=True), note('x', 100)]
     kept, about = context_budget.note_view(pins, 2400, order=['p1', 'p2', 'x'])
-    assert [s['sid'] for s in kept] == ['p1', 'p2'] and about['pinned_over'].startswith('置顶的节加起来就有 3004 字')
+    assert [s['sid'] for s in kept] == ['p1', 'p2'] and about['pins_over'].startswith('置顶的节加起来就有 3004 字')
     assert about['fullness'] == '超了', 'pins still count inside the limit'
 
 
@@ -222,7 +228,7 @@ def test_a_group_s_notes_fold_by_last_surfacing_and_a_folded_one_comes_up_when_a
           '一个聊天的群。' + '锚' * 300, mutation='n3')
     tiers = Tiers(store, 'P1')
     anchor = sid_of(store, slug, '这个群是什么')
-    write(store, slug, {'op': 'set_tags', 'sid': anchor, 'pinned': True}, mutation='n4')
+    write(store, slug, {'op': 'set_tags', 'sid': anchor, 'pin': True}, mutation='n4')
     baking, hiking = sid_of(store, slug, '松饼'), sid_of(store, slug, '登山')
     for sid, days in ((baking, 20), (anchor, 30)):
         tiers.rows.update_one({'_id': tiers.item(slug, sid)['_id']}, {'$set': {
@@ -240,7 +246,7 @@ def test_a_group_s_notes_fold_by_last_surfacing_and_a_folded_one_comes_up_when_a
     builder.pilot = pilot
     _, context, manifest = builder.prepare(event('fold-1', scene='g1', text='松饼'), 'P1')
     own = [m for m in context['memories'] if m.get('kind') == 'own_item']
-    assert ('doc:%s#%s' % (slug, baking)) in [m['_id'] for m in own] and own[0]['place'] == AT_HAND
+    assert ('doc:%s#%s' % (slug, baking)) in [m['_id'] for m in own] and own[0]['place'] == memory_tiers.FOLDED
     assert manifest['carried']['notes'] == ['doc:%s#%s' % (slug, s) for s in (hiking, anchor)]
     assert 'doc:%s#%s' % (slug, baking) in manifest['carried']['brought_up']
 
@@ -248,9 +254,9 @@ def test_a_group_s_notes_fold_by_last_surfacing_and_a_folded_one_comes_up_when_a
 def test_a_pin_is_said_with_what_it_does_not_do_and_only_in_a_group_s_notes(store):
     owner(store)
     lane = FakeLane(store, [FakeTurn([THINK, ('write_document', {'doc': 'persona', 'do': 'set_tags', 'section': 'x',
-                                                                  'pinned': 'yes', 'why': '置顶'})], '好。')])
+                                                                  'pin': 'yes', 'why': '置顶'})], '好。')])
     Coordinator(store, lane).ingest(event('pin-home'))
-    assert 'pinned 只用于群笔记' in lane.tool_results[1][4] and not lane.tool_results[1][5]
+    assert 'pin 只用于群笔记' in lane.tool_results[1][4] and not lane.tool_results[1][5]
     assert '随身' in context_budget.PIN_NOTE and '%d 条' in context_budget.PIN_NOTE
 
 
@@ -265,7 +271,7 @@ def test_a_stored_voice_section_is_found_by_recall_like_any_other(store):
     assert any(item['store'] == 'voice' and item['sid'] == sid for item in memory_pilot.own_items(store, 'P1'))
     pilot = memory_pilot.Pilot(store, 'P1', Route())
     pilot.sync()
-    found = memory_tiers.deliver(store, 'P1', pilot, Retrieval(), '周六烤松饼', {'global-safe'}, 'dm-a', recall=True)
+    found, _ = memory_tiers.deliver(store, 'P1', pilot, Retrieval(), '周六烤松饼', {'global-safe'}, 'dm-a', recall=True)
     assert 'doc:voice#' + sid in [m['_id'] for m in found] and docs.read('voice')[1]
 
 
@@ -274,30 +280,79 @@ def test_carried_counts_are_a_replay_of_what_the_turns_recorded(store):
     owner(store)
     coordinator = Coordinator(store, FakeLane(store, [FakeTurn([THINK], '嗯。') for _ in range(3)]))
     eps = [coordinator.ingest(event('count-%d' % n, scene=scene)) for n, scene in enumerate(('dm-a', 'dm-a', 'g1'))]
+    scored = eps[1]['manifest']['carried']['refs'][0]
+    store.db.episodes.update_one({'_id': eps[1]['_id']}, {'$set': {'manifest.carried.would_surface': [scored]}})
+    doc, sid = scored[len('doc:'):].split('#')
+    store.audit(eps[1]['_id'], 'recall.read', {'sections_read': [{'doc': doc, 'sid': sid}], 'memories': [],
+                                               'place': 'home'}, eps[1]['scope_key'])
     day = datetime.now(timezone.utc).date()
     tally, pair_turns = {}, {}
     for ep in eps:
-        mark = ep['manifest']['carried']
-        pair = (mark['place'], mark['class'])
+        mark = store.db.episodes.find_one({'_id': ep['_id']})['manifest']['carried']
+        pair = carried.PAIR_WORDS[(mark['place'], mark['class'])]
         pair_turns[pair] = pair_turns.get(pair, 0) + 1
         for ref in mark['refs'] + mark['notes']:
             tally[(ref, pair)] = tally.get((ref, pair), 0) + 1
-    rows = carried.day_counts(store, 'P1', day)
-    assert {(row['section'], (row['place'], row['class'])): row['turns'] for row in rows} == tally and tally
-    assert all(row['pair_turns'] == pair_turns[(row['place'], row['class'])] for row in rows)
-    assert not any(row['reconstructed'] for row in rows)
+    rows, spans = carried.day_counts(store, 'P1', day)
+    assert {(row['section'], row['pair']): row['turns_carried'] for row in rows} == tally and tally
+    assert all(row['pair_turns'] == pair_turns[row['pair']] for row in rows)
+    assert set(rows[0]) == {'_id', 'persona', 'section', 'pair', 'day', 'turns_carried', 'pair_turns', 'recall_hits',
+                            'program_score', 'reconstructed'}
+    mine = next(row for row in rows if (row['section'], row['pair']) == (scored, '家里'))
+    assert (mine['program_score'], mine['recall_hits']) == (1, 1) and not any(row['reconstructed'] for row in rows)
+    assert set(spans) == {ref for ref, _ in tally}
     # A turn from before the manifest recorded it is reconstructed from the tiers' moves, and says so.
     store.db.episodes.update_one({'_id': eps[0]['_id']}, {'$unset': {'manifest.carried': ''}})
-    rebuilt = carried.day_counts(store, 'P1', day)
-    assert {(row['section'], row['place'], row['class']): row['turns'] for row in rebuilt} == \
-        {(row['section'], row['place'], row['class']): row['turns'] for row in rows}
-    assert all(row['reconstructed'] for row in rebuilt if (row['place'], row['class']) == HOME)
+    rebuilt, _ = carried.day_counts(store, 'P1', day)
+    assert ({(row['section'], row['pair']): row['turns_carried'] for row in rebuilt}
+            == {(row['section'], row['pair']): row['turns_carried'] for row in rows})
+    assert all(row['reconstructed'] for row in rebuilt if row['pair'] == '家里')
     tomorrow = datetime.now(timezone.utc) + timedelta(days=1)
     store.db.carried_counts.insert_one({'_id': 'count:old', 'persona': 'P1', 'day': (day - timedelta(days=40)).isoformat()})
     done = carried.count_days(store, 'P1', tomorrow)
     assert done['deleted'] == 1 and done['days'] >= 1
     assert store.db.carried_counts.count_documents({'day': day.isoformat()}) == len(rebuilt)
-    assert carried.count_days(store, 'P1', tomorrow)['days'] == 0, 'a day is counted once'
+    assert store.db.carried_days.find_one({'day': day.isoformat()})['rows'] == len(rebuilt), 'the day is recorded'
+    kept = store.db.carried_sections.find_one({'section': scored})
+    assert kept['first_carried_at'] <= kept['last_carried_at']
+    assert carried.count_days(store, 'P1', tomorrow)['days'] == 0, 'a day is counted once, rows or none'
+    carried.count_days(store, 'P1', tomorrow + timedelta(days=60))
+    assert not store.db.carried_counts.find_one({'day': day.isoformat()}), 'the day rows keep 30 days'
+    assert store.db.carried_sections.find_one({'section': scored}), 'first and last stay past them'
+
+
+def test_a_move_from_before_moves_said_who_reads_with_who_from_its_reason(store):
+    from asuna.dbread import Reader
+    store.db.memory_tiers.insert_many([{'_id': 'move:old-her', 'row': 'move', 'reason': 'let_go'},
+                                       {'_id': 'move:old-program', 'row': 'move', 'reason': 'stay'},
+                                       {'_id': 'move:new', 'row': 'move', 'reason': 'stay', 'by': 'program'}])
+    reader = Reader(store.db, store.db.name)
+    rows = {row['_id']: row['by'] for row in reader.find('memory_tiers', {'row': 'move'})['rows']}
+    assert rows == {'move:old-her': 'her', 'move:old-program': 'program', 'move:new': 'program'}
+    assert reader.count('memory_tiers', {'row': 'move', 'by': 'her'})['found'] == 1
+    assert {row['_id'] for row in reader.find('memory_tiers', {'by': 'program'})['rows']} == {'move:old-program',
+                                                                                              'move:new'}
+    assert not store.db.memory_tiers.find_one({'_id': 'move:old-her'}).get('by'), 'old rows are not rewritten'
+
+
+# ---- her install checks ------------------------------------------------------------------
+def test_her_four_install_checks_pass_on_a_build_that_carries_what_it_measures(store, monkeypatch):
+    owner(store)
+    write(store, 'persona', {'op': 'append_section', 'heading': '要放下的', 'visibility': 'public', 'inject': 'always'},
+          'CHECK_LINE', mutation='k1')
+    tiers = Tiers(store, 'P1')
+    tiers.sync()
+    tiers.let_go('persona', sid_of(store, 'persona', '要放下的'))            # one tier/inject difference to say
+    render._CACHE.clear()                                                  # a restart
+    Coordinator(store, FakeLane(store, [FakeTurn([THINK], '嗯。')])).ingest(event('check-1'))
+    ceiling_at(monkeypatch, carried.identity(store, 'P1')[HOME] - 5)      # home over: its refusal says by how much
+    checks = carried.install_checks(store, 'P1')
+    assert {name for name, *_ in checks} == {'system_ref_is_carried', 'refusal_is_carried_number', 'room_line',
+                                             'tier_line'}
+    assert all(passed for _, passed, _ in checks), checks
+    assert next(seen for name, _, seen in checks if name == 'tier_line') == {'differ': 1, 'said': 1}
+    home = next(seen for name, _, seen in checks if name == 'refusal_is_carried_number' and seen['pair'] == '家里')
+    assert home['said'] == 5 == home['expected']
 
 
 def test_the_closed_pilot_s_old_turn_rows_go_and_its_index_stays(store):

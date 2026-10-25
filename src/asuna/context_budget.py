@@ -88,7 +88,7 @@ def _fold(always, limit, order):
     folds last) until the rest fit; a pinned section never folds and still counts. Returns (kept, folded)."""
     from .config import excerpt
     rank = {sid: index for index, sid in enumerate(order)}
-    candidates = sorted((s for s in always if not s.get('pinned')),
+    candidates = sorted((s for s in always if not s.get('pin')),
                         key=lambda s: (rank.get(s['sid'], len(rank)), always.index(s)))
     used, folded = sum(map(_cost, always)), []
     for section in candidates:
@@ -119,9 +119,9 @@ def note_view(sections, limit, order=None):
         about['not_shown'] = [{'sid': s['sid'], 'heading': s.get('heading') or s['sid']}
                               for s in folded[:FOLDED_HEADINGS]]
         about['over_limit'] = FOLD_LINE % len(folded)
-        pins = sum(_cost(s) for s in always if s.get('pinned'))
+        pins = sum(_cost(s) for s in always if s.get('pin'))
         if pins > limit:
-            about['pinned_over'] = PINS_OVER % (pins, limit)
+            about['pins_over'] = PINS_OVER % (pins, limit)
     elif total > limit:
         kept, used = [], 0
         for section in reversed(always):

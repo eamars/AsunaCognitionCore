@@ -217,14 +217,13 @@ def _cut(text, limit):
 
 
 def group_notes(store, persona, scene):
-    """Her notes about this group: the sections her turns there carry, in their order, headings and bodies, the first
-    NOTES_CHARS characters."""
-    from .carried import note_sections
-    from .context_budget import shown
+    """Her notes about this group as her turn there shows them (group_admin.notes_view: carried, folded over the
+    limit), in their order, headings and bodies, the first NOTES_CHARS characters."""
     from .documents import DocumentStore
-    from .group_admin import notes_slug
+    from .group_admin import notes_slug, notes_view
     slug = notes_slug(scene['_id'])
-    sections = shown(note_sections(store, persona, slug, DocumentStore(store, persona).read(slug)[1]))
+    content = DocumentStore(store, persona).read(slug)[1]
+    sections = notes_view(store, persona, slug, content)[0] if content else []
     text = '\n'.join('%s：%s' % (s.get('heading') or s['sid'], ' '.join(str(s.get('body') or '').split())) for s in sections)
     return _cut(text, NOTES_CHARS) if text else None
 

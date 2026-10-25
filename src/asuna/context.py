@@ -486,6 +486,7 @@ class ContextBuilder:
                 else:row.pop('attachment',None)
         own=[]
         brought_up=[]                    # her own items this turn's retrieval brought up (ADR-096)
+        would_surface=[]                 # carried items it would have brought up, had they not been carried
         if self.retrieval:
             try:
                 from .persona_model import effective as _effective
@@ -521,11 +522,11 @@ class ContextBuilder:
                 # ADR-062: two of the six slots for her own items at hand (a recall reaches put-away ones too).
                 try:
                     _private=visibility.owner_private_scope(persona) if session_class==visibility.OWNER_PRIVATE else None
-                    own=memory_tiers.deliver(self.store,persona,self.pilot,self.retrieval,event['text'],
+                    own,would_surface=memory_tiers.deliver(self.store,persona,self.pilot,self.retrieval,event['text'],
                                              {'global-safe',scope,*([_private] if _private else [])},scene['_id'],
                                              recall=recall,excerpt_chars=MEMORY_CHARS)
                 except Exception:
-                    own=[]
+                    own,would_surface=[],[]
                 if own:
                     memories=memories[:memory_tiers.SLOTS-len(own)]
                 brought_up=[item['_id'] for item in own]
@@ -1325,5 +1326,5 @@ class ContextBuilder:
         manifest['carried']=_carried.manifest(carried_here,system_ref['place'],session_class,moment,
             notes=['doc:%s#%s'%(group_admin.notes_slug(scene['_id']),s['sid'])
                    for s in (context.get('group_notes_from_program') or {}).get('sections') or []],
-            brought_up=brought_up)
+            brought_up=brought_up,would_surface=would_surface)
         return system,context,manifest

@@ -13,7 +13,8 @@ description: 我身上每层字（persona／voice 里 inject=always 那些节）
 2. **每一节的数 = 那份渲染去掉这一节少多少。** 不是那一节的字数：同一节在不同场合可以不同，甚至可以等于 0。
    - `visibility` 是 owner_private 的节只在家里和线出现；public 的节哪儿都出现；
    - 打了 `place:` 标签的节只在那个场合出现（`src/asuna/visibility.py:section_places`）。
-3. **预算卡的是几个场合里最大的那份。** `src/asuna/render.py:render_status` 报的就是它。上限是 `render.budget_tokens`：policy 存储 > persona-model 默认 > 核默认 6144（那个 6144 在 `src/asuna/persona_model.py:CORE_DEFAULTS`，优先序在 `src/asuna/persona_model.py:effective`）。这是**预算口径**：它直接读 doc 里的 `inject`；真带出门那份是另一个数，见第六节。
+3. **预算卡的是几个场合里最大的那份。** `src/asuna/render.py:render_status` 报的就是它。上限现在由 `src/asuna/carried.py:limit` 算：基数是 `render.identity_tokens`，优先序 policy 存储 > persona-model 默认 > 核默认（那格 12288 在 `src/asuna/persona_model.py:CORE_DEFAULTS`，优先序在 `src/asuna/persona_model.py:effective`）；再给包里自己种子的渲染留余量——`src/asuna/render.py:SEED_ROOM`＝种子渲染 ×1.25，只有超过基数一半（`src/asuna/carried.py:PERSONA_SHARE`＝0.5）的那一截加到基数上面，整顶再被 `render.max_window_share` × 上下文窗口压住。**现值以脚本现读为准**：`budget_per_place.py` 打的「上限 N」那一行就是它（10-26 实跑打出「上限 12288」）。旧键名 `render.budget_tokens` 已退役（10-26 现读 src 下所有文件 0 命中）。这是**预算口径**：它直接读 doc 里的 `inject`；真带出门那份是另一个数，见第六节。
+   - 来历：6144 是旧上限口径（用到 10-25 前后）；现行程序按 render 那族上限 12288 一把；两份口径并排量、别混（另一把 placed 真带出门口径另列，见第六节）。
 4. **token 怎么估：** 一个中日韩字符算 1，其余按字符数 ÷4 向上取整（`src/asuna/render.py:estimate_tokens`）。所以「多少字」和「多少 token」不是一回事。
 
 ## 二、最值钱的一格（推论）

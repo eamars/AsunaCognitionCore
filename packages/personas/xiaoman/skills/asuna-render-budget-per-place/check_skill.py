@@ -54,8 +54,9 @@ RULES = [
     ("rule_place_class_source", "PLACE_CLASS"),
     ("rule_section_is_delta", "去掉这一节少多少"),
     ("rule_budget_bounds_largest", "最大的那份"),
-    ("rule_limit_key", "render.budget_tokens"),
-    ("rule_limit_value", "核默认 6144"),
+    ("rule_limit_key", "render.identity_tokens"),
+    ("rule_limit_value_current", "12288"),
+    ("rule_limit_provenance_6144", "6144 是旧上限口径"),
     ("rule_limit_precedence", "policy 存储 > persona-model 默认 > 核默认"),
     ("rule_token_estimate", "estimate_tokens"),
     ("rule_token_estimate_rule", "÷4"),
@@ -91,6 +92,10 @@ LEDGER_ANCHOR_SHAPE = ["ANCHOR = (", "形状", "只出现在一个场合的节�
 # 绝对值锚点的旧写法：任何一处（脚本、正文、frontmatter description）再出现就红。description 那一行每一拍进技能目录、被当触发依据读，
 # 所以它与正文同口径一起扫。
 STALE_ABSOLUTE_ANCHOR = ["home≈", "≈733", "733"]
+# 10-26 上限口径更新：旧上限 6144 被当现值写回来（老句子「核默认 6144」回到散文）就红；反引号里的引用不算，与绝对值锚点同一判法。
+# 同一族另一头在 RULES：rule_limit_value_current（12288 必须在）与 rule_limit_provenance_6144（来历那一行必须在）
+# ——现值被抹掉要红，来历被删光也要红，两头都咬，不是空锁。
+STALE_LIMIT_VALUE = ["核默认 6144"]
 DESC_MUST_SAY = ["两种口径", "memory_tiers.placed", "不受 6144 管", "形状"]
 
 # 代码锚点：`文件:名字`。行号每次有人改那个文件就漂，名字不会——所以锚点只准写文件里真有的标识符。
@@ -319,6 +324,10 @@ def main():
                         ("no_absolute_anchor_in_frontmatter", desc)):
         hit = [token for token in STALE_ABSOLUTE_ANCHOR if token in where]
         check(name, not hit, "还写着绝对值锚点：" + "、".join(hit))
+    # 10-26：上限从 render.budget_tokens 6144 换到 render.identity_tokens 12288 一把（carried.py:limit 算），
+    # 旧句子回到散文（当现值用）就红。prose 已剥掉反引号里的引用，同绝对值锚点那一族。
+    stale_limit = [token for token in STALE_LIMIT_VALUE if token in prose]
+    check("no_stale_limit_value", not stale_limit, "6144 又被当现值写了：" + "、".join(stale_limit))
     desc_missing = [token for token in DESC_MUST_SAY if token not in desc]
     check("frontmatter_description_current", not desc_missing,
           "frontmatter description 没写到（那一行每一拍进我的技能目录）：" + "、".join(desc_missing))

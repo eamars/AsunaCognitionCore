@@ -475,10 +475,11 @@ export class CognitionCore {
   }
 
   /** ADR-094 §10.2: a compaction summary of this conversation is sent as its next request would be: that request's
-   * provider and model, its level (else the compaction engine's `summaryReasoningEffort` when the model offers it,
-   * else the model's default level: never none, which a model that thinks by default reads as thinking without a
-   * budget) and its output limit (else the model's own), so its thinking is bounded as its turns' is and the summary
-   * has the room its turns have. Undefined for a session not hers or a route not configured. */
+   * provider and model; its level: the conversation's own (its last request's on that model), else the route's, else
+   * the compaction engine's `summaryReasoningEffort` when the model offers it, else the model's default; and its output
+   * limit (else the model's own), so its thinking is bounded as its turns' is and the summary has the room its turns
+   * have. A route and model that name no level at all leave it unnamed, and the log line says so. Undefined for a
+   * session not hers or a route not configured. */
   async summaryInstance(agent) {
     const lane = this.laneOf(agent);
     if (!lane) return undefined;
@@ -487,8 +488,15 @@ export class CognitionCore {
     const info = await this.ctx.llm.resolveModelInfo(route.provider, route.model);
     const offered = (info?.reasoning?.efforts ?? []).map(effort => effort.id);
     const preset = this.ctx.get('agentPresets')?.serviceFor(agent, 'compaction')?.summaryReasoningEffort;
-    const [level, from] = route.reasoningEffort ? [route.reasoningEffort, "the conversation's"]
-      : offered.includes(preset) ? [preset, "the preset's"] : [info?.reasoning?.defaultEffort, "the model's default"];
+    // A conversation's level is its own, not a stage's: a group's turns run at the group's effort, and no stage is
+    // current at its turn end or its quiet-time /compact. Its last request on the same model carries that level;
+    // after a change of model (a 高 job that fell), the route's level for the model it goes to now.
+    const last = agent.session.requestHeader?.()?.config;
+    const own = last?.provider === route.provider && last?.model === route.model ? last.reasoningEffort : undefined;
+    const [level, from] = own ? [own, "the conversation's"] : route.reasoningEffort ? [route.reasoningEffort, "the route's"]
+      : offered.includes(preset) ? [preset, "the preset's"] : info?.reasoning?.defaultEffort
+        ? [info.reasoning.defaultEffort, "the model's default"]
+        : [undefined, 'the route names none and the model declares no default'];
     const maxTokens = route.maxTokens ?? info?.defaultMaxTokens;
     return { lane, from, provider: route.provider, model: route.model, ...(level ? { reasoningEffort: level } : {}),
       ...(maxTokens ? { maxTokens } : {}) };
@@ -854,7 +862,9 @@ export class CognitionCore {
     // It does not disable the channel. Reopen before DSH's archive gate.
     if (stage.lane === 'character' && this.channelOf(stage.binding.scene_id))
       await this.ctx.workspaceRegistry.unarchiveSession(stage.session_id);
-    if (this.reopen.has(stage.session_id) && this.handles.has(stage.session_id) && this.idle(stage.session_id)) {
+    // Not while its turn-end compaction runs: a stage of one of its tasks reaches here without waiting for it (begin).
+    if (this.reopen.has(stage.session_id) && this.handles.has(stage.session_id) && this.idle(stage.session_id)
+      && !this.turnEnds.running.has(stage.session_id)) {
       this.reopen.delete(stage.session_id);
       const stale = this.handles.get(stage.session_id);
       this.handles.delete(stage.session_id);

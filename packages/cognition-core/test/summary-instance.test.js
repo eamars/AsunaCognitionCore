@@ -35,7 +35,7 @@ test('an action job\'s summary goes where its next request goes: 高 while on �
   assert.deepEqual(await core.summaryInstance(job), { lane: 'executor', from: "the conversation's", provider: 'cloud',
     model: 'hosted', reasoningEffort: 'medium', maxTokens: 128000 }, '高: its own level, the model\'s own limit');
   core.state('act').fell = true;                              // the job fell to 低; its last header still names 高
-  assert.deepEqual(await core.summaryInstance(job), { lane: 'executor', from: "the conversation's", provider: 'local-a',
+  assert.deepEqual(await core.summaryInstance(job), { lane: 'executor', from: "the route's", provider: 'local-a',
     model: 'local', reasoningEffort: 'high', maxTokens: 32768 }, 'never the model it fell from, nor that model\'s level');
   core.state('act').fell = false;
   core.highRest = { reason: 'rate limit', until: new Date(Date.now() + 60_000).toISOString() };
@@ -115,4 +115,53 @@ test('her conversation\'s own engine asks the Host too: the instance\'s level, a
   await engine.summarize({ messages: [{ role: 'user', content: [{ type: 'text', text: '在吗' }] }] }, agent);
   assert.deepEqual([sent.provider, sent.model, sent.reasoningEffort, sent.maxTokens], ['local-c', 'local', 'high', 32768]);
   assert.match(logged.at(-1), /thinks at "high" \(the conversation's\), output limit 32768, on local-c\/local \(character\) in s$/);
+});
+
+test('a group conversation\'s summary at its turn end or quiet-time /compact (no stage current) keeps the group\'s own level', async () => {
+  const { core } = host();
+  core.efforts = { group: 'medium' };
+  const group = agentOf('g', 'asuna-p', { provider: 'local-c', model: 'local', reasoningEffort: 'medium' });
+  assert.equal(core.states.get('g')?.current, undefined, 'as at a turn end: ownIdle holds only with no stage');
+  assert.deepEqual([(await core.summaryInstance(group)).reasoningEffort, (await core.summaryInstance(group)).from],
+    ['medium', "the conversation's"], 'its last request\'s level on the same model, not the route\'s high');
+  const first = agentOf('n', 'asuna-p');                      // no request yet: the route's
+  assert.equal((await core.summaryInstance(first)).reasoningEffort, 'high');
+  const none = host({ routes: { action: { provider: 'local-a', model: 'local', maxTokens: 32768 } } });
+  none.core.ctx.llm.resolveModelInfo = async () => ({ reasoning: { efforts: [{ id: 'high' }] }, defaultMaxTokens: 32768 });
+  const job = await none.core.summaryInstance(agentOf('a', 'asuna-action'));
+  assert.deepEqual([job.reasoningEffort, job.from], [undefined, 'the route names none and the model declares no default'],
+    'said as it is, not as a model that offers no level');
+});
+
+test('the real summaryInstance through the listener: a group\'s summary from DSH\'s own engine goes at the group\'s level', async () => {
+  const { core } = host();
+  core.efforts = { group: 'medium' };
+  const group = agentOf('g', 'asuna-p', { provider: 'local-c', model: 'local', reasoningEffort: 'medium' });
+  let listener;
+  const sent = [];
+  core.ctx.on = (name, fn) => { listener = fn; };
+  core.ctx.agents = { get: id => (id === 'g' ? group : undefined) };
+  core.ctx.logger = { info: () => {} };
+  core.ctx.llm.stream = async function* (options) { sent.push(options); yield { type: 'finish', reason: { kind: 'stop' } }; };
+  summaryAsNextRequest(core);
+  const request = { provider: 'local-c', model: 'local', maxTokens: 8192, sessionId: 'g', purpose: 'compaction' };
+  for await (const chunk of listener(request, () => assert.fail('a summary with the preset cap and no level is sent again'))) {
+    assert.equal(chunk.type, 'finish');
+  }
+  assert.deepEqual([sent[0].reasoningEffort, sent[0].maxTokens], ['medium', 32768]);
+});
+
+test('an Apply reopen waits while the conversation\'s turn-end compaction runs, also for a stage of one of its tasks', async () => {
+  const { core } = host();
+  const live = new Map();
+  core.ctx.agents = { get: id => live.get(id) };
+  core.ctx.workspaceRegistry = { unarchiveSession: async () => {} };
+  core.channelOf = () => undefined;
+  const role = { id: 'role', session: { id: 'role', header: {}, snapshotEvents: () => [] } };
+  live.set('role', role);
+  core.handles.set('role', { agent: role, dispose: async () => assert.fail('closed in the middle of its compaction') });
+  core.reopen.add('role');
+  core.turnEnds.running.set('role', { done: new Promise(() => {}) });
+  assert.equal(await core.openAgent({ session_id: 'role', lane: 'character', binding: { scene_id: 'x', cwd: '.' } }), role);
+  assert.equal(core.reopen.has('role'), true, 'reopened at a later turn instead');
 });

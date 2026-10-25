@@ -408,6 +408,26 @@ owner's), and a 高 job whose conversation outgrows 低's window cannot fall mid
 rule, not this one). Tests: `packages/cognition-core/test/summary-instance.test.js` (a job on 高, after a fall, with 高
 resting; a group stage's level; the level fallbacks; the listener's resend and pass-through; her engine asking the Host).
 
+**Independent review before merge (2026-10-25, a Fable 5.1 reviewer, read-only, briefed with the code and these
+rules, not Claude's conclusions).** It confirmed claims 1, 2 and 4 with evidence (no gap between `running.set` and DSH
+maintenance; a message during maintenance is latched; the commit checks only its span; the listener cannot loop or
+double a request) and found three defects, all fixed before merge:
+
+1. **The 10-20 mistake again, for groups.** The level came from the current stage, and a group's effort exists only on
+   a stage; at a turn end and at the quiet-time `/compact` no stage is current, so every group summary would have gone
+   at the route's `high` while the group's turns run at `medium` (49 of the live Host's 130 summary lines are
+   `"medium"`). The test had invented a current stage that never exists then. Fixed at the root: a conversation's level
+   is its own, carried by its last request on the same model; only after a change of model (a fall) does the route's
+   level of the new model apply.
+2. **An Apply reopen could close a conversation mid-compaction** through a stage of one of its tasks, which does not
+   pass `begin`; fix 1 had widened that window. Fixed: no reopen while its turn-end compaction runs (`openAgent`).
+3. **"Never none" was not guaranteed** (the local provider declares no default level) and the log line named the wrong
+   reason; the span-alone line printed the old cap. Fixed: the line says the route names none and the model declares no
+   default; the cap printed is the one used. The dead "her turn came first" branch went with `preempt`.
+
+New tests for each (no stage at a group's turn end, the real `summaryInstance` through the listener, the reopen held);
+each fails on the reviewed commit and passes now. Suite: 210, 207 pass, 3 skipped.
+
 ## Carried from ADR-085 (archived, git 0fd844ad): automatic compactions, the template, her signature
 
 Copied as written; her signed sentences are hers word for word.

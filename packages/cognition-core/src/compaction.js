@@ -139,7 +139,7 @@ export class TurnEnds {
   constructor(ctx, deadline = TURN_END_DEADLINE_MS) {
     this.ctx = ctx;
     this.deadline = deadline;
-    /** Session id → its running turn-end compaction: { abort (AbortController), done (settles when it ends) }. */
+    /** Session id → its running turn-end compaction: { done (settles when it ends) }. */
     this.running = new Map();
     /** Session id → how many of her stages are being started there. */
     this.starting = new Map();
@@ -171,13 +171,14 @@ export class TurnEnds {
   async run({ agent, engine, meter, idle }) {
     const id = agent.session.id;
     if (this.off || this.broken.has(agent)) return undefined;
-    const own = new AbortController();
     const done = await compactAtTurnEnd({ lane: 'character', agent, meter, engine,
       idle: () => idle() && !this.starting.has(id),
       compact: () => {
-        const done = engine.compactTurnEnd(agent, AbortSignal.any([own.signal, AbortSignal.timeout(this.deadline)]))
-          .finally(() => { if (this.running.get(id)?.abort === own) this.running.delete(id); });
-        this.running.set(id, { abort: own, done: done.then(() => undefined, () => undefined) });
+        const entry = {};
+        const done = engine.compactTurnEnd(agent, AbortSignal.timeout(this.deadline))
+          .finally(() => { if (this.running.get(id) === entry) this.running.delete(id); });
+        entry.done = done.then(() => undefined, () => undefined);
+        this.running.set(id, entry);
         return done;
       } });
     const logger = this.ctx.logger;
@@ -192,7 +193,7 @@ export class TurnEnds {
     const result = done.result ?? {};
     if (done.skipped) logger.info(head + 'busy, left for the next turn end');
     else if (result.code === 'aborted') logger.info(head + 'stopped, ' + (result.compacted ? 'after it was written' : 'nothing changed')
-      + ' (' + (own.signal.aborted ? own.signal.reason.message : 'over its ' + this.deadline / 1000 + ' s deadline') + ')');
+      + ' (over its ' + this.deadline / 1000 + ' s deadline)');
     else if (result.code === 'commit') {
       this.broken.add(agent);
       logger.warn(head + 'did not commit cleanly; none here until the conversation is opened again (' + result.reason + ')');
@@ -273,7 +274,7 @@ function finishError(finish) {
  * that came from, its output limit and its model, so a reading of compactions can tell them apart. */
 function summaryLine(logger, agent, instance) {
   logger?.info?.('Asuna compaction: summary request thinks at ' + (instance.reasoningEffort
-    ? '"' + instance.reasoningEffort + '" (' + instance.from + ')' : 'no named level (the model offers none)')
+    ? '"' + instance.reasoningEffort + '" (' + instance.from + ')' : 'no named level (' + instance.from + ')')
     + ', output limit ' + (instance.maxTokens ?? "the model's own") + ', on ' + instance.provider + '/' + instance.model
     + ' (' + instance.lane + ') in ' + agent.session.id);
 }
@@ -359,8 +360,8 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
       : await this.wholeConversation(input, agent, target, signal, cap);
     if (whole?.messages) {
       try { return await once(whole.messages, whole.tail); }
-      catch (error) { if (!overflowed(error)) throw error; this.spanAlone(agent, 'refused for the window', whole); }
-    } else if (whole) this.spanAlone(agent, whole.reason, whole);
+      catch (error) { if (!overflowed(error)) throw error; this.spanAlone(agent, 'refused for the window', whole, cap); }
+    } else if (whole) this.spanAlone(agent, whole.reason, whole, cap);
     const [head, body] = input.messages[0]?.role === 'system'
       ? [input.messages.slice(0, 1), input.messages.slice(1)] : [[], input.messages];
     return inSteps(head, body, messages => once(messages));
@@ -440,9 +441,9 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
 
   /** One log line each time the summary request falls back to the replayed span alone, with the sizes it judged by,
    * so a reading of compactions can tell the two shapes apart. */
-  spanAlone(agent, reason, { tokens, window }) {
+  spanAlone(agent, reason, { tokens, window }, cap = this.config.maxTokens) {
     this.ctx.logger?.info?.('Asuna compaction: summary request sends the compacted span alone (' + reason + (tokens
-      ? '; conversation ~' + tokens + ' tokens, summary cap ' + this.config.maxTokens + ', window ' + window : '')
+      ? '; conversation ~' + tokens + ' tokens, summary cap ' + cap + ', window ' + window : '')
       + ') in ' + agent.session.id);
   }
 

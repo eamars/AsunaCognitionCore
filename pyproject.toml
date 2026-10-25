@@ -23,6 +23,7 @@ dependencies = [
     "sherpa-onnx==1.13.8",     # transcribes a voice message on this machine (voice.py)
     "sherpa-onnx-core==1.13.8", # its native libraries; named here because one of its wheels (the lock reads that one) omits it
     "numpy==2.5.3",            # the samples sherpa-onnx takes
+    "jieba==0.42.1",           # cuts Chinese into words for the keys that bring her notes back (key_words.py)
 ]
 
 [project.scripts]

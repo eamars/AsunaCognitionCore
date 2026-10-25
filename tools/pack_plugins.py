@@ -41,7 +41,7 @@ def prepare_resources(destination: Path) -> list:
 
 
 WORKER_DEPENDENCIES = ['httpx', 'pymongo', 'jsonschema', 'pydantic', 'PyYAML', 'tzdata', 'websockets', 'pillow', 'paramiko', 'av', 'zstandard',
-                       'sherpa-onnx', 'sherpa-onnx-core', 'numpy']
+                       'sherpa-onnx', 'sherpa-onnx-core', 'numpy', 'jieba']
 
 
 def pinned_requirements(roots):

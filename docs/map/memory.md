@@ -32,7 +32,7 @@ Index persisted local dialogue off the generation thread; restart scans pending 
 
 The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
 
-- def `own_items` — Her items as the pilot indexes them: [{key, store, doc, sid, scope_key, visibility, inject, text, lexical}].
+- def `own_items` — Her items as the pilot indexes them: [{key, store, doc, sid, scope_key, visibility, inject, text, heading, tags, lexical}].
 - def `prune` — Delete the pilot's turn rows (and recall and failure rows) older than `days`; items and pairs stay.
 - def `attach` — Start the item index for a context builder that retrieves: the Pilot, else None.
 - def `rank` — Her items the way retrieval ranks memories: vector and lexical ranks fused (terms common to over half of the items say nothing).
@@ -72,6 +72,10 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
   - `fold_order` — The order a group's notes fold in over their per-turn limit: the section that surfaced longest ago first.
   - `refold` — Recompute and keep a group's fold order (on her write and at settlement, not every turn, so the block is not re-sent for it).
   - `folding` — The kept fold order of a group's notes, made once when there is none.
+  - `place_lines` — The place's recent lines that decide what is rare there: its newest inbound lines of the last key_words.WINDOW_DAYS days, at most key_words.WINDOW_LINES.
+  - `rerate` — Count a place's common words again and keep them.
+  - `rarity` — A place's kept common words, counted once when there are none.
+  - `rerate_all` — At settlement: every place with lines in the window counted again; a place with none keeps no row.
   - `let_go` — Her let_go: the item one place down now (a put-away item stays where it is).
   - `used` — Her use of items by `doc:slug#sid` refs: recall returned them, or she cited them in a tool call.
   - `surfaced` — Items a turn surfaced: memorable only when a second, different conversation brings one up.
@@ -89,10 +93,31 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 - def `week` — Her weekly reading of her memory (her answer, 2026-10-13), in a self-evaluation turn, at most once a week: what left 随身 this week and whether she recalled it afterwards, one put-away item's own text (chosen by the week), and one line of wha
 - def `detail` — The verbatim a gist stands for (its revision before the gist), or None.
 - def `placed` — A document's sections as the turn reads them when the switch is on; unchanged when it is off.
-- def `deliver` — Her own items a turn brings up by itself (手边; a recall also reaches 收着), scored as memories are, at most OWN_SLOTS above FLOOR, as memory entries with their store, place and age words and a doc ref.
-- def `headings` — recall: the headings of her items at hand or put away that match the question, beyond the bodies it returns.
+- def `deliver` — Her own items a turn brings up by itself (手边; a recall also reaches 收着): an item whose key the message has (key_words.py), or one scored above FLOOR as memories are; at most OWN_SLOTS in fused order, as memory entries with their store, plac
+- def `key_said` — The first of an item's keys the text has, as the text spells it, or None.
+- def `headings` — recall: the headings of her items at hand or put away whose key the question has (the keys a turn's message brings an item back by), beyond the bodies it returns, each with the word that matched.
 - def `doc_headings` — recall with a doc and no sid: that document's headings, each with its place; the latest that fit `limit` characters, after a first entry naming how many earlier ones are left out.
 - def `refs_in` — The `doc:slug#sid` refs anywhere in a tool call's arguments.
+
+## `key_words`
+
+[src/asuna/key_words.py](../../src/asuna/key_words.py)
+
+The words that bring her items back by themselves (ADR-097): keys, a place's common words, and the segmenter.
+
+- def `segmenter` — jieba, loaded once (its dictionary takes a fraction of a second), quiet.
+- def `words` — A text as words, in order: Chinese runs cut by the segmenter, ASCII runs whole and lower-cased.
+- def `heading_words` — The words of a heading that can be keys: two characters or more, each once, in order.
+- def `everyday` — A Chinese word the segmenter's dictionary rates as everyday; ASCII runs never are.
+- def `keys` — An item's keys in a place whose common atoms are `table`: its rare tags, then its rare, not everyday heading words.
+- def `tag_keys` — Her tags that are keys: free tags of two characters or more (a `place:` tag and the correction mark are not).
+- def `atoms` — What a line is counted by: its ASCII runs and its Chinese substrings of GRAMS lengths.
+- def `limit` — How many of the lines a rare word may be in.
+- def `common` — The atoms more of these lines contain than a rare word may be in, sorted: the place's table.
+- def `rare` — Whether a word is rare in a place whose common atoms are `table` (a set).
+- def `found` — The key as the text has it (its own spelling), or None.
+- def `lines_with` — How many of the lines contain the key.
+- def `tag_here` — A tag's line in words: how often this place's recent lines say it, and whether it brings the section back.
 
 ## `retrieval`
 

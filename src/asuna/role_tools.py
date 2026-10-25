@@ -169,6 +169,7 @@ TOOLS = {
     'recall': {
         'description': ('回想：按一句话搜你的记忆（query）；或读文档里某一节的原文（sections，照抄 doc 和 section）'
                          '，合并转发的全文也这样读（doc 写 forward，section 照抄那行里的 ref）。每回合最多 %d 次。'
+                         '找一个词，query 只写那个词就够。'
                          '对话里说过的话用它想起来；记不起来就照实说，不编。在家里还会带上你在群里那时的心里话。'
                          '回想一个人用 person：读你对他两层理解的全文。' % RECALLS_PER_TURN),
         'parameters': {'query': _s(limit=500, description='想找什么，用一句话说；只读 sections 或 person 时可省略'),
@@ -1574,7 +1575,7 @@ class RoleTools:
                                                              if self._cls(ep) == visibility.OWNER_PRIVATE else [])}
             shown = {m.get('_id') for m in result['memories']}
             found = memory_tiers.headings(self.store, ep['persona'], c.context.pilot, query, readable, self._cls(ep),
-                                          shown) if query else []
+                                          where['scene_id'], shown) if query else []
             if found:
                 result['headings'] = found
             result['searched'] = memory_tiers.SEARCHED
@@ -2194,6 +2195,9 @@ class RoleTools:
                 result['place'] = memory_tiers.NOT_BACK % placed['place']
             if kept_away:
                 result['place'] = kept_away
+            pilot = getattr(self.coordinator.context, 'pilot', None)
+            if pilot is not None:
+                pilot.synced_at = 0.0            # her item index reads the new heading and tags at its next turn
         if item['op'] in ('append_section', 'correction') and sections:
             result['sid'] = sections[-1]['sid']          # the new section's sid, for a later replace or set_tags
         written = next((s for s in sections if s['sid'] == result['sid']), None) if result['sid'] else None
@@ -2202,6 +2206,12 @@ class RoleTools:
             result['now'] = {'visibility': written['visibility'], 'inject': written['inject'], 'tags': written.get('tags') or [],
                              'places': visibility.section_places(written) or '到处都带'}
             self._carried_lines(ep, slug, written, result)
+            from . import key_words
+            tags = key_words.tag_keys(item.get('tags')) if memory_tiers.ENABLED else []
+            if tags:
+                # ADR-097: a tag brings the section back where it is said; how often it is said here.
+                lines = memory_tiers.Tiers(self.store, ep['persona']).place_lines(ep['scene_id'])
+                result['tags_here'] = [key_words.tag_here(tag, lines) for tag in tags]
             if 'pin' in item:
                 from .context_budget import NOTE_CHARS, PIN_NOTE, UNPIN_NOTE
                 result['pin'] = (PIN_NOTE % (NOTE_CHARS['group_notes'], memory_tiers.CAPS['group_notes'])

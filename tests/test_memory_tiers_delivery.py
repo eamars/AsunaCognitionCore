@@ -136,8 +136,7 @@ def test_a_recall_says_where_it_searched_and_reaches_what_is_put_away(setup):
     assert tiers.item('persona', sids['mountain'])['uses'] == 1, 'a recall that returns an item is a use'
     words = recall_turn(store, builder, {'query': '红叶'})
     assert not [m for m in words['memories'] if m.get('kind') == 'own_item'], 'the question is not about it'
-    assert [h['ref'] for h in words['headings']] == ['doc:persona#' + sids['mountain']], 'but a word of it matches'
-    assert words['headings'][0]['place'] == PUT_AWAY
+    assert 'headings' not in words, 'a word of its body is not a key (ADR-097): headings list by keys only'
 
 
 def test_an_empty_recall_says_all_three_places_and_a_doc_without_sid_lists_its_headings(setup):

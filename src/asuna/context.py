@@ -1293,6 +1293,8 @@ class ContextBuilder:
                 _folds=memory_tiers.Tiers(self.store,persona)
                 for _slug in docs.slugs('group:'):
                     _folds.refold(_slug,docs.read(_slug)[1],moment)
+                # ADR-097: each place's common words, which decide which words are rare there, counted again.
+                _folds.rerate_all(moment)
                 # ADR-062: the night list replaces the notes review (no tidy-three framing, no keep or drop).
                 listed=memory_tiers.night_list(self.store,persona,moment)
                 if listed:

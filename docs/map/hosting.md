@@ -32,7 +32,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `earlier_sessions` — This session and every session it continued from (their successors lead to it).
   - `carry_session` — Her conversation no longer fits the model's window (ADR-028): the scene continues in a new session that carries the old one's last summary, and the old binding names it as successor.
   - `action_session_id` — One native context per authorized execution binding, including old logs.
-  - `audit_retention` — ADR-074: the audit, bounded by time and by size, is pruned once at start and then daily; stored pictures are swept by their life cycle (media_life) on the same beat.
+  - `audit_retention` — ADR-074: the audit, bounded by time and by size, is pruned once at start and then daily; stored pictures are swept by their life cycle (media_life) on the same beat, the days she carried are counted (carried.count_days) and the shadow pilot
   - `watch_host`
   - `resolve_role_session` — Bind trusted, normalized ingress; old transcripts stay read-only.
   - `carried` — Whether a turn that follows another (a task's, a plan's) continues that turn's session: only a conversation of its own place.

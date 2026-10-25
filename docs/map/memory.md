@@ -30,9 +30,10 @@ Index persisted local dialogue off the generation thread; restart scans pending 
 
 [src/asuna/memory_pilot.py](../../src/asuna/memory_pilot.py)
 
-The shadow pilot of tiered memory (ADR-062 phase 1): which of her own items a turn would surface, measured only.
+The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
 
 - def `own_items` — Her items as the pilot indexes them: [{key, store, doc, sid, scope_key, visibility, inject, text, lexical}].
+- def `prune` — Delete the pilot's turn rows (and recall and failure rows) older than `days`; items and pairs stay.
 - def `attach` — Start the item index for a context builder that retrieves: the Pilot, else None.
 - def `rank` — Her items the way retrieval ranks memories: vector and lexical ranks fused (terms common to over half of the items say nothing).
 - def `admitted` — Of candidates in fused order [(key, score)], the ones a turn would surface: at most `slots`, each at the floor.
@@ -50,6 +51,7 @@ The shadow pilot of tiered memory (ADR-062 phase 1): which of her own items a tu
 
 Tiered memory (ADR-062): where each of her items lives, kept up by what is memorable, moved down by the program.
 
+- def `told_text`
 - def `words`
 - def `age_word`
 - def `store_of` — Which store a document is, or None when it is not tiered (her working documents).
@@ -64,7 +66,11 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
   - `tick` — Lapses whose stay ran out and memories cooled by disuse; facts never cool.
   - `memorable` — A memorable moment: the stay starts again from now and, once per stay, the next one doubles.
   - `overflows` — The stores over their cap that this turn reads: shown once each, for her to choose; one already shown in an earlier turn lapses by the program's rule first (so a cap is over for one turn at most).
-  - `written` — After one of her document writes: a new item starts carried (a running record's at hand), a rewrite that changed an item starts its stay again from carried, a correction supersedes the item it corrects.
+  - `placement_after` — Where a write leaves each section it moves, {sid: [(place, reason), ...]} in order, the last one the place it ends in: the one rule for the write (written) and for the gate that measures it first (carried.gate).
+  - `written` — After one of her document writes, the moves placement_after gives, made: a new item starts carried (a running record's at hand), a rewrite that changed an item starts its stay again from carried, a correction supersedes the item it corrects
+  - `fold_order` — The order a group's notes fold in over their per-turn limit: the section that surfaced longest ago first.
+  - `refold` — Recompute and keep a group's fold order (on her write and at settlement, not every turn, so the block is not re-sent for it).
+  - `folding` — The kept fold order of a group's notes, made once when there is none.
   - `let_go` — Her let_go: the item one place down now (a put-away item stays where it is).
   - `used` — Her use of items by `doc:slug#sid` refs: recall returned them, or she cited them in a tool call.
   - `surfaced` — Items a turn surfaced: memorable only when a second, different conversation brings one up.

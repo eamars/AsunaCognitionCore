@@ -24,7 +24,8 @@ Every turn has a **class**, decided by the program from the conversation and the
     owner-private scope (`retrieval.Retrieval.search`). A linked conversation adds its scope but never raises the
     class (`scene_links`).
   - Documents and persona sections are filtered the same way (`visibility.readable`, `render.readable_sections`), and
-    a section tagged with places renders only there.
+    a section tagged with places renders only there. What each (place, class) pair carries of her persona, voice,
+    `self` and `core` is one function's (`carried.carried`), with its own identity budget (`carried.gate`).
   - `context.ContextBuilder` adds the home-only blocks only in owner_private turns: her mood's reasons, her questions,
     her places, errands and credentials.
 - **What she can do follows the place.** Each conversation lists its tools by place (`role_tools.toolbox`): her
@@ -100,7 +101,8 @@ no platform. Decided in ADR-005, ADR-016 and ADR-093 (voices); the adapter's own
 
 1. **Episode.** An input becomes an episode (`ingress`), and `coordinator.Coordinator` runs one turn per episode.
 2. **Context.** `context.ContextBuilder` assembles what she reads: memories, people, mood, tasks, places, notes, all
-   as words. `render.render_system` renders the system prompt (core prompts plus her persona's every-turn sections).
+   as words. `render.render_system` renders the system prompt (core prompts plus her persona's carried sections,
+   `carried.carried`).
 3. **The turn.** It is a native DSH turn in the conversation's role session. She calls `think` first, then any tools
    (`role_tools`), and each text she writes is what she says.
 4. **Checks.** Her words pass the end-of-turn checks (`answers.speech_problem`, stickers, labels); a failed check is
@@ -149,6 +151,8 @@ Decided in ADR-011.
   `recall` more herself.
 - **Keeping.** At night she promotes what is worth keeping long term (`promote_memory`). Her own documents (persona,
   voice, notes) live in `documents`, and her understanding of people in `understanding`.
+- **Carried.** Each of her sections has a tier (`memory_tiers.Tiers`); what a turn carries follows it
+  (`carried.carried`), and what was carried is counted per day (`carried.count_days`).
 
 ### How do her plans, heartbeats and nights happen?
 
@@ -235,6 +239,7 @@ From an input to her words: queueing, context, her tools, the checks, publishing
 - [`context_budget`](../../src/asuna/context_budget.py) — What a turn may carry on its own, and how her own notes stay short (owner 2026-10-06, ADR-014).
 - [`block_guide`](../../src/asuna/block_guide.py) — What her turns' blocks are for, said once in her role system prompt (ADR-056 rule 1).
 - [`render`](../../src/asuna/render.py) — Role system prompt rendering (ADR-009 §8.1).
+- [`carried`](../../src/asuna/carried.py) — What she carries: one function says it for every reader (ADR-096).
 - [`role_tools`](../../src/asuna/role_tools.py) — Her mind's tools: what the character brain may do in one native turn (ADR-011 §3, §5.1).
 - [`param_names`](../../src/asuna/param_names.py) — ADR-060: one name per idea in what a tool shows, and the old names still working for a while.
 - [`tool_args`](../../src/asuna/tool_args.py) — What she plainly meant, before a tool checks its arguments (owner 2026-10-06).
@@ -282,7 +287,7 @@ What she remembers, how it is recalled, her documents, mood and blobs.
 
 - [`memory`](../../src/asuna/memory.py) — Her written memory: `commit_understanding` saves the understanding of a person she writes in a turn, `chunk` cuts chat lines into memory units for recall, and `rollback` is the operator's audited undo.
 - [`memory_indexer`](../../src/asuna/memory_indexer.py) — Index persisted local dialogue off the generation thread; restart scans pending work.
-- [`memory_pilot`](../../src/asuna/memory_pilot.py) — The shadow pilot of tiered memory (ADR-062 phase 1): which of her own items a turn would surface, measured only.
+- [`memory_pilot`](../../src/asuna/memory_pilot.py) — The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
 - [`memory_tiers`](../../src/asuna/memory_tiers.py) — Tiered memory (ADR-062): where each of her items lives, kept up by what is memorable, moved down by the program.
 - [`retrieval`](../../src/asuna/retrieval.py) — Local embeddings and server-side, prefiltered Mongo vector retrieval.
 - [`history_query`](../../src/asuna/history_query.py) — 查宿主保存的授权消息（P1-b）：字面检索覆盖完整 messages，原文整条回读。

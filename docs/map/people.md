@@ -17,7 +17,7 @@ The relevance gate (owner direction 2026-10-04): may she let a group message pas
 - def `recent` — (lines as she reads them, words for how long since she spoke here and how much came since).
 - def `material` — Everything the gate reads, in words.
 - def `system` — Shared rules, then who she is: her core sentences (public), not her persona's rules for talking; small, so a cold read is cheap (owner 2026-10-14: the gate only answers whether to join, she judges in her turn).
-- def `group_notes` — Her notes about this group: the always-shown sections in their order, headings and bodies, the first NOTES_CHARS characters.
+- def `group_notes` — Her notes about this group: the sections her turns there carry, in their order, headings and bodies, the first NOTES_CHARS characters.
 - def `speaker_understanding` — Her lines about the speaker (ADR-082): the person layer's short, then this group's, each the body while it has no short; cut at UNDERSTANDING_CHARS.
 - def `instruction`
 - def `check` — The verdict of an answer whose first line starts with 接话 or 不理; anything else is a mistake the gate tells back to her (answers.py).
@@ -63,7 +63,7 @@ The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls
 - def `table` — (period, weights) for now: asleep inside her declared sleep window, awake otherwise.
 - def `weights_for`
 - def `roll` — The outcome for this beat: the occurrence seeds it, so the same beat always rolls the same.
-- def `line` — The one line her heartbeat opens with; `homes` names her lines for a reach_out.
+- def `line` — The one line her heartbeat opens with; `homes` names her lines for a reach_out, `model` (the persona model) words the idle beat.
 - def `waiting` — Whether a 'nothing' beat would lose something only a heartbeat shows (her rule: lost wakes her, late does not).
 - def `losses` — What a 'nothing' beat would lose, by kind, so the roll's record says why it still reached her: {'waiting_groups': n} for groups where someone she waits for would drop off her list, {'asides_full': True}.
 - def `review` — dice_review_from_program: every roll since her last review (not this one), with what each beat did.
@@ -74,6 +74,7 @@ The heartbeat's die (ADR-058): before a heartbeat reaches her, the program rolls
 
 self_review_from_program (ADR-058): her own day in raw readings, for a heartbeat that rolled self evaluation.
 
+- def `exchanges_note` — The note on her exchanges: the persona model's `self_review.exchanges_note` (a persona words it; the core default is neutral).
 - def `block`
 - def `exchanges` — Her lines since this was last shown (at most WINDOW_DAYS), each beside the thought she wrote in that turn and what followed it; records the showing.
 - def `cared` — Her sections tagged `tag` in her self documents: headings with the day each was last written, or whole when `whole`; None when she has none (no line stands in for it).
@@ -178,6 +179,8 @@ Group administration where she is an admin (owner direction 2026-10-04: on by de
 - def `place` — Her place in this group, in words, and what she may do there; None outside groups.
 - def `queue` — Check one group_action and put it in the outbox; returns the result she reads.
 - def `notes_slug`
+- def `notes_view` — (sections shown, words about the note) of a group's notes this turn: the carried sections (carried.py), within the per-turn limit; over it, the section that surfaced longest ago folds to its heading first (the kept order, memory_tiers.Tiers
+- def `folded` — The sids of a group's notes folded to their headings this turn (at hand for memory_tiers.deliver).
 - def `notes_block` — Her own notes about this group (who is who, its customs, how she acts here), as a context block, within its per-turn limit (context_budget.py): how full it is in words, and the sections it does not show by heading.
 - def `claim` — One queued action for this channel's adapter, or None; it is marked SENDING with a fresh attempt.
 - def `receipt`

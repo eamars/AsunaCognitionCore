@@ -79,7 +79,7 @@ What a turn may carry on its own, and how her own notes stay short (owner 2026-1
 - def `note_chars`
 - def `note_view` — (sections to show, words about the note).
 - def `note_limit`
-- def `note_gate` — Refuse growth of a note already far over its limit (DocumentStore.apply's budget hook).
+- def `note_gate` — Refuse growth of a note already far over its limit (DocumentStore.apply's budget hook, through carried.gate, which passes both as her turns carry them).
 - def `trim_turn` — Drop the oldest list rows (TRIM_ORDER) until the turn fits; say what was left out.
 - def `ceiling` — The ceiling as the Host applies it to the notice it composes (context-delivery.js trimTurn): what is sent, not what is prepared, so a block she still sees never pushes another one's text under the knife.
 - def `carried_block` — What the first notice of a session that replaced one that no longer fit the model's window says (ADR-028).
@@ -105,19 +105,49 @@ Role system prompt rendering (ADR-009 §8.1).
 - def `readable_sections` — Sections of a document visible to a session class, public before owner-private.
 - def `compose`
 - def `role_text` — Her role system prompt: the persona render, then how a turn goes and what its blocks are (block_guide.py, ADR-056).
-- def `largest` — (estimated tokens, text) of the largest render over the places: the one the budget bounds.
+- def `largest` — (estimated tokens, text) of the largest render over the places of raw documents, as written: what seed_estimate measures of a package's own seeds.
 - def `model_and_policy`
 - def `estimate_tokens` — Tokenizer-free upper estimate: one token per CJK character, DSH's characters/4 for everything else.
 - def `seed_estimate` — Estimated tokens of the owner-private render the installed package's own persona and voice seeds make, or None when the package declares neither.
-- def `budget_limit` — The larger of render.budget_tokens and the package's seeds with room to grow, never above the character context window × render.max_window_share; None when nothing bounds it.
+- def `budget_limit` — Each (place, class) pair's identity ceiling (carried.limit): render.identity_tokens, plus room for a package's own seeds, never above the character context window × render.max_window_share; None when nothing bounds it.
 - def `render_system` — Render the current role system prompt for a session class and place, and whether its conversation speaks only through speak; returns (text, system_ref).
-- def `render_status` — The largest render over the places against the budget, for the settings card and memory tab.
-- def `report_budget`
-- def `budget_gate` — For DocumentStore.apply: refuse a persona/voice change that grows an over-budget render, and growth of a note already far over its limit (context_budget.note_gate).
-- def `over_budget_words` — By how much a write overshoots, in which place's render, and the largest always-injected sections there she could tuck away or trim (a section pinned to another place is not in that render, so tucking it frees nothing).
-- def `system_for` — Re-render the system prompt an episode fixed at preparation time.
+- def `render_status` — Each pair's identity layer against its limit, for the settings card and memory tab: the largest one's estimate, whether any pair is over, and every pair's size.
+- def `report_budget` — Audit, once for each state of it, a pair whose identity layer is over its limit.
+- def `budget_gate` — For DocumentStore.apply, adopt_seed and promote_memory: refuse a write that grows her identity layer in a pair over its limit, and growth of a note already far over its own (carried.gate).
+- def `over_budget_words` — By how much a write overshoots, in which pair, with that pair's own numbers before and after, and the largest carried sections there she could let go or trim (carried.over_words).
+- def `system_for` — Re-render the system prompt an episode fixed at preparation time: the sections its ref recorded as carried, from the revisions it names.
 - def `episode_system` — Stage system prompt, re-rendered from the episode's system_ref (drift is audited).
 - def `action_values` — Action-brain system suffix (ADR-009 §8.3, revised by the owner 2026-10-04).
+
+## `carried`
+
+[src/asuna/carried.py](../../src/asuna/carried.py)
+
+What she carries: one function says it for every reader (ADR-096).
+
+- def `number`
+- def `pairs` — The (place, class) pairs a turn can have: the four places, and a group read at home when one is configured.
+- def `contents`
+- def `placed` — A document as turns read it: each section's `inject` follows its tier, and `placements` ({sid: tier}, from placement_after) where a write will leave them.
+- def `sections` — Of a placed document, the sections carried in a turn of this class and place.
+- def `carried` — {slug: carried sections} of persona, voice, self and core for one (place, class) pair.
+- def `note_sections` — A note's sections as a turn reads them, before its per-turn view (context_budget.note_view): placed, readable here (group notes are public), tucked ones included so the view can count them.
+- def `system_text` — The persona render: common.md, then the carried persona sections, then voice (a legacy persona revision without sections renders its body).
+- def `self_block` — The self or core block as a turn sends it.
+- def `tokens` — Estimated tokens of one pair's identity layer as sent: the persona render and the self and core blocks (a block is sent once its document has sections).
+- def `identity` — {(place, class): estimated tokens} of each pair's identity layer.
+- def `limit` — Each pair's identity ceiling: render.identity_tokens (owner-only), plus what a package's own seeds need above the persona share with a quarter to grow (render.SEED_ROOM), never above the character window × render.max_window_share; None when
+- def `placements_after` — {sid: tier} where this write leaves the sections it moves (memory_tiers.Tiers.placement_after).
+- def `weight` — Estimated tokens of one section as it is carried.
+- def `room_parts`
+- def `room_line` — What a write to her identity, or a let_go, returns: the section's weight and each pair's size and room, from the number the gate uses; None when nothing bounds it.
+- def `tier_line` — When a section's `inject` and its tier differ: both, said once (None when they agree or tiers are off).
+- def `over_words` — A refusal: the pair that is over, with that pair's own numbers before and after, and its largest carried sections.
+- def `gate` — For DocumentStore.apply and adopt_seed: refuse a write that grows the identity layer in a pair over its limit (each pair on its own, measured as the write will carry it), and growth of a note far over its own limit.
+- def `room_block` — things_from_program: how full each pair readable here is, in coarse words, only when the words changed since this conversation was last told; None otherwise.
+- def `manifest` — What a turn carried, for its episode manifest: the section refs of its pair, the group-notes sections shown, and the sections its own retrieval brought up.
+- def `day_counts` — The carried_counts rows of one local day: per section × pair, the turns that carried it, the pair's turns that day, when it was last carried, and in how many of its turns the program's retrieval brought it up.
+- def `count_days` — The nightly count (the audit retention thread): each whole local day not counted yet, back to when the tiers went on and at most COUNT_DAYS; rows older than COUNT_DAYS go.
 
 ## `role_tools`
 

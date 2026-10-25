@@ -7,7 +7,7 @@ The interfaces of the Asuna runtime: what a channel adapter, a persona or channe
 - [Process layout](#process-layout)
 - [Configuration](#configuration): [plugin settings](#plugin-settings), [model routes](#model-routes), [secrets](#secrets), [deployment settings](#deployment-settings)
 - [Channel API](#channel-api): [server and endpoints](#server-and-endpoints), [channels and routes](#channels-and-routes), [admission](#admission), [route keys](#route-keys), [receive an event](#receive-an-event), [platform notices](#platform-notices), [post a notice for her home](#post-a-notice-for-her-home), [claim public output](#claim-public-output), [fetch attachment bytes](#fetch-attachment-bytes), [record a platform receipt](#record-a-platform-receipt), [post a group's member list](#post-a-groups-member-list), [post the current media-link keys](#post-the-current-media-link-keys), [post her own mute in a group](#post-her-own-mute-in-a-group), [post a voice](#post-a-voice), [HTTP outcomes](#http-outcomes)
-- [Persona packages](#persona-packages): [persona model](#persona-model)
+- [Persona packages](#persona-packages): [persona model](#persona-model), [what she carries](#what-she-carries)
 - [Channel packages](#channel-packages): [kind module](#kind-module)
 - [Her tools](#her-tools)
 - [Action capabilities](#action-capabilities): [tools a task is given](#tools-a-task-is-given), [web search and fetch](#web-search-and-fetch), [skills](#skills), [sandbox](#sandbox), [credentials](#credentials)
@@ -569,14 +569,14 @@ The model is the package's defaults for the core's parameters, checked against `
 | Key group | Rule |
 |---|---|
 | `PRIVATE_KEYS` (`rhythm.timezone`, `rhythm.sleep_window`, `rhythm.public_clock`) | set only on the machine; a package may not default them |
-| `CORE_WRITABLE_KEYS` (`render.budget_tokens`, `heartbeat.*` pace and visits, `heartbeat.dice_*`, `self_development.night_*`) | a package may default them; she sets them with `set_policy` within their ranges |
-| `OWNER_KEYS` (`heartbeat.enabled`) | a package may default it; only the owner changes it |
+| `CORE_WRITABLE_KEYS` (`heartbeat.*` pace and visits, `heartbeat.dice_*`, `self_development.night_*`) | a package may default them; she sets them with `set_policy` within their ranges |
+| `OWNER_KEYS` (`heartbeat.enabled`, `render.identity_tokens`) | a package may default them; only the owner changes them |
 | `policy_keys` | keys the package declares for her; may not redeclare core keys |
 
 | Key | Core default | Meaning |
 |---|---|---|
-| `render.budget_tokens` | 6144 (256–12,288) | estimated-token budget of her persona and voice render |
-| `render.max_window_share` | 0.25 | the render never takes more of the character route's window than this |
+| `render.identity_tokens` | 12288 (1,024–65,536) | estimated-token ceiling of what one (place, class) pair carries of her identity every turn: `common.md`, persona, voice, and the `self` and `core` blocks as sent; each pair its own. A package whose own persona and voice seeds render to more than half of it, with a quarter to grow, gets the difference on top |
+| `render.max_window_share` | 0.25 | the ceiling never takes more of the character route's window than this |
 | `render.action_persona` | `core` | who the action brain is told she is: `core` (her core sentences), `values` (public sections tagged `render.values_tag`), `persona` (the persona's every-turn sections) |
 | `render.values_tag` | `values` | the tag `values` reads |
 | `people.owner_label` | `本机用户` | the start of the owner's label in her conversations |
@@ -586,10 +586,26 @@ The model is the package's defaults for the core's parameters, checked against `
 | `speak.chars_per_second`, `speak.min_gap_s`, `speak.max_gap_s` | 12, 1, 5 | typing pace between her parts |
 | `heartbeat.enabled` | `false` | her heartbeat ([Schedules](#schedules)) |
 | `self_review.tag` | — | the tag of her own sections her reviews read |
+| `self_review.exchanges_note` | neutral text | the note on her exchanges in a self-evaluation |
+| `heartbeat.idle_hint` | neutral text | the hint of an idle heartbeat beat |
+| `memory.tiers_told` | neutral text | how her memory's places (carried, at hand, put away) are told, once per conversation |
 
 Every other group (`affect`, `memory`, `recall_protocol`, `phrasing`, `rhythm.settle_at`, `self_development.every_min`) is defined in `CORE_DEFAULTS` and the schema.
 
-A seed section tagged `place:home`, `place:peer`, `place:group` or `place:dm` renders only in turns at that place; an untagged one everywhere (`src/asuna/visibility.py` `PLACES`). An edit that would grow her persona or voice past the render budget is refused (`PERSONA_RENDER_OVER_BUDGET`); one that shrinks it applies.
+A persona, voice, `self` or `core` section tagged `place:home`, `place:peer`, `place:group` or `place:dm` is carried only in turns at that place; an untagged one everywhere (`src/asuna/visibility.py` `PLACES`).
+
+### What she carries
+
+`src/asuna/carried.py` `carried` gives, for one (place, class) pair, the sections of persona, voice, `self` and `core` that reach a turn: each where its tier puts it (`memory_tiers.placed`), readable in the class, its `place:` tags honoured. The pairs are the four places, each with its class, and a group read at home when `home_groups` is configured (`carried.pairs`). The system prompt, its re-render from `system_ref` (which records the carried section ids), the identity budget, the relevance gate, the action brain, `doc_refs_from_program`, the persona-data probe, the memory tab and the settings card read it; notes and ledgers go through `carried.note_sections`.
+
+| Rule | Where |
+|---|---|
+| A write that grows a pair's identity layer while that pair is over `render.budget_limit` is refused (`PERSONA_RENDER_OVER_BUDGET`, naming the pair with its own numbers); one that shrinks it or keeps it the same applies. `write_document`, `adopt_seed`, `promote_memory` and persona-data imports pass the same gate, measured as the write will carry it (`memory_tiers.Tiers.placement_after`) | `carried.gate` |
+| A write to persona, voice, `self` or `core`, and a `let_go`, returns the section's weight and each pair's size and room (`room`); a section whose `inject` and tier differ says both, on a write and on a `recall` of it (`tier`). The program never writes her `inject` | `carried.room_line`, `carried.tier_line` |
+| `things_from_program.identity_room`: how full each pair readable in the turn is, in words, only when they change | `carried.room_block`, `carried.ROOM_WORDS` |
+| Every tier move's `move` row says `by`: `her` for `let_go` and her own `inject` writes, `program` for the rest | `memory_tiers.BY` |
+| A group's notes over their per-turn limit (2,400 characters) fold the section that surfaced longest ago first (a turn bringing it up, her recall, her rewrite, her writing it); the order is kept and recomputed on her write and at settlement. A folded section is at hand for her own items' retrieval. A section with `pinned` never folds and still counts; the fold line says when the pins alone are over | `group_admin.notes_view`, `context_budget.note_view`, `memory_tiers.Tiers.fold_order` |
+| Each turn's episode manifest records `carried`: its pair, the section refs, the group-notes sections shown, the sections its own retrieval brought up. The audit retention thread writes `carried_counts` (section × pair × local day: `turns`, `pair_turns`, `last_carried`, `brought_up`, `reconstructed` for days before manifests recorded it, back to when the tiers went on) and keeps 30 days | `carried.manifest`, `carried.count_days` |
 
 ## Channel packages
 
@@ -651,7 +667,7 @@ Her tools: `src/asuna/role_tools.py` (`TOOLS`; where each is offered: `EVERYWHER
 |---|---|
 | parameter names she is shown, and old names still taken | `src/asuna/param_names.py` (`RENAMED`, `STILL_TAKEN`) |
 | a conversation's tool list and the options it shows (an option no turn there can use is left out, one spec per place and class), fixed when its session starts | `src/asuna/role_tools.py` (`session_specs`, `placed_spec`) |
-| the context blocks a turn carries, their limits, and their words | `src/asuna/context.py` (`ContextBuilder`), `src/asuna/context_budget.py`, `src/asuna/block_guide.py` |
+| the context blocks a turn carries, their limits, and their words; what of her identity each place carries | `src/asuna/context.py` (`ContextBuilder`), `src/asuna/context_budget.py`, `src/asuna/block_guide.py`, `src/asuna/carried.py` |
 | the checks on a turn's end, the gate's answer, an appraisal | `src/asuna/answers.py` |
 | the relevance gate and group focus | `src/asuna/attend.py`, `src/asuna/focus.py` |
 | people, labels and her understanding of them | `src/asuna/people.py`, `src/asuna/understanding.py` |

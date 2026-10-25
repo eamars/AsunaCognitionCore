@@ -30,7 +30,9 @@ gaps, counted apart.
 
 **Results.** 7 of the 10 came back, and none of the 7 by retrieval:
 - 5 rode on a note she happened to be carrying;
-- 1 was still in the conversation's history window;
+- 1 was still in the conversation itself: 79 minutes after the explanation, so outside the delivered window of lines
+  (60 minutes). It was still in the session's own context, which keeps earlier turns until a compaction. "In view"
+  means that session context, not the delivered window (her correction);
 - 1 she carried over herself, by writing it into the other group's notes.
 
 **The misses.** All 3 were cross-place, and all 3 are reading ① below. In each, the meaning lived in her own words in
@@ -170,8 +172,9 @@ No words from the other place appear in it. Its rules:
    windows are what the deep dive measured, and they are config defaults.
 4. **Never on a templated message.** No cue on bot status lines, task notices, or a repeated prefix; the leading
    @-mention is stripped before this test.
-5. **Once per word per 60 minutes,** and not while the word is still in her history window. That window is the one
-   the turn already delivers: the last 12 lines plus every line since she last spoke, at most 40 lines and 60 minutes.
+5. **Once per word per 60 minutes,** and not while the word is in the lines this turn delivers: the last 12 lines
+   plus every line since she last spoke, at most 40 lines and 60 minutes. This is a cheap repeat test only. What she
+   actually has in view reaches further back, through the session's context until its next compaction.
 6. **At most 1 cue a turn,** inside the existing two own-item slots. Her own note on the word (D1) outranks it.
 7. **No push to answer.** The line states a fact and how to look; the turn stays hers.
 

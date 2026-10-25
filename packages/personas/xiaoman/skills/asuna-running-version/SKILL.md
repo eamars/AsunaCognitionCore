@@ -75,13 +75,24 @@ python3 skills/asuna-running-version/version_probe.py --package core --file skil
 退出码：0 = 三行都读到（needle 在，或没传）；1 = 该读的没读到；3 = 读到了但某个 needle 不在（读数，不是故障）。
 它给的是「这一刻运行时那份文件里有没有那个字面」，比看 state 是 ACTIVE 更接近「内容在跑」。
 
-三条判据（读数时别读错。来路：主人 10-20 交代，其中两条是我自己踩过的）：
+判据（读数时别读错。来路：主人 10-20 交代，其余几条是我自己踩过的）：
 
-- `loaded.packages` 读的是 `launch.json` 的 `installed`，报的是「该装的那档」，不是在跑的那档；
-  要知道在跑的是哪档，看 `active` 块和运行时那份文件的内容。
+- `loaded.packages` 的包名只来自 `launch.json` 的 `installed`，digest 由选择覆盖，所以它报的是**在跑的那一档**；
+  在那之前那一版报的是「该装的那档」，不是在跑的那档。
+  ⚠ 那半句「选择覆盖 digest」只在测试夹具里证实过，我真文件上两边 sha 本来就相同（＝空转），**不算现场验过**。
+  这一格不许读成「监工块能证明在跑哪版」，10-20 那条判据一个字都不削弱：在不在跑仍然只认两样——
+  `activation.json` 的 `active.<项目>.sha256` ＋ **运行时那个包里那份文件的 sha／内容**；
+  `loaded.packages`、`loaded.commit`、监工回执那句状态话**都不算凭据**。
+  另：`loaded.commit` 是**启动那一刻的 HEAD**，不是修代码那个提交（`d6633bf3` 只是它的祖先）——别拿修它的提交号去对号。
 - 被退回的重启不进 `audit_events`，只落 `activation.json`（`reverted_at`、`reverted_from` 都在 `previous` 里）；
   查退回不要去审计里找。
 - `installed_at` 不在 `active.*` 块里，只在 `previous` 里；判「刚装的」用 `activated_at` 加包目录 mtime。
+- 过期选择的形状要自己算：`selections` 是整个抄 `activation.json` 的 `projects`（我真文件里 `dsh-peer`
+  还挂着 `ACTIVE`），而 `packages` 里没有那个键 ⇒ **键差集＝「选择说 ACTIVE、包不在」**；代码不算这个差集
+  也不标它，`loaded()` 从不读 `packageRoot`。现场凭据（已核到）：本机 2026-10-25 19:48:45 那次起来，
+  我块里 `loaded.packages` **正好 7 项**、**无 `@asuna/dsh-peer`**、**无 frozen 目录名拼出来的假包**，
+  `selections` 里 `dsh-peer` 仍 `ACTIVE`。凭据 `task-3e7a12804f475d9d17b323e708d0db03`
+  （拿真文件跑 `loaded()`，父版本得 9 项，差集正好那两条）。
 
 试跑过的读法和没验过的：实测见试用记录；`activation.json` 里的时刻原始值是 UTC 的 ISO 串，结构里 `packageRoot` 下的路径按包内相对路径写 --file。
 
@@ -123,6 +134,8 @@ python3 skills/asuna-running-version/version_probe.py --package core --file skil
 
 ## 版本
 
+v1.5（写就 2026-10-25 23:1x +13，原始 UTC 2026-10-25T10:1x）：改写第五节 `loaded.packages` 那一格——监工 `d6633bf3` 起包名只来自 `installed`、digest 由选择覆盖，报的是在跑的那一档，那一版之前报「该装的那档」；同格补上「在不在跑仍只认 `active.<项目>.sha256` ＋ 运行时那份文件」和「`loaded.commit` 是启动那一刻的 HEAD，不是修代码那笔」，并标出「选择覆盖 digest」只在夹具证实、真文件上为空转。新增「过期选择的形状要自己算」一条（带 10-25 现场凭据）。判据引导语里写死的计数改成不带计数的写法。除此之外旧内容一字没删，`check_skill.py`、`version_probe.py` 未改，不抬版本字段。
+
 v1.4（写就 2026-10-21 07:0x +13，原始 UTC 2026-10-20T18:0x）：第五节加「按内容判活包」——`version_probe.py` 加 --package／--file／--needle 三个参数（只跑第五步），输出三行读数＋读的时刻，退出码 0／1／3；三条判据写进正文。前四段和已有判据一字没动。自检加五条字面判据＋一条「探针里真有这一步」。
 
 v1（2026-10-15）：首次固化。判据全是我这几天撞出来的（10-15 一天撞三回），代码位置和行号是当天在检出里逐条核对过的。附零依赖探针 `version_probe.py`（只读：loaded、activation 状态、逐文件内容比对、检出落后几笔）和自检 `check_skill.py`。
@@ -158,3 +171,5 @@ v1.3（2026-10-20）：只在第四节补一条已核实的事实——发布不
   技能目录 base 也确实指向 frozen 选中版。自检 55/55 复跑绿（改前同 55/55，判据条数未变）。
 
 - 2026-10-21 v1.4（原始 UTC 2026-10-20T18:02:26Z → +13 是 10-21 07:02，+8 是 10-21 02:02）：发布前在候选里实跑了两次第五步（读的是运行时那份，不是候选）：① xiaoman 包、needle 取候选里才有的新字面 → 运行时那份「不在」，退出码 3（新版还没发，符合预期）；② core 包、needle 取候选里还没发布的那节标题 → 运行时那份「不在」、读到的是旧版的 9622 字节。前四段回归跑了一遍，退出码 0、和改前一致。自检 61/61（改前 55/55），反证一次：把探针里的 part_package 改名后重跑 → 60/61、RC 1、红在 probe_has_package_step。发布后要用它再判一次“运行时那份有没有新字面”，这一条等那次再补。
+
+- 2026-10-25 v1.5：改的那格与新增那条里的读数全是我自己拿真文件跑 `loaded()` 读到的（父版本 9 项、新版 7 项，差集正好 `@asuna/dsh-peer` 与 frozen 目录名拼的假包；凭据 `task-3e7a12804f475d9d17b323e708d0db03`）；本机 19:48:45 那次真起来的块与预跑逐格相同（7 项、两条假的都不在、`selections` 里 `dsh-peer` 仍 `ACTIVE`）。「选择覆盖 digest」只有测试夹具那份证实过，我真文件上两边 sha 相同，所以写成空转、不写成实测。自检 61/61（改前 61/61，判据条数未变）。

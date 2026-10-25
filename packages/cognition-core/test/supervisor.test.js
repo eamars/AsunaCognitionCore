@@ -215,3 +215,18 @@ test('the record says what runs: a selection that fell back reports the package 
     await fs.rm(base, { recursive: true, force: true });
   }
 });
+
+test('the record lists only installed packages: a persona selection by its id, a removed package not at all', async () => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-loaded-'));
+  try {
+    await fs.writeFile(path.join(base, 'launch.json'), JSON.stringify({ installed: {
+      '@asuna/cognition-core': '59273e56719b8c09', '@asuna/persona-a': '1111111111111111' } }));
+    await fs.writeFile(path.join(base, 'activation.json'), JSON.stringify({ projects: {
+      'persona-a': { state: 'ACTIVE', sha256: '2222222222222222', packageRoot: path.join('development', 'persona-a', 'frozen', 'a392bdbbbd6ed478') },
+      'old-channel': { state: 'ACTIVE', sha256: '3333333333333333', packageRoot: path.join('profiles', 'node_modules', '@asuna', 'old-channel') } } }));
+    const record = await loaded(base, path.join(base, 'launch.json'), () => 'abc1234\n');
+    assert.deepEqual(record.packages, { '@asuna/cognition-core': '59273e56719b', '@asuna/persona-a': '222222222222' });
+  } finally {
+    await fs.rm(base, { recursive: true, force: true });
+  }
+});

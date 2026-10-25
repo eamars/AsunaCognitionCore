@@ -193,9 +193,11 @@ export async function supervise(d) {
   }
 }
 
-/** What actually runs after a start: the checkout's commit, and each package's digest. A package the selection
- * names runs as selected (activation.json), which a fallback changes without a new install; launch.json's record of
- * the last install covers the others. A selection that fell back names the digest it returned from. */
+/** What actually runs after a start: the checkout's commit, and each package's digest. Only installed packages run
+ * (launch.json's record of the last install); a selection (activation.json) changes the digest of the installed
+ * package it is for, which a fallback changes without a new install. A selection is for the package named by its
+ * folder (the core's) or by its id (a persona's, whose folder is a frozen snapshot); one for no installed package,
+ * such as a removed channel's, runs nothing. A selection that fell back names the digest it returned from. */
 export async function loaded(base, launchFile, commitOf = () =>
   spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true }).stdout) {
   const read = async file => { try { return JSON.parse(await fs.readFile(file, 'utf8')); } catch { return {}; } };
@@ -203,9 +205,11 @@ export async function loaded(base, launchFile, commitOf = () =>
   const launch = await read(launchFile);
   const short = sha => String(sha).slice(0, 12);
   const packages = Object.fromEntries(Object.entries(launch.installed ?? {}).map(([name, sha]) => [name, short(sha)]));
-  for (const selected of Object.values(selection.projects ?? {}))
-    if (selected.packageRoot && selected.sha256)
-      packages['@asuna/' + path.basename(selected.packageRoot)] = short(selected.sha256);
+  for (const [id, selected] of Object.entries(selection.projects ?? {})) {
+    const name = selected.packageRoot && selected.sha256
+      && ['@asuna/' + path.basename(selected.packageRoot), '@asuna/' + id].find(each => each in packages);
+    if (name) packages[name] = short(selected.sha256);
+  }
   return {
     commit: (commitOf() || '').trim() || null,
     packages,

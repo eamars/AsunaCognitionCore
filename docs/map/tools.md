@@ -339,5 +339,6 @@ Install the core, one persona package and its channel packages into a local-only
 - def `persona_package` — Read the persona package's npm name, project id and agent preset from its own files.
 - def `channel_package` — A channel package's npm name, project id and kind module (its one python/<module> package).
 - def `move_secrets` — Settings written before ADR-010 D6 carried plaintext under `secrets` and path-named references ({"$secret": "embedding/api_key"}).
+- def `compose` — The profile patch an install writes: each of this installer's rows with the saved row merged over it, then the saved rows it does not write.
 - def `profile_patch`
 - def `main`

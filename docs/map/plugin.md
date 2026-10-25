@@ -126,11 +126,11 @@ Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoi
 - def `compactAtTurnEnd` — ADR-094: compact one of her conversations at the end of its turn, keeping that whole turn as it is, when it is due.
 - def `TURN_END_DEADLINE_MS` — The longest a turn-end compaction runs (ADR-094): past it, it stops and the next turn end tries again.
 - class `TurnEnds` — ADR-094: this Host's turn-end compactions of her conversations.
-  - `preempt` — A message for her arrived in this conversation (any source: DSH's `agent/inbox/inserted`): stop its running turn-end compaction, so the message never waits for the summary.
-  - `begin` — Her stage is about to start in this conversation: stop its turn-end compaction, start none until the returned function is called (once the stage is handed to DSH, or refused).
+  - `begin` — Her stage is about to start in this conversation: start no turn-end compaction there until the returned function is called (once the stage is handed to DSH, or refused); resolves to it once a running one has ended, so the stage is handed ov
   - `run` — The end of one of her turns (`compactAtTurnEnd`, with `idle` the Host's own test).
 - def `lastTurnStart` — ADR-094 §8: the first surface node of her last turn, by place on the surface: the one after the last node from before the end of her turn before it, so the line that opened her turn stays with it.
 - def `keptRule` — The instruction's last rule when the summary request carries the retained tail: how many messages stay as they are, and the opening of the first one with text, quoted only to locate it.
+- def `summaryAsNextRequest` — ADR-094 §10.2: every compaction summary request of her sessions, from any engine (DSH's own engine in the action, background-summary and recovery presets sends one with no level and its config's cap), goes out as the conversation's next req
 - class `RoleCompactionEngine`
   - `summarize`
   - `keepsTurns` — Whether this DSH's `compactNow` takes a keep-from point (its fourth parameter, `options.keepFrom`).
@@ -243,6 +243,9 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `resolveRoutes`
   - `stageEfforts` — Per-stage effort on the character route, as chosen on the settings card from the levels its model offers: the relevance gate (attendEffort) and her group turns (groupEffort).
   - `tierRoute` — ADR-075: the route of a request in a job she sent to 高, while it has not fallen and 高 is not resting; else undefined (the action route).
+  - `requestRoute` — The provider, model, level and output limit the next request of this conversation takes (before nativeRoute): a deliberate native model selection stays authoritative for its session; otherwise 高 for a job she sent there, else the lane's rou
+  - `laneOf` — The lane of one of her sessions, by the preset it was opened with; undefined for a session not hers.
+  - `summaryInstance` — ADR-094 §10.2: a compaction summary of this conversation is sent as its next request would be: that request's provider and model; its level: the conversation's own (its last request's on that model), else the route's, else the compaction en
   - `fall` — The job falls to 低 for good; the worker records it on the task, said to her in capability words.
   - `restHigh` — 高 rests: shown on its settings row, and to her when she sends a job there (action_tiers.py).
   - `tierStatus` — The action brain's 高 for the settings card: configured, and resting until when and why.
@@ -265,6 +268,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `onEvent`
   - `disposed` — A conversation's agent is gone: its stage state goes with it, unless it was closed to reopen the conversation.
   - `idle` — No stage running or queued in this session, nor in an action session it handed work to that is still working: an action session whose task has finished stays open and holds nothing.
+  - `ownIdle` — No stage of this conversation itself running or queued: when a due turn-end compaction may run (ADR-094 §10.1).
   - `handedTo` — The open sessions this one handed work to, as [session id, handle].
   - `ensureAgent` — The conversation's agent, loaded after any write or load of it that began before (one opener at a time).
   - `openAgent`

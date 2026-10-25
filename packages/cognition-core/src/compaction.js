@@ -21,8 +21,9 @@
  * (`compactAtTurnEnd`, ADR-094): once the conversation is at `turnEndRatio` of the window, the Host compacts it while
  * she is idle, keeping her whole last turn as it is (`compactTurnEnd`, DSH's `compactNow` with a keep-from point); the
  * summary request carries the span before that turn alone, and the next turn reads the checkpoint and her last turn,
- * not a long kept tail. Her turn takes precedence: a stage starting in that conversation stops its turn-end compaction,
- * which also stops at a deadline (`TurnEnds`), and a stopped one leaves the conversation as it was. On a DSH whose
+ * not a long kept tail. A due compaction happens at the first turn end that reaches it: what arrives meanwhile waits
+ * for it (a stage of hers in `TurnEnds.begin`, a message in DSH's inbox), it stops only at its deadline, and a stopped
+ * one leaves the conversation as it was. On a DSH whose
  * `compactNow` keeps no turn nothing is compacted at the turn's end. DSH's in-turn pressure compaction stays as the
  * guard for a turn that grows past the threshold. The action brain keeps DSH's own engineering template. */
 import z from '@deepseek-ai/schemastery';
@@ -103,8 +104,9 @@ const TURN_END_RATIO = 0.70;
 
 /** ADR-094: compact one of her conversations at the end of its turn, keeping that whole turn as it is, when it is due.
  * Only her own conversations (`asuna-role-*` on the character lane), only on a DSH that can keep a turn
- * (`keepsTurns`), only at or above the engine's `turnEndTokens`, only while nothing of hers runs or waits there
- * (`idle`); `compact` runs the engine's `compactTurnEnd`. A conversation that is busy is left for its next turn's end.
+ * (`keepsTurns`), only at or above the engine's `turnEndTokens`, only while no stage of this conversation runs or
+ * waits (`idle`; a task it handed to the action brain runs in a session of its own and does not count, §10.1);
+ * `compact` runs the engine's `compactTurnEnd`. A conversation that is busy is left for its next turn's end.
  * Returns what was decided, for the Host's log line. */
 export async function compactAtTurnEnd({ lane, agent, idle, meter, engine, compact }) {
   const id = agent.session.id;
@@ -123,17 +125,18 @@ export async function compactAtTurnEnd({ lane, agent, idle, meter, engine, compa
  * summaries measured (46–69 s median, plus ~20 s when the span is read cold). */
 export const TURN_END_DEADLINE_MS = 180_000;
 
-/** ADR-094: this Host's turn-end compactions of her conversations. Her turn takes precedence: a stage starting in a
- * conversation (`begin`) stops its running turn-end compaction and keeps a new one from starting until the stage is
- * handed to DSH; each one also stops at `deadline`. A stopped one leaves the conversation as it was (DSH closes its
- * compaction with an error), so the next turn end tries again; the in-turn guard is DSH's and unchanged. One that did
- * not commit cleanly stops them in its conversation until it is opened again (a new agent); one after which her last
- * turn is not right after the checkpoint stops them for the rest of this run. One log line each. */
+/** ADR-094: this Host's turn-end compactions of her conversations. A due compaction happens at the first turn end
+ * that reaches it (§10.1): nothing arriving stops it. A message DSH holds until it ends; a stage of hers starting in
+ * the conversation (`begin`) waits for it and keeps a new one from starting until the stage is handed to DSH. Each one
+ * stops at `deadline`. A stopped one leaves the conversation as it was (DSH closes its compaction with an error), so
+ * the next turn end tries again; the in-turn guard is DSH's and unchanged. One that did not commit cleanly stops them in
+ * its conversation until it is opened again (a new agent); one after which her last turn is not right after the
+ * checkpoint stops them for the rest of this run. One log line each. */
 export class TurnEnds {
   constructor(ctx, deadline = TURN_END_DEADLINE_MS) {
     this.ctx = ctx;
     this.deadline = deadline;
-    /** Session id → the AbortController of its running turn-end compaction. */
+    /** Session id → its running turn-end compaction: { abort (AbortController), done (settles when it ends) }. */
     this.running = new Map();
     /** Session id → how many of her stages are being started there. */
     this.starting = new Map();
@@ -144,24 +147,20 @@ export class TurnEnds {
     this.saidNoTurnKept = false;
   }
 
-  /** A message for her arrived in this conversation (any source: DSH's `agent/inbox/inserted`): stop its running
-   * turn-end compaction, so the message never waits for the summary. */
-  preempt(id) {
-    this.running.get(id)?.abort(new Error('her turn came first'));
-  }
-
-  /** Her stage is about to start in this conversation: stop its turn-end compaction, start none until the returned
-   * function is called (once the stage is handed to DSH, or refused). */
-  begin(id) {
-    this.preempt(id);
+  /** Her stage is about to start in this conversation: start no turn-end compaction there until the returned function
+   * is called (once the stage is handed to DSH, or refused); resolves to it once a running one has ended, so the stage
+   * is handed over after the checkpoint. */
+  async begin(id) {
     this.starting.set(id, (this.starting.get(id) ?? 0) + 1);
     let ended = false;
-    return () => {
+    const release = () => {
       if (ended) return;
       ended = true;
       const left = this.starting.get(id) - 1;
       if (left) this.starting.set(id, left); else this.starting.delete(id);
     };
+    await this.running.get(id)?.done;
+    return release;
   }
 
   /** The end of one of her turns (`compactAtTurnEnd`, with `idle` the Host's own test). Returns what was decided, or
@@ -173,9 +172,10 @@ export class TurnEnds {
     const done = await compactAtTurnEnd({ lane: 'character', agent, meter, engine,
       idle: () => idle() && !this.starting.has(id),
       compact: () => {
-        this.running.set(id, own);
-        return engine.compactTurnEnd(agent, AbortSignal.any([own.signal, AbortSignal.timeout(this.deadline)]))
-          .finally(() => { if (this.running.get(id) === own) this.running.delete(id); });
+        const done = engine.compactTurnEnd(agent, AbortSignal.any([own.signal, AbortSignal.timeout(this.deadline)]))
+          .finally(() => { if (this.running.get(id)?.abort === own) this.running.delete(id); });
+        this.running.set(id, { abort: own, done: done.then(() => undefined, () => undefined) });
+        return done;
       } });
     const logger = this.ctx.logger;
     if (done.skipped === 'dsh keeps no turn') {

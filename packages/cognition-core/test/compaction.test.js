@@ -439,22 +439,31 @@ function turnEndEngine(compact) {
 
 const recording = logged => ({ logger: { info: line => logged.push(['info', line]), warn: line => logged.push(['warn', line]) } });
 
-test('her turn takes precedence over a turn-end compaction, which also stops at its deadline', async () => {
+test('a due turn-end compaction is not stopped by what arrives: her stage waits for it; only its deadline stops it', async () => {
   const logged = [];
   const ends = new TurnEnds(recording(logged), 50);
   const agent = { session: { id: 'asuna-role-1' } };
   const meter = { measure: () => ({ totalTokens: 120 }) };
-  let seen;
+  let seen, finish;
   const waits = turnEndEngine(signal => new Promise(resolve => {
     seen = signal;
+    finish = () => resolve({ compacted: true, items: 3, tokens: 9, keptTurn: true });
     signal.addEventListener('abort', () => resolve({ compacted: false, code: 'aborted', reason: 'x' }), { once: true });
   }));
   const running = ends.run({ agent, engine: waits, meter, idle: () => true });
   await new Promise(resolve => setImmediate(resolve));
-  const started = ends.begin('asuna-role-1');
-  assert.equal(seen.aborted, true, 'her stage stops the running summary at once');
+  let handed = false;
+  const starting = ends.begin('asuna-role-1').then(release => { handed = true; return release; });
+  const elsewhere = await ends.begin('asuna-role-2');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(seen.aborted, false, 'her stage does not stop the running summary');
+  assert.equal(handed, false, 'her stage waits for it');
+  elsewhere();
+  finish();
   await running;
-  assert.match(logged.at(-1)[1], /stopped, nothing changed \(her turn came first\)/);
+  const started = await starting;
+  assert.equal(handed, true, 'and is handed over once the checkpoint is written');
+  assert.match(logged.at(-1)[1], /compacted 3 items/);
   // While her stage is being started there, no turn-end compaction begins.
   assert.equal((await ends.run({ agent, engine: waits, meter, idle: () => true })).skipped, 'busy');
   started();
@@ -463,15 +472,7 @@ test('her turn takes precedence over a turn-end compaction, which also stops at 
   assert.equal(timed.result.code, 'aborted');
   assert.match(logged.at(-1)[1], /stopped, nothing changed \(over its 0\.05 s deadline\)/);
   assert.equal(ends.running.size, 0);
-  // A message from any source (DSH's agent/inbox/inserted: the Web chat too) stops it the same way.
-  const again = ends.run({ agent, engine: waits, meter, idle: () => true });
-  await new Promise(resolve => setImmediate(resolve));
-  ends.preempt('asuna-role-2');
-  assert.equal(seen.aborted, false, 'a message in another conversation leaves it running');
-  ends.preempt('asuna-role-1');
-  assert.equal(seen.aborted, true);
-  await again;
-  assert.match(logged.at(-1)[1], /stopped, nothing changed \(her turn came first\)/);
+  assert.equal(typeof ends.preempt, 'undefined', 'nothing else stops it');
 });
 
 test('a turn-end compaction that did not commit cleanly stops them in its conversation; a turn not kept stops them all', async () => {

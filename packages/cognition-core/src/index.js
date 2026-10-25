@@ -735,8 +735,8 @@ export class CognitionCore {
       const waiter = state.waiter; state.waiter = null; waiter.resolve(event); return;
     }
     if (event.kind !== 'stage') return;
-    // Her turn takes precedence: a turn-end compaction there stops, and none starts while this stage starts (ADR-094).
-    const started = this.turnEnds.begin(event.session_id);
+    // A turn-end compaction running there ends first, and none starts while this stage starts (ADR-094 §10.1).
+    const started = await this.turnEnds.begin(event.session_id);
     try {
       if (event.lane !== 'character' && event.binding?.parent_session_id) {
         await this.children.start(event);
@@ -776,11 +776,18 @@ export class CognitionCore {
 
   /** Nothing of this conversation is running: no turn, none queued, no child of it open. */
   /** No stage running or queued in this session, nor in an action session it handed work to that is still working: an
-   * action session whose task has finished stays open and holds nothing. */
+   * action session whose task has finished stays open and holds nothing. Whether the conversation can be reopened. */
   idle(id) {
     const state = this.states.get(id);
     return !state?.current && !state?.queue.length
       && !this.handedTo(id).some(([child]) => this.states.get(child)?.current || this.states.get(child)?.queue.length);
+  }
+
+  /** No stage of this conversation itself running or queued: when a due turn-end compaction may run (ADR-094 §10.1). A
+   * task it handed to the action brain runs in its own session, which the compaction does not touch. */
+  ownIdle(id) {
+    const state = this.states.get(id);
+    return !state?.current && !state?.queue.length;
   }
 
   /** The open sessions this one handed work to, as [session id, handle]. */
@@ -880,12 +887,12 @@ export class CognitionCore {
 
   /** ADR-094: compact her conversation at the end of its turn when it has reached her character preset's
    * `turnEndRatio` of the window, keeping that whole turn as it is (compaction.js `TurnEnds`, the engine's
-   * `compactTurnEnd`): the next turn reads the checkpoint and her last turn. A conversation with a turn running, queued
-   * or starting is left for its next turn's end; her next stage there stops a running one. */
+   * `compactTurnEnd`): the next turn reads the checkpoint and her last turn. A conversation with a stage of its own
+   * running, queued or starting is left for its next turn's end; her next stage there waits for a running one. */
   async turnEnd(agent) {
     const id = agent.session.id;
     await this.turnEnds.run({ agent, engine: this.ctx.get('agentPresets')?.serviceFor(agent, 'compaction'),
-      meter: this.ctx.get('tokenMeter'), idle: () => this.idle(id) });
+      meter: this.ctx.get('tokenMeter'), idle: () => this.ownIdle(id) });
   }
 
   /** ADR-049: condense one of her conversations now, on her own earlier choice; the worker picks the quiet moment.
@@ -1076,8 +1083,6 @@ export class CognitionCore {
     // Steer into her running turn waits as the next turn instead of failing it (steer.js).
     if (lane === 'character') scope.on('agent/inbox/inserted', ({ agent, message }) => {
       if (!agent) return;
-      // Any message for her (the Web chat too, not only a stage of ours) stops a turn-end compaction there (ADR-094).
-      this.turnEnds.preempt(agent.session.id);
       queueMicrotask(() => holdSteeredInput(agent, message, Boolean(this.state(agent.session.id).current)));
     });
     // A platform line that waited for the conversation's first turn (navigation.js) is history, not local input.

@@ -261,7 +261,7 @@ guard from below. The turn end had been reached and passed by: `compactAtTurnEnd
 (`idle`), and a message arriving stops one that runs (`TurnEnds.preempt`). Since install 22 turn ends were "busy, left
 for the next turn end" and 3 were "stopped, nothing changed (her turn came first)", one at 206,517 after 123 s of
 summary, two minutes before the guard fired anyway. In the last 12 hours all three guards were on the agent line,
-where agents' messages arrive back to back.
+where the agents' asks send her work to the action brain most often (§10.1 correction).
 
 **The broken invariant.** Her turn's precedence was meant to keep a message from waiting for a summary. It cannot:
 once a conversation is due, every turn end left for a waiting message moves it closer to the guard, and on a line
@@ -274,6 +274,21 @@ compaction for a message does not save the wait; it moves it into the turn and a
 compact; a message that arrives during it waits, as it would for the guard, and is answered right after (warm: 67–94 s
 for a hit, §9). `idle` and `preempt` go; the 180 s deadline stays as the bound. Below the mark nothing changes. No
 exemptions and no second threshold.
+
+**Correction, found while building (2026-10-25 19:xx; Claude).** "Busy" was never a message waiting. The Host's
+turn-end hook runs on DSH's `agent/status` idle, and DSH does not go idle while its own inbox holds a message (the next
+turn starts at once). The `idle` it was given is the Host's `idle(id)`, written on 10-13 for reopening a conversation
+after Apply (`94f72b98`, `191a9ff2`): it also counts an action session the conversation handed a task to and that is
+still working. In all 22 "busy" turn ends since install such a task was running (it ended 49 s to 18 min later), and the
+conversation's own next turn began 2 s to 15 min later (`busy_why.py`); nothing looked again in between, so the task's
+hand-back opened a turn already past the guard. The broken invariant is the same, a due compaction must happen at the
+turn end that reaches it, and the cause is narrower: a definition of "busy" borrowed from another purpose, checked
+once. The rule she signed stands; the build: the turn-end compaction is held only by a stage of the conversation itself
+(`ownIdle`; a task in its own session does not touch it), nothing arriving stops it (`preempt` is gone; DSH latches a
+wake during the compaction and starts the turn after it), and a stage of hers starting there waits for it
+(`TurnEnds.begin`), which also keeps an Apply reopen from closing the conversation in the middle of one. DSH's commit of
+a turn-end compaction checks only its own span (`assertSelectedSpanStable`), so a line or an inbox splice added after it
+meanwhile is safe.
 
 **By line** (her ask before she decides, 2026-10-25 18:3x; the Host log's turn ends matched to their scenes through
 `episodes.native_session_id`, `by_line.py`):

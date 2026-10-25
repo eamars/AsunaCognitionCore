@@ -124,3 +124,30 @@ test('a conversation that handed work to the action brain is reopened too once t
   assert.equal(core.retired.has(child), true, 'the finished action session closed with it');
   assert.equal(core.handles.has('act'), false);
 });
+
+test('a task handed to the action brain keeps its conversation from reopening, never from a due turn-end compaction', async () => {
+  const live = new Map();
+  const open = (id, parent) => {
+    const agent = { id, session: { id, header: parent ? { parentSession: parent } : {}, snapshotEvents: () => [], surface: { nodes: [] } } };
+    live.set(id, agent);
+    return { agent, dispose: async () => live.delete(id) };
+  };
+  const ctx = { get: () => undefined,
+    agents: { get: id => live.get(id), resume: async ({ resumeSessionId, parentAgent }) => open(resumeSessionId, parentAgent?.id) },
+    sessionPersistence: { stat: async () => true },
+    agentPresets: { mount: async () => {} },
+    workspaceRegistry: { create: async () => ({ attachSession: async () => {} }), unarchiveSession: async () => {} } };
+  const core = new CognitionCore(ctx, { persona: 'p', routes: { character: { provider: 'x', model: 'm' }, action: { provider: 'x', model: 'm' } } });
+  core.personas.set('p', { preset: 'role' });
+  core.channelOf = () => undefined;
+  const role = await core.ensureAgent({ session_id: 'role', lane: 'character', binding: { scene_id: 'x', cwd: '.' } });
+  await core.ensureAgent({ session_id: 'act', lane: 'executor', binding: { scene_id: 'x', cwd: '.' } }, role);
+  let idle;
+  core.turnEnds = { run: async options => { idle = options.idle; } };
+  await core.turnEnd(role);
+  core.state('act').current = { token: 'task' };              // her task still runs in its own session
+  assert.equal(core.idle('role'), false, 'not reopened while the task runs');
+  assert.equal(idle(), true, 'but its due compaction may run: the task does not touch this conversation');
+  core.state('role').queue.push({ token: 'next' });          // a stage of the conversation itself waits
+  assert.equal(idle(), false);
+});

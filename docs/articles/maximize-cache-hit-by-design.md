@@ -375,9 +375,11 @@ request sends the span before that turn alone, so the summarizer never sees the 
 previous turn ended, which the local engine still holds while her last turn had at most four steps (it keeps the
 prompt ends of its last few steps); a longer turn reads the span cold, outside anyone's turn. At a hosted API the
 span is a prefix of what was last sent and reads from the cache. The next turn's first request reads the
-checkpoint and her last turn besides its own notice. Her turn takes precedence: a stage or a consult starting in that
-conversation stops the summary, which also stops after 180 s, and the conversation stays as it was until its next
-turn's end; a conversation with a turn running, queued or starting is left for its next turn's end (`TurnEnds`).
+checkpoint and her last turn besides its own notice. A due compaction happens at the first turn end that reaches it:
+a stage or a consult starting in that conversation waits for the summary, and a message waits in DSH's inbox, as it
+would for the in-turn guard; the summary stops only after 180 s, and a stopped one leaves the conversation as it was
+until its next turn's end. A conversation with a stage of its own running, queued or starting is left for its next
+turn's end; a task it handed to the action brain runs in its own session and does not hold it (`TurnEnds`).
 
 This needs a DSH whose `compactNow` takes the keep-from point (`options.keepFrom`). On one that doesn't
 (`keepsTurns` is false) nothing is compacted at a turn's end, the Host says so once in its log, and only the

@@ -3,7 +3,7 @@
 Each switch ends by itself: after 24 hours unless she gives another number of hours (at most a week), so a switch she
 forgot never turns into her being inconsistent with someone who did nothing. The program keeps them and says where
 one is on: the switched conversation lists its own switches, her home lists them all and the ones that ended lately.
-She sets them with tools she has: mute with `group_focus`, block with `understand_person` (the person speaking to her),
+She sets them with tools she has: mute with `group_focus`, block with `watch` op `block` (the person speaking to her),
 tools off and an early end with `set_policy`.
 
 - Muted: the group rests (focus.active is false: only words addressed to her wake her, no first word from her, no

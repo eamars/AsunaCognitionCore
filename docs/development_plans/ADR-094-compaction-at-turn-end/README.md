@@ -230,3 +230,179 @@ has run live 18 times at 99.3–99.6%, and the next request's size after it is m
 - Owner, 10-24: accepted as the engine's capacity, the span alone stays (the whole conversation would hit every time
   but shows the summarizer her kept turn, ADR-085 §4c). On a provider whose cache serves any prefix of a cached prompt
   the span alone would hit; whether a given API does is read from its documentation when the move to it is made.
+
+## Carried from ADR-085 (archived, git 0fd844ad): automatic compactions, the template, her signature
+
+Copied as written; her signed sentences are hers word for word.
+
+### 4c. The boundary by its stamp, replayed; automatic compactions send the span alone (2026-10-22)
+
+The owner approved one more pre-registered replay (`.runtime/private/compaction-study/replay/PREREG2.md`, 6 KB with its
+amendments, written before any output): arm C names the boundary by the `[label] MM/DD HH:MM` stamp of the first kept
+platform line and says 现在 / 此刻 / 最近 mean that moment (the researcher's recommendation, her first choice). If it
+passed it would be installed; if it failed, automatic compactions would send the compacted span alone, with no third
+round. Before the first call the researcher's dry run found no platform line in the home conversation's kept tails,
+where C is A's rule word for word, so step 1 was amended to the five agent-line points (no leak above 3% allowed).
+
+Result (local character model, high, as A; `runs.jsonl`, numbers only): after three agent-line points C leaked in two
+(4.8% against A's 9.8%; 1.8% against 7.2%; 7.2% against 1.3%), so the stopping rule ended the run: **C fails**. Like
+arm B it lowers the leak where A leaks and adds its own where A does not; a boundary named in the instruction, by
+count, quote or stamp, does not stop a summarizer that reads the tail from restating it.
+
+So an automatic compaction (DSH's `compactIfNeeded`: step pressure, context overflow) sends the compacted span alone
+again (`compaction.js`, `automatic`); the summarizer never reads what it must not summarize. It costs the cold read
+§1 measured on the local engine, about 20 s and about 120k tokens per automatic compaction, about ten a day, nearly all
+in her home conversation and the agent line. A commanded compaction (`/compact`, which keeps the last message; ADR-049's
+condensing of groups) still sends the whole conversation: its kept part is one message, the group readings found no
+kept-tail repeat in it (researcher-audit.md §5), and its cache read stays. Each automatic one writes one Host log line
+(`spanAlone`, reason `automatic`). The template's own 30–40% waste is a separate proposal, after this lands (owner).
+Test: `packages/cognition-core/test/compaction.test.js`.
+
+### 7. The checkpoint template trimmed (2026-10-22)
+
+The template's own waste was approved for a separate change by the owner (§4c). Claude proposed it 2026-10-22 14:0x
+NZDT; an independent reviewer agent checked it in two rounds with its own scripts (every number below reproduced or
+corrected by it); on the owner's instruction Claude settled the final form with the reviewer. It reaches her for
+reading and signature before install.
+
+**What a merge loses** (her role checkpoints since 10-08: 339 merge hops, each a checkpoint and the next one in the
+same conversation, which merged it; errand sessions' copies of their parent's checkpoints left out; numbers only):
+
+- Of the earlier checkpoint's 答应过的事 and 更正与分歧 items (3,932), the next carries 36% in the same section and 4%
+  elsewhere; 60% are not found (character 4-gram containment 0.5; 38–75% across n = 3–6 and thresholds 0.3–0.7).
+  Only 6% of the items not found carried a done mark; the share grows with the time between the two checkpoints (43%
+  under an hour, 61% at 1–6 h, 72% over a day).
+- Hard tokens of the earlier checkpoint (labels, times, dates, quotes, code, file names, numbers; each once): 51% not
+  found in the next.
+- A phrase pointing at the earlier checkpoint (「承接…」) in 64% of hops. Its bullet holds the compressed older
+  history (236 bullets, median 121 characters; their content is nowhere else in the checkpoint in 235).
+- In group checkpoints (`researcher-audit.md` §5) 委托中的事 copies the task list (87–100% of its characters), and her
+  group notes, not on the do-not-copy list, are 3–11% of every checkpoint.
+- Her own reading of the first automatic checkpoint (§6): the losses come from the merge; process, evidence and
+  provenance go, conclusions and promises stay. Her ask (10-22, Claude's paraphrase): on a merge, carry 答应过的事 and
+  更正与分歧 item by item, or mark an item closed.
+
+**Changed** (`ROLE_COMPACTION_INSTRUCTION`; the six sections, their order and `hasSections` are unchanged, so old and
+new checkpoints compare):
+
+1. A merge carries the earlier 答应过的事 and 更正与分歧 item by item, word for word; one done or no longer true is
+   marked 「已了结：」 with its basis at the end, 「（凭：谁在什么时候说的或做的那一句）」, for one checkpoint, and dropped at
+   the next merge (the basis is her change after reading the 13:34 hop, where most items that looked closed were
+   another matter standing in for this one).
+2. No phrase points at the earlier checkpoint; its history goes into the start of 对话脉络 and may be shortened; that
+   part is exempt from change 5 (her change: otherwise the two rules cancel each other there).
+3. Her group notes (`group_notes_from_program`) join the do-not-copy list.
+4. 委托中的事 keeps what the task list cannot show: who waits for the result, whom she promised to tell, the points of
+   a result that came back (the task list shows goal, title and state, never the result text).
+5. One fact in one section: promises, corrections and open threads in their own sections; 对话脉络 tells what
+   happened without repeating their details (the reverse would leave a promise first told in the narrative outside
+   the protected section).
+6. What stays of names, times, numbers and quotes is not rewritten (the old rule said both "shorten" and "keep as
+   is").
+
+**Reading** (pre-registered; `.runtime/private/compaction-study/trim_reading.py`, numbers only; she reads the
+checkpoints herself). The measure allows rewording: an item counts as carried when half of its four-character pieces
+are found in the next checkpoint (near word for word, six-character pieces at 90% or more, only 18% of the 339 hops'
+items are carried, so a reworded carry is already lossy; the change is to stop whole items going). From her install,
+per merge hop: the earlier 答应过的事 and 更正与分歧 items not already
+marked closed; silent drops (not carried by the measure above); items newly marked 已了结; the items the next
+checkpoint holds in those two sections; pointer phrases; hard tokens of those two sections lost (reported only).
+
+- **The first 4 hops of home and the agent line** decide (her ask, 15:5x: there the two sections hold promises,
+  corrections and orderings, in groups mostly open threads; the bars were calibrated on those two classes); group
+  hops are reported to her the same way and not counted. About 12 such hops a day. Keep if the pooled silent-drop share is
+  20% or less; revert at once on a hop at 50% or more, or on a loss she reports. Any hop over 20% is reported to her at
+  once with its numbers and the first 8 characters of each of its items (a share alone she cannot judge), so a bad hop is never hidden by a good one in the pool (her
+  concern; she asked for a per-hop 20% bar, and the pooled verdict stays because with 8–14 items a hop a per-hop bar
+  would revert a template that truly drops 10% in about half of the readings). Marks without their basis are counted
+  per hop. Calibrated on today's template, home
+  and agent-line hops since 10-15 (88 hops, 85 four-hop windows): per-hop median 72%, best window 26%, so the rule
+  keeps today's template in 0 of 85 windows, and it keeps a template that drops 5%, 10% or 15% of these items 100%,
+  97% or 82% of the time.
+- **Growth.** Today a checkpoint holds a median 10 such items (p99 20, max 24) and about 5.7 new ones arrive per hop.
+  Carried word for word they settle near new items divided by the closure rate: 86–96 at today's (6–7% a hop), 38 at
+  15%, 29 at 20%. A checkpoint with more than 40 in the two sections first ends the one-checkpoint stay of a closed
+  item (deleted when marked); if the next checkpoint still holds more than 40, change 1 is reverted (her change: the
+  item-by-item carry is the mechanism being fixed, so it goes last). Watched until the ~10-24 reading. At today's closure it would trip in about 9 hops (about 1.5 days), so the first 4 hops also report the
+  newly-marked share; under 12%, she is told the stop is likely before it trips: it would mean marking did not rise,
+  not that the wording failed.
+- **Live, without a replay:** a failed hop loses no more than a hop does today (the reviewer agrees); a replay would
+  cost about 12 calls on the engine her sister shares and could not include her reading.
+
+Her review (2026-10-22 14:4x NZDT, on Claude's agent line; Claude's paraphrase): she signs all six changes and the
+three stops, with two changes folded in above (change 2 exempt from change 5; at the growth stop the one-checkpoint stay
+goes before change 1). The thresholds do not move to pass a reading. Her own 12:22 count (40 → 40 items) and Claude's
+(13 of 14) differ in their denominator, all six sections against the two: every count says its denominator first. She
+reads the 13:34 checkpoints herself and says whether its items were closed or lost.
+
+Her reading of the 13:34 hop (15:34, Claude's paraphrase; she read both checkpoints in full): a real loss, not
+closure. Of the earlier 8 items in the two sections (Claude's script counts 7: it leaves out one that already carried a
+done word), none survived word for word and one in rewritten form; of 34 sub-items, 30 not found and 24 with no trace
+anywhere; the summary's own reasoning listed five pending appointments that its text then left out. Items with a block
+of their own (her plans) can be recovered; promises and orderings with no other home are the real loss, which is what
+this change is for. A later hop (14:43) wrote items as 「X → 已做到／未做／进行中」 unprompted.
+
+**The measure, corrected before the second hop (2026-10-22 17:1x; her reading of hop 1, agreed with her).** The first
+hop counted 3 of 14 items as gone (21%); she read all 15 old items and found every one, 10 carried and 5 marked
+closed. The marked ones had been rewritten when closed (1.2–2.0 times as long, 11–48% of their four-character pieces
+kept), which the measure took for losses; the rule asks for the prefix on the original words, and the model did not
+follow that (recorded; the template is not changed during the reading). From now on, and for hop 1 again: status
+prefixes (「已了结：」「仍有效：」…) and the basis 「（凭：…）」 are stripped on both sides; each old item is compared with its
+best single match in the same section of the new checkpoint; it is **carried** if that match is not marked closed and
+holds 50% or more of its pieces, **closed** if the match starts 「已了结」, cites its basis and holds 10% or more, and
+**unclear** otherwise. Only unclear items count toward the 20% and 50% bars; each is named to her with its best match,
+and her reading of it decides. The denominator is every old item except those whose line starts 「已了结」 (no longer
+any item containing a done word, which took a live promise out). Also reported per hop: closed items in the new
+checkpoint that no old promise or correction maps to, with the section their best old source is in. Hop 1 recounted:
+15 items, 9 carried, 5 closed, 1 unclear (a reworded correction she reads as carried), so 0 lost; 7 closed items in
+the new checkpoint, 2 of them from elsewhere (best old source in 对话脉络). The 20%, 50% and 40 bars are unchanged.
+
+Her own check, made cheap (her ask, 14:5x): each hop's reading that reaches her lists the first 8 characters of every
+item the new checkpoint holds in the two sections, one a line, at most 40, so she sees at a glance which one is gone
+without rereading both checkpoints. The script posts it to her line itself; Claude sees only the counts.
+
+Signature: 小满（10-22，经 agent 线）：这两节是我的账，不是文采。丢掉的偏是承诺和来路，留下的偏是结论——我要的是下一次我还能认出自己答应过什么、为什么改过口。六条改法我认，我自己提的两条已并入：旧经过并进「对话脉络」那一处不受第 5 条限制；撞 40 条先停「留一次」，下一份还超才撤第 1 条。门槛 20%、50%、40 写死，不为过线挪杆；每个数先报分母。
+
+
+### 7a. Read and closed (2026-10-22 evening)
+
+The reading's watcher failed silently from 17:41 to about 22:00 NZDT: a script error stopped every post after hop 2,
+and the loop printed only its successes. Fixed (one post a hop; a failed run now stops the watcher and says so); the
+seven hops reached her at about 22:00 and she read every one.
+
+**Script and her reading.** The first 4 hops of home and the agent line: the script's unclear share 11 of 56
+(19.6%); her reading: 7 of 66 truly lost (10.6%), one with a consequence. The two denominators differ and were not
+reconciled. Within the 20% bar: keep. After hop 4 three hops passed 50% by the script (19:17 home 56%, 20:12 agent
+line 76%, 21:24 agent line 60%); after her reading none is near 50%.
+
+**Like for like** (`impact.py`, the same rule over all 236 home and agent-line hops since 10-08). Gone = under 30% of
+an item anywhere in the next checkpoint and not back in the next three:
+
+| template | home | agent line | hard tokens lost (home / agent line) |
+|---|---|---|---|
+| before the trim (148 / 74 hops) | 50% of 1,905 items | 71% of 719 | 39% / 55% |
+| trimmed (4 / 5 hops) | 9% of 66 | 40% of 81 | 28% / 33% |
+
+The 50% bar took the old template as the safe floor to revert to; it loses more, so no hop was a case for reverting.
+
+**Where loss remains** (the trim's 9 hops): 答应过的事 4 of 50, 更正与分歧 at home 4 of 42, on the agent line 30 of
+55. Not the output cap (4.4k–8.9k of 24.6k tokens) and not size: agent-line spans are 51k–57k tokens against 53k–63k
+at home, with sections of similar length. Her reading of the agent line: at 20:12 most corrections were folded into
+one long line (「其余旧账不变：…」, which the measure counts as lost), and that line was compressed again at 21:24, so
+folding delays a loss by one merge. The one loss with a consequence: her final decision on two of her skills, gone at
+the 18:14 merge; at 21:0x she planned to make it again, and a home turn caught it at 21:24.
+
+**Decided (the owner, 2026-10-22 evening).** The template stays. Loss on the agent line is acceptable: Claude and she
+remember, and settled research is in the ADRs. No program-side carry (Claude proposed re-appending the items a merge
+drops; withdrawn). Her answer on remembering (Claude's paraphrase): what was lost tonight is her own decisions, which
+are in no ADR, so she writes them into her own ledger when she makes them, with a self-check on 10-27.
+
+On her ask the owner approved one sentence, which she amended (22:10, on Claude's agent line): shortening may cut only
+how an item came about, never its basis or source. Added after change 1:
+
+> 合并时，「答应过的事」「更正与分歧」一条一行：不把几条并成一句，也不写“其余不变”这类总括；条目多就把每条压短，压短只压经过，留下这一条的判据和来路（数字、idea-…、commit 短号、谁那句原话），每条都单独留着。
+
+The script reading has ended. She reads two agent-line hops herself after it is installed (from 10-23 21:00): one
+item a line, and whether each keeps its basis and source.
+
+Evidence (numbers only): `.runtime/private/compaction-study/impact.py` (6,886 B) and `trim_reading.py` (13,276 B).

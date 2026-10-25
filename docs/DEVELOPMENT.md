@@ -45,6 +45,9 @@ Ignored and local: `.runtime/`, `.venv/`, `node_modules/`, `reports/`, `config/l
   voice-recognition model (`models/sensevoice-2024-07-17/`, [Voice messages](../RUNTIME_API.md#voice-messages))
   and the worker's own files.
   Everything under `.runtime/` is local and disposable except what a profile needs; never commit it.
+- **Archived group history** sits in `messages` under its own scene ids (`archive:<scene id>`) with
+  `direction: 'archived'`; only explicit history reads it. A live reader selects by the live scene id and a direction
+  of `inbound` or `outbound`, never these rows (familiarity, for one, counts inbound lines).
 
 ## How a change reaches the running Host
 
@@ -146,6 +149,25 @@ resolved) or `packages/channels/napcat-qq` (managed adapter in the sandbox, whic
 4. The README says what a deployment configures (see the QQ package's "Setting up QQ").
 5. `npm install`, `npm run test:native`, then add it to a profile
    ([Add or remove an optional package](../RUN_ASUNA.md#add-or-remove-an-optional-package)).
+
+What she reads and the tools she uses do not depend on the adapter: the line handle and every rendering are
+Core's, from Core's records; an adapter supplies facts (this line quotes that platform id), never words, and declares
+which functions it can carry. A function it cannot carry is hidden from her, never shown and then refused or dropped.
+
+Every channel adapter keeps its lanes:
+
+1. A slow, failing or hung message delays only its own conversation and only work of its own kind: isolation by
+   conversation in both directions, and chat is never behind files or heavy media.
+2. Order is a property of a conversation, never of the process, in both directions and across retries.
+3. Inbound is at-least-once and idempotent at the Host; outbound is at-most-once for anything a person sees, so doubt
+   is UNKNOWN, never a blind resend.
+4. Every wait has a deadline and an owner; nothing optional holds a line (an extra that fails or runs out of time is
+   marked and the line goes on).
+5. A stuck item is detected and its slot freed without a restart; the item is held, never dropped.
+6. State is visible: per lane and per conversation, how many wait, the oldest one's age, and what is in flight and for
+   how long.
+
+The NapCat adapter's self-test (`qqadapter/selftest.py`) holds the cases these rules were built against.
 
 Core code, core prompts and example configs never name a persona or a platform.
 

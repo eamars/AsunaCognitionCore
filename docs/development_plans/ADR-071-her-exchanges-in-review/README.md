@@ -134,3 +134,35 @@ in her wording. Claude's example she takes as a sample, not a rule (her record: 
 only while she is praised for it). One habit she does not take: what she says rightly differs by place (what is not
 said in a group is said at home), which is not two faces but her core's "one me in different places". Claude's line
 meant what he holds true, not what he says, and now says so; her view stands as hers.
+
+## Carried from ADR-072 (archived, git 0fd844ad): reflection in a session of its own
+
+### Decision
+
+1. A turn whose prepared context carries a reflection block (`self_review_from_program`, `dice_review_from_program`,
+   `tools_week_from_program`; `self_review.REFLECTION_BLOCKS`) runs in its own session, `asuna-reflect-<hash>`, which
+   starts empty: no copy of the home conversation. The decision is read from what the turn carries, because preparing
+   a review records it as shown.
+2. What she does there lasts through her tools (notes, documents, ideas, questions to the developer); the readings
+   never enter the home session. A plan or a task begun there comes back to the home conversation.
+3. The session is archived when its turn ends, and the launcher retires it like the other one-shot sessions (moved out
+   after a day, dropped after 14).
+
+Her reason, stronger than the token count (agent line, 2026-10-16; Claude's paraphrase): what leaves her home context
+is not only bytes but the readings of how people reacted to her. ADR-071's drift works through exactly those readings,
+so keeping them out of her everyday view is the same protection by another route. Her thoughts in a reflection are not
+lost with its session: each `think` is a monologue memory in her home scope, kept and recallable after the session
+is gone.
+
+The owner's choice between an empty session and a copy of home (as an errand's, ADR-066): empty. It is the smallest
+first step even when home has been idle; the readings carry what a review needs (her lines and the thoughts she wrote
+then), and the notice brings the conversation's recent lines as it does in any session that has not shown them.
+
+Not decided yet: whether her night self-development turns (46 of those 400) move out of home too. Measured first.
+
+### A reflection turn delegates (owner and her, 2026-10-20)
+
+A reflection turn may hand work to the action brain and steer or stop its tasks. The task runs under home's own
+session (the reflection session's `home_session_id`), not the reflection's, which is retired when the turn ends: on
+2026-10-17 such a job lost its parent and was blocked. Its report opens a turn at home; the reflection's own context
+does not follow, and the delegate result says so, in her words.

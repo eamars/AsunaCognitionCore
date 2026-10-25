@@ -44,3 +44,13 @@ ReflectionManager, ImprovementPlanner, GrowthScore, PatchReviewer, DeploymentApp
 - Boundary incident (2026-09-25): a question is not an implementation request. The operator's model server, its scripts, weights and processes are outside the project; changing, downloading for or restarting it needs the owner's explicit authorization.
 
 Full text: git bf771c33
+
+## Carried from ADR-008 (archived, git 0fd844ad): unacceptable approaches
+
+- iframe 指向旧 Asuna Web；插件内部再启动各 lane 的 `sdk-minimal` 和旧 UI、再用轮询拼回；
+- 覆盖全局 `assistant-step`，把所有 DSH 助手都变成她；全局占用 `main.conversation`、`sidebar.workspaces` 等已占用位置；
+- 伪造 `SessionBinding`、手工实现 `ISessions` 假装 Mongo episodes 是原生会话、为了让原生 Chat 显示而复制一份假历史；
+- 改 DOM、私有导入、修改 node_modules、复制 DSH 的 apps/web 或完整 Chat 源码；
+- 在显示层给输出加口癖冒充独立角色；为省 token 裁剪工具或把角色缩成一句形容词；
+- 新增全局原生 hook 截获非 Asuna 会话：作用域只限注册好的角色/行动绑定；
+- 先建通用总线、工作流、技能市场、人格管理平台、跨版本 HMR 平台。

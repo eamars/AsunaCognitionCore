@@ -656,7 +656,9 @@ Cost: `speak`'s description +153 characters (budget raised in `tests/test_tool_b
    once she learned there is no private quoting today at either end: it adds a capability that never existed, not a
    change to her default. She agrees with step 1 changing only what she reads.
 2. Reactions between other people: she wants them shown (13:5x); it is the same gap as reactions held in memory in her
-   resting groups. How (each, or folded into one program line per turn) is still open.
+   resting groups. How (each, or folded into one program line per turn) is still open. (2026-10-25: step 3, §9.8c, built
+   the shared anchor for reactions and folded notices; whether it covers reactions between other people is read with
+   the §9.8 probes.)
 3. The `react` part: the local model sent a sticker named 赞 instead of a reaction in one moment under B. Her view
    (13:5x): on QQ a sticker is often the most natural like, and she does it herself; it is not a failure, so the
    reaction part is not to be made the "right answer" over stickers.

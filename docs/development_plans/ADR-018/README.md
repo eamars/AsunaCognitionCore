@@ -2,7 +2,7 @@
 
 | Item | Content |
 | --- | --- |
-| Status | **Implemented (M1–M4), 2026-10-07.** The owner decided §10.1. The owner left §10.2 to the implementer, who chose as recorded there. M5 (review on the live Web page) is pending. §11 lists how it was built and where it differs from §5. |
+| Status | **Implemented (M1–M4), 2026-10-07.** The owner decided §10.1. The owner left §10.2 to the implementer, who chose as recorded there. M5 (review on the live Web page) closed by use: notes have run live since 2026-10-07 (owner, 2026-10-25). §11 lists how it was built and where it differs from §5. |
 | Date | 2026-10-07 |
 | Author | The implementer (Claude), drafted at the owner's request |
 | Relation | Amends ADR-017 rule 2 ("public → home must not be real time") for **messages** only. Requests to act (action instructions) keep the ADR-017 / ADR-011 Q7 rule. |

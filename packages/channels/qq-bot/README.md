@@ -20,6 +20,8 @@ sits beside [QQ through NapCat](../napcat-qq/README.md): a profile may have eith
   - A group message carries the group's name as the platform gives it (`raw.group_name`, from
     `/v2/groups/{group_openid}/info`), read once a day per group and kept with when it was read in the bridge's
     state file (`groups`). A bot the platform refuses that lookup gets no name, and the group shows none.
+  - A group's first names can be a default made of three member names joined with 、 rather than a name anyone
+    gave it; the bridge cannot tell the two apart. A rename reaches her within a day.
   - Other people's @ read as `@<openid>`.
   - Pictures and videos arrive as `[图片（未解析）]` / `[视频（未解析）]` with their link in `raw.asuna_media`, so she
     can read them (a video as a contact sheet). Voice and files arrive as placeholders; a voice message carries the

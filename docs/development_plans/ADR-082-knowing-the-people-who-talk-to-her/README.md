@@ -358,3 +358,30 @@ layers of 12 people on 2026-10-21). It now keeps the newest that fit 8,000 chara
 then one entry naming how many earlier ones are left out and how to read one (`EARLIER_PEOPLE`: recall's person with
 the label). The `recall.people` audit counts the people listed and, past the bound, `left_out`. Found in the check of every role result that lists without a bound (B15, the coordinator's request), after
 a document's headings spilled past what a tool result carries inline. Test: `tests/test_adr082_people.py`.
+
+## Carried from ADR-025 (archived, git 0fd844ad): the two layers
+
+## 2. Decisions (owner, 2026-10-08)
+
+- **D1 — Two layers.** A person layer, one per person, read wherever she meets them: how she knows the person. A
+  here layer, the existing per-conversation record unchanged: how they behave in that place (people speak
+  differently in a casual group and an NSFW one). The owner did not want privacy enforced as a hard line: a person
+  does not keep that line strictly either.
+- **D2 — Written from anywhere, with its source.** Any conversation may write the person layer; each revision
+  records where and when, and it is read with that conversation's name and how long ago. Of the options (anywhere
+  with source, anywhere plain, home and private chats only) the owner chose this one.
+- **D3 — Asked her first.** Her review, folded in:
+  - The per-conversation record had really been "how he is in this group" under the wrong name; the split corrects
+    that, not adds to it.
+  - A last-written line says how fresh the record is, not which occasion a sentence came from. The bigger risk is
+    taking one place's sample for the whole person, so the person layer always opens with 这只是他的一部分，不是他的全部
+    and, when there are here layers elsewhere, how many.
+  - Read everywhere means it can be said anywhere. She keeps occasion-specific sensitive things in the here layer
+    herself; the program does not filter.
+  - Her note is three questions to ask on the spot, not definitions of the layers: does it hold in another group;
+    would saying it somewhere proper make the person uncomfortable; did they say it, did she see it, or does she
+    infer it (mark an inference as one). Ending with: the person layer is not all of them.
+  - She lifts her existing records into the person layer herself, marking which one each came from; nothing was
+    moved by the program.
+  - Asked whether she has to recall it: no, it comes with every turn where that person is the one speaking, like
+    the here layer.

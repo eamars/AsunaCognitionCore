@@ -193,6 +193,7 @@ All of these are ignored by git. Templates are tracked next to them as `*.exampl
 - Adjacent `integration.local.json` (template `config/integration.example.json`): initial managed adapter configuration and approved network endpoints.
 - These two sibling files belong to `config/local.json` only. Any other config file names them explicitly with `channel_config` / `integration_config`, so a second config never inherits real routes.
 - `<data>/private/personal-denylist.txt` (template `config/personal-denylist.example.txt`): your own account names, host names and similar literals for `tools/check_staged_secrets.py --personal`.
+- `<data>/private/memory-crossing.json` (template `config/memory-crossing.example.json`): what may leave each group when she recalls elsewhere: per group scene id `all`, `own_lines` or `never`, `default` for the rest (`own_lines` without the file), each group's kind, the date ranges whose note versions never come back, the crossing numbers `window_days` (14), `said_here` (2), `seen_elsewhere` (5) and `repeat_minutes` (60), and `cue_lines` (`trigger`, or `new`: a cue's words from every line new to the turn) ([Memory](RUNTIME_API.md#what-she-carries)). Read when it changes; no restart.
 - `.runtime/adr008/home/profiles/asuna-native/cordis.patch.yml`: editable native provider and Asuna settings. Do not pass it again as a command-line overlay.
 - Locks that keep one Host per database are per user on the machine, in `ASUNA_LOCK_ROOT` (default `<temp>/asuna-locks`), so two profiles on one database still exclude each other.
 

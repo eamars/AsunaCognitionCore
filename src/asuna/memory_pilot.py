@@ -40,7 +40,8 @@ SELF_ITEM_CHARS = 30
 
 
 def own_items(store, persona):
-    """Her items as the pilot indexes them: [{key, store, doc, sid, scope_key, visibility, inject, text, lexical}]."""
+    """Her items as the pilot indexes them: [{key, store, doc, sid, scope_key, visibility, inject, text, heading, tags,
+    lexical}]."""
     from .documents import DocumentStore
     from .group_admin import notes_slug
     from .visibility import owner_private_scope
@@ -54,6 +55,7 @@ def own_items(store, persona):
             out.append({'key': 'shadow:' + sha(canonical([kind, doc, section['sid']]))[:32], 'store': kind, 'doc': doc,
                         'sid': section['sid'], 'scope_key': scope_key, 'visibility': section.get('visibility'),
                         'inject': section.get('inject'), 'text': body, 'heading': section.get('heading') or '',
+                        'tags': list(section.get('tags') or []),
                         'lexical': (section.get('heading') or '') + '\n' + body})
 
     def scope_of(section):

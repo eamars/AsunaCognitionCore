@@ -32,7 +32,7 @@ Index persisted local dialogue off the generation thread; restart scans pending 
 
 The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
 
-- def `own_items` — Her items as the pilot indexes them: [{key, store, doc, sid, scope_key, visibility, inject, text, lexical}].
+- def `own_items` — Her items as the pilot indexes them: [{key, store, doc, sid, scope_key, visibility, inject, text, heading, tags, lexical}].
 - def `prune` — Delete the pilot's turn rows (and recall and failure rows) older than `days`; items and pairs stay.
 - def `attach` — Start the item index for a context builder that retrieves: the Pilot, else None.
 - def `rank` — Her items the way retrieval ranks memories: vector and lexical ranks fused (terms common to over half of the items say nothing).
@@ -72,10 +72,17 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
   - `fold_order` — The order a group's notes fold in over their per-turn limit: the section that surfaced longest ago first.
   - `refold` — Recompute and keep a group's fold order (on her write and at settlement, not every turn, so the block is not re-sent for it).
   - `folding` — The kept fold order of a group's notes, made once when there is none.
+  - `place_lines` — The place's recent lines that decide what is rare there: its newest inbound lines of the last crossing.number('window_days') days, at most key_words.WINDOW_LINES.
+  - `rerate` — Count a place's common words, and the cross words it says itself, again and keep them.
+  - `rarity` — A place's kept common words, counted once when there are none.
+  - `said` — The cross words a place says itself (key_words.said), counted once when there are none.
+  - `openings` — The openings a place repeats (key_words.openings), counted once when there are none.
+  - `rerate_all` — At settlement: every place with lines in the window counted again; a place with none keeps no row.
   - `let_go` — Her let_go: the item one place down now (a put-away item stays where it is).
   - `used` — Her use of items by `doc:slug#sid` refs: recall returned them, or she cited them in a tool call.
   - `surfaced` — Items a turn surfaced: memorable only when a second, different conversation brings one up.
   - `things` — things_from_program: her items by store and place in words, and the moves since this conversation was last told, each once, with its clock time.
+  - `came_back` — Once a local day in each conversation: what came back in the last day, each kind in words, and the notes readable here that came back most (never which place it was).
 - def `signing` — Why this write may not make the item a fact (her own judgment signed by herself), or None.
 - def `gist_refusal` — Why her rewrite may not be taken as the gist of a listed item, or None: it keeps the claim and drops the basis its verbatim had (her rule: a claim without its basis is loss, not fading).
 - def `claim_chars` — A gist's length without its basis lines: the basis is never what the 160 characters squeeze out.
@@ -89,10 +96,66 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 - def `week` — Her weekly reading of her memory (her answer, 2026-10-13), in a self-evaluation turn, at most once a week: what left 随身 this week and whether she recalled it afterwards, one put-away item's own text (chosen by the week), and one line of wha
 - def `detail` — The verbatim a gist stands for (its revision before the gist), or None.
 - def `placed` — A document's sections as the turn reads them when the switch is on; unchanged when it is off.
-- def `deliver` — Her own items a turn brings up by itself (手边; a recall also reaches 收着), scored as memories are, at most OWN_SLOTS above FLOOR, as memory entries with their store, place and age words and a doc ref.
-- def `headings` — recall: the headings of her items at hand or put away that match the question, beyond the bodies it returns.
+- def `deliver` — Her own items a turn brings up by itself (手边; a recall also reaches 收着): an item whose key the message has (key_words.py), or one scored above FLOOR as memories are; at most OWN_SLOTS in fused order, as memory entries with their store, plac
+- def `key_said` — The first of an item's keys the text has, as the text spells it, or None.
+- def `headings` — recall: the headings of her items at hand or put away whose key the question has (the keys a turn's message brings an item back by), beyond the bodies it returns, each with the word that matched.
 - def `doc_headings` — recall with a doc and no sid: that document's headings, each with its place; the latest that fit `limit` characters, after a first entry naming how many earlier ones are left out.
 - def `refs_in` — The `doc:slug#sid` refs anywhere in a tool call's arguments.
+
+## `key_words`
+
+[src/asuna/key_words.py](../../src/asuna/key_words.py)
+
+The words that bring her items back by themselves (ADR-097): keys, a place's common words, and the segmenter.
+
+- def `segmenter` — jieba, loaded once (its dictionary takes a fraction of a second), quiet.
+- def `words` — A text as words, in order: Chinese runs cut by the segmenter, ASCII runs whole and lower-cased.
+- def `heading_words` — The words of a heading that can be keys: two characters or more, each once, in order.
+- def `frequency` — A word's frequency in jieba's own dictionary (None when it is not there), whatever was learned.
+- def `everyday` — A Chinese word the segmenter's dictionary rates as everyday; ASCII runs never are.
+- def `learn` — Cut these words whole from now on, and forget what was learned before and is not among them.
+- def `learned`
+- def `vocabulary` — The words to learn from {cross word: lines}: Chinese ones in LEARNED_LINES lines or more, without the glued pieces: one that contains a shorter candidate said in at least as many lines (破甲来 holds 破甲).
+- def `keys` — An item's keys in a place whose common atoms are `table`: its rare tags, then its rare, not everyday heading words.
+- def `tag_keys` — Her tags that are keys: free tags of two characters or more (a `place:` tag and the correction mark are not).
+- def `atoms` — What a line is counted by: its ASCII runs and its Chinese substrings of GRAMS lengths.
+- def `limit` — How many of the lines a rare word may be in.
+- def `common` — The atoms more of these lines contain than a rare word may be in, sorted: the place's table.
+- def `rare` — Whether a word is rare in a place whose common atoms are `table` (a set).
+- def `found` — The key as the text has it (its own spelling), or None.
+- def `cross_words` — The words of a text that may reach another place, each once: outside the dictionary, or whole ASCII words and numbers, two characters or more; links and mentions (`mention`, the platform's pattern) stripped first.
+- def `said` — The cross words more of these lines say than `most`, sorted: what the place says itself.
+- def `openings` — The openings a place repeats: the first OPENING characters of OPENING_LINE-character lines (a leading @-mention stripped), when OPENING_REPEATS lines or more share them; a bot's status lines and a task's notices start alike.
+- def `templated` — A line made from a template, not said: one of the place's repeated openings, or a record of three labelled fields or more (a status line).
+- def `lines_with` — How many of the lines contain the key.
+- def `tag_here` — A tag's line in words: how often this place's recent lines say it, and whether it brings the section back.
+
+## `crossing`
+
+[src/asuna/crossing.py](../../src/asuna/crossing.py)
+
+What she learned elsewhere comes back when she asks (ADR-097 D3, D4): lines from her other groups, past versions of her notes, and the place rules that decide what may leave a group.
+
+- def `settings` — The deployment's rules: {default, places, kinds, history_excluded}, defaults filled; a malformed entry is dropped (an unknown rule reads as the default).
+- def `number` — One of the deployment's numbers (NUMBERS).
+- def `rule`
+- def `kind`
+- def `query_words` — The words of a recall's query that reach other places: cross words this place says at most `said_here` times.
+- def `elsewhere` — recall: lines of her other groups that have a word of the query that may cross, at most ELSEWHERE_SHOWN, best first.
+- def `vocabulary` — The learned words of the index's build, learned in this process once per build; `ensure` builds the index first when there is none (a place's words must be cut as the index cuts them).
+- def `build` — Build the word index again from every chat line of her groups, as a new generation; the old one goes once the new one is in place.
+- def `top_up` — Add the group lines said since the index's mark: each group's chunked lines after its last indexed one, up to the first line the indexer has not chunked yet.
+- def `seen_for` — {word: [(scope, lines in the window, latest)]} from the index, topped up first.
+- def `lines_for` — [(unit id, scope, hers)] of the lines that have one of the words, the index topped up first.
+- def `fetch` — recall sections {doc: elsewhere, section: ref}: the lines around one line of another group, the place rule checked again now, speakers as 你 or 别人.
+- def `versions` — `history` of one document, kept while its ledger has no newer revision (one small read to check).
+- def `history` — Every past text of each section of one of her documents, oldest first: {sid: [(body, written_at, replaced_at, reason of the change that replaced it)]}; the current text is not among them.
+- def `before` — recall: past versions of her notes readable here that have a word of the query that may cross, which their section no longer has; one per section, newest change first, at most SHOWN.
+- def `cue` — A group turn's one line of presence, or None.
+- def `fired` — One count row: what came back (FIRE_KINDS), in which conversation and turn (`episode`, else the event's), at which line (the turn's line's scene_seq) and when.
+- def `recalled` — A recall's count rows: each line from elsewhere and past version it returned, and W6 when it brought back something the turn's own memories had not (`returned`: the ids of its memories).
+- def `prune` — At settlement: fire rows older than FIRES_DAYS go.
+- def `report` — ADR-097's reading from the count rows since `since` (ISO), per place and in all: her turns from someone's line, cues and cues a turn, her recalls in a cue's turn or the next one there (and those whose query has the cue's word), her notes ba
 
 ## `retrieval`
 

@@ -148,7 +148,9 @@ Decided in ADR-011.
 - **Summaries.** Batches are summarized with the speakers attributed by the program (`dialogue_summary`,
   `summary_attribution`).
 - **Recall.** A turn recalls by meaning within what the class may read (`retrieval.Retrieval.search`), and she can
-  `recall` more herself.
+  `recall` more herself. Her own items come back by their keys or their meaning (`memory_tiers.deliver`, `key_words`); a recall also
+  reaches her other groups' lines and her notes' past versions (`crossing`, through its rebuildable word index
+  `crossing_words`).
 - **Keeping.** At night she promotes what is worth keeping long term (`promote_memory`). Her own documents (persona,
   voice, notes) live in `documents`, and her understanding of people in `understanding`.
 - **Carried.** Each of her sections has a tier (`memory_tiers.Tiers`); what a turn carries follows it
@@ -289,6 +291,8 @@ What she remembers, how it is recalled, her documents, mood and blobs.
 - [`memory_indexer`](../../src/asuna/memory_indexer.py) — Index persisted local dialogue off the generation thread; restart scans pending work.
 - [`memory_pilot`](../../src/asuna/memory_pilot.py) — The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
 - [`memory_tiers`](../../src/asuna/memory_tiers.py) — Tiered memory (ADR-062): where each of her items lives, kept up by what is memorable, moved down by the program.
+- [`key_words`](../../src/asuna/key_words.py) — The words that bring her items back by themselves (ADR-097): keys, a place's common words, and the segmenter.
+- [`crossing`](../../src/asuna/crossing.py) — What she learned elsewhere comes back when she asks (ADR-097 D3, D4): lines from her other groups, past versions of her notes, and the place rules that decide what may leave a group.
 - [`retrieval`](../../src/asuna/retrieval.py) — Local embeddings and server-side, prefiltered Mongo vector retrieval.
 - [`history_query`](../../src/asuna/history_query.py) — 查宿主保存的授权消息（P1-b）：字面检索覆盖完整 messages，原文整条回读。
 - [`dialogue_summary`](../../src/asuna/dialogue_summary.py) — Low-priority, source-bound summaries for new dialogue batches (DM and authorized groups).
@@ -468,6 +472,7 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`import_native_credentials.mjs`](../../tools/import_native_credentials.mjs) — One-time private migration through DSH's credential provider; never logs values.
 - [`integration_import_offline_check.py`](../../tools/integration_import_offline_check.py) — 集成产物导入的离线自检：不需要 Mongo、不需要 pytest、不需要 WSL，直接跑同一套用例。
 - [`make_demo_config.py`](../../tools/make_demo_config.py) — Create the ignored demo config (ADR-009 §0.3) from config/demo.example.json.
+- [`memory_fires_report.py`](../../tools/memory_fires_report.py) — ADR-097: the reading of what came back, from the count rows (memory_fires), in counts only (no text, word, heading, query, id or place name).
 - [`memory_pilot_report.py`](../../tools/memory_pilot_report.py) — ADR-062 phase 1: the shadow pilot's daily reading, in counts only (no text, no headings, no queries).
 - [`outbound_image_offline_check.py`](../../tools/outbound_image_offline_check.py) — 出站图片附件（QQ 私聊 B 阶段第一步）的离线自检：不需要 Mongo、不需要 pytest、不联网、不发 QQ。
 - [`p1c_offline_check.py`](../../tools/p1c_offline_check.py) — ADR-005 P1-c 离线自检：不需要 Mongo、不需要 pytest，直接跑同一套整理用例。

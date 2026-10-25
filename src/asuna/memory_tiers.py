@@ -12,9 +12,11 @@ them. Every move is one row `move` and one audit line `memory.moved`, saying who
 and her own `inject` writes, `program` for the rest), and is told once in each conversation that can read the item
 (`things_from_program`). Where a write leaves each section is one rule, `Tiers.placement_after`, which the identity
 gate (carried.py) measures before the write lands. A group's notes over their per-turn limit fold by last surfacing
-(`fold_order`, kept and recomputed on a write and at settlement); a folded section is at hand for `deliver`. The
-program never writes her `inject`: the tier is the record of what is carried. She reads all of it as words from the
-tables below.
+(`fold_order`, kept and recomputed on a write and at settlement); a folded section is at hand for `deliver`. An item
+at hand comes up when the turn's message has one of its keys (key_words.py: her tags, and a group note's rare heading
+words), or when it is close enough in meaning; each place's common words, which decide what is rare there, are kept
+beside the fold order (rows `rarity`, recomputed at settlement and made when missing). The program never writes her
+`inject`: the tier is the record of what is carried. She reads all of it as words from the tables below.
 
 `ENABLED` is the switch; off, nothing here is read or written and her turns are as before.
 """
@@ -124,7 +126,13 @@ def told_text(config):
     return effective((config or {}).get('persona_model') or {}, 'memory.tiers_told')
 THINGS_NOTE = ('你的东西在哪：每份随身还能放多少，手边、收着各有几条；moved 是程序挪过的，每件只说一次（又用到、改写出变化就回来）；'
                'identity_room 是各处每回合随身带的（%s 合起来）用了上限的多少：%s；变了才说；'
+               'came_back 是最近一天里各样东西按词回来过几次，每天说一次；'
                'self_items 是把 current_self 拆成条的提议。')
+# What came back in the last day (ADR-097 D5), each kind in words; told once a day in each conversation.
+CAME_BACK_KINDS = (('note', '你的笔记回来'), ('cue', '别的群见过的词提醒'), ('elsewhere_hers', 'recall 找到你在别处说过的'),
+                   ('elsewhere_theirs', 'recall 找到别人提过的'), ('before', 'recall 找到你以前记过的'))
+TIMES_WORDS = ((0, '没有'), (1, '一次'), (3, '两三次'), (9, '好几次'), (None, '很多次'))
+CAME_BACK_ITEMS = 3
 
 
 def _things_note():
@@ -508,6 +516,57 @@ class Tiers:
         row = self.rows.find_one({'_id': 'fold:%s:%s' % (self.persona, slug)}, {'order': 1})
         return row['order'] if row else self.refold(slug, content)
 
+    # ── a place's common words, for her items' keys (ADR-097) ───────
+    def place_lines(self, scene_id, moment=None):
+        """The place's recent lines that decide what is rare there: its newest inbound lines of the last
+        crossing.number('window_days') days, at most key_words.WINDOW_LINES."""
+        from . import crossing, key_words
+        since = _iso((moment or _now()) - timedelta(days=crossing.number('window_days')))
+        rows = self.store.db.messages.find({'scene_id': scene_id, 'direction': 'inbound', 'received_at': {'$gte': since}},
+                                           {'text': 1}).sort('scene_seq', -1).limit(key_words.WINDOW_LINES)
+        return [row['text'] for row in rows if isinstance(row.get('text'), str)]
+
+    def rerate(self, scene_id, moment=None):
+        """Count a place's common words, and the cross words it says itself, again and keep them. Returns the row."""
+        from . import channel_kinds, crossing, key_words
+        crossing.vocabulary(self.store, ensure=True)     # the place's words are cut as the word index cuts them
+        lines = self.place_lines(scene_id, moment)
+        platform = channel_kinds.of(scene_id)
+        row = {'row': 'rarity', 'persona': self.persona, 'scene_id': scene_id, 'lines': len(lines),
+               'limit': key_words.limit(len(lines)), 'common': key_words.common(lines),
+               'said': key_words.said(lines, platform.INBOUND_MENTION if platform else None, crossing.number('said_here')),
+               'openings': key_words.openings(lines), 'at': _iso(moment or _now())}
+        self.rows.update_one({'_id': 'rarity:%s:%s' % (self.persona, scene_id)}, {'$set': row}, upsert=True)
+        return row
+
+    def _rated(self, scene_id, field):
+        row = self.rows.find_one({'_id': 'rarity:%s:%s' % (self.persona, scene_id)}, {field: 1})
+        return set((row if row and field in row else self.rerate(scene_id))[field])
+
+    def rarity(self, scene_id):
+        """A place's kept common words, counted once when there are none."""
+        return self._rated(scene_id, 'common')
+
+    def said(self, scene_id):
+        """The cross words a place says itself (key_words.said), counted once when there are none."""
+        return self._rated(scene_id, 'said')
+
+    def openings(self, scene_id):
+        """The openings a place repeats (key_words.openings), counted once when there are none."""
+        return self._rated(scene_id, 'openings')
+
+    def rerate_all(self, moment=None):
+        """At settlement: every place with lines in the window counted again; a place with none keeps no row."""
+        from . import crossing
+        moment = moment or _now()
+        since = _iso(moment - timedelta(days=crossing.number('window_days')))
+        places = sorted(set(self.store.db.messages.distinct('scene_id', {'direction': 'inbound',
+                                                                        'received_at': {'$gte': since}})))
+        for scene_id in places:
+            self.rerate(scene_id, moment)
+        self.rows.delete_many({'row': 'rarity', 'persona': self.persona, 'scene_id': {'$nin': places}})
+        return len(places)
+
     def let_go(self, slug, sid, *, scene_id=None, moment=None):
         """Her let_go: the item one place down now (a put-away item stays where it is)."""
         row = self.item(slug, sid)
@@ -585,7 +644,40 @@ class Tiers:
                                   {'$addToSet': {'told_in': scene['_id']}})
         if home and not self.rows.find_one({'row': 'item', 'persona': self.persona, 'doc': SELF_DOC}):
             block['self_items'] = SELF_OFFER
+        came = self.came_back(here, scene, zone, moment)
+        if came:
+            block['came_back'] = came
         return block
+
+    def came_back(self, here, scene, zone, moment):
+        """Once a local day in each conversation: what came back in the last day, each kind in words, and the notes
+        readable here that came back most (never which place it was)."""
+        from . import crossing
+        day = moment.astimezone(zone['tz'] if isinstance(zone, dict) else timezone.utc).date().isoformat()
+        key = 'came_back:%s:%s' % (self.persona, scene['_id'])
+        if (self.rows.find_one({'_id': key}, {'day': 1}) or {}).get('day') == day:
+            return None
+        since = _iso(moment - timedelta(days=1))
+        rows = list(self.store.db[crossing.FIRES].find({'persona': self.persona, 'kind': {'$in': [k for k, _ in CAME_BACK_KINDS]},
+                                                        'at': {'$gte': since}}, {'kind': 1, 'ref': 1}))
+        tally = {kind: sum(1 for row in rows if row['kind'] == kind) for kind, _ in CAME_BACK_KINDS}
+        notes = {}
+        for row in rows:
+            if row['kind'] == 'note' and row.get('ref'):
+                notes[row['ref']] = notes.get(row['ref'], 0) + 1
+        named = []
+        for ref_, n in sorted(notes.items(), key=lambda pair: -pair[1]):
+            doc, _, sid = ref_[len('doc:'):].partition('#')
+            item = self.item(doc, sid)
+            if item and here(item):
+                named.append('「%s」%s' % (item.get('heading') or sid, words(TIMES_WORDS, n)))
+            if len(named) == CAME_BACK_ITEMS:
+                break
+        parts = ['%s %s' % (label, words(TIMES_WORDS, tally[kind])) + ('（%s）' % '、'.join(named) if kind == 'note' and named else '')
+                 for kind, label in CAME_BACK_KINDS]
+        self.rows.update_one({'_id': key}, {'$set': {'row': 'told', 'persona': self.persona, 'scene_id': scene['_id'],
+                                                     'day': day}}, upsert=True)
+        return '最近一天：' + '；'.join(parts)
 
 
 def signing(row, intent, body=None):
@@ -877,14 +969,15 @@ def placed(store, persona, slug, content, override=None):
 
 def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, recall=False, moment=None,
             excerpt_chars=800):
-    """Her own items a turn brings up by itself (手边; a recall also reaches 收着), scored as memories are, at most
-    OWN_SLOTS above FLOOR, as memory entries with their store, place and age words and a doc ref. What is carried
-    (随身) is already in front of her and is never brought up again, except a group-notes section folded to its
-    heading this turn (ADR-096), which comes up labelled as carried and folded. Each one surfaced is marked: recalled,
-    or surfaced in this conversation. Returns (the entries, the refs of carried items the turn would have brought up
-    had they not been carried: the program's score for what she carries)."""
+    """Her own items a turn brings up by itself (手边; a recall also reaches 收着): an item whose key the message has
+    (key_words.py), or one scored above FLOOR as memories are; at most OWN_SLOTS in fused order, as memory entries with
+    their store, place and age words, a doc ref, and the word that brought it. What is carried (随身) is already in
+    front of her and is never brought up again, except a group-notes section folded to its heading this turn
+    (ADR-096), which comes up labelled as carried and folded. Each one surfaced is marked: recalled, or surfaced in
+    this conversation. Returns (the entries, the refs of carried items the turn would have brought up had they not
+    been carried: the program's score for what she carries)."""
     from .config import excerpt
-    from .memory_pilot import admitted, rank
+    from .memory_pilot import rank
     items = list(getattr(pilot, 'items', None) or [])
     if not items:
         return [], []
@@ -906,52 +999,74 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
     carried = [item for item in readable_items if tier(item) == CARRIED and not is_folded(item)]
     if not pool and not carried:
         return [], []
-    vector = retrieval.query_vector(query) or retrieval.embed([query], 'query')[0]
+    table = tiers.rarity(scene_id)
+    said = {item['key']: key_said(item, table, query) for item in pool + carried}
+    try:
+        vector = retrieval.query_vector(query) or retrieval.embed([query], 'query')[0]
+    except Exception:
+        vector = None                    # the embedding route is down: the exact word still brings an item back
     moment = moment or _now()
+
+    def admit(candidates):
+        if vector is None:
+            return [item['key'] for item in candidates if said[item['key']]][:OWN_SLOTS]
+        order, scores, _ = rank(candidates, query, vector)
+        order += [item['key'] for item in candidates if said[item['key']] and item['key'] not in order]
+        return [key for key in order if said[key] or scores.get(key, 0) >= FLOOR][:OWN_SLOTS]
     would = []
     if carried and not recall:
         # A carried item is never brought up (it is in front of her), so it cannot show use that way: one the turn
-        # would have brought up above the floor, had it not been carried, is used in this conversation.
-        order, scores, _ = rank(pool + carried, query, vector)
-        above = admitted([(key, scores[key]) for key in order], FLOOR, OWN_SLOTS)
+        # would have brought up, had it not been carried, is used in this conversation.
+        above = admit(pool + carried)
         hits = [(item['doc'], item['sid']) for item in carried if item['key'] in above]
         tiers.surfaced(hits, scene_id, moment)
         would = [ref(*hit) for hit in hits]
     if not pool:
         return [], would
-    order, scores, _ = rank(pool, query, vector)
     by_key = {item['key']: item for item in pool}
     out, refs = [], []
-    for key in admitted([(key, scores[key]) for key in order], FLOOR, OWN_SLOTS):
+    for key in admit(pool):
         item, row = by_key[key], rows[(by_key[key]['doc'], by_key[key]['sid'])]
         out.append({'_id': ref(item['doc'], item['sid']), 'kind': 'own_item', 'heading': item.get('heading') or row['heading'],
                     'body_markdown': excerpt(item['text'], excerpt_chars), 'store': STORE_WORDS[row['store']],
                     'place': FOLDED if is_folded(item) else row['place'],
-                    'age': FACT if row.get('fact') else age_word(row.get('added'), moment)})
+                    'age': FACT if row.get('fact') else age_word(row.get('added'), moment),
+                    **({'why': BROUGHT_BY % said[key]} if said[key] else {})})
         refs.append((item['doc'], item['sid']))
     if refs:
         tiers.used(refs, 'recalled', scene_id) if recall else tiers.surfaced(refs, scene_id)
     return out, would
 
 
-def headings(store, persona, pilot, query, readable, cls, shown=()):
-    """recall: the headings of her items at hand or put away that match the question, beyond the bodies it returns."""
+BROUGHT_BY = '因为这句话里有「%s」'
+
+
+def key_said(item, table, text):
+    """The first of an item's keys the text has, as the text spells it, or None."""
+    from . import key_words
+    return next(filter(None, (key_words.found(key, text) for key in key_words.keys(item, table))), None)
+
+
+def headings(store, persona, pilot, query, readable, cls, scene_id, shown=()):
+    """recall: the headings of her items at hand or put away whose key the question has (the keys a turn's message
+    brings an item back by), beyond the bodies it returns, each with the word that matched."""
     from . import visibility
-    from .retrieval import terms
-    wanted = terms(query)
-    rows = {(row['doc'], row['sid']): row for row in Tiers(store, persona).items(place={'$in': [AT_HAND, PUT_AWAY]})}
-    texts = {(item['doc'], item['sid']): (item['scope_key'], item['lexical']) for item in getattr(pilot, 'items', None) or []}
+    tiers = Tiers(store, persona)
+    rows = {(row['doc'], row['sid']): row for row in tiers.items(place={'$in': [AT_HAND, PUT_AWAY]})}
+    indexed = {(item['doc'], item['sid']): item for item in getattr(pilot, 'items', None) or []}
+    table = tiers.rarity(scene_id)
     found = []
     for key, row in rows.items():
         if ref(*key) in shown or not visibility.readable(row.get('visibility') or 'public', cls):
             continue
-        scope, text = texts.get(key, (None, row.get('heading') or ''))
-        if scope is not None and scope not in readable:
+        item = indexed.get(key) or {'heading': row.get('heading') or '', 'store': row['store'], 'scope_key': None}
+        if item['scope_key'] is not None and item['scope_key'] not in readable:
             continue
-        hits = len(wanted & terms(text))
-        if hits >= min(2, len(wanted)) and hits:
-            found.append((-hits, row['heading'], {'ref': ref(*key), 'heading': row['heading'],
-                                                  'store': STORE_WORDS[row['store']], 'place': row['place']}))
+        said = key_said(item, table, query)
+        if said:
+            found.append((-len(said), row['heading'], {'ref': ref(*key), 'heading': row['heading'],
+                                                       'store': STORE_WORDS[row['store']], 'place': row['place'],
+                                                       'why': BROUGHT_BY % said}))
     return [entry for *_, entry in sorted(found)[:HEADINGS_SHOWN]]
 
 

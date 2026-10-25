@@ -31,6 +31,7 @@ source = { editable = "." }
 dependencies = [
     { name = "av" },
     { name = "httpx" },
+    { name = "jieba" },
     { name = "jsonschema" },
     { name = "numpy" },
     { name = "paramiko" },
@@ -57,6 +58,7 @@ dev = [
 requires-dist = [
     { name = "av", specifier = "==18.1.0" },
     { name = "httpx", specifier = "==0.28.1" },
+    { name = "jieba", specifier = "==0.42.1" },
     { name = "jsonschema", specifier = "==4.26.0" },
     { name = "numpy", specifier = "==2.5.3" },
     { name = "paramiko", specifier = "==4.0.0" },
@@ -418,6 +420,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/33/f6/227c48c5fe47fa178
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5a/de/bbc12563bbf979618d17625a4e753ff7a078523e28d870d3626daa97261a/invoke-3.0.3-py3-none-any.whl", hash = "sha256:f11327165e5cbb89b2ad1d88d3292b5113332c43b8553b494da435d6ec6f5053", size = 160958, upload-time = "2026-04-07T15:17:46.875Z" },
 ]
+
+[[package]]
+name = "jieba"
+version = "0.42.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c6/cb/18eeb235f833b726522d7ebed54f2278ce28ba9438e3135ab0278d9792a2/jieba-0.42.1.tar.gz", hash = "sha256:055ca12f62674fafed09427f176506079bc135638a14e23e25be909131928db2", size = 19214172, upload-time = "2020-01-20T14:27:23.5Z" }
 
 [[package]]
 name = "jsonschema"

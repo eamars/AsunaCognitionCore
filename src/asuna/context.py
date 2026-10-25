@@ -473,6 +473,8 @@ class ContextBuilder:
                                                        'scene_seq':{'$gte':source['scene_seq']}},
                                                       {'platform_event_id':1}):
                 tail_sources.update((queued['_id'], queued.get('platform_event_id')))
+        # The lines this turn delivers, for the presence cue (ADR-097 D2), before their numbers are dropped.
+        history_lines=[(row.get('scene_seq'),row.get('text') or '',row.get('direction')) for row in history]
         for row in history:
             # A native role session leaves out rows (and its own replies) it still shows; it needs the ids.
             row.pop('scene_seq',None)
@@ -530,6 +532,23 @@ class ContextBuilder:
                 if own:
                     memories=memories[:memory_tiers.SLOTS-len(own)]
                 brought_up=[item['_id'] for item in own]
+                if not recall:
+                    # ADR-097: what came back is counted (D5), and one line of presence for a word her other groups
+                    # know may take a free own-item slot (D2).
+                    try:
+                        from . import crossing as _crossing
+                        for item in own:
+                            word=item['why'][len(memory_tiers.BROUGHT_BY.split('%s')[0]):-1] if item.get('why') else None
+                            _crossing.fired(self.store,persona,'note',scene,event,ref=item['_id'],word=word,
+                                            by='word' if word else 'meaning')
+                        _cue=_crossing.cue(self.store,persona,scene,event,history_lines,own,
+                                           schedule_rules.scene_timezone(self.store.config,scene),
+                                           free=len(own)<memory_tiers.OWN_SLOTS)
+                    except Exception:
+                        _cue=None
+                    if _cue:
+                        own=[*own,_cue]
+                        memories=memories[:memory_tiers.SLOTS-len(own)]
         else:
             readable=[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}]
             if session_class==visibility.OWNER_PRIVATE:
@@ -1293,6 +1312,12 @@ class ContextBuilder:
                 _folds=memory_tiers.Tiers(self.store,persona)
                 for _slug in docs.slugs('group:'):
                     _folds.refold(_slug,docs.read(_slug)[1],moment)
+                # ADR-097: the word index of her groups' lines (a new generation, its learned words), its fire rows
+                # past their keeping, then each place's common words counted again with the same cuts.
+                from . import crossing as _crossing
+                _crossing.build(self.store,moment)
+                _crossing.prune(self.store,moment)
+                _folds.rerate_all(moment)
                 # ADR-062: the night list replaces the notes review (no tidy-three framing, no keep or drop).
                 listed=memory_tiers.night_list(self.store,persona,moment)
                 if listed:

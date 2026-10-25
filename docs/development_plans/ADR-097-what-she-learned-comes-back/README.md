@@ -1,6 +1,6 @@
 # ADR-097: What she learned comes back when it comes up
 
-Status: **Built 2026-10-26 (merged f77cab7d), not yet installed.** Design agreed by the owner and Claude, signed by her. The owner asked whether
+Status: **Built and installed 2026-10-26 10:48:54 NZDT (merged f77cab7d); first reading 10-28 evening.** Design agreed by the owner and Claude, signed by her. The owner asked whether
 anything like `recall` brings back a group's slang, or something she learned recently, at the right moment. He
 suspected that the cycle from learning a thing to having it again is not closed. Claude read three groups' real talk
 (with her permission). A Fable 5.1 research session then measured the whole cycle against the code and her records,

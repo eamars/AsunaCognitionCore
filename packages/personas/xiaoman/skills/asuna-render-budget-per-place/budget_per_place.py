@@ -226,7 +226,7 @@ def main():
     # ── 自我层：不进 6144 那把尺 ──
     print("\n自我层（单独一格，**不受 %s 管**）：" % (limit or "6144"))
     print("  render.compose 只吃 persona＋voice；`self`、`core` 两本走 context 里的 self_state（current_self／character_core 那一块），"
-          "放不放得下不看 render.budget_tokens（它有没有别的上限我没查）。所以「自我层省了 N」≠「预算省了 N」：6144 那格只认上面两列。")
+          "放不放得下不看 render.budget_tokens（它有没有别的上限我没查）。所以「自我层省了 N」≠「预算省了 N」：预算那把尺（上限见上面「上限 N」那行）只认上面两列。")
     self_docs, self_revs = {}, {}
     for slug in (memory_tiers.SELF_DOC, memory_tiers.CORE_DOC):
         content, rev = content_of(db, persona, slug)

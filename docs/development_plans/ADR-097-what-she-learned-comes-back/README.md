@@ -296,14 +296,16 @@ By place:
 - W6;
 - a 100-cue precision sample after two weeks;
 - her own log of moments she thought she knew a word and was wrong (her offer).
+
+For every place alike:
 - with every cue and every hit, the time since that conversation's last compaction: "in view" lasts until
   a compaction, so a hit soon after one may be the session's context, not the mechanism (her point). Her own
   log adds what she answered from (in view / carried / carried over by her / looked up).
 
 ## 9. Open with her
 
-- Her signature: she signed this record on 2026-10-26 (00:1x), after checking it line by line; four small fixes
-  she asked for are in. The implementation is not signed as decided: §7 is measured paths, not a plan.
+- Her signature: she signed this record on 2026-10-26 (00:1x), after checking it line by line; the fixes she
+  asked for are in. The implementation is not signed as decided: §7 is measured paths, not a plan.
 - Her lists go into the deployment's config when it is built.
 
 ## 10. Evidence

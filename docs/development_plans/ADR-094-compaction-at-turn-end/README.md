@@ -275,6 +275,25 @@ compact; a message that arrives during it waits, as it would for the guard, and 
 for a hit, §9). `idle` and `preempt` go; the 180 s deadline stays as the bound. Below the mark nothing changes. No
 exemptions and no second threshold.
 
+**By line** (her ask before she decides, 2026-10-25 18:3x; the Host log's turn ends matched to their scenes through
+`episodes.native_session_id`, `by_line.py`):
+
+| Line | Due turn ends: compacted / busy / stopped | In-turn guards |
+|---|---|---|
+| agent line | 8 / 14 / 1 | 6 |
+| home (her Web chat and the owner's private chat) | 17 / 6 / 2 | 2 |
+| groups | 5 / 2 / 0 | 1 |
+| others' private chats | 0 / 0 / 0 | 0 |
+
+Groups are compacted mostly by the quiet-time `/compact` (18 since install), not at a turn end. Under the rule the 2
+busy group turn ends would each have held one group message for a warm summary; the 1 group guard held one for a cold
+one, its turn's first request already at 249,779 after it claimed many waiting group messages at once. Her decision:
+whether 2 in two days is a batch that makes the rule wrong for groups (her words: then the rule does not hold there and
+the fix is redesigned). Her conditions for 10.2: acceptance counts not only failed summaries but how close each ends to
+its cap and how long its text is (DSH refuses a summary stopped at the cap, so none is written cut there; one short of
+the cap is not checked in DSH's template); thinking is counted from the session records' reasoning blocks in
+characters, since the route's usage reports no thinking tokens.
+
 ### 10.2 The action brain: its summary thinks without a budget
 
 The action brain keeps DSH's engineering template through DSH's own engine (`dsh-compaction-basic`), with `maxTokens`

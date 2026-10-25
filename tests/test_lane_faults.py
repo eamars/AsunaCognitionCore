@@ -19,14 +19,17 @@ def row(**over):
 
 
 def test_counts_add_up_by_signature_and_hour_and_carry_no_message(store):
-    assert lane_faults.receive(store, 'qq', {'counts': [row(count=2)]}) == {'status': 'recorded', 'rows': 1}
-    lane_faults.receive(store, 'qq', {'counts': [row(count=3), row(hour=EARLIER, count=2)]})
+    # record() stamps the hour it runs in, so this test reads the clock when it runs, not when the module loaded.
+    now = datetime.now(timezone.utc)
+    hour, earlier = lane_faults.hour_of(now), lane_faults.hour_of(now - timedelta(hours=1))
+    assert lane_faults.receive(store, 'qq', {'counts': [row(hour=hour, count=2)]}) == {'status': 'recorded', 'rows': 1}
+    lane_faults.receive(store, 'qq', {'counts': [row(hour=hour, count=3), row(hour=earlier, count=2)]})
     lane_faults.record(store, 'qq', 'inbound', 'post', 'host_error:500')
     docs = {doc['hour']: doc for doc in store.db.lane_faults.find({'channel_id': 'qq'})}
-    assert docs[HOUR]['count'] == 6 and docs[EARLIER]['count'] == 2
-    assert set(docs[HOUR]) == {'_id', 'schema_version', 'channel_id', 'lane', 'stage', 'error', 'hour', 'hour_at',
+    assert docs[hour]['count'] == 6 and docs[earlier]['count'] == 2
+    assert set(docs[hour]) == {'_id', 'schema_version', 'channel_id', 'lane', 'stage', 'error', 'hour', 'hour_at',
                                'count', 'first_posted_at', 'last_posted_at'}
-    assert docs[HOUR]['hour_at'].strftime(lane_faults.HOUR_FORMAT) == HOUR
+    assert docs[hour]['hour_at'].strftime(lane_faults.HOUR_FORMAT) == hour
 
 
 def test_counts_leave_after_their_days_by_a_ttl_on_the_hour(store):

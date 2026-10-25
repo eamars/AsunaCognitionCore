@@ -23,7 +23,8 @@ Windows, `.venv/bin/python` elsewhere).
 | `publication_scan.py` | The checks that guard main (the private list and private addresses everywhere; in what the release ships, `check_staged_secrets.py --personal` and the persona names), on a candidate's changed files; her publication runs it before anything is published. Prints only path, line and category. |
 | `cleanup_test_databases.py` | `--inventory <file>` lists leftover `asuna_v2_test_*` databases into a file; with `--apply`, drops exactly the inventoried ones. |
 | `check_dsh_release.py` | Compares the installed DSH version with the public registry's tags. |
-| `memory_pilot_report.py` | The shadow pilot's reading in counts (`memory_pilot.py`): would-be surfacings of her own items per day by turn kind, the floor that keeps them at or under one a turn and none in heartbeats, near-duplicate pairs, recall hits, the cost. `--since` limits it; `--drop` removes the pilot's collection. |
+| `memory_pilot_report.py` | The shadow pilot's reading in counts (`memory_pilot.py`): would-be surfacings of her own items per day by turn kind, the floor that keeps them at or under one a turn and none in heartbeats, near-duplicate pairs, recall hits, the cost. `--since` limits it; `--drop` removes the pilot's collection, which is also tiered memory's item index (her items stop coming up until it is rebuilt). |
+| `carried_check.py` | Her install checks, read only (`carried.install_checks`): the latest turn's `system_ref` sections are what `carried()` gives, each place's refusal says `carried()`'s number, a write gets its room line, every tier/`inject` difference is said. One PASS or FAIL line per check, numbers only. `--model` names the persona package's `persona-model.json`. |
 
 ## Offline self-checks
 

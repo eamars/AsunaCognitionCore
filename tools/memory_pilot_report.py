@@ -1,7 +1,8 @@
 """ADR-062 phase 1: the shadow pilot's daily reading, in counts only (no text, no headings, no queries).
 
 Usage: python tools/memory_pilot_report.py [--since 2026-10-14] [--config config/local.json]
-       python tools/memory_pilot_report.py --drop     removes everything the pilot wrote (one collection)
+       python tools/memory_pilot_report.py --drop     drops the collection: the pilot's rows and tiered memory's item
+                                                       index (her items stop coming up until it is rebuilt)
 """
 import argparse
 import json

@@ -426,7 +426,11 @@ double a request) and found three defects, all fixed before merge:
    default; the cap printed is the one used. The dead "her turn came first" branch went with `preempt`.
 
 New tests for each (no stage at a group's turn end, the real `summaryInstance` through the listener, the reopen held);
-each fails on the reviewed commit and passes now. Suite: 210, 207 pass, 3 skipped.
+each fails on the reviewed commit and passes now. Suite: 210, 207 pass, 3 skipped. The reviewer's second read of
+`a54d2aee` found all three fixed, with one window left and accepted: a task's stage reaching `openAgent` during the
+one `await` before `TurnEnds` registers the compaction (`engine.turnEndTokens`) can still reopen the conversation; the
+compaction then fails on the closed agent and that turn end compacts nothing, until the next one. Microseconds wide,
+nothing corrupted; not guarded.
 
 ## Carried from ADR-085 (archived, git 0fd844ad): automatic compactions, the template, her signature
 

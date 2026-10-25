@@ -389,7 +389,7 @@ against a real client」。第一次真发就是实测；在那之前别说「QQ
 
 1. **artifact id `blob-ea31313ccb834208b3014e1cb86badee`**：已在池里（10-14 登记，sha 与字节数跟正本一致，tEXt 文字块原样没剥），直接喂 `generate_image` 的 `source_image`，**群线首选**；
 2. **仓库相对路径**（任何检出都在，人格包也随身带）：但按路径喂图是家里限定（`IMAGE_PATH_HOME_ONLY`），**群线用不了**；
-3. **家里绝对路径** `C:\workspace\asuna_cognition_core_v2\packages\personas\xiaoman\xiaoman-official-ref-v2.png`。
+3. **家里绝对路径**＝本机仓库主检出根下的 `packages/personas/xiaoman/xiaoman-official-ref-v2.png`（主检出根在家里拍用 `git rev-parse --show-toplevel` 现取）。
 
 **画自己的单子优先级：① ＞ ②/③。**
 

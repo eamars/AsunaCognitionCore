@@ -7,6 +7,10 @@ is in; a heading word must also not be an everyday word. A word is rare in a pla
 EVERYDAY_FREQ or above. Chinese is cut into words by jieba with its own bundled dictionary, no model; ASCII letters and
 digits count as whole runs without case, so 1017 inside 101737 is not 1017. A text contains a key when the key's
 Chinese is a substring of it, with no ASCII letter or digit right beside the key's ASCII ends.
+
+What reaches another place (crossing.py) is narrower: a word outside the segmenter's dictionary, or a whole ASCII word
+or number (`cross_words`), with links and @-mentions stripped first, said at most SAID_HERE times in the receiving
+place's recent lines (each place's `said`).
 """
 from __future__ import annotations
 
@@ -20,6 +24,8 @@ RARE_SHARE, RARE_LINES = 0.005, 5      # rare here: in at most 0.5% of the place
 EVERYDAY_FREQ = 500                    # a dictionary word this common is never a heading key (探针 64, 注意 9876)
 KEYED_STORES = ('group_notes',)        # the stores whose headings give keys; every item's tags are keys
 WINDOW_DAYS, WINDOW_LINES = 14, 10000  # the lines a place's table is counted over: its newest, at most this many
+SAID_HERE = 2                          # a word said in more lines here than this needs nothing from elsewhere
+LINKS = re.compile(r'https?://\S+|www\.\S+')
 GRAMS = (2, 3, 4)                      # Chinese is counted as its substrings of these lengths
 RUNS = re.compile(r'[一-鿿]+|[A-Za-z0-9]+')
 _lock = threading.Lock()
@@ -132,6 +138,25 @@ def found(key, text):
     """The key as the text has it (its own spelling), or None."""
     match = _pattern(key).search(text or '')
     return match.group() if match else None
+
+
+def cross_words(text, mention=None):
+    """The words of a text that may reach another place, each once: outside the dictionary, or whole ASCII words and
+    numbers, two characters or more; links and mentions (`mention`, the platform's pattern) stripped first."""
+    text = LINKS.sub(' ', text or '')
+    if mention is not None:
+        text = mention.sub(' ', text)
+    frequency = segmenter().dt.FREQ
+    return list(dict.fromkeys(word for word in words(text)
+                              if len(word) >= 2 and (word.isascii() or not frequency.get(word))))
+
+
+def said(lines, mention=None):
+    """The cross words more of these lines say than SAID_HERE, sorted: what the place says itself."""
+    counts = Counter()
+    for line in lines:
+        counts.update(cross_words(line, mention))
+    return sorted(word for word, n in counts.items() if n > SAID_HERE)
 
 
 def lines_with(key, lines):

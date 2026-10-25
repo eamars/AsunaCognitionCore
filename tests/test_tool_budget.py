@@ -13,7 +13,7 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (30, 21397)       # ADR-097: recall says the bare word is enough +19; ADR-096: write_document's pin, and what each place carries (visibility no longer restates it) +49; ADR-092 D1: speak's file part (its name and where its artifact_id is copied from) +49; ADR-091 D2: note's deliver names a reply's default +20; soft limits (owner 2026-10-22): a stated length names only what she is asked for -182; watch block takes person (ADR-052 addendum 2026-10-21) +29; ADR-087 §4.1: think asks 120, refused past 360 (both numbers) +10; §4.5: note's matching advice (naming the source does not pass) +32; ADR-086 D1/D5: feel's who field and the recording words, +264;       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
+CHARACTER = (30, 21416)       # ADR-097: recall says the bare word is enough +19, and reaches other groups and past notes +19; ADR-096: write_document's pin, and what each place carries (visibility no longer restates it) +49; ADR-092 D1: speak's file part (its name and where its artifact_id is copied from) +49; ADR-091 D2: note's deliver names a reply's default +20; soft limits (owner 2026-10-22): a stated length names only what she is asked for -182; watch block takes person (ADR-052 addendum 2026-10-21) +29; ADR-087 §4.1: think asks 120, refused past 360 (both numbers) +10; §4.5: note's matching advice (naming the source does not pass) +32; ADR-086 D1/D5: feel's who field and the recording words, +264;       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
                               # ADR-064 phase 2: reply +1,334 (QQ group lists +451 net, QQ private +1,028), stay_silent -16, leave_note question +88;
                               # reply force (a #number that is someone here is sent back unless force=yes; owner 2026-10-14) +90; stay_silent why optional (said: nothing to explain) -10;
                               # ADR-060 leftovers: recall query optional with sections, feel yes/no and its decisions named, recall section +25
@@ -35,7 +35,7 @@ CHARACTER = (30, 21397)       # ADR-097: recall says the bare word is enough +19
                               # soft text budget (owner 2026-10-20): each stated length gives what she is asked for and
                               # where the program refuses, 「N 字以内，最多 M 字」 (her ask: both numbers) +155
 # With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): let_go, nature, from, about and the recall sentence (+294).
-CHARACTER_TIERED = (30, 21693)                  # ADR-097: recall's bare word +19; ADR-096: pin and what each place carries +49; ADR-092 D1: speak's file part +49
+CHARACTER_TIERED = (30, 21712)                  # ADR-097: recall's bare word +19, elsewhere and past notes +19; ADR-096: pin and what each place carries +49; ADR-092 D1: speak's file part +49
 ACTION = (26 + len(ACTION_DSH_CAPABILITIES), 16141)        # the worker's tools, plus DSH's own (skill, todo, web);
                                                            # ADR-092 D2: offer_file, 25 -> 26 tools, +441 (15,467 -> 15,908 measured)
 

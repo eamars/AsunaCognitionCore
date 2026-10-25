@@ -148,7 +148,9 @@ Decided in ADR-011.
 - **Summaries.** Batches are summarized with the speakers attributed by the program (`dialogue_summary`,
   `summary_attribution`).
 - **Recall.** A turn recalls by meaning within what the class may read (`retrieval.Retrieval.search`), and she can
-  `recall` more herself. Her own items come back by their keys or their meaning (`memory_tiers.deliver`, `key_words`).
+  `recall` more herself. Her own items come back by their keys or their meaning (`memory_tiers.deliver`, `key_words`); a recall also
+  reaches her other groups' lines and her notes' past versions (`crossing`, through its rebuildable word index
+  `crossing_words`).
 - **Keeping.** At night she promotes what is worth keeping long term (`promote_memory`). Her own documents (persona,
   voice, notes) live in `documents`, and her understanding of people in `understanding`.
 - **Carried.** Each of her sections has a tier (`memory_tiers.Tiers`); what a turn carries follows it
@@ -290,6 +292,7 @@ What she remembers, how it is recalled, her documents, mood and blobs.
 - [`memory_pilot`](../../src/asuna/memory_pilot.py) — The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
 - [`memory_tiers`](../../src/asuna/memory_tiers.py) — Tiered memory (ADR-062): where each of her items lives, kept up by what is memorable, moved down by the program.
 - [`key_words`](../../src/asuna/key_words.py) — The words that bring her items back by themselves (ADR-097): keys, a place's common words, and the segmenter.
+- [`crossing`](../../src/asuna/crossing.py) — What she learned elsewhere comes back when she asks (ADR-097 D3, D4): lines from her other groups, past versions of her notes, and the place rules that decide what may leave a group.
 - [`retrieval`](../../src/asuna/retrieval.py) — Local embeddings and server-side, prefiltered Mongo vector retrieval.
 - [`history_query`](../../src/asuna/history_query.py) — 查宿主保存的授权消息（P1-b）：字面检索覆盖完整 messages，原文整条回读。
 - [`dialogue_summary`](../../src/asuna/dialogue_summary.py) — Low-priority, source-bound summaries for new dialogue batches (DM and authorized groups).

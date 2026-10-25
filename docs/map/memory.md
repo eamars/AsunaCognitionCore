@@ -73,8 +73,9 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
   - `refold` — Recompute and keep a group's fold order (on her write and at settlement, not every turn, so the block is not re-sent for it).
   - `folding` — The kept fold order of a group's notes, made once when there is none.
   - `place_lines` — The place's recent lines that decide what is rare there: its newest inbound lines of the last key_words.WINDOW_DAYS days, at most key_words.WINDOW_LINES.
-  - `rerate` — Count a place's common words again and keep them.
+  - `rerate` — Count a place's common words, and the cross words it says itself, again and keep them.
   - `rarity` — A place's kept common words, counted once when there are none.
+  - `said` — The cross words a place says itself (key_words.said), counted once when there are none.
   - `rerate_all` — At settlement: every place with lines in the window counted again; a place with none keeps no row.
   - `let_go` — Her let_go: the item one place down now (a put-away item stays where it is).
   - `used` — Her use of items by `doc:slug#sid` refs: recall returned them, or she cited them in a tool call.
@@ -116,8 +117,29 @@ The words that bring her items back by themselves (ADR-097): keys, a place's com
 - def `common` — The atoms more of these lines contain than a rare word may be in, sorted: the place's table.
 - def `rare` — Whether a word is rare in a place whose common atoms are `table` (a set).
 - def `found` — The key as the text has it (its own spelling), or None.
+- def `cross_words` — The words of a text that may reach another place, each once: outside the dictionary, or whole ASCII words and numbers, two characters or more; links and mentions (`mention`, the platform's pattern) stripped first.
+- def `said` — The cross words more of these lines say than SAID_HERE, sorted: what the place says itself.
 - def `lines_with` — How many of the lines contain the key.
 - def `tag_here` — A tag's line in words: how often this place's recent lines say it, and whether it brings the section back.
+
+## `crossing`
+
+[src/asuna/crossing.py](../../src/asuna/crossing.py)
+
+What she learned elsewhere comes back when she asks (ADR-097 D3, D4): lines from her other groups, past versions of her notes, and the place rules that decide what may leave a group.
+
+- def `settings` — The deployment's rules: {default, places, kinds, history_excluded}, defaults filled; a malformed entry is dropped (an unknown rule reads as the default).
+- def `rule`
+- def `kind`
+- def `query_words` — The words of a recall's query that reach other places: cross words this place says at most SAID_HERE times.
+- def `elsewhere` — recall: lines of her other groups that have a word of the query that may cross, at most ELSEWHERE_SHOWN, best first.
+- def `build` — Build the word index again from every chat line of her groups, as a new generation; the old one goes once the new one is in place.
+- def `top_up` — Add the group lines said since the index's mark: each group's chunked lines after its last indexed one, up to the first line the indexer has not chunked yet.
+- def `lines_for` — [(unit id, scope, hers)] of the lines that have one of the words, the index topped up first.
+- def `fetch` — recall sections {doc: elsewhere, section: ref}: the lines around one line of another group, the place rule checked again now, speakers as 你 or 别人.
+- def `versions` — `history` of one document, kept while its ledger has no newer revision (one small read to check).
+- def `history` — Every past text of each section of one of her documents, oldest first: {sid: [(body, written_at, replaced_at, reason of the change that replaced it)]}; the current text is not among them.
+- def `before` — recall: past versions of her notes readable here that have a word of the query that may cross, which their section no longer has; one per section, newest change first, at most SHOWN.
 
 ## `retrieval`
 

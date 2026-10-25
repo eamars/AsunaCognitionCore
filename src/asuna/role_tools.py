@@ -169,7 +169,7 @@ TOOLS = {
     'recall': {
         'description': ('回想：按一句话搜你的记忆（query）；或读文档里某一节的原文（sections，照抄 doc 和 section）'
                          '，合并转发的全文也这样读（doc 写 forward，section 照抄那行里的 ref）。每回合最多 %d 次。'
-                         '找一个词，query 只写那个词就够。'
+                         '找一个词，query 只写那个词就够；也会找到别的群里说过的、你以前记过的。'
                          '对话里说过的话用它想起来；记不起来就照实说，不编。在家里还会带上你在群里那时的心里话。'
                          '回想一个人用 person：读你对他两层理解的全文。' % RECALLS_PER_TURN),
         'parameters': {'query': _s(limit=500, description='想找什么，用一句话说；只读 sections 或 person 时可省略'),
@@ -1532,6 +1532,14 @@ class RoleTools:
         if self._cls(ep) == visibility.OWNER_PRIVATE and query:
             scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
             elsewhere = c.context.own_thoughts_elsewhere(scene, query)
+        # ADR-097 D3: lines of her other groups that may leave them, and past versions of her notes, by the word.
+        crossed, before = [], []
+        if query:
+            from . import crossing, schedule_rules
+            here = self.store.db.scenes.find_one({'_id': where['scene_id']}) or {'_id': where['scene_id']}
+            zone = schedule_rules.scene_timezone(self.store.config, here)
+            crossed = crossing.elsewhere(self.store, ep['persona'], here, query, zone)
+            before = crossing.before(self.store, ep['persona'], here, self._cls(ep), query, zone)                 if memory_tiers.ENABLED else []
         ep = self._fresh(ep)
         c._update(ep, recall_count=count + 1,
                   recalled=[*(ep.get('recalled') or []), *[m.get('_id') for m in recalled.get('memories') or []],
@@ -1545,6 +1553,7 @@ class RoleTools:
             'sections_read': [{'doc': d.get('doc'), 'sid': d.get('sid')} for d in documents or []],
             'sections_missing': missing or [], 'memories': [m.get('_id') for m in recalled.get('memories') or []],
             'own_thoughts_elsewhere': [m['_id'] for m in elsewhere],
+            'elsewhere': [m['ref'] for m in crossed], 'before': [m.get('now') for m in before],
             'turn_kind': turn_kind(ep), 'place': place(self.store.config, self.store.db, scene, ep['person_id'])},
             ep['scope_key'])
         result = {'query': query, 'memories': recalled.get('memories') or []}
@@ -1558,6 +1567,11 @@ class RoleTools:
             result['not_read'] = missing
         if elsewhere:
             result['own_thoughts_in_groups'] = [{k: v for k, v in m.items() if k != '_id'} for m in elsewhere]
+        if crossed:
+            from . import crossing
+            result['elsewhere'], result['elsewhere_how'] = crossed, crossing.HOW
+        if before:
+            result['before'] = before
         if memory_tiers.ENABLED:
             # ADR-062: what she reads back is used; she sees which places were searched, and what else exists there.
             tiers = memory_tiers.Tiers(self.store, ep['persona'])
@@ -1579,7 +1593,7 @@ class RoleTools:
             if found:
                 result['headings'] = found
             result['searched'] = memory_tiers.SEARCHED
-            if not (result['memories'] or result.get('documents') or found or elsewhere):
+            if not (result['memories'] or result.get('documents') or found or elsewhere or crossed or before):
                 result['found'] = memory_tiers.NOTHING
         return result, False
 
@@ -3148,11 +3162,16 @@ def _seed_text(store, slug):
 
 def read_sections(store, ep, items, cls):
     """recall with sections: readable section text, and what could not be read (in words)."""
-    from . import forwards
+    from . import crossing, forwards
     docs, out, missing = DocumentStore(store, ep['persona']), [], []
     for item in items:
-        if item['doc'] == forwards.DOC:
-            section, why = forwards.read(store, ep['scene_id'], item['sid'])
+        if item['doc'] in (forwards.DOC, crossing.DOC):
+            if item['doc'] == forwards.DOC:
+                section, why = forwards.read(store, ep['scene_id'], item['sid'])
+            else:
+                from . import schedule_rules
+                here = store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+                section, why = crossing.fetch(store, here, item['sid'], schedule_rules.scene_timezone(store.config, here))
             out.append(section) if section else missing.append(why)
             continue
         _, content = docs.read(item['doc'])

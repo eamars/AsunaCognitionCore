@@ -521,19 +521,27 @@ class Tiers:
         return [row['text'] for row in rows if isinstance(row.get('text'), str)]
 
     def rerate(self, scene_id, moment=None):
-        """Count a place's common words again and keep them. Returns them."""
-        from . import key_words
+        """Count a place's common words, and the cross words it says itself, again and keep them. Returns the row."""
+        from . import channel_kinds, key_words
         lines = self.place_lines(scene_id, moment)
-        common = key_words.common(lines)
-        self.rows.update_one({'_id': 'rarity:%s:%s' % (self.persona, scene_id)}, {'$set': {
-            'row': 'rarity', 'persona': self.persona, 'scene_id': scene_id, 'lines': len(lines),
-            'limit': key_words.limit(len(lines)), 'common': common, 'at': _iso(moment or _now())}}, upsert=True)
-        return common
+        platform = channel_kinds.of(scene_id)
+        row = {'row': 'rarity', 'persona': self.persona, 'scene_id': scene_id, 'lines': len(lines),
+               'limit': key_words.limit(len(lines)), 'common': key_words.common(lines),
+               'said': key_words.said(lines, platform.INBOUND_MENTION if platform else None), 'at': _iso(moment or _now())}
+        self.rows.update_one({'_id': 'rarity:%s:%s' % (self.persona, scene_id)}, {'$set': row}, upsert=True)
+        return row
+
+    def _rated(self, scene_id, field):
+        row = self.rows.find_one({'_id': 'rarity:%s:%s' % (self.persona, scene_id)}, {field: 1})
+        return set((row if row and field in row else self.rerate(scene_id))[field])
 
     def rarity(self, scene_id):
         """A place's kept common words, counted once when there are none."""
-        row = self.rows.find_one({'_id': 'rarity:%s:%s' % (self.persona, scene_id)}, {'common': 1})
-        return set(row['common'] if row else self.rerate(scene_id))
+        return self._rated(scene_id, 'common')
+
+    def said(self, scene_id):
+        """The cross words a place says itself (key_words.said), counted once when there are none."""
+        return self._rated(scene_id, 'said')
 
     def rerate_all(self, moment=None):
         """At settlement: every place with lines in the window counted again; a place with none keeps no row."""

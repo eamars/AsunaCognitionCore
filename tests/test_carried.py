@@ -194,7 +194,9 @@ def test_her_write_says_its_weight_and_each_place_s_room_and_a_tier_that_differs
     Coordinator(store, lane).ingest(event('room-2'))
     gone, recalled = lane.tool_results[1][4], lane.tool_results[2][4]
     first, last = gone['tier'].splitlines()
-    assert first == '这一节的真带是 手边；你写的 when_shown 是 always' and gone['room'].endswith('带它的地方：无')
+    assert first == '这一节的真带是 手边；你写的 when_shown 是 always'
+    assert gone['room'].endswith('带它的地方：无（原本带在 %d 处，每处腾出约 %s token）' % (
+        len(carried.ordered(sizes)), carried.number(weight))), 'what the let_go freed, and in how many places'
     assert last.startswith('上一次挪档：') and last.endswith(' · 你 · 你放手了')
     assert recalled['documents'][0]['tier'] == gone['tier'], 'every read of that section says both'
     assert DocumentStore(store, 'P1').read('persona')[1]['sections'][-1]['inject'] == 'always', 'never written for her'

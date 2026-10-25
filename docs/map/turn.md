@@ -141,6 +141,7 @@ What she carries: one function says it for every reader (ADR-096).
 - def `weight` — Estimated tokens of one section as it is carried.
 - def `laid_out` — {(place, class): (carried sections by slug, estimated tokens)} of each pair: what `identity` counts.
 - def `ordered` — Pairs in her order (PAIR_WORDS).
+- def `carrying` — The pairs that carry this section now.
 - def `room_line` — What a write to her identity, or a let_go, returns: the section's weight and, for each pair that carries it, the room left (or how far over), from the number the gate uses; None when nothing bounds it.
 - def `room_word` — The coarse word for a pair's share of its limit (ROOM_WORDS; the limit itself is still 快满了).
 - def `room_ranges` — ROOM_WORDS as the ranges the program uses, for the note that explains them.

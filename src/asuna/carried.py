@@ -42,6 +42,7 @@ SCOPE_WORDS = '程序的开头说明、persona、voice、self、core'
 ROOM_LINE = '这节约 %s。%s'
 ROOM_PAIR, ROOM_LEFT, ROOM_OVER, ROOM_SEPARATOR = '%s %s（%s）', '剩 %s', '超 %s', '｜'
 ROOM_NOWHERE = '带它的地方：无'
+ROOM_FREED = '（原本带在 %d 处，每处腾出约 %s token）'    # her ask (2026-10-25): what a let_go freed, not only where it is now
 TIER_LINE = '这一节的真带是 %s；你写的 when_shown 是 %s'      # her inject, by the name she is shown
 TIER_LAST = '上一次挪档：%s · %s · %s'
 TIER_NONE = '挪档史：无记录'
@@ -197,21 +198,29 @@ def ordered(pairs_found):
     return sorted(pairs_found, key=lambda pair: order.index(pair) if pair in order else len(order))
 
 
-def room_line(store, persona, slug, section):
+def carrying(store, persona, slug, sid, laid=None):
+    """The pairs that carry this section now."""
+    laid = laid if laid is not None else laid_out(store, persona)
+    return [pair for pair in ordered(laid) if any(s['sid'] == sid for s in laid[pair][0][slug])]
+
+
+def room_line(store, persona, slug, section, was=0):
     """What a write to her identity, or a let_go, returns: the section's weight and, for each pair that carries it, the
-    room left (or how far over), from the number the gate uses; None when nothing bounds it."""
+    room left (or how far over), from the number the gate uses; None when nothing bounds it. `was`: how many pairs
+    carried it before a let_go, so a section carried nowhere now says what it freed."""
     ceiling = limit(store, persona)
     if not ceiling or slug not in IDENTITY or not section:
         return None
     laid = laid_out(store, persona)
     parts = []
-    for pair in ordered(laid):
-        found, size = laid[pair]
-        if any(s['sid'] == section['sid'] for s in found[slug]):
-            left = ceiling - size
-            parts.append(ROOM_PAIR % (PAIR_WORDS[pair], number(size),
-                                      (ROOM_LEFT if left >= 0 else ROOM_OVER) % number(abs(left))))
-    return ROOM_LINE % (number(weight(slug, section)), ROOM_SEPARATOR.join(parts) or ROOM_NOWHERE)
+    for pair in carrying(store, persona, slug, section['sid'], laid):
+        size = laid[pair][1]
+        left = ceiling - size
+        parts.append(ROOM_PAIR % (PAIR_WORDS[pair], number(size),
+                                  (ROOM_LEFT if left >= 0 else ROOM_OVER) % number(abs(left))))
+    heavy = number(weight(slug, section))
+    nowhere = ROOM_NOWHERE + (ROOM_FREED % (was, heavy) if was else '')
+    return ROOM_LINE % (heavy, ROOM_SEPARATOR.join(parts) or nowhere)
 
 
 def room_word(size, ceiling):

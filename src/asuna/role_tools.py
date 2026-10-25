@@ -2208,11 +2208,11 @@ class RoleTools:
                                  if item['pin'] is True else UNPIN_NOTE)
         return result, False
 
-    def _carried_lines(self, ep, slug, section, result):
+    def _carried_lines(self, ep, slug, section, result, was=0):
         """ADR-096: a write to her identity, or a let_go, says the section's weight and each place's room, in exact
         numbers; a section whose `inject` and tier differ says both."""
         from . import carried
-        room = carried.room_line(self.store, ep['persona'], slug, section)
+        room = carried.room_line(self.store, ep['persona'], slug, section, was)
         if room:
             result['room'] = room
         tier = carried.tier_line(self.store, ep['persona'], slug, section)
@@ -2230,10 +2230,12 @@ class RoleTools:
         sid = found['sid']
         tiers = memory_tiers.Tiers(self.store, ep['persona'])
         tiers.sync()
+        from . import carried
+        was = len(carried.carrying(self.store, ep['persona'], slug, sid)) if slug in carried.IDENTITY else 0
         move = tiers.let_go(slug, sid, scene_id=ep['scene_id'])
         result = {'doc': slug, 'op': 'let_go', 'sid': sid,
                   'note': memory_tiers.told(move) if move else '它已经收着了，再放就没有更下面的地方了；什么都没改。'}
-        self._carried_lines(ep, slug, found, result)
+        self._carried_lines(ep, slug, found, result, was)
         return result
 
     def tool_update_self(self, ep, call_id, args):

@@ -5,6 +5,7 @@ Run after tools/pack_plugins.py --persona <dir> --channel <dir>. Models are DSH 
 brains are chosen on the Asuna settings card. Persona and channel packages are arguments; the core names neither.
 """
 import argparse
+from copy import deepcopy
 import json
 import os
 from pathlib import Path
@@ -127,6 +128,28 @@ def move_secrets(core):
     return moved
 
 
+def compose(defaults, prior):
+    """The profile patch an install writes: each of this installer's rows with the saved row merged over it, then the
+    saved rows it does not write. The core's `deployment` is the exception: the local files (config/local.json and its
+    siblings) seed it on a profile's first install only; once the profile has one, the saved deployment is the
+    deployment, so a setting removed on the settings card stays removed (a merge brought it back from the local
+    files at every install)."""
+    def merge(base, override):
+        if isinstance(base, dict) and isinstance(override, dict):
+            return {**base, **{key: merge(base.get(key), val) for key, val in override.items()}}
+        return override
+    by_id = {row.get('id'): row for row in prior or [] if 'id' in row}
+    merged = [merge(row, by_id.get(row['id'], {})) for row in defaults]
+    saved = (by_id.get('asuna-cognition-core') or {}).get('config', {}).get('deployment')
+    if saved is not None:
+        for row in merged:
+            if row.get('id') == 'asuna-cognition-core':
+                row['config']['deployment'] = deepcopy(saved)
+    ids = {row['id'] for row in defaults}
+    merged.extend(row for row in prior or [] if row.get('id') not in ids)
+    return merged
+
+
 def profile_patch(config, config_path, persona, profile='asuna-native', channels=(), channel_admission=None):
     data_root, state_dir = data_folder(profile)
     return [
@@ -200,14 +223,7 @@ def main():
     prior = profile_yaml(editable.read_text(encoding='utf-8')) if editable.exists() else []
     defaults = profile_patch(config, args.config, persona, args.profile, channels, args.channel_admission)
     stored = {}
-    def merge(base, override):
-        if isinstance(base, dict) and isinstance(override, dict):
-            return {**base, **{key: merge(base.get(key), val) for key, val in override.items()}}
-        return override
-    by_id = {row.get('id'): row for row in prior or [] if 'id' in row}
-    merged = [merge(row, by_id.get(row['id'], {})) for row in defaults]
-    ids = {row['id'] for row in defaults}
-    merged.extend(row for row in prior or [] if row.get('id') not in ids)
+    merged = compose(defaults, prior)
     # Older installers put an Asuna route's output limit into this native
     # service. It is not part of AgentDefaultModel.Config: removing it during
     # a native picker save causes an ordinary lifecycle reload instead of a

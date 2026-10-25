@@ -3,8 +3,15 @@ of her notes, and the place rules that decide what may leave a group.
 
 `recall` with a word reaches the chat lines of her other groups that contain it, when it is a word that may cross
 (key_words.cross_words: outside the segmenter's dictionary, or a whole ASCII word or number) and the place she is in
-says it at most twice itself (key_words.SAID_HERE): a sentence crosses only through such words, and a word this place
-already says has its own memories here. Her own lines come back as 「你在别处说过」, others' as 「别人提过」, each with
+says it at most `said_here` times itself: a sentence crosses only through such words, and a word this place already
+says has its own memories here.
+
+In a group turn, a line with such a word that her other groups have said at least `seen_elsewhere` times in the last
+`window_days` days brings one line of presence (`cue`): the word, how often, the day of the latest and that place's
+kind, and that recall finds it; no words from there. Others' lines count too, from places that let only her own lines
+leave. Never on a templated line (a place's repeated opening, a status record), never on a word the turn's delivered
+lines already have, once per word per conversation in `repeat_minutes`, at most one a turn and only in a free one of
+her own items' slots, after her own note on the word. Each cue is a row in `memory_fires`, with its turn and line. Her own lines come back as 「你在别处说过」, others' as 「别人提过」, each with
 the place's kind and the day, never the place or the speaker; an @-mention in them reads 「@某人」. Her own line ranks
 first, then a line that explains the word, then the newest. A line someone later corrected (a reply the program
 resolves, summary_attribution.corrections) comes back marked as corrected, with the correction. She can read the few
@@ -12,13 +19,14 @@ lines around one by its ref (`fetch`), under the same rules, the speakers only a
 
 Lines are found through `crossing_words`, a collection the program derives from her groups' chat lines and can always
 rebuild: one row per cross word with the lines that have it (unit id, hers or others', scope; no text), others' the
-newest OTHERS_KEPT. It is built when missing and again at settlement (a new generation, the old one dropped after),
+newest OTHERS_KEPT, and per group how many lines of the window said it and when the latest was (`seen`). It is built when missing and again at settlement (a new generation, the old one dropped after),
 and topped up at each recall from the group lines said since. Place rules are never in it: they are checked when it
 is read and again at a fetch, so a change of the rules file counts at once.
 
 What leaves a place is the deployment's choice, in `<data>/private/memory-crossing.json`: per place `all` (her lines
 and others'), `own_lines` (only hers) or `never` (nothing), `default` for a place it does not name (own_lines when
-the file is absent), each place's kind, and the date ranges whose note versions never come back. A rule governs only
+the file is absent), each place's kind, the date ranges whose note versions never come back, and the numbers above
+(NUMBERS gives their defaults). A rule governs only
 what leaves its place; any place may receive. Only groups are sources: home, her private chats and every
 owner-private scope never are. Her thoughts never cross from here: only her spoken lines do.
 
@@ -31,6 +39,7 @@ told apart by the program; the day and the reason are what she reads them by.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from datetime import datetime, timezone
 
 from . import key_words
@@ -44,6 +53,12 @@ SHOWN = 3                            # past versions a recall returns
 ELSEWHERE_SHOWN = 2                  # lines from elsewhere a recall returns
 WORDS = 'crossing_words'             # the word index of her groups' lines (program-derived, rebuildable)
 OTHERS_KEPT = 20                     # others' lines kept per word, the newest
+FIRES = 'memory_fires'               # what came back and when (cues), for the readings; kept FIRES_DAYS
+FIRES_DAYS = 30
+# The deployment's numbers (memory-crossing.json), with these defaults and bounds.
+NUMBERS = {'window_days': (14, 1, 90), 'said_here': (2, 0, 100), 'seen_elsewhere': (5, 1, 1000),
+           'repeat_minutes': (60, 0, 1440)}
+CUE = '%s：这个词你在别的群见过 %d 次，最近 %s%s；recall 写上它能找到'
 EXCERPT = 200
 AROUND = 2                           # lines before and after the one fetched
 LATER = 30                           # lines after a line that may correct it
@@ -85,9 +100,16 @@ def settings(path=None):
         kinds = {str(k): v for k, v in (raw.get('kinds') or {}).items() if isinstance(v, str) and v}
         excluded = [tuple(pair) for pair in raw.get('history_excluded') or []
                     if isinstance(pair, list) and len(pair) == 2 and all(isinstance(d, str) for d in pair)]
+        numbers = {name: raw[name] if type(raw.get(name)) is int and low <= raw[name] <= high else default_value
+                   for name, (default_value, low, high) in NUMBERS.items()}
         _cache.update(mtime=(path, mtime), value={'default': default, 'places': places, 'kinds': kinds,
-                                                  'history_excluded': excluded})
+                                                  'history_excluded': excluded, **numbers})
     return _cache['value']
+
+
+def number(name):
+    """One of the deployment's numbers (NUMBERS)."""
+    return settings().get(name, NUMBERS[name][0])
 
 
 def rule(scene_id):
@@ -100,8 +122,9 @@ def kind(scene_id):
 
 
 def query_words(store, persona, here, query):
-    """The words of a recall's query that reach other places: cross words this place says at most SAID_HERE times."""
+    """The words of a recall's query that reach other places: cross words this place says at most `said_here` times."""
     from .memory_tiers import Tiers
+    vocabulary(store)
     words = key_words.cross_words(query)
     said = Tiers(store, persona).said(here['_id']) if words else set()
     return [word for word in words if word not in said]
@@ -210,30 +233,66 @@ def _mention(scene_id):
     return platform.INBOUND_MENTION if platform else None
 
 
-def _postings(units, groups):
-    """{word: {'hers': [[unit, scope]], 'theirs': [[unit, scope, said at]]}} for these chat units."""
+def _postings(units, groups, times, since):
+    """{word: {'hers': [[unit, scope]], 'theirs': [[unit, scope, said at]], 'seen': {scope: [lines, latest]}}} for
+    these chat units; `seen` counts the lines said since `since` (her lines by their receipts, `times`)."""
     scenes = {scene['scope_key']: scene_id for scene_id, scene in groups.items()}
     out = {}
     for unit in units:
         hers = unit.get('epistemic_type') == 'public_statement'
+        at = str(times.get(unit['_id']) or unit.get('occurred_at') or '')
         for word in key_words.cross_words(unit.get('body_markdown'), _mention(scenes.get(unit['scope_key']))):
-            entry = out.setdefault(word, {'hers': [], 'theirs': []})
+            entry = out.setdefault(word, {'hers': [], 'theirs': [], 'seen': {}})
             if hers:
                 entry['hers'].append([unit['_id'], unit['scope_key']])
             else:
-                entry['theirs'].append([unit['_id'], unit['scope_key'], unit.get('occurred_at') or ''])
+                entry['theirs'].append([unit['_id'], unit['scope_key'], at])
+            if at and at >= since:
+                lines, latest = entry['seen'].get(unit['scope_key'], (0, ''))
+                entry['seen'][unit['scope_key']] = [lines + 1, max(latest, at)]
     return out
+
+
+def _since(moment=None):
+    from datetime import timedelta
+    return ((moment or datetime.now(timezone.utc)) - timedelta(days=number('window_days'))).isoformat()
+
+
+def vocabulary(store, ensure=False):
+    """The learned words of the index's build, learned in this process once per build; `ensure` builds the index
+    first when there is none (a place's words must be cut as the index cuts them)."""
+    mark = store.db[WORDS].find_one({'_id': 'mark'}, {'build': 1, 'vocabulary': 1})
+    if not mark and ensure:
+        build(store)
+        return store.db[WORDS].find_one({'_id': 'mark'}, {'build': 1})
+    if mark and _loaded.get('build') != mark.get('build'):
+        key_words.learn(mark.get('vocabulary') or [])
+        _loaded['build'] = mark.get('build')
+    return mark
+
+
+_loaded = {}
 
 
 def build(store, moment=None):
     """Build the word index again from every chat line of her groups, as a new generation; the old one goes once the
-    new one is in place. Returns how many words it holds."""
+    new one is in place. Two passes: the cross words in her lines are counted and the frequent ones learned
+    (key_words.vocabulary), then the lines are cut again with them. Returns how many words it holds."""
     from .state import now
+    vocabulary(store)
     groups = _groups(store)
-    rows = store.db.memory_units.find({'kind': 'chat_chunk', 'status': 'active', 'character_id': character_id(store.config),
-                                       'scope_key': {'$in': [s['scope_key'] for s in groups.values()]}},
-                                      {'body_markdown': 1, 'scope_key': 1, 'epistemic_type': 1, 'occurred_at': 1})
-    words = _postings(rows, groups)
+    rows = list(store.db.memory_units.find({'kind': 'chat_chunk', 'status': 'active',
+                                            'character_id': character_id(store.config),
+                                            'scope_key': {'$in': [s['scope_key'] for s in groups.values()]}},
+                                           {'body_markdown': 1, 'scope_key': 1, 'epistemic_type': 1, 'occurred_at': 1,
+                                            'source_event_ids': 1}))
+    times = _said_at(store, [unit for unit in rows if not unit.get('occurred_at')])
+    scenes = {scene['scope_key']: scene_id for scene_id, scene in groups.items()}
+    counts = Counter(word for unit in rows for word in key_words.cross_words(
+        unit.get('body_markdown'), _mention(scenes.get(unit['scope_key']))))
+    learned = key_words.vocabulary(counts)
+    key_words.learn(learned)
+    words = _postings(rows, groups, times, _since(moment))
     column = store.db[WORDS]
     mark = column.find_one({'_id': 'mark'}) or {}
     generation = int(mark.get('generation') or 0) + 1
@@ -241,12 +300,17 @@ def build(store, moment=None):
                        or {}).get('scene_seq', 0) for scene_id in groups}
     batch = [{'_id': '%d:%s' % (generation, word), 'row': 'word', 'generation': generation, 'word': word,
               'hers': entry['hers'],
-              'theirs': sorted(entry['theirs'], key=lambda posting: posting[2])[-OTHERS_KEPT:]}     # oldest first
+              'theirs': sorted(entry['theirs'], key=lambda posting: posting[2])[-OTHERS_KEPT:],    # oldest first
+              'seen': [[scope, lines, latest] for scope, (lines, latest) in entry['seen'].items()]}
              for word, entry in words.items()]
     for start in range(0, len(batch), 1000):
         column.insert_many(batch[start:start + 1000], ordered=False)
-    column.update_one({'_id': 'mark'}, {'$set': {'row': 'mark', 'generation': generation, 'seqs': seqs,
-                                                 'at': moment.isoformat() if moment else now()}}, upsert=True)
+    import uuid
+    built = uuid.uuid4().hex
+    column.update_one({'_id': 'mark'}, {'$set': {'row': 'mark', 'generation': generation, 'seqs': seqs, 'build': built,
+                                                 'vocabulary': learned, 'at': moment.isoformat() if moment else now()}},
+                      upsert=True)
+    _loaded['build'] = built
     column.delete_many({'row': 'word', 'generation': {'$ne': generation}})
     return len(batch)
 
@@ -259,6 +323,7 @@ def top_up(store):
     if not mark:
         build(store)
         return column.find_one({'_id': 'mark'})['generation']
+    vocabulary(store)
     from .evidence import canonical, sha
     from .ingress import PROGRAM_AUTHOR
     groups = _groups(store)
@@ -287,17 +352,33 @@ def top_up(store):
             units += list(store.db.memory_units.find({'_id': {'$in': ids}, 'kind': 'chat_chunk', 'status': 'active',
                                                       'character_id': me},
                                                      {'body_markdown': 1, 'scope_key': 1, 'epistemic_type': 1,
-                                                      'occurred_at': 1}))
+                                                      'occurred_at': 1, 'source_event_ids': 1}))
     generation = mark['generation']
-    for word, entry in _postings(units, groups).items():
+    since = _since()
+    added = _postings(units, groups, _said_at(store, [u for u in units if not u.get('occurred_at')]), since)
+    kept = {row['word']: row for row in column.find({'_id': {'$in': ['%d:%s' % (generation, w) for w in added]}},
+                                                    {'word': 1, 'seen': 1})}
+    for word, entry in added.items():
+        seen = {scope: [lines, latest] for scope, lines, latest in (kept.get(word) or {}).get('seen') or []}
+        for scope, (lines, latest) in entry['seen'].items():
+            was = seen.get(scope, [0, ''])
+            seen[scope] = [was[0] + lines, max(was[1], latest)]
         column.update_one({'_id': '%d:%s' % (generation, word)}, {
             '$setOnInsert': {'row': 'word', 'generation': generation, 'word': word},
+            '$set': {'seen': [[scope, lines, latest] for scope, (lines, latest) in seen.items()]},
             '$addToSet': {'hers': {'$each': entry['hers']}},
             '$push': {'theirs': {'$each': entry['theirs'], '$slice': -OTHERS_KEPT}}}, upsert=True)
     if reached:
         column.update_one({'_id': 'mark', 'generation': generation},
                           {'$max': {'seqs.' + scene_id: seq for scene_id, seq in reached.items()}})
     return generation
+
+
+def seen_for(store, words):
+    """{word: [(scope, lines in the window, latest)]} from the index, topped up first."""
+    generation = top_up(store)
+    return {row['word']: row.get('seen') or [] for row in store.db[WORDS].find(
+        {'_id': {'$in': ['%d:%s' % (generation, word) for word in words]}}, {'word': 1, 'seen': 1})}
 
 
 def lines_for(store, words):
@@ -468,3 +549,73 @@ def before(store, persona, here, cls, query, zone):
                 found.append((-_seconds(replaced), {'line': line, **({'now': ref(slug, sid)} if section else {})}))
                 break
     return [entry for _, entry in sorted(found, key=lambda pair: pair[0])[:SHOWN]]
+
+
+# ── the presence cue (D2) ─────────────────────────────────────────
+def cue(store, persona, scene, event, delivered, own, zone, moment=None):
+    """A group turn's one line of presence, or None: the word of this line that her other groups say most often, when
+    it may cross, this place says it at most `said_here` times, the turn's delivered lines do not have it, no cue named
+    it here within `repeat_minutes`, and her own items this turn do not have it. The fire is written as a row."""
+    from datetime import timedelta
+    from .memory_tiers import Tiers
+    if scene.get('kind') != 'group' or (event.get('episode_kind') or 'external') != 'external':
+        return None
+    text = event.get('text') if isinstance(event.get('text'), str) else ''
+    tiers = Tiers(store, persona)
+    if not text or key_words.templated(text, tiers.openings(scene['_id'])):
+        return None
+    vocabulary(store)
+    said = tiers.said(scene['_id'])
+    shown = [own_item.get('heading', '') + '\n' + own_item.get('body_markdown', '') for own_item in own]
+    words = [word for word in key_words.cross_words(text, _mention(scene['_id'])) if word not in said
+             and not any(key_words.found(word, line) for line in [*delivered, *shown])]
+    if not words:
+        return None
+    moment = moment or datetime.now(timezone.utc)
+    recent = (moment - timedelta(minutes=number('repeat_minutes'))).isoformat()
+    words = [word for word in words if not store.db[FIRES].find_one(
+        {'kind': 'cue', 'scene_id': scene['_id'], 'word': word, 'at': {'$gte': recent}}, {'_id': 1})]
+    if not words:
+        return None
+    groups = {group['scope_key']: group_id for group_id, group in _groups(store).items()
+              if group_id != scene['_id'] and rule(group_id) != 'never'}
+    since = _since(moment)
+    best = None
+    for word, seen in seen_for(store, words).items():
+        places = [(scope, lines, latest) for scope, lines, latest in seen if scope in groups and latest >= since]
+        lines = sum(n for _, n, _ in places)
+        if lines >= number('seen_elsewhere') and (best is None or lines > best[1]):
+            best = (word, lines, max(places, key=lambda place: place[2]))
+    if not best:
+        return None
+    word, lines, (scope, _, latest) = best
+    place_kind = kind(groups[scope])
+    line = CUE % (key_words.found(word, text) or word, lines, _month_day(latest, zone),
+                  '，' + place_kind if place_kind else '')
+    source = store.db.messages.find_one({'_id': 'in-' + _episode(event)}, {'scene_seq': 1}) or {}
+    store.db[FIRES].insert_one({'kind': 'cue', 'persona': persona, 'scene_id': scene['_id'], 'word': word,
+                                'event_id': event.get('event_id'), 'episode_id': _episode(event),
+                                'scene_seq': source.get('scene_seq'), 'at': moment.isoformat(), 'lines': lines,
+                                'latest': latest, 'kind_set': bool(place_kind)})
+    return {'kind': 'cue', 'cue': line}
+
+
+def _episode(event):
+    from .ingress import episode_id
+    return episode_id(event)
+
+
+def _month_day(value, zone):
+    try:
+        moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except ValueError:
+        return ''
+    local = moment.astimezone(zone['tz'] if zone else timezone.utc)
+    return '%02d-%02d' % (local.month, local.day)
+
+
+def prune(store, moment=None):
+    """At settlement: fire rows older than FIRES_DAYS go. Returns how many."""
+    from datetime import timedelta
+    cutoff = ((moment or datetime.now(timezone.utc)) - timedelta(days=FIRES_DAYS)).isoformat()
+    return store.db[FIRES].delete_many({'at': {'$lt': cutoff}}).deleted_count

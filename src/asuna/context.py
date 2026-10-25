@@ -530,6 +530,17 @@ class ContextBuilder:
                 if own:
                     memories=memories[:memory_tiers.SLOTS-len(own)]
                 brought_up=[item['_id'] for item in own]
+                if not recall and len(own)<memory_tiers.OWN_SLOTS:
+                    # ADR-097 D2: one line of presence for a word her other groups know, in a free own-item slot.
+                    try:
+                        from . import crossing as _crossing
+                        _cue=_crossing.cue(self.store,persona,scene,event,[row.get('text') or '' for row in history],own,
+                                           schedule_rules.scene_timezone(self.store.config,scene))
+                    except Exception:
+                        _cue=None
+                    if _cue:
+                        own=[*own,_cue]
+                        memories=memories[:memory_tiers.SLOTS-len(own)]
         else:
             readable=[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}]
             if session_class==visibility.OWNER_PRIVATE:
@@ -1293,10 +1304,12 @@ class ContextBuilder:
                 _folds=memory_tiers.Tiers(self.store,persona)
                 for _slug in docs.slugs('group:'):
                     _folds.refold(_slug,docs.read(_slug)[1],moment)
-                # ADR-097: each place's common words, which decide which words are rare there, counted again.
-                _folds.rerate_all(moment)
+                # ADR-097: the word index of her groups' lines (a new generation, its learned words), its fire rows
+                # past their keeping, then each place's common words counted again with the same cuts.
                 from . import crossing as _crossing
-                _crossing.build(self.store,moment)    # ADR-097: the word index of her groups' lines, a new generation
+                _crossing.build(self.store,moment)
+                _crossing.prune(self.store,moment)
+                _folds.rerate_all(moment)
                 # ADR-062: the night list replaces the notes review (no tidy-three framing, no keep or drop).
                 listed=memory_tiers.night_list(self.store,persona,moment)
                 if listed:

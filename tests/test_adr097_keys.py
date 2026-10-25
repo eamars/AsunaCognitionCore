@@ -17,6 +17,7 @@ from test_adr009_p2 import owner, THINK
 from test_engineering_m1 import event
 from test_memory_pilot import Route
 from test_memory_tiers_delivery import Retrieval, write
+from test_adr097_crossing import fresh_words  # noqa: F401 (autouse: nothing learned)
 
 
 def test_ascii_keys_are_whole_runs_and_chinese_keys_are_substrings():
@@ -131,3 +132,14 @@ def test_settlement_counts_every_place_again_and_drops_a_silent_one(group):
     assert tiers.rerate_all() == 1
     assert tiers.rows.find_one({'_id': 'rarity:P1:g1'})['lines'] == 10
     assert not tiers.rows.find_one({'_id': 'rarity:P1:gone'})
+
+
+def test_learned_words_are_cut_whole_and_forgetting_gives_the_dictionary_back():
+    assert key_words.words('破甲来了')[0] != '破甲', 'jieba alone glues the rare word to its neighbour'
+    assert key_words.vocabulary({'破甲': 200, '破甲来': 5, '大肥鱼': 600, '肥鱼': 3, 'abc': 9}) == ['大肥鱼', '破甲', '肥鱼'], \
+        'a glued piece goes (破甲来); a word far more frequent than a piece of it stays (大肥鱼); ASCII is never learned'
+    key_words.learn(['破甲'])
+    assert key_words.cross_words('说破甲了吗') == ['破甲'] and key_words.words('破甲来了')[0] == '破甲'
+    assert key_words.frequency('破甲') == 0, "the dictionary test reads jieba's own entry, not the learned one"
+    key_words.learn([])
+    assert key_words.words('破甲注意大家') == ['破甲', '注意', '大家'], 'forgetting restores the entry, not a forced split'

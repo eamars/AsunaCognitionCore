@@ -72,10 +72,11 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
   - `fold_order` — The order a group's notes fold in over their per-turn limit: the section that surfaced longest ago first.
   - `refold` — Recompute and keep a group's fold order (on her write and at settlement, not every turn, so the block is not re-sent for it).
   - `folding` — The kept fold order of a group's notes, made once when there is none.
-  - `place_lines` — The place's recent lines that decide what is rare there: its newest inbound lines of the last key_words.WINDOW_DAYS days, at most key_words.WINDOW_LINES.
+  - `place_lines` — The place's recent lines that decide what is rare there: its newest inbound lines of the last crossing.number('window_days') days, at most key_words.WINDOW_LINES.
   - `rerate` — Count a place's common words, and the cross words it says itself, again and keep them.
   - `rarity` — A place's kept common words, counted once when there are none.
   - `said` — The cross words a place says itself (key_words.said), counted once when there are none.
+  - `openings` — The openings a place repeats (key_words.openings), counted once when there are none.
   - `rerate_all` — At settlement: every place with lines in the window counted again; a place with none keeps no row.
   - `let_go` — Her let_go: the item one place down now (a put-away item stays where it is).
   - `used` — Her use of items by `doc:slug#sid` refs: recall returned them, or she cited them in a tool call.
@@ -109,7 +110,11 @@ The words that bring her items back by themselves (ADR-097): keys, a place's com
 - def `segmenter` — jieba, loaded once (its dictionary takes a fraction of a second), quiet.
 - def `words` — A text as words, in order: Chinese runs cut by the segmenter, ASCII runs whole and lower-cased.
 - def `heading_words` — The words of a heading that can be keys: two characters or more, each once, in order.
+- def `frequency` — A word's frequency in jieba's own dictionary (None when it is not there), whatever was learned.
 - def `everyday` — A Chinese word the segmenter's dictionary rates as everyday; ASCII runs never are.
+- def `learn` — Cut these words whole from now on, and forget what was learned before and is not among them.
+- def `learned`
+- def `vocabulary` — The words to learn from {cross word: lines}: Chinese ones in LEARNED_LINES lines or more, without the glued pieces: one that contains a shorter candidate said in at least as many lines (破甲来 holds 破甲).
 - def `keys` — An item's keys in a place whose common atoms are `table`: its rare tags, then its rare, not everyday heading words.
 - def `tag_keys` — Her tags that are keys: free tags of two characters or more (a `place:` tag and the correction mark are not).
 - def `atoms` — What a line is counted by: its ASCII runs and its Chinese substrings of GRAMS lengths.
@@ -118,7 +123,9 @@ The words that bring her items back by themselves (ADR-097): keys, a place's com
 - def `rare` — Whether a word is rare in a place whose common atoms are `table` (a set).
 - def `found` — The key as the text has it (its own spelling), or None.
 - def `cross_words` — The words of a text that may reach another place, each once: outside the dictionary, or whole ASCII words and numbers, two characters or more; links and mentions (`mention`, the platform's pattern) stripped first.
-- def `said` — The cross words more of these lines say than SAID_HERE, sorted: what the place says itself.
+- def `said` — The cross words more of these lines say than `most`, sorted: what the place says itself.
+- def `openings` — The openings a place repeats: the first OPENING characters of OPENING_LINE-character lines (a leading @-mention stripped), when OPENING_REPEATS lines or more share them; a bot's status lines and a task's notices start alike.
+- def `templated` — A line made from a template, not said: one of the place's repeated openings, or a record of three labelled fields or more (a status line).
 - def `lines_with` — How many of the lines contain the key.
 - def `tag_here` — A tag's line in words: how often this place's recent lines say it, and whether it brings the section back.
 
@@ -129,17 +136,22 @@ The words that bring her items back by themselves (ADR-097): keys, a place's com
 What she learned elsewhere comes back when she asks (ADR-097 D3, D4): lines from her other groups, past versions of her notes, and the place rules that decide what may leave a group.
 
 - def `settings` — The deployment's rules: {default, places, kinds, history_excluded}, defaults filled; a malformed entry is dropped (an unknown rule reads as the default).
+- def `number` — One of the deployment's numbers (NUMBERS).
 - def `rule`
 - def `kind`
-- def `query_words` — The words of a recall's query that reach other places: cross words this place says at most SAID_HERE times.
+- def `query_words` — The words of a recall's query that reach other places: cross words this place says at most `said_here` times.
 - def `elsewhere` — recall: lines of her other groups that have a word of the query that may cross, at most ELSEWHERE_SHOWN, best first.
+- def `vocabulary` — The learned words of the index's build, learned in this process once per build; `ensure` builds the index first when there is none (a place's words must be cut as the index cuts them).
 - def `build` — Build the word index again from every chat line of her groups, as a new generation; the old one goes once the new one is in place.
 - def `top_up` — Add the group lines said since the index's mark: each group's chunked lines after its last indexed one, up to the first line the indexer has not chunked yet.
+- def `seen_for` — {word: [(scope, lines in the window, latest)]} from the index, topped up first.
 - def `lines_for` — [(unit id, scope, hers)] of the lines that have one of the words, the index topped up first.
 - def `fetch` — recall sections {doc: elsewhere, section: ref}: the lines around one line of another group, the place rule checked again now, speakers as 你 or 别人.
 - def `versions` — `history` of one document, kept while its ledger has no newer revision (one small read to check).
 - def `history` — Every past text of each section of one of her documents, oldest first: {sid: [(body, written_at, replaced_at, reason of the change that replaced it)]}; the current text is not among them.
 - def `before` — recall: past versions of her notes readable here that have a word of the query that may cross, which their section no longer has; one per section, newest change first, at most SHOWN.
+- def `cue` — A group turn's one line of presence, or None: the word of this line that her other groups say most often, when it may cross, this place says it at most `said_here` times, the turn's delivered lines do not have it, no cue named it here withi
+- def `prune` — At settlement: fire rows older than FIRES_DAYS go.
 
 ## `retrieval`
 

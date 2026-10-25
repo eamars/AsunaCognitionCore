@@ -22,6 +22,17 @@ from test_memory_tiers_delivery import Retrieval, write
 AT = datetime.now(timezone.utc) - timedelta(days=2)
 
 
+@pytest.fixture(autouse=True)
+def fresh_words():
+    """What the segmenter learned belongs to a process: each test starts and ends with nothing learned."""
+    from asuna import key_words
+    key_words.learn([])
+    crossing._loaded.clear()
+    yield
+    key_words.learn([])
+    crossing._loaded.clear()
+
+
 def unit_id(scene, n):
     """A line's chunk id as the indexer makes it (memory.chunk): opaque, no place in it."""
     return 'chunk-' + sha(canonical(['m-%s-%d' % (scene, n), 2, 0]))

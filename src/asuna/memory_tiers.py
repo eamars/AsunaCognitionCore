@@ -513,21 +513,23 @@ class Tiers:
     # ── a place's common words, for her items' keys (ADR-097) ───────
     def place_lines(self, scene_id, moment=None):
         """The place's recent lines that decide what is rare there: its newest inbound lines of the last
-        key_words.WINDOW_DAYS days, at most key_words.WINDOW_LINES."""
-        from . import key_words
-        since = _iso((moment or _now()) - timedelta(days=key_words.WINDOW_DAYS))
+        crossing.number('window_days') days, at most key_words.WINDOW_LINES."""
+        from . import crossing, key_words
+        since = _iso((moment or _now()) - timedelta(days=crossing.number('window_days')))
         rows = self.store.db.messages.find({'scene_id': scene_id, 'direction': 'inbound', 'received_at': {'$gte': since}},
                                            {'text': 1}).sort('scene_seq', -1).limit(key_words.WINDOW_LINES)
         return [row['text'] for row in rows if isinstance(row.get('text'), str)]
 
     def rerate(self, scene_id, moment=None):
         """Count a place's common words, and the cross words it says itself, again and keep them. Returns the row."""
-        from . import channel_kinds, key_words
+        from . import channel_kinds, crossing, key_words
+        crossing.vocabulary(self.store, ensure=True)     # the place's words are cut as the word index cuts them
         lines = self.place_lines(scene_id, moment)
         platform = channel_kinds.of(scene_id)
         row = {'row': 'rarity', 'persona': self.persona, 'scene_id': scene_id, 'lines': len(lines),
                'limit': key_words.limit(len(lines)), 'common': key_words.common(lines),
-               'said': key_words.said(lines, platform.INBOUND_MENTION if platform else None), 'at': _iso(moment or _now())}
+               'said': key_words.said(lines, platform.INBOUND_MENTION if platform else None, crossing.number('said_here')),
+               'openings': key_words.openings(lines), 'at': _iso(moment or _now())}
         self.rows.update_one({'_id': 'rarity:%s:%s' % (self.persona, scene_id)}, {'$set': row}, upsert=True)
         return row
 
@@ -543,11 +545,15 @@ class Tiers:
         """The cross words a place says itself (key_words.said), counted once when there are none."""
         return self._rated(scene_id, 'said')
 
+    def openings(self, scene_id):
+        """The openings a place repeats (key_words.openings), counted once when there are none."""
+        return self._rated(scene_id, 'openings')
+
     def rerate_all(self, moment=None):
         """At settlement: every place with lines in the window counted again; a place with none keeps no row."""
-        from . import key_words
+        from . import crossing
         moment = moment or _now()
-        since = _iso(moment - timedelta(days=key_words.WINDOW_DAYS))
+        since = _iso(moment - timedelta(days=crossing.number('window_days')))
         places = sorted(set(self.store.db.messages.distinct('scene_id', {'direction': 'inbound',
                                                                         'received_at': {'$gte': since}})))
         for scene_id in places:

@@ -410,6 +410,8 @@ export class CognitionCore {
       await this.worker.call('navigation.ready');
       this.startFailures = 0;
       // ADR-101: the start completed; the span she was down, if any, is handed over beside it, never holding it up.
+      // A new worker starts with nothing said: what failed with the last one is said again if it fails with this one.
+      this.handOverSaid = new Set();
       this.handOver();
     })().catch(async error => {
       if (error.unconfigured) {
@@ -435,7 +437,8 @@ export class CognitionCore {
     // The same failure for the same span is said once, not at every try (an older worker would make it 288 a day):
     // keyed on what it is (cameBack's second argument: the span and the error's name), not on its changing text.
     // Every key said is kept, not only the last, so two failures taking turns are each said once (her review); the
-    // set is bounded, the oldest key going first.
+    // set is bounded, the first said going first (a key heard again keeps its place), and a key dropped is said
+    // again when it comes back. It lasts one worker: a completed start empties it (ready()).
     this.handOverSaid ??= new Set();
     const once = (text, key = text) => {
       if (this.handOverSaid.has(key)) return;

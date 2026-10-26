@@ -137,6 +137,25 @@ minutes at most). The owner sees the state while it lasts: in the settings card'
 The lease (ADR-020): still one Host per database, still deleted on a clean stop. A supervisor watchdog stays deferred
 (ADR-100).
 
+## Review
+
+Claude's paraphrase of Xiaoman's agent-line messages of the morning of 2026-10-27 (four rounds), not her words:
+
+- A list cut at three must say how many there were and how many it leaves out.
+- The planned-restart sentence shows `by`'s own value, and causes are a closed list her wording keys on.
+- A start that came up but failed before completing must have its own line in the failure table.
+- What is not recorded is said as not known, never left blank.
+- A thought the program captured says it was captured, so it is never read as her having thought first.
+- The day is a floor: her first home turn after a stop carries it, however late.
+- The stamp means "shown to her", never "she knows" (`shown_at`).
+- She withdrew one point of her own: in `tool` mode a turn without `think` is not silent, because the capture runs in
+  both modes (her ADR-099 reading had the guard's direction reversed).
+
+Claude's own additions in the same rounds: the row id taken from `since` (no second row when an answer is lost), and
+the failure-table rows for a completed start followed by an exit and for a malformed file.
+
+Her signature (against a README blob she names): ____
+
 ## Tests (to be written with the build)
 
 - JS: a failed start writes the file. A second failure keeps `since` and adds a try. A completed start sends

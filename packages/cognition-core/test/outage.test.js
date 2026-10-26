@@ -265,3 +265,29 @@ test('a planned in-place restart opens no span', async t => {
     await core.restart(reason);
   assert.equal(openSpan(dir), null);
 });
+
+test('the said-once set is bounded: past 64 the first said goes, and is said again when it comes back', async t => {
+  const dir = folder(t);
+  const { CognitionCore } = await import('../src/index.js');
+  const warned = [];
+  const core = new CognitionCore({ logger: { warn: text => warned.push(text), info() {} }, asunaFloor: { dataRoot: dir } }, {});
+  wentDown(dir, 'exited:1');
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const failWith = async name => {
+    core.worker = { closed: false, call: async () => { throw new Error(name + ': reset'); } };
+    core.handOver(); await settle();
+  };
+  for (let i = 0; i <= 64; i++) await failWith('Failure' + i);         // 65 kinds: the set keeps 64 (HANDOVER_KEYS)
+  assert.equal(warned.length, 65);
+  await failWith('Failure64');                                         // still kept: not said again
+  assert.equal(warned.length, 65);
+  await failWith('Failure1');                                          // still kept: a key heard again keeps its place
+  assert.equal(warned.length, 65);
+  await failWith('Failure0');                                          // the first said went first: said again
+  assert.equal(warned.length, 66);
+  // First in, first out, not least recently used: Failure1 was heard again above, yet it is now the oldest and went
+  // when Failure0 came back, so it is said again (under LRU Failure2 would have gone instead).
+  await failWith('Failure1');
+  assert.equal(warned.length, 67);
+  core.unloaded = true; clearTimeout(core.handOverTimer);
+});

@@ -431,8 +431,11 @@ export class CognitionCore {
    * that failed does not wait for the next start (days, perhaps). Never throws. */
   handOver(worker = this.worker) {
     clearTimeout(this.handOverTimer);
-    // The same failure for the same span is said once, not at every try (an older worker would make it 288 a day).
-    const once = text => { if (text !== this.handOverSaid) { this.handOverSaid = text; this.warnLine(text); } };
+    // The same failure for the same span is said once, not at every try (an older worker would make it 288 a day):
+    // keyed on what it is (cameBack's second argument: the span and the error's name), not on its changing text.
+    const once = (text, key = text) => {
+      if (key !== this.handOverSaid) { this.handOverSaid = key; this.warnLine(text); }
+    };
     cameBack(this.ctx.asunaFloor.dataRoot, span => worker.call('host.came_back', span), once).then(result => {
       if (result !== KEPT || this.unloaded || this.worker !== worker || worker.closed) return;
       // A worker replaced or closed meanwhile is not called: the next completed start hands it over.

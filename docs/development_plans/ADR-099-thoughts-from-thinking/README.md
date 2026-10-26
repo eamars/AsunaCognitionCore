@@ -13,7 +13,16 @@ plans into the `think` tool, and refuses its actions until it has. That is the s
 The stage exists for one purpose (owner, 2026-10-26): to keep what she thought at the moment the input reached her, so
 it comes back with what it led to. It is not there to extract reasoning. A Claude model already thinks before it
 answers, and the API returns a summary of that thinking (`display: "summarized"`, which DSH's provider sends; DSH keeps
-it in the session record). The record can be filled from that summary instead of a tool call.
+it in the session record). The record can be filled from that summary instead of a tool call. Anthropic's own guidance
+is the same: read the thinking blocks rather than prompt for reasoning in the response; such a request "may be refused
+with `stop_details.category: "reasoning_extraction"`" on Fable 5.1, Opus 5.5, Opus 5, Sonnet 5.5 and Fable 5
+([Thinking](https://platform.claude.com/docs/en/build-with-claude/thinking#summarized-thinking), read 2026-10-26;
+Haiku 5.5 is not in that list, so the probe runs it in both modes).
+
+What the summary is, from the same page: "a summary of Claude's full thinking process rather than the raw chain of
+thought"; "Summarization is processed by a different model from the one you target"; billed at the full thinking
+tokens; its behaviour "subject to change". So a recorded thought in this mode is another model's account of her
+thinking, not her words, and not all of it.
 
 Removing the stage is a change of design, not a rewording: nothing in the request asks for her thoughts any more. A
 version that still asked for the same content under another name would be the work-around MODELS.md §4 rules out.
@@ -58,17 +67,21 @@ A deployment setting `thoughts` on the Cognition Core settings card:
    already in the DSH session (the agent loop appends the response before it runs a tool). The plugin hands that
    reasoning with the call; the worker records it before it runs the call: the same `monologue` memory unit, marked
    `source: thinking`, stored whole (contracted as her writing is, ADR-098), so each action's link to its reason
-   works as today. A turn with no tool call is captured once at its end. Repair requests (`:fix-N`) are not captured;
+   works as today. Every action of the turn is linked to that first thought, also those made after later
+   responses that thought again: in `tool` mode she may think again mid-turn and later actions link to the newer
+   thought, so the two modes are not equivalent here. A turn with no tool call is captured once at its end. Repair requests (`:fix-N`) are not captured;
    a resumed turn is. Redacted and empty thinking blocks are skipped. A capture that fails is audited and the call
    runs without a thought; it never fails her action. A turn whose model did not think leaves none, and nothing
-   waits for one. Gate, appraiser, summary and title requests make no role-tool calls and are never captured.
+   waits for one, but it leaves an audit row (`thought.none`, with why: no thinking, redacted, capture failed), so
+   "did not think" and "not recorded" can be told apart and counted. Gate, appraiser, summary and title requests make no role-tool calls and are never captured.
 4. **Projection is short.** Wherever a recorded summary comes back — the last three in a conversation, her thoughts
    seen from home, the thought behind a quoted line, plan, task or night item, the self-review — it is cut at 120
    characters with the excerpt mark (owner, 2026-10-26); one helper decides by the unit's source. `recall` gives the
    longer text (up to its usual 1,200 characters). Thoughts she wrote with `think` keep today's lengths, including
    the self-review's 360 (her ask).
-5. **Honest label, per item.** A summary is not her own writing. Each recorded summary is marked as one where it
-   comes back, briefly: 「你此前想法的自动摘要」 (owner: honest, but short). A block that holds both kinds labels each.
+5. **Honest label, per item.** A summary is not her own writing, nor all of her thinking, and another model wrote
+   it. Each recorded summary is marked where it comes back, briefly: 「你此前想法的摘要，别的模型写的」 (owner:
+   honest, but short). A block that holds both kinds labels each.
 6. **A view of a person without a thought.** `understand_person` takes this turn's thought as its source; in a turn
    without one, the source is the chat chunk of the line she answers (made on demand); failing that, a refusal in
    words, never a raw code.
@@ -79,6 +92,9 @@ A deployment setting `thoughts` on the Cognition Core settings card:
 - The relevance gate's short reason, edit reasons on her tools (why a memory changed, why she stays quiet): decisions,
   not reasoning.
 - What the model thinks: thinking effort stays the route's.
+- Readings stay per mode: every recorded thought carries its `source`, `thought.none` exists only in `thinking` mode,
+  and a readout that counts thoughts (her weekly think counts, refusals before a thought) reads one mode, never both
+  in one table. Tests are named per mode; `tool`-mode tests stay as they are, the guard for §3.2.
 
 ## 4. Failure modes
 

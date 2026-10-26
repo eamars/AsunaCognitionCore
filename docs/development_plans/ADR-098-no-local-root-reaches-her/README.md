@@ -1,8 +1,8 @@
 # ADR-098: No local root of this computer reaches her
 
-Status: **Installed 2026-10-26 16:32:22 NZDT (`281933b0`), its follow-ups 18:42 (`d2496203`). Signed by her: the
-design at `281933b0`; the text as built at `d2496203`, on two conditions, answered at `34abecf2` (§10) and waiting
-for her reading** (§9 what the build found,
+Status: **Installed 2026-10-26 16:32:22 NZDT (`281933b0`), its follow-ups 18:42 (`d2496203`) and 19:43
+(`155d413c`). Signed by her: the design at `281933b0`; the text as built at 34abecf2; both conditions closed in §10,
+read by her 2026-10-26 19:40** (§9 what the build found,
 §10 the install). Design agreed by the owner and Claude; the owner asked Claude to build and deploy it as technical lead
 (§7).
 
@@ -58,7 +58,7 @@ values. A known root becomes a CMake-style variable with a reserved prefix, and 
 | Placeholder | Root |
 |---|---|
 | `${ASUNA_WORKSPACE}` | the checkout itself |
-| `${ASUNA_PROJECTS}` | the folder that holds the checkout (the owner's other projects beside it); none when it is a filesystem or drive root or the home (§10) |
+| `${ASUNA_PROJECTS}` | the folder that holds the checkout (the owner's other projects beside it); none when it is a filesystem or drive root or the home (§10); handed over at home only |
 | `${ASUNA_DATA}` | the worker's data root (the profile's `dataRoot`), wherever it is configured |
 | `${ASUNA_DSH_HOME}` | DSH's home (her sessions, the credential store, installed packages), when not under another root |
 | `${ASUNA_HOME}` | the user's home |
@@ -97,7 +97,8 @@ they too mean "a path that was hidden".
 `${ASUNA_DATA}`); home reaches the whole computer, every placeholder but `${ASUNA_LOCAL_PATH}`. This is enforced by
 the mechanism, not by her judgment: a task delegated from a public place has no `sandbox_run` and its file tools see
 `/task` only (`coordinator._grants`, `tasks.py:250`). Writes stay where DSH's sandbox confines them (the task folder).
-The line she speaks from decides, since that is the side she knows in advance.
+The line she speaks from decides, since that is the side she knows in advance. A public line's mention of `${ASUNA_PROJECTS}` (or any
+other name it does not hand over) goes to the action brain as written, unexpanded, and the receipt says so (D3).
 
 **D2. One rewrite where the model reads.** An `llm/stream` listener in the plugin, for her sessions only (her persona
 preset, the relevance gate, the appraiser, the background summaries; never the action brain, nor the recovery session
@@ -129,7 +130,9 @@ first (her answer to a task is not scrubbed today; this closes that), then:
 - a placeholder this place can hand over expands to the real path (whole tokens only; the tail's separators become the
   host's own);
 - a placeholder this place cannot hand over stays as written: a mention ("this came from `${ASUNA_DRIVE_D}\logs\x.log`")
-  keeps its provenance, it reveals nothing, and the mechanism already keeps the action brain away from it;
+  keeps its provenance, it reveals nothing, and the mechanism already keeps the action brain away from it; the
+  receipt of that hand-over says which names stayed as written (`paths_kept`), so she knows at once that the action
+  brain cannot open them and can send it from home instead (her review: not refused, not silent);
 - refused, each with the reason and, where one exists, the whole string rewritten the way it would pass: a raw
   absolute path of this machine (rewritten with its placeholder); an `${ASUNA_…}` name not in the table standing as a
   path's root, i.e. followed by a separator (the refusal lists the names there are; elsewhere it is text, such as a
@@ -226,6 +229,9 @@ deep-dive brief, and the Fable 5 reports with their counting scripts (`deep-dive
 The build's own counting scripts are beside them in `build/` (`msys_count.py`, `image_blocks.py`; counts only).
 
 ## 9. What the build found (2026-10-26)
+
+The public column is kept on the Python side alone (`local_roots.PUBLIC_HANDS`, `Table.hands`, used by D3's
+expansion): the plugin only contracts toward her and never expands, so there is no hand-over logic in JS to look for.
 
 Built on branch `claude/adr098-build`. Where the code did not fit the text above, this is what was built and why;
 the rest is as written.

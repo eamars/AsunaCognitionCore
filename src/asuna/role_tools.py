@@ -1480,6 +1480,12 @@ class RoleTools:
         from . import credentials, local_roots
         return local_roots.outbound(credentials.scrub(text), self._place(ep) == visibility.OWNER_PRIVATE)
 
+    def _kept(self, ep, *texts):
+        """Her words on placeholders this line handed over as written (ADR-098 D3), for the tool result; None for none."""
+        from . import local_roots
+        home = self._place(ep) == visibility.OWNER_PRIVATE
+        return local_roots.kept_words(sorted({n for t in texts for n in local_roots.kept(t, home)}))
+
     def _text(self, args, field, limit, *, required=True, ask=None, offer=True):
         """A text field refused past `limit`; she is asked for `ask` (by default four fifths of it, config.soft).
         offer=False for a list she writes (a plan's intent, an idea, an errand): its last line often says what counts
@@ -2007,8 +2013,10 @@ class RoleTools:
     def tool_delegate(self, ep, call_id, args):
         self._depth(ep)
         # The title reaches the action brain with the brief: the same expansion, or it would see a name it cannot open.
-        title = self._toward_action(ep, self._text(args, 'title', 80))
-        brief = self._toward_action(ep, self._text(args, 'brief', 20000))  # no credential value, no raw root
+        title_as_written, brief_as_written = self._text(args, 'title', 80), self._text(args, 'brief', 20000)
+        title = self._toward_action(ep, title_as_written)
+        brief = self._toward_action(ep, brief_as_written)  # no credential value, no raw root
+        kept = self._kept(ep, title_as_written, brief_as_written)
         from . import action_tiers
         tier = None
         if action_tiers.offered():
@@ -2024,7 +2032,8 @@ class RoleTools:
                 'action_brain': '新开一份上下文：它只看得到这次的 brief 和对方的原话。',
                 'queue': queue_words(self.store, task['_id']),
                 'note': (HOME_TASK if ep.get('errand') else REFLECTION_TASK if _one_shot(ep)
-                         else '结果回来会再叫你；在那之前不要说已经做完。')}, False
+                         else '结果回来会再叫你；在那之前不要说已经做完。'),
+                **({'paths_kept': kept} if kept else {})}, False
 
     def _listed_tasks(self, ep):
         """The ids of the tasks this turn lists (task_state_from_program): what a task reference can name."""
@@ -2055,8 +2064,12 @@ class RoleTools:
     def tool_task_message(self, ep, call_id, args):
         self._depth(ep)
         task = self._own_task(ep, args.get('task'))
-        message = self._toward_action(ep, self._text(args, 'message', 20000))
+        as_written = self._text(args, 'message', 20000)
+        message = self._toward_action(ep, as_written)
         outcome = self.coordinator.message_action(ep, call_id, task, message)
+        kept = self._kept(ep, as_written)
+        if kept and isinstance(outcome, dict):
+            outcome = {**outcome, 'paths_kept': kept}
         return outcome, False
 
     def tool_task_stop(self, ep, call_id, args):

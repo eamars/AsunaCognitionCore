@@ -106,6 +106,8 @@ No local root of this computer reaches her character brain (ADR-098): the root t
 - def `contract_text`
 - def `speech` — Her words about to leave, with a raw root written as its placeholder (D5).
 - def `outbound` — `Table.outbound` with this worker's table; without one, any placeholder is refused.
+- def `kept` — The placeholders of a text she hands the action brain that this line does not hand over: they go as written, a name the action brain cannot open, and the tool result says so (`kept_words`).
+- def `kept_words` — Her words for `kept`: what stayed as written, and that only home can hand it over; None for none.
 - def `context_line` — Her program context's line on the placeholders: names and meanings, never values.
 
 ## `grants`

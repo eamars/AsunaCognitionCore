@@ -781,7 +781,8 @@ No local root of this computer reaches the character brain; the action brain wor
   shows the table's size and the requests rewritten since the start.
 - **Toward the action brain.** The `delegate` brief and title, a message to a task, her answer to a task's question and an `ask`
   to 行动脑 lose every credential value, then each placeholder the place hands over becomes its real path with the
-  host's separators (a public place: `WORKSPACE`, `DATA`; home: all but `LOCAL_PATH`); any other stays as written.
+  host's separators (a public place: `WORKSPACE`, `DATA`; home: all but `LOCAL_PATH`); any other stays as written, and the
+  tool's result names it (`paths_kept`).
   Refused, in words: a raw root (with the whole text rewritten), an `${ASUNA_...}` name the table does not have where it stands as a path's root (followed by a separator; elsewhere it is text, as the deployment's own `${ASUNA_...}` variables are), a
   `..` segment in a path at a root or placeholder, and in a public place a relative path that climbs.
 - **Her writing.** Every other string argument of her tools is stored contracted, except a credential's values and her

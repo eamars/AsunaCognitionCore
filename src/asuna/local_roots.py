@@ -470,6 +470,26 @@ def outbound(text, home):
     return TABLE.outbound(text, home)
 
 
+def kept(text, home):
+    """The placeholders of a text she hands the action brain that this line does not hand over: they go as written,
+    a name the action brain cannot open, and the tool result says so (`kept_words`)."""
+    table = current()
+    if table is None:
+        return []
+    return sorted({m.group(1) for m in TOKEN_TAIL.finditer(text or '')
+                   if m.group(1) in table.names and not table.hands(m.group(1), home)})
+
+
+def kept_words(names):
+    """Her words for `kept`: what stayed as written, and that only home can hand it over; None for none."""
+    if not names:
+        return None
+    shown = '、'.join('${%s%s}' % (PREFIX, n) for n in names)
+    if names == [LOCAL_PATH]:
+        return '%s 是藏起来的路径，原样给了行动脑，它打不开；要用请把文件放到这台电脑上' % shown
+    return '%s 这条线交不出去，原样给了行动脑，它打不开；要用请从家里派' % shown
+
+
 def context_line(home):
     """Her program context's line on the placeholders: names and meanings, never values."""
     hands = '家里能交给行动脑的是除 ${ASUNA_LOCAL_PATH} 外的全部' if home else \

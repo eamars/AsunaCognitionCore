@@ -48,9 +48,9 @@ def test_a_brief_from_home_reaches_the_action_brain_with_the_real_paths(store, h
 
 def test_a_title_reaches_the_action_brain_expanded_as_its_brief_is(store, home):
     """The action brain cannot open a placeholder: a path in the title is expanded with the brief (her review)."""
-    ep, result, ok, task = delegate(store, home_event(store, 'h-title'), '读第一行', title='读 ${ASUNA_WORKSPACE}\a.md')
+    ep, result, ok, task = delegate(store, home_event(store, 'h-title'), '读第一行', title='读 ${ASUNA_WORKSPACE}\\a.md')
     assert ok, result
-    assert task['title'] == '读 %s\a.md' % WS
+    assert task['title'] == '读 %s\\a.md' % WS
 
 
 def test_a_brief_from_a_public_place_expands_only_the_workspace_and_data(store):
@@ -119,3 +119,17 @@ def test_her_program_context_names_the_placeholders_never_their_values():
         line = local_roots.context_line(home)
         assert 'WORKSPACE' in line and '${ASUNA_' in line and WS not in line and HOME not in line
     assert '只有 ${ASUNA_WORKSPACE} 和 ${ASUNA_DATA}' in local_roots.context_line(False)
+
+
+def test_a_placeholder_this_line_cannot_hand_over_is_kept_as_written_and_said_at_hand_over(store, home):
+    """No refusal (a mention keeps its source), and not silent: the delegate receipt names what stayed as written."""
+    from asuna import local_roots
+    assert local_roots.kept('读 ${ASUNA_HOME}\a.md 和 ${ASUNA_WORKSPACE}\b.md', False) == ['HOME']
+    assert local_roots.kept('读 ${ASUNA_HOME}\a.md 和 ${ASUNA_WORKSPACE}\b.md', True) == []
+    assert '这条线交不出去' in local_roots.kept_words(['HOME'])
+    ep, result, ok, task = delegate(store, home_event(store, 'h-kept'), '查 ${ASUNA_LOCAL_PATH} 里那份')
+    assert ok, result
+    assert '${ASUNA_LOCAL_PATH}' in task['brief'], 'kept as written'
+    assert '${ASUNA_LOCAL_PATH}' in result['paths_kept'] and '打不开' in result['paths_kept']
+    ep, result, ok, task = delegate(store, home_event(store, 'h-none'), '读 ${ASUNA_WORKSPACE}\README.md')
+    assert ok and 'paths_kept' not in result

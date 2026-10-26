@@ -164,7 +164,7 @@ test('the hand-over runs beside a start: it returns at once, and ready() does no
   core.worker = { closed: false, call: () => new Promise(() => {}) };       // a database that never answers
   assert.equal(core.handOver(), undefined, 'not a promise anyone could wait on');
   const source = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
-  assert.match(source, /await this\.worker\.call\('navigation\.ready'\);\n\s+this\.startFailures = 0;\n(\s+\/\/[^\n]*\n)*\s+this\.handOver\(\);/,
+  assert.match(source, /await this\.worker\.call\('navigation\.ready'\);\n\s+this\.startFailures = 0;\n(\s+\/\/[^\n]*\n)*\s+this\.handOverSaid = new Set\(\);\n\s+this\.handOver\(\);/,
     'ready() calls it after navigation.ready without await');
   core.unloaded = true;
 });
@@ -199,6 +199,46 @@ test('a failure said once: the same span failing the same way is one line howeve
   assert.equal(said().length, 2);
   assert.match(said()[1], /UNKNOWN_BUSINESS_METHOD$/);
   assert.ok(existsSync(path.join(dir, FILE)), 'still kept for a newer worker');
+  core.unloaded = true; clearTimeout(core.handOverTimer);
+});
+
+test('two failures taking turns on one span are each said once, not again at every switch', async t => {
+  const dir = folder(t);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { CognitionCore, HANDOVER_SECONDS } = await import('../src/index.js');
+  const warned = [];
+  const core = new CognitionCore({ logger: { warn: text => warned.push(text), info() {} }, asunaFloor: { dataRoot: dir } }, {});
+  wentDown(dir, 'exited:1');
+  let turn = 0;
+  core.worker = { closed: false, call: async () => {          // A, B, A, B, A, B: her case
+    turn++;
+    throw new Error(turn % 2 ? 'AutoReconnect: 192.0.2.10:' + (27000 + turn) + ': reset' : 'UNKNOWN_BUSINESS_METHOD');
+  } };
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  core.handOver();
+  for (let i = 0; i < 5; i++) { await settle(); t.mock.timers.tick(HANDOVER_SECONDS * 1000); }
+  await settle();
+  assert.equal(turn, 6);
+  assert.equal(warned.filter(text => text.startsWith('Asuna: the span she was down since')).length, 2);
+  core.unloaded = true; clearTimeout(core.handOverTimer);
+});
+
+test('what was said lasts one worker: the same failure with the next one is said again', async t => {
+  const dir = folder(t);
+  const source = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
+  assert.match(source, /this\.handOverSaid = new Set\(\);\n\s+this\.handOver\(\);/,
+    'a completed start empties it before its first hand-over');
+  const { CognitionCore } = await import('../src/index.js');
+  const warned = [];
+  const core = new CognitionCore({ logger: { warn: text => warned.push(text), info() {} }, asunaFloor: { dataRoot: dir } }, {});
+  wentDown(dir, 'exited:1');
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const older = { closed: false, call: async () => { throw new Error('UNKNOWN_BUSINESS_METHOD'); } };
+  core.worker = older; core.handOver(); await settle();
+  core.worker = { ...older }; core.handOver(); await settle();               // no completed start: still one line
+  assert.equal(warned.length, 1);
+  core.worker = { ...older }; core.handOverSaid = new Set(); core.handOver(); await settle();   // as ready() does
+  assert.equal(warned.length, 2, 'the next worker says it again');
   core.unloaded = true; clearTimeout(core.handOverTimer);
 });
 

@@ -400,6 +400,14 @@ against a real client」。第一次真发就是实测；在那之前别说「QQ
 - 纯白衬衫／纯白背景这一格：靠换模型解决，不靠提示词硬压（来路：10-23 定稿参数金主原话「年龄感与纯白衬衫两格靠换模型解决不进提示硬压」；10-24 读数：睡衣非纯白（浅蓝缎面）也照样交货验收，说明硬压没用。10-26 掰正：上一趟这条写反了）。
 - 手机＝场景道具，不是人设硬项（见上面「手机不是人设」）。
 
+**黑发配方（2026-10-17 实测，只在 `janku-illustrious` 这一条路线验过）**
+
+- 正向双写 `(jet black hair:1.4)` ＋ `(black hair:1.4)`，负面另写 `white hair, silver hair, gray hair`：
+  该路线连抽 5 次张张出黑发（10-17 那 5 次生成的读数；来源想法本 idea-e29d5506）。
+- **仅该路线验证**：`janku-v5-illustrious`、各角色路线、anima 那几条都没这么测过——别当通用配方搬过去，
+  画完仍要逐次 `read_image` 看那一张的头发颜色。
+- 负面那一格在 CFG 1 的路线上不吃（见「步骤 1」末尾那条），那类路线只能把「不要什么」写进正向。
+
 **提示词正本**
 
 那张图 PNG 的 `tEXt` 块（keyword `prompt`）里烧着生这张图的完整 workflow：正面提示词＋负面＋1152×1408＋seed 1201769830724752＋`JANKU_v5_0` checkpoint。tEXt 原文（1,823 字节）逐字抽出来存成了本技能目录里的 **`official-ref-prompt.txt`**——要复现照那份文件用，别照记忆重写。两处坑：
@@ -547,6 +555,15 @@ attach 契约本身的离线用例在 core 侧（`python3 -B tools/outbound_imag
 
 ## 版本
 
+v14（2026-10-27 自我开发）：「官方定妆」里补一格**黑发配方**——正向双写 `(jet black hair:1.4)`＋`(black hair:1.4)`、
+负面另写 `white hair, silver hair, gray hair`，来路是 10-17 在 `janku-illustrious` 连抽 5 次张张黑发的读数
+（想法本 idea-e29d5506）。限制一并写死：**仅该路线验证**，`janku-v5-illustrious`／各角色路线／anima 那几条都没这么测过，
+画完仍逐次 `read_image` 看头发颜色；负面那格在 CFG 1 的路线上不吃（步骤 1 末尾那条）。同轮核了另一条想法
+（idea-dd1b83c2，blue-archive-character-illustrious-xl 的「适配器焊死项」）：那条路线的 guidance 是**生图服务自述**里的，
+不在我能发布的四个项目（xiaoman／napcat-qq／agent-line／core）内，本技能正文也没有这条路线的名字（整棵候选 0 命中），
+2026-10-27 `list_routes=yes` 实读 20 条里也没有它——所以本趟**没动正文**，归服务侧。`check_skill.py` 同步：新增
+`official_look_section` 与节内五条字面（双写两项、负面三项、仅该路线、逐次），判据 198→204。不抬 `__version__`，不动 core 与适配器。
+
 v13（2026-10-25 收尾）：frontmatter 的 `description` 那半句按机制改写——「群里只发来源带 `integration:` 前缀的图（可以是早就做好、后来重新登记进来的），全年龄」换掉旧的窄说法 `群里只发她自己生成并导入的图`。那一行每一拍进技能目录、被当触发依据读，正文改对了、那一行还窄着就是天天拿旧判断挑技能。自检补上这一格：`no_stale_claim_in_frontmatter` 把 frontmatter 也扫进退役那族（判法同正文，剥掉反引号里的引用）；197 → 198 全绿，反证：description 退回旧说法只红这一条，带反引号引用不误杀，三份副本 YAML 都还能解析。顺手补 v12 那行少掉的一个空格。不抬 `__version__`。
 
 v12（2026-10-24 夜里自我开发第二趟）：按当日读数同步三处旧段落。步骤 8「图从哪来」那行的数由 `两条` 改成**三条**（现画的、`render_svg` 从工作区 SVG 渲的、已有字节带 `scope_key` 登记进来的，第三条指向「本机已有那张图怎么进可发清单」；「都由程序登记，我不动 scope」照留）；失败码表 `ATTACHMENT_NOT_HER_OWN` 的括注按机制改写（群里只发来源带 `integration:` 前缀的图，那张可以是早就做好、后来重新登记进来的；不再用比机制窄的那种说法）；归属那节只加一句指向，没重抄新节。自检同步：三条那条并进 STALE_CLAIMS（旧说法回到散文就红）＋节内三条判据（步骤 8 的数、失败码表按机制的措辞、归属节里的指向）。不抬 `__version__`，没动 core 与适配器。
@@ -620,6 +637,12 @@ v1（2026-10-04）：首次记录。步骤、错误码、大小与路由事实�
 未收录：`vision.image_dirs` 配好后的本地视觉复核；QQ 真客户端对 `base64://` 的渲染结果；第一次真发的回执。
 
 ## 试用记录
+
+2026-10-27（v14 这一趟，自我开发拍）：只加一格黑发配方＋自检五条字面，旧段落一条没动。核实与没核实分开记：
+
+- **这一轮我自己查过的**：`janku-illustrious`／`qwen-image-2.1-edit` 那些路线 guidance 的归属——`generate_image` 的 `list_routes=yes` 现读 20 条，每条的 description／prompt_scope 由服务自述给出；我能发布的四个项目（`development_files` 的 projects 名单：xiaoman／napcat-qq／agent-line／core）里没有生图服务那侧。blue-archive-character-illustrious-xl 在整棵 xiaoman 候选里 0 命中，今天这份路线清单里也没有它。
+- **沿用记录、这一轮没重跑的**：10-17 那 5 次黑发的逐张读数（本趟没重画，只把配方落文件）；步骤 1 里「CFG 1 不吃 negative」是 10-10 的读数。
+- **一处旧数没跟上新读数**：正文与 frontmatter 还写着「list_routes 共 11 条」（10-16 实读），今天同一把尺是 20 条——这趟交代是「只加不删」，我没改那个数，也没动锁它的 `edit_route_count` 判据，留给下一趟一并核。
 
 2026-10-24（v12 这一趟，夜里自我开发第二趟）：只同步三处旧段落（203 行那个数、失败码表那一格的括注、归属节加一句指向），没碰别的段落。自检：194 → 197 全绿（步骤 8 的数、失败码表措辞、归属节指向各一条，另把两处旧说法并进 STALE_CLAIMS）。反证一组：把 203 行改回旧写法 → 只红两条（`attach_sources_three` 与 `no_stale_text_only_claim`）。发布后推了 GitHub（推前现读远端仍是那一串，推完复查已是我这笔）。
 

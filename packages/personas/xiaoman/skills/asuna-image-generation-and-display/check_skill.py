@@ -60,6 +60,10 @@ scope_key 那一格在不在（scope 字面值从 `scenes` 读、`source` 前缀
 库里是两条独立消息行）。「只有 render_svg 这一条路」是 10-21 想法本里的待提案、本技能正文从没写过（本轮扫过
 候选整棵、origin/main 那份文件与 `git log -S`，三处 0 命中）——它进 STALE_CLAIMS：不带反引号写回散文才红。
 
+2026-10-27 起再补一节判据（「官方定妆」里的黑发配方）：正向双写 (jet black hair:1.4)＋(black hair:1.4)、
+负面三项 white hair, silver hair, gray hair、以及两条限制（仅该路线验证、画完仍逐次 read_image）五条字面
+押在该节切片里——配方与限制同等承重，只留配方不留限制，下次就会被当通用配方搬去别的路线。
+
 不联网、不调生图服务、不生成图、不写 Mongo、不发 QQ。
 
 用法：
@@ -455,6 +459,33 @@ def register_section_slice(body):
     return "\n".join(out)
 
 
+LOOK_HEADING = "## 官方定妆（画自己/自拍必读）"
+
+# 黑发配方（2026-10-17 在该路线连抽 5 次的读数）：五条字面都押在「官方定妆」这一节的切片里。
+# 限制那两条（只在 janku-illustrious 验过、画完仍逐次 read_image）和配方本体同等重要——
+# 只留配方不留限制，下次就会把它当通用配方搬去 v5 和角色路线。切片为空不等于查过，五条一起红。
+BLACK_HAIR = [
+    ("black_hair_positive_boosted", "(jet black hair:1.4)"),
+    ("black_hair_positive_plain", "(black hair:1.4)"),
+    ("black_hair_negative_three", "white hair, silver hair, gray hair"),
+    ("black_hair_route_only", "仅该路线验证"),
+    ("black_hair_read_each_time", "逐次"),
+]
+
+
+def look_section_slice(body):
+    """「## 官方定妆…」标题下、下一个二级标题之前的正文（2026-10-27 起黑发配方住在这里）。"""
+    out, taking = [], False
+    for line in body.splitlines():
+        if line.startswith("## 官方定妆"):
+            taking = True
+        elif taking and line.startswith("## "):
+            break
+        if taking:
+            out.append(line)
+    return "\n".join(out)
+
+
 def private_list():
     """私密名单（private_words 工具维护，永远不进仓库）：一行一条 category|word|why。
 
@@ -734,6 +765,13 @@ def main():
     check("register_no_absolute_image_path", not ABSOLUTE_IMAGE.search(reg_section),
           "「本机已有那张图…」那一节里有盘符开头的绝对路径")
 
+
+    # 官方定妆里的黑发配方（2026-10-27 补）：节标题＋节内五条字面。标题被删 → 切片为空 → 一起红。
+    look_slice = look_section_slice(body)
+    check("official_look_section", bool(look_slice), "「官方定妆」一节切不出正文（标题被改或删）")
+    for name, token in BLACK_HAIR:
+        check(name, token in look_slice,
+              "「%s」不在「官方定妆」这一节里（切片 %d 字）" % (token, len(look_slice)))
 
     check("display_relative_markdown_image", bool(RELATIVE_IMAGE.search(body)))
     check("display_no_absolute_image_path", not ABSOLUTE_IMAGE.search(body))

@@ -549,6 +549,31 @@ def infer_op(name, args):
     return ops.pop() if len(ops) == 1 else None if ops else OP_DEFAULT.get(name)
 
 
+# ADR-098 D3: the fields that go to the action brain; each passes `_toward_action` (scrub, then the root table) and is
+# not contracted on the way in, so a raw root in one is refused, not quietly rewritten.
+ACTION_BOUND = {'delegate': 'brief', 'task.message': 'message', 'task.answer': 'answer', 'ask.ask': 'question'}
+# What must stay as she wrote it: a credential's values and her private words are literal values the program keeps.
+LITERAL_TOOLS = ('credential', 'private_words')
+
+
+def written(name, args):
+    """Her arguments with every local root contracted (ADR-098 D4), except a field bound for the action brain (D3)
+    and her speech, whose replacements `tool_speak` counts (D5)."""
+    from . import local_roots, questions
+    if not isinstance(args, dict) or name in LITERAL_TOOLS:
+        return args
+    can = ability(name, args)
+    if can == 'speak':
+        return args
+    bound = ACTION_BOUND.get(can)
+    if can == 'ask.ask':
+        wanted = args.get('to')
+        wanted = [wanted] if isinstance(wanted, str) else wanted if isinstance(wanted, list) else []
+        if not any(isinstance(w, str) and ' '.join(w.split()) == questions.ACTION for w in wanted):
+            bound = None
+    return {key: value if key == bound else local_roots.contract(value) for key, value in args.items()}
+
+
 def ability(tool, args=None):
     """What a call does: its tool, or for a tool with options the option ('task.message'). An old name is its option,
     so records of either kind read the same."""
@@ -1300,6 +1325,7 @@ class RoleTools:
         inferred = name in OPS and isinstance(args, dict) and not args.get('op') and infer_op(name, args)
         if inferred:
             args = {**args, 'op': inferred}
+        args = written(name, args)                      # ADR-098 D4: what she writes is kept with no local root
         done = (ep.get('tool_calls') or {}).get(call_id)
         if done:
             if done['tool'] != name or done['args_sha256'] != sha(canonical(args)):
@@ -1445,6 +1471,13 @@ class RoleTools:
     def _place(self, ep):
         """The class of the conversation this turn is in: what goes out there and who is there."""
         return (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
+
+    def _toward_action(self, ep, text):
+        """A text she hands the action brain (ADR-098 D3): no stored credential value, then each placeholder this
+        line may hand over as its real path; a raw root, an unknown ${ASUNA_…} name or a climbing `..` is refused
+        (local_roots.PathRefused, in words). The line she speaks from decides."""
+        from . import credentials, local_roots
+        return local_roots.outbound(credentials.scrub(text), self._place(ep) == visibility.OWNER_PRIVATE)
 
     def _text(self, args, field, limit, *, required=True, ask=None, offer=True):
         """A text field refused past `limit`; she is asked for `ask` (by default four fifths of it, config.soft).
@@ -1684,10 +1717,11 @@ class RoleTools:
     def tool_speak(self, ep, call_id, args):
         """ADR-064 phase 2: her speech here, in parts. Every part is checked before any is queued: one wrong part
         means none of this call leaves, and the result says which and why."""
-        from . import channel_kinds, stickers
+        from . import channel_kinds, local_roots, stickers
         from .persona_model import effective
         from .render import model_and_policy
         ep = self._fresh(ep)
+        replaced = 0
         scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
         kinds = speak_kinds(self.store, scene)
         parts = args.get('parts')
@@ -1715,6 +1749,8 @@ class RoleTools:
                                                                if kind in LEG_WORDS else ''))
             elif kind == 'text':
                 text = part.get('text') if isinstance(part.get('text'), str) else ''
+                text, found = local_roots.contract_text(text)          # ADR-098 D5: no raw root leaves
+                replaced += found
                 same = ' '.join(text.split())
                 face = same and stickers.speech_problem(self.store, ep, text)
                 if not same:
@@ -1811,6 +1847,10 @@ class RoleTools:
             # a question's line is waited on by the question (its looks and answers), not listed again as a wait
             changes['await_answer'] = {'off': True}
         cancelled = [self._cancel_own(ep, item) for item in cancels]       # still queued: it never leaves
+        if replaced:
+            # A count, never the text: above zero the rewrite at the model failed or a model invented a root.
+            self.store.audit(ep['_id'], local_roots.SPEECH_EVENT, {'count': replaced, 'scene_id': ep['scene_id']},
+                             ep['scope_key'])
         queued = self.coordinator.queue_reply(self.coordinator._update(ep, **changes) if changes else ep, planned) \
             if planned else []
         asked = None
@@ -1953,7 +1993,7 @@ class RoleTools:
             produced_only=mine_only, here=(scene or {}).get('scope_key'))
 
     def tool_task_answer(self, ep, call_id, args):
-        answer = self._text(args, 'answer', 20000)
+        answer = self._toward_action(ep, self._text(args, 'answer', 20000))
         self.coordinator._update(self._fresh(ep), answer=answer)
         return {'answered': True}, True
 
@@ -1966,8 +2006,7 @@ class RoleTools:
     def tool_delegate(self, ep, call_id, args):
         self._depth(ep)
         title = self._text(args, 'title', 80)
-        from . import credentials
-        brief = credentials.scrub(self._text(args, 'brief', 20000))     # a credential value never rides a brief
+        brief = self._toward_action(ep, self._text(args, 'brief', 20000))  # no credential value, no raw root
         from . import action_tiers
         tier = None
         if action_tiers.offered():
@@ -2014,8 +2053,7 @@ class RoleTools:
     def tool_task_message(self, ep, call_id, args):
         self._depth(ep)
         task = self._own_task(ep, args.get('task'))
-        from . import credentials
-        message = credentials.scrub(self._text(args, 'message', 20000))
+        message = self._toward_action(ep, self._text(args, 'message', 20000))
         outcome = self.coordinator.message_action(ep, call_id, task, message)
         return outcome, False
 
@@ -2932,6 +2970,10 @@ class RoleTools:
         sources = [self._ask_place(ep, w) for w in wanted]
         if any(source['kind'] == 'action' for source in sources) and 'delegate' not in (ep.get('turn_tools') or ()):
             raise Refused('ASK_NO_ACTION_BRAIN: 这一回合不能交给行动脑，问不了它；问别处，或者等能交事的回合。')
+        # ADR-098: the action brain's copy is checked and expanded before anything is sent; hers stays contracted.
+        from . import local_roots
+        toward = self._toward_action(ep, text) if any(s['kind'] == 'action' for s in sources) else None
+        text = local_roots.contract(text)
         qid = questions.question_id([ep['_id'], call_id])
         row = self.store.db.questions.find_one({'_id': qid})
         if not row:
@@ -2955,7 +2997,7 @@ class RoleTools:
                 else:
                     self._depth(ep)
                     task = self.coordinator.delegate(ep, '%s:ask' % call_id, ' '.join(text.split())[:80],
-                                                     questions.BRIEF % text)
+                                                     questions.BRIEF % toward)
                     source['task'] = task['_id']
             row = questions.record(self.store, ep, qid, text, patience, sources)
         return {'id': qid, 'to': [questions.place_words(source) for source in row['sources']],

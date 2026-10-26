@@ -193,27 +193,33 @@ def test_a_page_ends_before_a_section_so_her_judgment_is_not_split():
     assert bold[1].startswith('**结论：**')
 
 
-def test_outside_home_a_report_holds_nothing_of_the_machine_and_at_home_all_of_it(store):
+def test_outside_home_a_report_holds_nothing_of_the_machine_and_at_home_all_of_it(store, monkeypatch):
     # ADR-050 (owner 2026-10-16, deterministic, in the program): 22 reports and 66 tool records handed back outside
-    # home in a week held a local path, 82 a traceback. Outside home they read as words; a path in the project and
-    # one in the action brain's own folder stay answers; home and the stored report are unchanged.
-    from asuna import machine_words
-    from asuna.config import ROOT
+    # home in a week held a local path, 82 a traceback. Outside home they read as words; a path keeps its tail under
+    # the root table's placeholder (ADR-098) and one in the action brain's own folder stays; home and the stored
+    # report are unchanged.
+    import json
+    from pathlib import Path
+    from asuna import local_roots, machine_words
     from asuna.coordinator import Coordinator
     from asuna.lanes import FakeLane
-    found = str(ROOT / 'packages' / 'personas' / 'demo' / 'icon.png')
-    text = ('图在 %s，草稿在 C:\\Users\\someone\\Desktop\\a.txt，产物 /task/out/f.png。\n'
-            'Traceback (most recent call last):\n  File "C:\\Users\\someone\\x.py", line 3\nValueError: bad\n' % found)
+    host = json.loads((Path(__file__).with_name('fixtures') / 'path_placeholders.json').read_text(encoding='utf-8'))
+    host = host['hosts']['windows']
+    monkeypatch.setattr(local_roots, 'TABLE', local_roots.build(host))
+    found = host['workspace'] + '\\packages\\personas\\demo\\icon.png'
+    text = ('图在 %s，草稿在 %s\\Desktop\\a.txt，产物 /task/out/f.png。\n'
+            'Traceback (most recent call last):\n  File "%s\\x.py", line 3\nValueError: bad\n'
+            % (found, host['home'], host['home']))
     task = task_row(store, text)
     service = object.__new__(TaskService)
     service.store = store
     outside = service._short_event(task, task, machine_words.clean)['trusted_context_events'][0]['report']
-    assert 'packages/personas/demo/icon.png' in outside and '/task/out/f.png' in outside
-    assert 'someone' not in outside and machine_words.LOCAL_PATH in outside and '（程序出错：ValueError）' in outside
+    assert '${ASUNA_WORKSPACE}\\packages\\personas\\demo\\icon.png' in outside and '/task/out/f.png' in outside
+    assert host['user'] not in outside and '${ASUNA_HOME}\\Desktop' in outside and '（程序出错：ValueError）' in outside
     assert service._short_event(task, task)['trusted_context_events'][0]['report'] == text, 'home: as it is'
     tools = Coordinator(store, FakeLane(store, [])).tools
     group = {'scene_id': 'dm-a', 'scope_key': 'scene:dm-a', 'policy_epoch': 1}
-    assert 'someone' not in tools.tool_task_page(group, 'p1', {'task': 'task-long', 'page': 1})[0]['text']
+    assert host['user'] not in tools.tool_task_page(group, 'p1', {'task': 'task-long', 'page': 1})[0]['text']
     home = {**group, 'manifest': {'session_class': visibility.OWNER_PRIVATE}}
     assert tools.tool_task_page(home, 'p2', {'task': 'task-long', 'page': 1})[0]['text'] == text
     assert store.db.tasks.find_one({'_id': 'task-long'})['result']['text'] == text, 'the stored report is unchanged'

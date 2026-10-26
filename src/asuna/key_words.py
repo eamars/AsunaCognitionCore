@@ -32,6 +32,7 @@ WINDOW_LINES = 10000                   # the lines a place's table is counted ov
 LINKS = re.compile(r'https?://\S+|www\.\S+')
 GRAMS = (2, 3, 4)                      # Chinese is counted as its substrings of these lengths
 RUNS = re.compile(r'[一-鿿]+|[A-Za-z0-9]+')
+PLACEHOLDER = re.compile(r'\$\{ASUNA_[^{}\s]*\}')        # the root table's names (local_roots.py), never her words
 LEARNED_LINES = 3                      # a cross word in this many lines is learned
 LEARNED_FREQ = 5000                    # the weight a learned word is cut with
 _lock = threading.Lock()
@@ -56,9 +57,10 @@ def segmenter():
 
 
 def words(text):
-    """A text as words, in order: Chinese runs cut by the segmenter, ASCII runs whole and lower-cased."""
+    """A text as words, in order: Chinese runs cut by the segmenter, ASCII runs whole and lower-cased. A placeholder
+    of the root table (`${ASUNA_WORKSPACE}`, ADR-098) is the program's, not a word she said: it is dropped first."""
     out = []
-    for run in RUNS.findall(text or ''):
+    for run in RUNS.findall(PLACEHOLDER.sub(' ', text or '')):
         if run.isascii():
             out.append(run.lower())
         else:
@@ -138,7 +140,7 @@ def tag_keys(tags):
 def atoms(line):
     """What a line is counted by: its ASCII runs and its Chinese substrings of GRAMS lengths."""
     out = set()
-    for run in RUNS.findall(line or ''):
+    for run in RUNS.findall(PLACEHOLDER.sub(' ', line or '')):
         if run.isascii():
             out.add(run.lower())
             continue

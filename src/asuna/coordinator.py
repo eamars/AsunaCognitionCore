@@ -310,6 +310,8 @@ class Coordinator:
                 issue=stickers.speech_problem(self.store,ep,speech)    # ADR-016: a sticker or face she does not have
             if issue is None:
                 self._absorb(ep,seen)
+                from . import local_roots
+                speech=local_roots.speech(self.store,ep,speech)     # ADR-098 D5: no raw root leaves, each counted
                 return self._publish(self._update(ep,state='SPEAK_ACCEPTED',speech=speech))
             self.store.audit(ep['_id'],'turn.rejected',{'operation':operation,'attempt':attempt,'problem':issue,
                 'request_refs':value.request_refs},ep['scope_key'])

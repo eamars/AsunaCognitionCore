@@ -166,6 +166,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `tiered_delegate`
 - def `developer_ask` — message_developer's arguments as ask's: a question to the developer's line, a wake as an hour's patience and a note as until it is answered (ADR-061).
 - def `infer_op` — The option a call without op plainly is, by its fields; None when they say none or several.
+- def `written` — Her arguments with every local root contracted (ADR-098 D4), except a field bound for the action brain (D3) and her speech, whose replacements `tool_speak` counts (D5).
 - def `ability` — What a call does: its tool, or for a tool with options the option ('task.message').
 - def `rename_note` — What a call by an old name is told: merged into an option, or simply renamed.
 - def `named` — An option as she reads it: 'task 的 message'.

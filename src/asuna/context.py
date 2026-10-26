@@ -1126,6 +1126,10 @@ class ContextBuilder:
         elif session_class!=visibility.OWNER_PRIVATE:
             context['action_capabilities_from_program']['run_code']=(
                 '在这里交出去的事，行动脑不能跑代码或命令；那只在主人那边做。别在这里答应跑代码。')
+        # ADR-098: the placeholders by name and meaning (never their values), and which this place hands over.
+        from . import local_roots as _local_roots
+        context['action_capabilities_from_program']['paths']=_local_roots.context_line(
+            session_class==visibility.OWNER_PRIVATE)
         context['action_capabilities_from_program']['history_query']=(
             '可委托行动脑查询当前授权场景保存的完整原话：字面检索覆盖全部消息并按 cursor 续页，返回原文、作者、时间及其来源；'
             '语义候选不等于全部原话，送达回执时间会标明是回执。需要引用原话时以查询结果为准，不凭印象复述。')

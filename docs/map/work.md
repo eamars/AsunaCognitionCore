@@ -77,7 +77,7 @@ ADR-075: her action brain in two tiers, 低 and 高, told by what each can do, n
 
 [src/asuna/machine_words.py](../../src/asuna/machine_words.py)
 
-What a conversation outside home reads of an action brain's report holds nothing of the machine (ADR-050).
+What a conversation outside home reads of an action brain's report holds nothing of the machine (ADR-050, ADR-098).
 
 - def `text`
 - def `clean` — The same value with every string in it rewritten (dicts and lists walked; keys kept).
@@ -101,8 +101,10 @@ No local root of this computer reaches her character brain (ADR-098): the root t
   - `wire` — What the plugin needs to rewrite her requests: the pattern's source (no flags) and each group's name.
 - def `build` — The table of these facts (TableRefused for a filesystem or drive root as a named root).
 - def `attach` — Build this worker's table from the machine (or the given facts); its wire, or None with REFUSED set.
+- def `current` — This worker's table; a process that never attached one (a tool, a test) builds it from the machine once.
 - def `contract` — `Table.contract` with this worker's table (the value as it is without one).
 - def `contract_text`
+- def `speech` — Her words about to leave, with a raw root written as its placeholder (D5).
 - def `outbound` — `Table.outbound` with this worker's table; without one, any placeholder is refused.
 - def `context_line` — Her program context's line on the placeholders: names and meanings, never values.
 

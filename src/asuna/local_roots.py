@@ -387,18 +387,37 @@ def attach(checkout=None, dsh_home=None, facts=None):
     return TABLE.wire() if TABLE else None
 
 
+def current():
+    """This worker's table; a process that never attached one (a tool, a test) builds it from the machine once. A
+    worker whose build refused has none."""
+    if TABLE is None and REFUSED is None:
+        attach()
+    return TABLE
+
+
 def contract(value):
     """`Table.contract` with this worker's table (the value as it is without one)."""
-    return TABLE.contract(value) if TABLE else value
+    table = current()
+    return table.contract(value) if table else value
 
 
 def contract_text(text):
-    return TABLE.contract_text(text) if TABLE else (text, 0)
+    table = current()
+    return table.contract_text(text) if table else (text, 0)
+
+
+def speech(store, ep, text):
+    """Her words about to leave, with a raw root written as its placeholder (D5). A replacement is a fault to look at
+    (the rewrite at the model failed, or a model invented a root): each is counted, never its text."""
+    out, count = contract_text(text)
+    if count:
+        store.audit(ep['_id'], SPEECH_EVENT, {'count': count, 'scene_id': ep.get('scene_id')}, ep['scope_key'])
+    return out
 
 
 def outbound(text, home):
     """`Table.outbound` with this worker's table; without one, any placeholder is refused."""
-    if TABLE is None:
+    if current() is None:
         if TOKEN.search(text or ''):
             raise PathRefused('PATH_TABLE_MISSING: 程序这次没有建好路径表（不是你的错），占位名交不出去；重试也一样，'
                               '先别写路径')

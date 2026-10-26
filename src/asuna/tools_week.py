@@ -218,6 +218,44 @@ def _list_change(now, before):
     return '；'.join(parts) + '。'
 
 
+LANE_WORDS = {'attend': '要不要接话的判断', 'appraiser': '心情评估', 'summary': '后台摘要'}
+SPEECH_NONE = ('这周你说出去的话里，没有一句带着本机的真实路径（发出前程序会把它换成占位名；这个数本来就该是 0）。')
+SPEECH_SOME = ('这周你说出去的话里，有 %d 处本来带着本机的真实路径，发出前程序换成了占位名。这个数本来该是 0：'
+               '大于 0 就是要查的故障（模型读到之前那层没换掉，或者模型自己编出了路径），值得用 ask 报给开发者。')
+REWRITTEN_NONE = ('这周程序没有记下你的请求被改写过：要么这周它没数到（插件没把数交回来），要么藏路径的那层没在工作；'
+                  '这个本来每周都大于 0，值得用 ask 问开发者。')
+REWRITTEN_SOME = ('这周程序在模型读到之前把本机路径换成占位名的请求：%s。这是这层在工作的证据，平常每处都大于 0。')
+
+
+def _local_roots(store, persona, since, until):
+    """ADR-098: two readings, each with its own criterion — her speech replaced (should be 0) and her requests
+    rewritten per conversation (normally above 0)."""
+    from . import local_roots
+    from .people import People
+    window = {'occurred_at': {'$gte': since, '$lt': until}}
+    spoken = sum(int((row.get('payload') or {}).get('count') or 0) for row in store.db.audit_events.find(
+        {'type': local_roots.SPEECH_EVENT, **window}, {'payload.count': 1}))
+    places = {}
+    people = People(store, persona)
+    for row in store.db.audit_events.find({'type': local_roots.TALLY, 'stream_id': 'roots:' + persona, **window},
+                                          {'payload.sessions': 1}):
+        for item in (row.get('payload') or {}).get('sessions') or ():
+            lane = item.get('lane')
+            if lane in LANE_WORDS:
+                where = LANE_WORDS[lane]
+            else:
+                binding = store.db.sessions.find_one({'_id': item.get('session_id')}, {'scene_id': 1}) or {}
+                scene = store.db.scenes.find_one({'_id': binding.get('scene_id')}) if binding.get('scene_id') else None
+                where = people.scene_title(scene)
+            seen = places.setdefault(where, [0, 0])
+            seen[0] += int(item.get('rewritten') or 0)
+            seen[1] += int(item.get('requests') or 0)
+    rewritten = ('；'.join('%s %d 次（共 %d 次请求）' % (where, n, total) for where, (n, total) in places.items())
+                 if places else '')
+    return {'speech': SPEECH_SOME % spoken if spoken else SPEECH_NONE,
+            'requests': REWRITTEN_SOME % rewritten if rewritten else REWRITTEN_NONE}
+
+
 def _last_time(store, persona, since):
     """What she asked the developer's line since `since`, and what came of each."""
     from . import questions
@@ -267,11 +305,13 @@ def block(store, persona, moment=None):
         'turn_shape': _turn_shape(week),
         'action_brain': action,
         'list_change': _list_change(lists, ((last or {}).get('payload') or {}).get('lists')),
+        'local_paths': _local_roots(store, persona, since, until),
     }
     sources = ('窗口 %s 到 %s（上周往前再 7 天）。calls 到 turn_shape：audit_events type=role_tool，refused 按 code 或第一句'
                '（「」和数字抹掉）分组，retried＝同一 stream_id 后面同一工具调成了；looking_things_up：tasks 的 artifacts.tool 全在 '
                'tools_week.READING；action_brain：tasks、artifacts、audit execution.rejected；list_change：对上次展示时记下的表；'
-               'last_time：questions 里问开发者那条线的（asked_at ≥ 上次展示）' % (since[:16], until[:16]))
+               'last_time：questions 里问开发者那条线的（asked_at ≥ 上次展示）；local_paths：audit_events '
+               'type=roots.speech_replaced 的 count 之和，type=roots.tally 按对话加总' % (since[:16], until[:16]))
     out = {**readings, 'sources': sources, 'note': NOTE}
     cut = []
     for key in CUT_ORDER:

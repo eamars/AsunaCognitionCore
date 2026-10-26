@@ -55,12 +55,24 @@ The Host plugin (JS) is the only side that knows why a worker went away, so it k
   that as an outside kill (「宿主上次是被外部终止的」). The plugin passes the open span with `initialize` as well. When
   it says `exited` and the lease left behind is from about the same moment (within `PLANNED_SECONDS`), no `killed` row
   is written: the `worker_down` row covers it.
-- **Her words.** `host_stops.block` shows the stops of the last day (newest first, at most three), each with its
-  `what` and `when`, plus the existing `note`. For `worker_down` the `what` is
-  「宿主一直在运行，但替你处理一切的那部分程序停了，没有马上起来」, plus the cause in words:
-  启动时出错（AutoReconnect），程序隔一阵自己重试，第 N 次起来了 / 它自己退出了（退出码 N），程序把它重新拉起来.
-  The `when` keeps today's form: last known running, back, and about how long. The cause is a name only. The error
-  text is never passed on, because it carries a host address.
+- **One row per span, written once.** The row's id comes from the span (`down-` and its `since`), so a `host.came_back`
+  that the worker carried out but whose answer was lost writes the same row again, not a second one.
+- **Her words.** `host_stops.block` shows the stops of the last day, newest first, at most three, and says how many
+  there were: `count` (「过去一天里停了 N 次」) and, when it lists fewer, 「更早的 M 次没有列出」. A cut list never
+  passes for the whole. Each stop has its `what` and its `when`, plus the existing `note`. For `worker_down` the `what`
+  is 「宿主一直在运行，但替你处理一切的那部分程序停了，没有马上起来」, plus its cause in words. The `when` keeps
+  today's form: last known running, back, and about how long nothing ran (「中间约 X 分钟」).
+- **Causes, a closed list.** A cause is a kind and a name, never the error's text (that carries a host address). The
+  kinds and their words:
+  - `start_failed:<name>`: 「启动时出错（<name>），程序隔一阵自己重试，第 <tries+1> 次起来了」
+  - `exited:<code>`: 「它自己退出了（退出码 <code>），程序把它重新拉起来」
+  - `unknown`: 「为什么停的没记下来」
+
+  A new kind is added to this list and to her words together. Her own wording keys on the kind (the part before `:`),
+  so a new name inside a known kind needs no new sentence.
+- **What is not known is said.** A field the record lacks is shown as not known, never left out: a span whose start
+  is not known says 「这一段从什么时候开始不知道（记录读坏了）」, and a cause not recorded says 「为什么停的没记下来」.
+  An empty field would read as "nothing happened", and that misreading is why this ADR exists.
 
 ### 2. A planned restart
 
@@ -68,7 +80,9 @@ The Host plugin (JS) is the only side that knows why a worker went away, so it k
   it in the row as `by`.
 - `host_stops.block` still does not show `planned` rows: they are not incidents, and her restart block covers that
   start. The restart block (`restarts.block`) names it: for a launcher start whose `host_stops` row is `planned`, the
-  `what` is 「启动：从启动器开的，是计划内的重启（%s 事先标好的），不是你要的」.
+  `what` is 「启动：从启动器开的，是计划内的重启（<by> 事先标好的），不是你要的」, where `<by>` is the mark's
+  own value as `--by` gave it (`claude`, `developer`, ...), never a name written into the sentence. A mark without
+  `by` says 「（谁标的没记下来）」.
 
 ### 3. Her path names from the table
 
@@ -88,9 +102,11 @@ records it, and now she reads it.
 |---|---|
 | The database is unreachable when a start fails | The file is written (no database needed). The span closes at the first completed start. |
 | The Host is killed while a span is open | The file survives. The next Host's completed start records the whole span with all its tries. The kill itself is recorded as today, from the lease, only if a worker held one. |
-| `host.came_back` fails (database reset in that second) | The file stays, the next completed start records it, and no row is duplicated: the row is written only once the call succeeds. |
-| A worker exits and the next start fails too | One span: `since` is the exit, `cause` is `exited`, `tries` is 2. |
-| The file is unreadable or malformed | It is treated as no span and replaced. One `Asuna:` warning line. |
+| `host.came_back` fails (database reset in that second) | The file stays and the next completed start records it. The row's id comes from `since`, so a call the worker carried out but whose answer was lost does not write a second row. |
+| A worker exits and the next start fails too | One span: `since` is the exit, `cause` is `exited:<code>` (the first cause), `tries` is 2. |
+| A start comes up but fails before it completes, then the next one does too | Still one span. Only a completed start closes it, so `since` stays the first failure and `tries` counts each. |
+| A start completes, then the worker exits a minute later | Two spans. The first closed when the start completed; the exit opens a new one with its own `since`. |
+| The file is unreadable or malformed | It is replaced by an open span whose `since` is not known and whose cause is `unknown`, and one `Asuna:` warning line is written. Her block then says 「这一段从什么时候开始不知道（记录读坏了）」 rather than nothing. |
 | Another deployment shares the database | The file is per data folder, so per deployment. Its rows carry no deployment id, as today's `host_stops` rows carry none. |
 | She never comes back | Nothing is recorded until she does. The span is in the file and in `host.log` (ADR-100's lines). |
 | A planned restart's mark expires (more than `PLANNED_SECONDS`) | It is recorded as `killed`, as today, and her block says so. |

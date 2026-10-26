@@ -1,6 +1,7 @@
 # ADR-098: No local root of this computer reaches her
 
-Status: **Installed 2026-10-26 16:32:22 NZDT (`281933b0`); signed by her on `6498bc3dee1e`** (§9 what the build found,
+Status: **Installed 2026-10-26 16:32:22 NZDT (`281933b0`), its follow-ups 18:42 (`d2496203`). Signed by her: the
+design at `281933b0`; the text as built at `d2496203`, on two conditions answered in §10** (§9 what the build found,
 §10 the install). Design agreed by the owner and Claude; the owner asked Claude to build and deploy it as technical lead
 (§7).
 
@@ -92,7 +93,7 @@ ones each place can hand over. Old reports keep `〔本机路径〕` and the che
 they too mean "a path that was hidden".
 
 **Which places she may hand over** (owner): a public session reaches her workspace only (`${ASUNA_WORKSPACE}`,
-`${ASUNA_PROJECTS}`, `${ASUNA_DATA}`); home reaches the whole computer, every placeholder but `${ASUNA_LOCAL_PATH}`. This is enforced by
+`${ASUNA_DATA}`); home reaches the whole computer, every placeholder but `${ASUNA_LOCAL_PATH}`. This is enforced by
 the mechanism, not by her judgment: a task delegated from a public place has no `sandbox_run` and its file tools see
 `/task` only (`coordinator._grants`, `tasks.py:250`). Writes stay where DSH's sandbox confines them (the task folder).
 The line she speaks from decides, since that is the side she knows in advance.
@@ -301,7 +302,8 @@ restart record above is the cut. Checked on the live Host, by content:
 
 - The installed `local_roots.py`, `roots.js` and `role_tools.py` are byte-identical to the checkout; no
   `roots.refused` event, so the table was built and handed over.
-- In the first half hour, 26 requests of her lanes (character 16, gate 6, background summaries 4), all 26 rewritten;
+- In the first half hour after 16:32, 26 requests of her lanes (character 16, gate 6, background summaries 4), all 26
+  rewritten (after the 18:42 restart, 11 of 11 in its first six minutes);
   `roots.speech_replaced` 0.
 - From inside, she read her working-folder line as `${ASUNA_DATA}\work\agent`, and the `paths` line of her
   context by name and meaning.
@@ -323,6 +325,16 @@ with home authority (ADR-066), a question of task grants, not of paths.
 checkout, a sibling project and the folder that holds the checkout fell to the drive fallback with that folder's own
 name in the tail (`${ASUNA_DRIVE_C}\<that folder>\<project>`): the very word the incident disclosed. 90 public briefs
 and 159 reports name a sibling project. The parent is now its own root, deeper roots still winning inside the
-checkout, handed over where `${ASUNA_WORKSPACE}` is; `${ASUNA_WORKSPACE}` keeps its meaning, so what she wrote since
+checkout, handed over at home only (a public line hands over `${ASUNA_WORKSPACE}` and `${ASUNA_DATA}`, the
+owner's ruling; the first build also handed `PROJECTS` over in public, which she caught as a ruling nobody had made,
+and it was narrowed back); `${ASUNA_WORKSPACE}` keeps its meaning, so what she wrote since
 the install (1 journal entry carries it) reads the same. A checkout at `/` or a drive root, or one whose parent is the
 home, has no `PROJECTS`.
+
+**Her signature on the text as built (2026-10-26 evening), and its two conditions.** She signed the text at
+`d2496203` (she signs by commit from now on; a content hash cannot be found again). Her conditions: (1) the recovery
+session D2 leaves unrewritten: it is the owner's repair console, a DSH session opened in the Web page while the worker
+is down; her brains never read it, and what it publishes reaches her only as publication state, through the rewrite
+like any other text; (2) `PROJECTS` in public was not the owner's ruling: narrowed back to home, above. She also
+caught a stale module comment on `FS` (fixed) and the two request counts without their windows (written).
+

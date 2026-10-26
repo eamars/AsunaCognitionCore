@@ -11,7 +11,7 @@ rest of the path stays as it was:
 - `PROGRAMS` the program folders (Windows: Program Files, ProgramData, the system folder; POSIX: `/usr`, `/opt`, ...),
   their own folder name kept (`${ASUNA_PROGRAMS}\\Program Files\\...`, `${ASUNA_PROGRAMS}/usr/...`);
 - `DRIVE_<X>` any other path on drive X (Windows, and WSL's `/mnt/x`); on POSIX each mount point by letter or index;
-- `FS` any other path of this machine's own tree on POSIX (`/` itself, the tail kept);
+- `FS` any other path in this machine's own top-level folders on POSIX, the tail kept (a fallback, not a named root);
 - `LOCAL_PATH` a network share, or another account's home beside the user's (`Public`, `Default`, `Default User`,
   `All Users` and `Shared` are nobody's and stay paths), nothing of it kept;
 - `USER` the OS account name, exactly that string, as a whole word (not a generic account such as `root`).
@@ -21,7 +21,7 @@ backslashes (JSON), percent-encoded, WSL's `/mnt/x/...` and MSYS's `/x/...`, aft
 case-insensitive on Windows, with or without a tail. `/task/...` (the action brain's sandbox path) is not a root.
 
 Toward the action brain (`outbound`): a placeholder the place may hand over expands to the real path (public: only
-WORKSPACE, PROJECTS and DATA; home: all but LOCAL_PATH); one it may not hand over stays as written; refused, with the reason:
+WORKSPACE and DATA; home: all but LOCAL_PATH); one it may not hand over stays as written; refused, with the reason:
 a raw root (with the whole string rewritten), an `${ASUNA_...}` name not in the table, a `..` segment in a path
 anchored at a root or placeholder, and in a public place a bare relative path that climbs. Every other `${...}` is
 text. The case file `tests/fixtures/path_placeholders.json` runs in pytest and `node --test` alike.
@@ -41,7 +41,7 @@ PREFIX = 'ASUNA_'
 WORKSPACE, DATA, DSH_HOME, HOME, TEMP = 'WORKSPACE', 'DATA', 'DSH_HOME', 'HOME', 'TEMP'
 PROJECTS = 'PROJECTS'
 PROGRAMS, FS, LOCAL_PATH, USER, DRIVE = 'PROGRAMS', 'FS', 'LOCAL_PATH', 'USER', 'DRIVE_'
-PUBLIC_HANDS = (WORKSPACE, PROJECTS, DATA)               # what a public place may hand to the action brain
+PUBLIC_HANDS = (WORKSPACE, DATA)               # what a public place may hand to the action brain (owner)
 NEVER_HANDS = (LOCAL_PATH,)
 SANDBOX = 'task'                               # /task/... is the action brain's own folder, never a root
 # Accounts whose name identifies nobody: replacing them would rewrite ordinary words (root, node, the image's user).
@@ -473,7 +473,7 @@ def outbound(text, home):
 def context_line(home):
     """Her program context's line on the placeholders: names and meanings, never values."""
     hands = '家里能交给行动脑的是除 ${ASUNA_LOCAL_PATH} 外的全部' if home else \
-        '这里（对外的对话）能交给行动脑的只有 ${ASUNA_WORKSPACE}、${ASUNA_PROJECTS} 和 ${ASUNA_DATA}；别的可以照样提一句，原样过去，行动脑在这里打不开'
+        '这里（对外的对话）能交给行动脑的只有 ${ASUNA_WORKSPACE} 和 ${ASUNA_DATA}；别的可以照样提一句，原样过去，行动脑在这里打不开'
     return ('路径里的 ${ASUNA_…} 是程序替你藏起本机真实根目录的名字（只有 ${ASUNA_ 开头的才是程序的，别的 ${…} 是普通文字）：'
             'WORKSPACE 程序的源码目录，PROJECTS 源码目录所在的那一层（别的项目也在这里），DATA 程序的数据目录，DSH_HOME 宿主 DSH 的目录，HOME 用户目录，TEMP 临时目录，'
             'PROGRAMS 装程序的目录，DRIVE_X 某个盘，FS 这台机器的文件树，LOCAL_PATH 网络共享或别的账号的目录（什么都不留），USER 本机账号名。'

@@ -51,6 +51,8 @@ def test_a_title_reaches_the_action_brain_expanded_as_its_brief_is(store, home):
     ep, result, ok, task = delegate(store, home_event(store, 'h-title'), '读第一行', title='读 ${ASUNA_WORKSPACE}\\a.md')
     assert ok, result
     assert task['title'] == '读 %s\\a.md' % WS
+    # A bare '\a' in a Windows path is a bell character in Python, on both sides alike: green, and nothing tested.
+    assert '\x07' not in task['title'] and task['title'].endswith('\\a.md'), 'a real backslash, not an escape'
 
 
 def test_a_brief_from_a_public_place_expands_only_the_workspace_and_data(store):

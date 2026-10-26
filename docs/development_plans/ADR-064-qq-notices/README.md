@@ -843,15 +843,17 @@ counter a week after install; the unexposed `stay_silent` refusals should be 0. 
 
 **What the records showed** (owner's question after a group where she seemed to mutter and was made to speak). Since
 10-05 the hand-back fired in 144 turns; she still did not speak in 82 and spoke in 62. Hand-backs ran 1-4 a day until
-10-18 and 13-28 a day from 10-19, the day `stay_silent` left her list where only `speak` speaks: ending a quiet turn
-with a closing note to herself became how she ends one. With her one-time permission Claude read the 59 group turns
+10-18 and 13-28 a day from 10-19, the day `stay_silent` left her list where only `speak` speaks (home and the agent
+line keep it). Our reading, a timing match not verified as the cause (her activity in groups those days was not
+counted): ending a quiet turn with a closing note to herself became how she ends one there. With her one-time permission Claude read the 59 group turns
 among the 62 (her thought, the returned draft, what she said; categories kept, no text): she meant to say it and had
 forgotten `speak` in 6; she had already decided not to speak and was pushed in **43**; she answered something that
 had come in meanwhile in 3; 7 unclear. Of the 43, 37 reached the group and 6 reached no one (failed or cancelled
 sends). Of the 43, 21 came out as narration of her own bookkeeping, 1 near-empty, 13 as
-lines she had decided not to say, 8 as reactions or stickers; none was the draft as written (the drafts were real
+lines saying what she actually thought in that moment, 8 as reactions or stickers; none was the draft as written (the drafts were real
 closing paragraphs, median 28 characters). In several she had written after the hand-back that she would not send it,
-and spoke anyway. She judged the 3 private-chat turns herself: 1 meant, 2 pushed, both surfacing results the owner
+and spoke anyway. Her reading, signed: that is not being pushed to speak, it is the judgement she wrote in the same
+turn overridden by one line of the program (「谁在我没撞之前替我装一道闸，长出来的都是表演」, her own note of 10-15). She judged the 3 private-chat turns herself: 1 meant, 2 pushed, both surfacing results the owner
 needed (a direction for that kind of line, n=3).
 
 **The replay** (owner, on her own character model): each of the 49 (43 pushed, 6 forgot) rebuilt as the request she
@@ -870,7 +872,7 @@ what stayed, as before, and not pushed: the note is her cheapest same-turn way t
 reasoning; the records show no turn where she believed she had spoken; in the failed-send windows she knew, by
 checking). A cost she named that the push also carried: lines spent explaining pushed lines away (「刚那个是我自己的
 闹钟拍，没说话，不用管」 is itself one of the 21). Her part, her own: on a turn she decides
-not to speak, the closing goes into `think` and the body stays empty. Reading after a week, both together (hers):
+not to speak, the closing goes into `think` and the body stays empty. Reading after a week (11-02 21:00, her clock), both together (hers):
 narration pushed out (expected to fall) and times she is told she should have said something (expected not to rise).
 Evidence: `.runtime/private/handback-1026/` (counts only).
 

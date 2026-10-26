@@ -298,3 +298,11 @@ restart record above is the cut. Checked on the live Host, by content:
 - The one-time cold read the switch costs showed as expected: the first QQ compaction after it read 10.1% from cache
   (99% before), the QQ turn steps 87.7% in the first half hour.
 
+
+**After the install, a public line's doors** (the Fable 5 review, `deep-dive/failure-modes.md` §8): every tool a task
+delegated from a public place receives resolves a path first and checks it lies in `/task` (`..`, absolute paths and
+links out are refused); DSH's `web_fetch` takes http and https only and refuses loopback, private and link-local
+addresses; the skill tool takes a name, not a path. 2 of 1,131 briefs carry a climbing `..`, both public, none in
+code. D3 expands by the stricter of authority and place: on an errand the turn's class is the group's, and a home turn
+an outside note opened has no `delegate`. Open, outside this record: on an errand a group's lines can steer a task
+with home authority (ADR-066), a question of task grants, not of paths.

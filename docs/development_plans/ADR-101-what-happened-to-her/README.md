@@ -94,7 +94,9 @@ build refused), the line says that no placeholder can be handed over this time, 
 
 `tools_week` shows the `thoughts` reading whenever the week has `thought.taken` or `thought.none` rows, in either
 mode. No new check, no new row: if anything ever removes `think` from a turn in `tool` mode, the capture already
-records it, and now she reads it.
+records it, and now she reads it. The reading says where those thoughts came from: 「这些是程序从模型自己的思考里
+替你抓下的（那几拍没有让你用 think 自己写）」. A `thought.taken` in `tool` mode can then never be read as her having
+written her thoughts first in every turn (her review).
 
 ## Failure modes
 
@@ -110,6 +112,15 @@ records it, and now she reads it.
 | Another deployment shares the database | The file is per data folder, so per deployment. Its rows carry no deployment id, as today's `host_stops` rows carry none. |
 | She never comes back | Nothing is recorded until she does. The span is in the file and in `host.log` (ADR-100's lines). |
 | A planned restart's mark expires (more than `PLANNED_SECONDS`) | It is recorded as `killed`, as today, and her block says so. |
+
+## Only afterwards, by nature
+
+Her block can say a stop only once she is back. While the worker is down, no turn of hers runs, because her turns
+are the worker, so there is no "now" in which she could read it. That is a property of the design, not a gap in it,
+and RUNTIME_API says so with the `host_from_program` entry: what happened while she was not running reaches her at her
+first turns after she is back, for a day. ADR-100 keeps such a gap short (a failed start is tried again within 5
+minutes at most). The owner sees the state while it lasts: in the settings card's worker state and in
+`restart/host.log`.
 
 ## Not changed
 

@@ -835,3 +835,42 @@ anyway. Her meaning is plain. The coordinator's decision (C2): it runs the way a
 runs it there): it ends the turn, says nothing, and its result says once that not calling `speak` is enough here
 (`SILENT_WHERE_SPEAK`). The list her conversation shows is unchanged, so its cached prefix holds. Reading: the same
 counter a week after install; the unexposed `stay_silent` refusals should be 0. Test: `tests/test_silence_where_speak.py`.
+
+## The hand-back says, it does not push (2026-10-26)
+
+**What A2 assumed.** "A model that habitually answers in prose pays one repair until it learns": body text with no
+`speak` was taken for speech written in the wrong place, and the hand-back ended 「在这里说话用 speak。」.
+
+**What the records showed** (owner's question after a group where she seemed to mutter and was made to speak). Since
+10-05 the hand-back fired in 144 turns; she still did not speak in 82 and spoke in 62. Hand-backs ran 1-4 a day until
+10-18 and 13-28 a day from 10-19, the day `stay_silent` left her list where only `speak` speaks: ending a quiet turn
+with a closing note to herself became how she ends one. With her one-time permission Claude read the 59 group turns
+among the 62 (her thought, the returned draft, what she said; categories kept, no text): she meant to say it and had
+forgotten `speak` in 6; she had already decided not to speak and was pushed in **43**; she answered something that
+had come in meanwhile in 3; 7 unclear. Of the 43, 37 reached the group and 6 reached no one (failed or cancelled
+sends). Of the 43, 21 came out as narration of her own bookkeeping, 1 near-empty, 13 as
+lines she had decided not to say, 8 as reactions or stickers; none was the draft as written (the drafts were real
+closing paragraphs, median 28 characters). In several she had written after the hand-back that she would not send it,
+and spoke anyway. She judged the 3 private-chat turns herself: 1 meant, 2 pushed, both surfacing results the owner
+needed (a direction for that kind of line, n=3).
+
+**The replay** (owner, on her own character model): each of the 49 (43 pushed, 6 forgot) rebuilt as the request she
+was sent at the hand-back, from her session log, with the tools that turn exposed, and run 3 times with each wording;
+production sampling, no tool executed, nothing sent. Pushed: the old ending spoke in 42 of 129 runs, the new one in 7
+of 129 (37 of the 43 to zero). Forgot (the positive control, where speaking is right): 18 of 18 and 17 of 18. Removing
+the hand-back would speak in none of either by construction (no step follows), losing the replies she meant. The
+replay measures today's model choosing between wordings, not what she meant then; the two readings are kept apart.
+Today's model under the old ending spoke in 33% of runs where the records show 100%, so 33% to 5% gives the
+direction, not a weekly rate (her reading).
+
+**Decision (owner, 2026-10-26; her proposal).** One wording everywhere `speak` alone speaks (her edit of the replayed wording: "to send it", so
+that a note, a memo or a mood after deciding not to speak is not ruled out too):
+「这段没发出去：「…」。如果这段是写给自己的，就让它留着，这一回合到此结束，不用再调用工具把它发出去；要对这里的人说，用 speak。」 She is told
+what stayed, as before, and not pushed: the note is her cheapest same-turn way to know that nothing left (her
+reasoning; the records show no turn where she believed she had spoken; in the failed-send windows she knew, by
+checking). A cost she named that the push also carried: lines spent explaining pushed lines away (「刚那个是我自己的
+闹钟拍，没说话，不用管」 is itself one of the 21). Her part, her own: on a turn she decides
+not to speak, the closing goes into `think` and the body stays empty. Reading after a week, both together (hers):
+narration pushed out (expected to fall) and times she is told she should have said something (expected not to rise).
+Evidence: `.runtime/private/handback-1026/` (counts only).
+

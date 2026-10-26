@@ -238,6 +238,8 @@ def test_words_outside_reply_never_leave_come_back_once_and_are_told_next_time(s
     ep = Coordinator(store, lane).ingest(event)
     assert ep['state'] == 'COMMITTED' and outbound(store, ep['_id']) == []
     assert lane.calls[1]['messages'][-1]['content'] == UNSENT_NOTE % '这段写在正文里', 'handed back once, same turn'
+    # Told, not pushed: leaving it is a stated choice, and speaking is speak (ADR-064, 2026-10-26).
+    assert '让它留着' in UNSENT_NOTE and '不用再调用工具把它发出去' in UNSENT_NOTE and UNSENT_NOTE.endswith('用 speak。')
     _, nxt, _ = turn(store, key='body-2')
     assert nxt['context']['unsent_from_program'] == '没发出去：「还是写在正文里」'
     _, again, _ = turn(store, key='body-3')

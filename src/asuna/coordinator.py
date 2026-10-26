@@ -54,7 +54,9 @@ TRIGGERS = {'task_feedback': 'task_result', 'consult': 'question', 'self_develop
 # said only in her system prompt, a missing first think was refused 1.75 times as often.
 THINK_FIRST = '这一回合第一步先调用 think 写心里话。'
 # ADR-064 phase 2: where only reply speaks, words written in the body come back once in the same turn.
-UNSENT_NOTE = '这段没发出去：「%s」。在这里说话用 speak。'
+# Said, not pushed (ADR-064, 2026-10-26): most body text written where only speak speaks is her own closing, and the
+# old ending (「在这里说话用 speak。」) made her say it; she is told it stayed, and that saying it is speak.
+UNSENT_NOTE = '这段没发出去：「%s」。如果这段是写给自己的，就让它留着，这一回合到此结束，不用再调用工具把它发出去；要对这里的人说，用 speak。'
 UNSENT_CHARS = 40
 REPLY_THINK_NOTE = '这一回合还没写心里话：先调用 think，再用 speak 说话；不说就不再调用工具。'
 
@@ -272,8 +274,8 @@ class Coordinator:
             speech=self._speech(ep,value)
             if replying:
                 # ADR-064 phase 2: here only reply speaks. Words in the body never leave: in a turn that spoke they
-                # are its ending (ADR-076 R10); written with no speak at all they come back once in this turn,
-                # stay_silent or not, then her next turn here says they were not sent.
+                # are its ending (ADR-076 R10); written with no speak at all she is told once in this turn that they
+                # stayed (leaving them is fine), stay_silent or not, then her next turn here says they were not sent.
                 pieces=[text.strip() for text in (value.said if value.said is not None else [value.content or ''])
                         if isinstance(text,str) and text.strip()]
                 speech='' if ep.get('reply') else '\n\n'.join(pieces)

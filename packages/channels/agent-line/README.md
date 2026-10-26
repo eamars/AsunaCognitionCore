@@ -47,3 +47,8 @@ When she asks on a line with `ask` (`questions_from_program` shows the question'
 `send --answers <id>`; an agent's message without it answers nothing. A line the owner writes there from the Web
 (he cannot mark one) is still taken as the answer when it is the first after her question. The developer's line, where a `message_developer` call goes (it runs as `ask` on that line), is the route with
 `"developer": true`, else the route named `claude-code`.
+
+She never sees a local root of this computer: what an agent posts reaches her with each path written as
+`${ASUNA_WORKSPACE}/...`, `${ASUNA_DATA}/...`, `${ASUNA_HOME}/...` and the other names of the root table, and she
+writes paths the same way ([Local roots](../../../RUNTIME_API.md#local-roots) says what each name stands for). An
+agent on this machine reads her paths by those names; a real path it posts is shown to her contracted.

@@ -130,9 +130,12 @@ Each layer of the request has one owner and one rule:
 The Host plugin enforces the first two in DSH's `system-prompt/assemble` hook (`packages/cognition-core/src/index.js`):
 for the character lane the system prompt is exactly the worker's render as the only section, and the tool list is
 DSH's assembled list filtered to the conversation's toolbox (`exposed(lane, sessionId)`, which for the character lane
-returns the stage's `tools`, the toolbox). DSH's own dynamic sections (harness identity, runtime-context snapshot with
-working folder and similar details) are blanked or suppressed in every Asuna lane
-(`scope.systemPrompt.suppressRuntimeContext()`), so nothing of the host's state leaks into the prefix.
+returns the stage's `tools`, the toolbox). DSH's own dynamic sections (harness identity, the optional runtime contexts
+such as the harness checkout and the Web GUI address) are blanked or suppressed in every Asuna lane
+(`scope.systemPrompt.suppressRuntimeContext()`). DSH's working-folder line is a required runtime context: it stays,
+as the first user message of every session, and her lanes' requests are rewritten at `llm/stream` with the worker's
+root table (`roots.js`). The rewrite is deterministic and per message, so a request still extends the one before it
+exactly; a new table (a moved root, a new placeholder) changes every session's first message once.
 
 Within one turn, each tool round is a new request: the previous request, plus the assistant's tool call, plus the
 tool result. It extends the previous request exactly, so steps inside a turn hit the cache by construction. The

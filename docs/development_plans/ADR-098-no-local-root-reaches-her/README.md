@@ -1,6 +1,6 @@
 # ADR-098: No local root of this computer reaches her
 
-Status: **Being built 2026-10-26.** Design agreed by the owner and Claude, direction signed by her; the owner asked
+Status: **Built 2026-10-26, not yet installed** (§9 says what the build found). Design agreed by the owner and Claude, direction signed by her; the owner asked
 Claude to build and deploy it as technical lead (§7).
 
 In a DSH technical group, a member asked where her workspace was, then for its absolute path. She gave the full path
@@ -202,3 +202,59 @@ the build.
 Kept in `.runtime/private/workspace-sanitize-1026/`: the incident trace and censuses (`evidence-scripts/`), the
 deep-dive brief, and the Fable 5 reports with their counting scripts (`deep-dive/report.md`,
 `deep-dive/failure-modes.md`, `deep-dive/scripts/`). All print counts, field names and masked keys only.
+The build's own counting scripts are beside them in `build/` (`msys_count.py`, `image_blocks.py`; counts only).
+
+## 9. What the build found (2026-10-26)
+
+Built on branch `claude/adr098-build`. Where the code did not fit the text above, this is what was built and why;
+the rest is as written.
+
+**Not covered by D2: the image path text.** DSH's DeepSeek adapter writes a text beside every image of a request,
+naming the attachment's read-only normalized copy by its absolute path under DSH's home
+(`dsh-llm-deepseek` `requestImageHandleText` and `offloadedImageText`, with `dsh-fs-local`'s
+`processPathFromHostPath`), and `dsh-llm` projects a file block to a text with its saved path. Both happen inside the
+adapter call, after the `llm/stream` waterfall, so the seam cannot rewrite them. Her lanes carry images: 609 image
+blocks in 27 of her 79 persona-preset session logs, none in the gate's or the summaries' (`build/image_blocks.py`);
+no file blocks. The deep dive's "ids, not paths" holds for the session log, not for the request. Closing it is DSH
+work (the owner's): an adapter or `fs` option that leaves the path out for her presets. Until then each image she
+sees carries one root.
+
+**D3 and D4 meet in `RoleTools.call`.** D4 contracts every string argument before the tool runs, which would rewrite
+a raw root in a brief before D3 could refuse it. So D4 leaves out the field bound for the action brain (the brief, the
+message, the answer, an `ask`'s question when it goes to 行动脑), and D3 sees it as she wrote it. It also leaves out
+her speech, so that D5 can count what it replaces (in `tool_speak`, and in her end-of-turn text, which is published
+without `speak` where a channel has no parts), and the literal values of `credential` and `private_words`. An `ask`
+keeps its own question contracted; only the action brain's brief is expanded.
+
+**The table, in detail.**
+- `${ASUNA_WORKSPACE}` is the Host's repository checkout (the floor's `checkout()`); without one, the installed core
+  package's root.
+- `${ASUNA_PROGRAMS}` keeps its own folder name (`${ASUNA_PROGRAMS}\Program Files\nodejs`, `${ASUNA_PROGRAMS}/usr/lib`):
+  one placeholder for several folders could not expand back otherwise.
+- `${ASUNA_FS}` covers only this machine's own top-level folders, so `/api/v1/users` in her technical talk is not a
+  path of the machine. On Windows there is no `${ASUNA_FS}`; POSIX-shaped text passes, except WSL's `/mnt/x` and the
+  MSYS spelling `/x/...` of a named root (6 and 1 records in 580,366, `build/msys_count.py`).
+- `${ASUNA_USER}` skips generic accounts (`root`, `node`, the container's `asuna`, and a few more), since replacing
+  them would rewrite ordinary words; it is that exact string, case-sensitive everywhere. The account name alone is not
+  a raw root: a brief with it is not refused.
+- A filesystem or drive root refuses the table when it is the checkout, the data folder or DSH's home; a home or temp
+  folder at one is left out of the table.
+- All Windows matching is spelled case-insensitively in the pattern itself, so the plugin compiles the worker's pattern
+  as it is, with no flag; both engines run the shared case file.
+
+**Fail closed, visibly.** The plugin's refusal is a thrown `ASUNA_ROOT_TABLE_MISSING` error at the waterfall: DSH ends
+the turn with `agent/error`, the worker records `FAILED_RUNTIME`, and `faults.turn_failed` tells the developer and marks
+the conversation for her next turn (`fault_from_program`), as any program fault. One `roots.refused` audit event per
+plugin start without a table; the settings card's alert says it.
+
+**The weekly reading** groups the rewritten requests by conversation (place title, or the gate, the summaries and the
+appraiser by name), not by session id: two sentences, her speech replaced and her requests rewritten, each with its
+own criterion.
+
+**Open.**
+- ADR-050 hid every path outside the project outside home, tail and all, since its last part can be a person's folder.
+  Under `${ASUNA_DRIVE_X}` and `${ASUNA_FS}` the tail is kept: another account's folder name (`C:\Users\<other>`,
+  `/home/<other>`) and an unmounted volume's label pass. One more rule (a sibling of the home under its parent folder
+  is `${ASUNA_LOCAL_PATH}`) would close it; not built, for the owner's call.
+- §5's end-to-end check (one real `delegate` from home) needs the installed Host; it is not run here.
+- "She is told the rule once in her notes" (D5, D8) is a note to her, not code.

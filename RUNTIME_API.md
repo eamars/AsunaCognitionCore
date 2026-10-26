@@ -752,7 +752,42 @@ A credential is a name (`^[a-z][a-z0-9-]{1,31}$`), a note and at most 6 environm
 
 - She files and drops one with her `credential` tool in her local chat; a turn sees names, notes and variable names, never a value.
 - Only a task from home may use one: `sandbox_run` with `credentials` sets those variables for that command (`CREDENTIALS_HOME_ONLY` elsewhere).
-- Every stored value is replaced by `[凭据已隐藏]` in tool results, briefs, messages to the action brain and reports.
+- Every stored value is replaced by `[凭据已隐藏]` in tool results, briefs, messages and answers to the action brain and reports.
+
+### Local roots
+
+No local root of this computer reaches the character brain; the action brain works with real paths
+(`src/asuna/local_roots.py`, `packages/cognition-core/src/roots.js`).
+
+- **The table.** The worker builds it at every start from its settings and the machine and hands it to the Host with
+  its `initialize` answer. A known root is written `${ASUNA_<NAME>}` and the rest of the path stays: `WORKSPACE` (the
+  Host's repository checkout, else the installed package), `DATA` (the data folder), `DSH_HOME` and `TEMP` (each when
+  not under another root), `HOME`, `PROGRAMS` (program folders, their own name kept: `${ASUNA_PROGRAMS}/usr/lib/...`),
+  `DRIVE_<X>` (any other path on drive X, WSL's `/mnt/x`; on POSIX each mount by letter or index), `FS` (any other path
+  in the machine's own top-level folders on POSIX), `LOCAL_PATH` (a network share, nothing kept) and `USER` (the
+  account name, that exact string as a whole word; not a generic account such as `root`). The deepest root wins. Every
+  spelling matches: either slash, doubled backslashes, percent-encoded, 8.3 aliases, resolved links, `/mnt/x/...`,
+  `/x/...`, after `file:///`, case-insensitive on Windows. `/task/...` is not a root; any other `${...}` is text. A
+  checkout, data folder or DSH home at a filesystem or drive root refuses the table.
+- **Toward her.** Every request of her lanes (her persona preset, the relevance gate, the appraiser, the background
+  summaries) is rewritten at DSH's `llm/stream`: text, reasoning, the system text and earlier tool calls' arguments.
+  DSH's working-folder line is a required runtime context and is rewritten with the rest. The DSH session, stored
+  messages and the Web page keep the real text. Without a table her lanes' requests fail with
+  `ASUNA_ROOT_TABLE_MISSING` (a program fault: her next turn there says a turn did not run, the developer inbox gets a
+  note, the audit one `roots.refused`) and the settings card says so; the action lane runs. Otherwise the settings card
+  shows the table's size and the requests rewritten since the start.
+- **Toward the action brain.** The `delegate` brief, a message to a task, her answer to a task's question and an `ask`
+  to 行动脑 lose every credential value, then each placeholder the place hands over becomes its real path with the
+  host's separators (a public place: `WORKSPACE`, `DATA`; home: all but `LOCAL_PATH`); any other stays as written.
+  Refused, in words: a raw root (with the whole text rewritten), an `${ASUNA_...}` name the table does not have, a
+  `..` segment in a path at a root or placeholder, and in a public place a relative path that climbs.
+- **Her writing.** Every other string argument of her tools is stored contracted, except a credential's values and her
+  private words.
+- **Her speech.** A raw root in a `speak` text or her end-of-turn text is replaced by its placeholder before it is
+  queued, each replacement one `roots.speech_replaced` count. Her weekly tool readings (`local_paths`) say that count,
+  which should be 0, and her requests rewritten per conversation (`roots.tally`), normally above 0.
+- **Not covered.** A path inside a picture, and the read-only path DSH's DeepSeek adapter writes beside each image of
+  a request after `llm/stream`.
 
 ## Media and images
 

@@ -67,6 +67,9 @@ def test_a_cut_list_says_how_many_there_were_and_how_many_it_leaves_out(store):
     said = host_stops.block(store, ZONE, MOMENT)
     assert said['count'] == '过去一天里停了 5 次' and said['not_listed'] == '更早的 2 次没有列出'
     assert len(said['stops']) == 3 and said['stops'][0]['when'].startswith('最后确认还在运行约是 10/27 05:55，重新起来是 10/27 06:00')
+    # Only the newest is 「上次」: the others are 「再往前一次」, so a list does not read as one stop said twice (her reading).
+    assert [stop['what'] for stop in said['stops']] == (['宿主上次是被外部终止的（不是正常停下）']
+                                                        + ['宿主再往前一次是被外部终止的（不是正常停下）'] * 2)
 
 
 def test_rows_from_before_are_shown_for_their_day_only(store):

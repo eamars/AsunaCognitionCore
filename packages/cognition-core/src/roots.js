@@ -138,12 +138,23 @@ export class Roots {
   }
 }
 
+/** A session's preset as it stands now: DSH's `agentPreset` projection (a preset chosen after the session was made
+ * moves it), else its header's. */
+function presetOf(ctx, agent) {
+  try {
+    const now = agent && ctx.sessionProjections?.stateOf?.(agent.session, 'agentPreset');
+    if (typeof now === 'string') return now;
+  } catch { /* a session without the projection keeps its header's preset */ }
+  return agent?.session?.header?.agentPreset;
+}
+
 /** The listener: her lanes' requests rewritten, or refused without a table; every other request passes as it is. */
 export function rootsAtTheModel(core) {
   const { ctx } = core;
   ctx.on('llm/stream', (options, next) => {
     if (options?.[DONE] || !options?.sessionId) return next();
-    const lane = core.laneOf(ctx.agents?.get(options.sessionId));
+    const agent = ctx.agents?.get(options.sessionId);
+    const lane = agent && core.laneOf({ session: { header: { agentPreset: presetOf(ctx, agent) } } });
     if (!HER_LANES.has(lane)) return next();
     const roots = core.roots;
     if (!roots.table) {

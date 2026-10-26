@@ -93,7 +93,9 @@ def guide(config, speaks=False):
     """The fixed text of her turns: how a turn goes, what each block is, how to read memories. `speaks`: the
     conversation speaks only through speak."""
     from .context import MEMORY_SOURCE_RULES
-    turn = prompt_path(config, 'turn.md').read_text(encoding='utf-8').strip()
+    from .role_tools import thinking_mode
+    # ADR-099: where her thoughts come from the model's thinking, the steps do not ask for them.
+    turn = prompt_path(config, 'turn_thinking.md' if thinking_mode(config) else 'turn.md').read_text(encoding='utf-8').strip()
     turn = turn.replace('{words}', WORDS[bool(speaks)]).replace('{ending}', ENDING[bool(speaks)])
     lines = ['# 每回合的资料', '带 _from_program 的块是程序事实；带 _at 的字段是本地钟点，和 clock_from_program 同一时区。'
              '下面是各块的说明，块里不再重复；某块自己带的 note 是这一回合特有的话，以它为准。']

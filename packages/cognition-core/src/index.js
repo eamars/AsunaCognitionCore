@@ -90,6 +90,8 @@ export const Config = z.object({ python: z.string().volatile(), persona: z.strin
     actionHigh: Route.required(false) })
     .volatile() });
 
+// A reasoning level that turns the model's thinking off (ADR-099: no thoughts to take in thinking mode).
+const NO_THINKING = /^(off|none|disabled|)$/i;
 // Responsibility routes are configured independently; a lane name never implies a model.
 // The relevance gate (attend) is her own judgment, so it uses the character route.
 const routeOf = lane => lane === 'character' || lane === 'attend' ? 'character' : lane === 'appraiser' ? 'appraiser' : 'action';
@@ -165,6 +167,31 @@ export function stageView(events, token, turn) {
 /** What a turn that ends in silence has written, in words for her: the texts so far in this operation's stages,
  * the message holding the stay_silent call included (DSH records it before running its tools). They leave when
  * the turn ends. */
+/** ADR-099: the model's own thinking in one response: its reasoning blocks that are neither redacted nor empty, joined,
+ * and whether any was redacted. */
+export function thinkingOf(message) {
+  const replay = message?.source?.replayState?.blocks ?? [];
+  const kept = [];
+  let redacted = false;
+  (message?.content ?? []).forEach((block, i) => {
+    if (block.type !== 'reasoning') return;
+    if (replay[i]?.redacted) redacted = true;
+    else if ((block.text ?? '').trim()) kept.push(block.text.trim());
+  });
+  return { text: kept.join('\n\n'), redacted };
+}
+
+/** ADR-099: with her first call of a stage that offers no think (and is not a repair), the thinking of the response that
+ * made it; undefined otherwise. Her thought is recorded from it before the call runs. */
+export function firstThinking(session, state, operation, callId) {
+  if (!operation || /:fix-\d+$/.test(operation) || (state.current?.tools ?? []).includes('think')
+      || state.thinkingSent === operation) return undefined;
+  state.thinkingSent = operation;
+  const holder = session.snapshotEvents().findLast(event => event.type === 'assistant/message'
+    && event.data.message.content.some(block => block.type === 'tool-call' && block.id === callId));
+  return thinkingOf(holder?.data.message);
+}
+
 export function writtenSoFar(session, operation) {
   const events = session.snapshotEvents();
   const turn = events.findLast(event => event.type === 'assistant/message')?.data.turn;
@@ -640,6 +667,12 @@ export class CognitionCore {
     if (!this.personas.has(next.persona)) throw new Error('PERSONA_NOT_INSTALLED');
     const models = await this.resolveRoutes(next.routes);
     if (!next.deployment) throw new Error('NATIVE_DEPLOYMENT_REQUIRED: fill in the deployment settings');
+    // ADR-099: her thoughts taken from the model's thinking need a character route that thinks, in groups too.
+    if (next.deployment.thoughts === 'thinking') {
+      const character = next.routes?.character;
+      if (!models.character || NO_THINKING.test(models.character.reasoning_effort ?? '') || NO_THINKING.test(character?.groupEffort || 'route'))
+        throw new Error('THOUGHTS_NEED_THINKING: thoughts=thinking needs a character route (and group effort) with a thinking level');
+    }
     assertSecretReferences(next.deployment);
     // This process imports and validates the proposed business configuration.
     // It does not initialize a RuntimeHost, consume queues, or call any model.
@@ -1047,6 +1080,7 @@ export class CognitionCore {
       ...(promptTokens ? { prompt_tokens: promptTokens } : {}),
       tool_calls: last.data.message.content.filter(x => x.type === 'tool-call'),
       reasoning: last.data.message.content.filter(x => x.type === 'reasoning').map(x => x.text).join(''),
+      thinking: thinkingOf(last.data.message),          // ADR-099: a turn that made no call is captured from it
       receipt: stage.token, request_refs: [sessionId + ':' + last.seq],
       ...(stage.delivery ? { delivery: stage.delivery } : {}),
     };
@@ -1311,8 +1345,10 @@ export class CognitionCore {
         execute: async (args, exec) => {
           exec.signal.throwIfAborted();
           const operation = this.state(agent.session.id).current?.token;
+          const thinking = firstThinking(agent.session, this.state(agent.session.id), operation, exec.callId);
           const reply = await toolReply(() => this.worker.call('role_tool', {
-            session_id: agent.session.id, operation, call_id: exec.callId, tool: spec.name, args }));
+            session_id: agent.session.id, operation, call_id: exec.callId, tool: spec.name, args,
+            ...(thinking ? { thinking } : {}) }));
           // A refusal is hers to correct in this turn: the tool error says what to do instead.
           if (reply.refused) throw new Error(reply.refused);
           if (reply.conclude) exec.concludeTurn();

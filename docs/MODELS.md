@@ -11,8 +11,8 @@ Which model may run which brain, what has been tested, and how to test a new one
 
 1. Each brain has its own route, and the routes are set independently. Never infer a model from a brain's name, or
    a brain from a model's name.
-2. **Do not put an Anthropic Claude model on the character route.** With the current design its requests are
-   stopped (§4).
+2. **A Claude model that stops the think stage runs the character route only with `thoughts: thinking`** (§4,
+   [RUNTIME_API.md](../RUNTIME_API.md) deployment settings). Probe a Claude model before it goes there (§5).
 3. A Claude model may run the action brain's `actionHigh` route (§2, §4).
 4. A route on a paid provider is the owner's choice. Applying route settings restarts the worker, so apply them when
    she is quiet.
@@ -39,7 +39,9 @@ Full contract: [RUNTIME_API.md](../RUNTIME_API.md).
 | Model | Provider | Route | How it was tested | Result |
 |---|---|---|---|---|
 | `qwen38-next-uncensored-strata-vision` | the operator's local server, OpenAI-compatible, qwen thinking format | `character` and `action` | in daily use on both; refusal probe on the research and recall conversations only, at commit `6df200a9` | in use; probe: none stopped or declined. Missed moments not yet measured: that run offered no `speak` in its groups, so every moment that needs it missed by construction |
-| `claude-sonnet-5-5`, effort medium | Anthropic | `character` | refusal probe, all seven conversations × 3 (51 turns), at commit `6df200a9` | **FAIL**: all 33 turns that reached the model were stopped on their first request, before any output, category `reasoning_extraction`; 18 turns got provider errors |
+| `claude-sonnet-5-5`, effort medium | Anthropic | `character`, `thoughts: tool` | refusal probe, all seven conversations × 3 (51 turns), at commit `6df200a9` | **FAIL**: all 33 turns that reached the model were stopped on their first request, before any output, category `reasoning_extraction`; 18 turns got provider errors |
+| `claude-haiku-5-5`, effort high | Anthropic | `character`, `thoughts: tool` | refusal probe, all eight conversations × 3 (57 turns), 2026-10-26 | FAIL on missed moments only: 0 stopped, 0 declined; 5 of 57 missed (home 4 of 6 used no `plan` or `delegate`; research 1 of 9 no `delegate`) |
+| `claude-haiku-5-5`, effort high | Anthropic | `character`, `thoughts: thinking` | refusal probe, the same 57 turns, 2026-10-26 | FAIL on missed moments only: 0 stopped, 0 declined; 8 of 57 missed (home 4 of 6; research 4 of 9 spoke instead of delegating) |
 | `claude-sonnet-5-5`, effort medium | Anthropic | `actionHigh` | in use for 高 tasks | runs; not probed (the probe covers the character brain only) |
 | `deepseek-flash` | DeepSeek API | none | an offline experiment on choosing which line to quote | not refusal-probed |
 
@@ -48,14 +50,16 @@ before relying on an old row.
 
 ## 4. Claude models: warnings
 
-- **The character route goes silent.** Anthropic's safety system stops every character request
-  (`stop_reason: "refusal"`, category `reasoning_extraction`) before the model writes anything, even in harmless
-  small talk. DSH turns the stop into a failed turn, so she does not answer, in any conversation.
+- **With `thoughts: tool` the character route goes silent on a model that stops the think stage.** Anthropic's
+  safety system stops every character request (`stop_reason: "refusal"`, category `reasoning_extraction`) before the
+  model writes anything, even in harmless small talk. DSH turns the stop into a failed turn, so she does not answer,
+  in any conversation. Anthropic names Fable 5.1, Opus 5.5, Opus 5, Sonnet 5.5 and Fable 5 for this refusal; Haiku
+  5.5 is not stopped (§3).
 - **The stop answers to the request's design, not to what people say.** It comes on the first request of a turn,
   before `think` or any other tool runs.
 - **It cannot be prompted around.** Rewording prompts, tool descriptions or the turn's steps to get past the check
-  would work around a provider's safety system; a Claude model on the character route is for the owner to raise with
-  Anthropic.
+  would work around a provider's safety system. `thoughts: thinking` is not a rewording: nothing then asks the model
+  for its thoughts, and her 心里话 are the summary of its own thinking, which the API returns.
 - **Sonnet 5.5 always thinks.** DSH's catalog gives it no "off" level, so every request uses adaptive thinking at the
   route's effort. The probe's `--effort` sends the same shape.
 - **On `actionHigh`, a refusal falls back to the low tier.** A refused 高 request is retried on `action`, and the task
@@ -73,7 +77,7 @@ python tools/refusal_probe.py --dry-run
 ```
 
 ```bash
-python tools/refusal_probe.py --provider anthropic --model <model id> --effort <level>
+python tools/refusal_probe.py --provider anthropic --model <model id> --effort <level> --thoughts <tool|thinking>
 ```
 
 ```bash

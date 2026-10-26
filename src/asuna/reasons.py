@@ -15,6 +15,10 @@ from __future__ import annotations
 
 SAID_CHARS = 40
 THOUGHT_CHARS = 400        # a thought is at most 360 characters; longer old ones keep the excerpt mark
+# ADR-099: a thought taken from the model's thinking is another model's summary, not her words: it comes back marked
+# so and this short (owner, 2026-10-26); recall gives the longer text.
+THINKING_CHARS = 120
+THINKING_LABEL = '（你此前想法的摘要，别的模型写的）'
 ARG_CHARS = 30
 DOC_WORDS = {'persona': '人格设定', 'voice': '说话方式', 'work_log': '工作记录', 'group_notes': '群笔记'}
 DECISIONS = {'adopt': '采纳了', 'defer': '先放着了', 'drop': '不要了'}
@@ -95,12 +99,31 @@ def _action(tool, args):
     return None
 
 
+def shown(unit, chars=THOUGHT_CHARS, recall=False):
+    """A thought as it comes back: hers within `chars`; one taken from the model's thinking (ADR-099) marked as
+    another model's summary and cut at THINKING_CHARS, or within `chars` when she recalls it. None when empty."""
+    from .config import excerpt
+    body = (unit or {}).get('body_markdown')
+    if not body:
+        return None
+    if unit.get('source') == 'thinking':
+        return THINKING_LABEL + excerpt(body, chars if recall else THINKING_CHARS)
+    return excerpt(body, chars)
+
+
 def then(store, unit):
-    """What she did after this thought, in her words, one line each; [] when it was not followed by anything."""
+    """What she did after this thought, in her words, one line each; [] when it was not followed by anything. A thought
+    taken from the model's thinking (ADR-099) is anchored to the call it came with, which it led to as well ('end':
+    the turn made no call)."""
     episode_id = unit.get('episode_id')
     call_id = str(unit.get('_id') or '').rsplit(':', 1)[-1]
     if not episode_id or not call_id:
         return []
+    anchored = unit.get('source') == 'thinking'
+    if anchored and call_id == 'end':
+        episode = store.db.episodes.find_one({'_id': episode_id}, {'speech': 1}) or {}
+        said = _short(episode.get('speech'), SAID_CHARS)
+        return ['所以我说了「%s」' % said] if said else []
     calls = list(store.db.audit_events.find({'stream_id': episode_id, 'type': 'role_tool'},
                                             {'payload': 1}).sort('seq', 1))
     names = [(c['payload'].get('call_id'), c['payload'].get('tool')) for c in calls]
@@ -108,7 +131,7 @@ def then(store, unit):
     if position is None:
         return []
     lines, last_thought = [], True
-    for call in calls[position + 1:]:
+    for call in calls[position + (0 if anchored else 1):]:
         payload = call['payload']
         if payload.get('tool') == 'think' and 'refused' not in payload:
             last_thought = False              # what follows belongs to her next thought
@@ -158,7 +181,8 @@ def newest(episode, before=None):
             continue
         if call.get('tool') == 'think' and 'refused' not in call:
             return 'mono-%s:%s' % (episode['_id'], call_id)
-    return None
+    # ADR-099: a turn whose thought came from the model's thinking has that one thought behind every call in it.
+    return episode.get('thinking_ref')
 
 
 def reason_of(episode, call_id):
@@ -168,10 +192,9 @@ def reason_of(episode, call_id):
 
 
 def thought(store, ref):
-    """Her thought as she wrote it (the excerpt mark if ever cut), or None."""
-    from .config import excerpt
-    unit = store.db.memory_units.find_one({'_id': ref, 'kind': 'monologue'}, {'body_markdown': 1}) if ref else None
-    return excerpt(unit['body_markdown'], THOUGHT_CHARS) if unit and unit.get('body_markdown') else None
+    """Her thought as she wrote it (the excerpt mark if ever cut), or one from the model's thinking as `shown`; None."""
+    unit = store.db.memory_units.find_one({'_id': ref, 'kind': 'monologue'}, {'body_markdown': 1, 'source': 1}) if ref else None
+    return shown(unit)
 
 
 def for_call(store, episode_id, field, value):

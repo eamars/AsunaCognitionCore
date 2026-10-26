@@ -16,6 +16,7 @@ Exit status: 0 PASS, 1 FAIL, 2 no result (a dry run, or a fault of the probe its
 from __future__ import annotations
 
 import argparse
+import collections
 import hashlib
 import json
 import os
@@ -219,6 +220,9 @@ class ProbeLane:
         start = len(history)
         history.append({'role': 'user', 'content': [{'type': 'text', 'text': text}]})
         said, made, thought = [], [], False
+        # ADR-099: as the plugin does, the first call of a stage that offers no think (not a repair) carries the
+        # thinking of the response that made it; a stage with no call carries its last response's.
+        hand = 'think' not in names and not re.search(r':fix-\d+$', operation)
         for step in range(MAX_STEPS):
             response = self.provider.call(system, history, self.schemas, names)
             blocks = response['content']
@@ -239,12 +243,15 @@ class ProbeLane:
             history.append({'role': 'assistant', 'content': blocks})
             said += [b['text'] for b in blocks if b['type'] == 'text' and b['text'].strip()]
             if response['stop'] != 'tool_use' or not calls:
-                return LaneResult(content=said[-1] if said else '', said=said or None, tool_calls=made)
+                return LaneResult(content=said[-1] if said else '', said=said or None, tool_calls=made,
+                                  thinking=thinking_of(blocks))
             results, conclude = [], False
             for block in (b for b in blocks if b['type'] == 'tool_use'):
                 made.append({'type': 'tool-call', 'name': block['name'], 'id': block['id']})
                 try:
-                    value, ends = handler(block['id'], block['name'], block.get('input') or {})
+                    extra = {'thinking': thinking_of(blocks)} if hand else {}
+                    hand = False
+                    value, ends = handler(block['id'], block['name'], block.get('input') or {}, **extra)
                     results.append({'type': 'tool_result', 'tool_use_id': block['id'],
                                     'content': json.dumps(value, ensure_ascii=False, default=str)})
                     conclude = conclude or ends
@@ -257,6 +264,12 @@ class ProbeLane:
                 return LaneResult(content='', said=said or None, tool_calls=made)
         record['ended'] = 'max_steps'
         return LaneResult(content=said[-1] if said else '', said=said or None, tool_calls=made)
+
+
+def thinking_of(blocks):
+    """The model's own thinking in one response, as the plugin hands it (index.js thinkingOf)."""
+    text = '\n\n'.join(b['thinking'].strip() for b in blocks if b.get('type') == 'thinking' and (b.get('thinking') or '').strip())
+    return {'text': text, 'redacted': any(b.get('type') == 'redacted_thinking' for b in blocks)}
 
 
 # ---- the synthetic world ---------------------------------------------------------------------------------------------
@@ -291,7 +304,7 @@ def open_world(config, run):
     return store
 
 
-def probe_config(name):
+def probe_config(name, thoughts='tool'):
     # The probe's groups are QQ groups as the NapCat channel declares them; without its kind module no group has a
     # reply part, and speak is never offered.
     channel_kinds.load([NAPCAT])
@@ -305,6 +318,7 @@ def probe_config(name):
     config.pop('persona_model', None)
     config['canonical_persons'] = {}
     config['channels'] = {'qq': {'account_id': BOT, 'token': 'x' * 24, 'routes': {}}}
+    config['thoughts'] = thoughts         # ADR-099: where her thoughts come from (tool: think; thinking: the model's)
     return config
 
 
@@ -349,7 +363,7 @@ def run_sequence(store, lane, seq, index, name):
     coordinator = Coordinator(store, lane)
     for i, line in enumerate(lines):
         if line['who'] == '你':
-            mine(store, scene_id, line['text'], i)
+            mine(store, scene_id, line['text'], i, index)
         else:
             persist_input(store, line_event(line, 'h%d-%d' % (index, i), aside=True))
     turns = []
@@ -390,13 +404,14 @@ def event(scene_id, group, number, line, key, name, aside=False):
                         'sender_id': sender, 'platform_event_id': 'pe-' + key}}
 
 
-def mine(store, scene_id, text, i):
-    """A line she said before the conversation starts: delivered, with a platform id (her recall can name it)."""
+def mine(store, scene_id, text, i, index=0):
+    """A line she said before the conversation starts: delivered, with a platform id (her recall can name it). `index`
+    is the run of the conversation: the home conversation runs in her one local chat on every repeat."""
     seq = store.db.scenes.find_one_and_update({'_id': scene_id}, {'$inc': {'sequence': 1}}, return_document=True)['sequence']
-    store.put('messages', {'_id': 'mine-%s-%d' % (scene_id[-5:], i), 'scene_id': scene_id, 'scope_key': 'scene:' + scene_id,
+    store.put('messages', {'_id': 'mine-%s-%d-%d' % (scene_id[-5:], index, i), 'scene_id': scene_id, 'scope_key': 'scene:' + scene_id,
                            'policy_epoch': 1, 'direction': 'outbound', 'author': 'demo', 'phase': 'SPEAK', 'text': text,
                            'scene_seq': seq, 'delivery_state': 'DELIVERED', 'episode_id': 'ep-before',
-                           'receipt_at': now(), 'platform_message_id': 'pm-%d' % i})
+                           'receipt_at': now(), 'platform_message_id': 'pm-%d-%d' % (index, i)})
 
 
 def now():
@@ -446,8 +461,9 @@ def report(turns, records, meta, dry_run=False):
            'categories': sorted({r['category'] for r in stops if r['category']}), 'missed': missed,
            'requests': len(records), 'input_tokens': sum(r['input_tokens'] for r in records),
            'output_tokens': sum(r['output_tokens'] for r in records), 'turns_detail': turns}
-    text = ['%s  model %s%s · commit %s · %s · %d sequences × %d · %d turns'
-            % (verdict, meta['model'], ' (effort %s)' % meta['effort'] if meta.get('effort') else '', meta['commit'],
+    text = ['%s  model %s%s%s · commit %s · %s · %d sequences × %d · %d turns'
+            % (verdict, meta['model'], ' (effort %s)' % meta['effort'] if meta.get('effort') else '',
+               ' · thoughts %s' % meta['thoughts'] if meta.get('thoughts') else '', meta['commit'],
                meta['at'], meta['sequences'], meta['repeat'], len(turns))]
     text += ['  - ' + reason for reason in reasons]
     text.append('by kind: ' + ' · '.join('%s %d (stopped %d, declined %d, missed %d)'
@@ -458,6 +474,10 @@ def report(turns, records, meta, dry_run=False):
             out['stopped_before_think'], out['stopped_after_think'],
             ' · categories %s' % ', '.join(out['categories']) if out['categories'] else ''))
     text += ['missed: ' + line for line in missed]
+    if meta.get('thoughts_recorded'):
+        rec = meta['thoughts_recorded']
+        text.append('thoughts recorded from thinking %d · without one %d%s' % (rec['taken'], sum(rec['none'].values()),
+                    ' (%s)' % ', '.join('%s %d' % pair for pair in rec['none'].items()) if rec['none'] else ''))
     text.append('requests %d · input tokens %d · output tokens %d' % (out['requests'], out['input_tokens'],
                                                                      out['output_tokens']))
     text.append('This holds for this model, today, with the design at this commit; a future model may differ.')
@@ -482,9 +502,14 @@ def probe(args, provider=None):
     seqs = sequences(args.sequences or [FIXTURES / 'sequences'])
     provider = provider or provider_for(args)
     schemas = dsh_schemas()
+    thoughts = getattr(args, 'thoughts', 'tool') or 'tool'
+    if thoughts == 'thinking':
+        # As session_specs gives them in thinking mode (ADR-099): no think, stay_silent without the line about it.
+        schemas.pop('think', None)
+        schemas['stay_silent'] = {**schemas['stay_silent'], 'description': role_tools.STAY_SILENT_THINKING}
     name = re.search(r'^# (\S+)', (FIXTURES / 'persona.md').read_text(encoding='utf-8')).group(1)
     run = uuid.uuid4().hex[:12]
-    store = open_world(probe_config(name), run)
+    store = open_world(probe_config(name, thoughts), run)
     keep_text = None
     if args.keep_text:
         Path(args.keep_text).mkdir(parents=True, exist_ok=True)
@@ -498,6 +523,15 @@ def probe(args, provider=None):
                 turns += run_sequence(store, lane, seq, index, name)
                 if args.progress:
                     print('.', end='', flush=True, file=sys.stderr)
+        # ADR-099: in thinking mode, how many turns recorded a thought and why the others did not (counts only; the
+        # recorded summaries go to the --keep-text folder when asked for).
+        recorded = {'taken': store.db.audit_events.count_documents({'type': 'thought.taken'}),
+                    'none': dict(collections.Counter(row['payload'].get('why') for row in
+                                                     store.db.audit_events.find({'type': 'thought.none'})))}
+        if keep_text and thoughts == 'thinking':
+            with open(keep_text.replace('.jsonl', '-thoughts.jsonl'), 'w', encoding='utf-8') as out:
+                for unit in store.db.memory_units.find({'kind': 'monologue', 'source': 'thinking'}, {'body_markdown': 1}):
+                    out.write(json.dumps({'_id': unit['_id'], 'text': unit['body_markdown']}, ensure_ascii=False) + '\n')
     finally:
         dispose_test_store(store)
     commit = subprocess.run(['git', 'rev-parse', '--short=8', 'HEAD'], capture_output=True, text=True,
@@ -505,7 +539,8 @@ def probe(args, provider=None):
     digest = hashlib.sha256(json.dumps(seqs, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:12]
     stamp = datetime.now().astimezone().strftime('%Y-%m-%d %H:%M %Z')
     meta = {'model': 'scripted' if isinstance(provider, Scripted) else args.model, 'provider': args.provider,
-            'effort': getattr(args, 'effort', '') or None,
+            'effort': getattr(args, 'effort', '') or None, 'thoughts': thoughts,
+            **({'thoughts_recorded': recorded} if thoughts == 'thinking' else {}),
             'commit': commit, 'at': stamp, 'sequences': len(seqs), 'sequence_set': digest, 'repeat': args.repeat,
             'database': store.name}
     out, text = report(turns, lane.records, meta, dry_run=args.dry_run)
@@ -527,6 +562,8 @@ def main(argv=None):
     parser.add_argument('--effort', default='', help='anthropic: the per-turn effort her route sets (low, medium, high)')
     parser.add_argument('--out', default='', help='report JSON path (default reports/refusal-probe-<time>.json)')
     parser.add_argument('--keep-text', default='', help='folder to keep the model words in (off by default)')
+    parser.add_argument('--thoughts', choices=['tool', 'thinking'], default='tool',
+                        help="where her thoughts come from (ADR-099): her think call, or the model's own thinking")
     parser.add_argument('--dry-run', action='store_true', help='run offline with a scripted model: no result')
     parser.add_argument('--progress', action='store_true')
     args = parser.parse_args(argv)

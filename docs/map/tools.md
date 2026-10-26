@@ -309,6 +309,7 @@ Refusal probe (ADR-080): can the model under test do what the character brain ne
 - def `dsh_schemas` — A conversation's character-brain tools as JSON Schemas from DSH's own conversion (dsh-tools parameterSchemaSpecToJsonSchema), so the model sees what a live turn there sends: that conversation's own specs (role_tools.session_specs, as the Ho
 - class `ProbeLane` — Stands where the native lane stands: the coordinator's system prompt, turn text, tool names and handler, and one session per conversation.
   - `generate`
+- def `thinking_of` — The model's own thinking in one response, as the plugin hands it (index.js thinkingOf).
 - def `sequences`
 - def `open_world` — A throwaway database holding the fixture world with the probe's persona as P1.
 - def `probe_config`

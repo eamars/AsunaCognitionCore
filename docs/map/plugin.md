@@ -227,7 +227,9 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
 - def `imagesOf` — Pictures attached to the owner's local messages (DSH keeps them in her conversation, so she sees them), read back for the program's own record: history, her action brain's read_image, an image she may send on.
 - def `pictureParts` — The pictures that come with a turn, saved as DSH attachments: one that cannot be saved is left out (her context says read_image reaches any picture that did not appear).
 - def `stageView`
-- def `writtenSoFar` — What a turn that ends in silence has written, in words for her: the texts so far in this operation's stages, the message holding the stay_silent call included (DSH records it before running its tools).
+- def `thinkingOf` — ADR-099: the model's own thinking in one response: its reasoning blocks that are neither redacted nor empty, joined, and whether any was redacted.
+- def `firstThinking` — ADR-099: with her first call of a stage that offers no think (and is not a repair), the thinking of the response that made it; undefined otherwise.
+- def `writtenSoFar`
 - class `CognitionCore`
   - `registerPersona`
   - `registerChannel` — A platform plugin (e.g. @asuna/napcat-qq) contributes its channel kind, adapter and skills.

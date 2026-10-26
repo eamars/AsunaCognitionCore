@@ -241,8 +241,16 @@ def _longest_text(node):
     return best
 
 
-def carried_block(summary):
-    """What the first notice of a session that replaced one that no longer fit the model's window says (ADR-028)."""
+# Why a session was replaced, when it was not the window (ADR-099: a session opened with the other source of thoughts).
+CARRIED_WHY = {'thoughts': '程序的设置改了，换了这个新会话接着聊；旧会话的细节不在这里，最近的消息在 delivered_history 里，'
+                           '更早的事要看就 recall。'}
+
+
+def carried_block(summary, why=None):
+    """What the first notice of a session that replaced one that no longer fit the model's window says (ADR-028), or
+    one replaced for another reason (`why`, CARRIED_WHY)."""
+    if why in CARRIED_WHY:
+        return {'note': CARRIED_WHY[why]}
     text = (summary or '').strip()
     if len(text) > CARRIED_CHARS:
         text = text[:CARRIED_CHARS] + CUT_NOTE % (len(text) - CARRIED_CHARS)

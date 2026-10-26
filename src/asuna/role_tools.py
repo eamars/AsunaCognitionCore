@@ -74,6 +74,20 @@ PLAN_OUTSIDE_ONLY_MADE = ('「%s」不是这一回合建的：外面的便条叫
 STEERING = ('task.message', 'task.stop')
 # Why think comes first, said where it is refused (her count, 2026-10-20: 153 refusals that gave no reason).
 THINK_FIRST = '先用 think 写下这回合的心里话，再做别的：它是你这一回合每一步的理由，存了档，之后回想得起来为什么这么做。'
+
+
+def thinking_mode(config):
+    """ADR-099: her 心里话 come from the model's own thinking (`thoughts: thinking`), not from her think call; nothing
+    then asks her to write her thoughts out."""
+    return (config or {}).get('thoughts') == 'thinking'
+
+
+def asks_thought(ep):
+    """Whether this turn asks for her thought before anything else (ADR-099): `think` is in the turn's tools. The one
+    predicate every check reads, recomputed each run from the configuration her tool lists come from."""
+    return 'think' in (ep.get('turn_tools') or ())
+
+
 # What a task begun in a one-shot turn says: it belongs to home's own session, not to the one this turn runs in.
 REFLECTION_TASK = '结果回到家里那一拍，这个会话的上下文不跟过去；在那之前不要说已经做完。'
 # ADR-049: where she decides it: a visit, her own moments at home, and at home a turn a plan of hers woke (her rule:
@@ -157,6 +171,10 @@ REPLY_REPLACES = ('await_answer', 'attach_image', 'stay_silent')
 
 from . import understanding as _understanding
 from . import notes as _notes, places as _places
+# ADR-099: a thought taken from the model's thinking is stored up to this long (a summary runs to 2,000 or so).
+THINKING_STORED_CHARS = 4000
+# stay_silent where her thoughts come from the model's thinking (ADR-099): the same, without the line about 心里话.
+STAY_SILENT_THINKING = '结束这回合，不再说话。回执会说这一回合发出了什么。'
 
 TOOLS = {
     'think': {
@@ -669,6 +687,10 @@ def session_specs(store, scene_id, person_id=None):
     cls = conversation_class(store, scene, person_id)
     listed = abilities(store, {'scene_id': scene_id, 'manifest': {'session_class': cls}})
     out = [placed_spec(spec, cls, scene.get('kind'), listed) for spec in all_specs()]
+    if thinking_mode(store.config):
+        # ADR-099: no think, and no tool description that points at it.
+        out = [{**spec, 'description': STAY_SILENT_THINKING} if spec['name'] == 'stay_silent' else spec
+               for spec in out if spec['name'] != 'think']
     kinds = speak_kinds(store, scene)
     if not kinds:
         return out
@@ -773,7 +795,7 @@ def _turn_rules(store, ep):
     context = ep.get('context') or {}
     kind = turn_kind(ep)
     cls = (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
-    names = ['think', 'recall']
+    names = ['recall'] if thinking_mode(store.config) else ['think', 'recall']
     if kind == CONSULT:
         return names + ['task.answer']
     if her_pictures(store, ep):
@@ -903,7 +925,7 @@ def abilities(store, ep):
     where = visibility.place_of(config, scene, cls)
     local = ep['scene_id'] == (config.get('chat') or {}).get('scene_id')
     platform = bool(scene.get('channel_id')) and where != 'peer'        # a group or a private chat on a platform
-    names = list(EVERYWHERE)
+    names = [name for name in EVERYWHERE if name != 'think' or not thinking_mode(config)]
     persona = ep.get('persona')
     if persona and AffectLedger(store, persona, *model_and_policy(store, persona)).enabled:
         names.append('feel')
@@ -974,6 +996,7 @@ NOT_NOW = {
 ERRAND_NOTE = ('外面写来的便条叫起来的回合，只有便条带着主人本人的原话（程序核对过他的账号）才能接差事；这张没有。'
                '要去办，就在这里说出来，主人在这里看得到。')
 CONSULT_ONLY = '行动脑在问你话：这一回合只用 task 的 answer 回答它（think、recall 也能用），别的事等下一回合。'
+CONSULT_ONLY_THINKING = '行动脑在问你话：这一回合只用 task 的 answer 回答它（recall 也能用），别的事等下一回合。'
 # ADR-088 §4.2: what needs home's authority, refused in a turn a note from outside opened at home, says where it goes.
 OUTSIDE_NEEDS_HOME = ('这一回合是外面写来的便条叫起来的，带的是便条那边的权限；这件事要家里的权限。'
                       '真要做，就在这里说出来，主人在这里看得到。')
@@ -991,7 +1014,7 @@ def not_now(store, ep, name):
                 % (name.split('.')[0], local_time.stamp(off['until'], local_time.zone_of(store, ep['scene_id'])), off['_id']))
     kind = turn_kind(ep)
     if kind == CONSULT:
-        return CONSULT_ONLY
+        return CONSULT_ONLY_THINKING if thinking_mode(store.config) else CONSULT_ONLY
     if ep.get('errand') and name in STEERING:
         from .errands import NO_STEER
         return NO_STEER
@@ -1311,10 +1334,13 @@ class RoleTools:
         self.store = coordinator.store
 
     # ── dispatch ────────────────────────────────────────────────────
-    def call(self, ep_id, call_id, name, args):
-        """(result, concludes_turn). Raises Refused for a call she can correct herself."""
+    def call(self, ep_id, call_id, name, args, thinking=None):
+        """(result, concludes_turn). Raises Refused for a call she can correct herself. `thinking`: the model's own
+        thinking in the response that made her first call of a stage (ADR-099), recorded before the call runs."""
         c = self.coordinator
         ep = self.store.db.episodes.find_one({'_id': ep_id})
+        if thinking is not None:
+            ep = self.take_thought(ep, call_id, thinking)
         called_as, replaced = None, False
         if name in RENAMED and isinstance(args, dict):          # an old name runs as its option (ADR-055)
             called_as, (name, args) = name, renamed(name, args)
@@ -1353,7 +1379,8 @@ class RoleTools:
                 raise Refused(not_now(self.store, ep, can))
             from . import reasons
             # A read may come before her thought; anything else needs one (ADR-087 §4.2, reasons.READS).
-            if name != 'think' and not ep.get('turn_thought') and not reasons.before_thought(name, args):
+            if (name != 'think' and asks_thought(ep) and not ep.get('turn_thought')
+                    and not reasons.before_thought(name, args)):
                 raise Refused(THINK_FIRST)
             made = len(ep.get('tool_calls') or {}) + 1                # this call's number in the turn
             if made == CALLS_HARD:
@@ -1516,6 +1543,39 @@ class RoleTools:
             self.__dict__.setdefault('over', []).append('%s %s' % (_SHOWN.get(field, field), words))
 
     # ── mind ────────────────────────────────────────────────────────
+    def take_thought(self, ep, anchor, thinking):
+        """ADR-099: in a turn that does not ask for her thought, the model's first thinking in it becomes her 心里话:
+        the same monologue unit, `source` thinking, stored contracted (ADR-098), anchored to the call it came with
+        ('end' when the turn made none). A turn whose model did not think, or whose thinking was redacted or could not
+        be recorded, leaves the audit row thought.none instead. It never fails her call."""
+        if not ep or asks_thought(ep) or ep.get('turn_thought') or ep.get('thought_none'):
+            return ep
+        try:
+            text = str((thinking or {}).get('text') or '').strip()
+            if not text:
+                why = 'redacted' if (thinking or {}).get('redacted') else 'no_thinking'
+                self.store.audit(ep['_id'], 'thought.none', {'why': why, 'anchor': anchor}, ep['scope_key'])
+                return self.coordinator._update(self._fresh(ep), thought_none=why)
+            from .config import character_id, excerpt
+            text = written('think', {'thought': excerpt(text, THINKING_STORED_CHARS)})['thought']
+            memory_id = 'mono-' + ep['_id'] + ':' + anchor
+            home = ep.get('errand') or ep               # an errand's thoughts are kept at home (ADR-066)
+            if not self.store.db.memory_units.find_one({'_id': memory_id}):
+                self.store.put('memory_units', {'_id': memory_id, 'character_id': character_id(self.store.config),
+                    'kind': 'monologue', 'source': 'thinking', 'scope_key': home['scope_key'],
+                    'policy_epoch': home['policy_epoch'], 'body_markdown': text,
+                    'epistemic_type': 'character_interpretation', 'source_event_ids': [ep['source_event_id']],
+                    'depends_on': [ep['source_event_id']], 'episode_id': ep['_id'], 'status': 'active',
+                    'embedding_status': 'PENDING'}, stream=ep['_id'])
+            self.store.audit(ep['_id'], 'thought.taken', {'anchor': anchor, 'chars': len(text)}, ep['scope_key'])
+            ep = self._fresh(ep)
+            return self.coordinator._update(ep, turn_thought=True, thinking_ref=memory_id,
+                monologue_refs=[*dict.fromkeys([*(ep.get('monologue_refs') or []), memory_id])])
+        except Exception as exc:                        # her call runs on without a thought
+            self.store.audit(ep['_id'], 'thought.none', {'why': 'capture_failed', 'anchor': anchor,
+                                                         'error': type(exc).__name__}, ep['scope_key'])
+            return self._fresh(ep)
+
     def tool_think(self, ep, call_id, args):
         # Asked for THOUGHT_CHARS, refused past THOUGHT_HARD_CHARS (ADR-087 §4.1); one kept between says so (`length`).
         thought = self._text(args, 'thought', THOUGHT_HARD_CHARS, ask=THOUGHT_CHARS)

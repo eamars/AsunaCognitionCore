@@ -35,7 +35,7 @@ Trusted host envelopes and debug fixtures share the persisted application route.
 One character turn per episode (ADR-011 §3).
 
 - class `ProtocolFailure`
-- class `SessionCarried` — Her conversation no longer fit the model's window and continues in a new session (ADR-028).
+- class `SessionCarried` — Her conversation continues in a new session: it no longer fit the model's window (ADR-028), or it was opened with the other source of her thoughts (ADR-099).
 - def `prepared_record` — context.prepared (ADR-067): the manifest (what was selected, the context's hash) and who the turn is with, as the memory view looks it up (native_cognition); the context itself is the episode's own.
 - class `Coordinator`
   - `ingest`
@@ -82,7 +82,7 @@ What a turn may carry on its own, and how her own notes stay short (owner 2026-1
 - def `note_gate` — Refuse growth of a note already far over its limit (DocumentStore.apply's budget hook, through carried.gate, which passes both as her turns carry them).
 - def `trim_turn` — Drop the oldest list rows (TRIM_ORDER) until the turn fits; say what was left out.
 - def `ceiling` — The ceiling as the Host applies it to the notice it composes (context-delivery.js trimTurn): what is sent, not what is prepared, so a block she still sees never pushes another one's text under the knife.
-- def `carried_block` — What the first notice of a session that replaced one that no longer fit the model's window says (ADR-028).
+- def `carried_block` — What the first notice of a session that replaced one that no longer fit the model's window says (ADR-028), or one replaced for another reason (`why`, CARRIED_WHY).
 - def `review_block` — Her notes that show every turn and are due for tidying tonight: over or near their limit, or changed and left untidied for a week.
 
 ## `block_guide`
@@ -161,6 +161,8 @@ What she carries: one function says it for every reader (ADR-096).
 Her mind's tools: what the character brain may do in one native turn (ADR-011 §3, §5.1).
 
 - def `group_note_ops` — What she may do to a group's notes; with tiered memory on (ADR-062) she may let one go too.
+- def `thinking_mode` — ADR-099: her 心里话 come from the model's own thinking (`thoughts: thinking`), not from her think call; nothing then asks her to write her thoughts out.
+- def `asks_thought` — Whether this turn asks for her thought before anything else (ADR-099): `think` is in the turn's tools.
 - class `Refused` — A call she can correct herself: the message says, in words for her, what to do instead.
 - def `tools` — The tool specs her brain is shown: tiered memory's when its switch is on, else as they are; `delegate` takes a tier when the owner configured the action brain's 高 (ADR-075).
 - def `tiered_delegate`
@@ -195,6 +197,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `reply_receipt` — What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2); where the conversation shows line numbers, each sent line's own (ADR-079).
 - class `RoleTools` — Runs one tool call for one episode, on the coordinator's thread (it holds the coordinator lock).
   - `call` — (result, concludes_turn).
+  - `take_thought` — ADR-099: in a turn that does not ask for her thought, the model's first thinking in it becomes her 心里话: the same monologue unit, `source` thinking, stored contracted (ADR-098), anchored to the call it came with ('end' when the turn made non
   - `tool_think`
   - `tool_recall`
   - `tool_stay_silent`
@@ -345,11 +348,12 @@ ADR-030: the program's watchdog over handovers between the brains.
 
 The reasons behind her actions: what she did after each thought, and the thought behind each action.
 
+- def `shown` — A thought as it comes back: hers within `chars`; one taken from the model's thinking (ADR-099) marked as another model's summary and cut at THINKING_CHARS, or within `chars` when she recalls it.
 - def `then` — What she did after this thought, in her words, one line each; [] when it was not followed by anything.
 - def `consequential` — Whether a call has consequences (the one table: _action).
 - def `before_thought` — Whether a call may run before her first thought in the turn: a read on the closed list READS.
 - def `newest` — The id of her newest thought in this turn (before the call at seq `before`), or None; a refused thought left no memory.
 - def `reason_of` — The thought a call came from: as recorded, or by the same rule for a call recorded before reasons were.
-- def `thought` — Her thought as she wrote it (the excerpt mark if ever cut), or None.
+- def `thought` — Her thought as she wrote it (the excerpt mark if ever cut), or one from the model's thinking as `shown`; None.
 - def `for_call` — The thought behind the call in that turn whose result carries field=value (a plan, a task), or None.
 - def `for_message` — The thought behind a line she delivered: her last thought in the turn that spoke it, or None.

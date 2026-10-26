@@ -79,6 +79,18 @@ class ContextOverflow(RuntimeError):
         self.carry, self.session_id = carry, session_id
 
 
+class ModeChanged(RuntimeError):
+    """Her conversation's session was opened with the other source of her thoughts (ADR-099): DSH keeps a session's
+    first tools and system text at the head of every request, so it is carried to a new session instead."""
+    def __init__(self, session_id):
+        super().__init__('THOUGHTS_MODE_CHANGED')
+        self.session_id = session_id
+
+
+# What a turn says when it runs again in the session that replaced one opened with the other source of her thoughts.
+MODE_CARRY_NOTE = '设置改了，这个对话换到新会话，这一回合在新会话里重新开始'
+
+
 class NativeLane:
     composes_context = True     # the plugin composes a role notice from structured context
     def __init__(self, worker, config, store, evidence, lane='character', *args):
@@ -103,7 +115,17 @@ class NativeLane:
         """One stage of a native turn. A character turn exposes `tools`: each call she makes reaches
         `handler` on this thread (role_tools.py) while the turn waits for its result."""
         try:
-            return self._generate(binding, operation, phase, text, system, tools, handler, **kwargs)
+            try:
+                return self._generate(binding, operation, phase, text, system, tools, handler, **kwargs)
+            except ModeChanged as exc:
+                successor = self.worker.carry_session(exc.session_id, {'summary': '', 'why': 'thoughts'})
+                if not successor:
+                    # Not a main conversation (an errand's copy, a reflection), or a carry not yet delivered: it goes
+                    # on in its session, which records the mode it now runs in.
+                    return self._generate(binding, operation, phase, text, system, tools, handler, mode_kept=True,
+                                          **kwargs)
+                from .coordinator import SessionCarried
+                raise SessionCarried(str(exc), successor, MODE_CARRY_NOTE) from exc
         except ContextOverflow as exc:
             successor = self.worker.carry_session(exc.session_id, exc.carry) if self.lane == 'character' else None
             if not successor:
@@ -111,7 +133,7 @@ class NativeLane:
             from .coordinator import SessionCarried
             raise SessionCarried(str(exc), successor) from exc
 
-    def _generate(self, binding, operation, phase, text, system, tools, handler, **kwargs):
+    def _generate(self, binding, operation, phase, text, system, tools, handler, mode_kept=False, **kwargs):
         with self.lock:
             prior = self.store.db.lane_receipts.find_one({'_id': operation})
             if prior and prior.get('native_host'):
@@ -195,7 +217,16 @@ class NativeLane:
             platform = channel_kinds.of(ep['scene_id'])
             cwd = (self.worker.channel_workspace(platform) if self.lane in ('character', 'attend') and platform
                    else str(Path(grant['workspace']).resolve()))
+            mode = None
+            if self.lane == 'character':
+                from .role_tools import thinking_mode
+                mode = 'thinking' if thinking_mode(self.store.config) else 'tool'
+                opened = self.store.db.sessions.find_one({'_id': native_id}, {'thoughts': 1})
+                # A session from before ADR-099 was opened in tool mode.
+                if opened and (opened.get('thoughts') or 'tool') != mode and not mode_kept:
+                    raise ModeChanged(native_id)
             record = self.worker.bind_session(native_id, {
+                **({'thoughts': mode} if mode else {}),
                 'lane': self.lane, 'scene_id': ep['scene_id'], 'person_id': ep['person_id'],
                 'scope_key': ep['scope_key'], 'policy_epoch': ep['policy_epoch'],
                 'character_context': context,
@@ -214,7 +245,8 @@ class NativeLane:
             if carried and not carried.get('delivered'):
                 # The first notice in a session that replaced one that no longer fit (ADR-028), once.
                 from .context_budget import carried_block
-                kwargs = {**kwargs, 'context': {'carried_from_program': carried_block(carried.get('summary')),
+                kwargs = {**kwargs, 'context': {'carried_from_program': carried_block(carried.get('summary'),
+                                                                                      carried.get('why')),
                                                 **kwargs['context']}}
             else:
                 carried = None
@@ -312,7 +344,9 @@ class NativeLane:
             try:
                 if not future.asuna_handler:
                     raise Denied('ROLE_TOOLS_NOT_EXPOSED')
-                reply.set_result(future.asuna_handler(call['call_id'], call['tool'], call.get('args') or {}))
+                # ADR-099: the thinking her first call of a stage came with, recorded as her thought before it runs.
+                extra = {'thinking': call['thinking']} if 'thinking' in call else {}
+                reply.set_result(future.asuna_handler(call['call_id'], call['tool'], call.get('args') or {}, **extra))
             except BaseException as exc:
                 reply.set_exception(exc)
         while True:                      # calls that arrived as the turn ended get a plain answer
@@ -573,10 +607,12 @@ class BusinessWorker:
         return chain
 
     def carry_session(self, session_id, carry):
-        """Her conversation no longer fits the model's window (ADR-028): the scene continues in a new session that
-        carries the old one's last summary, and the old binding names it as successor. The Host prepares the new
+        """Her conversation no longer fits the model's window (ADR-028), or was opened with the other source of her
+        thoughts (`carry['why']` 'thoughts', ADR-099): the scene continues in a new session that carries the old
+        one's last summary, and the old binding names it as successor. The Host prepares the new
         session and archives the old one. Returns the new session id, or None when this session is not a main
         conversation or is itself a carried session whose first notice never got through (no loop)."""
+        from .role_tools import thinking_mode
         store = self.app.store
         with self.carry_lock:
             old = store.db.sessions.find_one({'_id': session_id, 'native_host': True})
@@ -598,14 +634,17 @@ class BusinessWorker:
                 'policy_epoch': scene['policy_epoch'], 'character_context': context, 'role_session_id': successor,
                 'main_conversation': True, 'retired': False, 'navigation_version': 1,
                 'previous_native_title': None, 'source_session_id': None,
-                'carry': {'from_session_id': session_id, 'summary': summary, 'delivered': None}})
+                'thoughts': 'thinking' if thinking_mode(store.config) else 'tool',     # ADR-099: opened in this mode
+                'carry': {'from_session_id': session_id, 'summary': summary, 'delivered': None,
+                          **({'why': carry['why']} if (carry or {}).get('why') else {})}})
             # The old binding keeps an explicit context: a row without one would match any context at navigation.
             store.put('sessions', {**old, 'character_context': old.get('character_context'), 'main_conversation': False,
                                    'retired': True, 'successor_id': successor},
                       expected=old['revision'], stream='native-binding:' + session_id)
             store.audit(session_id, 'native.context.carried', {
                 'from_session_id': session_id, 'successor_id': successor, 'scene_id': scene['_id'],
-                'summary_chars': len(summary)}, scene['scope_key'])
+                'summary_chars': len(summary), **({'why': carry['why']} if (carry or {}).get('why') else {})},
+                scene['scope_key'])
             platform = channel_kinds.of(scene['_id'])
             workspace = platform.TITLE if platform else 'Local'
             self.host_call('carry_session', {'session_id': session_id, 'plan': {
@@ -1258,7 +1297,9 @@ class BusinessWorker:
                 if future.asuna_lane != 'character' or future.asuna_session_id != args['session_id']:
                     raise Denied('NATIVE_OPERATION_SESSION_MISMATCH')
             reply = Future()
-            future.asuna_calls.put(({'call_id': args['call_id'], 'tool': args['tool'], 'args': args.get('args')}, reply))
+            future.asuna_calls.put(({'call_id': args['call_id'], 'tool': args['tool'], 'args': args.get('args'),
+                                     **({'thinking': args['thinking']} if isinstance(args.get('thinking'), dict) else {})},
+                                    reply))
             try:
                 value, conclude = reply.result(timeout=self.app.config['workflow_timeout_seconds'])
             except Refused as exc:

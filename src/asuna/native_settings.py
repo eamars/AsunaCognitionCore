@@ -8,6 +8,7 @@ from .config import DATA, local_workspace, validate_database, validate_endpoint
 # A secret's key, by substring (settings.js uses the same pattern): its value goes to DSH's credential store and the
 # settings keep a reference named like an environment variable (ADR-010 D6).
 SECRET_KEY = re.compile(r'mongo_uri|api_?key|token|password|secret', re.I)
+THOUGHTS = ('tool', 'thinking')
 
 
 def credential_ref(path):
@@ -49,6 +50,7 @@ def export_settings(config):
     value.setdefault('canonical_persons', {})
     value.setdefault('channel_port', 8766)
     value.setdefault('active_groups', 4)
+    value.setdefault('thoughts', 'tool')
     return {'deployment': visit(value), 'secrets': secrets}
 
 
@@ -95,6 +97,9 @@ def runtime_settings(deployment, secrets, models, admission='explicit', *, creat
         raise ValueError('INVALID_CHANNEL_PORT')
     if type(value.get('active_groups', 4)) is not int or not 1 <= value.get('active_groups', 4) <= 100:
         raise ValueError('INVALID_ACTIVE_GROUPS: a whole number from 1 to 100')
+    # ADR-099: where her 心里话 come from: her think call, or the model's own thinking.
+    if value.get('thoughts', 'tool') not in THOUGHTS:
+        raise ValueError('INVALID_THOUGHTS: tool or thinking')
     for key in ('provider_idle_timeout_seconds', 'workflow_timeout_seconds'):
         value.setdefault(key, 1800)
         if type(value[key]) not in (int, float) or not 1 <= value[key] <= 86400:

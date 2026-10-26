@@ -157,3 +157,44 @@ def test_the_coordinator_runs_a_carried_turn_once_more_and_says_why():
     coordinator._run_turn = lambda ep: (_ for _ in ()).throw(SessionCarried('again', 'third'))
     with pytest.raises(SessionCarried):
         coordinator._turn(episode)
+
+
+def test_a_conversation_opened_in_tool_mode_goes_on_in_a_new_session_in_thinking_mode(local):
+    """ADR-099: DSH keeps a session's first tools and system text at the head of every request, so a session opened
+    with think is carried, not reused, once her thoughts come from the model's thinking."""
+    from asuna.context_budget import CARRIED_WHY
+    worker, store = local.worker, local.store
+    store.put('episodes', {'_id': 'ep-1', 'scene_id': 'local', 'person_id': 'owner', 'scope_key': 'scene:local',
+                           'policy_epoch': 1, 'persona': 'xiaoman', 'native_session_id': local.role}, stream='ep-1')
+    worker.stages = []
+    worker.answer = lambda request: worker.dispatch('result', {'token': request['token'],
+                                                               'result': {'content': '好', 'request_refs': []}})
+    lane = NativeLane(worker, local.config, store, None)
+    context = {'scene': {'kind': 'dm'}, 'event': {'text': '在吗'}}
+    lane.generate('b', 'ep-1:TURN', 'TURN', 'tail', 'system', context=context, tail='tail')
+    assert store.db.sessions.find_one({'_id': local.role})['thoughts'] == 'tool', 'the default, recorded at bind'
+    store.config['thoughts'] = 'thinking'
+    with pytest.raises(SessionCarried) as raised:
+        lane.generate('b', 'ep-1:TURN:resume:1', 'TURN', 'tail', 'system', context=context, tail='tail')
+    successor = raised.value.successor
+    assert raised.value.note == native_worker.MODE_CARRY_NOTE and len(worker.stages) == 1, 'nothing was sent'
+    assert store.db.sessions.find_one({'_id': successor})['thoughts'] == 'thinking'
+    assert store.db.audit_events.find_one({'type': 'native.context.carried', 'payload.why': 'thoughts'})
+    lane.generate('b', 'ep-1:TURN:resume:2', 'TURN', 'tail', 'system', context=context, tail='tail')
+    assert worker.stages[1]['session_id'] == successor
+    assert worker.stages[1]['context']['carried_from_program'] == {'note': CARRIED_WHY['thoughts']}, 'says why, not "too long"'
+    lane.generate('b', 'ep-1:TURN:resume:3', 'TURN', 'tail', 'system', context=context, tail='tail')
+    assert worker.stages[2]['session_id'] == successor and 'carried_from_program' not in worker.stages[2]['context']
+
+
+def test_a_session_from_before_the_setting_is_a_tool_mode_session_and_stays(local):
+    worker, store = local.worker, local.store
+    assert 'thoughts' not in (store.db.sessions.find_one({'_id': local.role}) or {})
+    store.put('episodes', {'_id': 'ep-1', 'scene_id': 'local', 'person_id': 'owner', 'scope_key': 'scene:local',
+                           'policy_epoch': 1, 'persona': 'xiaoman', 'native_session_id': local.role}, stream='ep-1')
+    worker.stages = []
+    worker.answer = lambda request: worker.dispatch('result', {'token': request['token'],
+                                                               'result': {'content': '好', 'request_refs': []}})
+    lane = NativeLane(worker, local.config, store, None)
+    lane.generate('b', 'ep-1:TURN', 'TURN', 'tail', 'system', context={'event': {'text': '在吗'}}, tail='tail')
+    assert worker.stages[0]['session_id'] == local.role and not local.hosted, 'no carry in tool mode'

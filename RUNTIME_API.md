@@ -103,6 +103,7 @@ Checked when the worker starts or a proposal is validated (`src/asuna/native_set
 | `channels` | none | configured channels ([Channel API](#channel-api)) |
 | `channel_port` | `8766` | channel server port, 1024–65535 (`INVALID_CHANNEL_PORT`) |
 | `active_groups` | `4` | the usual number of active groups, 1–100 (`INVALID_ACTIVE_GROUPS`) |
+| `thoughts` | `tool` | where her 心里话 come from: `tool`, her `think` call, first in every turn; `thinking`, the summary of the character model's own first thinking in the turn, recorded by the program, shown cut at 120 characters and marked as another model's summary (`INVALID_THOUGHTS`). `thinking` needs a character route and group effort with a thinking level (`THOUGHTS_NEED_THINKING`); a conversation opened in the other mode continues in a new session at its next turn |
 | `provider_idle_timeout_seconds` | `1800` | read timeout of a model request, 1–86,400 (`INVALID_TIMEOUT`) |
 | `workflow_timeout_seconds` | `1800` | how long one native stage may run before it is fenced, 1–86,400 (`INVALID_TIMEOUT`) |
 | `sandbox.backend` | `auto` | `auto` or `none` ([Sandbox](#sandbox)) |

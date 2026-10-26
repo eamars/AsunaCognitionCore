@@ -39,10 +39,11 @@ class ProtocolFailure(RuntimeError):
 
 
 class SessionCarried(RuntimeError):
-    """Her conversation no longer fit the model's window and continues in a new session (ADR-028)."""
-    def __init__(self, message, successor):
+    """Her conversation continues in a new session: it no longer fit the model's window (ADR-028), or it was opened
+    with the other source of her thoughts (ADR-099). `note` is what the turn says when it runs again there."""
+    def __init__(self, message, successor, note='旧会话太长，模型装不下了，这一回合换到新会话重新开始'):
         super().__init__(message)
-        self.successor=successor
+        self.successor,self.note=successor,note
 
 
 # Every state a turn can be resumed from after a restart (chat.py, tasks.py, recover()).
@@ -195,10 +196,12 @@ class Coordinator:
     # ── one turn ────────────────────────────────────────────────────
     def _notice(self, ep):
         """What follows the prepared context in the turn's first message: what this turn has of its own (a consult, a
-        resumed turn), then THINK_FIRST, always last. The rest of the turn instruction is in her system prompt
-        (block_guide.py, ADR-056)."""
+        resumed turn), then THINK_FIRST, always last, where the turn asks for her thought. The rest of the turn
+        instruction is in her system prompt (block_guide.py, ADR-056)."""
         kind=role_tools.turn_kind(ep)
-        extra=prompt_path(self.store.config,'turn_consult.md').read_text(encoding='utf-8') if kind=='consult' else ''
+        asks=role_tools.asks_thought(ep)      # ADR-099: no think in this turn, nothing asks for her thought
+        extra=prompt_path(self.store.config,'turn_consult.md' if asks else 'turn_consult_thinking.md').read_text(
+            encoding='utf-8') if kind=='consult' else ''
         if ep.get('resume_diagnostic'):
             # The stored failure (often a traceback with paths) is read only at home; elsewhere she is told plainly
             # that the turn did not finish, in words she could repeat without giving away the machine (ADR-050).
@@ -213,7 +216,7 @@ class Coordinator:
             if tasks:
                 extra+='\n这一回合中断前已经交给行动脑的事（不要再交一遍）：'+'、'.join(
                     '「%s」（%s）'%(row.get('title') or row.get('goal'),row['_id']) for row in tasks)
-        return (extra.strip('\n') + '\n' + THINK_FIRST).lstrip('\n')
+        return (extra.strip('\n') + ('\n' + THINK_FIRST if asks else '')).lstrip('\n')
 
     @staticmethod
     def _operation(ep_id, generation):
@@ -228,7 +231,7 @@ class Coordinator:
                 # ADR-028: the turn runs again, once, in the session that replaced the one that no longer fit.
                 self.store.audit(ep['_id'],'turn.carried',{'successor':exc.successor},ep['scope_key'])
                 ep=self.store.db.episodes.find_one({'_id':ep['_id']})
-                ep=self._update(ep,resume_diagnostic='旧会话太长，模型装不下了，这一回合换到新会话重新开始')
+                ep=self._update(ep,resume_diagnostic=exc.note)
                 return self._run_turn(ep)
         finally:
             # The native turn waits after each stage for another one (a repair note); tell it there is none.
@@ -257,7 +260,7 @@ class Coordinator:
         instruction=self._notice(ep)
         from . import channel_kinds
         replying=bool(channel_kinds.reply_parts(ep['scene_id'])) and kind!='consult'
-        handler=lambda call_id,name,args:self.tools.call(ep['_id'],call_id,name,args)
+        handler=lambda call_id,name,args,thinking=None:self.tools.call(ep['_id'],call_id,name,args,thinking)
         note=''
         seen=[]
         for attempt in range(answers.REPAIRS+1):
@@ -265,6 +268,9 @@ class Coordinator:
                                 instruction if not attempt else note,listed,handler,first=not attempt)
             seen+=list(value.seen_inputs or ())
             ep=self.store.db.episodes.find_one({'_id':ep['_id']})
+            if not attempt and not value.tool_calls:
+                # ADR-099: a turn that made no call has its thought from its one response (none when it asks for it).
+                ep=self.tools.take_thought(ep,'end',value.thinking or {})
             if value.finish_reason not in answers.MODEL_FINISHES:
                 # Not her mistake (a transport error after DSH's retries, an interrupted turn).
                 raise ProtocolFailure('TURN_NOT_FINISHED: '+json.dumps({'finish_reason':value.finish_reason,
@@ -280,7 +286,7 @@ class Coordinator:
                         if isinstance(text,str) and text.strip()]
                 speech='' if ep.get('reply') else '\n\n'.join(pieces)
                 issue=None
-                if not ep.get('turn_thought') and not ep.get('reply'):
+                if role_tools.asks_thought(ep) and not ep.get('turn_thought') and not ep.get('reply'):
                     issue,note='no_thought',REPLY_THINK_NOTE
                 elif speech and not attempt:
                     issue,note='unsent',UNSENT_NOTE%speech          # whole, as written: she may reply it as is
@@ -305,7 +311,8 @@ class Coordinator:
                 self._absorb(ep,seen)
                 return self._update(ep,state='WAITING_TASK' if self._waits(ep) else 'COMMITTED',
                                     silent_reason=ep['silent']['reason'])
-            issue=answers.speech_problem(replace(value,content=speech),thought=bool(ep.get('turn_thought')),
+            issue=answers.speech_problem(replace(value,content=speech),
+                                         thought=bool(ep.get('turn_thought')) or not role_tools.asks_thought(ep),
                                          consult=kind=='consult')
             if issue is None and kind!='consult':
                 from . import stickers

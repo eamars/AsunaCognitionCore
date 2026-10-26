@@ -286,13 +286,13 @@ class ContextBuilder:
         change the block every turn with nothing new in it."""
         from . import reasons
         rows=list(self.store.db.memory_units.find({'kind':'monologue','scope_key':scope,'status':'active'},
-            {'body_markdown':1,'formed_at':1,'episode_id':1}).sort('formed_at',-1).limit(RECENT_THOUGHTS))
+            {'body_markdown':1,'formed_at':1,'episode_id':1,'source':1}).sort('formed_at',-1).limit(RECENT_THOUGHTS))
         out=[]
         for row in reversed(rows):
             when=schedule_rules.line_stamp(zone,row.get('formed_at'))
             # _id lets the Host leave out a thought her session still shows where she wrote it (context-delivery.js).
             then=reasons.then(self.store,row)
-            out.append({'_id':row['_id'],'thought':excerpt(row.get('body_markdown'),MEMORY_CHARS),
+            out.append({'_id':row['_id'],'thought':reasons.shown(row,MEMORY_CHARS),      # ADR-099: a summary short
                         **({'when':when} if when else {}),**({'then':then} if then else {})})
         return out
 
@@ -311,7 +311,7 @@ class ContextBuilder:
         out=[]
         for unit in units:
             item={'_id':unit['_id'],'where':people.scene_title(groups.get(unit['scope_key'])),
-                  'thought':excerpt(unit.get('body_markdown'),MEMORY_CHARS)}
+                  'thought':reasons.shown(unit,MEMORY_CHARS)}
             when=self.when(unit,zone,moment)
             if when:item['when']=when
             then=reasons.then(self.store,unit)
@@ -569,6 +569,9 @@ class ContextBuilder:
             if fact.get('kind')=='monologue':
                 # One of her past thoughts: what she did then (reasons.py).
                 from . import reasons
+                if unit.get('source')=='thinking':
+                    # ADR-099: another model's summary, marked; short in a turn, longer when she recalls it.
+                    fact['body_markdown']=reasons.shown(unit,MEMORY_CHARS,recall=bool(recall))
                 then=reasons.then(self.store,unit)
                 if then:fact['then']=then
             if fact.get('invented'):

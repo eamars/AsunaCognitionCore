@@ -15,6 +15,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
 - def `take_persona` — The persona package as the worker reads it: at its start and after each persona publication, so what a publication reports ACTIVE is what her turns use.
 - def `gate_session_id` — A fresh gate session for each question, its repairs included: the material is complete every time, so the gate keeps no history and never compacts (attend.py).
 - class `ContextOverflow` — A stage of her conversation was refused because the session no longer fits the model's window, after DSH's own overflow compaction (ADR-028).
+- class `ModeChanged` — Her conversation's session was opened with the other source of her thoughts (ADR-099): DSH keeps a session's first tools and system text at the head of every request, so it is carried to a new session instead.
 - class `NativeLane`
   - `child_title` — A child session's title: content only (her task's title, or the conversation it serves), since DSH shows a stored title as it is and UI words must follow the viewer's language (ADR-011 §2.8).
   - `generate` — One stage of a native turn.
@@ -30,7 +31,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `role_session_id`
   - `continued_session` — The session a conversation continues in now: its successors followed to the last one.
   - `earlier_sessions` — This session and every session it continued from (their successors lead to it).
-  - `carry_session` — Her conversation no longer fits the model's window (ADR-028): the scene continues in a new session that carries the old one's last summary, and the old binding names it as successor.
+  - `carry_session` — Her conversation no longer fits the model's window (ADR-028), or was opened with the other source of her thoughts (`carry['why']` 'thoughts', ADR-099): the scene continues in a new session that carries the old one's last summary, and the ol
   - `action_session_id` — One native context per authorized execution binding, including old logs.
   - `audit_retention` — ADR-074: the audit, bounded by time and by size, is pruned once at start and then daily; stored pictures are swept by their life cycle (media_life) on the same beat, the days she carried are counted (carried.count_days) and the shadow pilot
   - `watch_host`

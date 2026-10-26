@@ -1,7 +1,9 @@
 # ADR-099: Her thoughts can come from the model's own thinking
 
-Status: **Designed 2026-10-26** by the owner and Claude; failure modes reviewed the same evening (§4). Building. The
-default deployment is unchanged (§3.2).
+Status: **Built 2026-10-27** (steps 1–3, §5); designed 2026-10-26 by the owner and Claude, failure modes reviewed the
+same evening (§4). The default deployment is unchanged (§3.2). The first persona on a Claude model runs `tool` mode
+(§6, owner); `thinking` mode is built as the backup for a model that stops the stage. Step 4 (a soak on a live DSH
+profile) waits for that deployment.
 
 ## 1. Why
 
@@ -121,6 +123,8 @@ answered in §3.
 
 ## 5. Order
 
+Done: steps 1–3. Step 2's result is §6.
+
 1. The switch, the predicate and the three checks (§3.1 items 1–2), the session carry (#1), the settings check (#3),
    and `--thoughts thinking` on the refusal probe.
 2. The refusal probe on the existing Anthropic key, Haiku 5.5 at effort high: the go/no-go. A FAIL means the stage
@@ -129,3 +133,31 @@ answered in §3.
 4. A multi-turn soak on Claude: drops and 400s from preserved thinking, turns without a thought, and a sample of the
    recorded summaries (synthetic conversations only) for the owner to judge their language and person.
 5. Current references (RUNTIME_API.md settings, MODELS.md).
+
+## 6. The probe, and the decision
+
+The refusal probe (`tools/refusal_probe.py`, eight synthetic conversations × 3, 57 turns), Claude Haiku 5.5 at effort
+high, on 2026-10-26, with step 1 built:
+
+| | `thoughts: tool` | `thoughts: thinking` |
+|---|---|---|
+| stopped by the provider | 0 | 0 |
+| declined in its own words | 0 | 0 |
+| home: no `plan` / `delegate` where needed | 4 of 6 | 4 of 6 |
+| research: no `delegate` where needed | 1 of 9 | 4 of 9 |
+| requests / input tokens | 137 / 3.06M | 119 / 2.53M |
+
+Haiku 5.5 does not stop the stage, as Anthropic's list says (§1); the stop recorded in MODELS.md is Sonnet 5.5's.
+On this sample `thinking` mode delegated less in research and kept another model's summary instead of her words, for
+about 17% fewer input tokens. The owner's decision (2026-10-26): the first Claude persona runs `tool` mode; `thinking`
+mode is built in full as the backup ("Tool mode, but also build the thinking mode for backup purposes").
+
+With steps 1–3 built, one pass in `thinking` mode (19 turns, `--keep-text`, synthetic conversations only) recorded a
+thought in all 19. The summaries: 15 of 19 mostly English, 4 mostly Chinese; first person ("I …") in 14, none naming
+"the user" or "the character"; 66–803 characters, median about 230, so the 120-character cut keeps the first sentence
+or two; some talk about the setup rather than the moment ("My persona guides me …", "my messages are still queued").
+A persona switched to `thinking` mode would read these, marked as another model's summary, in her context. Whether
+that is acceptable is the owner's call when a persona is switched; it does not touch `tool` mode.
+
+Found on the way: with `--repeat` above 1 the probe's home conversation reused its message ids in her one local chat
+and the run stopped on a duplicate key; the ids now carry the run.

@@ -163,6 +163,14 @@ class MemoryService:
                 skipped.append({'id':key,'reason':why});continue
             auto.append(key)
             if unit.get('corrected_by'):stale.append(key)
+        if not monologue and not auto and self.store.db.messages.find_one({'_id':'in-'+episode['_id']},{'_id':1}):
+            # ADR-099: a turn with no thought (the model did not think) takes the line she answers, made on demand.
+            self.chunk(episode['scene_id'])
+            key='chunk-'+sha(canonical(['in-'+episode['_id'],2,0]))
+            if self.store.db.memory_units.find_one({'_id':key,'scope_key':scope,'status':'active'},{'_id':1}):
+                auto.append(key)
+        if not monologue and not auto:
+            raise Denied('UNDERSTANDING_NO_SOURCE: 这回合没有能挂上的来源（没有想法的记录，也没有这里的人说的话）；下回合再更新')
         return monologue+auto,auto,skipped,stale
 
     def rollback(self,entity,scope,target_id,base_id,operation,*,operator=False):

@@ -303,7 +303,7 @@ def test_carried_counts_are_a_replay_of_what_the_turns_recorded(store):
     doc, sid = scored[len('doc:'):].split('#')
     store.audit(eps[1]['_id'], 'recall.read', {'sections_read': [{'doc': doc, 'sid': sid}], 'memories': [],
                                                'place': 'home'}, eps[1]['scope_key'])
-    day = datetime.now(timezone.utc).date()
+    day = datetime.now(carried._zone(store, 'P1')).date()      # her local day, as day_counts counts it
     tally, pair_turns = {}, {}
     for ep in eps:
         mark = store.db.episodes.find_one({'_id': ep['_id']})['manifest']['carried']

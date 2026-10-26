@@ -82,7 +82,12 @@ python tools/refusal_probe.py --provider openai-compatible --base-url <url>/v1 -
 - `--repeat N` runs every conversation N times (default 3).
 - `--sequences` takes other files or folders.
 - `--effort <level>` (anthropic) sends a request shaped as the character route sends it to a model whose effort is
-  set per turn: adaptive thinking and an effort marker on each turn. The thinking is passed back and never read.
+  set per turn: adaptive thinking and an effort marker on each turn. The thinking is passed back; with
+  `--thoughts tool` it is never read.
+- `--thoughts tool|thinking` (default `tool`) runs the turns with that deployment setting. With `thinking` the
+  model is offered no `think`, her thought is recorded from the summary of its first thinking in each turn, and the
+  report counts the turns that recorded one and those that did not, by why; with `--keep-text` the recorded
+  summaries go to `refusal-probe-<run>-thoughts.jsonl` beside the words.
 
 A sequence file looks like this:
 

@@ -23,6 +23,7 @@ class LaneResult:
     said: list | None=None         # every text she wrote in the turn, in order (beside a tool call too)
     seen_inputs: list | None=None  # platform lines in her view for the first time this turn (by input id)
     prompt_tokens: int | None=None # how long the conversation was on this request (ADR-049 size words)
+    thinking: dict | None=None     # ADR-099: the last response's own thinking {text, redacted}, for a turn with no call
 
 
 class Lane(Protocol):

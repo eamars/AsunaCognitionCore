@@ -45,3 +45,20 @@ test('a brain without its own route uses DSH default model', () => {
   assert.deepEqual(core.routeFor('action'), { maxTokens: 2048, provider: 'dsh-default', model: 'd' });
   assert.equal(core.routeFor('appraiser'), undefined, 'the appraiser stays off when not chosen');
 });
+
+test('thinking-mode thoughts need a character route that thinks, in groups too (ADR-099)', async () => {
+  const check = async (effort, routes = { character: route }, thoughts = 'thinking') => {
+    const core = new CognitionCore({}, {});
+    core.personas = new Set(['p']);
+    core.resolveRoutes = async () => ({ character: { reasoning_effort: effort } });
+    // Past the check the proposed worker would start; reaching it is passing the check.
+    core.workerPython = async () => { throw new Error('PAST_THE_CHECK'); };
+    return core.validateSettings({ persona: 'p', routes, deployment: { thoughts } }, 'path');
+  };
+  await assert.rejects(check('off'), /THOUGHTS_NEED_THINKING/);
+  await assert.rejects(check(undefined), /THOUGHTS_NEED_THINKING/);
+  await assert.rejects(check('high', { character: { ...route, groupEffort: 'off' } }), /THOUGHTS_NEED_THINKING/);
+  await assert.rejects(check('high'), /PAST_THE_CHECK/);
+  await assert.rejects(check('high', { character: { ...route, groupEffort: 'low' } }), /PAST_THE_CHECK/);
+  await assert.rejects(check('off', { character: route }, 'tool'), /PAST_THE_CHECK/, 'tool mode asks nothing of the route');
+});

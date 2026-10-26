@@ -705,8 +705,9 @@ class Appraiser:
         ledger = AffectLedger(self.store, ep['persona'], model, policy)
         if not ledger.enabled or self.store.db.affect_proposals.find_one({'episode_id': episode_id}):
             return []
-        monologues = [row.get('body_markdown', '') for row in self.store.db.memory_units.find(
-            {'_id': {'$in': ep.get('monologue_refs', [])}}, {'body_markdown': 1})]
+        from .reasons import shown
+        monologues = [shown(row, len(row.get('body_markdown') or '') or 1) or '' for row in self.store.db.memory_units.find(
+            {'_id': {'$in': ep.get('monologue_refs', [])}}, {'body_markdown': 1, 'source': 1})]   # ADR-099: a summary short
         payload = {'input': ep['context'].get('event', {}).get('text'), 'monologue': monologues,
                    'speech': ep.get('speech'), 'ref_index': _refs(ep),
                    'how_to_record': recording_guide(ledger.model)}

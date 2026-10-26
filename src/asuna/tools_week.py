@@ -256,6 +256,21 @@ def _local_roots(store, persona, since, until):
             'requests': REWRITTEN_SOME % rewritten if rewritten else REWRITTEN_NONE}
 
 
+# ADR-099: where her thoughts come from the model's thinking, how many turns got one and why the others did not.
+THOUGHT_WHY = {'no_thinking': '模型没思考', 'redacted': '思考被遮住了', 'capture_failed': '没记上'}
+
+
+def _thoughts(store, since, until):
+    """Turns that recorded a summary of the model's thinking as her thought, and those that did not, by why."""
+    window = {'occurred_at': {'$gte': since, '$lt': until}}
+    taken = store.db.audit_events.count_documents({'type': 'thought.taken', **window})
+    none = collections.Counter((row.get('payload') or {}).get('why') for row in store.db.audit_events.find(
+        {'type': 'thought.none', **window}, {'payload.why': 1}))
+    missing = '、'.join('%s %d' % (THOUGHT_WHY.get(why, why), n) for why, n in none.most_common())
+    return ('这周 %d 个回合记下了你想法的摘要（别的模型写的）；%d 个回合没有%s。'
+            % (taken, sum(none.values()), '（%s）' % missing if missing else ''))
+
+
 def _last_time(store, persona, since):
     """What she asked the developer's line since `since`, and what came of each."""
     from . import questions
@@ -307,11 +322,16 @@ def block(store, persona, moment=None):
         'list_change': _list_change(lists, ((last or {}).get('payload') or {}).get('lists')),
         'local_paths': _local_roots(store, persona, since, until),
     }
+    from .role_tools import thinking_mode
+    if thinking_mode(store.config):
+        readings['thoughts'] = _thoughts(store, since, until)
     sources = ('窗口 %s 到 %s（上周往前再 7 天）。calls 到 turn_shape：audit_events type=role_tool，refused 按 code 或第一句'
                '（「」和数字抹掉）分组，retried＝同一 stream_id 后面同一工具调成了；looking_things_up：tasks 的 artifacts.tool 全在 '
                'tools_week.READING；action_brain：tasks、artifacts、audit execution.rejected；list_change：对上次展示时记下的表；'
                'last_time：questions 里问开发者那条线的（asked_at ≥ 上次展示）；local_paths：audit_events '
-               'type=roots.speech_replaced 的 count 之和，type=roots.tally 按对话加总' % (since[:16], until[:16]))
+               'type=roots.speech_replaced 的 count 之和，type=roots.tally 按对话加总'
+               '%s' % (since[:16], until[:16], '；thoughts：audit_events type=thought.taken 和 thought.none（按 why）'
+                       if 'thoughts' in readings else ''))
     out = {**readings, 'sources': sources, 'note': NOTE}
     cut = []
     for key in CUT_ORDER:

@@ -43,12 +43,19 @@ NOTE = ('这是你今天的原始读数（从你的零点算起），带出处�
         'refused 被退回的调用按工具数，open 还挂着的事。答应过别人还没销的事程序没有记录，在你的活账里（ledgers_from_program）。')
 
 
+# ADR-099: what the note adds where her thoughts come from the model's thinking.
+THINKING_NOTE = '那一回合的想法标着（你此前想法的摘要，别的模型写的），不是你自己写下的字。'
+
+
 def exchanges_note(store, persona):
     """The note on her exchanges: the persona model's `self_review.exchanges_note` (a persona words it; the core
     default is neutral)."""
     from .persona_model import effective
     from .render import model_and_policy
-    return effective(model_and_policy(store, persona)[0], 'self_review.exchanges_note')
+    from .role_tools import thinking_mode
+    note = effective(model_and_policy(store, persona)[0], 'self_review.exchanges_note')
+    # ADR-099: there the thought of a turn is another model's summary of hers, whatever the note calls it.
+    return note + THINKING_NOTE if thinking_mode(store.config) else note
 
 
 def _midnight(zone_name, moment):

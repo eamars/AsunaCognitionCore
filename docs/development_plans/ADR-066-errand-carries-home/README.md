@@ -177,3 +177,12 @@ memory view of its session (`native_cognition.py`). The errand turn stays the re
 her thought then (`tasks._why_then`), the turn that waits on the task and its delegation depth. Tests:
 `test_a_task_begun_on_an_errand_has_the_grants_and_the_input_of_the_home_turn_that_sent_it`,
 `test_the_action_brain_asking_about_a_task_begun_on_an_errand_is_answered_at_home`.
+
+## Row 8 re-checked (2026-10-26)
+
+ADR-098's review asked whether a line planted in the destination can steer home's authority now that a task begun on
+an errand carries home's grants (the sandbox among them, since 10-21). It can, in one place: the brief she writes in
+the errand turn. The turn's authority ends with the turn, the task reports home and cannot be steered from the
+destination (`NO_STEER`), and no line there can open an errand. Measured: 6 errand turns, all into groups; 3 tasks,
+one with `sandbox_run` (5 runs). Owner: a one-off errand is low risk; row 8 stands as decided (judgment, her own rule
+in her persona), unlike a public line's own tasks, which are limited by mechanism (ADR-098).

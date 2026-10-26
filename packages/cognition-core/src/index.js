@@ -97,6 +97,8 @@ const NO_THINKING = /^(off|none|disabled|)$/i;
 const routeOf = lane => lane === 'character' || lane === 'attend' ? 'character' : lane === 'appraiser' ? 'appraiser' : 'action';
 // Her credentials' records in DSH's credential store: <scope>/<name> (credentialRecords).
 const CREDENTIAL_SCOPE = 'asuna-cognition-core';
+// How long a failed start waits before the next try: the first few soon, then every five minutes, never giving up.
+export const START_RETRY_SECONDS = [5, 15, 45, 135, 300];
 // A tool's own refusal comes back from the worker written for the brain that called it. A lost connection
 // (the worker exited or is restarting) is not, and its text names this machine's files: say what it means instead.
 const WORKER_DOWN = 'ASUNA_WORKER_UNAVAILABLE: 处理工具的后台进程这会儿断开了（它会自己重启），这次调用没有完成——不是参数的问题；'
@@ -230,6 +232,7 @@ export class CognitionCore {
     // The worker's root table and the counts of her rewritten requests (roots.js, ADR-098).
     this.roots = new Roots(this);
     this.lifecycle = { state: 'unconfigured', error: null, restarts: 0 };
+    this.startFailures = 0;             // starts failed in a row (startAgain)
   }
 
   registerPersona(persona) {
@@ -242,11 +245,8 @@ export class CognitionCore {
       throw error;
     }
     this.personas.set(persona.id, normalized);
-    if (persona.id === this.config.persona && this.config.deployment)
-      this.ready().catch(error => {
-        this.ctx.logger.warn(String(error));
-        process.stderr.write('Asuna worker could not start: ' + String(error) + '\n');
-      });
+    // A start that fails reports itself and is tried again (ready()).
+    if (persona.id === this.config.persona && this.config.deployment) this.ready().catch(() => {});
     return () => this.personas.delete(persona.id);
   }
 
@@ -334,7 +334,8 @@ export class CognitionCore {
   }
 
   ready() {
-    if (!this.initializing) this.initializing = (async () => {
+    if (this.initializing) return this.initializing;
+    const attempt = this.initializing = (async () => {
       const persona = this.personas.get(this.config.persona);
       // A profile not yet set up (a fresh install) is waiting for its settings, not failed.
       const unconfigured = message => Object.assign(new Error(message), { unconfigured: true });
@@ -397,6 +398,7 @@ export class CognitionCore {
       this.roleAliases = await this.worker.call('role_tool_aliases');
       this.lifecycle.state = 'ready'; this.lifecycle.error = null;
       await this.worker.call('navigation.ready');
+      this.startFailures = 0;
     })().catch(async error => {
       if (error.unconfigured) {
         this.lifecycle.state = 'unconfigured'; this.lifecycle.error = error.message; this.initializing = null;
@@ -404,9 +406,28 @@ export class CognitionCore {
       }
       this.lifecycle.state = 'failed'; this.lifecycle.error = String(error);
       if (this.worker) { this.worker.onFailure = null; await this.worker.dispose(); }
+      // Its callers see this failure; the next call starts afresh, and one is scheduled (startAgain).
+      if (this.initializing === attempt) this.initializing = null;
+      this.startAgain(error);
       throw error;
     });
-    return this.initializing;
+    return attempt;
+  }
+
+  /** A start that failed is tried again, further apart each time, until one succeeds: a fault that passes (a
+   * database connection reset while the network link drops during her first minute) must not leave her down
+   * while the Host runs on. A tick that finds a start or restart under way, or the plugin gone, does nothing. */
+  startAgain(error) {
+    const delay = START_RETRY_SECONDS[Math.min(this.startFailures, START_RETRY_SECONDS.length - 1)];
+    this.startFailures++;
+    this.ctx.logger.warn('Asuna worker could not start (attempt %d): %s; trying again in %d s',
+      this.startFailures, String(error), delay);
+    clearTimeout(this.startTimer);
+    if (this.unloaded) return;
+    this.startTimer = setTimeout(() => {
+      if (!this.unloaded && !this.restarting && !this.initializing) this.ready().catch(() => {});
+    }, delay * 1000);
+    this.startTimer.unref?.();
   }
 
   /** DSH's home: the profile's, else the variable the Host was started with. */
@@ -1093,10 +1114,15 @@ export class CognitionCore {
       if (state.current) this.ctx.agents.get(id)?.cancel({ kind: 'user' });
       state.current = null; state.admitted = null; state.claimed = []; state.queue = [];
     }
-    if (!this.disposed && !this.restarting && this.lifecycle.restarts < 3) {
+    // A worker that exits is started again, further apart while it keeps failing (the delays of a failed start); a
+    // start that succeeds clears the count. A start that fails reports itself and is tried again (startAgain).
+    if (!this.unloaded && !this.restarting) {
+      const delay = START_RETRY_SECONDS[Math.min(this.startFailures, START_RETRY_SECONDS.length - 1)];
+      this.startFailures++;
+      clearTimeout(this.restartTimer);
       this.restartTimer = setTimeout(() => this.restart('worker failed: ' + String(error))
-        .catch(e => this.ctx.logger.warn(String(e))), 1000);
-      this.restartTimer.unref();
+        .catch(e => this.ctx.logger.warn('Asuna worker restart failed: %s', String(e))), delay * 1000);
+      this.restartTimer.unref?.();
     }
   }
 
@@ -1409,10 +1435,11 @@ export class CognitionCore {
   }
 
   async dispose() {
-    this.disposed = true;
+    this.unloaded = true;           // not `disposed`: that name is the agent-disposal handler, disposed(agent)
     this.roots.flush();
     this.releaseProbe?.();
     clearTimeout(this.restartTimer);
+    clearTimeout(this.startTimer);
     if (this.worker) this.worker.onFailure = null;
     await this.worker?.dispose();
     await this.children.dispose();

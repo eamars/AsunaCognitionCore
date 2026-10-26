@@ -28,7 +28,7 @@ Where each part of Asuna runs. For anyone changing the code or writing a package
 | Channel packages | registered with the core plugin; the adapter runs in the integration sandbox or in the Host | one platform's kind module and adapter | `packages/channels/<name>/`; contract in [Channel packages](#channel-packages) |
 
 - The worker gets the profile's data folder as `ASUNA_DATA_ROOT` (a checkout's `.runtime` when unset). The folder is the floor's `dataRoot` setting, else `$DSH_HOME/asuna/<profile>/` (`paths.js` `dataRoot`). A deployment's private files are in `<data>/private/`.
-- A failed worker is restarted after 1 second, at most 3 times; each restart is appended to `<data>/worker-restarts.jsonl` (`index.js` `workerFailed`, `restart`).
+- A worker that exits, and a start that fails, are tried again after 5, 15, 45 and 135 seconds and then every 5 minutes, never giving up; a start that succeeds clears the count. Each failed start writes an `Asuna worker could not start (attempt N)` line, and each restart is appended to `<data>/worker-restarts.jsonl` (`index.js` `ready`, `startAgain`, `workerFailed`, `restart`; delays `START_RETRY_SECONDS`).
 - Every inbound input is stored before any retrieval or model call (`src/asuna/ingress.py` `persist_input`).
 - The DSH services, hooks, events and file formats the core plugin relies on are listed in `packages/cognition-core/DSH_API.md`.
 

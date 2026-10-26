@@ -876,3 +876,6 @@ not to speak, the closing goes into `think` and the body stays empty. Reading af
 narration pushed out (expected to fall) and times she is told she should have said something (expected not to rise).
 Evidence: `.runtime/private/handback-1026/` (counts only).
 
+She read this section at `5215716d` (2026-10-26 21:53) and signs the counts, the decision, her own part and the two
+readings due 11-02; her own reading is marked as hers.
+

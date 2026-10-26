@@ -393,6 +393,7 @@ The DSH plugin (JavaScript): the worker it starts, her sessions, the action brai
 - [`index.js`](../../packages/cognition-core/src/index.js) — The Host plugin's core: `CognitionCore` starts the Python worker and runs the turns it prepares in her native DSH sessions, with her role and action tools served by the worker.
 - [`log-sink.js`](../../packages/cognition-core/src/log-sink.js) — Asuna's own log lines, kept.
 - [`navigation.js`](../../packages/cognition-core/src/navigation.js) — Her conversations as DSH sessions: `organizeNativeWorkspaces` creates and titles the workspaces and sessions the worker plans, and `recordChannelInput` writes a received platform line into its conversation without starting a turn.
+- [`outage.js`](../../packages/cognition-core/src/outage.js) — The span she was down while the Host ran on (ADR-101).
 - [`pairing.js`](../../packages/cognition-core/src/pairing.js) — A tool call and its result stay adjacent in her conversation, and a compaction sees the surface it summarizes.
 - [`paths.js`](../../packages/cognition-core/src/paths.js) — Where a profile's files live: `dataRoot` (the profile's data folder, which the worker also gets as ASUNA_DATA_ROOT), the local chat's working folder and the publication floor's state folder.
 - [`persistence.js`](../../packages/cognition-core/src/persistence.js) — DSH compatibility seam for informational plugin event envelopes.

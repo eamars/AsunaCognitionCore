@@ -1576,6 +1576,19 @@ class RoleTools:
                                                          'error': type(exc).__name__}, ep['scope_key'])
             return self._fresh(ep)
 
+    def thought_not_carried(self, ep):
+        """ADR-101: a turn that does not ask for her thought leaves one row. Once its first stage has ended (every call
+        that could carry the model's thinking has run), a turn with neither thought.taken nor thought.none gets
+        thought.none `not_carried`: a call that carried no thinking, a scripted lane. Written here and not at a call,
+        because one response's calls may run at once and the first to arrive need not be the one that carries it."""
+        if not ep or asks_thought(ep) or ep.get('turn_thought') or ep.get('thought_none'):
+            return ep
+        try:
+            self.store.audit(ep['_id'], 'thought.none', {'why': 'not_carried', 'anchor': 'stage'}, ep['scope_key'])
+            return self.coordinator._update(self._fresh(ep), thought_none='not_carried')
+        except Exception:                               # a row it could not write never fails her turn
+            return self._fresh(ep)
+
     def tool_think(self, ep, call_id, args):
         # Asked for THOUGHT_CHARS, refused past THOUGHT_HARD_CHARS (ADR-087 §4.1); one kept between says so (`length`).
         thought = self._text(args, 'thought', THOUGHT_HARD_CHARS, ask=THOUGHT_CHARS)

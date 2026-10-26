@@ -271,6 +271,8 @@ class Coordinator:
             if not attempt and not value.tool_calls:
                 # ADR-099: a turn that made no call has its thought from its one response (none when it asks for it).
                 ep=self.tools.take_thought(ep,'end',value.thinking or {})
+            if not attempt:
+                ep=self.tools.thought_not_carried(ep)     # ADR-101: one row for every turn not asking for it
             if value.finish_reason not in answers.MODEL_FINISHES:
                 # Not her mistake (a transport error after DSH's retries, an interrupted turn).
                 raise ProtocolFailure('TURN_NOT_FINISHED: '+json.dumps({'finish_reason':value.finish_reason,

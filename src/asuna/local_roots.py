@@ -490,12 +490,34 @@ def kept_words(names):
     return '%s 这条线交不出去，原样给了行动脑，它打不开；要用请从家里派' % shown
 
 
+# What each name means, for her line. The names themselves come from this worker's table (ADR-101): the same list an
+# unknown name is refused against (`Table.problems`).
+MEANINGS = {WORKSPACE: '程序的源码目录', PROJECTS: '源码目录所在的那一层（别的项目也在这里）', DATA: '程序的数据目录',
+            DSH_HOME: '宿主 DSH 的目录', HOME: '用户目录', TEMP: '临时目录', PROGRAMS: '装程序的目录',
+            FS: '这台机器的文件树', LOCAL_PATH: '网络共享或别的账号的目录（什么都不留）', USER: '本机账号名'}
+NO_TABLE_LINE = ('这次程序没有本机根目录的名字表：${ASUNA_…} 的名字一个也交不出去，写了也会被退回；'
+                 '要交给行动脑的路径先别写，等程序有了这张表再说。')
+
+
+def _meaning(name):
+    if name.startswith(DRIVE):
+        mark = name[len(DRIVE):]
+        # A drive letter (Windows, WSL's /mnt/x), or a POSIX mount point by its index.
+        return '第 %s 个挂载的盘' % mark if mark.isdigit() else '%s 盘' % mark
+    return MEANINGS.get(name, '程序的一个根目录')
+
+
 def context_line(home):
-    """Her program context's line on the placeholders: names and meanings, never values."""
+    """Her program context's line on the placeholders: the names this worker's table has, each with its meaning, never
+    a value; with no table, that none can be handed over."""
+    table = current()
+    if table is None:
+        return NO_TABLE_LINE
+    order = list(MEANINGS)
+    names = sorted(table.names, key=lambda name: (order.index(name) if name in order else len(order), name))
     hands = '家里能交给行动脑的是除 ${ASUNA_LOCAL_PATH} 外的全部' if home else \
         '这里（对外的对话）能交给行动脑的只有 ${ASUNA_WORKSPACE} 和 ${ASUNA_DATA}；别的可以照样提一句，原样过去，行动脑在这里打不开'
-    return ('路径里的 ${ASUNA_…} 是程序替你藏起本机真实根目录的名字（只有 ${ASUNA_ 开头的才是程序的，别的 ${…} 是普通文字）：'
-            'WORKSPACE 程序的源码目录，PROJECTS 源码目录所在的那一层（别的项目也在这里），DATA 程序的数据目录，DSH_HOME 宿主 DSH 的目录，HOME 用户目录，TEMP 临时目录，'
-            'PROGRAMS 装程序的目录，DRIVE_X 某个盘，FS 这台机器的文件树，LOCAL_PATH 网络共享或别的账号的目录（什么都不留），USER 本机账号名。'
+    return ('路径里的 ${ASUNA_…} 是程序替你藏起本机真实根目录的名字（只有 ${ASUNA_ 开头的才是程序的，别的 ${…} 是普通文字）。'
+            '这台机器上的名字只有这些：%s。'
             '交给行动脑时照这样写，程序替你换成真路径；%s。旧报告里的〔本机路径〕和从源码目录算起的相对路径也是藏起来的路径。'
-            % hands)
+            % ('，'.join('%s %s' % (name, _meaning(name)) for name in names), hands))

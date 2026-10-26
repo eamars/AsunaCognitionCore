@@ -198,6 +198,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - class `RoleTools` — Runs one tool call for one episode, on the coordinator's thread (it holds the coordinator lock).
   - `call` — (result, concludes_turn).
   - `take_thought` — ADR-099: in a turn that does not ask for her thought, the model's first thinking in it becomes her 心里话: the same monologue unit, `source` thinking, stored contracted (ADR-098), anchored to the call it came with ('end' when the turn made non
+  - `thought_not_carried` — ADR-101: a turn that does not ask for her thought leaves one row.
   - `tool_think`
   - `tool_recall`
   - `tool_stay_silent`

@@ -37,11 +37,16 @@ def test_a_planned_restart_is_recorded_and_not_shown(store):
 def test_her_home_turns_say_it_for_a_day_in_words(store):
     moment = datetime(2026, 10, 8, 12, 0, tzinfo=timezone.utc)
     assert host_stops.block(store, ZONE, moment) is None
-    host_stops.record(store, datetime(2026, 10, 8, 9, 7), back_at='2026-10-08T11:15:00+00:00')
+    row = host_stops.record(store, datetime(2026, 10, 8, 9, 7), back_at='2026-10-08T11:15:00+00:00')
     said = host_stops.block(store, ZONE, moment)
-    assert said['what'] == '宿主上次是被外部终止的（不是正常停下）'
-    assert said['when'] == '最后确认还在运行约是 10/8 09:07，重新起来是 10/8 11:15，中间约 2 小时 8 分钟宿主没有运行'
+    assert said['count'] == '过去一天里停了 1 次' and 'not_listed' not in said
+    assert said['stops'] == [{'what': '宿主上次是被外部终止的（不是正常停下）',
+                              'when': '最后确认还在运行约是 10/8 09:07，重新起来是 10/8 11:15，中间约 2 小时 8 分钟宿主没有运行'}]
+    # A day is a floor (ADR-101): not yet shown in a committed turn, it is still there after the day.
+    assert host_stops.block(store, ZONE, moment + timedelta(hours=24))['count'] == '过去一天里停了 1 次'
+    host_stops.shown(store, [row['_id']])
     assert host_stops.block(store, ZONE, moment + timedelta(hours=24)) is None
+    assert host_stops.block(store, ZONE, moment)['count'] == '过去一天里停了 1 次', 'shown, but still within its day'
 
 
 def test_a_host_that_exited_on_its_own_is_recorded_as_a_crash_with_its_code(store, tmp_path):
@@ -66,7 +71,7 @@ def test_a_host_that_exited_on_its_own_is_recorded_as_a_crash_with_its_code(stor
     host_stops.record(store, alive, back_at='2026-10-22T09:04:16+00:00', exit_code=3221225477)
     row = store.db.host_stops.find_one()
     assert (row['how'], row['exit_code']) == ('crashed', 3221225477)
-    said = host_stops.block(store, ZONE, datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc))
+    said = host_stops.block(store, ZONE, datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc))['stops'][0]
     assert said['what'] == '宿主上次是自己崩掉退出的（不是被谁停的，也不是正常停下）'
     assert said['when'].startswith('最后确认还在运行约是 10/22 09:03，重新起来是 10/22 09:04')
 
@@ -95,4 +100,8 @@ def test_a_home_turn_carries_it(store, tmp_path):
     host_stops.record(store, datetime.now(timezone.utc) - timedelta(hours=1))
     lane = FakeLane(store, [FakeTurn([('think', {'thought': '嗯。'})], '在。')])
     ep = Coordinator(store, lane).ingest({'event_id': 'm1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '在吗'})
-    assert ep['context']['host_from_program']['what'].startswith('宿主上次是被外部终止的')
+    assert ep['context']['host_from_program']['stops'][0]['what'].startswith('宿主上次是被外部终止的')
+    # The turn that showed it committed: the stop is stamped shown (ADR-101), never more than that.
+    row = store.db.host_stops.find_one()
+    assert ep['manifest']['told']['host_stops'] == [row['_id']]
+    assert row['shown_at'] is not None

@@ -224,6 +224,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
 - def `inject`
 - def `Config`
 - def `START_RETRY_SECONDS`
+- def `HANDOVER_SECONDS`
 - def `DSH_DEVELOPER_SECTIONS`
 - def `imagesOf` — Pictures attached to the owner's local messages (DSH keeps them in her conversation, so she sees them), read back for the program's own record: history, her action brain's read_image, an image she may send on.
 - def `pictureParts` — The pictures that come with a turn, saved as DSH attachments: one that cannot be saved is left out (her context says read_image reaches any picture that did not appear).
@@ -241,6 +242,8 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `applyInPlace` — A persona or channel publication that needs no restart: the worker takes the persona model at once, new action scopes discover its skills, and the next integration_start runs its adapter.
   - `personaProbe` — The running worker's reading of a persona package published to `root`, as it would take it on a swap or at the next start (persona.check: its model loaded and its id checked, nothing applied), in the boot probe's form.
   - `ready`
+  - `handOver` — Hand the open span to the worker until it is recorded (ADR-101): beside a completed start, so a slow database never holds up the turns waiting for it, and again every HANDOVER_SECONDS while that worker runs, so a hand-over that failed does 
+  - `downNow` — A worker went down unplanned (ADR-101): the open span in the data folder.
   - `startAgain` — A start that failed is tried again, further apart each time, until one succeeds: a fault that passes (a database connection reset while the network link drops during her first minute) must not leave her down while the Host runs on.
   - `dshHome` — DSH's home: the profile's, else the variable the Host was started with.
   - `attachSchedule`
@@ -315,6 +318,22 @@ Her conversations as DSH sessions: `organizeNativeWorkspaces` creates and titles
 - def `workspaceTitle` — The title a workspace shows: the character's name, then the viewer's word for it (api.js) or its key, so every page says whose conversations these are (ADR-020 D3).
 - def `retitleSession` — A conversation's title changed while running (a group made active or resting): retitle it and show it.
 - def `organizeNativeWorkspaces` — Native workspace/session migration.
+
+## `outage.js`
+
+[packages/cognition-core/src/outage.js](../../packages/cognition-core/src/outage.js)
+
+The span she was down while the Host ran on (ADR-101). Only this plugin knows why a worker went away (a start that failed, a worker that exited), so it keeps the open span in the profile's data folder, `worker-down.json`: {since, cause, tries, inside, opened}. A file and not the database, because the failure is often the database itself, and a file survives a Host restart and a recreated container (the data folder is the deployment's own). The worker reads it at its start (a lease left behind inside the span is that same outage) and never writes it. A completed start hands the span to the worker (`host.came_back`), which records it once as a `worker_down` row (host_stops.py); then the file goes. A worker without that method (an older core) leaves the file for a later one.
+
+- def `FILE`
+- def `SPAN_BYTES`
+- def `KEPT`
+- def `startCause` — A failed start's cause by name only, as faults.cause takes it: the error code its last line carries, else the exception's class (`AutoReconnect` from "AutoReconnect: <host>:<port>: …").
+- def `exitCause` — A worker's exit by its code (`exited:1`, `exited:none` when it had none), or unknown.
+- def `openSpan` — The open span, or null when there is none or its file cannot be read.
+- def `wentDown` — A worker went down unplanned: open the span, or keep its start and first cause and count one more try.
+- def `stopInside` — A Host stop inside the open span (a lease left behind that was not this Host's own exited worker): one more.
+- def `cameBack` — A start completed: hand the open span to the worker, then remove it.
 
 ## `pairing.js`
 

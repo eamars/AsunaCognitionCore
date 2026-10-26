@@ -202,6 +202,27 @@ test('a failure said once: the same span failing the same way is one line howeve
   core.unloaded = true; clearTimeout(core.handOverTimer);
 });
 
+test('two failures taking turns on one span are each said once, not again at every switch', async t => {
+  const dir = folder(t);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { CognitionCore, HANDOVER_SECONDS } = await import('../src/index.js');
+  const warned = [];
+  const core = new CognitionCore({ logger: { warn: text => warned.push(text), info() {} }, asunaFloor: { dataRoot: dir } }, {});
+  wentDown(dir, 'exited:1');
+  let turn = 0;
+  core.worker = { closed: false, call: async () => {          // A, B, A, B, A, B: her case
+    turn++;
+    throw new Error(turn % 2 ? 'AutoReconnect: 192.0.2.10:' + (27000 + turn) + ': reset' : 'UNKNOWN_BUSINESS_METHOD');
+  } };
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  core.handOver();
+  for (let i = 0; i < 5; i++) { await settle(); t.mock.timers.tick(HANDOVER_SECONDS * 1000); }
+  await settle();
+  assert.equal(turn, 6);
+  assert.equal(warned.filter(text => text.startsWith('Asuna: the span she was down since')).length, 2);
+  core.unloaded = true; clearTimeout(core.handOverTimer);
+});
+
 test('two failures with no name to tell them by are not merged: each is said', async t => {
   const dir = folder(t);
   wentDown(dir, 'exited:1');

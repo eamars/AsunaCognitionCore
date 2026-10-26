@@ -102,6 +102,7 @@ const CREDENTIAL_SCOPE = 'asuna-cognition-core';
 export const START_RETRY_SECONDS = [5, 15, 45, 135, 300];
 // How long a span the worker could not record waits before it is handed over again (ADR-101).
 export const HANDOVER_SECONDS = 300;
+const HANDOVER_KEYS = 64;               // hand-over failures remembered as said (handOver)
 // A tool's own refusal comes back from the worker written for the brain that called it. A lost connection
 // (the worker exited or is restarting) is not, and its text names this machine's files: say what it means instead.
 const WORKER_DOWN = 'ASUNA_WORKER_UNAVAILABLE: 处理工具的后台进程这会儿断开了（它会自己重启），这次调用没有完成——不是参数的问题；'
@@ -433,8 +434,14 @@ export class CognitionCore {
     clearTimeout(this.handOverTimer);
     // The same failure for the same span is said once, not at every try (an older worker would make it 288 a day):
     // keyed on what it is (cameBack's second argument: the span and the error's name), not on its changing text.
+    // Every key said is kept, not only the last, so two failures taking turns are each said once (her review); the
+    // set is bounded, the oldest key going first.
+    this.handOverSaid ??= new Set();
     const once = (text, key = text) => {
-      if (key !== this.handOverSaid) { this.handOverSaid = key; this.warnLine(text); }
+      if (this.handOverSaid.has(key)) return;
+      this.handOverSaid.add(key);
+      if (this.handOverSaid.size > HANDOVER_KEYS) this.handOverSaid.delete(this.handOverSaid.values().next().value);
+      this.warnLine(text);
     };
     cameBack(this.ctx.asunaFloor.dataRoot, span => worker.call('host.came_back', span), once).then(result => {
       if (result !== KEPT || this.unloaded || this.worker !== worker || worker.closed) return;

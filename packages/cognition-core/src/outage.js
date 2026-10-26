@@ -96,8 +96,11 @@ export async function cameBack(dataRoot, send, warn = () => {}) {
   let answer;
   try { answer = await send(span); }
   catch (error) {
+    // The second argument is what the failure is, for a caller that says each one once: the span and the error's
+    // name, never its text (a database error carries values that change at every try: ids, times, addresses).
     warn('Asuna: the span she was down since ' + (span.since ?? 'an unknown moment') + ' is not recorded yet; '
-      + 'it is handed over again: ' + String(error?.message ?? error).split(/\r?\n/)[0].slice(0, 200));
+      + 'it is handed over again: ' + String(error?.message ?? error).split(/\r?\n/)[0].slice(0, 200),
+    'handover ' + (span.since ?? span.opened ?? 'unknown') + ' ' + startCause(error).slice('start_failed:'.length));
     return KEPT;
   }
   try { unlinkSync(path.join(dataRoot, FILE)); }

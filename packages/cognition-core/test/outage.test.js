@@ -169,19 +169,35 @@ test('the hand-over runs beside a start: it returns at once, and ready() does no
   core.unloaded = true;
 });
 
-test('a failure said once: the same span failing the same way is one line, not one every try', async t => {
+test('a failure said once: the same span failing the same way is one line however its text changes', async t => {
   const dir = folder(t);
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const { CognitionCore, HANDOVER_SECONDS } = await import('../src/index.js');
   const warned = [];
   const core = new CognitionCore({ logger: { warn: text => warned.push(text), info() {} }, asunaFloor: { dataRoot: dir } }, {});
   wentDown(dir, 'exited:1');
-  core.worker = { closed: false, call: async () => { throw new Error('UNKNOWN_BUSINESS_METHOD'); } };   // an older worker
+  // A database error as it really comes: its id, time and port change at every try (her review: a fixed text would
+  // prove only that a fixed text is said once).
+  let tries = 0;
+  const failing = () => async () => {
+    tries++;
+    throw new Error('ServerSelectionTimeoutError: 192.0.2.10:' + (27017 + tries) + ': timed out after ' + (5000 + tries)
+      + 'ms, Topology Description: <TopologyDescription id: 6531a0f' + tries + 'c2e, topology_type: Unknown>');
+  };
+  core.worker = { closed: false, call: failing() };
   const settle = () => new Promise(resolve => setImmediate(resolve));
+  const said = () => warned.filter(text => text.startsWith('Asuna: the span she was down since'));
   core.handOver();
   for (let i = 0; i < 3; i++) { await settle(); t.mock.timers.tick(HANDOVER_SECONDS * 1000); }
   await settle();
-  assert.equal(warned.filter(text => text.startsWith('Asuna: the span she was down since')).length, 1);
+  assert.equal(tries, 4);
+  assert.equal(said().length, 1, 'four different texts of one failure: one line');
+  // Another kind of failure on the same span is said again: a new cause is never silenced.
+  core.worker.call = async () => { throw new Error('UNKNOWN_BUSINESS_METHOD'); };
+  t.mock.timers.tick(HANDOVER_SECONDS * 1000);
+  await settle(); t.mock.timers.tick(HANDOVER_SECONDS * 1000); await settle();
+  assert.equal(said().length, 2);
+  assert.match(said()[1], /UNKNOWN_BUSINESS_METHOD$/);
   assert.ok(existsSync(path.join(dir, FILE)), 'still kept for a newer worker');
   core.unloaded = true; clearTimeout(core.handOverTimer);
 });

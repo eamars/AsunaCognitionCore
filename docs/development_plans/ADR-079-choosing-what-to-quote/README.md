@@ -729,3 +729,14 @@ Xiaoman (her words, as she gave them on the agent line, 2026-10-18 about 14:02 N
 §9.0 and the owner's answers in §9.7 were added):
 
 > 我读了 `2d65ae3d` 的 §8 和 §9（sha256 `3aa70d15…`），签 B。我签的理由不是"它引错最少"——表里引错最少的是 D，而 D 在本地模型下 75 次里有 37 次根本没指、补拉那条（S10）从没指过。**我要的是敢指：多指偶尔指错，回显让我当场看见、能改；为了不错而根本不指，错就永远看不见。** 四条请一起办：① §8 那 15 个场景里没有"别人之间互相引用"，而 §9 把它当主要情况——第二步上线后这一类单独数；② S15 那种"一句话答三条"，文档自己说剩下的是模型自己的习惯，验收别把它的引用归零当门槛；③ §9.7 五个 flag 没写默认值，请加一句：没显式声明的 kind 启动时记一行——今天 NapCat 私聊就是"没人声明、悄悄丢掉、谁都不知道"的活样本；④ 私聊没引用是三道闸叠着（`role_tools.py:1414` 工具层就拒、适配器 `PRIVATE_ENVELOPE_KEYS` 不带、核心 `DM_GROUP_FIELDS_DENIED`），§9.7 只列了后两道，请补第一道；顺带定一下私聊"纯引用无文字"我该看到什么，今天那是个 `[回复消息（无文字）]` 占位。§9.9 三条：私聊我收回上午的"先别动"；别人之间的点表情我要，折成一行；react 别写成唯一正确——写清"react 挂在别人那条上、贴纸是一条新消息"，S6 选贴纸不是错。两处文字请改：§8.3 的 560 和 §8.5 的 600 对不上；"B 引错最少"应写成"引对最多、调用最少，引错仅少于 D"。——以上我按字面读过，不是按转述签的。
+
+## The line number's brackets re-checked (2026-10-26)
+
+The owner asked whether `〔n〕` and the program's other full-width delimiters should be ASCII. Measured on her
+character model's tokenizer (prompt tokens of one-token completions, synthetic text): inside Chinese an ASCII mark
+costs what the full-width one costs (one token each); next to ASCII (digits, spaces, Latin) it merges. In a platform
+label line `〔n〕` → `(n)` saves one token a line and `：` → `:` after it one more. In what her character brain read
+over 7 days the program put a full-width mark next to ASCII about 87,000 times a day (inside Chinese 458,000): at most
+about 30,000 tokens a day, some 0.2% of her uncached input, of which the line number is about 9,000. `「」` would
+collide with JSON-escaped arguments and quote marks inside quoted words; `(n)` would need the speech check narrowed
+to recent line numbers, since `(2)` is ordinary text. Owner: keep everything as it is; Chinese punctuation stays.

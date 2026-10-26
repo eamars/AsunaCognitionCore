@@ -56,6 +56,7 @@ values. A known root becomes a CMake-style variable with a reserved prefix, and 
 | Placeholder | Root |
 |---|---|
 | `${ASUNA_WORKSPACE}` | the checkout itself |
+| `${ASUNA_PROJECTS}` | the folder that holds the checkout (the owner's other projects beside it); none when it is a filesystem or drive root or the home (§10) |
 | `${ASUNA_DATA}` | the worker's data root (the profile's `dataRoot`), wherever it is configured |
 | `${ASUNA_DSH_HOME}` | DSH's home (her sessions, the credential store, installed packages), when not under another root |
 | `${ASUNA_HOME}` | the user's home |
@@ -91,7 +92,7 @@ ones each place can hand over. Old reports keep `〔本机路径〕` and the che
 they too mean "a path that was hidden".
 
 **Which places she may hand over** (owner): a public session reaches her workspace only (`${ASUNA_WORKSPACE}`,
-`${ASUNA_DATA}`); home reaches the whole computer, every placeholder but `${ASUNA_LOCAL_PATH}`. This is enforced by
+`${ASUNA_PROJECTS}`, `${ASUNA_DATA}`); home reaches the whole computer, every placeholder but `${ASUNA_LOCAL_PATH}`. This is enforced by
 the mechanism, not by her judgment: a task delegated from a public place has no `sandbox_run` and its file tools see
 `/task` only (`coordinator._grants`, `tasks.py:250`). Writes stay where DSH's sandbox confines them (the task folder).
 The line she speaks from decides, since that is the side she knows in advance.
@@ -306,3 +307,11 @@ addresses; the skill tool takes a name, not a path. 2 of 1,131 briefs carry a cl
 code. D3 expands by the stricter of authority and place: on an errand the turn's class is the group's, and a home turn
 an outside note opened has no `delegate`. Open, outside this record: on an errand a group's lines can steer a task
 with home authority (ADR-066), a question of task grants, not of paths.
+
+**`${ASUNA_PROJECTS}` (added after the install, from the Fable 5 review §9).** With `${ASUNA_WORKSPACE}` as the
+checkout, a sibling project and the folder that holds the checkout fell to the drive fallback with that folder's own
+name in the tail (`${ASUNA_DRIVE_C}\<that folder>\<project>`): the very word the incident disclosed. 90 public briefs
+and 159 reports name a sibling project. The parent is now its own root, deeper roots still winning inside the
+checkout, handed over where `${ASUNA_WORKSPACE}` is; `${ASUNA_WORKSPACE}` keeps its meaning, so what she wrote since
+the install (1 journal entry carries it) reads the same. A checkout at `/` or a drive root, or one whose parent is the
+home, has no `PROJECTS`.

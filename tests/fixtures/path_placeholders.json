@@ -26,7 +26,8 @@
     "C:\\workplace\\asuna_core\\.runtime": [
      "C:\\WORKPL~1\\ASUNA_~1\\RUNTIM~1"
     ]
-   }
+   },
+   "projects": "C:\\workplace"
   },
   "windows_moved_data": {
    "os": "windows",
@@ -46,7 +47,8 @@
     "C",
     "D"
    ],
-   "aliases": {}
+   "aliases": {},
+   "projects": "C:\\workplace"
   },
   "linux": {
    "os": "posix",
@@ -80,7 +82,8 @@
     "usr",
     "var"
    ],
-   "aliases": {}
+   "aliases": {},
+   "projects": "/home/alice/src"
   },
   "docker": {
    "os": "posix",
@@ -109,7 +112,8 @@
     "usr",
     "var"
    ],
-   "aliases": {}
+   "aliases": {},
+   "projects": "/srv"
   },
   "docker_app_as_root": {
    "os": "posix",
@@ -140,7 +144,8 @@
     "usr",
     "var"
    ],
-   "aliases": {}
+   "aliases": {},
+   "projects": "/"
   },
   "macos": {
    "os": "posix",
@@ -176,7 +181,8 @@
     "/var/folders/x1/abcd1234/T": [
      "/private/var/folders/x1/abcd1234/T"
     ]
-   }
+   },
+   "projects": "/Users/alice/dev"
   }
  },
  "refused": [
@@ -342,13 +348,13 @@
    "host": "windows",
    "note": "a sibling folder is not the checkout",
    "input": "C:\\workplace\\asuna_core2\\x",
-   "contracted": "${ASUNA_DRIVE_C}\\workplace\\asuna_core2\\x"
+   "contracted": "${ASUNA_PROJECTS}\\asuna_core2\\x"
   },
   {
    "host": "windows",
    "note": "a name that continues past a dot is not the checkout",
    "input": "C:\\workplace\\asuna_core.bak\\x",
-   "contracted": "${ASUNA_DRIVE_C}\\workplace\\asuna_core.bak\\x"
+   "contracted": "${ASUNA_PROJECTS}\\asuna_core.bak\\x"
   },
   {
    "host": "windows",
@@ -812,7 +818,7 @@
    "host": "docker",
    "note": "its parent is not the checkout",
    "input": "/srv/other/x",
-   "contracted": "${ASUNA_FS}/srv/other/x"
+   "contracted": "${ASUNA_PROJECTS}/other/x"
   },
   {
    "host": "docker",
@@ -893,19 +899,52 @@
    "note": "root's home is at /root: /home is not its parent",
    "input": "/home/bob/x",
    "contracted": "${ASUNA_FS}/home/bob/x"
+  },
+  {
+   "host": "windows",
+   "note": "a sibling project beside the checkout: PROJECTS, the parent's own name hidden",
+   "input": "C:\\workplace\\comfy\\run.py",
+   "contracted": "${ASUNA_PROJECTS}\\comfy\\run.py",
+   "home": "C:\\workplace\\comfy\\run.py",
+   "public": "C:\\workplace\\comfy\\run.py"
+  },
+  {
+   "host": "windows",
+   "note": "the parent folder itself",
+   "input": "cd C:\\workplace",
+   "contracted": "cd ${ASUNA_PROJECTS}"
+  },
+  {
+   "host": "windows",
+   "note": "inside the checkout the deeper root still wins",
+   "input": "C:\\workplace\\asuna_core\\src\\main.py",
+   "contracted": "${ASUNA_WORKSPACE}\\src\\main.py"
+  },
+  {
+   "host": "linux",
+   "note": "a sibling project under the home: PROJECTS, deeper than HOME",
+   "input": "/home/alice/src/other/x",
+   "contracted": "${ASUNA_PROJECTS}/other/x"
+  },
+  {
+   "host": "docker_app_as_root",
+   "note": "a checkout at /app: its parent is / and is no root",
+   "input": "/srv/x",
+   "contracted": "${ASUNA_FS}/srv/x"
   }
  ],
  "tables": {
   "windows": {
    "version": 1,
    "os": "windows",
-   "source": "(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL][aA][cC][eE](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_[cC][oO][rR][eE](?:\\\\+|/|%5[Cc]|%2[Ff])\\.[rR][uU][nN][tT][iI][mM][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL]~1(?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_~1(?:\\\\+|/|%5[Cc]|%2[Ff])[rR][uU][nN][tT][iI][mM]~1)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL][aA][cC][eE](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_[cC][oO][rR][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL]~1(?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_~1)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[uU][sS][eE][rR][sS](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][lL][iI][cC][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])(?:[pP][rR][oO][gG][rR][aA][mM] [fF][iI][lL][eE][sS]|[pP][rR][oO][gG][rR][aA][mM]%20[fF][iI][lL][eE][sS])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])(?:[pP][rR][oO][gG][rR][aA][mM] [fF][iI][lL][eE][sS] \\([xX]86\\)|[pP][rR][oO][gG][rR][aA][mM]%20[fF][iI][lL][eE][sS]%20%28[xX]86%29)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])[pP][rR][oO][gG][rR][aA][mM][dD][aA][tT][aA](?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][iI][nN][dD][oO][wW][sS](?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[uU][sS][eE][rR][sS](?:\\\\+|/|%5[Cc]|%2[Ff])(?!(?:[aA][lL][iI][cC][eE]|[pP][uU][bB][lL][iI][cC]|[dD][eE][fF][aA][uU][lL][tT]|[dD][eE][fF][aA][uU][lL][tT] [uU][sS][eE][rR]|[aA][lL][lL] [uU][sS][eE][rR][sS]|[sS][hH][aA][rR][eE][dD])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))[^\\s\\\\/\"\\'<>|*?`%]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*)|(?<![A-Za-z0-9_])([A-Za-z](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[A-Za-z])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?<![A-Za-z0-9_])(alice)(?![A-Za-z0-9_])",
+   "source": "(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL][aA][cC][eE](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_[cC][oO][rR][eE](?:\\\\+|/|%5[Cc]|%2[Ff])\\.[rR][uU][nN][tT][iI][mM][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL]~1(?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_~1(?:\\\\+|/|%5[Cc]|%2[Ff])[rR][uU][nN][tT][iI][mM]~1)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL][aA][cC][eE](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_[cC][oO][rR][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL]~1(?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_~1)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[uU][sS][eE][rR][sS](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][lL][iI][cC][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL][aA][cC][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])(?:[pP][rR][oO][gG][rR][aA][mM] [fF][iI][lL][eE][sS]|[pP][rR][oO][gG][rR][aA][mM]%20[fF][iI][lL][eE][sS])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])(?:[pP][rR][oO][gG][rR][aA][mM] [fF][iI][lL][eE][sS] \\([xX]86\\)|[pP][rR][oO][gG][rR][aA][mM]%20[fF][iI][lL][eE][sS]%20%28[xX]86%29)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])[pP][rR][oO][gG][rR][aA][mM][dD][aA][tT][aA](?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][iI][nN][dD][oO][wW][sS](?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[uU][sS][eE][rR][sS](?:\\\\+|/|%5[Cc]|%2[Ff])(?!(?:[aA][lL][iI][cC][eE]|[pP][uU][bB][lL][iI][cC]|[dD][eE][fF][aA][uU][lL][tT]|[dD][eE][fF][aA][uU][lL][tT] [uU][sS][eE][rR]|[aA][lL][lL] [uU][sS][eE][rR][sS]|[sS][hH][aA][rR][eE][dD])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))[^\\s\\\\/\"\\'<>|*?`%]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*)|(?<![A-Za-z0-9_])([A-Za-z](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[A-Za-z])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?<![A-Za-z0-9_])(alice)(?![A-Za-z0-9_])",
    "groups": [
     "DATA",
     "DATA",
     "WORKSPACE",
     "WORKSPACE",
     "HOME",
+    "PROJECTS",
     "PROGRAMS",
     "PROGRAMS",
     "PROGRAMS",
@@ -916,7 +955,7 @@
     "LOCAL_PATH",
     "USER"
    ],
-   "roots": 3,
+   "roots": 4,
    "names": [
     "DATA",
     "DRIVE_C",
@@ -924,6 +963,7 @@
     "HOME",
     "LOCAL_PATH",
     "PROGRAMS",
+    "PROJECTS",
     "USER",
     "WORKSPACE"
    ]
@@ -931,11 +971,12 @@
   "windows_moved_data": {
    "version": 1,
    "os": "windows",
-   "source": "(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL][aA][cC][eE](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_[cC][oO][rR][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[uU][sS][eE][rR][sS](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][lL][iI][cC][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[dD](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[dD]|/[dD])(?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]-[dD][aA][tT][aA])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])(?:[pP][rR][oO][gG][rR][aA][mM] [fF][iI][lL][eE][sS]|[pP][rR][oO][gG][rR][aA][mM]%20[fF][iI][lL][eE][sS])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])(?:[pP][rR][oO][gG][rR][aA][mM] [fF][iI][lL][eE][sS] \\([xX]86\\)|[pP][rR][oO][gG][rR][aA][mM]%20[fF][iI][lL][eE][sS]%20%28[xX]86%29)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])[pP][rR][oO][gG][rR][aA][mM][dD][aA][tT][aA](?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][iI][nN][dD][oO][wW][sS](?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[uU][sS][eE][rR][sS](?:\\\\+|/|%5[Cc]|%2[Ff])(?!(?:[aA][lL][iI][cC][eE]|[pP][uU][bB][lL][iI][cC]|[dD][eE][fF][aA][uU][lL][tT]|[dD][eE][fF][aA][uU][lL][tT] [uU][sS][eE][rR]|[aA][lL][lL] [uU][sS][eE][rR][sS]|[sS][hH][aA][rR][eE][dD])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))[^\\s\\\\/\"\\'<>|*?`%]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*)|(?<![A-Za-z0-9_])([A-Za-z](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[A-Za-z])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?<![A-Za-z0-9_])(alice)(?![A-Za-z0-9_])",
+   "source": "(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL][aA][cC][eE](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_[cC][oO][rR][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[uU][sS][eE][rR][sS](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][lL][iI][cC][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[dD](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[dD]|/[dD])(?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]-[dD][aA][tT][aA])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL][aA][cC][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])(?:[pP][rR][oO][gG][rR][aA][mM] [fF][iI][lL][eE][sS]|[pP][rR][oO][gG][rR][aA][mM]%20[fF][iI][lL][eE][sS])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])(?:[pP][rR][oO][gG][rR][aA][mM] [fF][iI][lL][eE][sS] \\([xX]86\\)|[pP][rR][oO][gG][rR][aA][mM]%20[fF][iI][lL][eE][sS]%20%28[xX]86%29)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])[pP][rR][oO][gG][rR][aA][mM][dD][aA][tT][aA](?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][iI][nN][dD][oO][wW][sS](?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[uU][sS][eE][rR][sS](?:\\\\+|/|%5[Cc]|%2[Ff])(?!(?:[aA][lL][iI][cC][eE]|[pP][uU][bB][lL][iI][cC]|[dD][eE][fF][aA][uU][lL][tT]|[dD][eE][fF][aA][uU][lL][tT] [uU][sS][eE][rR]|[aA][lL][lL] [uU][sS][eE][rR][sS]|[sS][hH][aA][rR][eE][dD])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))[^\\s\\\\/\"\\'<>|*?`%]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*)|(?<![A-Za-z0-9_])([A-Za-z](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[A-Za-z])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?<![A-Za-z0-9_])(alice)(?![A-Za-z0-9_])",
    "groups": [
     "WORKSPACE",
     "HOME",
     "DATA",
+    "PROJECTS",
     "PROGRAMS",
     "PROGRAMS",
     "PROGRAMS",
@@ -946,7 +987,7 @@
     "LOCAL_PATH",
     "USER"
    ],
-   "roots": 3,
+   "roots": 4,
    "names": [
     "DATA",
     "DRIVE_C",
@@ -954,6 +995,7 @@
     "HOME",
     "LOCAL_PATH",
     "PROGRAMS",
+    "PROJECTS",
     "USER",
     "WORKSPACE"
    ]
@@ -961,11 +1003,12 @@
   "linux": {
    "version": 1,
    "os": "posix",
-   "source": "(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])alice(?:/|%2[Ff])src(?:/|%2[Ff])asuna(?:/|%2[Ff])\\.runtime)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])alice(?:/|%2[Ff])src(?:/|%2[Ff])asuna)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])media(?:/|%2[Ff])alice(?:/|%2[Ff])USBSTICK)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])alice)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])mnt(?:/|%2[Ff])c)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])tmp)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])usr(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])opt(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])etc(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])bin(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])lib(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])(?!(?:alice|Public|Default|Default User|All Users|Shared)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))[^\\s/\"\\'<>|*?`%]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*)|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])(?:bin|etc|home|lib|media|mnt|opt|srv|tmp|usr|var)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])(alice)(?![A-Za-z0-9_])",
+   "source": "(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])alice(?:/|%2[Ff])src(?:/|%2[Ff])asuna(?:/|%2[Ff])\\.runtime)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])alice(?:/|%2[Ff])src(?:/|%2[Ff])asuna)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])media(?:/|%2[Ff])alice(?:/|%2[Ff])USBSTICK)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])alice(?:/|%2[Ff])src)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])alice)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])mnt(?:/|%2[Ff])c)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])tmp)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])usr(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])opt(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])etc(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])bin(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])lib(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])(?!(?:alice|Public|Default|Default User|All Users|Shared)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))[^\\s/\"\\'<>|*?`%]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*)|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])(?:bin|etc|home|lib|media|mnt|opt|srv|tmp|usr|var)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])(alice)(?![A-Za-z0-9_])",
    "groups": [
     "DATA",
     "WORKSPACE",
     "DRIVE_1",
+    "PROJECTS",
     "HOME",
     "DRIVE_C",
     "TEMP",
@@ -979,7 +1022,7 @@
     "FS",
     "USER"
    ],
-   "roots": 6,
+   "roots": 7,
    "names": [
     "DATA",
     "DRIVE_1",
@@ -988,6 +1031,7 @@
     "HOME",
     "LOCAL_PATH",
     "PROGRAMS",
+    "PROJECTS",
     "TEMP",
     "USER",
     "WORKSPACE"
@@ -996,11 +1040,12 @@
   "docker": {
    "version": 1,
    "os": "posix",
-   "source": "(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])srv(?:/|%2[Ff])asuna(?:/|%2[Ff])\\.runtime)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])asuna)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])srv(?:/|%2[Ff])asuna)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])tmp)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])usr(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])opt(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])etc(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])bin(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])lib(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])(?!(?:asuna|Public|Default|Default User|All Users|Shared)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))[^\\s/\"\\'<>|*?`%]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*)|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])(?:bin|etc|home|lib|opt|srv|tmp|usr|var)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))",
+   "source": "(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])srv(?:/|%2[Ff])asuna(?:/|%2[Ff])\\.runtime)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])asuna)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])srv(?:/|%2[Ff])asuna)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])srv)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])tmp)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])usr(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])opt(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])etc(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])bin(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])lib(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])(?!(?:asuna|Public|Default|Default User|All Users|Shared)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))[^\\s/\"\\'<>|*?`%]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*)|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])(?:bin|etc|home|lib|opt|srv|tmp|usr|var)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))",
    "groups": [
     "DATA",
     "HOME",
     "WORKSPACE",
+    "PROJECTS",
     "TEMP",
     "PROGRAMS",
     "PROGRAMS",
@@ -1011,13 +1056,14 @@
     "LOCAL_PATH",
     "FS"
    ],
-   "roots": 4,
+   "roots": 5,
    "names": [
     "DATA",
     "FS",
     "HOME",
     "LOCAL_PATH",
     "PROGRAMS",
+    "PROJECTS",
     "TEMP",
     "WORKSPACE"
    ]
@@ -1053,13 +1099,14 @@
   "macos": {
    "version": 1,
    "os": "posix",
-   "source": "(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])private(?:/|%2[Ff])var(?:/|%2[Ff])folders(?:/|%2[Ff])x1(?:/|%2[Ff])abcd1234(?:/|%2[Ff])T)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Users(?:/|%2[Ff])alice(?:/|%2[Ff])dev(?:/|%2[Ff])asuna(?:/|%2[Ff])\\.runtime)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])var(?:/|%2[Ff])folders(?:/|%2[Ff])x1(?:/|%2[Ff])abcd1234(?:/|%2[Ff])T)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Users(?:/|%2[Ff])alice(?:/|%2[Ff])dev(?:/|%2[Ff])asuna)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Volumes(?:/|%2[Ff])(?:Backup Disk|Backup%20Disk))(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Users(?:/|%2[Ff])alice)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])usr(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])opt(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])Applications(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])Library(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])System(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Users(?:/|%2[Ff])(?!(?:alice|Public|Default|Default User|All Users|Shared)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))[^\\s/\"\\'<>|*?`%]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*)|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])(?:Applications|Library|System|Users|Volumes|opt|private|tmp|usr|var)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])(alice)(?![A-Za-z0-9_])",
+   "source": "(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])private(?:/|%2[Ff])var(?:/|%2[Ff])folders(?:/|%2[Ff])x1(?:/|%2[Ff])abcd1234(?:/|%2[Ff])T)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Users(?:/|%2[Ff])alice(?:/|%2[Ff])dev(?:/|%2[Ff])asuna(?:/|%2[Ff])\\.runtime)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])var(?:/|%2[Ff])folders(?:/|%2[Ff])x1(?:/|%2[Ff])abcd1234(?:/|%2[Ff])T)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Users(?:/|%2[Ff])alice(?:/|%2[Ff])dev(?:/|%2[Ff])asuna)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Volumes(?:/|%2[Ff])(?:Backup Disk|Backup%20Disk))(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Users(?:/|%2[Ff])alice(?:/|%2[Ff])dev)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Users(?:/|%2[Ff])alice)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])usr(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])opt(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])Applications(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])Library(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])System(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Users(?:/|%2[Ff])(?!(?:alice|Public|Default|Default User|All Users|Shared)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))[^\\s/\"\\'<>|*?`%]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*)|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])(?:Applications|Library|System|Users|Volumes|opt|private|tmp|usr|var)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])(alice)(?![A-Za-z0-9_])",
    "groups": [
     "TEMP",
     "DATA",
     "TEMP",
     "WORKSPACE",
     "DRIVE_1",
+    "PROJECTS",
     "HOME",
     "PROGRAMS",
     "PROGRAMS",
@@ -1071,7 +1118,7 @@
     "FS",
     "USER"
    ],
-   "roots": 5,
+   "roots": 6,
    "names": [
     "DATA",
     "DRIVE_1",
@@ -1079,6 +1126,7 @@
     "HOME",
     "LOCAL_PATH",
     "PROGRAMS",
+    "PROJECTS",
     "TEMP",
     "USER",
     "WORKSPACE"

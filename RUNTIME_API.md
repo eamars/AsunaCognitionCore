@@ -761,7 +761,8 @@ No local root of this computer reaches the character brain; the action brain wor
 
 - **The table.** The worker builds it at every start from its settings and the machine and hands it to the Host with
   its `initialize` answer. A known root is written `${ASUNA_<NAME>}` and the rest of the path stays: `WORKSPACE` (the
-  Host's repository checkout, else the installed package), `DATA` (the data folder), `DSH_HOME` and `TEMP` (each when
+  Host's repository checkout, else the installed package), `PROJECTS` (the folder that holds it, unless that is a
+  filesystem or drive root or the home), `DATA` (the data folder), `DSH_HOME` and `TEMP` (each when
   not under another root), `HOME`, `PROGRAMS` (program folders, their own name kept: `${ASUNA_PROGRAMS}/usr/lib/...`),
   `DRIVE_<X>` (any other path on drive X, WSL's `/mnt/x`; on POSIX each mount by letter or index), `FS` (any other path
   in the machine's own top-level folders on POSIX), `LOCAL_PATH` (a network share, or another account's home beside the user's, nothing
@@ -780,7 +781,7 @@ No local root of this computer reaches the character brain; the action brain wor
   shows the table's size and the requests rewritten since the start.
 - **Toward the action brain.** The `delegate` brief and title, a message to a task, her answer to a task's question and an `ask`
   to 行动脑 lose every credential value, then each placeholder the place hands over becomes its real path with the
-  host's separators (a public place: `WORKSPACE`, `DATA`; home: all but `LOCAL_PATH`); any other stays as written.
+  host's separators (a public place: `WORKSPACE`, `PROJECTS`, `DATA`; home: all but `LOCAL_PATH`); any other stays as written.
   Refused, in words: a raw root (with the whole text rewritten), an `${ASUNA_...}` name the table does not have where it stands as a path's root (followed by a separator; elsewhere it is text, as the deployment's own `${ASUNA_...}` variables are), a
   `..` segment in a path at a root or placeholder, and in a public place a relative path that climbs.
 - **Her writing.** Every other string argument of her tools is stored contracted, except a credential's values and her

@@ -5,7 +5,8 @@ plugin with the worker's `initialize` answer (`Table.wire`): the plugin rewrites
 (packages/cognition-core/src/roots.js), so both sides apply one table. A known root becomes `${ASUNA_<NAME>}` and the
 rest of the path stays as it was:
 
-- `WORKSPACE` the checkout, `DATA` the worker's data folder, `DSH_HOME` DSH's home and `TEMP` the temporary folder (each
+- `WORKSPACE` the checkout, `PROJECTS` the folder that holds it (the owner's other projects beside it; left out when
+  it is a filesystem or drive root or the home), `DATA` the worker's data folder, `DSH_HOME` DSH's home and `TEMP` the temporary folder (each
   of the last two only when not under another root), `HOME` the user's home; the deepest root wins;
 - `PROGRAMS` the program folders (Windows: Program Files, ProgramData, the system folder; POSIX: `/usr`, `/opt`, ...),
   their own folder name kept (`${ASUNA_PROGRAMS}\\Program Files\\...`, `${ASUNA_PROGRAMS}/usr/...`);
@@ -20,7 +21,7 @@ backslashes (JSON), percent-encoded, WSL's `/mnt/x/...` and MSYS's `/x/...`, aft
 case-insensitive on Windows, with or without a tail. `/task/...` (the action brain's sandbox path) is not a root.
 
 Toward the action brain (`outbound`): a placeholder the place may hand over expands to the real path (public: only
-WORKSPACE and DATA; home: all but LOCAL_PATH); one it may not hand over stays as written; refused, with the reason:
+WORKSPACE, PROJECTS and DATA; home: all but LOCAL_PATH); one it may not hand over stays as written; refused, with the reason:
 a raw root (with the whole string rewritten), an `${ASUNA_...}` name not in the table, a `..` segment in a path
 anchored at a root or placeholder, and in a public place a bare relative path that climbs. Every other `${...}` is
 text. The case file `tests/fixtures/path_placeholders.json` runs in pytest and `node --test` alike.
@@ -38,8 +39,9 @@ from urllib.parse import quote
 VERSION = 1
 PREFIX = 'ASUNA_'
 WORKSPACE, DATA, DSH_HOME, HOME, TEMP = 'WORKSPACE', 'DATA', 'DSH_HOME', 'HOME', 'TEMP'
+PROJECTS = 'PROJECTS'
 PROGRAMS, FS, LOCAL_PATH, USER, DRIVE = 'PROGRAMS', 'FS', 'LOCAL_PATH', 'USER', 'DRIVE_'
-PUBLIC_HANDS = (WORKSPACE, DATA)               # what a public place may hand to the action brain
+PUBLIC_HANDS = (WORKSPACE, PROJECTS, DATA)               # what a public place may hand to the action brain
 NEVER_HANDS = (LOCAL_PATH,)
 SANDBOX = 'task'                               # /task/... is the action brain's own folder, never a root
 # Accounts whose name identifies nobody: replacing them would rewrite ordinary words (root, node, the image's user).
@@ -124,7 +126,8 @@ def machine(checkout=None, dsh_home=None):
         user = getpass.getuser()
     except Exception:
         user = None
-    facts = {'os': 'windows' if windows else 'posix', 'workspace': str(Path(checkout).resolve() if checkout else ROOT),
+    workspace = Path(checkout).resolve() if checkout else ROOT
+    facts = {'os': 'windows' if windows else 'posix', 'workspace': str(workspace), 'projects': str(workspace.parent),
              'data': str(data_root), 'dsh_home': str(Path(dsh_home).resolve()) if dsh_home else
              (str(Path(os.environ['DSH_HOME']).resolve()) if os.environ.get('DSH_HOME') else None),
              'home': str(Path.home()), 'temp': tempfile.gettempdir(), 'user': user, 'aliases': {}}
@@ -143,7 +146,7 @@ def machine(checkout=None, dsh_home=None):
             facts['top'] = sorted(n for n in os.listdir('/') if os.path.isdir('/' + n) and n != SANDBOX)
         except OSError:
             facts['top'] = []
-    for key in ('workspace', 'data', 'dsh_home', 'home', 'temp'):
+    for key in ('workspace', 'projects', 'data', 'dsh_home', 'home', 'temp'):
         path = facts.get(key)
         if not path:
             continue
@@ -180,6 +183,12 @@ class Table:
                 raise TableRefused('ROOT_TABLE_REFUSED: %s 是文件系统或盘符的根（%s），不能当作一个根' % (name, path))
             roots.append((name, path))
         home = facts.get('home')
+        # The folder that holds the checkout: the owner's other projects sit beside it, and its name is the machine's
+        # (the incident's word). Not a root when it is a filesystem or drive root, or the home itself.
+        projects = facts.get('projects')
+        if projects and not _is_fs_root(w, projects) and not (
+                home and _under(w, projects, home) and _under(w, home, projects)):
+            roots.append((PROJECTS, projects))
         dsh = facts.get('dsh_home')
         if dsh:
             if _is_fs_root(w, dsh):
@@ -464,9 +473,9 @@ def outbound(text, home):
 def context_line(home):
     """Her program context's line on the placeholders: names and meanings, never values."""
     hands = '家里能交给行动脑的是除 ${ASUNA_LOCAL_PATH} 外的全部' if home else \
-        '这里（对外的对话）能交给行动脑的只有 ${ASUNA_WORKSPACE} 和 ${ASUNA_DATA}；别的可以照样提一句，原样过去，行动脑在这里打不开'
+        '这里（对外的对话）能交给行动脑的只有 ${ASUNA_WORKSPACE}、${ASUNA_PROJECTS} 和 ${ASUNA_DATA}；别的可以照样提一句，原样过去，行动脑在这里打不开'
     return ('路径里的 ${ASUNA_…} 是程序替你藏起本机真实根目录的名字（只有 ${ASUNA_ 开头的才是程序的，别的 ${…} 是普通文字）：'
-            'WORKSPACE 程序的源码目录，DATA 程序的数据目录，DSH_HOME 宿主 DSH 的目录，HOME 用户目录，TEMP 临时目录，'
+            'WORKSPACE 程序的源码目录，PROJECTS 源码目录所在的那一层（别的项目也在这里），DATA 程序的数据目录，DSH_HOME 宿主 DSH 的目录，HOME 用户目录，TEMP 临时目录，'
             'PROGRAMS 装程序的目录，DRIVE_X 某个盘，FS 这台机器的文件树，LOCAL_PATH 网络共享或别的账号的目录（什么都不留），USER 本机账号名。'
             '交给行动脑时照这样写，程序替你换成真路径；%s。旧报告里的〔本机路径〕和从源码目录算起的相对路径也是藏起来的路径。'
             % hands)

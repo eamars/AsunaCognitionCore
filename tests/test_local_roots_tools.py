@@ -118,4 +118,4 @@ def test_her_program_context_names_the_placeholders_never_their_values():
     for home in (True, False):
         line = local_roots.context_line(home)
         assert 'WORKSPACE' in line and '${ASUNA_' in line and WS not in line and HOME not in line
-    assert '只有 ${ASUNA_WORKSPACE} 和 ${ASUNA_DATA}' in local_roots.context_line(False)
+    assert '只有 ${ASUNA_WORKSPACE}、${ASUNA_PROJECTS} 和 ${ASUNA_DATA}' in local_roots.context_line(False)

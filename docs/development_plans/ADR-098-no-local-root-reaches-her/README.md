@@ -61,7 +61,7 @@ values. A known root becomes a CMake-style variable with a reserved prefix, and 
 | `${ASUNA_TEMP}` | the temporary folder, when not under another root (macOS's is a per-account random path) |
 | `${ASUNA_PROGRAMS}` | Windows: Program Files, ProgramData, the system folder. POSIX: `/usr`, `/opt`, `/etc`, `/bin`, `/sbin`, `/lib*`, `/snap`, `/nix`; macOS also `/Applications`, `/Library`, `/System`, `/opt/homebrew` |
 | `${ASUNA_DRIVE_D}` (one per drive) | the fallback root on Windows: any other path on that drive. On POSIX each mount point (`/mnt/<x>`, `/media/<user>/<x>`, `/Volumes/<x>`, `/run/media/<user>/<x>`) is named by letter or index, never by its label, so WSL's `/mnt/c/…` and Windows's `C:\…` read the same |
-| `${ASUNA_FS}` | the fallback root on POSIX: `/` itself, tail kept |
+| `${ASUNA_FS}` | the fallback on POSIX: a path in the machine's own top-level folders that no named root covers, tail kept (not a named root; §9) |
 | `${ASUNA_LOCAL_PATH}` | a network share (`\\server\share`, `//server/share`, `smb://`, `\\wsl$\…`), or another account's home beside the user's (`C:\Users\<other>`, `/home/<other>`, `/Users/<other>`; not the shared `Public`, `Default`, `Default User`, `All Users`, `Shared`), nothing kept (§9) |
 | `${ASUNA_USER}` | the OS account name, exactly that string (3 characters or more), as a whole word anywhere (a `whoami`, `name@host`, inside a path); a git author or a person's name is left alone unless it is that very string |
 
@@ -96,7 +96,10 @@ the mechanism, not by her judgment: a task delegated from a public place has no 
 The line she speaks from decides, since that is the side she knows in advance.
 
 **D2. One rewrite where the model reads.** An `llm/stream` listener in the plugin, for her sessions only (her persona
-preset, the relevance gate, the appraiser, the background summaries; never the action brain). It applies the table to
+preset, the relevance gate, the appraiser, the background summaries; never the action brain, nor the recovery session
+that repairs a publication while the worker is down: both work with real paths). A session is hers by its preset as it
+stands now (DSH's `agentPreset` projection, else its header): one switched to her preset is rewritten, one switched
+away from it is not. It applies the table to
 every text block of the request, the system message included, and to string arguments of earlier tool calls. Storage
 stays raw: messages, the DSH surface and her stored writing are untouched and the Web page keeps showing them as they
 are; only what the model reads changes. Compaction and background summaries are written from rewritten requests, so

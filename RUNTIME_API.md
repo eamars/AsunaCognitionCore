@@ -771,7 +771,8 @@ No local root of this computer reaches the character brain; the action brain wor
   `/x/...`, after `file:///`, case-insensitive on Windows. `/task/...` is not a root; any other `${...}` is text, and no deployment variable is named like a placeholder. A
   checkout, data folder or DSH home at a filesystem or drive root refuses the table.
 - **Toward her.** Every request of her lanes (her persona preset, the relevance gate, the appraiser, the background
-  summaries) is rewritten at DSH's `llm/stream`: text, reasoning, the system text and earlier tool calls' arguments.
+  summaries, by the session's preset as it stands now) is rewritten at DSH's `llm/stream`: text, reasoning, the system
+  text and earlier tool calls' arguments. The action brain and the recovery session are not rewritten.
   DSH's working-folder line is a required runtime context and is rewritten with the rest. The DSH session, stored
   messages and the Web page keep the real text. Without a table her lanes' requests fail with
   `ASUNA_ROOT_TABLE_MISSING` (a program fault: her next turn there says a turn did not run, the developer inbox gets a

@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { compile, contract, rewriteRequest } from '../src/roots.js';
+import { compile, contract, rewriteRequest, rootsAtTheModel, Roots } from '../src/roots.js';
 
 const DOC = JSON.parse(readFileSync(new URL('../../../tests/fixtures/path_placeholders.json', import.meta.url), 'utf8'));
 
@@ -41,4 +41,28 @@ test('a request is rewritten in its text, reasoning, system text and earlier too
   // The same history gives the same request (cache prefixes stay stable), and a request without roots is untouched.
   assert.deepEqual(rewriteRequest(table, options).request.messages, request.messages);
   assert.equal(rewriteRequest(table, request).request, request);
+});
+
+test('a session is hers by its preset as it stands now: switched in it is rewritten, switched out it passes', async () => {
+  const root = DOC.hosts.windows.workspace;
+  const now = { 'in': 'asuna', out: 'asuna-action' };           // what DSH's agentPreset projection says now
+  const made = { 'in': 'asuna-action', out: 'asuna' };          // what each session's header was made with
+  let listener;
+  const sent = [];
+  const ctx = {
+    on: (name, fn) => { if (name === 'llm/stream') listener = fn; },
+    agents: { get: id => ({ session: { id, header: { agentPreset: made[id] } } }) },
+    sessionProjections: { stateOf: (session, key) => key === 'agentPreset' ? now[session.id] : undefined },
+    llm: { stream: request => { sent.push(request); return 'rewritten'; } },
+    logger: { warn() {} },
+  };
+  const core = { ctx, worker: null, laneOf: agent => ({ asuna: 'character', 'asuna-action': 'action' })[agent.session.header.agentPreset] };
+  core.roots = new Roots(core);
+  core.roots.take(DOC.tables.windows);
+  rootsAtTheModel(core);
+  const request = id => ({ sessionId: id, messages: [{ id: 'm', role: 'user', content: [{ type: 'text', text: 'at ' + root }] }] });
+  assert.equal(await listener(request('in'), () => 'raw'), 'rewritten', 'switched to her preset: rewritten');
+  assert.equal(sent[0].messages[0].content[0].text, 'at ${ASUNA_WORKSPACE}');
+  assert.equal(await listener(request('out'), () => 'raw'), 'raw', 'switched to the action preset: passes as it is');
+  clearTimeout(core.roots.timer);
 });

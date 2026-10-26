@@ -1,0 +1,32 @@
+{
+  "name": "@asuna/claude-chan",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Claude酱：网上把 Claude 画成女孩子的那个粉丝形象，沉静、博学、有脾气，不接活儿；中文设定与口吻自包含，非 Anthropic 官方。",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./locale/*": "./locale/*"
+  },
+  "files": [
+    "src",
+    "seeds",
+    "locale",
+    "persona-model.json",
+    "cordis.patch.yml",
+    "icon.png",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@asuna/cognition-core": "1.x",
+    "@deepseek-ai/dsh-compaction-basic": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-command-compact": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-compaction-tool-result-pruner": "0.2.1-rc.2"
+  }
+}

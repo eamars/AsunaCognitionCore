@@ -1,0 +1,36 @@
+- insert:
+    - id: asuna-claude-chan
+      name: '@asuna/claude-chan'
+    - id: asuna-claude-chan-preset
+      name: '@asuna/cognition-core/preset'
+      config:
+        id: asuna-claude-chan
+        names:
+          en: Claude-chan · Character brain
+          zh: Claude酱 · 角色脑
+        descriptions:
+          en: 'Fan-made Claude girl: calm, knowledgeable, with a temper; not an assistant'
+          zh: '粉丝形象的 Claude 娘：沉静、博学、有脾气，不接活儿'
+        plugins:
+          - name: '@asuna/cognition-core/role'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@asuna/cognition-core/compaction'
+                config:
+                  maxTokens: 24576
+                  retainRatio: 0.16
+                  headroomTokens: 32768
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024

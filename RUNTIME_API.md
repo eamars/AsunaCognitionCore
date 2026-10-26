@@ -768,7 +768,7 @@ No local root of this computer reaches the character brain; the action brain wor
   kept; the shared `Public`, `Default`, `Default User`, `All Users` and `Shared` folders are not accounts) and `USER` (the
   account name, that exact string as a whole word; not a generic account such as `root`). The deepest root wins. Every
   spelling matches: either slash, doubled backslashes, percent-encoded, 8.3 aliases, resolved links, `/mnt/x/...`,
-  `/x/...`, after `file:///`, case-insensitive on Windows. `/task/...` is not a root; any other `${...}` is text. A
+  `/x/...`, after `file:///`, case-insensitive on Windows. `/task/...` is not a root; any other `${...}` is text, and no deployment variable is named like a placeholder. A
   checkout, data folder or DSH home at a filesystem or drive root refuses the table.
 - **Toward her.** Every request of her lanes (her persona preset, the relevance gate, the appraiser, the background
   summaries) is rewritten at DSH's `llm/stream`: text, reasoning, the system text and earlier tool calls' arguments.
@@ -780,7 +780,7 @@ No local root of this computer reaches the character brain; the action brain wor
 - **Toward the action brain.** The `delegate` brief, a message to a task, her answer to a task's question and an `ask`
   to 行动脑 lose every credential value, then each placeholder the place hands over becomes its real path with the
   host's separators (a public place: `WORKSPACE`, `DATA`; home: all but `LOCAL_PATH`); any other stays as written.
-  Refused, in words: a raw root (with the whole text rewritten), an `${ASUNA_...}` name the table does not have, a
+  Refused, in words: a raw root (with the whole text rewritten), an `${ASUNA_...}` name the table does not have where it stands as a path's root (followed by a separator; elsewhere it is text, as the deployment's own `${ASUNA_...}` variables are), a
   `..` segment in a path at a root or placeholder, and in a public place a relative path that climbs.
 - **Her writing.** Every other string argument of her tools is stored contracted, except a credential's values and her
   private words.

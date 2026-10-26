@@ -346,7 +346,10 @@ class Table:
     def problems(self, text, home):
         """What keeps a text she wrote toward the action brain from going as it is: [(code, words)]."""
         out = []
-        unknown = sorted({m.group(1) for m in TOKEN.finditer(text) if m.group(1) not in self.names})
+        # An unknown name is refused where it stands as a path's root (a separator follows): the typo case. Elsewhere
+        # it is text: the deployment's own variables (`${ASUNA_REPO:-…}` in deploy/docker) are quoted as they are.
+        unknown = sorted({m.group(1) for m in TOKEN_TAIL.finditer(text)
+                          if m.group(1) not in self.names and m.group(2)[:1] in ('\\', '/')})
         if unknown:
             out.append(('PATH_NAME_UNKNOWN', '%s 不是程序的名字；程序的名字只有这些：%s，照抄其中一个' % (
                 '、'.join('${%s%s}' % (PREFIX, n) for n in unknown),

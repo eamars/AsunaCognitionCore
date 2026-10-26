@@ -68,16 +68,20 @@ values. A known root becomes a CMake-style variable with a reserved prefix, and 
 So `<checkout>\packages\personas\xiaoman` reaches her as `${ASUNA_WORKSPACE}\packages\personas\xiaoman`. The
 checkout itself, not its parent, so that a Docker checkout at `/app`, a renamed checkout, or another machine reading
 the same memory (ADR-020) still finds `${ASUNA_WORKSPACE}\packages\…`. The prefix because `${HOME}`, `${1}` and
-`${VAR}` are real shell and CMake text: no shell variable is named `ASUNA_…` unless someone makes one on purpose (0 of
-27,701 tool receipts and 0 of 1,129 briefs contain `${ASUNA_`), so every other `${…}` stays text.
+`${VAR}` are real shell and CMake text, and every other `${…}` stays text. `${ASUNA_` appears in 0 of 27,701 tool
+receipts and 0 of 1,129 briefs; the deployment's own variables use the prefix (`deploy/docker`: `${ASUNA_REPO}`,
+`${ASUNA_CHECKOUT}` and others, found by her), so no deployment variable may be named like a placeholder (a test reads
+`deploy/` and fails on one), and an unknown name is refused only where it stands as a path's root (D3).
 
 Matching: longest root first, so the deeper root wins (the data root reads `${ASUNA_DATA}\private\…` whether it lies
 inside the checkout, as today, or elsewhere; a path written under the checkout's `.runtime` may come back as
 `${ASUNA_DATA}\…`: two spellings, one place). Each root in every spelling: as configured and resolved (symlinks,
 junctions, macOS `/private/tmp`), its 8.3 alias on Windows, either slash kind at each step, the JSON-escaped form
 (doubled backslashes), percent-encoded, and after `/`, `(`, a quote or `file:///`; case-insensitive on Windows; a bare
-root with no tail too. A filesystem root or a drive root is never a named root: the table builder refuses one, and
-the worker does not start her lanes on it. `/task/…` (the action brain's sandbox path, kept as it is since ADR-050) is
+root with no tail too. A filesystem root or a drive root is never a named root: when the checkout, the data root or
+DSH's home is one, the builder refuses the whole table, and that is the same state as no table (D2): her lanes'
+requests are refused, visibly. `${ASUNA_FS}` is not a named root but the POSIX fallback for whatever no named root
+covers; a checkout at `/` refuses the table, it never falls to `${ASUNA_FS}`. `/task/…` (the action brain's sandbox path, kept as it is since ADR-050) is
 not a root and stays as it is.
 
 She knows the table by name and meaning, never by value (the values are what is hidden): one line of her program
@@ -105,7 +109,11 @@ unaffected. The refused turn reaches her as a program fault through the existing
 `fault_from_program` line in that conversation, and the developer's note), and the owner sees it on the settings card
 (install check). The install check shows the table (number of roots) and a per-session count of rewritten requests, so
 a DSH upgrade that moved the seam shows instead of leaking quietly; the count reaches her in words with the weekly
-readings beside D5's.
+readings beside D5's. What she sees without a table, whichever the cause (the builder refused, or the plugin never
+got one): her turns there end before reaching the model, and her next turn there opens with the program-fault line
+`ASUNA_ROOT_TABLE_MISSING`, "not your fault, retrying does the same"; inbound lines still arrive and the action
+brain still works. Without a table the other rules hold too: D3 refuses any placeholder toward the action brain
+(`PATH_TABLE_MISSING`) and passes text without one; D4 and D5 have nothing to contract.
 
 **D3. Expansion toward the action brain.** One helper at the four fields that go to it: the `delegate` brief, a
 message to a task, her answer to a task's question, and an `ask` to 行动脑. It runs the vault's `credentials.scrub`
@@ -115,8 +123,9 @@ first (her answer to a task is not scrubbed today; this closes that), then:
 - a placeholder this place cannot hand over stays as written: a mention ("this came from `${ASUNA_DRIVE_D}\logs\x.log`")
   keeps its provenance, it reveals nothing, and the mechanism already keeps the action brain away from it;
 - refused, each with the reason and, where one exists, the whole string rewritten the way it would pass: a raw
-  absolute path of this machine (rewritten with its placeholder); an `${ASUNA_…}` name not in the table (the refusal
-  lists the names there are); a path that climbs with `..` (owner: relative climbing paths are rejected). A `..`
+  absolute path of this machine (rewritten with its placeholder); an `${ASUNA_…}` name not in the table standing as a
+  path's root, i.e. followed by a separator (the refusal lists the names there are; elsewhere it is text, such as a
+  quoted `${ASUNA_REPO:-…}`); a path that climbs with `..` (owner: relative climbing paths are rejected). A `..`
   segment in a path anchored at a placeholder or a real root is refused everywhere (`${ASUNA_WORKSPACE}\..\x`,
   `C:\a\..\b`); a bare relative path that climbs (`..\x`, `../x`, `cd ..`) is refused in a public session only: at
   home it escapes nothing (home reaches the whole computer) and her scripts use `cd ..`.
@@ -163,6 +172,10 @@ back), Windows and POSIX tables, and the Docker shapes (`/app`, `/srv/asuna`, ru
   expands. `${HOME}` and `${1}` in a script pass untouched everywhere.
 - A new revision, note, plan or question written with a raw root is stored contracted.
 - An outbound message cannot carry a raw root; each replacement is counted.
+- Both counts reach her weekly reading as two sentences, each with its own criterion: speech replaced (above zero is
+  a fault) and requests rewritten per conversation (normally above zero).
+- A quoted deployment variable (`${ASUNA_REPO:-…}`) passes toward the action brain as text; no deployment variable
+  in `deploy/` is named like a placeholder.
 - `key_words` yields no word from a placeholder.
 - `machine_words` emits the table's form (D6), in `tests/test_machine_words.py`.
 - The JSON-escaped spelling (doubled backslashes) contracts and expands like the plain one: five sixths of the paths

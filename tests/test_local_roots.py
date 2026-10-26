@@ -74,3 +74,17 @@ def test_the_machine_facts_build_a_table_here():
                                                          local_roots.HOME, local_roots.TEMP, local_roots.DSH_HOME)
     workspace = facts['workspace']
     assert workspace not in table.contract('at ' + workspace + ' and ' + json.dumps(workspace))
+
+
+def test_no_deployment_variable_is_named_like_a_placeholder():
+    """The deployment's own `${ASUNA_…}` variables (deploy/) stay text toward the action brain; one named like a
+    placeholder would be expanded as a path, so none may be."""
+    import re
+    ours = {local_roots.WORKSPACE, local_roots.DATA, local_roots.DSH_HOME, local_roots.HOME, local_roots.TEMP,
+            local_roots.PROGRAMS, local_roots.FS, local_roots.LOCAL_PATH, local_roots.USER}
+    deploy = Path(__file__).resolve().parents[1] / 'deploy'
+    names = {name for path in deploy.rglob('*') if path.is_file()
+             for name in re.findall(r'ASUNA_([A-Z0-9_]+)', path.read_text(encoding='utf-8', errors='replace'))}
+    assert names, 'deploy/ names no ASUNA_ variable: this test reads the wrong folder'
+    clash = sorted(name for name in names if name in ours or name.startswith(local_roots.DRIVE))
+    assert not clash, 'a deployment variable is named like a placeholder: ' + ', '.join(clash)

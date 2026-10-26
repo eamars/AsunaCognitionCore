@@ -570,6 +570,22 @@
   },
   {
    "host": "windows",
+   "note": "a deployment variable quoted from deploy/docker is text, not a placeholder",
+   "input": "image: ${ASUNA_REPO:-asuna}:${ASUNA_REF:-main}",
+   "contracted": "image: ${ASUNA_REPO:-asuna}:${ASUNA_REF:-main}",
+   "home": "image: ${ASUNA_REPO:-asuna}:${ASUNA_REF:-main}",
+   "public": "image: ${ASUNA_REPO:-asuna}:${ASUNA_REF:-main}"
+  },
+  {
+   "host": "linux",
+   "note": "an unknown name not standing as a path root is text",
+   "input": "set ${ASUNA_CHECKOUT_VOLUME} first",
+   "contracted": "set ${ASUNA_CHECKOUT_VOLUME} first",
+   "home": "set ${ASUNA_CHECKOUT_VOLUME} first",
+   "public": "set ${ASUNA_CHECKOUT_VOLUME} first"
+  },
+  {
+   "host": "windows",
    "note": "a raw root toward the action brain",
    "input": "改 C:\\workplace\\asuna_core\\src\\a.py",
    "contracted": "改 ${ASUNA_WORKSPACE}\\src\\a.py",

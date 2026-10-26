@@ -4,7 +4,13 @@
  * DSH's `llm/stream` waterfall, the one place every request passes: turn steps, compaction summaries, one-shot
  * sessions. Text blocks (the system message included), reasoning and earlier tool calls' arguments are contracted;
  * storage stays raw. Without a table her lanes' requests are refused with a coded fault, never sent raw. The same
- * shared case file (tests/fixtures/path_placeholders.json) runs here and in pytest. */
+ * shared case file (tests/fixtures/path_placeholders.json) runs here and in pytest.
+ *
+ * One path is written after the waterfall: the note DSH's DeepSeek adapter puts beside each image names the
+ * attachment's copy by a path it asks DSH's fs service for (`processPathFromHostPath`), while it builds the request.
+ * Her requests therefore run in a scope (`HERS`), and that one mapping answers with the path contracted inside it;
+ * everywhere else (the action brain, DSH's own UI and session controller) it answers as it always did. */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { isAgentLoopRequest, markAgentLoopRequest } from '@deepseek-ai/dsh-llm';
 
 /** Her lanes (index.js laneOf): whatever the model reads there is hers. */
@@ -13,6 +19,9 @@ export const MISSING = 'ASUNA_ROOT_TABLE_MISSING';
 const MISSING_TEXT = MISSING + ': 程序没有拿到本机路径表，这一回合没有发给模型（不是你的错）；已经报给开发者了，'
   + '重试也一样，等程序修好';
 const DONE = Symbol('asuna.roots');
+const WRAPPED = Symbol('asuna.roots.fs');
+/** The table of the request of hers being built now; undefined outside one. */
+const HERS = new AsyncLocalStorage();
 const FLUSH_MS = 60_000;
 
 /** The worker's wire table, compiled; null for none. */
@@ -148,6 +157,41 @@ function presetOf(ctx, agent) {
   return agent?.session?.header?.agentPreset;
 }
 
+/** DSH's fs service, its host-path mapping wrapped once: inside one of her requests the mapped path comes back
+ * contracted. Read again on every request of hers, so a service provided anew is wrapped too. */
+export function wrapHostPaths(ctx) {
+  let fs;
+  try { fs = ctx.get('fs'); } catch { return false; }
+  if (!fs || typeof fs.processPathFromHostPath !== 'function') return false;
+  if (fs[WRAPPED]) return true;
+  const original = fs.processPathFromHostPath;
+  fs.processPathFromHostPath = function (hostPath) {
+    const mapped = original.call(this, hostPath);
+    const table = HERS.getStore();
+    return table && typeof mapped === 'string' ? contract(table, mapped).text : mapped;
+  };
+  fs[WRAPPED] = true;
+  return true;
+}
+
+/** A stream made and read inside her scope: the adapter builds the request while it is read, after its own
+ * awaits, so every step of it runs in the scope. */
+function inHerScope(table, make) {
+  return (async function* () {
+    const it = HERS.run(table, make)[Symbol.asyncIterator]();
+    let finished = false;
+    try {
+      for (;;) {
+        const step = await HERS.run(table, () => it.next());
+        if (step.done) { finished = true; return step.value; }
+        yield step.value;
+      }
+    } finally {
+      if (!finished) await HERS.run(table, () => it.return?.());
+    }
+  })();
+}
+
 /** The listener: her lanes' requests rewritten, or refused without a table; every other request passes as it is. */
 export function rootsAtTheModel(core) {
   const { ctx } = core;
@@ -163,6 +207,8 @@ export function rootsAtTheModel(core) {
     }
     const { request, count } = rewriteRequest(roots.table, options);
     roots.count(options.sessionId, lane, count > 0);
-    return request === options ? next() : ctx.llm.stream(request);
+    wrapHostPaths(ctx);
+    // Always in her scope, rewritten or not: a picture's note can be the only path in a request.
+    return inHerScope(roots.table, () => request === options ? next() : ctx.llm.stream(request));
   }, { global: true });
 }

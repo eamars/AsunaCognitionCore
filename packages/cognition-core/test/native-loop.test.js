@@ -3,7 +3,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Context } from '@deepseek-ai/cordis';
-import LlmRuntime, { LlmAdapter, createUserMessage } from '@deepseek-ai/dsh-llm';
+import LlmRuntime, { LlmAdapter, createUserMessage, requestImageHandleText, resolveImageAttachmentAccess }
+  from '@deepseek-ai/dsh-llm';
+import LocalFileSystem from '@deepseek-ai/dsh-fs-local';
 import SessionStore from '@deepseek-ai/dsh-session';
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection';
 import AgentRegistry from '@deepseek-ai/dsh-agent';
@@ -32,10 +34,13 @@ async function harness(t, finish = 'stop', composition) {
   const requests = [];
   let enter;
   const entered = new Promise(resolve => { enter = resolve; });
+  const notes = [];
+  let note;              // what DSH's DeepSeek adapter writes beside an image, built while the request is read
   class Adapter extends LlmAdapter {
     async *stream(options) {
       requests.push(options);
       enter();
+      if (note) { await new Promise(resolve => setTimeout(resolve, 2)); notes.push([options.sessionId, note()]); }
       if (finish === 'wait') await new Promise((_, reject) => {
         options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
       });
@@ -70,7 +75,7 @@ async function harness(t, finish = 'stop', composition) {
     handles.push(handle);
     return handle.agent;
   }
-  return { ctx, core, requests, business, create, entered };
+  return { ctx, core, requests, business, create, entered, notes, imageNote: fn => { note = fn; } };
 }
 
 test('first native request has persona; one real input and no duplicate assistant history', async t => {
@@ -366,3 +371,27 @@ test('ADR-098: without a table her lane is refused with the coded fault and one 
   assert.equal(h.requests.length, 1);
   assert.equal(h.core.roots.status().refused, 'ROOT_TABLE_REFUSED: fixture');
 });
+
+test("ADR-098: the image note's path is contracted in her request only (DSH's fs host-path mapping, in her scope)", async t => {
+  const h = await rootsHarness(t, PATHS.tables.windows);
+  new LocalFileSystem(h.ctx, { cwd: process.cwd(), diffBasisMaxBytes: 1 << 20 });
+  const host = WIN.data + BS + 'adr008' + BS + 'home' + BS + 'attachments' + BS + 'ab' + BS + 'abcdef.jpg';
+  const ref = { attachmentId: 'sha256:abcdef0123456789', name: 'photo.jpg', width: 64, height: 48, mediaType: 'image/jpeg' };
+  // As dsh-llm-deepseek resolves it: the attachment's host path through the fs service of its own scope.
+  const adapterScope = h.ctx.extend ? h.ctx.extend() : h.ctx;
+  h.imageNote(() => requestImageHandleText(ref, { width: 64, height: 48 }, resolveImageAttachmentAccess(
+    { imageHostPath: () => host }, path => adapterScope.get('fs')?.processPathFromHostPath(path), ref)));
+  const role = await h.open('role', 'asuna', 'asuna');
+  role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'look' }] }));
+  await role.whenIdle();
+  const action = await h.open('action', 'asuna-action', 'ordinary');
+  action.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'open it' }] }));
+  await action.whenIdle();
+  const hers = h.notes.find(([id]) => id === 'role')?.[1], actions = h.notes.find(([id]) => id === 'action')?.[1];
+  assert.ok(hers && actions, 'both requests built an image note');
+  assert.doesNotMatch(hers, ROOTS, 'no root in the note of her request');
+  assert.ok(hers.includes('"${ASUNA_DATA}' + BS + BS + 'adr008'), hers);
+  assert.match(actions, ROOTS, "the action brain's note keeps the real path");
+  assert.equal(h.ctx.get('fs').processPathFromHostPath(host), host, 'outside a request of hers the mapping is unchanged');
+});
+

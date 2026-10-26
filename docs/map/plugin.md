@@ -423,6 +423,7 @@ No local root of this computer reaches her character brain (ADR-098). The worker
   - `flush` — The counts since the last flush reach the worker, which keeps them for her weekly reading.
   - `refuse`
   - `status` — For the settings card: the table's size, or why there is none; requests rewritten per session since start.
+- def `wrapHostPaths` — DSH's fs service, its host-path mapping wrapped once: inside one of her requests the mapped path comes back contracted.
 - def `rootsAtTheModel` — The listener: her lanes' requests rewritten, or refused without a table; every other request passes as it is.
 
 ## `schedule.js`

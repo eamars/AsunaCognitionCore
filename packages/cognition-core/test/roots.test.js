@@ -43,6 +43,9 @@ test('a request is rewritten in its text, reasoning, system text and earlier too
   assert.equal(rewriteRequest(table, request).request, request);
 });
 
+async function* chunks(...items) { for (const item of items) yield item; }
+async function drain(stream) { const out = []; for await (const item of stream) out.push(item); return out; }
+
 test('a session is hers by its preset as it stands now: switched in it is rewritten, switched out it passes', async () => {
   const root = DOC.hosts.windows.workspace;
   const now = { 'in': 'asuna', out: 'asuna-action' };           // what DSH's agentPreset projection says now
@@ -53,7 +56,7 @@ test('a session is hers by its preset as it stands now: switched in it is rewrit
     on: (name, fn) => { if (name === 'llm/stream') listener = fn; },
     agents: { get: id => ({ session: { id, header: { agentPreset: made[id] } } }) },
     sessionProjections: { stateOf: (session, key) => key === 'agentPreset' ? now[session.id] : undefined },
-    llm: { stream: request => { sent.push(request); return 'rewritten'; } },
+    llm: { stream: request => { sent.push(request); return chunks('rewritten'); } },
     logger: { warn() {} },
   };
   const core = { ctx, worker: null, laneOf: agent => ({ asuna: 'character', 'asuna-action': 'action' })[agent.session.header.agentPreset] };
@@ -61,8 +64,17 @@ test('a session is hers by its preset as it stands now: switched in it is rewrit
   core.roots.take(DOC.tables.windows);
   rootsAtTheModel(core);
   const request = id => ({ sessionId: id, messages: [{ id: 'm', role: 'user', content: [{ type: 'text', text: 'at ' + root }] }] });
-  assert.equal(await listener(request('in'), () => 'raw'), 'rewritten', 'switched to her preset: rewritten');
+  assert.deepEqual(await drain(listener(request('in'), () => chunks('raw'))), ['rewritten'],
+    'switched to her preset: rewritten');
   assert.equal(sent[0].messages[0].content[0].text, 'at ${ASUNA_WORKSPACE}');
-  assert.equal(await listener(request('out'), () => 'raw'), 'raw', 'switched to the action preset: passes as it is');
+  assert.deepEqual(await drain(listener(request('out'), () => chunks('raw'))), ['raw'],
+    'switched to the action preset: passes as it is');
   clearTimeout(core.roots.timer);
+});
+
+test("DSH's DeepSeek adapter still names an image's copy through the fs service's host-path mapping", () => {
+  // roots.js contracts that one mapping inside her requests; an upgrade that resolves image paths another way would
+  // bring the real root back into her image notes without anything else failing.
+  const adapter = readFileSync(new URL(import.meta.resolve('@deepseek-ai/dsh-llm-deepseek')), 'utf8');
+  assert.match(adapter, /resolveImageAccess:[^\n]*processPathFromHostPath/);
 });

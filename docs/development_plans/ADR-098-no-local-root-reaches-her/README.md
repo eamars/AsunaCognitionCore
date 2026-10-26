@@ -234,9 +234,20 @@ naming the attachment's read-only normalized copy by its absolute path under DSH
 `processPathFromHostPath`), and `dsh-llm` projects a file block to a text with its saved path. Both happen inside the
 adapter call, after the `llm/stream` waterfall, so the seam cannot rewrite them. Her lanes carry images: 609 image
 blocks in 27 of her 79 persona-preset session logs, none in the gate's or the summaries' (`build/image_blocks.py`);
-no file blocks. The deep dive's "ids, not paths" holds for the session log, not for the request. Closing it is DSH
-work (the owner's): an adapter or `fs` option that leaves the path out for her presets. Until then each image she
-sees carries one root.
+no file blocks. The deep dive's "ids, not paths" holds for the session log, not for the request.
+
+**Closed on our side (2026-10-26 evening, the owner's choice of the three: report upstream, patch the fork, or a
+hook of ours).** The adapter asks DSH's fs service for that path (`processPathFromHostPath`) while it builds the
+request, inside the stream the waterfall returns. The plugin runs each request of her lanes in one
+`AsyncLocalStorage` scope, made and read inside it, and wraps that one mapping once: inside her scope the mapped
+path comes back contracted (`${ASUNA_DATA}\adr008\home\attachments\...`), the note otherwise as DSH writes it;
+outside it (the action brain, DSH's UI and session controller) the mapping answers as before. No DSH file
+changes. An experiment with real cordis, `LlmRuntime`, `dsh-fs-local` and DSH's own note functions came first;
+the test now runs through the installed listener and agents (`native-loop.test.js`), with a negative control (the
+wrapper off, it fails), and `roots.test.js` fails if the installed DeepSeek adapter stops resolving image paths
+through that mapping, so a DSH upgrade cannot bring the root back quietly. DSH's price estimate reads the note
+outside the scope for its length only; it is never sent. A file block's saved-path text would pass the same
+mapping; none reach her lanes today.
 
 **D3 and D4 meet in `RoleTools.call`.** D4 contracts every string argument before the tool runs, which would rewrite
 a raw root in a brief before D3 could refuse it. So D4 leaves out the field bound for the action brain (the brief, the

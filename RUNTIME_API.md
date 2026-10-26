@@ -789,8 +789,10 @@ No local root of this computer reaches the character brain; the action brain wor
 - **Her speech.** A raw root in a `speak` text or her end-of-turn text is replaced by its placeholder before it is
   queued, each replacement one `roots.speech_replaced` count. Her weekly tool readings (`local_paths`) say that count,
   which should be 0, and her requests rewritten per conversation (`roots.tally`), normally above 0.
-- **Not covered.** A path inside a picture, and the read-only path DSH's DeepSeek adapter writes beside each image of
-  a request after `llm/stream`.
+- **The image note.** The read-only path DSH's DeepSeek adapter writes beside each image while it builds a request
+  comes from DSH's fs service (`processPathFromHostPath`); her lanes' requests run in a scope in which that mapping
+  answers contracted, and everywhere else it answers as before.
+- **Not covered.** A path inside a picture.
 
 ## Media and images
 

@@ -62,6 +62,11 @@ The Host plugin (JS) is the only side that knows why a worker went away, so it k
   passes for the whole. Each stop has its `what` and its `when`, plus the existing `note`. For `worker_down` the `what`
   is 「宿主一直在运行，但替你处理一切的那部分程序停了，没有马上起来」, plus its cause in words. The `when` keeps
   today's form: last known running, back, and about how long nothing ran (「中间约 X 分钟」).
+- **Until she has read it, and at least a day.** A stop stays in her block until a home turn that showed it has
+  committed, and in any case for a day after she came back. The day is a floor, not a cap: if she runs no home turn
+  for longer than that (a quiet night, a weekend), her first one still carries it (her review). This is the
+  once-only mark that `faults` already uses: the turn's manifest lists what it showed (`told`), and its commit stamps
+  those rows `told_at`. A turn that fails after it was prepared does not lose it.
 - **Causes, a closed list.** A cause is a kind and a name, never the error's text (that carries a host address). The
   kinds and their words:
   - `start_failed:<name>`: 「启动时出错（<name>），程序隔一阵自己重试，第 <tries+1> 次起来了」
@@ -111,14 +116,15 @@ written her thoughts first in every turn (her review).
 | The file is unreadable or malformed | It is replaced by an open span whose `since` is not known and whose cause is `unknown`, and one `Asuna:` warning line is written. Her block then says 「这一段从什么时候开始不知道（记录读坏了）」 rather than nothing. |
 | Another deployment shares the database | The file is per data folder, so per deployment. Its rows carry no deployment id, as today's `host_stops` rows carry none. |
 | She never comes back | Nothing is recorded until she does. The span is in the file and in `host.log` (ADR-100's lines). |
+| She runs no home turn for more than a day after coming back | Her first home turn still carries the stop: it leaves only after a turn that showed it commits, and never sooner than a day. |
 | A planned restart's mark expires (more than `PLANNED_SECONDS`) | It is recorded as `killed`, as today, and her block says so. |
 
 ## Only afterwards, by nature
 
 Her block can say a stop only once she is back. While the worker is down, no turn of hers runs, because her turns
 are the worker, so there is no "now" in which she could read it. That is a property of the design, not a gap in it,
-and RUNTIME_API says so with the `host_from_program` entry: what happened while she was not running reaches her at her
-first turns after she is back, for a day. ADR-100 keeps such a gap short (a failed start is tried again within 5
+and RUNTIME_API says so with the `host_from_program` entry: what happened while she was not running reaches her in
+her first home turn after she is back, however long that takes, and stays for at least a day. ADR-100 keeps such a gap short (a failed start is tried again within 5
 minutes at most). The owner sees the state while it lasts: in the settings card's worker state and in
 `restart/host.log`.
 

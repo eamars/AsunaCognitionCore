@@ -34,6 +34,7 @@ import { applyFetch } from './fetch.js';
 import { renderSvg } from './svg.js';
 import { carrySession, lastSummary, overflowed } from './carry.js';
 import { TurnEnds, summaryAsNextRequest } from './compaction.js';
+import { Roots, rootsAtTheModel } from './roots.js';
 import { languageWords, savedLanguage } from './ui-language.js';
 import { Collab } from './collab.js';
 import { failureClass, restFor, resting } from './tiers.js';
@@ -199,6 +200,8 @@ export class CognitionCore {
     this.schedules = new NativeSchedules(this);
     this.children = new NativeChildren(this);
     this.collab = new Collab(this);
+    // The worker's root table and the counts of her rewritten requests (roots.js, ADR-098).
+    this.roots = new Roots(this);
     this.lifecycle = { state: 'unconfigured', error: null, restarts: 0 };
   }
 
@@ -347,7 +350,10 @@ export class CognitionCore {
         deployment: this.config.deployment, secrets: await this.credentialValues(this.config.deployment), admission: this.config.channelAdmission,
         channels, apply_integrations: !!this.applying, schedule, sandbox: await this.sandboxStatus(),
         // Her rhythm tasks' names in the language last reported by a browser (ui-language.js).
-        ui_titles: this.uiTitles ??= (await languageWords(await savedLanguage(this.ctx.asunaFloor.dataRoot))).titles });
+        ui_titles: this.uiTitles ??= (await languageWords(await savedLanguage(this.ctx.asunaFloor.dataRoot))).titles,
+        // The roots the worker's table names besides its own (local_roots.py): the checkout and DSH's home.
+        checkout: this.ctx.asunaFloor.checkout(), dsh_home: this.dshHome() });
+      this.roots.take(status.roots, status.roots_refused);
       await this.worker.call('publication.activated', { publications: await this.ctx.asunaFloor.workerReady() });
       await organizeNativeWorkspaces(this, status.navigation);
       // Her own working copy of the checkout in each home place's folder: each made once, never reset (ADR-065).
@@ -374,6 +380,13 @@ export class CognitionCore {
       throw error;
     });
     return this.initializing;
+  }
+
+  /** DSH's home: the profile's, else the variable the Host was started with. */
+  dshHome() {
+    let profile;
+    try { profile = this.ctx.reflect?.get('profileContext'); } catch { profile = undefined; }
+    return profile?.home ?? process.env.DSH_HOME ?? null;
   }
 
   // DSH Web ships the Schedule service, which may still be starting when the worker starts: plans use it once it is
@@ -1361,6 +1374,7 @@ export class CognitionCore {
 
   async dispose() {
     this.disposed = true;
+    this.roots.flush();
     this.releaseProbe?.();
     clearTimeout(this.restartTimer);
     if (this.worker) this.worker.onFailure = null;
@@ -1418,6 +1432,8 @@ export function apply(ctx, config = {}) {
   ctx.on('agent/request-error', imageRefusalListener(text => ctx.logger.warn('Asuna: ' + text)));
   // Platform lines held while a compaction ran on their conversation join it as the compaction ends (pairing.js).
   releaseAfterCompaction(core);
+  // Her lanes' requests carry no local root of this computer: rewritten with the worker's table (roots.js, ADR-098).
+  rootsAtTheModel(core);
   // A compaction summary is sent as its conversation's next request would be (compaction.js, ADR-094 §10.2).
   summaryAsNextRequest(core);
   ctx.on('dispose', () => {

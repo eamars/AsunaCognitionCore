@@ -1,0 +1,157 @@
+/** No local root of this computer reaches her character brain (ADR-098). The worker builds the root table at its start
+ * (local_roots.py) and hands it over with its `initialize` answer; every request of her lanes (her persona preset,
+ * the relevance gate, the appraiser, the background summaries; never the action brain) is rewritten with it at
+ * DSH's `llm/stream` waterfall, the one place every request passes: turn steps, compaction summaries, one-shot
+ * sessions. Text blocks (the system message included), reasoning and earlier tool calls' arguments are contracted;
+ * storage stays raw. Without a table her lanes' requests are refused with a coded fault, never sent raw. The same
+ * shared case file (tests/fixtures/path_placeholders.json) runs here and in pytest. */
+import { isAgentLoopRequest, markAgentLoopRequest } from '@deepseek-ai/dsh-llm';
+
+/** Her lanes (index.js laneOf): whatever the model reads there is hers. */
+export const HER_LANES = new Set(['character', 'attend', 'appraiser', 'summary']);
+export const MISSING = 'ASUNA_ROOT_TABLE_MISSING';
+const MISSING_TEXT = MISSING + ': 程序没有拿到本机路径表，这一回合没有发给模型（不是你的错）；已经报给开发者了，'
+  + '重试也一样，等程序修好';
+const DONE = Symbol('asuna.roots');
+const FLUSH_MS = 60_000;
+
+/** The worker's wire table, compiled; null for none. */
+export function compile(wire) {
+  if (!wire || typeof wire.source !== 'string' || !Array.isArray(wire.groups)) return null;
+  return { pattern: new RegExp(wire.source, 'g'), groups: wire.groups, roots: wire.roots ?? 0, cache: new WeakMap() };
+}
+
+function nameOf(name, text) {
+  if (name !== 'DRIVE_') return name;
+  const lower = text.toLowerCase();
+  return 'DRIVE_' + (lower.startsWith('/') || lower.startsWith('%2f') ? text.at(-1) : text[0]).toUpperCase();
+}
+
+/** { text with every root written as its placeholder, how many were replaced }. */
+export function contract(table, text) {
+  let count = 0;
+  const n = table.groups.length;
+  const out = text.replace(table.pattern, (...args) => {
+    for (let i = 0; i < n; i++) {
+      const group = args[1 + i];
+      if (group !== undefined) { count++; return '${ASUNA_' + nameOf(table.groups[i], group) + '}'; }
+    }
+    return args[0];
+  });
+  return { text: count ? out : text, count };
+}
+
+function block(table, item) {
+  if ((item?.type === 'text' || item?.type === 'reasoning') && typeof item.text === 'string') {
+    const { text, count } = contract(table, item.text);
+    return count ? [{ ...item, text }, count] : [item, 0];
+  }
+  if (item?.type === 'tool-call' && typeof item.arguments === 'string') {
+    const { text, count } = contract(table, item.arguments);
+    return count ? [{ ...item, arguments: text }, count] : [item, 0];
+  }
+  return [item, 0];
+}
+
+/** One message contracted (the same object when nothing changed); cached by message, since DSH reuses its frozen
+ * history from request to request and the rewrite of each is the same every time. */
+function message(table, item) {
+  const known = table.cache.get(item);
+  if (known) return known;
+  let count = 0;
+  const content = Array.isArray(item?.content) ? item.content.map(part => {
+    const [next, n] = block(table, part); count += n; return next;
+  }) : item?.content;
+  const value = [count ? Object.freeze({ ...item, content: Object.freeze(content) }) : item, count];
+  if (item && typeof item === 'object') table.cache.set(item, value);
+  return value;
+}
+
+/** { request, count }: the request with every root contracted; the same request object when there was none. */
+export function rewriteRequest(table, options) {
+  let count = 0;
+  const messages = (options.messages ?? []).map(item => { const [next, n] = message(table, item); count += n; return next; });
+  let system = options.system;
+  if (typeof system === 'string') { const out = contract(table, system); system = out.text; count += out.count; }
+  if (!count) return { request: options, count };
+  const request = { ...options, messages, ...(system !== undefined ? { system } : {}), [DONE]: true };
+  if (isAgentLoopRequest(options)) markAgentLoopRequest(request);
+  return { request, count };
+}
+
+/** The table, its counts and the refusals, kept on the core (`core.roots`). */
+export class Roots {
+  constructor(core) {
+    this.core = core;
+    this.table = null;
+    this.refused = null;            // why the worker built none, when it said so
+    this.sessions = new Map();      // session id -> { lane, requests, rewritten } since the plugin started
+    this.unsent = new Map();        // the same, not yet handed to the worker
+    this.reported = false;          // the missing table's one audit event
+    this.timer = null;
+  }
+
+  /** The worker's answer at its start: a table, or why there is none. */
+  take(wire, refused) {
+    this.table = compile(wire);
+    this.refused = this.table ? null : (refused || 'the worker sent no table');
+    if (this.table) this.reported = false;
+  }
+
+  count(sessionId, lane, replaced) {
+    for (const map of [this.sessions, this.unsent]) {
+      const row = map.get(sessionId) ?? { lane, requests: 0, rewritten: 0 };
+      row.requests++; if (replaced) row.rewritten++;
+      map.set(sessionId, row);
+    }
+    this.timer ??= setTimeout(() => this.flush(), FLUSH_MS);
+    this.timer.unref?.();
+  }
+
+  /** The counts since the last flush reach the worker, which keeps them for her weekly reading. */
+  flush() {
+    clearTimeout(this.timer); this.timer = null;
+    if (!this.unsent.size || !this.core.worker) return;
+    const sessions = [...this.unsent].map(([session_id, row]) => ({ session_id, ...row }));
+    this.unsent = new Map();
+    this.core.worker.call('roots.tally', { sessions })
+      .catch(error => this.core.ctx.logger.warn('Asuna roots: counts not kept: ' + String(error?.message ?? error)));
+  }
+
+  refuse(lane) {
+    if (!this.reported) {
+      this.reported = true;
+      this.core.ctx.logger.warn('Asuna roots: no root table (' + this.refused + '): requests of her lanes are refused');
+      this.core.worker?.call('roots.refused', { lane, reason: String(this.refused ?? 'no table') })
+        .catch(error => this.core.ctx.logger.warn('Asuna roots: refusal not recorded: ' + String(error?.message ?? error)));
+    }
+    return Object.assign(new Error(MISSING_TEXT), { code: MISSING });
+  }
+
+  /** For the settings card: the table's size, or why there is none; requests rewritten per session since start. */
+  status() {
+    const rows = [...this.sessions.values()];
+    return { roots: this.table?.roots ?? 0, refused: this.table ? null : this.refused, sessions: this.sessions.size,
+      requests: rows.reduce((sum, row) => sum + row.requests, 0),
+      rewritten: rows.reduce((sum, row) => sum + row.rewritten, 0),
+      by_session: Object.fromEntries([...this.sessions].map(([id, row]) => [id, { ...row }])) };
+  }
+}
+
+/** The listener: her lanes' requests rewritten, or refused without a table; every other request passes as it is. */
+export function rootsAtTheModel(core) {
+  const { ctx } = core;
+  ctx.on('llm/stream', (options, next) => {
+    if (options?.[DONE] || !options?.sessionId) return next();
+    const lane = core.laneOf(ctx.agents?.get(options.sessionId));
+    if (!HER_LANES.has(lane)) return next();
+    const roots = core.roots;
+    if (!roots.table) {
+      const error = roots.refuse(lane);
+      return (async function* () { throw error; })();
+    }
+    const { request, count } = rewriteRequest(roots.table, options);
+    roots.count(options.sessionId, lane, count > 0);
+    return request === options ? next() : ctx.llm.stream(request);
+  }, { global: true });
+}

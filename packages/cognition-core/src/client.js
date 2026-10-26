@@ -168,6 +168,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.sandboxReason.off': "设置里关掉了", 'settings.sandboxReason.no_host': "宿主没有沙箱",
       'settings.channels': '{titles}：{state}', 'settings.channelOn': '本机入口已启动；适配器 {state}；平台连接未验证',
       'settings.channelOff': '未启用', 'settings.schedule': '定时：{state}', 'settings.sandbox': '沙箱：{state}', 'settings.sandboxNone': '无（{reason}）：跑代码、自开发与集成已关闭', 'settings.scheduleOn': '原生调度',
+      'settings.roots': '本机路径表：{roots} 个根，这次启动后 {sessions} 个对话的请求改写了 {rewritten}／{requests} 次',
+      'settings.rootsMissing': '本机路径表没有建好（{reason}）：她的对话都不发给模型，直到修好',
       'settings.pending': '已保存的配置尚未应用。', 'settings.applied': '保存配置与当前应用配置一致。',
       'settings.apply': '应用已保存设置', 'settings.refresh': '刷新状态',
       'persona.aria': '人格数据', 'persona.title': '人格数据 · {persona}',
@@ -342,6 +344,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'settings.sandboxReason.no_host': "the Host has no sandbox",
       'settings.channels': '{titles}: {state}', 'settings.channelOn': 'local entry running; adapter {state}; platform connection not verified',
       'settings.channelOff': 'off', 'settings.schedule': 'Schedules: {state}', 'settings.sandbox': 'Sandbox: {state}', 'settings.sandboxNone': 'none ({reason}): running code, self-development and integration are off', 'settings.scheduleOn': 'native scheduler',
+      'settings.roots': 'Local root table: {roots} roots; since this start {rewritten} of {requests} requests rewritten in {sessions} conversations',
+      'settings.rootsMissing': 'No local root table ({reason}): none of her conversations reaches the model until it is fixed',
       'settings.pending': 'Saved settings are not applied yet.', 'settings.applied': 'Saved settings match what is running.',
       'settings.apply': 'Apply saved settings', 'settings.refresh': 'Refresh status',
       'persona.aria': 'Persona data', 'persona.title': 'Persona data · {persona}',
@@ -1050,6 +1054,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           database: worker?.database ? word(t, 'settings.database.', worker.database) : t('settings.disconnected') })
           : t('settings.readingStatus')),
         status?.lifecycle.error && h('p', { role: 'alert' }, status.lifecycle.error),
+        // ADR-098: without the worker's root table her lanes are refused, said here, never left silent.
+        status?.roots?.refused && h('p', { role: 'alert' }, t('settings.rootsMissing', { reason: status.roots.refused })),
         // A publication that only a Host restart puts into effect is said, never left silent (ADR-021 D4).
         ...(status?.publications ?? []).filter(p => p.state === 'HOST_RESTART_REQUIRED').map(p => h('p', { key: 'restart-' + p.project,
           role: 'status' }, t('settings.restartWaiting', { project: p.project,
@@ -1083,7 +1089,8 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
           t('settings.schedule', { state: worker?.schedules_active ? t('settings.scheduleOn') : t('settings.channelOff') }),
           ...(worker?.sandbox ? [t('settings.sandbox', { state: worker.sandbox.backend === 'none'
             ? t('settings.sandboxNone', { reason: worker.sandbox.reason_code ? word(t, 'settings.sandboxReason.', worker.sandbox.reason_code)
-              : worker.sandbox.reason }) : word(t, 'settings.sandbox.', worker.sandbox.backend) })] : [])].join(' · ')),
+              : worker.sandbox.reason }) : word(t, 'settings.sandbox.', worker.sandbox.backend) })] : []),
+          ...(status.roots && !status.roots.refused && status.roots.roots ? [t('settings.roots', status.roots)] : [])].join(' · ')),
         status && h('p', { role: 'status' }, status.pending ? t('settings.pending') : t('settings.applied')),
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           h(Button, { disabled: busy || state.shell.dirty || state.shell.saving, onClick: activate, variant: 'outline' }, t('settings.apply')),

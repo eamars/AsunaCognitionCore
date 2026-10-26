@@ -15,9 +15,11 @@ import { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry';
 import TokenMeter from '@deepseek-ai/dsh-token-meter';
 import Commands from '@deepseek-ai/dsh-commands';
 import fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import YAML from 'yaml';
 import { CognitionCore, pictureParts } from '../src/index.js';
 import { asunaRender, attachImage } from '../src/tool-output.js';
+import { rootsAtTheModel } from '../src/roots.js';
 
 async function harness(t, finish = 'stop', composition) {
   const ctx = new Context();
@@ -277,4 +279,90 @@ test('pictures of a group turn become image parts; one that cannot be saved is l
     { ref: 'att-bad', media_type: 'image/png', data }, { ref: 'att-2' }]);
   assert.deepEqual(parts, [{ type: 'image', attachment: { attachmentId: 'a-att-1', mediaType: 'image/png' } }]);
   assert.deepEqual(saved, ['att-1']);
+});
+
+// ADR-098: what the model reads in her lanes holds no local root of this computer; the action brain's requests and
+// every stored message stay as they were.
+const PATHS = JSON.parse(readFileSync(new URL('../../../tests/fixtures/path_placeholders.json', import.meta.url), 'utf8'));
+const WIN = PATHS.hosts.windows;
+const BS = '\\';
+
+async function rootsHarness(t, wire, refused) {
+  const h = await harness(t);
+  h.core.config.persona = 'fixture';
+  h.core.personas.set('fixture', { preset: 'asuna' });
+  h.core.roots.take(wire, refused);
+  rootsAtTheModel(h.core);
+  // DSH's working-folder line, a required runtime context as dsh-working-directory registers it.
+  h.ctx.systemPrompt.context({ name: 'working-directory:current', order: 1, required: true, interpolate: false,
+    text: ({ agent }) => agent ? 'Current working directory: ' + JSON.stringify(agent.session.header.cwd) + '.' : '' });
+  const calls = [];
+  const call = h.core.worker.call.bind(h.core.worker);
+  h.core.worker.call = async (method, args) => {
+    calls.push({ method, args });
+    if (method === 'roots.tally' || method === 'roots.refused') return { kept: true };
+    if (method === 'input') {
+      await h.core.onEvent({ kind: 'stage', session_id: args.session_id, token: 'stage-' + args.session_id, phase: 'TURN',
+        lane: 'character', system: 'Persona. 你的源码在 ' + WIN.workspace + BS + 'packages', text: 'Internal context' });
+      return { accepted: true };
+    }
+    return call(method, args);
+  };
+  const open = async (id, preset, mount) => {
+    const handle = await h.ctx.agents.create({ sessionId: id, agentOptions: { provider: 'fixture', model: 'one-model' },
+      meta: { cwd: WIN.data + BS + 'work' + BS + 'local-user', agentPreset: preset },
+      setup: async scope => { await h.ctx.agentPresets.mount(scope, mount); } });
+    t.after(() => handle.dispose());
+    return handle.agent;
+  };
+  return { ...h, calls, open };
+}
+
+// Any of the fixture's roots or its account name, in any count of backslashes, any case.
+const ROOTS = new RegExp([WIN.workspace, WIN.home, WIN.user].map(text => text.split(BS)
+  .map(part => part.replace(/[.^$|?*+()[\]{}]/g, ch => BS + ch)).join('[' + BS + BS + '/]+')).join('|'), 'i');
+
+test('ADR-098: her requests carry zero roots and zero user names; the action brain\'s are unchanged', async t => {
+  const h = await rootsHarness(t, PATHS.tables.windows);
+  const role = await h.open('role', 'asuna', 'asuna');
+  role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text',
+    text: '看 ' + WIN.home + BS + 'Desktop' + BS + 'a.txt 和 ' + JSON.stringify(WIN.workspace + BS + 'src')
+      + '，whoami 是 ' + WIN.user }] }));
+  await role.whenIdle();
+  const action = await h.open('action', 'asuna-action', 'ordinary');
+  action.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'do ' + WIN.workspace }] }));
+  await action.whenIdle();
+  assert.equal(h.requests.length, 2);
+  const [hers, actions] = h.requests.map(request => request.messages.flatMap(m => m.content.map(x => x.text ?? '')).join('\n'));
+  assert.doesNotMatch(hers, ROOTS, 'no root and no user name in the request of her lane');
+  assert.ok(hers.includes('Current working directory: "${ASUNA_DATA}' + BS + BS + 'work' + BS + BS + 'local-user".'));
+  assert.ok(hers.includes('你的源码在 ${ASUNA_WORKSPACE}' + BS + 'packages'));
+  assert.ok(hers.includes('看 ${ASUNA_HOME}' + BS + 'Desktop' + BS + 'a.txt 和 "${ASUNA_WORKSPACE}' + BS + BS + 'src"'));
+  assert.ok(hers.includes('whoami 是 ${ASUNA_USER}'));
+  assert.match(actions, ROOTS, "the action brain's request keeps the real paths");
+  // Storage stays raw: her conversation's log keeps what was written.
+  assert.match(JSON.stringify(role.session.snapshotEvents()), ROOTS);
+  h.core.roots.flush();
+  const tally = h.calls.find(x => x.method === 'roots.tally').args.sessions;
+  assert.deepEqual(tally, [{ session_id: 'role', lane: 'character', requests: 1, rewritten: 1 }]);
+  assert.equal(h.core.roots.status().rewritten, 1);
+});
+
+test('ADR-098: without a table her lane is refused with the coded fault and one audit event; the action lane runs', async t => {
+  const h = await rootsHarness(t, null, 'ROOT_TABLE_REFUSED: fixture');
+  for (const id of ['role', 'role-two']) {
+    const role = await h.open(id, 'asuna', 'asuna');
+    role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'hello' }] }));
+    await role.whenIdle();
+  }
+  assert.equal(h.requests.length, 0, 'nothing of hers reached the model');
+  const failed = h.calls.filter(x => x.method === 'result' && x.args.error);
+  assert.equal(failed.length, 2);
+  assert.ok(failed.every(x => x.args.error.startsWith('Error: ASUNA_ROOT_TABLE_MISSING:')), failed[0]?.args.error);
+  assert.equal(h.calls.filter(x => x.method === 'roots.refused').length, 1);
+  const action = await h.open('action', 'asuna-action', 'ordinary');
+  action.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'do it' }] }));
+  await action.whenIdle();
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.core.roots.status().refused, 'ROOT_TABLE_REFUSED: fixture');
 });

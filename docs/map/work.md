@@ -82,6 +82,30 @@ What a conversation outside home reads of an action brain's report holds nothing
 - def `text`
 - def `clean` — The same value with every string in it rewritten (dicts and lists walked; keys kept).
 
+## `local_roots`
+
+[src/asuna/local_roots.py](../../src/asuna/local_roots.py)
+
+No local root of this computer reaches her character brain (ADR-098): the root table and its two directions.
+
+- class `TableRefused` — A root the table cannot hold (a filesystem or drive root): her lanes do not start on it.
+- class `PathRefused` — A path she wrote toward the action brain that cannot go as it is: `CODE: words`.
+- def `machine` — This machine's facts for `build`: the configured roots, their other spellings, program folders, drives or mounts and the account name.
+- class `Table` — One machine's roots: `contract` (toward her), `outbound` (toward the action brain), `wire` (for the plugin).
+  - `contract_text` — (the text with every root of this machine written as its placeholder, how many were replaced).
+  - `contract` — The same value with every string in it contracted (dicts and lists walked; keys kept).
+  - `hands` — Whether a place (home or public) hands this placeholder over as its real path.
+  - `problems` — What keeps a text she wrote toward the action brain from going as it is: [(code, words)].
+  - `expand` — Every placeholder this place hands over written as its real path, the tail's separators the host's own; the others as written.
+  - `outbound` — A text she wrote toward the action brain, ready to go: expanded, or PathRefused with the reasons.
+  - `wire` — What the plugin needs to rewrite her requests: the pattern's source (no flags) and each group's name.
+- def `build` — The table of these facts (TableRefused for a filesystem or drive root as a named root).
+- def `attach` — Build this worker's table from the machine (or the given facts); its wire, or None with REFUSED set.
+- def `contract` — `Table.contract` with this worker's table (the value as it is without one).
+- def `contract_text`
+- def `outbound` — `Table.outbound` with this worker's table; without one, any placeholder is refused.
+- def `context_line` — Her program context's line on the placeholders: names and meanings, never values.
+
 ## `grants`
 
 [src/asuna/grants.py](../../src/asuna/grants.py)

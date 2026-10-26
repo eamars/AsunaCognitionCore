@@ -370,7 +370,7 @@ class BusinessWorker:
     def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, native_sessions=None,
                    deployment=None, secrets=None, admission='explicit', apply_integrations=False,
                    schedule=True, channels=None, sandbox=None, ui_titles=None, action_idle_minutes=None,
-                   action_high_idle_minutes=None, media=None):
+                   action_high_idle_minutes=None, media=None, checkout=None, dsh_home=None):
         # Worker initialization is managed by the native Host.
         if self.app:
             return self.status()
@@ -383,6 +383,10 @@ class BusinessWorker:
         if not deployment:
             raise ValueError('NATIVE_DEPLOYMENT_REQUIRED')
         config = runtime_settings(deployment, secrets or {}, models, admission, create_dirs=True, persona=persona['id'])
+        # ADR-098: the table of this machine's roots, built at every start and handed to the plugin with this answer;
+        # without one (a filesystem or drive root) her lanes do not run.
+        from . import local_roots
+        roots = local_roots.attach(checkout, dsh_home)
         # One Host per database: two Hosts may never run the same business queue
         # or publish the same scene concurrently.
         self.stack.enter_context(RuntimeLease(database_lock(config)))
@@ -453,7 +457,8 @@ class BusinessWorker:
         threading.Thread(target=self.audit_retention, name='audit-retention', daemon=True).start()
         from .grants import home_workspaces
         # The Host makes her working copy in each (working-copy.js, ADR-065).
-        return {**self.status(), 'navigation': self.navigation, 'home_workspaces': home_workspaces(self.app.config)}
+        return {**self.status(), 'navigation': self.navigation, 'home_workspaces': home_workspaces(self.app.config),
+                'roots': roots, 'roots_refused': local_roots.REFUSED}
 
     def prepare_navigation(self, native_sessions):
         """Bind real native conversations; the Host owns their logs and workspaces."""
@@ -1016,6 +1021,21 @@ class BusinessWorker:
             return self.status()
         if not self.app:
             raise RuntimeError('BUSINESS_WORKER_NOT_READY')
+        if method == 'roots.tally':
+            # Her lanes' requests the plugin rewrote, per session since its last count (ADR-098 D2), for her week.
+            from . import local_roots
+            rows = [row for row in args.get('sessions') or () if isinstance(row, dict)]
+            self.app.store.audit('roots:' + self.app.config['chat']['persona'], local_roots.TALLY,
+                                 {'sessions': [{'session_id': str(row.get('session_id')), 'lane': str(row.get('lane')),
+                                                'requests': int(row.get('requests') or 0),
+                                                'rewritten': int(row.get('rewritten') or 0)} for row in rows[:500]]})
+            return {'kept': len(rows)}
+        if method == 'roots.refused':
+            # The plugin refused her lanes' requests for want of a table: one audit event says why (ADR-098 D2).
+            from . import local_roots
+            self.app.store.audit('roots:' + self.app.config['chat']['persona'], local_roots.REFUSED_EVENT,
+                                 {'lane': str(args.get('lane')), 'reason': str(args.get('reason'))[:300]})
+            return {'kept': True}
         if method == 'settings.quiesce':
             # unfinished_tasks also includes work dequeued before its active
             # flag is set. The ingress fence closes admission in that window.

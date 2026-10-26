@@ -20,6 +20,8 @@ ALLOWED = {
     'src/asuna/sandbox_backend.py': "Git for Windows' Schannel has no credentials under the sandbox's restricted "
                                     'token; git uses its OpenSSL (ADR-065)',
     'src/asuna/sandbox_site/sitecustomize.py': "CPython's own mkdir(0o700) on Windows drops inherited ACLs (ADR-065)",
+    'src/asuna/local_roots.py': "the root table reads this machine's own roots: drive letters, 8.3 aliases and the "
+                                'program folders on Windows, the file tree and its mounts elsewhere (ADR-098)',
 }
 # What runs, and the start path that installs it. Operator diagnostics in tools/ and tests are outside.
 SCOPE = ('src', 'packages', 'tools/asuna-launch.mjs', 'tools/pack_plugins.py', 'tools/setup_native_profile.py')

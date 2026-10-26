@@ -238,6 +238,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `applyInPlace` — A persona or channel publication that needs no restart: the worker takes the persona model at once, new action scopes discover its skills, and the next integration_start runs its adapter.
   - `personaProbe` — The running worker's reading of a persona package published to `root`, as it would take it on a swap or at the next start (persona.check: its model loaded and its id checked, nothing applied), in the boot probe's form.
   - `ready`
+  - `dshHome` — DSH's home: the profile's, else the variable the Host was started with.
   - `attachSchedule`
   - `routeFor` — A brain's route: the one chosen on the settings card, else DSH's own default model (the appraiser and the action brain's 高 have none: unset, they are off).
   - `resolveRoutes`
@@ -404,6 +405,25 @@ The character brain's preset plugin: her role session gets the worker-rendered s
 - def `name` — The character brain's preset plugin: her role session gets the worker-rendered system prompt and her role tools (`attachRole` in index.js).
 - def `inject`
 - def `apply`
+
+## `roots.js`
+
+[packages/cognition-core/src/roots.js](../../packages/cognition-core/src/roots.js)
+
+No local root of this computer reaches her character brain (ADR-098). The worker builds the root table at its start (local_roots.py) and hands it over with its `initialize` answer; every request of her lanes (her persona preset, the relevance gate, the appraiser, the background summaries; never the action brain) is rewritten with it at DSH's `llm/stream` waterfall, the one place every request passes: turn steps, compaction summaries, one-shot sessions. Text blocks (the system message included), reasoning and earlier tool calls' arguments are contracted; storage stays raw. Without a table her lanes' requests are refused with a coded fault, never sent raw. The same shared case file (tests/fixtures/path_placeholders.json) runs here and in pytest.
+
+- def `HER_LANES` — Her lanes (index.js laneOf): whatever the model reads there is hers.
+- def `MISSING`
+- def `compile` — The worker's wire table, compiled; null for none.
+- def `contract` — { text with every root written as its placeholder, how many were replaced }.
+- def `rewriteRequest` — { request, count }: the request with every root contracted; the same request object when there was none.
+- class `Roots` — The table, its counts and the refusals, kept on the core (`core.roots`).
+  - `take` — The worker's answer at its start: a table, or why there is none.
+  - `count`
+  - `flush` — The counts since the last flush reach the worker, which keeps them for her weekly reading.
+  - `refuse`
+  - `status` — For the settings card: the table's size, or why there is none; requests rewritten per session since start.
+- def `rootsAtTheModel` — The listener: her lanes' requests rewritten, or refused without a table; every other request passes as it is.
 
 ## `schedule.js`
 

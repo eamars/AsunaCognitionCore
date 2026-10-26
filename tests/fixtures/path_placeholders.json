@@ -1,0 +1,978 @@
+{
+ "about": "ADR-098 shared case file: pytest (tests/test_local_roots.py) and node --test (packages/cognition-core/test/roots.test.js) both run every case. `hosts` are the machine facts local_roots.build takes; `tables` is what it builds from them (regenerate with ASUNA_REGEN_PATH_FIXTURE=1 and run the pytest); a case gives the input, what it contracts to, and where it says so, what the contracted text goes out as toward the action brain from home or a public place (home, public; recontracted: what that contracts back to when not the same), or the refusal code of the input as written (home_refused, public_refused).",
+ "hosts": {
+  "windows": {
+   "os": "windows",
+   "workspace": "C:\\workplace\\asuna_core",
+   "data": "C:\\workplace\\asuna_core\\.runtime",
+   "dsh_home": "C:\\workplace\\asuna_core\\.runtime\\adr008\\home",
+   "home": "C:\\Users\\alice",
+   "temp": "C:\\Users\\alice\\AppData\\Local\\Temp",
+   "user": "alice",
+   "programs": [
+    "C:\\Program Files",
+    "C:\\Program Files (x86)",
+    "C:\\ProgramData",
+    "C:\\Windows"
+   ],
+   "drives": [
+    "C",
+    "D"
+   ],
+   "aliases": {
+    "C:\\workplace\\asuna_core": [
+     "C:\\WORKPL~1\\ASUNA_~1"
+    ],
+    "C:\\workplace\\asuna_core\\.runtime": [
+     "C:\\WORKPL~1\\ASUNA_~1\\RUNTIM~1"
+    ]
+   }
+  },
+  "windows_moved_data": {
+   "os": "windows",
+   "workspace": "C:\\workplace\\asuna_core",
+   "data": "D:\\asuna-data",
+   "dsh_home": "D:\\asuna-data\\adr008\\home",
+   "home": "C:\\Users\\alice",
+   "temp": "C:\\Users\\alice\\AppData\\Local\\Temp",
+   "user": "alice",
+   "programs": [
+    "C:\\Program Files",
+    "C:\\Program Files (x86)",
+    "C:\\ProgramData",
+    "C:\\Windows"
+   ],
+   "drives": [
+    "C",
+    "D"
+   ],
+   "aliases": {}
+  },
+  "linux": {
+   "os": "posix",
+   "workspace": "/home/alice/src/asuna",
+   "data": "/home/alice/src/asuna/.runtime",
+   "dsh_home": "/home/alice/src/asuna/.runtime/adr008/home",
+   "home": "/home/alice",
+   "temp": "/tmp",
+   "user": "alice",
+   "programs": [
+    "/usr",
+    "/opt",
+    "/etc",
+    "/bin",
+    "/lib"
+   ],
+   "mounts": [
+    "/media/alice/USBSTICK",
+    "/mnt/c"
+   ],
+   "top": [
+    "bin",
+    "etc",
+    "home",
+    "lib",
+    "media",
+    "mnt",
+    "opt",
+    "srv",
+    "tmp",
+    "usr",
+    "var"
+   ],
+   "aliases": {}
+  },
+  "docker": {
+   "os": "posix",
+   "workspace": "/srv/asuna",
+   "data": "/srv/asuna/.runtime",
+   "dsh_home": null,
+   "home": "/home/asuna",
+   "temp": "/tmp",
+   "user": "asuna",
+   "programs": [
+    "/usr",
+    "/opt",
+    "/etc",
+    "/bin",
+    "/lib"
+   ],
+   "mounts": [],
+   "top": [
+    "bin",
+    "etc",
+    "home",
+    "lib",
+    "opt",
+    "srv",
+    "tmp",
+    "usr",
+    "var"
+   ],
+   "aliases": {}
+  },
+  "docker_app_as_root": {
+   "os": "posix",
+   "workspace": "/app",
+   "data": "/app/.runtime",
+   "dsh_home": null,
+   "home": "/root",
+   "temp": "/tmp",
+   "user": "root",
+   "programs": [
+    "/usr",
+    "/opt",
+    "/etc",
+    "/bin",
+    "/lib"
+   ],
+   "mounts": [],
+   "top": [
+    "app",
+    "bin",
+    "etc",
+    "home",
+    "lib",
+    "opt",
+    "root",
+    "srv",
+    "tmp",
+    "usr",
+    "var"
+   ],
+   "aliases": {}
+  },
+  "macos": {
+   "os": "posix",
+   "workspace": "/Users/alice/dev/asuna",
+   "data": "/Users/alice/dev/asuna/.runtime",
+   "dsh_home": null,
+   "home": "/Users/alice",
+   "temp": "/var/folders/x1/abcd1234/T",
+   "user": "alice",
+   "programs": [
+    "/usr",
+    "/opt",
+    "/Applications",
+    "/Library",
+    "/System"
+   ],
+   "mounts": [
+    "/Volumes/Backup Disk"
+   ],
+   "top": [
+    "Applications",
+    "Library",
+    "System",
+    "Users",
+    "Volumes",
+    "opt",
+    "private",
+    "tmp",
+    "usr",
+    "var"
+   ],
+   "aliases": {
+    "/var/folders/x1/abcd1234/T": [
+     "/private/var/folders/x1/abcd1234/T"
+    ]
+   }
+  }
+ },
+ "refused": [
+  {
+   "note": "a checkout at a drive root",
+   "facts": {
+    "os": "windows",
+    "workspace": "C:\\",
+    "data": "C:\\workplace\\asuna_core\\.runtime",
+    "dsh_home": "C:\\workplace\\asuna_core\\.runtime\\adr008\\home",
+    "home": "C:\\Users\\alice",
+    "temp": "C:\\Users\\alice\\AppData\\Local\\Temp",
+    "user": "alice",
+    "programs": [
+     "C:\\Program Files",
+     "C:\\Program Files (x86)",
+     "C:\\ProgramData",
+     "C:\\Windows"
+    ],
+    "drives": [
+     "C",
+     "D"
+    ],
+    "aliases": {}
+   }
+  },
+  {
+   "note": "a checkout at the filesystem root",
+   "facts": {
+    "os": "posix",
+    "workspace": "/",
+    "data": "/srv/asuna/.runtime",
+    "dsh_home": null,
+    "home": "/home/asuna",
+    "temp": "/tmp",
+    "user": "asuna",
+    "programs": [
+     "/usr",
+     "/opt",
+     "/etc",
+     "/bin",
+     "/lib"
+    ],
+    "mounts": [],
+    "top": [
+     "bin",
+     "etc",
+     "home",
+     "lib",
+     "opt",
+     "srv",
+     "tmp",
+     "usr",
+     "var"
+    ],
+    "aliases": {}
+   }
+  },
+  {
+   "note": "a data folder at a drive root",
+   "facts": {
+    "os": "windows",
+    "workspace": "C:\\workplace\\asuna_core",
+    "data": "D:\\",
+    "dsh_home": "C:\\workplace\\asuna_core\\.runtime\\adr008\\home",
+    "home": "C:\\Users\\alice",
+    "temp": "C:\\Users\\alice\\AppData\\Local\\Temp",
+    "user": "alice",
+    "programs": [
+     "C:\\Program Files",
+     "C:\\Program Files (x86)",
+     "C:\\ProgramData",
+     "C:\\Windows"
+    ],
+    "drives": [
+     "C",
+     "D"
+    ],
+    "aliases": {}
+   }
+  }
+ ],
+ "cases": [
+  {
+   "host": "windows",
+   "note": "the checkout, the tail kept",
+   "input": "C:\\workplace\\asuna_core\\packages\\personas\\demo",
+   "contracted": "${ASUNA_WORKSPACE}\\packages\\personas\\demo"
+  },
+  {
+   "host": "windows",
+   "note": "the data folder inside the checkout: the deeper root wins",
+   "input": "C:\\workplace\\asuna_core\\.runtime\\private\\x.txt",
+   "contracted": "${ASUNA_DATA}\\private\\x.txt"
+  },
+  {
+   "host": "windows",
+   "note": "DSH's home under the data folder is not a root of its own",
+   "input": "C:\\workplace\\asuna_core\\.runtime\\adr008\\home\\sessions",
+   "contracted": "${ASUNA_DATA}\\adr008\\home\\sessions"
+  },
+  {
+   "host": "windows",
+   "note": "forward slashes",
+   "input": "C:/workplace/asuna_core/src/asuna",
+   "contracted": "${ASUNA_WORKSPACE}/src/asuna"
+  },
+  {
+   "host": "windows",
+   "note": "JSON-escaped (doubled backslashes)",
+   "input": "\"C:\\\\workplace\\\\asuna_core\\\\src\"",
+   "contracted": "\"${ASUNA_WORKSPACE}\\\\src\""
+  },
+  {
+   "host": "windows",
+   "note": "DSH's working-folder line",
+   "input": "Current working directory: \"C:\\\\workplace\\\\asuna_core\\\\.runtime\\\\work\\\\local-user\".",
+   "contracted": "Current working directory: \"${ASUNA_DATA}\\\\work\\\\local-user\"."
+  },
+  {
+   "host": "windows",
+   "note": "case-insensitive on Windows",
+   "input": "c:\\WORKPLACE\\Asuna_Core\\x",
+   "contracted": "${ASUNA_WORKSPACE}\\x"
+  },
+  {
+   "host": "windows",
+   "note": "a file URI",
+   "input": "file:///C:/workplace/asuna_core/README.md",
+   "contracted": "file:///${ASUNA_WORKSPACE}/README.md"
+  },
+  {
+   "host": "windows",
+   "note": "a markdown link",
+   "input": "[读我](C:/workplace/asuna_core/a.md)",
+   "contracted": "[读我](${ASUNA_WORKSPACE}/a.md)"
+  },
+  {
+   "host": "windows",
+   "note": "percent-encoded",
+   "input": "C%3A%5Cworkplace%5Casuna_core%5Cx",
+   "contracted": "${ASUNA_WORKSPACE}%5Cx"
+  },
+  {
+   "host": "windows",
+   "note": "the 8.3 alias",
+   "input": "C:\\WORKPL~1\\ASUNA_~1\\src",
+   "contracted": "${ASUNA_WORKSPACE}\\src"
+  },
+  {
+   "host": "windows",
+   "note": "mixed separators",
+   "input": "C:\\workplace/asuna_core\\src/a.py",
+   "contracted": "${ASUNA_WORKSPACE}\\src/a.py"
+  },
+  {
+   "host": "windows",
+   "note": "a bare root with no tail",
+   "input": "在 C:\\workplace\\asuna_core 里",
+   "contracted": "在 ${ASUNA_WORKSPACE} 里"
+  },
+  {
+   "host": "windows",
+   "note": "a sibling folder is not the checkout",
+   "input": "C:\\workplace\\asuna_core2\\x",
+   "contracted": "${ASUNA_DRIVE_C}\\workplace\\asuna_core2\\x"
+  },
+  {
+   "host": "windows",
+   "note": "a name that continues past a dot is not the checkout",
+   "input": "C:\\workplace\\asuna_core.bak\\x",
+   "contracted": "${ASUNA_DRIVE_C}\\workplace\\asuna_core.bak\\x"
+  },
+  {
+   "host": "windows",
+   "note": "the home",
+   "input": "C:\\Users\\alice\\Desktop\\a.txt",
+   "contracted": "${ASUNA_HOME}\\Desktop\\a.txt",
+   "home": "C:\\Users\\alice\\Desktop\\a.txt",
+   "public": "${ASUNA_HOME}\\Desktop\\a.txt"
+  },
+  {
+   "host": "windows",
+   "note": "the temp folder under the home is not a root of its own",
+   "input": "C:\\Users\\alice\\AppData\\Local\\Temp\\x",
+   "contracted": "${ASUNA_HOME}\\AppData\\Local\\Temp\\x"
+  },
+  {
+   "host": "windows",
+   "note": "a program folder keeps its name",
+   "input": "C:\\Program Files\\nodejs\\node.exe",
+   "contracted": "${ASUNA_PROGRAMS}\\Program Files\\nodejs\\node.exe",
+   "home": "C:\\Program Files\\nodejs\\node.exe"
+  },
+  {
+   "host": "windows",
+   "note": "Program Files (x86)",
+   "input": "C:\\Program Files (x86)\\Git\\bin",
+   "contracted": "${ASUNA_PROGRAMS}\\Program Files (x86)\\Git\\bin"
+  },
+  {
+   "host": "windows",
+   "note": "the system folder",
+   "input": "C:\\Windows\\System32\\cmd.exe",
+   "contracted": "${ASUNA_PROGRAMS}\\Windows\\System32\\cmd.exe"
+  },
+  {
+   "host": "windows",
+   "note": "another drive, the tail kept",
+   "input": "D:/scratch/b.txt",
+   "contracted": "${ASUNA_DRIVE_D}/scratch/b.txt",
+   "home": "D:\\scratch\\b.txt",
+   "public": "${ASUNA_DRIVE_D}/scratch/b.txt",
+   "recontracted": "${ASUNA_DRIVE_D}\\scratch\\b.txt"
+  },
+  {
+   "host": "windows",
+   "note": "a network share, nothing kept",
+   "input": "日志在 \\\\nas\\share\\c.txt 里",
+   "contracted": "日志在 ${ASUNA_LOCAL_PATH} 里",
+   "home": "日志在 ${ASUNA_LOCAL_PATH} 里"
+  },
+  {
+   "host": "windows",
+   "note": "WSL's share",
+   "input": "\\\\wsl$\\Ubuntu\\home\\bob\\x",
+   "contracted": "${ASUNA_LOCAL_PATH}"
+  },
+  {
+   "host": "windows",
+   "note": "WSL's spelling of the checkout",
+   "input": "/mnt/c/workplace/asuna_core/src",
+   "contracted": "${ASUNA_WORKSPACE}/src"
+  },
+  {
+   "host": "windows",
+   "note": "WSL's spelling of another drive",
+   "input": "/mnt/d/data/x",
+   "contracted": "${ASUNA_DRIVE_D}/data/x"
+  },
+  {
+   "host": "windows",
+   "note": "MSYS's spelling of the checkout",
+   "input": "/c/workplace/asuna_core/src",
+   "contracted": "${ASUNA_WORKSPACE}/src"
+  },
+  {
+   "host": "windows",
+   "note": "the action brain's own folder stays",
+   "input": "产物 /task/out/f.png",
+   "contracted": "产物 /task/out/f.png",
+   "home": "产物 /task/out/f.png",
+   "public": "产物 /task/out/f.png"
+  },
+  {
+   "host": "windows",
+   "note": "what is not a path passes",
+   "input": "见 https://example.org/a/b 和 http://127.0.0.1:8766/v1/x，发 /help，1/2 份，读写/执行，~/notes/a.md。",
+   "contracted": "见 https://example.org/a/b 和 http://127.0.0.1:8766/v1/x，发 /help，1/2 份，读写/执行，~/notes/a.md。"
+  },
+  {
+   "host": "windows",
+   "note": "URL paths, ratios and times pass",
+   "input": "fetch('/api/v1/users')，比例 3:2，时间 10:30",
+   "contracted": "fetch('/api/v1/users')，比例 3:2，时间 10:30"
+  },
+  {
+   "host": "windows",
+   "note": "a script's own variables are text",
+   "input": "echo ${HOME} ${1} ${VAR} $HOME %USERPROFILE%",
+   "contracted": "echo ${HOME} ${1} ${VAR} $HOME %USERPROFILE%",
+   "home": "echo ${HOME} ${1} ${VAR} $HOME %USERPROFILE%",
+   "public": "echo ${HOME} ${1} ${VAR} $HOME %USERPROFILE%"
+  },
+  {
+   "host": "windows",
+   "note": "the account name as a whole word",
+   "input": "whoami 打出 alice；提示符 alice@box",
+   "contracted": "whoami 打出 ${ASUNA_USER}；提示符 ${ASUNA_USER}@box",
+   "home": "whoami 打出 alice；提示符 alice@box"
+  },
+  {
+   "host": "windows",
+   "note": "a git author with another name passes untouched",
+   "input": "Author: Bob Smith <bob@example.org>",
+   "contracted": "Author: Bob Smith <bob@example.org>"
+  },
+  {
+   "host": "windows",
+   "note": "a git author whose name IS the account name (that exact string): replaced",
+   "input": "Author: alice <alice@example.org>",
+   "contracted": "Author: ${ASUNA_USER} <${ASUNA_USER}@example.org>"
+  },
+  {
+   "host": "windows",
+   "note": "only the exact account-name string, as a whole word: another case or a longer word passes",
+   "input": "Alice Liddell 和 malice",
+   "contracted": "Alice Liddell 和 malice"
+  },
+  {
+   "host": "windows",
+   "note": "machine facts pass (D8)",
+   "input": "Windows 11，Python 3.12，cargo 1.80",
+   "contracted": "Windows 11，Python 3.12，cargo 1.80"
+  },
+  {
+   "host": "windows",
+   "note": "a placeholder is never contracted again",
+   "input": "${ASUNA_WORKSPACE}\\src\\a.py",
+   "contracted": "${ASUNA_WORKSPACE}\\src\\a.py",
+   "home": "C:\\workplace\\asuna_core\\src\\a.py",
+   "public": "C:\\workplace\\asuna_core\\src\\a.py"
+  },
+  {
+   "host": "windows",
+   "note": "two spellings, one place: this expands into the data folder and contracts back as ${ASUNA_DATA}",
+   "input": "${ASUNA_WORKSPACE}\\.runtime\\private\\x",
+   "contracted": "${ASUNA_WORKSPACE}\\.runtime\\private\\x",
+   "home": "C:\\workplace\\asuna_core\\.runtime\\private\\x",
+   "recontracted": "${ASUNA_DATA}\\private\\x"
+  },
+  {
+   "host": "windows",
+   "note": "the tail's separators become the host's",
+   "input": "${ASUNA_WORKSPACE}/packages/x",
+   "contracted": "${ASUNA_WORKSPACE}/packages/x",
+   "home": "C:\\workplace\\asuna_core\\packages\\x",
+   "recontracted": "${ASUNA_WORKSPACE}\\packages\\x"
+  },
+  {
+   "host": "windows",
+   "note": "a public place does not hand these over: they stay as written; home expands them",
+   "input": "${ASUNA_HOME}\\notes.md 和 ${ASUNA_DRIVE_D}\\logs\\x.log",
+   "contracted": "${ASUNA_HOME}\\notes.md 和 ${ASUNA_DRIVE_D}\\logs\\x.log",
+   "home": "C:\\Users\\alice\\notes.md 和 D:\\logs\\x.log",
+   "public": "${ASUNA_HOME}\\notes.md 和 ${ASUNA_DRIVE_D}\\logs\\x.log"
+  },
+  {
+   "host": "windows",
+   "note": "climbing out of a placeholder: refused everywhere",
+   "input": "${ASUNA_WORKSPACE}\\..\\x",
+   "contracted": "${ASUNA_WORKSPACE}\\..\\x",
+   "home_refused": "PATH_CLIMBS",
+   "public_refused": "PATH_CLIMBS"
+  },
+  {
+   "host": "windows",
+   "note": "climbing in a real path: refused everywhere",
+   "input": "C:\\a\\..\\b",
+   "contracted": "${ASUNA_DRIVE_C}\\a\\..\\b",
+   "home_refused": "PATH_CLIMBS",
+   "public_refused": "PATH_CLIMBS"
+  },
+  {
+   "host": "windows",
+   "note": "a bare relative climb: passes at home, refused in a public place",
+   "input": "cd .. && ls ../x",
+   "contracted": "cd .. && ls ../x",
+   "home": "cd .. && ls ../x",
+   "public_refused": "PATH_CLIMBS_HERE"
+  },
+  {
+   "host": "windows",
+   "note": "dots in prose are not a climb",
+   "input": "等一下..好的……",
+   "contracted": "等一下..好的……",
+   "home": "等一下..好的……",
+   "public": "等一下..好的……"
+  },
+  {
+   "host": "windows",
+   "note": "an unknown ${ASUNA_...} name",
+   "input": "${ASUNA_WORKSPACEE}\\x",
+   "contracted": "${ASUNA_WORKSPACEE}\\x",
+   "home_refused": "PATH_NAME_UNKNOWN",
+   "public_refused": "PATH_NAME_UNKNOWN"
+  },
+  {
+   "host": "windows",
+   "note": "whole tokens only",
+   "input": "${ASUNA_HOMEs}/x",
+   "contracted": "${ASUNA_HOMEs}/x",
+   "home_refused": "PATH_NAME_UNKNOWN"
+  },
+  {
+   "host": "windows",
+   "note": "a drive this machine does not have",
+   "input": "${ASUNA_DRIVE_Q}\\x",
+   "contracted": "${ASUNA_DRIVE_Q}\\x",
+   "home_refused": "PATH_NAME_UNKNOWN"
+  },
+  {
+   "host": "windows",
+   "note": "a raw root toward the action brain",
+   "input": "改 C:\\workplace\\asuna_core\\src\\a.py",
+   "contracted": "改 ${ASUNA_WORKSPACE}\\src\\a.py",
+   "home_refused": "PATH_RAW_ROOT",
+   "public_refused": "PATH_RAW_ROOT"
+  },
+  {
+   "host": "windows",
+   "note": "a share is never handed over",
+   "input": "${ASUNA_LOCAL_PATH}",
+   "contracted": "${ASUNA_LOCAL_PATH}",
+   "home": "${ASUNA_LOCAL_PATH}"
+  },
+  {
+   "host": "windows_moved_data",
+   "note": "a moved data folder",
+   "input": "D:\\asuna-data\\private\\x",
+   "contracted": "${ASUNA_DATA}\\private\\x"
+  },
+  {
+   "host": "windows_moved_data",
+   "note": "the checkout's own .runtime is not the data folder then",
+   "input": "C:\\workplace\\asuna_core\\.runtime\\x",
+   "contracted": "${ASUNA_WORKSPACE}\\.runtime\\x"
+  },
+  {
+   "host": "linux",
+   "note": "the checkout under the home",
+   "input": "/home/alice/src/asuna/packages/x",
+   "contracted": "${ASUNA_WORKSPACE}/packages/x",
+   "home": "/home/alice/src/asuna/packages/x",
+   "public": "/home/alice/src/asuna/packages/x"
+  },
+  {
+   "host": "linux",
+   "note": "the data folder",
+   "input": "/home/alice/src/asuna/.runtime/work/local-user",
+   "contracted": "${ASUNA_DATA}/work/local-user"
+  },
+  {
+   "host": "linux",
+   "note": "the home",
+   "input": "/home/alice/.bashrc",
+   "contracted": "${ASUNA_HOME}/.bashrc"
+  },
+  {
+   "host": "linux",
+   "note": "a program folder keeps its name",
+   "input": "/usr/lib/python3.12/os.py",
+   "contracted": "${ASUNA_PROGRAMS}/usr/lib/python3.12/os.py",
+   "home": "/usr/lib/python3.12/os.py",
+   "public": "${ASUNA_PROGRAMS}/usr/lib/python3.12/os.py"
+  },
+  {
+   "host": "linux",
+   "note": "the machine's own tree, the tail kept",
+   "input": "/var/log/syslog",
+   "contracted": "${ASUNA_FS}/var/log/syslog",
+   "home": "/var/log/syslog",
+   "public": "${ASUNA_FS}/var/log/syslog"
+  },
+  {
+   "host": "linux",
+   "note": "another user's home is the tree",
+   "input": "/home/bob/x",
+   "contracted": "${ASUNA_FS}/home/bob/x"
+  },
+  {
+   "host": "linux",
+   "note": "the temp folder",
+   "input": "/tmp/x/e.log",
+   "contracted": "${ASUNA_TEMP}/x/e.log"
+  },
+  {
+   "host": "linux",
+   "note": "a WSL drive mount by its letter",
+   "input": "/mnt/c/Users/x",
+   "contracted": "${ASUNA_DRIVE_C}/Users/x"
+  },
+  {
+   "host": "linux",
+   "note": "a mount by index, never its label",
+   "input": "/media/alice/USBSTICK/a.jpg",
+   "contracted": "${ASUNA_DRIVE_1}/a.jpg",
+   "home": "/media/alice/USBSTICK/a.jpg"
+  },
+  {
+   "host": "linux",
+   "note": "not a folder of this machine, and a URL, pass",
+   "input": "fetch('/api/v1/users') 和 https://example.org/usr/lib",
+   "contracted": "fetch('/api/v1/users') 和 https://example.org/usr/lib"
+  },
+  {
+   "host": "linux",
+   "note": "the action brain's own folder stays",
+   "input": "/task/out/x.txt",
+   "contracted": "/task/out/x.txt"
+  },
+  {
+   "host": "linux",
+   "note": "percent-encoded",
+   "input": "%2Fhome%2Falice%2Fsrc%2Fasuna%2Fx",
+   "contracted": "${ASUNA_WORKSPACE}%2Fx"
+  },
+  {
+   "host": "linux",
+   "note": "a PATH list",
+   "input": "PATH=/usr/bin:/home/alice/bin",
+   "contracted": "PATH=${ASUNA_PROGRAMS}/usr/bin:${ASUNA_HOME}/bin"
+  },
+  {
+   "host": "linux",
+   "note": "a Windows path is not a path of a POSIX machine",
+   "input": "C:\\Users\\x\\a.txt",
+   "contracted": "C:\\Users\\x\\a.txt"
+  },
+  {
+   "host": "linux",
+   "note": "the account name is case-sensitive here too",
+   "input": "alice 和 Alice",
+   "contracted": "${ASUNA_USER} 和 Alice"
+  },
+  {
+   "host": "linux",
+   "note": "the tail's separators become the host's",
+   "input": "${ASUNA_WORKSPACE}\\packages\\x",
+   "contracted": "${ASUNA_WORKSPACE}\\packages\\x",
+   "home": "/home/alice/src/asuna/packages/x",
+   "recontracted": "${ASUNA_WORKSPACE}/packages/x"
+  },
+  {
+   "host": "linux",
+   "note": "the tree expands at home only",
+   "input": "${ASUNA_FS}/srv/x",
+   "contracted": "${ASUNA_FS}/srv/x",
+   "home": "/srv/x",
+   "public": "${ASUNA_FS}/srv/x"
+  },
+  {
+   "host": "linux",
+   "note": "climbing in a real path",
+   "input": "/home/alice/src/asuna/../x",
+   "contracted": "${ASUNA_WORKSPACE}/../x",
+   "home_refused": "PATH_CLIMBS"
+  },
+  {
+   "host": "docker",
+   "note": "a Docker checkout at /srv/asuna",
+   "input": "/srv/asuna/packages/x",
+   "contracted": "${ASUNA_WORKSPACE}/packages/x"
+  },
+  {
+   "host": "docker",
+   "note": "its parent is not the checkout",
+   "input": "/srv/other/x",
+   "contracted": "${ASUNA_FS}/srv/other/x"
+  },
+  {
+   "host": "docker",
+   "note": "the image's user's home",
+   "input": "/home/asuna/.cache/uv",
+   "contracted": "${ASUNA_HOME}/.cache/uv"
+  },
+  {
+   "host": "docker",
+   "note": "the image's generic account name is not replaced",
+   "input": "@asuna/cognition-core 和 asuna 用户",
+   "contracted": "@asuna/cognition-core 和 asuna 用户"
+  },
+  {
+   "host": "docker_app_as_root",
+   "note": "a checkout at /app",
+   "input": "/app/src/asuna/x.py",
+   "contracted": "${ASUNA_WORKSPACE}/src/asuna/x.py",
+   "home": "/app/src/asuna/x.py",
+   "public": "/app/src/asuna/x.py"
+  },
+  {
+   "host": "docker_app_as_root",
+   "note": "with the checkout at /app the program folders are still their own",
+   "input": "/usr/lib/python3.12/x.py",
+   "contracted": "${ASUNA_PROGRAMS}/usr/lib/python3.12/x.py"
+  },
+  {
+   "host": "docker_app_as_root",
+   "note": "root's home; the word root passes",
+   "input": "/root/.cache/x 和 run as root",
+   "contracted": "${ASUNA_HOME}/.cache/x 和 run as root"
+  },
+  {
+   "host": "macos",
+   "note": "macOS's per-account temp folder",
+   "input": "/var/folders/x1/abcd1234/T/tmpab/x",
+   "contracted": "${ASUNA_TEMP}/tmpab/x"
+  },
+  {
+   "host": "macos",
+   "note": "its resolved spelling",
+   "input": "/private/var/folders/x1/abcd1234/T/y",
+   "contracted": "${ASUNA_TEMP}/y"
+  },
+  {
+   "host": "macos",
+   "note": "a volume by index, never its label",
+   "input": "/Volumes/Backup Disk/photos",
+   "contracted": "${ASUNA_DRIVE_1}/photos"
+  },
+  {
+   "host": "macos",
+   "note": "Applications",
+   "input": "/Applications/Xcode.app",
+   "contracted": "${ASUNA_PROGRAMS}/Applications/Xcode.app"
+  },
+  {
+   "host": "macos",
+   "note": "the checkout",
+   "input": "/Users/alice/dev/asuna/README.md",
+   "contracted": "${ASUNA_WORKSPACE}/README.md"
+  }
+ ],
+ "tables": {
+  "windows": {
+   "version": 1,
+   "os": "windows",
+   "source": "(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL][aA][cC][eE](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_[cC][oO][rR][eE](?:\\\\+|/|%5[Cc]|%2[Ff])\\.[rR][uU][nN][tT][iI][mM][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL]~1(?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_~1(?:\\\\+|/|%5[Cc]|%2[Ff])[rR][uU][nN][tT][iI][mM]~1)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL][aA][cC][eE](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_[cC][oO][rR][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL]~1(?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_~1)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[uU][sS][eE][rR][sS](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][lL][iI][cC][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])(?:[pP][rR][oO][gG][rR][aA][mM] [fF][iI][lL][eE][sS]|[pP][rR][oO][gG][rR][aA][mM]%20[fF][iI][lL][eE][sS])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])(?:[pP][rR][oO][gG][rR][aA][mM] [fF][iI][lL][eE][sS] \\([xX]86\\)|[pP][rR][oO][gG][rR][aA][mM]%20[fF][iI][lL][eE][sS]%20%28[xX]86%29)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])[pP][rR][oO][gG][rR][aA][mM][dD][aA][tT][aA](?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][iI][nN][dD][oO][wW][sS](?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([A-Za-z](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[A-Za-z])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?<![A-Za-z0-9_])(alice)(?![A-Za-z0-9_])",
+   "groups": [
+    "DATA",
+    "DATA",
+    "WORKSPACE",
+    "WORKSPACE",
+    "HOME",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "DRIVE_",
+    "DRIVE_",
+    "LOCAL_PATH",
+    "USER"
+   ],
+   "roots": 3,
+   "names": [
+    "DATA",
+    "DRIVE_C",
+    "DRIVE_D",
+    "HOME",
+    "LOCAL_PATH",
+    "PROGRAMS",
+    "USER",
+    "WORKSPACE"
+   ]
+  },
+  "windows_moved_data": {
+   "version": 1,
+   "os": "windows",
+   "source": "(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][oO][rR][kK][pP][lL][aA][cC][eE](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]_[cC][oO][rR][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[cC](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[cC]|/[cC])(?:\\\\+|/|%5[Cc]|%2[Ff])[uU][sS][eE][rR][sS](?:\\\\+|/|%5[Cc]|%2[Ff])[aA][lL][iI][cC][eE])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])((?:[dD](?::|%3[Aa])|(?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[dD]|/[dD])(?:\\\\+|/|%5[Cc]|%2[Ff])[aA][sS][uU][nN][aA]-[dD][aA][tT][aA])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])(?:[pP][rR][oO][gG][rR][aA][mM] [fF][iI][lL][eE][sS]|[pP][rR][oO][gG][rR][aA][mM]%20[fF][iI][lL][eE][sS])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])(?:[pP][rR][oO][gG][rR][aA][mM] [fF][iI][lL][eE][sS] \\([xX]86\\)|[pP][rR][oO][gG][rR][aA][mM]%20[fF][iI][lL][eE][sS]%20%28[xX]86%29)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])[pP][rR][oO][gG][rR][aA][mM][dD][aA][tT][aA](?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([cC](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff])[wW][iI][nN][dD][oO][wW][sS](?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])([A-Za-z](?::|%3[Aa]))(?=(?:\\\\+|/|%5[Cc]|%2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])[mM][nN][tT](?:/|%2[Ff])[A-Za-z])(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?<![A-Za-z0-9_])(alice)(?![A-Za-z0-9_])",
+   "groups": [
+    "WORKSPACE",
+    "HOME",
+    "DATA",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "DRIVE_",
+    "DRIVE_",
+    "LOCAL_PATH",
+    "USER"
+   ],
+   "roots": 3,
+   "names": [
+    "DATA",
+    "DRIVE_C",
+    "DRIVE_D",
+    "HOME",
+    "LOCAL_PATH",
+    "PROGRAMS",
+    "USER",
+    "WORKSPACE"
+   ]
+  },
+  "linux": {
+   "version": 1,
+   "os": "posix",
+   "source": "(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])alice(?:/|%2[Ff])src(?:/|%2[Ff])asuna(?:/|%2[Ff])\\.runtime)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])alice(?:/|%2[Ff])src(?:/|%2[Ff])asuna)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])media(?:/|%2[Ff])alice(?:/|%2[Ff])USBSTICK)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])alice)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])mnt(?:/|%2[Ff])c)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])tmp)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])usr(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])opt(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])etc(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])bin(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])lib(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])(?:bin|etc|home|lib|media|mnt|opt|srv|tmp|usr|var)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])(alice)(?![A-Za-z0-9_])",
+   "groups": [
+    "DATA",
+    "WORKSPACE",
+    "DRIVE_1",
+    "HOME",
+    "DRIVE_C",
+    "TEMP",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "LOCAL_PATH",
+    "FS",
+    "USER"
+   ],
+   "roots": 6,
+   "names": [
+    "DATA",
+    "DRIVE_1",
+    "DRIVE_C",
+    "FS",
+    "HOME",
+    "LOCAL_PATH",
+    "PROGRAMS",
+    "TEMP",
+    "USER",
+    "WORKSPACE"
+   ]
+  },
+  "docker": {
+   "version": 1,
+   "os": "posix",
+   "source": "(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])srv(?:/|%2[Ff])asuna(?:/|%2[Ff])\\.runtime)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])home(?:/|%2[Ff])asuna)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])srv(?:/|%2[Ff])asuna)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])tmp)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])usr(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])opt(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])etc(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])bin(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])lib(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])(?:bin|etc|home|lib|opt|srv|tmp|usr|var)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))",
+   "groups": [
+    "DATA",
+    "HOME",
+    "WORKSPACE",
+    "TEMP",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "LOCAL_PATH",
+    "FS"
+   ],
+   "roots": 4,
+   "names": [
+    "DATA",
+    "FS",
+    "HOME",
+    "LOCAL_PATH",
+    "PROGRAMS",
+    "TEMP",
+    "WORKSPACE"
+   ]
+  },
+  "docker_app_as_root": {
+   "version": 1,
+   "os": "posix",
+   "source": "(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])app(?:/|%2[Ff])\\.runtime)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])root)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])app)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])tmp)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])usr(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])opt(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])etc(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])bin(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])lib(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])(?:app|bin|etc|home|lib|opt|root|srv|tmp|usr|var)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))",
+   "groups": [
+    "DATA",
+    "HOME",
+    "WORKSPACE",
+    "TEMP",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "LOCAL_PATH",
+    "FS"
+   ],
+   "roots": 4,
+   "names": [
+    "DATA",
+    "FS",
+    "HOME",
+    "LOCAL_PATH",
+    "PROGRAMS",
+    "TEMP",
+    "WORKSPACE"
+   ]
+  },
+  "macos": {
+   "version": 1,
+   "os": "posix",
+   "source": "(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])private(?:/|%2[Ff])var(?:/|%2[Ff])folders(?:/|%2[Ff])x1(?:/|%2[Ff])abcd1234(?:/|%2[Ff])T)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Users(?:/|%2[Ff])alice(?:/|%2[Ff])dev(?:/|%2[Ff])asuna(?:/|%2[Ff])\\.runtime)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])var(?:/|%2[Ff])folders(?:/|%2[Ff])x1(?:/|%2[Ff])abcd1234(?:/|%2[Ff])T)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Users(?:/|%2[Ff])alice(?:/|%2[Ff])dev(?:/|%2[Ff])asuna)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Volumes(?:/|%2[Ff])(?:Backup Disk|Backup%20Disk))(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))((?:/|%2[Ff])Users(?:/|%2[Ff])alice)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])usr(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])opt(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])Applications(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])Library(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])System(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_:/\\\\}])((?:\\\\{2,8}[^\\s\\\\/\"\\'<>|*?`]{2,}(?:\\\\+|/)|//[A-Za-z0-9_$-]{2,}/)[^\\s\\\\/\"\\'<>|*?`]+[^\\s\"\\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\\s\"\\'<>]+)|(?:(?<=file://)|(?<![A-Za-z0-9_.~\\-/\\\\}]))()(?=(?:/|%2[Ff])(?:Applications|Library|System|Users|Volumes|opt|private|tmp|usr|var)(?![A-Za-z0-9_~$-]|\\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff])))|(?<![A-Za-z0-9_])(alice)(?![A-Za-z0-9_])",
+   "groups": [
+    "TEMP",
+    "DATA",
+    "TEMP",
+    "WORKSPACE",
+    "DRIVE_1",
+    "HOME",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "PROGRAMS",
+    "LOCAL_PATH",
+    "FS",
+    "USER"
+   ],
+   "roots": 5,
+   "names": [
+    "DATA",
+    "DRIVE_1",
+    "FS",
+    "HOME",
+    "LOCAL_PATH",
+    "PROGRAMS",
+    "TEMP",
+    "USER",
+    "WORKSPACE"
+   ]
+  }
+ }
+}

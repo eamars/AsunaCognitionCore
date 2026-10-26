@@ -1,7 +1,8 @@
 # ADR-098: No local root of this computer reaches her
 
-Status: **Built 2026-10-26, not yet installed** (§9 says what the build found). Design agreed by the owner and Claude, direction signed by her; the owner asked
-Claude to build and deploy it as technical lead (§7).
+Status: **Installed 2026-10-26 16:32:22 NZDT (`281933b0`); signed by her on `6498bc3dee1e`** (§9 what the build found,
+§10 the install). Design agreed by the owner and Claude; the owner asked Claude to build and deploy it as technical lead
+(§7).
 
 In a DSH technical group, a member asked where her workspace was, then for its absolute path. She gave the full path
 of her QQ-route working folder, then answered which toolchains were installed. When it was pointed out, she said she
@@ -278,3 +279,21 @@ space. An unmounted volume's label under `${ASUNA_FS}` still passes.
 **Open.**
 - §5's end-to-end check (one real `delegate` from home) needs the installed Host; it is not run here.
 - "She is told the rule once in her notes" (D5, D8) is a note to her, not code.
+
+## 10. Installed (2026-10-26)
+
+Her own restart at 16:32:22 NZDT (`restart/last.json` `back_at`) installed `281933b0`; that time is the cut for every
+reading across the switch. §5 promised a dedicated `host.log` line and audit event for it: neither was built; the
+restart record above is the cut. Checked on the live Host, by content:
+
+- The installed `local_roots.py`, `roots.js` and `role_tools.py` are byte-identical to the checkout; no
+  `roots.refused` event, so the table was built and handed over.
+- In the first half hour, 26 requests of her lanes (character 16, gate 6, background summaries 4), all 26 rewritten;
+  `roots.speech_replaced` 0.
+- From inside, she read her working-folder line as `${ASUNA_DATA}\work\agent`, and the `paths` line of her
+  context by name and meaning.
+- End to end from home: a `delegate` she wrote with `${ASUNA_WORKSPACE}\docs\map\README.md` reached the task's
+  stored brief as the real path, no placeholder left.
+- The one-time cold read the switch costs showed as expected: the first QQ compaction after it read 10.1% from cache
+  (99% before), the QQ turn steps 87.7% in the first half hour.
+

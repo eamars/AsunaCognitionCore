@@ -133,3 +133,66 @@ test('a hand-over that failed is tried again while that worker runs, never holdi
   assert.equal(old, 1, 'the replaced worker is not called again');
   core.unloaded = true; clearTimeout(core.handOverTimer);
 });
+
+test('a span file past the size cap is a span whose start is not known, as the worker reads it', async t => {
+  const dir = folder(t);
+  const { SPAN_BYTES } = await import('../src/outage.js');
+  writeFileSync(path.join(dir, FILE), JSON.stringify({ since: '2026-10-27T06:29:45Z', cause: 'exited:1', pad: 'x'.repeat(SPAN_BYTES) }));
+  const span = openSpan(dir);
+  assert.deepEqual([span.since, span.cause], [null, 'unknown'], 'the same as host_stops.open_span past SPAN_BYTES');
+  assert.ok(readFileSync(path.join(dir, FILE)).length < 200, 'replaced by the small span both sides read alike');
+});
+
+test('a recorded span whose file cannot be removed says it was recorded, not that it was not', async t => {
+  const dir = folder(t);
+  const { mkdirSync } = await import('node:fs');
+  wentDown(dir, 'exited:1');
+  const warned = [];
+  const answer = await cameBack(dir, async () => {
+    rmSync(path.join(dir, FILE)); mkdirSync(path.join(dir, FILE));       // a folder there now: unlink cannot remove it
+    return { stop_id: 'down-x' };
+  }, text => warned.push(text));
+  assert.deepEqual(answer, { stop_id: 'down-x' });
+  assert.match(warned[0], /^Asuna: the span was recorded, but worker-down\.json could not be removed \(\w+\); the next start hands it over again and writes no second row$/);
+});
+
+test('the hand-over runs beside a start: it returns at once, and ready() does not wait for it', async t => {
+  const dir = folder(t);
+  const { CognitionCore } = await import('../src/index.js');
+  const core = new CognitionCore({ logger: { warn() {}, info() {} }, asunaFloor: { dataRoot: dir } }, {});
+  wentDown(dir, 'exited:1');
+  core.worker = { closed: false, call: () => new Promise(() => {}) };       // a database that never answers
+  assert.equal(core.handOver(), undefined, 'not a promise anyone could wait on');
+  const source = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
+  assert.match(source, /await this\.worker\.call\('navigation\.ready'\);\n\s+this\.startFailures = 0;\n(\s+\/\/[^\n]*\n)*\s+this\.handOver\(\);/,
+    'ready() calls it after navigation.ready without await');
+  core.unloaded = true;
+});
+
+test('a failure said once: the same span failing the same way is one line, not one every try', async t => {
+  const dir = folder(t);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { CognitionCore, HANDOVER_SECONDS } = await import('../src/index.js');
+  const warned = [];
+  const core = new CognitionCore({ logger: { warn: text => warned.push(text), info() {} }, asunaFloor: { dataRoot: dir } }, {});
+  wentDown(dir, 'exited:1');
+  core.worker = { closed: false, call: async () => { throw new Error('UNKNOWN_BUSINESS_METHOD'); } };   // an older worker
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  core.handOver();
+  for (let i = 0; i < 3; i++) { await settle(); t.mock.timers.tick(HANDOVER_SECONDS * 1000); }
+  await settle();
+  assert.equal(warned.filter(text => text.startsWith('Asuna: the span she was down since')).length, 1);
+  assert.ok(existsSync(path.join(dir, FILE)), 'still kept for a newer worker');
+  core.unloaded = true; clearTimeout(core.handOverTimer);
+});
+
+test('a planned in-place restart opens no span', async t => {
+  const dir = folder(t);
+  const { CognitionCore } = await import('../src/index.js');
+  const core = new CognitionCore({ logger: { warn() {}, info() {} }, asunaFloor: { dataRoot: dir } }, {});
+  core.worker = { onFailure: null, dispose: async () => {} };
+  core.ready = async () => {};
+  for (const reason of ['worker asked: published-worker', 'settings applied', 'recovery activated core'])
+    await core.restart(reason);
+  assert.equal(openSpan(dir), null);
+});

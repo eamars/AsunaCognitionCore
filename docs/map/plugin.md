@@ -326,6 +326,7 @@ Her conversations as DSH sessions: `organizeNativeWorkspaces` creates and titles
 The span she was down while the Host ran on (ADR-101). Only this plugin knows why a worker went away (a start that failed, a worker that exited), so it keeps the open span in the profile's data folder, `worker-down.json`: {since, cause, tries, inside, opened}. A file and not the database, because the failure is often the database itself, and a file survives a Host restart and a recreated container (the data folder is the deployment's own). The worker reads it at its start (a lease left behind inside the span is that same outage) and never writes it. A completed start hands the span to the worker (`host.came_back`), which records it once as a `worker_down` row (host_stops.py); then the file goes. A worker without that method (an older core) leaves the file for a later one.
 
 - def `FILE`
+- def `SPAN_BYTES`
 - def `KEPT`
 - def `startCause` — A failed start's cause by name only, as faults.cause takes it: the error code its last line carries, else the exception's class (`AutoReconnect` from "AutoReconnect: <host>:<port>: …").
 - def `exitCause` — A worker's exit by its code (`exited:1`, `exited:none` when it had none), or unknown.

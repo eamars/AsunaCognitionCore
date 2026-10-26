@@ -8,10 +8,11 @@
  *
  * Nothing here may make things worse than the outage it records: no function throws, every write is whole or not at
  * all (a temporary file renamed over the old one), and what fails is said in one `Asuna:` line. */
-import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 export const FILE = 'worker-down.json';
+export const SPAN_BYTES = 65536;
 export const KEPT = 'kept';
 
 const CODE = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/;
@@ -50,13 +51,16 @@ function save(dataRoot, span, warn) {
  * a span whose start is not known: kept and said, never dropped. */
 export function openSpan(dataRoot, warn = () => {}) {
   let text;
-  try { text = readFileSync(path.join(dataRoot, FILE), 'utf8'); }
-  catch (error) {
+  try {
+    const file = path.join(dataRoot, FILE);
+    // Past SPAN_BYTES it is not a span, on this side as in the worker's (host_stops.SPAN_BYTES): both read it alike.
+    text = statSync(file).size > SPAN_BYTES ? null : readFileSync(file, 'utf8');
+  } catch (error) {
     if (error?.code !== 'ENOENT') warn('Asuna: ' + FILE + ' could not be read (' + (error?.code ?? 'error') + ')');
     return null;
   }
   try {
-    const span = JSON.parse(text);
+    const span = text === null ? null : JSON.parse(text);
     if (span && typeof span === 'object' && typeof span.cause === 'string') return span;
   } catch { /* said below */ }
   warn('Asuna: ' + FILE + ' could not be read; the span it held is kept with its start not known');

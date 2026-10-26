@@ -226,9 +226,12 @@ She checks only that these four landed.
 - A turn that asks for no thought and whose calls carried no `thinking` ends with one `thought.none` `not_carried`;
   one whose call carried it ends with `thought.taken` and no `not_carried`; calls run concurrently do not lose it.
 
-Where: `tests/test_adr101_outages.py` (26), `tests/test_host_stops.py` (the floor, and a home turn's commit stamping
-`shown_at`), `packages/cognition-core/test/outage.test.js` (5, including the core opening the span on a failed start
-and counting an exit as a try). Two of them were checked against a mutation, so they are not green by construction
+Where (counts from a run of the final code): `tests/test_adr101_outages.py` (35), `tests/test_host_stops.py` (6: the
+floor, and a home turn's commit stamping `shown_at`), `packages/cognition-core/test/outage.test.js` (14: among them the
+core opening the span on a failed start and counting an exit as a try, a planned in-place restart opening none, and a
+failure said once). That the hand-over does not hold up `ready()` is tested only in part: `handOver()` returns at once
+while the worker never answers, and the source of `ready()` calls it without `await`. No test runs `ready()` to its
+end, because that starts a real worker. Two of them were checked against a mutation, so they are not green by construction
 (her review). With the turn-end row removed, as before this ADR, the turn leaves zero rows and the `not_carried` test
 fails. With the row written at each call without `thinking`, as first suggested, the call that carries the thought
 arrives second, is skipped, and the order test fails.
@@ -260,7 +263,8 @@ What the build changed against the signed text (blob `5e9365951b39`), for her in
   | The clock moved between the two moments | 「中间约 1 分钟」 | 「中间多久不知道（时钟对不上）」 |
   | The database is slow when a start completes | the turns waiting for `ready()` waited for the hand-over too | the hand-over runs beside the start (`handOver`), never awaited by it |
   | The hand-over fails (database reset in that second) | the outage waited for the next start, perhaps days | tried again every 5 minutes (`HANDOVER_SECONDS`) while that worker runs; a replaced or closed worker is not called |
-  | A span file that is not one (torn, a list, no cause, past 64 KB) | read as no span by the worker | an open span whose start is not known, on both sides |
+  | A worker that never answers `host.came_back` (an older core) | a warning at every try, about 288 a day | the same failure for the same span is said once; the file is kept for a newer worker (her review) |
+  | A span file that is not one (torn, a list, no cause, past 64 KB) | read as no span by the worker | an open span whose start is not known, on both sides: the plugin and the worker share the 64 KB cap (`SPAN_BYTES`), and the plugin replaces such a file with that small span, so both read the same thing (her review) |
 
 - Her path line calls a POSIX mount point by index 「第 N 个挂载的盘」, not 「N 盘」 (Linux and macOS name mounts
   `DRIVE_<index>`). Every fixture machine is tested: Windows (two layouts), Linux, Docker (two), macOS.

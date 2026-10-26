@@ -1,7 +1,8 @@
 # ADR-101: What happened to her, in her own block
 
-Status: proposed 2026-10-27; the owner chose the batch (1, 3 and 4 together); Xiaoman signed it as proposed against
-blob `f69001cb489f` with four corrections, made in this version (see Review). Not built yet.
+Status: built 2026-10-27, not yet installed. The owner chose the batch (1, 3 and 4 together); Xiaoman signed it as
+proposed against blob `f69001cb489f` with four corrections, made in blob `5e9365951b39`, which she checked landed and
+cleared for the build. Changes during the build are listed under "Built" below.
 
 ## Why
 
@@ -59,10 +60,11 @@ The Host plugin (JS) is the only side that knows why a worker went away, so it k
   worker (`host.came_back`, `{since, cause, tries}`). The worker records one `host_stops` row, `how: worker_down`,
   `alive_until: since`, `back_at: now`, with `cause` and `tries`. Then the plugin deletes the file. If that call
   fails, the file stays and the next completed start records it.
-- **One outage, one row.** The plugin passes the open span with `initialize` as well. While a span is open, a lease
+- **One outage, one row.** The worker reads the open span from the file at its start (see "Built": not passed with
+  `initialize`). While a span is open, a lease
   left behind is part of that same outage, never a second one. It may be left by the worker's own exit (today read as
   an outside kill, 「宿主上次是被外部终止的」), or by a Host killed or crashed during a start that had not completed.
-  No `killed` or `crashed` row is written for it. The span counts it (`host_stops_inside`), and its words add
+  No `killed` or `crashed` row is written for it. The span counts it (`inside`, in the file and in the row), and its words add
   「这段时间里宿主也停过 N 次」. With no span open, a lease left behind is recorded as today. **`count` counts rows**:
   each row is one outage, so a Host stop inside a worker's span is never counted again (her review).
 - **One row per span, written once.** The row's id comes from the span (`down-` and its `since`), so a `host.came_back`
@@ -114,12 +116,14 @@ build refused), the line says that no placeholder can be handed over this time, 
 
 ### 4. Thoughts in every mode
 
-- **Every turn that does not ask for her thought leaves exactly one row.** At the end of such a turn, when neither
-  `thought.taken` nor `thought.none` was written, the coordinator writes `thought.none` with `why: not_carried`. That
-  covers the entries that leave nothing today: a call without `thinking`, and a scripted or placeholder lane. It is
-  written at the turn's end, not at each call, because DSH can run one response's calls concurrently, so a call
-  without `thinking` could reach the worker first, set `thought_none`, and make the guard skip the call that did carry
-  the thought. Xiaoman suggested the row (`thinking is None` → `thought.none`). Putting it at the turn's end is
+- **Every turn that does not ask for her thought leaves exactly one row.** Once such a turn's first stage has ended,
+  when neither `thought.taken` nor `thought.none` was written, the coordinator writes `thought.none` with
+  `why: not_carried`. That covers the entries that leave nothing today: a call without `thinking`, and a scripted or
+  placeholder lane. Only a first stage's calls can carry the thinking (repair stages never do), and when it has ended
+  every one of them has run, so this is the turn's last chance and the only point every turn passes through. It is
+  written there and not at each call, because DSH can run one response's calls concurrently, so a call without
+  `thinking` could reach the worker first, set `thought_none`, and make the guard skip the call that did carry the
+  thought. Xiaoman suggested the row (`thinking is None` → `thought.none`). Putting it after the first stage is
   Claude's change, because of that race.
 - `tools_week` shows the `thoughts` reading whenever the week has `thought.taken` or `thought.none` rows, in either
   mode. If anything ever removes `think` from a turn in `tool` mode, its rows are then written and read. The reading says where those thoughts came from: 「这些是程序从模型自己的思考里
@@ -131,7 +135,7 @@ written her thoughts first in every turn (her review).
 | Case | What happens |
 |---|---|
 | The database is unreachable when a start fails | The file is written (no database needed). The span closes at the first completed start. |
-| The Host is killed while a span is open | The file survives. The next Host's completed start records the whole span with all its tries. A lease left behind inside the span is part of the same outage: no `killed` row, the span counts it (`host_stops_inside`), and `count` stays one. |
+| The Host is killed while a span is open | The file survives. The next Host's completed start records the whole span with all its tries. A lease left behind inside the span is part of the same outage: no `killed` row, the span counts it (`inside`), and `count` stays one. |
 | `host.came_back` fails (database reset in that second) | The file stays and the next completed start records it. The row's id comes from `since`, so a call the worker carried out but whose answer was lost does not write a second row. |
 | A worker exits and the next start fails too | One span: `since` is the exit, `cause` is `exited:<code>` (the first cause), `tries` is 2. |
 | A start comes up but fails before it completes, then the next one does too | Still one span. Only a completed start closes it, so `since` stays the first failure and `tries` counts each. |
@@ -159,7 +163,8 @@ The lease (ADR-020): still one Host per database, still deleted on a clean stop.
 
 ## Review
 
-Claude's paraphrase of Xiaoman's agent-line messages of the morning of 2026-10-27 (four rounds), not her words:
+Items 1 to 7 are Claude's paraphrase of Xiaoman's agent-line messages of the morning of 2026-10-27 (four rounds), not
+her words; item 8 quotes her:
 
 - A list cut at three must say how many there were and how many it leaves out.
 - The planned-restart sentence shows `by`'s own value, and causes are a closed list her wording keys on.
@@ -186,30 +191,79 @@ She checks only that these four landed.
 
 ## Landing list (what the build changes)
 
-- `packages/cognition-core/src/index.js`: `worker-down.json` (open on a failed start or an exit, add a try, delete
-  after `host.came_back`), passed with `initialize`.
-- `src/asuna/native_worker.py`: `host.came_back`; a lease left behind inside an open span is folded into it.
+- `packages/cognition-core/src/outage.js` (new) and `index.js`: `worker-down.json` (open on a failed start or an
+  exit, add a try, delete after `host.came_back`); the worker reads it at its start (`host_stops.open_span`).
+- `src/asuna/native_worker.py`: `host.came_back`; a lease left behind inside an open span is folded into it
+  (`host_stops.left_behind`).
+- `src/asuna/faults.py`: a committed turn's `told.host_stops` stamps `shown_at`.
 - `src/asuna/host_stops.py`: `worker_down` rows (id from `since`), `by` on planned rows, `block` with up to three stops
   and the count, causes in words, `shown_at`; its `block` docstring.
 - `src/asuna/host_lease.py`: keep `planned_stop.by`.
 - `src/asuna/restarts.py`: a planned launcher start names `by`.
-- `src/asuna/coordinator.py`: `thought.none` `not_carried` at the turn's end.
+- `src/asuna/coordinator.py`, `src/asuna/role_tools.py`: `thought.none` `not_carried` once the first stage ends
+  (`RoleTools.thought_not_carried`).
 - `src/asuna/tools_week.py`: `thoughts` in either mode, with where the thoughts came from.
 - `src/asuna/local_roots.py`: `context_line` from the table's names.
 - `src/asuna/context.py` / manifest `told`: the once-only stamp for stops.
-- `RUNTIME_API.md`: a `host_from_program` entry (what it shows, for how long, only afterwards) and `worker-down.json`.
+- `RUNTIME_API.md`: a `host_from_program` entry (what it shows, for how long, only afterwards) and `worker-down.json`,
+  and the `thoughts` setting row (one row for every turn not asking for her thought, read in either mode).
+- **The rows change shape from this build**: while a span is open, a lease left behind writes no `killed` or
+  `crashed` row, so there are fewer of them than before. Anything that counts outages by those rows reads
+  `host_stops` with `worker_down` included and one row per outage (her review).
 - `docs/map/hosting.md`: regenerated.
 
-## Tests (to be written with the build)
+## Tests
 
 - JS: a failed start writes the file. A second failure keeps `since` and adds a try. A completed start sends
   `host.came_back` and deletes the file. A failed call keeps it. A planned restart writes nothing. An exit writes
   `exited:<code>`.
 - Python: `host.came_back` records one `worker_down` row (twice with the same `since`: still one). A lease left
-  behind while a span is open adds to `host_stops_inside` and writes no `killed` row. The block says it in words, with its cause and tries, and
+  behind while a span is open adds to `inside` and writes no `killed` row. The block says it in words, with its cause and tries, and
   shows up to three stops of the day. A lease left behind by a worker exit is not recorded as `killed`. A planned
   row stores `by`, and the restart block names it.
 - `context_line` lists exactly `Table.names` (the fixture machine), and no name it does not list is accepted.
 - `tools_week` shows `thoughts` in `tool` mode when there are rows, and not when there are none.
 - A turn that asks for no thought and whose calls carried no `thinking` ends with one `thought.none` `not_carried`;
   one whose call carried it ends with `thought.taken` and no `not_carried`; calls run concurrently do not lose it.
+
+Where: `tests/test_adr101_outages.py` (26), `tests/test_host_stops.py` (the floor, and a home turn's commit stamping
+`shown_at`), `packages/cognition-core/test/outage.test.js` (5, including the core opening the span on a failed start
+and counting an exit as a try). Two of them were checked against a mutation, so they are not green by construction
+(her review). With the turn-end row removed, as before this ADR, the turn leaves zero rows and the `not_carried` test
+fails. With the row written at each call without `thinking`, as first suggested, the call that carries the thought
+arrives second, is skipped, and the order test fails.
+
+## Built
+
+What the build changed against the signed text (blob `5e9365951b39`), for her install-day check:
+
+- `not_carried` is written once the first stage ends, not at the turn's end: the same point for every turn, after
+  every call that could carry the thinking (Decision 4).
+- The count of Host stops folded into a span is named `inside`, not `host_stops_inside` (Decision 1, failure table).
+- The fold is `host_stops.left_behind`, so it can be tested apart from the worker's start.
+- **The span is not passed with `initialize`; the worker reads the file itself** (`host_stops.open_span`, read-only,
+  at most 64 KB). The owner asked for the failure modes of the failure path. One was found there: her core candidate
+  restarts only the Python worker, onto her frozen copy, while the JS stays the installed one. So a JS and a Python of
+  different versions run together by design, and a new `initialize` argument would make an older worker refuse every
+  start. Now each side tolerates the other. An older worker ignores the file and records stops as before. A worker
+  without `host.came_back` answers `UNKNOWN_BUSINESS_METHOD`, and the plugin keeps the file for a later one. An older
+  plugin never writes the file. `folded_stop` is an extra key of the status that an older plugin ignores.
+- **Failures of the failure path**, each tested:
+
+  | When | Before | Now |
+  |---|---|---|
+  | The data folder cannot be written (read-only, full, unmounted) | the span functions threw inside `ready()`, so the bookkeeping itself failed the start | nothing throws; the outage is not recorded and one `Asuna:` line says so |
+  | A crash in the middle of writing the file | a torn file, its `since` lost | written whole or not at all (a temporary file renamed over it) |
+  | The span was recorded but the file cannot be removed | a warning saying it was not recorded | a warning saying it was, and the next hand-over writes no second row |
+  | The `shown_at` stamp cannot be written at commit | an exception after the commit | ignored: the stop is shown again, the safe side |
+  | The `not_carried` row cannot be written | her turn failed | her turn goes on without it |
+  | The clock moved between the two moments | 「中间约 1 分钟」 | 「中间多久不知道（时钟对不上）」 |
+  | The database is slow when a start completes | the turns waiting for `ready()` waited for the hand-over too | the hand-over runs beside the start (`handOver`), never awaited by it |
+  | The hand-over fails (database reset in that second) | the outage waited for the next start, perhaps days | tried again every 5 minutes (`HANDOVER_SECONDS`) while that worker runs; a replaced or closed worker is not called |
+  | A span file that is not one (torn, a list, no cause, past 64 KB) | read as no span by the worker | an open span whose start is not known, on both sides |
+
+- Her path line calls a POSIX mount point by index 「第 N 个挂载的盘」, not 「N 盘」 (Linux and macOS name mounts
+  `DRIVE_<index>`). Every fixture machine is tested: Windows (two layouts), Linux, Docker (two), macOS.
+- Docker: the container keeps the checkout and its data folder on a volume and starts through the same launcher, so
+  `worker-down.json` survives a recreated container. Nothing in this change is platform-specific (`path.join` and
+  plain file reads and writes).

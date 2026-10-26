@@ -379,6 +379,7 @@ class BusinessWorker:
         self.controller = None
         self.host = None
         self.host_pending = {}
+        self.folded_stop = False        # a lease left behind was folded into the plugin's open span (ADR-101)
         self.stopping = threading.Event()
         self.carry_lock = threading.Lock()
 
@@ -468,8 +469,8 @@ class BusinessWorker:
             self.app, self.controller = host.app, host.controller
             if lease.left_behind:                  # the last Host did not stop by itself (host_stops)
                 from . import host_stops
-                host_stops.record(self.app.store, lease.left_behind, planned=lease.planned,
-                                  exit_code=None if lease.planned else host_stops.crash_code(lease.left_behind))
+                # ADR-101: the plugin's open span, read from the data folder (the worker never writes it).
+                self.folded_stop = host_stops.left_behind(self.app.store, lease, host_stops.open_span())
             self.navigation = self.prepare_navigation(native_sessions or [])
             self.projection_start = self.app.store.db.artifacts.find_one({'_id': 'native-channel-projection'})
             if not self.projection_start:
@@ -492,7 +493,7 @@ class BusinessWorker:
         from .grants import home_workspaces
         # The Host makes her working copy in each (working-copy.js, ADR-065).
         return {**self.status(), 'navigation': self.navigation, 'home_workspaces': home_workspaces(self.app.config),
-                'roots': roots, 'roots_refused': local_roots.REFUSED}
+                'roots': roots, 'roots_refused': local_roots.REFUSED, 'folded_stop': self.folded_stop}
 
     def prepare_navigation(self, native_sessions):
         """Bind real native conversations; the Host owns their logs and workspaces."""
@@ -1089,6 +1090,10 @@ class BusinessWorker:
                     if not future.done():
                         future.set_exception(RuntimeError('BACKGROUND_SUMMARY_PAUSED_FOR_SETTINGS'))
             return {'quiesced': True}
+        if method == 'host.came_back':
+            # ADR-101: a start completed; the plugin hands over the span she was down, recorded once.
+            from . import host_stops
+            return {'stop_id': host_stops.worker_down(self.app.store, args)['_id']}
         if method == 'navigation.ready':
             for entry in self.navigation['entries']:
                 record = self.app.store.db.sessions.find_one({'_id': entry['session_id']})

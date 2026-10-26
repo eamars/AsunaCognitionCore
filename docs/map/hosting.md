@@ -253,6 +253,7 @@ Her restarts (ADR-034): the worker side of the Host supervisor (tools/asuna-supe
   - `close`
 - def `waiting_words` — A pending request in her words: when it goes, why, and which of her conversations asked.
 - def `waiting` — The request waiting at the desk, from its file (any worker reads the same one), or None.
+- def `planned_mark` — The planned-stop row of the start a record is about (the newest one back since it went down), or None.
 - def `block` — restart_from_program for a home turn: a request waiting at the desk, and the supervisor's latest record, for a day.
 - def `call_after_fallback` — Once, right after a restart that fell back: a home turn tells her she runs the previous version.
 
@@ -264,10 +265,18 @@ When the Host was taken away from outside, she should not have to infer from a g
 
 - def `crash_code` — The exit code of a Host that exited on its own, when the supervisor's record of this start says so: a restart nobody asked for, not back yet, that went down within one planned-stop window of the lease's last renewal.
 - def `record` — One stop that left the lease behind, found at startup: alive_until is the old Host's last known moment.
+- def `open_span` — The Host plugin's open span (outage.js), read from the data folder and never written here: a dict, or None when there is none or it cannot be read.
+- def `left_behind` — A start found the lease the last Host left behind: record the stop, or, while the plugin's span is open (`down`), fold an unplanned one into that same outage (ADR-101) and write nothing.
+- def `span_of` — An open span as the Host plugin hands it over, checked: {since (ISO or None), cause (the closed list, else unknown), tries (at least 1), inside (Host stops folded into it), opened (ISO, when since is not known)}.
+- def `worker_down` — The span a completed start hands over (ADR-101): one `worker_down` row, its id from the span (its `since`, or when that is not known the moment the span was opened), so handing the same span over again writes no second row.
 - def `missed_cause` — The cause code of a look the gate could not decide.
 - def `missed_look` — One look the gate could not decide, in its own small collection (the home turn counts them).
 - def `missed_looks` — '某群 3 次、某群 1 次' for the gate's failed looks since then, or None.
-- def `block` — host_from_program for a home turn: the latest stop of the last day that was not planned (killed from outside or crashed) and the gate's failed looks of the last day, or None.
+- def `listed` — The outages her home turn shows: each that came back within the last day, and each not yet shown in a turn that committed (`shown_at` None, however old), newest first.
+- def `cause_words` — A worker_down row's cause in words, by its kind (the part before `:`).
+- def `stop_words` — One outage: what it was and when, in words.
+- def `block` — host_from_program for a home turn: the outages of the last day and those not yet shown (`listed`; killed from outside, crashed, or her worker down while the Host ran on), newest first, at most LISTED with how many there were, and the gate's
+- def `shown` — A turn that showed these outages committed: each is stamped `shown_at` once.
 - def `main` — `python -m asuna.host_stops planned [--by NAME]`: mark the running Host's coming stop as a planned restart.
 
 ## `host_lease`

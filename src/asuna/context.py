@@ -350,6 +350,7 @@ class ContextBuilder:
 
     def _prepare(self, event, persona, recall, turn_kind):
         scene=self.store.authorize(event['scene_id'],event['person_id'])
+        shown_stops=[]                  # the outages this turn shows (host_from_program, home turns only)
         from . import memory_tiers
         if memory_tiers.ENABLED and not recall:
             # ADR-062: rows for new items, then the lapses and cooling due, before anything is read for the turn.
@@ -959,8 +960,10 @@ class ContextBuilder:
             asked=_questions.block(self.store,persona,scene['_id'],moment,(first_note or {}).get('question'))
             if asked:context['questions_from_program']=asked
             from . import host_stops as _host_stops
-            away=_host_stops.block(self.store,schedule_zone,moment,persona)
+            stops=_host_stops.listed(self.store,moment)
+            away=_host_stops.block(self.store,schedule_zone,moment,persona,rows=stops)
             if away:context['host_from_program']=away
+            shown_stops=[row['_id'] for row in stops]      # stamped shown_at when this turn commits (ADR-101)
             from . import restarts as _restarts
             restarted=_restarts.block(self.store,schedule_zone,moment)
             if restarted:context['restart_from_program']=restarted
@@ -1086,6 +1089,7 @@ class ContextBuilder:
             *['doc:persona#'+section['sid'] for section in carried_here['persona']]]))
         if doc_refs:context['doc_refs_from_program']=doc_refs
         manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'person_revision':person_head[0]['revision_id'] if person_head else None,'person_entity_key':person_entity+'|'+_understanding.PERSON_SCOPE,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
+        if shown_stops:manifest.setdefault('told',{})['host_stops']=shown_stops
         if scene['kind']=='group':
             # ADR-082: a group is read by people. The person who starts the turn (and whoever's @ or reply to her waits
             # behind it) comes as an entry: familiarity, stance, her shorts; the full layers come with recall's person.

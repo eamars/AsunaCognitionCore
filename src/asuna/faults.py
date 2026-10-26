@@ -61,3 +61,10 @@ def told(store, ep):
     if shown.get('unsent'):
         store.db.scenes.update_one({'_id': ep['scene_id'], 'unsent.episode_id': shown['unsent']},
                                    {'$unset': {'unsent': ''}})
+    if shown.get('host_stops'):
+        # ADR-101: the outages it showed stay until such a turn commits, and at least a day (host_stops.listed).
+        from . import host_stops
+        try:
+            host_stops.shown(store, shown['host_stops'])
+        except Exception:
+            pass                        # unstamped, it is shown again next time: the safe side of a failed write

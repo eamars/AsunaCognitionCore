@@ -52,6 +52,7 @@ class DatabaseLease:
         self.thread = None
         self.left_behind = None
         self.planned = False
+        self.planned_by = None          # who marked the planned stop (`mark_planned --by`), when it said
 
     def _expiry(self):
         return {'$add': ['$$NOW', LEASE_SECONDS * 1000]}
@@ -60,8 +61,10 @@ class DatabaseLease:
         mine = self.leases.find_one({'_id': 'host', 'instance': self.me}, {'expires_at': 1, 'planned_stop': 1})
         if mine and mine.get('expires_at'):
             self.left_behind = mine['expires_at'] - timedelta(seconds=LEASE_SECONDS)
-            marked = (mine.get('planned_stop') or {}).get('at')
+            mark = mine.get('planned_stop') or {}
+            marked = mark.get('at')
             self.planned = bool(marked) and self.left_behind - marked <= timedelta(seconds=PLANNED_SECONDS)
+            self.planned_by = (str(mark['by'])[:40] or None) if self.planned and mark.get('by') else None
         # A planned-restart mark belongs to the Host that was stopped, never to this one.
         take = [{'$set': {**self.holder, 'since': '$$NOW', 'expires_at': self._expiry()}}, {'$unset': 'planned_stop'}]
         free_or_mine = {'$or': [{'$lt': ['$expires_at', '$$NOW']}, {'$eq': ['$instance', self.me]}]}

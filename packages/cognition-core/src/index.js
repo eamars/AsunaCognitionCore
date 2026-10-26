@@ -21,6 +21,7 @@ import { composeContext, restoreContext, trimTurn, visibleCarried, withoutVisibl
 import { BusinessWorker } from './worker.js';
 import { ensureWorkingCopies } from './working-copy.js';
 import { appendFile } from 'node:fs/promises';
+import { KEPT, cameBack, exitCause, startCause, stopInside, wentDown } from './outage.js';
 import { NativeSchedules } from './schedule.js';
 import { AsunaApi } from './api.js';
 import { readSpill } from './spill.js';
@@ -99,6 +100,8 @@ const routeOf = lane => lane === 'character' || lane === 'attend' ? 'character' 
 const CREDENTIAL_SCOPE = 'asuna-cognition-core';
 // How long a failed start waits before the next try: the first few soon, then every five minutes, never giving up.
 export const START_RETRY_SECONDS = [5, 15, 45, 135, 300];
+// How long a span the worker could not record waits before it is handed over again (ADR-101).
+export const HANDOVER_SECONDS = 300;
 // A tool's own refusal comes back from the worker written for the brain that called it. A lost connection
 // (the worker exited or is restarting) is not, and its text names this machine's files: say what it means instead.
 const WORKER_DOWN = 'ASUNA_WORKER_UNAVAILABLE: 处理工具的后台进程这会儿断开了（它会自己重启），这次调用没有完成——不是参数的问题；'
@@ -233,6 +236,8 @@ export class CognitionCore {
     this.roots = new Roots(this);
     this.lifecycle = { state: 'unconfigured', error: null, restarts: 0 };
     this.startFailures = 0;             // starts failed in a row (startAgain)
+    this.workerExited = false;          // this Host's worker exited since its last start (workerFailed)
+    this.warnLine = text => this.ctx.logger.warn(text);
   }
 
   registerPersona(persona) {
@@ -381,6 +386,10 @@ export class CognitionCore {
         ui_titles: this.uiTitles ??= (await languageWords(await savedLanguage(this.ctx.asunaFloor.dataRoot))).titles,
         // The roots the worker's table names besides its own (local_roots.py): the checkout and DSH's home.
         checkout: this.ctx.asunaFloor.checkout(), dsh_home: this.dshHome() });
+      // ADR-101: the worker read the open span itself (worker-down.json) and folded a lease left behind into it; one
+      // that was not this Host's own exited worker is a Host stop inside the span. An older worker sends no flag.
+      if (status.folded_stop && !this.workerExited) stopInside(this.ctx.asunaFloor.dataRoot, this.warnLine);
+      this.workerExited = false;
       this.roots.take(status.roots, status.roots_refused);
       await this.worker.call('publication.activated', { publications: await this.ctx.asunaFloor.workerReady() });
       await organizeNativeWorkspaces(this, status.navigation);
@@ -399,6 +408,8 @@ export class CognitionCore {
       this.lifecycle.state = 'ready'; this.lifecycle.error = null;
       await this.worker.call('navigation.ready');
       this.startFailures = 0;
+      // ADR-101: the start completed; the span she was down, if any, is handed over beside it, never holding it up.
+      this.handOver();
     })().catch(async error => {
       if (error.unconfigured) {
         this.lifecycle.state = 'unconfigured'; this.lifecycle.error = error.message; this.initializing = null;
@@ -408,10 +419,33 @@ export class CognitionCore {
       if (this.worker) { this.worker.onFailure = null; await this.worker.dispose(); }
       // Its callers see this failure; the next call starts afresh, and one is scheduled (startAgain).
       if (this.initializing === attempt) this.initializing = null;
+      this.downNow(startCause(error));
       this.startAgain(error);
       throw error;
     });
     return attempt;
+  }
+
+  /** Hand the open span to the worker until it is recorded (ADR-101): beside a completed start, so a slow database
+   * never holds up the turns waiting for it, and again every HANDOVER_SECONDS while that worker runs, so a hand-over
+   * that failed does not wait for the next start (days, perhaps). Never throws. */
+  handOver(worker = this.worker) {
+    clearTimeout(this.handOverTimer);
+    cameBack(this.ctx.asunaFloor.dataRoot, span => worker.call('host.came_back', span), this.warnLine).then(result => {
+      if (result !== KEPT || this.unloaded || this.worker !== worker || worker.closed) return;
+      // A worker replaced or closed meanwhile is not called: the next completed start hands it over.
+      this.handOverTimer = setTimeout(() => {
+        if (!this.unloaded && this.worker === worker && !worker.closed) this.handOver(worker);
+      }, HANDOVER_SECONDS * 1000);
+      this.handOverTimer.unref?.();
+    }, () => {});
+  }
+
+  /** A worker went down unplanned (ADR-101): the open span in the data folder. Never fails its caller (outage.js
+   * does not throw; a plugin started without a data folder has nowhere to keep it). */
+  downNow(cause) {
+    const dataRoot = this.ctx.asunaFloor?.dataRoot;
+    if (dataRoot) wentDown(dataRoot, cause, this.warnLine);
   }
 
   /** A start that failed is tried again, further apart each time, until one succeeds: a fault that passes (a
@@ -1109,6 +1143,8 @@ export class CognitionCore {
 
   workerFailed(error) {
     this.lifecycle.state = 'failed'; this.lifecycle.error = String(error);
+    this.workerExited = true;           // the lease its worker leaves behind is not a Host stop (ADR-101)
+    this.downNow(exitCause(error));
     for (const [id, state] of this.states) {
       state.waiter?.reject(error); state.waiter = null;
       if (state.current) this.ctx.agents.get(id)?.cancel({ kind: 'user' });
@@ -1440,6 +1476,7 @@ export class CognitionCore {
     this.releaseProbe?.();
     clearTimeout(this.restartTimer);
     clearTimeout(this.startTimer);
+    clearTimeout(this.handOverTimer);
     if (this.worker) this.worker.onFailure = null;
     await this.worker?.dispose();
     await this.children.dispose();

@@ -238,6 +238,18 @@ LAUNCHER = 'launcher'
 ASKED_WORDS = {'self': '你自己要的', 'nobody': '没人要：宿主自己退出了，监工把它拉起来',
                LAUNCHER: '从启动器开的，不是你要的重启'}
 LAUNCHED_WHEN = '%s 启动器开始，%s 起来，用了约 %s'
+# A launcher start whose stop was marked planned beforehand (host_stops.record `by`, ADR-101): by the mark's own value.
+PLANNED_LAUNCH = '从启动器开的，是计划内的重启（%s），不是你要的'
+PLANNED_BY = '%s 事先标好的'
+PLANNED_BY_UNKNOWN = '谁标的没记下来'
+
+
+def planned_mark(store, down_at):
+    """The planned-stop row of the start a record is about (the newest one back since it went down), or None."""
+    if not down_at:
+        return None
+    return store.db.host_stops.find_one({'how': 'planned', 'back_at': {'$gte': _aware(down_at).isoformat()}},
+                                        sort=[('back_at', -1)])
 def block(store, zone, moment=None, root=None, integration_state=None):
     """restart_from_program for a home turn: a request waiting at the desk, and the supervisor's latest record, for a
     day."""
@@ -252,6 +264,9 @@ def block(store, zone, moment=None, root=None, integration_state=None):
     down = _span((_aware(record['back_at']) - _aware(record['down_at'])).total_seconds())
     tries = record.get('attempts') or []
     launched = record.get('asked') == LAUNCHER
+    mark = planned_mark(store, record.get('down_at')) if launched else None
+    if mark:
+        asked = PLANNED_LAUNCH % (PLANNED_BY % mark['by'] if mark.get('by') else PLANNED_BY_UNKNOWN)
     value = {'what': ('演练' if record.get('drill') else '启动' if launched else '重启') + '：' + asked,
              **({'why': str(record['why'])[:200]} if record.get('why') else {}),
              'when': (LAUNCHED_WHEN if launched else '%s 停，%s 起来，中间约 %s') % (

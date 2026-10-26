@@ -217,8 +217,11 @@ def cause_words(row):
     return CAUSE_WORDS['unknown']
 
 
-def stop_words(row, zone):
-    """One outage: what it was and when, in words."""
+EARLIER = '再往前一次'           # an older stop of the list: 「上次」 is only the newest (her reading, 10-27)
+
+
+def stop_words(row, zone, newest=True):
+    """One outage: what it was and when, in words. Only the newest of a list is 「上次」; an older one is 「再往前一次」."""
     from .schedule_rules import line_stamp
     back = line_stamp(zone, row['back_at'])
     if row['how'] == 'worker_down':
@@ -229,6 +232,8 @@ def stop_words(row, zone):
             return {'what': what, 'when': SINCE_UNKNOWN % back}
     else:
         what = CRASHED if row['how'] == 'crashed' else WHAT
+        if not newest:
+            what = what.replace('上次', EARLIER, 1)
     gone = (datetime.fromisoformat(row['back_at']) - datetime.fromisoformat(row['alive_until'])).total_seconds()
     who = '你' if row['how'] == 'worker_down' else '宿主'         # the Host ran on while her worker was down
     if gone < 0:                        # the clock moved between the two moments: how long is not known
@@ -247,7 +252,7 @@ def block(store, zone, moment=None, persona=None, rows=None):
     rows = listed(store, moment) if rows is None else rows
     out = {}
     if rows:
-        out = {'count': COUNT % len(rows), 'stops': [stop_words(row, zone) for row in rows[:LISTED]], 'note': NOTE}
+        out = {'count': COUNT % len(rows), 'stops': [stop_words(row, zone, i == 0) for i, row in enumerate(rows[:LISTED])], 'note': NOTE}
         if len(rows) > LISTED:
             out['not_listed'] = NOT_LISTED % (len(rows) - LISTED)
     missed = missed_looks(store, persona, since)

@@ -778,7 +778,7 @@ No local root of this computer reaches the character brain; the action brain wor
   `ASUNA_ROOT_TABLE_MISSING` (a program fault: her next turn there says a turn did not run, the developer inbox gets a
   note, the audit one `roots.refused`) and the settings card says so; the action lane runs. Otherwise the settings card
   shows the table's size and the requests rewritten since the start.
-- **Toward the action brain.** The `delegate` brief, a message to a task, her answer to a task's question and an `ask`
+- **Toward the action brain.** The `delegate` brief and title, a message to a task, her answer to a task's question and an `ask`
   to 行动脑 lose every credential value, then each placeholder the place hands over becomes its real path with the
   host's separators (a public place: `WORKSPACE`, `DATA`; home: all but `LOCAL_PATH`); any other stays as written.
   Refused, in words: a raw root (with the whole text rewritten), an `${ASUNA_...}` name the table does not have where it stands as a path's root (followed by a separator; elsewhere it is text, as the deployment's own `${ASUNA_...}` variables are), a

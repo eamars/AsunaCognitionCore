@@ -31,8 +31,8 @@ def home_event(store, key, **extra):
     return event(key, **extra)
 
 
-def delegate(store, ev, brief):
-    coordinator, lane = run(store, FakeTurn([THINK, ('delegate', {'title': '看文件', 'brief': brief})], '交给行动脑了。'))
+def delegate(store, ev, brief, title='看文件'):
+    coordinator, lane = run(store, FakeTurn([THINK, ('delegate', {'title': title, 'brief': brief})], '交给行动脑了。'))
     ep = coordinator.ingest(ev)
     [(_, _, _, _, result, ok)] = [r for r in lane.tool_results if r[2] == 'delegate']
     task = store.db.tasks.find_one({'_id': ep['task_ids'][0]}) if ep.get('task_ids') else None
@@ -44,6 +44,13 @@ def test_a_brief_from_home_reaches_the_action_brain_with_the_real_paths(store, h
     ep, result, ok, task = delegate(store, home_event(store, 'h1'), brief)
     assert ep['manifest']['session_class'] == visibility.OWNER_PRIVATE and ok, result
     assert task['brief'] == ('读 %s\\packages\\x\\README.md 和 %s\\notes.md；脚本里 echo ${HOME} ${1} 照旧。' % (WS, HOME))
+
+
+def test_a_title_reaches_the_action_brain_expanded_as_its_brief_is(store, home):
+    """The action brain cannot open a placeholder: a path in the title is expanded with the brief (her review)."""
+    ep, result, ok, task = delegate(store, home_event(store, 'h-title'), '读第一行', title='读 ${ASUNA_WORKSPACE}\a.md')
+    assert ok, result
+    assert task['title'] == '读 %s\a.md' % WS
 
 
 def test_a_brief_from_a_public_place_expands_only_the_workspace_and_data(store):
@@ -76,7 +83,8 @@ def test_what_she_writes_is_kept_contracted(store, home):
     # A credential's values and her private words are kept as she wrote them.
     literal = {'op': 'keep', 'env': {'X_PATH': WS}}
     assert role_tools.written('credential', literal) == literal
-    assert role_tools.written('delegate', {'title': WS, 'brief': WS}) == {'title': '${ASUNA_WORKSPACE}', 'brief': WS}
+    # A delegate's title goes to the action brain with its brief: both stay as written, for D3.
+    assert role_tools.written('delegate', {'title': WS, 'brief': WS}) == {'title': WS, 'brief': WS}
 
 
 def test_her_words_leave_with_no_raw_root_and_each_replacement_is_counted(store, home):

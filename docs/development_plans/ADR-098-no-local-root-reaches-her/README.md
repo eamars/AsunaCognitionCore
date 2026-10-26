@@ -119,7 +119,8 @@ got one): her turns there end before reaching the model, and her next turn there
 brain still works. Without a table the other rules hold too: D3 refuses any placeholder toward the action brain
 (`PATH_TABLE_MISSING`) and passes text without one; D4 and D5 have nothing to contract.
 
-**D3. Expansion toward the action brain.** One helper at the four fields that go to it: the `delegate` brief, a
+**D3. Expansion toward the action brain.** One helper at the fields that go to it: the `delegate` brief and its
+title (her review after the install: the title reached the action brain unexpanded, a name it cannot open), a
 message to a task, her answer to a task's question, and an `ask` to 行动脑. It runs the vault's `credentials.scrub`
 first (her answer to a task is not scrubbed today; this closes that), then:
 - a placeholder this place can hand over expands to the real path (whole tokens only; the tail's separators become the

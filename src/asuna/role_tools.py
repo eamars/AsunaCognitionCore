@@ -551,7 +551,8 @@ def infer_op(name, args):
 
 # ADR-098 D3: the fields that go to the action brain; each passes `_toward_action` (scrub, then the root table) and is
 # not contracted on the way in, so a raw root in one is refused, not quietly rewritten.
-ACTION_BOUND = {'delegate': 'brief', 'task.message': 'message', 'task.answer': 'answer', 'ask.ask': 'question'}
+ACTION_BOUND = {'delegate': ('brief', 'title'), 'task.message': ('message',), 'task.answer': ('answer',),
+                'ask.ask': ('question',)}
 # What must stay as she wrote it: a credential's values and her private words are literal values the program keeps.
 LITERAL_TOOLS = ('credential', 'private_words')
 
@@ -565,13 +566,13 @@ def written(name, args):
     can = ability(name, args)
     if can == 'speak':
         return args
-    bound = ACTION_BOUND.get(can)
+    bound = ACTION_BOUND.get(can, ())
     if can == 'ask.ask':
         wanted = args.get('to')
         wanted = [wanted] if isinstance(wanted, str) else wanted if isinstance(wanted, list) else []
         if not any(isinstance(w, str) and ' '.join(w.split()) == questions.ACTION for w in wanted):
-            bound = None
-    return {key: value if key == bound else local_roots.contract(value) for key, value in args.items()}
+            bound = ()
+    return {key: value if key in bound else local_roots.contract(value) for key, value in args.items()}
 
 
 def ability(tool, args=None):
@@ -2005,7 +2006,8 @@ class RoleTools:
 
     def tool_delegate(self, ep, call_id, args):
         self._depth(ep)
-        title = self._text(args, 'title', 80)
+        # The title reaches the action brain with the brief: the same expansion, or it would see a name it cannot open.
+        title = self._toward_action(ep, self._text(args, 'title', 80))
         brief = self._toward_action(ep, self._text(args, 'brief', 20000))  # no credential value, no raw root
         from . import action_tiers
         tier = None

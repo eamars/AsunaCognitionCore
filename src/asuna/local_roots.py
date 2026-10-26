@@ -347,7 +347,7 @@ class Table:
         """What keeps a text she wrote toward the action brain from going as it is: [(code, words)]."""
         out = []
         # An unknown name is refused where it stands as a path's root (a separator follows): the typo case. Elsewhere
-        # it is text: the deployment's own variables (`${ASUNA_REPO:-…}` in deploy/docker) are quoted as they are.
+        # it is text: the deployment's own variables (`${ASUNA_REPO:-…}` in its deploy files) are quoted as they are.
         unknown = sorted({m.group(1) for m in TOKEN_TAIL.finditer(text)
                           if m.group(1) not in self.names and m.group(2)[:1] in ('\\', '/')})
         if unknown:

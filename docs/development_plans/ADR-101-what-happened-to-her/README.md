@@ -62,11 +62,15 @@ The Host plugin (JS) is the only side that knows why a worker went away, so it k
   passes for the whole. Each stop has its `what` and its `when`, plus the existing `note`. For `worker_down` the `what`
   is 「宿主一直在运行，但替你处理一切的那部分程序停了，没有马上起来」, plus its cause in words. The `when` keeps
   today's form: last known running, back, and about how long nothing ran (「中间约 X 分钟」).
-- **Until she has read it, and at least a day.** A stop stays in her block until a home turn that showed it has
+- **Until a turn has shown it, and at least a day.** A stop stays in her block until a home turn that showed it has
   committed, and in any case for a day after she came back. The day is a floor, not a cap: if she runs no home turn
   for longer than that (a quiet night, a weekend), her first one still carries it (her review). This is the
   once-only mark that `faults` already uses: the turn's manifest lists what it showed (`told`), and its commit stamps
-  those rows `told_at`. A turn that fails after it was prepared does not lose it.
+  those rows `shown_at`. A turn that fails after it was prepared does not lose it.
+- **What the stamp means.** `shown_at` says only that the stop was in a committed turn's context, rendered in front
+  of her. It does not say she took it in, answered it or acted on it: that turn may have stayed silent, been cut by a
+  compaction, or done nothing. Nothing reads `shown_at` as "she knows", and no rule may use it as a reason she should
+  not ask again (her review).
 - **Causes, a closed list.** A cause is a kind and a name, never the error's text (that carries a host address). The
   kinds and their words:
   - `start_failed:<name>`: 「启动时出错（<name>），程序隔一阵自己重试，第 <tries+1> 次起来了」
@@ -116,7 +120,7 @@ written her thoughts first in every turn (her review).
 | The file is unreadable or malformed | It is replaced by an open span whose `since` is not known and whose cause is `unknown`, and one `Asuna:` warning line is written. Her block then says 「这一段从什么时候开始不知道（记录读坏了）」 rather than nothing. |
 | Another deployment shares the database | The file is per data folder, so per deployment. Its rows carry no deployment id, as today's `host_stops` rows carry none. |
 | She never comes back | Nothing is recorded until she does. The span is in the file and in `host.log` (ADR-100's lines). |
-| She runs no home turn for more than a day after coming back | Her first home turn still carries the stop: it leaves only after a turn that showed it commits, and never sooner than a day. |
+| She runs no home turn for more than a day after coming back | Her first home turn still carries the stop: it leaves only after a turn that showed it commits (`shown_at`), and never sooner than a day. |
 | A planned restart's mark expires (more than `PLANNED_SECONDS`) | It is recorded as `killed`, as today, and her block says so. |
 
 ## Only afterwards, by nature

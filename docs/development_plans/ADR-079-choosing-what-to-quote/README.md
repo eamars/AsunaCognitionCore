@@ -734,7 +734,10 @@ Xiaoman (her words, as she gave them on the agent line, 2026-10-18 about 14:02 N
 
 The owner asked whether `〔n〕` and the program's other full-width delimiters should be ASCII. Measured on her
 character model's tokenizer (prompt tokens of one-token completions, synthetic text): inside Chinese an ASCII mark
-costs what the full-width one costs (one token each); next to ASCII (digits, spaces, Latin) it merges. In a platform
+costs what the full-width one costs (one token each); next to ASCII (digits, spaces, Latin) it merges. The test set:
+16 marks, each 40 times between two Chinese words (and the paired brackets around a 4-digit number), against
+its ASCII form; then 40 synthetic platform label lines (`[name #n] 10/26 16:mm 〔68nn〕：…`) in four forms: 1,259 tokens as
+today, 1,219 with `(n)`, 1,179 with `(n)` and `:`, 1,219 with `[n]`. In a platform
 label line `〔n〕` → `(n)` saves one token a line and `：` → `:` after it one more. In what her character brain read
 over 7 days the program put a full-width mark next to ASCII about 87,000 times a day (inside Chinese 458,000): at most
 about 30,000 tokens a day, some 0.2% of her uncached input, of which the line number is about 9,000. `「」` would

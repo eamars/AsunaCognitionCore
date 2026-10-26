@@ -223,6 +223,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
 - def `name`
 - def `inject`
 - def `Config`
+- def `START_RETRY_SECONDS`
 - def `DSH_DEVELOPER_SECTIONS`
 - def `imagesOf` — Pictures attached to the owner's local messages (DSH keeps them in her conversation, so she sees them), read back for the program's own record: history, her action brain's read_image, an image she may send on.
 - def `pictureParts` — The pictures that come with a turn, saved as DSH attachments: one that cannot be saved is left out (her context says read_image reaches any picture that did not appear).
@@ -240,6 +241,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `applyInPlace` — A persona or channel publication that needs no restart: the worker takes the persona model at once, new action scopes discover its skills, and the next integration_start runs its adapter.
   - `personaProbe` — The running worker's reading of a persona package published to `root`, as it would take it on a swap or at the next start (persona.check: its model loaded and its id checked, nothing applied), in the boot probe's form.
   - `ready`
+  - `startAgain` — A start that failed is tried again, further apart each time, until one succeeds: a fault that passes (a database connection reset while the network link drops during her first minute) must not leave her down while the Host runs on.
   - `dshHome` — DSH's home: the profile's, else the variable the Host was started with.
   - `attachSchedule`
   - `routeFor` — A brain's route: the one chosen on the settings card, else DSH's own default model (the appraiser and the action brain's 高 have none: unset, they are off).
@@ -295,11 +297,11 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
 
 [packages/cognition-core/src/log-sink.js](../../packages/cognition-core/src/log-sink.js)
 
-Asuna's own log lines, kept. The Host's logger keeps a plugin's messages in memory only (a ring of the newest thousand, gone at each restart), so a line such as a summary request's reasoning level or a worker restart's reason reached no file. This exporter writes the lines Asuna writes (they start with `Asuna`) to the Host's stderr, which the supervisor keeps in `restart/host.log`; every other plugin's lines are left as they were.
+Asuna's own log lines, kept. The Host's logger keeps a plugin's messages in memory only (a ring of the newest thousand, gone at each restart), so a line such as a summary request's reasoning level or a worker restart's reason reached no file. This exporter writes Asuna's lines to the Host's stderr, which the supervisor keeps in `restart/host.log`: every line an Asuna package's logger writes (its name starts with `asuna`), whatever its text, and any line that starts with `Asuna`. A line that does not say it is Asuna's carries its logger's name. Every other plugin's lines are left as they were.
 
 - def `PREFIX` — Asuna's own log lines, kept.
 - def `formatted` — A message's arguments as one line of text, `%s`, `%d` and `%o` filled in the way the Host's own logger does.
-- def `asunaLogExporter` — The exporter for `ctx.logger.exporter()`: each Asuna line, stamped with its time and level, through `write`.
+- def `asunaLogExporter` — The exporter for `ctx.logger.exporter()`: each of Asuna's lines, stamped with its time and level, through `write`.
 
 ## `navigation.js`
 

@@ -15,6 +15,19 @@ test('Asuna lines reach the sink with their time and level; other plugins\' line
   ]);
 });
 
+test('a line an Asuna package\'s logger writes is kept whatever its text, and says whose it is', () => {
+  const written = [];
+  const exporter = asunaLogExporter(text => written.push(text));
+  const at = Date.UTC(2026, 9, 27, 0, 0, 0);
+  exporter.export({ ts: at, type: 'warn', name: 'asuna-cognition-core', args: [new Error('AutoReconnect: reset')] });
+  exporter.export({ ts: at, type: 'warn', name: 'asuna-napcat-qq', args: ['Asuna: adapter line'] });
+  exporter.export({ ts: at, type: 'warn', name: 'asunax', args: ['not ours'] });
+  exporter.export({ ts: at, type: 'warn', name: 'loader', args: ['Error: someone else\'s'] });
+  assert.equal(written.length, 2);
+  assert.match(written[0], /^2026-10-27T00:00:00\.000Z warn \[asuna-cognition-core\] Error: AutoReconnect: reset/);
+  assert.equal(written[1], '2026-10-27T00:00:00.000Z warn Asuna: adapter line\n');
+});
+
 test('the sink takes errors, information and warnings, not debug lines', () => {
   // The Host's logger levels: error 0, info 1, warn 2, debug 3.
   assert.equal(asunaLogExporter(() => {}).levels.default, 2);

@@ -16,6 +16,7 @@ export const SPAN_BYTES = 65536;
 export const KEPT = 'kept';
 
 const CODE = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/;
+const UNNAMED = 'Error';                 // a failure with no name to tell it by
 
 /** A failed start's cause by name only, as faults.cause takes it: the error code its last line carries, else the
  * exception's class (`AutoReconnect` from "AutoReconnect: <host>:<port>: …"). Never the text: it carries addresses. */
@@ -24,7 +25,7 @@ export function startCause(error) {
   const last = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean).pop() ?? '';
   const code = last.match(CODE);
   const name = (code ? code[0] : last.split(':')[0].trim().split('.').pop()).replace(/[^A-Za-z0-9_]/g, '').slice(0, 60);
-  return 'start_failed:' + (/^[A-Za-z]/.test(name) ? name : 'Error');
+  return 'start_failed:' + (/^[A-Za-z]/.test(name) ? name : UNNAMED);
 }
 
 /** A worker's exit by its code (`exited:1`, `exited:none` when it had none), or unknown. */
@@ -97,10 +98,13 @@ export async function cameBack(dataRoot, send, warn = () => {}) {
   try { answer = await send(span); }
   catch (error) {
     // The second argument is what the failure is, for a caller that says each one once: the span and the error's
-    // name, never its text (a database error carries values that change at every try: ids, times, addresses).
+    // name, never its text (a database error carries values that change at every try: ids, times, addresses). An
+    // error with no name to tell it by keys on its text instead: it may be said again, never silenced as another.
+    const line = String(error?.message ?? error).split(/\r?\n/)[0].slice(0, 200);
+    const name = startCause(error).slice('start_failed:'.length);
     warn('Asuna: the span she was down since ' + (span.since ?? 'an unknown moment') + ' is not recorded yet; '
-      + 'it is handed over again: ' + String(error?.message ?? error).split(/\r?\n/)[0].slice(0, 200),
-    'handover ' + (span.since ?? span.opened ?? 'unknown') + ' ' + startCause(error).slice('start_failed:'.length));
+      + 'it is handed over again: ' + line,
+    'handover ' + (span.since ?? span.opened ?? 'unknown') + ' ' + (name === UNNAMED ? 'text ' + line : name));
     return KEPT;
   }
   try { unlinkSync(path.join(dataRoot, FILE)); }

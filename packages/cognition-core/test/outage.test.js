@@ -202,6 +202,19 @@ test('a failure said once: the same span failing the same way is one line howeve
   core.unloaded = true; clearTimeout(core.handOverTimer);
 });
 
+test('two failures with no name to tell them by are not merged: each is said', async t => {
+  const dir = folder(t);
+  wentDown(dir, 'exited:1');
+  const keys = [];
+  const record = (text, key = text) => keys.push(key);
+  await cameBack(dir, async () => { throw new Error('  '); }, record);
+  await cameBack(dir, async () => { throw new Error('?? 42'); }, record);
+  await cameBack(dir, async () => { throw new Error('AutoReconnect: 192.0.2.10:27017: reset'); }, record);
+  await cameBack(dir, async () => { throw new Error('AutoReconnect: 192.0.2.10:27018: reset'); }, record);
+  assert.equal(new Set(keys.slice(0, 2)).size, 2, 'unnamed failures key on their text, never as one');
+  assert.equal(keys[2], keys[3], 'a named failure keys on its name: one, however its text changes');
+});
+
 test('a planned in-place restart opens no span', async t => {
   const dir = folder(t);
   const { CognitionCore } = await import('../src/index.js');

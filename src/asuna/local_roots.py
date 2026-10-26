@@ -11,7 +11,8 @@ rest of the path stays as it was:
   their own folder name kept (`${ASUNA_PROGRAMS}\\Program Files\\...`, `${ASUNA_PROGRAMS}/usr/...`);
 - `DRIVE_<X>` any other path on drive X (Windows, and WSL's `/mnt/x`); on POSIX each mount point by letter or index;
 - `FS` any other path of this machine's own tree on POSIX (`/` itself, the tail kept);
-- `LOCAL_PATH` a network share, nothing of it kept;
+- `LOCAL_PATH` a network share, or another account's home beside the user's (`Public`, `Default`, `Default User`,
+  `All Users` and `Shared` are nobody's and stay paths), nothing of it kept;
 - `USER` the OS account name, exactly that string, as a whole word (not a generic account such as `root`).
 
 Each root matches in every spelling: as configured and resolved, its 8.3 alias, either slash kind at each step, doubled
@@ -61,8 +62,11 @@ _SEP_WIN = r'(?:\\+|/|%5[Cc]|%2[Ff])'
 _SEP_POSIX = r'(?:/|%2[Ff])'
 _COLON = r'(?::|%3[Aa])'
 _AFTER = r'(?![A-Za-z0-9_~$-]|\.[A-Za-z0-9_]|%(?!5[Cc]|2[Ff]))'
+_TAIL = r'[^\s"\'<>|*?`()（）「」『』【】，。；：、！？,;]*'         # the rest of a path that is replaced whole
 _SHARE = (r'(?<![A-Za-z0-9_:/\\}])((?:\\{2,8}[^\s\\/"\'<>|*?`]{2,}(?:\\+|/)|//[A-Za-z0-9_$-]{2,}/)'
-          r'[^\s\\/"\'<>|*?`]+[^\s"\'<>|*?`()（）「」『』【】，。；：、！？,;]*|smb://[^\s"\'<>]+)')
+          r'[^\s\\/"\'<>|*?`]+' + _TAIL + r'|smb://[^\s"\'<>]+)')
+# Profile folders beside the home that belong to no one (Windows and macOS): they stay paths with their tails.
+SHARED_PROFILES = ('Public', 'Default', 'Default User', 'All Users', 'Shared')
 _CLIMB_BARE = re.compile(r'(?:^|(?<=[\s"\'`(=]))\.\.(?=[\\/]|\s|$|["\'`)])', re.MULTILINE)
 _SPECIAL = set('\\^$.|?*+()[]{}')
 
@@ -235,6 +239,17 @@ class Table:
         for path in programs:
             parts.append(self._program_pattern(path))
             groups.append(PROGRAMS)
+        # Another account's home beside the user's (C:\Users\<other>, /home/<other>): a person's folder name, so the
+        # whole path is LOCAL_PATH with nothing kept; the home itself and the shared ones are not.
+        if home and not _is_fs_root(w, home):
+            parents = {}
+            for form in [home, *aliases.get(home, ())]:
+                parent = str(_pure(w, form).parent)
+                if form and not _is_fs_root(w, parent):
+                    parents.setdefault(parent.lower() if w else parent, (parent, _pure(w, form).name))
+            for parent, own in parents.values():
+                parts.append(self._sibling_pattern(parent, own))
+                groups.append(LOCAL_PATH)
         if w:
             parts.append(_BEFORE_WIN + '([A-Za-z]' + _COLON + ')(?=' + _SEP_WIN + ')')
             groups.append(DRIVE)
@@ -265,6 +280,24 @@ class Table:
                     + _AFTER)
         pure = PurePosixPath(form)
         return _BEFORE_POSIX + '(' + ''.join(_SEP_POSIX + _segment(s, False) for s in pure.parts[1:]) + ')' + _AFTER
+
+    def _sibling_pattern(self, parent, own):
+        """A folder beside the home under its parent, not the home and not a shared one, with all that follows."""
+        w = self.windows
+        sep = _SEP_WIN if w else _SEP_POSIX
+        skip = '|'.join(_lit(name, w) for name in (own, *SHARED_PROFILES))
+        if w:
+            pure = PureWindowsPath(parent)
+            letter = _lit(pure.drive[0], True)
+            before = _BEFORE_WIN
+            head = ('(?:' + letter + _COLON + '|(?:/|%2[Ff])' + _lit('mnt', True) + _SEP_POSIX + letter + '|/' + letter
+                    + ')' + ''.join(_SEP_WIN + _segment(s, True) for s in pure.parts[1:]))
+            name = r'[^\s\\/"\'<>|*?`%]+'
+        else:
+            before = _BEFORE_POSIX
+            head = ''.join(_SEP_POSIX + _segment(s, False) for s in PurePosixPath(parent).parts[1:])
+            name = r'[^\s/"\'<>|*?`%]+'
+        return before + '(' + head + sep + '(?!(?:' + skip + ')' + _AFTER + ')' + name + _TAIL + ')'
 
     def _program_pattern(self, path):
         if self.windows:
@@ -428,9 +461,9 @@ def outbound(text, home):
 def context_line(home):
     """Her program context's line on the placeholders: names and meanings, never values."""
     hands = '家里能交给行动脑的是除 ${ASUNA_LOCAL_PATH} 外的全部' if home else \
-        '这里（对外的对话）能交给行动脑的只有 ${ASUNA_WORKSPACE} 和 ${ASUNA_DATA}，别的照写也交不过去'
+        '这里（对外的对话）能交给行动脑的只有 ${ASUNA_WORKSPACE} 和 ${ASUNA_DATA}；别的可以照样提一句，原样过去，行动脑在这里打不开'
     return ('路径里的 ${ASUNA_…} 是程序替你藏起本机真实根目录的名字（只有 ${ASUNA_ 开头的才是程序的，别的 ${…} 是普通文字）：'
             'WORKSPACE 程序的源码目录，DATA 程序的数据目录，DSH_HOME 宿主 DSH 的目录，HOME 用户目录，TEMP 临时目录，'
-            'PROGRAMS 装程序的目录，DRIVE_X 某个盘，FS 这台机器的文件树，LOCAL_PATH 网络共享（什么都不留），USER 本机账号名。'
+            'PROGRAMS 装程序的目录，DRIVE_X 某个盘，FS 这台机器的文件树，LOCAL_PATH 网络共享或别的账号的目录（什么都不留），USER 本机账号名。'
             '交给行动脑时照这样写，程序替你换成真路径；%s。旧报告里的〔本机路径〕和从源码目录算起的相对路径也是藏起来的路径。'
             % hands)

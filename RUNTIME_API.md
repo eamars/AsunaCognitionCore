@@ -764,7 +764,8 @@ No local root of this computer reaches the character brain; the action brain wor
   Host's repository checkout, else the installed package), `DATA` (the data folder), `DSH_HOME` and `TEMP` (each when
   not under another root), `HOME`, `PROGRAMS` (program folders, their own name kept: `${ASUNA_PROGRAMS}/usr/lib/...`),
   `DRIVE_<X>` (any other path on drive X, WSL's `/mnt/x`; on POSIX each mount by letter or index), `FS` (any other path
-  in the machine's own top-level folders on POSIX), `LOCAL_PATH` (a network share, nothing kept) and `USER` (the
+  in the machine's own top-level folders on POSIX), `LOCAL_PATH` (a network share, or another account's home beside the user's, nothing
+  kept; the shared `Public`, `Default`, `Default User`, `All Users` and `Shared` folders are not accounts) and `USER` (the
   account name, that exact string as a whole word; not a generic account such as `root`). The deepest root wins. Every
   spelling matches: either slash, doubled backslashes, percent-encoded, 8.3 aliases, resolved links, `/mnt/x/...`,
   `/x/...`, after `file:///`, case-insensitive on Windows. `/task/...` is not a root; any other `${...}` is text. A

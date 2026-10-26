@@ -62,7 +62,7 @@ values. A known root becomes a CMake-style variable with a reserved prefix, and 
 | `${ASUNA_PROGRAMS}` | Windows: Program Files, ProgramData, the system folder. POSIX: `/usr`, `/opt`, `/etc`, `/bin`, `/sbin`, `/lib*`, `/snap`, `/nix`; macOS also `/Applications`, `/Library`, `/System`, `/opt/homebrew` |
 | `${ASUNA_DRIVE_D}` (one per drive) | the fallback root on Windows: any other path on that drive. On POSIX each mount point (`/mnt/<x>`, `/media/<user>/<x>`, `/Volumes/<x>`, `/run/media/<user>/<x>`) is named by letter or index, never by its label, so WSL's `/mnt/c/…` and Windows's `C:\…` read the same |
 | `${ASUNA_FS}` | the fallback root on POSIX: `/` itself, tail kept |
-| `${ASUNA_LOCAL_PATH}` | a network share (`\\server\share`, `//server/share`, `smb://`, `\\wsl$\…`), nothing kept |
+| `${ASUNA_LOCAL_PATH}` | a network share (`\\server\share`, `//server/share`, `smb://`, `\\wsl$\…`), or another account's home beside the user's (`C:\Users\<other>`, `/home/<other>`, `/Users/<other>`; not the shared `Public`, `Default`, `Default User`, `All Users`, `Shared`), nothing kept (§9) |
 | `${ASUNA_USER}` | the OS account name, exactly that string (3 characters or more), as a whole word anywhere (a `whoami`, `name@host`, inside a path); a git author or a person's name is left alone unless it is that very string |
 
 So `<checkout>\packages\personas\xiaoman` reaches her as `${ASUNA_WORKSPACE}\packages\personas\xiaoman`. The
@@ -251,10 +251,14 @@ plugin start without a table; the settings card's alert says it.
 appraiser by name), not by session id: two sentences, her speech replaced and her requests rewritten, each with its
 own criterion.
 
+**Another account's home (decided after review, built).** ADR-050 hid every path outside the project outside home,
+tail and all, since its last part can be a person's folder; under `${ASUNA_DRIVE_X}` and `${ASUNA_FS}` the tail is
+kept. This machine has another real account folder, so a folder beside the user's home under the home's parent
+(`C:\Users\<other>`, `/home/<other>`, `/Users/<other>`) is `${ASUNA_LOCAL_PATH}` with nothing kept, never expanded.
+The home itself and the shared profiles (`Public`, `Default`, `Default User`, `All Users`, `Shared`) keep their tails
+under the drive or tree fallback; a home at `/root` has no siblings. A folder name with a space ends the match at the
+space. An unmounted volume's label under `${ASUNA_FS}` still passes.
+
 **Open.**
-- ADR-050 hid every path outside the project outside home, tail and all, since its last part can be a person's folder.
-  Under `${ASUNA_DRIVE_X}` and `${ASUNA_FS}` the tail is kept: another account's folder name (`C:\Users\<other>`,
-  `/home/<other>`) and an unmounted volume's label pass. One more rule (a sibling of the home under its parent folder
-  is `${ASUNA_LOCAL_PATH}`) would close it; not built, for the owner's call.
 - §5's end-to-end check (one real `delegate` from home) needs the installed Host; it is not run here.
 - "She is told the rule once in her notes" (D5, D8) is a note to her, not code.

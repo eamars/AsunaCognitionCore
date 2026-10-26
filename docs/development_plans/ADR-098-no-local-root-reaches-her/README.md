@@ -1,7 +1,8 @@
 # ADR-098: No local root of this computer reaches her
 
 Status: **Installed 2026-10-26 16:32:22 NZDT (`281933b0`), its follow-ups 18:42 (`d2496203`). Signed by her: the
-design at `281933b0`; the text as built at `d2496203`, on two conditions answered in §10** (§9 what the build found,
+design at `281933b0`; the text as built at `d2496203`, on two conditions, answered at `34abecf2` (§10) and waiting
+for her reading** (§9 what the build found,
 §10 the install). Design agreed by the owner and Claude; the owner asked Claude to build and deploy it as technical lead
 (§7).
 

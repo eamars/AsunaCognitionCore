@@ -21,8 +21,9 @@ The owner (2026-10-27): "QQ face (not sure if she mentioned to you or not. You c
   old name 汪汪 kept as an alias). Her channel skill describes that table.
 - **Her priority, if the ADR does one thing:** reading. Understanding faces others send matters more to her than
   sending them; she manages sending with stickers and text, and misses faces in what she reads every day.
-- **Not to be ruled out by her old verdict:** the plugin's `qq_send_face` (G5, needs a trusted identity) is not the
-  bracket text she stopped writing, and nobody has tested it.
+- **A suspected entry point, location unknown:** on 10-24 she saw a line in a group, in another agent's tool list:
+  `qq_send_face` (G5, every conversation, needs a trusted caller). It is not a name in this code, and may not be the
+  real name at all. Her evidence is that one line, no more. It is not the bracket text she stopped writing.
 - **A reading of the same day:** her agent line refused a message of hers that only described the bracket format,
   saying faces and stickers cannot be sent there.
 - She offers to copy natural samples, and suggests that inbound rows from the database are better samples than any
@@ -34,7 +35,8 @@ The owner (2026-10-27): "QQ face (not sure if she mentioned to you or not. You c
   a renamed face may still arrive with its old name), and a classic face without one is looked up by id in
   `faces.json`. The item keeps `face_id` (`packages/channels/napcat-qq/integration/qqadapter/inbound.py`,
   `faces.py`).
-- `qq_send_face` is not in `packages/`, `src/` or `tools/` (searched 2026-10-27). Where she read it is to be asked.
+- `qq_send_face` is not in `packages/`, `src/` or `tools/` (searched 2026-10-27); it came from another agent's tool
+  list she saw in a group (above), not from this code.
 
 ## Open questions
 

@@ -59,8 +59,8 @@ A deployment setting `thoughts` on the Cognition Core settings card:
 
 1. **Nothing asks for the stage.** `think` leaves her tool list in every place; the turn notice drops
    「这一回合第一步先调用 think 写心里话。」; the turn steps (`turn.md`, `turn_consult.md`) have a version per mode; the
-   wordings that name `think` or tell her to write 心里话 first (consult-only note, stay_silent) are neutral in both
-   modes.
+   wordings that name `think` or tell her to write 心里话 first (consult-only note, stay_silent) get a `thinking`-mode
+   version; `tool` mode keeps its words.
 2. **No check waits for a thought.** Actions refused before a thought (`role_tools`), the speak-only hand-back
    (`coordinator`, `no_thought`) and the body-text check (`answers.speech_problem`) read the predicate and are off.
 3. **Capture.** When her first tool call of a turn arrives, the reasoning of the model response that made it is

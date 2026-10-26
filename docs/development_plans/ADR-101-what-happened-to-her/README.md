@@ -263,7 +263,7 @@ What the build changed against the signed text (blob `5e9365951b39`), for her in
   | The clock moved between the two moments | 「中间约 1 分钟」 | 「中间多久不知道（时钟对不上）」 |
   | The database is slow when a start completes | the turns waiting for `ready()` waited for the hand-over too | the hand-over runs beside the start (`handOver`), never awaited by it |
   | The hand-over fails (database reset in that second) | the outage waited for the next start, perhaps days | tried again every 5 minutes (`HANDOVER_SECONDS`) while that worker runs; a replaced or closed worker is not called |
-  | A worker that never answers `host.came_back` (an older core) | a warning at every try, about 288 a day | the same failure for the same span is said once; the file is kept for a newer worker (her review) |
+  | A worker that never answers `host.came_back` (an older core) | a warning at every try, about 288 a day | the same failure for the same span is said once, keyed on the span and the error's name, never its text (a database error's text changes at every try); another kind of failure is said again; the file is kept for a newer worker (her review) |
   | A span file that is not one (torn, a list, no cause, past 64 KB) | read as no span by the worker | an open span whose start is not known, on both sides: the plugin and the worker share the 64 KB cap (`SPAN_BYTES`), and the plugin replaces such a file with that small span, so both read the same thing (her review) |
 
 - Her path line calls a POSIX mount point by index 「第 N 个挂载的盘」, not 「N 盘」 (Linux and macOS name mounts

@@ -3,7 +3,11 @@
 import pytest
 
 from asuna.context import ledger_block
+from asuna.coordinator import Coordinator
 from asuna.documents import DocumentError, DocumentStore
+from asuna.lanes import FakeLane, FakeTurn
+from test_adr009_p2 import owner, THINK
+from test_engineering_m1 import event
 
 
 def create(docs, slug, kind, mutation, body='一节正文'):
@@ -18,6 +22,17 @@ def test_a_ledger_made_with_its_kind_reaches_her_turns_and_one_made_without_does
     assert docs.read('promises')[1]['kind'] == 'ledger' and docs.read('scratch')[1]['kind'] == 'working'
     assert docs.read('promises')[1]['sections'][0]['inject'] == 'always'
     assert [item['doc'] for item in ledger_block(docs, 'owner_private')] == ['promises']
+
+
+def test_a_turn_that_carries_a_ledger_can_cite_its_sections(store):
+    # The ledger block shows a section's id as `section` (ADR-060); the turn's document refs are built from that view.
+    owner(store)
+    docs = DocumentStore(store, 'P1')
+    create(docs, 'promises', 'ledger', 'k1')
+    sid = docs.read('promises')[1]['sections'][0]['sid']
+    ep = Coordinator(store, FakeLane(store, [FakeTurn([THINK], '嗯。')])).ingest(event('ledger-turn'))
+    assert ep['context']['ledgers_from_program'][0]['sections'][0]['section'] == sid
+    assert 'doc:promises#' + sid in ep['context']['doc_refs_from_program']
 
 
 def test_a_journal_made_with_its_kind_is_a_running_record_of_rows(store):

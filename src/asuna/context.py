@@ -1085,7 +1085,7 @@ class ContextBuilder:
         # (refs, ADR-056).
         context['ref_index']=['in-'+_episode_id(event)]
         doc_refs=list(dict.fromkeys([
-            *['doc:%s#%s'%(item['doc'],section['sid']) for item in ledgers for section in item['sections']],
+            *['doc:%s#%s'%(item['doc'],section['section']) for item in ledgers for section in item['sections']],
             *['doc:persona#'+section['sid'] for section in carried_here['persona']]]))
         if doc_refs:context['doc_refs_from_program']=doc_refs
         manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'person_revision':person_head[0]['revision_id'] if person_head else None,'person_entity_key':person_entity+'|'+_understanding.PERSON_SCOPE,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}

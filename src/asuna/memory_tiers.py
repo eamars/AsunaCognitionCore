@@ -26,6 +26,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from .evidence import canonical, sha
+from .memory_pilot import FLOOR, OWN_SLOTS, SLOTS   # her own items: two of a turn's six slots, above the pilot's floor
 
 TIERS_VERSION = 1
 ENABLED = True                     # the switch (ADR-062 phase 2): hers and the owner's to turn on
@@ -84,7 +85,6 @@ def moved_by(move):
     return move.get('by') or BY.get(move.get('reason'), 'program')
 HER_OPS = ('replace_section', 'append_section', 'correction', 'set_tags')     # her writes (placement_after)
 MOVED_SHOWN = 5
-FLOOR, OWN_SLOTS, SLOTS = 0.83, 2, 6     # her own items: two of a turn's six memory slots, above an absolute floor
 HEADINGS_SHOWN = 8
 # The night list (settlement): at most a few items, chosen by rule, told why; no keep or drop choice among them.
 NIGHT_ITEMS = 5

@@ -29,7 +29,8 @@ TIERS_VERSION = 1
 SHADOW_PILOT = False              # the pilot's turn rows (ADR-062 phase 1, closed); the index runs without it
 TURN_ROWS_DAYS = 30               # turn rows older than this go (prune)
 COLLECTION = 'memory_shadow'
-FLOOR = 0.83                      # absolute floor on the vector score, from ADR-062 §1.1
+# Every score below is on the (1 + cosine) / 2 scale (`_score`); tiered memory reads FLOOR and the slots from here.
+FLOOR = 0.83                      # absolute floor on the vector score, from ADR-062 §1.1 (cosine 0.66)
 OWN_SLOTS, SLOTS = 2, 6           # her own items may take at most two of a turn's six memory slots
 RECORD_ABOVE = 0.75               # candidates written per turn (the best SLOTS above this), so a report can try floors
 DUPLICATE_ABOVE = 0.93            # pairs within a store written from this score up

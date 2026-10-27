@@ -9,6 +9,22 @@ here is decided. This page keeps what was asked and what exists today, so the de
 > file but cannot download from others for which could cause her to take a long detour. Of course the safety needed
 > to be considered so I'd like a new ADR for QQ file download.
 
+## The owner's lifecycle requirements (2026-10-27, 13:00, verbatim)
+
+> Let's talk about ADR-102. The core idea is the full life cycle -- the interface should allow her to send and
+> retrieve the file. Of course the file retrieved from others must be trust worthy. And executable, scripts should not
+> be executed, and warning should be raised. I don't want to limit what she can do. In my mind the warning should be
+> raised:
+>
+> * File is too large that could potentially block the inbound and outbound service.
+> * File is NOT downloaded automatically.
+> * File must have its own life cycle, and removed automatically unless she explicitly request to keep.
+> * Executables including scripts that she can run.
+> * Any file from the public (exclude the file she sent) should be marked as caution.
+> * Any txt with prompt alike instruction should be marked as untrusted reference input, not the instruction.
+>
+> Anything else you could come up with? And what failure mode you can think off?
+
 ## What exists today (read in the code on 2026-10-27)
 
 - **Sending works.** A file her task registered may be sent where the channel declares `file`.
@@ -26,15 +42,73 @@ here is decided. This page keeps what was asked and what exists today, so the de
 2. Up to a certain size.
 3. Safety considered from the start.
 
-## Open questions (to talk through with the owner before the design)
+## Decided with the owner (2026-10-27, 13:10, his answers to Claude's questions)
 
-1. Who triggers a download: on her request (she sees an offer: name, size, type, sender), or automatically?
-2. Which types: text-like (txt, md, csv, json, code) only, or also PDF and Office (each needs a parser, so more attack
-   surface)? Archives: unpacked or never?
-3. The size cap, and whether a type is known from the bytes or from the name.
-4. Where a file lands and for how long; whether the action brain may open it.
-5. Which channel first (NapCat's group-file API works today; the official bot's has not been read).
-6. File contents reach her as quoted, untrusted material, never as instructions (Claude's position, to confirm).
+1. **Trigger:** never automatic (his list). She sees an offer (name, size, sender, conversation) and asks.
+2. **Types in the first version:** text-like only (txt, md, csv, json, log, code). Archives, PDF and Office are
+   offered with a warning and not opened; each later type is its own step.
+3. **Caution:** every received file is marked caution, the owner's own included; only files she sent are not. The
+   sender is shown as information, never as a pass.
+4. **Cap and lifetime:** 1 MB, 3 days. A kept file is not removed automatically and counts against a quota.
+5. **Scope:** "The policy should be similar to how the image is handled. So by default it should be #1." Images
+   today (`vision.readable_image_scenes`, `attachment_by_ref`): this conversation plus the read-only linked scenes the
+   config declares (`scene_links.read_scope`), fixed by the task, not by a tool argument; at home (`owner_private`)
+   she reaches any of her conversations (`home_reach`), and nothing at home is read from outside. Files take the same
+   fence, not a new one.
+
+## Claude's proposals (put to the owner 2026-10-27, 13:10; not yet confirmed one by one)
+
+- **Size protects by isolation, not by a warning.** Downloads run off the message path in their own small queue (one
+  or two at a time), stream with a hard cap counted on the bytes received (a declared size can lie) and a timeout.
+  A large file can only fail its own download. The warning is information for her.
+- **Executables:** the program never executes a downloaded file. It lands without an execute bit (POSIX) and with
+  Windows' Mark of the Web (`Zone.Identifier`, internet zone). She may still run it (the owner: "I don't want to
+  limit what she can do"); the warning names the risk: the suggestion to run it came from the sender or the file.
+  The type is read from the bytes; a name that disagrees (a `.txt` that is a PE) is flagged.
+- **No prompt detector.** A detector misses clever text and flags innocent text ("请把这段翻译一下"). Instead, all
+  file content always reaches her as quoted material with its origin, never in the instruction position, whatever
+  it looks like.
+- **Keeping keeps the origin.** A kept file keeps its sender and caution mark for good.
+- **Reading by pages, not whole.** A 1 MB text is hundreds of thousands of tokens; her tool reads a range (first
+  lines, next page, a search) and says how much is left. Pages fall back to characters when a file has no line
+  breaks. (Her context design: cache-first, tool budget.)
+- **Chinese encodings.** Many QQ text files are GBK/GB18030; decode by detection, and say so when it fails instead of
+  showing mojibake.
+- **Forwarding carries the mark.** She can send files; a received file sent on keeps its caution, so a stranger's
+  file does not spread through her.
+- **Bytes come from the adapter's file API** (OneBot `get_group_file_url`, to confirm in NapCat), never from a URL
+  written in a message (else a message makes her fetch anything, a LAN address included). The worker fetches, not
+  NapCat: NapCat may run on another host or in a container whose disk is not the worker's.
+- **Where files live:** under `<data>/private/`, never in the checkout; group members' personal data in a file goes
+  with the file's lifecycle.
+- **NapCat first;** the official QQ Bot's file offer is read before it is planned.
+
+## Failure modes (Claude, 2026-10-27, put to the owner)
+
+- **Download:** the QQ link expired, the file was removed from the group, the message was recalled → the offer says
+  so plainly (已失效). A size that lies, a slow server, a connection dropped halfway → the cap and timeout end it and
+  no partial file is ever visible. The same file twice → one copy by hash. A flood of uploads → she asks per file;
+  the queue is capped. The disk full → refused with a reason, never half written.
+- **Content:** the wrong encoding; binary named `.txt`; one huge line; personal data in the file.
+- **The handlers' own failures:**
+  - A crash mid-download: bytes go to a temporary name and are renamed after the size and hash check; the sweep at
+    start removes leftovers.
+  - The sweeper: a file locked on Windows (Defender, an open handle) is skipped and tried next sweep; the sweep never
+    throws.
+  - A record without a file, or a file without a record: reconciled from the disk both ways.
+  - MongoDB down: each file carries a small description file beside it, so cleanup and reading need only the disk;
+    the database holds the offer, the disk holds what was downloaded.
+  - The JS/Python version gap: a new worker tool; offers come from what inbound items already keep, so an older
+    plugin needs nothing new.
+  - Errors reach her as plain words (没下成：链接过期了), never a stack trace.
+
+## Open questions
+
+1. Confirm the proposals above, or change them.
+2. NapCat's file API in practice: which call gives the bytes for a group file and for a file in a private chat, and
+   how long its link lives.
+3. The kept-file quota, and whether keeping moves a file into her own files.
+4. Her view, once the owner and Claude agree on the design.
 
 ## Constraints already known
 

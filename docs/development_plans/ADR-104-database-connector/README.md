@@ -184,9 +184,20 @@ the old code (approximate) and the new (exact), read only (its audit and evidenc
 | the third | 10 | 5 | 8 | 3 |
 | the fourth | 10 | 7 | 4 | 2 |
 
-20 of the 240 selected memories change (8%); the vector candidates changed for 29 of the 40 queries. Whether the ones
-that dropped out should have is hers to judge on their content: ten of them, each with what came in, went to her by
-id (Claude does not read them).
+20 of the 240 selected memories change by id; the vector candidates changed for 29 of the 40 queries. Split as she
+asked (she found it in the sample), by where each dropped out and whether an identical twin (another record with the
+same `content_sha256`, so the same score) took its place:
+
+| | a twin took its place | a real change |
+|---|---|---|
+| out of the vector candidates (not in the new 24) | 2 | 4 |
+| out at the fusion that picks six (still in the new 24) | 7 | 7 |
+
+So 11 of 240 (4.6%) really change: 4 lost by recall, 7 at the fusion. A twin swap happens because exact search orders
+equal scores by id; in one sample the query's own memory gave way to its twin. Whether the 11 should have dropped out
+is hers to judge on their content: ten samples, each with what came in, went to her by id (Claude does not read them);
+seven of the ten turned out to be twin swaps. Her queries are mostly short phrases, not whole memories; a second
+reading with real phrases of hers is open (it needs their embeddings).
 
 ## Step 2: the record interface (proposed by Claude 2026-10-28, for the owner's review)
 
@@ -303,7 +314,8 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
   score itself; the contract now says so.
   On her database `ensure_vectors` runs where `ensure_index` ran before (the worker's memory indexer, `asuna`'s index
   command): her index already has the space's six filter fields, so it only lists the index; it changes an index only
-  when a space's fields differ from it.
+  when a space's fields differ from it. Before a change of the filter fields reaches her database, she is told
+  (her ask, 2026-10-28).
 
 ## Open questions (to discuss with the owner first) (as recorded before the decisions)
 

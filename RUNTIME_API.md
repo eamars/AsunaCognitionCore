@@ -11,7 +11,7 @@ The interfaces of the Asuna runtime: what a channel adapter, a persona or channe
 - [Channel packages](#channel-packages): [kind module](#kind-module)
 - [Her tools](#her-tools)
 - [Action capabilities](#action-capabilities): [tools a task is given](#tools-a-task-is-given), [web search and fetch](#web-search-and-fetch), [skills](#skills), [sandbox](#sandbox), [credentials](#credentials)
-- [Media and images](#media-and-images): [inbound media](#inbound-media), [voice messages](#voice-messages), [reading images](#reading-images), [sending pictures](#sending-pictures), [sending files](#sending-files)
+- [Media and images](#media-and-images): [inbound media](#inbound-media), [voice messages](#voice-messages), [reading images](#reading-images), [sending pictures](#sending-pictures), [sending files](#sending-files), [erased media](#erased-media)
 - [Schedules](#schedules): [rhythms](#rhythms), [what the owner sees](#what-the-owner-sees)
 - [Integration and self-development](#integration-and-self-development): [integration profile](#integration-profile), [integration tools](#integration-tools), [drawing and rendering](#drawing-and-rendering), [private words](#private-words), [self-development](#self-development)
 
@@ -341,7 +341,7 @@ The answer is `{"items": [], "lane": …}` or `{"items": [item], "lane": …}`. 
 - **Order.** A claim with the channel's token gets queued admin actions first. Conversations take turns by when their oldest queued message was queued (`queued_at`); within a conversation, messages come in its order. A part with `not_before` waits for its time, and a later part of one reply waits until the part before it is delivered (or she cancelled it); either holds only its own conversation. A part whose earlier part ended without arriving is cancelled when it comes up (`CANCELLED_AFTER_FAILURE`).
 - **Speaking in parts.** Where a kind declares `REPLY_PARTS`, one reply is several items, each sent as its own platform message and confirmed with its own receipt. A part that ends `failed` or `unknown` cancels the parts after it (`CANCELLED_AFTER_FAILURE`). A `recall` action takes back her own delivered line.
 - **Not declared.** An action the claim does not declare fails its row (`CHANNEL_DOES_NOT_DECLARE_POKE`, `…_REACT`, `…_RECALL`); a sticker fails with `CHANNEL_DOES_NOT_DECLARE_STICKER`, a file with `CHANNEL_DOES_NOT_DECLARE_FILE`. A picture without `image` declared: the text goes out and the row records `attachment_skipped`.
-- **Files.** A file row fails at claim time, before anything is sent, with `FILE_OVER_CHANNEL_LIMIT` (over the declared `file:<bytes>`; the row keeps `file_limit` `{bytes, limit}`) or `FILE_BYTES_EXPIRED` (its bytes were removed; the row keeps `source_present`, whether the task folder still holds the original). Both rows carry `failure_detail` in words.
+- **Files.** A file row fails at claim time, before anything is sent, with `FILE_OVER_CHANNEL_LIMIT` (over the declared `file:<bytes>`; the row keeps `file_limit` `{bytes, limit}`) `FILE_BYTES_EXPIRED` (its bytes were removed; the row keeps `source_present`, whether the task folder still holds the original), or `FILE_ERASED` (a privacy erasure deleted its bytes, [Erased media](#erased-media)). Each row carries `failure_detail` in words.
 - **Kept.** The host keeps each channel's last `supports` (`artifacts` kind `channel_capabilities`) across restarts; what she is offered there follows it (`src/asuna/capabilities.py`).
 - A row whose route, member, policy epoch or task changed since it was queued is failed at claim time and not handed out (`PUBLICATION_MEMBER_REVOKED`, `PUBLICATION_CONTEXT_STALE`, `PUBLICATION_EPISODE_STALE`, `PUBLICATION_INTENT_STALE`).
 
@@ -357,7 +357,7 @@ The answer is `{"items": [], "lane": …}` or `{"items": [item], "lane": …}`. 
 
 The answer is the bytes with `Content-Type` from their file signature, re-checked against the row's `sha256`. The adapter checks the digest and signature again; only a platform receipt says the picture arrived.
 
-A file's piece is `application/octet-stream`. The host does not hash a piece: the adapter checks the whole file's `sha256` across its pieces. A piece outside the file, or longer than 8 MiB, is 400 `FILE_PIECE_INVALID`. A file's other refusals (403): `FILE_NOT_DECLARED`, `FILE_ARTIFACT_UNAVAILABLE`, `FILE_BYTES_EXPIRED` (its bytes were removed), `FILE_SHA_MISMATCH` (the stored file is not the declared one).
+A file's piece is `application/octet-stream`. The host does not hash a piece: the adapter checks the whole file's `sha256` across its pieces. A piece outside the file, or longer than 8 MiB, is 400 `FILE_PIECE_INVALID`. A file's other refusals (403): `FILE_NOT_DECLARED`, `FILE_ARTIFACT_UNAVAILABLE`, `FILE_BYTES_EXPIRED` (its bytes were removed), `FILE_SHA_MISMATCH` (the stored file is not the declared one). A picture or file a privacy erasure deleted after the claim is 403 `ARTIFACT_ERASED`, followed by its sentence.
 
 | Code (all 403, no partial body) | When |
 |---|---|
@@ -905,6 +905,15 @@ A file goes to a group as its own message: speak's `file` part names a file a ta
 - **Offer.** A file any of her tasks registered may be sent where the channel declares `file`, as her own pictures go anywhere. `file_artifacts_from_program` lists them, newest first and at most 8, each with `artifact_id`, `name`, a readable `size`, `type` and `registered_at`; it appears in a group whose kind lists `file` in `REPLY_PARTS` and whose adapter declares `file`.
 - **Sending.** The part is refused in words when the file is not listed, its bytes are gone, or its size is over the limit the adapter declared; the program has no size or type limit of its own. Her record line is `[文件：名字，大小]`, with `，类型没认出来` when its type was not recognized.
 - **Bytes kept.** A file's bytes are removed 7 days after it was last delivered, or 7 days after registration if never delivered, and kept while a message on its way names it (`media_life.sweep`, daily). The artifact row stays, with `storage` `removed` and `bytes_removed_at`. A part or claim naming it then says when the bytes expired and whether the task folder still holds the original unchanged.
+
+### Erased media
+
+An operator's privacy erasure (`asuna delete-memory`) deletes every stored byte of the memory's conversation and marks each of its artifact rows `storage` `erased`, with `erased_at` and `deletion_id`; the row keeps its name, size, sources and time. Code: `src/asuna/blobs.py` (`erase_scope`, `refuse_erased`).
+
+- An erased row leaves every offer by itself (`image_artifacts_from_program`, `file_artifacts_from_program`), and the sweep passes it.
+- Whatever names one by its id, inside the fence that would let it read or send the row, answers in that same call with one sentence: `这张图被隐私清除删过（<time>），字节已经不在了，拿不回来；不是没有内容。`, or `这个文件…` for a file (`ARTIFACT_ERASED`). That holds for `read_image`, a `picture` or `file` part of `speak`, `attach_image`, keeping her own drawing as a sticker, a claim (`FILE_ERASED`) and the byte endpoint. Outside that fence the row is refused like any unknown id.
+- A row that still says `gridfs` but has no bytes answers `ARTIFACT_BYTES_MISSING`, in words; running the erasure again marks it.
+- The same bytes arriving later are stored as a new row, never matched to the erased one.
 
 ## Schedules
 

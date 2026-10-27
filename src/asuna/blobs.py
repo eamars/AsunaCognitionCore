@@ -3,8 +3,9 @@
 Bucket `artifact_blobs` in the configured database (GridFS creates `.files`, `.chunks` and their indexes on the first
 upload); the `artifacts` collection holds each blob's scope, size, SHA256, source ids and GridFS id. An upload writes
 an audit intent, reads the bytes back to verify them, then commits the manifest; a failed check deletes the blob.
-Reads need the operator view and a matching scope. Scoped erasure deletes the GridFS records before redacting the
-manifests. Ordinary BSON records stay under 1 MiB: callers store larger content here explicitly and keep the
+Reads need the operator view and a matching scope. Scoped erasure deletes the GridFS records, then marks each of the
+scope's rows `storage` `erased` (ADR-105): whatever looks such a row up by its id answers with `ERASED_WORDS`, never
+"not found". Ordinary BSON records stay under 1 MiB: callers store larger content here explicitly and keep the
 reference; nothing is silently truncated. Back up both collections with the database. `put_stream` stores a file of
 any size from an open handle: it hashes while it copies and verifies by reading back in pieces, never holding the
 whole file in memory.
@@ -16,6 +17,30 @@ from .evidence import sha
 from .state import Denied, now
 
 STREAM_PIECE = 1024 * 1024          # what put_stream reads and verifies at a time
+ERASED = 'erased'                   # a row's storage once a privacy erasure deleted its bytes (ADR-105)
+# ADR-105's one sentence: the kind as she reads it (张图, 个文件), then when, on her clock.
+ERASED_WORDS = '这%s被隐私清除删过（%s），字节已经不在了，拿不回来；不是没有内容。'
+BYTES_MISSING = ('ARTIFACT_BYTES_MISSING: 这份登记着的字节不在存储里了（程序的问题，不是你的错）；不是没有内容。'
+                 '重试也一样：不用这份，照实写进结果')
+
+
+def erased(row):
+    """Whether a privacy erasure deleted this row's bytes."""
+    return (row or {}).get('storage') == ERASED
+
+
+def erased_words(store, row, scene_id=None):
+    """ADR-105's sentence for an erased row, its time on the clock of the conversation it is said in."""
+    from . import local_time
+    what = '张图' if (row or {}).get('kind') == 'image' else '个文件'
+    return ERASED_WORDS % (what, local_time.stamp((row or {}).get('erased_at'), local_time.zone_of(store, scene_id)))
+
+
+def refuse_erased(store, row, scene_id=None):
+    """Raise the sentence for an erased row; the caller has already checked the row is in its fence, so the words say
+    nothing about a row the caller may not see."""
+    if erased(row):
+        raise Denied('ARTIFACT_ERASED: ' + erased_words(store, row, scene_id))
 
 
 class _Hashing:
@@ -87,12 +112,26 @@ class BlobStore:
         if existing:return {'artifact_id':existing['_id'],'sha256':existing['sha256'],'size':existing['size'],'storage':'gridfs','deduplicated':True}
         return self.put(data,scope,kind,source_ids=source_ids)
 
+    def _readable(self,key,scope):
+        """The row of `key` if its bytes may be read in `scope`: refused when it is not there or not in the scope, and,
+        only then, with ADR-105's sentence when an erasure deleted its bytes."""
+        item=self.store.db.artifacts.find_one({'_id':key,'state':'DONE'})
+        if not item or item['scope_key'] not in ('global-safe',scope):raise Denied('ARTIFACT_SCOPE_DENIED: 没有这份文件，或它不在这个对话的范围里；照抄这个对话里给出的 artifact_id')
+        scene=self.store.db.scenes.find_one({'scope_key':item['scope_key']},{'_id':1})
+        refuse_erased(self.store,item,(scene or {}).get('_id'))
+        if item.get('storage')!='gridfs':raise Denied('ARTIFACT_SCOPE_DENIED: 没有这份文件，或它不在这个对话的范围里；照抄这个对话里给出的 artifact_id')
+        return item
+
+    def _open(self,item):
+        from bson import ObjectId
+        from gridfs.errors import NoFile
+        try:return self.bucket.open_download_stream(ObjectId(item['gridfs_id']))
+        except NoFile:raise ValueError(BYTES_MISSING) from None
+
     def get(self,key,scope,*,operator=False):
         if not operator:raise Denied('ARTIFACT_OPERATOR_VIEW_REQUIRED')
-        item=self.store.db.artifacts.find_one({'_id':key,'state':'DONE','storage':'gridfs'})
-        if not item or item['scope_key'] not in ('global-safe',scope):raise Denied('ARTIFACT_SCOPE_DENIED: 没有这份文件，或它不在这个对话的范围里；照抄这个对话里给出的 artifact_id')
-        from bson import ObjectId
-        data=self.bucket.open_download_stream(ObjectId(item['gridfs_id'])).read()
+        item=self._readable(key,scope)
+        data=self._open(item).read()
         if len(data)!=item['size'] or sha(data)!=item['sha256']:raise ValueError('ARTIFACT_HASH_MISMATCH: 存着的这份文件和登记的校验值对不上（存储损坏）；不是参数的问题，重试也一样：不用这份，照实写进结果')
         return data
 
@@ -100,15 +139,19 @@ class BlobStore:
         """`length` bytes from `offset` of a stored blob (fewer at its end), read with a seek: a piece of a large file
         without reading the rest. The whole file's hash is the reader's to check."""
         if not operator:raise Denied('ARTIFACT_OPERATOR_VIEW_REQUIRED')
-        item=self.store.db.artifacts.find_one({'_id':key,'state':'DONE','storage':'gridfs'})
-        if not item or item['scope_key'] not in ('global-safe',scope):raise Denied('ARTIFACT_SCOPE_DENIED: 没有这份文件，或它不在这个对话的范围里；照抄这个对话里给出的 artifact_id')
-        from bson import ObjectId
-        stream=self.bucket.open_download_stream(ObjectId(item['gridfs_id']))
+        stream=self._open(self._readable(key,scope))
         stream.seek(int(offset))
         return stream.read(int(length))
 
-    def erase_scope(self,scope):
+    def erase_scope(self,scope,deletion=None):
+        """Delete every stored byte of `scope`, then mark each of its rows whose bytes are gone (`gridfs`, and
+        `removed`: an expired file must not be fetched again either) `erased`, by the row's own scope, so a row whose
+        bytes were already missing is marked too. The row keeps its name, size, sender and when (ADR-105). Run again
+        after a stop, it finishes both. Returns the number of GridFS files deleted."""
         count=0
         for item in self.store.db.artifact_blobs.files.find({'metadata.scope_key':scope},{'_id':1}):
             self.bucket.delete(item['_id']);count+=1
+        self.store.db.artifacts.update_many({'scope_key':scope,'storage':{'$in':['gridfs','removed']}},
+                                            {'$set':{'storage':ERASED,'erased_at':now(),'deletion_id':deletion},
+                                             '$unset':{'gridfs_id':''}})
         return count

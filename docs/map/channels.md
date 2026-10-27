@@ -276,6 +276,7 @@ How long stored media bytes live: every kind of stored picture has an owner or a
 - def `row_image_scopes` — 这条消息那一轮能引用哪些 scope：全部从行自己算（场景、路由上的人、session_class）。
 - def `image_artifacts` — 本轮可引用的图片：这些 scope 里已存好的 image artifact（新的在前，最多 limit 条）。
 - def `offer` — 上下文里那块 ``image_artifacts_from_program``；方向不允许或没图可引用就不出现。
+- def `refuse_erased_named` — A picture she names that this turn did not offer: if an erasure deleted it and it is one she could otherwise send here, ADR-105's sentence, in the call that names it; anything else is left to the caller's own refusal.
 - def `accept_artifact` — 程序接受一张图准备随这条消息发出去：读一次字节、认魔数、按行内 sha 复核。
 - def `kept_sticker` — This row sends a sticker, and its picture is one she keeps on her shelf.
 - def `serve` — 字节端点的围栏：只发这一条 publication 自己声明的那张图，且行内 sha 复核通过。

@@ -1,15 +1,21 @@
 # ADR-105: What erasure leaves
 
-Status: decided by the owner 2026-10-27; not built (it is built with ADR-102, whose received files are its first new
-kind). This page is the canonical rule; ADR-102 and the picture and file code cite it, and none keeps its own version.
+Status: decided by the owner 2026-10-27. Built 2026-10-27 for every place that exists today (see Built); the
+places of ADR-102's received files (`read`, `kept`, `copy`) are built with ADR-102. This page is the canonical rule; ADR-102 and the picture and file code cite it, and none keeps its own version.
 
 ## Why
 
 An operator's privacy erasure (`asuna` CLI `delete-memory`, `PrivacyService._erase`) deletes every stored byte of the
 memory's conversation: `BlobStore.erase_scope(scope)` deletes each GridFS file whose `metadata.scope_key` is that
-scope. It does not touch the `artifacts` rows, so each row still says `storage: gridfs` with a `gridfs_id` that points
-at nothing. A reader then fails with GridFS's own error, or with a generic "not found", and she reads it as a file
-that never had content (Xiaoman, her ADR-102 verdict of 2026-10-27: "账上还有引用，东西已经不在").
+scope. Then `PrivacyService._erase` replaces every `artifacts` row of the scope, as it does every episode, task and
+message, with a stub that keeps only its identity (`state: INVALIDATED`, no `storage`, no name, no size). Every reader
+looks a row up with `state: DONE`, so it answers with a generic "not found", and she reads it as a file that never had
+content (Xiaoman, her ADR-102 verdict of 2026-10-27: "账上还有引用，东西已经不在").
+
+*Corrected 2026-10-27, in the build.* This paragraph first said the erasure does not touch the `artifacts` rows and
+that a reader fails on a `gridfs_id` pointing at nothing. Claude had read only `erase_scope`, not the rest of `_erase`;
+the build's test of a real erasure found the stub. The problem is the same, and so is the rule; the build also keeps
+the marked rows out of that stub (Built), since the owner's decision 2 is that the row keeps its name.
 
 Counted on 2026-10-27 by Claude, read-only queries on the deployment's database, before this page was written: no
 erasure has run in this deployment (`audit_events` has no `privacy.intent`), and no `artifacts` row misses its bytes
@@ -79,6 +85,28 @@ erasure has run in this deployment (`audit_events` has no `privacy.intent`), and
 ## Not changed
 
 What erasure deletes (bytes, memories, revisions) and who may run it.
+
+## Built (2026-10-27)
+
+- `blobs.py`: `ERASED`, `ERASED_WORDS`, `erased`, `erased_words`, `refuse_erased`. `erase_scope(scope, deletion)`
+  deletes the scope's GridFS files, then marks every row of the scope whose storage is `gridfs` or `removed`. The
+  bytes go first, so a stop between the two leaves no byte behind; running it again marks what is left. A `removed` row
+  is marked too: its bytes are gone either way, and for ADR-102's received files `removed` means "fetched again from
+  the link", which an erasure must stop. `BlobStore.get` and `get_range` check the fence, then the mark, then read; a
+  row whose GridFS file is missing answers `ARTIFACT_BYTES_MISSING` in words.
+- `privacy.py`: `_erase` passes its `deletion_id` to `erase_scope` and leaves rows marked `erased` out of its stub
+  (Why). Every other `artifacts` row of the scope is still replaced as before.
+- Each place looks the row up without filtering on `storage`, checks its own fence, and only then says the sentence,
+  so it never tells anyone that a row outside their fence exists: `vision.stored_image`, `vision.local_upload_bytes`,
+  `outbound_media.accept_artifact` and `serve`, `outbound_files.check`, `claim_failure` (`FILE_ERASED`, its
+  `failure_detail` the sentence; `FAILED_CODES` carries it to her record) and `serve_piece`.
+- **Said when she names it** also for a picture this turn did not offer: `outbound_media.refuse_erased_named` runs
+  the same fence (`_fence`) without reading bytes, for `speak`'s picture and `attach_image`.
+- **One place this page did not list,** found by the structural test: `stickers.keep` of a picture she drew. Its
+  lookup filtered on `gridfs`, so an erased drawing answered "不是你自己画好的图", which is false. It now says the
+  sentence.
+- RUNTIME_API: "Erased media", and the codes in the claim and the byte endpoint.
+- `tests/test_erasure_marks.py`: 17 tests, the structural one included; 21 mutants, each turning its own test red.
 
 ## Tests
 

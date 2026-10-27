@@ -115,8 +115,12 @@ def keep(store, blobs, ep, persona, args, config):
     doc = {'persona': persona, 'name': name, 'when': when, 'kept_at': now(), 'kept_in': ep['scene_id'],
            'sent': 0, 'last_sent_at': None}
     if ARTIFACT_REF.fullmatch(ref):
-        row = store.db.artifacts.find_one({'_id': ref, 'kind': 'image', 'state': 'DONE', 'storage': 'gridfs'})
+        from .blobs import refuse_erased
+        row = store.db.artifacts.find_one({'_id': ref, 'kind': 'image', 'state': 'DONE'})
         if not row or not produced(row):
+            raise Denied('STICKER_NOT_YOURS: 「%s」不是你自己画好的图' % ref)
+        refuse_erased(store, row, ep['scene_id'])           # hers, erased with the conversation it was made in
+        if row.get('storage') != 'gridfs':
             raise Denied('STICKER_NOT_YOURS: 「%s」不是你自己画好的图' % ref)
         doc.update(origin='own', kind='custom', artifact_id=ref, sha256=row['sha256'], size=row['size'],
                    media_type=row.get('media_type'), identity='sha:' + row['sha256'],

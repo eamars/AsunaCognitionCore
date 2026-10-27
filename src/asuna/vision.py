@@ -684,12 +684,15 @@ def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offere
     """Look again at a picture already stored as an image artifact: one in this scene's own scope, one she
     made herself (her own generator, any scene), or one this turn was offered to send. Anything else answers
     exactly like an unknown id, so the tool cannot be used to probe other people's pictures."""
+    from .blobs import refuse_erased
     from .outbound_media import produced
-    row = store.db.artifacts.find_one({'_id': artifact_id, 'kind': 'image', 'state': 'DONE', 'storage': 'gridfs'})
+    row = store.db.artifacts.find_one({'_id': artifact_id, 'kind': 'image', 'state': 'DONE'})
     if (not blobs or not row or not (row.get('scope_key') == task.get('scope_key') or produced(row)
                                      or artifact_id in (offered or ()))):
-        raise ValueError('IMAGE_ARTIFACT_NOT_READABLE: %s 不是能看的图：没有这张，或它不在这个对话里、不是你画的、'
-                         '也不是这一回合可发的；自己画的图照抄 generate_image 回执里的 artifact.artifact_id' % artifact_id)
+        raise ValueError(NOT_READABLE % artifact_id)
+    refuse_erased(store, row, task.get('scene_id'))          # in her fence: an erased picture says so (ADR-105)
+    if row.get('storage') != 'gridfs':
+        raise ValueError(NOT_READABLE % artifact_id)
     data = blobs.get(artifact_id, row['scope_key'], operator=True)
     cap = min(int(max_bytes or vision_capability(config)['max_bytes']), HARD_MAX_BYTES)
     if len(data) > cap:
@@ -706,7 +709,12 @@ def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offere
             'note': '这是存好的那张图本身；看完再判断它是不是要的样子。'}
 
 
+NOT_READABLE = ('IMAGE_ARTIFACT_NOT_READABLE: %s 不是能看的图：没有这张，或它不在这个对话里、不是你画的、'
+                '也不是这一回合可发的；自己画的图照抄 generate_image 回执里的 artifact.artifact_id')
+
+
 LOCAL_NOT_IN_SCENE = 'IMAGE_ATTACHMENT_NOT_IN_SCENE: 这张图的原消息已经不在这个对话可读的范围里；' + GIVE_UP
+SOURCE_UNAVAILABLE = 'IMAGE_SOURCE_UNAVAILABLE: 这张本机聊天里的图已经不在存储里了；' + GIVE_UP
 
 
 def local_upload_bytes(store, blobs, task, config, entry, max_bytes=None):
@@ -722,11 +730,14 @@ def local_upload_bytes(store, blobs, task, config, entry, max_bytes=None):
     item = next((item for index, item in enumerate(items) if ref_of(row['_id'], index) == entry['ref']), None)
     if not local_upload_item(row, item):
         raise ValueError(LOCAL_NOT_IN_SCENE)
-    artifact = store.db.artifacts.find_one({'_id': item['artifact_id'], 'kind': 'image', 'state': 'DONE',
-                                            'storage': 'gridfs'})
+    artifact = store.db.artifacts.find_one({'_id': item['artifact_id'], 'kind': 'image', 'state': 'DONE'})
     if (not blobs or not artifact or artifact.get('scope_key') != row.get('scope_key')
             or LOCAL_UPLOAD + str(row['event'].get('event_id')) not in (artifact.get('source_ids') or [])):
-        raise ValueError('IMAGE_SOURCE_UNAVAILABLE: 这张本机聊天里的图已经不在存储里了；' + GIVE_UP)
+        raise ValueError(SOURCE_UNAVAILABLE)
+    from .blobs import refuse_erased
+    refuse_erased(store, artifact, scene_id)                 # the owner's own picture, erased: said so (ADR-105)
+    if artifact.get('storage') != 'gridfs':
+        raise ValueError(SOURCE_UNAVAILABLE)
     data = blobs.get(artifact['_id'], artifact['scope_key'], operator=True)
     cap = min(int(max_bytes or vision_capability(config)['max_bytes']), HARD_MAX_BYTES)
     if len(data) > cap:

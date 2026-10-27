@@ -36,7 +36,7 @@ HEAD_BYTES = 64 * 1024             # what the type is read from
 NAME_BYTES = 255                   # a file name, in UTF-8 bytes, as file systems take it
 REMOVED = 'removed'                # the artifacts row's storage once its bytes are gone
 UNKNOWN_TYPE = '类型没认出来'
-FAILED_CODES = ('CHANNEL_DOES_NOT_DECLARE_FILE', 'FILE_OVER_CHANNEL_LIMIT', 'FILE_BYTES_EXPIRED',
+FAILED_CODES = ('CHANNEL_DOES_NOT_DECLARE_FILE', 'FILE_OVER_CHANNEL_LIMIT', 'FILE_BYTES_EXPIRED', 'FILE_ERASED',
                 'FILE_DESCRIPTOR_INVALID')
 
 TYPE_WORDS = {
@@ -337,7 +337,10 @@ def descriptor(raw):
 def check(store, ep, scene, artifact_id):
     """(descriptor, None) for a file her speak part may send here, else (None, why in words)."""
     from . import capabilities, local_time
+    from .blobs import erased, erased_words
     item = store.db.artifacts.find_one({'_id': artifact_id, 'kind': KIND}) if artifact_id else None
+    if item and erased(item):
+        return None, erased_words(store, item, (scene or {}).get('_id'))
     if item and removed(item):
         return None, expired_words(item, local_time.zone_of(store, (scene or {}).get('_id')))
     offered = ((ep.get('context') or {}).get('file_artifacts_from_program') or {}).get('items') or ()
@@ -371,7 +374,10 @@ def claim_failure(store, row, limits):
     meta = descriptor(row.get(KIND))
     if not meta:
         return {'failure': 'FILE_DESCRIPTOR_INVALID', 'failure_detail': '这条消息记的文件信息不完整（不是你的错），发不了'}
+    from .blobs import erased, erased_words
     item = store.db.artifacts.find_one({'_id': meta['artifact_id']})
+    if erased(item):                    # erased while it was on its way: the same sentence (ADR-105)
+        return {'failure': 'FILE_ERASED', 'failure_detail': erased_words(store, item, row.get('scene_id'))}
     if not item or removed(item) or item.get('storage') != 'gridfs':
         return {'failure': 'FILE_BYTES_EXPIRED', 'failure_detail': '这个文件的字节已经不在存储里了'}
     most = (limits or {}).get(CAPABILITY)
@@ -424,6 +430,8 @@ def serve_piece(store, row, query):
     item = store.db.artifacts.find_one({'_id': meta['artifact_id']})
     if not item or item.get('kind') != KIND:
         raise Denied('FILE_ARTIFACT_UNAVAILABLE')
+    from .blobs import refuse_erased
+    refuse_erased(store, item, (row or {}).get('scene_id'))
     if removed(item) or item.get('state') != 'DONE' or item.get('storage') != 'gridfs':
         raise Denied('FILE_BYTES_EXPIRED')
     if item.get('sha256') != meta['sha256'] or item.get('size') != meta['size']:

@@ -51,7 +51,7 @@ class PrivacyService:
         self.store.put('scenes',{**scene,'policy_epoch':scene['policy_epoch']+1},expected=scene['revision'],stream=deletion)
         # Immediate fencing precedes potentially slow file cleanup.
         from .blobs import BlobStore
-        erased_blobs=BlobStore(self.store).erase_scope(scope)
+        erased_blobs=BlobStore(self.store).erase_scope(scope,deletion)
         sources=set(memory.get('source_event_ids',[]))|{key}
         affected={key}
         for _ in range(32):
@@ -90,6 +90,9 @@ class PrivacyService:
             else:db.memory_units.update_one({'_id':mem['_id']},{'$set':{'policy_epoch':scene['policy_epoch']+1}})
         for collection in ('episodes','tasks','messages','artifacts','sink_receipts'):
             for doc in db[collection].find({'scope_key':scope}):
+                # A stored file or picture whose bytes erase_scope deleted keeps its row as marked (ADR-105: its name,
+                # size, sender and when stay, and every reader says it was erased).
+                if collection=='artifacts' and doc.get('storage')=='erased':continue
                 # Conservative scope erasure includes generated paraphrases and
                 # unfinished work. Retain identity/state/hash, never old bodies.
                 retained={k:doc[k] for k in ('_id','schema_version','revision','scope_key','scene_id','source_event_id','episode_kind','publication_key','request_key','binding_key','content_hash','scene_seq','direction','author','adapter_id','platform_event_id') if k in doc}

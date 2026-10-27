@@ -130,6 +130,15 @@ def _moment(value):
     return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
+RECORDED = ('pulled', 'listed', 'files', 'failed', 'undated')
+
+
+def worth_recording(removed):
+    """Whether a sweep's report is recorded as `media.swept`: something was removed, could not be swept, or was kept
+    because its time cannot be read. A sweep that only found nothing to do leaves no record."""
+    return any(removed.get(key) for key in RECORDED)
+
+
 def _size(row):
     """A row's recorded size in bytes; 0 when it is not a number (the count is a report, never a reason to stop)."""
     try:

@@ -164,3 +164,33 @@ def test_a_range_query_on_an_iso_string_never_matches_a_missing_or_date_time(sto
         assert older == {'text-old'} and newer == {'text-new'}
     finally:
         store.db.time_probe.drop()
+
+
+def test_within_one_day_times_compare_as_moments_never_as_text(store):
+    """The cutoff falls at 06:00 of one day; rows of that day at 02:00 go and at 13:00 stay, each stored once as an ISO
+    string and once as a Date. Compared as text, '... 13:00:00' sorts before '...T06:00:00' (a space before T) and the
+    13:00 row would go (Xiaoman's check of 8d96a489: every earlier case was days apart and could not see it)."""
+    blobs = BlobStore(store)
+    scope = store.db.scenes.find_one()['scope_key']
+    put = lambda source: blobs.put(b'\x89PNG' + source.encode(), scope, 'image', source_ids=[source])['artifact_id']
+    day = datetime(2026, 10, 20, tzinfo=timezone.utc)
+    early_text, late_text, early_date, late_date = put('in-ep-1a'), put('in-ep-1b'), put('in-ep-1c'), put('in-ep-1d')
+    store.db.artifacts.update_one({'_id': early_text}, {'$set': {'created_at': (day + timedelta(hours=2)).isoformat()}})
+    store.db.artifacts.update_one({'_id': late_text}, {'$set': {'created_at': (day + timedelta(hours=13)).isoformat()}})
+    store.db.artifacts.update_one({'_id': early_date}, {'$set': {'created_at': day + timedelta(hours=2)}})
+    store.db.artifacts.update_one({'_id': late_date}, {'$set': {'created_at': day + timedelta(hours=13)}})
+    moment = day + timedelta(days=media_life.PULLED_DAYS, hours=6)
+    removed = media_life.sweep(store, moment)
+    left = {row['_id'] for row in store.db.artifacts.find()}
+    assert early_text not in left and early_date not in left and late_text in left and late_date in left
+    assert removed['pulled'] == 2 and removed['undated'] == 0
+
+
+def test_a_sweep_is_recorded_when_anything_was_removed_failed_or_kept_undated(store):
+    """The worker records `media.swept` by media_life.worth_recording: each count a real sweep returns is enough alone,
+    bytes alone are not, and a sweep with nothing to report leaves no record."""
+    quiet = media_life.sweep(store)
+    assert not any(quiet.values()) and not media_life.worth_recording(quiet)
+    assert set(media_life.RECORDED) == set(quiet) - {'bytes'}, 'every count the sweep returns is one that is recorded'
+    for key in quiet:
+        assert media_life.worth_recording(dict(quiet, **{key: 1})) == (key != 'bytes'), key

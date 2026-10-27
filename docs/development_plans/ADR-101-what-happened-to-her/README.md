@@ -296,3 +296,9 @@ rows and GridFS bytes together, so no row was left pointing at nothing. The only
 stored) and `provider-responses-deleted.json` (296 bytes; when, by whom, how and why). Both stay; a cleanup of
 `<data>/private/` leaves them. The script beside them (`delete_provider_responses.py`) refuses on any mismatch with
 that count. Checked afterwards: no row of that kind, and none of its GridFS files or chunks, remains.
+
+Whether a sweep leaves a `media.swept` row is `media_life.worth_recording`: any of its counts but bytes (removed,
+failed, kept undated), each tested alone, and a test that times of one day compare as moments, not as text (her
+check of `8d96a489`: every earlier case was days apart).
+
+Xiaoman re-verified by content on install day, 2026-10-27: the built README `a296256664d3` with RUNTIME_API `623df695e2e7`, and this tail's README `e59ff97ead3f`.

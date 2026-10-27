@@ -347,3 +347,4 @@ pictures sent as files (`read_image` handles pictures).
   (`tests/test_tool_budget.py`). Tests: `tests/test_received_files_read.py`, five, for the guards whose failure would
   be silent (the fence, the cap and the hosts, https, a program never stored, an erased file never fetched again);
   paging and wording are checked by reading a real file.
+- Part 3: `copy` for the action brain (`received_files.copy`, `safe_name`; the deny-execute entry is `(OI)(IO)(X)`, on the files and not the folder, so the folder can still be listed: tried on this machine, a program copied in is refused with "Access is denied" and is still readable), copies removed with the bytes (`drop_copies`, from the sweep and from `BlobStore.erase_scope`; the sweep reports `copies`), forwarding (`received_from` on `offer_file`, `FORWARDED` in the offer). The action brain's tool +55 characters. Tests: `tests/test_received_files_copy.py`, four.

@@ -180,4 +180,6 @@ class BlobStore:
         self.store.db.artifacts.update_many({'scope_key':scope,'storage':{'$in':['gridfs','removed']}},
                                             {'$set':{'storage':ERASED,'erased_at':now(),'deletion_id':deletion},
                                              '$unset':{'gridfs_id':''}})
+        from .received_files import drop_copies
+        drop_copies(self.store)          # a received file's copies in task folders go with the erased bytes
         return count

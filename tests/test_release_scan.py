@@ -87,3 +87,29 @@ def test_a_git_id_is_not_an_account_but_a_bare_number_on_any_platform_still_is()
     assert found('token 1234567890123')                      # personal-scan: ok (all digits: not a git id)
     assert found('user id9365951b39 here')                   # personal-scan: ok (glued on the left: not a git id)
     assert found('user 9365951b39z here')                    # personal-scan: ok (glued on the right: not a git id)
+
+
+def test_only_the_exact_marker_exempts_a_line_and_a_number_without_it_is_reported():
+    """The marker silences a line, so it is a way out for a real number too: only the exact marker exempts, and a line
+    without it is reported (Xiaoman's review of the made-up numbers' markers). The number is built here, so this file
+    holds none."""
+    number = '1' + '2' * 8
+    scan = lambda line: [category for _, category in check_staged_secrets.scan_lines(line, 'tests/x.py', set(), [])]
+    assert scan('member %s joined' % number) == ['account_id']
+    assert scan('member %s joined  # personal-scan: ok (made up)' % number) == []
+    for wrong in ('personal-scan:ok', 'personal_scan: ok', 'personal-scan: okay', 'personal-scan: OK'):
+        assert scan('member %s joined  # %s' % (number, wrong)) == ['account_id'], wrong
+
+
+def test_strict_exits_1_on_a_counted_hit_and_the_default_stays_report_only(tmp_path):
+    """`--strict` is the form a push gate uses: exit 1 when anything counted was found, 0 when nothing was; without it
+    the scan only reports (exit 0). A file outside the repository is checked by its name."""
+    flagged = tmp_path / ('n' + '1' + '2' * 8 + '.txt')
+    clean = tmp_path / 'clean.txt'
+    flagged.write_text('x\n', encoding='utf-8')
+    clean.write_text('x\n', encoding='utf-8')
+    run = lambda *args: subprocess.run([sys.executable, str(ROOT / 'tools/check_staged_secrets.py'), '--personal', *args],
+                                       cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=60)
+    assert run('--strict', '--paths', str(flagged)).returncode == 1
+    assert run('--paths', str(flagged)).returncode == 0
+    assert run('--strict', '--paths', str(clean)).returncode == 0

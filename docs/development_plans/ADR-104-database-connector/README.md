@@ -2,7 +2,7 @@
 
 Status: decided with the owner 2026-10-28 (below). Third in the owner's order (102, 103, 104). The vector interface
 is designed (section "Vector search", Claude on the owner's delegation) and built as step 1 of 4 (see "Build order"
-and "Built"), not installed. The record interface (step 2) is not designed yet.
+and "Built"), not installed. The record interface (step 2) is proposed, for the owner's review.
 
 ## The owner's ask (2026-10-27, verbatim)
 
@@ -159,6 +159,92 @@ memories share one top score.
 Verdict: exact passes. On every query retrieval makes it costs at most 8 ms and is mostly faster; it finds what
 approximate missed (up to five of six of one query's best). Noted, not this ADR's: identical memories (up to 24 at
 one score) can fill a whole result.
+
+## Step 2: the record interface (proposed by Claude 2026-10-28, for the owner's review)
+
+Decisions 5 and 6 give its shape: a small vocabulary the core defines, which the core and her read tool both speak.
+
+### What it has to carry (counted in `src/asuna/` on 2026-10-28)
+
+- Calls: `find_one` 624, `find` 254, `update_one` 38, `count_documents` 32, `delete_many` 13, `distinct` 8,
+  `insert_one` 7, `update_many` 5, `replace_one` 5, `delete_one` 5, `find_one_and_update` 4, `aggregate` 3 (plus
+  `dbread`'s), `bulk_write` 2. Writes of records mostly go through `Store.put` (a revision checked, an audit row).
+- Filter words, counted as written (an operator inside an aggregate counts too): any of (`$in`) 129, ranges 128,
+  `$or` 44, exists 42, not (`$ne`) 23, none of (`$nin`) 16, a regular expression 12 (9 "starts with", two of them
+  any of several prefixes; 3 "contains" at two places, one case-blind), `$elemMatch` 2, `$type` 1 (beside a prefix).
+- Change words: set 66, unset 13, add to a set 11, increase 9, set when created 7, keep the larger 4, keep the
+  smaller 1, push and keep the last few 1.
+- Database features beyond reads and writes: unique keys, some only over rows that have a field (inbound messages are
+  dropped as duplicates by one); a counter taken and increased in one step (a conversation's sequence); the host
+  lease taken on the server's clock (`$$NOW`, ADR-020); three aggregates (the audit stream's heads, a conversation's
+  tasks joined to their messages with `$lookup`, the Web's message listing).
+- Her side: seven files of her skills name `dbread`, and the code of four calls it ten times (`find`, `count`,
+  `distinct`, one `aggregate` that groups and counts), and one script takes MongoDB's own handle (`dbread._default().db`). Her task scripts outside the
+  repository use it too.
+- Tests: 49 test files make a store or name a test database (an `asuna_v2_test_*` database on her server), 5 use
+  `mongomock`.
+
+### The interface
+
+```python
+class Records(Protocol):                       # the core's store; `Store` keeps its audit and revision rules on top
+    def declare(self, collection, *, unique=(), indexes=()) -> None   # unique: (fields, only where these exist)
+    def get(self, collection, id, fields=None) -> dict | None
+    def find(self, collection, where, *, sort=(), skip=0, limit=None, fields=None) -> Iterator[dict]
+    def count(self, collection, where) -> int
+    def distinct(self, collection, field, where) -> list
+    def group(self, collection, where, by, *, total=None) -> list[tuple]     # count, or a field's sum, per value
+    def insert(self, collection, record) -> None                            # Duplicate when a unique key repeats
+    def replace(self, collection, record, *, revision=None) -> bool         # only if its revision is still that one
+    def update(self, collection, where, change, *, many=False, create=False) -> int
+    def delete(self, collection, where) -> int
+    def next(self, collection, id, field) -> int                            # the counter increased, in one step
+    # and step 1's ensure_vectors and nearest
+```
+
+- **Where**, in plain Python with the core's own words, never a database's: `{'field': value}` (equals; on a list
+  field, the list holds it), `AnyOf([...])`, `NoneOf([...])`, `Not(value)` (also true where the field is missing),
+  `Range(gte=, gt=, lt=, lte=)`, `Exists(True/False)`, `StartsWith('...', ...)` (any of the prefixes), `Contains('...', case=False)`,
+  `Or(where, ...)`, `Each(field, where)` (one list item meets all of `where`). Dotted names reach nested fields.
+- **Change**: `Set({...})`, `Unset([...])`, `Add(field, *values)` (to a set), `Increase(field, by)`,
+  `Larger(field, value)`, `Smaller(field, value)`, `OnCreate({...})`, `Push(field, value, keep_last=n)`.
+- **Semantics written down once**, the way MongoDB behaves today where the core relies on it: a missing field is not
+  null; `Not` and `NoneOf` match a missing field; equals on a list means "holds"; strings compare by code point; a
+  sort puts missing first. The in-memory double implements exactly these, and the contract suite pins each.
+- **Named operations stay few:** `next` (the sequence), the lease (its own small interface, the adapter's clock), and
+  `group`. The three aggregates become reads plus Python: the audit heads read each stream's newest row; a
+  conversation's tasks are read, then their messages by id (16 tasks at most); the Web listing reads and cuts its
+  excerpt in Python.
+- **Not in it:** transactions (every write today is one record, made safe by its revision), change streams, joins,
+  full-text search, the database's clock outside the lease.
+
+### Her read tool
+
+`dbread` keeps its names and its answers (what it asked, how many rows, 零行) and takes the same `where` words, so a
+script of hers reads the same on any database. `aggregate` becomes `group`; the raw handle goes. She rewrites her own
+skills and scripts; the change reaches her when this step is built, with the list of her files that use the old
+syntax (four files of code in her package today), never edited for her.
+
+### Tests (requirement 5)
+
+- The double is the in-memory `Records`; `mongomock` goes.
+- One contract suite runs the same cases against the double and the MongoDB adapter. The adapter's run needs a MongoDB
+  server no deployment uses, with vector search (step 1's `nearest`): open, for the owner (see below).
+- Unit tests then run on the double: no database server, no shared load on hers. Which tests stay is requirement 6,
+  step 4.
+
+### How the call sites move
+
+Module by module, largest first, nothing changing for her between steps: each module's reads are checked on her real
+database read-only, the old query against the new one, as step 1 was (same rows, same order), before its commit. A
+module is done when it names no collection method.
+
+### Open, for the owner
+
+1. **A MongoDB server for the adapter's tests**, separate from her live one, with vector search (`mongot`; for example
+   the `mongodb/mongodb-atlas-local` container): it installs on this machine and takes its memory and disk, so it is
+   the owner's to allow. Without it the adapter is checked only by read-only runs on her database, and its writes by
+   her own use.
 
 ### Build order
 

@@ -418,8 +418,8 @@ WORKSPACE_TOOLS.append(NOTE_IDEA_TOOL)
 # 看图（Pull 模式）：定义与实现同处注册；是否进入某个任务的能力清单，取决于那条行动路由
 # 是否声明了图片输入（见 route_filtered_tool_names），不按模型名字猜。
 WORKSPACE_TOOLS.append(READ_IMAGE_TOOL)
-from .received_files import RECEIVED_FILE_TOOL, TOOL_NAME as RECEIVED_FILE_TOOL_NAME
-WORKSPACE_TOOLS.append(RECEIVED_FILE_TOOL)
+from .received_files import RECEIVED_FILE_TASK_TOOL, TOOL_NAME as RECEIVED_FILE_TOOL_NAME
+WORKSPACE_TOOLS.append(RECEIVED_FILE_TASK_TOOL)
 
 
 def stale_reason(task,current,scene):
@@ -840,7 +840,8 @@ class ToolBroker:
                 scene_row=self.service.store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']}
                 result=received_files.run(self.service.store,task,self.service.store.config,args,
                                           persona=self.service.store.config['chat']['persona'],
-                                          session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']))
+                                          session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']),
+                                          task_dir=sandbox.task_dir)
                 with self.service.lock:self.service.valid(task)
             elif tool=='generate_image':
                 # 本机生图：任何任务都可以画，但只走 image 端点的固定流程；等待期间不持副作用锁。

@@ -132,8 +132,9 @@ a fixed line:
 - **Only the item's own link,** `https` only, only on the hosts the channel kind declares in a new `FILE_HOSTS`
   (`napcat_qq`: `.ftn.qq.com`); a redirect must stay inside the list (vision's `_KeepInsideAllowList`). A link written
   in someone's message text is never fetched.
-- **1 MiB counted on the bytes read** (a declared size can lie); the read stops at the first byte over. **20 s** for the
-  whole fetch. With that cap the bytes stay in memory until they are checked and stored: no partial file on any disk.
+- **1 MiB counted on the bytes read** (a declared size can lie); the read stops at the first byte over. **20 s:** a
+  wait of 20 s without data ends the fetch, and after 20 s it ends at the next piece, so a host that drips can hold
+  it about 40 s (her reading of 5f4a8f3ac50f). With that cap the bytes stay in memory until they are checked and stored: no partial file on any disk.
 - **Off the channel's path.** The worker fetches from QQ's file host itself; the adapter and NapCat take no part, so a
   download cannot hold an inbound or outbound lane. What a fetch can hold is her own tool call, for at most 20 s, as
   `read_image` does today with a cap eight times larger.
@@ -182,7 +183,9 @@ types one way.
 - **After the bytes, before the ref ends** (days 4 to 7): the row stays (`storage` `removed`) and a `read` fetches
   again from the item's link. Fetched: the page, with `前一份字节在%s到期删了，这次是重新拉的`. Not fetched, one
   sentence: `这个文件%s拉过，字节在%s到期删了；现在链接失效了（平台答%s），拿不回来了。这一份存在过、有内容。`
-- **What finds a file.** A ref is found by scanning the conversation's messages, so it lives as long as that scan: 7
+- **What finds a file.** A ref is found among the newest 8 files and pictures of the last 50 messages others sent in
+  the conversation (each linked conversation its own 50), or among those of its last 7 days (the picture function;
+  her reading of 5f4a8f3ac50f, and her point at fae57e0a01f0 that "lines" was not exact), so it lives as long as that scan: 7
   days (`REF_DAYS`); after that the words are the ones a picture's old ref gets. A kept file is found by its own row,
   so its ref never ends and `kept` lists refs that keep working. Every line that tells her a file can still be got back
   says which of the two finds it. (Pictures have a smaller mismatch of the same kind, not changed here: a ref's 7 days
@@ -223,7 +226,8 @@ marks. The name is made safe: no path separators, no `..`, no Windows device nam
 or space, at most 255 UTF-8 bytes; a clash gets ` (2)`.
 
 - **No execute:** on Windows the program puts one inherited deny-execute entry for the worker's account on
-  `/task/received` when it makes the folder (`icacls … /deny *<SID>:(OI)(X)`); on POSIX the file is created `0600`.
+  `/task/received` when it makes the folder (`icacls … /deny *<SID>:(OI)(IO)(X)`: inherited by the files only, so
+  the folder can still be listed); on POSIX the file is created `0600`.
   This stops the file being started as a program; an interpreter (`python file.py`) reads it, so a script runs only
   when she runs it herself, with the marks in front of her (the owner: "I don't want to limit what she can do").
 - Where the entry cannot be set (a drive or share without ACLs, a refused `icacls`), the copy is still made and the
@@ -347,3 +351,4 @@ pictures sent as files (`read_image` handles pictures).
   (`tests/test_tool_budget.py`). Tests: `tests/test_received_files_read.py`, five, for the guards whose failure would
   be silent (the fence, the cap and the hosts, https, a program never stored, an erased file never fetched again);
   paging and wording are checked by reading a real file.
+- Part 3: `copy` for the action brain (`received_files.copy`, `safe_name`; the deny-execute entry is `(OI)(IO)(X)`, on the files and not the folder, so the folder can still be listed: tried on this machine, a program copied in is refused with "Access is denied" and is still readable), copies removed with the bytes (`drop_copies`, from the sweep and from `BlobStore.erase_scope`; the sweep reports `copies`), forwarding (`received_from` on `offer_file`, `FORWARDED` in the offer). The action brain's tool +58 characters. Tests: `tests/test_received_files_copy.py`, four.

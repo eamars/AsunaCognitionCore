@@ -262,6 +262,10 @@ def register(store, task, root, args):
                                                  # refusal after the bytes went says what is left there
                                                  fields={'name': name, 'task_id': task.get('_id'), 'source': {
                                                      'task_id': task.get('_id'), 'folder': str(root), 'path': relative}})
+            from .received_files import received_from
+            origin = received_from(store, task, stored['sha256'])       # a file someone sent (ADR-102 section 8)
+            if origin:
+                store.db.artifacts.update_one({'_id': stored['artifact_id']}, {'$set': {'received_from': origin}})
     except Exception as exc:
         return {'error': 'TASK_OPERATION_FAILED: ' + workspace_reason(exc, 'offer_file', given),
                 'execution': {'exit_code': 1, 'stderr': traceback.format_exc(limit=1)}}
@@ -308,13 +312,16 @@ def offer(store, scene, *, limit=MAX_OFFERED):
         return None
     cursor = store.db.artifacts.find({'kind': KIND, 'state': 'DONE', 'storage': 'gridfs'},
                                      {'name': 1, 'size': 1, 'media_type': 1, 'created_at': 1,
-                                      'source_ids': 1}).sort('created_at', -1).limit(200)
+                                      'source_ids': 1, 'received_from': 1}).sort('created_at', -1).limit(200)
     items = []
     for row in cursor:
         if not produced(row):
             continue
         items.append({'artifact_id': row['_id'], 'name': row.get('name'), 'size': size_words(row.get('size')),
                       'type': type_words(row.get('media_type')), 'registered_at': row.get('created_at')})
+        if row.get('received_from'):
+            from .received_files import FORWARDED
+            items[-1]['from'] = FORWARDED % row['received_from'].get('sender')
         if len(items) >= limit:
             break
     return {'items': items, 'note': OFFER_NOTE} if items else None

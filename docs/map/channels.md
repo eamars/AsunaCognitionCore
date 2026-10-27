@@ -348,7 +348,11 @@ Files people send her (ADR-102): offered by ref, read when she asks, stored, kep
 - def `reach` — The scopes a call may read received files in: this conversation and its read-only linked scenes, the same function pictures use; at home any of her conversations.
 - def `found` — (entry, row, scopes): the item a ref names among the files of the last REF_DAYS days in reach (the picture fence), and its stored row; or a kept file's own row, whose ref never ends.
 - def `read` — op=read: the first read fetches the file; every read answers one page (`page`), or where a word is (`find`).
-- def `run` — The `received_file` tool, for both halves: `where` is her turn's scene or the task's binding.
+- def `run` — The `received_file` tool, for both halves: `where` is her turn's scene or the task's binding; only the action brain, which has a task folder, copies (`task_dir`).
+- def `safe_name` — A received file's name made safe before it touches a disk: no path parts, no `..`, no Windows device name, no trailing dot or space, at most NAME_BYTES bytes in UTF-8 (the extension kept).
+- def `copy` — op=copy (the action brain only): the stored bytes to /task/received/<name>, with the marks.
+- def `drop_copies` — Remove the copies of every received file whose bytes are gone (expired or erased); a copy that cannot be deleted now (locked on Windows) stays listed and is tried again at the next sweep.
+- def `received_from` — {ref, sender} of a received file with these bytes in the task's fence, or None: by content, so a copy renamed or moved inside /task keeps where it came from.
 
 ## `animated`
 

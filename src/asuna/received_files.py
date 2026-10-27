@@ -457,7 +457,7 @@ def fetch(url, hosts):
     except urllib.error.HTTPError as exc:
         raise _refused(exc.code) from None
     except (urllib.error.URLError, OSError, TimeoutError) as exc:
-        raise FetchFailed(FETCH_FAILED % ('%s，限时 %d 秒' % (type(exc).__name__, FETCH_SECONDS))) from None
+        raise FetchFailed(FETCH_FAILED % ('%s，%d 秒没有数据，或过了 %d 秒' % (type(exc).__name__, FETCH_SECONDS, FETCH_SECONDS))) from None
 
 
 def _refused(status):
@@ -601,14 +601,17 @@ def _life(store, row, scene_id):
     return LIFE % (gone, KEEP_DAYS, _stamp(store, (sent + timedelta(days=REF_DAYS)).isoformat(), scene_id))
 
 
-def run(store, where, config, args, *, persona, session_class, moment=None):
-    """The `received_file` tool, for both halves: `where` is her turn's scene or the task's binding."""
+def run(store, where, config, args, *, persona, session_class, moment=None, task_dir=None):
+    """The `received_file` tool, for both halves: `where` is her turn's scene or the task's binding; only the action
+    brain, which has a task folder, copies (`task_dir`)."""
     args = args or {}
     op = args.get('op') or 'read'
     if op == 'kept':
         return kept(store, reach(store, where, config, session_class), where.get('scene_id'))
     if op == 'read':
         return read(store, where, config, args, persona=persona, session_class=session_class, moment=moment)
+    if op == 'copy' and task_dir:
+        return copy(store, where, config, args, task_dir=task_dir, session_class=session_class)
     if op not in ('keep', 'let_go'):
         raise Denied(BAD_OP)
     ref = str(args.get('ref') or '').strip()
@@ -630,3 +633,132 @@ RECEIVED_FILE_TOOL = {
                    'page': {'type': 'integer', 'description': '第几页'},
                    'find': {'type': 'string', 'description': '要找的词'},
                    'why': {'type': 'string', 'description': '为什么留'}}}
+
+
+# ── the action brain's copy (section 7) ──────────────────────────────
+COPY_DIR = 'received'
+NAME_BYTES = 255
+DEVICE_NAMES = {'CON', 'PRN', 'AUX', 'NUL', *('COM%d' % i for i in range(1, 10)), *('LPT%d' % i for i in range(1, 10))}
+NO_DENY = '这里没法禁止执行'
+COPIED = '复制到了 %s；能读，不能跑：这个文件夹里的文件不能被当成程序直接启动，程序也不会运行它。'
+NOT_STORED = 'RECEIVED_FILE_NOT_READ_YET: 这个文件的字节现在不在：先 read 一次（会从平台拉下来），再 copy'
+
+
+def safe_name(name):
+    """A received file's name made safe before it touches a disk: no path parts, no `..`, no Windows device name, no
+    trailing dot or space, at most NAME_BYTES bytes in UTF-8 (the extension kept)."""
+    import re
+    base = re.split(r'[\\/]', str(name or ''))[-1]
+    base = ''.join('_' if c in '<>:"|?*' or ord(c) < 32 else c for c in base).strip().rstrip('. ')
+    if not base or base in ('.', '..'):
+        base = 'file'
+    stem, dot, ext = base.rpartition('.')
+    if (stem if dot else base).upper() in DEVICE_NAMES:
+        base = '_' + base
+    stem, dot, ext = base.rpartition('.')
+    while len(base.encode('utf-8')) > NAME_BYTES:
+        stem = (stem if dot else base)[:-1]
+        base = stem + (dot + ext if dot else '')
+    return base
+
+
+def _deny_execute(folder):
+    """One inherited deny-execute entry for the worker's account on the copies folder, set when it is made (files
+    only: `(OI)(IO)(X)`, so the folder can still be listed). On POSIX each copy is made 0600 instead. False where the
+    entry cannot be set (a file system without ACLs, a refused icacls)."""
+    import os
+    import subprocess
+    if os.name != 'nt':
+        return True
+    try:
+        sid = subprocess.run(['whoami', '/user', '/fo', 'csv', '/nh'], capture_output=True, text=True, timeout=10)
+        account = sid.stdout.strip().rsplit(',', 1)[-1].strip('"')
+        if not account.startswith('S-1-'):
+            return False
+        done = subprocess.run(['icacls', str(folder), '/deny', '*%s:(OI)(IO)(X)' % account],
+                              capture_output=True, text=True, timeout=20)
+        return done.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def copy(store, where, config, args, *, task_dir, session_class):
+    """op=copy (the action brain only): the stored bytes to /task/received/<name>, with the marks. The program never
+    runs a received file; the copy cannot be started as a program, and a script runs only when she runs it herself."""
+    import os
+    from pathlib import Path
+    ref = str(args.get('ref') or '').strip()
+    _, row, scopes = found(store, where, config, ref, session_class)
+    if not row:
+        raise Denied(NOT_READ_YET % 'copy')
+    refuse_erased(store, row, where.get('scene_id'))
+    if row.get('storage') != 'gridfs':
+        raise Denied(NOT_STORED)
+    data = BlobStore(store).get(row['_id'], row['scope_key'], operator=True)
+    folder = Path(task_dir) / COPY_DIR
+    fresh = not folder.exists()
+    folder.mkdir(parents=True, exist_ok=True)
+    denied = _deny_execute(folder) if fresh else True
+    name = safe_name(row.get('name'))
+    target, n = folder / name, 2
+    stem, dot, ext = name.rpartition('.')
+    while target.exists():
+        target = folder / ('%s (%d)%s' % (stem if dot else name, n, dot + ext if dot else ''))
+        n += 1
+    target.write_bytes(data)
+    if os.name != 'nt':
+        os.chmod(target, 0o600)
+    store.db.artifacts.update_one({'_id': row['_id']}, {'$addToSet': {'copies': str(target)}})
+    shown = '/task/%s/%s' % (COPY_DIR, target.name)
+    out = {'ref': ref, 'path': shown, 'marks': row.get('marks') or [], 'note': COPIED % shown}
+    if not denied:
+        out['note'] = COPIED.split('；')[0] % shown + '；' + NO_DENY + '，程序也不会运行它。'
+    return out
+
+
+def drop_copies(store):
+    """Remove the copies of every received file whose bytes are gone (expired or erased); a copy that cannot be
+    deleted now (locked on Windows) stays listed and is tried again at the next sweep. Returns (removed, failed)."""
+    from pathlib import Path
+    removed = failed = 0
+    for row in store.db.artifacts.find({'kind': KIND, 'storage': {'$ne': 'gridfs'}, 'copies.0': {'$exists': True}},
+                                       {'copies': 1}):
+        left = []
+        for path in row.get('copies') or []:
+            try:
+                Path(path).unlink(missing_ok=True)
+                removed += 1
+            except OSError:
+                left.append(path)
+                failed += 1
+        store.db.artifacts.update_one({'_id': row['_id']}, {'$set': {'copies': left}})
+    return removed, failed
+
+
+# The action brain's tool: the same, and copy (section 7).
+RECEIVED_FILE_TASK_TOOL = {
+    **RECEIVED_FILE_TOOL,
+    'description': RECEIVED_FILE_TOOL['description'] + 'do=copy 把读过的文件复制到 /task/received/（能读，不能被当成程序直接启动）。',
+    'parameters': {**RECEIVED_FILE_TOOL['parameters'],
+                   'op': {**RECEIVED_FILE_TOOL['parameters']['op'], 'enum': ['read', 'keep', 'let_go', 'kept', 'copy']}}}
+
+
+# ── forwarding (section 8) ───────────────────────────────────────────
+FORWARDED = '这是%s发来的文件；发出去时它的来路跟着'
+
+
+def received_from(store, task, sha256):
+    """{ref, sender} of a received file with these bytes in the task's fence, or None: by content, so a copy renamed
+    or moved inside /task keeps where it came from."""
+    from . import visibility
+    if not task.get('scene_id'):
+        return None
+    scene = store.db.scenes.find_one({'_id': task['scene_id']}) or {'_id': task['scene_id']}
+    cls = visibility.session_class(store.config, store.db, scene, task.get('requester_id'))
+    try:
+        scopes = reach(store, task, store.config, cls)
+    except Denied:                       # the task's fence does not hold: no origin is claimed; registering goes on
+        return None
+    row = store.db.artifacts.find_one({'kind': KIND, 'sha256': sha256, 'scope_key': {'$in': sorted(scopes)}},
+                                      {'ref': 1, 'sender': 1}, sort=[('created_at', 1)])
+    return {'ref': row.get('ref'), 'sender': row.get('sender')} if row else None

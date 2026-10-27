@@ -70,13 +70,17 @@ def sweep(store, now=None):
     keep = named(store)
     going = set(db.messages.distinct('file.artifact_id', {'file.artifact_id': {'$exists': True},
                                                           'delivery_state': {'$in': list(Channels.PART_ON_ITS_WAY)}}))
-    removed = {PULLED: 0, LISTED: 0, 'files': 0, RECEIVED: 0, 'bytes': 0, 'failed': 0, 'undated': 0}
+    removed = {PULLED: 0, LISTED: 0, 'files': 0, RECEIVED: 0, 'copies': 0, 'bytes': 0, 'failed': 0, 'undated': 0}
     for row in db.artifacts.find({'storage': 'gridfs'}, {'source_ids': 1, 'created_at': 1, 'gridfs_id': 1, 'size': 1,
                                                          'last_sent_at': 1, 'kept_at': 1, 'days_from': 1}):
         try:
             _sweep_one(db, bucket, row, moment, cutoff, keep, going, removed)
         except Exception:                       # noqa: BLE001 one bad row is counted; the rows after it still go
             removed['failed'] += 1
+    from .received_files import drop_copies
+    copies, stuck = drop_copies(store)          # received files' copies in task folders go with their bytes
+    removed['copies'] += copies
+    removed['failed'] += stuck
     return removed
 
 
@@ -149,7 +153,7 @@ def _moment(value):
 
 # Written out on purpose, apart from the keys `sweep` returns: the test holds the two lists equal, so a count added to
 # the sweep and forgotten here fails it. Derive this from that list and the test can no longer fail (review M3b, 2026-10-27).
-RECORDED = ('pulled', 'listed', 'files', 'received', 'failed', 'undated')
+RECORDED = ('pulled', 'listed', 'files', 'received', 'copies', 'failed', 'undated')
 
 
 def worth_recording(removed):

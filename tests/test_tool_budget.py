@@ -36,8 +36,8 @@ CHARACTER = (31, 21915)       # ADR-102: received_file, 30 -> 31 tools, +499; AD
                               # where the program refuses, 「N 字以内，最多 M 字」 (her ask: both numbers) +155
 # With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): let_go, nature, from, about and the recall sentence (+294).
 CHARACTER_TIERED = (31, 22211)                  # ADR-102: received_file +499; ADR-097: recall's bare word +19, elsewhere and past notes +19; ADR-096: pin and what each place carries +49; ADR-092 D1: speak's file part +49
-ACTION = (27 + len(ACTION_DSH_CAPABILITIES), 16432)        # the worker's tools, plus DSH's own (skill, todo, web);
-                                                           # ADR-102: received_file, 26 -> 27 tools, +291;
+ACTION = (27 + len(ACTION_DSH_CAPABILITIES), 16490)        # the worker's tools, plus DSH's own (skill, todo, web);
+                                                           # ADR-102: received_file, 26 -> 27 tools, +291; its copy (part 3) +58;
                                                            # ADR-092 D2: offer_file, 25 -> 26 tools, +441 (15,467 -> 15,908 measured)
 
 

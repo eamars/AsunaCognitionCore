@@ -11,9 +11,9 @@ scope. It does not touch the `artifacts` rows, so each row still says `storage: 
 at nothing. A reader then fails with GridFS's own error, or with a generic "not found", and she reads it as a file
 that never had content (Xiaoman, her ADR-102 verdict of 2026-10-27: "账上还有引用，东西已经不在").
 
-Counted on 2026-10-27, before this page was written: no erasure has run in this deployment (`audit_events` has no
-`privacy.intent`), and no `artifacts` row misses its bytes (0 of 1,282). The hole is in the code's shape, not in the
-data.
+Counted on 2026-10-27 by Claude, read-only queries on the deployment's database, before this page was written: no
+erasure has run in this deployment (`audit_events` has no `privacy.intent`), and no `artifacts` row misses its bytes
+(0 of 1,282 `storage: gridfs` rows). The hole is in the code's shape, not in the data.
 
 ## Decisions (the owner, 2026-10-27, in the question tool)
 
@@ -38,9 +38,10 @@ data.
 - **Looked up by id, read or sent.** Every place that finds one row by its id and finds it erased answers with one
   sentence, never a generic "not found" or a storage error:
 
-  > 这个文件被隐私清除删过（%s），字节已经不在了，拿不回来；不是文件没有内容。
+  > 这%s被隐私清除删过（%s），字节已经不在了，拿不回来；不是没有内容。
 
-  `%s` is when, on her clock. The places, from the code of 2026-10-27: `BlobStore.get` and `BlobStore.get_range`;
+  The first `%s` names the thing by its kind, as she reads it: 张图 for a picture, 个文件 for a file (one she sent,
+  or one she received). The second is when, on her clock. This is "the ADR-105 sentence" other pages cite. The places, from the code of 2026-10-27: `BlobStore.get` and `BlobStore.get_range`;
   `vision.stored_image` and `vision.local_upload_bytes` (`read_image` of a stored picture); `outbound_media.accept_artifact`
   and `outbound_media.serve` (a picture attached to `speak`); `outbound_files.check`, `claim_failure` and `serve_piece`
   (a file sent with `speak`); `received_files` (ADR-102: `read`, `kept`, `copy`). A claim already on its way when the
@@ -60,7 +61,12 @@ data.
   erasure refuses that scope (`GLOBAL_ERASURE_REQUIRES_ALL_SCENE_MIGRATION`), so no sticker is erased by it. If an
   erasure of `global-safe` is ever built, the shelf and the pool list an erased sticker with the same sentence and
   sending it answers with it.
-- **The sweep** (`media_life`) treats an erased row as having no bytes: nothing to delete, never an error.
+- **`storage` has three values now** (`gridfs`, `removed`, `erased`), so every reader of it is named here, from the
+  code of 2026-10-27: the lookups and offers above read `gridfs` only; `BlobStore.put_once` deduplicates against
+  `gridfs` rows only, so the same bytes arriving after an erasure are stored anew, never matched to the erased row;
+  `media_life.sweep` reads `gridfs` rows only, so an erased row is never swept and never an error;
+  `outbound_files.removed` tests `removed` only, so an erased file is not said to have expired. A reader added later
+  is held by the structural test below.
 
 ## Failure modes
 

@@ -187,8 +187,7 @@ types one way.
 - **Privacy:** the bytes stay in the deployment's own database and go with their lifecycle; logs and the audit name
   a file by its ref, never by its name or content. **Erasure** follows ADR-105, the one place the rule is written:
   an operator erasure deletes the conversation's bytes, kept files included, and marks each row erased; `read`,
-  `kept` and `copy` then say `这个文件被隐私清除删过（%s），字节已经不在了，拿不回来；不是文件没有内容。` The row keeps
-  its name (the owner).
+  `kept` and `copy` then answer with the ADR-105 sentence. The row keeps its name (the owner).
 - **Keep:** `keep` marks the row kept (`kept_at`, her `why`); the origin and marks do not change. The quota is
   **50 files or 20 MiB**, whichever comes first (a proposal; the owner left it open). Over the quota the keep is
   refused with her kept list, so she can let one go. Keeping does not move a file out of its conversation's fence.

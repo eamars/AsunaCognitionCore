@@ -151,3 +151,33 @@ test('a task handed to the action brain keeps its conversation from reopening, n
   core.state('role').queue.push({ token: 'next' });          // a stage of the conversation itself waits
   assert.equal(idle(), false);
 });
+
+// A save is checked against the routes of the draft, never against the ones already in force.
+const listing = (...ids) => ({ llm: { listModels: async provider => provider === 'local' ? ids.map(id => ({ id })) : [],
+  resolveModelInfo: async () => ({ reasoning: { efforts: [{ id: 'high' }], defaultEffort: 'high' }, inputModalities: [] }) },
+  get: () => undefined });
+const chosen = { provider: 'local', model: 'm', reasoningEffort: 'high', maxTokens: 1024 };
+const saved = (config, routes) => {
+  const core = new CognitionCore(listing('m'), config);
+  core.personas = new Set(['p']);
+  // Past the route check the proposed worker would start; reaching it is passing the check.
+  core.workerPython = async () => { throw new Error('PAST_THE_CHECK'); };
+  return { core, check: () => core.validateSettings({ persona: 'p', routes, deployment: {} }, 'path') };
+};
+
+test('a draft that sets the first routes is accepted although the routes in force are none', async () => {
+  await assert.rejects(saved({ routes: {}, deployment: {} }, { character: chosen, action: chosen }).check(), /PAST_THE_CHECK/);
+});
+
+test('a draft route whose model the provider does not list is refused although the routes in force are valid', async () => {
+  const inForce = { routes: { character: chosen, action: chosen }, deployment: {} };
+  await assert.rejects(saved(inForce, { character: { ...chosen, model: 'gone' }, action: chosen }).check(), /MODEL_NOT_CONFIGURED: character/);
+  await assert.rejects(saved(inForce, { character: chosen }).check(), /MODEL_NOT_CONFIGURED: action/, 'a draft with a lane missing is not covered by the routes in force');
+  await assert.rejects(saved(inForce, undefined).check(), /MODEL_NOT_CONFIGURED: character/, 'nor is a draft with no routes at all');
+});
+
+test('without a draft the routes in force are the ones checked (the worker\'s own start)', async () => {
+  const { core } = saved({ routes: { character: chosen, action: chosen }, deployment: {} });
+  assert.deepEqual(Object.keys(await core.resolveRoutes()), ['character', 'action']);
+  await assert.rejects(saved({ routes: {}, deployment: {} }).core.resolveRoutes(), /MODEL_NOT_CONFIGURED: character/);
+});

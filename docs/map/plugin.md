@@ -248,7 +248,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `dshHome` — DSH's home: the profile's, else the variable the Host was started with.
   - `attachSchedule`
   - `routeFor` — A brain's route: the one chosen on the settings card, else DSH's own default model (the appraiser and the action brain's 高 have none: unset, they are off).
-  - `resolveRoutes`
+  - `resolveRoutes` — The model each brain's route resolves to: for the routes given (a draft's, when a save is checked), else for the routes in force (the worker's own start).
   - `stageEfforts` — Per-stage effort on the character route, as chosen on the settings card from the levels its model offers: the relevance gate (attendEffort) and her group turns (groupEffort).
   - `tierRoute` — ADR-075: the route of a request in a job she sent to 高, while it has not fallen and 高 is not resting; else undefined (the action route).
   - `requestRoute` — The provider, model, level and output limit the next request of this conversation takes (before nativeRoute): a deliberate native model selection stays authoritative for its session; otherwise 高 for a job she sent there, else the lane's rou

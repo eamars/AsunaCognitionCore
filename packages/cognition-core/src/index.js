@@ -498,20 +498,22 @@ export class CognitionCore {
   }
 
   /** A brain's route: the one chosen on the settings card, else DSH's own default model (the appraiser and the action
-   * brain's 高 have none: unset, they are off). */
-  routeFor(lane) {
-    const own = this.config.routes?.[lane];
+   * brain's 高 have none: unset, they are off). `routes` are the ones in force unless a draft's are given. */
+  routeFor(lane, routes = this.config.routes) {
+    const own = routes?.[lane];
     if (own?.provider || lane === 'appraiser' || lane === 'actionHigh') return own;
     const fallback = this.ctx.get('agentDefaultModel')?.currentSelection();
     return fallback ? { ...own, provider: fallback.provider, model: fallback.model } : own;
   }
 
-  async resolveRoutes() {
+  /** The model each brain's route resolves to: for the routes given (a draft's, when a save is checked), else for the
+   * routes in force (the worker's own start). A draft with no routes passes `{}`, never undefined. */
+  async resolveRoutes(routes = this.config.routes) {
     const models = {};
     for (const lane of ['character', 'action', 'appraiser', 'actionHigh']) {
       // optional: the affect appraiser and the action brain's 高 are off when unset
-      if (!this.routeFor(lane)?.provider && (lane === 'appraiser' || lane === 'actionHigh')) continue;
-      const route = nativeRoute(this.routeFor(lane));
+      if (!this.routeFor(lane, routes)?.provider && (lane === 'appraiser' || lane === 'actionHigh')) continue;
+      const route = nativeRoute(this.routeFor(lane, routes));
       if (!route?.provider) throw new Error('MODEL_NOT_CONFIGURED: ' + lane);
       if (!(await this.ctx.llm.listModels(route.provider)).some(model => model.id === route.model))
         throw new Error('MODEL_NOT_CONFIGURED: ' + lane);
@@ -735,7 +737,7 @@ export class CognitionCore {
 
   async validateSettings(next, pythonPath) {
     if (!this.personas.has(next.persona)) throw new Error('PERSONA_NOT_INSTALLED');
-    const models = await this.resolveRoutes(next.routes);
+    const models = await this.resolveRoutes(next.routes ?? {});
     if (!next.deployment) throw new Error('NATIVE_DEPLOYMENT_REQUIRED: fill in the deployment settings');
     // ADR-099: her thoughts taken from the model's thinking need a character route that thinks, in groups too.
     if (next.deployment.thoughts === 'thinking') {

@@ -335,7 +335,13 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
   set in 73 of 73, the same order in 72. The 24 candidates (1,752): 7 displaced (0.4%); 53 one place lower by score,
   each because a closer record came in above it; 8 tie reorders. The id-like class the same. Her query text and its
   vectors were deleted after the run. The earlier 8% (whole memories as queries) came from placeholder duplicates,
-  not from how she searches.
+  not from how she searches. What this shows (her boundary): old and new code are equivalent on today's memory, not
+  that those queries find what they found the day she asked them; her memory grows by the minute.
+  Its cost, a whole `search` (vector and lexical, six selected) on 40 queries, three runs each, the old code run
+  before and after (read only, the embedding call left out, the same in both): p50 383 / 387 ms old, 371 ms 1b;
+  p95 566 / 563 old, 596 1b; the vector part alone p50 28 / 26 old, 24 1b, p95 35 / 33 old, 37 1b. A recall's time
+  is mostly the lexical read of up to 4,096 records; exact adds at most 4 ms to the vector part, and the whole
+  search's p95 moved within about 5%.
 ## Open questions (to discuss with the owner first) (as recorded before the decisions)
 
 1. Which databases are meant ("a different database": another MongoDB, or another kind such as PostgreSQL or SQLite)?

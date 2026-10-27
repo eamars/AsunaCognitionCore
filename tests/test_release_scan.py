@@ -81,9 +81,9 @@ def test_a_git_id_is_not_an_account_but_a_bare_number_on_any_platform_still_is()
     found = lambda line: check_staged_secrets.account_id(line, set())
     assert not found('signed against commit `b1f6f2ce` (README blob `5e9365951b39`)')
     assert not found('git diff 626121d66364d5672f1a9d5571442ca24ca33958..HEAD')
-    assert found('member 123456789 joined')                              # 9 digits, QQ-length
-    assert found('author 112233445566778899 posted')                     # 18 digits, snowflake-length
-    assert found('blob 5e9365951b39 from 112233445566778899')             # beside a git id, still reported
-    assert found('token 1234567890123')                                 # all digits: no letter, not a git id
-    assert found('user id9365951b39 here')                               # glued to a letter on the left: not a git id
-    assert found('user 9365951b39z here')                                # glued to a letter on the right: not a git id
+    assert found('member 123456789 joined')                  # personal-scan: ok (made up; 9 digits)
+    assert found('author 112233445566778899 posted')         # personal-scan: ok (made up; 18 digits)
+    assert found('blob 5e9365951b39 from 112233445566778899') # personal-scan: ok (beside a git id, still reported)
+    assert found('token 1234567890123')                      # personal-scan: ok (all digits: not a git id)
+    assert found('user id9365951b39 here')                   # personal-scan: ok (glued on the left: not a git id)
+    assert found('user 9365951b39z here')                    # personal-scan: ok (glued on the right: not a git id)

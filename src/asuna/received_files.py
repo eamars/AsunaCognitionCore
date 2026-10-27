@@ -640,7 +640,7 @@ COPY_DIR = 'received'
 NAME_BYTES = 255
 DEVICE_NAMES = {'CON', 'PRN', 'AUX', 'NUL', *('COM%d' % i for i in range(1, 10)), *('LPT%d' % i for i in range(1, 10))}
 NO_DENY = '这里没法禁止执行'
-COPIED = '复制到了 %s；程序不会运行它，这个文件夹里的文件不能被当成程序直接启动。'
+COPIED = '复制到了 %s；能读，不能跑：这个文件夹里的文件不能被当成程序直接启动，程序也不会运行它。'
 NOT_STORED = 'RECEIVED_FILE_NOT_READ_YET: 这个文件的字节现在不在：先 read 一次（会从平台拉下来），再 copy'
 
 
@@ -738,7 +738,7 @@ def drop_copies(store):
 # The action brain's tool: the same, and copy (section 7).
 RECEIVED_FILE_TASK_TOOL = {
     **RECEIVED_FILE_TOOL,
-    'description': RECEIVED_FILE_TOOL['description'] + 'do=copy 把读过的文件复制到 /task/received/（不能被当成程序直接启动）。',
+    'description': RECEIVED_FILE_TOOL['description'] + 'do=copy 把读过的文件复制到 /task/received/（能读，不能被当成程序直接启动）。',
     'parameters': {**RECEIVED_FILE_TOOL['parameters'],
                    'op': {**RECEIVED_FILE_TOOL['parameters']['op'], 'enum': ['read', 'keep', 'let_go', 'kept', 'copy']}}}
 

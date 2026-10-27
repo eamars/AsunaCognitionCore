@@ -1,7 +1,8 @@
 # ADR-102: Files people send her
 
-Status: design drafted 2026-10-27 at the owner's word, with Xiaoman for review; nothing built. The build starts after
-ADR-101 is closed (installed, its follow-up merged). First in the owner's order (102, 103, 104).
+Status: designed 2026-10-27; not built. The changes asked in review of commit `bafd7b8d` are made in the commit
+after it, with the owner's rulings on erasure (ADR-105). The build starts after ADR-101 is closed (its tail merged).
+First in the owner's order (102, 103, 104).
 
 ## Why
 
@@ -34,11 +35,13 @@ Nothing fetches the bytes.
 ## Decided with the owner (2026-10-27)
 
 1. **Never automatic.** She sees an offer and asks.
-2. **Text-like only in the first version** (txt, md, csv, json, log, code, html; judged by the bytes). Archives, PDF,
-   Office and media are offered as not opened; each later type is its own step.
+2. **Text-like only in the first version:** a file whose bytes are text (section 4) — plain text, Markdown, CSV,
+   JSON, logs, HTML, source code and scripts of any language. Archives, PDF, Office and media are offered as not
+   opened (section 1); each later type is its own step.
 3. **Every received file is marked caution,** the owner's own included; only files she sent are not. The sender is
    shown as information, never as a pass.
-4. **1 MB, 3 days.** A kept file is not removed automatically and counts against a quota.
+4. **1 MiB, 3 days.** 1 MiB is 1,048,576 bytes, the one cap on this page (a declared size of 1,048,576 is fetched,
+   1,048,577 is not). A kept file is not removed automatically and counts against a quota.
 5. **Scope as images have it** ("The policy should be similar to how the image is handled. So by default it should be
    #1."): this conversation plus the read-only linked scenes the config declares; at home (`owner_private`) any of her
    conversations; nothing at home is read from outside.
@@ -65,7 +68,8 @@ Nothing fetches the bytes.
   counts the cap on the bytes read; the fence is `readable_image_scenes` and `attachment_by_ref`.
 - **Files she sends already have a lifecycle** (`outbound_files`, `media_life`): bytes in the blob store (GridFS,
   `artifacts` rows), the type read from the first bytes (`outbound_files.sniff`), bytes removed after their days with
-  the row kept as the record, swept at start and daily, never raising for one bad row.
+  the row kept as the record, swept at start and daily. One bad row used to stop the whole sweep (only the bytes'
+  deletion was guarded); the ADR-101 tail counts it and goes on.
 - **Her shell in the pinned DSH** (`@deepseek-ai/dsh-pwsh-local`, `dsh-bash-local`, `dsh-tool-pwsh`, `dsh-tool-bash`):
   PowerShell runs `-NonInteractive`; both shells get stdin from the null device; every command has a timeout, and one
   that outlasts it moves to a background job she can stop. A console prompt therefore ends at once; a graphical prompt
@@ -80,12 +84,13 @@ as pictures have one. Before anything is fetched the program knows only the item
 note says what it knows and whether reading can be tried:
 
 - `（文件 ref：att-…，45 KB）` — can be read.
-- `（文件 ref：att-…，4.6 MB，超过 1 MB 的上限，不下载）`
-- `（文件 ref：att-…，ZIP 压缩包，这一版只读文本类的文件，先不打开）` — by the name's extension, for archives, PDF,
-  Office, pictures sent as files, audio and video.
+- `（文件 ref：att-…，4.6 MB，超过 1 MiB 的上限，不下载）`
+- `（文件 ref：att-…，ZIP 压缩包，这一版只读文本类的文件，先不打开）` — by the name's extension, from the table
+  `received_files.NOT_OPENED`: `zip 7z rar gz tgz tar bz2 xz pdf doc docx xls xlsx ppt pptx odt ods odp epub png jpg
+  jpeg gif webp bmp heic mp3 m4a wav ogg flac amr mp4 mov avi mkv webm exe dll msi apk dmg iso`.
 - `（文件 ref：att-…，消息里没有下载链接，拿不到）`
 
-A name with no extension, or one the table does not know, can be tried: the bytes decide. The note never says the
+A name with no extension, or one not in that table, can be tried: the bytes decide. The note never says the
 file is safe or unsafe; that waits for the bytes.
 
 ### 2. Reading: one tool for her, `received_file`
@@ -104,7 +109,8 @@ Her role tools (说话的那一半) and the action brain's task tools both get `
     first 5 pages that hold one, each with the line number and the matched line (cut to 200 characters). It is not an
     extra: a full 1 MiB of ASCII text is at least 175 pages (1 MiB of Chinese, at least 58; more when lines are short
     and the 200-line limit comes first), too many to page through, so
-    `find` and the direct `page` are how she gets to a place in a large file.
+    `find` and the direct `page` are how she gets to a place in a large file. No match says
+    `全文 %d 页里没有「%s」`.
   - The answer says which page this is, how many pages and characters the file has, so she decides whether to read
     on.
 - `keep` (`ref`, `why`): keeps it (section 5).
@@ -132,9 +138,10 @@ a fixed line:
   `read_image` does today with a cap eight times larger.
 - **No link, or a dead one** (the 5 of 153; a link QQ no longer serves): she is told plainly, in words, with the
   platform's status. Asking the adapter for a fresh link (`get_group_file_url`, on the bulk lane, a new adapter
-  capability that an older adapter does not declare) is left until a real file shows links dying inside her 7 days;
-  how long QQ's links live has not been measured (it needs an internet fetch from QQ, done once in the build with the
-  owner's word).
+  capability that an older adapter does not declare) is left until a real file shows links dying inside her 7 days.
+- **How long QQ's links live is measured in the build, not assumed:** one real text file from a group, fetched once
+  with the owner's word and again at intervals, and the life found is written back into this page. Until then it is
+  not known.
 
 ### 4. Types and marks, from the bytes
 
@@ -143,8 +150,8 @@ After the fetch the bytes are judged before anything is stored:
 - **Binary that is not text** (a program: `MZ`, ELF, Mach-O; an archive, a PDF, media; NUL bytes): not stored, not
   shown. If the name said text, the answer says the two disagree: `名字是 .txt，内容却是 Windows 程序；没收下，也没给你看`.
 - **Text:** a BOM (UTF-8, UTF-16) decides; else strict UTF-8; else strict GB18030, accepted only when the decoded text
-  has almost no control characters besides tab and line breaks (GB18030 decodes nearly any bytes). Otherwise
-  `编码没认出来`, nothing shown.
+  has at most 1 control character (Unicode `Cc`, other than tab, `\n` and `\r`) per 1,000 characters (GB18030
+  decodes nearly any bytes). Otherwise `编码没认出来`, nothing shown.
 - **Marks,** a list on every answer:
   - **Caution, always** (decision 3): `这个文件是%s发来的，内容按外来资料对待`. The owner's file says `主人发来的` in
     the same line.
@@ -162,11 +169,26 @@ types one way.
   matches kind, and a received file that equals one of hers must never come back as hers, unmarked.
 - The row keeps its origin for good: the source `received-file:<message id>:<index>`, the sender, the conversation,
   the name, the declared and real sizes, the encoding, the marks.
-- `media_life.POLICY` gets the prefix `received-file:` with its own cycle: bytes removed **3 days** after the fetch;
-  kept files are not removed. The row stays as the record (`storage` `removed`), so a later `read` says
-  `这个文件的字节在%s过期了，要再看就再读一次` and fetches again while the link lives.
+- **A new cycle in `media_life`, not one more line of its table.** Today nothing in `media_life` is kept by a
+  switch on its own row: what stays is either a record by its source or named by another row (her shelf, the pool,
+  a message), and `cutoff` knows three lives. `received-file:` gets a cycle of its own, `RECEIVED`: bytes removed
+  **3 days** after the fetch (or after `let_go`), and a row with `kept_at` is not removed. A row whose time cannot be
+  read (`created_at` missing or not a time) is kept and counted, never read as expired (the ADR-101 tail makes this
+  the rule for every cycle: 65 real rows lack `created_at` today, all records). A prefix missing from `POLICY` reads
+  as a record and would be kept for good without a word, so a test pins that a received file is gone after 3 days.
+- **After the bytes, before the ref ends** (days 4 to 7): the row stays (`storage` `removed`) and a `read` fetches
+  again from the item's link. Fetched: the page, with `前一份字节在%s到期删了，这次是重新拉的`. Not fetched, one
+  sentence: `这个文件%s拉过，字节在%s到期删了；现在链接失效了（平台答%s），拿不回来了。文件不是没内容，是拿不回来。`
+- **What finds a file.** A ref is found by scanning the conversation's messages, so it lives as long as that scan: 7
+  days (`REF_DAYS`); after that the words are the ones a picture's old ref gets. A kept file is found by its own row,
+  so its ref never ends and `kept` lists refs that keep working. Every line that tells her a file can still be got back
+  says which of the two finds it. (Pictures have a smaller mismatch of the same kind, not changed here: a ref's 7 days
+  count from the message, the bytes' 7 days from `created_at`.)
 - **Privacy:** the bytes stay in the deployment's own database and go with their lifecycle; logs and the audit name
-  a file by its ref, never by its name or content.
+  a file by its ref, never by its name or content. **Erasure** follows ADR-105, the one place the rule is written:
+  an operator erasure deletes the conversation's bytes, kept files included, and marks each row erased; `read`,
+  `kept` and `copy` then say `这个文件被隐私清除删过（%s），字节已经不在了，拿不回来；不是文件没有内容。` The row keeps
+  its name (the owner).
 - **Keep:** `keep` marks the row kept (`kept_at`, her `why`); the origin and marks do not change. The quota is
   **50 files or 20 MiB**, whichever comes first (a proposal; the owner left it open). Over the quota the keep is
   refused with her kept list, so she can let one go. Keeping does not move a file out of its conversation's fence.
@@ -184,6 +206,7 @@ a ref from home is not found from outside. The task binds the scope; no argument
 | A ref is recognized for | 7 days (`REF_DAYS`) | 7 days, the same constant |
 | Fetched bytes kept | 7 days (`PULLED_DAYS`) | 3 days, unless she keeps it |
 | Over the cap | a fetch stops at the cap (`IMAGE_TOO_LARGE`); a video declared over 32 MiB is not fetched | not fetched when declared over; a fetch stops at the first byte over |
+| A fetch may take | 15 s (`vision.DEFAULT_TIMEOUT_SECONDS`) | 20 s |
 
 ### 7. The action brain's copy
 
@@ -197,7 +220,10 @@ or space, at most 255 UTF-8 bytes; a clash gets ` (2)`.
   when she runs it herself, with the marks in front of her (the owner: "I don't want to limit what she can do").
 - Where the entry cannot be set (a drive or share without ACLs, a refused `icacls`), the copy is still made and the
   answer says `这里没法禁止执行`; the program never runs a received file either way.
-- The copy lives and goes with its task folder.
+- **The copy's life is the row's, not the folder's.** The path of each copy is recorded on the row (`copies`), and
+  the sweep removes the copies with the row's bytes: 3 days after the fetch or after `let_go`, or at an erasure. It is
+  the one place `media_life` touches a disk. A kept file's copies stay while it is kept. A later turn that needs the
+  file in a task folder again asks `copy` again. How long a task folder itself lives is not changed here.
 
 ### 8. Forwarding
 
@@ -246,8 +272,13 @@ The research changed four of them; the owner had agreed to them, so they are nam
 | Two `read` calls on one ref at once | Both fetch; `put_once` may store twice in a race; the sweep removes both in time. Accepted, not locked. |
 | Over the keep quota | `keep` refused with her list. |
 | MongoDB down | The worker is down; nothing here runs. A fetch that ends while the database drops raises the store's own error, in words. |
-| The sweep meets a broken row | Skipped and counted (`media_life` never raises for one row). |
-| Bytes already swept | `过期了`, fetched again on the next `read` while the link lives. |
+| The sweep meets a broken row | Counted and passed; the rows after it still go (ADR-101 tail). |
+| A row whose time cannot be read | Kept and counted, never read as expired. |
+| A cycle prefix missing from `POLICY` | A test fails (a received file must be gone after 3 days). |
+| Bytes already swept, ref still found | Fetched again; or the one sentence that it cannot be got back, never "no content". |
+| A ref older than 7 days | Not found by the scan; a kept file is still found by its row. |
+| An operator erasure | Bytes gone, the row marked, the ADR-105 sentence in `read`, `kept`, `copy`; copies removed. |
+| A copy the sweep cannot delete (locked on Windows) | Counted, tried again at the next sweep. |
 | `icacls` refused, or a file system without ACLs | The copy is made; `这里没法禁止执行`. |
 | A name with path parts or a device name | Made safe before it touches the disk. |
 | She asks for a file from another conversation | Not found outside the fence, the words pictures use. |
@@ -261,11 +292,9 @@ PDF, Office and archives (each a step of its own, with its parser's own risks); 
 NapCat's `get_private_file_url` exists); a fresh link through the adapter; the official QQ Bot's file host; reading
 pictures sent as files (`read_image` handles pictures).
 
-## Open for review
+## Open
 
-1. Xiaoman: the words she will read (the offer notes, the fixed line before the text, the marks), the tool's shape (one
-   `received_file` with four ops), the page size, and whether `find` is worth having.
-2. The owner: the keep quota (50 files or 20 MiB proposed).
+1. The owner: the keep quota (50 files or 20 MiB proposed).
 
 ## Landing list (what the build changes)
 
@@ -274,7 +303,8 @@ pictures sent as files (`read_image` handles pictures).
 - `src/asuna/vision.py`: the file notes under a line next to the picture refs (`line_refs`); the fence functions
   shared, not copied.
 - `src/asuna/outbound_files.py`: `sniff` learns programs and GB18030; `register` records `received_from`.
-- `src/asuna/media_life.py`: the `received-file:` cycle.
+- `src/asuna/media_life.py`: the `RECEIVED` cycle (kept rows, copies on disk).
+- ADR-105's landing (erasure marks rows; every lookup by id says so), built with this one.
 - `src/asuna/role_tools.py`, `src/asuna/tasks.py`: the `received_file` tool for each half.
 - `packages/channels/napcat-qq/python/napcat_qq/__init__.py`: `FILE_HOSTS`. `src/asuna/channel_kinds.py`: `file_hosts()`.
 - `RUNTIME_API.md` (Received files), `docs/map/*`, this page's Built section.
@@ -286,10 +316,12 @@ pictures sent as files (`read_image` handles pictures).
 - Judging: each program magic, a UTF-8 / UTF-16 / GB18030 / unknown sample, the control-character check, `#!`, every
   script extension, a `.txt` that is a program.
 - Paging: line pages, a one-line file, `find`, page counts, a cut never inside a character.
-- Lifecycle: 3 days, keep, let go, the quota, the swept row's words, the separate kind.
+- Lifecycle: 3 days (also as the pin against a prefix missing from `POLICY`), keep, let go, the quota, the swept
+  row's two sentences (fetched again, cannot be got back), a row without `created_at` kept, the separate kind, a kept
+  ref found after 7 days, copies removed with the bytes.
 - Fence: this conversation, a linked scene, home reach, refused from outside.
 - The copy: safe names, the deny-execute entry on Windows (and its refusal path), `0600` on POSIX.
 - Forwarding by content after a rename.
 - Each test mutation-checked so it is not green by construction. Mongo tests drop their own databases.
 - Once in the build, with the owner's word: one real text file from a group, fetched and read end to end, and how long
-  its link lives.
+  its link lives, written back into this page (a must, not an extra).

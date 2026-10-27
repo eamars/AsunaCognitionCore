@@ -1,7 +1,7 @@
 # ADR-104: Database connector
 
-Status: requirements recorded 2026-10-27, before any design. Third in the owner's order (102, 103, 104). The owner
-wants to talk it through first. Nothing here is decided.
+Status: decided with the owner 2026-10-28 (below), not designed in detail, not built. Third in the owner's order
+(102, 103, 104). Before it is built, Claude researches the vector interface (decision 3) and presents the options.
 
 ## The owner's ask (2026-10-27, verbatim)
 
@@ -46,7 +46,21 @@ wants to talk it through first. Nothing here is decided.
    you to remote all unit. But this isn't the excuse of adding more and more unit test without considering 'do i need
    them?'."
 
-## Open questions (to discuss with the owner first)
+## Decided with the owner (2026-10-28)
+
+1. **MongoDB and a test double.** The first version builds the interface, the MongoDB adapter (today's behaviour)
+   and an in-memory double the unit tests use (requirement 5). A second real database is written when a user needs
+   one; the double shows the interface is not MongoDB-only.
+2. **The core's own operations.** The interface is defined from what the core does (store a record, read by id, find
+   by fields, update, count, append to a log, ...), not as a MongoDB-shaped subset; every call site moves to it,
+   module by module, behind the MongoDB adapter, with nothing changing for her between steps.
+3. **Retrieval is to be researched first.** The owner: "I need you to research and define the common vector
+   interface for commonly used databases. You don't need to do it now, but later before running the ADR, and present
+   the option to me."
+4. **The model is the channel packages:** its own package folder and tests, a module the core loads by
+   configuration, the core naming no database.
+
+## Open questions (to discuss with the owner first) (as recorded before the decisions)
 
 1. Which databases are meant ("a different database": another MongoDB, or another kind such as PostgreSQL or SQLite)?
 2. What the interface is: the store's operations the core really needs, or a MongoDB-shaped query surface. With 912

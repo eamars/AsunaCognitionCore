@@ -319,7 +319,9 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
   and after 1a's, gave the same six and the same 24 vector candidates every time (her memory did not drift between),
   and the same coverage score to the bit, so the same verdict for any `coverage_floor`. The one visible change is the
   scale of the scores the evidence records: raw cosine, 2s - 1 of MongoDB's (her finding); a comparison of scores
-  across 1a converts first.
+  across 1a converts first. They land in her audit stream (`retrieval.selected`, `vector_ranks`), so rows from
+  before 1a's install carry the old scale; no code reads that field, and `nearest`'s callers are only retrieval's
+  two searches (`own_thoughts` uses ids alone; `search` uses the score for coverage, converted back to 0..1).
   Its integration test, `integration/test_mongo_vectors.py` (18 cases, 7 s, a throwaway database of 301 synthetic
   records): the index made and brought up to the space's fields; `nearest` gives k records, each matching the filter
   and scored with its own cosine, best first, for value, list, pair and combined filters at k 1, 12 and 24; identical

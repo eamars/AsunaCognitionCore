@@ -21,6 +21,9 @@
 输出三行读数＋读的时刻（UTC 原始值＋ +13／+8 两种换算）：
   1. activation.json 的 active.<项目>：sha256、state、activated_at
   2. 运行时那份文件（active 的 packageRoot 下的 --file）：sha256、字节数
+     --file 两种写法都试（2026-10-27 修）：包内相对 packageRoot（skills/<技能>/SKILL.md），或仓库相对
+     （packages/cognition-core/skills/<技能>/SKILL.md）。packageRoot 本身已经指到包自己那一层，仓库相对
+     那条照拼会成双层目录、报「找不到」（当天实测 rc=1）；两种都读不到时把试过的两条全打出来。
   3. --needle 字面在不在（可重复传；字面按 UTF-8 字节匹配）
 退出码：0 = 三行都读到（needle 在，或没传）；1 = 该读的没读到（没 activation／没这个项目／文件不在）；
 3 = 都读到了但某个 needle 不在（这是读数，不是故障）。
@@ -33,6 +36,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -211,6 +215,32 @@ def clock_lines(now=None):
     }
 
 
+def package_file_forms(root, relfile):
+    """--file 的两条写法，按顺序试（2026-10-27 修的双层目录）。返回 [(写法, 拼出来的路径)]。
+
+    1) 照 --file 原样拼到 packageRoot 下；
+    2) 原样以 packages/ 开头 → 剥掉 packages/<…>/ 前缀再拼，一层（packages/cognition-core/）和
+       两层（packages/personas/xiaoman/）按这个顺序都试，先中先读：core 的 packageRoot 本身已以
+       packages/cognition-core 结尾（冻结快照那份），宿主装的那份是 …/node_modules/@asuna/cognition-core，
+       照仓库相对拼就是双层目录 → 「找不到」rc=1（2026-10-27 实测）。
+       原样已在包内 → 反过来补上 packages/<packageRoot 末级目录>/（末级像包名才补：冻结快照那一级的
+       末级是 cognition-core 这样的名字，而人格包快照那一级是 64 位候选 id，补出来不是仓库路径）。
+    一条都读不到时，返回的这些正是该给我看的候选路径（全打出来，别只报第一条）。
+    """
+    rel = relfile.replace("\\", "/").lstrip("/")
+    forms = [rel]
+    if rel.startswith("packages/"):
+        for depth in (1, 2):        # 一层 packages/cognition-core/ 与两层 packages/personas/xiaoman/ 都试
+            alt = re.sub(r"^packages/(?:[^/]+/){%d}" % depth, "", rel, count=1)
+            if alt and alt != rel and alt not in forms:
+                forms.append(alt)
+    else:
+        tail = (root or "").replace("\\", "/").rstrip("/").split("/")[-1]
+        if re.fullmatch(r"[a-z][a-z0-9-]{1,30}", tail):
+            forms.append("packages/%s/%s" % (tail, rel))
+    return [(form, os.path.join(root, *form.split("/"))) for form in forms]
+
+
 def part_package(data, project, relfile, needles):
     """按内容判活包：三行读数＋读的时刻。返回退出码 0／1／3。
 
@@ -233,13 +263,21 @@ def part_package(data, project, relfile, needles):
     print("1) active.%s: sha256=%s state=%s activated_at=%s"
           % (project, active.get("sha256"), active.get("state"), active.get("activated_at")))
     root = active.get("packageRoot")
-    target = os.path.join(root, *relfile.replace("\\", "/").split("/")) if root and relfile else None
-    if not target or not os.path.isfile(target):
-        print("2) 运行时那份文件找不到：", target, "（packageRoot=%s）" % root)
+    forms = package_file_forms(root, relfile) if root and relfile else []
+    hit = next((form for form in forms if os.path.isfile(form[1])), None)
+    if not hit:
+        print("2) 运行时那份文件找不到。试过的写法（packageRoot=%s）：" % root)
+        for form, joined in forms:
+            print("     %s → %s" % (form, joined))
+        if len(forms) < 2:
+            print("     只试了这一条：--file 已是包内相对，而 packageRoot 末级不像包名，拼不出仓库相对那一条。")
         return 1
+    used, target = hit
     with open(target, "rb") as handle:
         blob = handle.read()
-    print("2) 运行时 %s: sha256=%s 字节=%d" % (relfile, hashlib.sha256(blob).hexdigest(), len(blob)))
+    print("2) 运行时 %s: sha256=%s 字节=%d" % (used, hashlib.sha256(blob).hexdigest(), len(blob)))
+    if used != relfile.replace("\\", "/").lstrip("/"):
+        print("   （--file 原样那条没读到，读到的是同一包的另一种写法）")
     missing = []
     if not needles:
         print("3) needle: 没传（--needle <字面>）")
@@ -266,7 +304,8 @@ def main():
     parser.add_argument("--data", help="这个 profile 的数据根（默认 asuna.config.DATA 或 ASUNA_DATA_ROOT）")
     parser.add_argument("--project", default="core", help="要比内容的 project（默认 core）")
     parser.add_argument("--package", help="按内容判活包：包名（project）。只跑第五步，不跑前四段")
-    parser.add_argument("--file", help="配合 --package：运行时那份里要读的文件（相对 packageRoot），如 skills/<技能>/SKILL.md")
+    parser.add_argument("--file", help="配合 --package：运行时那份里要读的文件，两种写法都试：包内相对 packageRoot"
+                                       "（skills/<技能>/SKILL.md），或仓库相对（packages/cognition-core/skills/<技能>/SKILL.md）")
     parser.add_argument("--needle", action="append", default=[], help="配合 --package：要找的字面，可重复")
     args = parser.parse_args()
     found_repo, found_data = find_roots()

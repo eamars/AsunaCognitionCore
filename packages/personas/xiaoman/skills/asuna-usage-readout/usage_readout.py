@@ -6,6 +6,9 @@
 对账表（SKILL.md 第二·五节）：
   列：类别｜请求数｜读入提示｜命中｜新读入｜写缓存｜输出｜命中率；读入提示＝input＋cacheRead＋cacheWrite。
   行：角色脑／行动脑·高／行动脑·低／行动脑·未归档／压缩／门／调度／其余／合计／拷贝行（不计入合计）。
+  命中率不适用的三类（2026-10-27 主人定的口径）：摘要／门／网页界面会话——这三类的行基本没有 cacheReadTokens 这个键——
+  这三类标「不适用命中率」、不进合计的分母（对账表的「门」行与六格②⑤ 都按这个口径；摘要在表里并进「压缩」行、
+  网页界面会话按 preset 进「角色脑」行，那两类的摘出只发生在六格②⑤ 那把按目录名前缀认的尺上）。
   行归属按会话首行 agentPreset；行动脑按所配任务 tier.ran（缺则 tier.chosen）分档，分不出进未归档。
   数据源两个根：<data>/adr008/home/sessions 与 <data>/adr008/archive/sessions，去重跨两个根。
   硬断言（不过就报错不出表）：①每行 读入提示＝命中＋新读入＋写缓存；②各行（不含拷贝行）之和＝合计每一列
@@ -104,6 +107,18 @@ TEST_PIECE_MARK = "机制验收"                 # 判据 3：测试件划出选
 TOTALS_KEYS = ("rows", "kept", "own", "copied", "copied_time", "copied_other", "dup_same",
                "no_cache_read_field", "inputTokens", "cacheReadTokens", "cacheWriteTokens",
                "outputTokens", "totalTokens")
+
+# 「不适用命中率」的三类（2026-10-27 主人定的口径；SKILL.md 硬规矩 10 是判据来源）：
+# 这三类整类没有 cacheReadTokens 这个键——单发会话（门／摘要）没有第二步，网页界面会话走的是另一条
+# 本地 route，缓存不在它们之间续命；把缺字段按 0 计入，等于把「字段缺失」读成「没命中」。
+# 10-17 与 10-19 两次读数各复现一次（那两趟这类报的是 0.00%）。三类照旧报行数与 token 数，只是不打比率。
+NA_HIT_RATE = ("摘要", "门", "网页界面会话")
+NA_HIT_RATE_WHY = ("这三类的行基本没有 cacheReadTokens 这个键：单发会话没有第二步，那条 route 的缓存不在它们之间续命；"
+                   "按 0 计入是把「字段缺失」读成「没命中」——10-17 与 10-19 两次读数各复现一次；"
+                   "这一窗每类缺多少行随下一行实测打出来")
+# 对账表里只有「门」是单独一行（摘要并进压缩、网页界面会话按 preset 进角色脑），所以表里只能摘出这一格。
+TABLE_NA = (T_GATE,)
+
 
 
 # --------------------------------------------------------------------------- 环境与窗口
@@ -497,7 +512,10 @@ def render_recon_table(occurrences, winner, lo_ms, hi_ms, local_bounds, utc_boun
 
     lines = ["", "【对账表】一行一类；各行（不含拷贝行）之和＝合计。硬断言①②③④全过才印这张表。",
              "恒等式：读入提示＝命中＋新读入＋写缓存——每一行都能拿这一句自查。",
-             "合计命中率＝总命中／总读入，不是各行命中率的平均。",
+             "合计命中率＝总命中／总读入，不是各行命中率的平均；「门」行不报命中率"
+             "（这一类的行没有 cacheReadTokens 字段），合计的分母也不含它（2026-10-27 口径）。",
+             "命中率不适用的三类在表里只有「门」是单独一行、可摘出；摘要并进「压缩」行、"
+             "网页界面会话按 preset 进「角色脑」行——那两类的摘出只在六格②⑤（按目录名前缀认的那把尺）生效。",
              "命中率＝命中／读入提示；分母含写缓存（cacheWrite 算未命中、留在分母里，六格⑤）。",
              "窗口：本地 %s → %s（%s，该日 UTC+13）＝UTC %s → %s"
              % (local_bounds[0], local_bounds[1], zone_name, utc_bounds[0], utc_bounds[1]),
@@ -522,12 +540,14 @@ def render_recon_table(occurrences, winner, lo_ms, hi_ms, local_bounds, utc_boun
         lines.append("%s｜%s｜%s｜%s｜%s｜%s｜%s｜%s"
                      % (kind, fmt_int(r["requests"]), fmt_int(r["prompt"]), fmt_int(r["hit"]),
                         fmt_int(r["fresh"]), fmt_int(r["write"]), fmt_int(r["output"]),
-                        rate_of(r["hit"], r["prompt"])))
+                        ("不适用（这一类的行没有 cacheReadTokens 字段）" if kind in TABLE_NA
+                         else rate_of(r["hit"], r["prompt"]))))
     lines.append("%s｜%s｜%s｜%s｜%s｜%s｜%s｜%s"
                  % (T_TOTAL, fmt_int(total_direct["requests"]), fmt_int(total_direct["prompt"]),
                     fmt_int(total_direct["hit"]), fmt_int(total_direct["fresh"]),
                     fmt_int(total_direct["write"]), fmt_int(total_direct["output"]),
-                    rate_of(total_direct["hit"], total_direct["prompt"])))
+                    rate_of(total_direct["hit"] - rows[T_GATE]["hit"],
+                            total_direct["prompt"] - rows[T_GATE]["prompt"])))
     lines.append("%s｜%s｜%s｜%s｜%s｜%s｜%s｜%s"
                  % (T_COPY, fmt_int(copy["requests"]), fmt_int(copy["prompt"]), fmt_int(copy["hit"]),
                     fmt_int(copy["fresh"]), fmt_int(copy["write"]), fmt_int(copy["output"]),
@@ -610,6 +630,31 @@ def hit_rate(stats):
     """命中率＝cacheRead／(input＋cacheRead＋cacheWrite)——写缓存算未命中，留在分母里（六格⑤）。"""
     denominator = stats["inputTokens"] + stats["cacheReadTokens"] + stats["cacheWriteTokens"]
     return (100.0 * stats["cacheReadTokens"] / denominator) if denominator else None
+
+
+def na_hit_rate(kind):
+    """这一类不报命中率（整类缺 cacheReadTokens 字段，按 0 计入会误导）。"""
+    return kind in NA_HIT_RATE
+
+
+def empty_totals():
+    """一类什么都没量到时的零值（读数里那一类没出现时也要能报 0／0）。"""
+    return {name: 0 for name in TOTALS_KEYS}
+
+
+def split_na(totals, per_kind):
+    """把「不适用命中率」那三类从合计里摘出去：返回（摘出后的合计，这三类之和）。"""
+    out = dict(totals)
+    na = {name: 0 for name in TOTALS_KEYS}
+    for kind in NA_HIT_RATE:
+        stats = per_kind.get(kind)
+        if not stats:
+            continue
+        for name in TOTALS_KEYS:
+            out[name] -= stats[name]
+            na[name] += stats[name]
+    return out, na
+
 
 
 def own_slice(occurrences, best, lo_ms, hi_ms, kind):
@@ -730,12 +775,15 @@ def cell_kinds(dbread, per_kind, totals, dirs_by_prefix, root, own_rates):
 
     def numbers(kind, stats):
         return ("窗口内 %s 行（自有 %s／拷贝 %s：行 time 早于本会话 createdAt %s、同 id 归别类 %s；"
-                "同类内重复记 %s；缺 cacheReadTokens %s 行按 0 算）"
+                "同类内重复记 %s；缺 cacheReadTokens %s 行%s）"
                 "｜input %s／cacheRead %s／cacheWrite %s｜命中率 %s（仅自有 %s）%s"
                 % (stats["rows"], stats["own"], stats["copied"], stats["copied_time"],
                    stats["copied_other"], stats["dup_same"], stats["no_cache_read_field"],
+                   "（整类缺该字段，这一类不报命中率）" if na_hit_rate(kind) else "按 0 算",
                    stats["inputTokens"], stats["cacheReadTokens"], stats["cacheWriteTokens"],
-                   rate_text(hit_rate(stats)), rate_text(own_rates.get(kind)),
+                   "不适用（这一类的行没有 cacheReadTokens 字段）" if na_hit_rate(kind)
+                   else rate_text(hit_rate(stats)),
+                   "不适用" if na_hit_rate(kind) else rate_text(own_rates.get(kind)),
                    "｜拷贝比自有还多，样本量只有 %s——这一类的命中率其实是别人的调用算出来的" % stats["own"]
                    if stats["own"] and stats["own"] < stats["copied"] else ""))
 
@@ -822,13 +870,29 @@ def cell_refusals(dbread, window):
 
 
 def cell_hit_rate(totals, per_kind, own_rates, root):
+    applicable, excluded = split_na(totals, per_kind)
     lines = ["⑤ 命中率｜窗口内调用行 %s 行、全局去重后 %s 行（判重键 data.message.id；"
-             "压缩行没有这个字段，退回启发式键 time＋四个 token 数）｜全局命中率 %s｜"
+             "压缩行没有这个字段，退回启发式键 time＋四个 token 数）｜命中率 %s（分母不含「不适用命中率」三类）｜"
              "input %s／cacheRead %s／cacheWrite %s／output %s／total %s｜"
-             "缺 cacheReadTokens 字段的行 %s 行按 0 计入（推断）"
-             % (totals["rows"], totals["kept"], rate_text(hit_rate(totals)), totals["inputTokens"],
-                totals["cacheReadTokens"], totals["cacheWriteTokens"], totals["outputTokens"],
-                totals["totalTokens"], totals["no_cache_read_field"])]
+             "缺 cacheReadTokens 字段的行 %s 行（其中「不适用」那三类 %s 行不进命中率；"
+             "其余 %s 行按 0 计入，是推断）"
+             % (totals["rows"], totals["kept"], rate_text(hit_rate(applicable)),
+                applicable["inputTokens"], applicable["cacheReadTokens"],
+                applicable["cacheWriteTokens"], applicable["outputTokens"],
+                applicable["totalTokens"], totals["no_cache_read_field"],
+                excluded["no_cache_read_field"],
+                totals["no_cache_read_field"] - excluded["no_cache_read_field"])]
+    lines.append("   不适用命中率（单列一行说明）：%s 三类不报命中率，也不进上面那个分母——%s。"
+                 % ("／".join(NA_HIT_RATE), NA_HIT_RATE_WHY))
+    lines.append("   摘出去的那三类的量：去重后 %s 行／缺 cacheReadTokens 字段 %s 行｜"
+                 "input %s／cacheRead %s／cacheWrite %s（照旧报数，只是不打比率）"
+                 % (excluded["kept"], excluded["no_cache_read_field"], excluded["inputTokens"],
+                    excluded["cacheReadTokens"], excluded["cacheWriteTokens"]))
+    lines.append("   这一窗实测（缺该字段的行数／该类去重后行数）：%s"
+                 % ("／".join("%s %s／%s" % (kind,
+                                (per_kind.get(kind) or empty_totals())["no_cache_read_field"],
+                                (per_kind.get(kind) or empty_totals())["kept"])
+                         for kind in NA_HIT_RATE)))
     for kind in KIND_ORDER:
         if kind not in per_kind:
             continue
@@ -837,12 +901,14 @@ def cell_hit_rate(totals, per_kind, own_rates, root):
                      "input %s／cacheRead %s／cacheWrite %s｜命中率 %s（仅自有 %s）"
                      % (kind, stats["kept"], stats["own"], stats["copied"], stats["copied_time"],
                         stats["inputTokens"],
-                        stats["cacheReadTokens"], stats["cacheWriteTokens"], rate_text(hit_rate(stats)),
-                        rate_text(own_rates.get(kind))))
+                        stats["cacheReadTokens"], stats["cacheWriteTokens"],
+                        "不适用（这一类的行没有 cacheReadTokens 字段）" if na_hit_rate(kind)
+                        else rate_text(hit_rate(stats)),
+                        "不适用" if na_hit_rate(kind) else rate_text(own_rates.get(kind))))
     lines.append("   来源=盘 %s/**/%s 的 type／time／data.usage 五个数／data.message.id＋首行 createdAt"
                  % (root or "（没找到）", SESSION_FILE))
     lines.append("   筛法=命中率＝cacheRead/(input＋cacheRead＋cacheWrite)（写缓存算未命中、留在分母里，六格⑤）；"
-                 "token 加权（各类先求和再相除，不是各条比例再平均）；先全局去重再按类求和；窗口按行 time")
+                 "token 加权（各类先求和再相除，不是各条比例再平均）；先全局去重再按类求和；窗口按行 time；「不适用命中率」那三类不进这个分母（2026-10-27 口径）")
     return lines, True
 
 
@@ -970,6 +1036,38 @@ def selfcheck():
     check("table_thousands_separator", fmt_int(1234567) == "1,234,567" and fmt_int(0) == "0")
     check("table_rows_list_complete",
           TABLE_ROWS == (T_ROLE, T_HIGH, T_LOW, T_UNARCH, T_COMPACT, T_GATE, T_SCHED, T_OTHER))
+
+    # 2026-10-27 口径：摘要／门／网页界面会话不报命中率，也不进合计的分母
+    check("na_hit_rate_list", NA_HIT_RATE == ("摘要", "门", "网页界面会话")
+          and all(kind in KIND_ORDER for kind in NA_HIT_RATE) and TABLE_NA == (T_GATE,))
+    role = {name: 0 for name in TOTALS_KEYS}
+    role.update({"rows": 2, "kept": 2, "own": 2, "inputTokens": 100,
+                 "cacheReadTokens": 300, "cacheWriteTokens": 100})
+    gate = {name: 0 for name in TOTALS_KEYS}
+    gate.update({"rows": 3, "kept": 3, "own": 3, "inputTokens": 500, "no_cache_read_field": 3})
+    small = {"rows": 1, "kept": 1, "own": 1, "inputTokens": 50, "no_cache_read_field": 1}
+    per = {"我的对话": role, T_GATE: gate, "摘要": dict(gate, **small), "网页界面会话": dict(gate, **small)}
+    tot = {name: sum(stats[name] for stats in per.values()) for name in TOTALS_KEYS}
+    applicable, excluded = split_na(tot, per)
+    check("na_out_of_denominator",
+          applicable["inputTokens"] == 100 and excluded["inputTokens"] == 600
+          and abs(hit_rate(applicable) - 60.0) < 1e-9)
+    check("na_split_keeps_total_identity",
+          all(applicable[name] + excluded[name] == tot[name] for name in TOTALS_KEYS))
+    head, _head_ok = cell_hit_rate(tot, per, {}, None)
+    check("na_line_explains_why",
+          any("不适用命中率" in line and "cacheReadTokens" in line and "10-17" in line for line in head))
+    check("na_head_rate_excludes_na",
+          any("命中率 60.00%（分母不含「不适用命中率」三类）" in line for line in head))
+    check("na_per_kind_says_na",
+          any(line.strip().startswith(T_GATE + "：") and "命中率 不适用" in line for line in head))
+    check("na_other_kind_still_numeric",
+          any(line.strip().startswith("我的对话：") and "命中率 60.00%" in line for line in head))
+    kind_lines, _kind_ok = cell_kinds(None, per, tot, {}, None, {})
+    check("cell_kinds_marks_na",
+          any("门（前缀 asuna-attend-）" in line and "命中率 不适用" in line for line in kind_lines)
+          and any("我的对话（前缀 asuna-role-）" in line and "命中率 60.00%" in line for line in kind_lines))
+
 
     failed = [name for name, ok in checks if not ok]
     for name in failed:

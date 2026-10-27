@@ -31,6 +31,11 @@ wants to talk it through first. Nothing here is decided.
 2. Another user can connect a different database.
 3. The connector interface accommodates future expansion.
 4. "Similar to the code cleanup".
+5. **Unit tests stop at the adapter** (the owner, 2026-10-27, on hearing that the suite runs about 1,500 tests
+   against the MongoDB server her live data is on): "I object the idea of using the real DB test from its root.
+   Perhaps add 'stop using real db for unit test' ... when the DB adapter interface is built, and the unit test stop
+   at the DB adapter." Unit tests use a double of the interface, never a database server; the adapter's own tests
+   are the only ones that reach a database, and never the server a live deployment uses.
 
 ## Open questions (to discuss with the owner first)
 
@@ -45,5 +50,7 @@ wants to talk it through first. Nothing here is decided.
 ## Constraints already known
 
 - JS and Python may run different versions (RUNTIME_API).
-- Tests and probes drop their own databases (AGENTS.md).
+- Tests and probes drop their own databases (AGENTS.md). Today the suite's databases live on the same server as the live data (`config/local.json`
+  `mongo_uri`, one `asuna_v2_test_*` database per test; drops refuse any other name, `tests/conftest.py`): separate
+  data, shared load. Requirement 5 ends that; the AGENTS.md rule changes with it.
 - A deployment's private data stays in its data folder and its own database.

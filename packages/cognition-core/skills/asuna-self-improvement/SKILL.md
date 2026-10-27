@@ -64,6 +64,12 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 - 这些覆盖不到真 Mongo、DSH 原生定时和界面实点；那些由主人在宿主侧跑 `tests/test_*.py`。
 - 已知坑：离线夹具把真文件复制进临时包；真文件新加一条同包 import，夹具的复制清单也要加，否则只会红在 `ModuleNotFoundError`。
 
+### 沙箱里装依赖：只走 uv，pip 一律带 `--no-cache-dir`（2026-10-27 本机实测）
+
+- **装依赖一律 `python3 -m uv` 写进 `pyproject.toml` ＋ `uv.lock`**（`python3 -m uv add <包>`，再 `python3 -m uv sync`），**禁裸 `pip install`**：实测候选沙箱里 `python3` 是 `.venv\Scripts\python.exe`，而 PATH 上的 `pip` 是系统 Python 那一个（`…\Python312\Scripts\pip.EXE`，装到 `…\Python312\Lib\site-packages`）——裸 pip 装的东西在 venv 外，worker 下次装包就没了。`python3 -m pip` 落在 venv 里，但同样不进 lock，照样算没装。
+- **沙箱里任何一次 pip 都带 `--no-cache-dir`**：实测默认缓存下，pip 对「缓存里已有条目」的包 3/3 挂死——零输出、进程还在、退出码永远不来；挂死长得跟成功一模一样（没报错、没返回码，看着像安静地跑完了）。
+- **零输出不等于成功**：装完必须验 `import` 或验产物（`python3 -c "import <包>"`、产物文件存在且大小对），拿到退出码才算那条命令结束。只进 venv、不进 `uv.lock` 的算没装——发布与重启装包只认 `uv.lock` 那份。
+
 ### 私密词有两道闸，别混（2026-10-25 本机实测）
 
 - **闸一管「发布说明本身」**：`development_publish` 当场扫我写的那段 reason——`packages/cognition-core/src/private-words.js` 的 `findings`，由 `floor.js` 在冻结候选之前调；命中就抛 `PUBLISH_REASON_NAMES_PRIVATE`，**这次什么都没发布**（候选里的改动留着，改写重发就行）。报错只报位数不报那串数字本身，也不印名单上的词：`packages/cognition-core/test/publication.test.js:PUBLISH_REASON_NAMES_PRIVATE` 所在那个用例（标题 a publication reason naming a listed word or a QQ-shaped number is refused before anything is published）里那条 assert.doesNotMatch 断言的就是号码不许进回执（同一个用例还断言词本身不许进）。同一份 reason 在 `publicationFindings`（`tools/publication_scan.py`）里会按发布版规则再扫一遍，两道都在冻结之前。
@@ -111,9 +117,11 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 3. **重启回执里「`<head> is not behind origin/main <target>`」／「本机检出有 origin/main 没有的提交」不等于没装。** 启动器只在 main 落后于 origin/main 时才快进（`tools/asuna-launch.mjs:fastForwardCheckout`），快进不了返回 `diverged`、不报错；发布的自动提交压在远端那一笔之上，本机就正好是「比远端新一格」——既 not behind、又多出一笔自己的提交。要判的是第 2 条：那一笔在不在 HEAD 的历史里，不是「本机比远端多几笔」。
    - 什么算违反：把「not behind」读成「改动没进去」；把「本机有 origin/main 没有的提交」当成回滚、或当成有人动了本机；只报 ahead 几笔，不跑 `--is-ancestor`。
 
-来路：2026-10-20 12:13 那笔 `ede4e2b0` 是发布自动提交，父提交 `f9bc5f20`（`git merge-base --is-ancestor f9bc5f20 ede4e2b0` → rc=0），`--stat` 显示这一笔改的是 `packages/personas/<name>/persona-model.json`（1 增 1 删），而它自己的提交正文写着「没动 packages/personas/<name>/ 镜像」——正文与 `--stat` 打架的就是这一格。发布任务：`task-2a3c346e608f1837268c9a1421d9b66d`。
+来路：2026-10-20 12:13 那笔 `ede4e2b0` 是发布自动提交，父提交 `f9bc5f20`（`git merge-base --is-ancestor f9bc5f20 ede4e2b0` → rc=0），`--stat` 显示这一笔改的是 `packages/personas/<name>/persona-model.json`（1 增 1 删），而它自己的提交正文说它没动那个人格包目录的镜像（这一节两处 `<name>` 都是泛化写法：正文原句带的是具体那个人格包的路径，不是逐字照抄，所以这里不放引号）——正文与 `--stat` 打架的就是这一格。发布任务：`task-2a3c346e608f1837268c9a1421d9b66d`。
 
 ## 版本
+
+v4（2026-10-27）：「发布前自检」里加「沙箱里装依赖：只走 uv，pip 一律带 `--no-cache-dir`」一小节（三条：装依赖走 `python3 -m uv` 进 `pyproject.toml`＋`uv.lock`、禁裸 `pip install`（实测裸 `pip` 是系统 Python 那份，装到 venv 外）；沙箱内 pip 一律 `--no-cache-dir`（默认缓存下对已缓存包 3/3 挂死、零输出、进程还在）；零输出不等于成功，要验 import 或验产物，只进 venv 不进 lock 算没装）。旧内容一条没删。
 
 v3（2026-10-25）：「发布前自检」里加「私密词有两道闸，别混」一小节：闸一＝发布说明在 `development_publish` 当场被扫（`private-words.js`／`floor.js`，报 `PUBLISH_REASON_NAMES_PRIVATE`，回执只报位数）；闸二＝整仓已提交文件由 `tests/test_personal_words.py` 扫（只报类别与名单行号）。再写死两条量到的数字形状规则（裸 7–11 位算账号形状、紧跟字母／数字／点或带单位／带千分位的放过），推论是发布说明里字节数一律带单位或加千分位。旧内容一条没删。
 

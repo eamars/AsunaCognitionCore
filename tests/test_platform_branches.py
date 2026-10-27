@@ -9,6 +9,8 @@ from asuna import repo_files
 
 ALLOWED = {
     'src/asuna/queue.py': 'cross-process byte locks: msvcrt on Windows, fcntl elsewhere',
+    'src/asuna/received_files.py': "a received file's copy cannot be started: a deny-execute entry on Windows, 0600 elsewhere "
+                                   '(ADR-102 section 7)',
     'src/asuna/media_children.py': 'a job object kills a Windows child with its Host; CREATE_NO_WINDOW',
     'src/asuna/media_worker.py': "the Host's pid is watched with OpenProcess on Windows, getppid elsewhere",
     'packages/cognition-core/src/python-env.js': 'venv layout (Scripts/python.exe or bin/python) and Python launcher names',

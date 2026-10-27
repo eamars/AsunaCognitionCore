@@ -1,8 +1,8 @@
 # ADR-104: Database connector
 
 Status: decided with the owner 2026-10-28 (below). Third in the owner's order (102, 103, 104). The vector interface
-is designed (section "Vector search", Claude on the owner's delegation) and built as step 1 of 4 (see "Build order"
-and "Built"), not installed. The record interface (step 2) is proposed, for the owner's review.
+is designed (section "Vector search", Claude on the owner's delegation); step 1a is built (the interface, her search
+unchanged), not installed; step 1b (exact search) is not built (see "Build order" and "Built"). The record interface (step 2) is proposed, for the owner's review.
 
 ## The owner's ask (2026-10-27, verbatim)
 
@@ -132,10 +132,13 @@ store.ensure_vectors(space, timeout=45) -> bool          # create, or bring the 
 store.nearest(space, vector, k, where) -> list[tuple[str, float]]
 ```
 
-- **`nearest`** is exact, best first, equal scores in id order, the score raw cosine in [-1, 1] (MongoDB's
-  (1 + cos) / 2 becomes 2s - 1). Which of several records tied at the k-th score are returned is the database's
-  (MongoDB picks among them itself, found by the one-off below); nothing in the core depends on which of identical
-  memories it gets. `where` maps a declared field to a value or a list (any of them), or a tuple of
+- **`nearest`** returns k records best first, the score raw cosine in [-1, 1] (MongoDB's (1 + cos) / 2 becomes
+  2s - 1). Step 1a keeps her search as it is: approximate (MongoDB looks at 8 candidates per result, retrieval's 96
+  and 192 before), equal scores in MongoDB's order. Exact search, the design's contract, is step 1b, its own change
+  (the owner, 2026-10-28: "Having different result from interface change is real concerning"; split, Claude's
+  recommendation). Under exact search, equal scores come in id order, and which of several records tied at the k-th
+  score are returned is the database's (found by the integration test); nothing in the core depends on which of
+  identical memories it gets. `where` maps a declared field to a value or a list (any of them), or a tuple of
   declared fields to a list of value tuples (any of those combinations); every entry holds; an empty any-of matches
   nothing. It refuses an undeclared field, a wrong dimension or a zero vector, and `k` outside 1 to 100.
 - **Written with the record.** The adapter keeps a record's vector and filter fields in the record's own write:
@@ -144,7 +147,7 @@ store.nearest(space, vector, k, where) -> list[tuple[str, float]]
 - **Left out of the first design:** `put` and `remove` (the record's write does it); the model in the space (the core
   already keeps models apart with its filter field `embedding_revision`); the combined field `scope_epoch` (a tuple
   key instead, so 134,016 records need no new field).
-- **Kept:** exact search as the contract, raw cosine, any-of, eventual visibility, and the list of what is not in the
+- **Kept:** exact search as the contract (from step 1b), raw cosine, any-of, eventual visibility, and the list of what is not in the
   interface.
 - **The core's own scale.** Her `memory.coverage_floor` is a persona setting from 0 to 1 that read MongoDB's score; so
   that it keeps its meaning, retrieval compares it with (1 + cosine) / 2.
@@ -282,7 +285,9 @@ module is done when it names no collection method.
 
 ### Build order
 
-1. Vector search through the store (built).
+1. Vector search through the store, in two changes: 1a the interface with her search unchanged (built); 1b exact
+   search (not built), landed apart from 1a, after a reading on real phrases of hers and her judgement of what
+   changes.
 2. The record interface from the core's own operations, the in-memory double and the contract suite; the call sites
    move to it module by module behind the MongoDB adapter, nothing changing for her between steps.
 3. The MongoDB adapter leaves the core into its own package, loaded by configuration as the channel packages are.
@@ -303,15 +308,18 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
 
 ## Built
 
-- Step 1 (2026-10-28, not installed): `Space`, `Store.ensure_vectors` and `Store.nearest` (`src/asuna/state.py`);
-  `retrieval.py` asks the store for both of its searches (`MEMORY`, exact, 24 for `search` and 12 for
-  `own_thoughts` as before) and imports nothing of MongoDB. Its evidence records `exact` instead of `numCandidates`.
-  Checked on her real memory, read only: for 30 queries of both kinds `nearest` returned the same records at the same
-  scores as the pipeline retrieval ran before, made exact; its refusals and its empty any-of hold. Its integration
-  test, `integration/test_mongo_vectors.py` (18 cases, 9 s, a throwaway database of 301 synthetic records): the
-  index made and brought up to the space's fields, `nearest` equal to a brute-force cosine for value, list, pair and
-  combined filters at k 1, 12 and 24, ties, the refusals. It found that MongoDB picks among records tied at the k-th
-  score itself; the contract now says so.
+- Step 1a (2026-10-28, not installed): `Space`, `Store.ensure_vectors` and `Store.nearest` (`src/asuna/state.py`);
+  `retrieval.py` asks the store for both of its searches (`MEMORY`, 24 for `search` and 12 for `own_thoughts` as
+  before) and imports nothing of MongoDB. The search stays what it was: approximate, `CANDIDATES_PER_RESULT` 8 (96
+  and 192 as before), MongoDB's order. Checked on her real memory, read only: for 30 queries of both kinds `nearest`
+  returned the same records in the same order at the same scores as the pipeline retrieval ran before; and for 40
+  queries the whole search (vector and lexical fused, six selected) gave the same six and the same 24 vector
+  candidates as the old code, every time (the old code run before and after, so her memory did not drift between).
+  Its integration test, `integration/test_mongo_vectors.py` (18 cases, 7 s, a throwaway database of 301 synthetic
+  records): the index made and brought up to the space's fields; `nearest` gives k records, each matching the filter
+  and scored with its own cosine, best first, for value, list, pair and combined filters at k 1, 12 and 24; identical
+  vectors; the refusals. Built first as exact (commits up to `774550b2d849`), then turned back to today's search
+  for the split; the measurements above are of that exact version, the reading for step 1b.
   On her database `ensure_vectors` runs where `ensure_index` ran before (the worker's memory indexer, `asuna`'s index
   command): her index already has the space's six filter fields, so it only lists the index; it changes an index only
   when a space's fields differ from it. Before a change of the filter fields reaches her database, she is told

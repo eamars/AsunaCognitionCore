@@ -186,7 +186,7 @@ The worker's MongoDB store: every write goes through `Store.put` with an expecte
   - `put`
   - `recover_commits`
   - `ensure_vectors` — Create the space's index, or bring an existing one's filter fields up to the space's (the old one keeps serving meanwhile); True once it can be queried, False if it cannot yet after `timeout` seconds.
-  - `nearest` — The k records nearest to `vector` among those matching `where`, best first, as (id, cosine similarity in [-1, 1]); exact, never approximate.
+  - `nearest` — The k records nearest to `vector` among those matching `where`, best first, as (id, cosine similarity in [-1, 1]).
   - `get`
   - `authorize`
   - `identity`

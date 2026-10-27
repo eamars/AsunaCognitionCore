@@ -86,21 +86,21 @@ def test_the_index_is_brought_up_to_the_space(world):
 
 @pytest.mark.parametrize('label,where,keep', CASES, ids=[c[0] for c in CASES])
 @pytest.mark.parametrize('k', (1, 12, 24))
-def test_nearest_is_exact_cosine(world, label, where, keep, k):
+def test_nearest_meets_the_interface(world, label, where, keep, k):
     store, rows, queries = world
     for q in queries:
-        got, everything = store.nearest(SPACE, q, k, where), brute(rows, q, keep)
-        want = everything[:k]
-        assert len(got) == len(want) and all(abs(a - b) < 1e-4 for (_, a), (_, b) in zip(got, want))
-        last = want[-1][1]
-        tied = {i for i, s in everything if abs(s - last) < 1e-4}
-        # Above the k-th score the same records in id order; at it, any of the records tied there.
-        assert all(g == w if s > last + 1e-4 else g in tied for (g, _), (w, s) in zip(got, want))
+        got, everything = store.nearest(SPACE, q, k, where), dict(brute(rows, q, keep))
+        # k results (the search is approximate: which ones is MongoDB's), each matching the filter, each scored with
+        # its own cosine, best first.
+        assert len(got) == min(k, len(everything))
+        assert all(i in everything and abs(s - everything[i]) < 1e-4 for i, s in got)
+        assert all(a >= b - 1e-9 for (_, a), (_, b) in zip(got, got[1:]))
 
 
-def test_ties_come_in_id_order(world):
+def test_identical_vectors_both_come_with_score_one(world):
     store, rows, _ = world
-    assert [i for i, _ in store.nearest(SPACE, rows[10]['embedding'], 2, {})] == ['u010', 'u999']
+    got = store.nearest(SPACE, rows[10]['embedding'], 2, {})
+    assert {i for i, _ in got} == {'u010', 'u999'} and all(abs(s - 1) < 1e-4 for _, s in got)
 
 
 def test_empty_any_of_matches_nothing_and_bad_queries_are_refused(world):

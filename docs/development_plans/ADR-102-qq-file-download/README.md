@@ -1,8 +1,7 @@
 # ADR-102: Files people send her
 
-Status: design drafted 2026-10-27, at the owner's word ("Go ahead with your research, draft the full ADR and forward
-to Xiaoman for sign off"). Not signed; nothing built. The build starts after ADR-101 is closed (installed, its
-follow-up merged). First in the owner's order (102, 103, 104).
+Status: design drafted 2026-10-27 at the owner's word, with Xiaoman for review; nothing built. The build starts after
+ADR-101 is closed (installed, its follow-up merged). First in the owner's order (102, 103, 104).
 
 ## Why
 
@@ -94,9 +93,20 @@ file is safe or unsafe; that waits for the bytes.
 Her role tools (说话的那一半) and the action brain's task tools both get `received_file`, with an `op`:
 
 - `read` (`ref`, optional `page`, optional `find`): the first `read` fetches the file (section 3); every `read`
-  returns one page. A page is up to 200 lines and 6,000 characters, whichever comes first; a line longer than a page
-  is cut into pages by characters. `find` returns the pages where a word appears (at most 5). The answer says which
-  page this is, how many there are and how many characters the file has, so she decides whether to read on.
+  returns one page, `page` any page directly.
+  - **Counted on the decoded text, never on bytes.** A character is one Unicode code point of the decoded text (a
+    Chinese character is one, as `a` is). A line ends at `\r\n`, `\n` or `\r` and nowhere else (not at the other
+    breaks Python's `splitlines` knows); the break belongs to its line. A tab is one character, not expanded. A file
+    whose last line has no break still has that line.
+  - **A page** is up to 200 lines and 6,000 characters, whichever comes first; a line longer than 6,000 characters is
+    cut into pages at character boundaries, and the answer says the line goes on.
+  - **`find`** (a word, matched as written, case-insensitive for Latin letters): the total count of matches and the
+    first 5 pages that hold one, each with the line number and the matched line (cut to 200 characters). It is not an
+    extra: a full 1 MiB of ASCII text is at least 175 pages (1 MiB of Chinese, at least 58; more when lines are short
+    and the 200-line limit comes first), too many to page through, so
+    `find` and the direct `page` are how she gets to a place in a large file.
+  - The answer says which page this is, how many pages and characters the file has, so she decides whether to read
+    on.
 - `keep` (`ref`, `why`): keeps it (section 5).
 - `let_go` (`ref`): ends a keep; the file then has its 3 days from that moment.
 - `kept`: what she keeps, newest first, with sender, size and when.
@@ -163,10 +173,17 @@ types one way.
 
 ### 6. The fence
 
-Files take the fence pictures have (decision 5), the same functions, not a copy: a ref is found in this
-conversation and its read-only linked scenes (`vision.readable_image_scenes`); at home it is found in any of her
-conversations (`attachment_by_ref`'s home reach); a ref from home is not found from outside. The task binds the
-scope; no argument widens it.
+Files take the fence pictures have (decision 5): who may read, from where. Only the fence; the numbers are files'
+own (below). The same functions, not a copy: a ref is found in this conversation and its read-only linked scenes
+(`vision.readable_image_scenes`); at home it is found in any of her conversations (`attachment_by_ref`'s home reach);
+a ref from home is not found from outside. The task binds the scope; no argument widens it.
+
+| | Pictures today | Received files |
+|---|---|---|
+| Fetched at most | 8 MiB (a video 32 MiB, as a contact sheet) | 1 MiB |
+| A ref is recognized for | 7 days (`REF_DAYS`) | 7 days, the same constant |
+| Fetched bytes kept | 7 days (`PULLED_DAYS`) | 3 days, unless she keeps it |
+| Over the cap | a fetch stops at the cap (`IMAGE_TOO_LARGE`); a video declared over 32 MiB is not fetched | not fetched when declared over; a fetch stops at the first byte over |
 
 ### 7. The action brain's copy
 

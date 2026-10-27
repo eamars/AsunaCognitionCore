@@ -174,8 +174,9 @@ types one way.
   switch on its own row: what stays is either a record by its source or named by another row (her shelf, the pool,
   a message), and `cutoff` knows three lives. `received-file:` gets a cycle of its own, `RECEIVED`: bytes removed
   **3 days** after the fetch (or after `let_go`), and a row with `kept_at` is not removed. The 3 days count from the
-  row's `days_from`, which every fetch and every `let_go` sets: the same file fetched again, stored once, has its 3
-  days from that fetch. A row whose time cannot be read (`days_from` and `created_at` missing, or not a time) is kept and counted, never read as expired (the ADR-101 tail makes this
+  row's `days_from`, which every fetch and every `let_go` sets; a read does not (a fetch is a download from the
+  platform). The same file posted again and fetched again, stored once, has its 3 days from that fetch: each fetch
+  starts them again, so 3 days is the time after the last fetch, not a longest life. A row whose time cannot be read (`days_from` and `created_at` missing, or not a time) is kept and counted, never read as expired (the ADR-101 tail makes this
   the rule for every cycle: 65 real rows lack `created_at` today, all records). A prefix missing from `POLICY` reads
   as a record and would be kept for good without a word, so a test pins that a received file is gone after 3 days.
 - **After the bytes, before the ref ends** (days 4 to 7): the row stays (`storage` `removed`) and a `read` fetches

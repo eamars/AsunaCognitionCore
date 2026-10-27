@@ -69,9 +69,11 @@ def stash(store, data, scope, *, message_id, index, name, sender, message_at=Non
     return stored
 
 
-def mark_read(store, artifact_id, moment=None):
-    """A page of it was read: the time a quota refusal sorts by."""
-    store.db.artifacts.update_one({'_id': artifact_id, 'kind': KIND}, {'$set': {'last_read_at': moment or now()}})
+def mark_read(store, artifact_id, scopes, moment=None):
+    """A page of it was read: the time a quota refusal sorts by, written only inside the fence like everything here
+    (her review of db192bdff79e: else another conversation's id could reorder whom a refusal names)."""
+    store.db.artifacts.update_one({'_id': artifact_id, 'kind': KIND, 'state': 'DONE',
+                                   'scope_key': {'$in': sorted(scopes)}}, {'$set': {'last_read_at': moment or now()}})
 
 
 def _row(store, artifact_id, scopes):
@@ -181,7 +183,8 @@ def let_go(store, artifact_id, scopes, scene_id=None, moment=None):
 
 def kept(store, scopes, scene_id=None):
     """What she keeps that this call may reach, newest first; an erased one carries ADR-105's sentence, and the files
-    kept in other conversations are counted, never named."""
+    kept in other conversations are counted, never named, with the quota's ruler (kept files whose bytes are stored),
+    so the two counts on one screen add up (her review of db192bdff79e)."""
     scopes = set(scopes)
     rows = sorted(store.db.artifacts.find({'kind': KIND, 'kept_at': {'$exists': True}}),
                   key=lambda r: _when(r.get('kept_at')), reverse=True)
@@ -191,8 +194,9 @@ def kept(store, scopes, scene_id=None):
         if erased(row):
             entry['erased'] = erased_words(store, row, scene_id)
         entries.append(entry)
-    out = {'kept': entries, 'quota': _quota_words(_kept_rows(store))}
-    elsewhere = sum(1 for r in rows if r.get('scope_key') not in scopes)
+    stored = _kept_rows(store)
+    out = {'kept': entries, 'quota': _quota_words(stored)}
+    elsewhere = sum(1 for r in stored if r.get('scope_key') not in scopes)
     if elsewhere:
         out['elsewhere'] = OTHERS_ELSEWHERE % elsewhere
     return out

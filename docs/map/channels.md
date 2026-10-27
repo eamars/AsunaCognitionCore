@@ -325,10 +325,10 @@ Files people send her (ADR-102): what she fetched is stored, and she keeps it or
 
 - def `source_of`
 - def `stash` — Store fetched bytes (already judged as text) in the conversation's scope; the same bytes there again are the row already stored, and their 3 days start again from this fetch.
-- def `mark_read` — A page of it was read: the time a quota refusal sorts by.
+- def `mark_read` — A page of it was read: the time a quota refusal sorts by, written only inside the fence like everything here (her review of db192bdff79e: else another conversation's id could reorder whom a refusal names).
 - def `keep` — Keep a file: its bytes are not removed until she lets it go; refused over the quota, in words she can act on.
 - def `let_go` — End a keep: the bytes have their 3 days from now, and the ref is found by its message again, as long as that is found.
-- def `kept` — What she keeps that this call may reach, newest first; an erased one carries ADR-105's sentence, and the files kept in other conversations are counted, never named.
+- def `kept` — What she keeps that this call may reach, newest first; an erased one carries ADR-105's sentence, and the files kept in other conversations are counted, never named, with the quota's ruler (kept files whose bytes are stored), so the two coun
 
 ## `animated`
 

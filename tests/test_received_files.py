@@ -191,3 +191,26 @@ def test_an_erased_kept_file_is_listed_with_the_sentence_until_she_lets_it_go(st
         rf.keep(store, file, 'again', reach)
     assert rf.let_go(store, file, reach, here['_id'])['note'] == sentence + rf.LET_GO_ERASED
     assert rf.kept(store, reach, here['_id'])['kept'] == []
+
+
+def test_marking_a_read_stays_inside_the_fence(store):
+    """The time a quota refusal sorts by is written only inside the fence: another conversation's id leaves it as it
+    was (Xiaoman's review of db192bdff79e)."""
+    here, there = scopes(store)
+    theirs = a_file(store, there['scope_key'], 1)
+    rf.mark_read(store, theirs, [here['scope_key']], ago(days=1))
+    assert 'last_read_at' not in row(store, theirs)
+    rf.mark_read(store, theirs, [there['scope_key']], ago(days=1))
+    assert row(store, theirs)['last_read_at']
+
+
+def test_kept_counts_what_is_elsewhere_with_the_quota_ruler(store):
+    """The two counts on one screen come from one set: a kept file erased elsewhere counts in neither."""
+    here, there = scopes(store)
+    gone, stays = a_file(store, there['scope_key'], 1), a_file(store, there['scope_key'], 2)
+    mine = a_file(store, here['scope_key'], 3)
+    for file, scope in ((gone, there), (stays, there), (mine, here)):
+        rf.keep(store, file, '', [scope['scope_key']])
+    store.db.artifacts.update_one({'_id': gone}, {'$set': {'storage': 'erased'}, '$unset': {'gridfs_id': ''}})
+    listing = rf.kept(store, [here['scope_key']], here['_id'])
+    assert listing['quota'].startswith('留着 2 个') and listing['elsewhere'] == rf.OTHERS_ELSEWHERE % 1

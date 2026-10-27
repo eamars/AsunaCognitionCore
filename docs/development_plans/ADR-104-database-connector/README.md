@@ -301,6 +301,9 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
   index made and brought up to the space's fields, `nearest` equal to a brute-force cosine for value, list, pair and
   combined filters at k 1, 12 and 24, ties, the refusals. It found that MongoDB picks among records tied at the k-th
   score itself; the contract now says so.
+  On her database `ensure_vectors` runs where `ensure_index` ran before (the worker's memory indexer, `asuna`'s index
+  command): her index already has the space's six filter fields, so it only lists the index; it changes an index only
+  when a space's fields differ from it.
 
 ## Open questions (to discuss with the owner first) (as recorded before the decisions)
 

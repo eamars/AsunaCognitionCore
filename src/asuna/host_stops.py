@@ -32,6 +32,7 @@ CAUSE_WORDS = {'start_failed': '启动时出错（%s），程序隔一阵自己�
                'unknown': '为什么停的没记下来'}
 COUNT = '过去一天里停了 %d 次'
 NOT_LISTED = '更早的 %d 次没有列出'
+UNREADABLE = '其中 %d 次的记录读坏了，说不清是什么、在什么时候'
 INSIDE = '这段时间里宿主也停过 %d 次'
 SINCE_UNKNOWN = '这一段从什么时候开始不知道（记录读坏了），重新起来是 %s'
 # Looks in a group the relevance gate could not decide (her ask, 2026-10-14): the program's failure, never her 不理.
@@ -221,7 +222,7 @@ EARLIER = '再往前一次'           # an older stop of the list: 「上次」 
 
 
 def stop_words(row, zone, newest=True):
-    """One outage: what it was and when, in words. Only the newest of a list is 「上次」; an older one is 「再往前一次」."""
+    """One outage in words, what and when; only the newest of a list is 「上次」, an older one 「再往前一次」."""
     from .schedule_rules import line_stamp
     back = line_stamp(zone, row['back_at'])
     if row['how'] == 'worker_down':
@@ -252,7 +253,15 @@ def block(store, zone, moment=None, persona=None, rows=None):
     rows = listed(store, moment) if rows is None else rows
     out = {}
     if rows:
-        out = {'count': COUNT % len(rows), 'stops': [stop_words(row, zone, i == 0) for i, row in enumerate(rows[:LISTED])], 'note': NOTE}
+        stops, unreadable = [], 0
+        for i, row in enumerate(rows[:LISTED]):
+            try:
+                stops.append(stop_words(row, zone, i == 0))
+            except Exception:           # noqa: BLE001 one broken row is counted, never takes her home turn with it
+                unreadable += 1
+        out = {'count': COUNT % len(rows), 'stops': stops, 'note': NOTE}
+        if unreadable:
+            out['unreadable'] = UNREADABLE % unreadable
         if len(rows) > LISTED:
             out['not_listed'] = NOT_LISTED % (len(rows) - LISTED)
     missed = missed_looks(store, persona, since)

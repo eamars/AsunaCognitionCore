@@ -62,8 +62,8 @@ The Host plugin (JS) is the only side that knows why a worker went away, so it k
   fails, the file stays and the next completed start records it.
 - **One outage, one row.** The worker reads the open span from the file at its start (see "Built": not passed with
   `initialize`). While a span is open, a lease
-  left behind is part of that same outage, never a second one. It may be left by the worker's own exit (today read as
-  an outside kill, 「宿主上次是被外部终止的」), or by a Host killed or crashed during a start that had not completed.
+  left behind is part of that same outage, never a second one. It may be left by the worker's own exit (before this
+  ADR read as an outside kill and said as one), or by a Host killed or crashed during a start that had not completed.
   No `killed` or `crashed` row is written for it. The span counts it (`inside`, in the file and in the row), and its words add
   「这段时间里宿主也停过 N 次」. With no span open, a lease left behind is recorded as today. **`count` counts rows**:
   each row is one outage, so a Host stop inside a worker's span is never counted again (her review).
@@ -272,3 +272,16 @@ What the build changed against the signed text (blob `5e9365951b39`), for her in
 - Docker: the container keeps the checkout and its data folder on a volume and starts through the same launcher, so
   `worker-down.json` survives a recreated container. Nothing in this change is platform-specific (`path.join` and
   plain file reads and writes).
+
+### The tail (after the install of eef8564b)
+
+Two more failures of the failure path, found in review (the second while designing ADR-102, Xiaoman's choice of a
+code fix over a softer sentence):
+
+| When | Before | Now |
+|---|---|---|
+| A listed outage whose record cannot be read (its `back_at` missing) | `stop_words` raised out of her home context, so that home turn failed, not only her list | the row is counted in `unreadable` (「其中 N 次的记录读坏了，说不清是什么、在什么时候」), the others are still said, the count stays true, 「上次」 stays the newest's |
+| One artifact row the media sweep cannot handle (a source it cannot read, a size that is not a number) | the sweep raised there, every day at the same row, so the rows after it were never swept and nothing she or the owner reads said so | the row is counted in `failed`, the rows after it still go, and `media.swept` is recorded when anything failed; a size that is not a number counts as 0 bytes |
+
+`stop_words`'s first sentence now carries 「上次」/「再往前一次」, since the project map shows a docstring's first
+sentence only.

@@ -80,3 +80,27 @@ def test_the_sweep_drops_old_pulled_copies_and_unlisted_candidates_and_keeps_the
     assert old_copy not in left and loose not in left
     assert {new_copy, sent_copy, listed, kept, made} <= left
     assert store.db['artifact_blobs.files'].count_documents({'filename': {'$in': [old_copy, loose]}}) == 0
+
+
+def test_one_bad_row_is_counted_and_the_rows_after_it_still_go(store, monkeypatch):
+    """A row the sweep cannot handle is counted as failed; it never stops the rows after it, so expired copies do not
+    pile up behind one bad row (Xiaoman's review of ADR-102, 10-27). A size that is not a number is reported as 0."""
+    blobs = BlobStore(store)
+    scope = store.db.scenes.find_one()['scope_key']
+    put = lambda source: blobs.put(b'\x89PNG' + source.encode(), scope, 'image', source_ids=[source])['artifact_id']
+    first, bad, last = put('in-ep-1'), put('in-ep-2'), put('in-ep-3')
+    long_ago = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+    store.db.artifacts.update_many({}, {'$set': {'created_at': long_ago}})
+    store.db.artifacts.update_one({'_id': last}, {'$set': {'size': 'many'}})
+    real = media_life.life
+
+    def life(row):
+        if row['_id'] == bad:
+            raise ValueError('a row the sweep cannot read')
+        return real(row)
+
+    monkeypatch.setattr(media_life, 'life', life)
+    removed = media_life.sweep(store)
+    left = {row['_id'] for row in store.db.artifacts.find()}
+    assert removed['failed'] == 1 and removed['pulled'] == 2
+    assert bad in left and first not in left and last not in left

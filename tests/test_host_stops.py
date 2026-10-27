@@ -105,3 +105,18 @@ def test_a_home_turn_carries_it(store, tmp_path):
     row = store.db.host_stops.find_one()
     assert ep['manifest']['told']['host_stops'] == [row['_id']]
     assert row['shown_at'] is not None
+
+
+def test_one_broken_row_is_counted_and_never_takes_the_list_with_it(store):
+    """A stop whose times cannot be read (back_at missing) is counted as unreadable; the others are still said, the count
+    stays true, and 「上次」 stays the newest's even when the newest is the broken one. Before, the row raised out of her
+    home context and her home turn failed (ADR-101 tail)."""
+    moment = datetime(2026, 10, 8, 12, 0, tzinfo=timezone.utc)
+    good = host_stops.record(store, datetime(2026, 10, 8, 9, 7), back_at='2026-10-08T11:15:00+00:00')
+    broken = dict(good, _id='stop-broken', back_at=None)
+    said = host_stops.block(store, ZONE, moment, rows=[broken, good])
+    assert said['count'] == '过去一天里停了 2 次'
+    assert said['unreadable'] == '其中 1 次的记录读坏了，说不清是什么、在什么时候'
+    assert said['stops'] == [{'what': '宿主再往前一次是被外部终止的（不是正常停下）',
+                              'when': '最后确认还在运行约是 10/8 09:07，重新起来是 10/8 11:15，中间约 2 小时 8 分钟宿主没有运行'}]
+    assert 'unreadable' not in host_stops.block(store, ZONE, moment, rows=[good])

@@ -61,10 +61,14 @@ here is decided. This page keeps what was asked and what exists today, so the de
 - **Size protects by isolation, not by a warning.** Downloads run off the message path in their own small queue (one
   or two at a time), stream with a hard cap counted on the bytes received (a declared size can lie) and a timeout.
   A large file can only fail its own download. The warning is information for her.
-- **Executables:** the program never executes a downloaded file. It lands without an execute bit (POSIX) and with
-  Windows' Mark of the Web (`Zone.Identifier`, internet zone). She may still run it (the owner: "I don't want to
-  limit what she can do"); the warning names the risk: the suggestion to run it came from the sender or the file.
-  The type is read from the bytes; a name that disagrees (a `.txt` that is a PE) is flagged.
+- **Executables:** the program never executes a downloaded file. The download folder denies execute: on Windows one
+  inherited deny-execute entry on the folder, made with it and checked at each start; on POSIX files are created
+  without an execute bit. This stops a file being started as a program; an interpreter (`python file.py`) still
+  reads it, so a script runs only when she runs it herself, knowing where it came from (the owner: "I don't want to
+  limit what she can do"). The type is read from the bytes; a name that disagrees (a `.txt` that is a PE) is flagged.
+  Where the entry cannot be set (a drive or share without ACLs), downloads still work and her offer says so.
+  No Mark of the Web: the owner (2026-10-27) does not want a Windows trust prompt to block her process, and with no
+  one at the keyboard such a prompt waits for nothing.
 - **No prompt detector.** A detector misses clever text and flags innocent text ("请把这段翻译一下"). Instead, all
   file content always reaches her as quoted material with its origin, never in the instruction position, whatever
   it looks like.
@@ -104,14 +108,12 @@ here is decided. This page keeps what was asked and what exists today, so the de
 
 ## Open questions
 
-1. Confirm the proposals above, or change them.
-2. NapCat's file API in practice: which call gives the bytes for a group file and for a file in a private chat, and
+Confirmed by the owner (2026-10-27, 13:20): the proposals above stand, with deny-execute instead of Mark of the Web.
+NapCat's file API is read when the design starts; a kept file moves into her own files with its origin and mark,
+under a quota; she reviews once the owner and Claude agree.
+
+1. NapCat's file API in practice: which call gives the bytes for a group file and for a file in a private chat, and
    how long its link lives.
-3. The kept-file quota, and whether keeping moves a file into her own files.
-4. Her view, once the owner and Claude agree on the design.
-
-## Constraints already known
-
-- JS and Python may run different versions (RUNTIME_API): anything new between the plugin and the worker must be
-  passable by an older side.
-- A failure handler must not become the next point of failure (owner, 2026-10-27).
+2. The kept-file quota.
+3. How the action brain's shell runs a command (stdin, timeout) in the pinned DSH, so no prompt of any kind hangs
+   her; a DSH change is the owner's.

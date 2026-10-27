@@ -65,6 +65,29 @@ def find(store, persona, name):
     return store.db.stickers.find_one({'persona': persona, 'name': name})
 
 
+# A sticker she drew keeps its picture in the conversation she drew it in, so an erasure of that conversation deletes
+# it (ADR-105); the shelf row stays, as the only record that the drawing existed, until she drops it herself.
+GONE_WORDS = '这几张画不在了：名字还在架子上，放不放下由你。'
+
+
+def erased_pictures(store, rows):
+    """{artifact_id: artifacts row} of the shelf pictures a privacy erasure deleted."""
+    ids = [row['artifact_id'] for row in rows if row and row.get('artifact_id')]
+    if not ids:
+        return {}
+    return {item['_id']: item for item in store.db.artifacts.find({'_id': {'$in': ids}, 'storage': 'erased'})}
+
+
+def refuse_erased(store, persona, name, scene_id):
+    """A sticker named in speak whose picture an erasure deleted: ADR-105's sentence in that call, so it is never
+    accepted and then failed when the adapter asks for its bytes."""
+    from . import blobs
+    row = find(store, persona, name)
+    gone = erased_pictures(store, [row])
+    if gone:
+        raise Denied('ARTIFACT_ERASED: ' + blobs.erased_words(store, gone[row['artifact_id']], scene_id))
+
+
 def _hours(moment, when):
     try:
         return (moment - datetime.fromisoformat(when)).total_seconds() / 3600
@@ -115,8 +138,12 @@ def keep(store, blobs, ep, persona, args, config):
     doc = {'persona': persona, 'name': name, 'when': when, 'kept_at': now(), 'kept_in': ep['scene_id'],
            'sent': 0, 'last_sent_at': None}
     if ARTIFACT_REF.fullmatch(ref):
-        row = store.db.artifacts.find_one({'_id': ref, 'kind': 'image', 'state': 'DONE', 'storage': 'gridfs'})
+        from .blobs import refuse_erased
+        row = store.db.artifacts.find_one({'_id': ref, 'kind': 'image', 'state': 'DONE'})
         if not row or not produced(row):
+            raise Denied('STICKER_NOT_YOURS: 「%s」不是你自己画好的图' % ref)
+        refuse_erased(store, row, ep['scene_id'])           # hers, erased with the conversation it was made in
+        if row.get('storage') != 'gridfs':
             raise Denied('STICKER_NOT_YOURS: 「%s」不是你自己画好的图' % ref)
         doc.update(origin='own', kind='custom', artifact_id=ref, sha256=row['sha256'], size=row['size'],
                    media_type=row.get('media_type'), identity='sha:' + row['sha256'],
@@ -189,16 +216,21 @@ def sends(scene):
 def block(store, persona, scene, *, at_home=False):
     """The shelf in full (names, usage notes, how often sent): in the turns that tidy it at home, and for `sticker` op
     shelf anywhere."""
+    from . import blobs
     rows = shelf(store, persona)
     if at_home and not rows:
         return None
+    gone = erased_pictures(store, rows)
     # At home, where she tidies it, a sticker with a picture carries its id so she can look at it again (her ask
-    # 2026-10-10: animated ones were named from their first frame only).
+    # 2026-10-10: animated ones were named from their first frame only). A picture an erasure deleted says so in a
+    # field of its own; the name stays as she wrote it, since she copies it to send, drop or rename.
     return {'items': [{'sticker': row['name'], 'when': row['when'], 'used': _tier(USE_WORDS, row.get('sent') or 0),
                        **({'from': ORIGIN_WORDS['own']} if row.get('origin') == 'own' else {}),
-                       **({'ref': row['artifact_id']} if at_home and row.get('artifact_id') else {})} for row in rows],
+                       **({'picture': blobs.erased_words(store, gone[row['artifact_id']], (scene or {}).get('_id'))}
+                          if row.get('artifact_id') in gone else
+                          {'ref': row['artifact_id']} if at_home and row.get('artifact_id') else {})} for row in rows],
             'shelf': '%d 个，%s' % (len(rows), fullness(len(rows))),
-            'note': HOME_NOTE if at_home else STICKERS_NOTE}
+            'note': HOME_NOTE if at_home else STICKERS_NOTE, **({'gone': GONE_WORDS} if gone else {})}
 
 
 NAMES_NOTE = '架子上的名字（你起的）。用法、样子和 ref 在整理架子的回合里列全，别的时候用 sticker 的 shelf 看。'
@@ -317,8 +349,13 @@ def review_block(store, persona, moment):
     full = len(rows) >= STICKER_SHELF * 0.8
     if since is not None and since < REVIEW_EVERY_DAYS * 24 and not full:
         return None
-    idle = []
+    from . import blobs
+    gone = erased_pictures(store, rows)
+    idle = [(-1, 0, row, blobs.erased_words(store, gone[row['artifact_id']])) for row in rows
+            if row.get('artifact_id') in gone]          # first to weigh; dropping them stays hers
     for row in rows:
+        if row.get('artifact_id') in gone:
+            continue
         kept = _hours(moment, row.get('kept_at')) or 0
         last_sent = _hours(moment, row.get('last_sent_at'))
         if not row.get('sent') and kept >= UNUSED_DAYS * 24:
@@ -335,7 +372,7 @@ def review_block(store, persona, moment):
     store.audit('stickers:' + persona, 'sticker.review_offered', {'listed': len(idle[:STICKER_REVIEW])})
     return {'shelf': '%d 个，%s' % (len(rows), fullness(len(rows))),
             'items': [{'sticker': row['name'], 'when': row['when'], 'why': why} for _, _, row, why in idle[:STICKER_REVIEW]],
-            'note': REVIEW_NOTE}
+            'note': REVIEW_NOTE, **({'gone': GONE_WORDS} if gone else {})}
 
 
 # ── the candidate pool (owner 2026-10-06) ───────────────────────────

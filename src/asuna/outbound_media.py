@@ -510,17 +510,8 @@ def offer(store, config, scene, session_class, person_id=None, *, limit=MAX_ITEM
     return {'items': items, 'note': note}
 
 
-def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=False, here=None):
-    """程序接受一张图准备随这条消息发出去：读一次字节、认魔数、按行内 sha 复核。
-
-    ``scope_keys`` 是程序算好的可引用 scope 列表（本场景 + 同一主人的另一个 owner_private
-    场景）；artifact 的 scope 不在列表里就是 ATTACHMENT_SCOPE_DENIED。返回行上要写的元数据；
-    任何一条不成立都抛 Denied（调用方逐条记进 rejections）。
-    """
-    scopes = [scope_keys] if isinstance(scope_keys, str) else [item for item in (scope_keys or ()) if item]
-    item = store.db.artifacts.find_one({'_id': artifact_id})
-    if not item or item.get('state') != 'DONE' or item.get('storage') != 'gridfs':
-        raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
+def _fence(item, scopes, produced_only, here):
+    """Whether a picture row may go out with this message; Denied with the reason when not."""
     back_here = here is not None and returns_to(item) == here        # an edit of a picture that came from here
     if produced_only:
         if not produced(item) and not back_here:
@@ -529,6 +520,41 @@ def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=Fals
         raise Denied('ATTACHMENT_SCOPE_DENIED')             # the owner's chat: its private pictures, and hers from anywhere
     if item.get('kind') != ATTACHMENT_KIND:
         raise Denied('ATTACHMENT_NOT_AN_IMAGE')
+
+
+def _scopes(scope_keys):
+    return [scope_keys] if isinstance(scope_keys, str) else [item for item in (scope_keys or ()) if item]
+
+
+def refuse_erased_named(store, artifact_id, scope_keys, *, produced_only=False, here=None, scene_id=None):
+    """A picture she names that this turn did not offer: if an erasure deleted it and it is one she could otherwise
+    send here, ADR-105's sentence, in the call that names it; anything else is left to the caller's own refusal."""
+    from .blobs import erased, refuse_erased
+    item = store.db.artifacts.find_one({'_id': artifact_id}) if artifact_id else None
+    if not erased(item):
+        return
+    try:
+        _fence(item, _scopes(scope_keys), produced_only, here)
+    except Denied:
+        return
+    refuse_erased(store, item, scene_id)
+
+
+def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=False, here=None, scene_id=None):
+    """程序接受一张图准备随这条消息发出去：读一次字节、认魔数、按行内 sha 复核。
+
+    ``scope_keys`` 是程序算好的可引用 scope 列表（本场景 + 同一主人的另一个 owner_private
+    场景）；artifact 的 scope 不在列表里就是 ATTACHMENT_SCOPE_DENIED。返回行上要写的元数据；
+    任何一条不成立都抛 Denied（调用方逐条记进 rejections）。
+    """
+    from .blobs import refuse_erased
+    item = store.db.artifacts.find_one({'_id': artifact_id})
+    if not item or item.get('state') != 'DONE':
+        raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
+    _fence(item, _scopes(scope_keys), produced_only, here)
+    refuse_erased(store, item, scene_id)                    # one she may send, erased: said in this call (ADR-105)
+    if item.get('storage') != 'gridfs':
+        raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
     size = item.get('size')
     if not isinstance(size, int) or isinstance(size, bool) or not 0 < size <= MAX_ATTACHMENT_BYTES:
         raise Denied('ATTACHMENT_OVER_LIMIT')
@@ -569,8 +595,9 @@ def serve(store, blobs, row, declared):
     """
     if (row or {}).get(SKIPPED_KEY):
         raise Denied('ATTACHMENT_NOT_DECLARED')       # 图没跟着这条出去，字节也不给
+    from .blobs import refuse_erased
     item = store.db.artifacts.find_one({'_id': declared['artifact_id']})
-    if not item or item.get('state') != 'DONE' or item.get('storage') != 'gridfs':
+    if not item or item.get('state') != 'DONE':
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
     if kept_sticker(store, row, item):
         pass                # a sticker on her shelf, sent as a sticker (ADR-016): any conversation that takes one
@@ -581,6 +608,9 @@ def serve(store, blobs, row, declared):
             raise Denied('ATTACHMENT_NOT_HER_OWN')
     elif item.get('scope_key') not in row_image_scopes(store, row) and not produced(item):
         raise Denied('ATTACHMENT_SCOPE_DENIED')
+    refuse_erased(store, item, (row or {}).get('scene_id'))       # erased after it was claimed (ADR-105)
+    if item.get('storage') != 'gridfs':
+        raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
     try:
         data = blobs.get(declared['artifact_id'], item['scope_key'], operator=True)   # checks the stored sha itself
     except ValueError as exc:

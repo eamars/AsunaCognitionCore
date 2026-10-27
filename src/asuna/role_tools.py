@@ -1857,6 +1857,11 @@ class RoleTools:
                     planned.append({'kind': 'text', 'text': text.strip(), 'shown': 'text'})
             elif kind == 'sticker':
                 name = str(part.get('name') or '').strip()
+                try:
+                    stickers.refuse_erased(self.store, ep['persona'], name, ep['scene_id'])
+                except Denied as exc:
+                    problems.append('第 %d 条 sticker「%s」%s' % (index, name, words(exc)))
+                    continue
                 fields = stickers.outbound(self.store, ep['persona'], '[表情包:%s]' % name) if name else None
                 if not fields:
                     problems.append('第 %d 条 sticker「%s」你没收着' % (index, name) if name else '第 %d 条 sticker 要写 name' % index)
@@ -2064,13 +2069,17 @@ class RoleTools:
         allowed, reason = outbound_media.target_allowed(self.store.config, scene, cls)
         if not allowed:
             raise Refused('发不了：%s' % ATTACH_REASONS.get(reason, reason))
+        mine_only = outbound_media.own_only(self.store.config, scene, cls)
+        scopes = [] if mine_only else outbound_media.image_scopes(self.store, self.store.config, scene, cls,
+                                                                  ep.get('person_id'))
+        here, scene_id = (scene or {}).get('scope_key'), (scene or {}).get('_id')
         offered = (ep.get('context') or {}).get('image_artifacts_from_program') or {}
         if artifact not in {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)}:
+            outbound_media.refuse_erased_named(self.store, artifact, scopes, produced_only=mine_only, here=here,
+                                               scene_id=scene_id)
             raise Refused('不在 image_artifacts_from_program 里')
-        mine_only = outbound_media.own_only(self.store.config, scene, cls)
-        return outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact,
-            [] if mine_only else outbound_media.image_scopes(self.store, self.store.config, scene, cls, ep.get('person_id')),
-            produced_only=mine_only, here=(scene or {}).get('scope_key'))
+        return outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact, scopes,
+                                              produced_only=mine_only, here=here, scene_id=scene_id)
 
     def tool_task_answer(self, ep, call_id, args):
         answer = self._toward_action(ep, self._text(args, 'answer', 20000))
@@ -2183,13 +2192,17 @@ class RoleTools:
         if not allowed:
             raise Denied('ATTACH_TARGET_NOT_ALLOWED: %s；重试也一样，这回合只说话不带图'
                          % ATTACH_REASONS.get(reason, reason))
+        mine_only = outbound_media.own_only(self.store.config, scene, cls)
+        scopes = [] if mine_only else outbound_media.image_scopes(self.store, self.store.config, scene, cls,
+                                                                  ep.get('person_id'))
+        here, scene_id = (scene or {}).get('scope_key'), (scene or {}).get('_id')
         offered = (ep.get('context') or {}).get('image_artifacts_from_program') or {}
         if artifact not in {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)}:
+            outbound_media.refuse_erased_named(self.store, artifact, scopes, produced_only=mine_only, here=here,
+                                               scene_id=scene_id)
             raise Denied('ATTACH_ARTIFACT_NOT_IN_CONTEXT: ' + artifact)
-        mine_only = outbound_media.own_only(self.store.config, scene, cls)
-        meta = outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact,
-            [] if mine_only else outbound_media.image_scopes(self.store, self.store.config, scene, cls, ep.get('person_id')),
-            produced_only=mine_only, here=(scene or {}).get('scope_key'))
+        meta = outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact, scopes,
+                                              produced_only=mine_only, here=here, scene_id=scene_id)
         self.coordinator._update(self._fresh(ep), attachment=dict(meta))
         return {'attached': artifact, 'note': '这张图会随你这回合要说的话一起发出去。'}, False
 

@@ -36,7 +36,10 @@ and "Built"), not installed. The record interface (step 2) is proposed, for the 
    against the MongoDB server her live data is on): "I object the idea of using the real DB test from its root.
    Perhaps add 'stop using real db for unit test' ... when the DB adapter interface is built, and the unit test stop
    at the DB adapter." Unit tests use a double of the interface, never a database server; the adapter's own tests
-   are the only ones that reach a database, and never the server a live deployment uses.
+   are the only ones that reach a database. Where (the owner, 2026-10-28, asked whether they can run on the
+   production server): on her server, in a throwaway `asuna_v2_test_*` database dropped after the run, run when the
+   adapter changes, not with every unit run. Claude's earlier "never the server a live deployment uses" was more
+   than the owner had said.
 6. **The suite is cleaned up with it** (the owner, 2026-10-27): "Fundamentally having unit tests to run for 10
    minutes is absurd, and that needed to be fixed. ... Perhaps with ADR-104 we need to start cleaning up, and
    removing unit tests serving no purposes as well. Adding unit test is NOT a good habit." Today: about 1,500 Python
@@ -138,7 +141,7 @@ store.nearest(space, vector, k, where) -> list[tuple[str, float]]
 - **The core's own scale.** Her `memory.coverage_floor` is a persona setting from 0 to 1 that read MongoDB's score; so
   that it keeps its meaning, retrieval compares it with (1 + cosine) / 2.
 - **The double and the contract suite** come with the record interface (step 2): the double is the in-memory store,
-  and the one contract suite runs against it and against the MongoDB adapter (a server that no deployment uses).
+  and the one contract suite runs against it and against the MongoDB adapter (a throwaway database on her server).
 
 ### Measured on her memory (2026-10-28 02:04, read only, numbers only)
 
@@ -228,8 +231,9 @@ syntax (four files of code in her package today), never edited for her.
 ### Tests (requirement 5)
 
 - The double is the in-memory `Records`; `mongomock` goes.
-- One contract suite runs the same cases against the double and the MongoDB adapter. The adapter's run needs a MongoDB
-  server no deployment uses, with vector search (step 1's `nearest`): open, for the owner (see below).
+- One contract suite runs the same cases against the double and the MongoDB adapter. The adapter's run uses a
+  throwaway `asuna_v2_test_*` database on her server (requirement 5), its vector index included (built and dropped
+  with it, seconds of work for the search process her retrieval shares), and runs when the adapter changes.
 - Unit tests then run on the double: no database server, no shared load on hers. Which tests stay is requirement 6,
   step 4.
 
@@ -239,20 +243,13 @@ Module by module, largest first, nothing changing for her between steps: each mo
 database read-only, the old query against the new one, as step 1 was (same rows, same order), before its commit. A
 module is done when it names no collection method.
 
-### Open, for the owner
-
-1. **A MongoDB server for the adapter's tests**, separate from her live one, with vector search (`mongot`; for example
-   the `mongodb/mongodb-atlas-local` container): it installs on this machine and takes its memory and disk, so it is
-   the owner's to allow. Without it the adapter is checked only by read-only runs on her database, and its writes by
-   her own use.
-
 ### Build order
 
 1. Vector search through the store (built).
 2. The record interface from the core's own operations, the in-memory double and the contract suite; the call sites
    move to it module by module behind the MongoDB adapter, nothing changing for her between steps.
 3. The MongoDB adapter leaves the core into its own package, loaded by configuration as the channel packages are.
-4. The suite: unit tests on the double, the adapter's tests on a server no deployment uses, and the reset
+4. The suite: unit tests on the double, the adapter's tests on a throwaway database of her server, and the reset
    (requirement 6).
 
 The package is the last step, not the first: until the core reaches the database only through the interface, there is

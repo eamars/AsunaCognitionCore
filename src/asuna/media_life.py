@@ -49,20 +49,21 @@ def named(store):
 
 def sweep(store, now=None):
     """Delete expired pulled copies and unlisted pool candidates, and the bytes of files past their days; returns
-    {'pulled': n, 'listed': n, 'files': n, 'bytes': n, 'failed': n}, `failed` the rows that could not be swept."""
+    {'pulled': n, 'listed': n, 'files': n, 'bytes': n, 'failed': n, 'unreadable': n}, `failed` the rows that could not
+    be swept, `unreadable` the rows kept because their time cannot be read (a time not known is never old)."""
     from gridfs import GridFSBucket
     from .channels import Channels
     from .outbound_files import KEEP_DAYS
     db = store.db
     bucket = GridFSBucket(db, bucket_name='artifact_blobs')
     moment = now or datetime.now(timezone.utc)
-    cutoff = {PULLED: (moment - timedelta(days=PULLED_DAYS)).isoformat(),
-              LISTED: (moment - timedelta(hours=LISTED_GRACE_HOURS)).isoformat(),
-              OFFERED: (moment - timedelta(days=KEEP_DAYS)).isoformat()}
+    cutoff = {PULLED: moment - timedelta(days=PULLED_DAYS),
+              LISTED: moment - timedelta(hours=LISTED_GRACE_HOURS),
+              OFFERED: moment - timedelta(days=KEEP_DAYS)}
     keep = named(store)
     going = set(db.messages.distinct('file.artifact_id', {'file.artifact_id': {'$exists': True},
                                                           'delivery_state': {'$in': list(Channels.PART_ON_ITS_WAY)}}))
-    removed = {PULLED: 0, LISTED: 0, 'files': 0, 'bytes': 0, 'failed': 0}
+    removed = {PULLED: 0, LISTED: 0, 'files': 0, 'bytes': 0, 'failed': 0, 'unreadable': 0}
     for row in db.artifacts.find({'storage': 'gridfs'}, {'source_ids': 1, 'created_at': 1, 'gridfs_id': 1, 'size': 1,
                                                          'last_sent_at': 1}):
         try:
@@ -76,9 +77,8 @@ def _sweep_one(db, bucket, row, moment, cutoff, keep, going, removed):
     from bson import ObjectId
     from .outbound_files import REMOVED
     cycle = life(row)
-    size = _size(row)
     if cycle == OFFERED:
-        if row['_id'] in going or str(row.get('last_sent_at') or row.get('created_at') or '') > cutoff[OFFERED]:
+        if row['_id'] in going or not _older(row.get('last_sent_at') or row.get('created_at'), cutoff[OFFERED], removed):
             return
         try:
             if row.get('gridfs_id'):
@@ -88,11 +88,11 @@ def _sweep_one(db, bucket, row, moment, cutoff, keep, going, removed):
         db.artifacts.update_one({'_id': row['_id']}, {'$set': {'storage': REMOVED, 'bytes_removed_at': moment.isoformat()},
                                                       '$unset': {'gridfs_id': ''}})
         removed['files'] += 1
-        removed['bytes'] += size
+        removed['bytes'] += _size(row)
         return
     if cycle == RECORD or row['_id'] in keep:
         return
-    if str(row.get('created_at') or '') > cutoff[cycle]:
+    if not _older(row.get('created_at'), cutoff[cycle], removed):
         return
     try:
         if row.get('gridfs_id'):
@@ -101,7 +101,30 @@ def _sweep_one(db, bucket, row, moment, cutoff, keep, going, removed):
         pass
     db.artifacts.delete_one({'_id': row['_id']})
     removed[cycle] += 1
-    removed['bytes'] += size
+    removed['bytes'] += _size(row)
+
+
+def _older(value, cutoff, removed):
+    """Whether a stored time is before the cutoff. A time that cannot be read (missing, not a time) is kept and counted
+    in `unreadable`: a time not known is never old. A stored Date and an ISO string compare as moments, not as text."""
+    moment = _moment(value)
+    if moment is None:
+        removed['unreadable'] += 1
+        return False
+    return moment < cutoff
+
+
+def _moment(value):
+    if isinstance(value, datetime):
+        moment = value
+    elif isinstance(value, str) and value:
+        try:
+            moment = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    else:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
 def _size(row):

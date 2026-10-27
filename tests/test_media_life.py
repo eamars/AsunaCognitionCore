@@ -88,10 +88,10 @@ def test_one_bad_row_is_counted_and_the_rows_after_it_still_go(store, monkeypatc
     blobs = BlobStore(store)
     scope = store.db.scenes.find_one()['scope_key']
     put = lambda source: blobs.put(b'\x89PNG' + source.encode(), scope, 'image', source_ids=[source])['artifact_id']
-    first, bad, last = put('in-ep-1'), put('in-ep-2'), put('in-ep-3')
+    first, bad, last, shelf = put('in-ep-1'), put('in-ep-2'), put('in-ep-3'), put('sticker:in-ep-k')
     long_ago = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
     store.db.artifacts.update_many({}, {'$set': {'created_at': long_ago}})
-    store.db.artifacts.update_one({'_id': last}, {'$set': {'size': 'many'}})
+    store.db.artifacts.update_many({'_id': {'$in': [last, shelf]}}, {'$set': {'size': 'many'}})
     real = media_life.life
 
     def life(row):
@@ -103,4 +103,26 @@ def test_one_bad_row_is_counted_and_the_rows_after_it_still_go(store, monkeypatc
     removed = media_life.sweep(store)
     left = {row['_id'] for row in store.db.artifacts.find()}
     assert removed['failed'] == 1 and removed['pulled'] == 2
-    assert bad in left and first not in left and last not in left
+    assert bad in left and first not in left and last not in left and shelf in left
+    assert removed['bytes'] == len(b'\x89PNGin-ep-1'), 'the size that is not a number counts 0; a kept row is not counted'
+
+
+def test_a_time_that_cannot_be_read_is_kept_and_counted_never_old(store):
+    """A row whose time is missing or not a time is kept and counted in `unreadable`: before, the missing time compared
+    as '' and fell into the deleting branch (Xiaoman's check, 10-27). A stored Date compares as a moment, not as text."""
+    blobs = BlobStore(store)
+    scope = store.db.scenes.find_one()['scope_key']
+    put = lambda source, kind='image': blobs.put(b'\x89PNG' + source.encode(), scope, kind,
+                                                 source_ids=[source])['artifact_id']
+    missing, not_a_time, old_date, new_date = put('in-ep-m'), put('in-ep-n'), put('in-ep-o'), put('in-ep-r')
+    unsent = put('task-file:t:/task/a.txt', 'file')
+    moment = datetime.now(timezone.utc)
+    store.db.artifacts.update_many({'_id': {'$in': [missing, unsent]}}, {'$unset': {'created_at': ''}})
+    store.db.artifacts.update_one({'_id': not_a_time}, {'$set': {'created_at': 'yesterday-ish'}})
+    store.db.artifacts.update_one({'_id': old_date}, {'$set': {'created_at': moment - timedelta(days=8)}})
+    store.db.artifacts.update_one({'_id': new_date}, {'$set': {'created_at': moment - timedelta(hours=1)}})
+    removed = media_life.sweep(store, moment)
+    left = {row['_id'] for row in store.db.artifacts.find()}
+    assert {missing, not_a_time, new_date} <= left and old_date not in left
+    assert store.db.artifacts.find_one({'_id': unsent})['storage'] == 'gridfs', 'a file with no time keeps its bytes'
+    assert removed['unreadable'] == 3 and removed['pulled'] == 1 and removed['failed'] == 0

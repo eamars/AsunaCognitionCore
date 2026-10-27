@@ -280,8 +280,9 @@ code fix over a softer sentence):
 
 | When | Before | Now |
 |---|---|---|
-| A listed outage whose record cannot be read (its `back_at` missing) | `stop_words` raised out of her home context, so that home turn failed, not only her list | the row is counted in `unreadable` (「其中 N 次的记录读坏了，说不清是什么、在什么时候」), the others are still said, the count stays true, 「上次」 stays the newest's |
+| A listed outage whose record cannot be read (its `back_at` missing) | `stop_words` raised out of her home context, so that home turn failed, not only her list: before its episode row was written (`chat.py` takes the error; the input is marked failed). Read in the code, not run: the row is never stamped `shown_at` (only a committed turn stamps it), and an unstamped row is listed however old, so every home turn after it would fail the same way | the row is counted in `unreadable` (「其中 N 次的记录读坏了，说不清是什么、在什么时候」), the others are still said, the count stays true, 「上次」 stays the newest's |
 | One artifact row the media sweep cannot handle (a source it cannot read, a size that is not a number) | the sweep raised there, every day at the same row, so the rows after it were never swept and nothing she or the owner reads said so | the row is counted in `failed`, the rows after it still go, and `media.swept` is recorded when anything failed; a size that is not a number counts as 0 bytes |
+| An artifact row whose time cannot be read (`created_at` missing or not a time) | compared as text, a missing time was `''`, which is never newer than the cutoff, so the row fell into the deleting branch; a time stored as a Date printed with a space, not `T`, and compared wrongly within its day | a time not known is never old: the row is kept and counted in `unreadable`; times are compared as moments (an ISO string or a Date), never as text. 65 rows with bytes lack `created_at` today (checked 10-27); they have no source id, so `life()` finds no prefix and they fall to its default, a record, which is the only reason none was deleted |
 
 `stop_words`'s first sentence now carries 「上次」/「再往前一次」, since the project map shows a docstring's first
 sentence only.

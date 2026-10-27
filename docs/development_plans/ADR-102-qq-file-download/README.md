@@ -184,7 +184,8 @@ types one way.
   again from the item's link. Fetched: the page, with `前一份字节在%s到期删了，这次是重新拉的`. Not fetched, one
   sentence: `这个文件%s拉过，字节在%s到期删了；现在链接失效了（平台答%s），拿不回来了。这一份存在过、有内容。`
 - **What finds a file.** A ref is found among the newest 8 files and pictures of the last 50 messages others sent in
-  the conversation (each linked conversation its own 50), or among those of its last 7 days (the picture function;
+  the conversation (each linked conversation its own 50), or among all of those of its last 7 days, with no 8 or 50
+  there (the picture function;
   her reading of 5f4a8f3ac50f, and her point at fae57e0a01f0 that "lines" was not exact), so it lives as long as that scan: 7
   days (`REF_DAYS`); after that the words are the ones a picture's old ref gets. A kept file is found by its own row,
   so its ref never ends and `kept` lists refs that keep working. Every line that tells her a file can still be got back

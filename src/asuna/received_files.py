@@ -268,6 +268,7 @@ BAD_PAGE = 'RECEIVED_FILE_PAGE_INVALID: 这个文件只有 %d 页，page 写 1 �
 BAD_FIND = 'RECEIVED_FILE_FIND_INVALID: find 写一个要找的词'
 NO_MATCH = '全文 %d 页里没有「%s」'
 BAD_OP = 'RECEIVED_FILE_OP_INVALID: do 写 read、keep、let_go 或 kept'
+BAD_OP_TASK = 'RECEIVED_FILE_OP_INVALID: do 写 read、copy、keep、let_go 或 kept'   # the action brain's five
 
 
 def extension(name):
@@ -613,7 +614,7 @@ def run(store, where, config, args, *, persona, session_class, moment=None, task
     if op == 'copy' and task_dir:
         return copy(store, where, config, args, task_dir=task_dir, session_class=session_class)
     if op not in ('keep', 'let_go'):
-        raise Denied(BAD_OP)
+        raise Denied(BAD_OP_TASK if task_dir else BAD_OP)
     ref = str(args.get('ref') or '').strip()
     _, row, scopes = found(store, where, config, ref, session_class)
     if not row:

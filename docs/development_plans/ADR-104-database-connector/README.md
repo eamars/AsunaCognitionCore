@@ -14,8 +14,9 @@ and "Built"), not installed. The record interface (step 2) is proposed, for the 
 ## What exists today (counted in the code on 2026-10-27)
 
 - The Python worker reaches MongoDB through `Store` (`src/asuna/state.py`: `put`, `audit`, `authorize`, and its
-  `db`), but most code goes to the collections directly: `store.db.<collection>` appears 912 times in 77 files of
-  `src/asuna/`.
+  `db`), but most code goes to the collections directly: `store.db.<collection>` appears 915 times in 77 files of
+  `src/asuna/` (`git grep -o 'store\.db\.' c6e837c947bf -- src/asuna`, occurrences, not lines; first written as 912
+  without its method, which Xiaoman could not reproduce; 931 in 78 files at `3e1e95f2c120`).
 - Its own clients besides the store: `src/asuna/dbread.py`, `host_lease.py`, `testing.py`, and in `tools/`
   `cleanup_test_databases.py` and `probe_qq_admission.py`.
 - MongoDB features in use: `aggregate` (7 uses); vector search in `retrieval.py` (`$vectorSearch` over a
@@ -170,6 +171,22 @@ memories share one top score.
 Verdict: exact passes. On every query retrieval makes it costs at most 8 ms and is mostly faster; it finds what
 approximate missed (up to five of six of one query's best). Noted, not this ADR's: identical memories (up to 24 at
 one score) can fill a whole result.
+
+What she gets (Xiaoman's ask, 2026-10-28: the final six, not the candidates, and what drops out). 40 queries, ten in
+each of her four largest conversations, each a stored memory of hers (not her thoughts) as the query's text and its
+stored vector as the query's vector; `Retrieval.search` run whole (vector and lexical fused, the six selected) with
+the old code (approximate) and the new (exact), read only (its audit and evidence writes turned off):
+
+| conversation | queries | the same six | memories that dropped out | most in one query |
+|---|---|---|---|---|
+| the largest | 10 | 5 | 8 | 2 |
+| the second | 10 | 10 | 0 | 0 |
+| the third | 10 | 5 | 8 | 3 |
+| the fourth | 10 | 7 | 4 | 2 |
+
+20 of the 240 selected memories change (8%); the vector candidates changed for 29 of the 40 queries. Whether the ones
+that dropped out should have is hers to judge on their content: ten of them, each with what came in, went to her by
+id (Claude does not read them).
 
 ## Step 2: the record interface (proposed by Claude 2026-10-28, for the owner's review)
 

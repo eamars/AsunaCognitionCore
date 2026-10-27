@@ -94,6 +94,11 @@ DIGITS=re.compile(r'(?<![0-9])[0-9]{7,}(?![0-9])')
 HEX=re.compile(r'(?<![0-9A-Fa-f])[0-9A-Fa-f]{32,}(?![0-9A-Fa-f])')
 # A git commit or blob id as the docs cite it (7-40 hex characters, at least one a-f letter), standing alone: not glued
 # to a letter or digit on either side, so a word or a number written next to it is not swallowed into it.
+# The price (owner ruling 2026-10-27: no platform's id shape is assumed, which binds this rule too): a number glued to
+# one letter a-f and standing alone (f99999999) is skipped unreported, as is any account id that is itself short hex.
+# Accepted because git ids are dense in the docs; a scan with no hit is not proof that no personal data is left.
+# The lower bound 7 changes nothing today (a token holding a 7-digit run with a letter is 8 long at least); it bites
+# only if DIGITS ever takes runs shorter than 7.
 GIT_ID=re.compile(r'(?<![0-9A-Za-z])(?=[0-9]*[A-Fa-f])[0-9A-Fa-f]{7,40}(?![0-9A-Za-z])')
 UUID=re.compile(r'(?<![0-9A-Fa-f])[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}(?![0-9A-Fa-f])')
 # Channel fixtures draw synthetic accounts, groups and members from one block, never a real account.

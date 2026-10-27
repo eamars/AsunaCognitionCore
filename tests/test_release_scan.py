@@ -113,3 +113,16 @@ def test_strict_exits_1_on_a_counted_hit_and_the_default_stays_report_only(tmp_p
     assert run('--strict', '--paths', str(flagged)).returncode == 1
     assert run('--paths', str(flagged)).returncode == 0
     assert run('--strict', '--paths', str(clean)).returncode == 0
+
+
+def test_strict_counts_only_counted_hits_never_report_only_ones(monkeypatch, capsys):
+    """`--strict` exits 1 on a counted hit only: a hit printed as report-only (docs/development_plans/) leaves it at 0,
+    so the gate does not stop a push for what the scan itself does not count (Xiaoman's review of --strict)."""
+    number = ('1' + '2' * 8).encode()
+    def sources(key):
+        return lambda args: iter([(key, key, b'member ' + number + b' joined\n')])
+    monkeypatch.setattr(check_staged_secrets, 'personal_sources', sources('docs/development_plans/ADR-900-x/README.md'))
+    assert check_staged_secrets.personal_scan(['--personal', '--strict', '--all']) == 0
+    assert 'report-only:docs/development_plans/ADR-900-x/README.md:1:account_id' in capsys.readouterr().out
+    monkeypatch.setattr(check_staged_secrets, 'personal_sources', sources('src/asuna/x.py'))
+    assert check_staged_secrets.personal_scan(['--personal', '--strict', '--all']) == 1

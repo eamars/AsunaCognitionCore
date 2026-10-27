@@ -64,6 +64,17 @@ and "Built"), not installed. The record interface (step 2) is not designed yet.
 4. **The model is the channel packages:** its own package folder and tests, a module the core loads by
    configuration, the core naming no database.
 
+5. **Step 2's record interface is a small query vocabulary the core defines** (the owner, 2026-10-28, in the question
+   tool, Claude's recommendation): get, find, count, update and delete by fields (equals, any of, not, ranges, exists,
+   starts with, contains, and/or, nested fields; sort, limit, the fields returned); named operations only for counters
+   and the few aggregates. Each adapter translates it. Not chosen: a named operation per use (hundreds of methods).
+   Counted for it on 2026-10-28: about 1,000 direct collection calls in 81 files of `src/asuna/` (`find_one` 624,
+   `find` 254, `update_one` 38, `count_documents` 32, the rest under 15 each).
+6. **Her read tool speaks that vocabulary** (the owner, 2026-10-28, Claude's recommendation): `dbread`, which her task
+   scripts and skills use with MongoDB's query syntax today, takes the core's vocabulary and so works on any database;
+   she rewrites her own scripts and skills, her way. Not chosen: translating MongoDB syntax in every adapter (the
+   MongoDB-shaped surface decision 2 ruled out), or the tool on MongoDB only.
+
 ## Vector search (designed by Claude, 2026-10-28, on the owner's delegation)
 
 ### What the core asks of it today (`src/asuna/retrieval.py`)

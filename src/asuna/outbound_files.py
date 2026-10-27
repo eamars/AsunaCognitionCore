@@ -53,6 +53,8 @@ TYPE_WORDS = {
     'image/svg+xml': 'SVG 图',
     'audio/mpeg': 'MP3 音频', 'audio/mp4': 'M4A 音频', 'audio/ogg': 'Ogg 音频', 'audio/wav': 'WAV 音频',
     'video/mp4': 'MP4 视频',
+    'application/x-msdownload': 'Windows 程序', 'application/x-executable': 'Linux 程序',
+    'application/x-mach-binary': 'macOS 程序',
     'text/plain': '文本', 'text/html': 'HTML 网页', 'application/json': 'JSON',
 }
 OOXML = ((b'word/', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
@@ -76,6 +78,12 @@ SOURCE_GONE = '，任务文件夹里的原文件也不在了（或已改动）�
 def sniff(head, whole=False):
     """The media type of a file from its first bytes (`whole`: they are the whole file); None when not recognized."""
     data = bytes(head or b'')
+    if data.startswith(b'MZ') and b'\x00' in data[:64]:      # a DOS header has NULs; a text that starts "MZ" does not
+        return 'application/x-msdownload'
+    if data.startswith(b'\x7fELF'):
+        return 'application/x-executable'
+    if data[:4] in (b'\xfe\xed\xfa\xce', b'\xfe\xed\xfa\xcf', b'\xce\xfa\xed\xfe', b'\xcf\xfa\xed\xfe'):
+        return 'application/x-mach-binary'
     if data.startswith(b'%PDF-'):
         return 'application/pdf'
     if data.startswith(b'PK\x03\x04') or data.startswith(b'PK\x05\x06'):
@@ -117,7 +125,8 @@ def _mpeg_frame(data):
 
 
 def _text_type(data, whole):
-    """UTF-8 text, decoded from the sample (a character cut at its end is not an error): svg, html, json or plain."""
+    """UTF-8 or GB18030 text, decoded from the sample (a character cut at its end is not an error): svg, html, json
+    or plain."""
     if data.startswith(b'\xef\xbb\xbf'):
         data = data[3:]
     if not data or b'\x00' in data:
@@ -125,11 +134,15 @@ def _text_type(data, whole):
     try:
         text = data.decode('utf-8')
     except UnicodeDecodeError as exc:
-        if whole or exc.reason != 'unexpected end of data' or exc.start < len(data) - 3:
-            return None
-        try:
-            text = data[:exc.start].decode('utf-8')
-        except UnicodeDecodeError:
+        text = None
+        if not whole and exc.reason == 'unexpected end of data' and exc.start >= len(data) - 3:
+            try:
+                text = data[:exc.start].decode('utf-8')
+            except UnicodeDecodeError:
+                pass
+        if text is None:
+            text = gb18030_text(data, whole)
+        if text is None:
             return None
     lead = text.lstrip().lower()
     if lead.startswith('<') and '<svg' in lead[:4096]:
@@ -145,6 +158,24 @@ def _text_type(data, whole):
         except ValueError:
             return 'text/plain'
     return 'text/plain'
+
+
+# GB18030 decodes nearly any bytes, so a decoding is taken as text only when it is nearly free of control characters.
+CONTROL_PER_THOUSAND = 1
+
+
+def gb18030_text(data, whole=True):
+    """The text of GB18030 bytes, or None: strict, and at most CONTROL_PER_THOUSAND control characters (Unicode Cc
+    other than tab, \\n and \\r) per 1,000 characters. A sample's last character may be cut (`whole` False)."""
+    import unicodedata
+    for cut in ((0,) if whole else (0, 1, 2, 3)):
+        try:
+            text = data[:len(data) - cut].decode('gb18030')
+        except UnicodeDecodeError:
+            continue
+        controls = sum(1 for c in text if c not in '\t\n\r' and unicodedata.category(c) == 'Cc')
+        return text if text and controls * 1000 <= CONTROL_PER_THOUSAND * len(text) else None
+    return None
 
 
 def size_words(size):

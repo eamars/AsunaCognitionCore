@@ -418,6 +418,8 @@ WORKSPACE_TOOLS.append(NOTE_IDEA_TOOL)
 # 看图（Pull 模式）：定义与实现同处注册；是否进入某个任务的能力清单，取决于那条行动路由
 # 是否声明了图片输入（见 route_filtered_tool_names），不按模型名字猜。
 WORKSPACE_TOOLS.append(READ_IMAGE_TOOL)
+from .received_files import RECEIVED_FILE_TOOL, TOOL_NAME as RECEIVED_FILE_TOOL_NAME
+WORKSPACE_TOOLS.append(RECEIVED_FILE_TOOL)
 
 
 def stale_reason(task,current,scene):
@@ -773,7 +775,7 @@ class ToolBroker:
         # and every cancellation needs it. A later cancellation still fences new calls; recording this accepted
         # call cannot revive the task.
         with (nullcontext() if integration_gated(tool) or tool in DEVELOPMENT_NAMES or tool=='ask_character'
-                  or tool in ('generate_image','render_svg','private_words','sandbox_run','offer_file') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
+                  or tool in ('generate_image','render_svg','private_words','sandbox_run','offer_file') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME or tool==RECEIVED_FILE_TOOL_NAME else self.service.lock):
             if not integration_gated(tool):self.service.valid(task)
             if tool=='persona_job_run':
                 if not task.get('development_grant'):raise Denied(capability_refusal(self.store,task,tool))
@@ -830,6 +832,15 @@ class ToolBroker:
                 if not getattr(self, 'vision', None):raise Denied('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
                 scene_row=self.service.store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']}
                 result=self.vision.read_image(task,args,session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']),task_dir=sandbox.task_dir)
+                with self.service.lock:self.service.valid(task)
+            elif tool==RECEIVED_FILE_TOOL_NAME:
+                # A file someone sent (ADR-102): the scene is the task's binding, as for read_image; the fetch waits
+                # without the effects lock.
+                from . import received_files
+                scene_row=self.service.store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']}
+                result=received_files.run(self.service.store,task,self.service.store.config,args,
+                                          persona=self.service.store.config['chat']['persona'],
+                                          session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']))
                 with self.service.lock:self.service.valid(task)
             elif tool=='generate_image':
                 # 本机生图：任何任务都可以画，但只走 image 端点的固定流程；等待期间不持副作用锁。

@@ -491,6 +491,9 @@ MESSAGE_DEVELOPER = {'name': 'message_developer', 'description': '已并入 ask�
 # read_image, with the same fences and storage; here it is bound to her turn's scene instead of a task.
 from .vision import READ_IMAGE_TOOL as _READ_IMAGE
 TOOLS[_READ_IMAGE['name']] = {k: v for k, v in _READ_IMAGE.items() if k != 'name'}
+# Reading a file someone sent is one tool for both halves too (ADR-102), bound to her turn's scene here.
+from .received_files import RECEIVED_FILE_TOOL as _RECEIVED_FILE
+TOOLS[_RECEIVED_FILE['name']] = {k: v for k, v in _RECEIVED_FILE.items() if k != 'name'}
 # Her list of words that point at real people and places, shared with the action brain (private_words.py).
 from .private_words import PRIVATE_WORDS_TOOL as _PRIVATE_WORDS
 TOOLS[_PRIVATE_WORDS['name']] = {k: v for k, v in _PRIVATE_WORDS.items() if k != 'name'}
@@ -800,6 +803,7 @@ def _turn_rules(store, ep):
         return names + ['task.answer']
     if her_pictures(store, ep):
         names.append('read_image')
+    names.append('received_file')       # listed where files can be read; a ref nothing offers is answered as not found
     names += ['stay_silent', 'ideas.note']
     note_tool = ['note'] if context.get('note_places_from_program') else []
     from . import notes
@@ -946,6 +950,8 @@ def abilities(store, ep):
     sees = vision_capability(config, 'character')['supported']
     if sees and (channel_kinds.sends_images(ep['scene_id']) or cls == visibility.OWNER_PRIVATE):
         names.append('read_image')
+    if channel_kinds.file_hosts(ep['scene_id']) or cls == visibility.OWNER_PRIVATE:
+        names.append('received_file')           # files people send (ADR-102); at home, from any of her conversations
     if outbound_media.target_allowed(config, scene, cls)[0]:
         names.append('attach_image')
     if stickers.sends(scene) or local:
@@ -2179,6 +2185,12 @@ class RoleTools:
         if isinstance(result, dict) and result.get('sticker'):
             result['sticker_note'] = STICKER_LOOKED_NOTE
         return result, False
+
+    def tool_received_file(self, ep, call_id, args):
+        from . import received_files
+        scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
+        return received_files.run(self.store, scene, self.store.config, args, persona=ep['persona'],
+                                  session_class=self._cls(ep)), False
 
     def tool_attach_image(self, ep, call_id, args):
         from . import outbound_media

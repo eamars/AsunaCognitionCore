@@ -612,6 +612,8 @@ class People:
             source = media_source(self.store, task, self.config, entry)
             return pull_bytes({**entry, **source}, self.config, timeout=PICTURE_FETCH_SECONDS)[0]
         refs = line_refs(row, self.config, lambda entries: recognized(self.store, self.persona, entries, fetch))
+        from .received_files import line_note
+        refs += line_note(row, self.config)              # files: ref and size, or why it is not read (ADR-102)
         if refs:
             lines.append('  ' + refs)
         return '\n'.join(lines)

@@ -121,6 +121,23 @@ class BlobStore:
         if existing:return {'artifact_id':existing['_id'],'sha256':existing['sha256'],'size':existing['size'],'storage':'gridfs','deduplicated':True}
         return self.put(data,scope,kind,source_ids=source_ids,fields=fields)
 
+    def restore(self,key,data:bytes):
+        """Put bytes fetched again back on the row whose bytes expired (`storage` `removed`), when they are the same
+        bytes (its sha256). False when they differ or the row is not `removed` (an erased row never is: ADR-105).
+        The row's `bytes_removed_at` goes with it: these bytes did not expire, so an erasure later took them."""
+        row=self.store.db.artifacts.find_one({'_id':key,'state':'DONE'})
+        if not row or erased(row) or row.get('storage')!='removed' or row.get('sha256')!=sha(data):return False
+        self._scope_known(row['scope_key'])
+        blob_id=self.bucket.upload_from_stream(key,data,metadata={'scope_key':row['scope_key'],'sha256':row['sha256'],'kind':row['kind'],'source_ids':list(row.get('source_ids') or [])})
+        try:
+            observed=self.bucket.open_download_stream(blob_id).read()
+            if sha(observed)!=row['sha256']:raise ValueError('ARTIFACT_STORED_BYTES_MISMATCH: 存进去的字节读回来对不上，这次没有存；可以再试一次，还不行就照实写进结果')
+            done=self.store.db.artifacts.update_one({'_id':key,'storage':'removed'},{'$set':{'storage':'gridfs','gridfs_id':str(blob_id),'refetched_at':now()},'$unset':{'bytes_removed_at':''}})
+            if not done.modified_count:raise ValueError('ARTIFACT_ROW_CHANGED: 这一行刚被改过（清除或另一次重拉），这次没有放回去')
+        except BaseException:
+            self.bucket.delete(blob_id);raise
+        return True
+
     def _readable(self,key,scope):
         """The row of `key` if its bytes may be read in `scope`: refused when it is not there or not in the scope, and,
         only then, with ADR-105's sentence when an erasure deleted its bytes."""

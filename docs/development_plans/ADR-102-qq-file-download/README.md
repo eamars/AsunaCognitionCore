@@ -132,8 +132,9 @@ a fixed line:
 - **Only the item's own link,** `https` only, only on the hosts the channel kind declares in a new `FILE_HOSTS`
   (`napcat_qq`: `.ftn.qq.com`); a redirect must stay inside the list (vision's `_KeepInsideAllowList`). A link written
   in someone's message text is never fetched.
-- **1 MiB counted on the bytes read** (a declared size can lie); the read stops at the first byte over. **20 s** for the
-  whole fetch. With that cap the bytes stay in memory until they are checked and stored: no partial file on any disk.
+- **1 MiB counted on the bytes read** (a declared size can lie); the read stops at the first byte over. **20 s:** a
+  wait of 20 s without data ends the fetch, and after 20 s it ends at the next piece, so a host that drips can hold
+  it about 40 s (her reading of 5f4a8f3ac50f). With that cap the bytes stay in memory until they are checked and stored: no partial file on any disk.
 - **Off the channel's path.** The worker fetches from QQ's file host itself; the adapter and NapCat take no part, so a
   download cannot hold an inbound or outbound lane. What a fetch can hold is her own tool call, for at most 20 s, as
   `read_image` does today with a cap eight times larger.
@@ -182,7 +183,8 @@ types one way.
 - **After the bytes, before the ref ends** (days 4 to 7): the row stays (`storage` `removed`) and a `read` fetches
   again from the item's link. Fetched: the page, with `前一份字节在%s到期删了，这次是重新拉的`. Not fetched, one
   sentence: `这个文件%s拉过，字节在%s到期删了；现在链接失效了（平台答%s），拿不回来了。这一份存在过、有内容。`
-- **What finds a file.** A ref is found by scanning the conversation's messages, so it lives as long as that scan: 7
+- **What finds a file.** A ref is found among the conversation's last 50 lines or its last 7 days, whichever reaches
+  further (the picture function; her reading of 5f4a8f3ac50f), so it lives as long as that scan: 7
   days (`REF_DAYS`); after that the words are the ones a picture's old ref gets. A kept file is found by its own row,
   so its ref never ends and `kept` lists refs that keep working. Every line that tells her a file can still be got back
   says which of the two finds it. (Pictures have a smaller mismatch of the same kind, not changed here: a ref's 7 days

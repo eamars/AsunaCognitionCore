@@ -457,7 +457,7 @@ def fetch(url, hosts):
     except urllib.error.HTTPError as exc:
         raise _refused(exc.code) from None
     except (urllib.error.URLError, OSError, TimeoutError) as exc:
-        raise FetchFailed(FETCH_FAILED % ('%s，限时 %d 秒' % (type(exc).__name__, FETCH_SECONDS))) from None
+        raise FetchFailed(FETCH_FAILED % ('%s，%d 秒没有数据，或过了 %d 秒' % (type(exc).__name__, FETCH_SECONDS, FETCH_SECONDS))) from None
 
 
 def _refused(status):

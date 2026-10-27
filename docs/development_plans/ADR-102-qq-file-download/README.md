@@ -181,7 +181,7 @@ types one way.
   as a record and would be kept for good without a word, so a test pins that a received file is gone after 3 days.
 - **After the bytes, before the ref ends** (days 4 to 7): the row stays (`storage` `removed`) and a `read` fetches
   again from the item's link. Fetched: the page, with `前一份字节在%s到期删了，这次是重新拉的`. Not fetched, one
-  sentence: `这个文件%s拉过，字节在%s到期删了；现在链接失效了（平台答%s），拿不回来了。文件不是没内容，是拿不回来。`
+  sentence: `这个文件%s拉过，字节在%s到期删了；现在链接失效了（平台答%s），拿不回来了。这一份存在过、有内容。`
 - **What finds a file.** A ref is found by scanning the conversation's messages, so it lives as long as that scan: 7
   days (`REF_DAYS`); after that the words are the ones a picture's old ref gets. A kept file is found by its own row,
   so its ref never ends and `kept` lists refs that keep working. Every line that tells her a file can still be got back
@@ -343,7 +343,7 @@ pictures sent as files (`read_image` handles pictures).
   redirect fence, one cap on bytes read, and a deadline for the whole fetch), judging (`judge`; `outbound_files.sniff`
   learned programs and GB18030), pages and `find`, bytes fetched again onto their own row (`BlobStore.restore`),
   `FILE_HOSTS` (`channel_kinds.file_hosts`; NapCat `.ftn.qq.com`). Its cost: one tool more in each half (her 30 -> 31,
-  the action brain's 26 -> 27), descriptions +488 characters for her and +280 for the action brain
+  the action brain's 26 -> 27), descriptions +499 characters for her and +291 for the action brain
   (`tests/test_tool_budget.py`). Tests: `tests/test_received_files_read.py`, five, for the guards whose failure would
   be silent (the fence, the cap and the hosts, https, a program never stored, an erased file never fetched again);
   paging and wording are checked by reading a real file.

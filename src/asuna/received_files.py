@@ -263,7 +263,7 @@ CONTENT_IS = '内容是%s，不是文本'
 NUL_BYTES = '二进制（里面有空字节）'
 UNKNOWN_ENCODING = 'RECEIVED_FILE_ENCODING_UNKNOWN: 编码没认出来；没给你看'
 NOT_GOT_BACK = ('RECEIVED_FILE_GONE: 这个文件%s拉过，字节在%s到期删了；现在链接失效了（平台答%s），拿不回来了。'
-                '文件不是没内容，是拿不回来。')
+                '这一份存在过、有内容。')
 BAD_PAGE = 'RECEIVED_FILE_PAGE_INVALID: 这个文件只有 %d 页，page 写 1 到 %d'
 BAD_FIND = 'RECEIVED_FILE_FIND_INVALID: find 写一个要找的词'
 NO_MATCH = '全文 %d 页里没有「%s」'
@@ -623,7 +623,7 @@ def run(store, where, config, args, *, persona, session_class, moment=None):
 RECEIVED_FILE_TOOL = {
     'name': TOOL_NAME,
     'description': ('读别人发来的文件（文本类，1 MiB 以内）。do=read：ref 照抄文件旁标的；第一次读从平台拉下来，每次一页，'
-                    'page 翻页，find 找一个词。拉下来的 3 天后删；keep 留下（why 写为什么），let_go 放下，kept 列出留着的。'
+                    'page 翻页，find 找一个词（拉丁字母不分大小写）。拉下来的 3 天后删；keep 留下（why 写为什么），let_go 放下，kept 列出留着的。'
                     '在家里也能读你别的对话里 7 天内的文件。'),
     'parameters': {'op': {'type': 'string', 'enum': ['read', 'keep', 'let_go', 'kept'], 'description': '默认 read'},
                    'ref': {'type': 'string', 'description': '文件旁标的 ref'},

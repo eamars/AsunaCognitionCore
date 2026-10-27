@@ -41,6 +41,10 @@ wants to talk it through first. Nothing here is decided.
    removing unit tests serving no purposes as well. Adding unit test is NOT a good habit." Today: about 1,500 Python
    tests, 9 to 16 minutes a run on this machine. Which tests earn their place, and how the slow ones are found, is
    part of the design.
+   Later the same night: "at some stage we need a total reset, that old test must gone, and tests with duplicated
+   coverage should be gone. I understand the unit test is to protect you from writing the good code so I won't ask
+   you to remote all unit. But this isn't the excuse of adding more and more unit test without considering 'do i need
+   them?'."
 
 ## Open questions (to discuss with the owner first)
 

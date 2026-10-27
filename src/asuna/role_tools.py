@@ -1857,6 +1857,11 @@ class RoleTools:
                     planned.append({'kind': 'text', 'text': text.strip(), 'shown': 'text'})
             elif kind == 'sticker':
                 name = str(part.get('name') or '').strip()
+                try:
+                    stickers.refuse_erased(self.store, ep['persona'], name, ep['scene_id'])
+                except Denied as exc:
+                    problems.append('第 %d 条 sticker「%s」%s' % (index, name, words(exc)))
+                    continue
                 fields = stickers.outbound(self.store, ep['persona'], '[表情包:%s]' % name) if name else None
                 if not fields:
                     problems.append('第 %d 条 sticker「%s」你没收着' % (index, name) if name else '第 %d 条 sticker 要写 name' % index)

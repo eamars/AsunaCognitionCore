@@ -326,3 +326,93 @@ def test_every_lookup_by_id_that_judges_storage_handles_the_erased_mark():
     filtered = "def look(store, key):\n    return store.db.artifacts.find_one({'_id': key, 'storage': 'gridfs'})\n"
     assert lookups_without_the_mark([('a.py', forgot), ('b.py', filtered)]) == [('a.py', 'look'), ('b.py', 'look')], \
         'the test itself bites'
+
+
+# ── two sentences, by a fact on the row ─────────────────────────────
+def test_the_two_shapes_of_one_kind_read_differently_and_say_whose_cause_is_whose(store):
+    """Bytes the erasure deleted, and bytes that had expired before it, get two different sentences: merged into one,
+    the expired row would be told the erasure took its bytes (Xiaoman's review of 94bb3ea3a92d)."""
+    from bson import ObjectId
+    here, _ = scopes(store)
+    blobs = BlobStore(store)
+    deleted, expired = picture(store, here['scope_key'], 'in-ep-d'), picture(store, here['scope_key'], 'in-ep-x')
+    blobs.bucket.delete(ObjectId(store.db.artifacts.find_one({'_id': expired})['gridfs_id']))
+    store.db.artifacts.update_one({'_id': expired}, {'$set': {'storage': 'removed',
+                                                              'bytes_removed_at': '2026-10-20T01:00:00+00:00'},
+                                                     '$unset': {'gridfs_id': ''}})
+    blobs.erase_scope(here['scope_key'], 'erase-test')
+    first, second = (blobs_mod.erased_words(store, store.db.artifacts.find_one({'_id': row_id}), here['_id'])
+                     for row_id in (deleted, expired))
+    zone = local_time.zone_of(store, here['_id'])
+    erased_at = local_time.stamp(store.db.artifacts.find_one({'_id': expired})['erased_at'], zone)
+    assert first != second
+    assert first == sentence(store, deleted, here['_id'], '张图') and '被隐私清除删掉' in first
+    assert second == blobs_mod.ERASED_AFTER_EXPIRY_WORDS % (
+        '张图', local_time.stamp('2026-10-20T01:00:00+00:00', zone), erased_at)
+    assert '到期删掉' in second and '被隐私清除删掉' not in second, 'the expiry, not the erasure, took those bytes'
+    assert not {'你', '我'} & set(first + second), 'neither sentence speaks as or to anyone'
+
+
+def test_speak_naming_another_conversations_erased_picture_hears_only_the_offer_refusal(store, tmp_path,
+                                                                                        monkeypatch):
+    """A picture of a conversation this one may not use: erased or not, the answer is the offer's own refusal, so the
+    sentence never tells this conversation that the row exists."""
+    from asuna import channel_kinds
+    from asuna.coordinator import Coordinator
+    from asuna.ingress import persist_input
+    from asuna.lanes import FakeLane, FakeTurn
+    from test_adr009_p2 import THINK
+    from test_outbound_image import model
+    _, _, qq = imported(store, tmp_path)
+    other = store.db.scenes.find_one({'_id': {'$nin': [qq, 'dm-a']}, 'scope_key': {'$exists': True}})
+    foreign = outbound_media.register_imported_image(store, other['scope_key'], PNG + b'b', source='upload:b')
+    foreign = foreign['artifact_id'] if isinstance(foreign, dict) else foreign
+    BlobStore(store).erase_scope(other['scope_key'], 'erase-test')
+    assert blobs_mod.erased(store.db.artifacts.find_one({'_id': foreign}))
+    monkeypatch.setattr(channel_kinds, 'reply_parts', lambda scene_id: ('text', 'picture') if scene_id == qq else ())
+    store.config['persona_model'] = model()
+    lane = FakeLane(store, [FakeTurn([THINK, ('speak', {'parts': [{'kind': 'picture', 'artifact_id': foreign}]})])])
+    event = {'event_id': 'pic-x', 'scene_id': qq, 'person_id': 'A', 'text': '图呢',
+             'channel': {'id': 'replay', 'account_id': 'bot', 'target': {'type': 'dm', 'id': 'peer'},
+                         'platform_event_id': 'p-pic-x'}}
+    persist_input(store, event, managed=True)
+    Coordinator(store, lane).ingest(event)
+    [(result, ok)] = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'speak']
+    assert not ok and '不在 image_artifacts_from_program 里' in str(result), result
+    assert '隐私清除' not in str(result)
+
+
+# ── a sticker she drew ──────────────────────────────────────────────
+def drawn_sticker(store, ep_scene='dm-a'):
+    """A picture she drew in dm-a, kept on her shelf as 画的; then dm-a's bytes are erased."""
+    scene = store.db.scenes.find_one({'_id': ep_scene})
+    row_id = picture(store, scene['scope_key'], outbound_media.PRODUCED_SOURCE + 'image:drawn')
+    ep = {'scene_id': scene['_id'], 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
+    stickers.keep(store, BlobStore(store), ep, 'P1', {'ref': row_id, 'name': '画的', 'when': '开心'}, store.config)
+    BlobStore(store).erase_scope(scene['scope_key'], 'erase-test')
+    return row_id, scene
+
+
+def test_speak_with_a_sticker_whose_drawing_was_erased_hears_the_sentence_and_sends_nothing(store, monkeypatch):
+    from test_adr009_p5_speak import channel_scene, model, outbound, turn
+    store.config['persona_model'] = model(2)
+    channel_scene(store, monkeypatch)
+    row_id, scene = drawn_sticker(store)
+    _, ep, lane = turn(store, calls=[('speak', {'parts': [{'kind': 'sticker', 'name': '画的'}]})])
+    [(result, ok)] = [(row[4], row[5]) for row in lane.tool_results if row[2] == 'speak'][:1]
+    assert not ok and sentence(store, row_id, scene['_id'], '张图') in str(result), result
+    assert outbound(store, ep['_id']) == []
+
+
+def test_the_shelf_and_the_review_mark_an_erased_drawing_in_a_field_of_its_own_and_keep_it(store):
+    from datetime import datetime, timezone
+    row_id, scene = drawn_sticker(store)
+    listed = stickers.block(store, 'P1', scene, at_home=True)
+    [item] = [item for item in listed['items'] if item['sticker'] == '画的']
+    assert item['picture'] == sentence(store, row_id, scene['_id'], '张图') and 'ref' not in item
+    assert listed['gone'] == stickers.GONE_WORDS
+    review = stickers.review_block(store, 'P1', datetime.now(timezone.utc))
+    assert review['items'][0]['sticker'] == '画的' and '被隐私清除删掉' in review['items'][0]['why']
+    assert review['gone'] == stickers.GONE_WORDS
+    assert stickers.find(store, 'P1', '画的'), 'the program never drops it: that is hers'
+    assert stickers.send_block(store, 'P1')['names'] == '画的', 'the names she copies stay as she wrote them'

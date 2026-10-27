@@ -18,8 +18,12 @@ from .state import Denied, now
 
 STREAM_PIECE = 1024 * 1024          # what put_stream reads and verifies at a time
 ERASED = 'erased'                   # a row's storage once a privacy erasure deleted its bytes (ADR-105)
-# ADR-105's one sentence: the kind as she reads it (张图, 个文件), then when, on her clock.
-ERASED_WORDS = '这%s被隐私清除删过（%s），字节已经不在了，拿不回来；不是没有内容。'
+# ADR-105's two sentences, kept apart on purpose: which one a row gets is a fact on the row, whether `bytes_removed_at`
+# is there, and its only writer is the sweep's expiry (media_life.py:89 at 94bb3ea3a92d). Merged into one template, the
+# expired row would again be told an erasure took its bytes; tests/test_erasure_marks.py holds them apart. The kind
+# comes with its measure word (张图, 个文件); the times are on the clock of the conversation it is said in.
+ERASED_WORDS = '这%s存在过、有内容；字节在%s被隐私清除删掉了，不会再拿回来。'
+ERASED_AFTER_EXPIRY_WORDS = '这%s存在过、有内容；字节在%s到期删掉了；%s的一次隐私清除之后，这一份不会再变回可读。'
 BYTES_MISSING = ('ARTIFACT_BYTES_MISSING: 这份登记着的字节不在存储里了（程序的问题，不是你的错）；不是没有内容。'
                  '重试也一样：不用这份，照实写进结果')
 
@@ -30,10 +34,15 @@ def erased(row):
 
 
 def erased_words(store, row, scene_id=None):
-    """ADR-105's sentence for an erased row, its time on the clock of the conversation it is said in."""
+    """ADR-105's sentence for an erased row: bytes the erasure deleted, or bytes that had expired before it."""
     from . import local_time
-    what = '张图' if (row or {}).get('kind') == 'image' else '个文件'
-    return ERASED_WORDS % (what, local_time.stamp((row or {}).get('erased_at'), local_time.zone_of(store, scene_id)))
+    row = row or {}
+    zone = local_time.zone_of(store, scene_id)
+    what = '张图' if row.get('kind') == 'image' else '个文件'
+    erased_at = local_time.stamp(row.get('erased_at'), zone)
+    if row.get('bytes_removed_at'):
+        return ERASED_AFTER_EXPIRY_WORDS % (what, local_time.stamp(row['bytes_removed_at'], zone), erased_at)
+    return ERASED_WORDS % (what, erased_at)
 
 
 def refuse_erased(store, row, scene_id=None):

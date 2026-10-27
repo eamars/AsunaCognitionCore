@@ -156,6 +156,8 @@ Her sticker shelf and the platform's own faces (ADR-016).
 
 - def `shelf`
 - def `find`
+- def `erased_pictures` — {artifact_id: artifacts row} of the shelf pictures a privacy erasure deleted.
+- def `refuse_erased` — A sticker named in speak whose picture an erasure deleted: ADR-105's sentence in that call, so it is never accepted and then failed when the adapter asks for its bytes.
 - def `fullness`
 - def `keep` — Put a sticker on her shelf: an att- ref of a sticker in this conversation, or a blob- id of a picture she made herself.
 - def `drop`

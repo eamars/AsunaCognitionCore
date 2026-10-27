@@ -337,7 +337,7 @@ Affect ledger and projection (ADR-009 ARCHITECTURE §6).
 Scoped, hash-verified GridFS storage for bounded-document overflow.
 
 - def `erased` — Whether a privacy erasure deleted this row's bytes.
-- def `erased_words` — ADR-105's sentence for an erased row, its time on the clock of the conversation it is said in.
+- def `erased_words` — ADR-105's sentence for an erased row: bytes the erasure deleted, or bytes that had expired before it.
 - def `refuse_erased` — Raise the sentence for an erased row; the caller has already checked the row is in its fence, so the words say nothing about a row the caller may not see.
 - class `BlobStore`
   - `put_stream` — Store what an open binary handle holds, hashing while it copies; the stored bytes are read back in pieces and checked against that hash before the manifest is written.

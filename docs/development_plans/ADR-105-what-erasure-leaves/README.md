@@ -42,12 +42,21 @@ erasure has run in this deployment (`audit_events` has no `privacy.intent`), and
 - **Offers.** Every list that offers stored media already reads `storage: 'gridfs'` only, so an erased row leaves
   every offer by itself (the pictures of a turn, the files she may send, her received files).
 - **Looked up by id, read or sent.** Every place that finds one row by its id and finds it erased answers with one
-  sentence, never a generic "not found" or a storage error:
+  sentence, never a generic "not found" or a storage error. Which of the two a row gets is a fact on the row, never a
+  guess: whether it carries `bytes_removed_at`, whose only writer is the sweep's expiry.
 
-  > 这%s被隐私清除删过（%s），字节已经不在了，拿不回来；不是没有内容。
+  > 这%s存在过、有内容；字节在%s被隐私清除删掉了，不会再拿回来。
 
-  The first `%s` names the thing by its kind, as she reads it: 张图 for a picture, 个文件 for a file (one she sent,
-  or one she received). The second is when, on her clock. This is "the ADR-105 sentence" other pages cite. The places, from the code of 2026-10-27: `BlobStore.get` and `BlobStore.get_range`;
+  > 这%s存在过、有内容；字节在%s到期删掉了；%s的一次隐私清除之后，这一份不会再变回可读。
+
+  The first is for bytes the erasure deleted; the second for bytes that had already expired, which the erasure did not
+  take (saying it did would be a false cause; Xiaoman, her review of 94bb3ea3a92d). The first `%s` is the kind with
+  its measure word, as she reads it: 张图 for a picture (a sticker she drew is one), 个文件 for a file (one she sent,
+  or one she received). The times are on the clock of the conversation it is said in. Neither sentence has 你 or 我
+  as its subject, and neither names the conversation that was erased. They are two constants, never one template
+  (`blobs.ERASED_WORDS`, `ERASED_AFTER_EXPIRY_WORDS`); a test fails when the two shapes of one kind read alike. A
+  received file whose source can be fetched again adds that this way is closed too, by the same fact on its row
+  (ADR-102). This is "the ADR-105 sentence" other pages cite. The places, from the code of 2026-10-27: `BlobStore.get` and `BlobStore.get_range`;
   `vision.stored_image` and `vision.local_upload_bytes` (`read_image` of a stored picture); `outbound_media.accept_artifact`
   and `outbound_media.serve` (a picture attached to `speak`); `outbound_files.check`, `claim_failure` and `serve_piece`
   (a file sent with `speak`); `received_files` (ADR-102: `read`, `kept`, `copy`). A claim already on its way when the
@@ -63,10 +72,22 @@ erasure has run in this deployment (`audit_events` has no `privacy.intent`), and
   them go.
 - **Copies on disk.** A received file's copy in a task folder (ADR-102 `copy`) is recorded on its row and removed with
   the row's bytes, erasure included.
-- **Stickers are outside this path.** Her shelf and the sticker pool are stored in `global-safe`, and a conversation
-  erasure refuses that scope (`GLOBAL_ERASURE_REQUIRES_ALL_SCENE_MIGRATION`), so no sticker is erased by it. If an
-  erasure of `global-safe` is ever built, the shelf and the pool list an erased sticker with the same sentence and
-  sending it answers with it.
+- **What an erasure covers.** Every row whose bytes are stored in the erased conversation's scope: pictures pulled
+  from its messages, the pictures the owner sent her at home, pictures she drew or edited there, files her tasks
+  registered there, and (ADR-102) files received there. So **a sticker she drew is covered**: its shelf row names
+  her drawing, which is stored where she drew it (13 of the 58 on her shelf on 2026-10-27, counted by Claude and
+  again by Xiaoman). *Corrected 2026-10-27, in the build:* this paragraph first said no sticker is erased, read from
+  the shelf's own scope alone.
+- **What it does not cover, and why.** `global-safe`: the stickers she collected (45 of 58) and the candidate pool.
+  Those bytes are shared by every conversation, so the erasure of one does not take them, and an erasure of
+  `global-safe` itself is refused (`GLOBAL_ERASURE_REQUIRES_ALL_SCENE_MIGRATION`). Voice: its bytes are not stored
+  today (`voice.py`), so this path finds none.
+- **A sticker whose drawing was erased.** Named in `speak`, it answers with the sentence in that call. The shelf lists
+  it with the sentence in a field of its own (`picture`), and the weekly review lists it first with one line,
+  `这几张画不在了：名字还在架子上，放不放下由你。`. Its name is left as she wrote it, since she copies it to send,
+  drop or rename. The program never drops it: the shelf row is then the only record that the drawing existed, and
+  whether to drop it is hers (Xiaoman). The list of names sent when she goes out is unchanged; there she learns it
+  from the answer.
 - **`storage` has three values now** (`gridfs`, `removed`, `erased`), so every reader of it is named here, from the
   code of 2026-10-27: the lookups and offers above read `gridfs` only; `BlobStore.put_once` deduplicates against
   `gridfs` rows only, so the same bytes arriving after an erasure are stored anew, never matched to the erased row;
@@ -106,7 +127,12 @@ What erasure deletes (bytes, memories, revisions) and who may run it.
   lookup filtered on `gridfs`, so an erased drawing answered "不是你自己画好的图", which is false. It now says the
   sentence.
 - RUNTIME_API: "Erased media", and the codes in the claim and the byte endpoint.
-- `tests/test_erasure_marks.py`: 17 tests, the structural one included; 21 mutants, each turning its own test red.
+- After Xiaoman's review of 94bb3ea3a92d (her green on it, 2026-10-27): the two sentences (`ERASED_WORDS`,
+  `ERASED_AFTER_EXPIRY_WORDS`, by `bytes_removed_at`); a sticker she drew (`stickers.refuse_erased` in `speak`'s
+  sticker part, since `stickers.leaving` reads a picture it cannot get as the shelf's own sha, which accepted it and
+  failed it later; `picture` on the shelf, the review's first items and `gone`); the coverage paragraphs.
+- `tests/test_erasure_marks.py`: 21 tests, the structural one and one where another conversation names an erased
+  picture included; 26 mutants, each turning its own test red.
 
 ## Tests
 

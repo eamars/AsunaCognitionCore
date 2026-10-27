@@ -26,7 +26,8 @@ Exclusions:
     that file may only list non-personal constants;
   - account_id only: a digit run touching a decimal point that touches another digit (fraction or integer part of
     a decimal); a digit run inside a contiguous hex token of >=32 chars (hashes and hash placeholders; no account
-    id is that long); a digit run inside a UUID (8-4-4-4-12 hex); a run in the fixtures' placeholder block
+    id is that long); a digit run inside a git commit or blob id (7-40 hex chars with at least one letter a-f, not
+    glued to another letter or digit), as ADRs cite them; a digit run inside a UUID (8-4-4-4-12 hex); a run in the fixtures' placeholder block
     900000xxx (a 7-9 digit run starting 900000: the ids, or a range written 9000001xx);
   - content of files containing NUL bytes or not decodable as UTF-8 (binary) is skipped; the name is still checked;
   - content of lockfiles package-lock.json and uv.lock is skipped (integrity blobs); the name is still checked;
@@ -91,6 +92,9 @@ def secret_scan():
 OK_MARK='personal-scan: '+'ok'
 DIGITS=re.compile(r'(?<![0-9])[0-9]{7,}(?![0-9])')
 HEX=re.compile(r'(?<![0-9A-Fa-f])[0-9A-Fa-f]{32,}(?![0-9A-Fa-f])')
+# A git commit or blob id as the docs cite it (7-40 hex characters, at least one a-f letter), standing alone: not glued
+# to a letter or digit on either side, so a word or a number written next to it is not swallowed into it.
+GIT_ID=re.compile(r'(?<![0-9A-Za-z])(?=[0-9]*[A-Fa-f])[0-9A-Fa-f]{7,40}(?![0-9A-Za-z])')
 UUID=re.compile(r'(?<![0-9A-Fa-f])[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}(?![0-9A-Fa-f])')
 # Channel fixtures draw synthetic accounts, groups and members from one block, never a real account.
 PLACEHOLDER=re.compile(r'900000[0-9]{1,3}')
@@ -118,7 +122,7 @@ def denylist():
     return out
 
 def account_id(line,allow):
-    spans=[m.span() for r in (HEX,UUID) for m in r.finditer(line)]
+    spans=[m.span() for r in (HEX,GIT_ID,UUID) for m in r.finditer(line)]
     for m in DIGITS.finditer(line):
         s,e=m.span()
         if s>=2 and line[s-1]=='.' and line[s-2].isdigit():continue

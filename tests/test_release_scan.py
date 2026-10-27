@@ -72,3 +72,18 @@ def test_no_committed_file_holds_a_private_address():
         found += ['%s:%d' % (path, number) for number, line in enumerate(committed_lines(path), 1)
                   if check_staged_secrets.private_address(line, allow)]
     assert not found, 'path:line (0 is the name) %s' % found
+
+
+def test_a_git_id_is_not_an_account_but_a_bare_number_on_any_platform_still_is():
+    """A git commit or blob id cited in a doc (7-40 hex characters with a letter a-f) is not an account id, however many
+    digits it holds; a bare number of 7 digits or more still is, whatever platform it would belong to: the rule assumes
+    no platform's id shape. Positive controls: a number beside a git id on the same line, and an all-digit token."""
+    found = lambda line: check_staged_secrets.account_id(line, set())
+    assert not found('signed against commit `b1f6f2ce` (README blob `5e9365951b39`)')
+    assert not found('git diff 626121d66364d5672f1a9d5571442ca24ca33958..HEAD')
+    assert found('member 123456789 joined')                              # 9 digits, QQ-length
+    assert found('author 112233445566778899 posted')                     # 18 digits, snowflake-length
+    assert found('blob 5e9365951b39 from 112233445566778899')             # beside a git id, still reported
+    assert found('token 1234567890123')                                 # all digits: no letter, not a git id
+    assert found('user id9365951b39 here')                               # glued to a letter on the left: not a git id
+    assert found('user 9365951b39z here')                                # glued to a letter on the right: not a git id

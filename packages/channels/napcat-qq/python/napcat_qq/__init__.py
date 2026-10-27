@@ -14,6 +14,8 @@ TITLE = 'QQ'                      # the sidebar workspace its conversations live
 # the NT media host, the group-picture CDN that older clients' pictures still come from, and the sticker
 # shop host store stickers come from.
 IMAGE_HOSTS = ('multimedia.nt.qq.com.cn', 'gchat.qpic.cn', 'gxh.vip.qq.com')
+# The file hosts the 148 received files with a link were served from (gzc-, hkc-, tjc-, njc-, cqc-download.ftn.qq.com).
+FILE_HOSTS = ('.ftn.qq.com',)
 # The adapter's resident service: an enabled integration for this channel starts it by itself the first time.
 SERVICE_ARGV = ('python3', '/app/adapter.py', '--service')
 # QQ's own faces (小黄脸) by name -> id: the same table the adapter turns `[表情:名字]` into a face with.

@@ -141,6 +141,11 @@ def image_hosts():
     return [host for kind in _KINDS.values() for host in getattr(kind, 'IMAGE_HOSTS', ())]
 
 
+def file_hosts(identifier):
+    """The hosts a scene's platform delivers received files from (`FILE_HOSTS`); empty where it declares none."""
+    return tuple(getattr(of(identifier), 'FILE_HOSTS', None) or ())
+
+
 def _signer(url):
     for kind in _KINDS.values():
         found = getattr(kind, 'media_key_name', None)

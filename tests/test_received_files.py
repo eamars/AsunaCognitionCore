@@ -82,7 +82,8 @@ def test_the_same_bytes_are_stored_once_in_their_own_kind_and_never_as_hers(stor
     store.db.artifacts.update_one({'_id': first}, {'$set': {'days_from': ago(days=2)}})
     again = a_file(store, here['scope_key'], 2, body=b'same text\n')
     assert again == first and row(store, first)['days_from'] > ago(minutes=1)
-    assert row(store, first)['source_ids'] == ['received-file:in-ep-1:0'], 'the first origin is the row\'s for good'
+    assert row(store, first)['source_ids'] == ['received-file:in-ep-1:0', 'received-file:in-ep-2:0'], \
+        'the first origin stays first (it names the life cycle); the repost\'s source finds the row without a fetch'
     hers = BlobStore(store).put_once(b'same text\n', here['scope_key'], 'file', source_ids=['task-file:t:a.txt'])
     assert hers['artifact_id'] != first and not hers.get('deduplicated')
     assert a_file(store, here['scope_key'], 3, body=b'same text\n') == first

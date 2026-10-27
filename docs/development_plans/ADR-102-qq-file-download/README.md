@@ -138,11 +138,11 @@ a fixed line:
   download cannot hold an inbound or outbound lane. What a fetch can hold is her own tool call, for at most 20 s, as
   `read_image` does today with a cap eight times larger.
 - **No link, or a dead one** (the 5 of 153; a link QQ no longer serves): she is told plainly, in words, with the
-  platform's status. Asking the adapter for a fresh link (`get_group_file_url`, on the bulk lane, a new adapter
-  capability that an older adapter does not declare) is left until a real file shows links dying inside her 7 days.
-- **How long QQ's links live is measured in the build, not assumed:** one real text file from a group, fetched once
-  with the owner's word and again at intervals, and the life found is written back into this page. Until then it is
-  not known.
+  platform's status. Asking the adapter for a fresh link (`get_group_file_url`, a new adapter capability) is not
+  built.
+- **QQ is not the storage** (the owner, 2026-10-27: "if the file is gone then gone"): a fetch is a best attempt.
+  What she has read is kept by this page's own lifecycle (section 5); a link QQ no longer serves is said once, in
+  words, and nothing waits on how long QQ keeps its links, which is not measured.
 
 ### 4. Types and marks, from the bytes
 
@@ -181,7 +181,7 @@ types one way.
   as a record and would be kept for good without a word, so a test pins that a received file is gone after 3 days.
 - **After the bytes, before the ref ends** (days 4 to 7): the row stays (`storage` `removed`) and a `read` fetches
   again from the item's link. Fetched: the page, with `前一份字节在%s到期删了，这次是重新拉的`. Not fetched, one
-  sentence: `这个文件%s拉过，字节在%s到期删了；现在链接失效了（平台答%s），拿不回来了。文件不是没内容，是拿不回来。`
+  sentence: `这个文件%s拉过，字节在%s到期删了；现在链接失效了（平台答%s），拿不回来了。这一份存在过、有内容。`
 - **What finds a file.** A ref is found by scanning the conversation's messages, so it lives as long as that scan: 7
   days (`REF_DAYS`); after that the words are the ones a picture's old ref gets. A kept file is found by its own row,
   so its ref never ends and `kept` lists refs that keep working. Every line that tells her a file can still be got back
@@ -197,7 +197,9 @@ types one way.
   total kept and the three kept files she has read least recently, never the whole list, so she can let one go and the
   answer stays short. The three are among the files she can let go from where she asks (inside that call's fence);
   files kept in other conversations are counted in one line and never named, as `kept` does, so a refusal in a group
-  names nothing from home or from another group. Keeping does not move a file out of its conversation's fence.
+  names nothing from home or from another group. The quota and the "elsewhere" count both count only kept files whose bytes
+  are still stored; an erased or expired one appears in neither, only in the list carrying ADR-105's sentence (her
+  review of 7ab4f702ad23). Keeping does not move a file out of its conversation's fence.
 
 ### 6. The fence
 
@@ -326,8 +328,7 @@ pictures sent as files (`read_image` handles pictures).
 - The copy: safe names, the deny-execute entry on Windows (and its refusal path), `0600` on POSIX.
 - Forwarding by content after a rename.
 - Each test mutation-checked so it is not green by construction. Mongo tests drop their own databases.
-- Once in the build, with the owner's word: one real text file from a group, fetched and read end to end, and how long
-  its link lives, written back into this page (a must, not an extra).
+- Once in the build, with the owner's word: one real text file from a group, fetched and read end to end.
 
 ## Built
 
@@ -337,3 +338,12 @@ pictures sent as files (`read_image` handles pictures).
   the source `received-file:<message id>:<index>`, `KEEP_DAYS` 3, the quota 20 MiB or 50 files);
   `src/asuna/media_life.py` (the `RECEIVED` cycle, counted as `received`); `BlobStore.put` and `put_once` take the
   row's own fields. Tests: `tests/test_received_files.py`.
+- Part 2: the `received_file` tool for both halves (`received_files.run`: `read`, `keep`, `let_go`, `kept`), the
+  note under a line (`line_note`, in `people.py`), fetching through `vision.download` (shared with pictures: one
+  redirect fence, one cap on bytes read, and a deadline for the whole fetch), judging (`judge`; `outbound_files.sniff`
+  learned programs and GB18030), pages and `find`, bytes fetched again onto their own row (`BlobStore.restore`),
+  `FILE_HOSTS` (`channel_kinds.file_hosts`; NapCat `.ftn.qq.com`). Its cost: one tool more in each half (her 30 -> 31,
+  the action brain's 26 -> 27), descriptions +499 characters for her and +291 for the action brain
+  (`tests/test_tool_budget.py`). Tests: `tests/test_received_files_read.py`, five, for the guards whose failure would
+  be silent (the fence, the cap and the hosts, https, a program never stored, an erased file never fetched again);
+  paging and wording are checked by reading a real file.

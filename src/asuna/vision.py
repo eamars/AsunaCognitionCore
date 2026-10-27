@@ -351,8 +351,12 @@ def readable_image_scenes(store, task, config):
     return out
 
 
-def scene_attachments(store, task, config, *, limit=MAX_ITEMS_PER_MESSAGE, scan=SCENE_SCAN_MESSAGES):
-    """本场景（外加按配置只读联动的场景）最近的入站图片。范围由任务绑定，参数换不了它。"""
+def scene_attachments(store, task, config, *, limit=MAX_ITEMS_PER_MESSAGE, scan=SCENE_SCAN_MESSAGES,
+                      entries=None):
+    """本场景（外加按配置只读联动的场景）最近的入站图片。范围由任务绑定，参数换不了它。
+    ``entries`` (message, config) -> items: what a message offers; pictures by default, received files with theirs
+    (received_files.files_of), so both are found through this one fence."""
+    entries = entries or attachments_of
     scenes = readable_image_scenes(store, task, config)
     rows, scanned = [], []
     for scope in scenes:
@@ -372,7 +376,7 @@ def scene_attachments(store, task, config, *, limit=MAX_ITEMS_PER_MESSAGE, scan=
     items = []
     for row in rows:
         linked = bool(row.pop('_linked_scene', False))
-        for entry in attachments_of(row, config=config):
+        for entry in entries(row, config=config):
             entry['scene_seq'] = row.get('scene_seq')
             entry['scene_id'] = row.get('scene_id')
             entry['linked_scene'] = linked
@@ -384,13 +388,14 @@ def scene_attachments(store, task, config, *, limit=MAX_ITEMS_PER_MESSAGE, scan=
             'vision': vision_capability(config)}
 
 
-def attachment_by_ref(store, task, config, ref, session_class=visibility.PUBLIC):
+def attachment_by_ref(store, task, config, ref, session_class=visibility.PUBLIC, entries=None):
     """(entry, listing): the attachment a ref names among the pictures of the last REF_DAYS days in this conversation
     and its linked scenes (the same fence as scene_attachments), or (None, listing). The newest few come first.
 
     At home (owner_private, owner 2026-10-11) the fence does not hold her back: a ref from any of her conversations
     is found, marked `home_reach`. Elsewhere it holds, so nothing at home is read from outside."""
-    listing = scene_attachments(store, task, config)
+    entries = entries or attachments_of
+    listing = scene_attachments(store, task, config, entries=entries)
     entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
     if entry:
         return entry, listing
@@ -408,7 +413,7 @@ def attachment_by_ref(store, task, config, ref, session_class=visibility.PUBLIC)
                                       {'_id': 1, 'scene_id': 1, 'scene_seq': 1, 'direction': 1, 'text': 1,
                                        'event.raw': 1, 'occurred_at': 1, 'received_at': 1}).sort('scene_seq', -1)
         for row in rows:
-            for found in attachments_of(row, config=config):
+            for found in entries(row, config=config):
                 if found['ref'] == ref:
                     found.update(scene_seq=row.get('scene_seq'), scene_id=row.get('scene_id'),
                                  linked_scene=bool(scope['linked']), **({'home_reach': True} if scope.get('home_reach') else {}))
@@ -420,7 +425,7 @@ def scene_id_of(task):
     return _clean((task or {}).get('scene_id'), 90)
 
 
-class _RedirectDenied(Exception):
+class RedirectDenied(Exception):
     """重定向跳出白名单：允许列表里的站点不能把我们带进内网任意端口。"""
 
 
@@ -432,8 +437,57 @@ class _KeepInsideAllowList(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         host = (urlsplit(newurl).hostname or '').lower()
         if not host_allowed(host, self.allow_hosts):
-            raise _RedirectDenied(host or '未知主机')
+            raise RedirectDenied(host or '未知主机')
         return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+class OverCap(Exception):
+    """A download passed its cap: it stopped at the first byte over."""
+
+
+class Refused(Exception):
+    """The host answered a status other than 200 without an error."""
+
+    def __init__(self, status):
+        super().__init__(status)
+        self.status = status
+
+
+# Tests only: the TLS context a local HTTPS stub is trusted with. None is the default verification.
+TEST_TLS_CONTEXT = None
+
+
+def download(url, allow_hosts, cap, timeout, agent=USER_AGENT, deadline=None):
+    """GET a link that stays on the allowed hosts, redirects included, reading at most `cap` bytes into memory.
+    `timeout` bounds each wait on the socket; `deadline` (time.monotonic) the whole download, checked between pieces.
+    Returns (data, final host, content type). Raises RedirectDenied (a host off the list, after a redirect or at
+    the end), OverCap, Refused (a status other than 200), urllib.error.HTTPError, and the transport's own errors
+    (URLError, OSError, TimeoutError) for the caller to put in words."""
+    import time
+    request = urllib.request.Request(url, headers={'User-Agent': agent})
+    handlers = [_KeepInsideAllowList(allow_hosts)]
+    if TEST_TLS_CONTEXT is not None:
+        handlers.append(urllib.request.HTTPSHandler(context=TEST_TLS_CONTEXT))
+    with urllib.request.build_opener(*handlers).open(request, timeout=timeout) as response:
+        status = getattr(response, 'status', None) or 200
+        if status != 200:
+            raise Refused(status)
+        final_host = (urlsplit(response.geturl()).hostname or '').lower()
+        content_type = response.headers.get('content-type', '') or ''
+        chunks, total = [], 0
+        while True:
+            part = response.read(65536)
+            if not part:
+                break
+            total += len(part)
+            if total > cap:
+                raise OverCap(cap)
+            chunks.append(part)
+            if deadline is not None and time.monotonic() > deadline:
+                raise TimeoutError('the whole download took longer than its limit')
+    if not host_allowed(final_host, allow_hosts):
+        raise RedirectDenied(final_host or '未知主机')
+    return b''.join(chunks), final_host, content_type
 
 
 def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=visibility.PUBLIC, task_dir=None,
@@ -456,27 +510,14 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=vis
         parsed = urlsplit(url)
         if parsed.scheme != 'https' and not config.get('vision', {}).get('allow_insecure_http'):
             raise ValueError('IMAGE_INSECURE_URL_DENIED: 这张图的链接是 %s，程序只拉 https；%s' % (parsed.scheme or '空', GIVE_UP))
-        request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-        opener = urllib.request.build_opener(_KeepInsideAllowList(vision['image_hosts']))
         try:
-            with opener.open(request, timeout=timeout or vision['timeout_seconds']) as response:
-                status = getattr(response, 'status', None) or 200
-                if status != 200:
-                    raise _fetch_failed(status, '', url, entry.get('signature'))
-                final_host = (urlsplit(response.geturl()).hostname or '').lower()
-                content_type = response.headers.get('content-type', '') or ''
-                chunks = []
-                total = 0
-                while True:
-                    part = response.read(65536)
-                    if not part:
-                        break
-                    total += len(part)
-                    if total > cap:
-                        raise ValueError(_video_too_large()) if video else _too_large(cap)
-                    chunks.append(part)
-                data = b''.join(chunks)
-        except _RedirectDenied as exc:
+            data, final_host, content_type = download(url, vision['image_hosts'], cap,
+                                                      timeout or vision['timeout_seconds'])
+        except Refused as exc:
+            raise _fetch_failed(exc.status, '', url, entry.get('signature')) from exc
+        except OverCap as exc:
+            raise (ValueError(_video_too_large()) if video else _too_large(cap)) from exc
+        except RedirectDenied as exc:
             raise ValueError(f'IMAGE_REDIRECT_HOST_DENIED: 图片链接跳到了 {exc}，不在 vision.image_hosts 白名单里；{GIVE_UP}') from exc
         except urllib.error.HTTPError as exc:
             try:
@@ -487,9 +528,6 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=vis
         except (urllib.error.URLError, OSError, TimeoutError) as exc:
             raise ValueError(f'IMAGE_FETCH_FAILED: 连不上图片主机（{type(exc).__name__}，限时 '
                              f'{timeout or vision["timeout_seconds"]:g} 秒）；{TRY_LATER}') from exc
-        if not host_allowed(final_host, vision['image_hosts']):
-            raise ValueError(f'IMAGE_REDIRECT_HOST_DENIED: 图片链接跳到了 {final_host or '未知主机'}，'
-                             f'不在 vision.image_hosts 白名单里；{GIVE_UP}')
     elif entry.get('pull_via') == 'local_file':
         given = entry.get('file')
         form = path_form(given) if session_class == visibility.OWNER_PRIVATE else None

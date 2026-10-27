@@ -334,7 +334,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures and files
 - [`media_life`](../../src/asuna/media_life.py) — How long stored media bytes live: every kind of stored picture has an owner or an expiry.
 - [`outbound_media`](../../src/asuna/outbound_media.py) — 出站图片附件：她的 attach_image 工具 → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
 - [`outbound_files`](../../src/asuna/outbound_files.py) — Files she sends to a group through the outbox (ADR-092): registered from a task's folder, offered to her turn, sent as speak's `file` part, read by the adapter in pieces, their bytes kept 7 days after they were last sent.
-- [`received_files`](../../src/asuna/received_files.py) — Files people send her (ADR-102): what she fetched is stored, and she keeps it or lets it go.
+- [`received_files`](../../src/asuna/received_files.py) — Files people send her (ADR-102): offered by ref, read when she asks, stored, kept or let go.
 - [`animated`](../../src/asuna/animated.py) — Animated pictures as something a still-image model can see: one labelled contact sheet plus words.
 - [`voice`](../../src/asuna/voice.py) — Voice messages arrive as text (ADR-093): a channel adapter fetches each voice of a message before it submits the line and posts the audio to `POST /v1/channels/<id>/voice`; the program turns it into text on this machine within that request 
 - [`lane_faults`](../../src/asuna/lane_faults.py) — Faults of the channel lanes, counted by signature and hour (ADR-095 §5.6, step 1).

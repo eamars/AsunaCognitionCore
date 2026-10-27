@@ -11,7 +11,7 @@ The interfaces of the Asuna runtime: what a channel adapter, a persona or channe
 - [Channel packages](#channel-packages): [kind module](#kind-module)
 - [Her tools](#her-tools)
 - [Action capabilities](#action-capabilities): [tools a task is given](#tools-a-task-is-given), [web search and fetch](#web-search-and-fetch), [skills](#skills), [sandbox](#sandbox), [credentials](#credentials)
-- [Media and images](#media-and-images): [inbound media](#inbound-media), [voice messages](#voice-messages), [reading images](#reading-images), [sending pictures](#sending-pictures), [sending files](#sending-files), [erased media](#erased-media)
+- [Media and images](#media-and-images): [inbound media](#inbound-media), [voice messages](#voice-messages), [reading images](#reading-images), [sending pictures](#sending-pictures), [sending files](#sending-files), [received files](#received-files), [erased media](#erased-media)
 - [Schedules](#schedules): [rhythms](#rhythms), [what the owner sees](#what-the-owner-sees)
 - [Integration and self-development](#integration-and-self-development): [integration profile](#integration-profile), [integration tools](#integration-tools), [drawing and rendering](#drawing-and-rendering), [private words](#private-words), [self-development](#self-development)
 
@@ -905,6 +905,17 @@ A file goes to a group as its own message: speak's `file` part names a file a ta
 - **Offer.** A file any of her tasks registered may be sent where the channel declares `file`, as her own pictures go anywhere. `file_artifacts_from_program` lists them, newest first and at most 8, each with `artifact_id`, `name`, a readable `size`, `type` and `registered_at`; it appears in a group whose kind lists `file` in `REPLY_PARTS` and whose adapter declares `file`.
 - **Sending.** The part is refused in words when the file is not listed, its bytes are gone, or its size is over the limit the adapter declared; the program has no size or type limit of its own. Her record line is `[文件：名字，大小]`, with `，类型没认出来` when its type was not recognized.
 - **Bytes kept.** A file's bytes are removed 7 days after it was last delivered, or 7 days after registration if never delivered, and kept while a message on its way names it (`media_life.sweep`, daily). The artifact row stays, with `storage` `removed` and `bytes_removed_at`. A part or claim naming it then says when the bytes expired and whether the task folder still holds the original unchanged.
+
+### Received files
+
+A file someone sends her is offered by ref and read only when she asks: `received_file`, one tool for both halves (her turn's scene, or the task's binding). Code: `src/asuna/received_files.py`.
+
+- **Offer.** A file on a platform line gets a note under the line: `（文件 ref：att-…，45.0 KB）`, or why it is not read: no link, a platform that declares no `FILE_HOSTS`, a name the first version does not open (archives, PDF, Office, media, programs: `received_files.NOT_OPENED`), a declared size over 1 MiB, a link off the platform's file hosts. A ref is found among the files of the last 7 days in reach, the same fence and window as pictures; at home, in any of her conversations.
+- **Fetching.** Only on `do=read`, only the item's own `https` link on the hosts its channel kind declares (`FILE_HOSTS`; NapCat: `.ftn.qq.com`), redirects included; at most 1,048,576 bytes counted as they are read, 20 s for the whole fetch, the bytes in memory until judged. A fetch is a best attempt: a link the platform no longer serves is said once, in words.
+- **Judging.** A BOM decides the encoding; else a program or other binary is refused and never stored (`名字是 .txt，内容却是Windows 程序`); else strict UTF-8; else GB18030 with at most 1 control character per 1,000; else `编码没认出来`. Every answer carries `marks`: caution always (`这个文件是<sender>发来的…`), and runnable for a script's extension or a text starting with `#!`. The text comes after a fixed line saying it is the sender's material.
+- **Reading.** One page per call: up to 200 lines and 6,000 characters, counted on the decoded text (a line ends at `\r\n`, `\n` or `\r`); `page` goes to any page, `find` gives the count of matches (Latin letters in either case) and the first 5 pages holding one, with the line. `life` says when the bytes go and how the ref is found.
+- **Keeping.** Bytes go 3 days after the last fetch or `let_go` (`media_life`, the `RECEIVED` cycle); a read does not move that. `do=keep` (`why`) keeps a file within 20 MiB or 50 files, `let_go` ends it, `kept` lists what she keeps there and counts the rest. A kept file's ref never ends. Bytes that expired are fetched again onto the same row while the ref is found.
+- **Erasure.** An erased file answers with the [Erased media](#erased-media) sentence and `从原消息的链接重新拉的那条路也一起关了。`; it is never fetched again.
 
 ### Erased media
 

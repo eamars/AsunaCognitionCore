@@ -65,6 +65,7 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 - def `sticker_of` — 'custom', 'market' or None for a stored media item the adapter did not mark (asks each kind).
 - def `sticker_md5` — The md5 of a stored media item's bytes when its platform names the file by it, else None (asks each kind).
 - def `image_hosts` — The media hosts the installed platforms deliver images from (vision's default allowlist).
+- def `file_hosts` — The hosts a scene's platform delivers received files from (`FILE_HOSTS`); empty where it declares none.
 - def `media_key_name` — The name of the key a platform signs this media link with, or None for a link that needs none (media_keys.py).
 - def `media_key_in` — (name, key) a freshly arrived link is signed with, or None.
 - def `sign_media`
@@ -208,6 +209,10 @@ Her sticker shelf and the platform's own faces (ADR-016).
 - def `scene_attachments` — 本场景（外加按配置只读联动的场景）最近的入站图片。范围由任务绑定，参数换不了它。
 - def `attachment_by_ref` — (entry, listing): the attachment a ref names among the pictures of the last REF_DAYS days in this conversation and its linked scenes (the same fence as scene_attachments), or (None, listing).
 - def `scene_id_of`
+- class `RedirectDenied` — 重定向跳出白名单：允许列表里的站点不能把我们带进内网任意端口。
+- class `OverCap` — A download passed its cap: it stopped at the first byte over.
+- class `Refused` — The host answered a status other than 200 without an error.
+- def `download` — GET a link that stays on the allowed hosts, redirects included, reading at most `cap` bytes into memory.
 - def `pull_bytes` — 按元数据把图片字节拉回来。返回 (bytes, media_type, via, source)。失败一律抛真实错误码。
 - def `resolve_image_file` — 路径 ref 指的是哪个文件：``/task/…`` 落在本任务自己的工作区下，绝对路径照原样拿。
 - def `read_image_for_task` — read_image 的实际执行：场景围栏 → 能力核对 → 拉字节 → 落 BlobStore → 交给插件的视觉输入载荷。
@@ -296,6 +301,7 @@ How long stored media bytes live: every kind of stored picture has an owner or a
 Files she sends to a group through the outbox (ADR-092): registered from a task's folder, offered to her turn, sent as speak's `file` part, read by the adapter in pieces, their bytes kept 7 days after they were last sent.
 
 - def `sniff` — The media type of a file from its first bytes (`whole`: they are the whole file); None when not recognized.
+- def `gb18030_text` — The text of GB18030 bytes, or None: strict, and at most CONTROL_PER_THOUSAND control characters (Unicode Cc other than tab, \n and \r) per 1,000 characters.
 - def `size_words` — A size for reading: 820 字节, 12.3 KB, 4.5 MB, 1.25 GB.
 - def `type_words`
 - def `record_line` — Her own record of a file she sent: what her later turns read (D4: an unrecognized type is said, not hidden).
@@ -321,14 +327,28 @@ Files she sends to a group through the outbox (ADR-092): registered from a task'
 
 [src/asuna/received_files.py](../../src/asuna/received_files.py)
 
-Files people send her (ADR-102): what she fetched is stored, and she keeps it or lets it go.
+Files people send her (ADR-102): offered by ref, read when she asks, stored, kept or let go.
 
 - def `source_of`
-- def `stash` — Store fetched bytes (already judged as text) in the conversation's scope; the same bytes there again are the row already stored, and their 3 days start again from this fetch.
+- def `stash` — Store fetched bytes (already judged as text) in the conversation's scope; the same bytes there again are the row already stored: their 3 days start again from this fetch, and the row learns this item's source too, so the item's ref finds it
 - def `mark_read` — A page of it was read: the time a quota refusal sorts by, written only inside the fence like everything here (her review of db192bdff79e: else another conversation's id could reorder whom a refusal names).
 - def `keep` — Keep a file: its bytes are not removed until she lets it go; refused over the quota, in words she can act on.
 - def `let_go` — End a keep: the bytes have their 3 days from now, and the ref is found by its message again, as long as that is found.
 - def `kept` — What she keeps that this call may reach, newest first; an erased one carries ADR-105's sentence, and the files kept in other conversations are counted, never named, with the quota's ruler (kept files whose bytes are stored), so the two coun
+- def `extension`
+- def `files_of` — A platform line's files, offered by ref before anything is fetched: the program knows only the name, the size the platform declared and whether reading can be tried (`pullable`, else `not_pullable_because` in her words).
+- def `line_note` — The note under a line with files: each ref with its size, or why it is not read.
+- def `judge` — (text, encoding) of fetched bytes, judged before anything is stored: a BOM decides; else a program or other binary is refused (naming the disagreement when the name has an extension); else strict UTF-8; else GB18030 with almost no control c
+- def `marks_of` — The marks on every answer: caution always (the sender shown as information, never as a pass), and runnable for a script's extension or a text that starts with #!.
+- def `lines_of` — The lines of decoded text: a line ends at \r\n, \n or \r and nowhere else, and keeps its break; a last line without a break is still a line.
+- def `pages_of` — Pages of up to PAGE_LINES lines and PAGE_CHARS characters, whichever comes first; a line longer than PAGE_CHARS is cut at character boundaries.
+- def `find_in` — The count of matches of `word` (as written, Latin letters in either case) and the first FIND_PAGES pages that hold one, each with its first match's line number and that line cut to FIND_LINE_CHARS around the match.
+- class `FetchFailed` — A fetch that brought nothing back: her words, and the platform's status when it answered one (`dead`: the link itself is refused, so trying again later does not help).
+- def `fetch` — The item's own link, https only, on the platform's file hosts (redirects too), at most MAX_BYTES read and FETCH_SECONDS for the whole fetch.
+- def `reach` — The scopes a call may read received files in: this conversation and its read-only linked scenes, the same function pictures use; at home any of her conversations.
+- def `found` — (entry, row, scopes): the item a ref names among the files of the last REF_DAYS days in reach (the picture fence), and its stored row; or a kept file's own row, whose ref never ends.
+- def `read` — op=read: the first read fetches the file; every read answers one page (`page`), or where a word is (`find`).
+- def `run` — The `received_file` tool, for both halves: `where` is her turn's scene or the task's binding.
 
 ## `animated`
 

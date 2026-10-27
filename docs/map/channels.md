@@ -317,6 +317,19 @@ Files she sends to a group through the outbox (ADR-092): registered from a task'
 - def `sent` — A delivered file row: its bytes are kept KEEP_DAYS from now.
 - def `failure_words` — Her words for a file row of hers that did not go: a mute as every line says it, else 没发出去 with the program's reason, the platform's own words, or the adapter's reason in words.
 
+## `received_files`
+
+[src/asuna/received_files.py](../../src/asuna/received_files.py)
+
+Files people send her (ADR-102): what she fetched is stored, and she keeps it or lets it go.
+
+- def `source_of`
+- def `stash` — Store fetched bytes (already judged as text) in the conversation's scope; the same bytes there again are the row already stored, and their 3 days start again from this fetch.
+- def `mark_read` — A page of it was read: the time a quota refusal sorts by, written only inside the fence like everything here (her review of db192bdff79e: else another conversation's id could reorder whom a refusal names).
+- def `keep` — Keep a file: its bytes are not removed until she lets it go; refused over the quota, in words she can act on.
+- def `let_go` — End a keep: the bytes have their 3 days from now, and the ref is found by its message again, as long as that is found.
+- def `kept` — What she keeps that this call may reach, newest first; an erased one carries ADR-105's sentence, and the files kept in other conversations are counted, never named, with the quota's ruler (kept files whose bytes are stored), so the two coun
+
 ## `animated`
 
 [src/asuna/animated.py](../../src/asuna/animated.py)

@@ -84,7 +84,7 @@ grilling is about where the test gives no answer, or where a program differs fro
    *Real person:* no answer; this is a question of fact.
    *Xiaoman answered it herself, 2026-10-27,* from two plans she read in the database on 10-24: what she mixed up was
    neither her clock nor the owner's but **a group line's clock**. A reminder she wrote for that line as "20:00" was
-   stored in the zone the line sets, so on her own clock it fired hours later, after midnight; another, written as
+   stored in the zone the line sets, so on her own clock it fired five hours later, after midnight; another, written as
    "21:30", fired on time by the line's clock, and on hers she read it as late. The gap is the zone the line carries,
    not her clock. She asks that it be recorded as a line of the program read against another clock face, not as her
    being careless with time; that day she made herself the rule to judge when a plan fires by `next_fire_at` alone.

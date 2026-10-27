@@ -271,7 +271,7 @@ The research changed four of them; the owner had agreed to them, so they are nam
 | The same file posted again | One stored copy (`put_once` in its kind and scope). |
 | A received file equal to one of hers | Its own kind keeps it apart; it is never returned as hers. |
 | Two `read` calls on one ref at once | Both fetch; `put_once` may store twice in a race; the sweep removes both in time. Accepted, not locked. |
-| Over the keep quota | `keep` refused with her list. |
+| Over the keep quota | `keep` refused with the total kept and the three files she has read least recently, never the whole list. |
 | MongoDB down | The worker is down; nothing here runs. A fetch that ends while the database drops raises the store's own error, in words. |
 | The sweep meets a broken row | Counted and passed; the rows after it still go (ADR-101 tail). |
 | A row whose time cannot be read | Kept and counted, never read as expired. |

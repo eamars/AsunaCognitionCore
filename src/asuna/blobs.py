@@ -22,7 +22,7 @@ ERASED = 'erased'                   # a row's storage once a privacy erasure del
 # is there, and its only writer is the sweep's expiry (media_life.py:89 at 94bb3ea3a92d). Merged into one template, the
 # expired row would again be told an erasure took its bytes; tests/test_erasure_marks.py holds them apart. The kind
 # comes with its measure word (张图, 个文件); the times are on the clock of the conversation it is said in.
-ERASED_WORDS = '这%s存在过、有内容；字节在%s被隐私清除删掉了，不会再拿回来。'
+ERASED_WORDS = '这%s存在过、有内容；字节在%s被隐私清除删掉了，这一份不会再变回可读。'
 ERASED_AFTER_EXPIRY_WORDS = '这%s存在过、有内容；字节在%s到期删掉了；%s的一次隐私清除之后，这一份不会再变回可读。'
 BYTES_MISSING = ('ARTIFACT_BYTES_MISSING: 这份登记着的字节不在存储里了（程序的问题，不是你的错）；不是没有内容。'
                  '重试也一样：不用这份，照实写进结果')

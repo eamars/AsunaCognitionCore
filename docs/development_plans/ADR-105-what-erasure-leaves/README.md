@@ -45,12 +45,14 @@ erasure has run in this deployment (`audit_events` has no `privacy.intent`), and
   sentence, never a generic "not found" or a storage error. Which of the two a row gets is a fact on the row, never a
   guess: whether it carries `bytes_removed_at`, whose only writer is the sweep's expiry.
 
-  > 这%s存在过、有内容；字节在%s被隐私清除删掉了，不会再拿回来。
+  > 这%s存在过、有内容；字节在%s被隐私清除删掉了，这一份不会再变回可读。
 
   > 这%s存在过、有内容；字节在%s到期删掉了；%s的一次隐私清除之后，这一份不会再变回可读。
 
   The first is for bytes the erasure deleted; the second for bytes that had already expired, which the erasure did not
-  take (saying it did would be a false cause; Xiaoman, her review of 94bb3ea3a92d). The first `%s` is the kind with
+  take (saying it did would be a false cause; Xiaoman, her review of 94bb3ea3a92d). Both end alike: what the erasure
+  closes is this row, never the file itself; a task can register its folder's copy again, as a new row (Xiaoman, her
+  review of ff171ae77fd1). The first `%s` is the kind with
   its measure word, as she reads it: 张图 for a picture (a sticker she drew is one), 个文件 for a file (one she sent,
   or one she received). The times are on the clock of the conversation it is said in. Neither sentence has 你 or 我
   as its subject, and neither names the conversation that was erased. They are two constants, never one template

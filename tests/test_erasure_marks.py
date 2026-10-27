@@ -350,6 +350,8 @@ def test_the_two_shapes_of_one_kind_read_differently_and_say_whose_cause_is_whos
     assert second == blobs_mod.ERASED_AFTER_EXPIRY_WORDS % (
         '张图', local_time.stamp('2026-10-20T01:00:00+00:00', zone), erased_at)
     assert '到期删掉' in second and '被隐私清除删掉' not in second, 'the expiry, not the erasure, took those bytes'
+    assert first.endswith('这一份不会再变回可读。') and second.endswith('这一份不会再变回可读。'), \
+        'what the erasure closes is this row, never the file: a task may register its copy again'
     assert not {'你', '我'} & set(first + second), 'neither sentence speaks as or to anyone'
 
 

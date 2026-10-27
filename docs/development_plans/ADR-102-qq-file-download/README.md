@@ -1,8 +1,9 @@
 # ADR-102: Files people send her
 
-Status: designed 2026-10-27; not built. The changes asked in review of commit `bafd7b8d` are made in the commit
-after it, with the owner's rulings on erasure (ADR-105). The build starts after ADR-101 is closed (its tail merged).
-First in the owner's order (102, 103, 104).
+Status: designed 2026-10-27; being built in three parts (storage, the `received_file` tool, the action brain's
+copy). Part 1 is built: ADR-105's places, and the storage and lifecycle of section 5 (see Built). The changes asked in
+review of commit `bafd7b8d` are made in the commit after it, with the owner's rulings on erasure (ADR-105). First in
+the owner's order (102, 103, 104).
 
 ## Why
 
@@ -172,8 +173,9 @@ types one way.
 - **A new cycle in `media_life`, not one more line of its table.** Today nothing in `media_life` is kept by a
   switch on its own row: what stays is either a record by its source or named by another row (her shelf, the pool,
   a message), and `cutoff` knows three lives. `received-file:` gets a cycle of its own, `RECEIVED`: bytes removed
-  **3 days** after the fetch (or after `let_go`), and a row with `kept_at` is not removed. A row whose time cannot be
-  read (`created_at` missing or not a time) is kept and counted, never read as expired (the ADR-101 tail makes this
+  **3 days** after the fetch (or after `let_go`), and a row with `kept_at` is not removed. The 3 days count from the
+  row's `days_from`, which every fetch and every `let_go` sets: the same file fetched again, stored once, has its 3
+  days from that fetch. A row whose time cannot be read (`days_from` and `created_at` missing, or not a time) is kept and counted, never read as expired (the ADR-101 tail makes this
   the rule for every cycle: 65 real rows lack `created_at` today, all records). A prefix missing from `POLICY` reads
   as a record and would be kept for good without a word, so a test pins that a received file is gone after 3 days.
 - **After the bytes, before the ref ends** (days 4 to 7): the row stays (`storage` `removed`) and a `read` fetches
@@ -192,7 +194,9 @@ types one way.
   **20 MiB or 50 files**, whichever comes first (the owner took Claude's and Xiaoman's proposal, 2026-10-27). With
   files of at most 1 MiB, the 20 MiB comes first (at 21 full-size files). Over the quota the keep is refused with the
   total kept and the three kept files she has read least recently, never the whole list, so she can let one go and the
-  answer stays short. Keeping does not move a file out of its conversation's fence.
+  answer stays short. The three are among the files she can let go from where she asks (inside that call's fence);
+  files kept in other conversations are counted in one line and never named, as `kept` does, so a refusal in a group
+  names nothing from home or from another group. Keeping does not move a file out of its conversation's fence.
 
 ### 6. The fence
 
@@ -323,3 +327,12 @@ pictures sent as files (`read_image` handles pictures).
 - Each test mutation-checked so it is not green by construction. Mongo tests drop their own databases.
 - Once in the build, with the owner's word: one real text file from a group, fetched and read end to end, and how long
   its link lives, written back into this page (a must, not an extra).
+
+## Built
+
+- Part 1, with ADR-105 (merged at `88206ed9`): every place ADR-105 names, the received-file rows included once they
+  exist.
+- Part 1b: `src/asuna/received_files.py` (`stash`, `mark_read`, `keep`, `let_go`, `kept`; the kind `received_file`,
+  the source `received-file:<message id>:<index>`, `KEEP_DAYS` 3, the quota 20 MiB or 50 files);
+  `src/asuna/media_life.py` (the `RECEIVED` cycle, counted as `received`); `BlobStore.put` and `put_once` take the
+  row's own fields. Tests: `tests/test_received_files.py`.

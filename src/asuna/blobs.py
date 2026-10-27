@@ -97,7 +97,7 @@ class BlobStore:
             self.bucket.delete(blob_id);raise
         return {'artifact_id':key,'sha256':digest,'size':size,'storage':'gridfs'}
 
-    def put(self,data:bytes,scope:str,kind:str,*,source_ids=(),media_type=None):
+    def put(self,data:bytes,scope:str,kind:str,*,source_ids=(),media_type=None,fields=None):
         # created_at / media_type 只是给「本轮可引用」那份清单用的说明（新的在前、格式看得见）；
         # 真要以字节为准时仍然现读现认魔数，不拿这两个字段当依据。
         self._scope_known(scope)
@@ -108,18 +108,18 @@ class BlobStore:
             # Read the stored stream before permitting any dependent operation.
             observed=self.bucket.open_download_stream(blob_id).read()
             if len(observed)!=len(data) or sha(observed)!=digest:raise ValueError('ARTIFACT_STORED_BYTES_MISMATCH: 存进去的字节读回来对不上，这次没有存；可以再试一次，还不行就照实写进结果')
-            doc={'_id':key,'scope_key':scope,'state':'DONE','kind':kind,'storage':'gridfs','gridfs_id':str(blob_id),'sha256':digest,'size':len(data),'source_ids':list(source_ids),'created_at':now()}
+            doc={**(fields or {}),'_id':key,'scope_key':scope,'state':'DONE','kind':kind,'storage':'gridfs','gridfs_id':str(blob_id),'sha256':digest,'size':len(data),'source_ids':list(source_ids),'created_at':now()}
             if media_type:doc['media_type']=str(media_type)[:40]
             self.store.put('artifacts',doc,stream=key)
         except BaseException:
             self.bucket.delete(blob_id);raise
         return {'artifact_id':key,'sha256':digest,'size':len(data),'storage':'gridfs'}
 
-    def put_once(self,data:bytes,scope:str,kind:str,*,source_ids=()):
-        """Content-addressed: the same bytes in the same scope are stored once."""
+    def put_once(self,data:bytes,scope:str,kind:str,*,source_ids=(),fields=None):
+        """Content-addressed: the same bytes in the same scope are stored once; `fields` go on a new row only."""
         existing=self.store.db.artifacts.find_one({'sha256':sha(data),'scope_key':scope,'kind':kind,'state':'DONE','storage':'gridfs'})
         if existing:return {'artifact_id':existing['_id'],'sha256':existing['sha256'],'size':existing['size'],'storage':'gridfs','deduplicated':True}
-        return self.put(data,scope,kind,source_ids=source_ids)
+        return self.put(data,scope,kind,source_ids=source_ids,fields=fields)
 
     def _readable(self,key,scope):
         """The row of `key` if its bytes may be read in `scope`: refused when it is not there or not in the scope, and,

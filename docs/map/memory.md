@@ -342,7 +342,7 @@ Scoped, hash-verified GridFS storage for bounded-document overflow.
 - class `BlobStore`
   - `put_stream` — Store what an open binary handle holds, hashing while it copies; the stored bytes are read back in pieces and checked against that hash before the manifest is written.
   - `put`
-  - `put_once` — Content-addressed: the same bytes in the same scope are stored once.
+  - `put_once` — Content-addressed: the same bytes in the same scope are stored once; `fields` go on a new row only.
   - `get`
   - `get_range` — `length` bytes from `offset` of a stored blob (fewer at its end), read with a seek: a piece of a large file without reading the rest.
   - `erase_scope` — Delete every stored byte of `scope`, then mark each of its rows whose bytes are gone (`gridfs`, and `removed`: an expired file must not be fetched again either) `erased`, by the row's own scope, so a row whose bytes were already missing is 

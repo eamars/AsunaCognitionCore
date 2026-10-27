@@ -13,13 +13,15 @@ A copy that a lasting row still names (her shelf, the pool, a message that sent 
 A file a task registered to send (`outbound_files`) keeps its bytes `outbound_files.KEEP_DAYS` after it was last
 sent, or after it was registered when it never was, and while a message still on its way names it; then its bytes
 go and its row stays as the record, with `storage` `removed` and `bytes_removed_at`.
+A file someone sent her (`received_files`) keeps its bytes `received_files.KEEP_DAYS` after it was last fetched or
+let go (`days_from`, else `created_at`); a kept one (`kept_at`) is not removed. Its row stays, as a task file's does.
 `sweep` deletes the rest once at start and then daily; it reports what it removed and never raises for one bad row.
 """
 from datetime import datetime, timedelta, timezone
 
 PULLED_DAYS = 7
 LISTED_GRACE_HOURS = 24          # a candidate's bytes are stored a moment before its pool row
-PULLED, LISTED, RECORD, OFFERED = 'pulled', 'listed', 'record', 'offered'
+PULLED, LISTED, RECORD, OFFERED, RECEIVED = 'pulled', 'listed', 'record', 'offered', 'received'
 # source id prefix -> life cycle. A new kind of stored picture adds its prefix here (tests/test_media_life.py).
 POLICY = {
     'in-': PULLED,               # read_image of a platform picture or a video (source: the message id)
@@ -30,6 +32,7 @@ POLICY = {
     'edit:': RECORD,             # a picture she edited
     'local-upload:': RECORD,     # a picture the owner sent her at home
     'task-file:': OFFERED,       # a file a task registered to send (outbound_files)
+    'received-file:': RECEIVED,  # a file someone sent her, fetched when she read it (received_files)
 }
 
 
@@ -50,23 +53,26 @@ def named(store):
 def sweep(store, now=None):
     """Delete expired pulled copies, unlisted pool candidates and the bytes of files past their days.
 
-    Returns {'pulled': n, 'listed': n, 'files': n, 'bytes': n, 'failed': n, 'undated': n}: `failed` the rows that could
-    not be swept, `undated` the rows kept because their time cannot be read (a time not known is never old)."""
+    Returns {'pulled': n, 'listed': n, 'files': n, 'received': n, 'bytes': n, 'failed': n, 'undated': n}: `files` the
+    task files and `received` the received files whose bytes went, `failed` the rows that could not be swept, `undated`
+    the rows kept because their time cannot be read (a time not known is never old)."""
     from gridfs import GridFSBucket
     from .channels import Channels
     from .outbound_files import KEEP_DAYS
+    from .received_files import KEEP_DAYS as RECEIVED_DAYS
     db = store.db
     bucket = GridFSBucket(db, bucket_name='artifact_blobs')
     moment = now or datetime.now(timezone.utc)
     cutoff = {PULLED: moment - timedelta(days=PULLED_DAYS),
               LISTED: moment - timedelta(hours=LISTED_GRACE_HOURS),
-              OFFERED: moment - timedelta(days=KEEP_DAYS)}
+              OFFERED: moment - timedelta(days=KEEP_DAYS),
+              RECEIVED: moment - timedelta(days=RECEIVED_DAYS)}
     keep = named(store)
     going = set(db.messages.distinct('file.artifact_id', {'file.artifact_id': {'$exists': True},
                                                           'delivery_state': {'$in': list(Channels.PART_ON_ITS_WAY)}}))
-    removed = {PULLED: 0, LISTED: 0, 'files': 0, 'bytes': 0, 'failed': 0, 'undated': 0}
+    removed = {PULLED: 0, LISTED: 0, 'files': 0, RECEIVED: 0, 'bytes': 0, 'failed': 0, 'undated': 0}
     for row in db.artifacts.find({'storage': 'gridfs'}, {'source_ids': 1, 'created_at': 1, 'gridfs_id': 1, 'size': 1,
-                                                         'last_sent_at': 1}):
+                                                         'last_sent_at': 1, 'kept_at': 1, 'days_from': 1}):
         try:
             _sweep_one(db, bucket, row, moment, cutoff, keep, going, removed)
         except Exception:                       # noqa: BLE001 one bad row is counted; the rows after it still go
@@ -76,20 +82,16 @@ def sweep(store, now=None):
 
 def _sweep_one(db, bucket, row, moment, cutoff, keep, going, removed):
     from bson import ObjectId
-    from .outbound_files import REMOVED
     cycle = life(row)
     if cycle == OFFERED:
         if row['_id'] in going or not _older(row.get('last_sent_at') or row.get('created_at'), cutoff[OFFERED], removed):
             return
-        try:
-            if row.get('gridfs_id'):
-                bucket.delete(ObjectId(row['gridfs_id']))
-        except Exception:                       # noqa: BLE001 bytes already gone: the row still says so
-            pass
-        db.artifacts.update_one({'_id': row['_id']}, {'$set': {'storage': REMOVED, 'bytes_removed_at': moment.isoformat()},
-                                                      '$unset': {'gridfs_id': ''}})
-        removed['files'] += 1
-        removed['bytes'] += _size(row)
+        _remove_bytes(db, bucket, row, moment, removed, 'files')
+        return
+    if cycle == RECEIVED:
+        if row.get('kept_at') or not _older(row.get('days_from') or row.get('created_at'), cutoff[RECEIVED], removed):
+            return
+        _remove_bytes(db, bucket, row, moment, removed, RECEIVED)
         return
     if cycle == RECORD or row['_id'] in keep:
         return
@@ -102,6 +104,21 @@ def _sweep_one(db, bucket, row, moment, cutoff, keep, going, removed):
         pass
     db.artifacts.delete_one({'_id': row['_id']})
     removed[cycle] += 1
+    removed['bytes'] += _size(row)
+
+
+def _remove_bytes(db, bucket, row, moment, removed, count):
+    """A file's bytes go and its row stays as the record, with `storage` `removed` and `bytes_removed_at`."""
+    from bson import ObjectId
+    from .outbound_files import REMOVED
+    try:
+        if row.get('gridfs_id'):
+            bucket.delete(ObjectId(row['gridfs_id']))
+    except Exception:                           # noqa: BLE001 bytes already gone: the row still says so
+        pass
+    db.artifacts.update_one({'_id': row['_id']}, {'$set': {'storage': REMOVED, 'bytes_removed_at': moment.isoformat()},
+                                                  '$unset': {'gridfs_id': ''}})
+    removed[count] += 1
     removed['bytes'] += _size(row)
 
 
@@ -132,7 +149,7 @@ def _moment(value):
 
 # Written out on purpose, apart from the keys `sweep` returns: the test holds the two lists equal, so a count added to
 # the sweep and forgotten here fails it. Derive this from that list and the test can no longer fail (review M3b, 2026-10-27).
-RECORDED = ('pulled', 'listed', 'files', 'failed', 'undated')
+RECORDED = ('pulled', 'listed', 'files', 'received', 'failed', 'undated')
 
 
 def worth_recording(removed):

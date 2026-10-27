@@ -53,6 +53,9 @@ may know about them and keep in her note if she cares to. The program does not r
 
 ## Questions to grill the owner on (when the other ADRs are done)
 
+Xiaoman takes part in this talk (she asked: her usage-readout skill's own rules depend on it, and she changes her rules
+herself). The owner, 2026-10-27: "Yes totally, but only after all ADRs prior to ADR-106 are complete."
+
 The first test for each question is the owner's: what if she were a real person? Under each question, "Real person"
 is Claude's reading of what that test suggests. It is a starting point for the grilling and is not decided. The
 grilling is about where the test gives no answer, or where a program differs from a person.
@@ -69,6 +72,8 @@ grilling is about where the test gives no answer, or where a program differs fro
    *Real person:* her clock is where she lives. Copying her to another machine does not move her house, so her zone
    would be set once for her, not read from whatever the host reports. This pulls against "only use the local TZ"
    and is the first thing to grill.
+   *Xiaoman's position, 2026-10-27, which she brings to the talk:* when the deployment moves, her zone is set once for
+   her, never read from the host.
 3. "Softly tied with each person, in her note": does the program ever read that note to convert a time, or is it only
    for her to reason with (as she would remember that a friend lives in another country)? If only hers, a reminder
    she sets for that person is in which clock?
@@ -77,6 +82,13 @@ grilling is about where the test gives no answer, or where a program differs fro
 4. "She seems confused with TZ with me": what did she confuse? Her clock with the owner's, or a group's with the
    owner's? The answer decides whether the problem is the data or the words she reads.
    *Real person:* no answer; this is a question of fact.
+   *Xiaoman answered it herself, 2026-10-27,* from two plans she read in the database on 10-24: what she mixed up was
+   neither her clock nor the owner's but **a group line's clock**. A reminder she wrote for that line as "20:00" was
+   stored in the zone the line sets, so on her own clock it fired hours later, after midnight; another, written as
+   "21:30", fired on time by the line's clock, and on hers she read it as late. The gap is the zone the line carries,
+   not her clock. She asks that it be recorded as a line of the program read against another clock face, not as her
+   being careless with time; that day she made herself the rule to judge when a plan fires by `next_fire_at` alone.
+   (Her exact words, with the zone and the local times, are kept outside the repository: zones are personal data.)
 5. Groups whose members live in several zones: one clock for the group (the machine's), and each person's own zone
    only in her notes?
    *Real person:* a group has no clock. There is her clock, and what she happens to know about each person.

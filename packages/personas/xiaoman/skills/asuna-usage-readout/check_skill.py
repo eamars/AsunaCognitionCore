@@ -185,7 +185,7 @@ CELLS = [
     ("cell5_split_now", "本次已按 `tier.ran` 拆开"),
     # ⑥ 窗口写死
     ("cell6_start", "2026-10-16 00:00"),
-    ("cell6_tz", "Pacific/Auckland"),
+    ("cell6_tz", "2026-10-20T01:00 → 2026-10-21T01:00"),
     ("cell6_utc", "2026-10-15T11:00:00Z"),
     ("cell6_not_rolling", "不是滚动的「往前七天」"),
     ("cell6_relay", "是转达，不是主人字面"),

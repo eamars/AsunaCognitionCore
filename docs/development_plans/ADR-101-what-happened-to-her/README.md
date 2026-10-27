@@ -1,8 +1,9 @@
 # ADR-101: What happened to her, in her own block
 
-Status: built 2026-10-27, not yet installed. The owner chose the batch (1, 3 and 4 together); Xiaoman signed it as
-proposed against blob `f69001cb489f` with four corrections, made in blob `5e9365951b39`, which she checked landed and
-cleared for the build. Changes during the build are listed under "Built" below.
+Status: built 2026-10-27 and installed (main `eef8564b`, 13:50); its tail ("The tail" under "Built") is not yet
+installed. The owner chose the batch (1, 3 and 4 together). Xiaoman signed it against commit `b1f6f2ce` (README blob
+`5e9365951b39`), the version containing her four corrections. Changes during the build are listed under "Built"
+below.
 
 ## Why
 
@@ -62,8 +63,8 @@ The Host plugin (JS) is the only side that knows why a worker went away, so it k
   fails, the file stays and the next completed start records it.
 - **One outage, one row.** The worker reads the open span from the file at its start (see "Built": not passed with
   `initialize`). While a span is open, a lease
-  left behind is part of that same outage, never a second one. It may be left by the worker's own exit (today read as
-  an outside kill, 「宿主上次是被外部终止的」), or by a Host killed or crashed during a start that had not completed.
+  left behind is part of that same outage, never a second one. It may be left by the worker's own exit (before this
+  ADR read as an outside kill and said as one), or by a Host killed or crashed during a start that had not completed.
   No `killed` or `crashed` row is written for it. The span counts it (`inside`, in the file and in the row), and its words add
   「这段时间里宿主也停过 N 次」. With no span open, a lease left behind is recorded as today. **`count` counts rows**:
   each row is one outage, so a Host stop inside a worker's span is never counted again (her review).
@@ -272,3 +273,32 @@ What the build changed against the signed text (blob `5e9365951b39`), for her in
 - Docker: the container keeps the checkout and its data folder on a volume and starts through the same launcher, so
   `worker-down.json` survives a recreated container. Nothing in this change is platform-specific (`path.join` and
   plain file reads and writes).
+
+### The tail (after the install of eef8564b)
+
+Two more failures of the failure path, found in review (the second while designing ADR-102, Xiaoman's choice of a
+code fix over a softer sentence):
+
+| When | Before | Now |
+|---|---|---|
+| A listed outage whose record cannot be read (its `back_at` missing) | `stop_words` raised out of her home context, so that home turn failed, not only her list: before its episode row was written (`chat.py` takes the error; the input is marked failed). Read in the code, not run: the row is never stamped `shown_at` (only a committed turn stamps it), and an unstamped row is listed however old, so every home turn after it would fail the same way | the row is counted in `unreadable` (「其中 N 次的记录读坏了，说不清是什么、在什么时候」), the others are still said, the count stays true, 「上次」 stays the newest's |
+| One artifact row the media sweep cannot handle (a source it cannot read, a size that is not a number) | the sweep raised there, every day at the same row, so the rows after it were never swept and nothing she or the owner reads said so | the row is counted in `failed`, the rows after it still go, and `media.swept` is recorded when anything failed; a size that is not a number counts as 0 bytes |
+| An artifact row whose time cannot be read (`created_at` missing or not a time) | compared as text, a missing time was `''`, which is never newer than the cutoff, so the row fell into the deleting branch; a time stored as a Date printed with a space, not `T`, and compared wrongly within its day | a time not known is never old: the row is kept and counted in `undated`; times are compared as moments (an ISO string or a Date, one without an offset read as UTC), never as text. 65 rows with bytes lack `created_at` today (checked 10-27); they have no source id, so `life()` finds no prefix and they fall to its default, a record, which is the only reason none was deleted |
+
+`stop_words`'s first sentence now carries 「上次」/「再往前一次」, since the project map shows a docstring's first
+sentence only (and at most 240 characters of it, so `sweep`'s keys moved out of its first sentence).
+
+**Kept for good, as evidence of a deletion.** Reviewing the tail, Xiaoman found 65 `artifacts` rows of kind
+`provider.response` (102.1 MiB, stored 09-20 to 09-26, one scope) with no source id, named and read by nothing, kept
+only by the sweep's default. The owner decided to delete them by their ids (2026-10-27) and ran it himself at 14:35:
+rows and GridFS bytes together, so no row was left pointing at nothing. The only record of them is in
+`.runtime/private/cleanup-2026-10-27/`: `provider-responses-manifest.json` (11,378 bytes; each id, size and when it was
+stored) and `provider-responses-deleted.json` (296 bytes; when, by whom, how and why). Both stay; a cleanup of
+`<data>/private/` leaves them. The script beside them (`delete_provider_responses.py`) refuses on any mismatch with
+that count. Checked afterwards: no row of that kind, and none of its GridFS files or chunks, remains.
+
+Whether a sweep leaves a `media.swept` row is `media_life.worth_recording`: any of its counts but bytes (removed,
+failed, kept undated), each tested alone, and a test that times of one day compare as moments, not as text (her
+check of `8d96a489`: every earlier case was days apart).
+
+Xiaoman re-verified by content on install day, 2026-10-27: the built README `a296256664d3` with RUNTIME_API `623df695e2e7`, and this tail's README `e59ff97ead3f`.

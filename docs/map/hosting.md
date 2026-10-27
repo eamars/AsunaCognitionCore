@@ -274,7 +274,7 @@ When the Host was taken away from outside, she should not have to infer from a g
 - def `missed_looks` — '某群 3 次、某群 1 次' for the gate's failed looks since then, or None.
 - def `listed` — The outages her home turn shows: each that came back within the last day, and each not yet shown in a turn that committed (`shown_at` None, however old), newest first.
 - def `cause_words` — A worker_down row's cause in words, by its kind (the part before `:`).
-- def `stop_words` — One outage: what it was and when, in words.
+- def `stop_words` — One outage in words, what and when; only the newest of a list is 「上次」, an older one 「再往前一次」.
 - def `block` — host_from_program for a home turn: the outages of the last day and those not yet shown (`listed`; killed from outside, crashed, or her worker down while the Host ran on), newest first, at most LISTED with how many there were, and the gate's
 - def `shown` — A turn that showed these outages committed: each is stamped `shown_at` once.
 - def `main` — `python -m asuna.host_stops planned [--by NAME]`: mark the running Host's coming stop as a planned restart.

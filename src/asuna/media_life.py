@@ -48,48 +48,102 @@ def named(store):
 
 
 def sweep(store, now=None):
-    """Delete expired pulled copies and unlisted pool candidates, and the bytes of files past their days; returns
-    {'pulled': n, 'listed': n, 'files': n, 'bytes': n}."""
-    from bson import ObjectId
+    """Delete expired pulled copies, unlisted pool candidates and the bytes of files past their days.
+
+    Returns {'pulled': n, 'listed': n, 'files': n, 'bytes': n, 'failed': n, 'undated': n}: `failed` the rows that could
+    not be swept, `undated` the rows kept because their time cannot be read (a time not known is never old)."""
     from gridfs import GridFSBucket
     from .channels import Channels
-    from .outbound_files import KEEP_DAYS, REMOVED
+    from .outbound_files import KEEP_DAYS
     db = store.db
     bucket = GridFSBucket(db, bucket_name='artifact_blobs')
     moment = now or datetime.now(timezone.utc)
-    cutoff = {PULLED: (moment - timedelta(days=PULLED_DAYS)).isoformat(),
-              LISTED: (moment - timedelta(hours=LISTED_GRACE_HOURS)).isoformat(),
-              OFFERED: (moment - timedelta(days=KEEP_DAYS)).isoformat()}
+    cutoff = {PULLED: moment - timedelta(days=PULLED_DAYS),
+              LISTED: moment - timedelta(hours=LISTED_GRACE_HOURS),
+              OFFERED: moment - timedelta(days=KEEP_DAYS)}
     keep = named(store)
     going = set(db.messages.distinct('file.artifact_id', {'file.artifact_id': {'$exists': True},
                                                           'delivery_state': {'$in': list(Channels.PART_ON_ITS_WAY)}}))
-    removed = {PULLED: 0, LISTED: 0, 'files': 0, 'bytes': 0}
+    removed = {PULLED: 0, LISTED: 0, 'files': 0, 'bytes': 0, 'failed': 0, 'undated': 0}
     for row in db.artifacts.find({'storage': 'gridfs'}, {'source_ids': 1, 'created_at': 1, 'gridfs_id': 1, 'size': 1,
                                                          'last_sent_at': 1}):
-        cycle = life(row)
-        if cycle == OFFERED:
-            if row['_id'] in going or str(row.get('last_sent_at') or row.get('created_at') or '') > cutoff[OFFERED]:
-                continue
-            try:
-                if row.get('gridfs_id'):
-                    bucket.delete(ObjectId(row['gridfs_id']))
-            except Exception:                   # noqa: BLE001 bytes already gone: the row still says so
-                pass
-            db.artifacts.update_one({'_id': row['_id']}, {'$set': {'storage': REMOVED, 'bytes_removed_at': moment.isoformat()},
-                                                          '$unset': {'gridfs_id': ''}})
-            removed['files'] += 1
-            removed['bytes'] += int(row.get('size') or 0)
-            continue
-        if cycle == RECORD or row['_id'] in keep:
-            continue
-        if str(row.get('created_at') or '') > cutoff[cycle]:
-            continue
+        try:
+            _sweep_one(db, bucket, row, moment, cutoff, keep, going, removed)
+        except Exception:                       # noqa: BLE001 one bad row is counted; the rows after it still go
+            removed['failed'] += 1
+    return removed
+
+
+def _sweep_one(db, bucket, row, moment, cutoff, keep, going, removed):
+    from bson import ObjectId
+    from .outbound_files import REMOVED
+    cycle = life(row)
+    if cycle == OFFERED:
+        if row['_id'] in going or not _older(row.get('last_sent_at') or row.get('created_at'), cutoff[OFFERED], removed):
+            return
         try:
             if row.get('gridfs_id'):
                 bucket.delete(ObjectId(row['gridfs_id']))
-        except Exception:                       # noqa: BLE001 bytes already gone: the row still goes
+        except Exception:                       # noqa: BLE001 bytes already gone: the row still says so
             pass
-        db.artifacts.delete_one({'_id': row['_id']})
-        removed[cycle] += 1
-        removed['bytes'] += int(row.get('size') or 0)
-    return removed
+        db.artifacts.update_one({'_id': row['_id']}, {'$set': {'storage': REMOVED, 'bytes_removed_at': moment.isoformat()},
+                                                      '$unset': {'gridfs_id': ''}})
+        removed['files'] += 1
+        removed['bytes'] += _size(row)
+        return
+    if cycle == RECORD or row['_id'] in keep:
+        return
+    if not _older(row.get('created_at'), cutoff[cycle], removed):
+        return
+    try:
+        if row.get('gridfs_id'):
+            bucket.delete(ObjectId(row['gridfs_id']))
+    except Exception:                           # noqa: BLE001 bytes already gone: the row still goes
+        pass
+    db.artifacts.delete_one({'_id': row['_id']})
+    removed[cycle] += 1
+    removed['bytes'] += _size(row)
+
+
+def _older(value, cutoff, removed):
+    """Whether a stored time is before the cutoff. A time that cannot be read (missing, not a time) is kept and counted
+    in `undated`: a time not known is never old. A stored Date and an ISO string compare as moments, not as text; a
+    stored time should carry its offset, and one without it (a naive Date, a string with no offset) is read as UTC,
+    as the writers' `state.now()` gives it, never as undated."""
+    moment = _moment(value)
+    if moment is None:
+        removed['undated'] += 1
+        return False
+    return moment < cutoff
+
+
+def _moment(value):
+    if isinstance(value, datetime):
+        moment = value
+    elif isinstance(value, str) and value:
+        try:
+            moment = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    else:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+# Written out on purpose, apart from the keys `sweep` returns: the test holds the two lists equal, so a count added to
+# the sweep and forgotten here fails it. Derive this from that list and the test can no longer fail (review M3b, 2026-10-27).
+RECORDED = ('pulled', 'listed', 'files', 'failed', 'undated')
+
+
+def worth_recording(removed):
+    """Whether a sweep's report is recorded as `media.swept`: something was removed, could not be swept, or was kept
+    because its time cannot be read. A sweep that only found nothing to do leaves no record."""
+    return any(removed.get(key) for key in RECORDED)
+
+
+def _size(row):
+    """A row's recorded size in bytes; 0 when it is not a number (the count is a report, never a reason to stop)."""
+    try:
+        return int(row.get('size') or 0)
+    except (TypeError, ValueError):
+        return 0

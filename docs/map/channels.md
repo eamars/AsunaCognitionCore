@@ -244,7 +244,8 @@ How long stored media bytes live: every kind of stored picture has an owner or a
 
 - def `life` — The life cycle of an artifacts row: by its first source id; anything not listed is kept.
 - def `named` — Artifact ids a lasting row names.
-- def `sweep` — Delete expired pulled copies and unlisted pool candidates, and the bytes of files past their days; returns {'pulled': n, 'listed': n, 'files': n, 'bytes': n}.
+- def `sweep` — Delete expired pulled copies, unlisted pool candidates and the bytes of files past their days.
+- def `worth_recording` — Whether a sweep's report is recorded as `media.swept`: something was removed, could not be swept, or was kept because its time cannot be read.
 
 ## `outbound_media`
 

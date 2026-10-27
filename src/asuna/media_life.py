@@ -130,6 +130,8 @@ def _moment(value):
     return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
+# Written out on purpose, apart from the keys `sweep` returns: the test holds the two lists equal, so a count added to
+# the sweep and forgotten here fails it. Derive this from that list and the test can no longer fail (Xiaoman's M3b).
 RECORDED = ('pulled', 'listed', 'files', 'failed', 'undated')
 
 

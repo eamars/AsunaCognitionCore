@@ -189,8 +189,10 @@ types one way.
   an operator erasure deletes the conversation's bytes, kept files included, and marks each row erased; `read`,
   `kept` and `copy` then answer with the ADR-105 sentence. The row keeps its name (the owner).
 - **Keep:** `keep` marks the row kept (`kept_at`, her `why`); the origin and marks do not change. The quota is
-  **50 files or 20 MiB**, whichever comes first (a proposal; the owner left it open). Over the quota the keep is
-  refused with her kept list, so she can let one go. Keeping does not move a file out of its conversation's fence.
+  **20 MiB or 50 files**, whichever comes first (the owner took Claude's and Xiaoman's proposal, 2026-10-27). With
+  files of at most 1 MiB, the 20 MiB comes first (at 21 full-size files). Over the quota the keep is refused with the
+  total kept and the three kept files she has read least recently, never the whole list, so she can let one go and the
+  answer stays short. Keeping does not move a file out of its conversation's fence.
 
 ### 6. The fence
 
@@ -291,10 +293,6 @@ PDF, Office and archives (each a step of its own, with its parser's own risks); 
 NapCat's `get_private_file_url` exists); a fresh link through the adapter; the official QQ Bot's file host; reading
 pictures sent as files (`read_image` handles pictures).
 
-## Open
-
-1. The owner: the keep quota (50 files or 20 MiB proposed).
-
 ## Landing list (what the build changes)
 
 - `src/asuna/received_files.py` (new): offer entries and notes, fetch, judging (types, encodings, marks), paging and
@@ -315,7 +313,8 @@ pictures sent as files (`read_image` handles pictures).
 - Judging: each program magic, a UTF-8 / UTF-16 / GB18030 / unknown sample, the control-character check, `#!`, every
   script extension, a `.txt` that is a program.
 - Paging: line pages, a one-line file, `find`, page counts, a cut never inside a character.
-- Lifecycle: 3 days (also as the pin against a prefix missing from `POLICY`), keep, let go, the quota, the swept
+- Lifecycle: 3 days (also as the pin against a prefix missing from `POLICY`), keep, let go, the quota (20 MiB
+  before 50 files; the refusal names the total and three files, never the list), the swept
   row's two sentences (fetched again, cannot be got back), a row without `created_at` kept, the separate kind, a kept
   ref found after 7 days, copies removed with the bytes.
 - Fence: this conversation, a linked scene, home reach, refused from outside.

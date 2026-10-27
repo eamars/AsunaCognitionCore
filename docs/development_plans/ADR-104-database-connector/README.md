@@ -36,6 +36,11 @@ wants to talk it through first. Nothing here is decided.
    Perhaps add 'stop using real db for unit test' ... when the DB adapter interface is built, and the unit test stop
    at the DB adapter." Unit tests use a double of the interface, never a database server; the adapter's own tests
    are the only ones that reach a database, and never the server a live deployment uses.
+6. **The suite is cleaned up with it** (the owner, 2026-10-27): "Fundamentally having unit tests to run for 10
+   minutes is absurd, and that needed to be fixed. ... Perhaps with ADR-104 we need to start cleaning up, and
+   removing unit tests serving no purposes as well. Adding unit test is NOT a good habit." Today: about 1,500 Python
+   tests, 9 to 16 minutes a run on this machine. Which tests earn their place, and how the slow ones are found, is
+   part of the design.
 
 ## Open questions (to discuss with the owner first)
 

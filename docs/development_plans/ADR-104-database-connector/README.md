@@ -134,7 +134,8 @@ store.nearest(space, vector, k, where) -> list[tuple[str, float]]
 
 - **`nearest`** returns k records best first, the score raw cosine in [-1, 1] (MongoDB's (1 + cos) / 2 becomes
   2s - 1). Step 1a keeps her search as it is: approximate (MongoDB looks at 8 candidates per result, retrieval's 96
-  and 192 before), equal scores in MongoDB's order. Exact search, the design's contract, is step 1b, its own change
+  and 192 before); among equal scores the order is not defined (MongoDB gives none without a sort, Xiaoman's point),
+  as before. Exact search, the design's contract, is step 1b, its own change
   (the owner, 2026-10-28: "Having different result from interface change is real concerning"; split, Claude's
   recommendation). Under exact search, equal scores come in id order, and which of several records tied at the k-th
   score are returned is the database's (found by the integration test); nothing in the core depends on which of
@@ -311,7 +312,7 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
 - Step 1a (2026-10-28, not installed): `Space`, `Store.ensure_vectors` and `Store.nearest` (`src/asuna/state.py`);
   `retrieval.py` asks the store for both of its searches (`MEMORY`, 24 for `search` and 12 for `own_thoughts` as
   before) and imports nothing of MongoDB. The search stays what it was: approximate, `CANDIDATES_PER_RESULT` 8 (96
-  and 192 as before), MongoDB's order. Checked on her real memory, read only: for 30 queries of both kinds `nearest`
+  and 192 as before), no defined order among equal scores. Checked on her real memory, read only: for 30 queries of both kinds `nearest`
   returned the same records in the same order at the same scores as the pipeline retrieval ran before; and for 40
   queries the whole search (vector and lexical fused, six selected) gave the same six and the same 24 vector
   candidates as the old code, every time (the old code run before and after, so her memory did not drift between).

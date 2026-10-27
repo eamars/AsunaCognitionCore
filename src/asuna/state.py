@@ -290,7 +290,7 @@ class Store:
         """The k records nearest to `vector` among those matching `where`, best first, as (id, cosine similarity in
         [-1, 1]). Approximate, as her search has been: MongoDB looks at CANDIDATES_PER_RESULT x k candidates. `where` maps a declared field to a value or a list of values (any of
         them), or a tuple of declared fields to a list of value tuples (any of those combinations); every entry holds.
-        Equal scores come in the database's order."""
+        Among equal scores the order is not defined (MongoDB gives none without a sort), as before."""
         if not 1 <= k <= 100:
             raise ValueError('VECTOR_K')
         if len(vector) != space.dimensions or not any(vector):

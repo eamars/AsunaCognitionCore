@@ -126,3 +126,11 @@ def test_strict_counts_only_counted_hits_never_report_only_ones(monkeypatch, cap
     assert 'report-only:docs/development_plans/ADR-900-x/README.md:1:account_id' in capsys.readouterr().out
     monkeypatch.setattr(check_staged_secrets, 'personal_sources', sources('src/asuna/x.py'))
     assert check_staged_secrets.personal_scan(['--personal', '--strict', '--all']) == 1
+
+
+def test_strict_without_personal_is_refused_never_a_silent_pass():
+    """Without --personal the secret scan took over and dropped --strict and the files, answering PASS on nothing with
+    exit 0; now it is refused with exit 2 and says what to write (Xiaoman's check of 0df21227)."""
+    done = subprocess.run([sys.executable, str(ROOT / 'tools/check_staged_secrets.py'), '--strict', 'tests/x.py'],
+                          cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=60)
+    assert done.returncode == 2 and 'STRICT_NEEDS_PERSONAL' in done.stderr and 'PASS' not in done.stdout

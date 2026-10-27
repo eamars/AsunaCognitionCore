@@ -7,7 +7,8 @@ needs neither config/local.json, Mongo nor the asuna package. Source: staged blo
 of every tracked file with ``--all``, the given files with ``--paths``. Each hit prints ``path:line:category`` (line 0
 means the file name; for --paths files outside the repo only the base name is checked) and never the matched value.
 Hits are deduplicated per path, line and category. The last line is ``personal-scan: <n> hit(s)``; exit code is 0,
-or 1 with ``--strict`` when n is not 0 (the form a push gate uses; the default stays report-only).
+or 1 with ``--strict`` when n is not 0 (the form a push gate uses; the default stays report-only). ``--strict``
+without ``--personal`` is refused (exit 2): the secret scan takes no options and would pass on nothing.
 
 Categories:
   account_id       >=7 consecutive ASCII digits in content or file name.
@@ -192,6 +193,12 @@ def personal_scan(argv):
 def main(argv=None):
     argv=sys.argv[1:] if argv is None else list(argv)
     if '--personal' in argv:return personal_scan(argv)
+    if '--strict' in argv:
+        # The secret scan takes no options: without --personal, --strict and the files given would be dropped and the
+        # scan would answer PASS on nothing (her finding); a gate must not pass by a forgotten flag.
+        print('STRICT_NEEDS_PERSONAL: --strict belongs to --personal; write --personal --strict --paths FILE...',
+              file=sys.stderr)
+        return 2
     secret_scan()
 
 if __name__=='__main__':raise SystemExit(main())

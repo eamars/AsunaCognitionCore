@@ -312,10 +312,14 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
 - Step 1a (2026-10-28, not installed): `Space`, `Store.ensure_vectors` and `Store.nearest` (`src/asuna/state.py`);
   `retrieval.py` asks the store for both of its searches (`MEMORY`, 24 for `search` and 12 for `own_thoughts` as
   before) and imports nothing of MongoDB. The search stays what it was: approximate, `CANDIDATES_PER_RESULT` 8 (96
-  and 192 as before), no defined order among equal scores. Checked on her real memory, read only: for 30 queries of both kinds `nearest`
-  returned the same records in the same order at the same scores as the pipeline retrieval ran before; and for 40
-  queries the whole search (vector and lexical fused, six selected) gave the same six and the same 24 vector
-  candidates as the old code, every time (the old code run before and after, so her memory did not drift between).
+  and 192 as before), no defined order among equal scores. Checked on her real memory, read only, against two references (Xiaoman asked that each
+  be named): (a) for 30 queries of both kinds `nearest` returned the same records in the same order at the same
+  scores as the `$vectorSearch` stage retrieval built, rebuilt in the check script (`check_nearest_1a.py`); (b) for
+  40 queries the whole search (vector and lexical fused, six selected), run with main's own `retrieval.py` before
+  and after 1a's, gave the same six and the same 24 vector candidates every time (her memory did not drift between),
+  and the same coverage score to the bit, so the same verdict for any `coverage_floor`. The one visible change is the
+  scale of the scores the evidence records: raw cosine, 2s - 1 of MongoDB's (her finding); a comparison of scores
+  across 1a converts first.
   Its integration test, `integration/test_mongo_vectors.py` (18 cases, 7 s, a throwaway database of 301 synthetic
   records): the index made and brought up to the space's fields; `nearest` gives k records, each matching the filter
   and scored with its own cosine, best first, for value, list, pair and combined filters at k 1, 12 and 24; identical

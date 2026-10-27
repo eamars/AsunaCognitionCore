@@ -177,6 +177,7 @@ The worker's MongoDB store: every write goes through `Store.put` with an expecte
 - def `commit_payload` — state.commit body: the document itself up to 16 KB, otherwise a reference (ADR-009 D-4).
 - def `content_ref` — {content_sha256, bytes} for model output kept elsewhere (receipt or native transcript).
 - def `now`
+- class `Space` — Vectors searched by cosine similarity: each record of `collection` holds its vector in `path`, written with the record by `put` (the store indexes it in the same write), and a search may filter on `fields`, declared with the index.
 - class `Conflict`
 - class `Denied`
 - class `Store`
@@ -184,6 +185,8 @@ The worker's MongoDB store: every write goes through `Store.put` with an expecte
   - `audit`
   - `put`
   - `recover_commits`
+  - `ensure_vectors` — Create the space's index, or bring an existing one's filter fields up to the space's (the old one keeps serving meanwhile); True once it can be queried, False if it cannot yet after `timeout` seconds.
+  - `nearest` — The k records nearest to `vector` among those matching `where`, best first, as (id, cosine similarity in [-1, 1]); exact, never approximate.
   - `get`
   - `authorize`
   - `identity`

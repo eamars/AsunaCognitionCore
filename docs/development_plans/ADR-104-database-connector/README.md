@@ -2,7 +2,7 @@
 
 Status: decided with the owner 2026-10-28 (below). Third in the owner's order (102, 103, 104). The vector interface
 is designed (section "Vector search", Claude on the owner's delegation); step 1a is built (the interface, her search
-unchanged), not installed; step 1b (exact search) is not built (see "Build order" and "Built"). The record interface (step 2) is proposed, for the owner's review.
+unchanged), not installed; step 1b (exact search) is built on it, not installed (see "Build order" and "Built"). The record interface (step 2) is proposed, for the owner's review.
 
 ## The owner's ask (2026-10-27, verbatim)
 
@@ -287,7 +287,7 @@ module is done when it names no collection method.
 ### Build order
 
 1. Vector search through the store, in two changes: 1a the interface with her search unchanged (built); 1b exact
-   search (not built), landed apart from 1a, after a reading on real phrases of hers and her judgement of what
+   search (built), landed apart from 1a, after a reading on real phrases of hers and her judgement of what
    changes.
 2. The record interface from the core's own operations, the in-memory double and the contract suite; the call sites
    move to it module by module behind the MongoDB adapter, nothing changing for her between steps.
@@ -326,6 +326,16 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
   when a space's fields differ from it. Before a change of the filter fields reaches her database, she is told
   (her ask, 2026-10-28).
 
+- Step 1b (2026-10-28, not installed): `nearest` exact (MongoDB's exact mode), equal scores in id order; retrieval's
+  evidence records `exact`; the integration test checks exact results against a brute-force cosine. Its reading on
+  her real searches, the one she asked for (her rule: ids and scores, not positions; three columns): 73 of her 182
+  past `recall` queries with text (60 drawn, plus all 13 id-like ones, a class apart), each in the conversation she
+  asked it in, embedded once through her embedding service (the owner's yes) and run whole (vector and lexical fused,
+  six selected), the old code before and after 1b so her memory's drift shows (none did). The final six: the same
+  set in 73 of 73, the same order in 72. The 24 candidates (1,752): 7 displaced (0.4%); 53 one place lower by score,
+  each because a closer record came in above it; 8 tie reorders. The id-like class the same. Her query text and its
+  vectors were deleted after the run. The earlier 8% (whole memories as queries) came from placeholder duplicates,
+  not from how she searches.
 ## Open questions (to discuss with the owner first) (as recorded before the decisions)
 
 1. Which databases are meant ("a different database": another MongoDB, or another kind such as PostgreSQL or SQLite)?

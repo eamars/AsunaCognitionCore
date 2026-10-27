@@ -48,9 +48,10 @@ def named(store):
 
 
 def sweep(store, now=None):
-    """Delete expired pulled copies and unlisted pool candidates, and the bytes of files past their days; returns
-    {'pulled': n, 'listed': n, 'files': n, 'bytes': n, 'failed': n, 'unreadable': n}, `failed` the rows that could not
-    be swept, `unreadable` the rows kept because their time cannot be read (a time not known is never old)."""
+    """Delete expired pulled copies, unlisted pool candidates and the bytes of files past their days.
+
+    Returns {'pulled': n, 'listed': n, 'files': n, 'bytes': n, 'failed': n, 'undated': n}: `failed` the rows that could
+    not be swept, `undated` the rows kept because their time cannot be read (a time not known is never old)."""
     from gridfs import GridFSBucket
     from .channels import Channels
     from .outbound_files import KEEP_DAYS
@@ -63,7 +64,7 @@ def sweep(store, now=None):
     keep = named(store)
     going = set(db.messages.distinct('file.artifact_id', {'file.artifact_id': {'$exists': True},
                                                           'delivery_state': {'$in': list(Channels.PART_ON_ITS_WAY)}}))
-    removed = {PULLED: 0, LISTED: 0, 'files': 0, 'bytes': 0, 'failed': 0, 'unreadable': 0}
+    removed = {PULLED: 0, LISTED: 0, 'files': 0, 'bytes': 0, 'failed': 0, 'undated': 0}
     for row in db.artifacts.find({'storage': 'gridfs'}, {'source_ids': 1, 'created_at': 1, 'gridfs_id': 1, 'size': 1,
                                                          'last_sent_at': 1}):
         try:
@@ -106,10 +107,12 @@ def _sweep_one(db, bucket, row, moment, cutoff, keep, going, removed):
 
 def _older(value, cutoff, removed):
     """Whether a stored time is before the cutoff. A time that cannot be read (missing, not a time) is kept and counted
-    in `unreadable`: a time not known is never old. A stored Date and an ISO string compare as moments, not as text."""
+    in `undated`: a time not known is never old. A stored Date and an ISO string compare as moments, not as text; a
+    stored time should carry its offset, and one without it (a naive Date, a string with no offset) is read as UTC,
+    as the writers' `state.now()` gives it, never as undated."""
     moment = _moment(value)
     if moment is None:
-        removed['unreadable'] += 1
+        removed['undated'] += 1
         return False
     return moment < cutoff
 

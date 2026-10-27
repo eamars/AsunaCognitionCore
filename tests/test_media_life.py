@@ -108,7 +108,7 @@ def test_one_bad_row_is_counted_and_the_rows_after_it_still_go(store, monkeypatc
 
 
 def test_a_time_that_cannot_be_read_is_kept_and_counted_never_old(store):
-    """A row whose time is missing or not a time is kept and counted in `unreadable`: before, the missing time compared
+    """A row whose time is missing or not a time is kept and counted in `undated`: before, the missing time compared
     as '' and fell into the deleting branch (Xiaoman's check, 10-27). A stored Date compares as a moment, not as text."""
     blobs = BlobStore(store)
     scope = store.db.scenes.find_one()['scope_key']
@@ -125,4 +125,42 @@ def test_a_time_that_cannot_be_read_is_kept_and_counted_never_old(store):
     left = {row['_id'] for row in store.db.artifacts.find()}
     assert {missing, not_a_time, new_date} <= left and old_date not in left
     assert store.db.artifacts.find_one({'_id': unsent})['storage'] == 'gridfs', 'a file with no time keeps its bytes'
-    assert removed['unreadable'] == 3 and removed['pulled'] == 1 and removed['failed'] == 0
+    assert removed['undated'] == 3 and removed['pulled'] == 1 and removed['failed'] == 0
+
+
+def test_a_time_without_an_offset_is_read_as_utc_not_as_undated(store):
+    """A naive Date or a string with no offset is read as UTC, as the writers' state.now() gives it: an old one is swept,
+    and it is never counted as undated (Xiaoman's check of e9cb565f)."""
+    blobs = BlobStore(store)
+    scope = store.db.scenes.find_one()['scope_key']
+    put = lambda source: blobs.put(b'\x89PNG' + source.encode(), scope, 'image', source_ids=[source])['artifact_id']
+    naive_date, naive_text, recent_text = put('in-ep-d'), put('in-ep-t'), put('in-ep-u')
+    moment = datetime.now(timezone.utc)
+    old = (moment - timedelta(days=8)).replace(tzinfo=None)
+    store.db.artifacts.update_one({'_id': naive_date}, {'$set': {'created_at': old}})
+    store.db.artifacts.update_one({'_id': naive_text}, {'$set': {'created_at': old.isoformat()}})
+    store.db.artifacts.update_one({'_id': recent_text},
+                                  {'$set': {'created_at': (moment - timedelta(hours=1)).replace(tzinfo=None).isoformat()}})
+    removed = media_life.sweep(store, moment)
+    left = {row['_id'] for row in store.db.artifacts.find()}
+    assert naive_date not in left and naive_text not in left and recent_text in left
+    assert removed['undated'] == 0 and removed['pulled'] == 2
+
+
+def test_a_range_query_on_an_iso_string_never_matches_a_missing_or_date_time(store):
+    """The other expiry queries (audit, vision, notices, crossing) compare in MongoDB against an ISO string. A row whose
+    time is missing or stored as a Date is never matched by them, in either direction: it is not selected, never read
+    as old. This pins the BSON type order those queries rely on (Xiaoman's reading, run here, not inferred)."""
+    moment = datetime.now(timezone.utc)
+    rows = [{'_id': 'missing', 'schema_version': 1},
+            {'_id': 'date', 'schema_version': 1, 'created_at': moment - timedelta(days=30)},
+            {'_id': 'text-old', 'schema_version': 1, 'created_at': (moment - timedelta(days=30)).isoformat()},
+            {'_id': 'text-new', 'schema_version': 1, 'created_at': moment.isoformat()}]
+    store.db.time_probe.insert_many(rows)
+    try:
+        cutoff = (moment - timedelta(days=7)).isoformat()
+        older = {row['_id'] for row in store.db.time_probe.find({'created_at': {'$lt': cutoff}})}
+        newer = {row['_id'] for row in store.db.time_probe.find({'created_at': {'$gte': cutoff}})}
+        assert older == {'text-old'} and newer == {'text-new'}
+    finally:
+        store.db.time_probe.drop()

@@ -694,7 +694,7 @@ class BusinessWorker:
                 # bytes of files past their days go.
                 from . import media_life
                 removed = media_life.sweep(self.app.store)
-                if removed['pulled'] or removed['listed'] or removed['files'] or removed['failed'] or removed['unreadable']:
+                if removed['pulled'] or removed['listed'] or removed['files'] or removed['failed'] or removed['undated']:
                     self.app.evidence.record('media.swept', removed)
             except Exception as exc:
                 self.app.evidence.record('media.sweep_failed', {'error': redact_text(str(exc), self.app.config)[:300]})

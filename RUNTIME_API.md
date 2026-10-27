@@ -652,6 +652,7 @@ The kind module tells the core one platform's id formats and adapter conventions
 | `outbound_mention(account)` | yes | how her @ reaches the adapter (`@<kind>:<account>` in the shipped kinds) |
 | `adapter_config(adapter, channel)`, `strip_derived(adapter)` | yes | fill and remove the adapter settings derived from the channel |
 | `IMAGE_HOSTS` | no | hosts images may be fetched from by default |
+| `FILE_HOSTS` | no | hosts a received file may be fetched from (an entry starting with `.` allows its subdomains); without it its files are offered as not readable |
 | `FACES`, `STICKERS` | no | the platform's faces by name → id; whether it sends stickers |
 | `HOME` | no | its conversations are home ones (owner-private) |
 | `TEXT_ONLY` | no | it carries no pictures |

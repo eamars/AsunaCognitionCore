@@ -1,6 +1,7 @@
 # ADR-107: Who may talk to her
 
-Status: decided 2026-10-27 (the four decisions below); not built.
+Status: decided 2026-10-27 (the four decisions below); not built. Built after every ADR before it is complete (the
+owner, 2026-10-27).
 
 ## The owner's ask (2026-10-27, verbatim)
 
@@ -87,7 +88,9 @@ account is not measured here.
 - **A folder per person is too much.** Open, every stranger who speaks once in a large group would get a folder made
   at start. The working folder is made when a task of hers first needs it, not at admission.
 - **Admission gets an end.** A member who left the group, and a DM nobody wrote in for a long time, stop being
-  admitted; their history stays hers. The member lists the adapter already posts every 6 hours say who left.
+  admitted; their history stays hers. A member has left when the platform says so (QQ's `group_decrease` notice,
+  which the adapter already passes on, `qqadapter/notices.py`); never because a member list or a lookup lacks them
+  (the incident below).
 - **Cost is the owner's:** every admitted line can wake her relevance gate (a model call). The block lists are the
   off switch; nothing caps it automatically.
 
@@ -108,10 +111,29 @@ account is not measured here.
 
 ## Open, to settle in the design
 
-- How long a silent DM stays admitted (N days), and whether "left the group" is read from the 6-hourly member list
-  alone.
+- How long a silent DM stays admitted (N days), and how long a group member who never speaks again stays admitted
+  when no leave notice came (a notice can be missed while the adapter is down).
 - The names of the two states on the settings card (today `automatic` and `explicit`), and how a saved `automatic`
   reads after the change.
+
+## An incident the design must survive (the owner's NapCat log, 2026-10-27)
+
+The owner sent a NapCat log of 385 lines, from one start of NapCat on. Claude read it with every id masked; only counts
+are written here.
+
+- **It is Xiaoman's NapCat:** all 11 groups it received lines from are her conversations (counted read-only in her
+  database). She runs `automatic`, so no roster was involved: the explicit list was not the cause.
+- **38 "member does not exist" errors** (`get_group_member_info`), all in one large group (1,035 people known to her,
+  32,868 lines): for people who had just posted there, and for her own account. The adapter asks this only after a
+  sender passed admission (the profile lookup in `qqadapter/peers.py`; her own role and mute in `selfrole.py` and
+  `mutes.py`). A reading, not proven: right after a start NapCat had not yet loaded that group's members.
+- **22 "message does not exist" errors** from the history calls the adapter's catch-up makes (`get_group_msg_history`
+  21, `get_friend_msg_history` 1), and 4 quoted messages it could not find: messages from before this start of NapCat.
+
+What it means here: what the platform says about membership can be wrong right after a start, saying a member who
+is speaking is not in the group. Admission therefore never ends on a failed or empty lookup, nor on one member list:
+only on the platform's own leave notice, or on the long silence the design settles. The same holds for the core
+wherever it reads a member list.
 
 ## Constraints already known
 

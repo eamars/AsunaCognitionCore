@@ -349,9 +349,13 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
   **Why 1b at all (the reason, so it can be judged).** Not her recall: on her real searches it changes nothing she
   sees (above). The reason is the interface and its tests. (1) The in-memory double the unit tests run on is exact (an
   approximate double would be a second approximate search to keep in step with MongoDB's); with exact production, a
-  unit test on the double shows what production returns, and with approximate production the two differ wherever
-  approximate search misses (0.4% of candidates on her searches; with whole memories as queries 1 to 4% of the
-  best-scored on average and up to 83% on one query). (2) Every engine surveyed searches exactly, while the approximate
+  unit test on the double shows what production returns, except at a tie on the k-th score: which of the tied
+  records come back stays the database's, and the double decides it its own way, so ties at that boundary belong to
+  the integration test, never to a unit test (her point: "unit test = production" must not become a free pass).
+  With approximate production the two differ wherever approximate search misses: 0.4% of candidates on her real
+  searches (the reading above); larger on stored memories used as queries (the first measurement: document vectors
+  as queries, in a memory full of identical placeholder records; 1 to 4% of the best-scored on average, up to 83% on
+  one query, counted by score so tie swaps do not count), a shape of the worst case, not how she searches. (2) Every engine surveyed searches exactly, while the approximate
   settings differ per engine (MongoDB's `numCandidates`, other engines' list and probe counts) and pgvector can return
   fewer than k after a filter, so exact is the one behaviour a second adapter can promise. (3) It costs within the
   noise (above). If these do not weigh enough for her, 1b waits: 1a works without it, and the double then has to be

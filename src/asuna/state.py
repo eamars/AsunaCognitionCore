@@ -101,11 +101,6 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
-# Approximate vector search looks at this many candidates per result (96 for 12, 192 for 24, as retrieval asked
-# before the store did).
-CANDIDATES_PER_RESULT = 8
-
-
 @dataclass(frozen=True)
 class Space:
     """Vectors searched by cosine similarity: each record of `collection` holds its vector in `path`, written with the
@@ -288,9 +283,9 @@ class Store:
 
     def nearest(self, space: Space, vector, k: int, where: dict) -> list[tuple[str, float]]:
         """The k records nearest to `vector` among those matching `where`, best first, as (id, cosine similarity in
-        [-1, 1]). Approximate, as her search has been: MongoDB looks at CANDIDATES_PER_RESULT x k candidates. `where` maps a declared field to a value or a list of values (any of
+        [-1, 1]); exact, never approximate. `where` maps a declared field to a value or a list of values (any of
         them), or a tuple of declared fields to a list of value tuples (any of those combinations); every entry holds.
-        Among equal scores the order is not defined (MongoDB gives none without a sort), as before."""
+        Equal scores come in id order; which of several records tied at the k-th score are returned is the database's."""
         if not 1 <= k <= 100:
             raise ValueError('VECTOR_K')
         if len(vector) != space.dimensions or not any(vector):
@@ -308,14 +303,13 @@ class Store:
                              else {key: {'$in': value}})
             else:
                 parts.append({key: value})
-        stage = {'index': space.name, 'path': space.path, 'queryVector': list(vector),
-                 'numCandidates': CANDIDATES_PER_RESULT * k, 'limit': k}
+        stage = {'index': space.name, 'path': space.path, 'queryVector': list(vector), 'exact': True, 'limit': k}
         if parts:
             stage['filter'] = parts[0] if len(parts) == 1 else {'$and': parts}
         rows = self.db[space.collection].aggregate([{'$vectorSearch': stage},
                                                     {'$project': {'_id': 1, 'score': {'$meta': 'vectorSearchScore'}}}])
         # MongoDB scores cosine as (1 + cosine) / 2.
-        return [(row['_id'], 2 * row['score'] - 1) for row in rows]
+        return sorted(((row['_id'], 2 * row['score'] - 1) for row in rows), key=lambda hit: (-hit[1], hit[0]))
 
     def get(self, collection: str, key: str, scope: str, *, operator: bool=False):
         if collection not in COLLECTIONS:

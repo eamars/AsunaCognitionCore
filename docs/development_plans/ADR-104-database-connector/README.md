@@ -1,8 +1,9 @@
 # ADR-104: Database connector
 
 Status: decided with the owner 2026-10-28 (below). Third in the owner's order (102, 103, 104). The vector interface
-is designed (section "Vector search", Claude on the owner's delegation); step 1a is built (the interface, her search
-unchanged), not installed; step 1b (exact search) is not built (see "Build order" and "Built"). The record interface (step 2) is proposed, for the owner's review.
+is designed (section "Vector search", Claude on the owner's delegation); step 1a (the interface, her search
+unchanged) is built and installed 2026-10-28; step 1b (exact search) is built on it, on main (see "Build order" and
+"Built"). The record interface (step 2) is proposed, for the owner's review.
 
 ## The owner's ask (2026-10-27, verbatim)
 
@@ -287,7 +288,7 @@ module is done when it names no collection method.
 ### Build order
 
 1. Vector search through the store, in two changes: 1a the interface with her search unchanged (built); 1b exact
-   search (not built), landed apart from 1a, after a reading on real phrases of hers and her judgement of what
+   search (built), landed apart from 1a, after a reading on real phrases of hers and her judgement of what
    changes.
 2. The record interface from the core's own operations, the in-memory double and the contract suite; the call sites
    move to it module by module behind the MongoDB adapter, nothing changing for her between steps.
@@ -320,7 +321,9 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
   and the same coverage score to the bit, so the same verdict for any `coverage_floor`. The one visible change is the
   scale of the scores the evidence records: raw cosine, 2s - 1 of MongoDB's (her finding); a comparison of scores
   across 1a converts first. They land in her audit stream (`retrieval.selected`, `vector_ranks`), so rows from
-  before 1a's install carry the old scale; no code reads that field, and `nearest`'s callers are only retrieval's
+  before 1a's install carry the old scale; no code reads that field (`vector_ranks`, and `numCandidates`, which 1b
+  replaces with `exact`, have no reader anywhere in the tree: `src`, `tools`, `integration`, `packages` with the JS
+  and her persona's skills, searched by her and by Claude), and `nearest`'s callers are only retrieval's
   two searches (`own_thoughts` uses ids alone; `search` uses the score for coverage, converted back to 0..1).
   Its integration test, `integration/test_mongo_vectors.py` (18 cases, 7 s, a throwaway database of 301 synthetic
   records): the index made and brought up to the space's fields; `nearest` gives k records, each matching the filter
@@ -332,6 +335,39 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
   when a space's fields differ from it. Before a change of the filter fields reaches her database, she is told
   (her ask, 2026-10-28).
 
+- Step 1b (2026-10-28): `nearest` exact (MongoDB's exact mode), equal scores in id order; retrieval's
+  evidence records `exact`; the integration test checks exact results against a brute-force cosine. Its reading on
+  her real searches, the one she asked for (her rule: ids and scores, not positions; three columns): 73 of the 182
+  `recall.read` rows with a query in her `audit_events` (60 drawn, plus all 13 id-like ones, a class apart), each in the conversation she
+  asked it in, embedded once through her embedding service (the owner's yes) and run whole (vector and lexical fused,
+  six selected), the old code before and after 1b so her memory's drift shows (none did). The final six: the same
+  set in 73 of 73, the same order in 72. The 24 candidates (1,752): 7 displaced (0.4%); 53 one place lower by score,
+  each because a closer record came in above it; 8 tie reorders. The id-like class the same. Her query text and its
+  vectors were deleted after the run. The earlier 8% (whole memories as queries) came from placeholder duplicates,
+  not from how she searches. What this shows (her boundary): old and new code are equivalent on today's memory, not
+  that those queries find what they found the day she asked them; her memory grows by the minute.
+  Its cost, a whole `search` (vector and lexical, six selected) on 40 queries, three runs each, the old code run
+  before and after (read only, the embedding call left out, the same in both): p50 383 / 387 ms old, 371 ms 1b;
+  p95 566 / 563 old, 596 1b; the vector part alone p50 28 / 26 old, 24 1b, p95 35 / 33 old, 37 1b. A recall's time
+  is mostly the lexical read of up to 4,096 records; exact adds at most 4 ms to the vector part; the whole search's
+  p95 went from 566 to 596 ms, 30 ms slower (+5.3%), more than the vector part explains, so it is reported as it is,
+  not as zero. Evidence, ids and scores only (her memory ids carry conversation keys, so it is not in git):
+  `<data>/private/adr104-evidence/`, 27 files, 1,472,997 bytes; `README.txt` there maps each reading to its file and
+  its code (by blob); kept until after her 10-30 check.
+  **Why 1b at all (the reason, so it can be judged).** Not her recall: on her real searches it changes nothing she
+  sees (above). The reason is the interface and its tests. (1) The in-memory double the unit tests run on is exact (an
+  approximate double would be a second approximate search to keep in step with MongoDB's); with exact production, a
+  unit test on the double shows what production returns, except at a tie on the k-th score: which of the tied
+  records come back stays the database's, and the double decides it its own way, so ties at that boundary belong to
+  the integration test, never to a unit test (her point: "unit test = production" must not become a free pass).
+  With approximate production the two differ wherever approximate search misses: 0.4% of candidates on her real
+  searches (the reading above); larger on stored memories used as queries (the first measurement: document vectors
+  as queries, in a memory full of identical placeholder records; 1 to 4% of the best-scored on average, up to 83% on
+  one query, counted by score so tie swaps do not count), a shape of the worst case, not how she searches. (2) Every engine surveyed searches exactly, while the approximate
+  settings differ per engine (MongoDB's `numCandidates`, other engines' list and probe counts) and pgvector can return
+  fewer than k after a filter, so exact is the one behaviour a second adapter can promise. (3) It costs within the
+  noise (above). If these do not weigh enough for her, 1b waits: 1a works without it, and the double then has to be
+  read as exact where production is not.
 ## Open questions (to discuss with the owner first) (as recorded before the decisions)
 
 1. Which databases are meant ("a different database": another MongoDB, or another kind such as PostgreSQL or SQLite)?

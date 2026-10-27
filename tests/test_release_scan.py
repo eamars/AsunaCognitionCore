@@ -81,9 +81,56 @@ def test_a_git_id_is_not_an_account_but_a_bare_number_on_any_platform_still_is()
     found = lambda line: check_staged_secrets.account_id(line, set())
     assert not found('signed against commit `b1f6f2ce` (README blob `5e9365951b39`)')
     assert not found('git diff 626121d66364d5672f1a9d5571442ca24ca33958..HEAD')
-    assert found('member 123456789 joined')                              # 9 digits, QQ-length
-    assert found('author 112233445566778899 posted')                     # 18 digits, snowflake-length
-    assert found('blob 5e9365951b39 from 112233445566778899')             # beside a git id, still reported
-    assert found('token 1234567890123')                                 # all digits: no letter, not a git id
-    assert found('user id9365951b39 here')                               # glued to a letter on the left: not a git id
-    assert found('user 9365951b39z here')                                # glued to a letter on the right: not a git id
+    assert found('member 123456789 joined')                  # personal-scan: ok (made up; 9 digits)
+    assert found('author 112233445566778899 posted')         # personal-scan: ok (made up; 18 digits)
+    assert found('blob 5e9365951b39 from 112233445566778899') # personal-scan: ok (beside a git id, still reported)
+    assert found('token 1234567890123')                      # personal-scan: ok (all digits: not a git id)
+    assert found('user id9365951b39 here')                   # personal-scan: ok (glued on the left: not a git id)
+    assert found('user 9365951b39z here')                    # personal-scan: ok (glued on the right: not a git id)
+
+
+def test_only_the_exact_marker_exempts_a_line_and_a_number_without_it_is_reported():
+    """The marker silences a line, so it is a way out for a real number too: only the exact marker exempts, and a line
+    without it is reported (Xiaoman's review of the made-up numbers' markers). The number is built here, so this file
+    holds none."""
+    number = '1' + '2' * 8
+    scan = lambda line: [category for _, category in check_staged_secrets.scan_lines(line, 'tests/x.py', set(), [])]
+    assert scan('member %s joined' % number) == ['account_id']
+    assert scan('member %s joined  # personal-scan: ok (made up)' % number) == []
+    for wrong in ('personal-scan:ok', 'personal_scan: ok', 'personal-scan: okay', 'personal-scan: OK'):
+        assert scan('member %s joined  # %s' % (number, wrong)) == ['account_id'], wrong
+
+
+def test_strict_exits_1_on_a_counted_hit_and_the_default_stays_report_only(tmp_path):
+    """`--strict` is the form a push gate uses: exit 1 when anything counted was found, 0 when nothing was; without it
+    the scan only reports (exit 0). A file outside the repository is checked by its name."""
+    flagged = tmp_path / ('n' + '1' + '2' * 8 + '.txt')
+    clean = tmp_path / 'clean.txt'
+    flagged.write_text('x\n', encoding='utf-8')
+    clean.write_text('x\n', encoding='utf-8')
+    run = lambda *args: subprocess.run([sys.executable, str(ROOT / 'tools/check_staged_secrets.py'), '--personal', *args],
+                                       cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=60)
+    assert run('--strict', '--paths', str(flagged)).returncode == 1
+    assert run('--paths', str(flagged)).returncode == 0
+    assert run('--strict', '--paths', str(clean)).returncode == 0
+
+
+def test_strict_counts_only_counted_hits_never_report_only_ones(monkeypatch, capsys):
+    """`--strict` exits 1 on a counted hit only: a hit printed as report-only (docs/development_plans/) leaves it at 0,
+    so the gate does not stop a push for what the scan itself does not count (Xiaoman's review of --strict)."""
+    number = ('1' + '2' * 8).encode()
+    def sources(key):
+        return lambda args: iter([(key, key, b'member ' + number + b' joined\n')])
+    monkeypatch.setattr(check_staged_secrets, 'personal_sources', sources('docs/development_plans/ADR-900-x/README.md'))
+    assert check_staged_secrets.personal_scan(['--personal', '--strict', '--all']) == 0
+    assert 'report-only:docs/development_plans/ADR-900-x/README.md:1:account_id' in capsys.readouterr().out
+    monkeypatch.setattr(check_staged_secrets, 'personal_sources', sources('src/asuna/x.py'))
+    assert check_staged_secrets.personal_scan(['--personal', '--strict', '--all']) == 1
+
+
+def test_strict_without_personal_is_refused_never_a_silent_pass():
+    """Without --personal the secret scan took over and dropped --strict and the files, answering PASS on nothing with
+    exit 0; now it is refused with exit 2 and says what to write (Xiaoman's check of 0df21227)."""
+    done = subprocess.run([sys.executable, str(ROOT / 'tools/check_staged_secrets.py'), '--strict', 'tests/x.py'],
+                          cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=60)
+    assert done.returncode == 2 and 'STRICT_NEEDS_PERSONAL' in done.stderr and 'PASS' not in done.stdout

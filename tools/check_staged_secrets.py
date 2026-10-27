@@ -6,7 +6,9 @@ Default mode (no ``--personal``) scans staged blobs for configured secrets; its 
 needs neither config/local.json, Mongo nor the asuna package. Source: staged blobs by default, the working-tree copy
 of every tracked file with ``--all``, the given files with ``--paths``. Each hit prints ``path:line:category`` (line 0
 means the file name; for --paths files outside the repo only the base name is checked) and never the matched value.
-Hits are deduplicated per path, line and category. The last line is ``personal-scan: <n> hit(s)``; exit code is 0.
+Hits are deduplicated per path, line and category. The last line is ``personal-scan: <n> hit(s)``; exit code is 0,
+or 1 with ``--strict`` when n is not 0 (the form a push gate uses; the default stays report-only). ``--strict``
+without ``--personal`` is refused (exit 2): the secret scan takes no options and would pass on nothing.
 
 Categories:
   account_id       >=7 consecutive ASCII digits in content or file name.
@@ -21,7 +23,8 @@ Categories:
   persona_name     the bundled persona's id or display name, only under src/asuna/, packages/cognition-core/,
                    config/, tools/ (persona packages and tests/fixtures/ are exempt).
 Exclusions:
-  - any line containing the marker ``personal-scan: ok`` (all categories);
+  - any line containing the marker ``personal-scan: ok`` (all categories), exactly so: the word ok, lower case,
+    one space after the colon (``okay``, ``OK`` or ``personal-scan:ok`` exempt nothing);
   - a matched value equal to an entry of tools/personal_scan_allow.txt (override: ASUNA_PERSONAL_ALLOWLIST);
     that file may only list non-personal constants;
   - account_id only: a digit run touching a decimal point that touches another digit (fraction or integer part of
@@ -89,11 +92,16 @@ def secret_scan():
     raise SystemExit(bool(matches))
 
 # ---- --personal (ADR-009) ----
-OK_MARK='personal-scan: '+'ok'
+OK_MARK=re.compile('personal-scan: '+'ok'+r'(?![A-Za-z0-9_])')  # the word ok itself; built so this line is no marker
 DIGITS=re.compile(r'(?<![0-9])[0-9]{7,}(?![0-9])')
 HEX=re.compile(r'(?<![0-9A-Fa-f])[0-9A-Fa-f]{32,}(?![0-9A-Fa-f])')
 # A git commit or blob id as the docs cite it (7-40 hex characters, at least one a-f letter), standing alone: not glued
 # to a letter or digit on either side, so a word or a number written next to it is not swallowed into it.
+# The price (owner ruling 2026-10-27: no platform's id shape is assumed, which binds this rule too): a number glued to
+# one letter a-f and standing alone (f99999999) is skipped unreported, as is any account id that is itself short hex.
+# Accepted because git ids are dense in the docs; a scan with no hit is not proof that no personal data is left.
+# The lower bound 7 changes nothing today (a token holding a 7-digit run with a letter is 8 long at least); it bites
+# only if DIGITS ever takes runs shorter than 7.
 GIT_ID=re.compile(r'(?<![0-9A-Za-z])(?=[0-9]*[A-Fa-f])[0-9A-Fa-f]{7,40}(?![0-9A-Za-z])')
 UUID=re.compile(r'(?<![0-9A-Fa-f])[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}(?![0-9A-Fa-f])')
 # Channel fixtures draw synthetic accounts, groups and members from one block, never a real account.
@@ -133,12 +141,12 @@ def account_id(line,allow):
 
 def private_address(line,allow):
     """A private address in this line (the marker and the allow list exempt it): checked in every committed file."""
-    return OK_MARK not in line and any(m.group() not in allow for m in PRIVATE.finditer(line))
+    return not OK_MARK.search(line) and any(m.group() not in allow for m in PRIVATE.finditer(line))
 
 def scan_lines(text,key,allow,deny):
     persona=key.startswith(CORE)
     for no,line in enumerate(text.split('\n'),1):
-        if OK_MARK in line:continue
+        if OK_MARK.search(line):continue
         if account_id(line,allow):yield no,'account_id'
         if private_address(line,allow):yield no,'private_address'
         if any(p.search(line) for p in deny):yield no,'denylist'
@@ -164,6 +172,7 @@ def personal_sources(args):
 def personal_scan(argv):
     ap=argparse.ArgumentParser(prog='check_staged_secrets.py --personal')
     ap.add_argument('--personal',action='store_true')
+    ap.add_argument('--strict',action='store_true')
     g=ap.add_mutually_exclusive_group();g.add_argument('--all',action='store_true');g.add_argument('--paths',nargs='+')
     args=ap.parse_args(argv)
     sys.stdout.reconfigure(errors='backslashreplace')
@@ -179,11 +188,17 @@ def personal_scan(argv):
             print(f'{prefix}{shown}:{no}:{c}')
             n+=not prefix
     print(f'personal-scan: {n} hit(s)')
-    return 0
+    return 1 if args.strict and n else 0
 
 def main(argv=None):
     argv=sys.argv[1:] if argv is None else list(argv)
     if '--personal' in argv:return personal_scan(argv)
+    if '--strict' in argv:
+        # The secret scan takes no options: without --personal, --strict and the files given would be dropped and the
+        # scan would answer PASS on nothing (her finding); a gate must not pass by a forgotten flag.
+        print('STRICT_NEEDS_PERSONAL: --strict belongs to --personal; write --personal --strict --paths FILE...',
+              file=sys.stderr)
+        return 2
     secret_scan()
 
 if __name__=='__main__':raise SystemExit(main())

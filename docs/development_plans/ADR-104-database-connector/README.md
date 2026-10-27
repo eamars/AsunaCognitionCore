@@ -36,10 +36,15 @@ and "Built"), not installed. The record interface (step 2) is proposed, for the 
    against the MongoDB server her live data is on): "I object the idea of using the real DB test from its root.
    Perhaps add 'stop using real db for unit test' ... when the DB adapter interface is built, and the unit test stop
    at the DB adapter." Unit tests use a double of the interface, never a database server; the adapter's own tests
-   are the only ones that reach a database. Where (the owner, 2026-10-28, asked whether they can run on the
-   production server): on her server, in a throwaway `asuna_v2_test_*` database dropped after the run, run when the
-   adapter changes, not with every unit run. Claude's earlier "never the server a live deployment uses" was more
-   than the owner had said.
+   are the only ones that reach a database. The owner, 2026-10-28, on Claude's question of a second server: "Can you
+   test on the production server? As you are using unit test to stress that server already." and then "Yes, but
+   after today the unit test needed never stress the production server anymore. This is one off test requirement."
+   Refined the same night: "most unit test stops at the DB adapter interface, only integration test reaches at real
+   server to ensure the interface compatibility, but not stressing the server." So: unit tests run on the double;
+   integration tests (`integration/`, outside the default run) reach her server only to show the adapter meets the
+   interface, on a throwaway `asuna_v2_test_*` database of synthetic records dropped at the end. From 2026-10-29 no
+   unit test reaches her server (AGENTS.md); until the double carries them, a unit test that needs a database is not
+   run, and what it would show is checked read-only on her database.
 6. **The suite is cleaned up with it** (the owner, 2026-10-27): "Fundamentally having unit tests to run for 10
    minutes is absurd, and that needed to be fixed. ... Perhaps with ADR-104 we need to start cleaning up, and
    removing unit tests serving no purposes as well. Adding unit test is NOT a good habit." Today: about 1,500 Python
@@ -127,7 +132,9 @@ store.nearest(space, vector, k, where) -> list[tuple[str, float]]
 ```
 
 - **`nearest`** is exact, best first, equal scores in id order, the score raw cosine in [-1, 1] (MongoDB's
-  (1 + cos) / 2 becomes 2s - 1). `where` maps a declared field to a value or a list (any of them), or a tuple of
+  (1 + cos) / 2 becomes 2s - 1). Which of several records tied at the k-th score are returned is the database's
+  (MongoDB picks among them itself, found by the one-off below); nothing in the core depends on which of identical
+  memories it gets. `where` maps a declared field to a value or a list (any of them), or a tuple of
   declared fields to a list of value tuples (any of those combinations); every entry holds; an empty any-of matches
   nothing. It refuses an undeclared field, a wrong dimension or a zero vector, and `k` outside 1 to 100.
 - **Written with the record.** The adapter keeps a record's vector and filter fields in the record's own write:
@@ -141,7 +148,8 @@ store.nearest(space, vector, k, where) -> list[tuple[str, float]]
 - **The core's own scale.** Her `memory.coverage_floor` is a persona setting from 0 to 1 that read MongoDB's score; so
   that it keeps its meaning, retrieval compares it with (1 + cosine) / 2.
 - **The double and the contract suite** come with the record interface (step 2): the double is the in-memory store,
-  and the one contract suite runs against it and against the MongoDB adapter (a throwaway database on her server).
+  and the one contract suite runs against it, and as an integration test against the MongoDB adapter on a throwaway
+  database of her server.
 
 ### Measured on her memory (2026-10-28 02:04, read only, numbers only)
 
@@ -231,11 +239,12 @@ syntax (four files of code in her package today), never edited for her.
 ### Tests (requirement 5)
 
 - The double is the in-memory `Records`; `mongomock` goes.
-- One contract suite runs the same cases against the double and the MongoDB adapter. The adapter's run uses a
-  throwaway `asuna_v2_test_*` database on her server (requirement 5), its vector index included (built and dropped
-  with it, seconds of work for the search process her retrieval shares), and runs when the adapter changes.
-- Unit tests then run on the double: no database server, no shared load on hers. Which tests stay is requirement 6,
-  step 4.
+- One contract suite runs the same cases against the double (with the unit tests) and the MongoDB adapter (as an
+  integration test, requirement 5: a throwaway database of her server, a few hundred synthetic records, dropped at
+  the end).
+- Unit tests then run on the double: no database server, no shared load on hers. From 2026-10-29 this comes first:
+  the double and the test setup on it are step 2's first part, before any call site moves, so the suite can run
+  again. Which tests stay is requirement 6, step 4.
 
 ### How the call sites move
 
@@ -249,7 +258,7 @@ module is done when it names no collection method.
 2. The record interface from the core's own operations, the in-memory double and the contract suite; the call sites
    move to it module by module behind the MongoDB adapter, nothing changing for her between steps.
 3. The MongoDB adapter leaves the core into its own package, loaded by configuration as the channel packages are.
-4. The suite: unit tests on the double, the adapter's tests on a throwaway database of her server, and the reset
+4. The suite: unit tests on the double (the double itself first, in step 2), and the reset
    (requirement 6).
 
 The package is the last step, not the first: until the core reaches the database only through the interface, there is
@@ -270,8 +279,11 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
   `retrieval.py` asks the store for both of its searches (`MEMORY`, exact, 24 for `search` and 12 for
   `own_thoughts` as before) and imports nothing of MongoDB. Its evidence records `exact` instead of `numCandidates`.
   Checked on her real memory, read only: for 30 queries of both kinds `nearest` returned the same records at the same
-  scores as the pipeline retrieval ran before, made exact; its refusals and its empty any-of hold. No unit test: no
-  test server has vector search, and the contract suite comes with the double (step 2).
+  scores as the pipeline retrieval ran before, made exact; its refusals and its empty any-of hold. Its integration
+  test, `integration/test_mongo_vectors.py` (18 cases, 9 s, a throwaway database of 301 synthetic records): the
+  index made and brought up to the space's fields, `nearest` equal to a brute-force cosine for value, list, pair and
+  combined filters at k 1, 12 and 24, ties, the refusals. It found that MongoDB picks among records tied at the k-th
+  score itself; the contract now says so.
 
 ## Open questions (to discuss with the owner first) (as recorded before the decisions)
 

@@ -13,6 +13,7 @@ in [NATIVE_PLUGIN.md](../NATIVE_PLUGIN.md), and the contracts in [RUNTIME_API.md
 | `packages/channels/<name>/` | A channel package: `src/index.js` (`registerChannel`), `python/<module>/` (the kind module), `cordis.patch.yml`, `locale/`, and where it has them `integration/` (a managed adapter), `skills/`, `test/`. |
 | `packages/personas/<name>/` | A persona package: `src/index.js` (`registerPersona`), `persona-model.json`, `seeds/`, `skills/`, `cordis.patch.yml` (its role preset), `locale/`, `icon.*`. |
 | `tests/` | pytest suites (`test_*.py`); case modules shared with the offline checks (`*_cases.py`); fixtures (`fixtures/world.json`, the synthetic persona `fixtures/personas/demo`); `dsh_sandbox.mjs`, which wraps test commands in DSH's sandbox. |
+| `integration/` | the database adapter's integration tests against a real server (not in the default run) |
 | `.agents/skills/` | Skills for coding agents, never published to a character: `asuna-cache-readout` (numbers-only readout of model traffic and cache hits from the DSH sessions). |
 | `tools/` | Install, launch, pack and build scripts, repository checks and diagnostics: see [tools/README.md](../tools/README.md). |
 | `config/` | Tracked templates (`*.example.*`). Real configuration (`local.json`, `*.local.json`) is ignored. |
@@ -83,6 +84,9 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
   per session and resets a reused `asuna_v2_test_*` database for each test; every test database is dropped at
   session end, failures included. Mongo tests skip when the service is unavailable.
 - Native node tests and the native worker/product tests use synthetic inference and create no database.
+- `integration/` holds the database adapter's integration tests, outside the default run
+  (`.\.venv\Scripts\python.exe -m pytest -q integration`). They reach the configured server only on a throwaway `asuna_v2_test_*`
+  database of synthetic records, dropped at the end, and skip when the server is not reachable.
 - The Python suites need the `dev` dependency group (`uv sync` installs it): pytest, mongomock and pyflakes.
   `tests/test_no_undefined_names.py` fails on any name a Python file uses but never defines, in `src/asuna`,
   `tools`, `packages/channels` and `tests` (not the vendored websocket client or the persona packages).

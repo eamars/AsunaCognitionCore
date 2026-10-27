@@ -1,7 +1,8 @@
 # ADR-104: Database connector
 
-Status: decided with the owner 2026-10-28 (below), not designed in detail, not built. Third in the owner's order
-(102, 103, 104). The vector interface is designed (section "Vector search", Claude on the owner's delegation).
+Status: decided with the owner 2026-10-28 (below). Third in the owner's order (102, 103, 104). The vector interface
+is designed (section "Vector search", Claude on the owner's delegation) and built as step 1 of 4 (see "Build order"
+and "Built"), not installed. The record interface (step 2) is not designed yet.
 
 ## The owner's ask (2026-10-27, verbatim)
 
@@ -89,63 +90,94 @@ Sources: the MongoDB Vector Search pages (index type, the `$vectorSearch` stage,
 filtered kNN pages, OpenSearch's filtered k-NN page, Qdrant's collections and search pages. Not verified: MongoDB's
 dotProduct and euclidean score formulas, Redis's dimension limit, sqlite-vec's exact cosine formula.
 
-### The interface
+### The interface (as built; revised from the first design during the build, 2026-10-28)
+
+The first design (commit `d6c35bf3e876`) had a vector store of its own, with `put` and `remove`. Building it showed
+what that costs: outside MongoDB its entries hold their own copy of the filter fields, so every change of a record's
+status and every erasure (ADR-105) would need a second call that each caller must remember, a sync rule spread over
+the call sites. Revised: vector search is an operation of the store that holds the records, and a record's vector is
+written with the record.
 
 ```python
 @dataclass(frozen=True)
-class Space:                       # one per embedding model and revision; fixed for its whole life
-    name: str
+class Space:                       # src/asuna/state.py
+    name: str                      # its index
+    collection: str                # the records that hold the vectors
+    path: str                      # the field with a record's vector, written with the record by `put`
     dimensions: int
-    model: str                     # the embedding model and revision: a mismatch is refused, never mixed
-    fields: dict[str, type]        # the filterable fields, declared with the index (str, int, bool)
+    fields: tuple[str, ...]        # the record fields a search may filter on, declared with the index
 
-class VectorStore(Protocol):
-    def ensure(self, space: Space) -> None: ...
-        # create, or check that the existing index matches; return only once it can be queried; refuse a mismatch
-    def put(self, id: str, vector: Sequence[float], fields: Mapping[str, object]) -> None: ...
-        # upsert; refuse a wrong dimension, a zero vector, an undeclared or mistyped field
-    def remove(self, id: str) -> None: ...          # nothing there is not an error
-    def nearest(self, vector: Sequence[float], k: int,
-                where: Mapping[str, object | Sequence[object]] = {}) -> list[tuple[str, float]]: ...
-        # exact top k among the records matching `where` (each field: one value, or any of a few values; the
-        # fields AND-ed), best first; score = cosine similarity in [-1, 1]; ties broken by id; 1 <= k <= 100
+store.ensure_vectors(space, timeout=45) -> bool          # create, or bring the filter fields up to the space's;
+                                                         # True once it can be queried
+store.nearest(space, vector, k, where) -> list[tuple[str, float]]
 ```
 
-- **Exact search is the contract.** Every engine above can do it, and at a companion's scale (10^4 to 10^5 memories)
-  it is affordable. It removes the approximate-search knobs, the filter-recall trap (pgvector can return fewer than
-  k after a filter), and lets the test double be exactly what the engines are. An adapter that one day needs
-  approximate search may switch internally; the shared contract tests then show what recall it lost.
-- **The score is raw cosine** in every adapter (MongoDB and Elasticsearch: 2s - 1; pgvector, sqlite-vec, Redis:
-  1 - d). A threshold set on one database then means the same on another. A minimum score is applied by the caller.
-- **"Any of a few values" stays,** because the core needs it (the scope and epoch pairs, written as one field
-  `scope_epoch`). An engine without `IN` (sqlite-vec) runs one exact query per value and merges the top k: under exact
-  search the result is the same.
-- **The model is part of the space.** Vectors from two embedding models compared by cosine mean nothing and nothing
-  would warn; a new model is a new space and a re-embedding (the core's `embedding_revision` today).
-- **Not in the interface:** metric choice, quantization, approximate-search knobs, ranges and negations, nested paths,
-  hybrid or full-text search, server-side embedding, returning stored vectors or documents. The adapter hides vector
-  normalization (and refuses a zero vector), the conversion to cosine, the encoding of vectors and ids, waiting for an
-  index, and turning off default quantization where an engine has it (Elasticsearch).
-- **Writes become visible eventually** (MongoDB's search follows the oplog; Elasticsearch refreshes every second);
-  PostgreSQL and SQLite are immediate. No caller may depend on reading its own write at once; the double has a
-  delayed-visibility mode so a caller that does fails in a unit test.
-- **One copy of the filter fields per adapter.** Outside MongoDB the vector entry holds its own copy of the filter
-  fields, so every change of a record's status and every erasure (ADR-105) updates or removes its vector entry in the
-  same step, or search returns stale or erased records. The contract tests pin it.
-- **The test double** is an exact cosine search in memory (float32, normalized), with the adapters' refusals,
-  upsert and idempotent remove, the same `k` bounds and tie order. One contract test suite runs against the double and
-  against each real adapter (a throwaway database or file, dropped after); with it, unit tests stop at the interface
-  (requirement 5).
+- **`nearest`** is exact, best first, equal scores in id order, the score raw cosine in [-1, 1] (MongoDB's
+  (1 + cos) / 2 becomes 2s - 1). `where` maps a declared field to a value or a list (any of them), or a tuple of
+  declared fields to a list of value tuples (any of those combinations); every entry holds; an empty any-of matches
+  nothing. It refuses an undeclared field, a wrong dimension or a zero vector, and `k` outside 1 to 100.
+- **Written with the record.** The adapter keeps a record's vector and filter fields in the record's own write:
+  MongoDB on the document (as today), PostgreSQL a `vector` column of the row, SQLite its `vec0` table in the same
+  transaction. A status change or an erasure needs no second call.
+- **Left out of the first design:** `put` and `remove` (the record's write does it); the model in the space (the core
+  already keeps models apart with its filter field `embedding_revision`); the combined field `scope_epoch` (a tuple
+  key instead, so 134,016 records need no new field).
+- **Kept:** exact search as the contract, raw cosine, any-of, eventual visibility, and the list of what is not in the
+  interface.
+- **The core's own scale.** Her `memory.coverage_floor` is a persona setting from 0 to 1 that read MongoDB's score; so
+  that it keeps its meaning, retrieval compares it with (1 + cosine) / 2.
+- **The double and the contract suite** come with the record interface (step 2): the double is the in-memory store,
+  and the one contract suite runs against it and against the MongoDB adapter (a server that no deployment uses).
+
+### Measured on her memory (2026-10-28 02:04, read only, numbers only)
+
+134,016 records, 28 conversation and epoch pairs (the largest 33,372). Twenty queries a row, each a stored vector of
+one of her memories (no embedding call), today's approximate search (`numCandidates` 96 and 192) against exact.
+Recall counts the approximate results whose score reaches the exact 24th (12th) score, because up to 24 identical
+memories share one top score.
+
+| query (as retrieval makes it) | records in the filter | approximate, ms median / p95 | exact, ms median / p95 | approximate recall, mean / worst |
+|---|---|---|---|---|
+| `search`, the largest conversation | 33,372 | 28 / 35 | 36 / 38 | 0.979 / 0.875 |
+| `search`, the second | 19,222 | 34 / 38 | 30 / 33 | 0.963 / 0.875 |
+| `search`, the third | 10,978 | 31 / 36 | 23 / 27 | 0.973 / 0.708 |
+| `search`, the fourth | 7,929 | 26 / 30 | 18 / 23 | 0.990 / 0.833 |
+| `own_thoughts`, six conversations | 3,719 | 18 / 22 | 14 / 18 | 0.946 / 0.167 |
+| no conversation filter (no query does this) | 133,835 | 31 / 33 | 94 / 101 | 0.892 / 0.625 |
+
+Verdict: exact passes. On every query retrieval makes it costs at most 8 ms and is mostly faster; it finds what
+approximate missed (up to five of six of one query's best). Noted, not this ADR's: identical memories (up to 24 at
+one score) can fill a whole result.
+
+### Build order
+
+1. Vector search through the store (built).
+2. The record interface from the core's own operations, the in-memory double and the contract suite; the call sites
+   move to it module by module behind the MongoDB adapter, nothing changing for her between steps.
+3. The MongoDB adapter leaves the core into its own package, loaded by configuration as the channel packages are.
+4. The suite: unit tests on the double, the adapter's tests on a server no deployment uses, and the reset
+   (requirement 6).
+
+The package is the last step, not the first: until the core reaches the database only through the interface, there is
+nothing to lift out, and the install path (the plugin, the floor, releases) changes once.
 
 ### Risks to check when it is built
 
-1. Switching MongoDB from approximate (`numCandidates` 96 and 192 today) to exact changes her retrieval: recall can
-   only rise, latency must be measured on her real memory first.
+1. Resolved by the measurement above: exact on her memory.
 2. MongoDB's self-managed vector search needs a replica set and `mongot`; this deployment has both today (its
    retrieval works). A new deployment's install says so.
 3. The dimension ceiling: pgvector indexes at most 2,000 dimensions (4,000 as `halfvec`), exact search has no such
    limit. Today's embedding model is well under it.
 4. sqlite-vec is before v1 (upsert only in alphas): its adapter pins the version and upserts as delete then insert.
+
+## Built
+
+- Step 1 (2026-10-28, not installed): `Space`, `Store.ensure_vectors` and `Store.nearest` (`src/asuna/state.py`);
+  `retrieval.py` asks the store for both of its searches (`MEMORY`, exact, 24 for `search` and 12 for
+  `own_thoughts` as before) and imports nothing of MongoDB. Its evidence records `exact` instead of `numCandidates`.
+  Checked on her real memory, read only: for 30 queries of both kinds `nearest` returned the same records at the same
+  scores as the pipeline retrieval ran before, made exact; its refusals and its empty any-of hold. No unit test: no
+  test server has vector search, and the contract suite comes with the double (step 2).
 
 ## Open questions (to discuss with the owner first) (as recorded before the decisions)
 

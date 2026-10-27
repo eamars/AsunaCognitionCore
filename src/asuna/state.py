@@ -8,11 +8,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import copy
 import json
+import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from bson import BSON
 from pymongo import ASCENDING, MongoClient, ReturnDocument, WriteConcern
 from pymongo.errors import DuplicateKeyError
+from pymongo.operations import SearchIndexModel
 from .config import validate_database, character_id
 from .evidence import canonical, sha
 
@@ -96,6 +99,18 @@ def content_ref(text):
 
 def now():
     return datetime.now(timezone.utc).isoformat()
+
+
+@dataclass(frozen=True)
+class Space:
+    """Vectors searched by cosine similarity: each record of `collection` holds its vector in `path`, written with the
+    record by `put` (the store indexes it in the same write), and a search may filter on `fields`, declared with the
+    index. A change of dimensions or fields is a new space."""
+    name: str
+    collection: str
+    path: str
+    dimensions: int
+    fields: tuple[str, ...]
 
 
 class Conflict(RuntimeError):
@@ -244,6 +259,57 @@ class Store:
                     self.audit('recovery','state.commit',commit_payload(op,name,doc,reconciled=True),doc.get('scope_key','operator'))
                     repaired += 1
         return repaired
+
+    def ensure_vectors(self, space: Space, timeout: float = 45) -> bool:
+        """Create the space's index, or bring an existing one's filter fields up to the space's (the old one keeps
+        serving meanwhile); True once it can be queried, False if it cannot yet after `timeout` seconds."""
+        collection = self.db[space.collection]
+        definition = {'fields': [{'type': 'vector', 'path': space.path, 'numDimensions': space.dimensions,
+                                  'similarity': 'cosine'}, *[{'type': 'filter', 'path': key} for key in space.fields]]}
+        current = list(collection.list_search_indexes(space.name))
+        if not current:
+            collection.create_search_index(SearchIndexModel(name=space.name, type='vectorSearch', definition=definition))
+        elif ({f.get('path') for f in (current[0].get('latestDefinition') or {}).get('fields') or []
+               if f.get('type') == 'filter'} != set(space.fields)):
+            collection.update_search_index(space.name, definition)
+        until = time.monotonic() + timeout
+        while True:
+            rows = list(collection.list_search_indexes(space.name))
+            if rows and rows[0].get('status') == 'READY' and rows[0].get('queryable'):
+                return True
+            if time.monotonic() > until:
+                return False
+            time.sleep(.5)
+
+    def nearest(self, space: Space, vector, k: int, where: dict) -> list[tuple[str, float]]:
+        """The k records nearest to `vector` among those matching `where`, best first, as (id, cosine similarity in
+        [-1, 1]); exact, never approximate. `where` maps a declared field to a value or a list of values (any of
+        them), or a tuple of declared fields to a list of value tuples (any of those combinations); every entry holds.
+        Equal scores come in id order."""
+        if not 1 <= k <= 100:
+            raise ValueError('VECTOR_K')
+        if len(vector) != space.dimensions or not any(vector):
+            raise ValueError('VECTOR_SHAPE')
+        parts = []
+        for key, value in where.items():
+            names = key if isinstance(key, tuple) else (key,)
+            if any(name not in space.fields for name in names):
+                raise ValueError('VECTOR_FIELD_NOT_DECLARED')
+            if isinstance(key, tuple) or isinstance(value, (list, set, frozenset)):
+                value = list(value)
+                if not value:
+                    return []                        # any of none: nothing matches
+                parts.append({'$or': [dict(zip(names, combo)) for combo in value]} if isinstance(key, tuple)
+                             else {key: {'$in': value}})
+            else:
+                parts.append({key: value})
+        stage = {'index': space.name, 'path': space.path, 'queryVector': list(vector), 'exact': True, 'limit': k}
+        if parts:
+            stage['filter'] = parts[0] if len(parts) == 1 else {'$and': parts}
+        rows = self.db[space.collection].aggregate([{'$vectorSearch': stage},
+                                                    {'$project': {'_id': 1, 'score': {'$meta': 'vectorSearchScore'}}}])
+        # MongoDB scores cosine as (1 + cosine) / 2.
+        return sorted(((row['_id'], 2 * row['score'] - 1) for row in rows), key=lambda hit: (-hit[1], hit[0]))
 
     def get(self, collection: str, key: str, scope: str, *, operator: bool=False):
         if collection not in COLLECTIONS:

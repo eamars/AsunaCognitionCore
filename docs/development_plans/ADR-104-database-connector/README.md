@@ -342,6 +342,16 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
   p95 566 / 563 old, 596 1b; the vector part alone p50 28 / 26 old, 24 1b, p95 35 / 33 old, 37 1b. A recall's time
   is mostly the lexical read of up to 4,096 records; exact adds at most 4 ms to the vector part, and the whole
   search's p95 moved within about 5%.
+  **Why 1b at all (the reason, so it can be judged).** Not her recall: on her real searches it changes nothing she
+  sees (above). The reason is the interface and its tests. (1) The in-memory double the unit tests run on is exact (an
+  approximate double would be a second approximate search to keep in step with MongoDB's); with exact production, a
+  unit test on the double shows what production returns, and with approximate production the two differ wherever
+  approximate search misses (0.4% of candidates on her searches; with whole memories as queries 1 to 4% of the
+  best-scored on average and up to 83% on one query). (2) Every engine surveyed searches exactly, while the approximate
+  settings differ per engine (MongoDB's `numCandidates`, other engines' list and probe counts) and pgvector can return
+  fewer than k after a filter, so exact is the one behaviour a second adapter can promise. (3) It costs within the
+  noise (above). If these do not weigh enough for her, 1b waits: 1a works without it, and the double then has to be
+  read as exact where production is not.
 ## Open questions (to discuss with the owner first) (as recorded before the decisions)
 
 1. Which databases are meant ("a different database": another MongoDB, or another kind such as PostgreSQL or SQLite)?

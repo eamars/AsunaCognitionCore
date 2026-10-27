@@ -124,7 +124,7 @@ class BlobStore:
 
     def _open(self,item):
         from bson import ObjectId
-        from gridfs.errors import NoFile
+        from gridfs import NoFile
         try:return self.bucket.open_download_stream(ObjectId(item['gridfs_id']))
         except NoFile:raise ValueError(BYTES_MISSING) from None
 

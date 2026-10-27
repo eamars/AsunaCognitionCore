@@ -120,7 +120,7 @@ def _install_stubs():
         _stub('_winapi', __getattr__=lambda name: 0)
 
     def gridfs():
-        _stub('gridfs', GridFSBucket=FakeBucket)
+        _stub('gridfs', GridFSBucket=FakeBucket, NoFile=type('NoFile', (Exception,), {}))
 
     installed = []
     for name, factory in (('bson', bson), ('pymongo', pymongo), ('httpx', httpx),

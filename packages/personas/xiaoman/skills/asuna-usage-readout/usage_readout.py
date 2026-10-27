@@ -966,7 +966,7 @@ def selfcheck():
                   "totalTokens": 10}]
     check("heuristic_key_dedups_compaction",
           aggregate(heuristic, dedupe(heuristic), 0, 10)[1]["kept"] == 1)
-    check("created_ms_is_int_on_disk", parse_created_ms(1792193565157) == 1792193565157)
+    check("created_ms_is_int_on_disk", parse_created_ms(1792193565157) == 1792193565157)  # personal-scan: ok (epoch-ms fixture taken from this machine's usage rows)
     check("created_ms_parses_both_iso_forms", parse_created_ms("2026-10-16T07:56:38.123456+00:00")
           == parse_created_ms("2026-10-16T07:56:38.123456Z"))
     check("created_ms_rejects_junk", parse_created_ms("不是时间") is None
@@ -1033,7 +1033,7 @@ def selfcheck():
           any("断言②③" in p for p in assert_recon_table(rows_t, copy_t, broken[T_ROLE], win_rows_t)))
     check("table_assert_catches_missing_row",
           any("断言④" in p for p in assert_recon_table(rows_t, copy_t, direct_t, win_rows_t + 1)))
-    check("table_thousands_separator", fmt_int(1234567) == "1,234,567" and fmt_int(0) == "0")
+    check("table_thousands_separator", fmt_int(1234567) == "1,234,567" and fmt_int(0) == "0")  # personal-scan: ok (input fixture of the thousands-separator test itself)
     check("table_rows_list_complete",
           TABLE_ROWS == (T_ROLE, T_HIGH, T_LOW, T_UNARCH, T_COMPACT, T_GATE, T_SCHED, T_OTHER))
 

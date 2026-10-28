@@ -1,17 +1,19 @@
 """The read-only check of one ADR-104 batch against a deployment's database, before the batch merges: numbers only,
 never a record id or a value.
 
-  python tools/adr104_equivalence.py b1b|b2|b3|b4|b5 [--config config/local.json] [--out <folder>] [--max-ms 2000]
+  python tools/adr104_equivalence.py b1b|b2|b3|b4|b5|b6 [--config config/local.json] [--out <folder>] [--max-ms 2000]
 
 Each batch: what the store's `ensure` would do there, as a dry run (collections it would create, indexes it would
 make, retired indexes it would drop, indexes of a declared name that differ, validators), and for every field the
 catalog declares in the batch's collections (b1b: all of them; b2: `host_leases` and `lane_faults`; b3: `scenes`;
-b4: `messages`; b5: `episodes`, `sessions`, `sink_receipts`, `lane_receipts`), its stored records by BSON type, the
-nulls, the records missing a required field and, for a vector, the lengths that differ; b4 and b5 also, per
-collection (SIZED), the records of 512 KiB or more and those whose BSON and JSON sizes fall on different sides of
-1 MiB. b3, b4 and b5 also run their read cases: each read the batch moved, as the replaced code wrote it with
-pymongo and as the owner (`records.scenes`, `records.messages`, `records.episodes`, `records.sessions`,
-`records.receipts`) now answers it, on parameters sampled through the
+b4: `messages`; b5: `episodes`, `sessions`, `sink_receipts`, `lane_receipts`; b6: `tasks`, `task_messages`,
+`plans`), its stored records by BSON type, the nulls, the records missing a required field and, for a vector, the
+lengths that differ; b4, b5 and b6 also, per collection (SIZED), the records of 512 KiB or more and those whose BSON
+and JSON sizes fall on different sides of 1 MiB. b3 to b6 also run their read cases: each read the batch moved, as
+the replaced code wrote it with pymongo and as the owner (`records.scenes`, `records.messages`, `records.episodes`,
+`records.sessions`, `records.receipts`, `records.tasks`, `records.plans`) now answers it (b6 also the conversation
+context's task aggregate against `records.tasks.recent_with_inputs` on up to 20 conversations, rows and their fields
+in order), on parameters sampled through the
 owners (at most 20 a case, at most 1,000 queries in all, serial, `--max-ms` each, three runs for the times): the same
 ids in the same order, the same records (values in one order for a distinct), the same plan stages (a distinct or an
 aggregate has no plan of its own to compare; the new plan is reported), and how many rows each side answered; per
@@ -230,9 +232,10 @@ def differs(collection, counts):
 
 # The collections whose declared fields each batch counts (None: every collection).
 BATCHES = {'b1b': None, 'b2': ('host_leases', 'lane_faults'), 'b3': ('scenes',), 'b4': ('messages',),
-           'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts')}
+           'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts'), 'b6': ('tasks', 'task_messages', 'plans')}
 # The collections whose records' sizes each batch counts (512 KiB or more; BSON and JSON on different sides of 1 MiB).
-SIZED = {'b4': ('messages',), 'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts')}
+SIZED = {'b4': ('messages',), 'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts'),
+         'b6': ('tasks', 'task_messages', 'plans')}
 QUERIES = 1000
 _ARCHIVED = {'reason': "the archived stream's old read left out `legacy` by an exclusion projection, which the store "
                        "does not have; the owner drops it after the read (accepted for B4, 2026-10-28)",
@@ -257,7 +260,7 @@ WATCHED = {'b4': {'who wrote in these': {
     'note': 'same family, under threshold: a values read grouped by presence, as "who wrote here" (293 ms against 9 '
             'before fa46c24132f6); measured at B4 old p50 ~12 ms, new ~19 ms, 1.55x'}}}
 RUNS = 3
-READ_CASES = ('b3', 'b4', 'b5')
+READ_CASES = ('b3', 'b4', 'b5', 'b6')
 
 
 def slower(old, new):
@@ -303,26 +306,27 @@ def _plain(value):
 
 class _Recording(MongoAdapter):
     """The MongoDB adapter, keeping the last read it sent (to explain it): (collection, filter, sort, skip, limit,
-    fields)."""
+    fields), and how many reads it sent (`calls`)."""
     sent = None
+    calls = 0
 
     def get(self, coll, id, fields=None):
-        self.sent = (coll, {'_id': id}, (), 0, 1, fields)
+        self.sent, self.calls = (coll, {'_id': id}, (), 0, 1, fields), self.calls + 1
         return super().get(coll, id, fields)
 
     def find(self, coll, where, sort=(), skip=0, limit=None, fields=None):
         from asuna.store.mongodb import query
-        self.sent = (coll, query(where), sort, skip, limit or 0, fields)
+        self.sent, self.calls = (coll, query(where), sort, skip, limit or 0, fields), self.calls + 1
         return super().find(coll, where, sort, skip, limit, fields)
 
     def count(self, coll, where, limit=None):
         from asuna.store.mongodb import query
-        self.sent = (coll, query(where), (), 0, 0, None)
+        self.sent, self.calls = (coll, query(where), (), 0, 0, None), self.calls + 1
         return super().count(coll, where, limit)
 
     def group(self, coll, where, by, *args, **kwargs):
         from asuna.store.mongodb import query
-        self.sent = (coll, query(where), (), 0, 0, None)
+        self.sent, self.calls = (coll, query(where), (), 0, 0, None), self.calls + 1
         return super().group(coll, where, by, *args, **kwargs)
 
 
@@ -394,6 +398,8 @@ def _compared(value, how):
     value = _plain(value)
     if how == 'values':
         return sorted(value, key=repr)
+    if how == 'ordered':                 # records with their fields in order (what a context renders from them)
+        return [list(row.items()) for row in value]
     return value
 
 
@@ -415,12 +421,20 @@ def reads(client, database, max_ms, batch, config):
     old_db = client.get_database(database)
     adapter = _Recording(client, database)
     store = Checked(adapter, CATALOG)
-    cases, sampling = (_cases_b3(store), 1) if batch == 'b3' else {'b4': _cases_b4, 'b5': _cases_b5}[batch](
-        store, config)
-    per_case = max(1, min(20, (QUERIES - sampling - 2 * len(cases)) // (len(cases) * 2 * RUNS)))
+    cases, sampling = (_cases_b3(store), 1) if batch == 'b3' else {'b4': _cases_b4, 'b5': _cases_b5,
+                                                                   'b6': _cases_b6}[batch](store, config)
+    # A case may name how many samples it takes (a sixth item: B6's proof on 20 conversations); its reads (one old,
+    # up to two new a run) come off the budget first, and the other cases share the rest.
+    fixed = [case for case in cases if len(case) > 5]
+    reserved = sum(min(len(case[3]), case[5]) * RUNS * 3 + 2 for case in fixed)
+    shared = max(1, len(cases) - len(fixed))
+    per_case = max(1, min(20, (QUERIES - sampling - reserved - 2 * shared) // (shared * 2 * RUNS)))
     out, timed, explained, confirmed = {}, 0, 0, 0
-    for name, old_call, new_call, params, how in cases:
-        chosen = params[::max(1, len(params) // per_case)][:per_case] if params else []
+    for name, old_call, new_call, params, how, *samples in cases:
+        if samples:
+            chosen = params[:samples[0]]
+        else:
+            chosen = params[::max(1, len(params) // per_case)][:per_case] if params else []
         same = differing = plans_differ = rows_old = rows_new = 0
         times = {'old': [], 'new': []}
         old_plan = new_plan = None
@@ -431,10 +445,10 @@ def reads(client, database, max_ms, batch, config):
                 started = clock.perf_counter()
                 old_value, old_cursor = _old(old_db, old_call(param))
                 times['old'].append((clock.perf_counter() - started) * 1000)
-                started = clock.perf_counter()
+                started, before = clock.perf_counter(), adapter.calls
                 new_value = new_call(param)
                 times['new'].append((clock.perf_counter() - started) * 1000)
-                timed += 2
+                timed += 1 + max(1, adapter.calls - before)
                 results = {'old': _compared(old_value, how), 'new': _compared(new_value, how)}
             rows_old, rows_new = rows_old + _amount(old_value), rows_new + _amount(new_value)
             if results['old'] == results['new']:
@@ -477,11 +491,12 @@ def reads(client, database, max_ms, batch, config):
             out[name]['confirm'] = {'runs': CONFIRM_RUNS, 'ms_old_p50': round(statistics.median(again['old']), 2),
                                     'ms_new_p50': round(statistics.median(again['new']), 2)}
     samples = sum(case['n'] for case in out.values())
-    # What was run: the sampling reads, each case's samples x 2 sides x RUNS timed runs, the confirmations of cases
-    # over the timing gate, and the explains (two per explained sample, one where the old form has no plan of its own).
+    # What was run: the sampling reads, each case's samples x RUNS timed runs (the old side's read, and every read the
+    # new side sent), the confirmations of cases over the timing gate, and the explains (two per explained sample, one
+    # where the old form has no plan of its own).
     return out, {'sampling': sampling, 'samples': samples, 'timed': timed, 'confirmed': confirmed,
                  'explain': explained, 'total': sampling + timed + confirmed + explained,
-                 'counted_as': 'sampling + samples x 2 sides x %d runs + confirmations + explain' % RUNS}
+                 'counted_as': 'sampling + samples x %d runs (old read, new reads) + confirmations + explain' % RUNS}
 
 
 PROGRAM_AUTHOR = 'asuna:internal'                       # ingress.PROGRAM_AUTHOR as the replaced code named it
@@ -1475,6 +1490,243 @@ def _cases_b5(store, config):
     return [case for case in cases if case[3]], got['reads']
 
 
+TASK = ['_id', 'scene_id', 'scope_key', 'policy_epoch', 'requester_id', 'episode_id', 'state', 'created_at',
+        'finished_at', 'paused_at', 'continues_task_id', 'lease_expires_at']
+PLAN = ['_id', 'scene_id', 'scope_key', 'person_id', 'policy_epoch', 'status', 'kind', 'next_fire_at', 'last_outcome']
+RECOVERED = ['READY', 'RUNNING', 'RETURNED', 'DONE', 'PARTIAL', 'BLOCKED', 'NEEDS_CHARACTER_DECISION', 'UNKNOWN']
+FINISHED_TASK = ['RETURNED', 'BLOCKED', 'DONE', 'PARTIAL', 'NEEDS_CHARACTER_DECISION', 'UNKNOWN']   # handover.FINISHED
+TAKEN = ['DELIVERED', 'WAITING_TASK', 'SUPPRESSED', 'UNDELIVERABLE']                                # handover.TAKEN
+OPEN_TASK = ['READY', 'RUNNING', 'PAUSED']
+RHYTHMS = ['self_development', 'presence', 'settlement', 'condense']                              # schedule.RHYTHM_KINDS
+CONVERSATIONS = 20
+LATE = float(2 ** 32)          # a lease time past every real one (seconds since the epoch)
+SHOWN_OLD = {'_id': 1, 'state': 1, 'goal': 1, 'title': 1, 'feedback_state': 1, 'finished_at': 1, 'cancel_reason': 1,
+             'pause_reason': 1, 'paused_at': 1, '_active': 1, 'tier': 1,
+             '_report_chars': {'$strLenCP': {'$ifNull': ['$result.text', '']}}}
+
+
+def _sample_b6(store):
+    """What the cases read with, through the owners: the conversations, up to CONVERSATIONS of them with tasks (each
+    one read), their tasks, some task messages, and plans."""
+    from asuna.records import plans, scenes, tasks
+    found = {'reads': 1}
+    rows = sorted(scenes.all(store, fields=['_id', 'scope_key', 'policy_epoch']), key=lambda row: row['_id'])
+    found['scenes'], found['busy'] = rows, []
+    for scene in rows:
+        if len(found['busy']) >= CONVERSATIONS or found['reads'] > 3 * CONVERSATIONS:
+            break
+        found['reads'] += 1
+        if tasks.of_conversations(store, [scene['_id']]).first(fields=['_id']):
+            found['busy'].append(scene)
+    found['tasks'] = tasks.of_conversations(store, [scene['_id'] for scene in found['busy']]).rows(limit=40,
+                                                                                               fields=TASK)
+    found['messages'] = []
+    for task in found['tasks'][:6]:
+        found['messages'] += tasks.thread(store, task['_id']).rows(limit=2, fields=['_id', 'task_id', 'from'])
+    found['plans'] = plans.in_status(store, statuses=['ACTIVE', 'CREATING', 'SUSPENDED']).rows(limit=30, fields=PLAN)
+    found['reads'] += 3 + min(6, len(found['tasks']))
+    return found
+
+
+def _cases_b6(store, config):
+    """(name, old(param), new(param), parameters, compare[, samples]) for each read B6 moved, the old as the replaced
+    code wrote it; parameters sampled through the owners, synthetic values where her records hold none (both sides
+    then read nothing, and the plans are still compared). The last case is B6's own proof: the conversation context's
+    aggregate against recent_with_inputs on up to CONVERSATIONS conversations."""
+    from asuna.records import plans, tasks
+    got = _sample_b6(store)
+    rows, plan_rows, busy = got['tasks'], got['plans'], got['busy']
+    none_task = {'_id': 'task-none', 'scene_id': 'scene-none', 'scope_key': 'scope-none', 'policy_epoch': 1,
+                 'requester_id': 'person-none', 'episode_id': 'turn-none', 'created_at': '2026-01-01T00:00:00+00:00'}
+    rows = rows or [none_task]
+    ids = [row['_id'] for row in rows]
+    batches = [ids[n:n + 5] for n in range(0, len(ids), 5)]
+    fenced = [row for row in rows if isinstance(row.get('scene_id'), str) and isinstance(row.get('requester_id'), str)
+              and isinstance(row.get('policy_epoch'), int)] or [none_task]
+    scoped = [row for row in rows if isinstance(row.get('scope_key'), str)] or [none_task]
+    times = sorted({row['created_at'] for row in rows if isinstance(row.get('created_at'), str)}) or [
+        none_task['created_at']]
+    since = times[0]
+    scenes = sorted({row['scene_id'] for row in rows if isinstance(row.get('scene_id'), str)}) or ['scene-none']
+    turns = sorted({row['episode_id'] for row in rows if isinstance(row.get('episode_id'), str)}) or ['turn-none']
+    messages = got['messages'] or [{'_id': 'message-none', 'task_id': 'task-none', 'from': 'character'}]
+    plan_rows = plan_rows or [{'_id': 'plan-none', 'scene_id': 'scene-none', 'scope_key': 'scope-none',
+                               'person_id': 'person-none', 'policy_epoch': 1}]
+    plan_ids = [row['_id'] for row in plan_rows] + ['plan-asuna-presence']
+    plan_fenced = [row for row in plan_rows if isinstance(row.get('scene_id'), str)
+                   and isinstance(row.get('person_id'), str)] or plan_rows
+    soon = '9999-12-31T23:59:59+00:00'
+    one = lambda coll, filter, proj=None, sort=None: ('find_one', coll, filter, proj, sort)
+    many = lambda coll, filter, proj=None, sort=None, limit=0: ('find', coll, filter, proj, sort, limit)
+    count = lambda coll, filter, limit=0: ('count', coll, filter, limit)
+    fields = lambda *names: {name: 1 for name in names}
+    T, M, P = 'tasks', 'task_messages', 'plans'
+
+    def aggregate(scene):
+        return ('aggregate', T, [
+            {'$match': {'scene_id': scene['_id'], 'scope_key': scene.get('scope_key'),
+                        'policy_epoch': scene.get('policy_epoch')}},
+            {'$lookup': {'from': 'messages', 'localField': 'raw_input_refs', 'foreignField': '_id',
+                         'pipeline': [{'$project': {'received_at': 1, '_id': 0}}], 'as': '_inputs'}},
+            {'$addFields': {'_active': {'$cond': [{'$in': ['$state', ['READY', 'RUNNING']]}, 1, 0]},
+                            '_input_time': {'$max': '$_inputs.received_at'}}},
+            {'$sort': {'_active': -1, '_input_time': -1, '_id': 1}}, {'$limit': 16}, {'$project': SHOWN_OLD}])
+
+    cases = [
+        # tasks
+        ('task by id', lambda i: one(T, {'_id': i}), lambda i: tasks.get(store, i), ids, 'value'),
+        ('task by id, fields', lambda i: one(T, {'_id': i}, fields('result.text', 'intent_revision')),
+         lambda i: tasks.get(store, i, ['result.text', 'intent_revision']), ids, 'value'),
+        ('task by id in a state', lambda i: one(T, {'_id': i, 'state': 'READY'}),
+         lambda i: tasks.get(store, i, state='READY'), ids, 'value'),
+        ('a requester\'s task here', lambda r: one(T, {'_id': r['_id'], 'scene_id': r['scene_id'],
+                                                      'requester_id': r['requester_id'],
+                                                      'policy_epoch': r['policy_epoch']}),
+         lambda r: tasks.get(store, r['_id'], scene=r['scene_id'], requester=r['requester_id'],
+                             epoch=r['policy_epoch']), fenced, 'value'),
+        ('a task here, its requester', lambda r: one(T, {'_id': r['_id'], 'scene_id': r['scene_id'],
+                                                        'policy_epoch': r['policy_epoch']}, fields('requester_id')),
+         lambda r: tasks.get(store, r['_id'], ['requester_id'], scene=r['scene_id'], epoch=r['policy_epoch']), fenced,
+         'value'),
+        ('a task of a place, its report', lambda r: one(T, {'_id': r['_id'], 'scene_id': r.get('scene_id'),
+                                                           'scope_key': r['scope_key'],
+                                                           'policy_epoch': r.get('policy_epoch')},
+                                                       fields('result.text', 'title', 'goal', 'intent_revision')),
+         lambda r: tasks.get(store, r['_id'], ['result.text', 'title', 'goal', 'intent_revision'],
+                             scene=r.get('scene_id'), scope=r['scope_key'], epoch=r.get('policy_epoch')), scoped,
+         'value'),
+        ('tasks by ids, fields', lambda b: many(T, {'_id': {'$in': b}}, fields('title', 'goal')),
+         lambda b: tasks.many(store, b).rows(fields=['title', 'goal']), batches, 'value'),
+        ('an open task among ids', lambda b: one(T, {'_id': {'$in': b}, 'state': {'$in': OPEN_TASK}}, fields('_id')),
+         lambda b: tasks.many(store, b, states=OPEN_TASK).first(fields=['_id']), batches, 'value'),
+        ('tasks to recover', lambda _: many(T, {'state': {'$in': RECOVERED}}),
+         lambda _: tasks.in_states(store, RECOVERED).rows(), [None], 'value'),
+        ('queued tasks, the first five', lambda _: many(T, {'state': 'READY'}, fields('title', 'goal'), None, 5),
+         lambda _: tasks.in_states(store, 'READY').rows(limit=5, fields=['title', 'goal']), [None], 'value'),
+        ('the queue ahead of a task', lambda i: many(T, {'state': {'$in': ['RUNNING', 'READY']}, '_id': {'$ne': i}},
+                                                     fields('state', 'scene_id', 'started_at', 'created_at')),
+         lambda i: tasks.in_states(store, ['RUNNING', 'READY'], besides=i).rows(
+             fields=['state', 'scene_id', 'started_at', 'created_at']), ids[:5], 'value'),
+        ('open tasks, their turns', lambda _: many(T, {'state': {'$in': OPEN_TASK}}, fields('episode_id')),
+         lambda _: tasks.in_states(store, OPEN_TASK).rows(fields=['episode_id']), [None], 'value'),
+        ('a requester\'s tasks by prefix', lambda r: many(T, {
+            'scene_id': r['scene_id'], 'requester_id': r['requester_id'], 'policy_epoch': r['policy_epoch'],
+            '_id': {'$regex': '^' + re.escape(r['_id'][:12])}}, fields('_id'), None, 3),
+         lambda r: tasks.by_prefix(store, r['_id'][:12], scene=r['scene_id'], requester=r['requester_id'],
+                                   epoch=r['policy_epoch']).rows(limit=3, fields=['_id']), fenced, 'value'),
+        ('tasks continuing these', lambda b: many(T, {'continues_task_id': {'$in': b}},
+                                                  fields('continues_task_id', 'created_at'), [('created_at', 1)]),
+         lambda b: tasks.continuations(store, b).rows(fields=['continues_task_id', 'created_at']), batches, 'value'),
+        ('results not handed back', lambda _: many(T, {'state': {'$in': FINISHED_TASK},
+                                                       'feedback_state': {'$exists': True, '$nin': [*TAKEN, None]}}),
+         lambda _: tasks.awaiting_feedback(store, FINISHED_TASK, TAKEN), [None], 'value'),
+        ('leases expired', lambda _: many(T, {'state': 'RUNNING', 'lease_expires_at': {'$lt': LATE}}),
+         lambda _: tasks.lease_expired(store, LATE).rows(), [None], 'value'),
+        ('tasks paused for a restart', lambda _: many(T, {'state': 'PAUSED', 'pause_reason': 'host_restart',
+                                                          'paused_state': {'$in': FINISHED_TASK}}),
+         lambda _: tasks.paused(store, 'host_restart', states=FINISHED_TASK).rows(), [None], 'value'),
+        ('tasks paused since', lambda s: many(T, {'state': 'PAUSED', 'pause_reason': 'host_restart',
+                                                  'paused_at': {'$gte': s}}, fields('title', 'goal'), None, 5),
+         lambda s: tasks.paused(store, 'host_restart', since=s).rows(limit=5, fields=['title', 'goal']), [since],
+         'value'),
+        ('tasks of conversations, newest finished', lambda b: many(T, {'scene_id': {'$in': b}}, fields(
+            'scene_id', 'state', 'title', 'goal', 'failure_type', 'result', 'feedback_state', 'finished_at'),
+            [('finished_at', -1)], 5),
+         lambda b: tasks.of_conversations(store, b, by='finished_at').rows(newest_first=True, limit=5, fields=[
+             'scene_id', 'state', 'title', 'goal', 'failure_type', 'result', 'feedback_state', 'finished_at']),
+         [scenes[n:n + 4] for n in range(0, len(scenes), 4)], 'value'),
+        ('tasks created since, in order', lambda s: many(T, {'created_at': {'$gte': s}}, fields(
+            'title', 'goal', 'scene_id', 'state', 'created_at', 'failure_type'), [('created_at', 1)]),
+         lambda s: tasks.created(store, s, by='created_at').rows(fields=['title', 'goal', 'scene_id', 'state',
+                                                                         'created_at', 'failure_type']),
+         times[:3], 'value'),
+        ('tasks created in a window', lambda s: many(T, {'created_at': {'$gte': s, '$lt': soon}},
+                                                     fields('_id', 'state', 'tier', 'tool_steps')),
+         lambda s: tasks.created(store, s, until=soon).rows(fields=['_id', 'state', 'tier', 'tool_steps']), times[:3],
+         'value'),
+        ('tasks created elsewhere', lambda b: many(T, {'scene_id': {'$nin': b[:1], '$in': b[1:] or [None]},
+                                                       'created_at': {'$gte': since}},
+                                                   fields('scene_id', 'title', 'state', 'feedback_state',
+                                                          'cancel_reason')),
+         lambda b: tasks.created(store, since, scenes=b[1:], besides=b[:1]).rows(
+             fields=['scene_id', 'title', 'state', 'feedback_state', 'cancel_reason']),
+         [scenes[:4], scenes[:1]], 'value'),
+        ('a turn\'s tasks', lambda e: many(T, {'episode_id': e}, fields('_id')),
+         lambda e: tasks.of_episode(store, e).rows(fields=['_id']), turns, 'value'),
+        ('a task finished since', lambda s: one(T, {'finished_at': {'$gt': s}}, fields('_id')),
+         lambda s: tasks.finished_since(store, s, fields=['_id']), times[:3], 'value'),
+        ('tasks of a scope', lambda r: many(T, {'scope_key': r['scope_key']}, fields('_id')),
+         lambda r: tasks.of_scope(store, r['scope_key'], fields=['_id']), scoped, 'value'),
+        ('what the action brain reported', lambda i: many(M, {'task_id': i, 'from': 'action'}, fields('text'),
+                                                          [('created_at', -1)], 2),
+         lambda i: tasks.thread(store, i, sender='action').rows(newest_first=True, limit=2, fields=['text']), ids,
+         'value'),
+        ('her messages not yet delivered', lambda i: many(M, {'task_id': i, 'from': 'character', 'delivered': False},
+                                                          None, [('created_at', 1)]),
+         lambda i: tasks.thread(store, i, sender='character', delivered=False).rows(), ids, 'value'),
+        ('task message by id', lambda m: one(M, {'_id': m['_id']}), lambda m: tasks.thread_message(store, m['_id']),
+         messages, 'value'),
+        ('her task message by id', lambda m: one(M, {'_id': m['_id'], 'from': 'character'}),
+         lambda m: tasks.thread_message(store, m['_id'], sender='character'), messages, 'value'),
+        # plans
+        ('plan by id', lambda i: one(P, {'_id': i}), lambda i: plans.get(store, i), plan_ids, 'value'),
+        ('plan by id, fields', lambda i: one(P, {'_id': i}, fields('visits')),
+         lambda i: plans.get(store, i, ['visits']), plan_ids, 'value'),
+        ('a person\'s plan here', lambda r: one(P, {'_id': r['_id'], 'scene_id': r.get('scene_id'),
+                                                   'person_id': r.get('person_id'),
+                                                   'policy_epoch': r.get('policy_epoch')}),
+         lambda r: plans.get(store, r['_id'], scene=r.get('scene_id'), person=r.get('person_id'),
+                             epoch=r.get('policy_epoch')), plan_fenced, 'value'),
+        ('a plan of this conversation', lambda r: one(P, {'_id': r['_id'], 'scene_id': r.get('scene_id')}, fields('_id')),
+         lambda r: plans.get(store, r['_id'], ['_id'], scene=r.get('scene_id')), plan_rows, 'value'),
+        ('the scheduled plan of a turn', lambda r: one(P, {
+            '_id': r['_id'], 'scene_id': r.get('scene_id'), 'scope_key': r.get('scope_key'),
+            'person_id': r.get('person_id'), 'policy_epoch': r.get('policy_epoch')}, fields(
+            '_id', 'intent', 'rule', 'last_occurrence_id', 'last_outcome', 'source_episode_id')),
+         lambda r: plans.get(store, r['_id'], ['_id', 'intent', 'rule', 'last_occurrence_id', 'last_outcome',
+                                               'source_episode_id'], scene=r.get('scene_id'), scope=r.get('scope_key'),
+                             person=r.get('person_id'), epoch=r.get('policy_epoch')), plan_fenced, 'value'),
+        ('plans active or being made', lambda _: many(P, {'status': {'$in': ['ACTIVE', 'CREATING']}}),
+         lambda _: plans.in_status(store, statuses=['ACTIVE', 'CREATING']).rows(), [None], 'value'),
+        ('active rhythms', lambda _: many(P, {'status': 'ACTIVE', 'kind': {'$in': RHYTHMS}}),
+         lambda _: plans.in_status(store, status='ACTIVE', kinds=RHYTHMS).rows(), [None], 'value'),
+        ('plans due', lambda _: many(P, {'status': 'ACTIVE', 'next_fire_at': {'$lte': soon},
+                                         'kind': {'$nin': RHYTHMS}}, fields('intent', 'next_fire_at'), None, 5),
+         lambda _: plans.due(store, soon, not_kinds=RHYTHMS).rows(limit=5, fields=['intent', 'next_fire_at']), [None],
+         'value'),
+        ('a person\'s plans here', lambda r: many(P, {
+            'scene_id': r.get('scene_id'), 'scope_key': r.get('scope_key'), 'person_id': r.get('person_id'),
+            'policy_epoch': r.get('policy_epoch'), 'kind': {'$nin': RHYTHMS},
+            'status': {'$in': ['CREATING', 'ACTIVE', 'SUSPENDED']}}, fields(
+            '_id', 'intent', 'rule', 'scheduled_at', 'status', 'plan_version', 'timezone', 'tz_source', 'next_fire_at',
+            'created_at', 'updated_at', 'last_outcome'), [('created_at', -1)], 8),
+         lambda r: plans.of_conversation(store, r.get('scene_id'), scope=r.get('scope_key'), person=r.get('person_id'),
+                                         epoch=r.get('policy_epoch'), statuses=['CREATING', 'ACTIVE', 'SUSPENDED'],
+                                         not_kinds=RHYTHMS).rows(newest_first=True, limit=8, fields=[
+             '_id', 'intent', 'rule', 'scheduled_at', 'status', 'plan_version', 'timezone', 'tz_source', 'next_fire_at',
+             'created_at', 'updated_at', 'last_outcome']), plan_fenced, 'value'),
+        ('a line\'s plans', lambda s: many(P, {'scene_id': s, 'status': {'$in': ['CREATING', 'ACTIVE']},
+                                               'kind': {'$nin': RHYTHMS}}, None, [('created_at', -1)], 3),
+         lambda s: plans.of_conversation(store, s, statuses=['CREATING', 'ACTIVE'], not_kinds=RHYTHMS).rows(
+             newest_first=True, limit=3), sorted({row['scene_id'] for row in plan_rows
+                                                  if isinstance(row.get('scene_id'), str)}) or ['scene-none'], 'value'),
+        ('home beats with an outcome', lambda s: many(P, {'kind': {'$in': ['settlement', 'self_development']},
+                                                          'scene_id': s, 'last_outcome': 'ENQUEUED'},
+                                                      fields('last_occurrence_at')),
+         lambda s: plans.with_outcome(store, s, ['settlement', 'self_development'], 'ENQUEUED').rows(
+             fields=['last_occurrence_at']), sorted({row['scene_id'] for row in plan_rows
+                                                     if isinstance(row.get('scene_id'), str)}) or ['scene-none'],
+         'value'),
+        ('active plans, counted', lambda _: count(P, {'status': 'ACTIVE'}),
+         lambda _: plans.count_status(store, 'ACTIVE'), [None], 'value'),
+        # B6's own proof: the context's task list, the aggregate against its reads
+        ('a conversation\'s tasks with their newest input', aggregate,
+         lambda scene: tasks.recent_with_inputs(store, scene['_id'], scene.get('scope_key'), scene.get('policy_epoch')),
+         busy, 'ordered', CONVERSATIONS),
+    ]
+    return [case for case in cases if case[3]], got['reads']
+
+
 def sizes(db, collection, max_ms, timings=None):
     """The records of 512 KiB or more by their BSON size, and of those the ones whose BSON and JSON sizes (the
     in-memory adapter's measure) fall on different sides of the store's 1 MiB limit; read part by part like the
@@ -1651,7 +1903,7 @@ def check(batch, settings, database, out, max_ms):
             print('timing gate: no read case slower past the threshold')
     if 'queries' in report:
         q = report['queries']
-        print('queries: %d (sampling %d, timed %d = %d samples x 2 sides x %d runs, timed again %d, explain %d)'
+        print('queries: %d (sampling %d, timed %d = %d samples x %d runs of each side, timed again %d, explain %d)'
               % (q['total'], q['sampling'], q['timed'], q['samples'], RUNS, q.get('confirmed', 0), q['explain']))
     print('numbers written to %s' % (out / (batch + '.json')))
     if unchecked or unchecked_fields:

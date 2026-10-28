@@ -475,6 +475,17 @@ precision is not verified). The 18 cases of `integration/test_mongo_vectors.py` 
 class. MongoDB's vector filter refuses an empty `$in`, so the adapter drops the branches that can match nothing and
 answers `[]` itself when none is left. `memory_units` declares `embedding` as `vector(768)`, the space's dimension.
 
+Where each of the 18 cases of `integration/test_mongo_vectors.py` (as at `b5c36121ac66`) went. Every `N` case runs on
+`[memory]`, is listed by its `[stand-in]` id (the stand-in has no vector search) and runs in the integration run on
+MongoDB:
+
+| old case | carried by | what differs |
+|---|---|---|
+| `test_the_index_is_brought_up_to_the_space` | `N01` | the old case read the index's filter fields (`list_search_indexes`); `N01` filters on a field only the second `ensure_vectors` added and compares with brute force, which on MongoDB fails while the index lacks it; on `[memory]` it shows nothing (no index) |
+| `test_nearest_is_exact_cosine[{k}-{filter}]`, 15 (k 1, 12, 24 by no filter, value, list, pairs, pairs and kind) | `N02` with the same 15 parameters | the filters are written in the store's words (a list as `AnyOf`, the pairs as `Or` of dicts with the other entries in `And`) |
+| `test_ties_come_in_id_order` | `N17` | none |
+| `test_empty_any_of_matches_nothing_and_bad_queries_are_refused` | `N18` | the empty any-of is `AnyOf([])` on one field; the old form, an empty list of pairs, is answered by `Store.nearest`'s translation (and from B7 by `records.memories`) without a call, and no case pins that: no home until B7's owner case. `N18` adds `VECTOR_FILTER_WORD` |
+
 **5.11 Large binary files and the record size limit.** The blob interface (methods 16-19). `blobs.py` keeps its rules in
 the core: it hashes while it streams into `blobs.write`, reads the bytes back through `blobs.open` in `STREAM_PIECE`
 pieces and compares hash and size, deletes on mismatch, then writes the `artifacts` row through `put`. The post-write
@@ -871,6 +882,9 @@ before its merge, as part of the lead's review of the batch (the owner is inform
 Writes are not run on her database: the change words are proven by the contract suite on MongoDB, the call sites by
 the unit tests, and after each restart by `audit.verify_documents` over the commits written since (each committed
 document equals its audit record).
+
+design.md is signed like the ADR page: a landing that changes design.md carries her new design blob in the ADR's
+index row, or the landing script stops.
 
 ---
 

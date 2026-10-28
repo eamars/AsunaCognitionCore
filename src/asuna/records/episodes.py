@@ -2,8 +2,10 @@
 state the turn reached), read and written only through these operations.
 
 `get` returns a turn as stored (`fields` names what to return, `_id` always comes back), within the fences given; an
-id or a fence that is missing or not of its kind finds nothing. The other reads are views (`View`: `rows`, `first`,
-`count`), in the database's order, as the replaced reads had none. `save` is the revisioned write (`Store.put`).
+id or a fence (conversation, scope, epoch, persona, person, native session) that is missing or not of its kind finds
+nothing. A turn's kind is required, never null or missing, so a kind of None finds nothing too. The other reads are
+views (`View`: `rows`, `first`, `count`), in the database's order, as the replaced reads had none. `save` is the
+revisioned write (`Store.put`).
 """
 from ..store.words import AnyOf, Exists, Not
 from .view import ANY, View, fenced, is_number, is_text, texts
@@ -61,16 +63,20 @@ def of_source(store, source_event_id, *, kind=ANY, scene=ANY, fields=None):
 
 def of_kind(store, kind, *, scenes=None):
     """View: the turns of a kind (in these conversations)."""
+    if not is_text(kind):
+        return _view(store, None)
     where = {'episode_kind': kind}
     if scenes is not None:
         where['scene_id'] = AnyOf(texts(scenes))
     return _view(store, where)
 
 
-def open(store, states, *, kind=None, not_kind=None):
+def open(store, states, *, kind=ANY, not_kind=None):
     """View: the turns in these states (of a kind, or of any kind but one)."""
     where = {'state': AnyOf(list(states))}
-    if kind is not None:
+    if kind is not ANY:
+        if not is_text(kind):
+            return _view(store, None)
         where['episode_kind'] = kind
     if not_kind is not None:
         where['episode_kind'] = Not(not_kind)

@@ -35,9 +35,9 @@ def fenced(where, fences):
 
 
 def pinned(where, pins):
-    """The condition `where` with each pin given ({field: (value, kind check)}), where a value of None stands for
-    "has none": the field null or missing, as the replaced read's equality on null matched. None when `where` is None
-    or a pin is not of its kind (it holds nothing)."""
+    """The condition `where` with each value condition given ({field: (value, kind check)}), where a value of None
+    stands for "has none": the field null or missing, as the replaced read's equality on null matched. None when
+    `where` is None or a value is not of its kind (it holds nothing). A fence given None is `fenced`'s: nothing."""
     if where is None:
         return None
     nones = []

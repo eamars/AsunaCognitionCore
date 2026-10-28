@@ -3,9 +3,10 @@ a replay answers the same), and what a sink received (a publication's delivery, 
 and their states, the native inputs projected), read and written only through these operations.
 
 `lane_get` and `sink_get` return a receipt as stored (`fields` names what to return, `_id` always comes back); an
-id that is missing or not text finds nothing. The other reads are views (`View`: `rows`, `first`, `count`), in the
-database's order unless an operation names its order. `save_lane` and `save_sink` are the revisioned writes
-(`Store.put`).
+id that is missing or not text finds nothing. A value condition given None (a receipt's kind, state, project) finds
+the receipts whose field is null or missing, as the replaced equality on None did. The other reads are views (`View`:
+`rows`, `first`, `count`), in the database's order unless an operation names its order. `save_lane` and
+`save_sink` are the revisioned writes (`Store.put`).
 """
 from ..store.words import AnyOf, Not, Range
 from .view import ANY, View, is_text, pinned, texts
@@ -48,17 +49,16 @@ def sinks(store, receipt_ids=None):
     return View(store, SINKS, {} if receipt_ids is None else {'_id': AnyOf(texts(receipt_ids))})
 
 
-def sink_of_kind(store, kind, *, state=None, states=None, project=ANY, besides=None, by=None):
+def sink_of_kind(store, kind, *, state=ANY, states=None, project=ANY, besides=None, by=None):
     """View: the sink receipts of a kind (in a state or one of several; of a project, None: of none; but one),
     ordered by `by` (None: the database's order)."""
-    where = {'kind': kind}
-    if state is not None:
-        where['state'] = state
+    where = {}
     if states is not None:
         where['state'] = AnyOf(list(states))
     if besides is not None:
         where['_id'] = Not(besides)
-    return View(store, SINKS, pinned(where, {'project': (project, is_text)}), ((by, 1),) if by else ())
+    return View(store, SINKS, pinned(where, {'kind': (kind, is_text), 'state': (state, is_text),
+                                             'project': (project, is_text)}), ((by, 1),) if by else ())
 
 
 def sink_window(store, *, gte=None, lte=None, lt=None):

@@ -633,22 +633,48 @@ there only through `tests/harness_skips.txt` by the case's `[stand-in]` id. Two 
 | `O` order | 6 (+ `O05` on the double) | missing/null first and last, multi-key, explicit `_id` direction, a unique key last gives one order on every adapter, skip, limit, fields; `O05`: the double shuffles ties (two seeds give two orders, one seed the same) |
 | `G` group | 5 | count, max, two keys, values ascending (missing out, null in), count with limit |
 | `C` changes | 12 | 3.4, create rules |
-| `X` writes | 14 | insert one and many (position, earlier kept), get missing, delete one and many, unique required and `only_where_present`, duplicate on insert, update and create, replace at a revision, stale, keep counters, claim order, counter |
+| `X` writes | 15 | insert one and many (position, earlier kept), get missing, delete one and many, unique required and `only_where_present`, duplicate on insert, update and create, replace at a revision, stale, keep counters, claim order, counter, size (records exact, bytes growing) |
 | `T` time | 5 (+ the clock case on the double) | aware round trip, naive refused, ms truncation, `Now` in a range and in `Set` and `insert` (on the real clock); the double's injected clock moved past an expiry |
 | `V` validation | 8 | undeclared stored and returned but not queryable, kinds, bool not number, nullable, required, size limit |
 | `N` nearest | 18 | the 18 cases of `integration/test_mongo_vectors.py` (filters by value, list, pair; k 1, 12, 24; identical vectors; refusals); exact against brute force |
 | `B` blobs | 6 | write, open, seek, delete twice, missing, of_scope; a 5 MiB synthetic stream |
-| `S` schema | 5 | ensure idempotent, retired index dropped, conflict refused, `NotSupported` before dispatch, unknown adapter kind refused |
+| `S` schema | 6 | ensure idempotent, retired index dropped, conflict refused, `NotSupported` before dispatch, unknown adapter kind refused, ping and close |
 | `R` races (integration only) | 4 | counter (4 processes x 50), claim (6 x 60), lease expiry (two holders), stale revision (two writers) |
 | `D` differential (integration only) | 1 | Hypothesis, `derandomize=True`, at most 200 records and 100 generated where trees per run (missing, null, empty lists, equal sort keys); `find` and `count` on MongoDB equal the double's, order included |
 
-Size, per run (measured at B1b):
-- the in-memory run: 112 cases, 110 shared (W 31, O 6, G 5, C 12, X 14, T 5, V 8, N 18, B 6, S 5) and 2 its own,
-  about 0.3 s;
-- the stand-in run: the 110 shared less `S05` (it opens no store, so it runs once) and those listed in
-  `tests/harness_skips.txt` by their `[stand-in]` ids: 109, of which 79 pass and 30 are listed, about 0.1 s;
-- the integration run on MongoDB: the 110 shared, `R` (4) and `D` (1, 100 generated conditions), 115 cases in about
-  45 s, under the target of 60 s.
+Size, per run (counted at B1b; times as measured, with where):
+- the in-memory run: 114 cases, 112 shared (W 31, O 6, G 5, C 12, X 15, T 5, V 8, N 18, B 6, S 6) and 2 its own;
+  its 111 `[memory]` cases took 0.25-0.26 s in the B1b worktree (B1a's run of 112 took 0.69-0.72 s in another
+  checkout of the same machine);
+- the stand-in run: the 112 shared less `S05` (it opens no store, so it runs once): 111 `[stand-in]` cases, of which
+  80 pass and 31 are listed in `tests/harness_skips.txt` by their `[stand-in]` ids; 0.09 s in the B1b worktree;
+- the integration run on MongoDB: the 112 shared, `R` (4) and `D` (1, 100 generated conditions), 117 cases in 46 s
+  from the B1b worktree against the configured server, under the target of 60 s.
+
+Which cases pin each method of 2.2 (a case fails when the in-memory adapter lacks the method; checked at B1b by
+deleting each method in turn), and from which batch the core first calls it:
+
+| method | pinned by | first called by the core |
+|---|---|---|
+| `ensure` | every case (the `store` fixture ensures), `S01`-`S03` | B1b (`Store.ensure`, `migrate`) |
+| `ensure_vectors` | `N01`, `N02`, `N17`, `N18` | B1b (`Store.ensure_vectors`, retrieval as built) |
+| `get` | `X03` and 25 more (`C`, `O07`, `T`, `V`, `X`) | B2 (the lease's holder) |
+| `find` | the `W` cases that match records, `O01`-`O04`, `O06`, `O07`, `C11`, `T03`, `X02`, `X05` | B1b (`Store.audit`'s newest of a stream, `recover_commits`) |
+| `count` | `G05`, `X04` | B1b (`recover_commits`) |
+| `group` | `G01`-`G04` | B4 (messages' `distinct`, as `values`) |
+| `insert` | every case that writes, `X01`, `X02` | B1b (`Store.put` new, `Store.audit`) |
+| `replace` | `X09`-`X12` | B1b (`Store.put` at a revision) |
+| `update` | `C01`-`C12`, `O07`, `T04`, `T05`, `X08`, `X12` | B2 (the lease, the fault counts) |
+| `claim` | `C12`, `T04`, `X13`, `X14` | B3 (the conversation counter) |
+| `delete` | `X04`, `X05` | B2 (the lease released, old fault counts) |
+| `nearest` | `N01`, `N02`, `N17`, `N18` | B1b (`Store.nearest`, retrieval as built) |
+| `size` | `X15` | B10 (audit prune) |
+| `ping` | `S06` | no caller until the batch that moves `native_worker.py:1042`'s ping; B13 at the latest |
+| `close` | `S06` | no caller until the core's `client.close()` calls move; B13 at the latest |
+| `blobs.write` | `B01`-`B03`, `B05`, `B06` | B8 (`blobs.py`) |
+| `blobs.open` | `B01`-`B04`, `B06` | B8 |
+| `blobs.delete` | `B03` | B8 |
+| `blobs.of_scope` | `B05` | B8 (erasure by scope, ADR-105) |
 
 Hypothesis is in the `dev` dependency group (`hypothesis==6.170.12`) for class `D`.
 
@@ -694,13 +720,14 @@ then fail relied on MongoDB's or mongomock's own behaviour and are fixed or go (
   into one reviewed file, `tests/harness_skips.txt`, one line per test: `test id | what the harness lacks`; a failure
   that is not a harness gap is fixed, and only one that a tests-only change cannot fix is listed, apart, named as a
   defect with where it is fixed (as built: the clock-tie class below, five tests).
-- `tests/conftest.py` reads that file at collection and marks each listed test skipped with the reason
-  `UNCHECKED, not passed: the interim harness lacks <what>`. Nothing is caught at run time: a listed id that no longer
-  exists fails the collection, and a test that fails and is not listed fails the run. A line skips only the collected
-  test whose id it equals exactly, parameters included (a parametrised test is listed once per parameter); a line
-  equal to no collected id fails a whole run's collection. A line equal to a case of the store's contract with the
-  adapter parameter `memory` stops the collection (`HARNESS_SKIP_HITS_THE_REFERENCE`): a contract case is listed by
-  its `[stand-in]` id only.
+- `tests/conftest.py` reads that file at collection and marks each listed test skipped with the reason `UNCHECKED, not
+  passed: the interim harness lacks <what>`. Nothing is caught at run time: a listed id that no longer exists fails the
+  collection (found only in a whole run, no `-k` and the paths from `testpaths`, since a part of the suite cannot know
+  the whole list; the landing run is the whole suite, so a stale line is caught there), and a test that fails and is not
+  listed fails the run. A line skips only the collected test whose id it equals exactly, parameters included (a
+  parametrised test is listed once per parameter); a line equal to no collected id fails a whole run's collection. A
+  line equal to a case of the store's contract with the adapter parameter `memory` stops the collection
+  (`HARNESS_SKIP_HITS_THE_REFERENCE`): a contract case is listed by its `[stand-in]` id only.
 - The lead reviews the list; B0 reports pass, skip (by reason) and run time against the baseline.
 - B13 deletes the file with the harness.
 
@@ -819,12 +846,13 @@ before its merge, as part of the lead's review of the batch (the owner is inform
    `COLLSCAN` or another index is a difference). Any difference stops the batch; the owner operation is corrected
    until its query, as the adapter sends it, gives what the old one gave. There is no "tie reorders" bucket: under
    3.3 the adapter passes today's sort unchanged, so MongoDB's own tie order is what both sides see.
-5. **Before declaring a collection**: per declared field, counts of records by BSON type and of nulls (`$type`
-   counts), of records missing a required unique field, of records whose BSON size and JSON size fall on different
-   sides of 1 MiB. Rule: the single type present gives the kind (int and double: `number`; string: `text`; date:
-   `time`; bool; array: `list`; object: `object`); nulls give `nullable`; two incompatible types, a missing required
-   field or a size disagreement stop the batch and are reported. B1b's check is `ensure` as a dry run (to create,
-   make, drop, conflicting; validators) and these counts for the fields it declares; exit 0 clean, 1 something
+5. **Before declaring a collection**: per declared field, counts of records by BSON type and of nulls (`$type` counts),
+   of records missing a required unique field, of records whose BSON size and JSON size fall on different sides of 1
+   MiB. Rule: the single type present gives the kind (int and double: `number`; string: `text`; date: `time`; bool;
+   array: `list`; object: `object`); nulls give `nullable`; two incompatible types, a missing required field or a size
+   disagreement stop the batch and are reported. The unit run at a batch's landing is the whole suite without `-k`, the
+   only run in which a skip-list line that names no test fails the collection. B1b's check is `ensure` as a dry run (to
+   create, make, drop, conflicting; validators) and these counts for the fields it declares; exit 0 clean, 1 something
    differs, 2 not checked. On her data it needs `--max-ms 10000`: at 2000 three large collections stay unchecked.
 6. **Output**: numbers only (case name, n, same, differing, p50/p95 old and new, plan stages, type counts), to `<data>/private/adr104-evidence/<batch>/`; ids never leave her machine; the folder goes when the batch
    merges, except a manifest named in the ADR with its path and size.

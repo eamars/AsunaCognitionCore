@@ -419,7 +419,7 @@ The store's errors: what the shared layer and an adapter raise, each a message t
   - `code`
 - class `QueryInvalid` — A condition, sort, group, field list or change the meaning table refuses.
 - class `RecordInvalid` — A record, or a value written into one, that its collection's declared fields cannot hold.
-- class `RecordTooLarge` — A record over 1 MiB of canonical JSON.
+- class `RecordTooLarge` — A record over the store's limit by its adapter's measure.
 - class `DuplicateKey` — A write repeated a unique key: `index` names the index, `at` the position in an insert of several.
 - class `StaleRevision` — A revisioned write found the record at another revision than the one it was read at.
 - class `NotSupported` — The adapter lacks a capability the call needs; raised before the database is reached.

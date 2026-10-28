@@ -566,6 +566,16 @@ class TestX:
         assert t.claim({'_id': 'nobody'}, Increase('rank')) is None
         assert t.claim({'_id': 'fresh'}, Increase('rank'), create=True) == {'_id': 'fresh', 'rank': 1}
 
+    def test_X15_size_counts_records_and_their_bytes(self, store):
+        t = store.collection('things')
+        assert t.size().records == 0
+        t.insert([{'_id': 'a', 'name': 'x'}, {'_id': 'b', 'name': 'y'}])
+        small = t.size()
+        assert small.records == 2 and small.bytes > 0
+        t.insert({'_id': 'c', 'loose': 'z' * 10000})
+        large = t.size()
+        assert large.records == 3 and large.bytes > small.bytes + 10000
+
 
 class TestT:
     """Time: aware, UTC, milliseconds; `Now` is the database's clock at the write."""
@@ -866,4 +876,8 @@ class TestS:
     def test_S05_an_adapter_kind_not_installed_is_refused(self):
         error = refused(AdapterNotInstalled, lambda: adapters.open({'database_adapter': 'no-such-kind'}, 'x'))
         assert str(error) == 'DATABASE_ADAPTER_NOT_INSTALLED: no-such-kind'
+
+    def test_S06_ping_and_close(self, store):
+        assert store.ping() is None
+        assert store.close() is None
 

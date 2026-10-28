@@ -23,7 +23,7 @@ class RecordInvalid(StoreError, ValueError):
 
 
 class RecordTooLarge(StoreError, ValueError):
-    """A record over 1 MiB of canonical JSON."""
+    """A record over the store's limit by its adapter's measure."""
 
 
 class DuplicateKey(StoreError):

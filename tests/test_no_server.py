@@ -5,8 +5,8 @@ import sys
 
 import pymongo
 
-from asuna.config import load
 from asuna.state import Store
+from asuna.testing import suite_config
 from conftest import NO_SERVER, UNIT_RUN_SITE
 
 
@@ -17,9 +17,9 @@ def test_every_client_is_the_in_process_stand_in_whatever_its_address():
 
 
 def test_every_loaded_configuration_names_an_address_that_cannot_resolve(store):
-    assert load()['mongo_uri'] == NO_SERVER
+    assert suite_config()['mongo_uri'] == NO_SERVER
     assert store.config['mongo_uri'] == NO_SERVER and getattr(store.client, 'unit_run', False)
-    assert getattr(Store(load(), store.name).client, 'unit_run', False)
+    assert getattr(Store(suite_config(), store.name).client, 'unit_run', False)
 
 
 def test_a_child_process_of_the_run_gets_the_stand_in_too():

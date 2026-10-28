@@ -96,7 +96,9 @@ UNCHECKED='UNCHECKED, not passed: no confined command runs in this run (%s)'%CAN
 
 # Tests the in-process stand-in cannot carry: one reviewed line each, `test id | what the stand-in lacks`, a line
 # skipping the one collected test whose id it equals. Read at collection, never caught at run time; the file goes with
-# the stand-in, when the unit run moves to the store's in-memory adapter (ADR-104).
+# the stand-in, when the unit run moves to the store's in-memory adapter (ADR-104). A line equal to no collected id is
+# found only in a whole run (no -k, the paths from testpaths): a part of the suite cannot know the whole list. The
+# landing run is the whole suite, so a stale line is caught there.
 HARNESS_SKIPS=Path(__file__).with_name('harness_skips.txt')
 
 

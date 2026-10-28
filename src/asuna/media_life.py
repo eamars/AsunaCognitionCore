@@ -46,7 +46,8 @@ def named(store):
     """Artifact ids a lasting row names."""
     db = store.db
     ids = set(db.stickers.distinct('artifact_id')) | set(db.sticker_pool.distinct('artifact_id'))
-    ids |= set(db.messages.distinct('attachment.artifact_id', {'attachment.artifact_id': {'$exists': True}}))
+    from .records import messages as message_records
+    ids |= set(message_records.artifact_refs(store, 'attachment'))
     return ids
 
 
@@ -68,8 +69,8 @@ def sweep(store, now=None):
               OFFERED: moment - timedelta(days=KEEP_DAYS),
               RECEIVED: moment - timedelta(days=RECEIVED_DAYS)}
     keep = named(store)
-    going = set(db.messages.distinct('file.artifact_id', {'file.artifact_id': {'$exists': True},
-                                                          'delivery_state': {'$in': list(Channels.PART_ON_ITS_WAY)}}))
+    from .records import messages as message_records
+    going = set(message_records.artifact_refs(store, 'file', states=Channels.PART_ON_ITS_WAY))
     removed = {PULLED: 0, LISTED: 0, 'files': 0, RECEIVED: 0, 'copies': 0, 'bytes': 0, 'failed': 0, 'undated': 0}
     for row in db.artifacts.find({'storage': 'gridfs'}, {'source_ids': 1, 'created_at': 1, 'gridfs_id': 1, 'size': 1,
                                                          'last_sent_at': 1, 'kept_at': 1, 'days_from': 1}):

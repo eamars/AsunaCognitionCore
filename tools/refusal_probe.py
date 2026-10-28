@@ -40,6 +40,7 @@ from asuna.lanes import LaneResult                                   # noqa: E40
 from asuna.state import Store                                        # noqa: E402
 from asuna.testing import dispose_test_store, suite_config            # noqa: E402
 from asuna.records import scenes as scene_records  # noqa: E402
+from asuna.records import messages as message_records                 # noqa: E402
 
 FIXTURES = ROOT / 'tools' / 'fixtures' / 'refusal_probe'
 WORLD = ROOT / 'tests' / 'fixtures' / 'world.json'
@@ -409,7 +410,7 @@ def mine(store, scene_id, text, i, index=0):
     """A line she said before the conversation starts: delivered, with a platform id (her recall can name it). `index`
     is the run of the conversation: the home conversation runs in her one local chat on every repeat."""
     seq = scene_records.next_seq(store, scene_id)
-    store.put('messages', {'_id': 'mine-%s-%d-%d' % (scene_id[-5:], index, i), 'scene_id': scene_id, 'scope_key': 'scene:' + scene_id,
+    message_records.save(store, {'_id': 'mine-%s-%d-%d' % (scene_id[-5:], index, i), 'scene_id': scene_id, 'scope_key': 'scene:' + scene_id,
                            'policy_epoch': 1, 'direction': 'outbound', 'author': 'demo', 'phase': 'SPEAK', 'text': text,
                            'scene_seq': seq, 'delivery_state': 'DELIVERED', 'episode_id': 'ep-before',
                            'receipt_at': now(), 'platform_message_id': 'pm-%d-%d' % (index, i)})

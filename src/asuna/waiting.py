@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 HORIZON = timedelta(hours=1)
 SHOWN_HOME = 5
@@ -27,7 +28,6 @@ def _excerpt(text):
 def pending(store, scene_ids, moment, persona=None):
     """[{scene_id, person (None: anyone), doc, at, text}] newest first: who she still waits for in these groups."""
     from .config import character_id
-    from .ingress import NOT_CORE_NOTICE
     from .people import LABEL_MENTION, People
     people, me, since = People(store, persona), character_id(store.config), (moment - HORIZON).isoformat()
     found = []
@@ -38,9 +38,8 @@ def pending(store, scene_ids, moment, persona=None):
         by_handle = {str(doc.get('handle')): doc for doc in people.roster(scene_id).values()
                      if doc.get('person') and doc.get('person') != people.self_id}
         settled = set()
-        lines = store.db.messages.find({'scene_id': scene_id, 'direction': 'outbound', 'delivery_state': 'DELIVERED',
-                                        'author': me, 'receipt_at': {'$gte': since}},
-                                       {'text': 1, 'episode_id': 1, 'scene_seq': 1, 'receipt_at': 1}).sort('scene_seq', -1)
+        lines = message_records.spoken(store, scene_id, author=me, receipt_since=since).rows(
+            newest_first=True, fields=['text', 'episode_id', 'scene_seq', 'receipt_at'])
         for line in lines:
             choice = (store.db.episodes.find_one({'_id': line.get('episode_id')}, {'await_answer': 1}) or {}).get(
                 'await_answer') or {}
@@ -57,11 +56,12 @@ def pending(store, scene_ids, moment, persona=None):
                 if person in settled:
                     continue                    # a newer line to them is already listed, or they answered it
                 settled.add(person)
-                after = {'scene_id': scene_id, 'direction': 'inbound', 'scene_seq': {'$gt': line.get('scene_seq') or 0},
-                         **NOT_CORE_NOTICE}         # a task result or a due plan answers nobody's wait
-                if person is not None:
-                    after['author'] = {'$in': people.authors_of(person, [scene_id]) or [person]}
-                if not store.db.messages.find_one(after, {'_id': 1}):
+                # a task result or a due plan answers nobody's wait
+                after = message_records.inbound(
+                    store, scene_id, after=line.get('scene_seq') or 0, people_only=True,
+                    authors=(people.authors_of(person, [scene_id]) or [person]) if person is not None else None,
+                    by=None)
+                if not after.first(fields=['_id']):
                     found.append({'scene_id': scene_id, 'person': person, 'doc': doc, 'at': line.get('receipt_at'),
                                   'text': line.get('text') or ''})
     return sorted(found, key=lambda item: str(item['at']), reverse=True)

@@ -38,7 +38,9 @@ def level(store, person_id):
                                            limit=KNOWN_REPLIES)
     if replies >= KNOWN_REPLIES:
         return 'known'
-    lines = db.messages.count_documents({'author': {'$in': ids}, 'direction': 'inbound'}, limit=REGULAR_LINES)
+    from . import records
+    from .records import messages as message_records
+    lines = message_records.inbound(records.on(db), authors=ids).count(limit=REGULAR_LINES)
     if replies >= REGULAR_REPLIES or lines >= REGULAR_LINES:
         return 'regular'
     if replies >= MET_REPLIES or lines >= MET_LINES:

@@ -20,7 +20,8 @@ import unicodedata
 
 from . import channel_kinds
 from .config import excerpt
-from .ingress import NOT_CORE_NOTICE, PROGRAM_AUTHOR
+from .records.messages import PROGRAM_AUTHOR
+from .records import messages as message_records
 from .peer_context import channel_of, peer_from_message, verify_peer
 from .state import Conflict, now
 from .records import scenes as scene_records
@@ -231,8 +232,8 @@ class People:
                 and key not in self._looked_up:
             # Someone first labelled from older history: take the names from their latest saved message.
             self._looked_up.add(key)
-            row = self.db.messages.find_one({'scene_id': scene['_id'], 'author': person_id, 'direction': 'inbound',
-                                             'event.raw.asuna_peer': {'$exists': True}}, sort=[('received_at', -1)])
+            row = message_records.inbound(self.store, scene['_id'], author=person_id, peer=True,
+                                          by='received_at').first(newest_first=True)
         fresh = profile if profile is not None else (
             self._profile(row) if row is not None and person != self.self_id else None)
         moment = str((row or {}).get('received_at') or '')
@@ -383,7 +384,7 @@ class People:
     def ensure_roster(self, scene):
         """Label everyone who has written in this scene, so a lookup can name them all."""
         roster = self.roster(scene['_id'])
-        for author in self.db.messages.distinct('author', {'scene_id': scene['_id'], 'direction': 'inbound'}):
+        for author in message_records.authors(self.store, scene['_id'], direction='inbound'):
             if author and author != self.self_id and scene['_id'] + '|' + self.person(author) not in roster:
                 self.entry(scene, author)
         return roster
@@ -413,9 +414,8 @@ class People:
         persons = {d.get('person') for d in docs
                    if name in {self.shown(d), self.named(d.get('person')), safe_name(d.get('card'), 60),
                                safe_name(d.get('nickname'), 60), *(safe_name(p.get('name'), 60) for p in d.get('previous') or [])}}
-        for row in self.db.messages.find({'scene_id': scene['_id'], 'direction': 'inbound', '$or': [
-                {'event.raw.asuna_peer.' + field: text} for field in ('card', 'nickname', 'display', 'aliases')]},
-                {'author': 1, 'scene_id': 1, 'event': 1, 'received_at': 1}).limit(200):
+        for row in message_records.inbound(self.store, scene['_id'], peer_named=text, by=None).rows(
+                limit=200, fields=['author', 'scene_id', 'event', 'received_at']):
             if self._profile(row) is not None:
                 persons.add(self.person(row['author']))
         found = [d for d in docs if d.get('person') in persons]
@@ -483,7 +483,7 @@ class People:
 
     def authors_of(self, person, scene_ids):
         """Every stored author id in these scenes that is this person (aliases by configuration)."""
-        return sorted(a for a in self.db.messages.distinct('author', {'scene_id': {'$in': list(scene_ids)}})
+        return sorted(a for a in message_records.authors(self.store, scenes=list(scene_ids))
                       if a and self.person(a) == person)
 
     def row_head(self, row):
@@ -514,9 +514,8 @@ class People:
         words = ' '.join(said(scene, row.get('text')).split())
         number = '〔%d〕 ' % row['scene_seq'] if row.get('scene_seq') and numbered(self.store, scene) else ''
         if not (row.get('received_at') or row.get('receipt_at')) and row.get('_id'):
-            row = {**row, **(self.db.messages.find_one({'_id': row['_id']}, {
-                'received_at': 1, 'receipt_at': 1, 'occurred_at': 1, 'event.occurred_at': 1,
-                'event.raw.' + CATCHUP_KEY: 1}) or {})}
+            row = {**row, **(message_records.get(self.store, row['_id'], fields=[
+                'received_at', 'receipt_at', 'occurred_at', 'event.occurred_at', 'event.raw.' + CATCHUP_KEY]) or {})}
         stamp = line_stamp(scene_timezone(self.config, scene), said_at(row))
         return '%s%s%s：%s' % (number, self.speaker(scene, row.get('author'), me='你'), ' ' + stamp if stamp else '',
                               words if len(words) <= POINTED_CHARS else words[:POINTED_CHARS] + '…')
@@ -537,9 +536,8 @@ class People:
         then = for_message(self.store, row['_id'])
         return THOUGHT_THEN % anchor(' '.join(then.split())) if then else None
 
-    # A line she can point at: anyone's in this conversation, hers once delivered; a program notice is not one.
-    POINTABLE = {'$or': [{'direction': 'inbound', 'event.raw.asuna_notice': {'$exists': False}, **NOT_CORE_NOTICE},
-                         {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}
+    # A line she can point at (records.messages.pointable): anyone's in this conversation, hers once delivered; a
+    # program notice is not one.
     RECENT_LINES = 6
 
     def line_of(self, scene, episode_id, value):
@@ -547,15 +545,14 @@ class People:
         called her): (row, None), or (None, why, in words she can act on) (ADR-079 §9.4)."""
         text = str(value or '').strip().strip('〔〕[]「」 ')
         if text == '这条':
-            row = self.db.messages.find_one({'_id': 'in-' + episode_id, 'scene_id': scene['_id'], **self.POINTABLE})
+            row = message_records.pointable(self.store, scene['_id'], line='in-' + episode_id, by=None).first()
             return (row, None) if row else (None, '这一回合没有叫你的那条，要引就写编号')
-        row = self.db.messages.find_one({'scene_id': scene['_id'], 'scene_seq': int(text), **self.POINTABLE}) \
+        row = message_records.pointable(self.store, scene['_id'], seq=int(text), by=None).first() \
             if text.isdigit() else None
         if row:
             return row, None
-        recent = list(self.db.messages.find({'scene_id': scene['_id'], **self.POINTABLE},
-                                            {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1})
-                      .sort('scene_seq', -1).limit(self.RECENT_LINES))
+        recent = message_records.pointable(self.store, scene['_id']).rows(
+            newest_first=True, limit=self.RECENT_LINES, fields=['text', 'author', 'direction', 'scene_seq'])
         listed = '；'.join(self.pointed(scene, row) for row in reversed(recent)) or '还没有'
         lead = '〔%s〕 不是这里的一行' % text if text.isdigit() else '写编号（只写数字，在每行末尾的〔〕里）或「这条」'
         return None, '%s；这里最近几行：%s' % (lead, listed)
@@ -585,8 +582,8 @@ class People:
         quoted = group if group.get('reply_to') or group.get('reply_message_id') else (event.get('reply') or {})
         # (a private chat's quote is `event.reply`, ADR-079)
         parent_id = quoted.get('reply_message_id')
-        parent = self.db.messages.find_one({'_id': parent_id, 'scene_id': scene['_id']},
-                                           {'author': 1, 'text': 1, 'direction': 1, 'scene_seq': 1}) if parent_id else None
+        parent = message_records.get(self.store, parent_id, scene=scene['_id'],
+                                     fields=['author', 'text', 'direction', 'scene_seq']) if parent_id else None
         if parent:
             lines.append('  > 回复 ' + self.pointed(scene, parent))
             then = self.thought_then(parent, scene['_id'] if once else None)
@@ -664,8 +661,8 @@ class People:
             if scene['_id'] == chat.get('scene_id'):
                 title = '家里·私聊'
             elif scene.get('kind') == 'group':
-                row = self.db.messages.find_one({'scene_id': scene['_id'], 'event.raw.group_name': {'$exists': True}},
-                                                {'event.raw.group_name': 1}, sort=[('received_at', -1)])
+                row = message_records.lines(self.store, scene['_id'], group_name=True, by='received_at').first(
+                    newest_first=True, fields=['event.raw.group_name'])
                 name = safe_name(((row or {}).get('event') or {}).get('raw', {}).get('group_name'), 30)
                 title = '群聊「%s」' % name if name else '一个群聊'
             else:

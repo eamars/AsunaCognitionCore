@@ -21,6 +21,7 @@ from asuna import discussion_digest as dd           # noqa: E402
 from asuna import history_query as hq                # noqa: E402
 from asuna import channel_kinds                      # noqa: E402
 import fake_collections                              # noqa: E402
+from asuna.store.words import AnyOf                  # noqa: E402
 
 
 def _qq_kind():
@@ -183,6 +184,28 @@ class FakeCollection:
         return len([doc for doc in self.rows if _match(doc, flt or {})])
 
 
+class _Recorded:
+    """The record owner's handle on a collection, keeping each condition it is asked to find (the fence cases read
+    them), and failing every read when the database is down (`boom`)."""
+
+    def __init__(self, handle, boom=False):
+        self.handle, self.boom, self.finds = handle, boom, []
+
+    def find(self, where=None, *args, **kwargs):
+        self.finds.append(where)
+        if self.boom:
+            raise RuntimeError("mongo down")
+        return self.handle.find(where, *args, **kwargs)
+
+    def count(self, *args, **kwargs):
+        if self.boom:
+            raise RuntimeError("mongo down")
+        return self.handle.count(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self.handle, name)
+
+
 class FakeStore:
     def __init__(self, rows, sink=None, scenes=None, boom=False):
         class DB:
@@ -193,7 +216,9 @@ class FakeStore:
         self.db.scenes = FakeCollection(scenes if scenes is not None else [scene_row()])
         if sink is not None:
             self.db.sink_receipts = FakeCollection(sink)
-        self.collection = fake_collections.collections(self.db)     # the record owners' way to the same rows
+        handles = fake_collections.collections(self.db)            # the record owners' way to the same rows
+        self.messages = _Recorded(handles('messages'), boom=boom)
+        self.collection = lambda name: self.messages if name == 'messages' else handles(name)
 
 
 def digest_of(rows, args=None, **kwargs):
@@ -583,11 +608,11 @@ def case_person_scope_labels_thread_context():
 def case_linkage_read_stays_inside_the_scene_fence():
     """链与身份块的批量读也带场景围栏：不拿别的场景的行来解释本场景的讨论。"""
     _value, store = digest_of(discussion_rows())
-    reads = [flt for flt, _proj, _sort, _limit in store.db.messages.finds
-             if isinstance(flt, dict) and "$in" in (flt.get("_id") or {})]
-    assert reads, "没看到按 _id $in 的批量链读"
-    for flt in reads:
-        assert flt.get("scene_id") == SCENE_ID and flt.get("policy_epoch") == EPOCH, flt
+    reads = [where for where in store.messages.finds
+             if isinstance(where, dict) and isinstance(where.get("_id"), AnyOf)]
+    assert reads, "没看到按 _id 批量的链读"
+    for where in reads:
+        assert where.get("scene_id") == SCENE_ID and where.get("policy_epoch") == EPOCH, where
 
 
 CASES = [name for name in sorted(globals()) if name.startswith("case_")]

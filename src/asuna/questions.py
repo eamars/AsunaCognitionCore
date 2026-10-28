@@ -30,6 +30,7 @@ from .evidence import canonical, sha
 from .state import Conflict, now
 from . import visibility
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 TABLES_VERSION = 1
 # Patience words -> minutes (None: until it is answered, for a report).
@@ -164,9 +165,8 @@ def wants_look(store, scene, person_id, moment=None):
         line = _question_line(store, source)
         if not line:
             continue
-        if not store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'inbound', 'author': person_id,
-                                           'scene_seq': {'$gt': line.get('scene_seq') or 0},
-                                           'event.group_context.wake_reason': 'question_wait'}, {'_id': 1}):
+        if not message_records.inbound(store, scene['_id'], author=person_id, after=line.get('scene_seq') or 0,
+                                       wake='question_wait', by=None).first(fields=['_id']):
             return True
     return False
 
@@ -174,19 +174,13 @@ def wants_look(store, scene, person_id, moment=None):
 def _group_answers(store, source, line):
     """Answers in a group: a reply to one of her question's lines, a line that got her a look while it waited, or
     a reaction to her question line. Each kept by reference, never its text."""
-    mine = list(store.db.messages.find({'scene_id': source['scene_id'], 'episode_id': source.get('episode'),
-                                        'direction': 'outbound', 'phase': 'SPEAK'}, {'_id': 1, 'platform_message_id': 1}))
+    mine = message_records.turn_parts(store, source.get('episode'), scene=source['scene_id'], outbound=True,
+                                      by=None).rows(fields=['_id', 'platform_message_id'])
     ids = [row['_id'] for row in mine]
     platform = [row['platform_message_id'] for row in mine if row.get('platform_message_id')]
-    from .ingress import NOT_CORE_NOTICE                            # the program's lines answer nothing
-    query = {'scene_id': source['scene_id'], 'direction': 'inbound', **NOT_CORE_NOTICE,
-             'scene_seq': {'$gt': line.get('scene_seq') or 0},
-             '$or': [{'event.group_context.reply_message_id': {'$in': ids}},
-                     {'event.group_context.wake_reason': 'question_wait'},
-                     {'event.raw.asuna_notice.kind': 'reaction', 'event.raw.asuna_notice.line.message_id': {'$in': platform}}]}
-    if source.get('until'):
-        query['received_at'] = {'$lte': source['until']}
-    return list(store.db.messages.find(query).sort('scene_seq', 1))
+    # the program's lines answer nothing
+    return message_records.inbound(store, source['scene_id'], people_only=True, after=line.get('scene_seq') or 0,
+                                   until=source.get('until') or None, answers_to=(ids, platform)).rows()
 
 
 def told_many(told):
@@ -247,8 +241,7 @@ def answer_tail(store, persona, qid, zone):
 # ── what came back ─────────────────────────────────────────────────
 def _question_line(store, source):
     """Her first line in the turn that asks there, or None."""
-    return store.db.messages.find_one({'scene_id': source['scene_id'], 'episode_id': source.get('episode'),
-                                       'direction': 'outbound', 'phase': 'SPEAK'}, sort=[('scene_seq', 1)])
+    return message_records.turn_parts(store, source.get('episode'), scene=source['scene_id'], outbound=True).first()
 
 
 def _answer(row, people, scene):
@@ -258,18 +251,16 @@ def _answer(row, people, scene):
 
 def _lines_after(store, qid, source, line):
     """The answers in a home place: lines naming this question, else the first line after hers there."""
-    from .ingress import NOT_CORE_NOTICE
-    base = {'scene_id': source['scene_id'], 'direction': 'inbound', **NOT_CORE_NOTICE,
-            'event.raw.asuna_aside': {'$ne': True}}
-    named = list(store.db.messages.find({**base, 'event.raw.%s.question' % ANSWER_KEY: qid}).sort('scene_seq', 1))
+    named = message_records.inbound(store, source['scene_id'], people_only=True, asides=False,
+                                    answers_question=qid).rows()
     if named:
         return named
-    after = {**base, 'scene_seq': {'$gt': line.get('scene_seq') or 0}, 'event.raw.%s' % ANSWER_KEY: {'$exists': False}}
     from . import channel_kinds
     marks = channel_kinds.marks_answers(source['scene_id'])
-    if marks:
-        after['author'] = {'$ne': marks}        # who can mark an answer answers only by marking it; others by their line
-    first = store.db.messages.find_one(after, sort=[('scene_seq', 1)])
+    # who can mark an answer answers only by marking it; others by their line
+    first = message_records.inbound(store, source['scene_id'], people_only=True, asides=False,
+                                    after=line.get('scene_seq') or 0, no_answer_mark=True,
+                                    not_author=marks or None).first()
     return [first] if first else []
 
 
@@ -469,7 +460,7 @@ def read(store, persona, qid, moment=None, outside=False):
                                 'text': machine_words.text(first) if outside else first,
                                 **({'more': '共 %d 页：task 的 page 接着读' % len(pages)} if len(pages) > 1 else {})})
             elif answer.get('line'):
-                line = store.db.messages.find_one({'_id': answer['line']}, {'text': 1})
+                line = message_records.get(store, answer['line'], fields=['text'])
                 text = str((line or {}).get('text') or '')
                 said = {'by': answer.get('by'), 'at': answer.get('at'), 'line': answer['line'],
                         'event_id': answer.get('event_id'),

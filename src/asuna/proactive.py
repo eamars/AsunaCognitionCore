@@ -20,11 +20,13 @@ from datetime import datetime, timedelta, timezone
 
 try:                                  # 宿主按包加载
     from . import summary_trigger
-    from .history_query import (DELIVERED, DELIVERY_FIELD, OUTBOUND, _outbound_time, _receipt_ref,
+    from .history_query import (OUTBOUND, _outbound_time, _receipt_ref,
                                _sink_times)
+    from .records import messages as message_records
 except Exception:                     # 同目录平铺加载（离线自检）也认
     import summary_trigger
-    from history_query import (DELIVERED, DELIVERY_FIELD, OUTBOUND, _outbound_time, _receipt_ref,
+    from asuna.records import messages as message_records
+    from history_query import (OUTBOUND, _outbound_time, _receipt_ref,
                                _sink_times)
 
 WAKE_REASON = 'proactive_unprompted'
@@ -98,12 +100,10 @@ def observe(store, scene, *, now_ts, trigger=None, limits=None):
     rhythm = summary_trigger.observe(store, scene, now_ts=now_ts, rows_limit=OBSERVE_ROWS)
     quiet = rhythm.get('quiet_after') or summary_trigger.SEED_QUIET_SECONDS
     quiet_source = rhythm.get('quiet_source') or 'seed'
-    rows = list(store.db.messages.find(
-        {'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
-         '$or': [{'direction': 'inbound'}, {'direction': OUTBOUND, DELIVERY_FIELD: DELIVERED}]},
-        {'scene_seq': 1, 'direction': 1, 'author': 1, 'text': 1, 'occurred_at': 1, 'received_at': 1,
-         'receipt_at': 1, 'receipt': 1, 'episode_id': 1, 'platform_message_id': 1,
-         'proactive': 1, 'event.group_context': 1}).sort('scene_seq', -1).limit(OBSERVE_ROWS))
+    rows = message_records.said(store, scene['_id'], scene['policy_epoch']).rows(
+        newest_first=True, limit=OBSERVE_ROWS,
+        fields=['scene_seq', 'direction', 'author', 'text', 'occurred_at', 'received_at', 'receipt_at', 'receipt',
+                'episode_id', 'platform_message_id', 'proactive', 'event.group_context'])
     rows.sort(key=lambda row: row.get('scene_seq') or 0)
     merge = limits.get('merge_window_seconds', MERGE_WINDOW_SECONDS)
     burst = 0
@@ -122,8 +122,8 @@ def observe(store, scene, *, now_ts, trigger=None, limits=None):
             and row.get('episode_id')]
     if mine:
         keys = ['in-' + row['episode_id'] for row in mine]
-        origins = {doc['_id']: doc for doc in store.db.messages.find(
-            {'_id': {'$in': keys}}, {'_id': 1, 'event.group_context': 1})}
+        origins = {doc['_id']: doc for doc in message_records.many(store, keys).rows(
+            fields=['_id', 'event.group_context'])}
     utterances, wakes = [], []
     for row in rows:
         if row.get('direction') == OUTBOUND:
@@ -249,12 +249,10 @@ def _chain_key(row):
 def chain(store, scene, row, *, character=None):
     """这条行是不是正在形成的队形：结尾一串同样内容、来自至少 CHAIN_PEOPLE 个不同的人、她还没跟过、
     这串也还没叫过她。返回 {'what','people','media','first'}；不是就 None。只读已落库的行。"""
-    rows = list(store.db.messages.find(
-        {'scene_id': scene['_id'], 'policy_epoch': scene.get('policy_epoch'),
-         'scene_seq': {'$lte': row.get('scene_seq') or 0},
-         '$or': [{'direction': 'inbound'}, {'direction': OUTBOUND}]},
-        {'scene_seq': 1, 'direction': 1, 'author': 1, 'text': 1, 'proactive': 1, 'event.raw.asuna_media': 1})
-        .sort('scene_seq', -1).limit(CHAIN_SCAN))
+    rows = message_records.lines(store, scene['_id'], scene.get('policy_epoch'), live=True,
+                                 upto=row.get('scene_seq') or 0).rows(
+        newest_first=True, limit=CHAIN_SCAN,
+        fields=['scene_seq', 'direction', 'author', 'text', 'proactive', 'event.raw.asuna_media'])
     if not rows or rows[0]['_id'] != row['_id']:
         return None
     key = _chain_key(rows[0])
@@ -299,7 +297,7 @@ def consider(store, evidence, config, scene, row, *, now_ts=None, can_run=True):
     else:
         profile = observe(store, scene, now_ts=moment, trigger=row, limits=limits)
         decision = decide(profile, limits, now_ts=moment, can_run=can_run)
-    current = store.db.messages.find_one({'_id': row['_id']})
+    current = message_records.get(store, row['_id'])
     if not current:
         return decision, None
     event = dict(current.get('event') or {})
@@ -316,7 +314,7 @@ def consider(store, evidence, config, scene, row, *, now_ts=None, can_run=True):
     record.update(decided_at=datetime.fromtimestamp(moment, timezone.utc).isoformat(),
                   wake=bool(decision['fire']))
     try:
-        updated = store.put('messages', {**current, 'event': event,
+        updated = message_records.save(store, {**current, 'event': event,
                                          'processing_outcome': OUTCOME_WAKE if decision['fire']
                                          else OUTCOME_HOLD,
                                          'proactive': record},

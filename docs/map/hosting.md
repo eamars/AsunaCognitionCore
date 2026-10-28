@@ -396,7 +396,7 @@ The catalog: every collection the core keeps, declared once, and the vector spac
 - class `Field` — A declared field: `of` is a list's element kind, `dimensions` a vector's length.
   - `holds` — Whether a value other than null is of this field's kind.
   - `holds_element`
-- class `Index` — An index: `keys` are (path, 1 | -1); a unique index's fields are required unless listed in `only_where_present`, and a record missing one of those (or holding null) is outside the index.
+- class `Index` — An index: `keys` are (path, 1 | -1); a unique index's fields are required, except in a partial one: a record missing a field listed in `only_where_present` (or holding null) is outside the index, and inside it the other fields may be missin
 - class `Space` — Vectors searched by cosine similarity: each record of `collection` holds its vector in `path`, and a search may filter on `fields`.
 - class `Collection` — A declared collection.
   - `field`
@@ -562,3 +562,53 @@ The owner of `scenes`: a conversation's record (its kind, members, scope and epo
 - def `hold_unsent`
 - def `clear_unsent` — The unsent mark goes, if it is still that turn's.
 - def `asides_shown` — The asides shown so far reach this position (it never moves back).
+
+## `records/messages`
+
+[src/asuna/records/messages.py](../../src/asuna/records/messages.py)
+
+The owner of `messages`: the lines of every conversation (what people wrote, her lines and where they are on their way, the program's own lines), read and written only through these operations.
+
+- class `View` — A named read: its condition and its order (`by`, ascending; None leaves it to the database).
+  - `rows`
+  - `each` — The rows, read as they come (for a read too large to hold at once).
+  - `first`
+  - `count`
+  - `values` — The distinct values of `field` among the view's lines (lines without it left out), ascending.
+- def `get` — The line with this id (within the fences given: a conversation, epoch, scope, direction, channel, or a line that came from a channel), or None.
+- def `many` — View: the lines with these ids (within a conversation or several and an epoch, or received since a time).
+- def `at` — The line at this position of a conversation (by this author, in this direction), or None.
+- def `said` — View: a conversation as people saw it in an epoch: the lines people wrote and her delivered lines.
+- def `said_across` — View: what people wrote in some conversations and her delivered lines in others.
+- def `said_in_sources` — View: the lines of these sources (conversations and the epochs read there, {scene_id, policy_epoch}) that people wrote or she delivered, people only (the Web memory page's source lines); one by id, several by ids, or those whose text contai
+- def `pointable` — View: the lines one may point at in a conversation: people's lines that are not notices, her delivered lines; one by id or by position.
+- def `lines` — View: a conversation's lines (`live`: only those in and out, not the program's internal ones nor archived ones), after or between positions; `group_name`: those that carry the group's name.
+- def `inbound` — View: lines people wrote, in one conversation or several (`scenes`; `besides` all but one); by author (one, several, all but one, people only), in a window of positions or of the times they came (`since` >=, `since_after` >, `until` <=), wo
+- def `woken` — The first line of a conversation after a position that woke her for this reason (its id only), or None.
+- def `mentions` — View: a conversation's lines that @-mention accounts, received since a time.
+- def `authors` — Values: who wrote in one conversation or several (in a direction; archived lines not deleted; among these authors or under this historical name).
+- def `spoken` — View: her lines (delivered, or every one of her speech when `delivered` is False and `speech`), in one conversation or all of them but `not_in`, by this author, with a receipt (since a time).
+- def `outgoing` — View: her lines in a conversation in these delivery states.
+- def `turn_parts` — View: the lines one turn produced: its speech (`speech`), outbound only, delivered or in a delivery state (`state`, one of `states`, none of `not_states`), its reply parts, the parts after or before a segment.
+- def `unsettled` — Count: her lines still queued for a channel or being sent.
+- def `of_event` — The line of a conversation and epoch whose event has this id, or None.
+- def `by_platform_id` — View: a conversation's lines (in an epoch) that the platform knows by this id: people's by its event id, hers (delivered, by this author) by its message id.
+- def `quoted` — The line a platform notice is about, newest first: hers by its message id however old (`mine`), else anyone's within a time (people's by received time, hers by receipt time); None when there is none.
+- def `referenced` — The line of a conversation and epoch a reference names: by its own id, its platform event id or its platform message id; None when none does.
+- def `of_platform_event` — The lines stored for this platform event id.
+- def `queued` — View: a channel's lines queued for it (`files` True: only files, False: no files), for one route's target.
+- def `in_flight_scenes` — Values: the conversations with a chat line (not a file) out on this channel, claimed since a time.
+- def `sending` — View: the lines left being sent on a channel (what the Host's start settles).
+- def `claim_unshown` — The oldest line of this author in a conversation not yet shown on its line, marked shown at `at`; or None.
+- def `ingress` — View: the inputs the Host manages in these ingress states, by when they came.
+- def `channel_inbound` — View: the inputs the Host manages that came from a channel since a time, by when they came.
+- def `visits` — View: her visit lines of this intent (received since a time), by when they came.
+- def `errand_results` — View: a conversation's completed errand visits not yet told there, by when they came.
+- def `artifact_refs` — Values: the artifact ids lines name as their picture (`attachment`) or file (`file`), in these delivery states.
+- def `search` — History search: one stream's lines of these conversations in an epoch, newest first by the stream's time, then position and conversation.
+- def `thread` — The lines of these conversations in an epoch that reply to these lines (people's by their quoted line, hers by the line she answered), and the lines with these ids (a digest's thread).
+- def `excluded` — Counts of her lines a digest leaves out in these conversations and epoch: speech not delivered (`undelivered_outbound`) and lines that are not speech (`non_speak_outbound`).
+- def `save` — The revisioned write of a whole line (`Store.put`: `expected`, `stream`).
+- def `mark_recalled` — Her line was taken back on the platform at `at`.
+- def `note_failure` — A file line whose bytes were gone: whether its original is still there, and the words that say so.
+- def `mark_errands_told` — These errand visits were told in their conversation at `at`.

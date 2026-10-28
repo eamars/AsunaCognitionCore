@@ -2,6 +2,8 @@
 from .evidence import canonical, sha
 from .state import Conflict, Denied, now
 from .records import scenes as scene_records
+from .records import messages as message_records
+from .records.messages import PROGRAM_AUTHOR
 
 
 INTERNAL_KINDS = {'self_development': 'self-development', 'presence': 'presence', 'settlement': 'settlement',
@@ -12,10 +14,8 @@ INTERNAL_SCENE_KIND = {'visit': 'group'}
 # Core notices queued in a person's scene (task results, due plans). They wake the role but are not
 # that person's words, so memory, summaries and the source list never treat them as speech.
 CORE_NOTICE_KINDS = ('task_feedback', 'scheduled', 'note')
-# A line's author is who wrote it (ADR-089): the program for every row it makes. Who authorizes the turn stays on the
-# event (`person_id`).
-PROGRAM_AUTHOR = 'asuna:internal'
-NOT_CORE_NOTICE = {'author': {'$ne': PROGRAM_AUTHOR}}
+# A line's author is who wrote it (ADR-089): the program (PROGRAM_AUTHOR, records/messages.py) for every row it makes.
+# Who authorizes the turn stays on the event (`person_id`).
 
 
 def author_of(event):
@@ -54,7 +54,7 @@ def persist_input(store, event, *, managed=False):
         if scene['_id'] not in owner_private_scenes(store.config):
             raise Denied('INTERNAL_SOURCE_DENIED')
     key = episode_id(event)
-    previous = store.db.messages.find_one({'_id': 'in-' + key})
+    previous = message_records.get(store, 'in-' + key)
     if previous:
         # The same line is the same text as received: a voice re-posted may settle differently the second time
         # (voice.py), and the first stored reading stands.
@@ -79,16 +79,16 @@ def persist_input(store, event, *, managed=False):
     if internal:
         message['direction'] = 'internal'
     try:
-        return store.put('messages', message, stream=key), True
+        return message_records.save(store, message, stream=key), True
     except Conflict:
         # A duplicate HTTP arrival may race the first durable write.
-        if not store.db.messages.find_one({'_id': 'in-' + key}):
+        if not message_records.get(store, 'in-' + key):
             raise
         return persist_input(store, event, managed=managed)[0], False
 
 
 def input_state(store, key, state, **extra):
-    message = store.db.messages.find_one({'_id': 'in-' + key})
+    message = message_records.get(store, 'in-' + key)
     if message and message.get('host_managed'):
-        return store.put('messages', {**message, 'ingress_state': state, **extra},
+        return message_records.save(store, {**message, 'ingress_state': state, **extra},
                          expected=message['revision'], stream=key)

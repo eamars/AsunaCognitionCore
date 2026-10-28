@@ -1,16 +1,18 @@
 """The read-only check of one ADR-104 batch against a deployment's database, before the batch merges: numbers only,
 never a record id or a value.
 
-  python tools/adr104_equivalence.py b1b|b2|b3 [--config config/local.json] [--out <folder>] [--max-ms 2000]
+  python tools/adr104_equivalence.py b1b|b2|b3|b4 [--config config/local.json] [--out <folder>] [--max-ms 2000]
 
 Each batch: what the store's `ensure` would do there, as a dry run (collections it would create, indexes it would
 make, retired indexes it would drop, indexes of a declared name that differ, validators), and for every field the
-catalog declares in the batch's collections (b1b: all of them; b2: `host_leases` and `lane_faults`; b3: `scenes`),
-its stored records by BSON type, the nulls, the records missing a required field and, for a vector, the lengths that
-differ. b3 also runs its read cases: each read the batch moved, as the replaced code wrote it with pymongo and as the
-owner (`records.scenes`) now answers it, on parameters sampled through the owner (at most 20 a case, at most 1,000
-queries in all, serial, `--max-ms` each, three runs for the times): the same ids in the same order, the same records,
-the same plan stages; numbers only.
+catalog declares in the batch's collections (b1b: all of them; b2: `host_leases` and `lane_faults`; b3: `scenes`;
+b4: `messages`), its stored records by BSON type, the nulls, the records missing a required field and, for a vector,
+the lengths that differ; b4 also the records of 512 KiB or more and those whose BSON and JSON sizes fall on different
+sides of 1 MiB. b3 and b4 also run their read cases: each read the batch moved, as the replaced code wrote it with
+pymongo and as the owner (`records.scenes`, `records.messages`) now answers it, on parameters sampled through the
+owners (at most 20 a case, at most 1,000 queries in all, serial, `--max-ms` each, three runs for the times): the same
+ids in the same order, the same records (values in one order for a distinct), the same plan stages (a distinct or an
+aggregate has no plan of its own to compare; the new plan is reported); numbers only.
 Each query is read-only and bounded by `--max-ms`. The numbers go to `<out>/<batch>.json` (default
 `<data>/private/adr104-evidence/<batch>/`) and to the console. Exit 0 when nothing would be created, made or refused,
 every validator is the one ensure creates and every declared field holds only its kind (the retired indexes to drop
@@ -21,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -42,44 +45,100 @@ def dry_run(adapter):
     return {c.name: {**adapter.plan(c), 'validator': adapter.validator(c)} for c in CATALOG.collections()}
 
 
+def _bson_type(value):
+    """A Python value's BSON type name, as `$type` names it."""
+    from datetime import datetime
+    if value is None:
+        return 'null'
+    if isinstance(value, bool):
+        return 'bool'
+    if isinstance(value, int):
+        return 'int' if -2 ** 31 <= value < 2 ** 31 else 'long'
+    return {float: 'double', str: 'string', dict: 'object', list: 'array', datetime: 'date'}.get(type(value), 'other')
+
+
+def _values_at(value, parts):
+    """The values at a path, through the objects of lists on the way."""
+    if not parts:
+        yield value
+    elif isinstance(value, dict):
+        if parts[0] in value:
+            yield from _values_at(value[parts[0]], parts[1:])
+    elif isinstance(value, list):
+        for item in value:
+            yield from _values_at(item, parts)
+
+
+def _list_root(collection, path):
+    """The first declared list on a field's path (its records hold the field once per element), or None."""
+    parts = path.split('.')
+    for n in range(1, len(parts)):
+        declared = collection.field('.'.join(parts[:n]))
+        if declared is not None and declared.kind == 'list':
+            return '.'.join(parts[:n])
+    return None
+
+
 def kinds(db, collection, max_ms):
-    """Per declared field: {bson type: records}, and the records whose vector length differs from the declared one."""
+    """Per declared field: {bson type: records}, the records whose vector length differs from the declared one, and
+    for a list {element bson type: records}. A field inside the objects of a list is counted by the types of the
+    values its records hold there (a record holding none counts as missing), read from the records holding the
+    list."""
     fields = [f for f in collection.fields if f.path != '_id']
     if not fields:
         return {}
-    project = {'_id': 0, **{'k%d' % n: {'$type': '$' + f.path} for n, f in enumerate(fields)}}
-    for n, f in enumerate(fields):
+    plain = [f for f in fields if _list_root(collection, f.path) is None]
+    project = {'_id': 0, **{'k%d' % n: {'$type': '$' + f.path} for n, f in enumerate(plain)}}
+    for n, f in enumerate(plain):
         if f.kind == 'vector':
             project['d%d' % n] = {'$cond': [{'$isArray': '$' + f.path}, {'$size': '$' + f.path}, None]}
+        if f.kind == 'list':
+            project['e%d' % n] = {'$cond': [{'$isArray': '$' + f.path}, {'$setUnion': [
+                {'$map': {'input': '$' + f.path, 'in': {'$type': '$$this'}}}]}, []]}
     rows = db[collection.name].aggregate([{'$project': project}, {'$group': {'_id': '$$ROOT', 'n': {'$sum': 1}}}],
                                          maxTimeMS=max_ms)
-    found = {f.path: {'types': {}, 'other_length': 0} for f in fields}
+    found = {f.path: {'types': {}, 'other_length': 0, 'elements': {}} for f in fields}
     for row in rows:
-        for n, f in enumerate(fields):
+        for n, f in enumerate(plain):
             kind = row['_id'].get('k%d' % n, 'missing')
             found[f.path]['types'][kind] = found[f.path]['types'].get(kind, 0) + row['n']
             length = row['_id'].get('d%d' % n)
             if f.kind == 'vector' and length is not None and length != f.dimensions:
                 found[f.path]['other_length'] += row['n']
+            for element in row['_id'].get('e%d' % n) or ():
+                found[f.path]['elements'][element] = found[f.path]['elements'].get(element, 0) + row['n']
+    for f in fields:
+        root = _list_root(collection, f.path)
+        if root is None:
+            continue
+        for doc in db[collection.name].find({root: {'$type': 'array'}}, {f.path: 1}, max_time_ms=max_ms):
+            seen = {_bson_type(value) for value in _values_at(doc, f.path.split('.'))} or {'missing'}
+            for kind in seen:
+                found[f.path]['types'][kind] = found[f.path]['types'].get(kind, 0) + 1
+            if f.kind == 'list':
+                for value in _values_at(doc, f.path.split('.')):
+                    for element in {_bson_type(item) for item in value} if isinstance(value, list) else ():
+                        found[f.path]['elements'][element] = found[f.path]['elements'].get(element, 0) + 1
     return found
 
 
 def differs(collection, counts):
     """The declared fields whose stored records the declaration refuses: another kind, null where not nullable, a
-    required field missing, a vector of another length."""
+    required field missing, a vector of another length, a list holding an element of another kind."""
     wrong = []
     for f in collection.fields:
         if f.path == '_id' or f.path not in counts:
             continue
         types = counts[f.path]['types']
         allowed = KINDS[f.kind] | {'missing'} | ({'null'} if f.nullable else set())
-        if set(types) - allowed or (f.required and types.get('missing')) or counts[f.path]['other_length']:
+        elements = set(counts[f.path].get('elements') or ()) - (KINDS[f.of] if f.kind == 'list' else set())
+        if set(types) - allowed or (f.required and types.get('missing')) or counts[f.path]['other_length']                 or (f.kind == 'list' and elements):
             wrong.append(f.path)
     return wrong
 
 
 # The collections whose declared fields each batch counts (None: every collection).
-BATCHES = {'b1b': None, 'b2': ('host_leases', 'lane_faults'), 'b3': ('scenes',)}
+BATCHES = {'b1b': None, 'b2': ('host_leases', 'lane_faults'), 'b3': ('scenes',), 'b4': ('messages',)}
 QUERIES = 1000
 RUNS = 3
 
@@ -106,7 +165,8 @@ def _plain(value):
 
 
 class _Recording(MongoAdapter):
-    """The MongoDB adapter, keeping the last read it sent (to explain it)."""
+    """The MongoDB adapter, keeping the last read it sent (to explain it): (collection, filter, sort, skip, limit,
+    fields)."""
     sent = None
 
     def get(self, coll, id, fields=None):
@@ -118,19 +178,29 @@ class _Recording(MongoAdapter):
         self.sent = (coll, query(where), sort, skip, limit or 0, fields)
         return super().find(coll, where, sort, skip, limit, fields)
 
+    def count(self, coll, where, limit=None):
+        from asuna.store.mongodb import query
+        self.sent = (coll, query(where), (), 0, 0, None)
+        return super().count(coll, where, limit)
 
-def _cases(db, store):
-    """(name, old(param), new(param), parameters) for each read B3 moved, the old as the replaced code wrote it."""
+    def group(self, coll, where, by, *args, **kwargs):
+        from asuna.store.mongodb import query
+        self.sent = (coll, query(where), (), 0, 0, None)
+        return super().group(coll, where, by, *args, **kwargs)
+
+
+def _cases_b3(store):
+    """(name, old(param), new(param), parameters, compare) for each read B3 moved, the old as the replaced code
+    wrote it."""
     from asuna.records import scenes as owner
     rows = sorted(owner.all(store, fields=['_id', 'scope_key', 'policy_epoch', 'kind']), key=lambda r: r['_id'])
     ids, kinds = [r['_id'] for r in rows], ['group', 'dm']
     scopes = [r['scope_key'] for r in rows if isinstance(r.get('scope_key'), str)]
     pairs = [(r['scope_key'], r.get('policy_epoch')) for r in rows if isinstance(r.get('scope_key'), str)]
     batches = [ids[n:n + 5] for n in range(0, len(ids), 5)]
-    scenes = db.scenes
-    one = lambda filter, proj=None: ('find_one', filter, proj)
-    many = lambda filter, proj=None: ('find', filter, proj)
-    return [
+    one = lambda filter, proj=None: ('find_one', 'scenes', filter, proj, None)
+    many = lambda filter, proj=None: ('find', 'scenes', filter, proj, None, 0)
+    return [(name, old, new, params, 'value') for name, old, new, params in [
         ('get', lambda i: one({'_id': i}), lambda i: owner.get(store, i), ids),
         ('get fields', lambda i: one({'_id': i}, {'kind': 1}), lambda i: owner.get(store, i, fields=['kind']), ids),
         ('by_scope', lambda s: one({'scope_key': s}), lambda s: owner.by_scope(store, s), scopes),
@@ -155,43 +225,70 @@ def _cases(db, store):
          lambda _: owner.condense_wanted(store), [None]),
         ('channel_scenes', lambda k: one({'kind': k, 'channel_id': {'$exists': True}}, {'_id': 1}),
          lambda k: owner.channel_scenes(store, k), kinds),
-    ], scenes
+    ]]
 
 
-def _old(scenes, call):
-    method, filter, proj = call
+def _old(db, call):
+    """An old read as the replaced code made it: (its answer, a cursor of the same query to explain, or None when the
+    form has no plan of its own to compare: distinct, an aggregate). A call is ('find_one', coll, filter, projection,
+    sort), ('find', coll, filter, projection, sort, limit), ('count', coll, filter, limit), ('distinct', coll, field,
+    filter), ('aggregate', coll, pipeline), or a function of the database doing several (its last query explained)."""
+    if callable(call):
+        return call(db)
+    method, coll = call[0], db[call[1]]
     if method == 'find_one':
-        return scenes.find_one(filter, proj), scenes.find(filter, proj).limit(1)
-    return list(scenes.find(filter, proj)), scenes.find(filter, proj)
+        _, _, filter, proj, sort = call
+        return coll.find_one(filter, proj, sort=sort), coll.find(filter, proj, sort=sort).limit(1)
+    if method == 'find':
+        _, _, filter, proj, sort, limit = call
+        return list(coll.find(filter, proj, sort=sort, limit=limit)), coll.find(filter, proj, sort=sort, limit=limit)
+    if method == 'count':
+        _, _, filter, limit = call
+        return coll.count_documents(filter, **({'limit': limit} if limit else {})), coll.find(filter)
+    if method == 'distinct':
+        _, _, field, filter = call
+        return coll.distinct(field, filter), None
+    _, _, pipeline = call
+    return list(coll.aggregate(pipeline)), None
 
 
-def reads(client, database, max_ms):
-    """Each case's numbers: n, same, differing, plan stages and times, old against new; none are ids."""
+def _compared(value, how):
+    """A read's answer as compared: records as they are (times without a zone), values in one order."""
+    value = _plain(value)
+    if how == 'values':
+        return sorted(value, key=repr)
+    return value
+
+
+def reads(client, database, max_ms, batch, config):
+    """Each case's numbers: n, same, differing, plan stages and times, old against new; none are ids. A case whose
+    old form has no plan to compare (a distinct, an aggregate) reports the new plan only."""
     import statistics
     import time as clock
     from asuna.store import Checked
     old_db = client.get_database(database)
     adapter = _Recording(client, database)
     store = Checked(adapter, CATALOG)
-    cases, scenes = _cases(old_db, store)
+    cases = _cases_b3(store) if batch == 'b3' else _cases_b4(store, config)
     per_case = max(1, min(20, (QUERIES - 2 * len(cases)) // (len(cases) * 2 * RUNS)))
     out, queries = {}, 0
-    for name, old_call, new_call, params in cases:
+    for name, old_call, new_call, params, how in cases:
         chosen = params[::max(1, len(params) // per_case)][:per_case] if params else []
         same = differing = plans_differ = 0
         times = {'old': [], 'new': []}
         old_plan = new_plan = None
+        compared = True
         for param in chosen:
             results = {}
             for _ in range(RUNS):
                 started = clock.perf_counter()
-                old_value, old_cursor = _old(scenes, old_call(param))
+                old_value, old_cursor = _old(old_db, old_call(param))
                 times['old'].append((clock.perf_counter() - started) * 1000)
                 started = clock.perf_counter()
                 new_value = new_call(param)
                 times['new'].append((clock.perf_counter() - started) * 1000)
                 queries += 2
-                results = {'old': _plain(old_value), 'new': _plain(new_value)}
+                results = {'old': _compared(old_value, how), 'new': _compared(new_value, how)}
             if results['old'] == results['new']:
                 same += 1
             else:
@@ -200,23 +297,784 @@ def reads(client, database, max_ms):
                 coll, filter, sort, skip, limit, fields = adapter.sent
                 new_cursor = adapter.db[coll].find(filter, {f: 1 for f in fields} if fields else None,
                                                    sort=list(sort) or None, skip=skip, limit=limit)
-                old_plan = _stages(old_cursor.explain()['queryPlanner']['winningPlan'])
                 new_plan = _stages(new_cursor.explain()['queryPlanner']['winningPlan'])
-                queries += 2
-                plans_differ += old_plan != new_plan
+                queries += 1
+                if old_cursor is None:
+                    compared = False
+                else:
+                    old_plan = _stages(old_cursor.explain()['queryPlanner']['winningPlan'])
+                    queries += 1
+                    plans_differ += old_plan != new_plan
         pct = lambda values, q: round(statistics.quantiles(values, n=20)[q], 2) if len(values) > 1 else (
             round(values[0], 2) if values else None)
         out[name] = {'n': len(chosen), 'same': same, 'differing': differing, 'plans_differ': plans_differ,
-                     'plan_old': old_plan, 'plan_new': new_plan,
+                     'plans_compared': compared, 'plan_old': old_plan, 'plan_new': new_plan,
                      'ms_old_p50': pct(times['old'], 9), 'ms_old_p95': pct(times['old'], 18),
                      'ms_new_p50': pct(times['new'], 9), 'ms_new_p95': pct(times['new'], 18)}
     return out, queries
 
 
+PROGRAM_AUTHOR = 'asuna:internal'                       # ingress.PROGRAM_AUTHOR as the replaced code named it
+NOT_CORE_NOTICE = {'author': {'$ne': PROGRAM_AUTHOR}}   # ingress.NOT_CORE_NOTICE
+SAID = [{'direction': 'inbound'}, {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]   # the outbound form
+SAID_DELIVERED = [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]                  # the delivered form
+POINTABLE = {'$or': [{'direction': 'inbound', 'event.raw.asuna_notice': {'$exists': False}, **NOT_CORE_NOTICE},
+                     {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}              # people.People.POINTABLE
+RELATED = {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1, 'delivery_state': 1, 'platform_reply_to': 1,
+           'event.group_context': 1, 'episode_id': 1, 'occurred_at': 1, 'receipt_at': 1, 'received_at': 1}
+HISTORY = {'text': 1, 'author': 1, 'direction': 1, 'delivery_state': 1, 'platform_event_id': 1, 'platform_reply_to': 1,
+           'event.group_context': 1, 'scene_seq': 1, 'episode_id': 1, 'received_at': 1, 'receipt_at': 1,
+           'attachment': 1, 'attachment_skipped': 1, 'occurred_at': 1, 'event.raw.asuna_catchup': 1,
+           'platform_receipt.response.verification': 1, 'event.raw.asuna_notice': 1, 'recalled_at': 1}
+THREAD = {'_id': 1, 'text': 1, 'author': 1, 'direction': 1, 'phase': 1, 'delivery_state': 1, 'occurred_at': 1,
+          'receipt_at': 1, 'receipt': 1, 'scene_seq': 1, 'scene_id': 1, 'policy_epoch': 1, 'reply_to': 1,
+          'event.group_context': 1, 'event.raw.asuna_peer': 1, 'event.channel': 1}           # discussion_digest
+SAMPLED = ['_id', 'scene_id', 'policy_epoch', 'scene_seq', 'direction', 'author', 'episode_id', 'received_at',
+           'receipt_at', 'channel_id', 'target', 'receipt', 'segment_index', 'text', 'event.event_id',
+           'event.channel.platform_event_id', 'platform_message_id', 'event.group_context.topic_id',
+           'event.raw.asuna_peer.display', 'event.raw.asuna_forward']
+
+
+def _old_search(parts, stream, query, window, after, case=True, author=None, person=None, authors=None,
+                refs=None):
+    """history_query's filters as the replaced code built them (message_filters, outbound_fallback_filter,
+    person_clause, scene_id_clause, _after_clause): one stream's filter, sort and limit."""
+    ids = list(dict.fromkeys(parts['scene_ids']))
+    base = {'scene_id': ids[0]} if len(ids) == 1 else {'scene_id': {'$in': ids}}
+    base['policy_epoch'] = parts['epoch']
+    if author:
+        base['author'] = author
+    pattern = {'$regex': re.escape(query), **({} if case else {'$options': 'i'})} if query else None
+    clause = {'author': {'$in': list(authors)}} if authors is not None else (
+        {'$or': [{key: value} for key in ('author', 'event.raw.asuna_peer.person_id', 'event.raw.asuna_peer.card',
+                                          'event.raw.asuna_peer.nickname', 'event.raw.asuna_peer.display',
+                                          'event.raw.asuna_peer.aliases') for value in sorted(person)]}
+        if person else None)
+    if stream == 'receipt':
+        flt = {**base, 'direction': 'outbound', 'phase': 'SPEAK', 'delivery_state': 'DELIVERED',
+               'receipt': {'$in': sorted(refs)}, 'receipt_at': {'$exists': False}}
+        if pattern:
+            flt['text'] = dict(pattern)
+        if clause:
+            flt['$and'] = [dict(clause)]
+        return flt, [('scene_seq', -1), ('scene_id', -1)], 0
+    bounds = {op: value for op, value in zip(('$gte', '$lte'), window or ()) if value}
+    field = 'receipt_at' if stream == 'outbound' else 'occurred_at'
+    if stream == 'outbound':
+        flt = {**base, 'direction': 'outbound', 'phase': 'SPEAK', 'delivery_state': 'DELIVERED'}
+    else:
+        flt = {**base, 'direction': 'inbound'}
+    if bounds:
+        flt[field] = dict(bounds)
+    if pattern:
+        if stream == 'outbound':
+            flt['text'] = dict(pattern)
+        else:
+            flt['$or'] = [{'text': dict(pattern)}, {'event.raw.asuna_forward.nodes.text': dict(pattern)}]
+    if clause:
+        flt['$and'] = [dict(clause)]
+    if stream == 'archived':
+        flt = {**flt, 'scene_id': {'$in': ['archive:' + sid for sid in parts['scene_ids']]},
+               'direction': 'archived', 'deletion_id': {'$exists': False}}
+        if bounds:
+            flt[field] = {op: _archive_stamp(value) for op, value in bounds.items()}
+        if clause:
+            flt['$and'] = [dict(clause)]
+    if after:
+        at, seq = after[0], after[1]
+        clauses = [{field: {'$lt': at}}, {field: at, 'scene_seq': {'$lt': seq}}]
+        if len(after) > 2:
+            clauses.append({field: at, 'scene_seq': seq, 'scene_id': {'$lt': after[2]}})
+        flt.setdefault('$and', []).append({'$or': clauses})
+    return flt, [(field, -1), ('scene_seq', -1), ('scene_id', -1)], 0
+
+
+def _archive_stamp(value):
+    """history_query._archive_stamp."""
+    from datetime import datetime, timezone
+    try:
+        date = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except (ValueError, TypeError):
+        return str(value)
+    if date.tzinfo is None:
+        date = date.replace(tzinfo=timezone.utc)
+    return date.astimezone(timezone.utc).isoformat(timespec='microseconds')
+
+
+def _days_before(stamp, days):
+    """An ISO time `days` before another, in the form the core writes (or the same text when it is no time)."""
+    from datetime import datetime, timedelta, timezone
+    try:
+        moment = datetime.fromisoformat(str(stamp).replace('Z', '+00:00'))
+    except ValueError:
+        return stamp
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return (moment - timedelta(days=days)).isoformat()
+
+
+def _sample_b4(store, config):
+    """What the cases read with, through the owners: the conversations, and the newest lines of up to 20 of them."""
+    from asuna.records import messages as owner, scenes as scene_owner
+    scenes = sorted(scene_owner.all(store, fields=['_id', 'policy_epoch', 'kind', 'scope_key', 'summary_start_seq']),
+                    key=lambda row: row['_id'])
+    places, tried = [], 0
+    for scene in scenes:
+        if len(places) >= 20 or tried >= 60:
+            break
+        tried += 1
+        rows = owner.lines(store, scene['_id']).rows(newest_first=True, limit=4, fields=SAMPLED)
+        if rows and isinstance(scene.get('policy_epoch'), int):
+            places.append((scene, rows))
+    return scenes, places, tried
+
+
+def _cases_b4(store, config):
+    """(name, old(param), new(param), parameters, compare) for each read B4 moved, the old as the replaced code wrote
+    it; parameters sampled through the owners, synthetic values where her lines hold none (both sides then read
+    nothing, and the plans are still compared)."""
+    from asuna.records import messages as owner
+    me = config.get('character_id') or (config.get('chat') or {}).get('persona', 'character')
+    boss = (config.get('chat') or {}).get('person_id') or 'nobody'
+    scenes, places, _ = _sample_b4(store, config)
+    lines = [(scene, row) for scene, rows in places for row in rows]
+    first = [(scene, rows[0]) for scene, rows in places]                       # each conversation's newest line
+    oldest = [(scene, rows[-1]) for scene, rows in places]                     # its 4th newest: a short window
+    s = lambda pair: pair[0]['_id']
+    e = lambda pair: pair[0]['policy_epoch']
+    q = lambda pair: pair[1].get('scene_seq') or 0
+    t = lambda pair: pair[1].get('received_at') or '9999'
+    ids = [row['_id'] for _, row in lines]
+    batches = [ids[n:n + 5] for n in range(0, len(ids), 5)]
+    by_scene = [(scene, [row['_id'] for row in rows]) for scene, rows in places]
+    inbound = [(scene, row) for scene, row in lines if row.get('direction') == 'inbound']
+    outbound = [(scene, row) for scene, row in lines if row.get('direction') == 'outbound']
+    outbound = [(scene, row) for scene, row in outbound if isinstance(row.get('episode_id'), str)]
+    episodes = list(dict.fromkeys(row['episode_id'] for _, row in outbound))
+    parts_of = [(scene, row) for scene, row in outbound if isinstance(row.get('segment_index'), int)] or outbound
+    authors = [(scene, row['author']) for scene, row in inbound if isinstance(row.get('author'), str)]
+    topics = [(scene, ((row.get('event') or {}).get('group_context') or {}).get('topic_id') or 'topic-none')
+              for scene, row in inbound]
+    events = [(scene, (row.get('event') or {}).get('event_id') or 'event-none') for scene, row in inbound]
+    platform = [(scene, ((row.get('event') or {}).get('channel') or {}).get('platform_event_id')
+                 or row.get('platform_message_id') or 'platform-none') for scene, row in lines]
+    names = [(scene, ((row.get('event') or {}).get('raw') or {}).get('asuna_peer', {}).get('display') or 'name-none')
+             for scene, row in inbound]
+    refs = [(scene, next((block.get('ref') for block in (((row.get('event') or {}).get('raw') or {})
+                                                         .get('asuna_forward') or []) if isinstance(block, dict)),
+                         'forward-none')) for scene, row in inbound]
+    channels = [(row['_id'], row['channel_id']) for _, row in outbound if isinstance(row.get('channel_id'), str)]
+    targets = [(row['channel_id'], row['target']) for _, row in outbound
+               if isinstance(row.get('channel_id'), str) and isinstance(row.get('target'), dict)]
+    receipts = [(scene, row['receipt']) for scene, row in outbound if isinstance(row.get('receipt'), str)]
+    newest = max((t(pair) for pair in first if t(pair) != '9999'), default='9999')
+    recent = _days_before(newest, 2)                                           # two days before the newest line
+    words = [(scene, row['text'][:2]) for scene, row in lines if isinstance(row.get('text'), str) and row['text']]
+    home = (config.get('chat') or {}).get('scene_id') or 'home-none'
+    routes = sorted({route['scene_id'] for channel in (config.get('channels') or {}).values()
+                     for route in (channel.get('routes') or {}).values() if route.get('scene_id')} | {home})
+    sources = lambda pair: [{'scene_id': s(pair), 'policy_epoch': e(pair)}]
+    message_query = lambda pair: {'$and': [{'$or': sources(pair)}, NOT_CORE_NOTICE, {'$or': list(SAID)}]}
+    parts = lambda pair: {'scene_ids': [s(pair)], 'epoch': e(pair)}
+    window = lambda pair: (t(pair)[:10] + 'T00:00:00Z', '9999-12-31T23:59:59Z')
+    one = lambda filter, proj=None, sort=None: ('find_one', 'messages', filter, proj, sort)
+    many = lambda filter, proj=None, sort=None, limit=0: ('find', 'messages', filter, proj, sort, limit)
+    count = lambda filter, limit=0: ('count', 'messages', filter, limit)
+    distinct = lambda field, filter: ('distinct', 'messages', field, filter)
+    desc = [('scene_seq', -1)]
+    asc = [('scene_seq', 1)]
+
+    def quoted_old(pair, mine):
+        """notices.fill: hers by its message id however old, else anyone's within the time."""
+        def run(db):
+            fields = {'_id': 1, 'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1}
+            flt = {'scene_id': s(pair), 'direction': 'outbound', 'platform_message_id': pair[1]}
+            row = db.messages.find_one(flt, fields, sort=desc) if mine else None
+            cursor = db.messages.find(flt, fields, sort=desc).limit(1)
+            if row:
+                return row, cursor
+            flt = {'scene_id': s(pair), '$or': [
+                {'direction': 'inbound', 'event.channel.platform_event_id': pair[1], 'received_at': {'$gte': recent}},
+                {'direction': 'outbound', 'platform_message_id': pair[1], 'receipt_at': {'$gte': recent}}]}
+            return db.messages.find_one(flt, fields, sort=desc), db.messages.find(flt, fields, sort=desc).limit(1)
+        return run
+
+    def page_old(pair, search=None):
+        """native_api.page's aggregate on the source lines (its excerpt as compared)."""
+        def run(db):
+            query = message_query(pair)
+            if search:
+                query = {'$and': [query, {'text': {'$regex': re.escape(search), '$options': 'i'}}]}
+            rows = list(db.messages.aggregate([{'$match': query}, {'$sort': {'occurred_at': -1, '_id': -1}},
+                                               {'$skip': 0}, {'$limit': 25}, {'$project': {
+                                                   'excerpt': {'$substrCP': [{'$ifNull': ['$text', '']}, 0, 200]}}}]))
+            return [(row['_id'], row['excerpt']) for row in rows], db.messages.find(query, {'text': 1}, sort=[
+                ('occurred_at', -1), ('_id', -1)], limit=25)
+        return run
+
+    def page_new(pair, search=None):
+        rows = owner.said_in_sources(store, sources(pair), search=search).rows(newest_first=True, limit=25,
+                                                                              fields=['text'])
+        return [(row['_id'], (row.get('text') if isinstance(row.get('text'), str) else '')[:200]) for row in rows]
+
+    def search_case(stream, text=False, person=False, cursor=False):
+        def params(pair):
+            word = next((w for scene, w in words if scene is pair[0]), None) if text else None
+            who = ([pair[1].get('author')] if pair[1].get('author') else ['nobody']) if person else None
+            after = [t(pair), q(pair), s(pair)] if cursor else None
+            return pair, word, who, after
+
+        def old(param):
+            pair, word, who, after = param
+            flt, sort, limit = _old_search(parts(pair), stream, word, window(pair), after, person=who)
+            return many(flt, {'legacy': 0} if stream == 'archived' else None, sort, 26)
+
+        def new(param):
+            pair, word, who, after = param
+            return owner.search(store, [s(pair)], e(pair), stream, text=word, person=who,
+                                window=window(pair) if stream != 'archived' else tuple(
+                                    _archive_stamp(v) for v in window(pair)), after=after, limit=26)
+        return old, new, [params(pair) for pair in first]
+
+    cases = [
+        # single lines
+        ('get', lambda i: one({'_id': i}), lambda i: owner.get(store, i), ids, 'value'),
+        ('get fields', lambda i: one({'_id': i}, {'author': 1, 'direction': 1}),
+         lambda i: owner.get(store, i, fields=['author', 'direction']), ids, 'value'),
+        ('get fenced to scene, scope, epoch', lambda p: one({'_id': p[1]['_id'], 'scene_id': s(p),
+                                                            'scope_key': p[0].get('scope_key'),
+                                                            'policy_epoch': e(p)}),
+         lambda p: owner.get(store, p[1]['_id'], scene=s(p), scope=p[0].get('scope_key'), epoch=e(p)), lines, 'value'),
+        ('get inbound in scene', lambda p: one({'_id': p[1]['_id'], 'scene_id': s(p), 'direction': 'inbound'}),
+         lambda p: owner.get(store, p[1]['_id'], scene=s(p), direction='inbound'), lines, 'value'),
+        ('get in scene fields', lambda p: one({'_id': p[1]['_id'], 'scene_id': s(p)},
+                                              {'author': 1, 'text': 1, 'direction': 1, 'scene_seq': 1}),
+         lambda p: owner.get(store, p[1]['_id'], scene=s(p), fields=['author', 'text', 'direction', 'scene_seq']),
+         lines, 'value'),
+        ('get in scene and epoch', lambda p: one({'_id': p[1]['_id'], 'scene_id': s(p), 'policy_epoch': e(p)}),
+         lambda p: owner.get(store, p[1]['_id'], scene=s(p), epoch=e(p)), lines, 'value'),
+        ('get outbound fields', lambda i: one({'_id': i, 'direction': 'outbound'}, {'monologue_refs': 1}),
+         lambda i: owner.get(store, i, fields=['monologue_refs'], direction='outbound'), ids, 'value'),
+        ('get on a channel', lambda c: one({'_id': c[0], 'channel_id': c[1]}, {'target': 1}),
+         lambda c: owner.get(store, c[0], fields=['target'], channel=c[1]), channels or [('none', 'none')], 'value'),
+        ('get from a channel', lambda i: one({'_id': i, 'event.channel': {'$exists': True}}),
+         lambda i: owner.get(store, i, from_channel=True), ids, 'value'),
+        ('many fields', lambda b: many({'_id': {'$in': b}}, {'author': 1}),
+         lambda b: owner.many(store, b).rows(fields=['author']), batches, 'value'),
+        ('many in scene and epoch', lambda p: many({'_id': {'$in': p[1]}, 'scene_id': p[0]['_id'],
+                                                    'policy_epoch': p[0]['policy_epoch']}, RELATED),
+         lambda p: owner.many(store, p[1], scene=p[0]['_id'], epoch=p[0]['policy_epoch']).rows(fields=list(RELATED)),
+         by_scene, 'value'),
+        ('many since', lambda b: many({'_id': {'$in': b}, 'received_at': {'$gte': recent}}, {'scene_seq': 1}),
+         lambda b: owner.many(store, b, since=recent).rows(fields=['scene_seq']), batches, 'value'),
+        ('many linkage (digest)', lambda p: many({'_id': {'$in': sorted(set(p[1]))}, 'scene_id': p[0]['_id'],
+                                                  'policy_epoch': p[0]['policy_epoch']},
+                                                 {'_id': 1, 'reply_to': 1, 'author': 1, 'direction': 1,
+                                                  'event.group_context': 1, 'event.raw.asuna_peer': 1,
+                                                  'event.channel': 1}),
+         lambda p: owner.many(store, p[1], scenes=[p[0]['_id']], epoch=p[0]['policy_epoch']).rows(
+             fields=['_id', 'reply_to', 'author', 'direction', 'event.group_context', 'event.raw.asuna_peer',
+                     'event.channel']), by_scene, 'value'),
+        ('at', lambda p: one({'scene_id': s(p), 'scene_seq': q(p)}, {'received_at': 1, 'receipt_at': 1}),
+         lambda p: owner.at(store, s(p), q(p), fields=['received_at', 'receipt_at']), lines, 'value'),
+        ('at hers', lambda p: one({'scene_id': s(p), 'scene_seq': q(p), 'direction': 'outbound', 'author': me}),
+         lambda p: owner.at(store, s(p), q(p), direction='outbound', author=me), lines, 'value'),
+        ('of_event', lambda p: one({'scene_id': s(p), 'policy_epoch': e(p), 'event.event_id': p[1]}, {'_id': 1}),
+         lambda p: owner.of_event(store, s(p), e(p), p[1], fields=['_id']), events, 'value'),
+        ('of_platform_event', lambda p: many({'platform_event_id': p[1]}, {'scope_key': 1, 'deletion_id': 1}),
+         lambda p: owner.of_platform_event(store, p[1], fields=['scope_key', 'deletion_id']), platform, 'value'),
+        ('referenced', lambda p: one({'scene_id': s(p), 'policy_epoch': e(p), '$or': [
+            {'_id': p[1]['_id']}, {'event.channel.platform_event_id': p[1]['_id']},
+            {'platform_message_id': p[1]['_id']}]}, {'author': 1, 'scene_seq': 1, 'direction': 1, 'summary_batch_id': 1}),
+         lambda p: owner.referenced(store, s(p), e(p), p[1]['_id'],
+                                    fields=['author', 'scene_seq', 'direction', 'summary_batch_id']), lines, 'value'),
+        ('by_platform_id', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p), '$or': [
+            {'direction': 'inbound', 'event.channel.platform_event_id': p[1]},
+            {'direction': 'outbound', 'platform_message_id': p[1], 'delivery_state': 'DELIVERED', 'author': me}]}),
+         lambda p: owner.by_platform_id(store, s(p), e(p), platform_id=p[1], author=me).rows(), platform, 'value'),
+        ('quoted, hers first', lambda p: quoted_old(p, True), lambda p: owner.quoted(store, s(p), p[1], mine=True,
+                                                                                     since=recent), platform, 'value'),
+        ('quoted, anyone', lambda p: quoted_old(p, False), lambda p: owner.quoted(store, s(p), p[1], mine=False,
+                                                                                  since=recent), platform, 'value'),
+        # what people saw (her turn context reads these)
+        ('said, attend window', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p), 'scene_seq': {'$lte': q(p)},
+                                                '$or': SAID}, {'_id': 1, 'author': 1, 'text': 1, 'direction': 1,
+                                                               'scene_seq': 1, 'received_at': 1}, desc, 40),
+         lambda p: owner.said(store, s(p), e(p), upto=q(p)).rows(
+             newest_first=True, limit=40, fields=['_id', 'author', 'text', 'direction', 'scene_seq', 'received_at']),
+         first, 'value'),
+        ('said, linked history', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p), '$or': SAID_DELIVERED},
+                                                HISTORY, desc, 12),
+         lambda p: owner.said(store, s(p), e(p)).rows(newest_first=True, limit=12, fields=list(HISTORY)),
+         first, 'value'),
+        ('turn context: history', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p), '$or': [
+            {'direction': 'inbound', 'scene_seq': {'$lt': q(p)}}, {'delivery_state': 'DELIVERED'}]}, HISTORY, desc,
+            40 if p[0].get('kind') == 'group' else 12),
+         lambda p: owner.said(store, s(p), e(p), heard_before=q(p)).rows(
+             newest_first=True, limit=40 if p[0].get('kind') == 'group' else 12, fields=list(HISTORY)),
+         first, 'value'),
+        ('turn context: topic thread', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p),
+                                                       'event.group_context.topic_id': p[1], '$or': SAID_DELIVERED},
+                                                      RELATED, desc, 12),
+         lambda p: owner.said(store, s(p), e(p), topic=p[1]).rows(newest_first=True, limit=12, fields=list(RELATED)),
+         topics, 'value'),
+        ('said, not yet summarised', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p),
+                                                     'scene_seq': {'$gt': p[0].get('summary_start_seq') or 0},
+                                                     'summary_batch_id': {'$exists': False}, **NOT_CORE_NOTICE,
+                                                     '$or': SAID}, None, asc, 24),
+         lambda p: owner.said(store, s(p), e(p), people_only=True, after=p[0].get('summary_start_seq') or 0,
+                              unsummarised=True).rows(limit=24), first, 'value'),
+        ('said, people only, whole conversation', lambda p: many({'scene_id': s(p), **NOT_CORE_NOTICE,
+                                                                  '$or': SAID_DELIVERED}, {'_id': 1}, asc),
+         lambda p: owner.said(store, s(p), people_only=True).rows(fields=['_id']), first[:3], 'value'),
+        ('said, after a line', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p), 'scene_seq': {'$gt': q(p)},
+                                               '$or': SAID_DELIVERED}, None, asc, 30),
+         lambda p: owner.said(store, s(p), e(p), after=q(p)).rows(limit=30), oldest, 'value'),
+        ('said, around a line', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p),
+                                                'scene_seq': {'$gte': q(p) - 2, '$lte': q(p) + 2},
+                                                '$or': SAID_DELIVERED},
+                                               {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1}, asc),
+         lambda p: owner.said(store, s(p), e(p), from_seq=q(p) - 2, upto=q(p) + 2).rows(
+             fields=['text', 'author', 'direction', 'scene_seq']), oldest, 'value'),
+        ('said, proactive rhythm', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p), '$or': SAID},
+                                                  {'scene_seq': 1, 'direction': 1, 'author': 1, 'occurred_at': 1},
+                                                  desc, 120),
+         lambda p: owner.said(store, s(p), e(p)).rows(newest_first=True, limit=120,
+                                                      fields=['scene_seq', 'direction', 'author', 'occurred_at']),
+         first, 'value'),
+        ('said across (home experience)', lambda _: many({'$or': [
+            {'scene_id': {'$in': [home]}, 'direction': 'inbound'},
+            {'scene_id': {'$in': routes}, 'delivery_state': 'DELIVERED'}]},
+            {'scene_id': 1, 'author': 1, 'direction': 1, 'text': 1, 'received_at': 1, 'delivery_state': 1},
+            [('received_at', -1)], 20),
+         lambda _: owner.said_across(store, [home], routes).rows(
+             newest_first=True, limit=20,
+             fields=['scene_id', 'author', 'direction', 'text', 'received_at', 'delivery_state']), [None], 'value'),
+        ('web page source lines', lambda p: page_old(p), lambda p: page_new(p), first, 'value'),
+        ('web page source lines, searched', lambda p: page_old(p[0], p[1]), lambda p: page_new(p[0], p[1]),
+         [(pair, word) for pair in first for scene, word in words if scene is pair[0]][:20], 'value'),
+        ('web page source line', lambda p: one({**message_query(p), '_id': p[1]['_id']},
+                                               {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1}),
+         lambda p: owner.said_in_sources(store, sources(p), line=p[1]['_id'], by=None).first(
+             fields=['text', 'author', 'scene_id', 'occurred_at']), lines, 'value'),
+        ('web page sources by ids', lambda p: many({**message_query((p[0], None)), '_id': {'$in': p[1]}},
+                                                   {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1},
+                                                   [('occurred_at', 1), ('_id', 1)], 12),
+         lambda p: owner.said_in_sources(store, [{'scene_id': p[0]['_id'], 'policy_epoch': p[0]['policy_epoch']}],
+                                         lines=p[1]).rows(limit=12, fields=['text', 'author', 'scene_id',
+                                                                            'occurred_at']),
+         by_scene, 'value'),
+        ('pointable, the turn\'s line', lambda p: one({'_id': p[1]['_id'], 'scene_id': s(p), **POINTABLE}),
+         lambda p: owner.pointable(store, s(p), line=p[1]['_id'], by=None).first(), lines, 'value'),
+        ('pointable, at a position', lambda p: one({'scene_id': s(p), 'scene_seq': q(p), **POINTABLE}),
+         lambda p: owner.pointable(store, s(p), seq=q(p), by=None).first(), lines, 'value'),
+        ('pointable, recent', lambda p: many({'scene_id': s(p), **POINTABLE},
+                                             {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1}, desc, 6),
+         lambda p: owner.pointable(store, s(p)).rows(newest_first=True, limit=6,
+                                                     fields=['text', 'author', 'direction', 'scene_seq']),
+         first, 'value'),
+        # a conversation's lines
+        ('lines, the newest position', lambda p: one({'scene_id': s(p)}, {'scene_seq': 1}, desc),
+         lambda p: owner.lines(store, s(p)).first(newest_first=True, fields=['scene_seq']), first, 'value'),
+        ('lines after a position', lambda p: many({'scene_id': s(p), 'scene_seq': {'$gt': q(p)}},
+                                                  {'text': 1, 'direction': 1, 'scene_seq': 1}, asc),
+         lambda p: owner.lines(store, s(p), after=q(p)).rows(fields=['text', 'direction', 'scene_seq']), oldest,
+         'value'),
+        ('lines between positions', lambda p: many({'scene_id': s(p), 'scene_seq': {'$gte': q(p), '$lte': q(p) + 3}},
+                                                   None, asc),
+         lambda p: owner.lines(store, s(p), from_seq=q(p), upto=q(p) + 3).rows(), oldest, 'value'),
+        ('lines live up to a position', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p),
+                                                        'scene_seq': {'$lte': q(p)},
+                                                        '$or': [{'direction': 'inbound'}, {'direction': 'outbound'}]},
+                                                       {'scene_seq': 1, 'direction': 1, 'author': 1, 'text': 1}, desc,
+                                                       12),
+         lambda p: owner.lines(store, s(p), e(p), live=True, upto=q(p)).rows(
+             newest_first=True, limit=12, fields=['scene_seq', 'direction', 'author', 'text']), first, 'value'),
+        ('lines with the group name', lambda p: one({'scene_id': s(p), 'event.raw.group_name': {'$exists': True}},
+                                                    {'event.raw.group_name': 1}, [('received_at', -1)]),
+         lambda p: owner.lines(store, s(p), group_name=True, by='received_at').first(
+             newest_first=True, fields=['event.raw.group_name']), first, 'value'),
+        ('woken after a position', lambda p: one({'scene_id': s(p), 'scene_seq': {'$gt': q(p)},
+                                                  'event.group_context.wake_reason': 'awaited_answer'}, {'_id': 1}),
+         lambda p: owner.woken(store, s(p), 'awaited_answer', after=q(p)), oldest, 'value'),
+        # what people wrote
+        ('inbound since, counted', lambda p: count({'scene_id': s(p), 'direction': 'inbound',
+                                                    'received_at': {'$gte': t(p)}}),
+         lambda p: owner.inbound(store, s(p), since=t(p)).count(), oldest, 'value'),
+        ('inbound, the newest by time', lambda p: one({'scene_id': s(p), 'direction': 'inbound'}, {'received_at': 1},
+                                                      [('received_at', -1)]),
+         lambda p: owner.inbound(store, s(p), by='received_at').first(newest_first=True, fields=['received_at']),
+         first, 'value'),
+        ('inbound since', lambda p: many({'scene_id': s(p), 'direction': 'inbound', 'received_at': {'$gte': t(p)}},
+                                         {'author': 1, 'text': 1, 'received_at': 1}),
+         lambda p: owner.inbound(store, s(p), since=t(p), by=None).rows(fields=['author', 'text', 'received_at']),
+         oldest, 'value'),
+        ('inbound elsewhere since', lambda p: many({'scene_id': {'$ne': s(p)}, 'direction': 'inbound',
+                                                    'received_at': {'$gte': newest}},
+                                                   {'scene_id': 1, 'author': 1, 'text': 1}),
+         lambda p: owner.inbound(store, besides=s(p), since=newest, by=None).rows(
+             fields=['scene_id', 'author', 'text']), first, 'value'),
+        ('inbound by others since', lambda p: many({'scene_id': s(p), 'direction': 'inbound', 'author': {'$ne': me},
+                                                    'received_at': {'$gte': t(p)}},
+                                                   {'text': 1, 'author': 1, 'received_at': 1}),
+         lambda p: owner.inbound(store, s(p), not_author=me, since=t(p), by=None).rows(
+             fields=['text', 'author', 'received_at']), oldest, 'value'),
+        ('turn context: queued after the line', lambda p: many({'scene_id': s(p), 'direction': 'inbound',
+                                                                'scene_seq': {'$gte': q(p)}}, {'platform_event_id': 1}),
+         lambda p: owner.inbound(store, s(p), from_seq=q(p), by=None).rows(fields=['platform_event_id']), oldest,
+         'value'),
+        ('turn context: later lines, not notices', lambda p: many({'scene_id': s(p), 'direction': 'inbound',
+                                                                   'event.raw.asuna_notice': {'$exists': False},
+                                                                   'scene_seq': {'$gt': q(p)}}, {'scene_seq': 1}, asc),
+         lambda p: owner.inbound(store, s(p), after=q(p), no_notice=True).rows(fields=['scene_seq']), oldest,
+         'value'),
+        ('turn context: the speaker\'s tail', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p),
+                                                              'author': p[1]['author'], 'direction': 'inbound',
+                                                              'scene_seq': {'$lt': q(p)}},
+                                                             {'text': 1, 'author': 1, 'scene_seq': 1}, desc, 3),
+         lambda p: owner.inbound(store, s(p), e(p), author=p[1]['author'], before=q(p)).rows(
+             newest_first=True, limit=3, fields=['text', 'author', 'scene_seq']),
+         [pair for pair in inbound if isinstance(pair[1].get('author'), str)], 'value'),
+        ('inbound by the owner, the newest', lambda _: many({'direction': 'inbound', 'author': boss},
+                                                            {'received_at': 1}, [('received_at', -1)], 1),
+         lambda _: owner.inbound(store, author=boss, by='received_at').rows(newest_first=True, limit=1,
+                                                                            fields=['received_at']), [None], 'value'),
+        ('inbound by authors, counted', lambda p: count({'author': {'$in': [p[1]]}, 'direction': 'inbound'}, 60),
+         lambda p: owner.inbound(store, authors=[p[1]]).count(limit=60), authors, 'value'),
+        ('inbound in a window, counted', lambda p: count({'scene_id': s(p), 'direction': 'inbound',
+                                                          'scene_seq': {'$gt': q(p) - 5, '$lte': q(p)}}, 50),
+         lambda p: owner.inbound(store, s(p), after=q(p) - 5, upto=q(p)).count(limit=50), first, 'value'),
+        ('inbound carrying a forward', lambda p: one({'scene_id': s(p), 'direction': 'inbound',
+                                                      'event.raw.asuna_forward.ref': p[1]}, None,
+                                                     [('received_at', -1)]),
+         lambda p: owner.inbound(store, s(p), forward=p[1], by='received_at').first(newest_first=True), refs, 'value'),
+        ('inbound with a peer card', lambda p: one({'scene_id': s(p), 'author': p[1], 'direction': 'inbound',
+                                                    'event.raw.asuna_peer': {'$exists': True}}, None,
+                                                   [('received_at', -1)]),
+         lambda p: owner.inbound(store, s(p), author=p[1], peer=True, by='received_at').first(newest_first=True),
+         authors, 'value'),
+        ('inbound by a peer\'s name', lambda p: many({'scene_id': s(p), 'direction': 'inbound', '$or': [
+            {'event.raw.asuna_peer.' + field: p[1]} for field in ('card', 'nickname', 'display', 'aliases')]},
+            {'author': 1, 'scene_id': 1, 'received_at': 1}, None, 200),
+         lambda p: owner.inbound(store, s(p), peer_named=p[1], by=None).rows(
+             limit=200, fields=['author', 'scene_id', 'received_at']), names, 'value'),
+        ('inbound pictures before a line', lambda p: many({'scene_id': s(p), 'direction': 'inbound',
+                                                           'policy_epoch': e(p),
+                                                           'scene_seq': {'$lt': q(p), '$gte': q(p) - 6},
+                                                           'event.raw.asuna_media': {'$exists': True}}, None, desc),
+         lambda p: owner.inbound(store, s(p), e(p), before=q(p), from_seq=q(p) - 6, media=True).rows(
+             newest_first=True), first, 'value'),
+        ('inbound pictures since', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p), 'direction': 'inbound',
+                                                   'received_at': {'$gte': t(p)},
+                                                   'event.raw.asuna_media': {'$exists': True}},
+                                                  {'_id': 1, 'scene_seq': 1}, desc),
+         lambda p: owner.inbound(store, s(p), e(p), since=t(p), media=True).rows(newest_first=True,
+                                                                                 fields=['_id', 'scene_seq']),
+         oldest, 'value'),
+        ('inbound in an epoch, newest', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p),
+                                                        'direction': 'inbound'}, {'_id': 1, 'scene_seq': 1}, desc, 50),
+         lambda p: owner.inbound(store, s(p), e(p)).rows(newest_first=True, limit=50, fields=['_id', 'scene_seq']),
+         first, 'value'),
+        ('inbound news since', lambda _: one({'scene_id': {'$in': routes}, 'direction': 'inbound',
+                                              'received_at': {'$gt': recent},
+                                              'processing_outcome': {'$ne': 'RECORDED_NO_WAKE'}}, {'_id': 1}),
+         lambda _: owner.inbound(store, scenes=routes, since_after=recent, not_outcome='RECORDED_NO_WAKE',
+                                 by=None).first(fields=['_id']), [None], 'value'),
+        ('inbound by people since, in an epoch', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p),
+                                                                 'direction': 'inbound',
+                                                                 'received_at': {'$gte': t(p)}, **NOT_CORE_NOTICE},
+                                                                {'author': 1}),
+         lambda p: owner.inbound(store, s(p), e(p), people_only=True, since=t(p), by=None).rows(fields=['author']),
+         oldest, 'value'),
+        ('inbound, the newest by position', lambda p: many({'scene_id': s(p), 'direction': 'inbound'},
+                                                           {'received_at': 1}, desc, 1),
+         lambda p: owner.inbound(store, s(p)).rows(newest_first=True, limit=1, fields=['received_at']), first,
+         'value'),
+        ('inbound calling her after a line', lambda p: one({'scene_id': s(p), 'direction': 'inbound',
+                                                            **NOT_CORE_NOTICE, 'scene_seq': {'$gt': q(p)},
+                                                            'event.group_context.wake_reason': {'$in': [
+                                                                'mentioned_account', 'reply_to_character',
+                                                                'name_called']}}, {'_id': 1}),
+         lambda p: owner.inbound(store, s(p), people_only=True, after=q(p),
+                                 wakes=('mentioned_account', 'reply_to_character', 'name_called'),
+                                 by=None).first(fields=['_id']), oldest, 'value'),
+        ('inbound waiting behind a turn', lambda p: many({'scene_id': s(p), 'direction': 'inbound', **NOT_CORE_NOTICE,
+                                                          'scene_seq': {'$gt': q(p)},
+                                                          'event.group_context.wake_reason': {'$in': [
+                                                              'mentioned_account', 'reply_to_character',
+                                                              'catchup_mention']}}, {'author': 1}, asc, 32),
+         lambda p: owner.inbound(store, s(p), people_only=True, after=q(p),
+                                 wakes=('mentioned_account', 'reply_to_character', 'catchup_mention')).rows(
+             limit=32, fields=['author']), oldest, 'value'),
+        ('inbound by people after a line', lambda p: one({'scene_id': s(p), 'direction': 'inbound', **NOT_CORE_NOTICE,
+                                                          'scene_seq': {'$gt': q(p)}}, {'_id': 1}),
+         lambda p: owner.inbound(store, s(p), people_only=True, after=q(p), by=None).first(fields=['_id']), oldest,
+         'value'),
+        ('inbound by someone after a line', lambda p: one({'scene_id': s(p), 'direction': 'inbound',
+                                                           'scene_seq': {'$gt': q(p) - 3},
+                                                           'author': {'$in': [p[1]['author']]}}, {'_id': 1}),
+         lambda p: owner.inbound(store, s(p), after=q(p) - 3, people_only=True, authors=[p[1]['author']],
+                                 by=None).first(fields=['_id']),
+         [pair for pair in inbound if isinstance(pair[1].get('author'), str)], 'value'),
+        ('inbound answering her wait', lambda p: one({'scene_id': s(p), 'direction': 'inbound', 'author': p[1],
+                                                      'scene_seq': {'$gt': 0},
+                                                      'event.group_context.wake_reason': 'question_wait'},
+                                                     {'_id': 1}),
+         lambda p: owner.inbound(store, s(p), author=p[1], after=0, wake='question_wait', by=None).first(
+             fields=['_id']), authors, 'value'),
+        ('inbound answering her question', lambda p: many({'scene_id': s(p), 'direction': 'inbound', **NOT_CORE_NOTICE,
+                                                           'scene_seq': {'$gt': q(p)}, '$or': [
+                                                               {'event.group_context.reply_message_id': {'$in': [
+                                                                   p[1]['_id']]}},
+                                                               {'event.group_context.wake_reason': 'question_wait'},
+                                                               {'event.raw.asuna_notice.kind': 'reaction',
+                                                                'event.raw.asuna_notice.line.message_id': {
+                                                                    '$in': ['platform-none']}}]}, None, asc),
+         lambda p: owner.inbound(store, s(p), people_only=True, after=q(p),
+                                 answers_to=([p[1]['_id']], ['platform-none'])).rows(), oldest, 'value'),
+        ('inbound marked as an answer', lambda p: many({'scene_id': s(p), 'direction': 'inbound', **NOT_CORE_NOTICE,
+                                                        'event.raw.asuna_aside': {'$ne': True},
+                                                        'event.raw.asuna_answer.question': 'q-none'}, None, asc),
+         lambda p: owner.inbound(store, s(p), people_only=True, asides=False, answers_question='q-none').rows(),
+         first, 'value'),
+        ('inbound first after her line, unmarked', lambda p: one({'scene_id': s(p), 'direction': 'inbound',
+                                                                  **NOT_CORE_NOTICE,
+                                                                  'event.raw.asuna_aside': {'$ne': True},
+                                                                  'scene_seq': {'$gt': q(p)},
+                                                                  'event.raw.asuna_answer': {'$exists': False}},
+                                                                 None, asc),
+         lambda p: owner.inbound(store, s(p), people_only=True, asides=False, after=q(p),
+                                 no_answer_mark=True).first(), oldest, 'value'),
+        ('inbound asides, counted', lambda p: count({'scene_id': s(p), 'direction': 'inbound',
+                                                     'event.raw.asuna_aside': True, 'scene_seq': {'$gt': q(p)}}),
+         lambda p: owner.inbound(store, s(p), asides=True, after=q(p)).count(), oldest, 'value'),
+        ('inbound since, newest first', lambda p: many({'scene_id': s(p), 'direction': 'inbound',
+                                                        'received_at': {'$gte': t(p)}}, {'text': 1}, desc, 10000),
+         lambda p: owner.inbound(store, s(p), since=t(p)).rows(newest_first=True, limit=10000, fields=['text']),
+         oldest, 'value'),
+        ('inbound conversations since', lambda _: distinct('scene_id', {'direction': 'inbound',
+                                                                        'received_at': {'$gte': recent}}),
+         lambda _: owner.inbound(store, since=recent).values('scene_id'), [None], 'values'),
+        ('inbound by people, by when said', lambda p: many({'scene_id': s(p), 'direction': 'inbound',
+                                                            **NOT_CORE_NOTICE}, {'author': 1, 'occurred_at': 1},
+                                                           [('occurred_at', -1)], 2000),
+         lambda p: owner.inbound(store, s(p), people_only=True, by='occurred_at').rows(
+             newest_first=True, limit=2000, fields=['author', 'occurred_at']), first[:5], 'value'),
+        ('inbound with the group\'s name', lambda p: one({'scene_id': s(p), 'direction': 'inbound',
+                                                          'event.raw.group_name': {'$exists': True}},
+                                                         {'event.raw.group_name': 1, 'event.raw.asuna_peer': 1},
+                                                         [('received_at', -1)]),
+         lambda p: owner.inbound(store, s(p), group_name=True, by='received_at').first(
+             newest_first=True, fields=['event.raw.group_name', 'event.raw.asuna_peer']), first, 'value'),
+        ('inbound with a peer\'s shown name', lambda p: one({'scene_id': s(p), 'direction': 'inbound',
+                                                             'event.raw.asuna_peer.display': {'$exists': True}},
+                                                            {'event.raw.group_name': 1, 'event.raw.asuna_peer': 1},
+                                                            [('received_at', -1)]),
+         lambda p: owner.inbound(store, s(p), peer_display=True, by='received_at').first(
+             newest_first=True, fields=['event.raw.group_name', 'event.raw.asuna_peer']), first, 'value'),
+        ('mentions since', lambda p: many({'scene_id': s(p), 'received_at': {'$gte': t(p)},
+                                           'event.group_context.mentioned_account_ids.0': {'$exists': True}},
+                                          {'event.group_context.mentioned_account_ids': 1}),
+         lambda p: owner.mentions(store, s(p), t(p)).rows(fields=['event.group_context.mentioned_account_ids']),
+         oldest, 'value'),
+        # her lines
+        ('spoken, her newest in an epoch', lambda p: one({'scene_id': s(p), 'policy_epoch': e(p),
+                                                          'direction': 'outbound', 'delivery_state': 'DELIVERED',
+                                                          'author': me}, None, desc),
+         lambda p: owner.spoken(store, s(p), e(p), author=me).first(newest_first=True), first, 'value'),
+        ('turn context: her newest', lambda p: many({'scene_id': s(p), 'direction': 'outbound', 'author': me,
+                                                     'delivery_state': 'DELIVERED'}, {'scene_seq': 1}, desc, 1),
+         lambda p: owner.spoken(store, s(p), author=me).rows(newest_first=True, limit=1, fields=['scene_seq']),
+         first, 'value'),
+        ('turn context: her recent phrasing', lambda p: many({'scene_id': s(p), 'direction': 'outbound',
+                                                              'delivery_state': 'DELIVERED'}, {'text': 1}, desc, 20),
+         lambda p: owner.spoken(store, s(p)).rows(newest_first=True, limit=20, fields=['text']), first, 'value'),
+        ('spoken, all of a conversation', lambda p: many({'scene_id': s(p), 'direction': 'outbound',
+                                                          'delivery_state': 'DELIVERED'}, {'_id': 1}, asc),
+         lambda p: owner.spoken(store, s(p)).rows(fields=['_id']), first[:3], 'value'),
+        ('spoken with a receipt, the newest', lambda p: one({'scene_id': s(p), 'direction': 'outbound',
+                                                             'delivery_state': 'DELIVERED',
+                                                             'receipt_at': {'$exists': True}}, {'receipt_at': 1},
+                                                            [('receipt_at', -1)]),
+         lambda p: owner.spoken(store, s(p), with_receipt=True, by='receipt_at').first(
+             newest_first=True, fields=['receipt_at']), first, 'value'),
+        ('spoken since a receipt, counted', lambda p: count({'scene_id': s(p), 'direction': 'outbound',
+                                                             'delivery_state': 'DELIVERED',
+                                                             'receipt_at': {'$gte': recent}}),
+         lambda p: owner.spoken(store, s(p), receipt_since=recent).count(), first, 'value'),
+        ('spoken elsewhere since', lambda _: many({'direction': 'outbound', 'author': me, 'delivery_state': 'DELIVERED',
+                                                   'receipt_at': {'$gte': recent}, 'scene_id': {'$nin': [home]}},
+                                                  {'scene_id': 1, 'receipt_at': 1}),
+         lambda _: owner.spoken(store, author=me, receipt_since=recent, not_in=[home], by=None).rows(
+             fields=['scene_id', 'receipt_at']), [None], 'value'),
+        ('her speech since', lambda _: many({'direction': 'outbound', 'phase': 'SPEAK', 'receipt_at': {'$gte': recent}},
+                                            {'scene_id': 1, 'receipt_at': 1}, [('receipt_at', 1)]),
+         lambda _: owner.spoken(store, delivered=False, speech=True, receipt_since=recent, by='receipt_at').rows(
+             fields=['scene_id', 'receipt_at']), [None], 'value'),
+        ('her speech, the newest', lambda p: one({'scene_id': s(p), 'direction': 'outbound', 'phase': 'SPEAK'},
+                                                 {'scene_seq': 1}, desc),
+         lambda p: owner.spoken(store, s(p), delivered=False, speech=True).first(newest_first=True,
+                                                                                 fields=['scene_seq']),
+         first, 'value'),
+        ('spoken since, newest first', lambda p: many({'scene_id': s(p), 'direction': 'outbound',
+                                                       'delivery_state': 'DELIVERED', 'author': me,
+                                                       'receipt_at': {'$gte': recent}},
+                                                      {'text': 1, 'episode_id': 1, 'scene_seq': 1}, desc),
+         lambda p: owner.spoken(store, s(p), author=me, receipt_since=recent).rows(
+             newest_first=True, fields=['text', 'episode_id', 'scene_seq']), first, 'value'),
+        ('turn context: undelivered', lambda p: many({'scene_id': s(p), 'direction': 'outbound', 'delivery_state': {
+            '$in': ['READY', 'QUEUED_EXTERNAL', 'SENDING', 'FAILED', 'UNKNOWN']}},
+            {'text': 1, 'delivery_state': 1, 'author': 1}, desc, 4),
+         lambda p: owner.outgoing(store, s(p), ['READY', 'QUEUED_EXTERNAL', 'SENDING', 'FAILED', 'UNKNOWN']).rows(
+             newest_first=True, limit=4, fields=['text', 'delivery_state', 'author']), first, 'value'),
+        # one turn's lines
+        ('turn speech', lambda ep: many({'episode_id': ep, 'phase': 'SPEAK'},
+                                        {'segment_index': 1, 'not_before': 1, 'text': 1}),
+         lambda ep: owner.turn_parts(store, ep, by=None).rows(fields=['segment_index', 'not_before', 'text']),
+         episodes, 'value'),
+        ('turn delivered in its scene', lambda p: many({'episode_id': p[1].get('episode_id'), 'scene_id': s(p),
+                                                        'direction': 'outbound', 'phase': 'SPEAK',
+                                                        'delivery_state': 'DELIVERED'}, None, asc),
+         lambda p: owner.turn_parts(store, p[1].get('episode_id'), scene=s(p), outbound=True, delivered=True).rows(),
+         outbound, 'value'),
+        ('turn outbound in order', lambda ep: many({'episode_id': ep, 'direction': 'outbound', 'phase': 'SPEAK'},
+                                                   {'text': 1, 'delivery_state': 1, 'scene_seq': 1}, asc),
+         lambda ep: owner.turn_parts(store, ep, outbound=True).rows(fields=['text', 'delivery_state', 'scene_seq']),
+         episodes, 'value'),
+        ('turn outbound, counted', lambda ep: count({'episode_id': ep, 'direction': 'outbound', 'phase': 'SPEAK'}),
+         lambda ep: owner.turn_parts(store, ep, outbound=True).count(), episodes, 'value'),
+        ('turn parts ready', lambda ep: many({'episode_id': ep, 'reply_part': True, 'delivery_state': 'READY'}, None,
+                                             [('segment_index', 1)]),
+         lambda ep: owner.turn_parts(store, ep, speech=False, state='READY', reply_parts=True,
+                                     by='segment_index').rows(), episodes, 'value'),
+        ('turn parts that left', lambda ep: many({'episode_id': ep, 'phase': 'SPEAK', 'reply_part': True,
+                                                  'delivery_state': {'$nin': ['FAILED', 'CANCELLED_AFTER_FAILURE',
+                                                                              'CANCELLED_BY_HER']}},
+                                                 {'text': 1, 'sticker': 1, 'attachment': 1, 'action': 1, 'file': 1}),
+         lambda ep: owner.turn_parts(store, ep, reply_parts=True, not_states=(
+             'FAILED', 'CANCELLED_AFTER_FAILURE', 'CANCELLED_BY_HER'), by=None).rows(
+             fields=['text', 'sticker', 'attachment', 'action', 'file']), episodes, 'value'),
+        ('turn parts after a segment', lambda p: many({'episode_id': p[1].get('episode_id'), 'phase': 'SPEAK',
+                                                       'segment_index': {'$gt': p[1].get('segment_index') or 0},
+                                                       'delivery_state': {'$in': ['READY', 'QUEUED_EXTERNAL']}}),
+         lambda p: owner.turn_parts(store, p[1].get('episode_id'), after_segment=p[1].get('segment_index') or 0,
+                                    states=['READY', 'QUEUED_EXTERNAL'], by=None).rows(), parts_of, 'value'),
+        ('turn parts before a segment', lambda p: many({'episode_id': p[1].get('episode_id'), 'phase': 'SPEAK',
+                                                        'segment_index': {'$lt': p[1].get('segment_index') or 1},
+                                                        'delivery_state': {'$nin': ['DELIVERED', 'CANCELLED_BY_HER']}},
+                                                       {'delivery_state': 1, 'file': 1}),
+         lambda p: owner.turn_parts(store, p[1].get('episode_id'), before_segment=p[1].get('segment_index') or 1,
+                                    not_states=('DELIVERED', 'CANCELLED_BY_HER'), by=None).rows(
+             fields=['delivery_state', 'file']), parts_of, 'value'),
+        ('her first line of a turn', lambda p: one({'scene_id': s(p), 'episode_id': p[1].get('episode_id'),
+                                                    'direction': 'outbound', 'phase': 'SPEAK'}, None, asc),
+         lambda p: owner.turn_parts(store, p[1].get('episode_id'), scene=s(p), outbound=True).first(), outbound,
+         'value'),
+        ('unsettled, counted', lambda _: count({'direction': 'outbound', 'delivery_state': {
+            '$in': ['QUEUED_EXTERNAL', 'SENDING']}}), lambda _: owner.unsettled(store), [None], 'value'),
+        # a channel's outbox and the Host's inputs
+        ('queued on a channel', lambda c: many({'channel_id': c[0], 'delivery_state': 'QUEUED_EXTERNAL'}),
+         lambda c: owner.queued(store, c[0]).rows(), targets or [('none', {})], 'value'),
+        ('queued chat on a route', lambda c: many({'channel_id': c[0], 'delivery_state': 'QUEUED_EXTERNAL',
+                                                   'file': {'$exists': False}, 'target.type': c[1].get('type'),
+                                                   'target.id': c[1].get('id')}),
+         lambda c: owner.queued(store, c[0], files=False, target=c[1]).rows(),
+         [c for c in targets if isinstance(c[1].get('type'), str) and isinstance(c[1].get('id'), str)]
+         or [('none', {'type': 'dm', 'id': 'none'})], 'value'),
+        ('conversations with a chat line out', lambda c: distinct('scene_id', {
+            'channel_id': c[0], 'delivery_state': 'SENDING', 'file': {'$exists': False},
+            'claimed_at': {'$gte': recent}}),
+         lambda c: owner.in_flight_scenes(store, c[0], recent), targets or [('none', {})], 'values'),
+        ('left sending', lambda _: many({'channel_id': {'$exists': True}, 'delivery_state': 'SENDING'}),
+         lambda _: owner.sending(store).rows(), [None], 'value'),
+        ('the Host\'s inputs in states', lambda _: many({'host_managed': True, 'ingress_state': {
+            '$in': ['ACCEPTED', 'PROCESSING', 'FAILED']}}, None, [('received_at', 1)]),
+         lambda _: owner.ingress(store, ['ACCEPTED', 'PROCESSING', 'FAILED']).rows(), [None], 'value'),
+        ('channel inputs since', lambda _: many({'host_managed': True, 'received_at': {'$gte': newest},
+                                                 'event.channel': {'$exists': True}}, None, [('received_at', 1)]),
+         lambda _: owner.channel_inbound(store, newest).rows(), [None], 'value'),
+        ('errands since, counted', lambda _: count({'event.visit.intent': 'errand', 'received_at': {'$gte': recent}}),
+         lambda _: owner.visits(store, 'errand', since=recent).count(), [None], 'value'),
+        ('errands, the newest', lambda _: many({'event.visit.intent': 'errand'},
+                                               {'scene_id': 1, 'received_at': 1, 'event.event_id': 1},
+                                               [('received_at', -1)], 5),
+         lambda _: owner.visits(store, 'errand').rows(newest_first=True, limit=5,
+                                                      fields=['scene_id', 'received_at', 'event.event_id']),
+         [None], 'value'),
+        ('errand results not yet told', lambda p: many({'adapter_id': 'visit', 'scene_id': s(p),
+                                                        'platform_event_id': {'$type': 'string',
+                                                                              '$regex': '^visit:errand:'},
+                                                        'ingress_state': 'COMPLETE',
+                                                        'errand_told': {'$exists': False}},
+                                                       {'episode_id': 1, 'received_at': 1}, [('received_at', 1)]),
+         lambda p: owner.errand_results(store, s(p)).rows(fields=['episode_id', 'received_at']), first, 'value'),
+        # values
+        ('pictures lines name', lambda _: distinct('attachment.artifact_id',
+                                                   {'attachment.artifact_id': {'$exists': True}}),
+         lambda _: owner.artifact_refs(store, 'attachment'), [None], 'values'),
+        ('files on their way', lambda _: distinct('file.artifact_id', {'file.artifact_id': {'$exists': True},
+                                                                       'delivery_state': {'$in': [
+                                                                           'READY', 'QUEUED_EXTERNAL', 'SENDING']}}),
+         lambda _: owner.artifact_refs(store, 'file', states=('READY', 'QUEUED_EXTERNAL', 'SENDING')), [None],
+         'values'),
+        ('who wrote here', lambda p: distinct('author', {'scene_id': s(p), 'direction': 'inbound'}),
+         lambda p: owner.authors(store, s(p), direction='inbound'), first, 'values'),
+        ('who wrote in these', lambda b: distinct('author', {'scene_id': {'$in': b}}),
+         lambda b: owner.authors(store, scenes=b), [[pair[0]['_id'] for pair in first][n:n + 3]
+                                                   for n in range(0, len(first), 3)], 'values'),
+        ('archived authors by name', lambda p: distinct('author', {
+            'scene_id': {'$in': ['archive:' + s(p)]}, 'direction': 'archived', 'policy_epoch': e(p),
+            'deletion_id': {'$exists': False}, '$or': [{'author': {'$in': ['nobody']}},
+                                                       {'historical_display_name': 'name-none'}]}),
+         lambda p: owner.authors(store, scenes=['archive:' + s(p)], epoch=e(p), direction='archived', live_only=True,
+                                 among=['nobody'], named='name-none'), first, 'values'),
+        # history search and the digest
+        ('search, people\'s lines', *search_case('inbound'), 'value'),
+        ('search, people\'s lines by text', *search_case('inbound', text=True), 'value'),
+        ('search, people\'s lines by person, after a cursor', *search_case('inbound', person=True, cursor=True),
+         'value'),
+        ('search, her lines', *search_case('outbound'), 'value'),
+        ('search, her lines by text, after a cursor', *search_case('outbound', text=True, cursor=True), 'value'),
+        ('search, archived lines', *search_case('archived'), 'value'),
+        ('search, her lines by receipt', lambda p: many(_old_search(parts(p[0]), 'receipt', None, None, None,
+                                                                    refs={p[1]})[0], None, [
+                                                                        ('scene_seq', -1), ('scene_id', -1)]),
+         lambda p: owner.search(store, [s(p[0])], e(p[0]), 'receipt', receipts={p[1]}),
+         [((scene, None), ref) for scene, ref in receipts] or [(first[0], 'receipt-none')] if first else [], 'value'),
+        ('digest thread', lambda p: many({'scene_id': p[0]['_id'], 'policy_epoch': p[0]['policy_epoch'], '$or': [
+            {'event.group_context.reply_message_id': {'$in': sorted(set(p[1]))}},
+            {'reply_to': {'$in': sorted(set(p[1]))}}, {'_id': {'$in': sorted(set(p[1]))}}]}, THREAD),
+         lambda p: owner.thread(store, [p[0]['_id']], p[0]['policy_epoch'], replying_to=p[1], ids=p[1],
+                                fields=list(THREAD)), by_scene, 'value'),
+        ('digest left out, counted', lambda p: count({'scene_id': s(p), 'policy_epoch': e(p), 'direction': 'outbound',
+                                                      'phase': 'SPEAK', 'delivery_state': {'$ne': 'DELIVERED'}}),
+         lambda p: owner.excluded(store, [s(p)], e(p))['undelivered_outbound'], first, 'value'),
+        ('digest not speech, counted', lambda p: count({'scene_id': s(p), 'policy_epoch': e(p),
+                                                        'direction': 'outbound', 'phase': {'$ne': 'SPEAK'}}),
+         lambda p: owner.excluded(store, [s(p)], e(p))['non_speak_outbound'], first, 'value'),
+    ]
+    return [case for case in cases if case[3]]
+
+
+def sizes(db, collection, max_ms):
+    """The records of 512 KiB or more by their BSON size, and of those the ones whose BSON and JSON sizes (the
+    in-memory adapter's measure) fall on different sides of the store's 1 MiB limit."""
+    from asuna.store.words import MAX_RECORD_BYTES, record_bytes
+    large = [row['_id'] for row in db[collection].aggregate(
+        [{'$project': {'s': {'$bsonSize': '$$ROOT'}}}, {'$match': {'s': {'$gte': MAX_RECORD_BYTES // 2}}},
+         {'$project': {'_id': 1}}], maxTimeMS=max_ms)]
+    differ = 0
+    for key in large:
+        doc = db[collection].find_one({'_id': key}, max_time_ms=max_ms)
+        if doc is not None:
+            bson = MongoAdapter.measure(None, doc)
+            differ += (bson > MAX_RECORD_BYTES) != (record_bytes(doc) > MAX_RECORD_BYTES)
+    return {'large': len(large), 'sides_differ': differ}
+
 
 def check(batch, settings, database, out, max_ms):
     client = MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
-                         **({'timeoutMS': max_ms} if batch == 'b3' else {}))
+                         **({'timeoutMS': max_ms} if batch in ('b3', 'b4') else {}))
     report, unchecked = {'database_collections': len(CATALOG.names())}, []
     try:
         adapter = MongoAdapter(client, database)
@@ -235,8 +1093,10 @@ def check(batch, settings, database, out, max_ms):
                 continue
             report['fields'][collection.name] = counts
             report['fields_differ'] += [[collection.name, path] for path in differs(collection, counts)]
-        if batch == 'b3':
-            report['reads'], report['queries'] = reads(client, database, max_ms)
+        if batch == 'b4':
+            report['sizes'] = sizes(adapter.db, 'messages', max_ms)
+        if batch in ('b3', 'b4'):
+            report['reads'], report['queries'] = reads(client, database, max_ms, batch, settings)
     except ExecutionTimeout:
         print('UNCHECKED, a read case over the time limit')
         return 2
@@ -262,16 +1122,21 @@ def check(batch, settings, database, out, max_ms):
     for name, counts in sorted(report['fields'].items()):
         for path, seen in sorted(counts.items()):
             shown = ', '.join('%s %d' % item for item in sorted(seen['types'].items()))
-            print('%s.%s: %s%s' % (name, path, shown, ', other length %d' % seen['other_length']
-                                   if seen['other_length'] else ''))
+            elements = ', '.join('%s %d' % item for item in sorted((seen.get('elements') or {}).items()))
+            print('%s.%s: %s%s%s' % (name, path, shown, ', other length %d' % seen['other_length']
+                                     if seen['other_length'] else '', '; elements: ' + elements if elements else ''))
     for name, path in report['fields_differ']:
         print('differs from its declaration: %s.%s' % (name, path))
     for name in unchecked:
         print('UNCHECKED, over the time limit: %s' % name)
+    if 'sizes' in report:
+        print('records of 512 KiB or more by BSON: %(large)d; on different sides of 1 MiB by BSON and JSON: '
+              '%(sides_differ)d' % report['sizes'])
     for name, case in (report.get('reads') or {}).items():
         print('read %s: n %d, same %d, differing %d, plans differing %d (%s | %s), ms old p50 %s p95 %s, new p50 %s p95 %s'
               % (name, case['n'], case['same'], case['differing'], case['plans_differ'],
-                 ' > '.join(case['plan_old'] or []), ' > '.join(case['plan_new'] or []),
+                 ' > '.join(case['plan_old'] or ['no plan of its own']) if case.get('plans_compared', True)
+                 else 'old: no plan of its own', ' > '.join(case['plan_new'] or []),
                  case['ms_old_p50'], case['ms_old_p95'], case['ms_new_p50'], case['ms_new_p95']))
     if 'queries' in report:
         print('queries: %d' % report['queries'])
@@ -280,6 +1145,7 @@ def check(batch, settings, database, out, max_ms):
         return 2
     clean = (not (totals['create'] or totals['make'] or totals['conflicts'])
              and set(validators) <= {'same', 'not declared'} and not report['fields_differ']
+             and not (report.get('sizes') or {}).get('sides_differ')
              and not any(case['differing'] or case['plans_differ'] for case in (report.get('reads') or {}).values()))
     return 0 if clean else 1
 

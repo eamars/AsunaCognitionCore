@@ -15,6 +15,7 @@ from .channels import route_for_scene, route_members
 from .integration import event_profile
 from .state import Conflict, Denied, now
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -688,8 +689,8 @@ class ScheduleService:
         scenes = {home}
         for channel in self.app.config.get('channels', {}).values():
             scenes.update(route['scene_id'] for route in channel.get('routes', {}).values())
-        reached = self.store.db.messages.find_one({'scene_id': {'$in': sorted(scenes)}, 'direction': 'inbound',
-            'received_at': {'$gt': since}, 'processing_outcome': {'$ne': 'RECORDED_NO_WAKE'}}, {'_id': 1})
+        reached = message_records.inbound(self.store, scenes=sorted(scenes), since_after=since,
+                                          not_outcome='RECORDED_NO_WAKE', by=None).first(fields=['_id'])
         return bool(reached or self.store.db.tasks.find_one({'finished_at': {'$gt': since}}, {'_id': 1}))
 
     def _presence(self, plan, occurrence, forced=False):
@@ -800,7 +801,7 @@ class ScheduleService:
         plan_id = plan_id or 'plan-' + ep['_id'][3:]
         plan = self.store.db.plans.find_one({'_id': plan_id})
         if not plan:
-            source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']})
+            source = message_records.get(self.store, 'in-' + ep['_id'])
             plan = self.store.put('plans', {'_id': plan_id, **target,
                 **({'from_scene_id': ep['scene_id']} if where else {}), 'source_episode_id': ep['_id'],
                 'intent': intent.strip(), 'rule': rule,

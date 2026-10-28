@@ -30,6 +30,7 @@ from .context_budget import ROUGH_AGO, STICKER_REVIEW, STICKER_SHELF, _tier
 from .evidence import sha
 from .state import Denied, now
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 TOKEN = re.compile(r'\[表情包:([^\[\]\n]{1,12})\]')
 FACE_TOKEN = re.compile(r'\[表情:([^\[\]\s:]{1,12})\]')
@@ -268,8 +269,7 @@ def faces_block(store, scene):
     if not names:
         return None
     counts = {}
-    for row in store.db.messages.find({'scene_id': scene['_id'], 'direction': 'inbound'}, {'text': 1}) \
-            .sort('scene_seq', -1).limit(FACE_SCAN):
+    for row in message_records.inbound(store, scene['_id']).rows(newest_first=True, limit=FACE_SCAN, fields=['text']):
         for found in FACE_TOKEN.findall(row.get('text') or ''):
             if found in names:
                 counts[found] = counts.get(found, 0) + 1
@@ -395,7 +395,7 @@ def pool_seen(store, blobs, config, message_id):
     """A group message's stickers join the pool (bytes saved now); returns how many new candidates."""
     from .state import Conflict
     from .vision import attachments_of, media_source, pull_bytes
-    row = store.db.messages.find_one({'_id': message_id})
+    row = message_records.get(store, message_id)
     if not row or row.get('direction') != 'inbound':
         return 0
     scene = scene_records.get(store, row['scene_id'])

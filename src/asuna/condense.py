@@ -25,6 +25,7 @@ import re
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 TABLES_VERSION = 1
 # Average incoming lines a day over the last week → minutes of quiet before condensing (measured by the character,
@@ -76,8 +77,7 @@ def _tier(table, value):
 def per_day(store, scene_id, moment):
     """Average incoming lines a day there over the last week."""
     since = (moment - timedelta(days=WEEK_DAYS)).isoformat()
-    return store.db.messages.count_documents({'scene_id': scene_id, 'direction': 'inbound',
-                                              'received_at': {'$gte': since}}) / WEEK_DAYS
+    return message_records.inbound(store, scene_id, since=since).count() / WEEK_DAYS
 
 
 def quiet_minutes(store, scene_id, moment):
@@ -88,8 +88,8 @@ def quiet_minutes(store, scene_id, moment):
 
 def last_line(store, scene_id):
     """When someone other than her last spoke there; her own lines never restart the wait."""
-    row = store.db.messages.find_one({'scene_id': scene_id, 'direction': 'inbound'}, {'received_at': 1},
-                                     sort=[('received_at', -1)])
+    row = message_records.inbound(store, scene_id, by='received_at').first(newest_first=True,
+                                                                           fields=['received_at'])
     return _at(row['received_at']) if row and row.get('received_at') else None
 
 
@@ -308,8 +308,8 @@ def phrases(store, scene, persona, since, moment=None):
     me = character_id(store.config)
     week = (moment - timedelta(days=WEEK_DAYS)).isoformat()
     since = (since or (moment - timedelta(days=WEEK_DAYS))).isoformat()
-    rows = list(store.db.messages.find({'scene_id': scene['_id'], 'direction': 'inbound',
-                                        'received_at': {'$gte': week}}, {'author': 1, 'text': 1, 'received_at': 1}))
+    rows = message_records.inbound(store, scene['_id'], since=week, by=None).rows(
+        fields=['author', 'text', 'received_at'])
     days = defaultdict(set)
     people = _speakers(rows, me, days)
     fresh = set().union(*(_phrases(row.get('text')) for row in rows if str(row.get('received_at') or '') >= since)) \
@@ -320,8 +320,8 @@ def phrases(store, scene, persona, since, moment=None):
         return None
     common = Counter()
     by_scene = defaultdict(list)
-    for row in store.db.messages.find({'scene_id': {'$ne': scene['_id']}, 'direction': 'inbound',
-                                       'received_at': {'$gte': week}}, {'scene_id': 1, 'author': 1, 'text': 1}):
+    for row in message_records.inbound(store, besides=scene['_id'], since=week, by=None).each(
+            fields=['scene_id', 'author', 'text']):
         by_scene[row['scene_id']].append(row)
     for scene_rows in by_scene.values():
         for phrase, who in _speakers(scene_rows, me).items():

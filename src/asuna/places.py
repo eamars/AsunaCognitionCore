@@ -14,6 +14,7 @@ from .channels import route_members
 from .config import ago, character_id, excerpt
 from .evidence import sha
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 TABLES_VERSION = 1
 # Lines in the group over the last hour → how it reads.
@@ -131,7 +132,7 @@ def errand_places(store, persona):
 def errands_lately(store, moment):
     """Errands queued in the last day (the daily cap counts these)."""
     since = (moment - timedelta(days=1)).isoformat()
-    return store.db.messages.count_documents({'event.visit.intent': 'errand', 'received_at': {'$gte': since}})
+    return message_records.visits(store, 'errand', since=since).count()
 
 
 def errand_text(exactly, by=None):
@@ -149,9 +150,8 @@ def errands_block(store, persona, moment):
     from . import errands
     from .people import People
     people = People(store, persona)
-    rows = list(store.db.messages.find({'event.visit.intent': 'errand'},
-                                       {'scene_id': 1, 'received_at': 1, 'event.event_id': 1, 'event.visit': 1})
-                .sort('received_at', -1).limit(ERRANDS_SHOWN))
+    rows = message_records.visits(store, 'errand').rows(newest_first=True, limit=ERRANDS_SHOWN,
+                                                        fields=['scene_id', 'received_at', 'event.event_id', 'event.visit'])
     items = []
     for row in rows:
         scene = scene_records.get(store, row['scene_id']) or {'_id': row['scene_id']}
@@ -233,18 +233,15 @@ def zones(store, persona, moment):
 
 def room(store, scene, moment):
     """The room as it is now, from stored rows only."""
-    from .ingress import NOT_CORE_NOTICE
     since = (moment - HOUR).isoformat()
     me = character_id(store.config)
-    lines = list(store.db.messages.find({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
-        'direction': 'inbound', 'received_at': {'$gte': since}, **NOT_CORE_NOTICE}, {'author': 1}))
-    last_in = next(iter(store.db.messages.find({'scene_id': scene['_id'], 'direction': 'inbound'},
-        {'received_at': 1}).sort('scene_seq', -1).limit(1)), None)
-    mine = next(iter(store.db.messages.find({'scene_id': scene['_id'], 'direction': 'outbound', 'author': me,
-        'delivery_state': 'DELIVERED'}, {'receipt_at': 1, 'claimed_at': 1, 'scene_seq': 1}).sort('scene_seq', -1).limit(1)), None)
-    called = store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'inbound', **NOT_CORE_NOTICE,
-        'scene_seq': {'$gt': (mine or {}).get('scene_seq') or 0},
-        'event.group_context.wake_reason': {'$in': list(ADDRESSED)}}, {'_id': 1})
+    lines = message_records.inbound(store, scene['_id'], scene['policy_epoch'], people_only=True, since=since,
+                                    by=None).rows(fields=['author'])
+    last_in = message_records.inbound(store, scene['_id']).first(newest_first=True, fields=['received_at'])
+    mine = message_records.spoken(store, scene['_id'], author=me).first(
+        newest_first=True, fields=['receipt_at', 'claimed_at', 'scene_seq'])
+    called = message_records.inbound(store, scene['_id'], people_only=True, after=(mine or {}).get('scene_seq') or 0,
+                                     wakes=ADDRESSED, by=None).first(fields=['_id'])
     return {'lines': len(lines), 'voices': len({row.get('author') for row in lines}),
             'last_line_at': _at((last_in or {}).get('received_at')),
             'mine_at': _at((mine or {}).get('receipt_at') or (mine or {}).get('claimed_at')),
@@ -269,9 +266,8 @@ def _span(delta):
 def pace(store, scene, zone):
     """The group's talk as it reads now: the current stretch and, before it, the last pause and what came since."""
     from .schedule_rules import line_stamp
-    rows = list(store.db.messages.find({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
-        '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]},
-        {'received_at': 1, 'receipt_at': 1}).sort('scene_seq', -1).limit(PACE_ROWS))
+    rows = message_records.said(store, scene['_id'], scene['policy_epoch']).rows(
+        newest_first=True, limit=PACE_ROWS, fields=['received_at', 'receipt_at'])
     times = [at for at in (_at(row.get('received_at') or row.get('receipt_at')) for row in rows) if at]
     if not times:
         return {'last_line': '还没见过有人说话'}
@@ -302,7 +298,7 @@ def outcome(store, visit):
     """What happened on one visit, read from its turn and the room afterwards."""
     ep_id = episode_key(visit)
     ep = store.db.episodes.find_one({'_id': ep_id}, {'state': 1, 'tool_calls': 1})
-    source = store.db.messages.find_one({'_id': 'in-' + ep_id}, {'ingress_state': 1, 'result_state': 1}) or {}
+    source = message_records.get(store, 'in-' + ep_id, fields=['ingress_state', 'result_state']) or {}
     if source.get('result_state') in ERRAND_ENDS:
         return ERRAND_ENDS[source['result_state']]
     if source.get('result_state') == 'SEEN_IN_TURN':
@@ -313,14 +309,13 @@ def outcome(store, visit):
         return 'pending'
     if ep['state'] in FAILED:
         return 'failed'
-    spoken = list(store.db.messages.find({'episode_id': ep_id, 'direction': 'outbound', 'phase': 'SPEAK'},
-                                         {'scene_seq': 1, 'delivery_state': 1}))
+    spoken = message_records.turn_parts(store, ep_id, outbound=True, by=None).rows(fields=['scene_seq', 'delivery_state'])
     said = max((row for row in spoken if row.get('delivery_state') == 'DELIVERED'),
                key=lambda row: row.get('scene_seq') or 0, default=None)
     if said:
-        from .ingress import NOT_CORE_NOTICE                        # a task result there is nobody's answer
-        answered = store.db.messages.find_one({'scene_id': visit['scene_id'], 'direction': 'inbound', **NOT_CORE_NOTICE,
-                                               'scene_seq': {'$gt': said['scene_seq']}}, {'_id': 1})
+        # a task result there is nobody's answer
+        answered = message_records.inbound(store, visit['scene_id'], people_only=True, after=said['scene_seq'],
+                                           by=None).first(fields=['_id'])
         return 'answered' if answered else 'unanswered'
     if spoken:
         return 'sending' if any(row.get('delivery_state') in SENDING for row in spoken) else 'not_sent'
@@ -518,9 +513,8 @@ def elsewhere(store, persona, moment, home, private=()):
     since = (moment - timedelta(hours=ELSEWHERE_HOURS)).isoformat()
     me = character_id(store.config)
     places = {}
-    for row in store.db.messages.find({'direction': 'outbound', 'author': me, 'delivery_state': 'DELIVERED',
-                                       'receipt_at': {'$gte': since}, 'scene_id': {'$nin': list(home)}},
-                                      {'scene_id': 1, 'receipt_at': 1, 'attachment': 1, 'sticker': 1, 'errand': 1, 'file': 1}):
+    for row in message_records.spoken(store, author=me, receipt_since=since, not_in=list(home), by=None).rows(
+            fields=['scene_id', 'receipt_at', 'attachment', 'sticker', 'errand', 'file']):
         place = places.setdefault(row['scene_id'], {'lines': 0, 'pictures': 0, 'stickers': 0, 'files': 0, 'tasks': [],
                                                     'last': None, 'errand': 0})
         place['errand'] += 1 if row.get('errand') else 0

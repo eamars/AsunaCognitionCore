@@ -339,11 +339,13 @@ class Store:
             else:
                 # Derived memory may cite a message/artifact rather than
                 # another memory. Known internal sources retain their scope.
-                known=[]
-                for collection in ('messages','artifacts','episodes'):
+                from .records import messages as message_records
+                line=message_records.get(self,key,fields=['scope_key','deletion_id'])
+                known=[line] if line else []
+                for collection in ('artifacts','episodes'):
                     source=self.db[collection].find_one({'_id':key},{'scope_key':1,'deletion_id':1})
                     if source:known.append(source)
-                known+=list(self.db.messages.find({'platform_event_id':key},{'scope_key':1,'deletion_id':1}))
+                known+=message_records.of_platform_event(self,key,fields=['scope_key','deletion_id'])
                 if any(item.get('deletion_id') or item.get('scope_key') not in readable_scopes for item in known):raise Denied('DERIVED_SOURCE_SCOPE_DENIED')
                 evidence_ids.add(key)
         for source in sources:roots(source,set())
@@ -362,6 +364,7 @@ class Store:
 
     def public_messages(self, scene: str, person: str):
         from .records import scenes as scene_records          # the owner imports this module
+        from .records import messages as message_records
         scene_records.authorize(self, scene, person)
         return [{k:row[k] for k in ('_id','scene_id','text','author','reply_to','delivery_state') if k in row}
-                for row in self.db.messages.find({'scene_id':scene,'direction':'outbound','delivery_state':'DELIVERED'}).sort('scene_seq',1)]
+                for row in message_records.spoken(self,scene).rows()]

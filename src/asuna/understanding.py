@@ -21,6 +21,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 PERSON_SCOPE = 'person'
 LAYERS = ('person', 'here')
@@ -148,11 +149,9 @@ def group_people(store, scene, event, persona, source):
     people = People(store, persona)
     ids = [event['person_id']]
     if source:
-        from .ingress import NOT_CORE_NOTICE                        # the program's lines are nobody waiting
-        for row in store.db.messages.find({'scene_id': scene['_id'], 'direction': 'inbound', **NOT_CORE_NOTICE,
-                                           'scene_seq': {'$gt': source['scene_seq']},
-                                           'event.group_context.wake_reason': {'$in': list(EXPLICIT)}},
-                                          {'author': 1}).sort('scene_seq', 1).limit(ENTRY_MAX * 4):
+        # the program's lines are nobody waiting
+        for row in message_records.inbound(store, scene['_id'], people_only=True, after=source['scene_seq'],
+                                           wakes=EXPLICIT).rows(limit=ENTRY_MAX * 4, fields=['author']):
             if row.get('author') and row['author'] not in ids:
                 ids.append(row['author'])
     from .affect import AffectLedger

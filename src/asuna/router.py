@@ -4,6 +4,7 @@ from .evidence import canonical,sha
 from .state import Store,Denied,now
 from .peer_context import snapshot_event
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 
 class FairQueue:
@@ -68,7 +69,7 @@ class Router:
         if (scene['kind']=='group' and not wake or aside) and event.get('episode_kind') != 'task_feedback':
             from .ingress import persist_input
             row, _ = persist_input(self.store, event, managed=True)
-            self.store.put('messages', {**row, 'processing_outcome': 'RECORDED_NO_WAKE'}, expected=row['revision'], stream=row['episode_id'])
+            message_records.save(self.store, {**row, 'processing_outcome': 'RECORDED_NO_WAKE'}, expected=row['revision'], stream=row['episode_id'])
             return {'state': 'RECEIVED_NO_WAKE', 'message_id': row['_id']}
         ep=self.coordinator.ingest(trusted,persona=persona)
         # Without the queued native Host (tests, diagnostics): run what she delegated, then her feedback turns.

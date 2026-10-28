@@ -10,6 +10,7 @@ from collections import Counter,OrderedDict
 from .evidence import Evidence, LocalHttp, canonical, sha
 from .state import Space, Store, now
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 # kind: her own thoughts in other conversations are searched apart from their talk (own_thoughts).
 MEMORY = Space(name='asuna_memory_v1', collection='memory_units', path='embedding', dimensions=768,
@@ -141,9 +142,9 @@ class Retrieval:
         rows = {row['_id']: row for row in self.store.db.memory_units.find({'_id': {'$in': list(ranks)}}, {
             'pinned': 1, 'salience': 1, 'occurred_at': 1, 'generated_at': 1, 'formed_at': 1, 'scene_seq': 1,
             'source_window': 1, 'source_event_ids': 1, 'scope_key': 1, 'kind': 1})}
-        sources = {row['_id']: row for row in self.store.db.messages.find(
-            {'_id': {'$in': [ids[-1] for row in rows.values() for ids in [row.get('source_event_ids') or []] if ids]}},
-            {'scene_seq': 1, 'summary_batch_id': 1})}
+        sources = {row['_id']: row for row in message_records.many(
+            self.store, [ids[-1] for row in rows.values() for ids in [row.get('source_event_ids') or []] if ids]).rows(
+            fields=['scene_seq', 'summary_batch_id'])}
         moment = datetime.now(timezone.utc)
         floor, stepped = float(forgetting.get('step_back_below') or 0), set()
         for key, row in rows.items():

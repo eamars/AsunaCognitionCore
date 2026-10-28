@@ -181,13 +181,10 @@ Local embeddings and server-side, prefiltered Mongo vector retrieval.
 查宿主保存的授权消息（P1-b）：字面检索覆盖完整 messages，原文整条回读。
 
 - def `identity_status` — 身份解析接上了没有、缺哪些名字——降级要看得见，不能静默少信息。
-- def `person_filter` — By-person condition: the authors the person resolved to (people.py), never a name match.
+- def `person_terms` — By-person: (the authors the person resolved to (people.py), None) when resolved, never a name match; else (None, the values a person may be known by, person_values) for standalone use; (None, None) for no person.
 - def `bind_people` — Resolve a person argument to one person's author ids and label hits by people.py.
-- def `scene_id_clause` — 场景过滤条件：没联动时保持原来的单值形状（条件一行都不多写），联动了才换成 $in。
 - def `sink_time_filter` — 送达回执那一侧的范围：时间窗下沉 + 游标下推（决胜位不下推，见下）。
-- def `person_clause` — 按人过滤要下沉到查询里（不能等分页后再筛，否则首页会被无关行占满）。
-- def `message_filters` — 两支行内时间的查询：入站用 occurred_at 夹时间，已送达 SPEAK 出站用 receipt_at 夹时间。
-- def `outbound_fallback_filter` — 第三支的过滤：已送达 SPEAK 出站、行内没有 receipt_at、但带着指向 sink_receipts 的 receipt。
+- def `person_values` — 一个人在行上可能被记成的那些值（排好序），没有人就是 None。
 - def `search_messages` — 行内时间两支各查一次（各自 keyset），关联那一支在内存里比，再按时间归并。
 - def `query_history` — 字面为主、语义为辅；两者都不碰 QQ 平台。场景不完整就拒查，不退化成无范围扫描。
 - def `render` — 行首时间，然后场景#序号、谁说的（我说／对方说）、身份、原文片段。

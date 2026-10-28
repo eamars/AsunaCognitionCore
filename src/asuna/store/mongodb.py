@@ -2,10 +2,11 @@
 in the GridFS bucket `artifact_blobs`, and exact vector search.
 
 A validated condition maps onto MongoDB's own operators, whose meaning on validated records is the meaning table's;
-`StartsWith` and `Contains` become escaped regular expressions (`i` when case-blind), `NonEmpty` the list's first
-element, and `Now` the server's `$$NOW` (in `$expr`, in an update pipeline, and as an upsert pipeline for an insert
-that holds it). Times come back aware, in UTC. Index names are MongoDB's defaults; a unique index's
-`only_where_present` fields become a `$type` filter of their declared kind, a plain index's an `$exists` one.
+`StartsWith` (with `$type: 'string'`) and `Contains` become escaped regular expressions (`i` when case-blind),
+`NonEmpty` the list's first element, and `Now` the server's `$$NOW` (in `$expr`, in an update pipeline, and as an
+upsert pipeline for an insert that holds it). Times come back aware, in UTC. Index names are MongoDB's defaults; a
+unique index's `only_where_present` fields become a `$type` filter of their declared kind, a plain index's an
+`$exists` one.
 """
 from __future__ import annotations
 import re
@@ -119,9 +120,11 @@ def _condition(path, test, clock):
     if isinstance(test, IsNull):
         return path, {'$type': 'null'}
     if isinstance(test, StartsWith):
+        # `$type` states what the prefix already implies (text), so a partial index on text (`$type: 'string'`)
+        # serves the read as it served the regex written with it.
         if len(test.prefixes) == 1:
-            return path, _prefix(test.prefixes[0])
-        return path, {'$in': [_prefix(p) for p in test.prefixes]}
+            return path, {'$regex': _prefix(test.prefixes[0]), '$type': 'string'}
+        return path, {'$in': [_prefix(p) for p in test.prefixes], '$type': 'string'}
     if isinstance(test, Contains):
         return path, {'$regex': re.escape(test.text), **({} if test.case else {'$options': 'i'})}
     if isinstance(test, Holds):

@@ -25,6 +25,7 @@ import traceback
 from pathlib import Path
 
 from .state import Denied, now
+from .records import messages as message_records
 
 KIND = 'file'                      # the artifacts row's kind, and the claim's and the row's field
 CAPABILITY = 'file'                # what an adapter declares on its claim, with its platform's limit: file:<bytes>
@@ -430,7 +431,7 @@ def expired_source(store, row_id):
     """After a claim failed a row with FILE_BYTES_EXPIRED, outside the effects lock: whether the task folder still
     holds the original (it is hashed), kept on the row as source_present with the words that say so."""
     from . import local_time
-    row = store.db.messages.find_one({'_id': row_id}) or {}
+    row = message_records.get(store, row_id) or {}
     meta = descriptor(row.get(KIND))
     item = store.db.artifacts.find_one({'_id': meta['artifact_id']}) if meta else None
     present = bool(item) and source_present(item)
@@ -439,7 +440,7 @@ def expired_source(store, row_id):
     else:
         words = '这个文件的字节不在存储里了' + (SOURCE_KEPT % (item.get('source') or {}).get('path') if present
                                              else SOURCE_GONE)
-    store.db.messages.update_one({'_id': row_id}, {'$set': {'source_present': present, 'failure_detail': words}})
+    message_records.note_failure(store, row_id, present, words)
     return present
 
 

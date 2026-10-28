@@ -238,6 +238,7 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`store/mongodb`](../../src/asuna/store/mongodb.py) — The MongoDB adapter: the store's words as MongoDB queries, the catalog's collections, validators and indexes, blobs in the GridFS bucket `artifact_blobs`, and exact vector search.
 - [`records/__init__`](../../src/asuna/records/__init__.py) — The owners of the collections read across many domains: one module per collection, the only code that names its fields and builds its conditions (ADR-104).
 - [`records/scenes`](../../src/asuna/records/scenes.py) — The owner of `scenes`: a conversation's record (its kind, members, scope and epoch, its position counter, and the marks the program keeps on it), read and written only through these operations.
+- [`records/messages`](../../src/asuna/records/messages.py) — The owner of `messages`: the lines of every conversation (what people wrote, her lines and where they are on their way, the program's own lines), read and written only through these operations.
 
 ### [A turn](turn.md)
 

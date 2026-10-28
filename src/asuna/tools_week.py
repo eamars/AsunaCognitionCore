@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from .config import excerpt
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 TABLES_VERSION = 1
 WEEK_DAYS = 7
@@ -290,7 +291,7 @@ def _last_time(store, persona, since):
         source = next(s for s in row['sources'] if s.get('scene_id') == scene_id)
         answers = []
         for answer in source.get('answers') or []:
-            line = store.db.messages.find_one({'_id': answer.get('line')}, {'text': 1}) if answer.get('line') else None
+            line = message_records.get(store, answer.get('line'), fields=['text']) if answer.get('line') else None
             if line and line.get('text'):
                 answers.append(excerpt(line['text'], ANSWER_CHARS))
         out.append({'asked': excerpt(row.get('text'), EXAMPLE_CHARS), 'asked_at': row.get('asked_at'),

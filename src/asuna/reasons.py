@@ -208,7 +208,8 @@ def for_call(store, episode_id, field, value):
 
 def for_message(store, message_id):
     """The thought behind a line she delivered: her last thought in the turn that spoke it, or None."""
-    row = store.db.messages.find_one({'_id': message_id, 'direction': 'outbound'}, {'monologue_refs': 1})
+    from .records import messages as message_records
+    row = message_records.get(store, message_id, fields=['monologue_refs'], direction='outbound')
     refs = (row or {}).get('monologue_refs') or []
     return thought(store, refs[-1]) if refs else None
 

@@ -18,6 +18,7 @@ from .state import Denied, now
 from .ingress import PROGRAM_AUTHOR
 from .people import People
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 try:                                  # 出站图片附件：元数据、字节端点的围栏都在 outbound_media
     from . import outbound_media
@@ -113,7 +114,7 @@ def addressees(store, scene, line):
     handles = {match.group('handle') or match.group('bare') for match in LABEL_MENTION.finditer(line.get('text') or '')}
     found = {people.person(doc.get('person')) for doc in people.roster(scene['_id']).values()
              if str(doc.get('handle')) in handles and doc.get('person')}
-    answered = store.db.messages.find_one({'_id': line.get('reply_to')}, {'author': 1, 'direction': 1}) or {}
+    answered = message_records.get(store, line.get('reply_to'), fields=['author', 'direction']) or {}
     if answered.get('direction') == 'inbound' and answered.get('author') and answered['author'] != PROGRAM_AUTHOR:
         found.add(people.person(answered['author']))
     return found
@@ -126,9 +127,8 @@ def awaited_answer(store, scene, person_id, mentions, reply):
     look yet."""
     if mentions or reply:
         return False                   # addressed to someone: an @ or quote of her is already its own wake
-    mine = store.db.messages.find_one({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
-                                       'direction': 'outbound', 'delivery_state': 'DELIVERED',
-                                       'author': character_id(store.config)}, sort=[('scene_seq', -1)])
+    mine = message_records.spoken(store, scene['_id'], scene['policy_epoch'],
+                                  author=character_id(store.config)).first(newest_first=True)
     if not mine or not mine.get('receipt_at'):
         return False
     try:
@@ -146,8 +146,7 @@ def awaited_answer(store, scene, person_id, mentions, reply):
             return False
     elif not choice:
         return False                   # addressed to nobody and no wait asked for: a remark of hers
-    return not store.db.messages.find_one({'scene_id': scene['_id'], 'scene_seq': {'$gt': mine.get('scene_seq', 0)},
-                                           'event.group_context.wake_reason': 'awaited_answer'}, {'_id': 1})
+    return not message_records.woken(store, scene['_id'], 'awaited_answer', after=mine.get('scene_seq', 0))
 
 
 def reply_parent(store, scene, reply, at=None, *, outbound_author=None):
@@ -163,11 +162,8 @@ def reply_parent(store, scene, reply, at=None, *, outbound_author=None):
             return None
     ceiling = moment(at) or datetime.now(timezone.utc)
     undated = datetime.min.replace(tzinfo=timezone.utc)
-    outbound = {'direction': 'outbound', 'platform_message_id': reply, 'delivery_state': 'DELIVERED'}
-    if outbound_author:
-        outbound['author'] = outbound_author
-    candidates = store.db.messages.find({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
-        '$or': [{'direction': 'inbound', 'event.channel.platform_event_id': reply}, outbound]})
+    candidates = message_records.by_platform_id(store, scene['_id'], scene['policy_epoch'], platform_id=reply,
+                                                author=outbound_author or None).rows()
     eligible = []
     for row in candidates:
         field = 'occurred_at' if row['direction'] == 'inbound' else 'receipt_at'
@@ -199,7 +195,7 @@ def group_context(store, route, body, event_id, person_id=None):
         recent = parent.get('received_at', parent.get('receipt_at', '')) >= (datetime.now(timezone.utc)-timedelta(minutes=30)).isoformat()
         if parent['direction'] == 'outbound':
             reason = reason or 'reply_to_character'
-            origin = store.db.messages.find_one({'_id': 'in-'+parent['episode_id']})
+            origin = message_records.get(store, 'in-'+parent['episode_id'])
             topic = (origin or {}).get('event', {}).get('group_context', {}).get('topic_id')
             topic_via = 'reply_to_character'
         elif previous.get('wake_reason') and recent:
@@ -277,9 +273,7 @@ class Channels:
             return []
         shown = []
         while len(shown) < self.OWNER_LINES_PER_CLAIM:
-            row = self.store.db.messages.find_one_and_update(
-                {'scene_id': scene_id, 'direction': 'inbound', 'author': owner, 'shown_on_line': {'$exists': False}},
-                {'$set': {'shown_on_line': now()}}, sort=[('scene_seq', 1)])
+            row = message_records.claim_unshown(self.store, scene_id, owner, now())
             if not row:
                 break
             shown.append({'id': row['_id'], 'seq': row.get('scene_seq'), 'text': row.get('text') or '',
@@ -298,7 +292,7 @@ class Channels:
         elif command == 'GET' and path == ['outbox']:
             pass
         elif command == 'POST' and len(path) == 3 and path[0] == 'outbox' and path[2] == 'receipt':
-            row = self.store.db.messages.find_one({'_id': path[1], 'channel_id': channel_id}, {'target': 1})
+            row = message_records.get(self.store, path[1], fields=['target'], channel=channel_id)
             if not row or row.get('target') != self.route_target(channel_id, route_id):
                 raise Denied('ROUTE_KEY_OTHER_ROUTE')
         else:
@@ -494,7 +488,7 @@ class Channels:
     PART_ON_ITS_WAY = ('READY', 'QUEUED_EXTERNAL', 'SENDING')
     PART_SETTLED = ('DELIVERED', 'CANCELLED_BY_HER')            # one she took back is settled
 
-    def _next(self, query, chat=True):
+    def _next(self, channel_id, queued, chat=True):
         """The next line to hand out: the first queued one whose conversation is not waiting. A paced part holds its
         conversation until its time and until the parts before it are delivered, so later lines there never overtake
         it (ADR-009 §11.1); it holds no other conversation. A part whose earlier part will never arrive is cancelled
@@ -507,12 +501,10 @@ class Channels:
         out. A file is no earlier part on its way for anyone: it goes on the bulk lane and holds nothing (files don't
         hold chat, owner 2026-10-23); a file waits for the chat parts before it like any part."""
         from .outbound_files import KIND
-        held, rows, first = set(), list(self.store.db.messages.find(query)), {}
+        held, rows, first = set(), queued.rows(), {}
         if chat and rows:
             lease = (datetime.now(timezone.utc) - timedelta(seconds=CHAT_LEASE_SECONDS)).isoformat()
-            held.update(self.store.db.messages.distinct('scene_id', {
-                'channel_id': query['channel_id'], 'delivery_state': 'SENDING', KIND: {'$exists': False},
-                'claimed_at': {'$gte': lease}}))
+            held.update(message_records.in_flight_scenes(self.store, channel_id, lease))
         for row in rows:
             first[row['scene_id']] = min(first.get(row['scene_id'], '~'), str(row.get('queued_at') or ''))
         rows.sort(key=lambda row: (first[row['scene_id']], row['scene_seq']))
@@ -520,12 +512,12 @@ class Channels:
             if row['scene_id'] in held:
                 continue
             if row.get('segment_index'):
-                earlier = list(self.store.db.messages.find(
-                    {'episode_id': row['episode_id'], 'phase': 'SPEAK', 'segment_index': {'$lt': row['segment_index']},
-                     'delivery_state': {'$nin': list(self.PART_SETTLED)}}, {'delivery_state': 1, KIND: 1}))
+                earlier = message_records.turn_parts(
+                    self.store, row['episode_id'], before_segment=row['segment_index'],
+                    not_states=self.PART_SETTLED, by=None).rows(fields=['delivery_state', KIND])
                 if any(part['delivery_state'] not in self.PART_ON_ITS_WAY for part in earlier):
-                    self.store.put('messages', {**row, 'delivery_state': 'CANCELLED_AFTER_FAILURE'},
-                                   expected=row['revision'], stream=row['episode_id'])
+                    message_records.save(self.store, {**row, 'delivery_state': 'CANCELLED_AFTER_FAILURE'},
+                                         expected=row['revision'], stream=row['episode_id'])
                     continue
                 # a file on its way holds nothing (the bulk lane); a chat part on its way holds the parts after it
                 if any(part['delivery_state'] in self.PART_ON_ITS_WAY and not part.get(KIND) for part in earlier):
@@ -555,41 +547,40 @@ class Channels:
                 action = None if target or lane == 'bulk' else group_admin.claim(self.store, channel_id)
                 if action:
                     return {'items': [action], 'lane': lane}
-                query = {'channel_id': channel_id, 'delivery_state': 'QUEUED_EXTERNAL'}
                 # ADR-095: files on the bulk lane, everything else on the chat lane. An adapter that declares no
                 # files has no bulk lane: its chat claims meet the file rows and fail them, as before; one that names
                 # no lane (from before ADR-095) gets everything on its one lane.
-                if lane == 'bulk':
-                    query[outbound_files.KIND] = {'$exists': True}
-                elif lane == 'chat' and outbound_files.CAPABILITY in (supports or ()):
-                    query[outbound_files.KIND] = {'$exists': False}
-                if target:                       # a route key claims only its own line's words (ADR-033)
-                    query.update({'target.type': target['type'], 'target.id': target['id']})
-                row = self._next(query, chat=lane != 'bulk')
+                files = True if lane == 'bulk' else (
+                    False if lane == 'chat' and outbound_files.CAPABILITY in (supports or ()) else None)
+                # a route key claims only its own line's words (ADR-033)
+                queued = message_records.queued(self.store, channel_id, files=files, target=target or None)
+                row = self._next(channel_id, queued, chat=lane != 'bulk')
                 if row:
                     try:
                         self._valid_publication(row, channel_id)
                     except Denied as exc:
-                        failed = self.store.put('messages', {**row, 'delivery_state': 'FAILED', 'failure': str(exc)},
-                                                expected=row['revision'], stream=row['episode_id'])
+                        failed = message_records.save(self.store, {**row, 'delivery_state': 'FAILED',
+                                                      'failure': str(exc)},
+                                                      expected=row['revision'], stream=row['episode_id'])
                         from .publish import PublishService
                         PublishService(self.store).cancel_after(failed)
                         continue
                     act = row.get('action') if isinstance(row.get('action'), dict) else None
                     if act and act.get('kind') not in (supports or ()):
                         # A poke or a reaction this adapter did not declare is not done at all (ADR-064 phase 2).
-                        failed = self.store.put('messages', {**row, 'delivery_state': 'FAILED',
-                                                'failure': 'CHANNEL_DOES_NOT_DECLARE_' + str(act.get('kind')).upper()},
-                                                expected=row['revision'], stream=row['episode_id'])
+                        failed = message_records.save(
+                            self.store, {**row, 'delivery_state': 'FAILED',
+                                         'failure': 'CHANNEL_DOES_NOT_DECLARE_' + str(act.get('kind')).upper()},
+                            expected=row['revision'], stream=row['episode_id'])
                         from .publish import PublishService
                         PublishService(self.store).cancel_after(failed)
                         continue
                     sticker = row.get('sticker') if isinstance(row.get('sticker'), dict) else None
                     if sticker and 'sticker' not in (supports or ()):
                         # A sticker is the whole message: one this adapter cannot send is not sent at all (ADR-016).
-                        failed = self.store.put('messages', {**row, 'delivery_state': 'FAILED',
-                                                'failure': 'CHANNEL_DOES_NOT_DECLARE_STICKER'},
-                                                expected=row['revision'], stream=row['episode_id'])
+                        failed = message_records.save(self.store, {**row, 'delivery_state': 'FAILED',
+                                                      'failure': 'CHANNEL_DOES_NOT_DECLARE_STICKER'},
+                                                      expected=row['revision'], stream=row['episode_id'])
                         from .publish import PublishService
                         PublishService(self.store).cancel_after(failed)
                         continue
@@ -601,8 +592,8 @@ class Channels:
                                    if outbound_files.CAPABILITY not in supports
                                    else outbound_files.claim_failure(self.store, row, limits))
                         if failing:
-                            failed = self.store.put('messages', {**row, 'delivery_state': 'FAILED', **failing},
-                                                    expected=row['revision'], stream=row['episode_id'])
+                            failed = message_records.save(self.store, {**row, 'delivery_state': 'FAILED', **failing},
+                                                          expected=row['revision'], stream=row['episode_id'])
                             from .publish import PublishService
                             PublishService(self.store).cancel_after(failed)
                             if failing['failure'] == 'FILE_BYTES_EXPIRED':
@@ -617,7 +608,7 @@ class Channels:
                     elif carries:
                         # 这次真把图带出去：上一次留下的「没带出去」不能接着算（重投的行会带着旧标记回来）
                         changes.pop(outbound_media.SKIPPED_KEY, None)
-                    self.store.put('messages', changes, expected=row['revision'], stream=row['episode_id'])
+                    message_records.save(self.store, changes, expected=row['revision'], stream=row['episode_id'])
                     # Her @[label] becomes the adapter's @qq:<account> here, at the edge (people.py).
                     scene = scene_records.get(self.store, row['scene_id'])
                     text = People(self.store).outbound(scene, row['text']) if scene else row['text']
@@ -665,7 +656,7 @@ class Channels:
         attempt_id = (query.get('attempt_id') or [''])[0]
         wanted = (query.get('artifact_id') or [''])[0]
         with database_effects_lock(self.store.name):
-            row = self.store.db.messages.find_one({'_id': publication_id})
+            row = message_records.get(self.store, publication_id)
             if not row or row.get('channel_id') != channel_id:
                 raise Denied('PUBLICATION_NOT_FOUND')
             if row.get('delivery_state') != 'SENDING' or not row.get('attempt_id') \
@@ -697,7 +688,7 @@ class Channels:
             with database_effects_lock(self.store.name):
                 return group_admin.receipt(self.store, channel_id, publication_id, body)
         with database_effects_lock(self.store.name):
-            row = self.store.db.messages.find_one({'_id': publication_id})
+            row = message_records.get(self.store, publication_id)
             # A poke or a reaction makes no message of its own: its receipt carries none (ADR-064 phase 2); nor does a
             # file, whose platform id is not one of ours (ADR-092 D6).
             if (status == 'platform_accepted' and not (row or {}).get('action') and not (row or {}).get('file')
@@ -718,14 +709,14 @@ class Channels:
                     and (row.get('target') or {}).get('type') == 'dm'):
                 from . import role_tools
                 role_tools.REACT_OFF_IN_DMS.add(channel_id)     # her call: tried again after the next restart
-            self.store.put('messages', {**row, 'delivery_state': state, 'platform_receipt': body,
-                           'platform_message_id': body.get('platform_message_id'), 'receipt_at': now(),
-                           'delivery_basis': 'platform_ack' if state == 'DELIVERED' else status},
-                           expected=row['revision'], stream=row['episode_id'])
+            message_records.save(self.store, {**row, 'delivery_state': state, 'platform_receipt': body,
+                                 'platform_message_id': body.get('platform_message_id'), 'receipt_at': now(),
+                                 'delivery_basis': 'platform_ack' if state == 'DELIVERED' else status},
+                                 expected=row['revision'], stream=row['episode_id'])
             act = row.get('action') or {}
             if state == 'DELIVERED' and act.get('kind') == 'recall' and act.get('line'):
                 # Her own line taken back: the line itself now says so wherever the program shows it again.
-                self.store.db.messages.update_one({'_id': act['line']}, {'$set': {'recalled_at': now()}})
+                message_records.mark_recalled(self.store, act['line'], now())
             if state == 'DELIVERED' and row.get('file'):
                 from . import outbound_files
                 outbound_files.sent(self.store, row)            # its bytes are kept KEEP_DAYS from now (D9)
@@ -741,9 +732,10 @@ class Channels:
         from .publish import PublishService
         from . import group_admin
         group_admin.recover_sending(self.store)
-        for row in self.store.db.messages.find({'channel_id': {'$exists': True}, 'delivery_state': 'SENDING'}):
-            unknown = self.store.put('messages', {**row, 'delivery_state': 'UNKNOWN', 'recovery_reason': 'adapter_attempt_interrupted'},
-                                     expected=row['revision'], stream=row['episode_id'])
+        for row in message_records.sending(self.store).rows():
+            unknown = message_records.save(self.store, {**row, 'delivery_state': 'UNKNOWN',
+                                           'recovery_reason': 'adapter_attempt_interrupted'},
+                                           expected=row['revision'], stream=row['episode_id'])
             PublishService(self.store).cancel_after(unknown)
 
 
@@ -756,7 +748,8 @@ def whole_host_state(exc):
     if isinstance(exc, RuntimeError) and str(exc) in WHOLE_HOST_STATES:
         return str(exc)
     from pymongo.errors import AutoReconnect, ServerSelectionTimeoutError
-    if isinstance(exc, (AutoReconnect, ServerSelectionTimeoutError)):
+    from .store.errors import Unavailable           # the same, met through the store's adapter
+    if isinstance(exc, (AutoReconnect, ServerSelectionTimeoutError, Unavailable)):
         return 'HOST_DATABASE_UNAVAILABLE'
     return None
 

@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from . import channel_kinds
 from .people import People, safe_name
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 MAX_MEMBERS = 5000                       # one group's list; a larger one is refused, not cut
 RECENT_ACTIVE = 20                       # the most recently active members always shown; find_member reaches the rest
@@ -99,8 +100,8 @@ def _spoken(store, scene_id, moment):
     """Her last line here and today's count, in words (SPOKE_RECENT, SPOKE_DAYS, places' line words)."""
     from .local_time import zone_of
     from .places import _at, _lines_word
-    mine = {'scene_id': scene_id, 'direction': 'outbound', 'delivery_state': 'DELIVERED', 'receipt_at': {'$exists': True}}
-    last = store.db.messages.find_one(mine, {'receipt_at': 1}, sort=[('receipt_at', -1)])
+    last = message_records.spoken(store, scene_id, with_receipt=True, by='receipt_at').first(
+        newest_first=True, fields=['receipt_at'])
     if not last:
         return NEVER_SPOKE
     tz = zone_of(store, scene_id)['tz']
@@ -112,7 +113,7 @@ def _spoken(store, scene_id, moment):
               'evening' if at.hour >= EVENING_HOUR else 'today'
         words = SPOKE_DAYS[day]
     start = here.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
-    today = store.db.messages.count_documents({**mine, 'receipt_at': {'$gte': start}})
+    today = message_records.spoken(store, scene_id, receipt_since=start).count()
     return YOU_SPOKE % (words, '说了' + _lines_word(today) if today else '还没说话')
 
 
@@ -151,9 +152,8 @@ def block(store, scene, persona, moment=None):
             known[str(account)] = entry
     since = (moment - timedelta(hours=MENTIONED_HOURS)).isoformat()
     mentioned = set()
-    for row in store.db.messages.find({'scene_id': scene['_id'], 'received_at': {'$gte': since},
-                                       'event.group_context.mentioned_account_ids.0': {'$exists': True}},
-                                      {'event.group_context.mentioned_account_ids': 1}):
+    for row in message_records.mentions(store, scene['_id'], since).rows(
+            fields=['event.group_context.mentioned_account_ids']):
         mentioned.update(str(a) for a in row['event']['group_context']['mentioned_account_ids'])
     mine = people.own_account(scene['_id'])
     own = next((m for m in doc['members'] if m['user_id'] == mine), None) if mine else None

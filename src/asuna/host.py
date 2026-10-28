@@ -16,6 +16,7 @@ from .memory_indexer import MemoryIndexer
 from . import handover
 from .state import Denied, now
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 # How often the host's existing watch thread also checks that her heartbeat still beats (ADR-012 §4.3), so a
 # lost heartbeat is found on a day when nobody talks to her too. It only checks; the clock stays DSH's.
@@ -392,14 +393,14 @@ class RuntimeHost:
     def _recover_tasks(self):
         store = self.app.store
         for task in store.db.tasks.find({'state': {'$in': ['READY', 'RUNNING', 'RETURNED', 'DONE', 'PARTIAL', 'BLOCKED', 'NEEDS_CHARACTER_DECISION', 'UNKNOWN']}}):
-            source = store.db.messages.find_one({'_id': task['raw_input_refs'][0]})
+            source = message_records.get(store, task['raw_input_refs'][0])
             seen = set()
             while source and source.get('event', {}).get('episode_kind') == 'task_feedback':
                 if source['_id'] in seen:
                     raise Denied('TASK_SOURCE_CYCLE')
                 seen.add(source['_id'])
                 parent = store.db.tasks.find_one({'_id': source['event']['task_id']})
-                source = store.db.messages.find_one({'_id': parent['raw_input_refs'][0]}) if parent else None
+                source = message_records.get(store, parent['raw_input_refs'][0]) if parent else None
             if not source or not source.get('host_managed'):
                 continue
             if self._settle_received(task):

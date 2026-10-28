@@ -214,7 +214,7 @@ def require_current_feedback(store, episode):
         return
     # episode.task_id changes when feedback delegates another action. The
     # durable input remains the identity of the result being considered.
-    source = store.db.messages.find_one({'_id': 'in-' + episode['_id']})
+    source = message_records.get(store, 'in-' + episode['_id'])
     event = (source or {}).get('event', {})
     task = store.db.tasks.find_one({'_id': event.get('task_id')})
     scene = scene_records.get(store, episode['scene_id'])
@@ -420,6 +420,7 @@ WORKSPACE_TOOLS.append(NOTE_IDEA_TOOL)
 WORKSPACE_TOOLS.append(READ_IMAGE_TOOL)
 from .received_files import RECEIVED_FILE_TASK_TOOL, TOOL_NAME as RECEIVED_FILE_TOOL_NAME
 from .records import scenes as scene_records
+from .records import messages as message_records
 WORKSPACE_TOOLS.append(RECEIVED_FILE_TASK_TOOL)
 
 
@@ -551,7 +552,7 @@ class TaskService:
             depth=original.get('delegation_depth',0)+1
             observations=[] if short else observations_of(self.store,task,shown)
             event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 task 的 message。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],**_why_then(self.store,task),'value':shown(bounded_result(task.get('result'),records_pages(observations))) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
-            source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0], 'scope_key':task['scope_key'], 'policy_epoch':task['policy_epoch']})
+            source=message_records.get(self.store,task['raw_input_refs'][0],scope=task['scope_key'],epoch=task['policy_epoch'])
             # The session the task belongs to (home's own for one begun on an errand or in a reflection).
             if task.get('native_session_id') or original.get('native_session_id'):
                 event['native_session_id']=task.get('native_session_id') or original['native_session_id']
@@ -1018,7 +1019,7 @@ class Executor:
     def _run_claimed(self,task,workspace,healthy):
         binding=task.get('execution_binding') or f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"
         self.broker.bind('s-'+sha(binding.encode())[:40],task,workspace)
-        source=self.service.store.db.messages.find_one({'_id':task['raw_input_refs'][0]})
+        source=message_records.get(self.service.store, task['raw_input_refs'][0])
         return self._run_workspace(task,binding,source,healthy)
 
     def _run_workspace(self,task,binding,source,healthy):

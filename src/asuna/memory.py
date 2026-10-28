@@ -10,7 +10,7 @@ from .config import character_id
 from .evidence import canonical,sha
 from .state import Store,Denied,Conflict,now
 from .queue import database_effects_lock
-from .ingress import NOT_CORE_NOTICE
+from .records import messages as message_records
 from . import summary_attribution
 from .records import scenes as scene_records
 
@@ -164,7 +164,7 @@ class MemoryService:
                 skipped.append({'id':key,'reason':why});continue
             auto.append(key)
             if unit.get('corrected_by'):stale.append(key)
-        if not monologue and not auto and self.store.db.messages.find_one({'_id':'in-'+episode['_id']},{'_id':1}):
+        if not monologue and not auto and message_records.get(self.store, 'in-'+episode['_id'], fields=['_id']):
             # ADR-099: a turn with no thought (the model did not think) takes the line she answers, made on demand.
             self.chunk(episode['scene_id'])
             key='chunk-'+sha(canonical(['in-'+episode['_id'],2,0]))
@@ -207,7 +207,7 @@ class MemoryService:
 
     def chunk(self,scene_id):
         scene=scene_records.get(self.store, scene_id)
-        rows=list(self.store.db.messages.find({'scene_id':scene_id,**NOT_CORE_NOTICE,'$or':[{'direction':'inbound'},{'delivery_state':'DELIVERED'}]}).sort('scene_seq',1))
+        rows=message_records.said(self.store,scene_id,people_only=True).rows()
         made=[]
         for row in rows:
             if row.get('policy_epoch',1)!=scene['policy_epoch']:continue
@@ -230,5 +230,5 @@ class MemoryService:
                     'segment_index':index,'segment_count':len(parts),'source_event_ids':[row['_id']],
                     'depends_on':[row['_id']],'status':'active','embedding_status':'PENDING',
                     'chunk_budget_method':'UTF8_bytes_conservative_bound','overlap_tokens':0},stream='chunk:'+scene_id))
-            self.store.put('messages',{**row,'memory_chunk_version':2},expected=row['revision'],stream='chunk:'+scene_id)
+            message_records.save(self.store, {**row,'memory_chunk_version':2},expected=row['revision'],stream='chunk:'+scene_id)
         return made

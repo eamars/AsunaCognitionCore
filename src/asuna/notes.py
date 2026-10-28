@@ -28,6 +28,7 @@ from .evidence import canonical, sha
 from .state import now
 from . import scene_links, visibility
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 TABLES_VERSION = 1
 NOTE_CHARS = 300                 # a note that crosses between home and outside
@@ -150,7 +151,7 @@ def opening_for(store, event):
 
 def opening(store, ep):
     """The note that opened this turn, or None."""
-    row = store.db.messages.find_one({'_id': 'in-' + ep['_id']}, {'event.note': 1, 'event.visit': 1})
+    row = message_records.get(store, 'in-' + ep['_id'], fields=['event.note', 'event.visit'])
     return opening_for(store, (row or {}).get('event') or {})
 
 
@@ -225,8 +226,8 @@ def borrowed(store, scene_id, text, moment):
         return None
     since = (moment - timedelta(hours=OWN_WORDS_HOURS)).isoformat()
     me = character_id(store.config)
-    for row in store.db.messages.find({'scene_id': scene_id, 'direction': 'inbound', 'author': {'$ne': me},
-                                       'received_at': {'$gte': since}}, {'text': 1, 'author': 1, 'received_at': 1}):
+    for row in message_records.inbound(store, scene_id, not_author=me, since=since, by=None).rows(
+            fields=['text', 'author', 'received_at']):
         line = ''.join(str(row.get('text') or '').split())
         hits = [i for i in range(len(flat) - OWN_WORDS_RUN + 1) if flat[i:i + OWN_WORDS_RUN] in line]
         if len(line) >= OWN_WORDS_RUN and hits:
@@ -354,7 +355,7 @@ def owner_line(store, ep):
     None. A note home from such a turn carries them; its home turn may then send an errand (ADR-066)."""
     if (ep.get('episode_kind') or 'external') != 'external'             or scene_links.canonical_person_id(store.config, store.db, ep.get('person_id')) != visibility.owner_id(store.config):
         return None
-    source = store.db.messages.find_one({'_id': 'in-' + ep['_id']}, {'text': 1, 'event.channel': 1}) or {}
+    source = message_records.get(store, 'in-' + ep['_id'], fields=['text', 'event.channel']) or {}
     if not (source.get('event') or {}).get('channel'):
         return None
     return excerpt(source.get('text'), OWNER_LINE_CHARS) or None

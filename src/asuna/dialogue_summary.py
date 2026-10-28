@@ -14,12 +14,12 @@ import threading
 import time
 
 from . import summary_attribution, summary_trigger
-from .ingress import NOT_CORE_NOTICE
 from .people import People
 from .evidence import canonical, sha
 from .state import Conflict, now
 from .config import character_id
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 
 
@@ -62,13 +62,9 @@ class DialogueSummarizer:
                                    expected=scene['revision'], stream='summary:init:' + scene_id)
 
     def _pending(self, scene):
-        query = {'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
-                 'scene_seq': {'$gt': scene['summary_start_seq']},
-                 'summary_batch_id': {'$exists': False},
-                 **NOT_CORE_NOTICE,
-                 '$or': [{'direction': 'inbound'},
-                         {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}
-        rows = list(self.store.db.messages.find(query).sort('scene_seq', 1).limit(self.WINDOW_ROWS))
+        pending = message_records.said(self.store, scene['_id'], scene['policy_epoch'], people_only=True,
+                                       after=scene['summary_start_seq'], unsummarised=True)
+        rows = pending.rows(limit=self.WINDOW_ROWS)
         # A saved summary may precede a crash during source marking. Complete
         # those markings before selecting a new batch, so no source is retold.
         for row in rows:
@@ -77,13 +73,13 @@ class DialogueSummarizer:
                 'policy_epoch': scene['policy_epoch'], 'status': 'active',
                 'source_event_ids': row['_id']}, {'_id': 1})
             if prior:
-                self.store.put('messages', {**row, 'summary_batch_id': prior['_id']},
-                               expected=row['revision'], stream='summary:recover:' + scene['_id'])
+                message_records.save(self.store, {**row, 'summary_batch_id': prior['_id']},
+                                     expected=row['revision'], stream='summary:recover:' + scene['_id'])
         if any(self.store.db.memory_units.find_one({
                 'kind': 'dialogue_summary', 'scope_key': scene['scope_key'],
                 'policy_epoch': scene['policy_epoch'], 'status': 'active',
                 'source_event_ids': row['_id']}, {'_id': 1}) for row in rows):
-            rows = list(self.store.db.messages.find(query).sort('scene_seq', 1).limit(self.WINDOW_ROWS))
+            rows = pending.rows(limit=self.WINDOW_ROWS)
         return rows
 
     def _labels(self, people, scene, rows):
@@ -224,13 +220,13 @@ class DialogueSummarizer:
                 'source_ids': source_ids, 'trigger': decision, 'participants': attribution['participants'],
                 'corrections': len(attribution['corrections']), 'request_refs': result.request_refs})
         for row in rows:
-            current = self.store.db.messages.find_one({'_id': row['_id']})
+            current = message_records.get(self.store, row['_id'])
             if current.get('summary_batch_id') == key:
                 continue
             if current.get('summary_batch_id'):
                 raise Conflict('SUMMARY_SOURCE_ALREADY_PROCESSED')
-            self.store.put('messages', {**current, 'summary_batch_id': key},
-                           expected=current['revision'], stream=key)
+            message_records.save(self.store, {**current, 'summary_batch_id': key},
+                                 expected=current['revision'], stream=key)
         corrected = summary_attribution.annotate_corrected(self.store, scene,
                                                            attribution['corrections'], key)
         if corrected:

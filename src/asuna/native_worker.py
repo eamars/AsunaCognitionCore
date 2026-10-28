@@ -32,6 +32,7 @@ from .skills import skill_directories
 from .state import Denied, now, Conflict
 from .queue import RuntimeLease
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 
 KEPT_HOST_REPORTS = 5     # this start's evidence and the starts just before it
@@ -266,7 +267,7 @@ class NativeLane:
                                    # the route this job runs on (ADR-075): 高's only while it has not fallen
                                    'tier': 'high' if (task.get('tier') or {}).get('ran') == '高' else 'low'}
             if self.lane == 'character':
-                source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']})
+                source = message_records.get(self.store, 'in-' + ep['_id'])
                 if source and source.get('event', {}).get('channel'):
                     request['channel_input'] = self.worker.channel_input(source)
             future = Future()
@@ -727,7 +728,7 @@ class BusinessWorker:
             original = store.db.episodes.find_one({'_id': task['episode_id']}) if task else None
             if original and self.carried(original.get('native_session_id'), ep):
                 return self.continued_session(original['native_session_id'])
-        source = store.db.messages.find_one({'_id': 'in-' + ep['_id']}) or {}
+        source = message_records.get(store, 'in-' + ep['_id']) or {}
         plan_id = source.get('event', {}).get('scheduled_plan_id')
         plan = store.db.plans.find_one({'_id': plan_id}) if plan_id else None
         original = store.db.episodes.find_one({'_id': plan.get('source_episode_id')}) if plan else None
@@ -925,7 +926,7 @@ class BusinessWorker:
     def episode_finished(self, event, result, error):
         if event.get('channel'):
             from .ingress import episode_id
-            row = self.app.store.db.messages.find_one({'_id': 'in-' + episode_id(event)})
+            row = message_records.get(self.app.store, 'in-' + episode_id(event))
             if row:
                 self.project_input(row)
         session_id = (result or {}).get('native_session_id') or event.get('native_session_id')
@@ -957,10 +958,9 @@ class BusinessWorker:
         name = route.get('display_name') if route.get('display_name') != route['target']['id'] else None
         if not name:
             # The newest message that carries the name: a notice (a join, a recall) carries none.
-            field = 'event.raw.group_name' if group else 'event.raw.asuna_peer.display'
-            last = self.app.store.db.messages.find_one(
-                {'scene_id': route['scene_id'], 'direction': 'inbound', field: {'$exists': True}},
-                {'event.raw.group_name': 1, 'event.raw.asuna_peer': 1}, sort=[('received_at', -1)])
+            last = message_records.inbound(self.app.store, route['scene_id'], group_name=group, peer_display=not group,
+                                           by='received_at').first(
+                newest_first=True, fields=['event.raw.group_name', 'event.raw.asuna_peer'])
             raw = (last or {}).get('event', {}).get('raw', {})
             name = raw.get('group_name') if group else (raw.get('asuna_peer') or {}).get('display')
         if not name and not group:
@@ -1103,16 +1103,14 @@ class BusinessWorker:
             self.navigation_ready.set()
             # Recover only native projection work, never model/tool execution.
             # Historical business rows predating this feature remain in Memory.
-            for row in self.app.store.db.messages.find({'host_managed': True,
-                    'received_at': {'$gte': self.projection_start['since']},
-                    'event.channel': {'$exists': True}}).sort('received_at', 1):
+            for row in message_records.channel_inbound(self.app.store, self.projection_start['since']).each():
                 try:
                     self.project_input(row)
                 except Denied:
                     pass  # Revoked scenes must not project into a new epoch.
             return {'ready': True}
         if method == 'channel_input.ack':
-            row = self.app.store.db.messages.find_one({'_id': args['input_id'], 'event.channel': {'$exists': True}})
+            row = message_records.get(self.app.store, args['input_id'], from_channel=True)
             if not row:
                 raise ValueError('NATIVE_INPUT_NOT_FOUND')
             receipt_id = 'native-input:' + row['_id']

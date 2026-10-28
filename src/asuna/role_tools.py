@@ -26,6 +26,7 @@ from pathlib import Path
 from .documents import DocumentError, DocumentStore, WRITE_STAGE_OPS
 from .evidence import canonical, sha
 from .state import Conflict, Denied
+from .records import messages as message_records
 from . import visibility
 from .errands import MARK as ERRAND_MARK
 from .vision import inline_summary as picture_receipt
@@ -1095,16 +1096,15 @@ def turn_pictures(store, ep):
     scene = scene_records.get(store, ep['scene_id'], fields=['kind'])
     if (scene or {}).get('kind') != 'group' or not vision_capability(store.config, 'character')['supported']:
         return [], None
-    source = store.db.messages.find_one({'_id': 'in-' + ep['_id'], 'scene_id': ep['scene_id']})
+    source = message_records.get(store, 'in-' + ep['_id'], scene=ep['scene_id'])
     if not source:
         return [], None
     chosen = [(entry, '触发这一回合的那条') for entry in attachments_of(source, config=store.config)][:TURN_PICTURES]
     if len(chosen) < TURN_PICTURES:
-        earlier = store.db.messages.find({'scene_id': ep['scene_id'], 'direction': 'inbound',
-                                          'policy_epoch': ep['policy_epoch'],
-                                          'scene_seq': {'$lt': source.get('scene_seq', 0),
-                                                        '$gte': source.get('scene_seq', 0) - TURN_PICTURE_LINES},
-                                          'event.raw.asuna_media': {'$exists': True}}).sort('scene_seq', -1)
+        earlier = message_records.inbound(store, ep['scene_id'], ep['policy_epoch'],
+                                          before=source.get('scene_seq', 0),
+                                          from_seq=source.get('scene_seq', 0) - TURN_PICTURE_LINES,
+                                          media=True).rows(newest_first=True)
         for row in earlier:
             for entry in attachments_of(row, config=store.config):
                 if len(chosen) < TURN_PICTURES and not entry.get('sticker'):
@@ -1272,9 +1272,8 @@ NEVER_LEFT = ('FAILED', 'CANCELLED_AFTER_FAILURE', CANCELLED_BY_HER)
 def spoken(store, ep):
     """(lines, texts) of this turn's text parts that left or may still leave, read from its outbox each time: a failure
     the platform reports after the call gives its lines back too."""
-    rows = store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK', 'reply_part': True,
-                                   'delivery_state': {'$nin': list(NEVER_LEFT)}},
-                                  {'text': 1, 'sticker': 1, 'attachment': 1, 'action': 1, 'file': 1})
+    rows = message_records.turn_parts(store, ep['_id'], reply_parts=True, not_states=NEVER_LEFT, by=None).rows(
+        fields=['text', 'sticker', 'attachment', 'action', 'file'])
     words = [row.get('text') or '' for row in rows if not ({'sticker', 'attachment', 'action', 'file'} & set(row))]
     return sum(chat_lines(text) for text in words), [' '.join(text.split()) for text in words]
 
@@ -1983,8 +1982,8 @@ class RoleTools:
         text = str(part.get('line') or '').strip().strip('〔〕[]「」 ')
         if not text.isdigit():
             raise Refused('line 写你那句的编号（只写数字）')
-        row = self.store.db.messages.find_one({'scene_id': scene['_id'], 'scene_seq': int(text), 'direction': 'outbound',
-                                               'author': character_id(self.store.config)})
+        row = message_records.at(self.store, scene['_id'], int(text), direction='outbound',
+                                 author=character_id(self.store.config))
         if not row:
             line, why_not = People(self.store, ep['persona']).line_of(scene, ep['_id'], text)
             raise Refused(RECALL_NOT_YOURS if line else why_not)
@@ -2013,11 +2012,11 @@ class RoleTools:
     def _cancel_own(self, ep, item):
         """A line of hers still in the outbox is taken out before it leaves; the row keeps why."""
         from .state import Conflict
-        row = self.store.db.messages.find_one({'_id': item['row']})
+        row = message_records.get(self.store, item['row'])
         if not row or row.get('delivery_state') not in ('READY', 'QUEUED_EXTERNAL'):
             return '〔%d〕 %s' % (item['seq'], RECALL_SENDING)
         try:
-            self.store.put('messages', {**row, 'delivery_state': CANCELLED_BY_HER,
+            message_records.save(self.store, {**row, 'delivery_state': CANCELLED_BY_HER,
                                         'cancelled': {'why': item['why'], 'episode_id': ep['_id']}},
                            expected=row['revision'], stream=row['episode_id'])
         except Conflict:
@@ -2811,7 +2810,7 @@ class RoleTools:
         """Whether this call moves a one-shot plan in the very turn it fired (ADR-087 §4.4)."""
         if op != 'update' or not timing or (plan or {}).get('status') != 'FIRED':
             return False
-        source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']}, {'event.scheduled_plan_id': 1}) or {}
+        source = message_records.get(self.store, 'in-' + ep['_id'], fields=['event.scheduled_plan_id']) or {}
         return (source.get('event') or {}).get('scheduled_plan_id') == plan['_id']
 
     def tool_group_action(self, ep, call_id, args):

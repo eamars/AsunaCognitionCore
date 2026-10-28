@@ -33,14 +33,15 @@ import json
 import re
 from datetime import timedelta
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 try:                                  # 宿主内：按包加载
     from .history_query import (DEFAULT_LIMIT, DEFAULT_WINDOW_DAYS, MAX_LIMIT, HISTORY_TOOL_NAME,
                                 TIME_SOURCE_INBOUND, TIME_SOURCE_RECEIPT_AT, TIME_SOURCE_SINK,
                                 query_history, _parse as _parse_stamp, _text as _norm,
                                 _scene_parts, _row_allowed, _outbound_time, _sink_times,
-                                _stamp, _hit as _history_hit, person_clause,
-                                scene_id_clause, _link_fields, bind_people,
+                                _stamp, _hit as _history_hit, person_values,
+                                _link_fields, bind_people,
                                 _bounded_text as _checked_text, _bounded_int as _checked_int,
                                 _bad_stamp, _bad_flag)
 except Exception:                     # 同目录平铺加载（离线自检）也认
@@ -49,8 +50,8 @@ except Exception:                     # 同目录平铺加载（离线自检）�
                                    HISTORY_TOOL_NAME, TIME_SOURCE_INBOUND, TIME_SOURCE_RECEIPT_AT,
                                    TIME_SOURCE_SINK, query_history, _parse as _parse_stamp,
                                    _text as _norm, _scene_parts, _row_allowed, _outbound_time,
-                                   _sink_times, _stamp, _hit as _history_hit, person_clause,
-                                   scene_id_clause, _link_fields, bind_people,
+                                   _sink_times, _stamp, _hit as _history_hit, person_values,
+                                   _link_fields, bind_people,
                                    _bounded_text as _checked_text, _bounded_int as _checked_int,
                                    _bad_stamp, _bad_flag)
     except Exception as exc:
@@ -170,17 +171,16 @@ def read_linkage(store, message_ids, scene=None):
     ids = [mid for mid in message_ids if isinstance(mid, str) and mid]
     if not ids:
         return {}, ""
-    column = getattr(getattr(store, "db", None), "messages", None)
-    if column is None:
+    if not callable(getattr(store, "collection", None)):
         return {}, "no_messages_collection"
     try:
-        flt = {"_id": {"$in": sorted(set(ids))}}
         if isinstance(scene, dict):      # 同一道围栏：链与身份块也只读授权场景集合、本策略周期
             parts = _scene_parts(scene)  # 联动场景里读到的行，链与身份块同样读得到（不然跨场景
-            flt.update(scene_id_clause(parts) if parts
-                       else {"scene_id": scene.get("scene_id")})   # 的更正会被当成没对象）
-            flt["policy_epoch"] = scene["policy_epoch"]
-        rows = list(column.find(flt, projection=LINKAGE_PROJECTION) or [])
+            lines = message_records.many(store, ids, scenes=parts["scene_ids"] if parts   # 的更正会被当成没对象）
+                                         else [scene.get("scene_id")], epoch=scene["policy_epoch"])
+        else:
+            lines = message_records.many(store, ids)
+        rows = lines.rows(fields=list(LINKAGE_PROJECTION))
     except Exception as exc:
         return {}, "digest_linkage_unavailable:%s" % type(exc).__name__
     out = {}
@@ -205,7 +205,6 @@ THREAD_PROJECTION = {"_id": 1, "text": 1, "author": 1, "direction": 1, "phase": 
                      "delivery_state": 1, "occurred_at": 1, "receipt_at": 1, "receipt": 1,
                      "scene_seq": 1, "scene_id": 1, "policy_epoch": 1, "reply_to": 1,
                      "event.group_context": 1, "event.raw.asuna_peer": 1, "event.channel": 1}
-REPLY_TARGET_KEYS = ("event.group_context.reply_message_id", "reply_to")   # 入站／出站两个形状
 MAX_THREAD_ROWS = 60            # 一条讨论流最多带这么多链内后续，超了照实说没展开完
 MAX_THREAD_ROUNDS = 8           # 每轮一条查询（找谁的回复＋找被回复的那条），不按行轮询
 MAX_THREAD_CARRY = 64           # 跨页去重集合随游标往下带的上限（cursor 有 1024 字上限）
@@ -231,7 +230,8 @@ def _topic_match(doc, topic, case_sensitive):
 
 
 def _person_match(doc, person, aliases=(), authors=None):
-    """这条发言是不是这个人说的：直接复用 P1-b 的 person_clause，不另写一份「谁说的」口径。
+    """这条发言是不是这个人说的：直接复用 P1-b 的 person_values 与按人过滤的字段（records.messages.PERSON_KEYS），
+    不另写一份「谁说的」口径。
 
     aliases 是配置里认定「同一个人」的其他 person_id：在 local-dm 里整理时，他从 QQ 那个入口
     说的话也算他说的。历史行上的 author 一个都不改写。
@@ -240,8 +240,8 @@ def _person_match(doc, person, aliases=(), authors=None):
         return False
     if authors is not None:
         return doc.get("author") in authors           # resolved by label (people.py), not by name
-    for sub in (person_clause(person, aliases) or {}).get("$or") or []:
-        for key, value in sub.items():
+    for key in message_records.PERSON_KEYS:
+        for value in person_values(person, aliases) or ():
             found, got = _lookup_doc(doc, key)
             if not found:
                 continue
@@ -291,12 +291,12 @@ def read_thread_continuations(store, scene, seed_ids, window, known, seed_docs=N
              "sink_why": "", "skipped_seed_eligible": 0, "skipped_carried": 0,
              "delivered": [], "carry_truncated": False, "pending": [], "pending_wanted": [],
              "pending_truncated": False, "resumed": False}
-    column = getattr(getattr(store, "db", None), "messages", None)
+    column = getattr(store, "collection", None)
     parts = _scene_parts(scene)
     seeds = [mid for mid in seed_ids if isinstance(mid, str) and mid]
     resume = resume if isinstance(resume, dict) else {}
     pending = [mid for mid in resume.get("frontier") or [] if isinstance(mid, str) and mid]
-    if column is None or parts is None or (not seeds and not pending):
+    if not callable(column) or parts is None or (not seeds and not pending):
         return {}, {}, stats
     if resume.get("literal_done"):
         stats["resumed"] = True
@@ -324,14 +324,9 @@ def read_thread_continuations(store, scene, seed_ids, window, known, seed_docs=N
             break
         stats["rounds"] += 1
         queried.update(frontier)
-        branches = [{key: {"$in": sorted(set(frontier))}} for key in REPLY_TARGET_KEYS]
-        if wanted:
-            branches.append({"_id": {"$in": sorted(wanted)}})
-        flt = dict(scene_id_clause(parts))
-        flt["policy_epoch"] = parts["epoch"]
-        flt["$or"] = branches
         try:
-            found = list(column.find(flt, projection=THREAD_PROJECTION) or [])
+            found = message_records.thread(store, parts["scene_ids"], parts["epoch"], replying_to=frontier,
+                                           ids=wanted, fields=list(THREAD_PROJECTION))
         except Exception as exc:
             stats["why"] = "digest_thread_unavailable:%s" % type(exc).__name__
             break
@@ -874,23 +869,14 @@ def _unwrap_cursor(value):
 
 def _excluded_counts(store, scene_doc):
     """被规则排除的出站行计数：读不到就照实说读不到，不给「没有排除项」的假安心。"""
-    column = getattr(getattr(store, "db", None), "messages", None)
-    if column is None:
+    if not callable(getattr(store, "collection", None)):
         return {}, "no_messages_collection"
     parts = _scene_parts(scene_doc)
-    base = dict(scene_id_clause(parts) if parts else {"scene_id": scene_doc["scene_id"]})
-    base.update({"policy_epoch": scene_doc["policy_epoch"], "direction": "outbound"})
-    wanted = {"undelivered_outbound": dict(base, phase="SPEAK",
-                                          delivery_state={"$ne": "DELIVERED"}),
-              "non_speak_outbound": dict(base, phase={"$ne": "SPEAK"})}
-    out = {}
-    for name, flt in wanted.items():
-        try:
-            counter = getattr(column, "count_documents", None)
-            out[name] = int(counter(flt)) if callable(counter) else len(list(column.find(flt) or []))
-        except Exception as exc:
-            return out, "excluded_count_failed:%s" % type(exc).__name__
-    return out, ""
+    try:
+        return message_records.excluded(store, parts["scene_ids"] if parts else [scene_doc["scene_id"]],
+                                        scene_doc["policy_epoch"]), ""
+    except Exception as exc:
+        return {}, "excluded_count_failed:%s" % type(exc).__name__
 
 
 class DiscussionDigestService:

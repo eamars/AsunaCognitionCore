@@ -74,8 +74,9 @@ ID = Field('_id', 'text', required=True)
 
 @dataclass(frozen=True)
 class Index:
-    """An index: `keys` are (path, 1 | -1); a unique index's fields are required unless listed in
-    `only_where_present`, and a record missing one of those (or holding null) is outside the index. `expire_after`:
+    """An index: `keys` are (path, 1 | -1); a unique index's fields are required, except in a partial one: a
+    record missing a field listed in `only_where_present` (or holding null) is outside the index, and inside it the
+    other fields may be missing (indexed as null). `expire_after`:
     a server removes a record that many seconds after the time in its one key (a TTL index; the in-memory adapter
     removes nothing)."""
     name: str
@@ -152,8 +153,9 @@ class Collection:
                 if index.unique and path in paths:
                     if paths[path].kind in ('list', 'object', 'vector'):
                         raise _invalid('%s: unique index %s on %s' % (self.name, index.name, path))
-                    if not (paths[path].required or path in index.only_where_present or self.pending):
-                        raise _invalid('%s: unique index %s: %s is neither required nor only_where_present'
+                    # Inside a partial index (only_where_present) its other fields may be missing: indexed as null.
+                    if not (paths[path].required or index.only_where_present or self.pending):
+                        raise _invalid('%s: unique index %s: %s is neither required nor in a partial index'
                                        % (self.name, index.name, path))
             if not set(index.only_where_present) <= {path for path, _ in index.keys}:
                 raise _invalid('%s: index %s: only_where_present names a field it does not index'
@@ -240,17 +242,50 @@ CATALOG = Catalog([
         Field('fault.at', 'text', nullable=True), Field('unsent', 'object', nullable=True),
         Field('unsent.episode_id', 'text', nullable=True), Field('asides_shown_seq', 'number')),
         versioned=True, counters=('sequence',)),
-    _core('messages', 'records.messages',
-          index(('adapter_id', 1), ('scene_id', 1), ('platform_event_id', 1), unique=True,
-                only_where_present=('platform_event_id',)),
-          index(('publication_key', 1), unique=True, only_where_present=('publication_key',)),
-          index(('scene_id', 1), ('scene_seq', 1)),
-          index(('host_managed', 1), ('ingress_state', 1), ('received_at', 1)),
-          index(('channel_id', 1), ('delivery_state', 1), ('scene_seq', 1)),
-          index(('author', 1), ('direction', 1)),
-          index(('episode_id', 1)),
-          index(('event.visit.intent', 1), ('received_at', 1), only_where_present=('event.visit.intent',)),
-          fields=_text('platform_event_id', 'publication_key')),
+    # A line of a conversation (records/messages.py): the fields its owner names; the rest is stored and returned as
+    # written. Its times are ISO text, as the core writes them.
+    Collection('messages', 'records.messages', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('scene_id', 'scope_key', 'direction', 'author', 'delivery_state', 'phase', 'episode_id', 'text',
+               'received_at', 'receipt_at', 'occurred_at', 'claimed_at', 'shown_on_line', 'recalled_at',
+               'errand_told', 'channel_id', 'ingress_state', 'adapter_id', 'platform_event_id', 'platform_message_id',
+               'publication_key', 'processing_outcome', 'deletion_id', 'historical_display_name', 'summary_batch_id',
+               'receipt', 'reply_to', 'failure_detail'),
+        *(Field(path, 'number', nullable=True) for path in ('policy_epoch', 'scene_seq', 'segment_index')),
+        *(Field(path, 'bool', nullable=True) for path in ('reply_part', 'host_managed', 'source_present')),
+        Field('file', 'object', nullable=True), *_text('file.artifact_id'),
+        Field('attachment', 'object', nullable=True), *_text('attachment.artifact_id'),
+        Field('target', 'object', nullable=True), *_text('target.type', 'target.id'),
+        Field('event', 'object', nullable=True), *_text('event.event_id'),
+        Field('event.channel', 'object', nullable=True), *_text('event.channel.platform_event_id'),
+        Field('event.group_context', 'object', nullable=True),
+        *_text('event.group_context.wake_reason', 'event.group_context.topic_id',
+               'event.group_context.reply_message_id'),
+        Field('event.group_context.mentioned_account_ids', 'list', of='text', nullable=True),
+        Field('event.visit', 'object', nullable=True), *_text('event.visit.intent'),
+        Field('event.raw', 'object', nullable=True), *_text('event.raw.group_name'),
+        Field('event.raw.asuna_aside', 'bool', nullable=True),
+        Field('event.raw.asuna_media', 'object', nullable=True),
+        Field('event.raw.asuna_notice', 'object', nullable=True), *_text('event.raw.asuna_notice.kind'),
+        Field('event.raw.asuna_notice.line', 'object', nullable=True),
+        *_text('event.raw.asuna_notice.line.message_id'),
+        Field('event.raw.asuna_answer', 'object', nullable=True), *_text('event.raw.asuna_answer.question'),
+        Field('event.raw.asuna_peer', 'object', nullable=True),
+        *_text(*('event.raw.asuna_peer.' + key for key in ('person_id', 'card', 'nickname', 'display'))),
+        Field('event.raw.asuna_peer.aliases', 'list', of='text', nullable=True),
+        Field('event.raw.asuna_forward', 'list', of='object', nullable=True), *_text('event.raw.asuna_forward.ref'),
+        Field('event.raw.asuna_forward.nodes', 'list', of='object', nullable=True),
+        *_text('event.raw.asuna_forward.nodes.text')),
+        (index(('adapter_id', 1), ('scene_id', 1), ('platform_event_id', 1), unique=True,
+               only_where_present=('platform_event_id',)),
+         index(('publication_key', 1), unique=True, only_where_present=('publication_key',)),
+         index(('scene_id', 1), ('scene_seq', 1)),
+         index(('host_managed', 1), ('ingress_state', 1), ('received_at', 1)),
+         index(('channel_id', 1), ('delivery_state', 1), ('scene_seq', 1)),
+         index(('author', 1), ('direction', 1)),
+         index(('episode_id', 1)),
+         index(('event.visit.intent', 1), ('received_at', 1), only_where_present=('event.visit.intent',))),
+        versioned=True),
     _core('episodes', 'records.episodes',
           index(('scene_id', 1), ('source_event_id', 1), ('episode_kind', 1), unique=True),
           index(('person_id', 1), ('state', 1))),

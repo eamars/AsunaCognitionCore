@@ -198,8 +198,8 @@ def review(store, persona, occurrence, moment=None):
                 tools = collections.Counter(a['payload'].get('tool') for a in store.db.audit_events.find(
                     {'type': 'role_tool', 'stream_id': ep['_id']}, {'payload.tool': 1}))
                 item['tools'] = dict(tools)
-                item['said'] = store.db.messages.count_documents({'episode_id': ep['_id'], 'direction': 'outbound',
-                                                                  'phase': 'SPEAK'})
+                from .records import messages as message_records
+                item['said'] = message_records.turn_parts(store, ep['_id'], outbound=True).count()
                 if ep.get('silent_reason'):
                     item['quiet'] = excerpt(' '.join(str(ep['silent_reason']).split()), QUIET_CHARS)
         out.append(item)

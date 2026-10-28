@@ -10,6 +10,7 @@ import re
 
 from .people import safe_name
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 KEY = 'asuna_forward'
 DOC = 'forward'
@@ -63,8 +64,7 @@ def read(store, scene_id, sid):
     page = int(page) if page.isdigit() and int(page) > 0 else 1
     if not REF.match(ref):
         return None, 'forward#%s：section 照抄那行合并转发里的 ref（f 开头九位）' % sid
-    row = store.db.messages.find_one({'scene_id': scene_id, 'direction': 'inbound', 'event.raw.%s.ref' % KEY: ref},
-                                     sort=[('received_at', -1)])
+    row = message_records.inbound(store, scene_id, forward=ref, by='received_at').first(newest_first=True)
     block = next((b for b in ((row or {}).get('event', {}).get('raw', {}).get(KEY) or []) if b.get('ref') == ref), None)
     if not block:
         return None, 'forward#%s：这里没有这条合并转发（只能在它发来的那个对话里读）' % sid

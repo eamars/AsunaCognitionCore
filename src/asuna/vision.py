@@ -26,6 +26,7 @@ from .evidence import canonical, sha
 from .scene_links import message_times, read_scope
 from .state import Denied
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 MEDIA_KEY = 'asuna_media'
 READ_IMAGE_TOOL_NAME = 'read_image'
@@ -42,6 +43,8 @@ DEFAULT_TIMEOUT_SECONDS = 15
 MAX_ITEMS_PER_MESSAGE = 8
 LISTING_ITEMS = 8               # the newest attachments a conversation's listing offers (not per message)
 SCENE_SCAN_MESSAGES = 50
+# What of a line a scan for its pictures reads.
+SCANNED_FIELDS = ['_id', 'scene_id', 'scene_seq', 'direction', 'text', 'event.raw', 'occurred_at', 'received_at']
 # A ref she copied stays readable this long: the listing a turn shows is the newest few, a ref is looked up wider.
 REF_DAYS = 7
 # QQ 的下载 URL 带长 fileid 与 rkey，截断就是静默把链接改坏（拉回来必然是错的或 404）。
@@ -362,12 +365,8 @@ def scene_attachments(store, task, config, *, limit=LISTING_ITEMS, scan=SCENE_SC
     scenes = readable_image_scenes(store, task, config)
     rows, scanned = [], []
     for scope in scenes:
-        found = list(store.db.messages.find({'scene_id': scope['scene_id'],
-                                             'policy_epoch': task['policy_epoch'],
-                                             'direction': 'inbound'},
-                                            {'_id': 1, 'scene_id': 1, 'scene_seq': 1, 'direction': 1,
-                                             'text': 1, 'event.raw': 1, 'occurred_at': 1, 'received_at': 1})
-                     .sort('scene_seq', -1).limit(scan))
+        found = message_records.inbound(store, scope['scene_id'], task['policy_epoch']).rows(
+            newest_first=True, limit=scan or None, fields=SCANNED_FIELDS)
         scanned.append({'scene_id': scope['scene_id'], 'linked': scope['linked'], 'messages': len(found)})
         for row in found:
             row['_linked_scene'] = bool(scope['linked'])
@@ -409,11 +408,8 @@ def attachment_by_ref(store, task, config, ref, session_class=visibility.PUBLIC,
         scopes += [{'scene_id': doc['_id'], 'linked': True, 'home_reach': True, 'policy_epoch': doc.get('policy_epoch')}
                    for doc in scene_records.all(store, fields=['_id', 'policy_epoch']) if doc['_id'] not in fenced]
     for scope in scopes:
-        rows = store.db.messages.find({'scene_id': scope['scene_id'], 'policy_epoch': scope['policy_epoch'],
-                                       'direction': 'inbound', 'received_at': {'$gte': cutoff},
-                                       'event.raw.' + MEDIA_KEY: {'$exists': True}},
-                                      {'_id': 1, 'scene_id': 1, 'scene_seq': 1, 'direction': 1, 'text': 1,
-                                       'event.raw': 1, 'occurred_at': 1, 'received_at': 1}).sort('scene_seq', -1)
+        rows = message_records.inbound(store, scope['scene_id'], scope['policy_epoch'], since=cutoff,
+                                       media=True).rows(newest_first=True, fields=SCANNED_FIELDS)
         for row in rows:
             for found in entries(row, config=config):
                 if found['ref'] == ref:
@@ -764,8 +760,7 @@ def local_upload_bytes(store, blobs, task, config, entry, max_bytes=None):
     scene_id = _clean(entry.get('scene_id'), 90) or task['scene_id']
     if scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
         raise ValueError(LOCAL_NOT_IN_SCENE)
-    row = store.db.messages.find_one({'_id': entry['source_message_id'], 'scene_id': scene_id,
-                                      'policy_epoch': task['policy_epoch']})
+    row = message_records.get(store, entry['source_message_id'], scene=scene_id, epoch=task['policy_epoch'])
     items = (media_block(row) or {}).get('items') or [] if row else []
     item = next((item for index, item in enumerate(items) if ref_of(row['_id'], index) == entry['ref']), None)
     if not local_upload_item(row, item):
@@ -808,8 +803,7 @@ def media_source_url(store, task, config, entry):
         epoch = (scene_records.get(store, scene_id, fields=['policy_epoch']) or {}).get('policy_epoch')
     elif scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
         return ''
-    row = store.db.messages.find_one({'_id': entry['source_message_id'], 'scene_id': scene_id,
-                                      'policy_epoch': epoch})
+    row = message_records.get(store, entry['source_message_id'], scene=scene_id, epoch=epoch)
     block = media_block(row)
     if not block:
         return ''

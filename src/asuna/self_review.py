@@ -20,6 +20,7 @@ from datetime import datetime, time, timedelta, timezone
 from .config import excerpt
 from .evidence import sha
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 EXAMPLE_CHARS = 80
 TASK_STATES = {'READY': '排着', 'RUNNING': '在做', 'PAUSED': '停着', 'RETURNED': '交回来了', 'FAILED': '没做成',
@@ -83,8 +84,8 @@ def block(store, persona, zone_name, moment=None):
         return title[scene_id]
 
     said = collections.OrderedDict()
-    for row in store.db.messages.find({'direction': 'outbound', 'phase': 'SPEAK', 'receipt_at': {'$gte': since}},
-                                      {'scene_id': 1, 'receipt_at': 1}).sort('receipt_at', 1):
+    for row in message_records.spoken(store, delivered=False, speech=True, receipt_since=since,
+                                      by='receipt_at').rows(fields=['scene_id', 'receipt_at']):
         item = said.setdefault(row['scene_id'], {'where': where(row['scene_id']), 'lines': 0})
         item['lines'] += 1
         item['last_at'] = row['receipt_at']
@@ -143,9 +144,9 @@ def exchanges(store, persona, zone_name, moment=None):
     floor = moment - timedelta(days=WINDOW_DAYS)
     since = max(_at(last['occurred_at']), floor) if last else floor
     store.audit('review:' + persona, SHOWN, {'persona': persona})
-    mine = list(store.db.messages.find({'direction': 'outbound', 'phase': 'SPEAK', 'receipt_at': {'$gte': since.isoformat()}},
-                                       {'scene_id': 1, 'scene_seq': 1, 'text': 1, 'platform_message_id': 1,
-                                        'receipt_at': 1}).sort('receipt_at', 1))
+    mine = message_records.spoken(store, delivered=False, speech=True, receipt_since=since.isoformat(),
+                                  by='receipt_at').rows(
+        fields=['scene_id', 'scene_seq', 'text', 'platform_message_id', 'receipt_at'])
     if not mine:
         return {'items': [NOTHING_SAID], 'note': exchanges_note(store, persona)}
     people, home = People(store, persona), visibility.owner_private_scenes(store.config)
@@ -156,11 +157,9 @@ def exchanges(store, persona, zone_name, moment=None):
     for scene_id, lines in by_scene.items():
         scene = scene_records.get(store, scene_id) or {'_id': scene_id}
         seqs = [row.get('scene_seq') or 0 for row in lines]
-        rows = list(store.db.messages.find({'scene_id': scene_id, 'scene_seq': {'$gte': min(seqs),
-                                                                                '$lte': max(seqs) + LOOK_AHEAD}})
-                    .sort('scene_seq', 1))
-        before = list(store.db.messages.find({'scene_id': scene_id, 'direction': 'inbound',
-                                              'scene_seq': {'$lt': min(seqs), '$gte': min(seqs) - LOOK_AHEAD}}))
+        rows = message_records.lines(store, scene_id, from_seq=min(seqs), upto=max(seqs) + LOOK_AHEAD).rows()
+        before = message_records.inbound(store, scene_id, before=min(seqs), from_seq=min(seqs) - LOOK_AHEAD,
+                                         by=None).rows()
         ours = {row['_id'] for row in lines}
         for index, line in enumerate(lines):
             seq = line.get('scene_seq') or 0

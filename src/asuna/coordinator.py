@@ -33,6 +33,7 @@ from .state import Store, Denied, now
 from .tasks import FeedbackStale, require_current_feedback
 from .queue import database_effects_lock
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 
 class ProtocolFailure(RuntimeError):
@@ -163,8 +164,8 @@ class Coordinator:
                     or any(belongs.get(field)!=task[key] for field,key in (('scene_id','scene_id'),
                            ('person_id','requester_id'),('scope_key','scope_key'),('policy_epoch','policy_epoch')))):
                 raise Denied('CONSULT_CONTEXT_UNAVAILABLE')
-            source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0],
-                'scene_id':task['scene_id'],'scope_key':task['scope_key'],'policy_epoch':task['policy_epoch']})
+            source=message_records.get(self.store,task['raw_input_refs'][0],
+                scene=task['scene_id'],scope=task['scope_key'],epoch=task['policy_epoch'])
             if not source:raise ValueError('CONSULT_SOURCE_MISSING')
             question=args['question'].strip()
             self.collab(task,'question',{'from':'action','text':question},entry_id='q:'+call_key)
@@ -343,10 +344,10 @@ class Coordinator:
         without one (chat.py) — the same line is never answered twice."""
         own='in-'+ep['_id']
         for input_id in dict.fromkeys(seen):
-            row=self.store.db.messages.find_one({'_id':input_id,'scene_id':ep['scene_id'],'direction':'inbound'})
+            row=message_records.get(self.store,input_id,scene=ep['scene_id'],direction='inbound')
             if not row or input_id==own or row.get('absorbed_by') or row.get('ingress_state')!='ACCEPTED':
                 continue
-            self.store.put('messages',{**row,'absorbed_by':ep['_id']},expected=row['revision'],stream=ep['_id'])
+            message_records.save(self.store, {**row,'absorbed_by':ep['_id']},expected=row['revision'],stream=ep['_id'])
             self.store.audit(ep['_id'],'input.absorbed',{'input_id':input_id},ep['scope_key'])
 
     def _deliver(self, ep, operation, text, names, handler, *, first):
@@ -409,7 +410,7 @@ class Coordinator:
         from datetime import datetime as _dt, timezone as _tz
         ep_id=ep['_id']
         model,policy=model_and_policy(self.store,ep['persona'])
-        earlier=list(self.store.db.messages.find({'episode_id':ep_id,'phase':'SPEAK'},{'segment_index':1,'not_before':1,'text':1}))
+        earlier=message_records.turn_parts(self.store,ep_id,by=None).rows(fields=['segment_index','not_before','text'])
         start=max([_dt.now(_tz.utc)]+[_dt.fromisoformat(row['not_before']) for row in earlier if row.get('not_before')])
         texts=([max(earlier,key=lambda row:row.get('segment_index') or 0).get('text') or ''] if earlier else [])+[part['text'] for part in planned]
         times=pacing(texts,start,effective(model,'speak.chars_per_second',policy) or 12,
@@ -428,7 +429,7 @@ class Coordinator:
                  **({'errand':True} if ep.get('errand') else {}),**(part.get('fields') or {})}
             if (scene or {}).get('channel_id') and (index or offset):
                 row['not_before']=times[offset].isoformat()
-            self.store.put('messages',row,stream=ep_id)
+            message_records.save(self.store, row,stream=ep_id)
             if part['kind']=='sticker':
                 stickers.sent(self.store,ep['persona'],part['name'],ep['scene_id'])
             queued.append({'number':offset+1,'shown':part['shown'],'key':key,'state':'READY','seq':sequence})
@@ -448,14 +449,14 @@ class Coordinator:
         picture when she gave one."""
         ep_id=ep['_id']
         key=ep_id+':speak:0'
-        if not self.store.db.messages.find_one({'_id':key}):
+        if not message_records.get(self.store, key):
             sequence=scene_records.next_seq(self.store, ep['scene_id'])
             row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':ep['speech'],'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY',**({'errand':True} if ep.get('errand') else {})}
             # 这一回合被程序接受的那张图（没有就 None）：字节仍在 BlobStore，行上只写元数据。
             attach_meta=outbound_media.attachment_for_speak(ep)
             if attach_meta:
                 row['attachment']=dict(attach_meta)
-            self.store.put('messages',row,stream=ep_id)
+            message_records.save(self.store, row,stream=ep_id)
         self.publisher.publish(key)
         self.crash('before_episode_commit')
         return self._update(self.store.db.episodes.find_one({'_id':ep_id}),
@@ -467,7 +468,7 @@ class Coordinator:
         from .state import content_ref
         event=ep['attend_event']
         scene=scene_records.authorize(self.store, ep['scene_id'], ep['person_id'])
-        row=self.store.db.messages.find_one({'_id':'in-'+ep['_id']})
+        row=message_records.get(self.store, 'in-'+ep['_id'])
         operation=ep['_id']+':ATTEND:0'
         self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':'ATTEND'},ep['scope_key'])
         try:
@@ -506,12 +507,12 @@ class Coordinator:
         self.store.audit(ep['_id'],'attend.verdict',verdict,ep['scope_key'])
         if verdict['choice']=='failed':
             host_stops.missed_look(self.store,ep,cause or 'error')
-        row=self.store.db.messages.find_one({'_id':'in-'+ep['_id']})     # the chunker may have stamped it meanwhile
+        row=message_records.get(self.store, 'in-'+ep['_id'])     # the chunker may have stamped it meanwhile
         if row:
             # A gate that could not decide is the program's failure, never her 不理 (her ask, 2026-10-14): it is
             # counted apart and shown at home (host_stops.block).
             outcome={'join':'ATTEND_JOIN','failed':'ATTEND_FAILED'}.get(verdict['choice'],'ATTEND_QUIET')
-            self.store.put('messages',{**row,'processing_outcome':outcome,
+            message_records.save(self.store, {**row,'processing_outcome':outcome,
                                        'attend':verdict},expected=row['revision'],stream=ep['_id'])
         fallback=verdict['choice']=='failed' and attend.addressed(event)
         if fallback:
@@ -600,7 +601,8 @@ class Coordinator:
 
     def publish_queued(self, ep_id):
         """Her reply's parts written but not yet handed on (ADR-064 phase 2), in order; a failed one cancels the rest."""
-        for row in self.store.db.messages.find({'episode_id':ep_id,'reply_part':True,'delivery_state':'READY'}).sort('segment_index',1):
+        for row in message_records.turn_parts(self.store,ep_id,speech=False,state='READY',reply_parts=True,
+                                              by='segment_index').rows():
             published=self.publisher.publish(row['_id'])
             if published.get('delivery_state') in ('FAILED','UNKNOWN'):
                 self.publisher.cancel_after(published)
@@ -616,7 +618,7 @@ class Coordinator:
         from .grants import development_granted
         from . import errands
         ep=errands.home_turn(self.store,ep)
-        source=self.store.db.messages.find_one({'_id':'in-'+ep['_id']}) or {}
+        source=message_records.get(self.store, 'in-'+ep['_id']) or {}
         event=source.get('event',{})
         scene=scene_records.get(self.store, ep['scene_id']) or {'_id':ep['scene_id']}
         development=ep.get('episode_kind')!='consult' and development_granted(self.store,scene,
@@ -666,7 +668,7 @@ class Coordinator:
             development,integration,names=self._grants(ep)
             source_ref=('in-'+authority['_id']) if authority.get('episode_kind')!='consult' else None
             original=self.store.db.tasks.find_one({'_id':ep.get('task_id')}) if ep.get('task_id') else None
-            raw=[source_ref] if source_ref and self.store.db.messages.find_one({'_id':source_ref},{'_id':1}) else (original or {}).get('raw_input_refs',[])
+            raw=[source_ref] if source_ref and message_records.get(self.store, source_ref, fields=['_id']) else (original or {}).get('raw_input_refs',[])
             with database_effects_lock(self.store.name):
                 require_current_feedback(self.store, ep)
                 task=self.store.put('tasks',{'_id':task_id,'request_key':task_id,'thread':task_id,'episode_id':ep['_id'],
@@ -722,7 +724,7 @@ class Coordinator:
             return {'task':task['_id'],'state':'行动脑下一步就会看到这句话',
                     'action_brain':'它正在做这件事，接着原来的上下文：之前查到的它都还看得到。'}
         local=(ep['scene_id'],ep['person_id'])==(self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])
-        source=(self.store.db.messages.find_one({'_id':'in-'+ep['_id']}) or {}).get('event',{})
+        source=(message_records.get(self.store, 'in-'+ep['_id']) or {}).get('event',{})
         if task['state']=='STALE':
             raise role_tools.Refused('这件事正在被改（不是你的错）：等它的新版本回来再补话，结果回来会再叫你。')
         if task['state']=='CANCELLED' and task.get('cancel_reason')!='host_stop':
@@ -745,7 +747,7 @@ class Coordinator:
             binding=(f"task:{task_id}:{ep['scope_key']}:{ep['policy_epoch']}:1" if fresh else
                      task.get('execution_binding') or f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}")
             source_ref='in-'+ep['_id']
-            raw=[source_ref] if self.store.db.messages.find_one({'_id':source_ref},{'_id':1}) else task['raw_input_refs']
+            raw=[source_ref] if message_records.get(self.store, source_ref, fields=['_id']) else task['raw_input_refs']
             with database_effects_lock(self.store.name):
                 require_current_feedback(self.store, ep)
                 continued=self.store.put('tasks',{'_id':task_id,'request_key':task_id,'thread':task.get('thread') or task['_id'],

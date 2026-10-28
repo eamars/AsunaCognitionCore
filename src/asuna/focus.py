@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 ACTIVE_GROUPS = 4
 # What still wakes her in a resting group: words addressed to her, and the people she is waiting for.
@@ -60,8 +61,7 @@ def wake(store, scene, reason):
 
 
 def _lines_today(store, scene, moment):
-    return store.db.messages.count_documents({'scene_id': scene['_id'], 'direction': 'inbound',
-                                              'received_at': {'$gte': (moment - DAY).isoformat()}})
+    return message_records.inbound(store, scene['_id'], since=(moment - DAY).isoformat()).count()
 
 
 def listing(store, persona, moment=None):

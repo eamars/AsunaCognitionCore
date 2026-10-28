@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import re
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 try:                                  # 宿主内：与 channels / history_query 同一套围栏
     from .state import Denied
@@ -704,7 +705,7 @@ def receipt_evidence(row, store=None):
     """平台回执里那份附件证据（适配器真的取到并发了图才会写）。行里没带就按 _id 窄取一次。"""
     raw = (row or {}).get('platform_receipt')
     if not isinstance(raw, dict) and store is not None and row.get('_id'):
-        full = store.db.messages.find_one({'_id': row['_id']}, {'platform_receipt': 1}) or {}
+        full = message_records.get(store, row['_id'], fields=['platform_receipt']) or {}
         raw = full.get('platform_receipt')
     if not isinstance(raw, dict):
         return None

@@ -28,6 +28,7 @@ from .blobs import BlobStore, erased, erased_words, refuse_erased
 from .outbound_files import removed, size_words
 from .state import Denied, now
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 KIND = 'received_file'             # its own kind: put_once matches kind, so it is never matched to a file of hers
 SOURCE = 'received-file:'          # the source id prefix (media_life.POLICY)
@@ -509,7 +510,7 @@ def _sender(store, persona, entry):
     """Who sent it, as the line names them; the owner by the persona's own word for them."""
     from .people import People
     scene = scene_records.get(store, entry.get('scene_id')) or {'_id': entry.get('scene_id')}
-    line = store.db.messages.find_one({'_id': entry['source_message_id']})
+    line = message_records.get(store, entry['source_message_id'])
     people = People(store, persona)
     doc = people.entry(scene, (line or {}).get('author'), line)
     return people.owner_label if people.is_owner(doc) else people.label(doc)
@@ -549,7 +550,7 @@ def read(store, where, config, args, *, persona, session_class, moment=None):
             store.db.artifacts.update_one({'_id': row['_id']}, {'$set': {'days_from': moment}})
         else:                                    # never fetched, or the link now serves other bytes: a row of its own
             sender = _sender(store, persona, entry)
-            line = store.db.messages.find_one({'_id': entry['source_message_id']}, {'received_at': 1}) or {}
+            line = message_records.get(store, entry['source_message_id'], fields=['received_at']) or {}
             scene = scene_records.get(store, entry.get('scene_id'), fields=['scope_key']) or {}
             stored = stash(store, data, scene['scope_key'], message_id=entry['source_message_id'],
                            index=entry['index'], name=entry['name'], sender=sender, message_at=line.get('received_at'),

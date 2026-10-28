@@ -13,7 +13,7 @@ import re
 from .config import ago, character_id
 from .state import Denied
 from . import carried, channel_kinds, scene_links
-from .ingress import NOT_CORE_NOTICE
+from .records import messages as message_records
 from .native_cognition import CognitionView
 from .peer_context import speaker_name
 from .records import scenes as scene_records
@@ -145,8 +145,6 @@ class NativeMemory:
         self.unit_query = {'status': 'active', 'character_id': character_id(self.store.config),
                            '$or': self.scopes + [{'scope_key': 'global-safe', 'policy_epoch': 1},
                                                  {'scope_key': 'owner-private:' + persona, 'policy_epoch': 1}]}
-        self.message_query = {'$and': [{'$or': self.sources}, NOT_CORE_NOTICE, {'$or': [
-            {'direction': 'inbound'}, {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}]}
         self.cognition = CognitionView(self)
 
     def scene_title(self, scene_id):
@@ -261,8 +259,8 @@ class NativeMemory:
         """The last ten people who spoke in this conversation, each with how she sees them here (or nothing yet)."""
         from . import understanding
         latest = {}
-        for message in self.store.db.messages.find({'scene_id': self.scene['_id'], 'direction': 'inbound', **NOT_CORE_NOTICE},
-                                                   {'author': 1, 'occurred_at': 1}).sort('occurred_at', -1).limit(2000):
+        for message in message_records.inbound(self.store, self.scene['_id'], people_only=True, by='occurred_at').rows(
+                newest_first=True, limit=2000, fields=['author', 'occurred_at']):
             if message.get('author') and message['author'] not in latest:
                 latest[message['author']] = message.get('occurred_at')
             if len(latest) == 10:
@@ -440,28 +438,34 @@ class NativeMemory:
         skipped = 0
         if kind in ('summary', 'source', 'interpretation'):
             messages = kind == 'source'
-            query = self.message_query if messages else dict(self.unit_query)
-            if kind == 'summary':
-                query['epistemic_type'] = 'derived_summary'
-            elif kind == 'interpretation':
-                query['epistemic_type'] = 'character_interpretation'
-            if search:
-                query = {'$and': [query, {'text' if messages else 'body_markdown': {
-                    '$regex': re.escape(search), '$options': 'i'}}]}
-            projection = {'scope_key': 1, 'scene_id': 1, 'author': 1, 'speaker': 1, 'kind': 1, 'event.raw.asuna_peer': 1,
-                'epistemic_type': 1, 'generated_at': 1, 'occurred_at': 1, '_memory_time': 1,
-                'excerpt': {'$substrCP': [{'$ifNull': ['$text' if messages else '$body_markdown', '']}, 0, 200]}}
-            collection = self.store.db.messages if messages else self.store.db.memory_units
             # State and coverage rows are bounded. Merge into a time-ordered
             # window instead of loading every preceding page or pinning them first.
             skipped = max(0, offset - len(heads))
-            # Every memory carries its own time: a summary when it was made, a line when it was said, a thought
-            # when she formed it.
-            timing = [] if messages else [
-                {'$addFields': {'_memory_time': {'$ifNull': ['$generated_at', '$occurred_at', '$formed_at']}}}]
-            result = collection.aggregate([{'$match': query}, *timing, {'$sort': {
-                'occurred_at' if messages else '_memory_time': -1, '_id': -1}},
-                {'$skip': skipped}, {'$limit': self.PAGE + 1 + len(heads)}, {'$project': projection}])
+            if messages:
+                # A line's time is when it was said; its excerpt is the start of its text.
+                result = message_records.said_in_sources(self.store, self.sources, search=search or None).rows(
+                    newest_first=True, skip=skipped, limit=self.PAGE + 1 + len(heads),
+                    fields=['scope_key', 'scene_id', 'author', 'speaker', 'kind', 'event.raw.asuna_peer',
+                            'epistemic_type', 'generated_at', 'occurred_at', 'text'])
+                for row in result:
+                    text = row.pop('text', None)
+                    row['excerpt'] = (text if isinstance(text, str) else '')[:200]
+            else:
+                query = dict(self.unit_query)
+                if kind == 'summary':
+                    query['epistemic_type'] = 'derived_summary'
+                elif kind == 'interpretation':
+                    query['epistemic_type'] = 'character_interpretation'
+                if search:
+                    query = {'$and': [query, {'body_markdown': {'$regex': re.escape(search), '$options': 'i'}}]}
+                projection = {'scope_key': 1, 'scene_id': 1, 'author': 1, 'speaker': 1, 'kind': 1,
+                    'event.raw.asuna_peer': 1, 'epistemic_type': 1, 'generated_at': 1, 'occurred_at': 1,
+                    '_memory_time': 1, 'excerpt': {'$substrCP': [{'$ifNull': ['$body_markdown', '']}, 0, 200]}}
+                # Every memory carries its own time: a summary when it was made, a thought when she formed it.
+                result = self.store.db.memory_units.aggregate([{'$match': query}, {'$addFields': {
+                    '_memory_time': {'$ifNull': ['$generated_at', '$occurred_at', '$formed_at']}}},
+                    {'$sort': {'_memory_time': -1, '_id': -1}},
+                    {'$skip': skipped}, {'$limit': self.PAGE + 1 + len(heads)}, {'$project': projection}])
             for row in result:
                 source = row.get('scene_id') or row.get('scope_key', '').removeprefix('scene:')
                 rows.append({'id': ('source:' if messages else 'unit:') + row['_id'],
@@ -608,8 +612,8 @@ class NativeMemory:
                     from . import reasons
                     result['then'] = reasons.then(self.store, row)       # what she did after this thought
         elif kind == 'source':
-            row = self.store.db.messages.find_one({**self.message_query, '_id': key},
-                {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1, 'direction': 1, 'event.raw.asuna_peer': 1})
+            row = message_records.said_in_sources(self.store, self.sources, line=key, by=None).first(
+                fields=['text', 'author', 'scene_id', 'occurred_at', 'direction', 'event.raw.asuna_peer'])
             if row:
                 result = {'id': identifier, 'body': row.pop('text', ''), 'interpretation': False,
                           'category': 'source', 'usage': self.cognition.usage(identifier), **row}
@@ -628,8 +632,8 @@ class NativeMemory:
         ids = result.pop('source_ids', [])
         result['sources_truncated'] = len(ids) > 12
         ids = ids[:12]
-        result['sources'] = list(self.store.db.messages.find({**self.message_query, '_id': {'$in': ids}},
-            {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1, 'event.raw.asuna_peer': 1}).sort([('occurred_at', 1), ('_id', 1)]).limit(12))
+        result['sources'] = message_records.said_in_sources(self.store, self.sources, lines=ids).rows(
+            limit=12, fields=['text', 'author', 'scene_id', 'occurred_at', 'event.raw.asuna_peer'])
         # Self/relationship revisions can cite interpretation or summary units,
         # not only original messages. Keep the source type and the same scope.
         for source in self.store.db.memory_units.find({**self.unit_query, '_id': {'$in': ids}},

@@ -31,6 +31,7 @@ from datetime import datetime, timedelta, timezone
 
 from .state import Denied, now
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 KEY = 'asuna_notice'
 GATES = ('poked', 'reacted')
@@ -75,14 +76,8 @@ def fill(store, scene, block, text, moment=None):
         return text.replace('{line}', '一条消息'), False, None
     moment = moment or datetime.now(timezone.utc)
     since = (moment - timedelta(days=QUOTE_DAYS)).isoformat()
-    fields = {'_id': 1, 'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1}
     # Her own line is found however old (its id is her receipt's); anyone's within the last QUOTE_DAYS.
-    row = (store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'outbound',
-                                       'platform_message_id': line['message_id']}, fields, sort=[('scene_seq', -1)])
-           if line.get('mine') else None) or store.db.messages.find_one({'scene_id': scene['_id'], '$or': [
-        {'direction': 'inbound', 'event.channel.platform_event_id': line['message_id'], 'received_at': {'$gte': since}},
-        {'direction': 'outbound', 'platform_message_id': line['message_id'], 'receipt_at': {'$gte': since}}]},
-        fields, sort=[('scene_seq', -1)])
+    row = message_records.quoted(store, scene['_id'], line['message_id'], mine=line.get('mine'), since=since)
     if not row:
         return text.replace('{line}', '一条消息', 1), False, None
     return _named(store, scene, text, row), row.get('direction') == 'outbound', row['_id']
@@ -96,7 +91,7 @@ def _named(store, scene, text, row):
 def line_row(store, block):
     """The row of the line a notice is about, when it was found (its direction tells whether it is hers)."""
     row_id = ((block or {}).get('line') or {}).get('row')
-    return store.db.messages.find_one({'_id': row_id}, {'direction': 1}) if row_id else None
+    return message_records.get(store, row_id, fields=['direction']) if row_id else None
 
 
 def words(store, scene, text, block):
@@ -106,7 +101,7 @@ def words(store, scene, text, block):
     row_id = ((block or {}).get('line') or {}).get('row')
     if not template or not row_id:
         return text
-    row = store.db.messages.find_one({'_id': row_id}, {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1})
+    row = message_records.get(store, row_id, fields=['text', 'author', 'direction', 'scene_seq'])
     return _named(store, scene, template, row) if row else text
 
 

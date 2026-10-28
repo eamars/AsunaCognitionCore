@@ -28,6 +28,7 @@ from datetime import datetime, timedelta, timezone
 from .evidence import canonical, sha
 from .memory_pilot import FLOOR, OWN_SLOTS, SLOTS   # her own items: two of a turn's six slots, above the pilot's floor
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 TIERS_VERSION = 1
 ENABLED = True                     # the switch (ADR-062 phase 2): hers and the owner's to turn on
@@ -523,8 +524,8 @@ class Tiers:
         crossing.number('window_days') days, at most key_words.WINDOW_LINES."""
         from . import crossing, key_words
         since = _iso((moment or _now()) - timedelta(days=crossing.number('window_days')))
-        rows = self.store.db.messages.find({'scene_id': scene_id, 'direction': 'inbound', 'received_at': {'$gte': since}},
-                                           {'text': 1}).sort('scene_seq', -1).limit(key_words.WINDOW_LINES)
+        rows = message_records.inbound(self.store, scene_id, since=since).each(
+            newest_first=True, limit=key_words.WINDOW_LINES, fields=['text'])
         return [row['text'] for row in rows if isinstance(row.get('text'), str)]
 
     def rerate(self, scene_id, moment=None):
@@ -561,8 +562,7 @@ class Tiers:
         from . import crossing
         moment = moment or _now()
         since = _iso(moment - timedelta(days=crossing.number('window_days')))
-        places = sorted(set(self.store.db.messages.distinct('scene_id', {'direction': 'inbound',
-                                                                        'received_at': {'$gte': since}})))
+        places = sorted(set(message_records.inbound(self.store, since=since).values('scene_id')))
         for scene_id in places:
             self.rerate(scene_id, moment)
         self.rows.delete_many({'row': 'rarity', 'persona': self.persona, 'scene_id': {'$nin': places}})

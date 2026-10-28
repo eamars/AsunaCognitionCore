@@ -13,6 +13,7 @@ from .config import redact_text as redact
 from .ingress import episode_id, persist_input, input_state
 from .router import FairQueue
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 
 class SceneQueue(Queue):
@@ -214,7 +215,7 @@ class Chat:
                              '自行决定是否值得反思、继续旧工作、委托改进，或者什么都不做。无需公开回复。'),
             'trusted_context_events': trusted_context_events or [],
         }
-        previous = self.app.store.db.messages.find_one({'_id': 'in-' + episode_id(event)})
+        previous = message_records.get(self.app.store, 'in-' + episode_id(event))
         if previous:
             prior_profile = (previous.get('event') or {}).get('integration_profile')
             if prior_profile is not None:
@@ -271,7 +272,7 @@ class Chat:
         woken = (event.get('group_context') or {}).get('wake_reason') == proactive.WAKE_REASON
         if not woken and not (event.get('channel') and 'group_context' in event):
             return None, None, None          # 不是通道群消息：没有旁听行可判断
-        row = self.app.store.db.messages.find_one({'_id': 'in-' + episode})
+        row = message_records.get(self.app.store, 'in-' + episode)
         scene = scene_records.get(self.app.store, event['scene_id'])
         if not scene or scene.get('kind') != 'group' or not row:
             return None, None, None
@@ -348,16 +349,15 @@ class Chat:
                                     can_run=self._proactive_open(scene['_id']))
         if decision['fire']:
             return False
-        current = self.app.store.db.messages.find_one({'_id': row['_id']})
+        current = message_records.get(self.app.store, row['_id'])
         if not current:
             return True
         record = {**(current.get('proactive') or {}), 'wake': False,
                   'recheck_hold': decision['holds'],
                   'recheck_at': datetime.fromtimestamp(moment, timezone.utc).isoformat()}
         try:
-            self.app.store.put('messages', {**current, 'processing_outcome': proactive.OUTCOME_HOLD,
-                                           'proactive': record}, expected=current['revision'],
-                               stream=episode)
+            message_records.save(self.app.store, {**current, 'processing_outcome': proactive.OUTCOME_HOLD,
+                                 'proactive': record}, expected=current['revision'], stream=episode)
         except Exception:
             pass
         self.app.evidence.record('proactive.hold', {'scene_id': scene['_id'], 'message_id': row['_id'],
@@ -367,8 +367,7 @@ class Chat:
     def recover_inputs(self):
         """Called once by the owning host before it exposes any clients."""
         with self.ingress_lock:
-            for row in self.app.store.db.messages.find({'host_managed': True,
-                    'ingress_state': {'$in': ['ACCEPTED', 'PROCESSING', 'FAILED']}}).sort('received_at', 1):
+            for row in message_records.ingress(self.app.store, ['ACCEPTED', 'PROCESSING', 'FAILED']).rows():
                 episode = row['episode_id']
                 # A failure before episode creation made no model/tool calls.
                 # Keep its original identity and diagnostic when resuming.
@@ -415,7 +414,7 @@ class Chat:
                         self.pending.put((event, task['episode_id']))
                 else:
                     scene = scene_records.authorize(self.app.store, event['scene_id'], event['person_id'])
-                    source = self.app.store.db.messages.find_one({'_id': 'in-' + episode})
+                    source = message_records.get(self.app.store, 'in-' + episode)
                     if source['policy_epoch'] != scene['policy_epoch']:
                         raise PermissionError('INPUT_POLICY_STALE')
                     if source.get('absorbed_by'):
@@ -457,10 +456,8 @@ class Chat:
                     self._proactive_consider(event, episode, result)
                     self._sticker_pool(event, episode)
                 scene_records.authorize(self.app.store, event['scene_id'], event['person_id'])
-                messages = list(self.app.store.db.messages.find({
-                    'episode_id': episode, 'scene_id': event['scene_id'],
-                    'direction': 'outbound', 'phase': 'SPEAK', 'delivery_state': 'DELIVERED'
-                }).sort('scene_seq', 1))
+                messages = message_records.turn_parts(self.app.store, episode, scene=event['scene_id'],
+                                                      outbound=True, delivered=True).rows()
                 for message in messages:
                     self.emit(f"{self.settings['display_name']}：{message['text']}")
                 ready = [task_id for task_id in result.get('task_ids') or ()

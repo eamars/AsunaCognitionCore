@@ -45,6 +45,7 @@ from datetime import datetime, timezone
 from . import key_words
 from .config import DATA, character_id, excerpt
 from .records import scenes as scene_records
+from .records import messages as message_records
 
 RULES = ('all', 'own_lines', 'never')
 DEFAULT = 'own_lines'
@@ -170,13 +171,11 @@ def _sources(store, here_id):
 def _correction(store, scene, unit):
     """The correction a later line made of this one (a resolved reply), as (who, text), or None."""
     from .summary_attribution import corrections
-    line = store.db.messages.find_one({'_id': (unit.get('source_event_ids') or [None])[0]})
+    line = message_records.get(store, (unit.get('source_event_ids') or [None])[0])
     if not line:
         return None
-    later = list(store.db.messages.find({'scene_id': scene['_id'], 'policy_epoch': scene.get('policy_epoch', 1),
-                                         'scene_seq': {'$gt': line.get('scene_seq', 0)},
-                                         '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]})
-                 .sort('scene_seq', 1).limit(LATER))
+    later = message_records.said(store, scene['_id'], scene.get('policy_epoch', 1),
+                                 after=line.get('scene_seq', 0)).rows(limit=LATER)
     me = character_id(store.config)
     for found in corrections(store, scene, [line, *later]):
         if found.get('corrects') == line['_id']:
@@ -303,7 +302,7 @@ def build(store, moment=None):
     column = store.db[WORDS]
     mark = column.find_one({'_id': 'mark'}) or {}
     generation = int(mark.get('generation') or 0) + 1
-    seqs = {scene_id: (store.db.messages.find_one({'scene_id': scene_id}, {'scene_seq': 1}, sort=[('scene_seq', -1)])
+    seqs = {scene_id: (message_records.lines(store, scene_id).first(newest_first=True, fields=['scene_seq'])
                        or {}).get('scene_seq', 0) for scene_id in groups}
     batch = [{'_id': '%d:%s' % (generation, word), 'row': 'word', 'generation': generation, 'word': word,
               'hers': entry['hers'],
@@ -339,9 +338,8 @@ def top_up(store):
     reached, units = {}, []
     for scene_id, scene in groups.items():
         upto = seqs.get(scene_id, 0)
-        rows = list(store.db.messages.find({'scene_id': scene_id, 'scene_seq': {'$gt': upto}},
-                                           {'text': 1, 'direction': 1, 'delivery_state': 1, 'author': 1, 'policy_epoch': 1,
-                                            'memory_chunk_version': 1, 'scene_seq': 1}).sort('scene_seq', 1))
+        rows = message_records.lines(store, scene_id, after=upto).rows(
+            fields=['text', 'direction', 'delivery_state', 'author', 'policy_epoch', 'memory_chunk_version', 'scene_seq'])
         ids = []
         for row in rows:
             chunked = row.get('memory_chunk_version') == 2
@@ -403,8 +401,8 @@ def _said_at(store, units):
     (scene_links.message_times, the order every cross-place merge uses)."""
     from .scene_links import message_times
     sources = {(unit.get('source_event_ids') or [None])[0]: unit['_id'] for unit in units}
-    rows = list(store.db.messages.find({'_id': {'$in': [key for key in sources if key]}},
-                                       {'direction': 1, 'receipt': 1, 'receipt_at': 1, 'occurred_at': 1, 'received_at': 1}))
+    rows = message_records.many(store, [key for key in sources if key]).rows(
+        fields=['direction', 'receipt', 'receipt_at', 'occurred_at', 'received_at'])
     times = message_times(store, rows)
     out = {unit['_id']: unit.get('occurred_at') for unit in units}
     out.update({sources[key]: at for key, (at, _) in times.items() if key in sources and at})
@@ -434,14 +432,12 @@ def fetch(store, here, ref, zone):
     leaving = rule(scene['_id'])
     if leaving == 'never':
         return None, MISSING['never'] % (DOC, ref)
-    line = store.db.messages.find_one({'_id': (unit.get('source_event_ids') or [None])[0]}, {'scene_seq': 1})
+    line = message_records.get(store, (unit.get('source_event_ids') or [None])[0], fields=['scene_seq'])
     if not line:
         return None, MISSING['gone'] % (DOC, ref)
     me = character_id(store.config)
-    rows = store.db.messages.find({'scene_id': scene['_id'], 'policy_epoch': scene.get('policy_epoch', 1),
-                                   'scene_seq': {'$gte': line['scene_seq'] - AROUND, '$lte': line['scene_seq'] + AROUND},
-                                   '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]},
-                                  {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1}).sort('scene_seq', 1)
+    rows = message_records.said(store, scene['_id'], scene.get('policy_epoch', 1), from_seq=line['scene_seq'] - AROUND,
+                                upto=line['scene_seq'] + AROUND).rows(fields=['text', 'author', 'direction', 'scene_seq'])
     lines, left_out = [], 0
     for row in rows:
         mine = row.get('direction') == 'outbound' and row.get('author') == me
@@ -586,8 +582,8 @@ def cue(store, persona, scene, event, history, own, zone, moment=None, *, free=T
     new.append((seq, text))
     if every and isinstance(seq, int):
         # Lines that came after the one the turn is for, claimed into it before its context was built.
-        new += [(row['scene_seq'], row.get('text') or '') for row in store.db.messages.find(
-            {'scene_id': scene['_id'], 'direction': 'inbound', 'scene_seq': {'$gt': seq}}, {'scene_seq': 1, 'text': 1})]
+        new += [(row['scene_seq'], row.get('text') or '') for row in message_records.inbound(
+            store, scene['_id'], after=seq, by=None).rows(fields=['scene_seq', 'text'])]
     earlier = [t for s, t, _ in history if not every or not isinstance(s, int) or s <= upto]
     tiers = Tiers(store, persona)
     vocabulary(store)
@@ -629,7 +625,7 @@ def cue(store, persona, scene, event, history, own, zone, moment=None, *, free=T
 
 def _line_seq(store, event):
     """The scene_seq of the line a turn is for, or None (a turn from no line)."""
-    return (store.db.messages.find_one({'_id': 'in-' + _episode(event)}, {'scene_seq': 1}) or {}).get('scene_seq')
+    return (message_records.get(store, 'in-' + _episode(event), fields=['scene_seq']) or {}).get('scene_seq')
 
 
 def fired(store, persona, what, scene, event, moment=None, *, episode=None, **fields):
@@ -637,7 +633,7 @@ def fired(store, persona, what, scene, event, moment=None, *, episode=None, **fi
     which line (the turn's line's scene_seq) and when."""
     import uuid
     episode = episode or _episode(event)
-    line = store.db.messages.find_one({'_id': 'in-' + episode}, {'scene_seq': 1}) or {}
+    line = message_records.get(store, 'in-' + episode, fields=['scene_seq']) or {}
     store.db[FIRES].insert_one({'_id': 'fire:' + uuid.uuid4().hex, 'kind': what, 'persona': persona,
                                 'scene_id': scene['_id'], 'event_id': event.get('event_id'), 'episode_id': episode,
                                 'scene_seq': line.get('scene_seq'), 'at': (moment or datetime.now(timezone.utc)).isoformat(),
@@ -697,8 +693,7 @@ def report(store, since, compactions=None):
     lines = {}
     ids = ['in-' + key for key in episodes]
     for start in range(0, len(ids), 1000):
-        for row in db.messages.find({'_id': {'$in': ids[start:start + 1000]}, 'received_at': {'$gte': since}},
-                                    {'scene_seq': 1}):
+        for row in message_records.many(store, ids[start:start + 1000], since=since).rows(fields=['scene_seq']):
             lines[row['_id'][len('in-'):]] = row.get('scene_seq') or 0
     turns = {}
     for key, seq in lines.items():

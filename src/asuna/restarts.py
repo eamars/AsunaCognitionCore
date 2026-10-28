@@ -108,7 +108,8 @@ class Desk:
         waiting = getattr(getattr(self.controller, 'pending', None), 'unfinished_tasks', 0)
         if waiting:
             items.append('排着队还没轮到的消息 %d 条：起来后接着处理，不会丢' % waiting)
-        unsent = store.db.messages.count_documents({'direction': 'outbound', 'delivery_state': {'$in': ['QUEUED_EXTERNAL', 'SENDING']}})
+        from .records import messages as message_records
+        unsent = message_records.unsettled(store)
         if unsent:
             items.append('还没确认送到的话 %d 条：在发的那条会变成「没给准话」，不会自动重发' % unsent)
         soon = (moment + timedelta(minutes=PLANS_AHEAD_MINUTES)).isoformat()

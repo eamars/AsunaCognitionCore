@@ -16,7 +16,9 @@ aggregate has no plan of its own to compare; the new plan is reported), and how 
 declared field, the records whose value its declaration refuses; numbers only. The collections to create, the
 indexes to make and the validators count for the collections the batch declares (the rest are reported apart); a
 plan difference the lead accepted (ACCEPTED_PLAN_DIFFERENCES) is reported with its times and does not fail the run.
-Each query is read-only and bounded by `--max-ms`. The numbers go to `<out>/<batch>.json` (default
+The field counts are many small reads (parts of at most PART_RECORDS records by `_id`, FIELDS_PER_READ fields
+each), each bounded by `--max-ms` on the server; a read over its limit leaves its fields unchecked, named in the
+report (exit 2). Each query is read-only and bounded by `--max-ms`. The numbers go to `<out>/<batch>.json` (default
 `<data>/private/adr104-evidence/<batch>/`) and to the console. Exit 0 when nothing would be created, made or refused,
 every validator is the one ensure creates and every declared field holds only its kind (the retired indexes to drop
 are reported: dropping them is the batch's change); 1 when something differs; 2 when a check could not run (a query
@@ -82,46 +84,109 @@ def _list_root(collection, path):
     return None
 
 
-def kinds(db, collection, max_ms):
+# The field-kind counts are many small reads, never one scan of a whole collection: the records in parts of at most
+# PART_RECORDS by `_id` (its index), a few fields at a time, each read bounded by `--max-ms` on the server.
+PART_RECORDS = 20000
+FIELDS_PER_READ = 10
+
+
+def parts(db, name, max_ms, timings):
+    """The `_id` bounds that cut a collection into parts of at most PART_RECORDS records: [(after, upto)], None
+    standing for an open end. Each bound is one read of the `_id` index (the store's ids are text)."""
+    import time as clock
+    bounds, last = [], None
+    while True:
+        started = clock.perf_counter()
+        try:
+            found = list(db[name].find({'_id': {'$gt': last}} if last is not None else {}, {'_id': 1},
+                                       sort=[('_id', 1)], skip=PART_RECORDS - 1, limit=1, max_time_ms=max_ms))
+        finally:
+            timings.append((clock.perf_counter() - started) * 1000)
+        if not found:
+            bounds.append((last, None))
+            return bounds
+        bounds.append((last, found[0]['_id']))
+        last = found[0]['_id']
+
+
+def _part(after, upto):
+    bound = {**({'$gt': after} if after is not None else {}), **({'$lte': upto} if upto is not None else {})}
+    return {'_id': bound} if bound else {}
+
+
+def kinds(db, collection, max_ms, timings=None, unchecked=None):
     """Per declared field: {bson type: records}, the records whose vector length differs from the declared one, and
     for a list {element bson type: records}. A field inside the objects of a list is counted by the types of the
     values its records hold there (a record holding none counts as missing), read from the records holding the
-    list."""
+    list. Read part by part and a few fields at a time (PART_RECORDS, FIELDS_PER_READ), each read bounded by
+    `max_ms`; a read over its limit adds its fields to `unchecked` and the count goes on without it."""
+    import time as clock
+    timings = [] if timings is None else timings
+    unchecked = set() if unchecked is None else unchecked
     fields = [f for f in collection.fields if f.path != '_id']
     if not fields:
         return {}
-    plain = [f for f in fields if _list_root(collection, f.path) is None]
-    project = {'_id': 0, **{'k%d' % n: {'$type': '$' + f.path} for n, f in enumerate(plain)}}
-    for n, f in enumerate(plain):
-        if f.kind == 'vector':
-            project['d%d' % n] = {'$cond': [{'$isArray': '$' + f.path}, {'$size': '$' + f.path}, None]}
-        if f.kind == 'list':
-            project['e%d' % n] = {'$cond': [{'$isArray': '$' + f.path}, {'$setUnion': [
-                {'$map': {'input': '$' + f.path, 'in': {'$type': '$$this'}}}]}, []]}
-    rows = db[collection.name].aggregate([{'$project': project}, {'$group': {'_id': '$$ROOT', 'n': {'$sum': 1}}}],
-                                         maxTimeMS=max_ms)
     found = {f.path: {'types': {}, 'other_length': 0, 'elements': {}} for f in fields}
-    for row in rows:
-        for n, f in enumerate(plain):
-            kind = row['_id'].get('k%d' % n, 'missing')
-            found[f.path]['types'][kind] = found[f.path]['types'].get(kind, 0) + row['n']
-            length = row['_id'].get('d%d' % n)
-            if f.kind == 'vector' and length is not None and length != f.dimensions:
-                found[f.path]['other_length'] += row['n']
-            for element in row['_id'].get('e%d' % n) or ():
-                found[f.path]['elements'][element] = found[f.path]['elements'].get(element, 0) + row['n']
+    plain = [f for f in fields if _list_root(collection, f.path) is None]
+    groups = [plain[n:n + FIELDS_PER_READ] for n in range(0, len(plain), FIELDS_PER_READ)]
+    nested = {}
     for f in fields:
         root = _list_root(collection, f.path)
-        if root is None:
-            continue
-        for doc in db[collection.name].find({root: {'$type': 'array'}}, {f.path: 1}, max_time_ms=max_ms):
-            seen = {_bson_type(value) for value in _values_at(doc, f.path.split('.'))} or {'missing'}
-            for kind in seen:
-                found[f.path]['types'][kind] = found[f.path]['types'].get(kind, 0) + 1
-            if f.kind == 'list':
-                for value in _values_at(doc, f.path.split('.')):
-                    for element in {_bson_type(item) for item in value} if isinstance(value, list) else ():
-                        found[f.path]['elements'][element] = found[f.path]['elements'].get(element, 0) + 1
+        if root is not None:
+            nested.setdefault(root, []).append(f)
+    try:
+        cut = parts(db, collection.name, max_ms, timings)
+    except ExecutionTimeout:                           # the parts' bounds could not be read: nothing is counted
+        unchecked.update(f.path for f in fields)
+        return found
+    for after, upto in cut:
+        where = _part(after, upto)
+        for group in groups:
+            project = {'_id': 0, **{'k%d' % n: {'$type': '$' + f.path} for n, f in enumerate(group)}}
+            for n, f in enumerate(group):
+                if f.kind == 'vector':
+                    project['d%d' % n] = {'$cond': [{'$isArray': '$' + f.path}, {'$size': '$' + f.path}, None]}
+                if f.kind == 'list':
+                    project['e%d' % n] = {'$cond': [{'$isArray': '$' + f.path}, {'$setUnion': [
+                        {'$map': {'input': '$' + f.path, 'in': {'$type': '$$this'}}}]}, []]}
+            started = clock.perf_counter()
+            try:
+                rows = list(db[collection.name].aggregate(
+                    [{'$match': where}, {'$project': project}, {'$group': {'_id': '$$ROOT', 'n': {'$sum': 1}}}],
+                    maxTimeMS=max_ms))
+            except ExecutionTimeout:
+                unchecked.update(f.path for f in group)
+                continue
+            finally:
+                timings.append((clock.perf_counter() - started) * 1000)
+            for row in rows:
+                for n, f in enumerate(group):
+                    kind = row['_id'].get('k%d' % n, 'missing')
+                    found[f.path]['types'][kind] = found[f.path]['types'].get(kind, 0) + row['n']
+                    length = row['_id'].get('d%d' % n)
+                    if f.kind == 'vector' and length is not None and length != f.dimensions:
+                        found[f.path]['other_length'] += row['n']
+                    for element in row['_id'].get('e%d' % n) or ():
+                        found[f.path]['elements'][element] = found[f.path]['elements'].get(element, 0) + row['n']
+        for root, inside in nested.items():
+            started = clock.perf_counter()
+            try:
+                docs = list(db[collection.name].find({**where, root: {'$type': 'array'}}, {root: 1},
+                                                     max_time_ms=max_ms))
+            except ExecutionTimeout:
+                unchecked.update(f.path for f in inside)
+                continue
+            finally:
+                timings.append((clock.perf_counter() - started) * 1000)
+            for doc in docs:
+                for f in inside:
+                    seen = {_bson_type(value) for value in _values_at(doc, f.path.split('.'))} or {'missing'}
+                    for kind in seen:
+                        found[f.path]['types'][kind] = found[f.path]['types'].get(kind, 0) + 1
+                    if f.kind == 'list':
+                        for value in _values_at(doc, f.path.split('.')):
+                            for element in {_bson_type(item) for item in value} if isinstance(value, list) else ():
+                                found[f.path]['elements'][element] = found[f.path]['elements'].get(element, 0) + 1
     return found
 
 
@@ -1130,13 +1195,28 @@ def _cases_b4(store, config):
     return [case for case in cases if case[3]], 1 + tried
 
 
-def sizes(db, collection, max_ms):
+def sizes(db, collection, max_ms, timings=None):
     """The records of 512 KiB or more by their BSON size, and of those the ones whose BSON and JSON sizes (the
-    in-memory adapter's measure) fall on different sides of the store's 1 MiB limit."""
+    in-memory adapter's measure) fall on different sides of the store's 1 MiB limit; read part by part like the
+    kinds. None when a read is over its limit."""
+    import time as clock
     from asuna.store.words import MAX_RECORD_BYTES, record_bytes
-    large = [row['_id'] for row in db[collection].aggregate(
-        [{'$project': {'s': {'$bsonSize': '$$ROOT'}}}, {'$match': {'s': {'$gte': MAX_RECORD_BYTES // 2}}},
-         {'$project': {'_id': 1}}], maxTimeMS=max_ms)]
+    timings = [] if timings is None else timings
+    large = []
+    try:
+        cut = parts(db, collection, max_ms, timings)
+    except ExecutionTimeout:
+        return None
+    for after, upto in cut:
+        started = clock.perf_counter()
+        try:
+            large += [row['_id'] for row in db[collection].aggregate(
+                [{'$match': _part(after, upto)}, {'$project': {'s': {'$bsonSize': '$$ROOT'}}},
+                 {'$match': {'s': {'$gte': MAX_RECORD_BYTES // 2}}}, {'$project': {'_id': 1}}], maxTimeMS=max_ms)]
+        except ExecutionTimeout:
+            return None
+        finally:
+            timings.append((clock.perf_counter() - started) * 1000)
     differ = 0
     for key in large:
         doc = db[collection].find_one({'_id': key}, max_time_ms=max_ms)
@@ -1149,8 +1229,13 @@ def sizes(db, collection, max_ms):
 def check(batch, settings, database, out, max_ms):
     client = MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
                          **({'timeoutMS': max_ms} if batch in ('b3', 'b4') else {}))
+    # The field counts' own client: no client-side time limit, only each read's `maxTimeMS` on the server, so a read
+    # over its limit is the server's refusal of that read (its fields unchecked), never a connection timing out.
+    counting = MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
+                           socketTimeoutMS=max_ms + 30000)
     # Nothing is written: ensure is planned, not run, and every read is read-only.
     report, unchecked = {'mode': 'dry_run', 'database_collections': len(CATALOG.names())}, []
+    timings, unchecked_fields = [], {}
     try:
         adapter = MongoAdapter(client, database)
         plans = dry_run(adapter)
@@ -1163,16 +1248,26 @@ def check(batch, settings, database, out, max_ms):
         for collection in CATALOG.collections():
             if BATCHES[batch] is not None and collection.name not in BATCHES[batch]:
                 continue
+            missed = set()
             try:
-                counts = kinds(adapter.db, collection, max_ms)
+                counts = kinds(counting.get_database(database), collection, max_ms, timings, missed)
             except ExecutionTimeout:
                 unchecked.append(collection.name)
                 continue
+            if missed:
+                unchecked_fields[collection.name] = sorted(missed)
             report['fields'][collection.name] = counts
             report['fields_differ'] += [[collection.name, path] for path in differs(collection, counts)]
             report.setdefault('fields_differing_records', {})[collection.name] = differing(collection, counts)
         if batch == 'b4':
-            report['sizes'] = sizes(adapter.db, 'messages', max_ms)
+            report['sizes'] = sizes(counting.get_database(database), 'messages', max_ms, timings)
+            if report['sizes'] is None:
+                unchecked.append('messages sizes')
+        ordered = sorted(timings)
+        report['field_reads'] = {'reads': len(ordered), 'records_a_read': PART_RECORDS, 'fields_a_read': FIELDS_PER_READ,
+                                 **({'ms_p50': round(ordered[len(ordered) // 2], 1),
+                                     'ms_p95': round(ordered[int(len(ordered) * .95)], 1),
+                                     'ms_max': round(ordered[-1], 1)} if ordered else {})}
         if batch in ('b3', 'b4'):
             report['reads'], report['queries'] = reads(client, database, max_ms, batch, settings)
     except ExecutionTimeout:
@@ -1183,7 +1278,8 @@ def check(batch, settings, database, out, max_ms):
         return 2
     finally:
         client.close()
-    report['unchecked'] = unchecked
+        counting.close()
+    report['unchecked'], report['unchecked_fields'] = unchecked, unchecked_fields
     # The collections to create, the indexes to make and the validators count for the collections the batch
     # declares (b1b: all); the drops and conflicts for every collection. The others are reported apart.
     ours = {name for name in plans if BATCHES[batch] is None or name in BATCHES[batch]}
@@ -1225,7 +1321,12 @@ def check(batch, settings, database, out, max_ms):
               % (name, path, report['fields_differing_records'][name][path]))
     for name in unchecked:
         print('UNCHECKED, over the time limit: %s' % name)
-    if 'sizes' in report:
+    for name, paths in sorted(unchecked_fields.items()):
+        print('UNCHECKED, a read over the time limit: %s fields %s' % (name, ', '.join(paths)))
+    if report.get('field_reads', {}).get('reads'):
+        print('field counts: %(reads)d reads of at most %(records_a_read)d records and %(fields_a_read)d fields, '
+              'ms p50 %(ms_p50)s p95 %(ms_p95)s max %(ms_max)s' % report['field_reads'])
+    if report.get('sizes'):
         print('records of 512 KiB or more by BSON: %(large)d; on different sides of 1 MiB by BSON and JSON: '
               '%(sides_differ)d' % report['sizes'])
     for name, case in (report.get('reads') or {}).items():
@@ -1241,7 +1342,7 @@ def check(batch, settings, database, out, max_ms):
         print('queries: %d (sampling %d, timed %d = %d samples x 2 sides x %d runs, explain %d)'
               % (q['total'], q['sampling'], q['timed'], q['samples'], RUNS, q['explain']))
     print('numbers written to %s' % (out / (batch + '.json')))
-    if unchecked:
+    if unchecked or unchecked_fields:
         return 2
     clean = (not (totals['create'] or totals['make'] or totals['conflicts'])
              and set(validators) <= {'same', 'not declared'} and not report['fields_differ']

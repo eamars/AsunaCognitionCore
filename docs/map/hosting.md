@@ -676,3 +676,42 @@ What the owners of `episodes`, `sessions` and the receipts share: a named read (
   - `rows`
   - `first`
   - `count`
+
+## `records/tasks`
+
+[src/asuna/records/tasks.py](../../src/asuna/records/tasks.py)
+
+The owner of `tasks` and `task_messages`: the work she hands to the action brain (its request, lease, state, result and hand-back) and the messages between her and the action session about it, read and written only through these operations.
+
+- def `get` — The task with this id (in this state; of this conversation, scope, epoch, requester), or None.
+- def `thread_message` — The task message with this id (from this side: `character` or `action`), or None.
+- def `many` — View: the tasks with these ids (in these states).
+- def `in_states` — View: the tasks in these states (but one); a single state as an equality.
+- def `by_prefix` — View: a requester's tasks in a conversation and epoch whose id starts with `prefix`.
+- def `continuations` — View: the tasks that continue these, in the order they were created.
+- def `awaiting_feedback` — The tasks in these finished states whose feedback has a state, and not one of `taken` (the states of a result that reached her).
+- def `lease_expired` — View: the running tasks whose lease expired before `moment` (seconds since the epoch).
+- def `paused` — View: the paused tasks paused for `reason` (that were in these states; paused since a time).
+- def `of_conversations` — View: the tasks of these conversations (ordered by `by`).
+- def `created` — View: the tasks created since a time (before `until`; of these conversations, an empty list being those of none; not of `besides`).
+- def `of_episode` — View: the tasks a turn made.
+- def `finished_since` — A task that finished after a time, or None.
+- def `of_scope` — The tasks of a scope.
+- def `thread` — View: a task's messages (from one side; delivered or not), in the order they were written.
+- def `recent_with_inputs` — A conversation's RECENT most relevant tasks in an epoch: the running and queued first, then by the newest time one of their input lines was received (those without one last), then by id; each with the SHOWN fields it has, `_active` (1 runni
+- def `save` — The revisioned write of a whole task (`Store.put`: `expected`, `stream`, `reset_counters`).
+- def `save_message` — The revisioned write of a task message (`Store.put`).
+
+## `records/plans`
+
+[src/asuna/records/plans.py](../../src/asuna/records/plans.py)
+
+The owner of `plans`: what she and the program scheduled (her plans in a conversation, the rhythms of the heartbeat, settlement, self-development and condensing, their next fire and last outcome), read and written only through these operations.
+
+- def `get` — The plan with this id (of this conversation, scope, person, epoch), or None.
+- def `in_status` — View: the plans in a status or one of several (of these kinds).
+- def `due` — View: the active plans due by `until` (ISO text), not of these kinds.
+- def `of_conversation` — View: a conversation's plans (of a scope, person and epoch; in these statuses; not of these kinds), in the order they were created.
+- def `with_outcome` — View: the plans of these kinds in a conversation whose last outcome was `outcome`.
+- def `count_status` — How many plans are in a status.
+- def `save` — The revisioned write of a whole plan (`Store.put`: `expected`, `stream`, `reset_counters`).

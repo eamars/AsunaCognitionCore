@@ -33,6 +33,8 @@ from .vision import inline_summary as picture_receipt
 from .config import cut, cut_offer, over, refs_usable, soft
 from .context_budget import SINGLE_BODY_CHARS
 from .records import episodes as episode_records
+from .records import plans as plan_records
+from .records import tasks as task_records
 
 THOUGHT_CHARS = 120                  # what she is asked for: her first reaction, short (ADR-087 §4.1)
 THOUGHT_HARD_CHARS = 360             # refused past this; the room up to it is the model's, said in the result
@@ -838,8 +840,8 @@ def _turn_rules(store, ep):
         if tasks:
             names.append('task.message')
     # A paused task is open work in her context, so she can close it as well (ADR-011 §7.1).
-    if tasks and not outside and store.db.tasks.find_one({'_id': {'$in': [task['_id'] for task in tasks]},
-                                                          'state': {'$in': ['READY', 'RUNNING', 'PAUSED']}}, {'_id': 1}):
+    if tasks and not outside and task_records.many(store, [task['_id'] for task in tasks],
+                                                   states=['READY', 'RUNNING', 'PAUSED']).first(fields=['_id']):
         names.append('task.stop')
     if context.get('image_artifacts_from_program'):
         names.append('attach_image')
@@ -2131,21 +2133,21 @@ class RoleTools:
     def _own_task(self, ep, task_id):
         if not isinstance(task_id, str) or not task_id:
             raise Refused('task 要照抄 task_state_from_program 里的 _id。' + refs_usable(self._listed_tasks(ep)))
-        task = self.store.db.tasks.find_one({'_id': task_id, 'scene_id': ep['scene_id'],
-                                             'requester_id': ep['person_id'], 'policy_epoch': ep['policy_epoch']})
+        task = task_records.get(self.store, task_id, scene=ep['scene_id'], requester=ep['person_id'],
+                                epoch=ep['policy_epoch'])
         if not task:
             # A task of this conversation that someone else asked for: say whose it is and when it can be steered or
             # stopped, rather than that it is not here (it is listed in task_state_from_program).
-            theirs = self.store.db.tasks.find_one({'_id': task_id, 'scene_id': ep['scene_id'],
-                                                   'policy_epoch': ep['policy_epoch']}, {'requester_id': 1})
+            theirs = task_records.get(self.store, task_id, ['requester_id'], scene=ep['scene_id'],
+                                      epoch=ep['policy_epoch'])
             if theirs:
                 from .people import People
                 scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
                 who = People(self.store, ep.get('persona')).speaker(scene, theirs['requester_id'])
                 raise Refused(OTHERS_TASK % (task_id, who))
-            close = [row['_id'] for row in self.store.db.tasks.find(
-                {'scene_id': ep['scene_id'], 'requester_id': ep['person_id'], 'policy_epoch': ep['policy_epoch'],
-                 '_id': {'$regex': '^' + __import__('re').escape(task_id[:12])}}, {'_id': 1}).limit(3)]
+            close = [row['_id'] for row in task_records.by_prefix(
+                self.store, task_id[:12], scene=ep['scene_id'], requester=ep['person_id'],
+                epoch=ep['policy_epoch']).rows(limit=3, fields=['_id'])]
             raise Refused('「%s」不是这个对话里的任务。照 task_state_from_program 原样抄 _id。%s'
                           % (task_id, refs_usable([*close, *self._listed_tasks(ep)])))
         return task
@@ -2748,11 +2750,11 @@ class RoleTools:
                 if outside is not None and plan_id not in made:
                     raise Refused(PLAN_OUTSIDE_ONLY_MADE % plan_id)
                 # Hers when listed or made this turn; the list shows a plan in words, so its state is read from the plan.
-                row = (plan_id in made or plan_id in planned and outside is None) and self.store.db.plans.find_one(
-                    {'_id': plan_id})
+                row = (plan_id in made or plan_id in planned and outside is None) and plan_records.get(
+                    self.store, plan_id)
                 if not row:
                     # Her list shows a few plans; one of this conversation's that it leaves out is still hers (ADR-054).
-                    kept = self.store.db.plans.find_one({'_id': plan_id, 'scene_id': ep['scene_id']})
+                    kept = plan_records.get(self.store, plan_id, scene=ep['scene_id'])
                     if kept and (kept.get('status') in ('CREATING', 'ACTIVE') or self._fired_here(ep, kept, op, timing)):
                         row = kept
                     elif kept:
@@ -3184,9 +3186,9 @@ class RoleTools:
         # At home every task of hers; anywhere else only the tasks this conversation sent (as reading a file by path).
         home = self._cls(ep) == visibility.OWNER_PRIVATE
         place = self._as_place(ep)          # a turn a note from outside opened reads the tasks of where it came from
-        where = {'_id': task_id} if home else {'_id': task_id, 'scene_id': place['scene_id'],
-                                                'scope_key': place['scope_key'], 'policy_epoch': place['policy_epoch']}
-        task = self.store.db.tasks.find_one(where, {'result.text': 1, 'title': 1, 'goal': 1, 'intent_revision': 1})
+        fence = {} if home else {'scene': place['scene_id'], 'scope': place['scope_key'],
+                                 'epoch': place['policy_epoch']}
+        task = task_records.get(self.store, task_id, ['result.text', 'title', 'goal', 'intent_revision'], **fence)
         if not task:
             raise Refused('「%s」不是%s的任务；task 照抄交回来的结果里的 task，或 task_state_from_program 里的 id。%s'
                           % (task_id, '你' if home else '这个对话里', refs_usable([ep.get('task_id'), *self._listed_tasks(ep)])))

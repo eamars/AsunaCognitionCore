@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from .config import excerpt
 from .records import scenes as scene_records
+from .records import plans as plan_records
 
 TABLES_VERSION = 1
 SHOWN = 'review.map'
@@ -189,7 +190,7 @@ def block(store, persona, moment=None, *, tag=None):
     ideas = collections.Counter(i.get('state') for i in store.db.ideas.find({'persona': persona}, {'state': 1}))
     index.append('想法本：没处理 %d、暂缓 %d（ideas 的 read）' % (ideas.get('open', 0), ideas.get('deferred', 0)))
     index.append('计划：生效中 %d（plans_from_program）；问题：还开着 %d（ask 的 read）' % (
-        store.db.plans.count_documents({'status': 'ACTIVE'}),
+        plan_records.count_status(store, 'ACTIVE'),
         store.db.questions.count_documents({'persona': persona, 'state': {'$ne': 'closed'}})))
     index.append('便条：上次以来写了 %d 张' % store.db.notes.count_documents({'persona': persona, 'created_at': {'$gte': since}}))
     errands = (places.errands_block(store, persona, moment) or {}).get('items') or []

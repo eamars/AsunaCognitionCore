@@ -37,6 +37,7 @@ from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import receipts as receipt_records
 from .records import sessions as session_records
+from .records import tasks as task_records
 
 
 class ProtocolFailure(RuntimeError):
@@ -217,7 +218,7 @@ class Coordinator:
             done=[call['tool'] for call in sorted((ep.get('tool_calls') or {}).values(),key=lambda c:c['seq']) if 'result' in call]
             if done:
                 extra+='\n这一回合中断前已经生效的工具调用（不用再做一遍）：'+'、'.join(done)
-            tasks=[row for row in self.store.db.tasks.find({'_id':{'$in':ep.get('task_ids') or []}},{'title':1,'goal':1})]
+            tasks=task_records.many(self.store,ep.get('task_ids') or []).rows(fields=['title','goal'])
             if tasks:
                 extra+='\n这一回合中断前已经交给行动脑的事（不要再交一遍）：'+'、'.join(
                     '「%s」（%s）'%(row.get('title') or row.get('goal'),row['_id']) for row in tasks)
@@ -257,7 +258,7 @@ class Coordinator:
             if ep['state']=='FAILED_PROTOCOL' or not receipt_records.lane_get(self.store, self._operation(ep['_id'],generation)):
                 generation+=1
             # delegate saves its task before the call is recorded: a task this episode made is its own.
-            made=[row['_id'] for row in self.store.db.tasks.find({'episode_id':ep['_id']},{'_id':1})]
+            made=[row['_id'] for row in task_records.of_episode(self.store,ep['_id']).rows(fields=['_id'])]
             changes['task_ids']=[*dict.fromkeys([*(ep.get('task_ids') or []),*made])]
         ep=self._update(ep,state='TURN',turn_tools=names,turn_generation=generation,
                         turn_thought=False if fresh else bool(ep.get('turn_thought')),**changes)
@@ -400,7 +401,7 @@ class Coordinator:
         return value
 
     def _waits(self, ep):
-        return any((self.store.db.tasks.find_one({'_id':task_id},{'state':1}) or {}).get('state') in ('READY','RUNNING')
+        return any((task_records.get(self.store, task_id, fields=['state']) or {}).get('state') in ('READY','RUNNING')
                    for task_id in ep.get('task_ids') or ())
 
     def queue_reply(self, ep, planned):
@@ -661,7 +662,7 @@ class Coordinator:
         session=self._task_session(ep)
         workspace_grant(self.store.config,home['scene_id'],home['person_id'])
         task_id='task-'+sha(canonical([ep['_id'],call_id]))[:32]
-        task=self.store.db.tasks.find_one({'_id':task_id})
+        task=task_records.get(self.store, task_id)
         said=None
         if not task and tier:
             from . import action_tiers
@@ -669,11 +670,11 @@ class Coordinator:
         if not task:
             development,integration,names=self._grants(ep)
             source_ref=('in-'+authority['_id']) if authority.get('episode_kind')!='consult' else None
-            original=self.store.db.tasks.find_one({'_id':ep.get('task_id')}) if ep.get('task_id') else None
+            original=task_records.get(self.store, ep.get('task_id')) if ep.get('task_id') else None
             raw=[source_ref] if source_ref and message_records.get(self.store, source_ref, fields=['_id']) else (original or {}).get('raw_input_refs',[])
             with database_effects_lock(self.store.name):
                 require_current_feedback(self.store, ep)
-                task=self.store.put('tasks',{'_id':task_id,'request_key':task_id,'thread':task_id,'episode_id':ep['_id'],
+                task=task_records.save(self.store, {'_id':task_id,'request_key':task_id,'thread':task_id,'episode_id':ep['_id'],
                     'scene_id':home['scene_id'],'scope_key':home['scope_key'],'requester_id':home['person_id'],
                     'policy_epoch':home['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],
                     'intent_revision':1,'goal':title,'title':title,'brief':brief,'constraints':[],
@@ -716,8 +717,8 @@ class Coordinator:
             raise role_tools.Refused('这一回合的授权和原来那件事不一样，不能给它补话或接着做；要做就用 delegate 交一件新的。')
         if task['state'] in ('READY','RUNNING'):
             message_id='msg-'+sha(canonical([ep['_id'],call_id]))[:32]
-            if not self.store.db.task_messages.find_one({'_id':message_id}):
-                self.store.put('task_messages',{'_id':message_id,'task_id':task['_id'],'thread':task.get('thread') or task['_id'],
+            if not task_records.thread_message(self.store, message_id):
+                task_records.save_message(self.store, {'_id':message_id,'task_id':task['_id'],'thread':task.get('thread') or task['_id'],
                     'from':'character','text':message,'episode_id':ep['_id'],'delivered':False,
                     'scope_key':task['scope_key'],'created_at':now()},stream=task['_id'])
                 self.collab(task,'message',{'from':'character','text':message},entry_id=message_id)
@@ -734,7 +735,7 @@ class Coordinator:
         if task['state']=='PAUSED' and not (ep.get('episode_kind')=='external' and local and not source.get('channel')):
             raise role_tools.Refused('这件事在重启时暂停了：只有主人明确要继续时才能接着做。')
         task_id='task-'+sha(canonical([ep['_id'],call_id]))[:32]
-        continued=self.store.db.tasks.find_one({'_id':task_id})
+        continued=task_records.get(self.store, task_id)
         said=None
         if not continued:
             # ADR-053: decided once, here, and kept on the task: a context idle past the action route's limit is not
@@ -752,7 +753,7 @@ class Coordinator:
             raw=[source_ref] if message_records.get(self.store, source_ref, fields=['_id']) else task['raw_input_refs']
             with database_effects_lock(self.store.name):
                 require_current_feedback(self.store, ep)
-                continued=self.store.put('tasks',{'_id':task_id,'request_key':task_id,'thread':task.get('thread') or task['_id'],
+                continued=task_records.save(self.store, {'_id':task_id,'request_key':task_id,'thread':task.get('thread') or task['_id'],
                     'episode_id':ep['_id'],'scene_id':ep['scene_id'],'scope_key':ep['scope_key'],'requester_id':ep['person_id'],
                     'policy_epoch':ep['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],'intent_revision':1,
                     'goal':task.get('title') or task['goal'],'title':task.get('title') or task['goal'],'brief':message,

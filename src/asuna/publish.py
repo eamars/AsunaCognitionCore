@@ -13,6 +13,8 @@ from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import receipts as receipt_records
+from .records import tasks as task_records
+from .records import plans as plan_records
 
 
 class PublishService:
@@ -49,7 +51,6 @@ class PublishService:
         return row.get('platform_message_id')
 
     def _publish(self, message_id: str):
-        db=self.store.db
         msg=message_records.get(self.store, message_id)
         if not msg or msg.get('author')!=character_id(self.store.config) or msg.get('phase')!='SPEAK':
             raise Denied('ONLY_CHARACTER_SPEAK_CAN_PUBLISH')
@@ -66,7 +67,7 @@ class PublishService:
         # A self-development activation event may carry its prior task ID only
         # as context. It is not itself a delegated task intent.
         if ep.get('task_id') and ep.get('intent_revision') is not None:
-            task=db.tasks.find_one({'_id':ep['task_id']})
+            task=task_records.get(self.store,ep['task_id'])
             if not task or task['intent_revision']!=ep['intent_revision'] or task['state'] in ('CANCELLED','STALE'):
                 raise Denied('PUBLICATION_INTENT_STALE')
         if scene.get('channel_id'):
@@ -83,7 +84,7 @@ class PublishService:
                     raise Denied('PUBLICATION_SOURCE_CYCLE')
                 seen.add(source_ep['_id'])
                 feedback_source = message_records.get(self.store, 'in-'+source_ep['_id'])
-                task = db.tasks.find_one({'_id': feedback_source['event']['task_id']})
+                task = task_records.get(self.store, feedback_source['event']['task_id'])
                 # A task begun on an errand answers where home sent it from (errands.home_turn).
                 from . import errands
                 source_ep = errands.home_turn(self.store, episode_records.get(self.store, task['episode_id']))
@@ -95,7 +96,7 @@ class PublishService:
                 ((source or {}).get('direction') == 'internal' and origin.get('episode_kind') in ('visit', 'note'))
                 # One of her plans that came due here: the scheduler's notice for a plan of this conversation.
                 or (origin.get('episode_kind') == 'scheduled' and origin.get('adapter_id') == 'scheduler'
-                    and db.plans.find_one({'_id': origin.get('scheduled_plan_id'), 'scene_id': scene['_id']}, {'_id': 1}))
+                    and plan_records.get(self.store, origin.get('scheduled_plan_id'), ['_id'], scene=scene['_id']))
                 # The owner's words on a home line he joins from the Web (ADR-051): her answer goes to the line.
                 or ((source or {}).get('direction') == 'inbound' and owner_line(self.store.config, scene['_id'], origin.get('person_id'))))
             if not channel and core_notice:

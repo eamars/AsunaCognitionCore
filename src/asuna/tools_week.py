@@ -17,6 +17,7 @@ from .config import excerpt
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import sessions as session_records
+from .records import tasks as task_records
 
 TABLES_VERSION = 1
 WEEK_DAYS = 7
@@ -164,8 +165,7 @@ def _turn_shape(calls):
 
 
 def _action_brain(store, since, until):
-    tasks = list(store.db.tasks.find({'created_at': {'$gte': since, '$lt': until}},
-                                     {'_id': 1, 'state': 1, 'tier': 1, 'tool_steps': 1}))
+    tasks = task_records.created(store, since, until=until).rows(fields=['_id', 'state', 'tier', 'tool_steps'])
     ids = [task['_id'] for task in tasks]
     used = collections.defaultdict(set)
     tools = collections.Counter()

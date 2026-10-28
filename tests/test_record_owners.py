@@ -11,7 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CENSUS = ROOT / 'docs' / 'development_plans' / 'ADR-104-database-connector' / 'design' / 'call_site_map.py'
 OWNERS = {'scenes': 'src/asuna/records/scenes.py', 'messages': 'src/asuna/records/messages.py',
           'episodes': 'src/asuna/records/episodes.py', 'sessions': 'src/asuna/records/sessions.py',
-          'lane_receipts': 'src/asuna/records/receipts.py', 'sink_receipts': 'src/asuna/records/receipts.py'}
+          'lane_receipts': 'src/asuna/records/receipts.py', 'sink_receipts': 'src/asuna/records/receipts.py',
+          'tasks': 'src/asuna/records/tasks.py', 'task_messages': 'src/asuna/records/tasks.py',
+          'plans': 'src/asuna/records/plans.py'}
 AREAS = ('src/asuna', 'tools')
 # The per-batch check makes the old calls on purpose: they are the old side it compares the owner with.
 ALLOWED = {'tools/adr104_equivalence.py'}

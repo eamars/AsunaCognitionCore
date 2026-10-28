@@ -243,6 +243,8 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`records/sessions`](../../src/asuna/records/sessions.py) — The owner of `sessions`: the bindings of her native sessions (which conversation, lane, persona, epoch and working folder a session belongs to, the sessions it continues and is continued by, its title and carry), read and written only throu
 - [`records/receipts`](../../src/asuna/records/receipts.py) — The owner of `lane_receipts` and `sink_receipts`: what a model lane answered for an operation (its result, kept so a replay answers the same), and what a sink received (a publication's delivery, her self-development publications and their s
 - [`records/view`](../../src/asuna/records/view.py) — What the owners of `episodes`, `sessions` and the receipts share: a named read (`View`) and the checks of a fence.
+- [`records/tasks`](../../src/asuna/records/tasks.py) — The owner of `tasks` and `task_messages`: the work she hands to the action brain (its request, lease, state, result and hand-back) and the messages between her and the action session about it, read and written only through these operations.
+- [`records/plans`](../../src/asuna/records/plans.py) — The owner of `plans`: what she and the program scheduled (her plans in a conversation, the rhythms of the heartbeat, settlement, self-development and condensing, their next fire and last outcome), read and written only through these operati
 
 ### [A turn](turn.md)
 

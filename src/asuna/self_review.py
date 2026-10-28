@@ -21,6 +21,7 @@ from .config import excerpt
 from .evidence import sha
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import tasks as task_records
 
 EXAMPLE_CHARS = 80
 TASK_STATES = {'READY': '排着', 'RUNNING': '在做', 'PAUSED': '停着', 'RETURNED': '交回来了', 'FAILED': '没做成',
@@ -92,9 +93,8 @@ def block(store, persona, zone_name, moment=None):
     tasks = [{'title': row.get('title') or row.get('goal'), 'where': where(row['scene_id']),
               'state': TASK_STATES.get(row.get('state'), row.get('state')), 'at': row['created_at'],
               **({'failure': row['failure_type']} if row.get('failure_type') else {})}
-             for row in store.db.tasks.find({'created_at': {'$gte': since}},
-                                            {'title': 1, 'goal': 1, 'scene_id': 1, 'state': 1, 'created_at': 1,
-                                             'failure_type': 1}).sort('created_at', 1)]
+             for row in task_records.created(store, since, by='created_at').each(
+                 fields=['title', 'goal', 'scene_id', 'state', 'created_at', 'failure_type'])]
     refused = collections.OrderedDict()
     for row in store.db.audit_events.find({'type': 'role_tool', 'occurred_at': {'$gte': since},
                                            'payload.refused': {'$exists': True}},
@@ -105,8 +105,8 @@ def block(store, persona, zone_name, moment=None):
         item['times'] += 1
     open_tasks = [{'title': row.get('title') or row.get('goal'), 'where': where(row['scene_id']),
                    'state': TASK_STATES.get(row['state'], row['state'])}
-                  for row in store.db.tasks.find({'state': {'$in': ['READY', 'RUNNING', 'PAUSED']}},
-                                                 {'title': 1, 'goal': 1, 'scene_id': 1, 'state': 1})]
+                  for row in task_records.in_states(store, ['READY', 'RUNNING', 'PAUSED']).each(
+                      fields=['title', 'goal', 'scene_id', 'state'])]
     return {'said': list(said.values()), 'tasks': tasks, 'refused': list(refused.values()), 'open': open_tasks,
             'since_at': since, 'note': NOTE}
 

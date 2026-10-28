@@ -36,6 +36,8 @@ from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import receipts as receipt_records
 from .records import sessions as session_records
+from .records import plans as plan_records
+from .records import tasks as task_records
 
 
 KEPT_HOST_REPORTS = 5     # this start's evidence and the starts just before it
@@ -162,7 +164,7 @@ class NativeLane:
                 ep['native_session_id'] = self.worker.resolve_role_session(ep)
             elif self.lane == 'executor' or phase == 'CONSULT':
                 task_id = base.split(':execute:', 1)[0].split(':consult:', 1)[0]
-                task = self.store.db.tasks.find_one({'_id': task_id})
+                task = task_records.get(self.store, task_id)
                 if not task:
                     raise Denied('STALE_TASK_FENCE')
                 if self.lane == 'executor':
@@ -721,13 +723,13 @@ class BusinessWorker:
             raise RuntimeError('NATIVE_NAVIGATION_NOT_READY')
         store = self.app.store
         if ep.get('task_id'):
-            task = store.db.tasks.find_one({'_id': ep['task_id']})
+            task = task_records.get(store, ep['task_id'])
             original = episode_records.get(store, task['episode_id']) if task else None
             if original and self.carried(original.get('native_session_id'), ep):
                 return self.continued_session(original['native_session_id'])
         source = message_records.get(store, 'in-' + ep['_id']) or {}
         plan_id = source.get('event', {}).get('scheduled_plan_id')
-        plan = store.db.plans.find_one({'_id': plan_id}) if plan_id else None
+        plan = plan_records.get(store, plan_id) if plan_id else None
         original = episode_records.get(store, plan.get('source_episode_id')) if plan else None
         # A plan or a task begun on an errand or in a reflection comes back to the conversation itself, never to the
         # side session.
@@ -906,7 +908,7 @@ class BusinessWorker:
         if session_id:
             # The tier a job was given and the one that ran it (ADR-075), for the owner's view of the thread; read
             # fresh, since a fall is recorded while the job runs. Never shown to her from here.
-            tier = (self.app.store.db.tasks.find_one({'_id': task['_id']}, {'tier': 1}) or task).get('tier')
+            tier = (task_records.get(self.app.store, task['_id'], fields=['tier']) or task).get('tier')
             view = {k: v for k, v in (tier or {}).items() if k in ('chosen', 'ran')}
             if (tier or {}).get('fell'):
                 view.update(reason=tier['fell'].get('reason'), mid_run=bool(tier['fell'].get('mid_run')))
@@ -1206,11 +1208,11 @@ class BusinessWorker:
             # ADR-075: a 高 job fell to 低 (the plugin saw a hard failure, or 高 resting when the job began).
             from . import action_tiers
             store = self.app.store
-            task = store.db.tasks.find_one({'_id': args['task_id']})
+            task = task_records.get(store, args['task_id'])
             if task and (task.get('tier') or {}).get('ran') == '高':
                 fell = {'reason': args['reason'], 'mid_run': bool(args.get('mid_run')), 'at': now(),
                         **({'code': args['code']} if args.get('code') else {})}
-                store.put('tasks', {**task, 'tier': {**task['tier'], 'ran': action_tiers.LOW, 'fell': fell}},
+                task_records.save(store, {**task, 'tier': {**task['tier'], 'ran': action_tiers.LOW, 'fell': fell}},
                           expected=task['revision'], stream=task['_id'])
                 store.audit(task['_id'], 'tier.fell', {'task_id': task['_id'], **fell})
             return {'recorded': bool(task)}
@@ -1258,9 +1260,9 @@ class BusinessWorker:
             return self.app.broker.specs
         if method == 'action_message.delivered':
             # The action session read her message at a step (index.js): no extra round needed for it.
-            row = self.app.store.db.task_messages.find_one({'_id': args['message_id'], 'from': 'character'})
+            row = task_records.thread_message(self.app.store, args['message_id'], sender='character')
             if row and not row.get('delivered'):
-                self.app.store.put('task_messages', {**row, 'delivered': True, 'delivered_at': now()},
+                task_records.save_message(self.app.store, {**row, 'delivered': True, 'delivered_at': now()},
                                    expected=row['revision'], stream=row['task_id'])
             return {'recorded': True}
         if method == 'role_tool_specs':

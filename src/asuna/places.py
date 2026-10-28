@@ -16,6 +16,7 @@ from .evidence import sha
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
+from .records import tasks as task_records
 
 TABLES_VERSION = 1
 # Lines in the group over the last hour → how it reads.
@@ -529,9 +530,8 @@ def elsewhere(store, persona, moment, home, private=()):
             place['lines'] += 1
         at = _at(row.get('receipt_at'))
         place['last'] = max(filter(None, (place['last'], at)), default=None)
-    for task in store.db.tasks.find({'scene_id': {'$nin': list(home), '$in': list(places) or [None]},
-                                     'created_at': {'$gte': since}},
-                                    {'scene_id': 1, 'title': 1, 'state': 1, 'feedback_state': 1, 'cancel_reason': 1}):
+    for task in task_records.created(store, since, scenes=list(places), besides=list(home)).each(
+            fields=['scene_id', 'title', 'state', 'feedback_state', 'cancel_reason']):
         if task.get('title'):
             from .handover import status_words      # the same words as her task list (ADR-030 D7)
             places[task['scene_id']]['tasks'].append('%s（%s）' % (excerpt(task['title'], 40), status_words(task)))

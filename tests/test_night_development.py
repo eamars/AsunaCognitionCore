@@ -57,7 +57,7 @@ def test_a_stage_never_stacks_on_open_work(store, monkeypatch):
     store.put('episodes', {'_id': 'ep-dev', 'source_event_id': 'ep-dev', 'episode_kind': 'self_development',
                            'state': 'WAITING_TASK',
                            'scene_id': 'dm-a'})
-    store.put('tasks', {'_id': 'task-dev', 'episode_id': 'ep-dev', 'state': 'RUNNING'})
+    store.put('tasks', {'_id': 'task-dev', 'request_key': 'task-dev', 'episode_id': 'ep-dev', 'state': 'RUNNING'})
     assert night_stage_busy(store) == 'STAGE_BUSY'
     assert svc._night_stage(store.db.plans.find_one({'_id': NIGHT_PLAN}), 'occ') == 'STAGE_BUSY' and not offered
     task = store.db.tasks.find_one({'_id': 'task-dev'})
@@ -115,7 +115,9 @@ def test_rhythm_task_names_follow_the_words_the_host_gives_and_only_they_are_ren
         events = [{'seq': 1, 'data': {'operation': 'create', 'schedule': {'id': 'n1', 'title': 'Heartbeat'}}},
                   {'seq': 2, 'data': {'operation': 'create', 'schedule': {'id': 'n2', 'title': 'Old wording'}}}]
         service = ScheduleService.__new__(ScheduleService)
-        service.store = SimpleNamespace(db=db, audit=lambda *a: None)
+        from asuna import records
+        service.store = SimpleNamespace(db=db, collection=records.on(db).collection,   # the owners' way to its rows
+                                        audit=lambda *a: None)
         service.lane = SimpleNamespace(schedule=lambda path, payload=None: events if path == '/schedule/events'
                                        else calls.append((path, payload)) or {})
         service.retitle()

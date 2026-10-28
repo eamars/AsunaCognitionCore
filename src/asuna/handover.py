@@ -16,6 +16,7 @@ from __future__ import annotations
 import time
 
 from .records import episodes as episode_records
+from .records import tasks as task_records
 
 SWEEP_SECONDS = 60
 FINISHED = ('RETURNED', 'BLOCKED', 'DONE', 'PARTIAL', 'NEEDS_CHARACTER_DECISION', 'UNKNOWN')
@@ -36,23 +37,21 @@ def waiting(task):
 def continuations(store, task_ids):
     """{task id: the newest task that continues it} for the given tasks."""
     found = {}
-    for row in store.db.tasks.find({'continues_task_id': {'$in': list(task_ids)}},
-                                   {'continues_task_id': 1, 'created_at': 1}).sort('created_at', 1):
+    for row in task_records.continuations(store, list(task_ids)).each(fields=['continues_task_id', 'created_at']):
         found[row['continues_task_id']] = row['_id']
     return found
 
 
 def lost(store, on_its_way):
     """Finished tasks whose result was handed back by no one: not taken, not queued, not being handed back now."""
-    rows = store.db.tasks.find({'state': {'$in': list(FINISHED)},
-                                'feedback_state': {'$exists': True, '$nin': [*TAKEN, None]}})
+    rows = task_records.awaiting_feedback(store, FINISHED, TAKEN)
     return [task for task in rows if task['_id'] not in on_its_way]
 
 
 def orphaned(store, running, moment=None):
     """Running tasks whose lease expired while this worker is not running them."""
     moment = time.time() if moment is None else moment
-    rows = store.db.tasks.find({'state': 'RUNNING', 'lease_expires_at': {'$lt': moment}})
+    rows = task_records.lease_expired(store, moment).each()
     return [task for task in rows if task['_id'] != running]
 
 

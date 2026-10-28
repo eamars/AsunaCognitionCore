@@ -27,6 +27,7 @@ from datetime import datetime, timedelta, timezone
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import sessions as session_records
+from .records import plans as plan_records
 
 TABLES_VERSION = 1
 # Average incoming lines a day over the last week → minutes of quiet before condensing (measured by the character,
@@ -263,7 +264,7 @@ def condensed_block(store, scene, event_id, moment=None):
 # ---- phrases for a write_notes visit -----------------------------------------------------------------------------
 def last_look(store, scene_id, current_event_id=None):
     """When she last visited this group before this visit (the heartbeat plan's ledger), or None."""
-    plan = store.db.plans.find_one({'_id': 'plan-asuna-presence'}, {'visits': 1}) or {}
+    plan = plan_records.get(store, 'plan-asuna-presence', fields=['visits']) or {}
     times = [_at(visit.get('at')) for visit in plan.get('visits') or []
              if visit.get('scene_id') == scene_id and visit.get('event_id') != current_event_id]
     times = [moment for moment in times if moment]

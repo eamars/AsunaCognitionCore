@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import timedelta
 from .records import scenes as scene_records
 from .records import episodes as episode_records
+from .records import plans as plan_records
 
 NIGHT_KINDS = ('self_development', 'settlement')
 LOOKBACK = timedelta(hours=48)
@@ -44,7 +45,7 @@ def _what(store, persona, tool, args):
         return {'request': '挂了重启', 'drill': '挂了重启演练', 'cancel': '撤了重启'}[op] + (
             '（%s）' % args['when'] if args.get('when') else '')
     if tool == 'plan':
-        intent = args.get('intent') or (store.db.plans.find_one({'_id': args.get('plan_id')}, {'intent': 1}) or {}).get('intent')
+        intent = args.get('intent') or (plan_records.get(store, args.get('plan_id'), fields=['intent']) or {}).get('intent')
         return {'create': '定了计划', 'update': '改了计划', 'cancel': '撤了计划'}[op or 'create'] + '：' + _short(intent, 30)
     if tool == 'peer_line':
         return '旧居那条线：' + ('开了' if op == 'open' else '关了')

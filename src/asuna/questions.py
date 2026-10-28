@@ -32,6 +32,7 @@ from . import visibility
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
+from .records import tasks as task_records
 
 TABLES_VERSION = 1
 # Patience words -> minutes (None: until it is answered, for a report).
@@ -272,7 +273,7 @@ def _source_now(store, qid, source, persona, moment):
         return source['state'], source.get('answers') or []
     if source['kind'] == 'action':
         from .tasks import TERMINAL
-        task = store.db.tasks.find_one({'_id': source.get('task')}, {'state': 1, 'finished_at': 1, 'result.text': 1})
+        task = task_records.get(store, source.get('task'), fields=['state', 'finished_at', 'result.text'])
         if not task:
             return 'not_done', []
         if task['state'] not in TERMINAL:
@@ -454,7 +455,7 @@ def read(store, persona, qid, moment=None, outside=False):
         answers = []
         for answer in source.get('answers') or []:
             if answer.get('task'):
-                task = store.db.tasks.find_one({'_id': answer['task']}, {'result.text': 1})
+                task = task_records.get(store, answer['task'], fields=['result.text'])
                 pages = report_pages(((task or {}).get('result') or {}).get('text') or '')
                 first = pages[0] if pages else ''
                 answers.append({'by': ACTION, 'at': answer.get('at'), 'task': answer['task'],

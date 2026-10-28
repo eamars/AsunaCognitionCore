@@ -14,6 +14,9 @@ import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .records import tasks as task_records
+from .records import plans as plan_records
+
 QUIET_MINUTES = 30            # at most this long waiting for no turn, task or queued input
 TICK_SECONDS = 15
 SHOWN_HOURS = 24
@@ -99,10 +102,10 @@ class Desk:
         store, moment = self.app.store, self.clock()
         items = []
         if getattr(self.controller, 'active_task', None):
-            task = store.db.tasks.find_one({'_id': self.controller.active_task}, {'title': 1, 'goal': 1}) or {}
+            task = task_records.get(store, self.controller.active_task, fields=['title', 'goal']) or {}
             items.append('行动脑正在跑「%s」：会停在暂停里，要有人说继续才接着做' % (task.get('title') or task.get('goal') or '一个任务')[:40])
-        queued = [row.get('title') or row.get('goal') or '' for row in store.db.tasks.find(
-            {'state': 'READY'}, {'title': 1, 'goal': 1}).limit(5)]
+        queued = [row.get('title') or row.get('goal') or '' for row in task_records.in_states(store, 'READY').rows(
+            limit=5, fields=['title', 'goal'])]
         if queued:
             items.append('排着队的任务 %d 个：%s' % (len(queued), '、'.join('「%s」' % t[:20] for t in queued)))
         waiting = getattr(getattr(self.controller, 'pending', None), 'unfinished_tasks', 0)
@@ -113,9 +116,8 @@ class Desk:
         if unsent:
             items.append('还没确认送到的话 %d 条：在发的那条会变成「没给准话」，不会自动重发' % unsent)
         soon = (moment + timedelta(minutes=PLANS_AHEAD_MINUTES)).isoformat()
-        for plan in store.db.plans.find({'status': 'ACTIVE', 'next_fire_at': {'$lte': soon},
-                                         'kind': {'$nin': ['presence', 'settlement', 'self_development', 'condense']}},
-                                        {'intent': 1, 'next_fire_at': 1}).limit(5):
+        for plan in plan_records.due(store, soon, not_kinds=['presence', 'settlement', 'self_development',
+                                                         'condense']).rows(limit=5, fields=['intent', 'next_fire_at']):
             items.append('%s 要响的计划「%s」：停着的时候到点，起来后补响' % (line_stamp(_zone(self.zone), plan['next_fire_at']), str(plan.get('intent', ''))[:30]))
         record = last(self.root)
         took = None
@@ -286,8 +288,8 @@ def block(store, zone, moment=None, root=None, integration_state=None):
         value['reverted'] = record['reverted']
     if record.get('interrupted'):
         value['interrupted'] = record['interrupted']
-    paused = [row.get('title') or row.get('goal') for row in store.db.tasks.find(
-        {'state': 'PAUSED', 'pause_reason': 'host_restart', 'paused_at': {'$gte': record['down_at']}}, {'title': 1, 'goal': 1}).limit(5)]
+    paused = [row.get('title') or row.get('goal') for row in task_records.paused(
+        store, 'host_restart', since=record['down_at']).rows(limit=5, fields=['title', 'goal'])]
     if paused:
         value['paused_tasks'] = ['「%s」：停在暂停里，工具记录都在，说一声继续就接着做' % str(t)[:40] for t in paused]
     adapter = integration_state if integration_state is not None else _adapter_since(record['back_at'], root)

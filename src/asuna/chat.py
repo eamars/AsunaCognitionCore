@@ -15,6 +15,7 @@ from .router import FairQueue
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
+from .records import tasks as task_records
 
 
 class SceneQueue(Queue):
@@ -101,7 +102,7 @@ class Chat:
         self.watchdog = threading.Thread(target=self._watch, name='asuna-handover-watchdog', daemon=True)
 
     def _schedule(self, task_id):
-        task = self.app.store.db.tasks.find_one({'_id': task_id})
+        task = task_records.get(self.app.store, task_id)
         self.latest_task = task['_id']
         key = (task['_id'], task['intent_revision'])
         if key not in self.scheduled_tasks:
@@ -126,7 +127,7 @@ class Chat:
                         self.task_queue.put((task_id, revision))
                         continue
                     self.active_task = task_id
-                task = self.app.store.db.tasks.find_one({'_id': task_id})
+                task = task_records.get(self.app.store, task_id)
                 if task['state'] != 'READY' or task['intent_revision'] != revision:
                     continue
                 from .grants import workspace_grant
@@ -140,7 +141,7 @@ class Chat:
                 self.app.evidence.record('chat.task_error', {'task_id': task_id, 'traceback': error})
                 try:
                     self.app.store.audit(task_id, 'execution.failed', {'traceback': error}, task['scope_key'])
-                    current = self.app.store.db.tasks.find_one({'_id': task_id})
+                    current = task_records.get(self.app.store, task_id)
                     cancelled = current and current['state'] == 'CANCELLED'
                 except Exception:
                     cancelled = False
@@ -401,7 +402,7 @@ class Chat:
                         continue
                     self.active = episode or event['event_id']
                 if event.get('_feedback_task'):
-                    task = self.app.store.db.tasks.find_one({'_id': event['_feedback_task']})
+                    task = task_records.get(self.app.store, event['_feedback_task'])
                     result = self.app.service.feedback(task, self.app.coordinator, short=event.get('_short', False),
                                                        again=event.get('_again', False))
                     if result is None:
@@ -462,7 +463,7 @@ class Chat:
                 for message in messages:
                     self.emit(f"{self.settings['display_name']}：{message['text']}")
                 ready = [task_id for task_id in result.get('task_ids') or ()
-                         if self.app.store.db.tasks.find_one({'_id': task_id, 'state': 'READY'})]
+                         if task_records.get(self.app.store, task_id, state='READY')]
                 for task_id in ready:
                     self._schedule(task_id)
                 if not ready and result.get('silent_reason'):
@@ -479,7 +480,7 @@ class Chat:
                     # never reached a turn.
                     try:
                         from .handover import result_event_id
-                        task = self.app.store.db.tasks.find_one({'_id': event['_feedback_task']})
+                        task = task_records.get(self.app.store, event['_feedback_task'])
                         short = event.get('_short', False)
                         turn = episode_records.of_source(self.app.store, result_event_id(task, short),
                                                          kind='task_feedback')
@@ -575,7 +576,7 @@ class Chat:
         # Fence this application's work before shutting down its action lane.
         if not self.restart_pending.is_set():
             for task_id, revision in self.scheduled_tasks.copy():
-                task = self.app.store.db.tasks.find_one({'_id': task_id})
+                task = task_records.get(self.app.store, task_id)
                 if task and task['intent_revision'] == revision and task['state'] in ('READY', 'RUNNING'):
                     self.app.service.cancel(task_id, reason='host_stop', person_id=task['requester_id'])
         if active_task:

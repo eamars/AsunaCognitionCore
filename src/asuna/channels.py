@@ -20,6 +20,7 @@ from .people import People
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
+from .records import tasks as task_records
 
 try:                                  # 出站图片附件：元数据、字节端点的围栏都在 outbound_media
     from . import outbound_media
@@ -480,7 +481,7 @@ class Channels:
         if not episode or episode['state'] not in speaking:
             raise Denied('PUBLICATION_EPISODE_STALE')
         if episode.get('task_id'):
-            task = self.store.db.tasks.find_one({'_id': episode['task_id']})
+            task = task_records.get(self.store, episode['task_id'])
             if not task or task['intent_revision'] != episode['intent_revision'] or task['state'] in ('CANCELLED', 'STALE'):
                 raise Denied('PUBLICATION_INTENT_STALE')
 

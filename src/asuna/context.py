@@ -22,6 +22,8 @@ from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import receipts as receipt_records
+from .records import plans as plan_records
+from .records import tasks as task_records
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -599,17 +601,7 @@ class ContextBuilder:
         # A storage revision counts writes/tool calls, not conversational time.
         # Use each task's durable input timestamp, including legacy tasks, so
         # recently returned work is not hidden behind old high-write tasks.
-        task_states=list(self.store.db.tasks.aggregate([
-            {'$match':{'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch']}},
-            {'$lookup':{'from':'messages','localField':'raw_input_refs','foreignField':'_id',
-                'pipeline':[{'$project':{'received_at':1,'_id':0}}],'as':'_inputs'}},
-            {'$addFields':{'_active':{'$cond':[{'$in':['$state',['READY','RUNNING']]},1,0]},
-                '_input_time':{'$max':'$_inputs.received_at'}}},
-            {'$sort':{'_active':-1,'_input_time':-1,'_id':1}}, {'$limit':16},
-            {'$project':{'_id':1,'state':1,'goal':1,'title':1,'feedback_state':1,'finished_at':1,
-                'cancel_reason':1,'pause_reason':1,'paused_at':1,'_active':1,'tier':1,
-                '_report_chars':{'$strLenCP':{'$ifNull':['$result.text','']}}}},
-        ]))
+        task_states=task_records.recent_with_inputs(self.store,scene['_id'],scope,scene['policy_epoch'])
         # Every open task (and every finished one whose result has not reached her), and only the last few others
         # (their results came back as their own turns).
         open_tasks=[task for task in task_states if task['_active'] or task['state']=='PAUSED'
@@ -622,7 +614,7 @@ class ContextBuilder:
             task.pop('_active',None)
             # A report longer than its first page reached her as that page; the rest she reads with task op page.
             if task.pop('_report_chars',0)>FIRST_PAGE_CHARS:
-                row=self.store.db.tasks.find_one({'_id':task['_id']},{'result.text':1,'intent_revision':1}) or {'_id':task['_id']}
+                row=task_records.get(self.store, task['_id'], fields=['result.text', 'intent_revision']) or {'_id':task['_id']}
                 text=((row.get('result') or {}).get('text')) or ''
                 pages=task_pages(self.store,row)
                 if len(pages)>1:
@@ -645,18 +637,16 @@ class ContextBuilder:
             if not running:
                 continue
             # What the action brain reported on its own while working (report_progress), newest last.
-            notes=list(self.store.db.task_messages.find({'task_id':task['_id'],'from':'action'},
-                {'text':1}).sort('created_at',-1).limit(2))
+            notes=task_records.thread(self.store,task['_id'],sender='action').rows(newest_first=True,limit=2,
+                fields=['text'])
             if notes:
                 task['progress_from_action']=[excerpt(row['text'],HISTORY_ROW_CHARS) for row in reversed(notes)]
-        plan_rows=list(self.store.db.plans.find({'scene_id':scene['_id'],'scope_key':scope,
-            'person_id':event['person_id'],'policy_epoch':scene['policy_epoch'],
+        plan_rows=plan_records.of_conversation(self.store,scene['_id'],scope=scope,person=event['person_id'],
+            epoch=scene['policy_epoch'],statuses=['CREATING','ACTIVE','SUSPENDED'],
             # Her rhythms belong to the program (ADR-012 §4.3); she tunes them with set_policy, never cancels them.
-            'kind':{'$nin':['self_development','presence','settlement','condense']},
-            'status':{'$in':['CREATING','ACTIVE','SUSPENDED']}},
-            {'_id':1,'intent':1,'rule':1,'scheduled_at':1,'status':1,'plan_version':1,
-             'timezone':1,'tz_source':1,'next_fire_at':1,'created_at':1,'updated_at':1,
-             'last_outcome':1}).sort('created_at',-1).limit(8))
+            not_kinds=['self_development','presence','settlement','condense']).rows(newest_first=True,limit=8,
+            fields=['_id','intent','rule','scheduled_at','status','plan_version','timezone','tz_source',
+                    'next_fire_at','created_at','updated_at','last_outcome'])
         # P3：计划行按这个场景的时区翻成人话再给她看——不让她自己拿 UTC 心算「明天九点」。
         # 已暂停（SUSPENDED）也列出来：不列就等于她不知道自己有一条挂着的安排没生效。
         schedule_zone=schedule_rules.scene_timezone(self.store.config,scene)
@@ -743,9 +733,9 @@ class ContextBuilder:
             for row in recent:
                 row['text']=excerpt(row.get('text'),EXPERIENCE_MESSAGE_CHARS)
             # Headlines (owner, 2026-10-05): titles, states and the start of each report; recall reads more.
-            tasks = list(self.store.db.tasks.find({'scene_id': {'$in': list(allowed)}},
-                {'scene_id':1,'state':1,'title':1,'goal':1,'failure_type':1,'result':1,
-                 'feedback_state':1,'finished_at':1}).sort('finished_at',-1).limit(EXPERIENCE_TASKS))
+            tasks = task_records.of_conversations(self.store, list(allowed), by='finished_at').rows(
+                newest_first=True, limit=EXPERIENCE_TASKS, fields=['scene_id','state','title','goal','failure_type',
+                                                                    'result','feedback_state','finished_at'])
             for item in tasks:
                 if item.get('title'):
                     item.pop('goal',None)
@@ -771,7 +761,7 @@ class ContextBuilder:
             # comes due at home may send her out too (2026-10-06): the same places, the same limits.
             from . import places
             from .render import model_and_policy as _places_model
-            plan=self.store.db.plans.find_one({'_id':'plan-asuna-presence'}) or {}
+            plan=plan_records.get(self.store, 'plan-asuna-presence') or {}
             _pm,_pp=_places_model(self.store,persona)
             date=places.local_date(self.store.config,_pm,_pp,moment)
             places_view=places.places_block(self.store,persona,_pm,_pp,plan,moment,date)
@@ -810,8 +800,8 @@ class ContextBuilder:
             for _item,_line in zip(context['lines_from_program']['items'],peer_lines):
                 if _line['scene_id']==event['scene_id']:
                     continue
-                _rows=list(self.store.db.plans.find({'scene_id':_line['scene_id'],'status':{'$in':['CREATING','ACTIVE']},
-                    'kind':{'$nin':['self_development','presence','settlement','condense']}}).sort('created_at',-1).limit(3))
+                _rows=plan_records.of_conversation(self.store,_line['scene_id'],statuses=['CREATING','ACTIVE'],
+                    not_kinds=['self_development','presence','settlement','condense']).rows(newest_first=True,limit=3)
                 if _rows:
                     _scene=scene_records.get(self.store, _line['scene_id']) or {'_id':_line['scene_id']}
                     _item['your_plans_there']=[{k:v for k,v in schedule_rules.project(r,schedule_rules.scene_timezone(
@@ -973,10 +963,9 @@ class ContextBuilder:
             note_places=_notes.places_view(self.store,persona,scene['_id'],session_class,first_note)
             if note_places:context['note_places_from_program']=note_places
         if event.get('episode_kind')=='scheduled':
-            plan=self.store.db.plans.find_one({'_id':event.get('scheduled_plan_id'),
-                'scene_id':scene['_id'],'scope_key':scope,'person_id':event['person_id'],
-                'policy_epoch':scene['policy_epoch']},
-                {'_id':1,'intent':1,'rule':1,'last_occurrence_id':1,'last_outcome':1,'source_episode_id':1})
+            plan=plan_records.get(self.store, event.get('scheduled_plan_id'),
+                ['_id','intent','rule','last_occurrence_id','last_outcome','source_episode_id'],
+                scene=scene['_id'],scope=scope,person=event['person_id'],epoch=scene['policy_epoch'])
             if not plan:raise Denied('SCHEDULE_PLAN_CONTEXT_MISSING')
             # Why she set it: her thought when she made the plan, as she wrote it (reasons.py, ADR-043).
             from . import reasons as _reasons

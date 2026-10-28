@@ -5,6 +5,7 @@ from .state import Store,Denied,now
 from .peer_context import snapshot_event
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import tasks as task_records
 
 
 class FairQueue:
@@ -75,7 +76,7 @@ class Router:
         # Without the queued native Host (tests, diagnostics): run what she delegated, then her feedback turns.
         while workspace is not None and self.executor:
             ready=[task_id for task_id in ep.get('task_ids') or ()
-                   if (self.store.db.tasks.find_one({'_id':task_id},{'state':1}) or {}).get('state')=='READY']
+                   if (task_records.get(self.store, task_id, fields=['state']) or {}).get('state')=='READY']
             if not ready:break
             for task_id in ready:
                 task=self.executor.run(task_id,workspace)

@@ -9,6 +9,7 @@ from .records import scenes as scene_records
 from .records import episodes as episode_records
 from .records import sessions as session_records
 from .records import receipts as receipt_records
+from .records import tasks as task_records
 
 
 class PrivacyService:
@@ -86,7 +87,7 @@ class PrivacyService:
                 if data.get('session')==session['_id'] or path.name=='boundary-'+session['_id']+'.json':path.unlink()
             session_records.invalidate(self.store,session['_id'],deletion)
         ep_ids={e['_id'] for e in episode_records.of_scope(self.store,scope,fields=['_id'])}
-        task_ids={t['_id'] for t in db.tasks.find({'scope_key':scope},{'_id':1})}
+        task_ids={t['_id'] for t in task_records.of_scope(self.store,scope,fields=['_id'])}
         for mem in db.memory_units.find({'scope_key':scope}):
             derived=mem.get('kind') in ('monologue','chat_chunk') and mem.get('episode_id') in ep_ids
             if mem['_id'] in affected or derived or mem.get('kind')=='chat_chunk':

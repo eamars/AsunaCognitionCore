@@ -19,6 +19,7 @@ from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import receipts as receipt_records
+from .records import tasks as task_records
 
 # How often the host's existing watch thread also checks that her heartbeat still beats (ADR-012 §4.3), so a
 # lost heartbeat is found on a day when nobody talks to her too. It only checks; the clock stays DSH's.
@@ -394,14 +395,15 @@ class RuntimeHost:
 
     def _recover_tasks(self):
         store = self.app.store
-        for task in store.db.tasks.find({'state': {'$in': ['READY', 'RUNNING', 'RETURNED', 'DONE', 'PARTIAL', 'BLOCKED', 'NEEDS_CHARACTER_DECISION', 'UNKNOWN']}}):
+        for task in task_records.in_states(store, ['READY', 'RUNNING', 'RETURNED', 'DONE', 'PARTIAL', 'BLOCKED',
+                                                   'NEEDS_CHARACTER_DECISION', 'UNKNOWN']).each():
             source = message_records.get(store, task['raw_input_refs'][0])
             seen = set()
             while source and source.get('event', {}).get('episode_kind') == 'task_feedback':
                 if source['_id'] in seen:
                     raise Denied('TASK_SOURCE_CYCLE')
                 seen.add(source['_id'])
-                parent = store.db.tasks.find_one({'_id': source['event']['task_id']})
+                parent = task_records.get(store, source['event']['task_id'])
                 source = message_records.get(store, parent['raw_input_refs'][0]) if parent else None
             if not source or not source.get('host_managed'):
                 continue
@@ -417,14 +419,13 @@ class RuntimeHost:
                 'previous_state': task['state'], 'state': paused['state']})
         # A finished task whose result she had already taken was once paused here when her turn on it handed
         # the work on to another task (its feedback stayed WAITING_TASK): it read as open work. Give it back.
-        for task in store.db.tasks.find({'state': 'PAUSED', 'pause_reason': 'host_restart',
-                                         'paused_state': {'$in': ['RETURNED', 'BLOCKED', 'DONE', 'PARTIAL', 'UNKNOWN',
-                                                                  'NEEDS_CHARACTER_DECISION']}}):
+        for task in task_records.paused(store, 'host_restart', states=['RETURNED', 'BLOCKED', 'DONE', 'PARTIAL',
+                                                                    'UNKNOWN', 'NEEDS_CHARACTER_DECISION']).each():
             if not self._feedback_taken(task):
                 continue
             restored = {key: value for key, value in task.items()
                         if key not in ('pause_reason', 'paused_at', 'paused_state', 'paused_feedback_state')}
-            restored = store.put('tasks', {**restored, 'state': task['paused_state'],
+            restored = task_records.save(store, {**restored, 'state': task['paused_state'],
                                            'feedback_state': task.get('paused_feedback_state')},
                                  expected=task['revision'], stream=task['_id'])
             self._settle_received(restored)
@@ -445,7 +446,7 @@ class RuntimeHost:
             return False
         if feedback['state'] == 'COMMITTED':
             if task.get('feedback_state') != 'DELIVERED':
-                store.put('tasks', {**task, 'feedback_state': 'DELIVERED'}, expected=task['revision'], stream=task['_id'])
+                task_records.save(store, {**task, 'feedback_state': 'DELIVERED'}, expected=task['revision'], stream=task['_id'])
             original = episode_records.get(store, task['episode_id'])
             if original and original['state'] == 'WAITING_TASK':
                 episode_records.save(store, {**original, 'state': 'COMMITTED', 'feedback_episode': feedback['_id']},

@@ -2,6 +2,7 @@
 import json
 
 from .records import episodes as episode_records
+from .records import tasks as task_records
 
 
 class CognitionView:
@@ -23,9 +24,8 @@ class CognitionView:
                  'person': self.binding['person_id'], 'epoch': self.binding['policy_epoch'],
                  'persona': self.binding['persona']}
         if self.binding.get('task_id'):
-            task = self.store.db.tasks.find_one({'_id': self.binding['task_id'],
-                'scene_id': self.binding['scene_id'], 'requester_id': self.binding['person_id'],
-                'policy_epoch': self.binding['policy_epoch']})
+            task = task_records.get(self.store, self.binding['task_id'], scene=self.binding['scene_id'],
+                                    requester=self.binding['person_id'], epoch=self.binding['policy_epoch'])
             if not task:
                 return None
             # The turn the task works for: on an errand, the home turn that sent it (errands.home_turn).

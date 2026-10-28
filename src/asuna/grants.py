@@ -2,6 +2,7 @@
 from pathlib import Path
 
 from .state import Denied
+from .records import tasks as task_records
 
 
 def home_workspaces(config):
@@ -79,7 +80,7 @@ def development_granted(store, scene, event, session_class=None):
         return False                      # her candidates are tested in the sandbox (ADR-010 D5)
     kind = event.get('episode_kind') or 'external'
     if kind == 'task_feedback':
-        return bool((store.db.tasks.find_one({'_id': event.get('task_id')}) or {}).get('development_grant'))
+        return bool((task_records.get(store, event.get('task_id')) or {}).get('development_grant'))
     cls = session_class or visibility.session_class(store.config, store.db, scene, event['person_id'])
     if cls != visibility.OWNER_PRIVATE:
         return False

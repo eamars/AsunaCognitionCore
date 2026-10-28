@@ -297,8 +297,22 @@ CATALOG = Catalog([
         (index(('scene_id', 1), ('source_event_id', 1), ('episode_kind', 1), unique=True),
          index(('person_id', 1), ('state', 1))),
         versioned=True),
-    _core('tasks', 'records.tasks', index(('request_key', 1), unique=True)),
-    _core('plans', 'records.plans', index(('scene_id', 1), ('person_id', 1), ('status', 1))),
+    # A task and its messages (records/tasks.py): the fields their owner names; the rest is stored as written. The
+    # field of the tasks' unique index is required (3.5). Their times are ISO text, but a lease's expiry: seconds.
+    Collection('tasks', 'records.tasks', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'), Field('request_key', 'text', required=True),
+        *_text('state', 'scene_id', 'scope_key', 'requester_id', 'episode_id', 'continues_task_id', 'feedback_state',
+               'pause_reason', 'paused_state', 'paused_at', 'created_at', 'finished_at'),
+        Field('policy_epoch', 'number', nullable=True), Field('lease_expires_at', 'number', nullable=True)),
+        (index(('request_key', 1), unique=True),),
+        versioned=True),
+    # A plan (records/plans.py): the fields its owner names; the rest is stored as written. Its times are ISO text.
+    Collection('plans', 'records.plans', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('scene_id', 'scope_key', 'person_id', 'status', 'kind', 'next_fire_at', 'created_at', 'last_outcome'),
+        Field('policy_epoch', 'number', nullable=True)),
+        (index(('scene_id', 1), ('person_id', 1), ('status', 1)),),
+        versioned=True),
     _core('memory_units', 'records.memories',
           index(('scope_key', 1), ('status', 1), ('policy_epoch', 1)),
           index(('scope_key', 1), ('origin', 1), ('source_identity', 1), unique=True,
@@ -347,8 +361,11 @@ CATALOG = Catalog([
           fields=_text('source_identity'), insert_only=True),
     _core('affect_proposals', 'affect', index(('persona', 1), ('kind_row', 1), ('created_at', 1)), insert_only=True),
     _core('scene_people', 'records.people', index(('scene_id', 1), ('handle', 1), unique=True)),
-    _core('task_messages', 'records.tasks', index(('task_id', 1), ('created_at', 1)),
-          index(('thread', 1), ('created_at', 1))),
+    Collection('task_messages', 'records.tasks', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('task_id', 'thread', 'from', 'created_at'), Field('delivered', 'bool', nullable=True)),
+        (index(('task_id', 1), ('created_at', 1)), index(('thread', 1), ('created_at', 1))),
+        versioned=True),
     _core('ideas', 'records.ideas', index(('persona', 1), ('state', 1), ('created_at', 1))),
     _core('stickers', 'stickers', index(('persona', 1), ('name', 1), unique=True),
           index(('persona', 1), ('identity', 1), unique=True)),

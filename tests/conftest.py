@@ -94,9 +94,9 @@ UNCHECKED='UNCHECKED, not passed: no confined command runs in this run (%s)'%CAN
 # a plain copy (a publication's candidate), so they run in both.
 
 
-# Tests the in-process stand-in cannot carry: one reviewed line each, `test id | what the stand-in lacks` (a test id
-# without its [parameters] covers them all). Read at collection, never caught at run time; the file goes with the
-# stand-in, when the unit run moves to the store's in-memory adapter (ADR-104).
+# Tests the in-process stand-in cannot carry: one reviewed line each, `test id | what the stand-in lacks`, a line
+# skipping the one collected test whose id it equals. Read at collection, never caught at run time; the file goes with
+# the stand-in, when the unit run moves to the store's in-memory adapter (ADR-104).
 HARNESS_SKIPS=Path(__file__).with_name('harness_skips.txt')
 
 
@@ -108,17 +108,30 @@ def _harness_skips():
     return listed
 
 
-def pytest_collection_modifyitems(session,config,items):
-    listed,used=_harness_skips(),set()
+# The store's contract runs in the unit run on the in-memory adapter, the reference (adapter parameter 'memory'), and
+# on the MongoDB adapter over the stand-in ('stand-in'): a skip line equal to a 'memory' case is refused.
+def apply_harness_skips(listed,items,whole):
+    """Mark each item whose id a line equals skipped. A line equal to a case of the reference run is refused; in a
+    whole run, so is a line equal to no collected id."""
+    reference={item.nodeid for item in items
+               if getattr(getattr(item,'callspec',None),'params',{}).get('adapter')=='memory'}
+    if reference&set(listed):
+        raise pytest.UsageError('HARNESS_SKIP_HITS_THE_REFERENCE: tests/harness_skips.txt would skip the store contract '
+                                'on the in-memory adapter (name the case by its [stand-in] id): '+
+                                ', '.join(sorted(reference&set(listed))[:10]))
+    used=set()
     for item in items:
-        test=item.nodeid if item.nodeid in listed else item.nodeid.split('[')[0]
-        if test in listed:
-            used.add(test)
-            item.add_marker(pytest.mark.skip(reason='UNCHECKED, not passed: the in-process stand-in lacks '+listed[test]))
-    whole=config.args_source==pytest.Config.ArgsSource.TESTPATHS and not config.option.keyword and not config.option.markexpr
+        if item.nodeid in listed:
+            used.add(item.nodeid)
+            item.add_marker(pytest.mark.skip(reason='UNCHECKED, not passed: the in-process stand-in lacks '+listed[item.nodeid]))
     if whole and set(listed)-used:
         raise pytest.UsageError('HARNESS_SKIP_NOT_A_TEST: tests/harness_skips.txt lists ids no test has: '+
                                 ', '.join(sorted(set(listed)-used)[:10]))
+
+
+def pytest_collection_modifyitems(session,config,items):
+    whole=config.args_source==pytest.Config.ArgsSource.TESTPATHS and not config.option.keyword and not config.option.markexpr
+    apply_harness_skips(_harness_skips(),items,whole)
 
 
 def pytest_report_header(config):

@@ -20,6 +20,22 @@ def runtime_modules():
     return sorted(p.stem for p in (ROOT / 'src/asuna').glob('*.py') if p.stem not in NOT_IN_WORKER)
 
 
+def store_modules():
+    """The store package's modules (src/asuna/store/), which ship with the worker's."""
+    return sorted(p.name for p in (ROOT / 'src/asuna/store').glob('*.py'))
+
+
+def prepare_store(destination: Path) -> list:
+    """Copy the store package next to the worker modules."""
+    target = destination / 'store'
+    if target.exists():
+        shutil.rmtree(target)
+    target.mkdir(parents=True)
+    for name in store_modules():
+        shutil.copyfile(ROOT / 'src/asuna/store' / name, target / name)
+    return [[f'src/asuna/store/{name}', f'python/asuna/store/{name}'] for name in store_modules()]
+
+
 def prepare_resources(destination: Path) -> list:
     """Copy behavior resources next to the worker modules; no npm, no network.
 
@@ -103,6 +119,7 @@ def bundle_python():
         shutil.copyfile(ROOT / 'src/asuna' / filename, destination / filename)
     from asuna.development import DEVELOPMENT_TOOLS
     mappings = [[f'src/asuna/{name}.py', f'python/asuna/{name}.py'] for name in modules]
+    mappings += prepare_store(destination)
     mappings += prepare_resources(destination)
     mappings += prepare_sandbox_site(destination)
     (ROOT / 'packages/cognition-core/runtime-manifest.json').write_text(

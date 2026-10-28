@@ -610,8 +610,9 @@ on top of her version.
 suite's own small catalog of synthetic collections), which the running module provides through an `open_store`
 fixture. `tests/test_store_contract.py` runs them on the in-memory adapter (unit);
 `integration/test_store_contract.py` runs the same classes on MongoDB on a throwaway `asuna_v2_test_*` database,
-dropped at the end and on failure. No marker skips a case outside `capabilities`. Two cases run on the double only,
-in `tests/test_store_contract.py`, because a server neither shuffles ties by a seed nor lets a test move its clock:
+dropped at the end and on failure. No marker skips a case outside `capabilities`, except in the stand-in's run, and
+there only through `tests/harness_skips.txt` by the case's `[stand-in]` id. Two cases run on the double only, in
+`tests/test_store_contract.py`, because a server neither shuffles ties by a seed nor lets a test move its clock:
 `O05` and the double's injected clock; the shared `T` cases use times relative to the real clock.
 
 | class | cases | what |
@@ -629,10 +630,15 @@ in `tests/test_store_contract.py`, because a server neither shuffles ties by a s
 | `R` races (integration only) | 4 | counter (4 processes x 50), claim (6 x 60), lease expiry (two holders), stale revision (two writers) |
 | `D` differential (integration only) | 1 | Hypothesis, `derandomize=True`, at most 200 records and 100 generated where trees per run (missing, null, empty lists, equal sort keys); `find` and `count` on MongoDB equal the double's, order included |
 
-Size: on the double 112 cases, 110 shared (W 31, O 6, G 5, C 12, X 14, T 5, V 8, N 18, B 6, S 5) and 2 on the
-double only, in about 0.3 s; integration adds `R` (4) and `D` (1). Target for the integration run: under 60 s
-(today's 18 vector cases take 7 s on 301 records, ADR page). Hypothesis is not in the checkout's environment
-(`import hypothesis` fails in `.venv`); B1b adds it to the `dev` dependency group with class `D`.
+Size, per run (measured at B1b):
+- the in-memory run: 112 cases, 110 shared (W 31, O 6, G 5, C 12, X 14, T 5, V 8, N 18, B 6, S 5) and 2 its own,
+  about 0.3 s;
+- the stand-in run: the 110 shared less `S05` (it opens no store, so it runs once) and those listed in
+  `tests/harness_skips.txt` by their `[stand-in]` ids: 109, of which 79 pass and 30 are listed, about 0.1 s;
+- the integration run on MongoDB: the 110 shared, `R` (4) and `D` (1, 100 generated conditions), 115 cases in about
+  45 s, under the target of 60 s.
+
+Hypothesis is in the `dev` dependency group (`hypothesis==6.170.12`) for class `D`.
 
 ### 7.2 What the contract suite cannot show
 
@@ -677,7 +683,11 @@ then fail relied on MongoDB's or mongomock's own behaviour and are fixed or go (
   defect with where it is fixed (as built: the clock-tie class below, five tests).
 - `tests/conftest.py` reads that file at collection and marks each listed test skipped with the reason
   `UNCHECKED, not passed: the interim harness lacks <what>`. Nothing is caught at run time: a listed id that no longer
-  exists fails the collection, and a test that fails and is not listed fails the run.
+  exists fails the collection, and a test that fails and is not listed fails the run. A line skips only the collected
+  test whose id it equals exactly, parameters included (a parametrised test is listed once per parameter); a line
+  equal to no collected id fails a whole run's collection. A line equal to a case of the store's contract with the
+  adapter parameter `memory` stops the collection (`HARNESS_SKIP_HITS_THE_REFERENCE`): a contract case is listed by
+  its `[stand-in]` id only.
 - The lead reviews the list; B0 reports pass, skip (by reason) and run time against the baseline.
 - B13 deletes the file with the harness.
 
@@ -687,7 +697,8 @@ Today: 193 test files, 1,285 test functions (parametrised ones count once; pytes
 them need a database through the `store` fixture or a fixture of their file that takes it, in 139 files; 5 files use
 mongomock, 50 make a client or a `Store` themselves (`test_census.py` at `5a62ebd6`). A run takes 9 to 16 minutes on
 this machine (ADR page). The time on the double is measured once it exists (B13), with `pytest --durations=0`
-written to a TSV.
+written to a TSV. "Test count and run time on the double" counts the in-memory run only (the contract's `[memory]`
+cases and every other test), never the stand-in's `[stand-in]` cases, so B15 compares like with like.
 
 Which tests go, by rule (applied in B15, one rule at a time, each with its count):
 
@@ -755,10 +766,12 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | B15 | the suite reset (7.4) | tests only | no | before and after: test count and run time on the double |
 
 **The stand-in is checked against the meaning table, not trusted.** From B1b the unit run also runs the shared
-contract classes on the MongoDB adapter over the stand-in's client (the same `open_store` fixture), beside the
-in-memory adapter. A case on which the two disagree is a place where a batch's green would only mean "the same as
-the stand-in": it goes to `tests/harness_skips.txt` with what the stand-in lacks, so it is never read as checked, and
-the integration run on MongoDB (7.1) decides it.
+contract classes on the MongoDB adapter over the stand-in's client, beside the in-memory adapter: one `open_store`
+fixture with the adapter as its parameter, `[memory]` and `[stand-in]`. A case on which the two disagree is a place
+where a batch's green would only mean "the same as the stand-in": it goes to `tests/harness_skips.txt` by its exact
+`[stand-in]` id, with what the stand-in lacks, so it is never read as checked, and the integration run on MongoDB
+(7.1) decides it. The in-memory run, the reference, is never skipped: the collection refuses a line that would reach
+it.
 
 **Restarts, two batches to one where they cannot hide each other.** Each batch is still reviewed, checked (8.3)
 and merged alone; only the install is shared, and only for adjacent batches over disjoint collections whose

@@ -221,7 +221,7 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`native_settings`](../../src/asuna/native_settings.py) — Native DSH settings migration and model-free runtime validation.
 - [`lanes`](../../src/asuna/lanes.py) — The model-lane contract: `LaneResult` is what one turn returns (its text, tool calls and everything she said), and `FakeLane` is the scripted stand-in tests use instead of a model.
 - [`queue`](../../src/asuna/queue.py) — Process-wide and cross-process endpoint serialization, without cloud routes.
-- [`state`](../../src/asuna/state.py) — The worker's MongoDB store: every write goes through `Store.put` with an expected revision and is recorded in a hash-chained audit stream.
+- [`state`](../../src/asuna/state.py) — The worker's store: every write goes through `Store.put` with an expected revision and is recorded in a hash-chained audit stream.
 - [`audit`](../../src/asuna/audit.py) — Checks and replays the store's audit trail: `verify` walks each stream's hash chain, `verify_documents` compares stored documents with their last audited commit, and `replay` rebuilds the state in an empty test database.
 - [`evidence`](../../src/asuna/evidence.py) — File evidence for runs and probes: `Evidence` writes each event as a hash-chained JSON file in a new folder; `canonical` and `sha` are the stable JSON bytes and digests the store's audit chain also uses.
 - [`testing`](../../src/asuna/testing.py) — Explicit teardown for databases owned by isolated tests and probes.
@@ -229,6 +229,13 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`host_stops`](../../src/asuna/host_stops.py) — When the Host was taken away from outside, she should not have to infer from a gap in the logs whether she was away.
 - [`host_lease`](../../src/asuna/host_lease.py) — One running Host per database, across machines (ADR-020 M1).
 - [`local_time`](../../src/asuna/local_time.py) — Times a model reads are on the local clock (owner 2026-10-08): stored records keep UTC for the program, and everything handed to a model passes `for_model` first.
+- [`store/__init__`](../../src/asuna/store/__init__.py) — The store: the core's way to its database, with no database named.
+- [`store/words`](../../src/asuna/store/words.py) — The words the core describes records with: conditions, changes, sorts and totals, their JSON form for her read tool, and their validation against a collection's declaration before any adapter sees them.
+- [`store/catalog`](../../src/asuna/store/catalog.py) — The catalog: every collection the core keeps, declared once, and the vector spaces searched in them.
+- [`store/errors`](../../src/asuna/store/errors.py) — The store's errors: what the shared layer and an adapter raise, each a message that starts with its code.
+- [`store/adapters`](../../src/asuna/store/adapters.py) — The registry of database adapters, and the results adapters return.
+- [`store/memory`](../../src/asuna/store/memory.py) — The in-memory adapter: the meaning table of the store's words written as code, its reference, and the unit tests' database.
+- [`store/mongodb`](../../src/asuna/store/mongodb.py) — The MongoDB adapter: the store's words as MongoDB queries, the catalog's collections, validators and indexes, blobs in the GridFS bucket `artifact_blobs`, and exact vector search.
 
 ### [A turn](turn.md)
 
@@ -465,6 +472,7 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 
 Commands for setup, packing, launching, probes and maintenance.
 
+- [`adr104_equivalence.py`](../../tools/adr104_equivalence.py) — The read-only check of one ADR-104 batch against a deployment's database, before the batch merges: numbers only, never a record id or a value.
 - [`agent_line.py`](../../tools/agent_line.py) — A coding agent's line to her (ADR-033): post a message, poll her answers.
 - [`asuna-launch.mjs`](../../tools/asuna-launch.mjs) — Stable entry: native Web and repair tools boot without importing Python code.
 - [`asuna-supervisor.mjs`](../../tools/asuna-supervisor.mjs) — The Host supervisor (ADR-034): the launcher stays as DSH's parent, restarts it when she asks or when it exits on its own, and brings it back down a fallback ladder when a start fails.

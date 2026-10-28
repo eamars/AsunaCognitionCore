@@ -87,15 +87,19 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
   of the stand-in for each test. A test the stand-in cannot carry is listed in `tests/harness_skips.txt` with what it
   lacks and skips as unchecked, not passed.
 - `src/asuna/store/` is the store's interface: the condition and change words, the catalog of declared collections,
-  the adapter registry and the in-memory adapter; the worker does not use it yet. `tests/store_contract.py` holds
-  the cases every adapter passes, and `tests/test_store_contract.py` runs them on the in-memory adapter. That adapter
-  returns records tied on every sort key in an order shuffled by one seed per run: a failure prints the seed, and
-  `ASUNA_STORE_SEED=<seed>` repeats it.
+  the adapter registry, the in-memory adapter and the MongoDB adapter, through which `Store` writes, audits and
+  searches vectors. `tests/store_contract.py` holds the cases every adapter passes: `tests/test_store_contract.py`
+  runs them on the in-memory adapter (`[memory]`) and on the MongoDB adapter over the stand-in (`[stand-in]`; a case
+  the stand-in answers otherwise is in `tests/harness_skips.txt` by its `[stand-in]` id, and a line that would skip a
+  `[memory]` case stops the collection), and `integration/test_store_contract.py` on MongoDB, with the races between processes and a differential of generated
+  conditions against the in-memory adapter. The in-memory adapter returns records tied on every sort key in an order
+  shuffled by one seed per run: a failure prints the seed, and `ASUNA_STORE_SEED=<seed>` repeats it.
 - Native node tests and the native worker/product tests use synthetic inference and create no database.
 - `integration/` holds the database adapter's integration tests, outside the default run
   (`.\.venv\Scripts\python.exe -m pytest -q integration`). They reach the configured server only on a throwaway `asuna_v2_test_*`
   database of synthetic records, dropped at the end, and skip when the server is not reachable.
-- The Python suites need the `dev` dependency group (`uv sync` installs it): pytest, mongomock and pyflakes.
+- The Python suites need the `dev` dependency group (`uv sync` installs it): pytest, mongomock, pyflakes and
+  hypothesis.
   `tests/test_no_undefined_names.py` fails on any name a Python file uses but never defines, in `src/asuna`,
   `tools`, `packages/channels` and `tests` (not the vendored websocket client or the persona packages).
 - pytest imports `asuna` from the checkout's own `src/` (`pythonpath` in `pyproject.toml`), never an installed copy.

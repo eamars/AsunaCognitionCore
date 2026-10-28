@@ -170,17 +170,18 @@ Process-wide and cross-process endpoint serialization, without cloud routes.
 
 [src/asuna/state.py](../../src/asuna/state.py)
 
-The worker's MongoDB store: every write goes through `Store.put` with an expected revision and is recorded in a hash-chained audit stream.
+The worker's store: every write goes through `Store.put` with an expected revision and is recorded in a hash-chained audit stream.
 
 - def `without_derived` — (the document without its derived fields, the names left out).
 - def `content_digest`
 - def `commit_payload` — state.commit body: the document itself up to 16 KB, otherwise a reference (ADR-009 D-4).
 - def `content_ref` — {content_sha256, bytes} for model output kept elsewhere (receipt or native transcript).
 - def `now`
-- class `Space` — Vectors searched by cosine similarity: each record of `collection` holds its vector in `path`, written with the record by `put` (the store indexes it in the same write), and a search may filter on `fields`, declared with the index.
 - class `Conflict`
 - class `Denied`
 - class `Store`
+  - `collection` — The handle of a declared collection: the store's words, checked against the catalog.
+  - `ensure` — Create every declared collection with its validator and indexes, and drop the retired indexes; {collection: Ensured}.
   - `migrate`
   - `audit`
   - `put`
@@ -304,3 +305,215 @@ Times a model reads are on the local clock (owner 2026-10-08): stored records ke
 - def `stamp` — One time on the local clock face (`face`); the value as it was when it is no time.
 - def `for_model` — A copy of a context block or tool result with every timestamp field on the local clock.
 - def `zone_of` — The time zone a conversation's times are read in (schedule_rules.scene_timezone).
+
+## `store/__init__`
+
+[src/asuna/store/__init__.py](../../src/asuna/store/__init__.py)
+
+The store: the core's way to its database, with no database named.
+
+- class `Handle` — One declared collection over the adapter; every argument is checked before the adapter is called.
+  - `get`
+  - `find`
+  - `count`
+  - `group`
+  - `insert`
+  - `replace`
+  - `update`
+  - `claim`
+  - `delete`
+  - `size`
+- class `Blobs` — The adapter's blob store, with each blob's metadata checked: `scope_key` and `kind` (text), `source_ids`.
+  - `write`
+  - `open`
+  - `delete`
+  - `of_scope`
+- class `Checked` — The shared layer over one adapter and the catalog its records are declared in.
+  - `collection`
+  - `ensure` — Create each declared collection and its indexes (all of them when `names` is None), and drop the retired ones; {name: Ensured}.
+  - `ensure_vectors`
+  - `nearest` — The k records nearest to `vector` among those matching `where`, best first, as (id, cosine); exact.
+  - `ping`
+  - `close`
+
+## `store/words`
+
+[src/asuna/store/words.py](../../src/asuna/store/words.py)
+
+The words the core describes records with: conditions, changes, sorts and totals, their JSON form for her read tool, and their validation against a collection's declaration before any adapter sees them.
+
+- class `Word` — A word of the vocabulary; two are equal when their kind and arguments are.
+- class `AnyOf` — Equal to one of the values; `AnyOf([])` matches nothing.
+- class `NoneOf` — Missing, null, or equal to none of the values; `NoneOf([])` matches every record.
+- class `Not` — The complement of equality: missing and null match.
+- class `Range` — Present, of the field's kind and within every bound given.
+  - `bounds`
+- class `Exists` — Present with any value, null included (`Exists(False)`: absent).
+- class `IsNull` — Present and null.
+- class `StartsWith` — Text that starts with any of the prefixes, literally, case kept.
+- class `Contains` — Text that contains `text` literally; `case=False` folds each character that folds to one character.
+- class `Holds` — A list with an element equal to the value.
+- class `HoldsAny` — A list with an element equal to one of the values.
+- class `NonEmpty` — A list with at least one element.
+- class `Each` — A list of objects with one element that meets every entry of `where` (paths relative to the element).
+- class `And`
+- class `Or`
+- class `Now` — The database's clock at the moment of the write, plus `seconds`: a `Range` bound in `update` and `claim`, and a value of a `time` field in `Set`, `OnCreate` and `insert`.
+- class `Set` — Sets each path, creating missing parent objects.
+- class `Unset` — Each path is absent afterwards.
+- class `Increase` — Adds `by` to a number; a missing field starts at 0.
+- class `Larger` — Keeps the larger of the stored value and `value`; a missing field takes the value.
+- class `Smaller` — Keeps the smaller of the stored value and `value`; a missing field takes the value.
+- class `AddToSet` — Adds each value the list does not hold yet; a missing field becomes the list.
+- class `Push` — Appends the values, then keeps the last `keep_last` elements.
+- class `OnCreate` — Sets each path only when the write creates the record.
+- class `Count`
+- class `Max`
+- def `to_utc_ms` — An aware time in UTC, truncated to the millisecond (what every adapter stores).
+- def `check_where` — `where` validated against the declared collection; `now`: `Now` may bound a range (update and claim).
+- def `check_vector_where` — A vector search's filter: equality, `AnyOf`, `And` and `Or` on the space's filter fields.
+- def `check_sort` — [(field, 1 | -1)] on declared fields that are not lists, objects or vectors.
+- def `check_fields` — The paths to return (`_id` always comes back); None returns whole records.
+- def `check_page`
+- def `check_group` — (the `by` fields, the total): `by` names declared value fields; the total is `Count()`, `Max(field)` or None.
+- def `record_bytes` — A record's size as canonical JSON (UTF-8).
+- def `check_record` — A copy of a whole record, validated: a text `_id`, every declared field of its kind, the required ones present, at most 1 MiB; `now`: `Now` may stand for a time (insert).
+- def `holds_now`
+- def `check_change` — A change validated: a list of change words, each value copied with times in UTC ms; two words never write one path or a path inside another.
+- def `check_create` — The change of a write that may create its record, with the created record's `_id` as `OnCreate` when the condition does not give it.
+- def `from_json` — The words of a condition given in her JSON form: a plain value is equality, a dict value is one word (`{"any_of": [...]}`, `{"range": {"gte": ...}}`, `{"contains": "...", "case": false}`, ...), and logic is the keys `"or"` and `"and"`.
+- def `to_json` — A condition in her JSON form (what her read tool shows as the filter asked).
+
+## `store/catalog`
+
+[src/asuna/store/catalog.py](../../src/asuna/store/catalog.py)
+
+The catalog: every collection the core keeps, declared once, and the vector spaces searched in them.
+
+- def `is_number`
+- def `kind_of` — The kind a value is: null, bool, number, text, time, list, object, bytes or other.
+- class `Field` — A declared field: `of` is a list's element kind, `dimensions` a vector's length.
+  - `holds` — Whether a value other than null is of this field's kind.
+  - `holds_element`
+- class `Index` — An index: `keys` are (path, 1 | -1); a unique index's fields are required unless listed in `only_where_present`, and a record missing one of those (or holding null) is outside the index.
+- class `Space` — Vectors searched by cosine similarity: each record of `collection` holds its vector in `path`, and a search may filter on `fields`.
+- class `Collection` — A declared collection.
+  - `field`
+  - `paths`
+  - `unique`
+- class `Catalog` — The declared collections and vector spaces, by name.
+  - `collection`
+  - `collections`
+  - `names`
+  - `spaces`
+  - `check_space` — Refuse a space whose collection, vector path or filter fields are not declared.
+- def `index` — An index named as MongoDB names one by default (`scene_id_1_scene_seq_1`).
+
+## `store/errors`
+
+[src/asuna/store/errors.py](../../src/asuna/store/errors.py)
+
+The store's errors: what the shared layer and an adapter raise, each a message that starts with its code.
+
+- class `StoreError` — Every error of the store; `code` is the first word of its message.
+  - `code`
+- class `QueryInvalid` — A condition, sort, group, field list or change the meaning table refuses.
+- class `RecordInvalid` — A record, or a value written into one, that its collection's declared fields cannot hold.
+- class `RecordTooLarge` — A record over 1 MiB of canonical JSON.
+- class `DuplicateKey` — A write repeated a unique key: `index` names the index, `at` the position in an insert of several.
+- class `StaleRevision` — A revisioned write found the record at another revision than the one it was read at.
+- class `NotSupported` — The adapter lacks a capability the call needs; raised before the database is reached.
+- class `SchemaConflict` — The database holds an index of a declared name with other keys or options.
+- class `Unavailable` — The database cannot be reached.
+- class `BlobMissing` — No stored blob has that id.
+- class `AdapterNotInstalled` — No adapter of the configured kind is installed; there is never a default.
+
+## `store/adapters`
+
+[src/asuna/store/adapters.py](../../src/asuna/store/adapters.py)
+
+The registry of database adapters, and the results adapters return.
+
+- class `Ensured` — What `ensure` did: whether it created the collection, the index names it made and those it dropped.
+- class `Updated` — What `update` did: records matched, records changed, whether it created one.
+- class `Size` — A collection's records and the bytes they take.
+- def `register` — Make an adapter module's kind available to `open`.
+- def `load` — Import a database package's adapter module: {'kind': ..., 'python': <directory>, 'module': <name>}.
+- def `loaded`
+- def `module` — The adapter module the settings select.
+- def `open` — An open adapter of the selected kind on `database`.
+- def `drop` — Drop a test database; any name outside `asuna_v2_test_*` is refused.
+
+## `store/memory`
+
+[src/asuna/store/memory.py](../../src/asuna/store/memory.py)
+
+The in-memory adapter: the meaning table of the store's words written as code, its reference, and the unit tests' database.
+
+- class `Database` — One in-memory database: records by collection and id (in write order), the indexes `ensure` made, blobs.
+- def `open` — The adapter on the named in-memory database; `settings` may give `seed`.
+- def `where`
+- def `databases`
+- def `drop`
+- def `same` — Equality as the meaning table defines it: numbers by value, a bool never a number, objects field by field in order, lists element by element.
+- def `matches` — Whether a record meets a validated condition; `now` is the moment a `Now` bound reads.
+- def `apply` — The record after a validated change (`doc` is changed in place).
+- def `created` — The record a create writes: the condition's equalities, then `OnCreate`, then the change.
+- def `project`
+- class `Blobs` — Blobs of one in-memory database: bytes with their metadata (scope_key, kind, source_ids).
+  - `write`
+  - `open`
+  - `delete`
+  - `of_scope`
+- class `MemoryAdapter` — The adapter over one in-memory database (a new private one when none is given).
+  - `ensure`
+  - `ensure_vectors`
+  - `get`
+  - `find`
+  - `count`
+  - `group`
+  - `insert`
+  - `replace`
+  - `update`
+  - `claim`
+  - `delete`
+  - `nearest`
+  - `size`
+  - `ping`
+  - `close`
+
+## `store/mongodb`
+
+[src/asuna/store/mongodb.py](../../src/asuna/store/mongodb.py)
+
+The MongoDB adapter: the store's words as MongoDB queries, the catalog's collections, validators and indexes, blobs in the GridFS bucket `artifact_blobs`, and exact vector search.
+
+- def `open` — The adapter on `database`, with a client of its own.
+- def `where` — The server's identity, without credentials: its first host and port.
+- def `databases`
+- def `drop`
+- def `query` — A validated condition as a MongoDB filter.
+- def `update_of` — A validated change as MongoDB update operators, or as an update pipeline when it holds `Now` (then it holds only `Set` and `Unset`, which the shared layer checks).
+- class `Blobs` — Blobs in the GridFS bucket `artifact_blobs`, their metadata (scope_key, kind, source_ids) as GridFS metadata; an optional `name` in the metadata is the file's name.
+  - `write`
+  - `open`
+  - `delete`
+  - `of_scope`
+- class `MongoAdapter` — The adapter over one database of a client; `owns_client`: closing the adapter closes the client.
+  - `plan` — What `ensure` would do, read only: {'create': bool, 'make': [index names], 'drop': [index names], 'conflicts': [(index name, why)]}.
+  - `validator` — Whether the stored collection has the validator `ensure` creates: 'same', 'other', 'none', 'absent' (no collection) or 'not declared' (the collection is not versioned).
+  - `ensure`
+  - `ensure_vectors`
+  - `get`
+  - `find`
+  - `count`
+  - `group`
+  - `insert`
+  - `replace`
+  - `update`
+  - `claim`
+  - `delete`
+  - `nearest`
+  - `size`
+  - `ping`
+  - `close`

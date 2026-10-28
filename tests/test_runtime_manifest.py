@@ -13,6 +13,8 @@ def test_the_committed_runtime_manifest_matches_the_sources():
     from asuna.development import DEVELOPMENT_TOOLS
     resources = ROOT / 'src/asuna/resources'
     files = [[f'src/asuna/{name}.py', f'python/asuna/{name}.py'] for name in pack.runtime_modules()]
+    files += [[f'src/asuna/store/{p.name}', f'python/asuna/store/{p.name}']
+              for p in sorted((ROOT / 'src/asuna/store').glob('*.py'))]
     for path in sorted(p for p in resources.rglob('*') if p.is_file() and '__pycache__' not in p.parts):
         relative = path.relative_to(resources).as_posix()
         files.append([f'src/asuna/resources/{relative}', f'python/asuna/resources/{relative}'])

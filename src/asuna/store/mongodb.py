@@ -291,36 +291,56 @@ class MongoAdapter:
                 for path in declared.only_where_present}
         return [(path, int(direction)) for path, direction in declared.keys], options
 
-    def ensure(self, collection):
+    def plan(self, collection):
+        """What `ensure` would do, read only: {'create': bool, 'make': [index names], 'drop': [index names],
+        'conflicts': [(index name, why)]}."""
         name = collection.name
         with _Guard(name):
-            created = not self.db.list_collection_names(filter={'name': name})
-            existing = {} if created else self.db[name].index_information()
-            wanted = {declared.name: self._wanted(collection, declared) for declared in collection.indexes}
-            for index, (keys, options) in wanted.items():
-                if index in existing:
-                    info = existing[index]
-                    have = ([(path, int(direction)) for path, direction in info['key']],
-                            {k: info[k] for k in ('unique', 'partialFilterExpression') if info.get(k)})
-                    if have != (keys, options):
-                        raise SchemaConflict(index, 'declared %s %s, the database has %s %s'
-                                             % (keys, options, have[0], have[1]))
+            listed = bool(self.db.list_collection_names(filter={'name': name}))
+            existing = self.db[name].index_information() if listed else {}
+        wanted = {declared.name: self._wanted(collection, declared) for declared in collection.indexes}
+        conflicts = []
+        for index, (keys, options) in wanted.items():
+            if index in existing:
+                info = existing[index]
+                have = ([(path, int(direction)) for path, direction in info['key']],
+                        {k: info[k] for k in ('unique', 'partialFilterExpression') if info.get(k)})
+                if have != (keys, options):
+                    conflicts.append((index, 'declared %s %s, the database has %s %s'
+                                      % (keys, options, have[0], have[1])))
+        return {'create': not listed, 'make': [index for index in wanted if index not in existing],
+                'drop': [index for index in collection.retired if index in existing], 'conflicts': conflicts}
+
+    def validator(self, collection):
+        """Whether the stored collection has the validator `ensure` creates: 'same', 'other', 'none', 'absent' (no
+        collection) or 'not declared' (the collection is not versioned)."""
+        if not collection.versioned:
+            return 'not declared'
+        with _Guard(collection.name):
+            listed = list(self.db.list_collections(filter={'name': collection.name}))
+        if not listed:
+            return 'absent'
+        found = (listed[0].get('options') or {}).get('validator')
+        return 'none' if found is None else 'same' if found == VALIDATOR else 'other'
+
+    def ensure(self, collection):
+        plan, name = self.plan(collection), collection.name
+        if plan['conflicts']:
+            raise SchemaConflict(*plan['conflicts'][0])
+        wanted = {declared.name: self._wanted(collection, declared) for declared in collection.indexes}
+        with _Guard(name):
+            created = plan['create']
             if created:
                 try:
                     self.db.create_collection(name, **({'validator': VALIDATOR} if collection.versioned else {}))
                 except CollectionInvalid:
                     created = False
-            made = []
-            for index, (keys, options) in wanted.items():
-                if index not in existing:
-                    self.db[name].create_index(keys, name=index, **options)
-                    made.append(index)
-            dropped = []
-            for index in collection.retired:
-                if index in existing:
-                    self.db[name].drop_index(index)
-                    dropped.append(index)
-            return Ensured(created, tuple(made), tuple(dropped))
+            for index in plan['make']:
+                keys, options = wanted[index]
+                self.db[name].create_index(keys, name=index, **options)
+            for index in plan['drop']:
+                self.db[name].drop_index(index)
+        return Ensured(created, tuple(plan['make']), tuple(plan['drop']))
 
     def ensure_vectors(self, space, timeout=45):
         collection = self.db[space.collection]

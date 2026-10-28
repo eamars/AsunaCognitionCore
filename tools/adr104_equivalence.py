@@ -217,11 +217,14 @@ def reads(client, database, max_ms):
 def check(batch, settings, database, out, max_ms):
     client = MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
                          **({'timeoutMS': max_ms} if batch == 'b3' else {}))
-    report, unchecked = {'database_collections': len(CATALOG.names())}, []
+    # Nothing is written: ensure is planned, not run, and every read is read-only.
+    report, unchecked = {'mode': 'dry_run', 'database_collections': len(CATALOG.names())}, []
     try:
         adapter = MongoAdapter(client, database)
         plans = dry_run(adapter)
-        report['ensure'] = {name: {k: (len(v) if isinstance(v, list) else v) for k, v in plan.items()}
+        report['ensure'] = {name: {'create': plan['create'], 'make': plan['make'], 'drop': plan['drop'],
+                                   'conflicts': [index for index, _ in plan['conflicts']],
+                                   'validator': plan['validator']}
                             for name, plan in plans.items()}
         report['conflicts'] = [[name, index] for name, plan in plans.items() for index, _ in plan['conflicts']]
         report['fields'], report['fields_differ'] = {}, []
@@ -257,6 +260,13 @@ def check(batch, settings, database, out, max_ms):
     print('ensure, dry run: collections to create %(create)d, indexes to make %(make)d, to drop %(drop)d, '
           'conflicting %(conflicts)d' % totals)
     print('validators: ' + ', '.join('%s %d' % item for item in sorted(validators.items())))
+    for what in ('make', 'drop'):
+        for name, plan in sorted(report['ensure'].items()):
+            for index in plan[what]:
+                print('to %s: %s.%s' % (what, name, index))
+    for name, plan in sorted(report['ensure'].items()):
+        if plan['create']:
+            print('to create: %s' % name)
     for name, index in report['conflicts']:
         print('conflict: %s.%s' % (name, index))
     for name, counts in sorted(report['fields'].items()):

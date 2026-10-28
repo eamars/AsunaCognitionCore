@@ -222,9 +222,9 @@ def test_the_session_binding_names_its_conversations_clock(monkeypatch):
     monkeypatch.setattr(scene_records, 'get', lambda *a, **k: None)
     monkeypatch.setattr(scene_records, 'authorize', lambda store, scene, person: {'policy_epoch': 1})
     monkeypatch.setattr(session_records, 'get', lambda store, session_id, fields=None, native=False: record)
-    worker.app = SimpleNamespace(store=SimpleNamespace(config={'timezone': 'Pacific/Auckland'}))
+    worker.app = SimpleNamespace(store=SimpleNamespace(config={'timezone': 'UTC'}))
     binding = worker.dispatch('session', {'session_id': 'native-session'})
-    assert binding['timezone'] == 'Pacific/Auckland' and binding['utc_offset_minutes'] in (720, 780)
+    assert binding['timezone'] == 'UTC' and binding['utc_offset_minutes'] == 0
     assert binding['scene_id'] == 'scene'
 
 

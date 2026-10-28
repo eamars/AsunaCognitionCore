@@ -80,9 +80,12 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
 - The tests keep only invariants whose breakage would be visible or harmful: privacy and visibility boundaries,
   authorization and epoch fencing, exactly-once ingest and publication, crash recovery, audit integrity, sandbox
   isolation and the visible native behavior.
-- Python suites read `config/local.json` for the MongoDB address. The `store` fixture builds the fixture world once
-  per session and resets a reused `asuna_v2_test_*` database for each test; every test database is dropped at
-  session end, failures included. Mongo tests skip when the service is unavailable.
+- The unit run reaches no database server. Every MongoDB client it makes, in the test process and in every Python
+  process it starts, is an in-process stand-in (`tests/unit_run_site/sitecustomize.py`, mongomock over one shared
+  store), and every configuration it loads names an address that cannot resolve; `tests/test_no_server.py` checks
+  both. The `store` fixture builds the fixture world once per session and resets a reused `asuna_v2_test_*` database
+  of the stand-in for each test. A test the stand-in cannot carry is listed in `tests/harness_skips.txt` with what it
+  lacks and skips as unchecked, not passed.
 - Native node tests and the native worker/product tests use synthetic inference and create no database.
 - `integration/` holds the database adapter's integration tests, outside the default run
   (`.\.venv\Scripts\python.exe -m pytest -q integration`). They reach the configured server only on a throwaway `asuna_v2_test_*`

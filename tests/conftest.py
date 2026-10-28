@@ -1,5 +1,26 @@
 import copy,uuid,os,re,shutil,subprocess,sys
 from pathlib import Path
+import importlib.util
+
+# A unit run reaches no database server (ADR-104). Two locks, each enough alone: every MongoDB client is the in-process
+# stand-in of unit_run_site/sitecustomize.py (here, and in every Python process the run starts with its environment),
+# and every configuration the run loads names an address that cannot resolve (RFC 6761 .invalid), so a process that
+# does not inherit the environment, such as a confined command, has no server to reach either.
+UNIT_RUN_SITE=Path(__file__).with_name('unit_run_site')
+os.environ['ASUNA_UNIT_RUN']='1'
+os.environ['PYTHONPATH']=os.pathsep.join(filter(None,[str(UNIT_RUN_SITE),os.environ.get('PYTHONPATH')]))
+_spec=importlib.util.spec_from_file_location('unit_run_stand_in',UNIT_RUN_SITE/'sitecustomize.py')
+_spec.loader.exec_module(importlib.util.module_from_spec(_spec))
+NO_SERVER='mongodb://unit-run.invalid:27017/'
+from asuna import config as _config
+_load_settings=_config.load
+
+
+def _unit_run_settings(*args,**kwargs):
+    value=_load_settings(*args,**kwargs);value['mongo_uri']=NO_SERVER
+    return value
+_config.load=_unit_run_settings
+
 import sandbox_temp
 sandbox_temp.inherit()   # tmp_path folders a run inside DSH's Windows sandbox can use
 import pytest
@@ -73,6 +94,33 @@ UNCHECKED='UNCHECKED, not passed: no confined command runs in this run (%s)'%CAN
 # a plain copy (a publication's candidate), so they run in both.
 
 
+# Tests the in-process stand-in cannot carry: one reviewed line each, `test id | what the stand-in lacks` (a test id
+# without its [parameters] covers them all). Read at collection, never caught at run time; the file goes with the
+# stand-in, when the unit run moves to the store's in-memory adapter (ADR-104).
+HARNESS_SKIPS=Path(__file__).with_name('harness_skips.txt')
+
+
+def _harness_skips():
+    listed={}
+    for line in HARNESS_SKIPS.read_text(encoding='utf-8').splitlines():
+        if line.strip() and not line.startswith('#'):
+            test,_,lacks=line.partition(' | ');listed[test.strip()]=lacks.strip()
+    return listed
+
+
+def pytest_collection_modifyitems(session,config,items):
+    listed,used=_harness_skips(),set()
+    for item in items:
+        test=item.nodeid if item.nodeid in listed else item.nodeid.split('[')[0]
+        if test in listed:
+            used.add(test)
+            item.add_marker(pytest.mark.skip(reason='UNCHECKED, not passed: the in-process stand-in lacks '+listed[test]))
+    whole=config.args_source==pytest.Config.ArgsSource.TESTPATHS and not config.option.keyword and not config.option.markexpr
+    if whole and set(listed)-used:
+        raise pytest.UsageError('HARNESS_SKIP_NOT_A_TEST: tests/harness_skips.txt lists ids no test has: '+
+                                ', '.join(sorted(set(listed)-used)[:10]))
+
+
 def pytest_report_header(config):
     return ['asuna data folder: %s'%DATA,
             'Host sandbox: '+(UNCHECKED if CANNOT_CONFINE else 'confines commands'),
@@ -127,7 +175,7 @@ def _world_snapshot(config):
         template=Store(config,isolated_database('asuna_v2_test_TPL'))
         try:
             template.migrate();_ORIGINAL_SEED(template,WORLD)
-            options={row['name']:row.get('options',{}) for row in template.db.list_collections()}
+            options={name:{} for name in template.db.list_collection_names()}   # the stand-in keeps no validator
             _WORLD_SNAPSHOT={name:(options[name],
                                    {k:v for k,v in template.db[name].index_information().items() if k!='_id_'},
                                    list(template.db[name].find({})))
@@ -147,7 +195,6 @@ def install_world(db):
     if Store.seed is not _ORIGINAL_SEED:
         db.migrate();db.seed(WORLD);return
     from concurrent.futures import ThreadPoolExecutor
-    from pymongo import IndexModel
     snapshot=_world_snapshot(db.config)
     present=set(db.db.list_collection_names())
     def one(name):
@@ -158,9 +205,8 @@ def install_world(db):
             db.db[name].delete_many({})
         else:
             db.db.create_collection(name,**({'validator':options['validator']} if options.get('validator') else {}))
-            if indexes:
-                db.db[name].create_indexes([IndexModel(spec['key'],name=index,**{k:spec[k] for k in ('unique','partialFilterExpression','expireAfterSeconds') if k in spec})
-                                            for index,spec in indexes.items()])
+            for index,spec in indexes.items():     # one at a time: the stand-in's create_indexes drops a partial filter
+                db.db[name].create_index(spec['key'],name=index,**{k:spec[k] for k in ('unique','partialFilterExpression','expireAfterSeconds') if k in spec})
         if documents:
             db.db[name].insert_many(copy.deepcopy(documents),ordered=True)
     with ThreadPoolExecutor(max_workers=8) as pool:

@@ -58,8 +58,9 @@ days, not months. Everything a second database cannot do faithfully is refused o
 temporary in-process stand-in, removed at its end); they can never reach a real server (the test setup takes the address away and refuses to make a connection). Only the adapter's own integration
 tests reach a real server, on a throwaway database of made-up records that is deleted at the end.
 
-**How long the move is.** Fifteen batches, one at a time, each with its own review and one restart of the running
-system; besides them, three steps that touch only the tests or add code nothing runs yet need no restart.
+**How long the move is.** Fifteen batches that change the running system, one at a time, each with its own review,
+installed in eleven restarts (four pairs share one; 8.2); besides them, three steps that touch only the tests or add
+code nothing runs yet need no restart.
 
 ---
 
@@ -567,6 +568,12 @@ today (the database, the collection, the filter as asked, the UTC window a local
 `fields(name)` returns the declared fields; `collections()` the catalog's names; `place`, `history`, `now`, `recent`
 stay. The raw handle goes (`dbread._default().db`); a script that needs the core's own functions (her render-budget
 script calls `memory_tiers` and `render` with a store) gets `dbread.store()`: a `Store` over the `ReadOnly` adapter.
+`Reader` and `Reader.from_host()` stay as the way a checkout tool opens the Host's own database read-only (the
+settings the Host wrote for it): `from_host()` returns the facade above, and `.store()` the same read-only `Store`.
+`tools/carried_check.py` (her nightly measure of the carried rooms) opens it this way and today reads
+`state_heads`, `state_revisions` and `memory_tiers` directly; it moves to `records.heads` and `memory_tiers`
+operations through `Reader.from_host().store()` in the batch that moves those collections (B9 for the heads, B11b
+for the tiers), and that batch's check runs it before and after: the same five numbers.
 
 **Her files that use the old syntax** (listed, never edited for her; she rewrites them her way; paths inside her
 persona package, `packages/personas/<hers>/`):
@@ -579,12 +586,19 @@ persona package, `packages/personas/<hers>/`):
 | `skills/asuna-render-budget-per-place/SKILL.md` | `db = dbread._default().db` (line 40) |
 | `skills/asuna-image-generation-and-display/SKILL.md` | reading GridFS bytes "with pymongo / GridFSBucket" (line 466) |
 | `skills/asuna-offline-selfchecks/SKILL.md` | line 154 describes equality and substring matches: to be read by her, may need no change |
+| `skills/asuna-usage-readout/check_skill.py` | its checks name `asuna.dbread` (line 71) and `development_database_read` (line 199): to be read by her with the readout's rewrite |
 | her task scripts outside the repository | not listed here (her workspace is not read); the refusal names the new form; she can list them with `grep -rl dbread` in her workspace |
 
 Core files that the batch itself updates (current references, not hers): `packages/cognition-core/skills/asuna-database/SKILL.md`
 (the words, `group`), `packages/cognition-core/skills/asuna-self-improvement/SKILL.md` line 49 ("pymongo can
-import"), `src/asuna/development.py`'s tool description of `development_database_read`, and the channel skill
+import"), `src/asuna/development.py`'s tool description of `development_database_read`, `src/asuna/tasks.py:333` (the
+`sandbox_run` tool description, which her action brain reads: "read the database with asuna.dbread"; its new words
+go to her with B12 like any wording she reads), and the channel skill
 `packages/channels/napcat-qq/skills/qq-napcat-adapter/SKILL.md` lines 195-197 (it describes `store.db.messages`).
+`RUNTIME_API.md:748` (home task commands get `ASUNA_MONGO_URI` for `asuna.dbread`) changes with B14's
+`ASUNA_DATABASE_ADAPTER` (5.15). Order with her own work: she moves her self rules into
+`asuna-self-improvement/SKILL.md` on 2026-10-29 at 23:00; B12 comes after that and changes line 49's sentence only,
+on top of her version.
 
 ---
 
@@ -715,7 +729,7 @@ A trap of the move: today's pymongo calls pass `limit=0` to mean "all" (`find`, 
 ### 8.2 Batches
 
 One batch is one branch in its own worktree, one review by the lead, one merge, and (where it changes the worker)
-one restart. Batches run in order; no two edit one file at once (the big owners touch 54 and 60 files). Every batch
+one install: alone or in one of the four pairs below. Batches run in order; no two edit one file at once (the big owners touch 54 and 60 files). Every batch
 after B1b depends only on B1b, so each reverts alone (`git revert -m 1` of its merge restores its call sites; its
 owner module has no other caller). B1b reverts alone only before B2 lands.
 
@@ -739,6 +753,21 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | B13 | `store.db` and pymongo leave the core outside the adapter module; repository guards: no `store.db`, no `pymongo`/`bson`/`gridfs` import and no `$`-key literal in `src/asuna` outside the adapter, `store.collection(name)` and `store.put(name, ...)` only in the owner of `name`; unit runs on the in-memory adapter, mongomock goes | guards | yes | the guards; the unit run on the double (its time measured, 7.4); the integration contract run |
 | B14 | the package split (5.15): `packages/databases/mongodb/`, `registerDatabase`, the registry, the settings keys, the Python locks, `pack_plugins`, `release.py`, the profile's package list | install path | yes | after the restart her `ensure` creates nothing and changes nothing (same MongoDB, same database, same records); `audit.verify_documents` passes; the start fails with `DATABASE_ADAPTER_NOT_INSTALLED` in a demo profile without the package |
 | B15 | the suite reset (7.4) | tests only | no | before and after: test count and run time on the double |
+
+**The stand-in is checked against the meaning table, not trusted.** From B1b the unit run also runs the shared
+contract classes on the MongoDB adapter over the stand-in's client (the same `open_store` fixture), beside the
+in-memory adapter. A case on which the two disagree is a place where a batch's green would only mean "the same as
+the stand-in": it goes to `tests/harness_skips.txt` with what the stand-in lacks, so it is never read as checked, and
+the integration run on MongoDB (7.1) decides it.
+
+**Restarts, two batches to one where they cannot hide each other.** Each batch is still reviewed, checked (8.3)
+and merged alone; only the install is shared, and only for adjacent batches over disjoint collections whose
+failures show in different places. Installed alone: B1b (every write and audit of hers goes through it), B4 (what her
+context is read from), B7 (her recall), B10 (privacy and audit: its check, `audit.verify_documents`, is also B9's),
+B12 (her tool), B13 (the unit run switch and the guards), B14 (the install path). Installed in pairs: B2 with B3 (the
+lease shows at start, the counter in positions), B5 with B6 (episodes, sessions and receipts against tasks and plans),
+B8 with B9 (files and blobs against heads, documents and people), B11a with B11b (disjoint small owners). So eleven
+restarts, not fourteen. A pair whose first restart shows a fault is reverted whole, then installed one at a time.
 
 Building: one builder subagent, warm, batch after batch; B11a and B11b touch disjoint files and may be built in
 parallel worktrees, landing one at a time. Per batch: the touched modules' tests and the contract suite on the
@@ -795,8 +824,8 @@ run off a server, the stand-in, its reviewed skip list, and its report (pass, sk
 baseline, 1,519 passed at `a00a9aa0eef6`). From the moment B0 lands, the unit suite never reaches her server again;
 until it lands, nobody runs the unit suite.
 
-**What does not land today:** B1a to B15. They land at the pace their checks allow, one at a time, a restart for each
-that changes the running worker (B1b to B14); nothing is shortened for a date. From B13 the unit run is on the in-memory adapter; only `integration/` reaches a server, on
+**What does not land today:** B1a to B15. They land at the pace their checks allow, one at a time, installed in eleven
+restarts for the fifteen that change the running worker (B1b to B14; 8.2's pairs); nothing is shortened for a date. From B13 the unit run is on the in-memory adapter; only `integration/` reaches a server, on
 throwaway databases.
 
 What she sees: no change of behaviour in any batch (each shown by 8.3); in B12 the new syntax of her read tool and
@@ -816,7 +845,7 @@ them.
 | Greek final sigma under case-blind matching | not verified | conformance case `W24` |
 | the clock-tie class (found by B0): this machine's clock moves in 1 ms steps, so two records written within one step carry the same time, and code that decides by the latest or oldest time decides by a hash `_id` | proven for `memory_tiers` (9 of 12 runs failed on the stand-in, 0 of 12 with a strictly increasing clock) and seen directly in the journal; three more tests flaky the same way | its own change (one clock in the core that never repeats a time, a counter where a true order is needed), before the batch that moves the code concerned; an owner operation never relies on time order alone (3.3) |
 | MongoDB's internal vector precision | not verified | stated tolerance (5.10); 1b's integration test compares exact results with brute force |
-| mongomock carries the 868 database tests | not verified | measured in B0 (pass, skip with reason, time) |
+| mongomock carries the 868 database tests | measured in B0 (2026-10-28, `1f7bb31bc629`): 1,502 passed, 20 skipped (14 gaps of the stand-in, 5 of the clock-tie class, 1 skip from before), 2 min 37 s | `tests/harness_skips.txt` |
 | her data's kinds per declared field, required unique fields present, BSON and JSON sizes agree at 1 MiB | not verified | 8.3 step 5, per batch, numbers only |
 | the reads replacing the `$lookup` and the Web page aggregate cost no more on her data | not verified | B6 and B4/B7 checks, p50/p95 |
 | SQLite: `RETURNING` (3.35+), partial and expression indexes, `json_each`, `BEGIN IMMEDIATE`, `LIKE` folding ASCII, no `regexp()` by default | from documentation (research), not run | when a SQLite adapter is written, its contract run |

@@ -98,7 +98,7 @@ and 8 below), from an independent survey ([research.md](research.md)), checked a
    per collection, writes validated once; a meaning table that the in-memory adapter implements and MongoDB is tested
    against; named primitives for what generic calls cannot make atomic (claim, revisioned replace, the database's
    clock in a write, the counter); a blob interface for large files; nineteen adapter methods; eighteen batches
-   (B0 to B15), each its own review, B1b to B14 a restart each. The words stay the core's own, not MongoDB's subset
+   (B0 to B15), each its own review; B1b to B14 installed in eleven restarts (four adjacent pairs share one). The words stay the core's own, not MongoDB's subset
    the survey suggested (decision 2). Decisions 5 and 6 stand as written; this one adds to them.
 8. **The unit run's stand-in until B13** (the owner, 2026-10-28 evening, in the question tool, Claude's
    recommendation): from B0 the unit run uses an in-process MongoDB stand-in (mongomock), never a server, until B13

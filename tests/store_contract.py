@@ -348,10 +348,11 @@ class TestG:
         assert [(r['platform'], r['state'], r['total']) for r in rows] == [
             ('p0', 's0', 1), ('p0', 's1', 1), ('p0', 's2', 1), ('p1', 's0', 1), ('p1', 's1', 1), ('p1', 's2', 1)]
 
-    def test_G04_values_ascending(self, store):
+    def test_G04_values_ascending_without_records_missing_the_field(self, store):
         t = things(store)
-        assert t.group({}, 'name', total=None) == [None, 'Alpha', 'Beta', 'a.c', 'alpha']
-        assert t.group({'name': Exists()}, ('flag', 'n'), total=None) == [(None, None), (None, 2), (False, 1), (True, 1)]
+        assert t.group({}, 'n', total=None) == [None, 1, 2]
+        assert t.group({}, 'name', total=None) == ['Alpha', 'Beta', 'a.c', 'alpha']
+        assert t.group({}, ('flag', 'n'), total=None) == [(False, 1), (True, 1)]
 
     def test_G05_count_with_a_limit(self, store):
         t = things(store)

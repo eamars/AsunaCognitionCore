@@ -74,13 +74,15 @@ src/asuna/store/                 the shared layer (core, no database named)
     errors.py     the errors below
     memory.py     the in-memory adapter: the reference of the meaning table, and the unit tests' double
     adapters.py   the registry: load(entry) imports a package's adapter module; open() fails loudly
-    __init__.py   Store: the core's facade (put, audit, collection handles for owners, nearest, blobs, maintenance)
+    __init__.py   Checked and Handle: the shared layer's checks over one adapter; Store: the core's facade (put,
+                  audit, collection handles for owners, nearest, blobs, maintenance), built on them
 src/asuna/records/<name>.py      the 12 leaf owner modules (section 4)
 packages/databases/mongodb/      the MongoDB adapter package (after batch B14; until then src/asuna/store/mongodb.py)
 ```
 
-An owner reaches its collections through `store.collection(name)`, a handle bound to the declared collection; the
-handle's verbs call the adapter methods below after the shared layer has validated the words against the catalog.
+An owner reaches its collections through `store.collection(name)`, which returns a `Handle` bound to the declared
+collection; the handle's verbs are the adapter methods below without the collection name, called after the shared
+layer (`Checked`, which `Store` takes over) has validated the words against the catalog.
 A repository test (B13) fails when `store.collection('<name>')`, `store.put('<name>', ...)` or any adapter call
 appears outside the owner of `<name>` named in the catalog.
 
@@ -123,16 +125,17 @@ the adapter, `capabilities`.
 anything reaches the database; retrieval already treats a failed vector search as "lexical recall only" unless the
 caller requires vectors (`retrieval.py:237-239`), and the memory indexer does not run. Everything else is required.
 
-**Errors** (`asuna.store.errors`), each with what raises it: `DuplicateKey` (insert, replace, update, claim with
-create: a unique key repeated; names the index and, for insert, the position); `StaleRevision` (the shared layer's
-`put` when `replace` returned `False` for a record that exists; mapped to today's `Conflict('STALE_REVISION: ...')`
-and its audit row); `QueryInvalid` (the shared layer, before dispatch: an undeclared field, a form section 3 refuses,
-a kind mismatch); `RecordInvalid` (the shared layer on write: a declared field of the wrong kind, a missing
-required field, a naive datetime; the adapter for a change the record cannot take, as MongoDB codes 28 and 14 in the
-probe); `RecordTooLarge` (the shared layer: over 1 MiB, today's `DOCUMENT_TOO_LARGE_USE_ARTIFACT`); `NotSupported`
-(before dispatch: a capability the adapter lacks); `SchemaConflict` (ensure); `Unavailable` (the adapter, for a
-database out of reach; `channels.whole_host_state` maps it to `HOST_DATABASE_UNAVAILABLE` instead of naming
-pymongo's `AutoReconnect`); `BlobMissing` (blobs); `AdapterNotInstalled` (the registry; section 5.15).
+**Errors** (`asuna.store.errors`), each with what raises it: `DuplicateKey` (insert, replace, update, claim with create:
+a unique key repeated; names the index and, for insert, the position); `StaleRevision` (the shared layer's `put` when
+`replace` returned `False` for a record that exists; mapped to today's `Conflict('STALE_REVISION: ...')` and its audit
+row); `QueryInvalid` (the shared layer, before dispatch: an undeclared field, a form section 3 refuses, a kind mismatch
+in a condition, a naive datetime in a condition, `QUERY_NAIVE_TIME`); `RecordInvalid` (the shared layer on write: a
+declared field of the wrong kind, a missing required field, a naive datetime written; the adapter for a change the
+record cannot take, as MongoDB codes 28 and 14 in the probe); `RecordTooLarge` (the shared layer: over 1 MiB, today's
+`DOCUMENT_TOO_LARGE_USE_ARTIFACT`); `NotSupported` (before dispatch: a capability the adapter lacks); `SchemaConflict`
+(ensure); `Unavailable` (the adapter, for a database out of reach; `channels.whole_host_state` maps it to
+`HOST_DATABASE_UNAVAILABLE` instead of naming pymongo's `AutoReconnect`); `BlobMissing` (blobs); `AdapterNotInstalled`
+(the registry; section 5.15).
 
 ### 2.3 What is not in it, and why
 
@@ -179,7 +182,8 @@ today.
 - Writes are validated once, in the shared layer, against the declared fields: a value of another kind, null in a
   non-nullable field, a missing required field: `RecordInvalid`. So no stored record mixes kinds in a declared field,
   and MongoDB's own cross-type ordering never applies. `V07`.
-- Time: aware datetimes only (naive refused, `RecordInvalid`); stored at millisecond precision, truncated by the
+- Time: aware datetimes only (naive refused: `RecordInvalid` in a write, `QueryInvalid` in a condition); stored at
+  millisecond precision, truncated by the
   shared layer before the write, so they round-trip equal on every adapter (probe: MongoDB keeps 456 ms of 456789
   µs and returns naive datetimes unless `tz_aware`; the MongoDB adapter opens with `tz_aware=True`). Times the core
   writes as ISO text today (`state.now()`) stay text, compared as text. `T01`-`T03`.
@@ -236,9 +240,14 @@ case-blind), `Now` into `$$NOW` in an update pipeline or `$expr` (probe `now_in_
   own `skip` (`dbread.find`, `development_database_read`: her sort, so the facade's help says to page with a unique
   key last, as her usage readout already does with `_id`). Every other paging read today already ends its sort with
   `_id` (`native_api.py:461`, `native_cognition.py:36`, `history_query.py:812`). `O06`.
-- `fields`: a list of declared or undeclared paths to return; `_id` always comes back. `O07`.
-- `group` returns rows ordered by the `by` values (the sort rule); `values` (group with no total) returns the
-  distinct values ascending. `group` on a list field is refused. Totals: `Count()`, `Max(field)`. `G01`-`G04`.
+- `fields`: a list of declared or undeclared paths to return; `_id` always comes back; overlapping paths are refused.
+  A path through a list returns, as MongoDB does, the list's object elements only, each with that field, or `{}`
+  when it lacks it. `O07`.
+- `group` returns rows ordered by the `by` values (the sort rule; missing and null form one group, `None`);
+  `values` (group with no total) returns the distinct values ascending and, as MongoDB's `distinct`, leaves out the
+  records missing a field (null stays, as `None`). `group` on a list field is refused. Totals: `Count()`,
+  `Max(field)`. `G01`-`G04`.
+- `limit=0` means zero records: the shared layer answers it without calling the adapter.
 - `count(limit=n)` stops at n. `G05`.
 
 ### 3.4 Change words
@@ -248,15 +257,17 @@ case-blind), `Now` into `$$NOW` in an update pipeline or `$expr` (probe `now_in_
 | `Set({path: value})` | sets each path, creating missing parent objects | a path through a field that is not an object (MongoDB code 28, probe), a value of another kind | `C01`, `C02` |
 | `Unset(*paths)` | each path is absent afterwards; an absent path is fine | a required field | `C03` |
 | `Increase(path, by=1)` | adds to a number; a missing field starts at 0 (probe `count: 2`) | a field that is not a number (MongoDB code 14, probe) | `C04`, `C05` |
-| `Larger(path, value)` / `Smaller(path, value)` | keeps the larger / smaller; a missing field takes the value (probe `high`, `low`) | another kind | `C06` |
+| `Larger(path, value)` / `Smaller(path, value)` | keeps the larger / smaller; a missing field takes the value (probe `high`, `low`); a stored null is below every value (`Larger` takes the value, `Smaller` keeps null), as the sort rule | another kind | `C06` |
 | `AddToSet(path, *values)` | adds each value not already in the list; a missing field becomes the list (probe `tags: ['a', 'b']`) | a non-list field | `C07` |
 | `Push(path, *values, keep_last=None)` | appends, then keeps the last n (`crossing.py:377`) | a non-list field | `C08` |
 | `OnCreate({path: value})` | applied only when the write creates the record | | `C09` |
 
-**Create** (`update(create=True)`, `claim(create=True)`, `replace(create=True)`): allowed only when `where` is
-equality on `_id` or on every field of a declared unique index; the created record holds those equalities, then
-`OnCreate`, `Set`, `Increase` from 0, `AddToSet` and `Push` as lists (probe `upsert_record`). A create that repeats a
-unique key raises `DuplicateKey`. `C10`-`C12`.
+**Create** (`update(create=True)`, `claim(create=True)`, `replace(create=True)`): allowed only when `where` is plain
+equalities, on `_id` or on every field of a declared unique index; the created record holds those equalities, then
+`OnCreate`, `Set`, `Increase` from 0, `AddToSet` and `Push` as lists (probe `upsert_record`), and must hold every
+required top-level field (`RecordInvalid` otherwise, before dispatch). A create by a unique index gets its `_id` from
+the shared layer (`OnCreate`, a uuid4 in hex) unless `OnCreate` gives one. A create that repeats a unique key raises
+`DuplicateKey`. `C10`-`C12`.
 
 ### 3.5 Unique keys
 
@@ -380,7 +391,8 @@ renew:        update({'_id': 'host', 'instance': me}, Set({'expires_at': Now(LEA
 mark_planned: update({'_id': 'host'}, Set({'planned_stop.at': Now(), 'planned_stop.by': by}))
 ```
 
-`Now` is allowed in this `update` (in a `Range` bound and in `Set`) and in `insert`'s values. Which clock: MongoDB the
+`Now` is allowed in this `update` (in a `Range` bound and in `Set`) and in `insert`'s values; the MongoDB adapter
+writes an insert holding `Now` as an upsert with an update pipeline using `$$NOW` (B1b). Which clock: MongoDB the
 server's `$$NOW` (as today, probe); PostgreSQL `now()` of the statement; SQLite the host's clock
 (`strftime('%Y-%m-%dT%H:%M:%fZ','now')`), shared by every process on that host, which is the only place an SQLite
 file is used; the double an injected clock (`MemoryAdapter(clock=...)`), which tests move. `expires_at`, `since` and
@@ -437,13 +449,15 @@ the cases `W22`-`W24` (unverified, section 10).
 **5.9 Nested fields and list items.** Dotted paths into objects; a path through a list is refused; lists use `Holds`,
 `HoldsAny`, `NonEmpty`, `Each` (3.2). The two `$elemMatch` (`questions.py:150`, `:209`) become `Each`; `copies.0`,
 `rejections.0`, `mentioned_account_ids.0` become `NonEmpty`; `tools_week.py:287`'s `sources.scene_id` becomes
-`Each('sources', {'scene_id': x})`, which MongoDB answers the same for a one-field condition.
+`{'sources': Each({'scene_id': x})}`, which MongoDB answers the same for a one-field condition.
 
-**5.10 Vector search.** As built in 1b, unchanged: `nearest(space, vector, k, where)`, exact, raw cosine, equal scores
-in id order, which of several records tied at the k-th score come back is the database's (integration only, never a
-unit test). The double scores in float64 by brute force; ties in conformance cases are built from identical
-vectors, and other cases keep scores at least 1e-6 apart (MongoDB's internal precision is not verified). The 18
-cases of `integration/test_mongo_vectors.py` move into the contract suite's `N` class.
+**5.10 Vector search.** As built in 1b: `nearest(space, vector, k, where)`, exact, raw cosine, equal scores in id order;
+`where` is the words (equality, `AnyOf`, `And`, `Or`) on the space's filter fields, so the owner turns 1b's pairs into
+an `Or` of dicts and answers an empty pair list itself, without a call; which of several records tied at the k-th score
+come back is the database's (integration only, never a unit test). The double scores in float64 by brute force; ties in
+conformance cases are built from identical vectors, and other cases keep scores at least 1e-6 apart (MongoDB's internal
+precision is not verified). The 18 cases of `integration/test_mongo_vectors.py` move into the contract suite's `N`
+class.
 
 **5.11 Large binary files and the record size limit.** The blob interface (methods 16-19). `blobs.py` keeps its
 rules in the core: it hashes while it streams into `blobs.write`, reads the bytes back through `blobs.open` in
@@ -487,29 +501,29 @@ index.
 
 No core invariant needs a multi-record transaction, so the interface has none.
 
-**5.15 The package, and the trap of an empty registry.** The MongoDB adapter becomes
-`packages/databases/mongodb/` (`@asuna/database-mongodb`): `package.json`, `src/index.js` calling
-`registerDatabase({kind: 'mongodb', title, resource_root, python: 'python', module: 'asuna_mongodb', settings: {...}})`
-(normalised like `normalizeChannel`, `packages/cognition-core/src/channel.js`), `python/asuna_mongodb/__init__.py`
-(the adapter and the module functions of 2.2), `python/requirements.lock` (pymongo 4.16.0 and its closure), README
-(what a deployment configures: a replica set, `mongot` for vector search), locale, LICENSE. The Host passes the
-registered entry to the worker beside `channels`; `asuna.store.adapters.load(entry)` imports it.
-`adapters.open(config)` looks the kind up and, when nothing of that kind was loaded, raises
-`AdapterNotInstalled('DATABASE_ADAPTER_NOT_INSTALLED: mongodb')`; it never returns a default or an empty store
-(the channel registry's trap: `channel_kinds.get` answers `None` and callers carry on; `of_channel` raises, and the
-adapter registry has only the raising form). The settings key that selects it is `database_adapter` (`mongodb`
-today; when exactly one database package is installed and the key is absent, that one). Its connection setting
-stays the key `mongo_uri` her saved settings already use, now declared by the package (`SECRETS`), so her profile's
-settings need no change. Outside the Host (checkout tools, `integration/`), `adapters.load_checkout(kind)` imports
-`packages/databases/<kind>/python`. The worker's Python environment is built from the union of the core's
-`requirements.lock` and each installed package's `python/requirements.lock` (`python-env.js` hashes them all; a
-change of any rebuilds), and `pymongo` leaves the core's `WORKER_DEPENDENCIES` (`tools/pack_plugins.py:43`).
-The places that name the connection string today take the package's `SECRETS` and `where()` instead:
-`config.database_lock`, `config.redact_text`, `config.redacted`, `native_settings.py` (its secret pattern and the
-deployment keys), the core plugin's settings page (`packages/cognition-core/src/client.js`, the `mongo_uri` labels and
-default, which the package's locale now supplies), and `dbread.environment`, which gives her home task's commands
-the registered adapter entry and its resolved settings (`ASUNA_DATABASE_ADAPTER`) in place of `ASUNA_MONGO_URI`.
-`deploy/docker` keeps naming MongoDB: it is the stack's own file.
+**5.15 The package, and the trap of an empty registry.** The MongoDB adapter becomes `packages/databases/mongodb/`
+(`@asuna/database-mongodb`): `package.json`, `src/index.js` calling `registerDatabase({kind: 'mongodb', title,
+resource_root, python: 'python', module: 'asuna_mongodb', settings: {...}})` (normalised like `normalizeChannel`,
+`packages/cognition-core/src/channel.js`), `python/asuna_mongodb/__init__.py` (the adapter and the module functions of
+2.2), `python/requirements.lock` (pymongo 4.16.0 and its closure), README (what a deployment configures: a replica set,
+`mongot` for vector search), locale, LICENSE. The Host passes the registered entry to the worker beside `channels`;
+`asuna.store.adapters.load(entry)` imports it. `adapters.open(config)` looks the kind up and, when nothing of that kind
+was loaded, raises `AdapterNotInstalled('DATABASE_ADAPTER_NOT_INSTALLED: mongodb')`; it never returns a default or an
+empty store (the channel registry's trap: `channel_kinds.get` answers `None` and callers carry on; `of_channel` raises,
+and the adapter registry has only the raising form). The settings key that selects it is `database_adapter` (`mongodb`
+today; when exactly one database package is installed and the key is absent, that one; absent with none installed is
+`DATABASE_ADAPTER_NOT_INSTALLED`, absent with several `DATABASE_ADAPTER_NOT_CHOSEN`, both `AdapterNotInstalled`). Its
+connection setting stays the key `mongo_uri` her saved settings already use, now declared by the package (`SECRETS`), so
+her profile's settings need no change. Outside the Host (checkout tools, `integration/`), `adapters.load_checkout(kind)`
+imports `packages/databases/<kind>/python`. The worker's Python environment is built from the union of the core's
+`requirements.lock` and each installed package's `python/requirements.lock` (`python-env.js` hashes them all; a change
+of any rebuilds), and `pymongo` leaves the core's `WORKER_DEPENDENCIES` (`tools/pack_plugins.py:43`). The places that
+name the connection string today take the package's `SECRETS` and `where()` instead: `config.database_lock`,
+`config.redact_text`, `config.redacted`, `native_settings.py` (its secret pattern and the deployment keys), the core
+plugin's settings page (`packages/cognition-core/src/client.js`, the `mongo_uri` labels and default, which the package's
+locale now supplies), and `dbread.environment`, which gives her home task's commands the registered adapter entry and
+its resolved settings (`ASUNA_DATABASE_ADAPTER`) in place of `ASUNA_MONGO_URI`. `deploy/docker` keeps naming MongoDB: it
+is the stack's own file.
 
 ---
 
@@ -578,19 +592,22 @@ import"), `src/asuna/development.py`'s tool description of `development_database
 
 ### 7.1 The contract suite
 
-`tests/store_contract.py`: pytest classes on a `store` fixture (an adapter with the suite's own small catalog of
-synthetic collections). `tests/test_store_contract.py` runs them on the in-memory adapter (unit);
+`tests/store_contract.py`: pytest classes on a `store` fixture (`Checked` over the adapter under test, with the
+suite's own small catalog of synthetic collections), which the running module provides through an `open_store`
+fixture. `tests/test_store_contract.py` runs them on the in-memory adapter (unit);
 `integration/test_store_contract.py` runs the same classes on MongoDB on a throwaway `asuna_v2_test_*` database,
-dropped at the end and on failure. No marker skips a case outside `capabilities`.
+dropped at the end and on failure. No marker skips a case outside `capabilities`. Two cases run on the double only,
+in `tests/test_store_contract.py`, because a server neither shuffles ties by a seed nor lets a test move its clock:
+`O05` and the double's injected clock; the shared `T` cases use times relative to the real clock.
 
 | class | cases | what |
 |---|---|---|
 | `W` words | 31 | 3.2, each rule above, with records missing the field, null, empty list, list, other kind |
-| `O` order | 7 | missing/null first and last, multi-key, explicit `_id` direction, a unique key last gives one order on every adapter, the double shuffles ties (two seeds give two orders, one seed the same), skip, limit, fields |
-| `G` group | 5 | count, max, two keys, values ascending, count with limit |
+| `O` order | 6 (+ `O05` on the double) | missing/null first and last, multi-key, explicit `_id` direction, a unique key last gives one order on every adapter, skip, limit, fields; `O05`: the double shuffles ties (two seeds give two orders, one seed the same) |
+| `G` group | 5 | count, max, two keys, values ascending (missing out, null in), count with limit |
 | `C` changes | 12 | 3.4, create rules |
 | `X` writes | 14 | insert one and many (position, earlier kept), get missing, delete one and many, unique required and `only_where_present`, duplicate on insert, update and create, replace at a revision, stale, keep counters, claim order, counter |
-| `T` time | 5 | aware round trip, naive refused, ms truncation, `Now` in a range and in `Set` (the double's clock injected) |
+| `T` time | 5 (+ the clock case on the double) | aware round trip, naive refused, ms truncation, `Now` in a range and in `Set` and `insert` (on the real clock); the double's injected clock moved past an expiry |
 | `V` validation | 8 | undeclared stored and returned but not queryable, kinds, bool not number, nullable, required, size limit |
 | `N` nearest | 18 | the 18 cases of `integration/test_mongo_vectors.py` (filters by value, list, pair; k 1, 12, 24; identical vectors; refusals); exact against brute force |
 | `B` blobs | 6 | write, open, seek, delete twice, missing, of_scope; a 5 MiB synthetic stream |
@@ -598,9 +615,10 @@ dropped at the end and on failure. No marker skips a case outside `capabilities`
 | `R` races (integration only) | 4 | counter (4 processes x 50), claim (6 x 60), lease expiry (two holders), stale revision (two writers) |
 | `D` differential (integration only) | 1 | Hypothesis, `derandomize=True`, at most 200 records and 100 generated where trees per run (missing, null, empty lists, equal sort keys); `find` and `count` on MongoDB equal the double's, order included |
 
-Size: 116 cases. Run time: targets, measured when built: the unit run under 5 s (in memory); the integration run
-under 60 s (today's 18 vector cases take 7 s on 301 records, ADR page). Hypothesis is not in the checkout's
-environment today (`import hypothesis` fails in `.venv`); B1a adds it to the `dev` dependency group.
+Size: on the double 112 cases, 110 shared (W 31, O 6, G 5, C 12, X 14, T 5, V 8, N 18, B 6, S 5) and 2 on the
+double only, in about 0.3 s; integration adds `R` (4) and `D` (1). Target for the integration run: under 60 s
+(today's 18 vector cases take 7 s on 301 records, ADR page). Hypothesis is not in the checkout's environment
+(`import hypothesis` fails in `.venv`); B1b adds it to the `dev` dependency group with class `D`.
 
 ### 7.2 What the contract suite cannot show
 
@@ -691,6 +709,9 @@ counted `<x>.db.<collection>` only; this one also counts collections reached thr
 `column = getattr(store.db, 'messages')` in `discussion_digest`, `history_query`, `scene_links`), GridFS bucket calls,
 database commands, and the `Store` API (`put`, `audit`, `authorize`, `head`, ...), which also names collections.
 
+A trap of the move: today's pymongo calls pass `limit=0` to mean "all" (`find`, `count_documents`); in the store
+`limit=0` means zero records (3.3), so each such call site moves to `limit=None`.
+
 ### 8.2 Batches
 
 One batch is one branch in its own worktree, one review by the lead, one merge, and (where it changes the worker)
@@ -701,14 +722,14 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | batch | what | rows | restart | what proves nothing changes for her |
 |---|---|---|---|---|
 | B0 | unit runs reach no server (7.3), the interim harness and its reviewed skip list `tests/harness_skips.txt`; reports pass, skip by reason and run time against the baseline (`a00a9aa0eef6`, 1,519 passed) | tests only | no | the guard test; no connection to her server in the run; nothing outside `tests/` changes |
-| B1a | `asuna.store`: words, catalog (fields filled per batch), errors, the in-memory adapter, the registry; the contract suite on the double; Hypothesis | new code, unused by the worker | no | the contract suite on the double |
-| B1b | the MongoDB adapter (`src/asuna/store/mongodb.py`); `Store` over it: `put`, `audit`, `recover_commits`, `ensure` (was `migrate`), `nearest`, `ensure_vectors`; `store.db` kept for old call sites | 38 shared rows | yes | the contract suite on MongoDB (integration, throwaway); `ensure` against her database in dry-run (list indexes only): zero to create or conflict; after the restart, `audit.verify_documents` over the commits since: 0 mismatches |
+| B1a | `asuna.store`: words, catalog (fields filled per batch), errors, the in-memory adapter, the registry, the shared layer's checks (`Checked`, `Handle`); the contract suite on the double | new code, unused by the worker | no | the contract suite on the double |
+| B1b | the MongoDB adapter (`src/asuna/store/mongodb.py`); `Store` over it: `put`, `audit`, `recover_commits`, `ensure` (was `migrate`), `nearest`, `ensure_vectors`, taking over `Checked` and `Handle`; `store.db` kept for old call sites; Hypothesis in the `dev` group and class `D`; `tools/pack_plugins.py` ships `src/asuna/store/` (it copies top-level modules only today) and `tools/project_map.py` maps the package | 38 shared rows | yes | the contract suite on MongoDB (integration, throwaway), class `D` included; the packed worker holds `asuna/store/` and the project map lists it, both checked at landing; `ensure` against her database in dry-run (list indexes only): zero to create or conflict; after the restart, `audit.verify_documents` over the commits since: 0 mismatches |
 | B2 | `host_lease`, `lane_faults` (Now, create, the TTL index retired) | 9 | yes | lease taken, renewed and released across the restart (`host_stops` records a planned stop); fault counts keep rising |
 | B3 | `records.scenes` | 221 in 60 files | yes | 8.3 on each view and get; the counter: positions contiguous after the restart |
 | B4 | `records.messages` | 229 in 54 files | yes | 8.3; her turn context built from the same lines (the `said`, `inbound`, `spoken` views compared) |
 | B5 | `records.episodes`, `records.sessions`, `records.receipts` | 166 | yes | 8.3 |
 | B6 | `records.tasks`, `records.plans` (the `$lookup` as reads) | 168 | yes | 8.3, and `recent_with_inputs` against the aggregate on 20 conversations: same 16 tasks, same order, time p50/p95 |
-| B7 | `records.memories` (retrieval's lexical reads; vector parts as built) | 67 | yes | 8.3; retrieval's whole search old against new on 40 queries (as 1a did): the same six and 24 |
+| B7 | `records.memories` (retrieval's lexical reads; vector parts as built, 1b's pairs as an `Or` of dicts, an empty pair list answered without a call) | 67 | yes | 8.3; retrieval's whole search old against new on 40 queries (as 1a did): the same six and 24 |
 | B8 | `records.artifacts`, `blobs` (the blob interface), `media_life`, `outbound_files` | 126 | yes | 8.3; blob probe on a throwaway database; her stored files open and hash-check (20 sampled ids, read only) |
 | B9 | `records.heads`, `documents`, `records.people`, `records.ideas` | 151 | yes | 8.3; `audit.verify_documents` after the restart |
 | B10 | `audit` reads, prune and redaction; `privacy` over the owners' `redact_scope`, `tombstone`, `invalidate` | 47 (+ the 146 appends, which stay `store.audit`) | yes | 8.3; prune in dry-run counts equal old against new; the erasure path on a throwaway database (no erasure on hers) |

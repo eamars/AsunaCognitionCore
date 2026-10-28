@@ -402,7 +402,8 @@ class MemoryAdapter:
         with self.lock:
             groups = {}
             for doc in self._records(coll).values():
-                if matches(doc, where):
+                # Values only (total None) leave out a record missing a field, as a distinct does; null stays.
+                if matches(doc, where) and (total is not None or all(_at(doc, path)[0] for path in by)):
                     values = tuple(_at(doc, path)[1] for path in by)
                     groups.setdefault(tuple(_key(v) for v in values), (values, []))[1].append(doc)
             rows = sorted(groups.values(), key=lambda item: tuple(_order(v) for v in item[0]))

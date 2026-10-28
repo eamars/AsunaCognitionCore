@@ -2,7 +2,9 @@
 import hashlib
 import hmac
 import json
+import os
 import secrets
+import sys
 import threading
 import time
 import traceback
@@ -21,6 +23,25 @@ from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import tasks as task_records
+
+INBOUND_SLOW_SECONDS = 2.0       # an admission this slow records where it waited (host.inbound_slow)
+STACKS_AFTER_SECONDS = 1.0       # ... with every thread's stack as it stood this far into the admission
+STACK_DEPTH = 12
+
+
+def thread_stacks(admitting):
+    """Every other thread's innermost frames as `file:line function` (file names and code only, never a value);
+    `admitting` (a thread ident) is shown as `admission`."""
+    names, seen, stacks = {t.ident: t.name for t in threading.enumerate()}, {}, {}
+    for ident, frame in sys._current_frames().items():
+        if ident == threading.get_ident():
+            continue                  # the thread taking the snapshot
+        name = 'admission' if ident == admitting else names.get(ident, 'unnamed')
+        seen[name] = seen.get(name, 0) + 1
+        stacks[name if seen[name] == 1 else '%s #%d' % (name, seen[name])] = [
+            '%s:%d %s' % (os.path.basename(f.filename), f.lineno, f.name)
+            for f in traceback.extract_stack(frame)[-STACK_DEPTH:]]
+    return stacks
 
 try:                                  # 出站图片附件：元数据、字节端点的围栏都在 outbound_media
     from . import outbound_media
@@ -329,10 +350,46 @@ class Channels:
 
     def receive(self, channel_id, body):
         # Admission and input persistence share the controller's existing fence.
-        with self.controller.ingress_lock:
-            if self.controller.reconfiguring or self.controller.stopping.is_set():
-                raise RuntimeError('HOST_RECONFIGURING')
-            return self._receive(channel_id, body)
+        from .chat import INGRESS_TIMING as timing
+        started, waited = time.monotonic(), None
+        timing.__dict__.clear()
+        snapshot, admitting = {}, threading.get_ident()
+
+        def take():
+            try:
+                snapshot.update(stacks_at=round(time.monotonic() - started, 3), stacks=thread_stacks(admitting))
+            except Exception:
+                pass
+        timer = threading.Timer(STACKS_AFTER_SECONDS, take)
+        timer.daemon = True
+        timer.start()
+        try:
+            with self.controller.ingress_lock:
+                waited = time.monotonic() - started
+                if self.controller.reconfiguring or self.controller.stopping.is_set():
+                    raise RuntimeError('HOST_RECONFIGURING')
+                return self._receive(channel_id, body)
+        finally:
+            timer.cancel()
+            total = time.monotonic() - started
+            if total >= INBOUND_SLOW_SECONDS:
+                self._record_slow(channel_id, total, waited, dict(vars(timing)), dict(snapshot))
+
+    def _record_slow(self, channel_id, total, waited, stages, snapshot=None):
+        """Where a slow admission spent its seconds: the fence (`fence_wait`), the line's write (`persist`), its projection
+        to the Web UI (`project`: `channel_input`, then the worker's `output_lock_wait` and `output_write`), and the rest
+        of the admission (`other`: the checks and reads before the write). `stacks` is every thread's stack as it stood
+        `stacks_at` seconds in (a snapshot taken much later than asked means no thread could run Python then).
+        Recorded after the fence is released; a failure to record is never the admission's."""
+        try:
+            known = (waited or 0) + stages.get('persist', 0) + stages.get('project', 0)
+            self.controller.app.evidence.record('host.inbound_slow', {
+                'channel_id': channel_id, 'total': round(total, 3),
+                'fence_wait': None if waited is None else round(waited, 3),
+                **{k: round(v, 3) for k, v in stages.items()}, 'other': round(max(0.0, total - known), 3),
+                **(snapshot or {})})
+        except Exception:
+            pass
 
     def _receive(self, channel_id, body):
         allowed = {'route_id', 'account_id', 'sender_id', 'event_id', 'text', 'raw', 'occurred_at', 'mentioned_account_ids', 'reply_to', 'group_id'}

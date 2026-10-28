@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from queue import Queue, Empty
 import threading
+import time
 import traceback
 import uuid
 
@@ -16,6 +17,9 @@ from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import tasks as task_records
+
+# Where the current thread's input admission spent its time (channels.receive reports a slow one).
+INGRESS_TIMING = threading.local()
 
 
 class SceneQueue(Queue):
@@ -244,7 +248,9 @@ class Chat:
                 if granted:
                     # The same decision the router makes, so the stored input and the handled one agree.
                     event = {**event, 'integration_profile': granted}
+            timing, mark = INGRESS_TIMING, time.monotonic()
             row, created = persist_input(self.app.store, event, managed=True)
+            timing.persist, mark = time.monotonic() - mark, time.monotonic()
             if self.on_input_received:
                 try:
                     self.on_input_received(row)
@@ -253,6 +259,7 @@ class Chat:
                     # retried without asking the adapter to invent a new input.
                     self.app.evidence.record('host.input_projection_error', {
                         'input_id': row['_id'], 'traceback': redact(traceback.format_exc(), self.app.config)})
+            timing.project = time.monotonic() - mark
             episode = row['episode_id']
             if row.get('ingress_state') == 'ACCEPTED' and episode not in self.enqueued:
                 self.enqueued.add(episode)

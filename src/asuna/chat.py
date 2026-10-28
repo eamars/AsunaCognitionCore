@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from queue import Queue, Empty
 import threading
+import time
 import traceback
 import uuid
 
@@ -91,6 +92,8 @@ class Chat:
         self.active_task = None
         self.latest_task = None
         self.ingress_lock = threading.RLock()
+        # Where an input's admission spent its time, per thread (channels.receive reports a slow one).
+        self.ingress_timing = threading.local()
         self.enqueued = set()
         self.reconfiguring = False
         self.on_turn_finished = None
@@ -244,7 +247,9 @@ class Chat:
                 if granted:
                     # The same decision the router makes, so the stored input and the handled one agree.
                     event = {**event, 'integration_profile': granted}
+            timing, mark = self.ingress_timing, time.monotonic()
             row, created = persist_input(self.app.store, event, managed=True)
+            timing.persist, mark = time.monotonic() - mark, time.monotonic()
             if self.on_input_received:
                 try:
                     self.on_input_received(row)
@@ -253,6 +258,7 @@ class Chat:
                     # retried without asking the adapter to invent a new input.
                     self.app.evidence.record('host.input_projection_error', {
                         'input_id': row['_id'], 'traceback': redact(traceback.format_exc(), self.app.config)})
+            timing.project = time.monotonic() - mark
             episode = row['episode_id']
             if row.get('ingress_state') == 'ACCEPTED' and episode not in self.enqueued:
                 self.enqueued.add(episode)

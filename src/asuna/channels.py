@@ -22,6 +22,8 @@ from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import tasks as task_records
 
+INBOUND_SLOW_SECONDS = 2.0       # an admission this slow records where it waited (host.inbound_slow)
+
 try:                                  # 出站图片附件：元数据、字节端点的围栏都在 outbound_media
     from . import outbound_media
 except Exception:                     # 同目录平铺加载（离线自检）也认
@@ -329,10 +331,34 @@ class Channels:
 
     def receive(self, channel_id, body):
         # Admission and input persistence share the controller's existing fence.
-        with self.controller.ingress_lock:
-            if self.controller.reconfiguring or self.controller.stopping.is_set():
-                raise RuntimeError('HOST_RECONFIGURING')
-            return self._receive(channel_id, body)
+        started, waited = time.monotonic(), None
+        timing = getattr(self.controller, 'ingress_timing', None)
+        if timing is not None:
+            timing.__dict__.clear()
+        try:
+            with self.controller.ingress_lock:
+                waited = time.monotonic() - started
+                if self.controller.reconfiguring or self.controller.stopping.is_set():
+                    raise RuntimeError('HOST_RECONFIGURING')
+                return self._receive(channel_id, body)
+        finally:
+            total = time.monotonic() - started
+            if total >= INBOUND_SLOW_SECONDS:
+                self._record_slow(channel_id, total, waited, vars(timing) if timing is not None else {})
+
+    def _record_slow(self, channel_id, total, waited, stages):
+        """Where a slow admission spent its seconds: the fence (`fence_wait`), the line's write (`persist`), its projection
+        to the Web UI (`project`: `channel_input`, then the worker's `output_lock_wait` and `output_write`), and the rest
+        of the admission (`other`: the checks and reads before the write). Recorded after the fence is released; a
+        failure to record is never the admission's."""
+        try:
+            known = (waited or 0) + stages.get('persist', 0) + stages.get('project', 0)
+            self.controller.app.evidence.record('host.inbound_slow', {
+                'channel_id': channel_id, 'total': round(total, 3),
+                'fence_wait': None if waited is None else round(waited, 3),
+                **{k: round(v, 3) for k, v in stages.items()}, 'other': round(max(0.0, total - known), 3)})
+        except Exception:
+            pass
 
     def _receive(self, channel_id, body):
         allowed = {'route_id', 'account_id', 'sender_id', 'event_id', 'text', 'raw', 'occurred_at', 'mentioned_account_ids', 'reply_to', 'group_id'}

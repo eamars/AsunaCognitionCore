@@ -403,10 +403,16 @@ class BusinessWorker:
             with self.pending_lock:
                 self.host_pending.pop(request_id, None)
 
-    def emit(self, value):
+    def emit(self, value, timing=None):
+        line = json.dumps(value, ensure_ascii=False, default=str) + '\n'
+        mark = time.monotonic()
         with self.output_lock:
-            sys.stdout.write(json.dumps(value, ensure_ascii=False, default=str) + '\n')
+            if timing is not None:
+                timing.output_lock_wait, mark = time.monotonic() - mark, time.monotonic()
+            sys.stdout.write(line)
             sys.stdout.flush()
+            if timing is not None:
+                timing.output_write = time.monotonic() - mark
 
     def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, native_sessions=None,
                    deployment=None, secrets=None, admission='explicit', apply_integrations=False,
@@ -943,7 +949,11 @@ class BusinessWorker:
             # delivers its spool. The row is durable; navigation.ready projects it.
             return
         if not receipt_records.sink_get(self.app.store, 'native-input:' + row['_id']):
-            self.emit({'kind': 'channel_input', **self.channel_input(row)})
+            timing, mark = getattr(self.controller, 'ingress_timing', None), time.monotonic()
+            value = {'kind': 'channel_input', **self.channel_input(row)}
+            if timing is not None:
+                timing.channel_input = time.monotonic() - mark
+            self.emit(value, timing)
 
     def channel_title(self, route):
         """Conversation title a person can read (content only): the configured name, else the group name or

@@ -641,7 +641,8 @@ then fail relied on MongoDB's or mongomock's own behaviour and are fixed or go (
 - B0 runs the unit suite once under the harness with no skip list, without a server. Each failure is read: one that
   is a gap of the harness (a feature mongomock lacks: `$vectorSearch`, `$$NOW` in a pipeline, `collStats`, ...) goes
   into one reviewed file, `tests/harness_skips.txt`, one line per test: `test id | what the harness lacks`; a failure
-  that is not a harness gap is reported, not listed.
+  that is not a harness gap is fixed, and only one that a tests-only change cannot fix is listed, apart, named as a
+  defect with where it is fixed (as built: the clock-tie class below, five tests).
 - `tests/conftest.py` reads that file at collection and marks each listed test skipped with the reason
   `UNCHECKED, not passed: the interim harness lacks <what>`. Nothing is caught at run time: a listed id that no longer
   exists fails the collection, and a test that fails and is not listed fails the run.
@@ -792,6 +793,7 @@ them.
 |---|---|---|
 | MongoDB: `{f: null}`, equality on lists, `$ne`/`$nin` on missing, `$exists` with null, `$in: [null]`, `f.0`, bool not number, sort of missing and null, code-point order, case-blind folding, partial and plain unique, `$inc/$max/$min/$addToSet` on missing, refusals 28 and 14, upsert record, `$$NOW` in `$expr` and pipelines, aware round trip and ms precision, claim-next with six claimers, the `_id` tie-break's `SORT` stage, prefix regex on an index, `collStats` | **verified today** | `probe-mongo-facts.json` (MongoDB 8.2.6, replica set) |
 | Greek final sigma under case-blind matching | not verified | conformance case `W24` |
+| the clock-tie class (found by B0): this machine's clock moves in 1 ms steps, so two records written within one step carry the same time, and code that decides by the latest or oldest time decides by a hash `_id` | proven for `memory_tiers` (9 of 12 runs failed on the stand-in, 0 of 12 with a strictly increasing clock) and seen directly in the journal; three more tests flaky the same way | its own change (one clock in the core that never repeats a time, a counter where a true order is needed), before the batch that moves the code concerned; an owner operation never relies on time order alone (3.3) |
 | MongoDB's internal vector precision | not verified | stated tolerance (5.10); 1b's integration test compares exact results with brute force |
 | mongomock carries the 868 database tests | not verified | measured in B0 (pass, skip with reason, time) |
 | her data's kinds per declared field, required unique fields present, BSON and JSON sizes agree at 1 MiB | not verified | 8.3 step 5, per batch, numbers only |

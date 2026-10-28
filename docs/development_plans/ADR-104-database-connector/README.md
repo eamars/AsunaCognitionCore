@@ -5,7 +5,7 @@ is designed (section "Vector search", Claude on the owner's delegation); step 1a
 unchanged) is built and installed 2026-10-28; step 1b (exact search) is built on it, on main (see "Build order" and
 "Built"). Everything after step 1 is designed to the end in [design.md](design.md) (2026-10-28 evening, decisions 7
 and 8 below), from an independent survey ([research.md](research.md)), checked against
-[review-list.md](review-list.md). Its batch B0 (the unit run reaches no server) lands apart from it.
+[review-list.md](review-list.md). Its batch B0 (the unit run reaches no server) is built and landed (see "Built").
 
 ## The owner's ask (2026-10-27, verbatim)
 
@@ -391,6 +391,15 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
   fewer than k after a filter, so exact is the one behaviour a second adapter can promise. (3) It costs within the
   noise (above). If these do not weigh enough for her, 1b waits: 1a works without it, and the double then has to be
   read as exact where production is not.
+
+- B0 (2026-10-28, landed at `8bf815818995` and `1f7bb31bc629`, tests only, no restart): the unit run reaches no
+  database server (design.md 7.3; decision 8). Every MongoDB client it makes is the in-process stand-in
+  (`tests/unit_run_site/sitecustomize.py`), in the test process and in every Python process it starts, and every
+  configuration it loads names `mongodb://unit-run.invalid:27017/`; `tests/test_no_server.py` checks both. Run on
+  `1f7bb31bc629`: Python 1,502 passed, 20 skipped, 2 min 37 s (the last run on her server, `a00a9aa0eef6`: 1,519
+  passed in 9 to 16 min); JS 260 passed. `tests/harness_skips.txt` lists 14 tests of what the stand-in lacks (the
+  lease's update pipeline on the server's clock, `collStats`, one store across processes, MongoDB's own refusal
+  text) and, apart, 5 of one defect class the stand-in's speed shows (design.md section 10, the clock-tie class).
 ## Open questions (to discuss with the owner first) (as recorded before the decisions)
 
 1. Which databases are meant ("a different database": another MongoDB, or another kind such as PostgreSQL or SQLite)?

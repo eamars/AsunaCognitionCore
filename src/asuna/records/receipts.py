@@ -8,7 +8,7 @@ database's order unless an operation names its order. `save_lane` and `save_sink
 (`Store.put`).
 """
 from ..store.words import AnyOf, Not, Range
-from .view import ANY, View, fenced, is_text, texts
+from .view import ANY, View, is_text, pinned, texts
 
 LANES, SINKS = 'lane_receipts', 'sink_receipts'
 
@@ -49,17 +49,16 @@ def sinks(store, receipt_ids=None):
 
 
 def sink_of_kind(store, kind, *, state=None, states=None, project=ANY, besides=None, by=None):
-    """View: the sink receipts of a kind (in a state or one of several; of a project; but one), ordered by `by`
-    (None: the database's order)."""
-    where = fenced({'kind': kind}, {'project': (project, is_text)})
-    if where is not None:
-        if state is not None:
-            where['state'] = state
-        if states is not None:
-            where['state'] = AnyOf(list(states))
-        if besides is not None:
-            where['_id'] = Not(besides)
-    return View(store, SINKS, where, ((by, 1),) if by else ())
+    """View: the sink receipts of a kind (in a state or one of several; of a project, None: of none; but one),
+    ordered by `by` (None: the database's order)."""
+    where = {'kind': kind}
+    if state is not None:
+        where['state'] = state
+    if states is not None:
+        where['state'] = AnyOf(list(states))
+    if besides is not None:
+        where['_id'] = Not(besides)
+    return View(store, SINKS, pinned(where, {'project': (project, is_text)}), ((by, 1),) if by else ())
 
 
 def sink_window(store, *, gte=None, lte=None, lt=None):

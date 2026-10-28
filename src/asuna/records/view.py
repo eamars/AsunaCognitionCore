@@ -34,13 +34,25 @@ def fenced(where, fences):
     return where
 
 
-def none_or(where, path, value):
-    """`where` and `path` equal to `value`, where a value of None stands for "has none": the field null or missing,
-    as the replaced read's equality on null matched."""
-    if value is not None:
-        return {**where, path: value}
-    return And(where, Or({path: IsNull()}, {path: Exists(False)})) if where else Or({path: IsNull()},
-                                                                                    {path: Exists(False)})
+def pinned(where, pins):
+    """The condition `where` with each pin given ({field: (value, kind check)}), where a value of None stands for
+    "has none": the field null or missing, as the replaced read's equality on null matched. None when `where` is None
+    or a pin is not of its kind (it holds nothing)."""
+    if where is None:
+        return None
+    nones = []
+    for path, (value, holds) in pins.items():
+        if value is ANY:
+            continue
+        if value is None:
+            nones.append(Or({path: IsNull()}, {path: Exists(False)}))
+        elif not holds(value):
+            return None
+        else:
+            where[path] = value
+    if not nones:
+        return where
+    return And(where, *nones) if where else (nones[0] if len(nones) == 1 else And(*nones))
 
 
 class View:

@@ -412,12 +412,15 @@ Tests that read the store's insides changed: `tests/test_forwards.py` (the histo
 As built, `records.episodes`, `records.sessions` and `records.receipts` (B5): every operation of their rows but
 `redact_scope`, under those names, and `of_task` as the row names it; call sites import them as `episode_records`,
 `session_records` and `receipt_records`. Their views share `records/view.py` (`View` with `rows`, `first`, `count`;
-the replaced read's sort, none where it had none, so no `_id` is added). `episodes.get` takes the fences the replaced
-reads wrote (persona, conversation, scope, person, epoch, native session, a carried system reference); `sessions.main`
-reads a character context of None as the field null or missing, as the replaced equality on null matched (`Or` of
-`IsNull` and `Exists(False)`; `sessions` has no index on the field, so the plan stays `COLLSCAN`); `receipts.sink_window`
-is history_query's receipt stream (its bounds from `history_query.sink_bounds`). The rest of B4's rule holds: a fence
-or id given as None, or not of its kind, finds nothing without a read. 161 map rows in 35 files moved (the map at
+the replaced read's sort, none where it had none, so no `_id` is added); it and `records.messages`' own `View` are
+unified later, in B13 (the cleanup batch), not now. `episodes.get` takes the fences the replaced reads wrote (persona,
+conversation, scope, person, epoch, native session, a carried system reference). Where a replaced read's equality could
+be on None, the owner reads None as the field null or missing, as MongoDB's `{field: None}` matched (`records.view.pinned`:
+an `Or` of `IsNull` and `Exists(False)`): `sessions.main`'s epoch and character context, `receipts.sink_of_kind`'s
+project (a publication result without a project supersedes the earlier ones without one); none of those fields has an
+index, so the plans stay `COLLSCAN`. `receipts.sink_window` is history_query's receipt stream (its bounds from
+`history_query.sink_bounds`). Elsewhere B4's rule holds: a fence or id given as None, or not of its kind, finds
+nothing without a read. 161 map rows in 35 files moved (the map at
 `fa46c24132f6`: episodes 82, sessions 46, the receipts 33), none left, and the turn part of `Store.mutate`'s source check;
 `privacy._erase` keeps redacting `episodes` and `sink_receipts` in its loop over five collections until B10, as for
 `messages`, and `audit.py`'s replay reads `sink_receipts` through the maintenance surface. The four collections are

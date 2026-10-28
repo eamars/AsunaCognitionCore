@@ -637,7 +637,7 @@ The owner of `sessions`: the bindings of her native sessions (which conversation
 - def `get` — The session with this id (`native`: only one the native Host binds), or None.
 - def `native` — View: the sessions the native Host binds (these ids; of a lane; not of a conversation).
 - def `successors` — View: the sessions that continue these.
-- def `main` — The main conversation session the native Host binds for a conversation (of a lane; of a persona, epoch and character context: None, a session with none), or None.
+- def `main` — The main conversation session the native Host binds for a conversation (of a lane; of a persona, epoch and character context: an epoch or a context of None, a session with none), or None.
 - def `titled` — The main session of a conversation that has a native title, or None.
 - def `of_task` — The newest action session of an execution binding (`broker`: its broker session), continuing one of `parents`, of this conversation, scope, epoch, person and persona (and of this task), or None.
 - def `of_scope` — The sessions of a scope.
@@ -656,7 +656,7 @@ The owner of `lane_receipts` and `sink_receipts`: what a model lane answered for
 - def `save_lane` — The revisioned write of a lane receipt (`Store.put`).
 - def `sink_get` — The sink's receipt with this id, or None.
 - def `sinks` — View: the sink receipts with these ids (None: every one).
-- def `sink_of_kind` — View: the sink receipts of a kind (in a state or one of several; of a project; but one), ordered by `by` (None: the database's order).
+- def `sink_of_kind` — View: the sink receipts of a kind (in a state or one of several; of a project, None: of none; but one), ordered by `by` (None: the database's order).
 - def `sink_window` — View: the sink receipts received within these bounds (text times as the core writes them), ordered by when they were received, then by id.
 - def `save_sink` — The revisioned write of a sink receipt (`Store.put`).
 
@@ -670,7 +670,7 @@ What the owners of `episodes`, `sessions` and the receipts share: a named read (
 - def `is_number`
 - def `texts`
 - def `fenced` — `where` with each fence given ({field: (value, kind check)}), or None when one holds nothing (a value missing or not of its kind).
-- def `none_or` — `where` and `path` equal to `value`, where a value of None stands for "has none": the field null or missing, as the replaced read's equality on null matched.
+- def `pinned` — The condition `where` with each pin given ({field: (value, kind check)}), where a value of None stands for "has none": the field null or missing, as the replaced read's equality on null matched.
 - class `View` — A named read on one collection: its condition and its order ((field, 1 | -1), ...).
   - `each` — The rows, read as they come.
   - `rows`

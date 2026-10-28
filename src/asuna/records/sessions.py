@@ -8,7 +8,7 @@ an operation says otherwise. A conversation's character context of None means on
 null or missing. `save` is the revisioned write (`Store.put`).
 """
 from ..store.words import AnyOf, Exists, Not, Set
-from .view import ANY, View, fenced, is_number, is_text, none_or, texts
+from .view import ANY, View, fenced, is_number, is_text, pinned, texts
 
 COLLECTION = 'sessions'
 INVALIDATED = 'INVALIDATED'
@@ -47,19 +47,14 @@ def successors(store, session_ids):
 
 def main(store, scene_id, *, lane=None, persona=ANY, epoch=ANY, context=ANY, fields=None):
     """The main conversation session the native Host binds for a conversation (of a lane; of a persona, epoch and
-    character context: None, a session with none), or None."""
+    character context: an epoch or a context of None, a session with none), or None."""
     if not is_text(scene_id):
         return None
     where = {'native_host': True, 'main_conversation': True, 'scene_id': scene_id}
     if lane is not None:
         where['lane'] = lane
-    where = fenced(where, {'persona': (persona, is_text), 'policy_epoch': (epoch, is_number)})
-    if where is None:
-        return None
-    if context is not ANY:
-        if context is not None and not is_text(context):
-            return None
-        where = none_or(where, 'character_context', context)
+    where = pinned(fenced(where, {'persona': (persona, is_text)}),
+                   {'policy_epoch': (epoch, is_number), 'character_context': (context, is_text)})
     return _view(store, where).first(fields=fields)
 
 

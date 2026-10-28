@@ -73,3 +73,42 @@ def test_an_emit_notes_its_output_lock_wait_and_its_write(capsys):
     assert capsys.readouterr().out == '{"kind": "probe"}\n'
     assert set(vars(worker.emit_timing)) == {'output_lock_wait', 'output_write'}
     assert all(value >= 0 for value in vars(worker.emit_timing).values())
+
+
+def test_a_slow_admission_carries_every_thread_s_stack_from_inside_it(monkeypatch):
+    import re
+    import time
+    monkeypatch.setattr(channels_module, 'STACKS_AFTER_SECONDS', 0.01)
+    monkeypatch.setattr(channels_module, 'INBOUND_SLOW_SECONDS', 0.0)
+    release = threading.Event()
+
+    def hold_the_line():
+        release.wait(5)
+    holder = threading.Thread(target=hold_the_line, name='holder', daemon=True)
+    holder.start()
+    evidence = Evidence()
+
+    def admit_slowly(timing):
+        time.sleep(0.3)
+        return {'status': 'accepted'}
+    try:
+        channels_over(evidence, admit_slowly).receive('qq', {})
+    finally:
+        release.set()
+    [(kind, payload)] = evidence.rows
+    assert payload['stacks_at'] >= 0.01
+    stacks = payload['stacks']
+    assert stacks['admission'][-1].endswith(' admit_slowly')
+    assert any(line.endswith(' hold_the_line') for line in stacks['holder'])
+    lines = [line for stack in stacks.values() for line in stack]
+    assert lines and all(re.fullmatch(r'[^:/\\]+:\d+ [\w<>.]+', line) for line in lines)   # file names and code only
+
+
+def test_a_fast_admission_takes_no_snapshot(monkeypatch):
+    import time
+    monkeypatch.setattr(channels_module, 'STACKS_AFTER_SECONDS', 0.05)
+    taken = []
+    monkeypatch.setattr(channels_module, 'thread_stacks', lambda admitting: taken.append(admitting) or {})
+    channels_over(Evidence(), lambda timing: {'status': 'accepted'}).receive('qq', {})
+    time.sleep(0.15)
+    assert taken == []

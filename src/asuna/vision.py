@@ -659,6 +659,12 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
         full = {**entry, **media_source(store, task, config, entry)}
         data, media_type, via, source = pull_bytes(full, config, max_bytes=max_bytes, video=entry['type'] == 'video')
         blob = None
+        if entry.get('sticker') == 'custom':
+            from . import stickers
+            try:                    # she opened it: a sticker she knows by its picture is known by this md5 too
+                stickers.opened(store, (config.get('chat') or {}).get('persona'), entry, data)
+            except Exception:       # noqa: BLE001 learning a sticker never fails her reading it
+                pass
     video = None
     if entry['type'] == 'video':
         # The video becomes its contact sheet now and its bytes are dropped: only the sheet is stored (media_life).

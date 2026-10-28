@@ -527,12 +527,12 @@ def keep_candidate(store, ep, persona, args):
 # A sticker she looked at and named stays known for good, by a fingerprint: the md5 of a picture's bytes (a
 # platform may name the file by it, channel_kinds.sticker_md5) or a store sticker's ids, and by its picture
 # (picture_key). When it is posted again, the line under it says what she called it, so she need not look
-# again: the file md5 needs no download; a copy whose md5 is unknown is downloaded once by the program and
-# matched by its picture, and that md5 is then known too (aliases). The words are only hers: a sticker on her
-# shelf is known by its name and note (and stays known after she drops it); one she looked at and does not want
-# to send she may remember with a name and a line of her own.
+# again: the file md5 needs no download. A copy whose md5 is unknown is matched by its picture when she opens it
+# (read_image, or her group turn's pictures: the bytes are there already), and that md5 is then known too
+# (aliases); a line is never held for a download. The words are only hers: a sticker on her shelf is known by its
+# name and note (and stays known after she drops it); one she looked at and does not want to send she may
+# remember with a name and a line of her own.
 MEMORY_WORDS = {'kept': '在你架子上', 'dropped': '你收过又放下了', 'looked': '你看过没收'}
-PICTURE_FETCH_SECONDS = 5
 _JPEG_METADATA = set(range(0xE0, 0xF0)) | {0xFE}          # APP0-APP15 (JFIF, EXIF, XMP, ICC...) and comments
 _PNG_METADATA = {b'tEXt', b'zTXt', b'iTXt', b'tIME', b'eXIf', b'pHYs'}
 _WEBP_METADATA = {b'EXIF', b'XMP ', b'VP8X'}
@@ -674,39 +674,29 @@ def known(store, persona, key):
     return store.db.sticker_memory.find_one({'persona': persona, **_by_key(key)}) if key else None
 
 
-_pictures = {}                  # ref -> picture of a posted sticker, downloaded once (None: it could not be)
-
-
-def _known_by_picture(store, persona, entry, key, fetch):
-    """A posted custom sticker whose md5 she does not know: downloaded once and matched by its picture; a match
-    makes that md5 known too, so the next copy needs no download."""
-    ref = entry['ref']
-    if ref not in _pictures:
-        try:
-            _pictures[ref] = picture_key(fetch(entry))
-        except Exception:                                  # unreachable or gone: it stays unknown, as before
-            _pictures[ref] = None
-        while len(_pictures) > 512:
-            _pictures.pop(next(iter(_pictures)))
-    picture = _pictures[ref]
-    row = store.db.sticker_memory.find_one({'persona': persona, 'picture': picture}) if picture else None
-    if row and key and key != row['key'] and key not in (row.get('aliases') or ()):
+def opened(store, persona, entry, data):
+    """She opened a posted custom sticker (its bytes `data`): one she knows by its picture though not by this md5
+    makes that md5 known too, so the next copy is known on sight. Returns the memory, or None."""
+    if entry.get('sticker') != 'custom' or not data:
+        return None
+    key = memory_key(entry)
+    if not key or known(store, persona, key):
+        return None
+    row = store.db.sticker_memory.find_one({'persona': persona, 'picture': picture_key(data)})
+    if row and key != row['key'] and key not in (row.get('aliases') or ()):
         store.put('sticker_memory', {**row, 'aliases': [*(row.get('aliases') or ()), key][-20:]},
                   expected=row['revision'], stream='sticker-memory:' + persona)
     return row
 
 
-def recognized(store, persona, entries, fetch=None):
-    """{ref: words} for the posted stickers she knows: what she called it, and whether it is on her shelf.
-    ``fetch(entry) -> bytes`` lets a custom sticker whose md5 is unknown be matched by its picture."""
+def recognized(store, persona, entries):
+    """{ref: words} for the posted stickers she knows: what she called it, and whether it is on her shelf. Known by
+    the md5 or a store sticker's ids only: nothing is downloaded."""
     out = {}
     for entry in entries:
         if not entry.get('sticker'):
             continue
-        key = memory_key(entry)
-        row = known(store, persona, key)
-        if not row and fetch and entry['sticker'] == 'custom' and entry.get('pullable'):
-            row = _known_by_picture(store, persona, entry, key, fetch)
+        row = known(store, persona, memory_key(entry))
         if not row:
             continue
         how = row['how']

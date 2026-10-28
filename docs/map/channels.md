@@ -185,6 +185,7 @@ Her sticker shelf and the platform's own faces (ADR-016).
 - def `memory_key` — The fingerprint a posted sticker is known by; None when the platform gives none.
 - def `remember_shelf` — Every sticker on her shelf is known, by its md5 and its picture (startup: the shelf as it is now).
 - def `known`
+- def `opened` — She opened a posted custom sticker (its bytes `data`): one she knows by its picture though not by this md5 makes that md5 known too, so the next copy is known on sight.
 - def `recognized` — {ref: words} for the posted stickers she knows: what she called it, and whether it is on her shelf.
 - def `remember` — She looked at a posted sticker or a candidate this turn and names it, without keeping it.
 

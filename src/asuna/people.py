@@ -602,14 +602,11 @@ class People:
         lines += ['  ' + said_line(line) for line in body.splitlines() or ['']]
         if notice_then:
             lines.append('  > ' + notice_then)      # a notice about her line: the same anchor a quote of it has
-        from .stickers import PICTURE_FETCH_SECONDS, recognized
-        from .vision import line_refs, media_source, pull_bytes
-        task = {'scene_id': scene['_id'], 'scope_key': scene.get('scope_key'), 'policy_epoch': scene.get('policy_epoch')}
-
-        def fetch(entry):               # a sticker whose md5 she does not know: the program matches its picture
-            source = media_source(self.store, task, self.config, entry)
-            return pull_bytes({**entry, **source}, self.config, timeout=PICTURE_FETCH_SECONDS)[0]
-        refs = line_refs(row, self.config, lambda entries: recognized(self.store, self.persona, entries, fetch))
+        from .stickers import recognized
+        from .vision import line_refs
+        # Known stickers by their md5 only: a line is written without a download (one opened is matched by its
+        # picture then, stickers.opened).
+        refs = line_refs(row, self.config, lambda entries: recognized(self.store, self.persona, entries))
         from .received_files import line_note
         refs += line_note(row, self.config)              # files: ref and size, or why it is not read (ADR-102)
         if refs:

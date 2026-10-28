@@ -360,6 +360,23 @@ class TestG:
         assert t.count({}) == 5 and t.count({}, limit=3) == 3 and t.count({'name': 'nobody'}, limit=3) == 0
         assert t.count({'n': 1}) == 2
 
+    def test_G06_values_of_a_field_no_record_holds(self, store):
+        k = store.collection('keyed')
+        k.insert([{'_id': str(n), 'platform': 'p', 'account': 'a%d' % n} for n in range(3)])
+        assert k.group({}, 'event', total=None) == []
+        assert k.group({'platform': 'nowhere'}, 'platform', total=None) == []
+
+    def test_G07_values_of_a_field_holding_mixed_kinds(self, store):
+        """Records written before their field was declared may hold any kind (the adapter takes them as they are):
+        each value once, null kept, a record missing the field left out."""
+        moment = datetime(2026, 3, 4, 5, 6, 7, 89000, tzinfo=timezone.utc)
+        store.adapter.insert('things', [{'_id': 'i1', 'n': 1}, {'_id': 'i2', 'n': 1}, {'_id': 'l', 'n': 2 ** 31 + 5},
+                                        {'_id': 't', 'n': moment}, {'_id': 'o', 'n': {'k': 1}},
+                                        {'_id': 'z', 'n': None}, {'_id': 'm'}], True)
+        values = store.collection('things').group({}, 'n', total=None)
+        expected = [1, 2 ** 31 + 5, moment, {'k': 1}, None]
+        assert len(values) == len(expected) and all(value in values for value in expected), values
+
 
 class TestC:
     """3.4: change words, and the rules of a write that creates its record."""

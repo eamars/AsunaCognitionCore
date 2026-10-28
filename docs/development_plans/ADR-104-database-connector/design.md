@@ -433,6 +433,27 @@ collection its fake does not hold as empty); fixtures that wrote turns or bindin
 carry them (`tests/test_host.py`, `test_carried_session.py`, `test_credentials.py`, `test_errand_carries_home.py`,
 `test_handover_watchdog.py`, `test_native_product.py`, `test_night_development.py`, `test_reviews.py`).
 
+As built, `records.tasks` and `records.plans` (B6): every operation of their rows but `redact_scope`, under those
+names (`thread`, `thread_message` and `save_message` on `task_messages`); call sites import them as `task_records` and
+`plan_records`; their views are `records/view.py`'s. Where a replaced read's equality could be on None, None reads as
+the field null or missing (`records.view.pinned`), in these places: `tasks.get`'s and `plans.get`'s fences (state;
+conversation, scope, epoch, requester or person), `tasks.by_prefix`, `tasks.thread_message`'s sender, `tasks.of_episode`,
+`tasks.of_scope`, `tasks.thread`, `plans.of_conversation`, `plans.with_outcome`, `recent_with_inputs`' conversation,
+scope and epoch, and `tasks.created(scenes=[])`, the replaced `$in: [None]` (the tasks of no conversation). The
+lost-results read (`awaiting_feedback`) keeps the replaced `$exists` and `$nin: [..., None]` as "feedback present
+and not taken"; the words have no "not null", so a task whose feedback is null is left out after the read (it reads
+those few rows more, never fewer). `recent_with_inputs` (5.7) reads the conversation's tasks (the fields the
+aggregate projected, `raw_input_refs` and `result.text`), then their input lines through `records.messages.many` in
+reads of 1,000 ids, and sorts and cuts in Python: open work first, the newest input time descending with those
+without one last, ties by `_id`; each row keeps the stored order of its fields, then `_active`, then `_report_chars`,
+as the aggregate gave them. 166 map rows in 23 files moved (the map at `dbb88ee2f64f`: tasks 82, task_messages 10,
+plans 74), none left; `privacy._erase`'s loop keeps redacting `tasks` until B10, and `audit.py`'s replay reads it
+through the maintenance surface. The three are declared (every field nullable but `tasks.request_key`, the field of
+its plain unique index, required, 3.5; a lease's expiry is a number of seconds, the other times ISO text) and no
+longer `pending`. Tests that faked the store's insides get the owners' collections over their own database
+(`tests/test_night_development.py`), and a fixture that wrote a task without its `request_key` carries it (the same
+file).
+
 **The shared layer's own surface** (no collection's owner; 21 map rows): `Store.put` and `Store.audit` (stay; owners
 call `put` through `save`, every module calls `audit`), `Store.ensure` (replaces `migrate`), `Store.recover_commits`,
 `Store.seed` (tests), the **maintenance surface** (`store.maintenance.record(collection, id)`,
@@ -899,7 +920,7 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | B3 | `records.scenes` | 221 in 60 files | yes | 8.3 on each view and get; the counter: positions contiguous after the restart |
 | B4 | `records.messages` | 229 in 54 files (as built: 225 in 53, the map at `85dd48275d22`) | yes | 8.3; her turn context built from the same lines (the `said`, `inbound`, `spoken` views compared). A later change of its own, not B4's: the history search's archived stream stops coming after the people's cursor under a person filter (a defect B4 keeps, section 4's as-built note) |
 | B5 | `records.episodes`, `records.sessions`, `records.receipts` | 166 (as built: 161 in 35 files, the map at `fa46c24132f6`) | yes | 8.3, its 44 read cases and the four collections' field kinds and sizes |
-| B6 | `records.tasks`, `records.plans` (the `$lookup` as reads) | 168 | yes | 8.3, and `recent_with_inputs` against the aggregate on 20 conversations: same 16 tasks, same order, time p50/p95 |
+| B6 | `records.tasks`, `records.plans` (the `$lookup` as reads) | 168 (as built: 166 in 23 files, the map at `dbb88ee2f64f`) | yes | 8.3, its 42 read cases, and `recent_with_inputs` against the aggregate on 20 conversations: same 16 tasks, same order, their fields in order, time p50/p95 |
 | B7 | `records.memories` (retrieval's lexical reads; vector parts as built, 1b's pairs as an `Or` of dicts, an empty pair list answered without a call) | 67 | yes | 8.3; retrieval's whole search old against new on 40 queries (as 1a did): the same six and 24; `state.py:218-227`'s `if not combinations: return []` (the empty pair list) is production code with no test until `records.memories`' `test_an_empty_pair_list_answers_nothing_without_a_call` lands here |
 | B8 | `records.artifacts`, `blobs` (the blob interface), `media_life`, `outbound_files` | 126 | yes | 8.3; blob probe on a throwaway database; her stored files open and hash-check (20 sampled ids, read only) |
 | B9 | `records.heads`, `documents`, `records.people`, `records.ideas` | 151 | yes | 8.3; `audit.verify_documents` after the restart |

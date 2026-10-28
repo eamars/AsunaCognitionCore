@@ -372,7 +372,8 @@ the owner's `authorize` raises the same `SCENE_MEMBERSHIP_DENIED`. A function th
 a store (`skills.skill_directories`, `scene_links`, `dbread`'s `place`) reaches the owner through `records.on(db)`.
 The owner imports only `asuna.store`, and `state`'s `Denied` inside `authorize`. Tests that faked the store's
 `authorize` or `db.scenes` stub the owner's operation instead; the offline case modules' fake stores get
-`collection(name)` from `tests/fake_collections.py`, the in-memory adapter over their own rows.
+`collection(name)` from `tests/fake_collections.py`, the in-memory adapter over their own rows (a fake that keeps a
+list is a read-only view there, so a write through an owner fails at once instead of going nowhere).
 `tests/test_record_owners.py` is the guard of 8.2's B13 row for the owners moved so far.
 
 **The shared layer's own surface** (no collection's owner; 21 map rows): `Store.put` and `Store.audit` (stay; owners

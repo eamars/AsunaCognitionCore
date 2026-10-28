@@ -175,7 +175,7 @@ def reads(client, database, max_ms):
     store = Checked(adapter, CATALOG)
     cases, scenes = _cases(old_db, store)
     per_case = max(1, min(20, (QUERIES - 2 * len(cases)) // (len(cases) * 2 * RUNS)))
-    out, queries = {}, 0
+    out, timed, explained = {}, 0, 0
     for name, old_call, new_call, params in cases:
         chosen = params[::max(1, len(params) // per_case)][:per_case] if params else []
         same = differing = plans_differ = 0
@@ -190,7 +190,7 @@ def reads(client, database, max_ms):
                 started = clock.perf_counter()
                 new_value = new_call(param)
                 times['new'].append((clock.perf_counter() - started) * 1000)
-                queries += 2
+                timed += 2
                 results = {'old': _plain(old_value), 'new': _plain(new_value)}
             if results['old'] == results['new']:
                 same += 1
@@ -202,7 +202,7 @@ def reads(client, database, max_ms):
                                                    sort=list(sort) or None, skip=skip, limit=limit)
                 old_plan = _stages(old_cursor.explain()['queryPlanner']['winningPlan'])
                 new_plan = _stages(new_cursor.explain()['queryPlanner']['winningPlan'])
-                queries += 2
+                explained += 2
                 plans_differ += old_plan != new_plan
         pct = lambda values, q: round(statistics.quantiles(values, n=20)[q], 2) if len(values) > 1 else (
             round(values[0], 2) if values else None)
@@ -210,7 +210,11 @@ def reads(client, database, max_ms):
                      'plan_old': old_plan, 'plan_new': new_plan,
                      'ms_old_p50': pct(times['old'], 9), 'ms_old_p95': pct(times['old'], 18),
                      'ms_new_p50': pct(times['new'], 9), 'ms_new_p95': pct(times['new'], 18)}
-    return out, queries
+    samples = sum(case['n'] for case in out.values())
+    # What was run: the one sampling read, each case's samples x 2 sides x RUNS timed runs, 2 explains per explained
+    # sample.
+    return out, {'sampling': 1, 'samples': samples, 'timed': timed, 'explain': explained,
+                 'total': 1 + timed + explained, 'counted_as': 'sampling + samples x 2 sides x %d runs + explain' % RUNS}
 
 
 
@@ -284,7 +288,9 @@ def check(batch, settings, database, out, max_ms):
                  ' > '.join(case['plan_old'] or []), ' > '.join(case['plan_new'] or []),
                  case['ms_old_p50'], case['ms_old_p95'], case['ms_new_p50'], case['ms_new_p95']))
     if 'queries' in report:
-        print('queries: %d' % report['queries'])
+        q = report['queries']
+        print('queries: %d (sampling %d, timed %d = %d samples x 2 sides x %d runs, explain %d)'
+              % (q['total'], q['sampling'], q['timed'], q['samples'], RUNS, q['explain']))
     print('numbers written to %s' % (out / (batch + '.json')))
     if unchecked:
         return 2

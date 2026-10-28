@@ -175,6 +175,10 @@ today.
 
 - A record is a dict with a text `_id`. Fields not declared in the catalog are stored and returned unchanged but
   cannot be named in a condition, sort, group or index (`QueryInvalid`). `V01`, `V02`.
+- A collection whose owner has not moved yet is `pending`: it declares only the fields the store itself names
+  (`_last_op`, the audit fields, a vector space's fields, the `only_where_present` fields of its unique indexes), and
+  its indexes may name fields not declared yet. The batch that moves its owner declares its fields after its 8.3
+  step 5 and ends `pending`; from B13 a guard fails while any collection is `pending`.
 - A declared field has a path (dotted for nested objects), a kind and two flags. Kinds: `text`, `number` (int or
   float, compared by value; `1 == 1.0`, probe `eq_1_matches`), `bool` (not a number: `{'g': 1}` does not match
   `True`, probe), `time` (an aware UTC datetime), `list` of one of these or of `object`, `object` (only its declared
@@ -188,9 +192,12 @@ today.
   shared layer before the write, so they round-trip equal on every adapter (probe: MongoDB keeps 456 ms of 456789
   µs and returns naive datetimes unless `tz_aware`; the MongoDB adapter opens with `tz_aware=True`). Times the core
   writes as ISO text today (`state.now()`) stay text, compared as text. `T01`-`T03`.
-- Size: a record's canonical JSON (UTF-8) is at most 1,048,576 bytes, checked by the shared layer
-  (`RecordTooLarge`; today BSON bytes, `state.py:_size`). Each adapter states its own hard ceiling, which must be at
-  least that (MongoDB 16 MiB). `V08`.
+- Size: a record is at most 1,048,576 bytes, checked by the shared layer before the write with the adapter's own
+  measure (`measure(record)`) and refused as today, `RecordTooLarge('DOCUMENT_TOO_LARGE_USE_ARTIFACT')`. The MongoDB
+  adapter measures BSON bytes, exactly as `state.py:_size` did; the in-memory adapter measures canonical JSON (UTF-8).
+  All adapters move to canonical JSON as a change of its own, once a count on her data shows no record on different
+  sides of 1 MiB under the two measures. Each adapter states its own hard ceiling, which must be at least that
+  (MongoDB 16 MiB). `V08`.
 
 ### 3.2 Condition words
 
@@ -213,7 +220,7 @@ the complements (`Not`, `NoneOf`) are true there.
 | `NonEmpty()` | a `list` field with at least one element (MongoDB `f.0` exists, probe `list_nonempty_dot0`) | a non-list field | `W27` |
 | `Each(where)` | a `list[object]` field with one element that meets every entry of `where` (MongoDB `$elemMatch`); two elements each meeting one entry do not match | a path through a list anywhere else (`sources.scene_id`): use `Each` | `W28`, `W29` |
 | `And(...)`, `Or(...)` | all / any; `Or()` with no branch refused | empty `Or` | `W30`, `W31` |
-| `Now(seconds=0)` | the database's clock at the moment of the write, plus seconds; allowed as a `Range` bound and in `Set` on `time` fields only, in `update` and `claim` | anywhere else | `T04`, `T05` |
+| `Now(seconds=0)` | the database's clock at the moment of the write, plus seconds; allowed as a `Range` bound and in `Set` on `time` fields only, in `update` and `claim` (a change that writes it holds only `Set` and `Unset` and creates nothing), and in `insert`'s values | anywhere else, `Each` included | `T04`, `T05` |
 
 The MongoDB adapter is nearly a passthrough: a validated tree maps onto MongoDB's own operators, whose meaning,
 given declared fields and validated writes, equals the table (probe); `NoneOf` and `Not` need nothing added (they
@@ -258,7 +265,7 @@ case-blind), `Now` into `$$NOW` in an update pipeline or `$expr` (probe `now_in_
 | `Set({path: value})` | sets each path, creating missing parent objects | a path through a field that is not an object (MongoDB code 28, probe), a value of another kind | `C01`, `C02` |
 | `Unset(*paths)` | each path is absent afterwards; an absent path is fine | a required field | `C03` |
 | `Increase(path, by=1)` | adds to a number; a missing field starts at 0 (probe `count: 2`) | a field that is not a number (MongoDB code 14, probe) | `C04`, `C05` |
-| `Larger(path, value)` / `Smaller(path, value)` | keeps the larger / smaller; a missing field takes the value (probe `high`, `low`); a stored null is below every value (`Larger` takes the value, `Smaller` keeps null), as the sort rule | another kind | `C06` |
+| `Larger(path, value)` / `Smaller(path, value)` | keeps the larger / smaller; a missing field takes the value (probe `high`, `low`); a stored null is below every value (`Larger` takes the value, `Smaller` keeps null), as the sort rule; an undeclared field compares in the sort's order of kinds, as MongoDB does | another kind, for a declared field | `C06` |
 | `AddToSet(path, *values)` | adds each value not already in the list; a missing field becomes the list (probe `tags: ['a', 'b']`) | a non-list field | `C07` |
 | `Push(path, *values, keep_last=None)` | appends, then keeps the last n (`crossing.py:377`) | a non-list field | `C08` |
 | `OnCreate({path: value})` | applied only when the write creates the record | | `C09` |
@@ -272,14 +279,16 @@ the shared layer (`OnCreate`, a uuid4 in hex) unless `OnCreate` gives one. A cre
 
 ### 3.5 Unique keys
 
-A unique index applies to the records where all its fields hold a value of their kind. Its fields are `required`
-unless the index lists them in `only_where_present`, in which case a record missing them (or holding null) is outside
-the index. So "only one record may lack the field" (MongoDB's plain unique index indexes missing as null: probe
-`plain_unique_two_missing: refused`) can never arise: a required field is never missing. MongoDB keeps today's
-indexes: a plain unique index for required fields, `partialFilterExpression: {f: {$type: 'string'}}` for
-`only_where_present` (probe `partial_unique_refuses_duplicate: 11000`); SQLite and PostgreSQL a partial unique
-expression index `WHERE json_type(...) = 'text'`. A repeat raises `DuplicateKey` on insert, replace, update and
-create. `X05`-`X09`.
+A unique index applies to the records where all its fields hold a value of their kind. A plain unique index's fields are
+`required`, so "only one record may lack the field" (MongoDB's plain unique index indexes missing as null: probe
+`plain_unique_two_missing: refused`) can never arise. A partial unique index lists fields in `only_where_present`: a
+record missing one of those (or holding null) is outside the index; inside it, its other fields may be missing and are
+indexed as null, as today (her outbound messages carry no `adapter_id`). The MongoDB adapter writes `only_where_present`
+as `{f: {$type: <the declared kind>}}` for a unique index and as `{f: {$exists: true}}` for a plain one
+(`event.visit.intent`), which reproduces today's 53 indexes. MongoDB keeps today's indexes: a plain unique index for
+required fields, `partialFilterExpression: {f: {$type: 'string'}}` for `only_where_present` (probe
+`partial_unique_refuses_duplicate: 11000`); SQLite and PostgreSQL a partial unique expression index `WHERE
+json_type(...) = 'text'`. A repeat raises `DuplicateKey` on insert, replace, update and create. `X05`-`X09`.
 
 ### 3.6 Revisions, counters, claims
 
@@ -392,11 +401,12 @@ renew:        update({'_id': 'host', 'instance': me}, Set({'expires_at': Now(LEA
 mark_planned: update({'_id': 'host'}, Set({'planned_stop.at': Now(), 'planned_stop.by': by}))
 ```
 
-`Now` is allowed in this `update` (in a `Range` bound and in `Set`) and in `insert`'s values; the MongoDB adapter
-writes an insert holding `Now` as an upsert with an update pipeline using `$$NOW` (B1b). Which clock: MongoDB the
-server's `$$NOW` (as today, probe); PostgreSQL `now()` of the statement; SQLite the host's clock
-(`strftime('%Y-%m-%dT%H:%M:%fZ','now')`), shared by every process on that host, which is the only place an SQLite
-file is used; the double an injected clock (`MemoryAdapter(clock=...)`), which tests move. `expires_at`, `since` and
+`Now` is allowed in this `update` (in a `Range` bound and in `Set`) and in `insert`'s values; the MongoDB adapter writes
+an insert holding `Now` as an upsert with an update pipeline using `$$NOW`, under a condition no record meets (`{_never:
+{$type: 'minKey'}}`; an upsert's condition may not use `$expr`), so an existing `_id` is a `DuplicateKey`. Which clock:
+MongoDB the server's `$$NOW` (as today, probe); PostgreSQL `now()` of the statement; SQLite the host's clock
+(`strftime('%Y-%m-%dT%H:%M:%fZ','now')`), shared by every process on that host, which is the only place an SQLite file
+is used; the double an injected clock (`MemoryAdapter(clock=...)`), which tests move. `expires_at`, `since` and
 `planned_stop.at` are `time` fields. Today's insert path is an upsert filtered on `instance` missing; the design's
 insert is the same effect (it fails when any lease exists). Not changed: a paused holder is not fenced after expiry
 (today's behaviour; the file lock stops a second Host on one machine). Races `R03`: two holders for an expired lease,
@@ -420,8 +430,9 @@ stream's newest, insert seq + 1, retry on `DuplicateKey` of `(stream_id, seq)` u
 (200 round trips at most, every few minutes). Partial failure behaves as today (unordered bulk writes are partial
 too). Its TTL index (`state.py:182`, 30 days) is replaced by `lane_faults.forget_old` on each write
 (`delete({'hour_at': Range(lt=cutoff)}, many=True)`); no Python code reads `lane_faults` (map: 2 rows, both writes),
-so when old rows go changes nothing anyone sees. The catalog lists the TTL index as retired and `ensure` drops it in
-batch B2. `insert(records, ordered=True)` serves `insert_many` (`crossing.py:314`, tests).
+so when old rows go changes nothing anyone sees. Until B2 the catalog does not declare the TTL index, so `ensure`
+leaves it as it is (a new database does not get it); B2 declares its replacement and lists the TTL index as retired,
+and `ensure` drops it. `insert(records, ordered=True)` serves `insert_many` (`crossing.py:314`, tests).
 
 **5.7 The three aggregates.**
 - *Audit heads* (`audit._latest`): `group('audit_events', {'type': AnyOf(LATEST_KEPT)}, by=('type', 'stream_id'),
@@ -458,17 +469,18 @@ an `Or` of dicts and answers an empty pair list itself, without a call; which of
 come back is the database's (integration only, never a unit test). The double scores in float64 by brute force; ties in
 conformance cases are built from identical vectors, and other cases keep scores at least 1e-6 apart (MongoDB's internal
 precision is not verified). The 18 cases of `integration/test_mongo_vectors.py` move into the contract suite's `N`
-class.
+class. MongoDB's vector filter refuses an empty `$in`, so the adapter drops the branches that can match nothing and
+answers `[]` itself when none is left. `memory_units` declares `embedding` as `vector(768)`, the space's dimension.
 
-**5.11 Large binary files and the record size limit.** The blob interface (methods 16-19). `blobs.py` keeps its
-rules in the core: it hashes while it streams into `blobs.write`, reads the bytes back through `blobs.open` in
-`STREAM_PIECE` pieces and compares hash and size, deletes on mismatch, then writes the `artifacts` row through
-`put`. The post-write `metadata.sha256` update on GridFS (`blobs.py:92`) goes: the row's `sha256` is the record of the
-hash, and nothing reads the metadata copy (map: one write, no read). Erasure by scope lists `blobs.of_scope(scope)`
-and deletes each, then marks the rows (ADR-105, unchanged). Two stored names stay in her data because renaming them
-is a data migration this ADR does not do: `storage: 'gridfs'` and the field `gridfs_id`; they live only in
-`records/artifacts.py` as constants (`STORED`, `BLOB_FIELD`), documented as stored names. Records stay at most 1 MiB
-(3.1); larger content goes to blobs as today.
+**5.11 Large binary files and the record size limit.** The blob interface (methods 16-19). `blobs.py` keeps its rules in
+the core: it hashes while it streams into `blobs.write`, reads the bytes back through `blobs.open` in `STREAM_PIECE`
+pieces and compares hash and size, deletes on mismatch, then writes the `artifacts` row through `put`. The post-write
+`metadata.sha256` update on GridFS (`blobs.py:92`) goes: the row's `sha256` is the record of the hash, and nothing reads
+the metadata copy (map: one write, no read). Erasure by scope lists `blobs.of_scope(scope)` and deletes each, then marks
+the rows (ADR-105, unchanged). Two stored names stay in her data because renaming them is a data migration this ADR does
+not do: `storage: 'gridfs'` and the field `gridfs_id`; they live only in `records/artifacts.py` as constants (`STORED`,
+`BLOB_FIELD`), documented as stored names. The GridFS file name (today the artifact key) is an optional `name` in the
+blob's metadata; B8 decides whether it stays. Records stay at most 1 MiB (3.1); larger content goes to blobs as today.
 
 **5.12 A collection chosen at run time** (46 in the code-facts table; the map's 127 hand rows include them). Three
 kinds, each in `hand.py`: an owner choosing among its own collections (`affect._insert`, `memory_tiers`,
@@ -658,7 +670,8 @@ Enforced by the test setup, from batch B0:
    environment, such as a confined command given the address through `dbread.environment`, has no server to reach
    either. Each lock is enough alone.
 3. A guard test (`tests/test_no_server.py`) asserts both, in the test process and in a child process, so a change that
-   undoes them fails the run.
+   undoes them fails the run. The stand-in ignores `tz_aware`, so in unit runs only the MongoDB adapter reads naive
+   times; a recovery of a record holding a datetime could be refused there, never on a server.
 4. After B13, unit runs register only the `memory` adapter; opening any other kind raises `AdapterNotInstalled`, and
    the MongoDB package is never loaded under `tests/`.
 
@@ -761,7 +774,7 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | B11a | `stickers`, `notes`, `watches`, `questions`, `switches`, `own_mute`, `group_members`, `developer_inbox`, `host_stops` | 120 | yes | 8.3 |
 | B11b | `memory_tiers` (with `carried`'s room rows), `carried`, `memory_pilot`, `crossing`, `affect` | 125 | yes | 8.3 |
 | B12 | her read facade: `dbread`, `development_database_read` (section 6); she gets the list first | 8 | yes | the facade's answers for the reads her scripts make today, written in the new form by the builder in a scratch file outside her package: same counts and rows as the old form |
-| B13 | `store.db` and pymongo leave the core outside the adapter module; repository guards: no `store.db`, no `pymongo`/`bson`/`gridfs` import and no `$`-key literal in `src/asuna` outside the adapter, `store.collection(name)` and `store.put(name, ...)` only in the owner of `name`; unit runs on the in-memory adapter, mongomock goes | guards | yes | the guards; the unit run on the double (its time measured, 7.4); the integration contract run |
+| B13 | `store.db` and pymongo leave the core outside the adapter module; repository guards: no `store.db`, no `pymongo`/`bson`/`gridfs` import and no `$`-key literal in `src/asuna` outside the adapter, `store.collection(name)` and `store.put(name, ...)` only in the owner of `name`, no collection `pending` (3.1); unit runs on the in-memory adapter, mongomock goes | guards | yes | the guards; the unit run on the double (its time measured, 7.4); the integration contract run |
 | B14 | the package split (5.15): `packages/databases/mongodb/`, `registerDatabase`, the registry, the settings keys, the Python locks, `pack_plugins`, `release.py`, the profile's package list | install path | yes | after the restart her `ensure` creates nothing and changes nothing (same MongoDB, same database, same records); `audit.verify_documents` passes; the start fails with `DATABASE_ADAPTER_NOT_INSTALLED` in a demo profile without the package |
 | B15 | the suite reset (7.4) | tests only | no | before and after: test count and run time on the double |
 
@@ -810,7 +823,9 @@ before its merge, as part of the lead's review of the batch (the owner is inform
    counts), of records missing a required unique field, of records whose BSON size and JSON size fall on different
    sides of 1 MiB. Rule: the single type present gives the kind (int and double: `number`; string: `text`; date:
    `time`; bool; array: `list`; object: `object`); nulls give `nullable`; two incompatible types, a missing required
-   field or a size disagreement stop the batch and are reported.
+   field or a size disagreement stop the batch and are reported. B1b's check is `ensure` as a dry run (to create,
+   make, drop, conflicting; validators) and these counts for the fields it declares; exit 0 clean, 1 something
+   differs, 2 not checked. On her data it needs `--max-ms 10000`: at 2000 three large collections stay unchecked.
 6. **Output**: numbers only (case name, n, same, differing, p50/p95 old and new, plan stages, type counts), to `<data>/private/adr104-evidence/<batch>/`; ids never leave her machine; the folder goes when the batch
    merges, except a manifest named in the ADR with its path and size.
 

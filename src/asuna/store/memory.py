@@ -367,6 +367,10 @@ class MemoryAdapter:
     def ensure_vectors(self, space, timeout=45):
         return True
 
+    def measure(self, record):
+        """A record's size against the store's limit: its canonical JSON."""
+        return record_bytes(record)
+
     # Reads.
 
     def _records(self, coll):

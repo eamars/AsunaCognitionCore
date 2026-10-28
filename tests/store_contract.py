@@ -676,10 +676,10 @@ class TestV:
 
     def test_V08_a_record_over_one_mebibyte_is_refused(self, store):
         t = store.collection('things')
-        overhead = len('{"_id":"x","loose":""}')
-        t.insert({'_id': 'x', 'loose': 'a' * (1024 * 1024 - overhead)})
-        error = refused(RecordTooLarge, lambda: t.insert({'_id': 'y', 'loose': 'a' * (1024 * 1024 - overhead + 1)}))
-        assert error.code == 'DOCUMENT_TOO_LARGE_USE_ARTIFACT' and t.get('y') is None
+        room = 1024 * 1024 - store.adapter.measure({'_id': 'x', 'loose': ''})       # the adapter's own measure
+        t.insert({'_id': 'x', 'loose': 'a' * room})
+        error = refused(RecordTooLarge, lambda: t.insert({'_id': 'y', 'loose': 'a' * (room + 1)}))
+        assert str(error) == 'DOCUMENT_TOO_LARGE_USE_ARTIFACT' and t.get('y') is None
 
 
 def unit(v):

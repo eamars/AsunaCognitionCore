@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 import time
 from urllib.parse import urlsplit
+from datetime import datetime, timezone
+from bson import BSON
 from bson.codec_options import CodecOptions
 from bson.objectid import ObjectId
 from bson.regex import Regex
@@ -34,6 +36,7 @@ VALIDATOR = {'$jsonSchema': {'bsonType': 'object', 'required': ['_id', 'schema_v
 BSON_TYPES = {'text': 'string', 'number': 'number', 'bool': 'bool', 'time': 'date'}
 # MongoDB's refusals of a change the stored record cannot take.
 REFUSED_CHANGES = {14: 'RECORD_NOT_A_NUMBER', 28: 'RECORD_PATH_NOT_OBJECT', 2: 'RECORD_NOT_A_LIST'}
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _BOUNDS = {'gt': '$gt', 'gte': '$gte', 'lt': '$lt', 'lte': '$lte'}
 # A condition no record meets and an upsert does not copy (an upsert's condition may not use $expr).
 _NEVER = {'_never': {'$type': 'minKey'}}
@@ -153,6 +156,16 @@ def _expression(value):
     if isinstance(value, list) and _has_now(value):
         return [_expression(v) for v in value]
     return {'$literal': value}
+
+
+def _measured(value):
+    if isinstance(value, Now):
+        return _EPOCH
+    if isinstance(value, dict):
+        return {k: _measured(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_measured(v) for v in value]
+    return value
 
 
 def _clocked(change):
@@ -278,6 +291,10 @@ class MongoAdapter:
         self.db = client.get_database(database, codec_options=CodecOptions(tz_aware=True),
                                       write_concern=WriteConcern(w='majority', j=True))
         self.blobs = Blobs(self.db)
+
+    def measure(self, record):
+        """A record's size against the store's limit: its BSON bytes (a `Now` counted as the time it becomes)."""
+        return len(BSON.encode(_measured(record)))
 
     # Schema.
 

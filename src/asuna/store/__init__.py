@@ -47,11 +47,12 @@ class Handle:
         records = [records] if isinstance(records, Mapping) else list(records)
         if not records:
             return None
-        return self.adapter.insert(self.name, [check_record(self.declared, r, now=True) for r in records],
+        return self.adapter.insert(self.name, [check_record(self.declared, r, now=True, measure=self.adapter.measure)
+                                                for r in records],
                                    bool(ordered))
 
     def replace(self, record, expected=None, keep=(), create=False):
-        record = check_record(self.declared, record)
+        record = check_record(self.declared, record, measure=self.adapter.measure)
         if expected is not None and (not is_number(expected)):
             raise QueryInvalid('QUERY_REVISION: expected 要是一个数（给的是 %r）' % (expected,))
         keep = tuple(keep)

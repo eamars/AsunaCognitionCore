@@ -377,7 +377,7 @@ The words the core describes records with: conditions, changes, sorts and totals
 - def `check_page`
 - def `check_group` — (the `by` fields, the total): `by` names declared value fields; the total is `Count()`, `Max(field)` or None.
 - def `record_bytes` — A record's size as canonical JSON (UTF-8).
-- def `check_record` — A copy of a whole record, validated: a text `_id`, every declared field of its kind, the required ones present, at most 1 MiB; `now`: `Now` may stand for a time (insert).
+- def `check_record` — A copy of a whole record, validated: a text `_id`, every declared field of its kind, the required ones present, at most 1 MiB by the adapter's `measure`; `now`: `Now` may stand for a time (insert).
 - def `holds_now`
 - def `check_change` — A change validated: a list of change words, each value copied with times in UTC ms; two words never write one path or a path inside another.
 - def `check_create` — The change of a write that may create its record, with the created record's `_id` as `OnCreate` when the condition does not give it.
@@ -468,6 +468,7 @@ The in-memory adapter: the meaning table of the store's words written as code, i
 - class `MemoryAdapter` — The adapter over one in-memory database (a new private one when none is given).
   - `ensure`
   - `ensure_vectors`
+  - `measure` — A record's size against the store's limit: its canonical JSON.
   - `get`
   - `find`
   - `count`
@@ -500,6 +501,7 @@ The MongoDB adapter: the store's words as MongoDB queries, the catalog's collect
   - `delete`
   - `of_scope`
 - class `MongoAdapter` — The adapter over one database of a client; `owns_client`: closing the adapter closes the client.
+  - `measure` — A record's size against the store's limit: its BSON bytes (a `Now` counted as the time it becomes).
   - `plan` — What `ensure` would do, read only: {'create': bool, 'make': [index names], 'drop': [index names], 'conflicts': [(index name, why)]}.
   - `validator` — Whether the stored collection has the validator `ensure` creates: 'same', 'other', 'none', 'absent' (no collection) or 'not declared' (the collection is not versioned).
   - `ensure`

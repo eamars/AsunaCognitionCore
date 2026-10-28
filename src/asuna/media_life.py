@@ -18,6 +18,7 @@ let go (`days_from`, else `created_at`); a kept one (`kept_at`) is not removed. 
 `sweep` deletes the rest once at start and then daily; it reports what it removed and never raises for one bad row.
 """
 from datetime import datetime, timedelta, timezone
+from . import clock
 
 PULLED_DAYS = 7
 LISTED_GRACE_HOURS = 24          # a candidate's bytes are stored a moment before its pool row
@@ -63,7 +64,7 @@ def sweep(store, now=None):
     from .received_files import KEEP_DAYS as RECEIVED_DAYS
     db = store.db
     bucket = GridFSBucket(db, bucket_name='artifact_blobs')
-    moment = now or datetime.now(timezone.utc)
+    moment = now or clock.now()
     cutoff = {PULLED: moment - timedelta(days=PULLED_DAYS),
               LISTED: moment - timedelta(hours=LISTED_GRACE_HOURS),
               OFFERED: moment - timedelta(days=KEEP_DAYS),

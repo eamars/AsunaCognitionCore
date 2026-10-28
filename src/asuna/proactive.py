@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import statistics
 from datetime import datetime, timedelta, timezone
+from . import clock
 
 try:                                  # 宿主按包加载
     from . import summary_trigger
@@ -54,7 +55,7 @@ REPORT_FIELDS = ('fire', 'signals', 'holds', 'dense', 'dense_median', 'dense_max
 # ── 配置：一个场景开不开、怎么开 ────────────────────────────────
 def now_ts():
     """评估用的单一时刻：调用方可注入固定钟点，检查里不谎称真等过冷却。"""
-    return datetime.now(timezone.utc).timestamp()
+    return clock.now().timestamp()
 
 
 
@@ -188,7 +189,7 @@ def decide(profile, limits, *, now_ts=None, can_run=True):
     holds, signals = [], []
     profile = profile or {}
     limits = limits or {}
-    now_ts = now_ts if now_ts is not None else datetime.now(timezone.utc).timestamp()
+    now_ts = now_ts if now_ts is not None else clock.now().timestamp()
     if not limits.get('enabled'):
         holds.append('not_enrolled')
     if profile.get('scene_kind') != 'group':

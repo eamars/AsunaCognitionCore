@@ -13,6 +13,7 @@ import json
 import threading
 import time
 
+from . import clock as core_clock   # `clock` is the injectable one below
 from . import summary_attribution, summary_trigger
 from .people import People
 from .evidence import canonical, sha
@@ -46,7 +47,7 @@ class DialogueSummarizer:
         self.scene_id = self.scene_ids[0] if self.scene_ids else None   # 兼容旧接线
         self.can_run = can_run
         # 判断“现在安静了多久”用的钟：默认墙上时钟，检查里可注入固定时刻。
-        self.clock = clock or (lambda: time.time())
+        self.clock = clock or (lambda: core_clock.now().timestamp())
         self.paused = threading.Event()
         self.next_attempt = {}      # 每场景的失败退避截止点（monotonic）
         self.failures = {}          # 每场景连续失败次数

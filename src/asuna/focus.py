@@ -10,9 +10,10 @@ groups (`active_groups`, default 4) is a soft limit: going past it works and say
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from .records import scenes as scene_records
 from .records import messages as message_records
+from . import clock
 
 ACTIVE_GROUPS = 4
 # What still wakes her in a resting group: words addressed to her, and the people she is waiting for.
@@ -68,7 +69,7 @@ def listing(store, persona, moment=None):
     """Her groups by state, with the last day's lines, in words for her."""
     from .people import People
     from . import places
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     people, rows = People(store, persona), {'active': [], 'resting': []}
     for scene_id, _, _ in places.groups(store.config):
         scene = scene_records.get(store, scene_id)

@@ -19,6 +19,7 @@ import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from .records import scenes as scene_records
+from . import clock
 
 SHOWN_HOURS = 24
 LISTED = 3                    # stops listed at most; the count says how many there were
@@ -201,7 +202,7 @@ def listed(store, moment=None):
     """The outages her home turn shows: each that came back within the last day, and each not yet shown in a turn
     that committed (`shown_at` None, however old), newest first. Rows from before ADR-101 carry no `shown_at` and keep
     the day alone."""
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     since = (moment - timedelta(hours=SHOWN_HOURS)).isoformat()
     return list(store.db.host_stops.find({'how': {'$in': list(OUTAGES)}, '$or': [
         {'back_at': {'$gte': since}}, {'shown_at': {'$exists': True, '$eq': None}}]}).sort('back_at', -1))
@@ -249,7 +250,7 @@ def block(store, zone, moment=None, persona=None, rows=None):
     """host_from_program for a home turn: the outages of the last day and those not yet shown (`listed`; killed from
     outside, crashed, or her worker down while the Host ran on), newest first, at most LISTED with how many there
     were, and the gate's failed looks of the last day, or None. `rows`: the outages already listed for this turn."""
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     since = (moment - timedelta(hours=SHOWN_HOURS)).isoformat()
     rows = listed(store, moment) if rows is None else rows
     out = {}

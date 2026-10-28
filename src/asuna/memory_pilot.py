@@ -21,6 +21,7 @@ import time
 import uuid
 from collections import Counter
 
+from . import clock
 from .evidence import canonical, sha
 from .retrieval import EMBED_OPENING_CHARS, refused, terms
 from .state import now
@@ -91,8 +92,8 @@ def own_items(store, persona):
 def prune(store, moment=None, days=TURN_ROWS_DAYS):
     """Delete the pilot's turn rows (and recall and failure rows) older than `days`; items and pairs stay. Their `at` is
     an ISO string, so a TTL index cannot do it. Returns how many went."""
-    from datetime import datetime, timedelta, timezone
-    cutoff = ((moment or datetime.now(timezone.utc)) - timedelta(days=days)).isoformat()
+    from datetime import timedelta
+    cutoff = ((moment or clock.now()) - timedelta(days=days)).isoformat()
     return store.db[COLLECTION].delete_many({'row': {'$in': ['turn', 'recall', 'failure']},
                                              'at': {'$lt': cutoff}}).deleted_count
 

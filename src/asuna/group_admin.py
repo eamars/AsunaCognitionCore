@@ -17,6 +17,7 @@ is "sent, not confirmed". A route may switch this off with `admin_actions: false
 from __future__ import annotations
 
 
+from . import clock
 from .evidence import canonical, sha
 from .state import Denied, now
 from .records import scenes as scene_records
@@ -192,9 +193,9 @@ def notes_block(docs, scene):
 def claim(store, channel_id):
     """One queued action for this channel's adapter, or None; it is marked SENDING with a fresh attempt."""
     import uuid
-    from datetime import datetime, timedelta, timezone
+    from datetime import timedelta
     from .channels import CHAT_LEASE_SECONDS
-    lease = (datetime.now(timezone.utc) - timedelta(seconds=CHAT_LEASE_SECONDS)).isoformat()
+    lease = (clock.now() - timedelta(seconds=CHAT_LEASE_SECONDS)).isoformat()
     if store.db.artifacts.find_one({'kind': 'group_action', 'channel_id': channel_id, 'state': 'SENDING',
                                     'claimed_at': {'$gte': lease}}, {'_id': 1}):
         return None                     # ADR-095: one out at a time, so they happen in the order she chose them

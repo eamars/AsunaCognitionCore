@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import Future, ThreadPoolExecutor
-from datetime import datetime, timezone
 from contextlib import ExitStack, nullcontext
 import json
 from pathlib import Path
@@ -20,6 +19,7 @@ import threading
 import time
 import uuid
 
+from . import clock
 from . import sandbox_backend, channel_kinds, errands
 from .application import Application
 from .host import RuntimeHost
@@ -1206,7 +1206,7 @@ class BusinessWorker:
             from .schedule_rules import offset_minutes
             zone = local_time.zone_of(self.app.store, record['scene_id'])
             return {**record, 'timezone': None if zone.get('zone_unavailable') else zone['name'],
-                    'utc_offset_minutes': offset_minutes(zone['tz'], datetime.now(timezone.utc))}
+                    'utc_offset_minutes': offset_minutes(zone['tz'], clock.now())}
         if method == 'ui.titles':
             # A browser in another language opened the Web UI (ui-language.js): her rhythm tasks follow it.
             from .schedule import set_titles
@@ -1506,7 +1506,7 @@ class NativeDevelopmentBridge:
                     project=result.get('project'), states=['APPLIED','HOST_RESTART_REQUIRED'],
                     besides=result['receipt_id']).each():
                 receipt_records.save_sink(self.store, {**older, 'state':'SUPERSEDED', 'superseded_by':result['receipt_id'],
-                    'superseded_at':datetime.now(timezone.utc).isoformat()},
+                    'superseded_at':clock.now().isoformat()},
                     expected=older['revision'], stream=older.get('task_id', older['_id']))
             if result['state'] == 'ACTIVE':
                 self.worker.host._complete_activations()

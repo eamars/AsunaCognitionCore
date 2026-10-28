@@ -10,6 +10,7 @@ memories, people's messages, names, her persona's own words for feelings) is sen
 from datetime import datetime
 import re
 
+from . import clock
 from .config import ago, character_id
 from .state import Denied
 from . import carried, channel_kinds, scene_links
@@ -381,7 +382,7 @@ class NativeMemory:
         view = ledger.description('owner_private')
         # "Now" sorts first: the mood is computed for this moment.
         rows = [{'id': 'affect:state', 'kind': 'affect', 'title': label('title.mood'), 'excerpt': mood_line(view),
-                 'updated_at': datetime.now().astimezone().isoformat()}]
+                 'updated_at': clock.now().astimezone().isoformat()}]
         events = list(self.store.db.affect_events.find({'persona': self.persona}).sort('ts', -1).limit(20))
         closed = {row['target'] for row in self.store.db.affect_amendments.find(
             {'target': {'$in': [event['_id'] for event in events]}, 'op': {'$in': ['close', 'void']}}, {'target': 1})}

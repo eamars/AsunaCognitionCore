@@ -8,9 +8,10 @@ is set, because local time and habits reveal the owner's time zone and routine.
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime
 import re
 
+from . import clock
 from .persona_model import effective, timezone as persona_timezone
 from . import visibility
 from .local_time import face
@@ -36,7 +37,7 @@ def in_window(local: datetime, window: str | None) -> bool:
 
 
 def rhythm_block(store, model, policy, cls, *, moment=None, owner_last_at=None):
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     zone, source = persona_timezone(model, policy, store.config)
     local = moment.astimezone(ZoneInfo(zone)) if ZoneInfo else moment
     if cls != visibility.OWNER_PRIVATE:
@@ -76,7 +77,7 @@ def episode_dates(store, episode_ids, zone):
 def selections(store, window_days, *, moment=None):
     """{memory id: [episode ids]} for memories actually selected into turns within the window."""
     from datetime import timedelta
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     since = (moment - timedelta(days=float(window_days or 7))).isoformat()
     out = {}
     for row in store.db.audit_events.find({'type': 'context.prepared', 'occurred_at': {'$gte': since}},

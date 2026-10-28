@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from . import visibility
 from .config import excerpt
 from .evidence import sha
@@ -96,7 +97,7 @@ def add(store, ep, persona, cls, args):
     person = found[0]['person']
     _id = 'watch-' + sha((persona + '|' + person).encode())[:12]
     current = store.db.watches.find_one({'_id': _id})
-    moment = datetime.now(timezone.utc)
+    moment = clock.now()
     active = store.db.watches.count_documents({'persona': persona, 'state': 'on', 'until': {'$gt': moment.isoformat()},
                                                '_id': {'$ne': _id}})
     if active >= WATCH_MAX:
@@ -125,7 +126,7 @@ def seen(store, person_id, moment=None):
     persona = _persona(store)
     if not persona or not person_id:
         return None
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     row = store.db.watches.find_one({'persona': persona, 'person': _person(store, person_id), 'state': 'on',
                                      'until': {'$gt': moment.isoformat()}})
     if not row:

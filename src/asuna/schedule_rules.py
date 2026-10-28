@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, time as wall_time, timedelta, timezone
+from . import clock
 
 try:
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -31,7 +32,7 @@ WEEKDAY_NAMES = ('周一', '周二', '周三', '周四', '周五', '周六', '�
 
 
 def now_utc():
-    return datetime.now(timezone.utc)
+    return clock.now()
 
 
 def _aware(moment):
@@ -63,7 +64,7 @@ def _zone(name, offset_minutes=None):
             pass
     if type(offset_minutes) is int and -840 <= offset_minutes <= 840:
         return {'tz': timezone(timedelta(minutes=offset_minutes)), 'zone_unavailable': name}
-    return {'tz': datetime.now().astimezone().tzinfo, 'zone_unavailable': name}
+    return {'tz': clock.now().astimezone().tzinfo, 'zone_unavailable': name}
 
 
 def scene_timezone(config, scene, plan=None):
@@ -167,7 +168,7 @@ def _face_to_iso(value):
     if not found:
         return value
     year, month, day, hour, minute = found.groups()
-    today = datetime.now(timezone.utc)
+    today = clock.now()
     if year is None:
         year = today.year
         try:

@@ -51,18 +51,3 @@ tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-2
 tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-24-pairs and kind] | vector search ($vectorSearch and search indexes)
 tests/test_store_contract.py::TestN::test_N17_ties_come_in_id_order[stand-in] | vector search ($vectorSearch and search indexes)
 tests/test_store_contract.py::TestN::test_N18_empty_any_of_matches_nothing_and_bad_queries_are_refused[stand-in] | vector search ($vectorSearch and search indexes)
-
-# Not gaps of the stand-in: one defect class its speed shows. This machine's clock moves in steps of 1 ms, and the
-# stand-in writes faster than that, so two records written one after the other can carry the same time; code that
-# decides by "the latest" or "the oldest" time then decides by whatever breaks the tie (often a hash _id). On the
-# server each write took longer than a step, so these tests never met a tie. On her system a tie needs two writes
-# within one millisecond (a tight loop over a LAN round trip): rare, possible. The fix is the class's, not each
-# test's (one clock in the core that never repeats a time), named as its own change; each line below goes with it.
-# Proven for the first two (with a strictly increasing clock: memory_tiers 9 of 12 runs failed before, 0 of 12
-# after; the journal's equal created_at seen directly); the last two are flaky the same way, not yet proven.
-tests/test_journal.py::test_a_stale_write_and_a_ledger_only_op_are_refused | nothing: a defect shows (equal times at one clock tick; the latest revision taken by a hash _id)
-tests/test_memory_tiers.py::test_when_she_lets_one_go_over_the_cap_nothing_else_lapses | nothing: a defect shows (equal times at one clock tick decide what lapses over the cap)
-tests/test_context_budget.py::test_settlement_lists_the_notes_due_for_tidying_most_pressing_first | nothing: a defect shows, suspected (fails 7 of 12 runs alone; the same tie class, not yet proven)
-tests/test_adr097_cue.py::test_too_few_lines_or_a_place_that_lets_nothing_out_gives_no_cue | nothing: a defect shows, suspected (fails 1 of 12 runs alone; the same tie class, not yet proven)
-tests/test_adr009_p5_rhythm.py::test_any_home_turn_counts_for_the_gap_and_only_news_for_her_lifts_it | nothing: a defect shows (a line received in the same 1 ms tick as her last turn is not after it, so it is not news; 2 of 7 full runs, 0 of 15 alone)
-tests/test_files_outbox.py::test_a_group_is_offered_her_files_and_a_file_goes_as_its_own_message | nothing: a defect shows (two files in one clock tick, newest first by time; 2 of 10 runs alone on main, 0 of 15 on the clock-tie fix's branch)

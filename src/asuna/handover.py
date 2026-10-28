@@ -13,7 +13,7 @@ gets the full result. When the short version fails too, the developer is told an
 """
 from __future__ import annotations
 
-import time
+from . import clock
 
 from .records import episodes as episode_records
 from .records import tasks as task_records
@@ -50,7 +50,7 @@ def lost(store, on_its_way):
 
 def orphaned(store, running, moment=None):
     """Running tasks whose lease expired while this worker is not running them."""
-    moment = time.time() if moment is None else moment
+    moment = clock.now().timestamp() if moment is None else moment
     rows = task_records.lease_expired(store, moment).each()
     return [task for task in rows if task['_id'] != running]
 

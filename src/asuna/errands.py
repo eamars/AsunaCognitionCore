@@ -7,8 +7,9 @@ prefix (same system prompt, same tool list). The tools that conversation lists a
 the copy, which is retired when the errand ends. The destination's next turn hears once that home sent her and what
 she said there (`told_block`); the request itself never goes there.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
+from . import clock
 from .evidence import sha
 from .state import now
 from .records import messages as message_records
@@ -80,7 +81,7 @@ def late(row, moment=None):
         queued = datetime.fromisoformat(str(row.get('received_at')).replace('Z', '+00:00'))
     except ValueError:
         return False
-    return (moment or datetime.now(timezone.utc)) - queued > timedelta(minutes=PATIENCE_MINUTES)
+    return (moment or clock.now()) - queued > timedelta(minutes=PATIENCE_MINUTES)
 
 
 def skipped(event, source, previous, moment=None):

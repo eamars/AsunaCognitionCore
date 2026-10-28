@@ -21,6 +21,7 @@ import json
 import math
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from . import visibility
 from .evidence import canonical, sha
 from .records import scenes as scene_records
@@ -326,7 +327,7 @@ def room_block(store, persona, cls, scene_id):
         return None
     store.db[COLLECTION].update_one({'_id': key}, {'$set': {'row': 'room_told', 'persona': persona, 'scene_id': scene_id,
                                                             'words': words, 'version': ROOM_VERSION,
-                                                            'at': datetime.now(timezone.utc).isoformat()}}, upsert=True)
+                                                            'at': clock.now().isoformat()}}, upsert=True)
     return words
 
 
@@ -499,7 +500,7 @@ def count_days(store, persona, moment=None):
     when the tiers went on and at most COUNT_DAYS; day rows older than COUNT_DAYS go, carried_sections (each
     section's first and last time carried) stays. Returns {'days', 'rows', 'deleted'}."""
     from . import memory_tiers
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     zone = _zone(store, persona)
     today = moment.astimezone(zone).date()
     oldest = today - timedelta(days=COUNT_DAYS)

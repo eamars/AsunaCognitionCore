@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 from pymongo.errors import DuplicateKeyError
 
+from . import clock
 from .evidence import canonical, sha
 from .state import Denied, now
 from . import visibility
@@ -413,7 +414,7 @@ class AffectLedger:
         return list(self.store.db.affect_amendments.find({'persona': self.persona}))
 
     def projection(self, at=None, who=None):
-        return project(self.model, self.events(), self.amendments(), at or datetime.now(timezone.utc), who=who)
+        return project(self.model, self.events(), self.amendments(), at or clock.now(), who=who)
 
     def person_feelings(self, person_id, cls, at=None):
         """ADR-086 D1: her live feelings toward this person, in words; [] when the ledger is off or none is left."""

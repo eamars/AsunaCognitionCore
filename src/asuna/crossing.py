@@ -42,6 +42,7 @@ import json
 from collections import Counter
 from datetime import datetime, timezone
 
+from . import clock
 from . import key_words
 from .config import DATA, character_id, excerpt
 from .records import scenes as scene_records
@@ -86,23 +87,24 @@ MISSING = {'gone': '%s#%s：没有这一句', 'here': '%s#%s：这一句就在�
            'never': '%s#%s：那个地方的话不外带'}
 OWN_JUDGMENT = '我自己的判断'
 
-_cache = {'mtime': None, 'value': None}
+_cache = {'key': None, 'value': None}
 
 
 def settings(path=None):
     """The deployment's rules: {default, places, kinds, history_excluded}, defaults filled; a malformed entry is
-    dropped (an unknown rule reads as the default)."""
+    dropped (an unknown rule reads as the default). Kept while the file's text is the same (a small read each call:
+    a file's modification time moves in the system clock's steps, so two writes in one step would look alike)."""
     path = path or PATH
     try:
-        mtime = path.stat().st_mtime
+        text = path.read_bytes()
     except OSError:
-        mtime = None
-    if _cache['mtime'] != (path, mtime):
+        text = None
+    if _cache['key'] != (path, text):
         raw = {}
-        if mtime is not None:
+        if text is not None:
             try:
-                raw = json.loads(path.read_text(encoding='utf-8'))
-            except (OSError, ValueError):
+                raw = json.loads(text.decode('utf-8'))
+            except (UnicodeDecodeError, ValueError):
                 raw = {}
         raw = raw if isinstance(raw, dict) else {}
         default = raw.get('default') if raw.get('default') in RULES else DEFAULT
@@ -113,7 +115,7 @@ def settings(path=None):
         numbers = {name: raw[name] if type(raw.get(name)) is int and low <= raw[name] <= high else default_value
                    for name, (default_value, low, high) in NUMBERS.items()}
         lines = raw.get('cue_lines') if raw.get('cue_lines') in CUE_LINES else CUE_LINES[0]
-        _cache.update(mtime=(path, mtime), value={'default': default, 'places': places, 'kinds': kinds,
+        _cache.update(key=(path, text), value={'default': default, 'places': places, 'kinds': kinds,
                                                   'history_excluded': excluded, 'cue_lines': lines, **numbers})
     return _cache['value']
 
@@ -147,7 +149,7 @@ def _day(value, zone):
     except ValueError:
         return ''
     local = moment.astimezone(zone['tz'] if zone else timezone.utc)
-    current = datetime.now(timezone.utc).astimezone(local.tzinfo)
+    current = clock.now().astimezone(local.tzinfo)
     return ('%d/' % local.year if local.year != current.year else '') + '%d/%d' % (local.month, local.day)
 
 
@@ -262,7 +264,7 @@ def _postings(units, groups, times, since):
 
 def _since(moment=None):
     from datetime import timedelta
-    return ((moment or datetime.now(timezone.utc)) - timedelta(days=number('window_days'))).isoformat()
+    return ((moment or clock.now()) - timedelta(days=number('window_days'))).isoformat()
 
 
 def vocabulary(store, ensure=False):
@@ -595,7 +597,7 @@ def cue(store, persona, scene, event, history, own, zone, moment=None, *, free=T
                 first[word] = (line_seq, key_words.found(word, line) or word)
     if not first:
         return None
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     recent = (moment - timedelta(minutes=number('repeat_minutes'))).isoformat()
     words = [word for word in first if not store.db[FIRES].find_one(
         {'kind': 'cue', 'scene_id': scene['_id'], 'word': word, 'at': {'$gte': recent}}, {'_id': 1})]
@@ -633,7 +635,7 @@ def fired(store, persona, what, scene, event, moment=None, *, episode=None, **fi
     line = message_records.get(store, 'in-' + episode, fields=['scene_seq']) or {}
     store.db[FIRES].insert_one({'_id': 'fire:' + uuid.uuid4().hex, 'kind': what, 'persona': persona,
                                 'scene_id': scene['_id'], 'event_id': event.get('event_id'), 'episode_id': episode,
-                                'scene_seq': line.get('scene_seq'), 'at': (moment or datetime.now(timezone.utc)).isoformat(),
+                                'scene_seq': line.get('scene_seq'), 'at': (moment or clock.now()).isoformat(),
                                 **fields})
 
 
@@ -671,7 +673,7 @@ def _month_day(value, zone):
 def prune(store, moment=None):
     """At settlement: fire rows older than FIRES_DAYS go. Returns how many."""
     from datetime import timedelta
-    cutoff = ((moment or datetime.now(timezone.utc)) - timedelta(days=FIRES_DAYS)).isoformat()
+    cutoff = ((moment or clock.now()) - timedelta(days=FIRES_DAYS)).isoformat()
     return store.db[FIRES].delete_many({'kind': {'$in': list(FIRE_KINDS)}, 'at': {'$lt': cutoff}}).deleted_count
 
 

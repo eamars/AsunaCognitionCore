@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import statistics
 from datetime import datetime, timezone
+from . import clock
 
 try:                                  # 宿主按包加载
     from .discussion_digest import (CONFIRM_CUES, CORRECTION_CUES, QUESTION_CUES, QUESTION_MARKS,
@@ -174,7 +175,7 @@ def closure_cue(rows):
 
 def decide(profile, pending, *, pooled_prior=None, now_ts=None, window_rows, row_char_cap=4000):
     """该不该现在整理这一批。返回带全部中间量的决定，调用方原样进证据／条目。"""
-    now_ts = now_ts if now_ts is not None else datetime.now(timezone.utc).timestamp()
+    now_ts = now_ts if now_ts is not None else clock.now().timestamp()
     profile = profile or {}
     pooled_prior = pooled_prior or {}
     quiet = profile.get('quiet_after') or pooled_prior.get('quiet_after') or SEED_QUIET_SECONDS

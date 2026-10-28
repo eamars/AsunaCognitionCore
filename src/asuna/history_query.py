@@ -781,7 +781,7 @@ def query_history(retrieval, store, scene, query="", *, person=None, author=None
                 "more": False, "semantic": {"ok": False, "why": "not_attempted", "candidates": 0,
                                             "manifest": None}, "dropped": {},
                 "fallback": _fallback_state()}
-    ref = _parse(now) or datetime.utcnow()
+    ref = _parse(now) or clock.now().replace(tzinfo=None)
     low = since or _iso(ref - timedelta(days=max(int(window_days), 1)))
     window = (low, until or "9999-12-31T23:59:59Z")
     page = max(1, min(int(limit or DEFAULT_LIMIT), MAX_LIMIT))
@@ -946,6 +946,7 @@ import re as _re
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import receipts as receipt_records
+from . import clock
 
 
 try:                                  # 宿主内：复用已有的 Denied 语义（409 失败回执走原路径）

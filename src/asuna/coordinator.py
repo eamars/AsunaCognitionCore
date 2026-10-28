@@ -21,6 +21,7 @@ from dataclasses import replace
 import json
 import threading
 
+from . import clock
 from .config import prompt_path, character_id, excerpt
 from .context import ContextBuilder
 from .evidence import canonical, sha
@@ -740,11 +741,10 @@ class Coordinator:
         if not continued:
             # ADR-053: decided once, here, and kept on the task: a context idle past the action route's limit is not
             # carried on (its provider has most likely dropped the cache); the continuation starts fresh.
-            from datetime import datetime, timezone
             from .tasks import idle_minutes, last_used
             from . import action_tiers
             limit=idle_minutes(self.store.config,(task.get('tier') or {}).get('ran'))
-            idle=(datetime.now(timezone.utc)-last_used(task)).total_seconds()/60
+            idle=(clock.now()-last_used(task)).total_seconds()/60
             fresh={'after_minutes':int(idle),'report_of':task['_id'],'limit':limit} if idle>limit else None
             tier,said=action_tiers.carried(task.get('tier'),fresh,self._zone(ep))
             binding=(f"task:{task_id}:{ep['scope_key']}:{ep['policy_epoch']}:1" if fresh else

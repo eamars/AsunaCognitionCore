@@ -8,8 +8,8 @@ reported. Deterministic and program-side: nothing runs while turns succeed.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
 
+from . import clock
 from . import developer_inbox
 from .records import scenes as scene_records
 
@@ -32,7 +32,7 @@ def cause(error):
 
 def turn_failed(store, ep, error, now=None):
     """Report a failed turn to the developer and mark its conversation for her next turn there."""
-    moment = now or datetime.now(timezone.utc)
+    moment = now or clock.now()
     name, kind = cause(error), ep.get('episode_kind') or 'external'
     row = developer_inbox.leave(store, ep.get('persona') or store.config['chat']['persona'], developer_inbox.NOTE,
                                 DEV_TEXT % (KINDS.get(kind, kind), name, ep.get('scene_id'), ep.get('_id')),

@@ -176,7 +176,6 @@ The worker's store: every write goes through `Store.put` with an expected revisi
 - def `content_digest`
 - def `commit_payload` — state.commit body: the document itself up to 16 KB, otherwise a reference (ADR-009 D-4).
 - def `content_ref` — {content_sha256, bytes} for model output kept elsewhere (receipt or native transcript).
-- def `now`
 - class `Conflict`
 - class `Denied`
 - class `Store`
@@ -197,6 +196,15 @@ The worker's store: every write goes through `Store.put` with an expected revisi
   - `head`
   - `mutate`
   - `public_messages`
+
+## `clock`
+
+[src/asuna/clock.py](../../src/asuna/clock.py)
+
+The core's one clock: the time now, in UTC, never the same twice in this process.
+
+- def `now` — An aware UTC datetime later than every one this process was given before.
+- def `stamp` — now() as the ISO text records keep, always with its microseconds, so that text order is time order.
 
 ## `audit`
 

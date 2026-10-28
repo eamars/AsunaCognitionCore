@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from . import clock
 from .state import Conflict, now
 from .records import scenes as scene_records
 
@@ -32,7 +33,7 @@ MAX_SECONDS = 400 * 86400                          # an end further away than th
 
 
 def _moment(moment=None):
-    return moment or datetime.now(timezone.utc)
+    return moment or clock.now()
 
 
 def _iso(epoch):
@@ -114,7 +115,7 @@ def receive(store, channel_id, body):
     for key in ('until', 'at'):
         value = body.get(key)
         if value is not None and (isinstance(value, bool) or not isinstance(value, int)
-                                  or not 0 < value < datetime.now(timezone.utc).timestamp() + MAX_SECONDS):
+                                  or not 0 < value < clock.now().timestamp() + MAX_SECONDS):
             raise ValueError('OWN_MUTE_INVALID: %s 要是平台给的秒数时间（给的是 %r）' % (key, value))
         epochs[key] = _iso(value) if value else None
     operator = body.get('operator_id')

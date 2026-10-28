@@ -6,17 +6,14 @@ left before that are moved into closed questions (questions.migrate).
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
 
+from . import clock
 from . import visibility
 from .evidence import canonical, sha
 
 WAKE, NOTE = 'wake', 'note'
 TEXT_CHARS = 800
 
-
-def _now():
-    return datetime.now(timezone.utc)
 
 
 def leave(store, persona, level, text, *, key, source):
@@ -26,7 +23,7 @@ def leave(store, persona, level, text, *, key, source):
     if row:
         return row
     row = store.put('developer_inbox', {'_id': message_id, 'persona': persona, 'level': level, 'text': text,
-                                        'state': 'new', 'source': source, 'created_at': _now().isoformat(),
+                                        'state': 'new', 'source': source, 'created_at': clock.now().isoformat(),
                                         'scope_key': visibility.owner_private_scope(persona)}, stream=message_id)
     store.audit(message_id, 'developer.message', {'level': level, 'chars': len(text), **source},
                 visibility.owner_private_scope(persona))
@@ -46,5 +43,5 @@ def mark(store, message_id, state):
     row = store.db.developer_inbox.find_one({'_id': message_id})
     if not row:
         raise ValueError('DEVELOPER_MESSAGE_UNKNOWN: 没有 %s' % message_id)
-    return store.put('developer_inbox', {**row, 'state': state, state + '_at': _now().isoformat()},
+    return store.put('developer_inbox', {**row, 'state': state, state + '_at': clock.now().isoformat()},
                      expected=row['revision'], stream=message_id)

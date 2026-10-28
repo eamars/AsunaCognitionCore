@@ -28,6 +28,7 @@ from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import sessions as session_records
 from .records import plans as plan_records
+from . import clock
 
 TABLES_VERSION = 1
 # Average incoming lines a day over the last week → minutes of quiet before condensing (measured by the character,
@@ -128,7 +129,7 @@ def main_session(store, scene, persona):
 
 # ---- her choice -------------------------------------------------------------------------------------------------
 def mark(store, scene, ep, moment=None):
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     scene_records.want_condense(store, scene['_id'], {
         'at': moment.isoformat(), 'episode_id': ep['_id'], 'turn': ep.get('turn_kind') or ep.get('episode_kind')})
     store.audit(ep['_id'], 'condense.wanted', {'scene_id': scene['_id']}, ep['scope_key'])
@@ -203,7 +204,7 @@ def look(store, persona, compact, moment=None, size=None, offer_notes=None):
     compact(session_id, scene_id, cwd) and size(session_id, scene_id, cwd) return the plugin's answer dicts;
     offer_notes(scene) opens the notes visit and returns its event id, or None when no visit can be opened there."""
     from . import places, switches
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     done = []
     for scene in watched(store):
         wanted = scene.get('condense_wanted')
@@ -256,7 +257,7 @@ def condensed_block(store, scene, event_id, moment=None):
     if not told:
         scene_records.told_condensed(store, scene['_id'], scene['condensed_at'], event_id)
     from .config import ago
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     hours = max(0.0, (moment - _at(scene['condensed_at'])).total_seconds() / 3600)
     return CONDENSED_NOTE % (ago(hours), CONDENSED_BY.get(scene.get('condensed_by'), CONDENSED_BY['mark']))
 
@@ -305,7 +306,7 @@ def phrases(store, scene, persona, since, moment=None):
     from .config import character_id
     from .documents import DocumentStore
     from .group_admin import notes_slug
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     me = character_id(store.config)
     week = (moment - timedelta(days=WEEK_DAYS)).isoformat()
     since = (since or (moment - timedelta(days=WEEK_DAYS))).isoformat()

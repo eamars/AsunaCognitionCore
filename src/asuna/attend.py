@@ -22,8 +22,9 @@ prefix stays as it was.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
+from . import clock
 from .caught_up import said_at
 from .config import ago, character_id, excerpt, prompt_path
 from .records import messages as message_records
@@ -120,7 +121,7 @@ def _amount(count):
 def recent(store, scene, until_seq, now_ts=None):
     """(lines as she reads them, words for how long since she spoke here and how much came since)."""
     from .people import People
-    now_ts = now_ts or datetime.now(timezone.utc).timestamp()
+    now_ts = now_ts or clock.now().timestamp()
     me = character_id(store.config)
     mine = message_records.spoken(store, scene['_id'], author=me).first(newest_first=True,
                                                                           fields=['scene_seq', 'receipt_at'])

@@ -26,7 +26,8 @@ from __future__ import annotations
 import collections
 import hashlib
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
+from . import clock
 
 from .records import episodes as episode_records
 
@@ -101,7 +102,7 @@ def table(model, policy, config, moment=None):
     from zoneinfo import ZoneInfo
     from .persona_model import effective, timezone as persona_timezone
     from .rhythm import in_window
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     zone, _ = persona_timezone(model, policy, config)
     try:
         local = moment.astimezone(ZoneInfo(zone))
@@ -164,7 +165,7 @@ def review(store, persona, occurrence, moment=None):
     """dice_review_from_program: every roll since her last review (not this one), with what each beat did."""
     from .config import excerpt
     from .render import model_and_policy
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     floor = (moment - timedelta(days=REVIEW_DAYS)).isoformat()
     rolled = {'type': 'presence.rolled', 'occurred_at': {'$gte': floor}, 'payload.occurrence': {'$ne': occurrence}}
     last = store.db.audit_events.find_one({**rolled, 'payload.outcome': 'review_dice', 'payload.reaches': True},

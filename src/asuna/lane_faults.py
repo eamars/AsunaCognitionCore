@@ -17,6 +17,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from .store.words import Increase, OnCreate, Range, Set
+from . import clock
 
 LANES = ('inbound', 'chat', 'bulk', 'receipts', 'transcriber', 'video', 'watchdog')
 CLASS_CHARS = re.compile(r'[A-Za-z0-9_.:-]{1,80}')
@@ -29,7 +30,7 @@ FUTURE = timedelta(hours=1)
 
 def hour_of(moment=None):
     """The UTC hour a fault is counted in, as `YYYY-MM-DDTHH`."""
-    return (moment or datetime.now(timezone.utc)).strftime(HOUR_FORMAT)
+    return (moment or clock.now()).strftime(HOUR_FORMAT)
 
 
 def _name(row, field):
@@ -56,7 +57,7 @@ def receive(store, channel_id, body):
     rows = body.get('counts') if isinstance(body, dict) else None
     if set(body or {}) - {'counts'} or not isinstance(rows, list) or not 1 <= len(rows) <= MAX_ROWS:
         raise ValueError('FAULTS_INVALID: counts 要是 1–%d 条的列表' % MAX_ROWS)
-    now = datetime.now(timezone.utc)
+    now = clock.now()
     checked = []
     for row in rows:
         if not isinstance(row, dict) or set(row) - {'lane', 'stage', 'error', 'hour', 'count'}:
@@ -77,7 +78,7 @@ def receive(store, channel_id, body):
 
 def record(store, channel_id, lane, stage, error, moment=None, count=1):
     """Count `count` faults of one signature in its hour (the current one unless `moment` is given)."""
-    now = datetime.now(timezone.utc)
+    now = clock.now()
     start = (moment or now).replace(minute=0, second=0, microsecond=0)
     row = (lane, stage, error, start.strftime(HOUR_FORMAT), start, int(count))
     for name in row[:3]:
@@ -97,7 +98,7 @@ def _count(store, channel_id, lane, stage, error, hour, start, count, now):
 
 
 def _cutoff(now):
-    return (now or datetime.now(timezone.utc)) - timedelta(days=KEEP_DAYS)
+    return (now or clock.now()) - timedelta(days=KEEP_DAYS)
 
 
 def _sweep(store, now, path):

@@ -25,6 +25,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from .config import excerpt
 from .evidence import canonical, sha
 from .state import Conflict, now
@@ -73,9 +74,6 @@ RETAKEN = '这个问题早就结束了；took 换成了你这次写的（原来�
 KEEP_HINT = ('要记下学到的：别人告诉你的，写的时候 from 写 别人说的；你自己的判断被回答证实了，用 replace_section '
              '改写它，from 写 查过的，依据写问过谁、几点、问题 id。')
 
-
-def _now():
-    return datetime.now(timezone.utc)
 
 
 def _at(value):
@@ -158,7 +156,7 @@ def _open_here(store, scene_id):
 def wants_look(store, scene, person_id, moment=None):
     """Whether this person's unaddressed line gets her a look: a question of hers here waits, within LOOK_MINUTES of
     being asked, and this person has not had a look for it yet."""
-    moment = moment or _now()
+    moment = moment or clock.now()
     for row in _open_here(store, scene['_id']):
         asked = _at(row['asked_at'])
         if not asked or moment > asked + timedelta(minutes=LOOK_MINUTES):
@@ -197,7 +195,7 @@ def group_block(store, persona, scene, moment=None):
     """questions_from_program in a group: her questions here, by id, when asked, how long she waits, who answered;
     and once each one the program closed here, with how it ended."""
     from .schedule_rules import line_stamp, scene_timezone
-    moment = moment or _now()
+    moment = moment or clock.now()
     rows = [refresh(store, row, moment) for row in _open_here(store, scene['_id'])]
     rows = sorted((row for row in rows if row.get('state') == 'open'), key=lambda row: row['asked_at'], reverse=True)
     more = len(rows) - SHOWN                  # the newest only: a long list buries that something is still open (her ask)
@@ -306,7 +304,7 @@ def _source_now(store, qid, source, persona, moment):
 
 def refresh(store, row, moment=None):
     """Bring one question up to date with what came back; closes it when it has run past its end. Returns the row."""
-    moment = moment or _now()
+    moment = moment or clock.now()
     if row.get('state') != 'open':
         return row
     sources, changed, events = [], False, []
@@ -412,7 +410,7 @@ def migrate(store, persona):
 def block(store, persona, scene_id, moment=None, opening=None):
     """questions_from_program at home: her open questions, and once in this conversation each one the program closed;
     None when there are none. `opening`: the question whose note opened this turn (its text is in that note)."""
-    moment = moment or _now()
+    moment = moment or clock.now()
     from .config import excerpt
     # Every open one is brought up to date, shown or not: one past its end closes now, not when it reaches the top.
     rows = [refresh(store, row, moment) for row in store.db.questions.find({'persona': persona, 'state': 'open'})]
@@ -487,7 +485,7 @@ def read(store, persona, qid, moment=None, outside=False):
 
 def history(store, persona, scene_id, name, moment=None):
     """Her last asks to one place (or the action brain) in READ_DAYS: when, answered or not, how long, her took."""
-    moment = moment or _now()
+    moment = moment or clock.now()
     since = (moment - timedelta(days=READ_DAYS)).isoformat()
     def here(source):
         return source['kind'] == 'action' if scene_id is None else source.get('scene_id') == scene_id
@@ -525,12 +523,12 @@ def close(store, persona, qid, took, moment=None):
         before = (row.get('closed') or {}).get('took', '')
         if not took or took == before:
             return row, '这个问题已经结束了（%s）。' % before
-        row = store.put('questions', {**row, 'closed': {**row['closed'], 'took': took, 'retaken_at': (moment or _now()).isoformat()}},
+        row = store.put('questions', {**row, 'closed': {**row['closed'], 'took': took, 'retaken_at': (moment or clock.now()).isoformat()}},
                         expected=row['revision'], stream=row['_id'])
         store.audit(row['_id'], 'question.retaken', {'question': row['_id'], 'chars': len(took)}, row['scope_key'])
         return row, RETAKEN % before
     row = store.put('questions', {**row, 'state': 'closed',
-                                  'closed': {'at': (moment or _now()).isoformat(), 'by': 'her', 'took': took}},
+                                  'closed': {'at': (moment or clock.now()).isoformat(), 'by': 'her', 'took': took}},
                     expected=row['revision'], stream=row['_id'])
     store.audit(row['_id'], 'question.closed', {'question': row['_id'], 'by': 'her', 'chars': len(took)}, row['scope_key'])
     who = [answer.get('by') for source in row['sources'] for answer in source.get('answers') or [] if answer.get('by')]

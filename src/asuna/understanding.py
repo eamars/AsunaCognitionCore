@@ -19,9 +19,10 @@ One-to-one conversations keep the `relationship` block as before.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from .records import scenes as scene_records
 from .records import messages as message_records
+from . import clock
 
 PERSON_SCOPE = 'person'
 LAYERS = ('person', 'here')
@@ -66,7 +67,7 @@ def _written(store, revision, moment):
 
 def person_view(store, person_id, here_scope, head, moment=None):
     """The person layer as she reads it: the fixed line first, then her text and where it was last written."""
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     others = _elsewhere(store, person_id, here_scope)
     view = {'first': PART + (PART_ELSEWHERE % others if others else '') + '。'}
     if not head:

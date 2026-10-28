@@ -9,6 +9,7 @@ import difflib
 import html
 import json
 from pathlib import Path
+from . import clock
 from .evidence import canonical,sha
 from .state import Store,Denied,content_digest,without_derived
 
@@ -35,9 +36,9 @@ CAP_BYTES=6*10**9
 
 
 def _latest(store):
-    """The _ids of the newest record of each LATEST_KEPT kind in each stream: never pruned."""
+    """The _ids of the newest record of each LATEST_KEPT kind in each stream (by the stream's seq): never pruned."""
     return [row['id'] for row in store.db.audit_events.aggregate([
-        {'$match':{'type':{'$in':list(LATEST_KEPT)}}},{'$sort':{'occurred_at':-1}},
+        {'$match':{'type':{'$in':list(LATEST_KEPT)}}},{'$sort':{'seq':-1}},
         {'$group':{'_id':{'type':'$type','stream':'$stream_id'},'id':{'$first':'$_id'}}}])]
 
 
@@ -46,9 +47,9 @@ def prune(store, moment=None, cap=None):
     `audit.pruned` record, also when it deleted nothing (her ask, 2026-10-20: a run that found nothing and no run look
     alike otherwise): up to when, how many by which rule, the audit's records and bytes before and after, how long."""
     import time
-    from datetime import datetime,timedelta,timezone
+    from datetime import timedelta
     started=time.monotonic()
-    moment=moment or datetime.now(timezone.utc)
+    moment=moment or clock.now()
     cap=CAP_BYTES if cap is None else cap
     first=store.db.command('collStats','audit_events')
     keep=_latest(store)

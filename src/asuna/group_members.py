@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from . import channel_kinds
 from .people import People, safe_name
 from .records import scenes as scene_records
@@ -142,7 +143,7 @@ def block(store, scene, persona, moment=None):
     doc = store.db.group_members.find_one({'_id': scene['_id']})
     if not doc or not doc.get('members'):
         return None
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     platform = channel_kinds.of(scene['_id'])
     people = People(store, persona)
     known = {}
@@ -183,7 +184,7 @@ def find(store, scene, persona, query, moment=None):
     doc = store.db.group_members.find_one({'_id': scene['_id']})
     if not doc:
         raise ValueError('MEMBERS_NOT_AVAILABLE: 这个群还没有成员名单（适配器还没拉过，或这个群没开）；重试也一样，等名单来了再找')
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     needle = query.casefold()
     hits = [m for m in doc['members'] if needle in m.get('nickname', '').casefold() or needle in m.get('card', '').casefold()]
     hits.sort(key=lambda m: -(m.get('last_sent_time') or 0))

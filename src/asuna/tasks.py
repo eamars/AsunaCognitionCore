@@ -16,6 +16,7 @@ import traceback
 import uuid
 from contextlib import contextmanager,nullcontext
 import jsonschema
+from . import clock
 from .config import DATA,prompt_path,redact_text,excerpt
 from .render import action_values
 from . import answers, handover, machine_words, sandbox_backend, visibility
@@ -392,7 +393,7 @@ def place_words(store, scene_id):
 
 def queue_words(store, task_id):
     """What is ahead of this task for the one action worker (ADR-053), always said, an empty queue too."""
-    from datetime import datetime, timezone
+    from datetime import datetime
     mine = task_records.get(store, task_id, fields=['created_at']) or {}
     ahead = [row for row in task_records.in_states(store, ['RUNNING', 'READY'], besides=task_id).rows(
                  fields=['state', 'scene_id', 'started_at', 'created_at'])
@@ -403,7 +404,7 @@ def queue_words(store, task_id):
     for row in ahead:
         if row['state'] == 'RUNNING':
             started = row.get('started_at') or row.get('created_at')
-            minutes = int((datetime.now(timezone.utc) - datetime.fromisoformat(started)).total_seconds() // 60) if started else 0
+            minutes = int((clock.now() - datetime.fromisoformat(started)).total_seconds() // 60) if started else 0
             parts.append('正在跑的一件来自%s，已经跑了约 %d 分钟' % (place_words(store, row['scene_id']), minutes))
     waiting = [row for row in ahead if row['state'] == 'READY']
     if waiting:

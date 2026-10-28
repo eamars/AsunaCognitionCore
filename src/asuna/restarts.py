@@ -13,6 +13,7 @@ import os
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from . import clock as core_clock   # `clock` is the injectable one below
 
 from .records import tasks as task_records
 from .records import plans as plan_records
@@ -76,7 +77,7 @@ def _span(seconds):
 class Desk:
     def __init__(self, app, controller, *, root=None, zone='UTC', clock=None):
         self.app, self.controller, self.root, self.zone = app, controller, root, zone
-        self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.clock = clock or core_clock.now
         self.lock = threading.Lock()
         self.stop_event = threading.Event()
         self.thread = None
@@ -258,7 +259,7 @@ def block(store, zone, moment=None, root=None, integration_state=None):
     day."""
     from .schedule_rules import line_stamp
     record = last(root)
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or core_clock.now()
     zone = _zone(zone)
     pending = waiting(root)
     if not record or not record.get('back_at') or moment - _aware(record['back_at']) > timedelta(hours=SHOWN_HOURS):
@@ -317,7 +318,7 @@ ADAPTER_NOT_SEEN = '健康记录还停在重启前：可能还没起来，也可
 def call_after_fallback(store, controller, config, root=None, moment=None):
     """Once, right after a restart that fell back: a home turn tells her she runs the previous version."""
     record = last(root)
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or core_clock.now()
     if not record or record.get('result') != 'fell_back' or not record.get('back_at'):
         return False
     if moment - _aware(record['back_at']) > timedelta(minutes=30):

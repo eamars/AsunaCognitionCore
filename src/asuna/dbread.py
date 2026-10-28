@@ -16,6 +16,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from .records import scenes as scene_records
 from . import records
+from . import clock
 
 LIMIT = 50
 MOST = 500
@@ -47,7 +48,7 @@ def _zone(name):
     try:
         return ZoneInfo(name or os.environ[ENV['zone']])
     except Exception:
-        return datetime.now().astimezone().tzinfo
+        return clock.now().astimezone().tzinfo
 
 
 def _local(text, zone):
@@ -76,13 +77,13 @@ def local_window(start, end=None, zone=None):
 
 def now(zone=None):
     """Her clock now, as local_window takes it: '2026-10-13 12:05'."""
-    return datetime.now(_zone(zone)).strftime('%Y-%m-%d %H:%M')
+    return clock.now().astimezone(_zone(zone)).strftime('%Y-%m-%d %H:%M')
 
 
 def recent(hours=24, zone=None):
     """The last `hours` up to now, as a local-time window."""
     tz = _zone(zone)
-    end = datetime.now(tz)
+    end = clock.now().astimezone(tz)
     return local_window((end - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S'), end.strftime('%Y-%m-%d %H:%M:%S'),
                         zone)
 

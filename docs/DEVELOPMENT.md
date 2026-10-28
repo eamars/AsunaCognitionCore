@@ -126,7 +126,8 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
 - **Repository guards** fail the suite when the tree drifts: `test_line_endings` (LF everywhere),
   `test_lock_files` (both locks match `package.json` / `pyproject.toml`), `test_no_docker_in_core` (no Docker in
   `src/` or `packages/`), `test_platform_branches` (OS branches only in the files it lists),
-  `persona.test.js` (every persona and channel package registers).
+  `test_one_clock` (the worker reads the time only through `asuna.clock`, which never gives the same time twice in a
+  process), `persona.test.js` (every persona and channel package registers).
 - `tools/p*_offline_check.py`, `tools/integration_import_offline_check.py` and `tools/outbound_image_offline_check.py`
   run the `tests/*_cases.py` modules without Mongo or pytest; they are the character's own checks inside her sandbox.
 - The personal-data scan prints only `file:line:category`, never the matched value.

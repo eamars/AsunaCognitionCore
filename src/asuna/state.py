@@ -7,12 +7,12 @@ and `db` the database itself for the code that still reads it directly. `get` re
 scope, and `mutate` writes her relationship and scene-affect revisions only from sources she may read.
 """
 from __future__ import annotations
-from datetime import datetime, timezone
 import copy
 import json
 import uuid
 from pathlib import Path
 from pymongo import MongoClient, WriteConcern
+from . import clock
 from .config import validate_database, character_id
 from .evidence import canonical, sha
 from .store import Checked
@@ -98,8 +98,7 @@ def content_ref(text):
     return {'content_sha256': sha(raw), 'bytes': len(raw)}
 
 
-def now():
-    return datetime.now(timezone.utc).isoformat()
+now = clock.stamp               # the core's one clock, as the ISO text records keep
 
 
 class Conflict(RuntimeError):

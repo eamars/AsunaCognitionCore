@@ -23,6 +23,7 @@ import re
 import json
 from pathlib import Path
 
+from . import clock
 from .documents import DocumentError, DocumentStore, WRITE_STAGE_OPS
 from .evidence import canonical, sha
 from .state import Conflict, Denied
@@ -1999,9 +2000,9 @@ class RoleTools:
         limit = getattr(channel_kinds.of(scene['_id']), 'OWN_RECALL_SECONDS', None)
         if limit and not (scene.get('kind') == 'group' and People(self.store, ep['persona']).self_role(scene) in ('owner', 'admin')):
             sent = row.get('receipt_at')
-            from datetime import datetime, timezone
+            from datetime import datetime
             try:
-                age = (datetime.now(timezone.utc) - datetime.fromisoformat(str(sent).replace('Z', '+00:00'))).total_seconds()
+                age = (clock.now() - datetime.fromisoformat(str(sent).replace('Z', '+00:00'))).total_seconds()
             except ValueError:
                 age = None
             if age is None or age > limit:
@@ -2236,8 +2237,7 @@ class RoleTools:
         if op == 'remember':
             return stickers.remember(self.store, self._fresh(ep), ep['persona'], args, self.store.config), False
         if op == 'pool':
-            from datetime import datetime, timezone
-            listing = stickers.pool_listing(self.store, datetime.now(timezone.utc))
+            listing = stickers.pool_listing(self.store, clock.now())
             fresh = self._fresh(ep)
             self.coordinator._update(fresh, pool_listed=[*dict.fromkeys([*(fresh.get('pool_listed') or []),
                                                                          *(item['candidate'] for item in listing['items'])])])
@@ -3018,9 +3018,8 @@ class RoleTools:
             raise Refused(str(exc)) from None
 
     def tool_place_timezone(self, ep, call_id, args):
-        from datetime import datetime, timezone
         from . import places
-        moment = datetime.now(timezone.utc)
+        moment = clock.now()
         op = args.get('op')
         if op == 'list':
             return {'groups': places.zones(self.store, ep['persona'], moment)}, False

@@ -222,6 +222,7 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`lanes`](../../src/asuna/lanes.py) — The model-lane contract: `LaneResult` is what one turn returns (its text, tool calls and everything she said), and `FakeLane` is the scripted stand-in tests use instead of a model.
 - [`queue`](../../src/asuna/queue.py) — Process-wide and cross-process endpoint serialization, without cloud routes.
 - [`state`](../../src/asuna/state.py) — The worker's store: every write goes through `Store.put` with an expected revision and is recorded in a hash-chained audit stream.
+- [`clock`](../../src/asuna/clock.py) — The core's one clock: the time now, in UTC, never the same twice in this process.
 - [`audit`](../../src/asuna/audit.py) — Checks and replays the store's audit trail: `verify` walks each stream's hash chain, `verify_documents` compares stored documents with their last audited commit, and `replay` rebuilds the state in an empty test database.
 - [`evidence`](../../src/asuna/evidence.py) — File evidence for runs and probes: `Evidence` writes each event as a hash-chained JSON file in a new folder; `canonical` and `sha` are the stable JSON bytes and digests the store's audit chain also uses.
 - [`testing`](../../src/asuna/testing.py) — Explicit teardown for databases owned by isolated tests and probes.

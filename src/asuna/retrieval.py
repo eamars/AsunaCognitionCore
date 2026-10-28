@@ -1,9 +1,10 @@
 """Local embeddings and server-side, prefiltered Mongo vector retrieval."""
 from __future__ import annotations
+from . import clock
 from .visibility import is_owner_private_scope
 from .config import character_id
 import math
-from datetime import datetime, timezone
+from datetime import datetime
 import re
 import time
 from collections import Counter,OrderedDict
@@ -144,7 +145,7 @@ class Retrieval:
         sources = {row['_id']: row for row in message_records.many(
             self.store, [ids[-1] for row in rows.values() for ids in [row.get('source_event_ids') or []] if ids]).rows(
             fields=['scene_seq', 'summary_batch_id'])}
-        moment = datetime.now(timezone.utc)
+        moment = clock.now()
         floor, stepped = float(forgetting.get('step_back_below') or 0), set()
         for key, row in rows.items():
             if row.get('pinned') or (row.get('salience') or {}).get('pinned'):

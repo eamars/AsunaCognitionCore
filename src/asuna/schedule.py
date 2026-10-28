@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 import threading
 
+from . import clock
 from .channels import route_for_scene, route_members
 from .integration import event_profile
 from .state import Conflict, Denied, now
@@ -157,7 +158,7 @@ class ScheduleService:
             if not native:
                 rule = plan['rule']
                 scene = scene_records.authorize(self.store, plan['scene_id'], plan['person_id'])
-                moment = datetime.now(timezone.utc)
+                moment = clock.now()
                 if 'every_seconds' in rule:
                     timing = {'every_seconds': rule['every_seconds']}
                 elif 'clock' in rule:
@@ -594,7 +595,7 @@ class ScheduleService:
         if not scene or not scene.get('channel_id'):
             raise ValueError('ERRAND_PLACE_UNKNOWN: 「%s」不在 errand_places_from_program 里；照抄那里的 place' % place)
         _, route, channel = found
-        done = places.errands_lately(self.store, datetime.now(timezone.utc))
+        done = places.errands_lately(self.store, clock.now())
         if done >= places.ERRANDS_PER_DAY:
             raise ValueError('ERRAND_LIMIT: 最近一天已经跑了 %d 趟，上限 %d 趟；跟托你的人说明天再办'
                              % (done, places.ERRANDS_PER_DAY))

@@ -8,6 +8,7 @@ program maps it to a time and shows her the state in words. The owner may also c
 """
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from . import channel_kinds
 from .state import now
 from .records import scenes as scene_records
@@ -94,7 +95,7 @@ def closed_until(store, scene_id, moment=None):
     if row.get('until_reopened'):
         return 'reopen'
     until = datetime.fromisoformat(row['closed_until'])
-    return until if until > (moment or datetime.now(timezone.utc)) else None
+    return until if until > (moment or clock.now()) else None
 
 
 def is_closed(store, scene_id, moment=None):
@@ -109,7 +110,7 @@ def _morning(moment, zone):
 
 
 def set_line(store, scene_id, *, closed, choice=None, zone='UTC', moment=None, by='character'):
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     row = _row(store, scene_id) or {'_id': 'peer-line:' + scene_id, 'kind': 'peer-line', 'scene_id': scene_id,
                                      'scope_key': 'scene:' + scene_id}
     value = {**row, 'closed': closed, 'changed_at': now(), 'changed_by': by, 'until_reopened': False, 'closed_until': None}

@@ -6,7 +6,8 @@ rest, so later 高 jobs go 低 at once. She is told what happened in capability 
 
 The task keeps `tier`: {chosen, why, ran, fell: {reason, mid_run, at}}. REST is the plugin's word on 高 resting, held
 here so a dispatch can say it: {reason, until (ISO) or None}."""
-from datetime import datetime, timezone
+from datetime import datetime
+from . import clock
 
 LOW, HIGH = '低', '高'
 WHY_CHARS = 80
@@ -33,7 +34,7 @@ def resting(moment=None):
     if not REST:
         return None
     until = REST.get('until')
-    if until and datetime.fromisoformat(until) <= (moment or datetime.now(timezone.utc)):
+    if until and datetime.fromisoformat(until) <= (moment or clock.now()):
         return None
     return REST
 
@@ -112,4 +113,4 @@ def weekly(tasks):
 
 
 def _now(moment=None):
-    return (moment or datetime.now(timezone.utc)).isoformat()
+    return (moment or clock.now()).isoformat()

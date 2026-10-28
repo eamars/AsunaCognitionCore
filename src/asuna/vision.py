@@ -21,6 +21,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
+from . import clock
 from . import animated, channel_kinds, media_children, visibility
 from .evidence import canonical, sha
 from .scene_links import message_times, read_scope
@@ -400,8 +401,8 @@ def attachment_by_ref(store, task, config, ref, session_class=visibility.PUBLIC,
     entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
     if entry:
         return entry, listing
-    from datetime import datetime, timedelta, timezone
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=REF_DAYS)).isoformat()
+    from datetime import timedelta
+    cutoff = (clock.now() - timedelta(days=REF_DAYS)).isoformat()
     scopes = [{**scope, 'policy_epoch': task['policy_epoch']} for scope in readable_image_scenes(store, task, config)]
     if session_class == visibility.OWNER_PRIVATE:
         fenced = {scope['scene_id'] for scope in scopes}

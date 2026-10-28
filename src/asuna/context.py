@@ -7,6 +7,7 @@ and long text is cut to the per-turn budget with a marker.
 from __future__ import annotations
 import json
 import traceback
+from . import clock
 from .config import character_id, excerpt, redact_text
 from . import errands as _errands, visibility
 from . import handover as _handover
@@ -164,10 +165,9 @@ def catch_up(store, scene, rows, now_ts=None):
     """A group's history for her turn (newest first): the last 12 lines, plus every line since she last spoke
     there, reaching back at least 10 and at most 60 minutes (attend.py's window), at most 40 lines. A group she
     lets rest gives its lines of the last day instead."""
-    from datetime import datetime, timezone
     from .config import character_id
     from . import focus
-    now_ts = now_ts or datetime.now(timezone.utc).timestamp()
+    now_ts = now_ts or clock.now().timestamp()
     if not focus.active(store, scene):
         # ADR-039: she has not been following a resting group; what was said there in the last day (at most the
         # MAX_LINES the query read) tells her what an @ is about.
@@ -309,13 +309,12 @@ class ContextBuilder:
         each with the group's name and the time she thought it."""
         if not self.retrieval:
             return []
-        from datetime import datetime, timezone
         from . import reasons
         groups={s['scope_key']:s for s in scene_records.of_kind(self.store, 'group', fields=['scope_key','policy_epoch','kind','channel_id'])}
         units=self.retrieval.own_thoughts([(key,s.get('policy_epoch',1)) for key,s in groups.items()],query)
         people=People(self.store)
         zone=schedule_rules.scene_timezone(self.store.config,scene)
-        moment=datetime.now(timezone.utc)
+        moment=clock.now()
         out=[]
         for unit in units:
             item={'_id':unit['_id'],'where':people.scene_title(groups.get(unit['scope_key'])),

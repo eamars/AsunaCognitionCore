@@ -17,6 +17,7 @@ import json
 import re
 from datetime import datetime, time, timedelta, timezone
 
+from . import clock
 from .config import excerpt
 from .evidence import sha
 from .records import scenes as scene_records
@@ -73,7 +74,7 @@ def _midnight(zone_name, moment):
 
 def block(store, persona, zone_name, moment=None):
     from .people import People
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     since = _midnight(zone_name, moment).isoformat()
     people = People(store, persona)
     title = {}
@@ -139,7 +140,7 @@ def exchanges(store, persona, zone_name, moment=None):
     from .ingress import PROGRAM_AUTHOR
     from .people import People
     from .schedule_rules import line_stamp
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     last = store.db.audit_events.find_one({'type': SHOWN, 'payload.persona': persona}, sort=[('occurred_at', -1)])
     floor = moment - timedelta(days=WINDOW_DAYS)
     since = max(_at(last['occurred_at']), floor) if last else floor

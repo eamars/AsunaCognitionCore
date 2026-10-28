@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from .config import ago, character_id, excerpt, over, soft
 from .evidence import canonical, sha
 from .state import now
@@ -268,7 +269,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
     carries one of her questions (`question`, questions.py) is never a reply and does not count against the turn's
     notes."""
     from .people import People
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     note_id = 'note-' + sha(canonical([ep['_id'], call_id]))[:20]
     existing = store.db.notes.find_one({'_id': note_id})
     if existing:

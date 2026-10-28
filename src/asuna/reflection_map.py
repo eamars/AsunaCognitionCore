@@ -13,6 +13,7 @@ import collections
 import json
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from .config import excerpt
 from .records import scenes as scene_records
 from .records import plans as plan_records
@@ -101,7 +102,7 @@ def block(store, persona, moment=None, *, tag=None):
     """The map since the last one she saw (at most WINDOW_DAYS); records the showing."""
     from . import group_admin, places, self_review, switches
     from .people import People
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     last = store.db.audit_events.find_one({'type': SHOWN, 'payload.persona': persona}, sort=[('occurred_at', -1)])
     floor = moment - timedelta(days=WINDOW_DAYS)
     since_at = max(_at(last['occurred_at']), floor) if last else floor

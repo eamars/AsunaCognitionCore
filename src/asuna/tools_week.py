@@ -13,6 +13,7 @@ import re
 import statistics
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from .config import excerpt
 from .records import scenes as scene_records
 from .records import messages as message_records
@@ -48,9 +49,6 @@ def _iso(moment):
     return moment.astimezone(timezone.utc).isoformat()
 
 
-def _now():
-    return datetime.now(timezone.utc)
-
 
 def last_shown(store, persona):
     """The audit record of the last showing, or None."""
@@ -60,7 +58,7 @@ def last_shown(store, persona):
 def due(store, persona, moment=None):
     """'week' when a week has passed since the last showing (or there was none), 'floor' when nine days have: the next
     home heartbeat carries it then whatever it rolled; None when it was shown within the week."""
-    moment = moment or _now()
+    moment = moment or clock.now()
     last = last_shown(store, persona) or store.db.audit_events.find_one(
         {'type': STARTED, 'payload.persona': persona}, sort=[('occurred_at', -1)])
     if not last:                        # never shown: the floor counts from the first time it was asked about
@@ -303,7 +301,7 @@ def _last_time(store, persona, since):
 
 def block(store, persona, moment=None):
     """The readings, or None when shown within the week. Records the showing with the list it saw."""
-    moment = moment or _now()
+    moment = moment or clock.now()
     last = last_shown(store, persona)
     if last and due(store, persona, moment) is None:
         return None

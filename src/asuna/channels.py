@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, parse_qs, unquote
 
+from . import clock
 from .evidence import canonical, sha
 from .config import redact_text, character_id
 from .queue import database_effects_lock
@@ -155,7 +156,7 @@ def awaited_answer(store, scene, person_id, mentions, reply):
     if not mine or not mine.get('receipt_at'):
         return False
     try:
-        since = datetime.now(timezone.utc) - datetime.fromisoformat(str(mine['receipt_at']).replace('Z', '+00:00'))
+        since = clock.now() - datetime.fromisoformat(str(mine['receipt_at']).replace('Z', '+00:00'))
     except ValueError:
         return False
     if since.total_seconds() > AWAIT_SECONDS:
@@ -183,7 +184,7 @@ def reply_parent(store, scene, reply, at=None, *, outbound_author=None):
             return date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date
         except (ValueError, TypeError):
             return None
-    ceiling = moment(at) or datetime.now(timezone.utc)
+    ceiling = moment(at) or clock.now()
     undated = datetime.min.replace(tzinfo=timezone.utc)
     candidates = message_records.by_platform_id(store, scene['_id'], scene['policy_epoch'], platform_id=reply,
                                                 author=outbound_author or None).rows()
@@ -215,7 +216,7 @@ def group_context(store, route, body, event_id, person_id=None):
     topic = topic_via = None
     if parent:
         previous = parent.get('event', {}).get('group_context', {})
-        recent = parent.get('received_at', parent.get('receipt_at', '')) >= (datetime.now(timezone.utc)-timedelta(minutes=30)).isoformat()
+        recent = parent.get('received_at', parent.get('receipt_at', '')) >= (clock.now()-timedelta(minutes=30)).isoformat()
         if parent['direction'] == 'outbound':
             reason = reason or 'reply_to_character'
             origin = message_records.get(store, 'in-'+parent['episode_id'])
@@ -562,7 +563,7 @@ class Channels:
         from .outbound_files import KIND
         held, rows, first = set(), queued.rows(), {}
         if chat and rows:
-            lease = (datetime.now(timezone.utc) - timedelta(seconds=CHAT_LEASE_SECONDS)).isoformat()
+            lease = (clock.now() - timedelta(seconds=CHAT_LEASE_SECONDS)).isoformat()
             held.update(message_records.in_flight_scenes(self.store, channel_id, lease))
         for row in rows:
             first[row['scene_id']] = min(first.get(row['scene_id'], '~'), str(row.get('queued_at') or ''))

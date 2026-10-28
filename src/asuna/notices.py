@@ -29,6 +29,7 @@ import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from .state import Denied, now
 from .records import scenes as scene_records
 from .records import messages as message_records
@@ -74,7 +75,7 @@ def fill(store, scene, block, text, moment=None):
     line = block.get('line')
     if not line:
         return text.replace('{line}', '一条消息'), False, None
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     since = (moment - timedelta(days=QUOTE_DAYS)).isoformat()
     # Her own line is found however old (its id is her receipt's); anyone's within the last QUOTE_DAYS.
     row = message_records.quoted(store, scene['_id'], line['message_id'], mine=line.get('mine'), since=since)
@@ -223,7 +224,7 @@ def home(store, controller, channel_id, body, delay=HOME_BATCH_SECONDS):
                 and (request['type'] == 'friend' or request.get('sub_type') in ('add', 'invite'))):
             raise ValueError('NOTICE_INVALID: request 要有 flag、type（friend 或 group）和群请求的 sub_type')
     at = body.get('at')
-    moment = datetime.fromtimestamp(at, timezone.utc) if type(at) is int and at > 0 else datetime.now(timezone.utc)
+    moment = datetime.fromtimestamp(at, timezone.utc) if type(at) is int and at > 0 else clock.now()
     if request is not None:
         line += _hint(_keep_request(store, channel_id, request, line, moment))
     with _lock:

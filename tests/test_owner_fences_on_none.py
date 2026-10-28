@@ -80,3 +80,32 @@ def test_episodes_a_fence_of_none_reads_nothing_and_so_does_a_kind_of_none(store
     assert episode_records.of_kind(store, None).rows() == []
     assert episode_records.open(store, ['X'], kind=None).rows() == []
     assert asked == []
+
+
+def test_tasks_a_fence_of_none_reads_nothing_and_a_state_or_a_side_of_none_is_a_record_without_one(store):
+    from asuna.records import tasks as task_records
+    task_records.save(store, {'_id': 't-x', 'request_key': 't-x', 'scene_id': 'g', 'scope_key': 's',
+                              'policy_epoch': 1, 'requester_id': 'p'}, stream='t-x')          # no `state`
+    task_records.save_message(store, {'_id': 'm-x', 'task_id': 't-x', 'text': 'hi'}, stream='t-x')   # no `from`
+    assert task_records.get(store, 't-x', state=None)['_id'] == 't-x'
+    assert [row['_id'] for row in task_records.thread(store, 't-x', sender=None).rows()] == ['m-x']
+    assert task_records.thread_message(store, 'm-x', sender=None)['_id'] == 'm-x'
+    asked = counted(store)
+    assert task_records.get(store, 't-x', scene=None) is None and task_records.get(store, 't-x', requester=None) is None
+    assert task_records.by_prefix(store, 't-', scene='g', requester=None, epoch=1).rows() == []
+    assert task_records.recent_with_inputs(store, 'g', None, 1) == [] and task_records.thread(store, None).rows() == []
+    assert asked == []
+
+
+def test_plans_a_fence_of_none_reads_nothing_and_an_outcome_or_a_status_of_none_is_a_plan_without_one(store):
+    from asuna.records import plans as plan_records
+    plan_records.save(store, {'_id': 'p-x', 'scene_id': 'g', 'person_id': 'p', 'policy_epoch': 1,
+                              'kind': 'settlement'}, stream='p-x')             # no `status`, no `last_outcome`
+    assert [row['_id'] for row in plan_records.with_outcome(store, 'g', ['settlement'], None).rows()] == ['p-x']
+    assert plan_records.count_status(store, None) == 1
+    assert [row['_id'] for row in plan_records.in_status(store, status=None).rows()] == ['p-x']
+    asked = counted(store)
+    assert plan_records.get(store, 'p-x', person=None) is None and plan_records.get(store, 'p-x', scene=None) is None
+    assert plan_records.of_conversation(store, 'g', epoch=None).rows() == []
+    assert plan_records.with_outcome(store, None, ['settlement'], None).rows() == []
+    assert asked == []

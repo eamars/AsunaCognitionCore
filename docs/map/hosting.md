@@ -686,7 +686,7 @@ The owner of `tasks` and `task_messages`: the work she hands to the action brain
 - def `get` — The task with this id (in this state; of this conversation, scope, epoch, requester), or None.
 - def `thread_message` — The task message with this id (from this side: `character` or `action`), or None.
 - def `many` — View: the tasks with these ids (in these states).
-- def `in_states` — View: the tasks in these states (but one); a single state as an equality.
+- def `in_states` — View: the tasks in these states (but one); a single state (None: none) as an equality.
 - def `by_prefix` — View: a requester's tasks in a conversation and epoch whose id starts with `prefix`.
 - def `continuations` — View: the tasks that continue these, in the order they were created.
 - def `awaiting_feedback` — The tasks in these finished states whose feedback has a state, and not one of `taken` (the states of a result that reached her).
@@ -709,7 +709,7 @@ The owner of `tasks` and `task_messages`: the work she hands to the action brain
 The owner of `plans`: what she and the program scheduled (her plans in a conversation, the rhythms of the heartbeat, settlement, self-development and condensing, their next fire and last outcome), read and written only through these operations.
 
 - def `get` — The plan with this id (of this conversation, scope, person, epoch), or None.
-- def `in_status` — View: the plans in a status or one of several (of these kinds).
+- def `in_status` — View: the plans in a status (None: none) or one of several (of these kinds).
 - def `due` — View: the active plans due by `until` (ISO text), not of these kinds.
 - def `of_conversation` — View: a conversation's plans (of a scope, person and epoch; in these statuses; not of these kinds), in the order they were created.
 - def `with_outcome` — View: the plans of these kinds in a conversation whose last outcome was `outcome`.

@@ -3,13 +3,14 @@ result and hand-back) and the messages between her and the action session about 
 these operations.
 
 `get` and `thread_message` return a record as stored (`fields` names what to return, `_id` always comes back),
-within the fences given; an id that is missing or not text finds nothing, and a fence of None finds the records whose
-field is null or missing, as the replaced reads' equality on None did. The other reads are views (`View`: `rows`,
-`each`, `first`, `count`), in the replaced read's order (none where it had none). `save` and `save_message` are the
-revisioned writes (`Store.put`). `recent_with_inputs` answers what the conversation-context aggregate did, by reads.
+within the fences given. None follows section 4's rule: an id or a fence (conversation, scope, epoch, requester, the
+turn or task whose records are read) given None finds nothing without a read; a value condition (a state, a pause
+reason, the side a message came from, whether it was delivered) given None finds the records whose field is null or
+missing. The other reads are views (`View`: `rows`, `each`, `first`, `count`), in the replaced read's order (none
+where it had none). `save` and `save_message` are the revisioned writes (`Store.put`). `recent_with_inputs` answers what the conversation-context aggregate did, by reads.
 """
 from ..store.words import And, AnyOf, Exists, NoneOf, Not, Range, StartsWith
-from .view import ANY, View, is_number, is_text, pinned, texts
+from .view import ANY, View, fenced, is_number, is_text, pinned, texts
 
 COLLECTION, MESSAGES = 'tasks', 'task_messages'
 ACTIVE = ('READY', 'RUNNING')
@@ -37,7 +38,7 @@ def get(store, task_id, fields=None, *, state=ANY, scene=ANY, scope=ANY, epoch=A
         return None
     if all(value is ANY for value in (state, scene, scope, epoch, requester)):
         return store.collection(COLLECTION).get(task_id, fields)
-    where = pinned({'_id': task_id}, {**_fences(scene, scope, epoch, requester), 'state': (state, is_text)})
+    where = pinned(fenced({'_id': task_id}, _fences(scene, scope, epoch, requester)), {'state': (state, is_text)})
     return _view(store, where).first(fields=fields)
 
 
@@ -62,10 +63,11 @@ def many(store, task_ids, *, states=None):
 
 
 def in_states(store, states, *, besides=None):
-    """View: the tasks in these states (but one); a single state as an equality."""
-    where = {'state': states} if isinstance(states, str) else {'state': AnyOf(list(states))}
-    if besides is not None:
-        where['_id'] = Not(besides)
+    """View: the tasks in these states (but one); a single state (None: none) as an equality."""
+    where = {'_id': Not(besides)} if besides is not None else {}
+    if states is None or isinstance(states, str):
+        return _view(store, pinned(where, {'state': (states, is_text)}))
+    where['state'] = AnyOf(list(states))
     return _view(store, where)
 
 
@@ -73,7 +75,7 @@ def by_prefix(store, prefix, *, scene, requester, epoch):
     """View: a requester's tasks in a conversation and epoch whose id starts with `prefix`."""
     if not is_text(prefix):
         return _view(store, None)
-    return _view(store, pinned({'_id': StartsWith(prefix)}, _fences(scene=scene, epoch=epoch, requester=requester)))
+    return _view(store, fenced({'_id': StartsWith(prefix)}, _fences(scene=scene, epoch=epoch, requester=requester)))
 
 
 def continuations(store, task_ids):
@@ -97,12 +99,12 @@ def lease_expired(store, moment):
 
 def paused(store, reason, *, states=None, since=None):
     """View: the paused tasks paused for `reason` (that were in these states; paused since a time)."""
-    where = {'state': 'PAUSED', 'pause_reason': reason}
+    where = {'state': 'PAUSED'}
     if states is not None:
         where['paused_state'] = AnyOf(list(states))
     if since is not None:
         where['paused_at'] = Range(gte=since)
-    return _view(store, where)
+    return _view(store, pinned(where, {'pause_reason': (reason, is_text)}))
 
 
 def of_conversations(store, scene_ids, by=None):
@@ -125,7 +127,7 @@ def created(store, since, *, until=None, scenes=None, besides=None, by=None):
 
 def of_episode(store, episode_id):
     """View: the tasks a turn made."""
-    return _view(store, pinned({}, {'episode_id': (episode_id, is_text)}))
+    return _view(store, fenced({}, {'episode_id': (episode_id, is_text)}))
 
 
 def finished_since(store, since, fields=None):
@@ -135,17 +137,14 @@ def finished_since(store, since, fields=None):
 
 def of_scope(store, scope_key, fields=None):
     """The tasks of a scope."""
-    return _view(store, pinned({}, {'scope_key': (scope_key, is_text)})).rows(fields=fields)
+    return _view(store, fenced({}, {'scope_key': (scope_key, is_text)})).rows(fields=fields)
 
 
-def thread(store, task_id, *, sender=None, delivered=None):
+def thread(store, task_id, *, sender=ANY, delivered=ANY):
     """View: a task's messages (from one side; delivered or not), in the order they were written."""
-    where = {}
-    if sender is not None:
-        where['from'] = sender
-    if delivered is not None:
-        where['delivered'] = delivered
-    return View(store, MESSAGES, pinned(where, {'task_id': (task_id, is_text)}), (('created_at', 1),))
+    where = pinned(fenced({}, {'task_id': (task_id, is_text)}),
+                   {'from': (sender, is_text), 'delivered': (delivered, lambda value: isinstance(value, bool))})
+    return View(store, MESSAGES, where, (('created_at', 1),))
 
 
 def recent_with_inputs(store, scene_id, scope_key, epoch):
@@ -154,7 +153,7 @@ def recent_with_inputs(store, scene_id, scope_key, epoch):
     `_active` (1 running or queued, else 0) and `_report_chars` (the length of its result's text). Read as the
     conversation's tasks, then their input lines by id."""
     from . import messages
-    where = pinned({}, _fences(scene=scene_id, scope=scope_key, epoch=epoch))
+    where = fenced({}, _fences(scene=scene_id, scope=scope_key, epoch=epoch))
     tasks = _view(store, where).rows(fields=[*SHOWN, 'raw_input_refs', 'result.text'])
     refs = sorted({ref for task in tasks for ref in _refs(task)})
     received = {}

@@ -664,12 +664,14 @@ there only through `tests/harness_skips.txt` by the case's `[stand-in]` id. Two 
 | `R` races (integration only) | 4 | counter (4 processes x 50), claim (6 x 60), lease expiry (two holders), stale revision (two writers) |
 | `D` differential (integration only) | 1 | Hypothesis, `derandomize=True`, at most 200 records and 100 generated where trees per run (missing, null, empty lists, equal sort keys); `find` and `count` on MongoDB equal the double's, order included |
 
-Size, per run (counted at B1b; times as measured, with where):
-- the in-memory run: 114 cases, 112 shared (W 31, O 6, G 5, C 12, X 15, T 5, V 8, N 18, B 6, S 6) and 2 its own;
-  its 111 `[memory]` cases took 0.25-0.26 s in the B1b worktree (B1a's run of 112 took 0.69-0.72 s in another
-  checkout of the same machine);
-- the stand-in run: the 112 shared less `S05` (it opens no store, so it runs once): 111 `[stand-in]` cases, of which
-  80 pass and 31 are listed in `tests/harness_skips.txt` by their `[stand-in]` ids; 0.09 s in the B1b worktree;
+Size, per run (counted at B1b; times as measured, with where). `tests/test_store_contract.py` collects 226 cases: the
+112 shared (W 31, O 6, G 5, C 12, X 15, T 5, V 8, N 18, B 6, S 6) less `S05` as 111 `[memory]` and 111 `[stand-in]`,
+and 4 without the adapter parameter (`S05`, `O05`, the skip-line guard test, the injected-clock case):
+- the in-memory run: the 111 `[memory]` cases and the 4 without the parameter, 115; the 111 `[memory]` cases took
+  0.25-0.26 s in the B1b worktree (B1a's run of 112 took 0.69-0.72 s in another checkout of the same machine);
+- the stand-in run: the 111 `[stand-in]` cases, of which 80 pass and 31 are skipped by 31 lines of
+  `tests/harness_skips.txt` with the file prefix `tests/test_store_contract.py` (16 of them literally `[stand-in]`,
+  15 parametrized as `[stand-in-<k>-<filter>]`); 0.09 s in the B1b worktree;
 - the integration run on MongoDB: the 112 shared, `R` (4) and `D` (1, 100 generated conditions), 117 cases in 46 s
   from the B1b worktree against the configured server, under the target of 60 s.
 
@@ -761,8 +763,9 @@ Today: 193 test files, 1,285 test functions (parametrised ones count once; pytes
 them need a database through the `store` fixture or a fixture of their file that takes it, in 139 files; 5 files use
 mongomock, 50 make a client or a `Store` themselves (`test_census.py` at `5a62ebd6`). A run takes 9 to 16 minutes on
 this machine (ADR page). The time on the double is measured once it exists (B13), with `pytest --durations=0`
-written to a TSV. "Test count and run time on the double" counts the in-memory run only (the contract's `[memory]`
-cases and every other test), never the stand-in's `[stand-in]` cases, so B15 compares like with like. B15's before
+written to a TSV. "Test count and run time on the double" counts the in-memory run only (of the contract's 226, the
+111 `[memory]` cases and the 4 without the adapter parameter; and every other test), never the 111 `[stand-in]`
+cases, so B15 compares like with like. B15's before
 and after are the landing run's numbers only (a fresh worktree, the whole suite without `-k`, as the landing script
 runs it), never a checkout's own run; the baseline is B0's landing run at `1f7bb31bc629`: 1,502 passed, 20 skipped,
 2 min 37 s (section 10).
@@ -878,9 +881,11 @@ before its merge, as part of the lead's review of the batch (the owner is inform
    MiB. Rule: the single type present gives the kind (int and double: `number`; string: `text`; date: `time`; bool;
    array: `list`; object: `object`); nulls give `nullable`; two incompatible types, a missing required field or a size
    disagreement stop the batch and are reported. The unit run at a batch's landing is the whole suite without `-k`, the
-   only run in which a skip-list line that names no test fails the collection. B1b's check is `ensure` as a dry run (to
-   create, make, drop, conflicting; validators) and these counts for the fields it declares; exit 0 clean, 1 something
-   differs, 2 not checked. On her data it needs `--max-ms 10000`: at 2000 three large collections stay unchecked.
+   only run in which a skip-list line that names no test fails the collection, and it does not run inside a sandbox: a
+   sandboxed run fails the tests bound to folder permissions, and the landing script then stops, by design. B1b's check
+   is `ensure` as a dry run (to create, make, drop, conflicting; validators) and these counts for the fields it
+   declares; exit 0 clean, 1 something differs, 2 not checked. On her data it needs `--max-ms 10000`: at 2000 three
+   large collections stay unchecked.
 6. **Output**: numbers only (case name, n, same, differing, p50/p95 old and new, plan stages, type counts), to `<data>/private/adr104-evidence/<batch>/`; ids never leave her machine; the folder goes when the batch
    merges, except a manifest named in the ADR with its path and size.
 

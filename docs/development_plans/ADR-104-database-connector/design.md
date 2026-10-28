@@ -672,8 +672,8 @@ deleting each method in turn), and from which batch the core first calls it:
 | `delete` | `X04`, `X05` | B2 (the lease released, old fault counts) |
 | `nearest` | `N01`, `N02`, `N17`, `N18` | B1b (`Store.nearest`, retrieval as built) |
 | `size` | `X15` | B10 (audit prune) |
-| `ping` | `S06` | no caller until the batch that moves `native_worker.py:1042`'s ping; B13 at the latest |
-| `close` | `S06` | no caller until the core's `client.close()` calls move; B13 at the latest |
+| `ping` | `S06` | no caller until B13 (`native_worker.py:1042`'s ping moves to it) |
+| `close` | `S06` | no caller until B13 (the core's `client.close()` calls move to it) |
 | `blobs.write` | `B01`-`B03`, `B05`, `B06` | B8 (`blobs.py`) |
 | `blobs.open` | `B01`-`B04`, `B06` | B8 |
 | `blobs.delete` | `B03` | B8 |
@@ -741,7 +741,10 @@ them need a database through the `store` fixture or a fixture of their file that
 mongomock, 50 make a client or a `Store` themselves (`test_census.py` at `5a62ebd6`). A run takes 9 to 16 minutes on
 this machine (ADR page). The time on the double is measured once it exists (B13), with `pytest --durations=0`
 written to a TSV. "Test count and run time on the double" counts the in-memory run only (the contract's `[memory]`
-cases and every other test), never the stand-in's `[stand-in]` cases, so B15 compares like with like.
+cases and every other test), never the stand-in's `[stand-in]` cases, so B15 compares like with like. B15's before
+and after are the landing run's numbers only (a fresh worktree, the whole suite without `-k`, as the landing script
+runs it), never a checkout's own run; the baseline is B0's landing run at `1f7bb31bc629`: 1,502 passed, 20 skipped,
+2 min 37 s (section 10).
 
 Which tests go, by rule (applied in B15, one rule at a time, each with its count):
 
@@ -803,10 +806,10 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | B10 | `audit` reads, prune and redaction; `privacy` over the owners' `redact_scope`, `tombstone`, `invalidate` | 47 (+ the 146 appends, which stay `store.audit`) | yes | 8.3; prune in dry-run counts equal old against new; the erasure path on a throwaway database (no erasure on hers) |
 | B11a | `stickers`, `notes`, `watches`, `questions`, `switches`, `own_mute`, `group_members`, `developer_inbox`, `host_stops` | 120 | yes | 8.3 |
 | B11b | `memory_tiers` (with `carried`'s room rows), `carried`, `memory_pilot`, `crossing`, `affect` | 125 | yes | 8.3 |
-| B12 | her read facade: `dbread`, `development_database_read` (section 6); she gets the list first | 8 | yes | the facade's answers for the reads her scripts make today, written in the new form by the builder in a scratch file outside her package: same counts and rows as the old form |
-| B13 | `store.db` and pymongo leave the core outside the adapter module; repository guards: no `store.db`, no `pymongo`/`bson`/`gridfs` import and no `$`-key literal in `src/asuna` outside the adapter, `store.collection(name)` and `store.put(name, ...)` only in the owner of `name`, no collection `pending` (3.1); unit runs on the in-memory adapter, mongomock goes | guards | yes | the guards; the unit run on the double (its time measured, 7.4); the integration contract run |
+| B12 | her read facade: `dbread`, `development_database_read` (section 6); she gets the list first | 8 | yes | the facade's answers for the reads her scripts make today, written in the new form by the builder in a scratch file outside her package: same counts and rows as the old form; for `usage_readout`'s comparison of two fields (section 6's list, her `$expr` at `usage_readout.py:732`), also the rows read before the comparison in Python |
+| B13 | `store.db` and pymongo leave the core outside the adapter module; repository guards: no `store.db`, no `pymongo`/`bson`/`gridfs` import and no `$`-key literal in `src/asuna` outside the adapter, `store.collection(name)` and `store.put(name, ...)` only in the owner of `name`, no collection `pending` (3.1); unit runs on the in-memory adapter, mongomock goes; the first core callers of `ping` (`native_worker.py:1042`) and `close` (the core's `client.close()` calls) | guards | yes | the guards; the unit run on the double (its time measured, 7.4); the integration contract run |
 | B14 | the package split (5.15): `packages/databases/mongodb/`, `registerDatabase`, the registry, the settings keys, the Python locks, `pack_plugins`, `release.py`, the profile's package list | install path | yes | after the restart her `ensure` creates nothing and changes nothing (same MongoDB, same database, same records); `audit.verify_documents` passes; the start fails with `DATABASE_ADAPTER_NOT_INSTALLED` in a demo profile without the package |
-| B15 | the suite reset (7.4) | tests only | no | before and after: test count and run time on the double |
+| B15 | the suite reset (7.4) | tests only | no | before and after: test count and run time on the double, the landing run's (7.4) |
 
 **The stand-in is checked against the meaning table, not trusted.** From B1b the unit run also runs the shared
 contract classes on the MongoDB adapter over the stand-in's client, beside the in-memory adapter: one `open_store`
@@ -884,7 +887,9 @@ baseline, 1,519 passed at `a00a9aa0eef6`). From the moment B0 lands, the unit su
 until it lands, nobody runs the unit suite.
 
 **What does not land today:** B1a to B15. They land at the pace their checks allow, one at a time, installed in eleven
-restarts for the fifteen that change the running worker (B1b to B14; 8.2's pairs); nothing is shortened for a date. From B13 the unit run is on the in-memory adapter; only `integration/` reaches a server, on
+restarts for the fifteen that change the running worker (B1b, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11a, B11b, B12,
+B13, B14: installed alone B1b, B4, B7, B10, B12, B13, B14; in pairs B2+B3, B5+B6, B8+B9, B11a+B11b; seven and four
+make eleven restarts; B0, B1a and B15 change nothing that runs and need none); nothing is shortened for a date. From B13 the unit run is on the in-memory adapter; only `integration/` reaches a server, on
 throwaway databases.
 
 What she sees: no change of behaviour in any batch (each shown by 8.3); in B12 the new syntax of her read tool and

@@ -227,7 +227,8 @@ the complements (`Not`, `NoneOf`) are true there.
 The MongoDB adapter is nearly a passthrough: a validated tree maps onto MongoDB's own operators, whose meaning,
 given declared fields and validated writes, equals the table (probe); `NoneOf` and `Not` need nothing added (they
 already match missing). It translates three words: `StartsWith` into an anchored `$regex` of the escaped prefix
-(probe `plan_prefix_regex`: it uses the index), `Contains` into an unanchored escaped `$regex` (`i` when
+(probe `plan_prefix_regex`: it uses the index) with `$type: 'string'` beside it (as built in B4: a partial unique
+index on text, `{$type: 'string'}`, then serves it as it served the regex written with `$type`), `Contains` into an unanchored escaped `$regex` (`i` when
 case-blind), `Now` into `$$NOW` in an update pipeline or `$expr` (probe `now_in_expr_and_pipeline`).
 
 ### 3.3 Order, paging, fields, values
@@ -374,6 +375,36 @@ The owner imports only `asuna.store`, and `state`'s `Denied` inside `authorize`.
 `authorize` or `db.scenes` stub the owner's operation instead; the offline case modules' fake stores get
 `collection(name)` from `tests/fake_collections.py`, the in-memory adapter over their own rows.
 `tests/test_record_owners.py` is the guard of 8.2's B13 row for the owners moved so far.
+
+As built, `records.messages` (B4): a read is a `View` with the verbs `rows`, `first`, `count` and `values`; its order
+is its `by` field (`by=None` leaves it to the database, `newest_first` turns it), so every read keeps the replaced
+call's sort, and no `_id` is added. Call sites import it as `message_records`. Operations: `get` (fenced to a
+conversation, epoch, scope, direction, channel, or a line from a channel), `many`, `at`, `said`, `said_across` (her
+home turn's lines from several places), `said_in_sources` (the row's `web_page`: the Web memory page's source lines,
+one `find`, 5.7), `pointable`, `lines`, `inbound`, `woken`, `mentions`, `authors`, `spoken`, `outgoing`,
+`turn_parts`, `unsettled`, `of_event`, `by_platform_id`, `quoted`, `referenced`, `of_platform_event` (`mutate`'s
+source check), `queued`, `in_flight_scenes`, `sending`, `claim_unshown`, `ingress`, `channel_inbound`, `visits`,
+`errand_results`, `artifact_refs`, `search` (history_query's four streams, its cursor and its person terms), `thread`
+and `excluded` (the digest's; the row's `replies_to`), `save`, `mark_recalled`, `note_failure`, `mark_errands_told`.
+The row's `answers` is `inbound(answers_to=...)` and its marks; `redact_scope` is not built: `privacy._erase` still
+redacts `messages` in its loop over five collections, with `audit`'s direct reads, until B10. 225 map rows in 53 files
+moved (the map at `85dd48275d22`), none left; besides them, `native_api`'s page aggregate on `messages` (the map's
+`messages|memory_units` row). `PROGRAM_AUTHOR` is the owner's (`ingress` imports it); `NOT_CORE_NOTICE`,
+`People.POINTABLE` and history_query's condition builders are gone. "Said" has one form: people's lines or her
+delivered outbound lines, where the replaced code also wrote the delivered branch without `direction` (the same lines:
+only her outbound lines are ever `DELIVERED`). An author condition given replaces "people only", as the replaced
+code's dict update did (`questions`, `waiting`). A fence or an author given as None, or not of its kind, finds
+nothing without a read, where MongoDB's equality on null matched a record without the field. Variable limits that
+could be 0 pass `or None` (8.1). `messages` is declared (74 fields; its times are ISO text as the core writes them;
+every field nullable, none required but `_id`) and no longer `pending`; its two partial unique indexes leave their
+other fields unrequired (3.5), which the catalog's rule now allows. `channels.whole_host_state` also maps the store's
+`Unavailable` to `HOST_DATABASE_UNAVAILABLE`. Known differences, for the lead's 8.3 run: the archived search stream
+reads whole records and drops `legacy` in the owner, the store having no exclusion projection (its plan loses the
+`PROJECTION_SIMPLE` stage; records the same); the replaced search shared one `$and` list between the people's and the
+archived streams, so with a person filter and a cursor the archived stream was also cut by the people's cursor; the
+owner gives each stream its own cursor. `distinct` reads are `values` (an aggregate), compared as sorted values.
+Tests that read the store's insides changed: `tests/test_forwards.py` (the history filter is the owner's `search`),
+`tests/discussion_digest_cases.py` (the database failing and the linkage fence are watched on the owner's handle).
 
 **The shared layer's own surface** (no collection's owner; 21 map rows): `Store.put` and `Store.audit` (stay; owners
 call `put` through `save`, every module calls `audit`), `Store.ensure` (replaces `migrate`), `Store.recover_commits`,
@@ -831,7 +862,7 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | B1b | the MongoDB adapter (`src/asuna/store/mongodb.py`); `Store` over it: `put`, `audit`, `recover_commits`, `ensure` (was `migrate`), `nearest`, `ensure_vectors`, taking over `Checked` and `Handle`; `store.db` kept for old call sites; Hypothesis in the `dev` group and class `D`; `tools/pack_plugins.py` ships `src/asuna/store/` (it copies top-level modules only today) and `tools/project_map.py` maps the package | 38 shared rows | yes | the contract suite on MongoDB (integration, throwaway), class `D` included; the packed worker holds `asuna/store/` and the project map lists it, both checked at landing; `ensure` against her database in dry-run (list indexes only): zero to create or conflict; after the restart, `audit.verify_documents` over the commits since: 0 mismatches |
 | B2 | `host_lease`, `lane_faults` (Now, create, the TTL index retired) | 9 | yes | lease taken, renewed and released across the restart (`host_stops` records a planned stop); fault counts keep rising; on throwaway databases, before: `integration/test_schema_and_vectors.py::test_a_fresh_database_gets_todays_ttl_index_from_b1bs_catalog` (B1b's catalog makes `hour_at_1` with `expireAfterSeconds` of 30 days), after: `integration/test_schema_and_vectors.py::test_b2s_ensure_drops_it_and_forget_old_takes_over`; `ensure_vectors`' two paths no case pinned: `integration/test_schema_and_vectors.py::test_the_old_index_answers_while_its_filter_fields_change`, `integration/test_schema_and_vectors.py::test_a_new_index_that_is_not_ready_answers_false` |
 | B3 | `records.scenes` | 221 in 60 files | yes | 8.3 on each view and get; the counter: positions contiguous after the restart |
-| B4 | `records.messages` | 229 in 54 files | yes | 8.3; her turn context built from the same lines (the `said`, `inbound`, `spoken` views compared) |
+| B4 | `records.messages` | 229 in 54 files (as built: 225 in 53, the map at `85dd48275d22`) | yes | 8.3; her turn context built from the same lines (the `said`, `inbound`, `spoken` views compared) |
 | B5 | `records.episodes`, `records.sessions`, `records.receipts` | 166 | yes | 8.3 |
 | B6 | `records.tasks`, `records.plans` (the `$lookup` as reads) | 168 | yes | 8.3, and `recent_with_inputs` against the aggregate on 20 conversations: same 16 tasks, same order, time p50/p95 |
 | B7 | `records.memories` (retrieval's lexical reads; vector parts as built, 1b's pairs as an `Or` of dicts, an empty pair list answered without a call) | 67 | yes | 8.3; retrieval's whole search old against new on 40 queries (as 1a did): the same six and 24; `state.py:218-227`'s `if not combinations: return []` (the empty pair list) is production code with no test until `records.memories`' `test_an_empty_pair_list_answers_nothing_without_a_call` lands here |

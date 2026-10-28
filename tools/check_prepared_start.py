@@ -1,6 +1,7 @@
 """Run the launcher's start preparation (rung 0) for one commit in a scratch folder and check what it installed.
 
-A git worktree of the commit gets this checkout's .venv and node_modules linked in, a synthetic config (a database
+A git worktree of the commit gets a .venv and node_modules linked in (this checkout's, else the main checkout's, found
+through git; the script reruns itself with that .venv's Python), a synthetic config (a database
 name no server is asked for, an unresolvable server, no model endpoint) and a fresh profile's launch record. Then
 `asuna-launch.mjs --prepare 0` packs and installs it as a start would. The check passes (exit 0) only when the
 preparation succeeds and installed the checkout, every file the core package ships from src/asuna is installed and
@@ -22,8 +23,6 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-
-import yaml
 
 import pack_plugins
 
@@ -169,9 +168,24 @@ def lock_environment(installed, scratch):
 
 def configured_python(base):
     """The interpreter the profile's worker is set to (the core's `python` setting), or None."""
+    import yaml
     patch = yaml.safe_load((base / 'home/profiles' / PROFILE / 'cordis.patch.yml').read_text(encoding='utf-8')) or []
     row = next((row for row in patch if row.get('id') == 'asuna-cognition-core'), {})
     return row.get('config', {}).get('python')
+
+
+def lender():
+    """The checkout whose .venv and node_modules the prepared tree uses: this one when it has both, else the main
+    checkout of the repository (a fresh worktree has neither). None when neither has them."""
+    common = Path(git('rev-parse', '--git-common-dir').decode().strip())
+    for root in (ROOT, (ROOT / common).resolve().parent):
+        if (root / '.venv').exists() and (root / 'node_modules').exists():
+            return root
+    return None
+
+
+def venv_python(root):
+    return root / ('.venv/Scripts/python.exe' if os.name == 'nt' else '.venv/bin/python')
 
 
 def main():
@@ -183,10 +197,15 @@ def main():
     parser.add_argument('--keep', action='store_true', help='leave the scratch folder and its worktree for reading')
     args = parser.parse_args()
     sha = git('rev-parse', '--verify', args.commit + '^{commit}').decode().strip()
-    for name in ('.venv', 'node_modules'):
-        if not (ROOT / name).exists():
-            print('FAIL: this checkout has no %s to lend the prepared tree' % name)
-            return 1
+    lent = lender()
+    if lent is None:
+        print('FAIL: neither this checkout nor the main checkout has both .venv (uv sync) and node_modules (npm install)')
+        return 1
+    if Path(sys.prefix).resolve() != (lent / '.venv').resolve():
+        # The checks need the checkout's dependencies (PyYAML, packaging): run again with its environment.
+        return subprocess.run([str(venv_python(lent)), str(Path(__file__).resolve()), *sys.argv[1:]],
+                              env={**os.environ, 'PYTHONUTF8': '1'}).returncode
+    print('lending the prepared tree .venv and node_modules of %s' % lent)
     if args.scratch:
         args.scratch.mkdir(parents=True, exist_ok=True)
         if any(args.scratch.iterdir()):
@@ -198,7 +217,7 @@ def main():
     try:
         git('worktree', 'add', '--detach', '--quiet', str(tree), sha)
         for at in links:
-            link((ROOT / at.name).resolve(), at)
+            link((lent / at.name).resolve(), at)
         print('prepared tree: %s at %s' % (tree, sha[:12]))
         base, prepared, output = prepare(tree, scratch, args.persona, args.channel)
         if not prepared:

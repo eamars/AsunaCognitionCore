@@ -116,6 +116,8 @@ Run the launcher's start preparation (rung 0) for one commit in a scratch folder
 - def `byte_check` — Problems of the installed core against the commit and the packed artifact, and the counts checked.
 - def `lock_environment` — The worker's environment as the plugin builds it on first start (python-env.js): uv when on PATH, else venv and pip.
 - def `configured_python` — The interpreter the profile's worker is set to (the core's `python` setting), or None.
+- def `lender` — The checkout whose .venv and node_modules the prepared tree uses: this one when it has both, else the main checkout of the repository (a fresh worktree has neither).
+- def `venv_python`
 - def `main`
 
 ## `check_staged_secrets.py`

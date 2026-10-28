@@ -8,7 +8,7 @@ import pytest
 from asuna.audit import projection, replay, trace_contents, verify, verify_documents
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane, FakeTurn
-from asuna.native_worker import NativeLane
+from asuna.native_worker import BusinessWorker, NativeLane
 from asuna.state import Store, content_digest, content_ref
 from test_adr009_p2 import THINK, owner
 
@@ -71,6 +71,7 @@ def test_T6_2_phase_output_keeps_hashes_and_native_receipts_are_final(store, tmp
         navigation_ready.set()
 
         controller = types.SimpleNamespace(ingress_lock=threading.Lock(), reconfiguring=False)
+        register_stage = BusinessWorker.register_stage      # the worker admits a stage (its locks, in order)
 
         def continued_session(self, session_id):
             return session_id
@@ -129,6 +130,7 @@ def test_a_stage_that_times_out_stops_its_native_run(store, tmp_path):
         navigation_ready = threading.Event()
         navigation_ready.set()
         controller = types.SimpleNamespace(ingress_lock=threading.Lock(), reconfiguring=False)
+        register_stage = BusinessWorker.register_stage      # the worker admits a stage (its locks, in order)
 
         def continued_session(self, session_id):
             return session_id

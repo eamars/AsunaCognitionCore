@@ -156,6 +156,7 @@ def test_the_action_brain_of_a_task_begun_on_an_errand_works_in_homes_folder(sto
         navigation_ready = threading.Event()
         navigation_ready.set()
         controller = types.SimpleNamespace(ingress_lock=threading.Lock(), reconfiguring=False)
+        register_stage = BusinessWorker.register_stage      # the worker admits a stage (its locks, in order)
         app = types.SimpleNamespace(service=TaskService(store), broker=types.SimpleNamespace(bindings={}))
 
         def continued_session(self, session_id):

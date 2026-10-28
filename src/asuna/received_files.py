@@ -441,9 +441,9 @@ class FetchFailed(Exception):
 
 
 def fetch(url, hosts):
-    """The item's own link, https only, on the platform's file hosts (redirects too), at most MAX_BYTES read. Each wait
-    for data is at most FETCH_SECONDS, and after FETCH_SECONDS the fetch ends at its next piece, so a host that
-    drips can hold it about twice that. The bytes stay in memory until they are judged and stored."""
+    """The item's own link, https only, on the platform's file hosts (redirects too), at most MAX_BYTES read; each wait
+    for data at most FETCH_SECONDS, the whole fetch about twice that. After FETCH_SECONDS the fetch ends at its next
+    piece, so a host that drips holds it longest. The bytes stay in memory until they are judged and stored."""
     import time
     import urllib.error
     from urllib.parse import urlsplit

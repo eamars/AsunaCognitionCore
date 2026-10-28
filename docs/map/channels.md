@@ -344,7 +344,7 @@ Files people send her (ADR-102): offered by ref, read when she asks, stored, kep
 - def `pages_of` — Pages of up to PAGE_LINES lines and PAGE_CHARS characters, whichever comes first; a line longer than PAGE_CHARS is cut at character boundaries.
 - def `find_in` — The count of matches of `word` (as written, Latin letters in either case) and the first FIND_PAGES pages that hold one, each with its first match's line number and that line cut to FIND_LINE_CHARS around the match.
 - class `FetchFailed` — A fetch that brought nothing back: her words, and the platform's status when it answered one (`dead`: the link itself is refused, so trying again later does not help).
-- def `fetch` — The item's own link, https only, on the platform's file hosts (redirects too), at most MAX_BYTES read.
+- def `fetch` — The item's own link, https only, on the platform's file hosts (redirects too), at most MAX_BYTES read; each wait for data at most FETCH_SECONDS, the whole fetch about twice that.
 - def `reach` — The scopes a call may read received files in: this conversation and its read-only linked scenes, the same function pictures use; at home any of her conversations.
 - def `found` — (entry, row, scopes): the item a ref names among the files of the last REF_DAYS days in reach (the picture fence), and its stored row; or a kept file's own row, whose ref never ends.
 - def `read` — op=read: the first read fetches the file; every read answers one page (`page`), or where a word is (`find`).

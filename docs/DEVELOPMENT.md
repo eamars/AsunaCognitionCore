@@ -58,6 +58,23 @@ change and installs again ([RUN_ASUNA.md](../RUN_ASUNA.md#start-review-stop)). T
 idle, and never run two instances on the same channel routes. Check the result on the Web page, in an isolated demo
 profile for new UI or behavior ([Demo environment](../RUN_ASUNA.md#demo-environment)).
 
+## Inbound lines, the clock and stored times
+
+- **Ingress.** Every inbound line is admitted under one fence, the controller's `ingress_lock` (`Channels.receive`,
+  `Chat.receive`), so whatever waits under it holds up every line behind it. Admission there does no network I/O,
+  starts no subprocess and waits on no Host reply. Work of those kinds stays outside the fence: picture downloads,
+  voice transcription, and walks over every member of every channel (a path resolve or a `mkdir` per grant). A
+  download happens after the line is in, or when she opens it; a voice is transcribed before its line is posted; a new
+  member's grant is checked and prepared alone (`host.prepare_admission`). A task's stage takes the effects lock
+  (`queue.database_effects_lock`) first and the fence only for its brief check, never the fence while it waits for
+  the effects lock.
+- **The one clock.** `asuna.clock` gives the time in one process in the order it was read (it takes a lock): a reading
+  that would not be later than the last one is the last one plus 1 µs. Such a 1 µs gap is spacing the clock made, not
+  a measured interval. Across processes (the worker and the Host, two starts) there is no such order.
+- **Times as text.** Comparing stored times as text is reliable only within one column and one form (the same offset
+  and the same precision). Within one second, `.` sorts before `Z`, so `...:55.896576Z` comes before `...:55Z`. Rows
+  whose time field is null or missing drop out of any time window.
+
 ## The project map
 
 [docs/map](map/README.md) answers how the main things are done (home and public kept apart, QQ to DSH and back, a

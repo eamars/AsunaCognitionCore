@@ -366,9 +366,17 @@ map.
 The full one-line meaning of each operation is in `owner_ops.py` (`python owner_ops.py --markdown` prints this table
 with them).
 
+**None in an owner's read** (the lead's rule, 2026-10-28, for every owner). A fence (a conversation, scope, epoch,
+persona, or the person, requester, turn or task whose records are read) given None, or a value not of its kind, finds
+nothing without a read: a fence narrows, never widens to the records that lack the field. A value condition (a state,
+kind, lane, status, outcome, project, a message's side, and any field where None is a meaning, "no outcome yet")
+given None finds the records whose field is null or missing, as MongoDB's `{field: None}` did
+(`records.view.pinned`: an `Or` of `IsNull` and `Exists(False)`). An operation's "not given" is its own sentinel,
+never None. A required field is never null or missing, so a value of None there finds nothing. Kept as asked:
+`tasks.created(scenes=[])`, the replaced `$in: [None]`, the tasks of no conversation.
+
 As built, `records.scenes` (B3): every operation of its row, under those names; call sites import it as
-`scene_records`. A missing id finds nothing, as before; a missing scope finds nothing, where MongoDB's equality on
-null matched a record without `scope_key` (8.3's counts show whether her data has one). `Store.authorize` is gone:
+`scene_records`. A missing id or scope finds nothing (the rule above). `Store.authorize` is gone:
 the owner's `authorize` raises the same `SCENE_MEMBERSHIP_DENIED`. A function that holds a database handle rather than
 a store (`skills.skill_directories`, `scene_links`, `dbread`'s `place`) reaches the owner through `records.on(db)`.
 The owner imports only `asuna.store`, and `state`'s `Denied` inside `authorize`. Tests that faked the store's
@@ -395,7 +403,7 @@ moved (the map at `85dd48275d22`), none left; besides them, `native_api`'s page 
 delivered outbound lines, where the replaced code also wrote the delivered branch without `direction` (the same lines:
 only her outbound lines are ever `DELIVERED`). An author condition given replaces "people only", as the replaced
 code's dict update did (`questions`, `waiting`). A fence or an author given as None, or not of its kind, finds
-nothing without a read, where MongoDB's equality on null matched a record without the field. Variable limits that
+nothing without a read (the rule above). Variable limits that
 could be 0 pass `or None` (8.1). `messages` is declared (74 fields; its times are ISO text as the core writes them;
 every field nullable, none required but `_id`) and no longer `pending`; its two partial unique indexes leave their
 other fields unrequired (3.5), which the catalog's rule now allows. `channels.whole_host_state` also maps the store's
@@ -414,13 +422,12 @@ As built, `records.episodes`, `records.sessions` and `records.receipts` (B5): ev
 `session_records` and `receipt_records`. Their views share `records/view.py` (`View` with `rows`, `first`, `count`;
 the replaced read's sort, none where it had none, so no `_id` is added); it and `records.messages`' own `View` are
 unified later, in B13 (the cleanup batch), not now. `episodes.get` takes the fences the replaced reads wrote (persona,
-conversation, scope, person, epoch, native session, a carried system reference). Where a replaced read's equality could
-be on None, the owner reads None as the field null or missing, as MongoDB's `{field: None}` matched (`records.view.pinned`:
-an `Or` of `IsNull` and `Exists(False)`): `sessions.main`'s epoch and character context, `receipts.sink_of_kind`'s
-project (a publication result without a project supersedes the earlier ones without one); none of those fields has an
-index, so the plans stay `COLLSCAN`. `receipts.sink_window` is history_query's receipt stream (its bounds from
-`history_query.sink_bounds`). Elsewhere B4's rule holds: a fence or id given as None, or not of its kind, finds
-nothing without a read. 161 map rows in 35 files moved (the map at
+conversation, scope, person, epoch, native session, a carried system reference). None follows the rule above. Its value
+conditions: `sessions.main`'s lane, epoch (accepted as a value there: condense passes the epoch of a conversation
+that may have none) and character context, `sessions.native`'s lane, and `receipts.sink_of_kind`'s kind, state and
+project (a publication result without a project supersedes the earlier ones without one); a turn's kind is required,
+so a kind of None finds no turn; none of those fields has an index, so the plans stay `COLLSCAN`.
+`receipts.sink_window` is history_query's receipt stream (its bounds from `history_query.sink_bounds`). 161 map rows in 35 files moved (the map at
 `fa46c24132f6`: episodes 82, sessions 46, the receipts 33), none left, and the turn part of `Store.mutate`'s source check;
 `privacy._erase` keeps redacting `episodes` and `sink_receipts` in its loop over five collections until B10, as for
 `messages`, and `audit.py`'s replay reads `sink_receipts` through the maintenance surface. The four collections are
@@ -435,11 +442,12 @@ carry them (`tests/test_host.py`, `test_carried_session.py`, `test_credentials.p
 
 As built, `records.tasks` and `records.plans` (B6): every operation of their rows but `redact_scope`, under those
 names (`thread`, `thread_message` and `save_message` on `task_messages`); call sites import them as `task_records` and
-`plan_records`; their views are `records/view.py`'s. Where a replaced read's equality could be on None, None reads as
-the field null or missing (`records.view.pinned`), in these places: `tasks.get`'s and `plans.get`'s fences (state;
-conversation, scope, epoch, requester or person), `tasks.by_prefix`, `tasks.thread_message`'s sender, `tasks.of_episode`,
-`tasks.of_scope`, `tasks.thread`, `plans.of_conversation`, `plans.with_outcome`, `recent_with_inputs`' conversation,
-scope and epoch, and `tasks.created(scenes=[])`, the replaced `$in: [None]` (the tasks of no conversation). The
+`plan_records`; their views are `records/view.py`'s. None follows the rule above. Its value
+conditions: a task's state (`get`, `in_states`), a pause reason (`paused`), a message's side and delivery (`thread`,
+`thread_message`), a plan's status (`in_status`, `count_status`) and last outcome (`with_outcome`); its fences: the
+conversation, scope, epoch, requester and person of `get`, `by_prefix`, `of_conversation`, `with_outcome` and
+`recent_with_inputs`, the turn of `of_episode`, the scope of `of_scope`, the task of `thread`; and
+`tasks.created(scenes=[])` as kept. The
 lost-results read (`awaiting_feedback`) keeps the replaced `$exists` and `$nin: [..., None]` as "feedback present
 and not taken"; the words have no "not null", so a task whose feedback is null is left out after the read (it reads
 those few rows more, never fewer). `recent_with_inputs` (5.7) reads the conversation's tasks (the fields the

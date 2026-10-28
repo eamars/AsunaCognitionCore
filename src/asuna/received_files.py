@@ -441,8 +441,9 @@ class FetchFailed(Exception):
 
 
 def fetch(url, hosts):
-    """The item's own link, https only, on the platform's file hosts (redirects too), at most MAX_BYTES read and
-    FETCH_SECONDS for the whole fetch. The bytes stay in memory until they are judged and stored."""
+    """The item's own link, https only, on the platform's file hosts (redirects too), at most MAX_BYTES read. Each wait
+    for data is at most FETCH_SECONDS, and after FETCH_SECONDS the fetch ends at its next piece, so a host that
+    drips can hold it about twice that. The bytes stay in memory until they are judged and stored."""
     import time
     import urllib.error
     from urllib.parse import urlsplit
@@ -461,7 +462,7 @@ def fetch(url, hosts):
     except urllib.error.HTTPError as exc:
         raise _refused(exc.code) from None
     except (urllib.error.URLError, OSError, TimeoutError) as exc:
-        raise FetchFailed(FETCH_FAILED % ('%s，%d 秒没有数据，或过了 %d 秒' % (type(exc).__name__, FETCH_SECONDS, FETCH_SECONDS))) from None
+        raise FetchFailed(FETCH_FAILED % ('%s，%d 秒没有数据，或一直在慢慢给、到约 %d 秒还没给完' % (type(exc).__name__, FETCH_SECONDS, 2 * FETCH_SECONDS))) from None
 
 
 def _refused(status):

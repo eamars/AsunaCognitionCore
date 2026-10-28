@@ -347,7 +347,8 @@ pictures sent as files (`read_image` handles pictures).
   row's own fields. Tests: `tests/test_received_files.py`.
 - Part 2: the `received_file` tool for both halves (`received_files.run`: `read`, `keep`, `let_go`, `kept`), the
   note under a line (`line_note`, in `people.py`), fetching through `vision.download` (shared with pictures: one
-  redirect fence, one cap on bytes read, and a deadline for the whole fetch), judging (`judge`; `outbound_files.sniff`
+  redirect fence, one cap on bytes read, and a time limit: 20 s without data, about 40 s at most for a host that
+  drips), judging (`judge`; `outbound_files.sniff`
   learned programs and GB18030), pages and `find`, bytes fetched again onto their own row (`BlobStore.restore`),
   `FILE_HOSTS` (`channel_kinds.file_hosts`; NapCat `.ftn.qq.com`). Its cost: one tool more in each half (her 30 -> 31,
   the action brain's 26 -> 27), descriptions +499 characters for her and +291 for the action brain

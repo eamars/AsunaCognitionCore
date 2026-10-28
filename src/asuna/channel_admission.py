@@ -81,21 +81,16 @@ def admit(controller, channel_id, body):
         route.update(sender_id=sender, **grant)
     key = 'channel-admission-' + sha(canonical([channel_id, channel['account_id'], body['route_id']]))
     prior = store.db.artifacts.find_one({'_id': key})
-    from .host import prepare_channels
-    # Validate all grants before making the admission fact durable. On a
-    # storage failure after that point, startup can finish the same admission.
-    channel.setdefault('routes', {})[body['route_id']] = route
-    try:
-        prepare_channels(store, dry_run=True)
-    except Exception:
-        if existing is None:
-            channel['routes'].pop(body['route_id'], None)
-        else:
-            channel['routes'][body['route_id']] = existing
-        raise
+    from .host import prepare_admission
+    # Only the new grant is checked and prepared (host.prepare_admission), never every member of every channel:
+    # this runs inside the ingress fence. It is validated before the admission fact is durable; the route joins the
+    # configuration only once it is prepared, so a failure in between is retried by the sender's next line, and
+    # startup finishes the same admission from the stored fact.
+    prepare_admission(store, channel_id, body['route_id'], route, sender, dry_run=True)
     # Admission facts are durable business state, not a second settings store.
     store.put('artifacts', {'_id': key, 'kind': 'channel_admission', 'channel_id': channel_id,
         'account_id': channel['account_id'], 'route_id': body['route_id'], 'route': route,
         'scope_key': 'operator'}, expected=prior['revision'] if prior else None, stream=key)
-    prepare_channels(store)
+    prepare_admission(store, channel_id, body['route_id'], route, sender)
+    channel.setdefault('routes', {})[body['route_id']] = route
     return route

@@ -182,7 +182,7 @@ A workspace must be an absolute path under `<data>/channels`; overlapping worksp
 | `explicit` (default) | refused (`CHANNEL_IDENTITY_DENIED`) |
 | `automatic` | admitted on its first valid event; the adapter sends the route id `auto-dm-<sender>` or `auto-group-<group>` |
 
-An admission is kept in `artifacts` (kind `channel_admission`) and restored at start. An admitted member gets a workspace under `<data>/channels` and no owner grants; admitting a group member does not change the group's policy epoch. A target that already has a route keeps it (`CHANNEL_TARGET_ALREADY_BOUND` for a second). Admission refusals: `CHANNEL_SENDER_INVALID`, `CHANNEL_BLOCKED`, `CHANNEL_GROUP_DENIED`, `CHANNEL_ROUTE_NOT_AUTHORIZED` (`src/asuna/channel_admission.py`).
+An admission is kept in `artifacts` (kind `channel_admission`) and restored at start. It checks and prepares only the new member's grant, by the same rules as the start (`src/asuna/host.py` `prepare_admission`), against the workspaces the start collected and the admissions since have added. An admitted member gets a workspace under `<data>/channels` and no owner grants; admitting a group member does not change the group's policy epoch. A target that already has a route keeps it (`CHANNEL_TARGET_ALREADY_BOUND` for a second). Admission refusals: `CHANNEL_SENDER_INVALID`, `CHANNEL_BLOCKED`, `CHANNEL_GROUP_DENIED`, `CHANNEL_ROUTE_NOT_AUTHORIZED` (`src/asuna/channel_admission.py`).
 
 ### Route keys
 

@@ -6,6 +6,7 @@ from pathlib import Path
 import threading
 import time
 import traceback
+import weakref
 
 from . import channel_kinds
 from .application import Application
@@ -40,18 +41,120 @@ def _workspace_overlaps(workspace, ordered, known):
     return index < len(ordered) and ordered[index].startswith(prefix)
 
 
-def prepare_channels(store, *, dry_run=False):
-    """Explicit DM/group identities and disjoint per-member resource grants."""
-    scene_ids, tokens = set(), set()
+class ChannelWorkspaces:
+    """The resolved workspaces of the local chat and of every channel grant: a new grant's must overlap none of them.
+    It belongs to the channels configuration it was built from (`channels`)."""
+
+    def __init__(self, local_workspace, channels):
+        self.channels = channels
+        self.ordered = [os.path.normcase(str(local_workspace))]
+        self.known = set(self.ordered)
+
+    def overlaps(self, workspace):
+        return _workspace_overlaps(workspace, self.ordered, self.known)
+
+    def add(self, workspace):
+        key = os.path.normcase(str(workspace))
+        insort(self.ordered, key)
+        self.known.add(key)
+
+
+# Each store's ChannelWorkspaces: set by every full pass over it (prepare_channels), extended by each admission
+# (prepare_admission). A worker start opens a new store, so every start builds it again.
+_WORKSPACES = weakref.WeakKeyDictionary()
+
+
+def channel_workspaces(store):
+    """The store's ChannelWorkspaces. When no full pass has run over this channels configuration, one runs dry (it
+    writes nothing) to build it."""
+    kept = _WORKSPACES.get(store)
+    if kept is None or kept.channels is not store.config.get('channels'):
+        prepare_channels(store, dry_run=True)
+        kept = _WORKSPACES[store]
+    return kept
+
+
+def _writers(store, dry_run):
     def put(collection, document, **kwargs):
         return document if dry_run else store.put(collection, document, **kwargs)
 
     def save_scene(document, **kwargs):
         return document if dry_run else scene_records.save(store, document, **kwargs)
+    return put, save_scene
+
+
+def _speaks(channel, route, kind, sender):
+    """Whether a member of a route is one of its scene's members: not blocked, nor in a blocked group."""
+    blocked = kind == 'group' and route['target']['id'] in channel.get('blocked_groups', [])
+    return not blocked and sender not in channel.get('blocked_senders', [])
+
+
+def _checked_workspace(grant, workspaces):
+    # A relative path would mean whatever folder the worker happens to run in.
+    if not Path(grant['workspace']).is_absolute():
+        raise Denied('CHANNEL_WORKSPACE_NOT_ABSOLUTE')
+    workspace = Path(grant['workspace']).resolve()
+    if not workspace.is_relative_to(DATA / 'channels'):
+        raise Denied('CHANNEL_WORKSPACE_OUTSIDE_CHANNEL_ROOT')
+    if workspaces.overlaps(workspace):
+        raise Denied('CHANNEL_WORKSPACE_OVERLAP')
+    return workspace
+
+
+def _bind_identity(put, identities_by_id, channel_id, route, kind, sender, person):
+    identity = identities_by_id.get(person)
+    if identity is None:
+        created = put('identities', {'_id': person, 'person_id': person, 'platform': channel_id,
+                                          'account_id': sender}, stream='host:setup')
+        identities_by_id[person] = created
+    elif (identity['platform'], identity['account_id']) != (channel_id, sender):
+        raise Denied('CHANNEL_IDENTITY_BINDING_CONFLICT')
+    # A line's own name for whoever speaks there (an agent line names the agent, ADR-033 D3). Only a
+    # one-person line names its speaker: a group's name is the group's, and an id is no name.
+    display = route.get('display_name') if kind == 'dm' and route.get('display_name') != route['target']['id'] else None
+    if display is not None and (not isinstance(display, str) or not 1 <= len(display) <= 40):
+        raise ValueError('CHANNEL_DISPLAY_NAME_INVALID')
+    if display and identities_by_id[person].get('display_name') != display:
+        current = identities_by_id[person]
+        identities_by_id[person] = put('identities', {**current, 'display_name': display},
+            **({'expected': current['revision']} if 'revision' in current else {}), stream='host:setup')
+    # No relationship record is seeded: everyone starts with none, which her context says in
+    # words, and her first written understanding creates it (familiarity.py, memory.py).
+
+
+def _route_scene(store, local, channel_id, channel, scene_id, kind, people, save_scene):
+    # The owner joins a line of a kind that lets him (ADR-051): he writes there from the Web.
+    joins = channel_kinds.owner_joins(scene_id) and local.get('person_id') not in people
+    if joins:
+        people.append(local['person_id'])
+    scene = scene_records.get(store, scene_id)
+    if scene is None:
+        save_scene({'_id': scene_id, 'scene_id': scene_id, 'kind': kind,
+                       'members': people, 'scope_key': 'scene:' + scene_id,
+                       'policy_epoch': 1, 'sequence': 0, 'channel_id': channel_id,
+                       'channel_account_id': channel['account_id']}, stream='host:setup')
+    else:
+        if (scene.get('channel_id') != channel_id or scene.get('channel_account_id') != channel['account_id'] or scene['kind'] != kind
+                or scene['scope_key'] != 'scene:' + scene_id):
+            raise Denied('CHANNEL_SCENE_BINDING_CONFLICT')
+        if set(scene['members']) != set(people):
+            # In automatic mode, another participant in the same QQ
+            # group is covered by the existing admission policy.
+            revoked = set(scene['members']) - set(people)
+            # The owner joining his own home line opens it to nobody else: the conversation goes on.
+            joined = set(people) - set(scene['members']) - ({local['person_id']} if joins else set())
+            bump = bool(revoked) or (channel.get('admission') != 'automatic' and bool(joined))
+            save_scene({**scene, 'members': people,
+                'policy_epoch': scene['policy_epoch'] + int(bump)},
+                expected=scene['revision'], stream='channel-membership:' + scene_id)
+
+
+def prepare_channels(store, *, dry_run=False):
+    """Explicit DM/group identities and disjoint per-member resource grants."""
+    scene_ids, tokens = set(), set()
+    put, save_scene = _writers(store, dry_run)
     local = store.config['chat']
-    local_workspace = Path(local['workspace']).resolve()
-    ordered_workspaces = [os.path.normcase(str(local_workspace))]
-    known_workspaces = set(ordered_workspaces)
+    workspaces = ChannelWorkspaces(Path(local['workspace']).resolve(), store.config.get('channels'))
     identities_by_id = {row['_id']: row for row in store.db.identities.find({})}
     for channel_id, channel in store.config.get('channels', {}).items():
         token = channel.get('token', '')
@@ -77,73 +180,66 @@ def prepare_channels(store, *, dry_run=False):
                 raise Denied('CHANNEL_TARGET_ALREADY_BOUND')
             targets.add(target)
             people, all_people = [], set()
-            blocked = kind == 'group' and route['target']['id'] in channel.get('blocked_groups', [])
             for sender, grant in members.items():
                 person = grant['person_id']
                 if not isinstance(sender, str) or not sender or not isinstance(person, str) or not person or person in all_people:
                     raise Denied('CHANNEL_MEMBER_BINDING_INVALID')
                 all_people.add(person)
-                if not blocked and sender not in channel.get('blocked_senders', []):
+                if _speaks(channel, route, kind, sender):
                     people.append(person)
-                # A relative path would mean whatever folder the worker happens to run in.
-                if not Path(grant['workspace']).is_absolute():
-                    raise Denied('CHANNEL_WORKSPACE_NOT_ABSOLUTE')
-                workspace = Path(grant['workspace']).resolve()
-                if not workspace.is_relative_to(DATA / 'channels'):
-                    raise Denied('CHANNEL_WORKSPACE_OUTSIDE_CHANNEL_ROOT')
-                if _workspace_overlaps(workspace, ordered_workspaces, known_workspaces):
-                    raise Denied('CHANNEL_WORKSPACE_OVERLAP')
-                workspace_key = os.path.normcase(str(workspace))
-                insort(ordered_workspaces, workspace_key)
-                known_workspaces.add(workspace_key)
-                identity = identities_by_id.get(person)
-                if identity is None:
-                    created = put('identities', {'_id': person, 'person_id': person, 'platform': channel_id,
-                                                      'account_id': sender}, stream='host:setup')
-                    identities_by_id[person] = created
-                elif (identity['platform'], identity['account_id']) != (channel_id, sender):
-                    raise Denied('CHANNEL_IDENTITY_BINDING_CONFLICT')
-                # A line's own name for whoever speaks there (an agent line names the agent, ADR-033 D3). Only a
-                # one-person line names its speaker: a group's name is the group's, and an id is no name.
-                display = route.get('display_name') if kind == 'dm' and route.get('display_name') != route['target']['id'] else None
-                if display is not None and (not isinstance(display, str) or not 1 <= len(display) <= 40):
-                    raise ValueError('CHANNEL_DISPLAY_NAME_INVALID')
-                if display and identities_by_id[person].get('display_name') != display:
-                    current = identities_by_id[person]
-                    identities_by_id[person] = put('identities', {**current, 'display_name': display},
-                        **({'expected': current['revision']} if 'revision' in current else {}), stream='host:setup')
-                # No relationship record is seeded: everyone starts with none, which her context says in
-                # words, and her first written understanding creates it (familiarity.py, memory.py).
+                workspace = _checked_workspace(grant, workspaces)
+                workspaces.add(workspace)
+                _bind_identity(put, identities_by_id, channel_id, route, kind, sender, person)
                 if not dry_run:
                     workspace.mkdir(parents=True, exist_ok=True)
-            # The owner joins a line of a kind that lets him (ADR-051): he writes there from the Web.
-            joins = channel_kinds.owner_joins(scene_id) and local.get('person_id') not in people
-            if joins:
-                people.append(local['person_id'])
-            scene = scene_records.get(store, scene_id)
-            if scene is None:
-                save_scene({'_id': scene_id, 'scene_id': scene_id, 'kind': kind,
-                               'members': people, 'scope_key': 'scene:' + scene_id,
-                               'policy_epoch': 1, 'sequence': 0, 'channel_id': channel_id,
-                               'channel_account_id': channel['account_id']}, stream='host:setup')
-            else:
-                if (scene.get('channel_id') != channel_id or scene.get('channel_account_id') != channel['account_id'] or scene['kind'] != kind
-                        or scene['scope_key'] != 'scene:' + scene_id):
-                    raise Denied('CHANNEL_SCENE_BINDING_CONFLICT')
-                if set(scene['members']) != set(people):
-                    # In automatic mode, another participant in the same QQ
-                    # group is covered by the existing admission policy.
-                    revoked = set(scene['members']) - set(people)
-                    # The owner joining his own home line opens it to nobody else: the conversation goes on.
-                    joined = set(people) - set(scene['members']) - ({local['person_id']} if joins else set())
-                    bump = bool(revoked) or (channel.get('admission') != 'automatic' and bool(joined))
-                    save_scene({**scene, 'members': people,
-                        'policy_epoch': scene['policy_epoch'] + int(bump)},
-                        expected=scene['revision'], stream='channel-membership:' + scene_id)
+            _route_scene(store, local, channel_id, channel, scene_id, kind, people, save_scene)
     if scene_links and not dry_run:
         # 派生投影：联动边写进 scenes，只为可观察；读路径每次现算自配置。
         scene_links.sync_scene_docs(store, store.config, sorted(scene_ids | {local['scene_id']}))
+    _WORKSPACES[store] = workspaces
     return scene_ids
+
+
+def prepare_admission(store, channel_id, route_id, route, sender, *, dry_run=False):
+    """One admitted member: `sender` on `route`, which becomes `route_id` of `channel_id` once this succeeds. The
+    full pass's rules, for this grant only: its workspace (absolute, under <data>/channels, overlapping none of
+    channel_workspaces), its member and identity bindings, its route, the route's scene (created, or its members
+    and epoch set as the full pass sets them) and that scene's links. A dry run writes nothing."""
+    put, save_scene = _writers(store, dry_run)
+    local = store.config['chat']
+    channels = store.config.get('channels', {})
+    channel = channels[channel_id]
+    scene_id, kind = route['scene_id'], route['target']['type']
+    others = [(other_id, other_route_id, other) for other_id, other_channel in channels.items()
+              for other_route_id, other in other_channel['routes'].items() if (other_id, other_route_id) != (channel_id, route_id)]
+    if scene_id == local['scene_id'] or any(other['scene_id'] == scene_id for _, _, other in others):
+        raise Denied('CHANNEL_SCENE_MUST_BE_DISTINCT')
+    members = route_members(route)
+    if not members or not isinstance(route['target'].get('id'), str) or not route['target']['id']:
+        raise Denied('CHANNEL_TARGET_OR_MEMBERS_REQUIRED')
+    if kind == 'dm' and route['target']['id'] != route['sender_id']:
+        raise Denied('CHANNEL_DM_TARGET_MISMATCH')
+    if any(other_id == channel_id and other['target']['type'] == kind and other['target']['id'] == route['target']['id']
+           for other_id, _, other in others):
+        raise Denied('CHANNEL_TARGET_ALREADY_BOUND')
+    grant = members[sender]
+    person = grant['person_id']
+    if (not isinstance(sender, str) or not sender or not isinstance(person, str) or not person
+            or person in {other['person_id'] for other_sender, other in members.items() if other_sender != sender}):
+        raise Denied('CHANNEL_MEMBER_BINDING_INVALID')
+    workspaces = channel_workspaces(store)
+    workspace = _checked_workspace(grant, workspaces)
+    identity = store.db.identities.find_one({'_id': person})
+    _bind_identity(put, {person: identity} if identity else {}, channel_id, route, kind, sender, person)
+    if not dry_run:
+        workspace.mkdir(parents=True, exist_ok=True)
+    people = [other['person_id'] for other_sender, other in members.items() if _speaks(channel, route, kind, other_sender)]
+    _route_scene(store, local, channel_id, channel, scene_id, kind, people, save_scene)
+    if not dry_run:
+        if scene_links:
+            scene_links.sync_scene_docs(store, store.config, [scene_id])
+        workspaces.add(workspace)
+    return route
 
 
 def write_route_keys(config, root):

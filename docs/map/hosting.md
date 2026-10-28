@@ -78,7 +78,12 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
 
 Long-lived owner of Application, queues and adapter listeners; Web is a client.
 
+- class `ChannelWorkspaces` — The resolved workspaces of the local chat and of every channel grant: a new grant's must overlap none of them.
+  - `overlaps`
+  - `add`
+- def `channel_workspaces` — The store's ChannelWorkspaces.
 - def `prepare_channels` — Explicit DM/group identities and disjoint per-member resource grants.
+- def `prepare_admission` — One admitted member: `sender` on `route`, which becomes `route_id` of `channel_id` once this succeeds.
 - def `write_route_keys` — Each route of a ROUTE_KEYS channel gets its key in <data>/private/route-keys/<channel>-<route>.json, ignored by git, for the agent on that line to read (ADR-033 D4).
 - class `RuntimeHost`
 

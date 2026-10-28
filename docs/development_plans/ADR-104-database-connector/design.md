@@ -477,6 +477,18 @@ precision is not verified). The 18 cases of `integration/test_mongo_vectors.py` 
 class. MongoDB's vector filter refuses an empty `$in`, so the adapter drops the branches that can match nothing and
 answers `[]` itself when none is left. `memory_units` declares `embedding` as `vector(768)`, the space's dimension.
 
+Where each of the 18 cases of `integration/test_mongo_vectors.py` (as at `b5c36121ac66`) went. Each new case is named
+by its `[memory]` node id; it also runs as `[stand-in]` (listed in `tests/harness_skips.txt`: the stand-in has no
+vector search) and as `integration/test_store_contract.py::TestN::<name>` on MongoDB:
+
+| old case (node id) | what it asserted | pinned by (node id) | what differs |
+|---|---|---|---|
+| `integration/test_mongo_vectors.py::test_the_index_is_brought_up_to_the_space` | after `ensure_vectors` with one filter field, then with the space's, the search index's filter fields are the space's | `tests/test_store_contract.py::TestN::test_N01_the_index_is_brought_up_to_the_space[memory]` | it filters on `kind`, a field only the second `ensure_vectors` added, and compares with brute force: on MongoDB that fails while the index lacks the field; on `[memory]` it shows nothing (no index) |
+| `integration/test_mongo_vectors.py::test_nearest_is_exact_cosine[<k>-<filter>]`, 15: k 1, 12, 24 by filter `no filter`, `value`, `list`, `pairs`, `pairs and kind` | for each of 10 query vectors, the k nearest under the filter equal exact cosine by brute force (scores within 1e-4; above the k-th score the same ids in id order, at it any of the tied ids) | `tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[memory-<k>-<filter>]`, the same 15 | the filters are written in the store's words (a list as `AnyOf`, the pairs as `Or` of dicts, the other entries in `And`) |
+| `integration/test_mongo_vectors.py::test_ties_come_in_id_order` | two records with one vector come back in id order | `tests/test_store_contract.py::TestN::test_N17_ties_come_in_id_order[memory]` | none |
+| `integration/test_mongo_vectors.py::test_empty_any_of_matches_nothing_and_bad_queries_are_refused`, its refusals | a filter on an undeclared field, a vector of the wrong length, a zero vector, k 0 and k 101 are refused | `tests/test_store_contract.py::TestN::test_N18_empty_any_of_matches_nothing_and_bad_queries_are_refused[memory]` | each refusal by its code; it adds `VECTOR_FILTER_WORD`, and its empty any-of is `AnyOf([])` on one field |
+| `integration/test_mongo_vectors.py::test_empty_any_of_matches_nothing_and_bad_queries_are_refused` (no parameters), its first assertion | `nearest` with an empty list of `(scope_key, policy_epoch)` pairs answers `[]` | no home | `Store.nearest`'s translation answers it without a call, and no case pins that; from B7, `records.memories`' tests pin it as `test_an_empty_pair_list_answers_nothing_without_a_call` |
+
 **5.11 Large binary files and the record size limit.** The blob interface (methods 16-19). `blobs.py` keeps its rules in
 the core: it hashes while it streams into `blobs.write`, reads the bytes back through `blobs.open` in `STREAM_PIECE`
 pieces and compares hash and size, deletes on mismatch, then writes the `artifacts` row through `put`. The post-write
@@ -652,39 +664,43 @@ there only through `tests/harness_skips.txt` by the case's `[stand-in]` id. Two 
 | `R` races (integration only) | 4 | counter (4 processes x 50), claim (6 x 60), lease expiry (two holders), stale revision (two writers) |
 | `D` differential (integration only) | 1 | Hypothesis, `derandomize=True`, at most 200 records and 100 generated where trees per run (missing, null, empty lists, equal sort keys); `find` and `count` on MongoDB equal the double's, order included |
 
-Size, per run (counted at B1b; times as measured, with where):
-- the in-memory run: 114 cases, 112 shared (W 31, O 6, G 5, C 12, X 15, T 5, V 8, N 18, B 6, S 6) and 2 its own;
-  its 111 `[memory]` cases took 0.25-0.26 s in the B1b worktree (B1a's run of 112 took 0.69-0.72 s in another
-  checkout of the same machine);
-- the stand-in run: the 112 shared less `S05` (it opens no store, so it runs once): 111 `[stand-in]` cases, of which
-  80 pass and 31 are listed in `tests/harness_skips.txt` by their `[stand-in]` ids; 0.09 s in the B1b worktree;
+Size, per run (counted at B1b; times as measured, with where). `tests/test_store_contract.py` collects 226 cases: the
+112 shared (W 31, O 6, G 5, C 12, X 15, T 5, V 8, N 18, B 6, S 6) less `S05` as 111 `[memory]` and 111 `[stand-in]`,
+and 4 without the adapter parameter (`S05`, `O05`, the skip-line guard test, the injected-clock case):
+- the in-memory run: the 111 `[memory]` cases and the 4 without the parameter, 115; the 111 `[memory]` cases took
+  0.25-0.26 s in the B1b worktree (B1a's run of 112 took 0.69-0.72 s in another checkout of the same machine);
+- the stand-in run: the 111 `[stand-in]` cases, of which 80 pass and 31 are skipped by 31 lines of
+  `tests/harness_skips.txt` with the file prefix `tests/test_store_contract.py` (16 of them literally `[stand-in]`,
+  15 parametrized as `[stand-in-<k>-<filter>]`); 0.09 s in the B1b worktree;
 - the integration run on MongoDB: the 112 shared, `R` (4) and `D` (1, 100 generated conditions), 117 cases in 46 s
   from the B1b worktree against the configured server, under the target of 60 s.
 
-Which cases pin each method of 2.2 (a case fails when the in-memory adapter lacks the method; checked at B1b by
-deleting each method in turn), and from which batch the core first calls it:
+Which cases pin each method of 2.2: the cases whose subject it is, named by their `[memory]` node id (each also runs as
+`[stand-in]` and as `integration/test_store_contract.py::<class>::<name>`); every case listed fails when the in-memory
+adapter lacks the method (checked at B1b by deleting each method in turn), and so do the other cases named after the
+`+`, which use it on the way. The last column is the batch from which the core first calls the method:
 
-| method | pinned by | first called by the core |
-|---|---|---|
-| `ensure` | every case (the `store` fixture ensures), `S01`-`S03` | B1b (`Store.ensure`, `migrate`) |
-| `ensure_vectors` | `N01`, `N02`, `N17`, `N18` | B1b (`Store.ensure_vectors`, retrieval as built) |
-| `get` | `X03` and 25 more (`C`, `O07`, `T`, `V`, `X`) | B2 (the lease's holder) |
-| `find` | the `W` cases that match records, `O01`-`O04`, `O06`, `O07`, `C11`, `T03`, `X02`, `X05` | B1b (`Store.audit`'s newest of a stream, `recover_commits`) |
-| `count` | `G05`, `X04` | B1b (`recover_commits`) |
-| `group` | `G01`-`G04` | B4 (messages' `distinct`, as `values`) |
-| `insert` | every case that writes, `X01`, `X02` | B1b (`Store.put` new, `Store.audit`) |
-| `replace` | `X09`-`X12` | B1b (`Store.put` at a revision) |
-| `update` | `C01`-`C12`, `O07`, `T04`, `T05`, `X08`, `X12` | B2 (the lease, the fault counts) |
-| `claim` | `C12`, `T04`, `X13`, `X14` | B3 (the conversation counter) |
-| `delete` | `X04`, `X05` | B2 (the lease released, old fault counts) |
-| `nearest` | `N01`, `N02`, `N17`, `N18` | B1b (`Store.nearest`, retrieval as built) |
-| `size` | `X15` | B10 (audit prune) |
-| `ping` | `S06` | no caller until B13 (`native_worker.py:1042`'s ping moves to it) |
-| `close` | `S06` | no caller until B13 (the core's `client.close()` calls move to it) |
-| `blobs.write` | `B01`-`B03`, `B05`, `B06` | B8 (`blobs.py`) |
-| `blobs.open` | `B01`-`B04`, `B06` | B8 |
-| `blobs.delete` | `B03` | B8 |
-| `blobs.of_scope` | `B05` | B8 (erasure by scope, ADR-105) |
+| method | pinned by (node id) | what that case asserts of the method | first called by the core |
+|---|---|---|---|
+| `ensure` | `tests/test_store_contract.py::TestS::test_S01_ensure_is_idempotent[memory]`, `tests/test_store_contract.py::TestS::test_S02_a_retired_index_is_dropped[memory]`, `tests/test_store_contract.py::TestS::test_S03_an_index_of_the_same_name_that_differs_is_refused[memory]`; + every case (the `store` fixture ensures) | it creates a collection and its indexes once, then nothing; drops a retired index; refuses an index of the same name with other keys or options | B1b (`Store.ensure`, `migrate`) |
+| `ensure_vectors` | `tests/test_store_contract.py::TestN::test_N01_the_index_is_brought_up_to_the_space[memory]`; + `N02`, `N17`, `N18` (the `vectors` fixture) | it answers True for a space, and again for the space with more filter fields | B1b (`Store.ensure_vectors`, retrieval as built) |
+| `get` | `tests/test_store_contract.py::TestX::test_X03_get[memory]`; + 25 cases that read a record back (`C`, `O07`, `T`, `V`, `X`) | a missing id gives None, `fields` returns those fields and `_id`, a non-text id is refused | B2 (the lease's holder) |
+| `find` | `tests/test_store_contract.py::TestO::test_O06_skip_and_limit[memory]`, `tests/test_store_contract.py::TestW::test_W01_equality_is_text_exactly[memory]`; + the other `W` cases that match records, `O01`-`O04`, `O07`, `C11`, `T03`, `X02`, `X05` | the records a condition matches, in the sort's order, paged by `skip` and `limit` | B1b (`Store.audit`'s newest of a stream, `recover_commits`) |
+| `count` | `tests/test_store_contract.py::TestG::test_G05_count_with_a_limit[memory]`; + `X04` | the records a condition matches, stopping at `limit` | B1b (`recover_commits`) |
+| `group` | `tests/test_store_contract.py::TestG::test_G01_count_by_one_key[memory]`, `tests/test_store_contract.py::TestG::test_G02_max[memory]`, `tests/test_store_contract.py::TestG::test_G03_two_keys_in_order[memory]`, `tests/test_store_contract.py::TestG::test_G04_values_ascending_without_records_missing_the_field[memory]` | rows by the `by` values in order, with `Count` or `Max`; values ascending, missing out and null in | B4 (messages' `distinct`, as `values`) |
+| `insert` | `tests/test_store_contract.py::TestX::test_X01_insert_one[memory]`, `tests/test_store_contract.py::TestX::test_X02_insert_many_stops_at_a_duplicate_and_keeps_what_came_before[memory]`; + every case that writes | a record comes back as written; an ordered insert stops at a duplicate at its position and keeps the earlier ones | B1b (`Store.put` new, `Store.audit`) |
+| `replace` | `tests/test_store_contract.py::TestX::test_X10_replace_at_a_revision[memory]`, `tests/test_store_contract.py::TestX::test_X11_a_stale_revision_writes_nothing[memory]`, `tests/test_store_contract.py::TestX::test_X12_replace_keeps_the_counters[memory]`, `tests/test_store_contract.py::TestX::test_X09_a_duplicate_on_replace[memory]` | it writes at the expected revision and not at another; kept fields keep their stored values; a repeated unique key is refused | B1b (`Store.put` at a revision) |
+| `update` | `tests/test_store_contract.py::TestC::test_C01_set_creates_missing_parents[memory]` to `tests/test_store_contract.py::TestC::test_C12_a_create_that_repeats_a_unique_key[memory]`; + `O07`, `T04`, `T05`, `X08`, `X12` | each change word's meaning (3.4) and the rules of a create | B2 (the lease, the fault counts) |
+| `claim` | `tests/test_store_contract.py::TestX::test_X13_claim_takes_the_first_by_sort_and_returns_it_changed[memory]`, `tests/test_store_contract.py::TestX::test_X14_the_counter[memory]`; + `C12`, `T04` | the first record by the sort, changed and returned in one step; the counter rises by one per call | B3 (the conversation counter) |
+| `delete` | `tests/test_store_contract.py::TestX::test_X04_delete_one[memory]`, `tests/test_store_contract.py::TestX::test_X05_delete_many[memory]` | one matching record or all of them go, and the count says how many | B2 (the lease released, old fault counts) |
+| `nearest` | `tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[memory-<k>-<filter>]` (15), `tests/test_store_contract.py::TestN::test_N17_ties_come_in_id_order[memory]`, `tests/test_store_contract.py::TestN::test_N18_empty_any_of_matches_nothing_and_bad_queries_are_refused[memory]`; + `N01` | exact cosine against brute force; ties in id order; refusals by code | B1b (`Store.nearest`, retrieval as built) |
+| `size` | `tests/test_store_contract.py::TestX::test_X15_size_counts_records_and_their_bytes[memory]` | the record count exactly, bytes above 0 that grow with a larger record | B10 (audit prune) |
+| `ping` | `tests/test_store_contract.py::TestS::test_S06_ping_and_close[memory]` | it answers None | no caller until B13 (`native_worker.py:1042`'s ping moves to it) |
+| `close` | `tests/test_store_contract.py::TestS::test_S06_ping_and_close[memory]` | it answers None | no caller until B13 (the core's `client.close()` calls move to it) |
+| `blobs.write` | `tests/test_store_contract.py::TestB::test_B01_write_and_open[memory]`, `tests/test_store_contract.py::TestB::test_B06_a_five_mebibyte_stream[memory]`; + `B02`, `B03`, `B05` | it stores a stream and answers its id and size; 5 MiB read back whole | B8 (`blobs.py`) |
+| `blobs.open` | `tests/test_store_contract.py::TestB::test_B02_a_blob_opens_seekable[memory]`, `tests/test_store_contract.py::TestB::test_B04_a_missing_blob[memory]`; + `B01`, `B03`, `B06` | the bytes come back seekable; a missing id is `BLOB_MISSING` | B8 |
+| `blobs.delete` | `tests/test_store_contract.py::TestB::test_B03_delete_twice[memory]` | True, then False; the blob no longer opens | B8 |
+| `blobs.of_scope` | `tests/test_store_contract.py::TestB::test_B05_blobs_of_a_scope[memory]` | the ids of a scope's blobs, and none of another's | B8 (erasure by scope, ADR-105) |
 
 Hypothesis is in the `dev` dependency group (`hypothesis==6.170.12`) for class `D`.
 
@@ -747,8 +763,9 @@ Today: 193 test files, 1,285 test functions (parametrised ones count once; pytes
 them need a database through the `store` fixture or a fixture of their file that takes it, in 139 files; 5 files use
 mongomock, 50 make a client or a `Store` themselves (`test_census.py` at `5a62ebd6`). A run takes 9 to 16 minutes on
 this machine (ADR page). The time on the double is measured once it exists (B13), with `pytest --durations=0`
-written to a TSV. "Test count and run time on the double" counts the in-memory run only (the contract's `[memory]`
-cases and every other test), never the stand-in's `[stand-in]` cases, so B15 compares like with like. B15's before
+written to a TSV. "Test count and run time on the double" counts the in-memory run only (of the contract's 226, the
+111 `[memory]` cases and the 4 without the adapter parameter; and every other test), never the 111 `[stand-in]`
+cases, so B15 compares like with like. B15's before
 and after are the landing run's numbers only (a fresh worktree, the whole suite without `-k`, as the landing script
 runs it), never a checkout's own run; the baseline is B0's landing run at `1f7bb31bc629`: 1,502 passed, 20 skipped,
 2 min 37 s (section 10).
@@ -864,15 +881,20 @@ before its merge, as part of the lead's review of the batch (the owner is inform
    MiB. Rule: the single type present gives the kind (int and double: `number`; string: `text`; date: `time`; bool;
    array: `list`; object: `object`); nulls give `nullable`; two incompatible types, a missing required field or a size
    disagreement stop the batch and are reported. The unit run at a batch's landing is the whole suite without `-k`, the
-   only run in which a skip-list line that names no test fails the collection. B1b's check is `ensure` as a dry run (to
-   create, make, drop, conflicting; validators) and these counts for the fields it declares; exit 0 clean, 1 something
-   differs, 2 not checked. On her data it needs `--max-ms 10000`: at 2000 three large collections stay unchecked.
+   only run in which a skip-list line that names no test fails the collection, and it does not run inside a sandbox: a
+   sandboxed run fails the tests bound to folder permissions, and the landing script then stops, by design. B1b's check
+   is `ensure` as a dry run (to create, make, drop, conflicting; validators) and these counts for the fields it
+   declares; exit 0 clean, 1 something differs, 2 not checked. On her data it needs `--max-ms 10000`: at 2000 three
+   large collections stay unchecked.
 6. **Output**: numbers only (case name, n, same, differing, p50/p95 old and new, plan stages, type counts), to `<data>/private/adr104-evidence/<batch>/`; ids never leave her machine; the folder goes when the batch
    merges, except a manifest named in the ADR with its path and size.
 
 Writes are not run on her database: the change words are proven by the contract suite on MongoDB, the call sites by
 the unit tests, and after each restart by `audit.verify_documents` over the commits written since (each committed
 document equals its audit record).
+
+design.md is signed like the ADR page: a landing that changes design.md carries her new design blob in the ADR's
+index row, or the landing script stops.
 
 ---
 

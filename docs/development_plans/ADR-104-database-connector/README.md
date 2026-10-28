@@ -3,7 +3,9 @@
 Status: decided with the owner 2026-10-28 (below). Third in the owner's order (102, 103, 104). The vector interface
 is designed (section "Vector search", Claude on the owner's delegation); step 1a (the interface, her search
 unchanged) is built and installed 2026-10-28; step 1b (exact search) is built on it, on main (see "Build order" and
-"Built"). The record interface (step 2) is proposed, for the owner's review.
+"Built"). Everything after step 1 is designed to the end in [design.md](design.md) (2026-10-28 evening, decisions 7
+and 8 below), from an independent survey ([research.md](research.md)), checked against
+[review-list.md](review-list.md). Its batch B0 (the unit run reaches no server) lands apart from it.
 
 ## The owner's ask (2026-10-27, verbatim)
 
@@ -84,6 +86,25 @@ unchanged) is built and installed 2026-10-28; step 1b (exact search) is built on
    scripts and skills use with MongoDB's query syntax today, takes the core's vocabulary and so works on any database;
    she rewrites her own scripts and skills, her way. Not chosen: translating MongoDB syntax in every adapter (the
    MongoDB-shaped surface decision 2 ruled out), or the tool on MongoDB only.
+
+7. **Step 2 onward as [design.md](design.md)** (2026-10-28 evening). The owner then judged decision 5's proposal not
+   robust enough in its level of abstraction: "This is the DB adapter's job. WHY the adapter even need to expose the
+   raw operator vocabulary?", and asked that the design be finished before the build, from a survey of how projects
+   that serve several databases do it ("I'm not intended to re-invent the wheel"). He set the direction as product
+   manager; the technical decisions are Claude's. The survey ran from requirements only, without reading this code
+   ([research.md](research.md)); a design agent wrote the design from it; Claude reviewed it against a list written
+   before the design existed ([review-list.md](review-list.md)) and had it revised once. What it adds to decision 5:
+   one owner module per collection, so no other module builds a condition or names a collection; declared fields
+   per collection, writes validated once; a meaning table that the in-memory adapter implements and MongoDB is tested
+   against; named primitives for what generic calls cannot make atomic (claim, revisioned replace, the database's
+   clock in a write, the counter); a blob interface for large files; nineteen adapter methods; eighteen batches
+   (B0 to B15), each its own review, B1b to B14 a restart each. The words stay the core's own, not MongoDB's subset
+   the survey suggested (decision 2). Decisions 5 and 6 stand as written; this one adds to them.
+8. **The unit run's stand-in until B13** (the owner, 2026-10-28 evening, in the question tool, Claude's
+   recommendation): from B0 the unit run uses an in-process MongoDB stand-in (mongomock), never a server, until B13
+   moves it onto the in-memory adapter. Its cost, as put to him: a fake leaned on for the length of the move, never
+   the reference of what a query means; the tests it cannot carry are skipped with what it lacks in one reviewed list.
+   Not chosen: switching the database tests off until each module has moved.
 
 ## Vector search (designed by Claude, 2026-10-28, on the owner's delegation)
 
@@ -205,6 +226,8 @@ seven of the ten turned out to be twin swaps. Her queries are mostly short phras
 reading with real phrases of hers is open (it needs their embeddings).
 
 ## Step 2: the record interface (proposed by Claude 2026-10-28, for the owner's review)
+
+Superseded the same evening by decision 7 and [design.md](design.md); kept below as it was proposed.
 
 Decisions 5 and 6 give its shape: a small vocabulary the core defines, which the core and her read tool both speak.
 

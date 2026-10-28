@@ -269,9 +269,9 @@ def reads(client, database, max_ms, batch, config):
     old_db = client.get_database(database)
     adapter = _Recording(client, database)
     store = Checked(adapter, CATALOG)
-    cases = _cases_b3(store) if batch == 'b3' else _cases_b4(store, config)
-    per_case = max(1, min(20, (QUERIES - 2 * len(cases)) // (len(cases) * 2 * RUNS)))
-    out, queries = {}, 0
+    cases, sampling = (_cases_b3(store), 1) if batch == 'b3' else _cases_b4(store, config)
+    per_case = max(1, min(20, (QUERIES - sampling - 2 * len(cases)) // (len(cases) * 2 * RUNS)))
+    out, timed, explained = {}, 0, 0
     for name, old_call, new_call, params, how in cases:
         chosen = params[::max(1, len(params) // per_case)][:per_case] if params else []
         same = differing = plans_differ = 0
@@ -287,7 +287,7 @@ def reads(client, database, max_ms, batch, config):
                 started = clock.perf_counter()
                 new_value = new_call(param)
                 times['new'].append((clock.perf_counter() - started) * 1000)
-                queries += 2
+                timed += 2
                 results = {'old': _compared(old_value, how), 'new': _compared(new_value, how)}
             if results['old'] == results['new']:
                 same += 1
@@ -298,12 +298,12 @@ def reads(client, database, max_ms, batch, config):
                 new_cursor = adapter.db[coll].find(filter, {f: 1 for f in fields} if fields else None,
                                                    sort=list(sort) or None, skip=skip, limit=limit)
                 new_plan = _stages(new_cursor.explain()['queryPlanner']['winningPlan'])
-                queries += 1
+                explained += 1
                 if old_cursor is None:
                     compared = False
                 else:
                     old_plan = _stages(old_cursor.explain()['queryPlanner']['winningPlan'])
-                    queries += 1
+                    explained += 1
                     plans_differ += old_plan != new_plan
         pct = lambda values, q: round(statistics.quantiles(values, n=20)[q], 2) if len(values) > 1 else (
             round(values[0], 2) if values else None)
@@ -311,7 +311,12 @@ def reads(client, database, max_ms, batch, config):
                      'plans_compared': compared, 'plan_old': old_plan, 'plan_new': new_plan,
                      'ms_old_p50': pct(times['old'], 9), 'ms_old_p95': pct(times['old'], 18),
                      'ms_new_p50': pct(times['new'], 9), 'ms_new_p95': pct(times['new'], 18)}
-    return out, queries
+    samples = sum(case['n'] for case in out.values())
+    # What was run: the sampling reads, each case's samples x 2 sides x RUNS timed runs, and the explains (two per
+    # explained sample, one where the old form has no plan of its own).
+    return out, {'sampling': sampling, 'samples': samples, 'timed': timed, 'explain': explained,
+                 'total': sampling + timed + explained,
+                 'counted_as': 'sampling + samples x 2 sides x %d runs + explain' % RUNS}
 
 
 PROGRAM_AUTHOR = 'asuna:internal'                       # ingress.PROGRAM_AUTHOR as the replaced code named it
@@ -436,7 +441,7 @@ def _cases_b4(store, config):
     from asuna.records import messages as owner
     me = config.get('character_id') or (config.get('chat') or {}).get('persona', 'character')
     boss = (config.get('chat') or {}).get('person_id') or 'nobody'
-    scenes, places, _ = _sample_b4(store, config)
+    scenes, places, tried = _sample_b4(store, config)
     lines = [(scene, row) for scene, rows in places for row in rows]
     first = [(scene, rows[0]) for scene, rows in places]                       # each conversation's newest line
     oldest = [(scene, rows[-1]) for scene, rows in places]                     # its 4th newest: a short window
@@ -1053,7 +1058,7 @@ def _cases_b4(store, config):
                                                         'direction': 'outbound', 'phase': {'$ne': 'SPEAK'}}),
          lambda p: owner.excluded(store, [s(p)], e(p))['non_speak_outbound'], first, 'value'),
     ]
-    return [case for case in cases if case[3]]
+    return [case for case in cases if case[3]], 1 + tried
 
 
 def sizes(db, collection, max_ms):
@@ -1075,11 +1080,14 @@ def sizes(db, collection, max_ms):
 def check(batch, settings, database, out, max_ms):
     client = MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
                          **({'timeoutMS': max_ms} if batch in ('b3', 'b4') else {}))
-    report, unchecked = {'database_collections': len(CATALOG.names())}, []
+    # Nothing is written: ensure is planned, not run, and every read is read-only.
+    report, unchecked = {'mode': 'dry_run', 'database_collections': len(CATALOG.names())}, []
     try:
         adapter = MongoAdapter(client, database)
         plans = dry_run(adapter)
-        report['ensure'] = {name: {k: (len(v) if isinstance(v, list) else v) for k, v in plan.items()}
+        report['ensure'] = {name: {'create': plan['create'], 'make': plan['make'], 'drop': plan['drop'],
+                                   'conflicts': [index for index, _ in plan['conflicts']],
+                                   'validator': plan['validator']}
                             for name, plan in plans.items()}
         report['conflicts'] = [[name, index] for name, plan in plans.items() for index, _ in plan['conflicts']]
         report['fields'], report['fields_differ'] = {}, []
@@ -1117,6 +1125,13 @@ def check(batch, settings, database, out, max_ms):
     print('ensure, dry run: collections to create %(create)d, indexes to make %(make)d, to drop %(drop)d, '
           'conflicting %(conflicts)d' % totals)
     print('validators: ' + ', '.join('%s %d' % item for item in sorted(validators.items())))
+    for what in ('make', 'drop'):
+        for name, plan in sorted(report['ensure'].items()):
+            for index in plan[what]:
+                print('to %s: %s.%s' % (what, name, index))
+    for name, plan in sorted(report['ensure'].items()):
+        if plan['create']:
+            print('to create: %s' % name)
     for name, index in report['conflicts']:
         print('conflict: %s.%s' % (name, index))
     for name, counts in sorted(report['fields'].items()):
@@ -1139,7 +1154,9 @@ def check(batch, settings, database, out, max_ms):
                  else 'old: no plan of its own', ' > '.join(case['plan_new'] or []),
                  case['ms_old_p50'], case['ms_old_p95'], case['ms_new_p50'], case['ms_new_p95']))
     if 'queries' in report:
-        print('queries: %d' % report['queries'])
+        q = report['queries']
+        print('queries: %d (sampling %d, timed %d = %d samples x 2 sides x %d runs, explain %d)'
+              % (q['total'], q['sampling'], q['timed'], q['samples'], RUNS, q['explain']))
     print('numbers written to %s' % (out / (batch + '.json')))
     if unchecked:
         return 2

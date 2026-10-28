@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from asuna import lane_faults
+from asuna.store.errors import Unavailable
 from asuna.channels import ChannelServer
 from test_voice import TOKEN, world
 
@@ -30,6 +31,23 @@ def test_counts_add_up_by_signature_and_hour_and_carry_no_message(store):
     assert set(docs[hour]) == {'_id', 'schema_version', 'channel_id', 'lane', 'stage', 'error', 'hour', 'hour_at',
                                'count', 'first_posted_at', 'last_posted_at'}
     assert docs[hour]['hour_at'].strftime(lane_faults.HOUR_FORMAT) == hour
+
+
+def test_a_failing_cleanup_never_changes_the_counts_answer(store, monkeypatch):
+    def unavailable(store, now=None):
+        raise Unavailable('DATABASE_UNAVAILABLE: cleanup')
+    monkeypatch.setattr(lane_faults, 'forget_old', unavailable)
+    assert lane_faults.receive(store, 'qq', {'counts': [row(count=2)]}) == {'status': 'recorded', 'rows': 1}
+    lane_faults.record(store, 'qq', 'inbound', 'post', 'other')
+    assert sorted((doc['error'], doc['count']) for doc in store.db.lane_faults.find()) == [
+        ('host_error:500', 2), ('other', 1)], 'each count written once'
+    assert not store.db.lane_faults.find_one({'type': 'lane_faults.forget_failed'}), 'recorded in the audit only'
+    failed = sorted(store.db.audit_events.find({'type': 'lane_faults.forget_failed'}), key=lambda e: e['payload']['path'])
+    assert [(event['payload']['path'], event['payload']['error']) for event in failed] == [
+        ('receive', 'DATABASE_UNAVAILABLE'), ('record', 'DATABASE_UNAVAILABLE')]
+    cutoffs = [datetime.fromisoformat(event['payload']['cutoff']) for event in failed]
+    assert all(abs(cutoff - (datetime.now(timezone.utc) - timedelta(days=lane_faults.KEEP_DAYS))) < timedelta(minutes=1)
+               for cutoff in cutoffs)
 
 
 def test_counts_leave_after_their_days_on_the_next_write(store):

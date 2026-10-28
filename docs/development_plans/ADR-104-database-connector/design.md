@@ -373,7 +373,8 @@ the owner's `authorize` raises the same `SCENE_MEMBERSHIP_DENIED`. A function th
 a store (`skills.skill_directories`, `scene_links`, `dbread`'s `place`) reaches the owner through `records.on(db)`.
 The owner imports only `asuna.store`, and `state`'s `Denied` inside `authorize`. Tests that faked the store's
 `authorize` or `db.scenes` stub the owner's operation instead; the offline case modules' fake stores get
-`collection(name)` from `tests/fake_collections.py`, the in-memory adapter over their own rows.
+`collection(name)` from `tests/fake_collections.py`, the in-memory adapter over their own rows (a fake that keeps a
+list is a read-only view there, so a write through an owner fails at once instead of going nowhere).
 `tests/test_record_owners.py` is the guard of 8.2's B13 row for the owners moved so far.
 
 As built, `records.messages` (B4): a read is a `View` with the verbs `rows`, `first`, `count` and `values`; its order
@@ -471,14 +472,22 @@ check (8.3) counts her records that lack a required unique field (expected 0; an
 stream's newest, insert seq + 1, retry on `DuplicateKey` of `(stream_id, seq)` up to 50 times (`state.py:193-208`).
 
 **5.6 Bulk writes.** `lane_faults.receive` writes up to `MAX_ROWS` 200 upserts per adapter post with
-`bulk_write(ordered=False)`; it becomes a loop of `update(create=True)` with `Increase`, `Set`, `OnCreate`
-(200 round trips at most, every few minutes). Partial failure behaves as today (unordered bulk writes are partial
-too). Its TTL index (`state.py:182`, 30 days) is replaced by `lane_faults.forget_old` on each write
-(`delete({'hour_at': Range(lt=cutoff)}, many=True)`); no Python code reads `lane_faults` (map: 2 rows, both writes),
-so when old rows go changes nothing anyone sees. Until B2 the catalog declares the TTL index as today's
-(`hour_at_1`, `expire_after` 30 days, MongoDB's `expireAfterSeconds`), so `ensure` finds it on her database and
-makes it on a new one; B2 declares its replacement and lists the TTL index as retired, and `ensure` drops it.
-`insert(records, ordered=True)` serves `insert_many` (`crossing.py:314`, tests).
+`bulk_write(ordered=False)`; it becomes a loop of `update(create=True)` with `Increase`, `Set`, `OnCreate` (200 round
+trips at most, every few minutes). Partial failure behaves as today (unordered bulk writes are partial too). Its TTL
+index (`state.py:182`, 30 days) is replaced by `lane_faults.forget_old` on each write (`delete({'hour_at':
+Range(lt=cutoff)}, many=True)`), run after the counts are written. The TTL's deletion at 30 days becomes a sweep at the
+next fault write: while no new fault arrives, rows older than 30 days stay until the next write. No Python code reads
+`lane_faults` (map: 2 rows, both writes), so when old rows go changes nothing anyone sees. A failure of the sweep never
+changes the write's answer (the counts are in, and an error would have the adapter post them again, counting them
+twice): it is recorded as one audit row through `store.audit` (never a `lane_faults` row), `lane_faults.forget_failed`
+naming the path (`receive` or `record`), the error's code and the cutoff it tried to clear, and not raised. `hour_at`
+has no index after B2, on purpose: the collection is bounded (one count per signature and hour, kept KEEP_DAYS), so each
+sweep scans `lane_faults`; no plain index is added. Only `hour_at` loses its index: `channel_id_1_hour_1` and
+`lane_1_stage_1_error_1_hour_1` stay, declared and installed. The sweep's cutoff is on the application's UTC clock
+(`forget_old`'s `datetime.now`), where the TTL used the server's. Until B2 the catalog declares the TTL index as today's
+(`hour_at_1`, `expire_after` 30 days, MongoDB's `expireAfterSeconds`), so `ensure` finds it on her database and makes it
+on a new one; B2 declares its replacement and lists the TTL index as retired, and `ensure` drops it. `insert(records,
+ordered=True)` serves `insert_many` (`crossing.py:314`, tests).
 
 **5.7 The three aggregates.**
 - *Audit heads* (`audit._latest`): `group('audit_events', {'type': AnyOf(LATEST_KEPT)}, by=('type', 'stream_id'),
@@ -860,7 +869,7 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | B0 | unit runs reach no server (7.3), the interim harness and its reviewed skip list `tests/harness_skips.txt`; reports pass, skip by reason and run time against the baseline (`a00a9aa0eef6`, 1,519 passed) | tests only | no | the guard test; no connection to her server in the run; nothing outside `tests/` changes |
 | B1a | `asuna.store`: words, catalog (fields filled per batch), errors, the in-memory adapter, the registry, the shared layer's checks (`Checked`, `Handle`); the contract suite on the double | new code, unused by the worker | no | the contract suite on the double |
 | B1b | the MongoDB adapter (`src/asuna/store/mongodb.py`); `Store` over it: `put`, `audit`, `recover_commits`, `ensure` (was `migrate`), `nearest`, `ensure_vectors`, taking over `Checked` and `Handle`; `store.db` kept for old call sites; Hypothesis in the `dev` group and class `D`; `tools/pack_plugins.py` ships `src/asuna/store/` (it copies top-level modules only today) and `tools/project_map.py` maps the package | 38 shared rows | yes | the contract suite on MongoDB (integration, throwaway), class `D` included; the packed worker holds `asuna/store/` and the project map lists it, both checked at landing; `ensure` against her database in dry-run (list indexes only): zero to create or conflict; after the restart, `audit.verify_documents` over the commits since: 0 mismatches |
-| B2 | `host_lease`, `lane_faults` (Now, create, the TTL index retired) | 9 | yes | lease taken, renewed and released across the restart (`host_stops` records a planned stop); fault counts keep rising; on throwaway databases, before: `integration/test_schema_and_vectors.py::test_a_fresh_database_gets_todays_ttl_index_from_b1bs_catalog` (B1b's catalog makes `hour_at_1` with `expireAfterSeconds` of 30 days), after: `integration/test_schema_and_vectors.py::test_b2s_ensure_drops_it_and_forget_old_takes_over`; `ensure_vectors`' two paths no case pinned: `integration/test_schema_and_vectors.py::test_the_old_index_answers_while_its_filter_fields_change`, `integration/test_schema_and_vectors.py::test_a_new_index_that_is_not_ready_answers_false` |
+| B2 | `host_lease`, `lane_faults` (Now, create, the TTL index retired) | 9 | yes | lease taken, renewed and released across the restart (`host_stops` records a planned stop); fault counts keep rising; the TTL's deletion at 30 days becomes a sweep at the next fault write (rows older than 30 days stay until a new fault arrives; no code reads them), and a failed sweep is recorded in the audit (`lane_faults.forget_failed`: path, error code, cutoff), never the write's error; `hour_at` has no index, on purpose (the collection is bounded), so each sweep scans `lane_faults`, while `channel_id_1_hour_1` and `lane_1_stage_1_error_1_hour_1` stay; the cutoff is on the application's UTC clock, where the TTL used the server's; on throwaway databases, before: `integration/test_schema_and_vectors.py::test_a_fresh_database_gets_todays_ttl_index_from_b1bs_catalog` (B1b's catalog makes `hour_at_1` with `expireAfterSeconds` of 30 days), after: `integration/test_schema_and_vectors.py::test_b2s_ensure_drops_it_and_forget_old_takes_over`; `ensure_vectors`' two paths no case pinned: `integration/test_schema_and_vectors.py::test_the_old_index_answers_while_its_filter_fields_change`, `integration/test_schema_and_vectors.py::test_a_new_index_that_is_not_ready_answers_false` |
 | B3 | `records.scenes` | 221 in 60 files | yes | 8.3 on each view and get; the counter: positions contiguous after the restart |
 | B4 | `records.messages` | 229 in 54 files (as built: 225 in 53, the map at `85dd48275d22`) | yes | 8.3; her turn context built from the same lines (the `said`, `inbound`, `spoken` views compared) |
 | B5 | `records.episodes`, `records.sessions`, `records.receipts` | 166 | yes | 8.3 |

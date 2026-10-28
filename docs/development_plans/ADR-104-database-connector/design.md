@@ -251,7 +251,8 @@ case-blind), `Now` into `$$NOW` in an update pipeline or `$expr` (probe `now_in_
   own `skip` (`dbread.find`, `development_database_read`: her sort, so the facade's help says to page with a unique
   key last, as her usage readout already does with `_id`). Every other paging read today already ends its sort with
   `_id` (`native_api.py:461`, `native_cognition.py:36`, `history_query.py:812`). `O06`.
-- `fields`: a list of declared or undeclared paths to return; `_id` always comes back; overlapping paths are refused.
+- `fields`: a list of declared or undeclared paths to return, or `Without(paths)` for every field but those (as built in
+  B7: a memory's vector left out of recall's reads); `_id` always comes back; overlapping paths are refused.
   A path through a list returns, as MongoDB does, the list's object elements only, each with that field, or `{}`
   when it lacks it. `O07`.
 - `group` returns rows ordered by the `by` values (the sort rule; missing and null form one group, `None`);
@@ -462,6 +463,36 @@ longer `pending`. Tests that faked the store's insides get the owners' collectio
 (`tests/test_night_development.py`), and a fixture that wrote a task without its `request_key` carries it (the same
 file).
 
+As built, `records.memories` (B7): every operation of its row, under those names; call sites import it as
+`memory_records`; its views are `records/view.py`'s. `get` takes the fences the replaced reads wrote ((scope, epoch)
+pairs, scope, epoch, turn, character) and their value conditions (a kind or one of several, a status, `erased=False`
+for "not a tombstone"); `of_kind` also takes several scopes (crossing's word index over her groups' chunks, which the
+map assigned to `readable`). None follows the rule above: its fences are those, a pair that is not a text scope and a
+number epoch is left out of the pairs and no pair left finds nothing; its value conditions are a kind, a status, where
+a thought came from (`source`) and an epistemic type. The replaced reads that met a fence of None as "missing": a
+search or a thought check whose epoch is None (`retrieval.search`, `index_pending` with a scope, `memory.py`'s
+understanding sources), a group or conversation without an epoch in crossing's and the Web page's pairs, and a summary
+of a conversation without one; each now finds nothing. The vector space (`SPACE`) moves from `retrieval.py` to the
+owner (`retrieval.MEMORY` names it); `nearest(store, vector, k, pairs, character=, revision=, status=, kind=)` builds
+the pairs as an `Or` of dicts beside the other filters (the filter 1b sent) and answers no pair without a search,
+pinned by `tests/test_memory_owner.py::test_an_empty_pair_list_answers_nothing_without_a_call`; `Store.nearest` now
+takes the store's words, as `Checked.nearest` does, and its tuple-key translation is gone. The seven replaced reads
+that left the vector out (`{'embedding': 0}`: five in retrieval, the context's development fallback, the Web page's
+memory) read `fields=Without('embedding')` (`memories.UNVECTORED`): the store's `fields` takes `Without(paths)` (3.3,
+`O08`), because a whole memory carries 768 numbers more (on a throwaway database, 4,096 synthetic memories sorted as
+recall reads them: 530 ms whole against 80 to 110 ms without). The Web memory page is two reads, not 5.7's three: the
+matching memories' own times, ordered in Python, then the page's memories by id under the same condition (one that
+stopped matching between the two is left out); on a throwaway database of 3,000 synthetic memories the three reads
+took 31 to 34 ms against the aggregate's 11 to 15 (past the timing gate), the two 13 to 19. 62 map rows in 17 files
+moved (the map at `f18f1778f243`: memory_units' 67 less the five of `integration/test_schema_and_vectors.py`, which
+the census puts on memory_units as it does every vector call: they search the contract suite's own collection), none
+left; `privacy._erase`'s memory loop is the owner's `of_scope`, `tombstone` and `set_epoch`, and `Store.mutate`'s
+source checks its `get`. `memory_units` is declared (21 fields: every field nullable, none required, its one unique
+index being partial on `source_identity`; its times ISO text; `embedding` the space's `vector(768)`) and no longer
+`pending`. `tests/test_record_owners.py` guards it; its census check leaves out the store's vector calls in the owner
+and in the adapter's integration tests. Tests that read the store's insides changed: `integration/test_required_fields.py`
+(B7's first commit) counts through the store's handle instead of `adapter.db['episodes']`, which the guard refuses.
+
 **The shared layer's own surface** (no collection's owner; 21 map rows): `Store.put` and `Store.audit` (stay; owners
 call `put` through `save`, every module calls `audit`), `Store.ensure` (replaces `migrate`), `Store.recover_commits`,
 `Store.seed` (tests), the **maintenance surface** (`store.maintenance.record(collection, id)`,
@@ -558,7 +589,8 @@ ordered=True)` serves `insert_many` (`crossing.py:314`, tests).
   "the first of `generated_at`, `occurred_at`, `formed_at`", a computed key, so three reads each limited to
   `skip + page` (records with `generated_at`; without it but with `occurred_at`; with neither but `formed_at`), each
   sorted by its field descending then `_id` descending, merged in Python; the excerpt (`$substrCP` 200) is cut in
-  Python. Exact and bounded (offset at most 10,000, `native_api.py:424`).
+  Python. Exact and bounded (offset at most 10,000, `native_api.py:424`). As built (B7): two reads instead, the
+  matching memories' own times ordered in Python, then the page's memories by id (section 4's as-built note).
 - *Her `aggregate`* becomes `group` (section 6).
 
 **5.8 Prefix, contains, case-blind.** `StartsWith`, `Contains(case=)` (3.2). The 8 `_id` `$regex` prefixes (some
@@ -757,7 +789,7 @@ there only through `tests/harness_skips.txt` by the case's `[stand-in]` id. Two 
 | class | cases | what |
 |---|---|---|
 | `W` words | 31 | 3.2, each rule above, with records missing the field, null, empty list, list, other kind |
-| `O` order | 6 (+ `O05` on the double) | missing/null first and last, multi-key, explicit `_id` direction, a unique key last gives one order on every adapter, skip, limit, fields; `O05`: the double shuffles ties (two seeds give two orders, one seed the same) |
+| `O` order | 7 (+ `O05` on the double) | missing/null first and last, multi-key, explicit `_id` direction, a unique key last gives one order on every adapter, skip, limit, fields, fields left out (`O08`, B7); `O05`: the double shuffles ties (two seeds give two orders, one seed the same) |
 | `G` group | 7 | count, max, two keys, values ascending (missing out, null in), count with limit, values of a field no record holds, values of a field holding mixed kinds (B5) |
 | `C` changes | 12 | 3.4, create rules |
 | `X` writes | 15 | insert one and many (position, earlier kept), get missing, delete one and many, unique required and `only_where_present`, duplicate on insert, update and create, replace at a revision, stale, keep counters, claim order, counter, size (records exact, bytes growing) |
@@ -929,7 +961,7 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | B4 | `records.messages` | 229 in 54 files (as built: 225 in 53, the map at `85dd48275d22`) | yes | 8.3; her turn context built from the same lines (the `said`, `inbound`, `spoken` views compared). A later change of its own, not B4's: the history search's archived stream stops coming after the people's cursor under a person filter (a defect B4 keeps, section 4's as-built note) |
 | B5 | `records.episodes`, `records.sessions`, `records.receipts` | 166 (as built: 161 in 35 files, the map at `fa46c24132f6`) | yes | 8.3, its 44 read cases and the four collections' field kinds and sizes |
 | B6 | `records.tasks`, `records.plans` (the `$lookup` as reads) | 168 (as built: 166 in 23 files, the map at `dbb88ee2f64f`) | yes | 8.3, its 42 read cases, and `recent_with_inputs` against the aggregate on 20 conversations: same 16 tasks, same order, their fields in order, time p50/p95 |
-| B7 | `records.memories` (retrieval's lexical reads; vector parts as built, 1b's pairs as an `Or` of dicts, an empty pair list answered without a call) | 67 | yes | 8.3; retrieval's whole search old against new on 40 queries (as 1a did): the same six and 24; `state.py:218-227`'s `if not combinations: return []` (the empty pair list) is production code with no test until `records.memories`' `test_an_empty_pair_list_answers_nothing_without_a_call` lands here |
+| B7 | `records.memories` (retrieval's lexical reads; vector parts as built, 1b's pairs as an `Or` of dicts, an empty pair list answered without a call) | 67 (as built: 62 in 17 files, the map at `f18f1778f243`) | yes | 8.3; retrieval's whole search old against new on 40 queries (as 1a did): the same six and 24; `state.py:218-227`'s `if not combinations: return []` (the empty pair list) is production code with no test until `records.memories`' `test_an_empty_pair_list_answers_nothing_without_a_call` lands here |
 | B8 | `records.artifacts`, `blobs` (the blob interface), `media_life`, `outbound_files` | 126 | yes | 8.3; blob probe on a throwaway database; her stored files open and hash-check (20 sampled ids, read only) |
 | B9 | `records.heads`, `documents`, `records.people`, `records.ideas` | 151 | yes | 8.3; `audit.verify_documents` after the restart |
 | B10 | `audit` reads, prune and redaction; `privacy` over the owners' `redact_scope`, `tombstone`, `invalidate` | 47 (+ the 146 appends, which stay `store.audit`) | yes | 8.3; prune in dry-run counts equal old against new; the erasure path on a throwaway database (no erasure on hers) |

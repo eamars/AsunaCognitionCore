@@ -183,9 +183,20 @@ class FakeCollection:
     def __init__(self, rows=None):
         self.rows = {row['_id']: dict(row) for row in (rows or [])}
 
-    def find(self, flt=None, projection=None):
-        return FakeCursor([_project(doc, projection) for doc in self.rows.values()
-                           if _match(doc, flt or {})])
+    def find(self, flt=None, projection=None, sort=None, skip=0, limit=0):
+        cursor = FakeCursor([_project(doc, projection) for doc in self.rows.values() if _match(doc, flt or {})])
+        if sort:
+            cursor.sort(sort)
+        cursor.rows = cursor.rows[skip:skip + limit] if limit else cursor.rows[skip:]
+        return cursor
+
+    def count_documents(self, flt, limit=None):
+        found = sum(1 for doc in self.rows.values() if _match(doc, flt or {}))
+        return min(found, limit) if limit else found
+
+    def insert_many(self, docs, ordered=True):
+        for doc in docs:
+            self.insert_one(doc)
 
     def distinct(self, key, flt=None):
         return sorted({doc[key] for doc in self.rows.values() if key in doc and _match(doc, flt or {})})
@@ -223,18 +234,18 @@ class FakeCollection:
         self.rows[doc['_id']] = dict(doc)
         return SimpleNamespace(inserted_id=doc['_id'])
 
-    def replace_one(self, flt, doc):
+    def replace_one(self, flt, doc, upsert=False):
         current = self.rows.get(flt.get('_id'))
         if current is None or ('revision' in flt and current.get('revision') != flt['revision']):
-            return SimpleNamespace(modified_count=0)
+            return SimpleNamespace(matched_count=0, modified_count=0, upserted_id=None)
         self.rows[flt['_id']] = dict(doc)
-        return SimpleNamespace(modified_count=1)
+        return SimpleNamespace(matched_count=1, modified_count=1, upserted_id=None)
 
-    def update_one(self, flt, pipeline):
+    def update_one(self, flt, pipeline, upsert=False):
         """Enough for Store.put's revisioned write with counters: one $project of literals and kept fields."""
         current = self.rows.get(flt.get('_id'))
         if current is None or ('revision' in flt and current.get('revision') != flt['revision']):
-            return SimpleNamespace(modified_count=0)
+            return SimpleNamespace(matched_count=0, modified_count=0, upserted_id=None)
         (stage,) = pipeline
         doc = {'_id': current['_id']}
         for key, value in stage['$project'].items():
@@ -243,7 +254,7 @@ class FakeCollection:
             elif key in current:
                 doc[key] = current[key]
         self.rows[flt['_id']] = doc
-        return SimpleNamespace(modified_count=1)
+        return SimpleNamespace(matched_count=1, modified_count=1, upserted_id=None)
 
 
 class FakeDB:

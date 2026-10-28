@@ -286,11 +286,26 @@ class MongoAdapter:
     """The adapter over one database of a client; `owns_client`: closing the adapter closes the client."""
     capabilities = frozenset({'vectors'})
 
-    def __init__(self, client, database, *, owns_client=False):
+    def __init__(self, client, database, *, owns_client=False, handle=None):
         self.client, self.owns_client, self.name = client, owns_client, database
-        self.db = client.get_database(database, codec_options=CodecOptions(tz_aware=True),
-                                      write_concern=WriteConcern(w='majority', j=True))
-        self.blobs = Blobs(self.db)
+        self.db = handle if handle is not None else client.get_database(
+            database, codec_options=CodecOptions(tz_aware=True), write_concern=WriteConcern(w='majority', j=True))
+        self._blobs = None
+
+    @classmethod
+    def over(cls, db):
+        """The adapter on a database handle already held: through its client (times read aware) when it has one,
+        else the handle as it is."""
+        client = getattr(db, 'client', None)
+        if hasattr(client, 'get_database'):
+            return cls(client, db.name)
+        return cls(None, getattr(db, 'name', None), handle=db)
+
+    @property
+    def blobs(self):
+        if self._blobs is None:
+            self._blobs = Blobs(self.db)
+        return self._blobs
 
     def measure(self, record):
         """A record's size against the store's limit: its BSON bytes (a `Now` counted as the time it becomes)."""
@@ -302,6 +317,8 @@ class MongoAdapter:
         options = {}
         if declared.unique:
             options['unique'] = True
+        if declared.expire_after is not None:
+            options['expireAfterSeconds'] = declared.expire_after
         if declared.only_where_present:
             options['partialFilterExpression'] = {
                 path: ({'$type': BSON_TYPES[collection.field(path).kind]} if declared.unique else {'$exists': True})
@@ -321,7 +338,8 @@ class MongoAdapter:
             if index in existing:
                 info = existing[index]
                 have = ([(path, int(direction)) for path, direction in info['key']],
-                        {k: info[k] for k in ('unique', 'partialFilterExpression') if info.get(k)})
+                        {k: info[k] for k in ('unique', 'partialFilterExpression', 'expireAfterSeconds')
+                         if info.get(k) is not None and info.get(k) is not False})
                 if have != (keys, options):
                     conflicts.append((index, 'declared %s %s, the database has %s %s'
                                       % (keys, options, have[0], have[1])))

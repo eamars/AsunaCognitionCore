@@ -180,6 +180,8 @@ The worker's store: every write goes through `Store.put` with an expected revisi
 - class `Conflict`
 - class `Denied`
 - class `Store`
+  - `checked` — The shared layer over the MongoDB adapter on this store's database, derived from `db` as it is now.
+  - `adapter`
   - `collection` — The handle of a declared collection: the store's words, checked against the catalog.
   - `ensure` — Create every declared collection with its validator and indexes, and drop the retired indexes; {collection: Ensured}.
   - `migrate`
@@ -501,6 +503,8 @@ The MongoDB adapter: the store's words as MongoDB queries, the catalog's collect
   - `delete`
   - `of_scope`
 - class `MongoAdapter` — The adapter over one database of a client; `owns_client`: closing the adapter closes the client.
+  - `over` — The adapter on a database handle already held: through its client (times read aware) when it has one, else the handle as it is.
+  - `blobs`
   - `measure` — A record's size against the store's limit: its BSON bytes (a `Now` counted as the time it becomes).
   - `plan` — What `ensure` would do, read only: {'create': bool, 'make': [index names], 'drop': [index names], 'conflicts': [(index name, why)]}.
   - `validator` — Whether the stored collection has the validator `ensure` creates: 'same', 'other', 'none', 'absent' (no collection) or 'not declared' (the collection is not versioned).

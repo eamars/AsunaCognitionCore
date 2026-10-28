@@ -18,7 +18,6 @@ from .evidence import canonical, sha
 from .store import Checked
 from .store.catalog import CATALOG, Space
 from .store.errors import DuplicateKey
-from .store.mongodb import MongoAdapter
 from .store.words import And, AnyOf, Exists, Or
 
 COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memory_units','state_heads',
@@ -118,9 +117,19 @@ class Store:
         self.client = MongoClient(config['mongo_uri'], serverSelectionTimeoutMS=5000,
                                   connectTimeoutMS=5000, timeoutMS=20000)
         self.db = self.client.get_database(self.name, write_concern=WriteConcern(w='majority', j=True))
-        self.adapter = MongoAdapter(self.client, self.name)
-        self.checked = Checked(self.adapter, CATALOG)
         self.fail_audit = False
+
+    @property
+    def checked(self):
+        """The shared layer over the MongoDB adapter on this store's database, derived from `db` as it is now."""
+        if getattr(self, '_checked_db', None) is not self.db:
+            from .store.mongodb import MongoAdapter       # only where a store is used: a module may stub pymongo
+            self._checked, self._checked_db = Checked(MongoAdapter.over(self.db), CATALOG), self.db
+        return self._checked
+
+    @property
+    def adapter(self):
+        return self.checked.adapter
 
     def collection(self, name):
         """The handle of a declared collection: the store's words, checked against the catalog."""

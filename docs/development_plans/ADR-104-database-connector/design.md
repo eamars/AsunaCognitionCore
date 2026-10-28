@@ -83,7 +83,9 @@ packages/databases/mongodb/      the MongoDB adapter package (after batch B14; u
 
 An owner reaches its collections through `store.collection(name)`, which returns a `Handle` bound to the declared
 collection; the handle's verbs are the adapter methods below without the collection name, called after the shared
-layer (`Checked`, which `Store` takes over) has validated the words against the catalog.
+layer (`Checked`, which `Store` takes over) has validated the words against the catalog. `Store` derives its adapter
+from the database it holds (`store.db`), when first used, so a store built over another handle (a test's own
+in-process database) writes through that handle.
 A repository test (B13) fails when `store.collection('<name>')`, `store.put('<name>', ...)` or any adapter call
 appears outside the owner of `<name>` named in the catalog.
 
@@ -430,9 +432,10 @@ stream's newest, insert seq + 1, retry on `DuplicateKey` of `(stream_id, seq)` u
 (200 round trips at most, every few minutes). Partial failure behaves as today (unordered bulk writes are partial
 too). Its TTL index (`state.py:182`, 30 days) is replaced by `lane_faults.forget_old` on each write
 (`delete({'hour_at': Range(lt=cutoff)}, many=True)`); no Python code reads `lane_faults` (map: 2 rows, both writes),
-so when old rows go changes nothing anyone sees. Until B2 the catalog does not declare the TTL index, so `ensure`
-leaves it as it is (a new database does not get it); B2 declares its replacement and lists the TTL index as retired,
-and `ensure` drops it. `insert(records, ordered=True)` serves `insert_many` (`crossing.py:314`, tests).
+so when old rows go changes nothing anyone sees. Until B2 the catalog declares the TTL index as today's
+(`hour_at_1`, `expire_after` 30 days, MongoDB's `expireAfterSeconds`), so `ensure` finds it on her database and
+makes it on a new one; B2 declares its replacement and lists the TTL index as retired, and `ensure` drops it.
+`insert(records, ordered=True)` serves `insert_many` (`crossing.py:314`, tests).
 
 **5.7 The three aggregates.**
 - *Audit heads* (`audit._latest`): `group('audit_events', {'type': AnyOf(LATEST_KEPT)}, by=('type', 'stream_id'),

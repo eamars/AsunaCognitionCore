@@ -75,11 +75,14 @@ ID = Field('_id', 'text', required=True)
 @dataclass(frozen=True)
 class Index:
     """An index: `keys` are (path, 1 | -1); a unique index's fields are required unless listed in
-    `only_where_present`, and a record missing one of those (or holding null) is outside the index."""
+    `only_where_present`, and a record missing one of those (or holding null) is outside the index. `expire_after`:
+    a server removes a record that many seconds after the time in its one key (a TTL index; the in-memory adapter
+    removes nothing)."""
     name: str
     keys: tuple
     unique: bool = False
     only_where_present: tuple = ()
+    expire_after: int | None = None
 
 
 @dataclass(frozen=True)
@@ -210,9 +213,9 @@ class Catalog:
                 raise _invalid('space %s filters on %s, not a declared value field' % (space.name, path))
 
 
-def index(*keys, unique=False, only_where_present=()):
+def index(*keys, unique=False, only_where_present=(), expire_after=None):
     """An index named as MongoDB names one by default (`scene_id_1_scene_seq_1`)."""
-    return Index('_'.join('%s_%s' % key for key in keys), tuple(keys), unique, tuple(only_where_present))
+    return Index('_'.join('%s_%s' % key for key in keys), tuple(keys), unique, tuple(only_where_present), expire_after)
 
 
 def _core(name, owner, *indexes, fields=(), **flags):
@@ -300,8 +303,8 @@ CATALOG = Catalog([
     _core('journal_revisions', 'documents', index(('mutation_id', 1), unique=True),
           index(('persona', 1), ('slug', 1), ('created_at', -1)), index(('entry_id', 1), ('created_at', 1))),
     _core('questions', 'questions'),
-    # The TTL index of its fault counts (hour_at) is not declared: ensure leaves it as it is, until
+    # Its fault counts leave 30 days (lane_faults.KEEP_DAYS) after their hour, by today's TTL index, until
     # lane_faults.forget_old replaces it.
     _core('lane_faults', 'lane_faults', index(('channel_id', 1), ('hour', 1)),
-          index(('lane', 1), ('stage', 1), ('error', 1), ('hour', 1))),
+          index(('lane', 1), ('stage', 1), ('error', 1), ('hour', 1)), index(('hour_at', 1), expire_after=30 * 86400)),
 ])

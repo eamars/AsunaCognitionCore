@@ -88,7 +88,7 @@ export function killTree(child, platform = process.platform) {
 
 /**
  * The loop. `d` gives the world:
- *   prepare(rung)            sync/selection for that rung (may throw)
+ *   prepare(rung, {fastForward, id})  sync/selection for that rung of the restart `id` (may throw)
  *   spawnHost()              a running DSH child (emits 'exit')
  *   ready(since)             whether the worker is ready since that time
  *   takeRequest()            her due restart request, removed once taken, else null
@@ -116,7 +116,7 @@ export async function supervise(d) {
     let child = null, outcome, code = null;
     try {
       // Only the first start of a restart she asked for brings origin/main in; the owner's starts never do.
-      const prepared = await d.prepare(rung, { fastForward: asked && rung === 0 });
+      const prepared = await d.prepare(rung, { fastForward: asked && rung === 0, id: record.id });
       asked = false;
       reverted.push(...((Array.isArray(prepared) ? prepared : prepared?.notes) ?? []));
       if (prepared?.checkout && record) record.checkout = prepared.checkout;

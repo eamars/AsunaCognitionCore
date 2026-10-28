@@ -8,7 +8,8 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { fastForwardCheckout, packageManagerEnv, prepareFresh, pruneProjectionCache, retireOneShotSessions } from '../../../tools/asuna-launch.mjs';
+import { fastForwardCheckout, packageManagerEnv, prepareFresh, prepareLog, pruneLogs, pruneProjectionCache,
+  retireOneShotSessions } from '../../../tools/asuna-launch.mjs';
 
 const pnpmName = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const corepackName = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
@@ -276,5 +277,25 @@ test('projection-cache records of sessions no longer in the store are removed be
     assert.equal(await pruneProjectionCache(home), 2);
     assert.deepEqual((await fs.readdir(cache)).sort(), ['asuna-role-a.json', 'notes.txt']);
     assert.equal(await pruneProjectionCache(path.join(dir, 'none')), 0);
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
+test("each restart's preparation logs are its own, and the newest ten restarts keep theirs", async () => {
+  // A failed rung 0's log was overwritten by rung 1 and its error lost (2026-10-28).
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-prepare-logs-'));
+  try {
+    // Ids as the supervisor makes them (begin): 'restart-' and the UTC time to the second.
+    const ids = Array.from({ length: 12 }, (_, i) =>
+      'restart-' + new Date(Date.UTC(2026, 9, 28, 6, i)).toISOString().replace(/[-:.TZ]/g, '').slice(0, 14));
+    assert.equal(path.basename(prepareLog(dir, ids[0], 1)), 'prepare-' + ids[0] + '-rung1.log');
+    for (const id of ids) for (const rung of [0, 1]) await fs.writeFile(prepareLog(dir, id, rung), id);
+    await fs.writeFile(path.join(dir, 'prepare.log'), 'the shared log of an earlier naming');
+    await fs.writeFile(path.join(dir, 'last.json'), '{}');
+    const removed = await pruneLogs(dir);
+    assert.deepEqual(removed.sort(), ['prepare-' + ids[0] + '-rung0.log', 'prepare-' + ids[0] + '-rung1.log',
+      'prepare-' + ids[1] + '-rung0.log', 'prepare-' + ids[1] + '-rung1.log', 'prepare.log'].sort());
+    const left = (await fs.readdir(dir)).sort();
+    assert.equal(left.length, 21, 'ten restarts with two rungs each, and last.json');
+    assert.ok(left.includes('last.json') && left.includes('prepare-' + ids[11] + '-rung1.log'));
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });

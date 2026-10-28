@@ -419,17 +419,22 @@ class MongoAdapter:
 
     def group(self, coll, where, by, total=Count()):
         keys = {'k%d' % n: {'$ifNull': ['$' + path, None]} for n, path in enumerate(by)}
-        match = query(where)
+        present = {}
         if total is None:
-            match = {'$and': [match, *[{path: {'$exists': True}} for path in by]]}
-        stage = {'_id': keys}
+            # Values leave out a record missing a field (null stays), as a distinct does: grouped by presence and
+            # dropped after, never an `$exists` in the match: that would offer the planner an index on the field
+            # which the caller's filter never asked for (one conversation's authors read through an index on
+            # `author` scan every line that has one).
+            present = {'p%d' % n: {'$ne': [{'$type': '$' + path}, 'missing']} for n, path in enumerate(by)}
+        stage = {'_id': {**keys, **present}}
         if isinstance(total, Max):
             stage['total'] = {'$max': '$' + total.field}
         elif total is not None:
             stage['total'] = {'$sum': 1}
         with _Guard(coll):
-            rows = list(self.db[coll].aggregate([{'$match': match}, {'$group': stage},
+            rows = list(self.db[coll].aggregate([{'$match': query(where)}, {'$group': stage},
                                                  {'$sort': {'_id.' + key: 1 for key in keys}}]))
+        rows = [row for row in rows if all(row['_id'].get(key) for key in present)]
         values = [tuple(row['_id'].get(key) for key in keys) for row in rows]
         if total is None:
             return [v[0] if len(by) == 1 else v for v in values]

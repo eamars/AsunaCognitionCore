@@ -9,6 +9,9 @@ means.
 import os
 
 if os.environ.get('ASUNA_UNIT_RUN') == '1':
+    import datetime
+
+    import bson
     import mongomock
     import mongomock.gridfs
     import pymongo
@@ -67,6 +70,31 @@ if os.environ.get('ASUNA_UNIT_RUN') == '1':
             raise mongomock.OperationFailure('$strLenCP requires a string argument, found: %s' % type(value).__name__)
         return len(value)
     _aggregate._Parser._handle_string_operator = string_operator
+
+    # `$type` (the expression): the BSON type's alias, 'missing' for an absent field, as MongoDB answers.
+    _type_operator = _aggregate._Parser._handle_type_operator
+    _aggregate.type_operators.append('$type')
+
+    def type_operator(self, operator, values):
+        if operator != '$type':
+            return _type_operator(self, operator, values)
+        try:
+            value = self.parse(values[0] if isinstance(values, list) and len(values) == 1 else values)
+        except KeyError:
+            return 'missing'
+        if value is None:
+            return 'null'
+        if isinstance(value, bool):
+            return 'bool'
+        if isinstance(value, int):
+            return 'int' if -2 ** 31 <= value < 2 ** 31 else 'long'
+        for kind, name in ((float, 'double'), (str, 'string'), (dict, 'object'), ((list, tuple), 'array'),
+                           (datetime.datetime, 'date'), (bson.ObjectId, 'objectId'), (bson.Decimal128, 'decimal'),
+                           (bytes, 'binData'), (bson.Regex, 'regex')):
+            if isinstance(value, kind):
+                return name
+        raise NotImplementedError('the stand-in has no $type for %s' % type(value).__name__)
+    _aggregate._Parser._handle_type_operator = type_operator
 
     # pymongo 4.16's bulk UpdateOne/ReplaceOne hand the builder `sort=None`; one with a real sort stays refused.
     _builder = mongomock.collection.BulkOperationBuilder

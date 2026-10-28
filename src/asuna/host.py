@@ -17,6 +17,8 @@ from . import handover
 from .state import Denied, now
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import episodes as episode_records
+from .records import receipts as receipt_records
 
 # How often the host's existing watch thread also checks that her heartbeat still beats (ADR-012 §4.3), so a
 # lost heartbeat is found on a day when nobody talks to her too. It only checks; the clock stays DSH's.
@@ -337,8 +339,8 @@ class RuntimeHost:
             return
         # Only a core publication replaces this worker. Persona and channel ones apply in place, and one
         # still APPLIED would otherwise ask for a restart after every turn, forever.
-        applied=self.app.store.db.sink_receipts.find_one({
-            'kind':'self_development_publish','state':'APPLIED','project':'core'})
+        applied=receipt_records.sink_of_kind(self.app.store,'self_development_publish',state='APPLIED',
+                                             project='core').first()
         if applied:
             with self.controller.state_lock:
                 if not self.restart_pending.is_set():
@@ -373,13 +375,13 @@ class RuntimeHost:
     def _complete_activations(self):
         """A successfully constructed live host supplies the actual boot result."""
         store=self.app.store
-        for row in store.db.sink_receipts.find({'kind':'self_development_publish','state':{'$in':['APPLIED','ACTIVE']}}):
-            current=store.db.sink_receipts.find_one({'_id':row['_id']})
+        for row in receipt_records.sink_of_kind(store,'self_development_publish',states=['APPLIED','ACTIVE']).each():
+            current=receipt_records.sink_get(store, row['_id'])
             # Native publications are activated only by the worker that actually
             # loaded the selected artifact, after its initialization succeeds.
             if current.get('artifact') and current['state'] != 'ACTIVE':
                 continue
-            active=(store.put('sink_receipts',{**current,'state':'ACTIVE','activated_at':now()},
+            active=(receipt_records.save_sink(store, {**current,'state':'ACTIVE','activated_at':now()},
                               expected=current['revision'],stream=current['task_id'])
                     if current['state']=='APPLIED' else current)
             self.controller.offer_self_development('self-development:publish:'+active['_id'],
@@ -432,7 +434,7 @@ class RuntimeHost:
 
     def _feedback_taken(self, task):
         """Her turn on this task's result ran: it committed, or it handed the work on to another task."""
-        feedback = self.app.store.db.episodes.find_one({'_id': task['feedback_episode']}) if task.get('feedback_episode') else None
+        feedback = episode_records.get(self.app.store, task['feedback_episode']) if task.get('feedback_episode') else None
         return feedback if feedback and feedback['state'] in ('COMMITTED', 'WAITING_TASK') else None
 
     def _settle_received(self, task):
@@ -444,9 +446,9 @@ class RuntimeHost:
         if feedback['state'] == 'COMMITTED':
             if task.get('feedback_state') != 'DELIVERED':
                 store.put('tasks', {**task, 'feedback_state': 'DELIVERED'}, expected=task['revision'], stream=task['_id'])
-            original = store.db.episodes.find_one({'_id': task['episode_id']})
+            original = episode_records.get(store, task['episode_id'])
             if original and original['state'] == 'WAITING_TASK':
-                store.put('episodes', {**original, 'state': 'COMMITTED', 'feedback_episode': feedback['_id']},
+                episode_records.save(store, {**original, 'state': 'COMMITTED', 'feedback_episode': feedback['_id']},
                           expected=original['revision'], stream=original['_id'])
         return True
 

@@ -17,6 +17,8 @@ from .records import messages as message_records
 from .native_cognition import CognitionView
 from .peer_context import speaker_name
 from .records import scenes as scene_records
+from .records import episodes as episode_records
+from .records import sessions as session_records
 
 DOCUMENT_KINDS = ('persona', 'voice', 'ledger', 'working')
 # The two scopes of the tab: what is the same in every conversation, and what this conversation reads.
@@ -153,8 +155,7 @@ class NativeMemory:
         if scene_id == self.scene['_id'] and self.binding.get('native_title'):
             return self.binding['native_title']
         # The same title the conversation list shows for that scene.
-        main = self.store.db.sessions.find_one({'scene_id': scene_id, 'main_conversation': True,
-                                                'native_title': {'$exists': True}}, {'native_title': 1})
+        main = session_records.titled(self.store, scene_id, fields=['native_title'])
         if main:
             return main['native_title']
         platform = channel_kinds.of(scene_id)
@@ -383,8 +384,8 @@ class NativeMemory:
         events = list(self.store.db.affect_events.find({'persona': self.persona}).sort('ts', -1).limit(20))
         closed = {row['target'] for row in self.store.db.affect_amendments.find(
             {'target': {'$in': [event['_id'] for event in events]}, 'op': {'$in': ['close', 'void']}}, {'target': 1})}
-        scenes = {row['_id']: row['scene_id'] for row in self.store.db.episodes.find(
-            {'_id': {'$in': [event.get('episode_id') for event in events]}}, {'scene_id': 1})}
+        scenes = {row['_id']: row['scene_id'] for row in episode_records.many(
+            self.store, [event.get('episode_id') for event in events]).rows(fields=['scene_id'])}
         for event in events:
             rows.append({'id': 'affect:' + event['_id'], 'kind': 'affect_event',
                          'title': label('title.moved', feeling=kind_label(ledger.model, event.get('kind'))),

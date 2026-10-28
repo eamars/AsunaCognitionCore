@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from .records import scenes as scene_records
+from .records import episodes as episode_records
 
 NIGHT_KINDS = ('self_development', 'settlement')
 LOOKBACK = timedelta(hours=48)
@@ -65,8 +66,8 @@ def _what(store, persona, tool, args):
 
 
 def _kinds(store, ids):
-    return {row['_id']: row.get('episode_kind') for row in store.db.episodes.find({'_id': {'$in': list(ids)}},
-                                                                                 {'episode_kind': 1})}
+    return {row['_id']: row.get('episode_kind') for row in episode_records.many(store, list(ids)).rows(
+        fields=['episode_kind'])}
 
 
 def _last_heartbeat(store, current, since):
@@ -105,7 +106,7 @@ def block(store, persona, zone, moment, current):
             item['why'] = _short(why, 80)
         else:
             ref = payload.get('reason_ref') or reasons.reason_of(
-                store.db.episodes.find_one({'_id': row['stream_id']}, {'tool_calls': 1}), payload.get('call_id'))
+                episode_records.get(store, row['stream_id'], fields=['tool_calls']), payload.get('call_id'))
             then = reasons.thought(store, ref)
             if then:
                 item['your_thought_then'] = then

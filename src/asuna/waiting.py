@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import timedelta
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import episodes as episode_records
 
 HORIZON = timedelta(hours=1)
 SHOWN_HOME = 5
@@ -41,7 +42,7 @@ def pending(store, scene_ids, moment, persona=None):
         lines = message_records.spoken(store, scene_id, author=me, receipt_since=since).rows(
             newest_first=True, fields=['text', 'episode_id', 'scene_seq', 'receipt_at'])
         for line in lines:
-            choice = (store.db.episodes.find_one({'_id': line.get('episode_id')}, {'await_answer': 1}) or {}).get(
+            choice = (episode_records.get(store, line.get('episode_id'), fields=['await_answer']) or {}).get(
                 'await_answer') or {}
             if choice.get('off'):
                 continue

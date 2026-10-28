@@ -8,6 +8,8 @@ names the levels.
 """
 import re
 
+from .records import episodes as episode_records
+
 TABLE_VERSION = 1
 LEVELS = ('owner', 'known', 'regular', 'met', 'new')
 # Coarse thresholds: turns in which she answered this person, and lines this person wrote where she could read them.
@@ -33,9 +35,7 @@ def level(store, person_id):
     ids = sorted({person_id, person, *extra_person_values(config, db, person)} - {None, ''})
     if db.state_heads.find_one({'_id': {'$regex': r'^relationship:(%s)\|' % '|'.join(re.escape(i) for i in ids)}}, {'_id': 1}):
         return 'known'
-    replies = db.episodes.count_documents({'person_id': {'$in': ids}, 'state': {'$in': ['COMMITTED', 'WAITING_TASK']},
-                                           'speech': {'$exists': True}},
-                                           limit=KNOWN_REPLIES)
+    replies = episode_records.answered(store, ids, limit=KNOWN_REPLIES)
     if replies >= KNOWN_REPLIES:
         return 'known'
     from . import records

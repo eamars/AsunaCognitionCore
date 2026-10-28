@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 from . import visibility
 from .evidence import canonical, sha
 from .records import scenes as scene_records
+from .records import episodes as episode_records
 
 IDENTITY = ('persona', 'voice', 'self', 'core')
 SELF_BLOCKS = (('current_self', 'self'), ('character_core', 'core'))    # the context names of the self and core blocks
@@ -416,9 +417,8 @@ def _turns(store, persona, start, end):
         if row['stream_id'] in seen:
             continue
         seen.add(row['stream_id'])
-        ep = store.db.episodes.find_one({'_id': row['stream_id']}, {'persona': 1, 'scene_id': 1,
-                                                                   'manifest.session_class': 1, 'manifest.carried': 1,
-                                                                   'context.memories': 1})
+        ep = episode_records.get(store, row['stream_id'], fields=['persona', 'scene_id', 'manifest.session_class',
+                                                                  'manifest.carried', 'context.memories'])
         if not ep or ep.get('persona') != persona:
             continue
         mark = (ep.get('manifest') or {}).get('carried')
@@ -443,7 +443,7 @@ def _recalls(store, persona, start, end):
     for row in store.db.audit_events.find({'type': 'recall.read', 'occurred_at': {'$gte': start, '$lt': end}},
                                           {'stream_id': 1, 'payload': 1}):
         payload = row.get('payload') or {}
-        ep = store.db.episodes.find_one({'_id': row.get('stream_id')}, {'persona': 1, 'manifest.session_class': 1})
+        ep = episode_records.get(store, row.get('stream_id'), fields=['persona', 'manifest.session_class'])
         if not ep or ep.get('persona') != persona:
             continue
         cls = (ep.get('manifest') or {}).get('session_class') or visibility.PUBLIC
@@ -556,8 +556,7 @@ def install_checks(store, persona):
     from .documents import DocumentError
     out, ep = [], None
     for row in store.db.audit_events.find({'type': 'turn.output'}, {'stream_id': 1}).sort('occurred_at', -1).limit(50):
-        ep = store.db.episodes.find_one({'_id': row['stream_id'], 'persona': persona,
-                                         'system_ref.carried': {'$exists': True}}, {'system_ref': 1})
+        ep = episode_records.get(store, row['stream_id'], fields=['system_ref'], persona=persona, carried=True)
         if ep:
             break
     if ep:

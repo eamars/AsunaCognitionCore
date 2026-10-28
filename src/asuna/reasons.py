@@ -13,6 +13,8 @@ result, a reply to her line, the night block (`for_call`, `for_message`). One ta
 """
 from __future__ import annotations
 
+from .records import episodes as episode_records
+
 SAID_CHARS = 40
 THOUGHT_CHARS = 400        # a thought is at most 360 characters; longer old ones keep the excerpt mark
 # ADR-099: a thought taken from the model's thinking is another model's summary, not her words: it comes back marked
@@ -121,7 +123,7 @@ def then(store, unit):
         return []
     anchored = unit.get('source') == 'thinking'
     if anchored and call_id == 'end':
-        episode = store.db.episodes.find_one({'_id': episode_id}, {'speech': 1}) or {}
+        episode = episode_records.get(store, episode_id, fields=['speech']) or {}
         said = _short(episode.get('speech'), SAID_CHARS)
         return ['所以我说了「%s」' % said] if said else []
     calls = list(store.db.audit_events.find({'stream_id': episode_id, 'type': 'role_tool'},
@@ -146,7 +148,7 @@ def then(store, unit):
         if words:
             lines.append('所以我' + words)
     if last_thought:
-        episode = store.db.episodes.find_one({'_id': episode_id}, {'speech': 1}) or {}
+        episode = episode_records.get(store, episode_id, fields=['speech']) or {}
         said = _short(episode.get('speech'), SAID_CHARS)
         if said:
             lines.append('所以我说了「%s」' % said)
@@ -199,7 +201,7 @@ def thought(store, ref):
 
 def for_call(store, episode_id, field, value):
     """The thought behind the call in that turn whose result carries field=value (a plan, a task), or None."""
-    episode = store.db.episodes.find_one({'_id': episode_id}, {'tool_calls': 1}) if episode_id else None
+    episode = episode_records.get(store, episode_id, fields=['tool_calls']) if episode_id else None
     for call_id, call in ((episode or {}).get('tool_calls') or {}).items():
         if isinstance(call.get('result'), dict) and call['result'].get(field) == value:
             return thought(store, reason_of(episode, call_id))

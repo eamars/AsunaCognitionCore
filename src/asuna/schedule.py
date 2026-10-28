@@ -16,6 +16,8 @@ from .integration import event_profile
 from .state import Conflict, Denied, now
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import episodes as episode_records
+from .records import receipts as receipt_records
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -49,23 +51,22 @@ def night_stage_busy(store):
     or one of her publications still being activated. One waiting for a Host restart does not hold the night: only
     that project takes no new publication until then (floor.js publish, waiting_restart)."""
     # A turn still at work (one waiting on its task is judged by the task below).
-    if store.db.episodes.find_one({'episode_kind': 'self_development',
-                                   'state': {'$in': ['ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED']}}, {'_id': 1}):
+    if episode_records.open(store, ['ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED'],
+                            kind='self_development').first(fields=['_id']):
         return 'STAGE_BUSY'
     for task in store.db.tasks.find({'state': {'$in': ['READY', 'RUNNING', 'PAUSED']}}, {'episode_id': 1}):
-        if (store.db.episodes.find_one({'_id': task.get('episode_id')}, {'episode_kind': 1}) or {}).get(
+        if (episode_records.get(store, task.get('episode_id'), fields=['episode_kind']) or {}).get(
                 'episode_kind') == 'self_development':
             return 'STAGE_BUSY'
-    if store.db.sink_receipts.find_one({'kind': 'self_development_publish',
-                                        'state': 'APPLIED'}, {'_id': 1}):
+    if receipt_records.sink_of_kind(store, 'self_development_publish', state='APPLIED').first(fields=['_id']):
         return 'PUBLISH_NOT_RUNNING'
     return None
 
 
 def waiting_restart(store):
     """Her publications that run only once the Host restarts: [(project, published_at)], oldest first."""
-    rows = store.db.sink_receipts.find({'kind': 'self_development_publish', 'state': 'HOST_RESTART_REQUIRED'},
-                                       {'project': 1, 'published_at': 1}).sort('published_at', 1)
+    rows = receipt_records.sink_of_kind(store, 'self_development_publish', state='HOST_RESTART_REQUIRED',
+                                        by='published_at').rows(fields=['project', 'published_at'])
     return [(row.get('project'), row.get('published_at')) for row in rows]
 PRESENCE_PLAN = 'plan-asuna-presence'
 HEARTBEAT_BEATS_PER_DAY = 24          # beats that reach the model, per local day

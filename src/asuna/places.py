@@ -15,6 +15,7 @@ from .config import ago, character_id, excerpt
 from .evidence import sha
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import episodes as episode_records
 
 TABLES_VERSION = 1
 # Lines in the group over the last hour → how it reads.
@@ -297,7 +298,7 @@ def episode_key(visit):
 def outcome(store, visit):
     """What happened on one visit, read from its turn and the room afterwards."""
     ep_id = episode_key(visit)
-    ep = store.db.episodes.find_one({'_id': ep_id}, {'state': 1, 'tool_calls': 1})
+    ep = episode_records.get(store, ep_id, fields=['state', 'tool_calls'])
     source = message_records.get(store, 'in-' + ep_id, fields=['ingress_state', 'result_state']) or {}
     if source.get('result_state') in ERRAND_ENDS:
         return ERRAND_ENDS[source['result_state']]

@@ -20,6 +20,8 @@ from .familiarity import words as familiarity_words
 from . import attend, caught_up, notices, own_mute
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import episodes as episode_records
+from .records import receipts as receipt_records
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -753,9 +755,9 @@ class ContextBuilder:
                 # A report of work from a public conversation may quote people there: home sees its headline only.
                 if isinstance(result,dict) and result.get('text') and item.get('scene_id') in private:
                     item['report_start']=excerpt(result['text'],EXPERIENCE_TASK_CHARS)
-            lineage=list(self.store.db.sink_receipts.find({'kind':'self_development_publish'},
-                {'project':1,'state':1,'changed_files':1,'deleted_files':1,'published_at':1,
-                 'activated_at':1,'task_id':1}).sort('published_at',-1).limit(EXPERIENCE_PUBLICATIONS))
+            lineage=receipt_records.sink_of_kind(self.store,'self_development_publish',by='published_at').rows(
+                newest_first=True,limit=EXPERIENCE_PUBLICATIONS,fields=['project','state','changed_files',
+                'deleted_files','published_at','activated_at','task_id'])
             for row in lineage:
                 # How much each publication changed, not every path (the receipt keeps the list).
                 row['changed_files']=len(row.get('changed_files') or [])
@@ -1040,7 +1042,7 @@ class ContextBuilder:
                 # Her own await_answer on her last line here: what she said she was waiting for, in her words.
                 mine = message_records.spoken(self.store, scene['_id'], author=character_id(self.store.config)).first(
                     newest_first=True, fields=['episode_id'])
-                waiting = ((self.store.db.episodes.find_one({'_id':(mine or {}).get('episode_id')},{'await_answer':1}) or {})
+                waiting = ((episode_records.get(self.store,(mine or {}).get('episode_id'),fields=['await_answer']) or {})
                            .get('await_answer') or {}).get('why')
                 continuity['awaited_from_program'] = {'you_were_waiting_for': excerpt(waiting, 200) if waiting else '',
                     'note': '你上一句 @ 了他或是在回他（或你说了在等回话）；这句没 @ 你也没引用你，是不是在回你由你判断。'}

@@ -31,6 +31,7 @@ from .state import Conflict, now
 from . import visibility
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import episodes as episode_records
 
 TABLES_VERSION = 1
 # Patience words -> minutes (None: until it is answered, for a report).
@@ -282,7 +283,7 @@ def _source_now(store, qid, source, persona, moment):
         return 'not_done', []
     line = _question_line(store, source)
     if not line:
-        episode = store.db.episodes.find_one({'_id': source.get('episode')}, {'state': 1}) if source.get('episode') else None
+        episode = episode_records.get(store, source.get('episode'), fields=['state']) if source.get('episode') else None
         return ('not_asked' if episode and episode.get('state') in ENDED else 'pending'), []
     if line.get('delivery_state') == 'FAILED':
         return 'not_sent', []

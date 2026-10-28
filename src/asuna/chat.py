@@ -14,6 +14,7 @@ from .ingress import episode_id, persist_input, input_state
 from .router import FairQueue
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import episodes as episode_records
 
 
 class SceneQueue(Queue):
@@ -372,7 +373,7 @@ class Chat:
                 # A failure before episode creation made no model/tool calls.
                 # Keep its original identity and diagnostic when resuming.
                 if row['ingress_state']=='FAILED':
-                    if self.app.store.db.episodes.find_one({'_id':episode}) or 'retrieval' not in row.get('failure','').lower():
+                    if episode_records.get(self.app.store, episode) or 'retrieval' not in row.get('failure','').lower():
                         continue  # Only migrate the known pre-RAG failure; no blanket replay.
                 if episode not in self.enqueued:
                     self.enqueued.add(episode)
@@ -438,7 +439,7 @@ class Chat:
                         # P5：入队时闸门还开着，真要开口时已经不该插这句——不建 episode、不调模型。
                         input_state(self.app.store, episode, 'COMPLETE', result_state='PROACTIVE_HELD')
                         continue
-                    previous = self.app.store.db.episodes.find_one({'_id': episode})
+                    previous = episode_records.get(self.app.store, episode)
                     from . import errands
                     why = errands.skipped(event, source, previous)
                     if why:
@@ -480,11 +481,11 @@ class Chat:
                         from .handover import result_event_id
                         task = self.app.store.db.tasks.find_one({'_id': event['_feedback_task']})
                         short = event.get('_short', False)
-                        turn = self.app.store.db.episodes.find_one({'source_event_id': result_event_id(task, short),
-                                                                    'episode_kind': 'task_feedback'})
+                        turn = episode_records.of_source(self.app.store, result_event_id(task, short),
+                                                         kind='task_feedback')
                         if turn and turn['state'] not in ('COMMITTED', 'WAITING_TASK'):
-                            self.app.store.put('episodes', {**turn, 'state': 'INTERRUPTED' if self.stopping.is_set()
-                                               else 'FAILED_RUNTIME', 'failure': error}, expected=turn['revision'], stream=turn['_id'])
+                            episode_records.save(self.app.store, {**turn, 'state': 'INTERRUPTED' if self.stopping.is_set()
+                                                 else 'FAILED_RUNTIME', 'failure': error}, expected=turn['revision'], stream=turn['_id'])
                             if not self.stopping.is_set():
                                 self._report_fault(turn, error)
                         elif not turn:
@@ -499,10 +500,10 @@ class Chat:
                 try:
                     input_state(self.app.store, episode, 'FAILED', failure=error)
                     self.app.store.audit(episode, 'chat.error', {'traceback': error}, 'scene:' + event['scene_id'])
-                    ep = self.app.store.db.episodes.find_one({'_id': episode})
+                    ep = episode_records.get(self.app.store, episode)
                     if ep and ep['state'] not in ('COMMITTED', 'WAITING_TASK'):
-                        self.app.store.put('episodes', {**ep, 'state': 'INTERRUPTED' if self.stopping.is_set() else 'FAILED_RUNTIME',
-                                           'failure': error}, expected=ep['revision'], stream=episode)
+                        episode_records.save(self.app.store, {**ep, 'state': 'INTERRUPTED' if self.stopping.is_set() else 'FAILED_RUNTIME',
+                                             'failure': error}, expected=ep['revision'], stream=episode)
                         if not self.stopping.is_set():
                             self._report_fault(ep, error)
                 except Exception:

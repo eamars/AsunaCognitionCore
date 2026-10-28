@@ -32,6 +32,7 @@ from .errands import MARK as ERRAND_MARK
 from .vision import inline_summary as picture_receipt
 from .config import cut, cut_offer, over, refs_usable, soft
 from .context_budget import SINGLE_BODY_CHARS
+from .records import episodes as episode_records
 
 THOUGHT_CHARS = 120                  # what she is asked for: her first reaction, short (ADR-087 §4.1)
 THOUGHT_HARD_CHARS = 360             # refused past this; the room up to it is the model's, said in the result
@@ -1344,7 +1345,7 @@ class RoleTools:
         """(result, concludes_turn). Raises Refused for a call she can correct herself. `thinking`: the model's own
         thinking in the response that made her first call of a stage (ADR-099), recorded before the call runs."""
         c = self.coordinator
-        ep = self.store.db.episodes.find_one({'_id': ep_id})
+        ep = episode_records.get(self.store, ep_id)
         if thinking is not None:
             ep = self.take_thought(ep, call_id, thinking)
         called_as, replaced = None, False
@@ -1446,7 +1447,7 @@ class RoleTools:
     def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False, called_as=None, code=None,
                 olds=None):
         c = self.coordinator
-        ep = self.store.db.episodes.find_one({'_id': ep_id})
+        ep = episode_records.get(self.store, ep_id)
         calls = dict(ep.get('tool_calls') or {})
         # A call with consequences keeps the thought it came from: her newest in the turn (reasons.py, ADR-043).
         from . import reasons
@@ -1469,7 +1470,7 @@ class RoleTools:
                          ep['scope_key'])
 
     def _fresh(self, ep):
-        return self.store.db.episodes.find_one({'_id': ep['_id']})
+        return episode_records.get(self.store, ep['_id'])
 
     def _cls(self, ep):
         """The authority this turn acts with: its conversation's class, home's on an errand (ADR-066), or, at home in a
@@ -1496,8 +1497,8 @@ class RoleTools:
         first = self._outside(ep)
         if first is None:
             return ep
-        origin = first and self.store.db.episodes.find_one(
-            {'_id': first.get('from_episode')}, {'scene_id': 1, 'person_id': 1, 'scope_key': 1, 'policy_epoch': 1})
+        origin = first and episode_records.get(self.store, first.get('from_episode'),
+                                               fields=['scene_id', 'person_id', 'scope_key', 'policy_epoch'])
         if not origin:
             raise Refused(OUTSIDE_GONE)
         return {**ep, **{k: origin[k] for k in ('scene_id', 'person_id', 'scope_key', 'policy_epoch')}}
@@ -3362,8 +3363,8 @@ def _from_home(store, persona, source_ids, episodes):
     home_scope = visibility.owner_private_scope(persona)
     if store.db.memory_units.find_one({'_id': {'$in': list(source_ids)}, 'scope_key': home_scope}, {'_id': 1}):
         return True
-    for row in store.db.episodes.find({'_id': {'$in': list(episodes)}}, {'manifest.session_class': 1, 'scene_id': 1,
-                                                                          'person_id': 1}):
+    for row in episode_records.many(store, list(episodes)).rows(fields=['manifest.session_class', 'scene_id',
+                                                                         'person_id']):
         cls = (row.get('manifest') or {}).get('session_class')
         if cls is None:
             scene = scene_records.get(store, row.get('scene_id')) or {'_id': row.get('scene_id')}
@@ -3395,9 +3396,9 @@ def promote(store, ep, item, *, key):
     episodes = set()
     for source in item['source_ids']:
         unit = store.db.memory_units.find_one({'_id': source}, {'episode_id': 1})
-        if store.db.episodes.find_one({'_id': source}, {'_id': 1}):
+        if episode_records.get(store, source, fields=['_id']):
             episodes.add(source)
-        elif source.startswith('in-') and store.db.episodes.find_one({'_id': source[3:]}, {'_id': 1}):
+        elif source.startswith('in-') and episode_records.get(store, source[3:], fields=['_id']):
             episodes.add(source[3:])
         elif unit:
             episodes.update([unit['episode_id']] if unit.get('episode_id') else picked.get(source, []))

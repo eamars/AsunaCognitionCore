@@ -19,6 +19,7 @@ from .ingress import PROGRAM_AUTHOR
 from .people import People
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import episodes as episode_records
 
 try:                                  # 出站图片附件：元数据、字节端点的围栏都在 outbound_media
     from . import outbound_media
@@ -137,7 +138,7 @@ def awaited_answer(store, scene, person_id, mentions, reply):
         return False
     if since.total_seconds() > AWAIT_SECONDS:
         return False
-    choice = (store.db.episodes.find_one({'_id': mine.get('episode_id')}, {'await_answer': 1}) or {}).get('await_answer')
+    choice = (episode_records.get(store, mine.get('episode_id'), fields=['await_answer']) or {}).get('await_answer')
     if (choice or {}).get('off'):
         return False
     asked = addressees(store, scene, mine)
@@ -458,7 +459,7 @@ class Channels:
         if not message or message.get('channel_id') != channel_id:
             raise Denied('PUBLICATION_NOT_FOUND')
         route = route_for_scene(self.store.config, channel_id, message['scene_id'])
-        episode = self.store.db.episodes.find_one({'_id': message['episode_id']})
+        episode = episode_records.get(self.store, message['episode_id'])
         channel = self.store.config['channels'][channel_id]
         allowed = {grant['person_id'] for sender, grant in route_members(route).items()
                    if sender not in channel.get('blocked_senders', [])}

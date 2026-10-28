@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from .evidence import sha
 from .state import now
 from .records import messages as message_records
+from .records import episodes as episode_records
 
 SESSION_PREFIX = 'asuna-errand-'
 # Waiting behind that conversation's own turns: past this the talk there has moved on (her review, 2026-10-15).
@@ -45,8 +46,7 @@ def carried(store, event):
     visit = event.get('visit') or {}
     if event.get('episode_kind') != 'visit' or visit.get('intent') != 'errand':
         return None
-    home = store.db.episodes.find_one({'_id': visit.get('from')},
-                                      {'scene_id': 1, 'scope_key': 1, 'policy_epoch': 1, 'person_id': 1})
+    home = episode_records.get(store, visit.get('from'), fields=['scene_id', 'scope_key', 'policy_epoch', 'person_id'])
     if not home:
         return None
     return {'from': home['_id'], 'scene_id': home['scene_id'], 'scope_key': home['scope_key'],
@@ -60,7 +60,7 @@ def home_turn(store, ep):
     is said) reads this turn, never the errand's; the errand turn stays the record of what she did and thought there."""
     if not (ep or {}).get('errand'):
         return ep
-    return store.db.episodes.find_one({'_id': ep['errand']['from']}) or ep
+    return episode_records.get(store, ep['errand']['from']) or ep
 
 
 def session_id(episode_id):

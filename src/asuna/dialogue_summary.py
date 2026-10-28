@@ -20,6 +20,7 @@ from .state import Conflict, now
 from .config import character_id
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import receipts as receipt_records
 
 
 
@@ -169,7 +170,7 @@ class DialogueSummarizer:
                           'corrections': people.corrections(scene, attribution['corrections'])}},
                           ensure_ascii=False))
             operation = key
-            receipt = self.store.db.lane_receipts.find_one({'_id': operation})
+            receipt = receipt_records.lane_get(self.store, operation)
             attempt = 0
             # A durably completed but interrupted/incomplete native turn is
             # known not to contain a usable summary. DSH replays DONE operations,
@@ -182,7 +183,7 @@ class DialogueSummarizer:
             while receipt and not usable(receipt.get('result', {})):
                 attempt += 1
                 operation = key + ':retry-' + str(attempt)
-                receipt = self.store.db.lane_receipts.find_one({'_id': operation})
+                receipt = receipt_records.lane_get(self.store, operation)
             from . import answers
 
             def generate(attempt, note):

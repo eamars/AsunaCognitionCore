@@ -21,6 +21,7 @@ from asuna.router import Router
 from asuna.state import Store
 from asuna.testing import dispose_test_store
 from asuna.records import messages as message_records
+from asuna.records import receipts as receipt_records
 
 
 def probe():
@@ -70,7 +71,7 @@ def probe():
         assert set(item) == {'publication_id', 'attempt_id', 'target', 'text', 'reply_to'}
         message = message_records.get(store, item['publication_id'])
         assert message['delivery_state'] == 'SENDING'
-        assert store.db.sink_receipts.count_documents({}) == 0
+        assert receipt_records.sinks(store).count() == 0
         channel.recover_sending()
         assert not client.get('/v1/channels/replay/outbox').json()['items']
         receipt = {'attempt_id': item['attempt_id'], 'status': 'platform_accepted',

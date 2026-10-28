@@ -26,6 +26,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import sessions as session_records
 
 TABLES_VERSION = 1
 # Average incoming lines a day over the last week → minutes of quiet before condensing (measured by the character,
@@ -110,16 +111,15 @@ def size_words(scene):
 def main_session(store, scene, persona):
     """The character session this group's conversation continues in now (native_worker.resolve_role_session):
     (session id, its working folder), or None."""
-    primary = store.db.sessions.find_one({'native_host': True, 'main_conversation': True, 'scene_id': scene['_id'],
-                                          'persona': persona, 'policy_epoch': scene.get('policy_epoch'),
-                                          'character_context': scene.get('character_context')})
+    primary = session_records.main(store, scene['_id'], persona=persona, epoch=scene.get('policy_epoch'),
+                                   context=scene.get('character_context'))
     if not primary:
         return None
     session_id, seen = primary['_id'], {primary['_id']}
     while True:
-        successor = (store.db.sessions.find_one({'_id': session_id}, {'successor_id': 1}) or {}).get('successor_id')
+        successor = (session_records.get(store, session_id, fields=['successor_id']) or {}).get('successor_id')
         if not successor or successor in seen:
-            row = store.db.sessions.find_one({'_id': session_id}, {'cwd': 1}) or {}
+            row = session_records.get(store, session_id, fields=['cwd']) or {}
             return session_id, row.get('cwd') or primary.get('cwd')
         seen.add(successor)
         session_id = successor

@@ -16,6 +16,7 @@ from .evidence import canonical, sha
 from .state import Denied, now
 from . import visibility
 from .context_budget import AFFECT_REASONS, rough_ago
+from .records import episodes as episode_records
 
 SHORT_ID = 12                 # event ids as she reads and quotes them; a unique prefix resolves to the event
 
@@ -698,7 +699,7 @@ class Appraiser:
         import json
         from .config import prompt_path
         from .render import model_and_policy
-        ep = self.store.db.episodes.find_one({'_id': episode_id})
+        ep = episode_records.get(self.store, episode_id)
         if not ep or ep.get('state') not in ('COMMITTED', 'WAITING_TASK'):
             return []
         model, policy = model_and_policy(self.store, ep['persona'])

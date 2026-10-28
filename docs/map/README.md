@@ -239,6 +239,10 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`records/__init__`](../../src/asuna/records/__init__.py) — The owners of the collections read across many domains: one module per collection, the only code that names its fields and builds its conditions (ADR-104).
 - [`records/scenes`](../../src/asuna/records/scenes.py) — The owner of `scenes`: a conversation's record (its kind, members, scope and epoch, its position counter, and the marks the program keeps on it), read and written only through these operations.
 - [`records/messages`](../../src/asuna/records/messages.py) — The owner of `messages`: the lines of every conversation (what people wrote, her lines and where they are on their way, the program's own lines), read and written only through these operations.
+- [`records/episodes`](../../src/asuna/records/episodes.py) — The owner of `episodes`: her turns (what woke her, what she was given, what she thought, said and called, and the state the turn reached), read and written only through these operations.
+- [`records/sessions`](../../src/asuna/records/sessions.py) — The owner of `sessions`: the bindings of her native sessions (which conversation, lane, persona, epoch and working folder a session belongs to, the sessions it continues and is continued by, its title and carry), read and written only throu
+- [`records/receipts`](../../src/asuna/records/receipts.py) — The owner of `lane_receipts` and `sink_receipts`: what a model lane answered for an operation (its result, kept so a replay answers the same), and what a sink received (a publication's delivery, her self-development publications and their s
+- [`records/view`](../../src/asuna/records/view.py) — What the owners of `episodes`, `sessions` and the receipts share: a named read (`View`) and the checks of a fence.
 
 ### [A turn](turn.md)
 

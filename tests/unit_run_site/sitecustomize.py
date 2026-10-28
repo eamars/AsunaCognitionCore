@@ -104,3 +104,7 @@ if os.environ.get('ASUNA_UNIT_RUN') == '1':
                 raise NotImplementedError('the stand-in has no sorted bulk update')
             return _plain(self, *args, **kwargs)
         setattr(_builder, _name, _without_sort)
+
+    # `$type: 'null'` (the condition): present and null, as MongoDB answers; a missing field is not null.
+    import mongomock.filtering as _filtering
+    _filtering.TYPE_MAP['null'] = lambda value: value is None

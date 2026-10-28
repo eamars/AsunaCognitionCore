@@ -29,6 +29,7 @@ from .state import now
 from . import scene_links, visibility
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import episodes as episode_records
 
 TABLES_VERSION = 1
 NOTE_CHARS = 300                 # a note that crosses between home and outside
@@ -390,7 +391,7 @@ def state(store, row, moment):
     if store.db.notes.find_one({'reply_to': row['_id']}, {'_id': 1}):
         return 'replied'
     seen = row.get('seen_in') or []
-    if seen and store.db.episodes.find_one({'_id': {'$in': seen}, 'state': {'$in': list(FINISHED)}}, {'_id': 1}):
+    if seen and episode_records.many(store, seen, states=FINISHED).first(fields=['_id']):
         return 'read'
     created = _at(row.get('created_at'))
     if created and moment - created > timedelta(hours=KEEP_HOURS):
@@ -405,7 +406,7 @@ def read_elsewhere(store, event, episode):
     note_id = (event.get('note') or {}).get('id') or (event.get('visit') or {}).get('note')
     row = store.db.notes.find_one({'_id': note_id}, {'seen_in': 1}) if note_id else None
     seen = [other for other in (row or {}).get('seen_in') or [] if other != episode]
-    return bool(seen) and store.db.episodes.count_documents({'_id': {'$in': seen}, 'state': {'$in': list(FINISHED)}}) > 0
+    return bool(seen) and episode_records.many(store, seen, states=FINISHED).count() > 0
 
 
 def waited(row, moment):

@@ -6,6 +6,9 @@ from .config import DATA, ROOT
 from .evidence import canonical,sha,write_json
 from .state import Denied,now
 from .records import scenes as scene_records
+from .records import episodes as episode_records
+from .records import sessions as session_records
+from .records import receipts as receipt_records
 
 
 class PrivacyService:
@@ -61,11 +64,11 @@ class PrivacyService:
             if not new:break
             affected|=new;sources|=new
         roots=set();session_ids=set();native_sessions=set()
-        for session in db.sessions.find({'scope_key':scope}):
+        for session in session_records.of_scope(self.store,scope):
             roots.update(session.get('evidence_roots',[]));roots.add(session.get('evidence_root',''));session_ids.add(session['_id'])
             if not session.get('dsh_home'):
                 # Native Host session: its transcript lives in the profile's DSH home; it is invalidated here.
-                db.sessions.update_one({'_id':session['_id']},{'$set':{'state':'INVALIDATED','deletion_id':deletion}})
+                session_records.invalidate(self.store,session['_id'],deletion)
                 native_sessions.add(session['_id'])
                 continue
             home=Path(session['dsh_home']).resolve()
@@ -81,8 +84,8 @@ class PrivacyService:
                 import json
                 data=json.loads(path.read_text(encoding='utf-8'))
                 if data.get('session')==session['_id'] or path.name=='boundary-'+session['_id']+'.json':path.unlink()
-            db.sessions.update_one({'_id':session['_id']},{'$set':{'state':'INVALIDATED','deletion_id':deletion}})
-        ep_ids={e['_id'] for e in db.episodes.find({'scope_key':scope},{'_id':1})}
+            session_records.invalidate(self.store,session['_id'],deletion)
+        ep_ids={e['_id'] for e in episode_records.of_scope(self.store,scope,fields=['_id'])}
         task_ids={t['_id'] for t in db.tasks.find({'scope_key':scope},{'_id':1})}
         for mem in db.memory_units.find({'scope_key':scope}):
             derived=mem.get('kind') in ('monologue','chat_chunk') and mem.get('episode_id') in ep_ids
@@ -99,8 +102,8 @@ class PrivacyService:
                 retained={k:doc[k] for k in ('_id','schema_version','revision','scope_key','scene_id','source_event_id','episode_kind','publication_key','request_key','binding_key','content_hash','scene_seq','direction','author','adapter_id','platform_event_id') if k in doc}
                 retained.update(deletion_id=deletion,state='INVALIDATED',delivery_state='REDACTED',text='[deleted]',policy_epoch=scene['policy_epoch']+1)
                 db[collection].replace_one({'_id':doc['_id']},retained)
-        for receipt in db.lane_receipts.find({'session_id':{'$in':list(session_ids)}}):
-            db.lane_receipts.replace_one({'_id':receipt['_id']},{'_id':receipt['_id'],'schema_version':1,'scope_key':'operator','state':'INVALIDATED','deletion_id':deletion})
+        for receipt in receipt_records.lane_of_sessions(self.store,list(session_ids)):
+            receipt_records.lane_invalidate(self.store,receipt['_id'],deletion)
         for head in db.state_heads.find({'scope_key':scope}):
             rev=db.state_revisions.find_one({'_id':head['revision_id']})
             while rev and rev.get('parent_revision_id'):rev=db.state_revisions.find_one({'_id':rev['parent_revision_id']})

@@ -34,6 +34,9 @@ from .tasks import FeedbackStale, require_current_feedback
 from .queue import database_effects_lock
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import episodes as episode_records
+from .records import receipts as receipt_records
+from .records import sessions as session_records
 
 
 class ProtocolFailure(RuntimeError):
@@ -95,7 +98,7 @@ class Coordinator:
         with self.lock:
             scene=scene_records.authorize(self.store, event['scene_id'], event['person_id'])
             ep_id='ep-'+sha(canonical([event['scene_id'],event['event_id'],event.get('episode_kind','external')]))[:32]
-            existing=self.store.db.episodes.find_one({'_id':ep_id})
+            existing=episode_records.get(self.store, ep_id)
             if existing:
                 self.store.audit(ep_id,'ingress.deduped',{'event_id':event['event_id']},scene['scope_key'])
                 return existing
@@ -104,7 +107,7 @@ class Coordinator:
             from . import attend
             if self.attend and attend.gated(scene,event):
                 # The gate first: nothing is recalled until she chooses to join (attend.py).
-                ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'ATTENDING','persona':persona,'person_id':event['person_id'],'attend_event':event,'context':{},'manifest':{},'monologue_refs':[]},stream=ep_id)
+                ep=episode_records.save(self.store, {'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'ATTENDING','persona':persona,'person_id':event['person_id'],'attend_event':event,'context':{},'manifest':{},'monologue_refs':[]},stream=ep_id)
                 if scene.get('character_context'):
                     ep=self._update(ep,character_context=scene['character_context'])
                 if self.native_session_resolver:
@@ -114,7 +117,7 @@ class Coordinator:
             self.store.audit(ep_id,'context.prepared',prepared_record(manifest,event['person_id'],scene['policy_epoch']),scene['scope_key'])
             from . import errands
             errand=errands.carried(self.store,event)       # ADR-066: home's authority, for this turn only
-            ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'person_id':event['person_id'],'monologue_refs':[],**({'errand':errand} if errand else {}),**{k:event[k] for k in ('task_id','intent_revision','delegation_depth') if k in event}},stream=ep_id)
+            ep=episode_records.save(self.store, {'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'person_id':event['person_id'],'monologue_refs':[],**({'errand':errand} if errand else {}),**{k:event[k] for k in ('task_id','intent_revision','delegation_depth') if k in event}},stream=ep_id)
             if scene.get('character_context'):
                 ep=self._update(ep,character_context=scene['character_context'])
             if event.get('native_session_id') or self.native_session_resolver:
@@ -135,7 +138,7 @@ class Coordinator:
         return self.native_session_resolver(proto)
 
     def _update(self, ep, **changes):
-        row=self.store.put('episodes',{**ep,**changes},expected=ep['revision'],stream=ep['_id'])
+        row=episode_records.save(self.store, {**ep,**changes},expected=ep['revision'],stream=ep['_id'])
         if changes.get('state') in ('COMMITTED','WAITING_TASK') and (ep.get('manifest') or {}).get('told'):
             from . import faults
             faults.told(self.store,{**ep,**changes})
@@ -157,7 +160,7 @@ class Coordinator:
             # She answers in the conversation the task belongs to: for one begun on an errand, the home turn that sent
             # it, whose place, person and scope the task carries (delegate).
             from . import errands
-            begun=self.store.db.episodes.find_one({'_id':task['episode_id']}) or {}
+            begun=episode_records.get(self.store, task['episode_id']) or {}
             belongs=begun.get('errand') or begun
             original=errands.home_turn(self.store,begun) if begun else None
             if (not original or scene['scope_key']!=task['scope_key']
@@ -170,7 +173,7 @@ class Coordinator:
             question=args['question'].strip()
             self.collab(task,'question',{'from':'action','text':question},entry_id='q:'+call_key)
             ep_id='ep-'+sha(canonical([task['scene_id'],call_key,'consult']))[:32]
-            ep=self.store.db.episodes.find_one({'_id':ep_id})
+            ep=episode_records.get(self.store, ep_id)
             if not ep:
                 event={'event_id':call_key,'scene_id':task['scene_id'],'person_id':task['requester_id'],
                     'text':question,'episode_kind':'consult','task_id':task['_id'],
@@ -180,7 +183,7 @@ class Coordinator:
                         'action_context':args.get('context','')}]}
                 if group:=program_group_context(source):event['group_context']=group
                 _,context,manifest=self.context.prepare(event,original['persona'])
-                ep=self.store.put('episodes',{'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],
+                ep=episode_records.save(self.store, {'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],
                     'policy_epoch':scene['policy_epoch'],'source_event_id':call_key,'episode_kind':'consult',
                     'state':'PREPARED','persona':original['persona'],'person_id':task['requester_id'],
                     'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'monologue_refs':[],
@@ -232,14 +235,14 @@ class Coordinator:
             except SessionCarried as exc:
                 # ADR-028: the turn runs again, once, in the session that replaced the one that no longer fit.
                 self.store.audit(ep['_id'],'turn.carried',{'successor':exc.successor},ep['scope_key'])
-                ep=self.store.db.episodes.find_one({'_id':ep['_id']})
+                ep=episode_records.get(self.store, ep['_id'])
                 ep=self._update(ep,resume_diagnostic=exc.note)
                 return self._run_turn(ep)
         finally:
             # The native turn waits after each stage for another one (a repair note); tell it there is none.
             done=getattr(self.character,'turn_done',None)
             if done:
-                done(self.store.db.episodes.find_one({'_id':ep['_id']}) or ep)
+                done(episode_records.get(self.store, ep['_id']) or ep)
 
     def _run_turn(self, ep):
         kind=role_tools.turn_kind(ep)
@@ -251,7 +254,7 @@ class Coordinator:
         if not fresh:
             # A native turn whose result was saved (its lane receipt) is replayed from it, never generated
             # again; one that never finished, or failed its checks, runs again as a new native turn.
-            if ep['state']=='FAILED_PROTOCOL' or not self.store.db.lane_receipts.find_one({'_id':self._operation(ep['_id'],generation)}):
+            if ep['state']=='FAILED_PROTOCOL' or not receipt_records.lane_get(self.store, self._operation(ep['_id'],generation)):
                 generation+=1
             # delegate saves its task before the call is recorded: a task this episode made is its own.
             made=[row['_id'] for row in self.store.db.tasks.find({'episode_id':ep['_id']},{'_id':1})]
@@ -269,7 +272,7 @@ class Coordinator:
             value=self._deliver(ep,operation if not attempt else operation+':fix-'+str(attempt),
                                 instruction if not attempt else note,listed,handler,first=not attempt)
             seen+=list(value.seen_inputs or ())
-            ep=self.store.db.episodes.find_one({'_id':ep['_id']})
+            ep=episode_records.get(self.store, ep['_id'])
             if not attempt and not value.tool_calls:
                 # ADR-099: a turn that made no call has its thought from its one response (none when it asks for it).
                 ep=self.tools.take_thought(ep,'end',value.thinking or {})
@@ -364,7 +367,7 @@ class Coordinator:
         from . import block_guide
         context=block_guide.strip(context)
         if pulled:
-            fresh=self.store.db.episodes.find_one({'_id':ep['_id']})
+            fresh=episode_records.get(self.store, ep['_id'])
             self._update(fresh,looked=[*dict.fromkeys([*(fresh.get('looked') or []),*(ref for ref,_ in pulled)])])
         # A native role session composes the notice itself: what it still shows verbatim is not repeated, and the
         # turn's ceiling applies to what it then sends. A context sent whole is held to the ceiling here.
@@ -459,7 +462,7 @@ class Coordinator:
             message_records.save(self.store, row,stream=ep_id)
         self.publisher.publish(key)
         self.crash('before_episode_commit')
-        return self._update(self.store.db.episodes.find_one({'_id':ep_id}),
+        return self._update(episode_records.get(self.store, ep_id),
                             state='WAITING_TASK' if self._waits(ep) else 'COMMITTED')
 
     def _attend(self, ep):
@@ -546,7 +549,7 @@ class Coordinator:
 
     def _advance(self, ep_id: str):
         with self.lock:
-            ep=self.store.db.episodes.find_one({'_id':ep_id})
+            ep=episode_records.get(self.store, ep_id)
             if not ep:
                 raise ValueError('EPISODE_NOT_FOUND')
             if ep['state'] in ('SUPPRESSED', 'COMMITTED'):
@@ -581,10 +584,10 @@ class Coordinator:
                     ep=self._publish(ep)
                 return ep
             except FeedbackStale as exc:
-                return self._suppress_feedback(self.store.db.episodes.find_one({'_id':ep_id}), exc)
+                return self._suppress_feedback(episode_records.get(self.store, ep_id), exc)
             except ProtocolFailure as exc:
                 self.store.audit(ep_id,'phase.failed',{'reason':str(exc)},ep['scope_key'])
-                return self._update(self.store.db.episodes.find_one({'_id':ep_id}),state='FAILED_PROTOCOL',failure=str(exc))
+                return self._update(episode_records.get(self.store, ep_id),state='FAILED_PROTOCOL',failure=str(exc))
 
     def _suppress_feedback(self, ep, error):
         self.store.audit(ep['_id'], 'feedback.suppressed', {'reason': str(error)}, ep['scope_key'])
@@ -592,8 +595,7 @@ class Coordinator:
 
     def recover(self):
         self.store.recover_commits()
-        episodes=list(self.store.db.episodes.find(
-            {'state':{'$in':['PREPARED','TURN','SPEAK_ACCEPTED']},'episode_kind':{'$ne':'consult'}}))
+        episodes=episode_records.open(self.store,['PREPARED','TURN','SPEAK_ACCEPTED'],not_kind='consult').rows()
         for ep in episodes:
             if ep['state']=='TURN':
                 self.publish_queued(ep['_id'])        # what her reply queued before the Host stopped still leaves
@@ -681,7 +683,7 @@ class Coordinator:
                     **({'errand_place':places.place_id(ep['scene_id'])} if ep.get('errand') else {}),
                     **({'tier':tier} if tier else {}),'created_at':now()},stream=ep['_id'])
             self.crash('after_task_persist')
-        fresh=self.store.db.episodes.find_one({'_id':ep['_id']})
+        fresh=episode_records.get(self.store, ep['_id'])
         self._update(fresh,task_ids=[*dict.fromkeys([*(fresh.get('task_ids') or []),task_id])])
         self.collab(task,'message',{'from':'character','text':brief,'title':title},entry_id='brief:'+task_id)
         return {**task,**({'tier_words':said} if said else {})}
@@ -692,10 +694,10 @@ class Coordinator:
         if not role_tools._one_shot(ep):
             return session
         if ep.get('errand'):
-            home=self.store.db.episodes.find_one({'_id':ep['errand']['from']},{'native_session_id':1}) or {}
+            home=episode_records.get(self.store, ep['errand']['from'], fields=['native_session_id']) or {}
             found=home.get('native_session_id')
         else:
-            side=self.store.db.sessions.find_one({'_id':session},{'reflection':1}) if session else None
+            side=session_records.get(self.store, session, fields=['reflection']) if session else None
             found=((side or {}).get('reflection') or {}).get('home_session_id')
         if not found and session:
             raise role_tools.Refused('家里的会话这会儿找不到（不是你的错）：这件回家再交，或者记一个 plan 到时候交。')
@@ -760,7 +762,7 @@ class Coordinator:
                     **({'fresh_context':fresh} if fresh else {}),**({'tier':tier} if tier else {}),
                     'native_session_id':task.get('native_session_id') or ep.get('native_session_id'),
                     'created_at':now()},stream=ep['_id'])
-        fresh=self.store.db.episodes.find_one({'_id':ep['_id']})
+        fresh=episode_records.get(self.store, ep['_id'])
         self._update(fresh,task_ids=[*dict.fromkeys([*(fresh.get('task_ids') or []),task_id])])
         self.collab(continued,'message',{'from':'character','text':message},entry_id='brief:'+task_id)
         from .tasks import queue_words

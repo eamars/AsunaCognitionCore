@@ -54,7 +54,8 @@ def test_a_stage_never_stacks_on_open_work(store, monkeypatch):
     offered = []
     svc = service(store, offered)
     at(monkeypatch, 2)
-    store.put('episodes', {'_id': 'ep-dev', 'episode_kind': 'self_development', 'state': 'WAITING_TASK',
+    store.put('episodes', {'_id': 'ep-dev', 'source_event_id': 'ep-dev', 'episode_kind': 'self_development',
+                           'state': 'WAITING_TASK',
                            'scene_id': 'dm-a'})
     store.put('tasks', {'_id': 'task-dev', 'episode_id': 'ep-dev', 'state': 'RUNNING'})
     assert night_stage_busy(store) == 'STAGE_BUSY'

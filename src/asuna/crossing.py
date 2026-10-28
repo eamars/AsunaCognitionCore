@@ -46,6 +46,7 @@ from . import key_words
 from .config import DATA, character_id, excerpt
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import episodes as episode_records
 
 RULES = ('all', 'own_lines', 'never')
 DEFAULT = 'own_lines'
@@ -688,8 +689,8 @@ def report(store, since, compactions=None):
     db = store.db
     fires = list(db[FIRES].find({'kind': {'$in': list(FIRE_KINDS)}, 'at': {'$gte': since}}))
     groups = set(_groups(store))
-    episodes = {ep['_id']: ep for ep in db.episodes.find({'episode_kind': 'external', 'scene_id': {'$in': sorted(groups)}},
-                                                          {'scene_id': 1, 'native_session_id': 1})}
+    episodes = {ep['_id']: ep for ep in episode_records.of_kind(store, 'external', scenes=sorted(groups)).rows(
+        fields=['scene_id', 'native_session_id'])}
     lines = {}
     ids = ['in-' + key for key in episodes]
     for start in range(0, len(ids), 1000):
@@ -737,7 +738,7 @@ def report(store, since, compactions=None):
                 target['recalls_with_the_cue_word'] += any(key_words.found(fire.get('word') or '', q) for q in asked)
         if kind_ in ('cue', 'note') and compactions is not None:
             session = (episodes.get(fire.get('episode_id')) or {}).get('native_session_id') or (
-                db.episodes.find_one({'_id': fire.get('episode_id')}, {'native_session_id': 1}) or {}).get('native_session_id')
+                episode_records.get(store, fire.get('episode_id'), fields=['native_session_id']) or {}).get('native_session_id')
             at = datetime.fromisoformat(fire['at'].replace('Z', '+00:00')).timestamp() * 1000
             ends = [end for end in compactions.get(session, []) if end <= at]
             minutes = (at - max(ends)) / 60000 if ends else None

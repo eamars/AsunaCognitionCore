@@ -286,9 +286,17 @@ CATALOG = Catalog([
          index(('episode_id', 1)),
          index(('event.visit.intent', 1), ('received_at', 1), only_where_present=('event.visit.intent',))),
         versioned=True),
-    _core('episodes', 'records.episodes',
-          index(('scene_id', 1), ('source_event_id', 1), ('episode_kind', 1), unique=True),
-          index(('person_id', 1), ('state', 1))),
+    # A turn (records/episodes.py): the fields its owner names; the rest is stored and returned as written. The fields
+    # of its unique index are required (3.5).
+    Collection('episodes', 'records.episodes', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *(Field(path, 'text', required=True) for path in ('scene_id', 'source_event_id', 'episode_kind')),
+        *_text('state', 'persona', 'person_id', 'scope_key', 'native_session_id', 'speech'),
+        Field('policy_epoch', 'number', nullable=True),
+        Field('system_ref', 'object', nullable=True), Field('system_ref.carried', 'object', nullable=True)),
+        (index(('scene_id', 1), ('source_event_id', 1), ('episode_kind', 1), unique=True),
+         index(('person_id', 1), ('state', 1))),
+        versioned=True),
     _core('tasks', 'records.tasks', index(('request_key', 1), unique=True)),
     _core('plans', 'records.plans', index(('scene_id', 1), ('person_id', 1), ('status', 1))),
     _core('memory_units', 'records.memories',
@@ -301,7 +309,16 @@ CATALOG = Catalog([
           counters=('salience',), derived=('embedding',)),
     _core('state_heads', 'records.heads'),
     _core('state_revisions', 'records.heads', index(('mutation_id', 1), unique=True)),
-    _core('sessions', 'records.sessions', index(('binding_key', 1), unique=True)),
+    # A native session's binding (records/sessions.py): the fields its owner names; the rest is stored as written.
+    Collection('sessions', 'records.sessions', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'), Field('binding_key', 'text', required=True),
+        *(Field(path, 'bool', nullable=True) for path in ('native_host', 'main_conversation')),
+        *_text('scene_id', 'scope_key', 'person_id', 'persona', 'lane', 'character_context', 'native_title',
+               'successor_id', 'parent_session_id', 'broker_session', 'task_id', 'binding_updated_at', 'state',
+               'deletion_id'),
+        Field('policy_epoch', 'number', nullable=True)),
+        (index(('binding_key', 1), unique=True),),
+        versioned=True),
     _core('audit_events', 'audit',
           index(('stream_id', 1), ('seq', 1), unique=True), index(('type', 1), ('occurred_at', 1)),
           index(('occurred_at', 1)),
@@ -309,8 +326,15 @@ CATALOG = Catalog([
                   Field('type', 'text'), Field('payload', 'object'), Field('payload.operation', 'text', nullable=True)),
           insert_only=True),
     _core('artifacts', 'records.artifacts'),
-    _core('sink_receipts', 'records.receipts'),
-    _core('lane_receipts', 'records.receipts'),
+    # What a sink received, and what a model lane answered (records/receipts.py): the fields their owner names; the
+    # rest is stored as written. Their times are ISO text, as the core and the Host write them.
+    Collection('sink_receipts', 'records.receipts', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('kind', 'state', 'project', 'published_at', 'received_at')),
+        versioned=True),
+    Collection('lane_receipts', 'records.receipts', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'), *_text('session_id')),
+        versioned=True),
     _core('affect_events', 'affect',
           index(('persona', 1), ('ts', 1)),
           index(('persona', 1), ('origin', 1), ('source_identity', 1), unique=True,

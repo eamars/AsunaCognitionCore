@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from . import channel_kinds
 from .records import scenes as scene_records
+from .records import receipts as receipt_records
 from . import records
 
 MAX_LINKS = 8          # 一条边最多带几个场景：写宽了直接推高 token 成本，超了照实截断
@@ -262,10 +263,9 @@ def message_times(store, rows):
             if isinstance(ref, str) and _clean(ref):
                 refs.add(ref)
     sinks = {}
-    column = getattr(getattr(store, "db", None), "sink_receipts", None)
-    if refs and column is not None:
+    if refs:
         try:
-            for row in (column.find({"_id": {"$in": sorted(refs)}}) or []):
+            for row in receipt_records.sinks(store, sorted(refs)).each():
                 if isinstance(row, dict) and _stamp(row.get("received_at")):
                     sinks[_clean(row.get("_id"), 60)] = _stamp(row.get("received_at"))
         except Exception:

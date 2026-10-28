@@ -11,6 +11,8 @@ from .queue import database_effects_lock
 from .config import character_id
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import episodes as episode_records
+from .records import receipts as receipt_records
 
 
 class PublishService:
@@ -53,7 +55,7 @@ class PublishService:
             raise Denied('ONLY_CHARACTER_SPEAK_CAN_PUBLISH')
         if msg['delivery_state'] in ('DELIVERED','UNKNOWN','FAILED','CANCELLED_AFTER_FAILURE'):
             return msg
-        ep=db.episodes.find_one({'_id':msg['episode_id']})
+        ep=episode_records.get(self.store,msg['episode_id'])
         scene=scene_records.get(self.store, msg['scene_id'])
         # A part of her reply leaves while her turn still runs (ADR-064 phase 2); words leave once the turn accepted them.
         speaking=('SPEAK_ACCEPTED','COMMITTED')+(('TURN',) if msg.get('reply_part') else ())
@@ -84,7 +86,7 @@ class PublishService:
                 task = db.tasks.find_one({'_id': feedback_source['event']['task_id']})
                 # A task begun on an errand answers where home sent it from (errands.home_turn).
                 from . import errands
-                source_ep = errands.home_turn(self.store, db.episodes.find_one({'_id': task['episode_id']}))
+                source_ep = errands.home_turn(self.store, episode_records.get(self.store, task['episode_id']))
             source = message_records.get(self.store, 'in-' + source_ep['_id'])
             channel = (source or {}).get('event', {}).get('channel', {})
             origin = (source or {}).get('event', {})
@@ -113,16 +115,16 @@ class PublishService:
                                   expected=msg['revision'], stream=ep['_id'])
         if msg['delivery_state']=='SENDING' and not self.idempotent:
             return message_records.save(self.store, {**msg,'delivery_state':'UNKNOWN'},expected=msg['revision'],stream=ep['_id'])
-        receipt=db.sink_receipts.find_one({'_id':msg['publication_key']}) if self.idempotent else None
+        receipt=receipt_records.sink_get(self.store,msg['publication_key']) if self.idempotent else None
         if receipt is None:
             self.store.audit(ep['_id'],'publication.attempt',{'message_id':message_id,'key':msg['publication_key']},msg['scope_key'])
             msg=message_records.save(self.store, {**msg,'delivery_state':'SENDING'},expected=msg['revision'],stream=ep['_id'])
             self.crash('before_send')
             receipt={'_id':msg['publication_key'] if self.idempotent else str(uuid.uuid4()),'publication_key':msg['publication_key'],'scope_key':msg['scope_key'],'text':msg['text'],'content_hash':sha(msg['text'].encode()),'received_at':now()}
             try:
-                receipt=self.store.put('sink_receipts',receipt,stream=ep['_id'])
+                receipt=receipt_records.save_sink(self.store,receipt,stream=ep['_id'])
             except Conflict:
-                receipt=db.sink_receipts.find_one({'_id':receipt['_id']})
+                receipt=receipt_records.sink_get(self.store,receipt['_id'])
                 if receipt['content_hash'] != sha(msg['text'].encode()):
                     raise Denied('IDEMPOTENCY_CONTENT_MISMATCH')
             self.crash('after_send_before_receipt')

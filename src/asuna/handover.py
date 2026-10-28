@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import time
 
+from .records import episodes as episode_records
+
 SWEEP_SECONDS = 60
 FINISHED = ('RETURNED', 'BLOCKED', 'DONE', 'PARTIAL', 'NEEDS_CHARACTER_DECISION', 'UNKNOWN')
 TAKEN = ('DELIVERED', 'WAITING_TASK', 'SUPPRESSED', 'UNDELIVERABLE')
@@ -58,12 +60,12 @@ def next_step(store, task):
     """FULL, SHORT or GIVE_UP for a lost result, from what the database says happened to it."""
     from .coordinator import RESUMABLE
     record = task.get('handback') or {}
-    short = store.db.episodes.find_one({'source_event_id': result_event_id(task, True), 'episode_kind': 'task_feedback'})
+    short = episode_records.of_source(store, result_event_id(task, True), kind='task_feedback')
     if record.get('short_failed') or short and short['state'] not in (*RESUMABLE, 'FAILED_PROTOCOL', 'COMMITTED'):
         return GIVE_UP
     if short:
         return SHORT                         # the short hand-back was cut off (a restart): resume it
-    full = store.db.episodes.find_one({'source_event_id': result_event_id(task), 'episode_kind': 'task_feedback'})
+    full = episode_records.of_source(store, result_event_id(task), kind='task_feedback')
     if full and full['state'] not in (*RESUMABLE, 'FAILED_PROTOCOL', 'COMMITTED'):
         return SHORT                         # her turn on it failed: the same full result would likely fail again
     if record.get('failures', 0) >= REPORT_FAILURES_BEFORE_SHORT:
@@ -76,7 +78,7 @@ def cause(store, task):
     from .coordinator import RESUMABLE
     if (task.get('handback') or {}).get('failures'):
         return 'report'
-    full = store.db.episodes.find_one({'source_event_id': result_event_id(task), 'episode_kind': 'task_feedback'})
+    full = episode_records.of_source(store, result_event_id(task), kind='task_feedback')
     return 'turn' if full and full['state'] not in (*RESUMABLE, 'FAILED_PROTOCOL', 'COMMITTED') else 'restart'
 
 

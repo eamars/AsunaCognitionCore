@@ -117,7 +117,6 @@ SIDE_OUTBOUND = "我说"        # 出站：我自己说过的（不是对方原�
 INBOUND_TIME_FIELD = "occurred_at"    # ingress.py
 OUTBOUND_TIME_FIELD = "receipt_at"    # channels.py 回执（QQ 平台 ack），出站时间的第一优先
 RECEIPT_REF_FIELD = "receipt"         # 出站行上指向 sink_receipts 那一行的引用
-SINK_COLLECTION = "sink_receipts"     # 宿主已有的送达回执表（本机 Web 出站写在这里）
 SINK_TIME_FIELD = "received_at"       # 那条回执的送达时间
 OUTBOUND_VIA_RECEIPT = "outbound_via_receipt"     # 第三支的游标键
 PHASE_FIELD = "phase"
@@ -325,16 +324,12 @@ def _receipt_ref(doc):
 def _sink_times(store, refs):
     """一次批量把 sink_receipts 的 received_at 取回来：{引用: 时间}。取不到就照实说，不猜。
 
-    只发一条 $in 查询，不按行轮询；表不在（更旧的宿主没这张表）就说 no_sink_receipts，
-    那一支整体不试，两支主查询照跑。
+    只发一条 $in 查询，不按行轮询。
     """
-    column = getattr(getattr(store, "db", None), SINK_COLLECTION, None)
-    if column is None:
-        return {}, "no_%s" % SINK_COLLECTION
     if not refs:
         return {}, ""
     try:
-        rows = list(column.find({"_id": {"$in": sorted(refs)}}) or [])
+        rows = receipt_records.sinks(store, sorted(refs)).rows()
     except Exception as exc:
         return {}, "sink_lookup_failed:%s" % type(exc).__name__
     out = {}
@@ -434,8 +429,8 @@ def _after_sink_pair(pair, stamp, ref):
     return _text(ref, 60) < _text(marker, 60)
 
 
-def sink_time_filter(window=None, pair=None):
-    """送达回执那一侧的范围：时间窗下沉 + 游标下推（决胜位不下推，见下）。
+def sink_bounds(window=None, pair=None):
+    """送达回执那一侧的范围（receipt_records.sink_window 的边界）：时间窗下沉 + 游标下推（决胜位不下推，见下）。
 
     游标第二位是回执 _id，宿主那边可能是 ObjectId，走 JSON 游标比不回来，所以下推只到时间：
     `$lte` 会把游标那一秒整组重新捞一遍，由 _after_sink_pair 逐条跳过已消费的。第二位是 None
@@ -444,12 +439,12 @@ def sink_time_filter(window=None, pair=None):
     bounds = {}
     if window:
         if window[0]:
-            bounds["$gte"] = window[0]
+            bounds["gte"] = window[0]
         if window[1]:
-            bounds["$lte"] = window[1]
+            bounds["lte"] = window[1]
     if pair:
-        bounds["$lte" if pair[1] is not None else "$lt"] = pair[0]
-    return {SINK_TIME_FIELD: bounds} if bounds else {}
+        bounds["lte" if pair[1] is not None else "lt"] = pair[0]
+    return bounds
 
 
 def _group_safe_cut(merged, cut):
@@ -597,14 +592,9 @@ def _receipt_fallback_items(store, parts, query, author, window, case_sensitive,
     每轮：按 (received_at, 回执 _id) 倒序捞一批回执 → 拿这批 id 回 messages 联本场景的行 →
     夹窗口、比游标 → 攒够一页就收手，剩下的留给下一页。时间窗在回执那一侧下沉，所以旧回执
     根本不用捞；单页预算只拦工作量，翻没到底写在 exhausted 里，由调用方换成 more。
-    回执表不存在就整支不试：两支主查询照跑，attempted/why 说清为什么这些行仍没时间。
+    捞不动（查询失败）就照实写在 why 里：两支主查询照跑，说清为什么这些行仍没时间。
     """
     fb = _fallback_state()
-    column = getattr(getattr(store, "db", None), SINK_COLLECTION, None)
-    if column is None:
-        fb["why"] = "no_%s" % SINK_COLLECTION
-        fb["exhausted"] = True          # 整支不试，没有「还没扫完」的悬念
-        return fb, []
     fb["attempted"] = True
     fb["batch"] = max(int(page) * 2, FALLBACK_BATCH_MIN)
     pos = pairs.get(OUTBOUND_VIA_RECEIPT)
@@ -612,9 +602,8 @@ def _receipt_fallback_items(store, parts, query, author, window, case_sensitive,
     while fb["rounds"] < FALLBACK_ROUNDS_MAX:
         fb["rounds"] += 1
         try:
-            rows = list(column.find(sink_time_filter(window, pos),
-                                    sort=[(SINK_TIME_FIELD, -1), (ID_FIELD, -1)],
-                                    limit=fb["batch"]) or [])
+            rows = receipt_records.sink_window(store, **sink_bounds(window, pos)).rows(newest_first=True,
+                                                                                    limit=fb["batch"])
         except Exception as exc:
             fb["why"] = "sink_scan_failed:%s" % type(exc).__name__
             fb["capped"] = True
@@ -909,7 +898,7 @@ def render(result, header="查到的授权历史", snippet=RENDER_SNIPPET, zone=
                      "联动场景里的行不是这个场景的新输入；跨场景命中 %d 条" % (
                          len(linked), "、".join(linked), others))
     fb = result.get("fallback") or {}
-    if fb.get("why"):        # 表不在（更旧的宿主）也要说清：不是没送达，是没有可比对的回执时间
+    if fb.get("why"):        # 回执那一支接不上也要说清：不是没送达，是没有可比对的回执时间
         notes.append("本机出站的送达时间没关联上（%s）：缺 receipt_at 的已送达出站仍按没时间戳处理"
                      % fb["why"])
     if fb.get("attempted") and not fb.get("exhausted"):
@@ -956,6 +945,7 @@ import json as _json
 import re as _re
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import receipts as receipt_records
 
 
 try:                                  # 宿主内：复用已有的 Denied 语义（409 失败回执走原路径）

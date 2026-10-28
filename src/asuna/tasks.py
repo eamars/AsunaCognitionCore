@@ -33,6 +33,7 @@ from .discussion_digest import DIGEST_TOOL, DIGEST_TOOL_NAME
 from .development import DEVELOPMENT_TOOLS, DEVELOPMENT_NAMES, PERSONA_JOB_TOOLS
 from .vision import (READ_IMAGE_TOOL, READ_IMAGE_TOOL_NAME, inline_summary as read_image_receipt,
                      route_filtered_tool_names, task_attachment_context)
+from .records import episodes as episode_records
 
 # How many extra rounds one run takes for her words its turn ended before reading.
 MESSAGE_ROUNDS = 3
@@ -531,17 +532,17 @@ class TaskService:
                     latest=self.store.db.tasks.find_one({'_id':task['_id']})
                     self.store.put('tasks',{**latest,'feedback_state':'SUPPRESSED'},expected=latest['revision'],stream=latest['_id'])
             return None
-        original=self.store.db.episodes.find_one({'_id':task['episode_id']})
+        original=episode_records.get(self.store, task['episode_id'])
         # Outside home what she reads of the result holds nothing of the machine (ADR-050, machine_words); home and
         # the stored result keep it as it is.
         outside=visibility.session_class(self.store.config,self.store.db,scene,task['requester_id'])!=visibility.OWNER_PRIVATE
         shown=machine_words.clean if outside else (lambda value:value)
         ep=None
         if not short and current.get('feedback_episode'):
-            ep=self.store.db.episodes.find_one({'_id':current['feedback_episode']})
+            ep=episode_records.get(self.store, current['feedback_episode'])
         if not ep:
-            ep=self.store.db.episodes.find_one({'scene_id':task['scene_id'],
-                'source_event_id':handover.result_event_id(task,short),'episode_kind':'task_feedback'})
+            ep=episode_records.of_source(self.store,handover.result_event_id(task,short),kind='task_feedback',
+                                         scene=task['scene_id'])
         continuing=bool(ep)
         if ep:
             if (ep.get('episode_kind')!='task_feedback' or ep.get('task_id')!=task['_id']
@@ -585,7 +586,7 @@ class TaskService:
         if ep['state']=='COMMITTED':
             self.handback(task,'taken',short=short)
         if ep['state']=='COMMITTED' and original['state']=='WAITING_TASK':
-            self.store.put('episodes',{**original,'state':'COMMITTED','feedback_episode':ep['_id']},expected=original['revision'],stream=original['_id'])
+            episode_records.save(self.store, {**original,'state':'COMMITTED','feedback_episode':ep['_id']},expected=original['revision'],stream=original['_id'])
         return ep
 
     def _short_event(self,task,current,shown=lambda value:value,source=None):

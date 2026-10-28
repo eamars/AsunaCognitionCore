@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from .config import excerpt
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import sessions as session_records
 
 TABLES_VERSION = 1
 WEEK_DAYS = 7
@@ -246,7 +247,7 @@ def _local_roots(store, persona, since, until):
             if lane in LANE_WORDS:
                 where = LANE_WORDS[lane]
             else:
-                binding = store.db.sessions.find_one({'_id': item.get('session_id')}, {'scene_id': 1}) or {}
+                binding = session_records.get(store, item.get('session_id'), fields=['scene_id']) or {}
                 scene = scene_records.get(store, binding.get('scene_id')) if binding.get('scene_id') else None
                 where = people.scene_title(scene)
             seen = places.setdefault(where, [0, 0])

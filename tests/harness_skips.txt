@@ -21,7 +21,6 @@ tests/test_adr011_ideas.py::test_a_database_read_mongo_refuses_comes_back_coded_
 # The store's contract on the MongoDB adapter over the stand-in, each by its exact [stand-in] id (a line that would
 # skip the in-memory reference is refused at collection): the cases the stand-in answers otherwise than the meaning
 # table; the integration run on MongoDB decides them.
-tests/test_store_contract.py::TestW::test_W18_is_null_is_present_and_null[stand-in] | $type 'null' in a condition
 tests/test_store_contract.py::TestW::test_W23_sharp_s_and_dotted_capital_i_are_not_folded[stand-in] | MongoDB's case-blind folding (it folds a dotted capital I to i)
 tests/test_store_contract.py::TestC::test_C02_set_through_a_non_object_or_of_another_kind_is_refused[stand-in] | MongoDB's refusal of a write through a value that is not an object (code 28)
 tests/test_store_contract.py::TestC::test_C05_increase_refuses_what_is_not_a_number[stand-in] | MongoDB's refusal of $inc on a value that is not a number (code 14)

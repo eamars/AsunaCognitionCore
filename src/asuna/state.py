@@ -342,9 +342,11 @@ class Store:
                 from .records import messages as message_records
                 line=message_records.get(self,key,fields=['scope_key','deletion_id'])
                 known=[line] if line else []
-                for collection in ('artifacts','episodes'):
-                    source=self.db[collection].find_one({'_id':key},{'scope_key':1,'deletion_id':1})
-                    if source:known.append(source)
+                from .records import episodes as episode_records
+                source=self.db.artifacts.find_one({'_id':key},{'scope_key':1,'deletion_id':1})
+                if source:known.append(source)
+                turn=episode_records.get(self,key,fields=['scope_key','deletion_id'])
+                if turn:known.append(turn)
                 known+=message_records.of_platform_event(self,key,fields=['scope_key','deletion_id'])
                 if any(item.get('deletion_id') or item.get('scope_key') not in readable_scopes for item in known):raise Denied('DERIVED_SOURCE_SCOPE_DENIED')
                 evidence_ids.add(key)

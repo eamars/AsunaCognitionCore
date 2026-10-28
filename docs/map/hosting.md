@@ -612,3 +612,67 @@ The owner of `messages`: the lines of every conversation (what people wrote, her
 - def `mark_recalled` — Her line was taken back on the platform at `at`.
 - def `note_failure` — A file line whose bytes were gone: whether its original is still there, and the words that say so.
 - def `mark_errands_told` — These errand visits were told in their conversation at `at`.
+
+## `records/episodes`
+
+[src/asuna/records/episodes.py](../../src/asuna/records/episodes.py)
+
+The owner of `episodes`: her turns (what woke her, what she was given, what she thought, said and called, and the state the turn reached), read and written only through these operations.
+
+- def `get` — The turn with this id (of this persona, conversation, scope, person, epoch or native session; `carried`: one whose system reference names the sections it carried), or None.
+- def `many` — View: the turns with these ids (in these states).
+- def `of_source` — The turn a source event opened (of this kind, in this conversation), or None.
+- def `of_kind` — View: the turns of a kind (in these conversations).
+- def `open` — View: the turns in these states (of a kind, or of any kind but one).
+- def `answered` — How many turns she answered these people with words (at most `limit`).
+- def `of_scope` — The turns of a scope.
+- def `save` — The revisioned write of a whole turn (`Store.put`: `expected`, `stream`, `reset_counters`).
+
+## `records/sessions`
+
+[src/asuna/records/sessions.py](../../src/asuna/records/sessions.py)
+
+The owner of `sessions`: the bindings of her native sessions (which conversation, lane, persona, epoch and working folder a session belongs to, the sessions it continues and is continued by, its title and carry), read and written only through these operations.
+
+- def `get` — The session with this id (`native`: only one the native Host binds), or None.
+- def `native` — View: the sessions the native Host binds (these ids; of a lane; not of a conversation).
+- def `successors` — View: the sessions that continue these.
+- def `main` — The main conversation session the native Host binds for a conversation (of a lane; of a persona, epoch and character context: None, a session with none), or None.
+- def `titled` — The main session of a conversation that has a native title, or None.
+- def `of_task` — The newest action session of an execution binding (`broker`: its broker session), continuing one of `parents`, of this conversation, scope, epoch, person and persona (and of this task), or None.
+- def `of_scope` — The sessions of a scope.
+- def `invalidate` — An erasure invalidated this session.
+- def `save` — The revisioned write of a whole session (`Store.put`: `expected`, `stream`, `reset_counters`).
+
+## `records/receipts`
+
+[src/asuna/records/receipts.py](../../src/asuna/records/receipts.py)
+
+The owner of `lane_receipts` and `sink_receipts`: what a model lane answered for an operation (its result, kept so a replay answers the same), and what a sink received (a publication's delivery, her self-development publications and their states, the native inputs projected), read and written only through these operations.
+
+- def `lane_get` — The lane's receipt of this operation, or None.
+- def `lane_of_sessions` — The lane receipts of these sessions.
+- def `lane_invalidate` — An erasure replaced this lane receipt by its invalidated form (its result and request gone).
+- def `save_lane` — The revisioned write of a lane receipt (`Store.put`).
+- def `sink_get` — The sink's receipt with this id, or None.
+- def `sinks` — View: the sink receipts with these ids (None: every one).
+- def `sink_of_kind` — View: the sink receipts of a kind (in a state or one of several; of a project; but one), ordered by `by` (None: the database's order).
+- def `sink_window` — View: the sink receipts received within these bounds (text times as the core writes them), ordered by when they were received, then by id.
+- def `save_sink` — The revisioned write of a sink receipt (`Store.put`).
+
+## `records/view`
+
+[src/asuna/records/view.py](../../src/asuna/records/view.py)
+
+What the owners of `episodes`, `sessions` and the receipts share: a named read (`View`) and the checks of a fence.
+
+- def `is_text`
+- def `is_number`
+- def `texts`
+- def `fenced` — `where` with each fence given ({field: (value, kind check)}), or None when one holds nothing (a value missing or not of its kind).
+- def `none_or` — `where` and `path` equal to `value`, where a value of None stands for "has none": the field null or missing, as the replaced read's equality on null matched.
+- class `View` — A named read on one collection: its condition and its order ((field, 1 | -1), ...).
+  - `each` — The rows, read as they come.
+  - `rows`
+  - `first`
+  - `count`

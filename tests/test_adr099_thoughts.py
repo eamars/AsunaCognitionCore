@@ -175,7 +175,8 @@ def test_a_summary_led_to_the_call_it_came_with_and_every_call_after_it_has_it_a
     for seq, (cid, tool, args) in enumerate([('c1', 'plan', plan), ('c2', 'stay_silent', {'reason': '先不说'})]):
         db.audit_events.insert_one({'stream_id': 'ep-1', 'type': 'role_tool', 'seq': seq,
                                     'payload': {'call_id': cid, 'tool': tool, 'args': args}})
-    store = SimpleNamespace(db=db)
+    from asuna import records
+    store = SimpleNamespace(db=db, collection=records.on(db).collection)   # the owners' way to the same rows
     lines = reasons.then(store, {'_id': 'mono-ep-1:c1', 'episode_id': 'ep-1', 'source': 'thinking'})
     assert lines[0].startswith('所以我定了个计划') and lines[1] == '所以我没说话：先不说'
     mine = reasons.then(store, {'_id': 'mono-ep-1:c1', 'episode_id': 'ep-1'})

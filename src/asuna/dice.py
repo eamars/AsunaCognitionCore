@@ -28,6 +28,8 @@ import hashlib
 import re
 from datetime import datetime, timedelta, timezone
 
+from .records import episodes as episode_records
+
 OUTCOMES = ('nothing', 'interesting', 'self_development', 'self_evaluation', 'review_dice', 'reach_out', 'idle')
 NAMES = {'nothing': '歇着', 'interesting': '有趣', 'self_development': '自我开发', 'self_evaluation': '自我评估',
          'review_dice': '复盘', 'reach_out': '找人', 'idle': '待着'}
@@ -191,7 +193,7 @@ def review(store, persona, occurrence, moment=None):
                                    + ([LOST_WORDS['asides_full']] if lost.get('asides_full') else []))
         if p.get('reaches'):
             source = ('self-development:dice:' if p.get('outcome') == 'self_development' else 'presence:') + p['occurrence']
-            ep = store.db.episodes.find_one({'source_event_id': source}, {'silent_reason': 1})
+            ep = episode_records.of_source(store, source, fields=['silent_reason'])
             if not ep:
                 item['reached'] = '叫了你，那拍还没跑或没留下记录'
             else:

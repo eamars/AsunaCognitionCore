@@ -147,7 +147,8 @@ def test_when_her_turn_on_the_result_failed_the_short_version_comes_next(store, 
     chat, service, task, entries, lane = setup(store, tmp_path, turn('结果到了。', '查到了。'))
     try:
         done = finish(store, service, task)
-        store.put('episodes', {'_id': 'ep-failed-turn', 'source_event_id': handover.result_event_id(done),
+        store.put('episodes', {'_id': 'ep-failed-turn', 'scene_id': task['scene_id'],
+                               'source_event_id': handover.result_event_id(done),
                                'episode_kind': 'task_feedback', 'state': 'FAILED_RUNTIME', 'task_id': task['_id']},
                   stream='ep-failed-turn')
         assert handover.cause(store, done) == 'turn' and handover.next_step(store, done) == handover.SHORT

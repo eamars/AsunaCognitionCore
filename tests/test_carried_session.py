@@ -10,6 +10,7 @@ from asuna.chat import Chat
 from asuna.context_budget import CARRIED_CHARS, carried_block
 from asuna.coordinator import Coordinator, SessionCarried
 from asuna.native_worker import BusinessWorker, ContextOverflow, NativeLane
+from asuna.records import episodes as episode_records
 from asuna.state import Store
 
 
@@ -87,7 +88,7 @@ def test_a_carried_session_is_not_carried_again_before_its_first_notice_got_thro
 
 def test_an_overflowed_turn_runs_again_in_the_new_session_with_the_summary_once(local):
     worker, store = local.worker, local.store
-    store.put('episodes', {'_id': 'ep-1', 'scene_id': 'local', 'person_id': 'owner', 'scope_key': 'scene:local',
+    store.put('episodes', {'_id': 'ep-1', 'source_event_id': 'ep-1', 'episode_kind': 'external', 'scene_id': 'local', 'person_id': 'owner', 'scope_key': 'scene:local',
                            'policy_epoch': 1, 'persona': 'xiaoman', 'native_session_id': local.role}, stream='ep-1')
     worker.stages = []
 
@@ -119,7 +120,7 @@ def test_an_overflowed_turn_runs_again_in_the_new_session_with_the_summary_once(
 def test_an_overflow_elsewhere_is_an_ordinary_failure(local):
     worker, store = local.worker, local.store
     successor = worker.carry_session(local.role, {'summary': 'S'})
-    store.put('episodes', {'_id': 'ep-2', 'scene_id': 'local', 'person_id': 'owner', 'scope_key': 'scene:local',
+    store.put('episodes', {'_id': 'ep-2', 'source_event_id': 'ep-2', 'episode_kind': 'external', 'scene_id': 'local', 'person_id': 'owner', 'scope_key': 'scene:local',
                            'policy_epoch': 1, 'persona': 'xiaoman', 'native_session_id': successor}, stream='ep-2')
     worker.stages = []
     worker.answer = lambda request: worker.dispatch('result', {'token': request['token'], 'error': 'too long',
@@ -136,12 +137,12 @@ def test_the_carried_block_is_bounded_and_says_when_there_was_no_summary():
     assert long.startswith('字' * CARRIED_CHARS) and '500' in long[CARRIED_CHARS:]
 
 
-def test_the_coordinator_runs_a_carried_turn_once_more_and_says_why():
+def test_the_coordinator_runs_a_carried_turn_once_more_and_says_why(monkeypatch):
     runs, updates, audits = [], [], []
     coordinator = Coordinator.__new__(Coordinator)
     episode = {'_id': 'ep', 'scope_key': 'scene:local', 'revision': 1}
-    coordinator.store = SimpleNamespace(audit=lambda *args: audits.append(args),
-                                        db=SimpleNamespace(episodes=SimpleNamespace(find_one=lambda _: episode)))
+    coordinator.store = SimpleNamespace(audit=lambda *args: audits.append(args))
+    monkeypatch.setattr(episode_records, 'get', lambda store, episode_id, fields=None, **fence: episode)
     coordinator.character = SimpleNamespace()
     coordinator._update = lambda ep, **changes: updates.append(changes) or {**ep, **changes}
 
@@ -164,7 +165,7 @@ def test_a_conversation_opened_in_tool_mode_goes_on_in_a_new_session_in_thinking
     with think is carried, not reused, once her thoughts come from the model's thinking."""
     from asuna.context_budget import CARRIED_WHY
     worker, store = local.worker, local.store
-    store.put('episodes', {'_id': 'ep-1', 'scene_id': 'local', 'person_id': 'owner', 'scope_key': 'scene:local',
+    store.put('episodes', {'_id': 'ep-1', 'source_event_id': 'ep-1', 'episode_kind': 'external', 'scene_id': 'local', 'person_id': 'owner', 'scope_key': 'scene:local',
                            'policy_epoch': 1, 'persona': 'xiaoman', 'native_session_id': local.role}, stream='ep-1')
     worker.stages = []
     worker.answer = lambda request: worker.dispatch('result', {'token': request['token'],
@@ -190,7 +191,7 @@ def test_a_conversation_opened_in_tool_mode_goes_on_in_a_new_session_in_thinking
 def test_a_session_from_before_the_setting_is_a_tool_mode_session_and_stays(local):
     worker, store = local.worker, local.store
     assert 'thoughts' not in (store.db.sessions.find_one({'_id': local.role}) or {})
-    store.put('episodes', {'_id': 'ep-1', 'scene_id': 'local', 'person_id': 'owner', 'scope_key': 'scene:local',
+    store.put('episodes', {'_id': 'ep-1', 'source_event_id': 'ep-1', 'episode_kind': 'external', 'scene_id': 'local', 'person_id': 'owner', 'scope_key': 'scene:local',
                            'policy_epoch': 1, 'persona': 'xiaoman', 'native_session_id': local.role}, stream='ep-1')
     worker.stages = []
     worker.answer = lambda request: worker.dispatch('result', {'token': request['token'],

@@ -183,7 +183,7 @@ Local embeddings and server-side, prefiltered Mongo vector retrieval.
 - def `identity_status` — 身份解析接上了没有、缺哪些名字——降级要看得见，不能静默少信息。
 - def `person_terms` — By-person: (the authors the person resolved to (people.py), None) when resolved, never a name match; else (None, the values a person may be known by, person_values) for standalone use; (None, None) for no person.
 - def `bind_people` — Resolve a person argument to one person's author ids and label hits by people.py.
-- def `sink_time_filter` — 送达回执那一侧的范围：时间窗下沉 + 游标下推（决胜位不下推，见下）。
+- def `sink_bounds` — 送达回执那一侧的范围（receipt_records.sink_window 的边界）：时间窗下沉 + 游标下推（决胜位不下推，见下）。
 - def `person_values` — 一个人在行上可能被记成的那些值（排好序），没有人就是 None。
 - def `search_messages` — 行内时间两支各查一次（各自 keyset），关联那一支在内存里比，再按时间归并。
 - def `query_history` — 字面为主、语义为辅；两者都不碰 QQ 平台。场景不完整就拒查，不退化成无范围扫描。

@@ -29,6 +29,7 @@ from .evidence import canonical, sha
 from .memory_pilot import FLOOR, OWN_SLOTS, SLOTS   # her own items: two of a turn's six slots, above the pilot's floor
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import episodes as episode_records
 
 TIERS_VERSION = 1
 ENABLED = True                     # the switch (ADR-062 phase 2): hers and the owner's to turn on
@@ -879,7 +880,7 @@ def land(store, ep, item, episodes):
     elif about == 'world':
         slug, intent = WORLD_LEDGER, {**intent, 'kind': 'ledger', 'visibility': item.get('visibility') or 'owner_private'}
     elif about == 'place':
-        scenes = {row.get('scene_id') for row in store.db.episodes.find({'_id': {'$in': list(episodes)}}, {'scene_id': 1})}
+        scenes = {row.get('scene_id') for row in episode_records.many(store, list(episodes)).rows(fields=['scene_id'])}
         groups = [scene for scene in scene_records.many(store, list(scenes), fields=['kind'])
                   if scene.get('kind') == 'group']
         if len(scenes) == 1 and len(groups) == 1 and item.get('visibility') == 'public':

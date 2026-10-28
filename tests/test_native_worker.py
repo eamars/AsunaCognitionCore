@@ -6,6 +6,7 @@ from asuna.native_worker import BusinessWorker, prune_host_reports, KEPT_HOST_RE
 from asuna.state import Denied
 from asuna.router import Router
 from asuna.records import scenes as scene_records
+from asuna.records import sessions as session_records
 from asuna.config import DATA, ROOT
 from concurrent.futures import Future
 
@@ -71,9 +72,8 @@ def test_group_actor_changes_reauthorize_while_action_task_actor_is_immutable(mo
             raise Denied('NOT_A_MEMBER')
         return {'policy_epoch': 1}
     monkeypatch.setattr(scene_records, 'authorize', lambda store, scene, person: authorize(scene, person))
-    worker.app = SimpleNamespace(store=SimpleNamespace(
-        db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda _: prior)),
-        put=lambda _, values, **kw: values))
+    monkeypatch.setattr(session_records, 'get', lambda store, session_id, fields=None, native=False: prior)
+    worker.app = SimpleNamespace(store=SimpleNamespace(put=lambda _, values, **kw: values))
     assert worker.bind_session('group', {**prior, 'person_id': 'bob'})['person_id'] == 'bob'
     assert calls[-1] == ('group', 'bob')
     with pytest.raises(Denied, match='NOT_A_MEMBER'):
@@ -87,19 +87,19 @@ def test_bound_session_checks_current_authorization_epoch(monkeypatch):
     worker = BusinessWorker()
     record = {'scene_id': 'scene', 'person_id': 'person', 'policy_epoch': 1}
     monkeypatch.setattr(scene_records, 'authorize', lambda store, scene, person: {'policy_epoch': 2})
-    worker.app = SimpleNamespace(store=SimpleNamespace(
-        db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda query: record))))
+    monkeypatch.setattr(session_records, 'get', lambda store, session_id, fields=None, native=False: record)
+    worker.app = SimpleNamespace(store=SimpleNamespace())
     with pytest.raises(Denied, match='NATIVE_SESSION_EPOCH_CHANGED'):
         worker.session('native-session')
 
 
-def test_qq_is_view_only_including_unbound_native_sessions():
+def test_qq_is_view_only_including_unbound_native_sessions(monkeypatch):
     worker = BusinessWorker()
     rows = [{'native_host': True, '_id': 'qq', 'scene_id': 'qq:bot:dm:one', 'lane': 'character'},
             {'native_host': True, '_id': 'local', 'scene_id': 'local', 'lane': 'character'},
             {'native_host': True, '_id': 'old-local', 'scene_id': 'local', 'lane': 'character', 'successor_id': 'local'}]
-    worker.app = SimpleNamespace(config={'chat': {'scene_id': 'local'}}, store=SimpleNamespace(
-        db=SimpleNamespace(sessions=SimpleNamespace(find=lambda _: rows))))
+    monkeypatch.setattr(session_records, 'native', lambda store, *a, **k: SimpleNamespace(rows=lambda **kw: rows))
+    worker.app = SimpleNamespace(config={'chat': {'scene_id': 'local'}}, store=SimpleNamespace())
     policies = worker.dispatch('input_policies', {'sessions': [
         {'id': row['_id']} for row in rows] + [{'id': 'unbound-qq', 'cwd': str(DATA / 'work/qq')}]})
     assert 'local' not in policies
@@ -108,11 +108,11 @@ def test_qq_is_view_only_including_unbound_native_sessions():
 
 
 @pytest.mark.parametrize('workspace', ['qq', 'local'])
-def test_web_input_requires_the_real_local_workspace(workspace, tmp_path):
+def test_web_input_requires_the_real_local_workspace(workspace, tmp_path, monkeypatch):
     worker = BusinessWorker()
     local = {'scene_id': 'local', 'person_id': 'owner', 'workspace': str(tmp_path / 'local')}
-    worker.app = SimpleNamespace(config={'chat': local}, store=SimpleNamespace(
-        db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda _: None))))
+    monkeypatch.setattr(session_records, 'get', lambda store, session_id, fields=None, native=False: None)
+    worker.app = SimpleNamespace(config={'chat': local}, store=SimpleNamespace())
     accepted = []
     worker.controller = SimpleNamespace(submit=lambda text, **kw: accepted.append(text))
     args = {'session_id': 'new', 'cwd': str(tmp_path / workspace), 'text': 'draft', 'message_ids': ['message']}
@@ -221,8 +221,8 @@ def test_the_session_binding_names_its_conversations_clock(monkeypatch):
     record = {'_id': 'native-session', 'scene_id': 'scene', 'person_id': 'person', 'policy_epoch': 1}
     monkeypatch.setattr(scene_records, 'get', lambda *a, **k: None)
     monkeypatch.setattr(scene_records, 'authorize', lambda store, scene, person: {'policy_epoch': 1})
-    worker.app = SimpleNamespace(store=SimpleNamespace(config={'timezone': 'Pacific/Auckland'},
-        db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda query: record))))
+    monkeypatch.setattr(session_records, 'get', lambda store, session_id, fields=None, native=False: record)
+    worker.app = SimpleNamespace(store=SimpleNamespace(config={'timezone': 'Pacific/Auckland'}))
     binding = worker.dispatch('session', {'session_id': 'native-session'})
     assert binding['timezone'] == 'Pacific/Auckland' and binding['utc_offset_minutes'] in (720, 780)
     assert binding['scene_id'] == 'scene'
@@ -273,8 +273,10 @@ def test_the_owner_writes_on_an_agent_line_he_joins(member, tmp_path, monkeypatc
     worker = BusinessWorker()
     monkeypatch.setattr(scene_records, 'get', lambda *a, **k: {'members': members})
     worker.app = SimpleNamespace(config={'chat': {'scene_id': 'local', 'person_id': 'owner', 'workspace': str(tmp_path / 'local')}},
-        store=SimpleNamespace(db=SimpleNamespace(
-            sessions=SimpleNamespace(find=lambda _: list(rows.values()), find_one=lambda query: rows.get(query['_id'])))))
+        store=SimpleNamespace())
+    monkeypatch.setattr(session_records, 'native',
+                        lambda store, *a, **k: SimpleNamespace(rows=lambda **kw: list(rows.values())))
+    monkeypatch.setattr(session_records, 'get', lambda store, session_id, fields=None, native=False: rows.get(session_id))
     accepted = []
     worker.controller = SimpleNamespace(submit=lambda text, **kw: accepted.append((text, kw['scene_id'])))
     policies = worker.dispatch('input_policies', {'sessions': [{'id': 'line', 'cwd': line['cwd']}, {'id': 'qq'}]})

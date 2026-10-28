@@ -6,7 +6,8 @@ only CLASS_CHARS, so no text of a line or of an answer can come in, and one faul
 adapter keeps its counts and posts them every few minutes (`POST /v1/channels/<id>/faults`, `receive`); the Host's own
 faults are counted where they happen (`record`). Each is one record per channel, signature and hour in
 `lane_faults` (this module is its owner), its count raised in the same write that creates it; `hour_at` is the hour's
-start, and each write forgets the counts whose hour is more than KEEP_DAYS old (`forget_old`). Counts are at least
+start, and each write then forgets the counts whose hour is more than KEEP_DAYS old (`forget_old`; a failure of
+that sweep is recorded, `lane_faults.forget_failed`, and never changes the write's answer). Counts are at least
 once: a post re-sent after its answer was lost counts again in the same hour. Nothing here interprets them: telling a
 persistent fault from a burst is a later step's (§5.6).
 """
@@ -70,7 +71,7 @@ def receive(store, channel_id, body):
         checked.append((lane, _name(row, 'stage'), _name(row, 'error'), hour, start, count))
     for row in checked:
         _count(store, channel_id, *row, now)
-    forget_old(store, now)
+    _sweep(store, now, 'receive')
     return {'status': 'recorded', 'rows': len(checked)}
 
 
@@ -83,7 +84,7 @@ def record(store, channel_id, lane, stage, error, moment=None, count=1):
         if not CLASS_CHARS.fullmatch(name):
             raise ValueError('FAULTS_FIELD_INVALID: %r is not a class name' % name)
     _count(store, channel_id, *row, now)
-    forget_old(store, now)
+    _sweep(store, now, 'record')
 
 
 def _count(store, channel_id, lane, stage, error, hour, start, count, now):
@@ -95,7 +96,25 @@ def _count(store, channel_id, lane, stage, error, hour, start, count, now):
         create=True)
 
 
+def _cutoff(now):
+    return (now or datetime.now(timezone.utc)) - timedelta(days=KEEP_DAYS)
+
+
+def _sweep(store, now, path):
+    """forget_old after the counts are written (`path`: receive or record): a failure is recorded in the audit, never
+    raised, since the counts are already in and an error would have them posted (and counted) again."""
+    try:
+        forget_old(store, now)
+    except Exception as error:
+        try:
+            store.audit('lane-faults', 'lane_faults.forget_failed',
+                        {'path': path, 'error': str(getattr(error, 'code', '') or type(error).__name__),
+                         'cutoff': _cutoff(now).isoformat()})
+        except Exception:
+            pass                          # nothing reachable to record it in: the counts' answer still stands
+
+
 def forget_old(store, now=None):
-    """Forget the counts whose hour started more than KEEP_DAYS ago; how many went."""
-    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=KEEP_DAYS)
-    return store.collection('lane_faults').delete({'hour_at': Range(lt=cutoff)}, many=True)
+    """Forget the counts whose hour started more than KEEP_DAYS ago; how many went. `hour_at` has no index: the
+    collection is bounded (one count per signature and hour, kept KEEP_DAYS), so the sweep reads it whole."""
+    return store.collection('lane_faults').delete({'hour_at': Range(lt=_cutoff(now))}, many=True)

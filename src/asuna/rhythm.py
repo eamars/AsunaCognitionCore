@@ -14,6 +14,7 @@ import re
 from .persona_model import effective, timezone as persona_timezone
 from . import visibility
 from .local_time import face
+from .records import memories as memory_records
 
 try:
     from zoneinfo import ZoneInfo
@@ -91,8 +92,8 @@ def promotion_candidates(store, model, policy, *, limit=20):
     """Deterministic: units or monologues referenced by ≥ 2 different turns within memory.promotion.window_days."""
     window = effective(model, 'memory.promotion.window_days', policy) or 7
     picked = [(memory_id, episodes) for memory_id, episodes in selections(store, window).items() if len(episodes) >= 2]
-    rows = {row['_id']: row for row in store.db.memory_units.find({'_id': {'$in': [m for m, _ in picked]}, 'status': 'active'},
-                                                                 {'body_markdown': 1, 'kind': 1, 'scope_key': 1})}
+    rows = {row['_id']: row for row in memory_records.many(store, [m for m, _ in picked], status='active').each(
+        fields=['body_markdown', 'kind', 'scope_key'])}
     return [{'memory_id': m, 'kind': rows[m].get('kind'), 'excerpt': rows[m].get('body_markdown', '')[:300], 'episodes': e}
             for m, e in sorted(picked, key=lambda item: (-len(item[1]), item[0])) if m in rows][:limit]
 

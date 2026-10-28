@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from .config import excerpt
 from .records import scenes as scene_records
 from .records import plans as plan_records
+from .records import memories as memory_records
 
 TABLES_VERSION = 1
 SHOWN = 'review.map'
@@ -175,7 +176,7 @@ def block(store, persona, moment=None, *, tag=None):
                     '上次以来按人那层改了 %d 个' % len(understood) if last else '基线·首次入图'))
 
     # The rest, as counts with where to look.
-    kinds = collections.Counter(m.get('kind') for m in store.db.memory_units.find({'status': 'active'}, {'kind': 1}))
+    kinds = collections.Counter(m.get('kind') for m in memory_records.alive(store).each(fields=['kind']))
     words = {'chat_chunk': '聊天片段', 'dialogue_summary': '对话摘要', 'monologue': '你的心里话'}
     index.append('记忆：' + '、'.join('%s %d' % (words.get(k, k), n) for k, n in kinds.most_common(4)))
     if 'memory_tiers' in store.db.list_collection_names():

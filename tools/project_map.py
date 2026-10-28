@@ -29,7 +29,8 @@ AREAS = {
         'audit', 'evidence', 'testing', 'restarts', 'host_stops', 'host_lease', 'local_time',
         'store/__init__', 'store/words', 'store/catalog', 'store/errors', 'store/adapters', 'store/memory',
         'store/mongodb', 'records/__init__', 'records/scenes', 'records/messages', 'records/episodes',
-        'records/sessions', 'records/receipts', 'records/view', 'records/tasks', 'records/plans']),
+        'records/sessions', 'records/receipts', 'records/view', 'records/tasks', 'records/plans',
+        'records/memories']),
     'turn': ('A turn', 'From an input to her words: queueing, context, her tools, the checks, publishing.', [
         'ingress', 'router', 'coordinator', 'context', 'context_budget', 'block_guide', 'render', 'carried', 'role_tools', 'param_names', 'tool_args',
         'answers', 'publish', 'lines', 'chat', 'handover', 'reasons']),

@@ -219,6 +219,17 @@ class OnCreate(Word):
         self.values = dict(values)
 
 
+# What a read returns.
+
+class Without(Word):
+    """Every field of a record but these paths (`_id` always comes back): a read's `fields` that leaves out a large one
+    no caller of that read uses."""
+    __slots__ = ('paths',)
+
+    def __init__(self, *paths):
+        self.paths = paths
+
+
 # Totals of `group`.
 
 class Count(Word):
@@ -414,17 +425,22 @@ def check_sort(collection, sort):
 
 
 def check_fields(fields):
-    """The paths to return (`_id` always comes back); None returns whole records."""
+    """The paths to return (`_id` always comes back), or `Without(paths)` to return all but those; None returns whole
+    records."""
     if fields is None:
         return None
-    if isinstance(fields, str) or not all(isinstance(p, str) and p and all(p.split('.')) for p in fields):
+    left_out = isinstance(fields, Without)
+    paths = fields.paths if left_out else fields
+    if isinstance(paths, str) or not all(isinstance(p, str) and p and all(p.split('.')) for p in paths):
         raise QueryInvalid('QUERY_FIELDS_FORM: 要返回的字段写成字段名的列表（给的是 %s）' % _shown(fields))
-    paths = list(dict.fromkeys(fields))
+    paths = list(dict.fromkeys(paths))
+    if left_out and (not paths or '_id' in paths):
+        raise QueryInvalid('QUERY_FIELDS_FORM: Without 至少要一个字段，_id 总会返回、去不掉（给的是 %s）' % _shown(fields))
     for a in paths:
         for b in paths:
             if a != b and b.startswith(a + '.'):
                 raise QueryInvalid('QUERY_FIELDS_FORM: "%s" 和 "%s" 重叠了；只留一个' % (a, b))
-    return tuple(paths)
+    return Without(*paths) if left_out else tuple(paths)
 
 
 def check_page(skip, limit):

@@ -17,6 +17,7 @@ from .state import Denied, now
 from . import visibility
 from .context_budget import AFFECT_REASONS, rough_ago
 from .records import episodes as episode_records
+from .records import memories as memory_records
 
 SHORT_ID = 12                 # event ids as she reads and quotes them; a unique prefix resolves to the event
 
@@ -707,8 +708,8 @@ class Appraiser:
         if not ledger.enabled or self.store.db.affect_proposals.find_one({'episode_id': episode_id}):
             return []
         from .reasons import shown
-        monologues = [shown(row, len(row.get('body_markdown') or '') or 1) or '' for row in self.store.db.memory_units.find(
-            {'_id': {'$in': ep.get('monologue_refs', [])}}, {'body_markdown': 1, 'source': 1})]   # ADR-099: a summary short
+        monologues = [shown(row, len(row.get('body_markdown') or '') or 1) or '' for row in memory_records.many(
+            self.store, ep.get('monologue_refs', [])).each(fields=['body_markdown', 'source'])]   # ADR-099: a summary short
         payload = {'input': ep['context'].get('event', {}).get('text'), 'monologue': monologues,
                    'speech': ep.get('speech'), 'ref_index': _refs(ep),
                    'how_to_record': recording_guide(ledger.model)}

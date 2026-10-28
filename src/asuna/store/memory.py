@@ -20,7 +20,7 @@ from .catalog import is_number, kind_of
 from .errors import BlobMissing, DuplicateKey, RecordInvalid, SchemaConflict
 from .words import (AddToSet, And, AnyOf, Contains, Count, Each, Exists, Holds, HoldsAny, Increase, IsNull, Larger,
                     Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Push, Range, Set, Smaller, StartsWith, Unset,
-                    record_bytes, to_utc_ms)
+                    Without, record_bytes, to_utc_ms)
 
 KIND = 'memory'
 SECRETS = ()
@@ -283,9 +283,27 @@ def _merge(into, part):
             into[key] = value
 
 
+def _leave_out(value, parts):
+    """Remove the path from value, through the objects of lists, as a projection that leaves it out does."""
+    if isinstance(value, dict):
+        if len(parts) == 1:
+            value.pop(parts[0], None)
+        elif parts[0] in value:
+            _leave_out(value[parts[0]], parts[1:])
+    elif isinstance(value, list):
+        for item in value:
+            if isinstance(item, dict):
+                _leave_out(item, parts)
+
+
 def project(doc, fields):
     if fields is None:
         return copy.deepcopy(doc)
+    if isinstance(fields, Without):
+        shown = copy.deepcopy(doc)
+        for path in fields.paths:
+            _leave_out(shown, path.split('.'))
+        return shown
     shown = {'_id': doc['_id']}
     for path in fields:
         found, part = _pick(doc, path.split('.'))

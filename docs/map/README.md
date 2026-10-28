@@ -245,6 +245,7 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`records/view`](../../src/asuna/records/view.py) — What the owners of `episodes`, `sessions` and the receipts share: a named read (`View`) and the checks of a fence.
 - [`records/tasks`](../../src/asuna/records/tasks.py) — The owner of `tasks` and `task_messages`: the work she hands to the action brain (its request, lease, state, result and hand-back) and the messages between her and the action session about it, read and written only through these operations.
 - [`records/plans`](../../src/asuna/records/plans.py) — The owner of `plans`: what she and the program scheduled (her plans in a conversation, the rhythms of the heartbeat, settlement, self-development and condensing, their next fire and last outcome), read and written only through these operati
+- [`records/memories`](../../src/asuna/records/memories.py) — The owner of `memory_units`: her recall (the chat chunks of her conversations, their summaries, her thoughts, imported entries) and its vector space, read and written only through these operations.
 
 ### [A turn](turn.md)
 

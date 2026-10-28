@@ -21,6 +21,7 @@ from .config import character_id
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import receipts as receipt_records
+from .records import memories as memory_records
 
 
 
@@ -69,17 +70,13 @@ class DialogueSummarizer:
         # A saved summary may precede a crash during source marking. Complete
         # those markings before selecting a new batch, so no source is retold.
         for row in rows:
-            prior = self.store.db.memory_units.find_one({
-                'kind': 'dialogue_summary', 'scope_key': scene['scope_key'],
-                'policy_epoch': scene['policy_epoch'], 'status': 'active',
-                'source_event_ids': row['_id']}, {'_id': 1})
+            prior = memory_records.summary_of(self.store, row['_id'], scope=scene['scope_key'],
+                                              epoch=scene['policy_epoch'], fields=['_id'])
             if prior:
                 message_records.save(self.store, {**row, 'summary_batch_id': prior['_id']},
                                      expected=row['revision'], stream='summary:recover:' + scene['_id'])
-        if any(self.store.db.memory_units.find_one({
-                'kind': 'dialogue_summary', 'scope_key': scene['scope_key'],
-                'policy_epoch': scene['policy_epoch'], 'status': 'active',
-                'source_event_ids': row['_id']}, {'_id': 1}) for row in rows):
+        if any(memory_records.summary_of(self.store, row['_id'], scope=scene['scope_key'],
+                                         epoch=scene['policy_epoch'], fields=['_id']) for row in rows):
             rows = pending.rows(limit=self.WINDOW_ROWS)
         return rows
 
@@ -158,7 +155,7 @@ class DialogueSummarizer:
                   for index, row in enumerate(rows)]
         source_ids = [row['_id'] for row in rows]
         key = 'summary-' + sha(canonical([scene_id, scene['policy_epoch'], source_ids]))
-        saved = self.store.db.memory_units.find_one({'_id': key})
+        saved = memory_records.get(self.store, key)
         attribution = summary_attribution.attribute(self.store, scene, rows)
         if not saved:
             prompt = ('请总结这一小段已确认交流；窗口与来源由程序保存，不需复制 ID。'
@@ -201,7 +198,7 @@ class DialogueSummarizer:
                 raise RuntimeError('DIALOGUE_SUMMARY_INCOMPLETE: ' + exc.problem) from None
             if result.finish_reason != 'stop' or not result.content.strip():
                 raise RuntimeError('DIALOGUE_SUMMARY_INCOMPLETE: ' + result.finish_reason)
-            saved = self.store.put('memory_units', {
+            saved = memory_records.save(self.store, {
                 '_id': key, 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
                 'character_id': character_id(self.store.config), 'kind': 'dialogue_summary',
                 'epistemic_type': 'derived_summary', 'body_markdown': result.content.strip(),

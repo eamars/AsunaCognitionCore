@@ -21,7 +21,7 @@ from asuna.store.errors import (AdapterNotInstalled, BlobMissing, DuplicateKey, 
                                 RecordInvalid, RecordTooLarge, SchemaConflict)
 from asuna.store.words import (AddToSet, And, AnyOf, Contains, Each, Exists, Holds, HoldsAny, Increase, IsNull,
                                Larger, Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Push, Range, Set, Smaller,
-                               StartsWith, Unset)
+                               StartsWith, Unset, Without)
 
 __all__ = ['CATALOG', 'store', 'vectors', 'TestW', 'TestO', 'TestG', 'TestC', 'TestX', 'TestT', 'TestV', 'TestN',
            'TestB', 'TestS']
@@ -324,6 +324,17 @@ class TestO:
             '_id': 'a', 'name': 'Alpha', 'meta': {'kind': 'k1'}, 'loose': {'deep': 1}}
         assert list(t.find({'_id': 'd'}, fields=['name'])) == [{'_id': 'd'}]
         refused(QueryInvalid, lambda: t.find({}, fields=['meta', 'meta.kind']), 'QUERY_FIELDS_FORM')
+
+    def test_O08_fields_left_out(self, store):
+        t = things(store)
+        whole = t.get('a')
+        assert t.get('a', fields=Without('tags', 'meta.size', 'sources.seq')) == {
+            **{k: v for k, v in whole.items() if k != 'tags'}, 'meta': {'kind': 'k1'},
+            'sources': [{'scene_id': 's1'}, {'scene_id': 's2'}]}
+        assert list(t.find({'_id': 'd'}, fields=Without('name'))) == [{'_id': 'd', 'rank': 4}]
+        refused(QueryInvalid, lambda: t.find({}, fields=Without('_id')), 'QUERY_FIELDS_FORM')
+        refused(QueryInvalid, lambda: t.get('a', fields=Without()), 'QUERY_FIELDS_FORM')
+        refused(QueryInvalid, lambda: t.find({}, fields=Without('meta', 'meta.kind')), 'QUERY_FIELDS_FORM')
 
 
 class TestG:

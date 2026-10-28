@@ -1,19 +1,21 @@
 """The read-only check of one ADR-104 batch against a deployment's database, before the batch merges: numbers only,
 never a record id or a value.
 
-  python tools/adr104_equivalence.py b1b|b2|b3|b4|b5|b6 [--config config/local.json] [--out <folder>] [--max-ms 2000]
+  python tools/adr104_equivalence.py b1b|b2|b3|b4|b5|b6|b7 [--config config/local.json] [--out <folder>] [--max-ms 2000]
 
 Each batch: what the store's `ensure` would do there, as a dry run (collections it would create, indexes it would
 make, retired indexes it would drop, indexes of a declared name that differ, validators), and for every field the
 catalog declares in the batch's collections (b1b: all of them; b2: `host_leases` and `lane_faults`; b3: `scenes`;
 b4: `messages`; b5: `episodes`, `sessions`, `sink_receipts`, `lane_receipts`; b6: `tasks`, `task_messages`,
-`plans`), its stored records by BSON type, the nulls, the records missing a required field and, for a vector, the
-lengths that differ; b4, b5 and b6 also, per collection (SIZED), the records of 512 KiB or more and those whose BSON
-and JSON sizes fall on different sides of 1 MiB. b3 to b6 also run their read cases: each read the batch moved, as
-the replaced code wrote it with pymongo and as the owner (`records.scenes`, `records.messages`, `records.episodes`,
-`records.sessions`, `records.receipts`, `records.tasks`, `records.plans`) now answers it (b6 also the conversation
-context's task aggregate against `records.tasks.recent_with_inputs` on up to 20 conversations, rows and their fields
-in order), on parameters sampled through the
+`plans`; b7: `memory_units`), its stored records by BSON type, the nulls, the records missing a required field and,
+for a vector, the lengths that differ; b4 to b7 also, per collection (SIZED), the records of 512 KiB or more and those
+whose BSON and JSON sizes fall on different sides of 1 MiB. b3 to b7 also run their read cases: each read the batch
+moved, as the replaced code wrote it with pymongo and as the owner (`records.scenes`, `records.messages`,
+`records.episodes`, `records.sessions`, `records.receipts`, `records.tasks`, `records.plans`, `records.memories`) now
+answers it (b6 also the conversation context's task aggregate against `records.tasks.recent_with_inputs` on up to 20
+conversations, rows and their fields in order; b7 the Web memory page's aggregate against `records.memories.web_page`,
+and a read that takes a whole conversation or every memory at most LIGHT records on both sides), on parameters
+sampled through the
 owners (at most 20 a case, at most 1,000 queries in all, serial, `--max-ms` each, three runs for the times): the same
 ids in the same order, the same records (values in one order for a distinct), the same plan stages (a distinct or an
 aggregate has no plan of its own to compare; the new plan is reported), and how many rows each side answered; per
@@ -25,6 +27,10 @@ SLOWER_MS above it, and still past it when timed again (CONFIRM_RUNS runs of eac
 both times and the new plan, unless the lead accepted it (ACCEPTED_SLOWDOWNS: the times when accepted, the reason,
 when it is looked at again; each reported on every run); the cases watched under the threshold (WATCHED) are
 reported beside their family with their times.
+b7 also runs B7's own proof (`search_proof`): retrieval's whole search, old (its memory reads with pymongo, the vector
+search's pairs translated as state.py did) against new, on QUERIES_SEARCH queries chosen as step 1a chose them (each a
+memory's text with its stored vector, no embedding call; nothing written): the same final six and the same 24 vector
+candidates, under the same timing gate; its reads are counted apart from the read cases' budget.
 The field counts are many small reads (parts of at most PART_RECORDS records by `_id`, FIELDS_PER_READ fields
 each), each bounded by `--max-ms` on the server; a read over its limit leaves its fields unchecked, named in the
 report (exit 2). Each query is read-only and bounded by `--max-ms`. The numbers go to `<out>/<batch>.json` (default
@@ -48,7 +54,7 @@ from pymongo import MongoClient  # noqa: E402
 from pymongo.errors import ExecutionTimeout, PyMongoError  # noqa: E402
 
 from asuna.store.catalog import CATALOG  # noqa: E402
-from asuna.store.mongodb import MongoAdapter  # noqa: E402
+from asuna.store.mongodb import MongoAdapter, projection  # noqa: E402
 
 KINDS = {'text': {'string'}, 'number': {'int', 'long', 'double', 'decimal'}, 'bool': {'bool'}, 'time': {'date'},
          'object': {'object'}, 'list': {'array'}, 'vector': {'array'}}
@@ -232,10 +238,11 @@ def differs(collection, counts):
 
 # The collections whose declared fields each batch counts (None: every collection).
 BATCHES = {'b1b': None, 'b2': ('host_leases', 'lane_faults'), 'b3': ('scenes',), 'b4': ('messages',),
-           'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts'), 'b6': ('tasks', 'task_messages', 'plans')}
+           'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts'), 'b6': ('tasks', 'task_messages', 'plans'),
+           'b7': ('memory_units',)}
 # The collections whose records' sizes each batch counts (512 KiB or more; BSON and JSON on different sides of 1 MiB).
 SIZED = {'b4': ('messages',), 'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts'),
-         'b6': ('tasks', 'task_messages', 'plans')}
+         'b6': ('tasks', 'task_messages', 'plans'), 'b7': ('memory_units',)}
 QUERIES = 1000
 _ARCHIVED = {'reason': "the archived stream's old read left out `legacy` by an exclusion projection, which the store "
                        "does not have; the owner drops it after the read (accepted for B4, 2026-10-28)",
@@ -260,7 +267,7 @@ WATCHED = {'b4': {'who wrote in these': {
     'note': 'same family, under threshold: a values read grouped by presence, as "who wrote here" (293 ms against 9 '
             'before fa46c24132f6); measured at B4 old p50 ~12 ms, new ~19 ms, 1.55x'}}}
 RUNS = 3
-READ_CASES = ('b3', 'b4', 'b5', 'b6')
+READ_CASES = ('b3', 'b4', 'b5', 'b6', 'b7')
 
 
 def slower(old, new):
@@ -422,7 +429,7 @@ def reads(client, database, max_ms, batch, config):
     adapter = _Recording(client, database)
     store = Checked(adapter, CATALOG)
     cases, sampling = (_cases_b3(store), 1) if batch == 'b3' else {'b4': _cases_b4, 'b5': _cases_b5,
-                                                                   'b6': _cases_b6}[batch](store, config)
+                                                                   'b6': _cases_b6, 'b7': _cases_b7}[batch](store, config)
     # A case may name how many samples it takes (a sixth item: B6's proof on 20 conversations); its reads (one old,
     # up to two new a run) come off the budget first, and the other cases share the rest.
     fixed = [case for case in cases if len(case) > 5]
@@ -457,8 +464,8 @@ def reads(client, database, max_ms, batch, config):
                 differing += 1
             if old_plan is None or new_plan is None or param is chosen[-1]:
                 coll, filter, sort, skip, limit, fields = adapter.sent
-                new_cursor = adapter.db[coll].find(filter, {f: 1 for f in fields} if fields else None,
-                                                   sort=list(sort) or None, skip=skip, limit=limit)
+                new_cursor = adapter.db[coll].find(filter, projection(fields), sort=list(sort) or None, skip=skip,
+                                                   limit=limit)
                 new_plan = _stages(new_cursor.explain()['queryPlanner']['winningPlan'])
                 explained += 1
                 if old_cursor is None:
@@ -1727,6 +1734,519 @@ def _cases_b6(store, config):
     return [case for case in cases if case[3]], got['reads']
 
 
+MEMORY = ['_id', 'scope_key', 'policy_epoch', 'character_id', 'kind', 'status', 'episode_id', 'source_event_ids',
+          'depends_on', 'source']
+NOT_VECTOR = {'embedding': 0}                       # the replaced reads' exclusion projection
+AUTO_SOURCES = ['dialogue_summary']                 # memory.Memory.UNDERSTANDING_AUTO_SOURCES
+THOUGHTS = 3                                        # context.RECENT_THOUGHTS
+# Reads that take a whole conversation's or every memory are read here at most LIGHT records on both sides: the same
+# query with a limit, so the check stays light; the reads her turns make (4096 and 2048) are run as they are.
+LIGHT = 200
+QUERIES_SEARCH = 40                                 # B7's proof: whole searches, old against new (as step 1a)
+SEARCH_CONVERSATIONS, SEARCH_PER_CONVERSATION = 4, 10
+
+
+def _sample_b7(store):
+    """What the cases read with, through the owner: her id (a memory's character), the conversations' (scope, epoch)
+    pairs, thoughts, chat chunks, summaries and other memories."""
+    from asuna.records import memories, scenes
+    found = {'reads': 8}
+    scenes_rows = sorted(scenes.all(store, fields=['_id', 'scope_key', 'policy_epoch', 'kind']), key=lambda r: r['_id'])
+    found['pairs'] = [(r['scope_key'], r['policy_epoch']) for r in scenes_rows
+                      if isinstance(r.get('scope_key'), str) and isinstance(r.get('policy_epoch'), int)]
+    found['groups'] = [r['scope_key'] for r in scenes_rows if r.get('kind') == 'group' and isinstance(
+        r.get('scope_key'), str)]
+    me = memories.alive(store).first(fields=['character_id'])
+    found['me'] = (me or {}).get('character_id') or 'character-none'
+    found['thoughts'] = memories.of_kind(store, 'monologue', status='active').rows(limit=20, fields=MEMORY)
+    found['chunks'] = memories.of_kind(store, 'chat_chunk', status='active').rows(limit=20, fields=MEMORY)
+    # The Web page's search: a few characters of a summary (used as the search, never printed or written).
+    summary = memories.of_kind(store, 'dialogue_summary', status='active').first(fields=['body_markdown'])
+    text = (summary or {}).get('body_markdown')
+    found['search'] = [text[:3]] if isinstance(text, str) and len(text.strip()) >= 3 else []
+    found['summaries'] = memories.of_kind(store, 'dialogue_summary', status='active').rows(limit=20, fields=MEMORY)
+    found['others'] = memories.alive(store).rows(limit=20, fields=MEMORY)
+    return found
+
+
+def _cases_b7(store, config):
+    """(name, old(param), new(param), parameters, compare) for each read B7 moved, the old as the replaced code wrote
+    it; parameters sampled through the owner, synthetic values where her records hold none (both sides then read
+    nothing, and the plans are still compared)."""
+    from asuna.records import memories as owner
+    got = _sample_b7(store)
+    me, pairs = got['me'], got['pairs'] or [('scope-none', 1)]
+    none = {'_id': 'memory-none', 'scope_key': 'scope-none', 'policy_epoch': 1, 'character_id': me,
+            'episode_id': 'turn-none', 'kind': 'monologue', 'source_event_ids': ['line-none']}
+    thoughts = got['thoughts'] or [none]
+    chunks = got['chunks'] or [{**none, 'kind': 'chat_chunk'}]
+    summaries = [row for row in got['summaries'] if row.get('source_event_ids')] or [
+        {**none, 'kind': 'dialogue_summary'}]
+    rows = thoughts + chunks + summaries + got['others']
+    ids = [row['_id'] for row in rows]
+    batches = [ids[n:n + 5] for n in range(0, len(ids), 5)]
+    scoped = [row for row in rows if isinstance(row.get('scope_key'), str)] or [none]
+    epoched = [row for row in scoped if isinstance(row.get('policy_epoch'), int)] or [none]
+    turned = [row for row in thoughts if isinstance(row.get('episode_id'), str)] or [none]
+    groups = got['groups'] or ['scope-none']
+    persona = (config.get('chat') or {}).get('persona') or 'persona-none'
+    page_pairs = pairs[:6] + [('global-safe', 1), ('owner-private:' + persona, 1)]
+    page_or = [{'scope_key': s, 'policy_epoch': e} for s, e in page_pairs]
+    unit_query = {'status': 'active', 'character_id': me, '$or': page_or}
+    readable_pairs = lambda row: [('global-safe', 1), (row['scope_key'], row['policy_epoch'])]
+    auth = lambda row: {'$or': [{'scope_key': s, 'policy_epoch': e} for s, e in readable_pairs(row)],
+                        'character_id': me, 'status': 'active'}
+    one = lambda filter, proj=None, sort=None: ('find_one', 'memory_units', filter, proj, sort)
+    many = lambda filter, proj=None, sort=None, limit=0: ('find', 'memory_units', filter, proj, sort, limit)
+    fields = lambda *names: {name: 1 for name in names}
+    U = owner.UNVECTORED
+    PAGE = ['scope_key', 'scene_id', 'author', 'speaker', 'kind', 'event.raw.asuna_peer', 'epistemic_type',
+            'body_markdown']
+
+    def page_old(args):
+        epistemic, search = args
+        query = dict(unit_query, epistemic_type=epistemic)
+        if search:
+            query = {'$and': [query, {'body_markdown': {'$regex': re.escape(search), '$options': 'i'}}]}
+        projection = {'scope_key': 1, 'scene_id': 1, 'author': 1, 'speaker': 1, 'kind': 1,
+                      'event.raw.asuna_peer': 1, 'epistemic_type': 1, 'generated_at': 1, 'occurred_at': 1,
+                      '_memory_time': 1, 'excerpt': {'$substrCP': [{'$ifNull': ['$body_markdown', '']}, 0, 200]}}
+
+        def run(db):
+            rows = list(db.memory_units.aggregate([{'$match': query}, {'$addFields': {
+                '_memory_time': {'$ifNull': ['$generated_at', '$occurred_at', '$formed_at']}}},
+                {'$sort': {'_memory_time': -1, '_id': -1}}, {'$skip': 0}, {'$limit': 25}, {'$project': projection}]))
+            return [(row['_id'], row.get('_memory_time'), row.get('excerpt')) for row in rows], None
+        return run
+
+    def page_new(args):
+        epistemic, search = args
+        rows = owner.web_page(store, page_pairs, me, epistemic=epistemic, search=search, skip=0, limit=25,
+                              fields=PAGE)
+        return [(row['_id'], row['_memory_time'], (row.get('body_markdown') if isinstance(
+            row.get('body_markdown'), str) else '')[:200]) for row in rows]
+
+    cases = [
+        # single records
+        ('memory by id', lambda i: one({'_id': i}), lambda i: owner.get(store, i), ids, 'value'),
+        ('memory by id, fields', lambda i: one({'_id': i}, fields('scope_key')),
+         lambda i: owner.get(store, i, ['scope_key']), ids, 'value'),
+        ('memory by id, not a tombstone', lambda i: one({'_id': i, 'status': {'$ne': 'tombstone'}}),
+         lambda i: owner.get(store, i, erased=False), ids, 'value'),
+        ('a thought by id', lambda i: one({'_id': i, 'kind': 'monologue'}, fields('body_markdown', 'source')),
+         lambda i: owner.get(store, i, ['body_markdown', 'source'], kind='monologue'), ids, 'value'),
+        ('an alive chat chunk by id', lambda i: one({'_id': i, 'kind': 'chat_chunk', 'status': 'active'}, fields(
+            'scope_key', 'policy_epoch', 'source_event_ids', 'occurred_at')),
+         lambda i: owner.get(store, i, ['scope_key', 'policy_epoch', 'source_event_ids', 'occurred_at'],
+                             kind='chat_chunk', status='active'), ids, 'value'),
+        ('a turn\'s thought here', lambda r: one({'_id': r['_id'], 'episode_id': r['episode_id'],
+                                                 'scope_key': r.get('scope_key'), 'policy_epoch': r.get('policy_epoch'),
+                                                 'status': 'active'}),
+         lambda r: owner.get(store, r['_id'], episode=r['episode_id'], scope=r.get('scope_key'),
+                             epoch=r.get('policy_epoch'), status='active'), turned, 'value'),
+        ('a summary as a source here', lambda r: one({'_id': r['_id'], 'scope_key': r['scope_key'],
+                                                     'policy_epoch': r['policy_epoch'], 'status': 'active',
+                                                     'kind': {'$in': AUTO_SOURCES}}),
+         lambda r: owner.get(store, r['_id'], scope=r['scope_key'], epoch=r['policy_epoch'], status='active',
+                             kinds=AUTO_SOURCES), epoched, 'value'),
+        ('an alive memory here', lambda r: one({'_id': r['_id'], 'scope_key': r['scope_key'], 'status': 'active'},
+                                               fields('_id')),
+         lambda r: owner.get(store, r['_id'], ['_id'], scope=r['scope_key'], status='active'), scoped, 'value'),
+        ('a line\'s summary', lambda r: one({'kind': 'dialogue_summary', 'scope_key': r['scope_key'],
+                                            'policy_epoch': r['policy_epoch'], 'status': 'active',
+                                            'source_event_ids': r['source_event_ids'][0]}, fields('_id')),
+         lambda r: owner.summary_of(store, r['source_event_ids'][0], scope=r['scope_key'], epoch=r['policy_epoch'],
+                                    fields=['_id']), summaries, 'value'),
+        ('a recalled memory, read again', lambda r: one({'_id': r['_id'], **auth(r)}, NOT_VECTOR),
+         lambda r: owner.get(store, r['_id'], U, pairs=readable_pairs(r), character=me, status='active'), epoched,
+         'value'),
+        ('a recalled thought, read again', lambda r: one({'_id': r['_id'], **auth(r), 'kind': 'monologue'},
+                                                         NOT_VECTOR),
+         lambda r: owner.get(store, r['_id'], U, pairs=readable_pairs(r), character=me, kind='monologue',
+                             status='active'), epoched, 'value'),
+        ('a superseded memory', lambda r: one({'_id': r['_id'], '$or': auth(r)['$or'], 'status': 'superseded'},
+                                              NOT_VECTOR),
+         lambda r: owner.get(store, r['_id'], U, pairs=readable_pairs(r), status='superseded'), epoched, 'value'),
+        ('a memory on the Web page', lambda i: one({**unit_query, '_id': i}, NOT_VECTOR),
+         lambda i: owner.get(store, i, U, pairs=page_pairs, character=me, status='active'), ids, 'value'),
+        # views
+        ('memories by ids, fields', lambda b: many({'_id': {'$in': b}}, fields('body_markdown', 'source')),
+         lambda b: owner.many(store, b).rows(fields=['body_markdown', 'source']), batches, 'value'),
+        ('memories by ids, for forgetting', lambda b: many({'_id': {'$in': b}}, fields(
+            'pinned', 'salience', 'occurred_at', 'generated_at', 'formed_at', 'scene_seq', 'source_window',
+            'source_event_ids', 'scope_key', 'kind')),
+         lambda b: owner.many(store, b).rows(fields=['pinned', 'salience', 'occurred_at', 'generated_at', 'formed_at',
+                                                     'scene_seq', 'source_window', 'source_event_ids', 'scope_key',
+                                                     'kind']), batches, 'value'),
+        ('alive memories by ids', lambda b: many({'_id': {'$in': b}, 'status': 'active'},
+                                                 fields('body_markdown', 'kind', 'scope_key')),
+         lambda b: owner.many(store, b, status='active').rows(fields=['body_markdown', 'kind', 'scope_key']),
+         batches, 'value'),
+        ('a home memory among ids', lambda r: one({'_id': {'$in': [r['_id']]}, 'scope_key': r['scope_key']},
+                                                  fields('_id')),
+         lambda r: owner.many(store, [r['_id']], scope=r['scope_key']).first(fields=['_id']), scoped, 'value'),
+        ('chat chunks by ids, hers', lambda b: many({'_id': {'$in': b}, 'kind': 'chat_chunk', 'status': 'active',
+                                                     'character_id': me}, fields(
+            'body_markdown', 'scope_key', 'epistemic_type', 'occurred_at', 'source_event_ids')),
+         lambda b: owner.many(store, b, character=me, kind='chat_chunk', status='active').rows(fields=[
+             'body_markdown', 'scope_key', 'epistemic_type', 'occurred_at', 'source_event_ids']), batches, 'value'),
+        ('chat chunks by ids, in her places', lambda b: many({
+            '_id': {'$in': b}, 'kind': 'chat_chunk', 'status': 'active', 'character_id': me,
+            '$or': [{'scope_key': s, 'policy_epoch': e} for s, e in pairs[:6]]}, fields(
+            'body_markdown', 'scope_key', 'policy_epoch', 'epistemic_type', 'occurred_at', 'source_event_ids')),
+         lambda b: owner.many(store, b, pairs=pairs[:6], character=me, kind='chat_chunk', status='active').rows(
+             fields=['body_markdown', 'scope_key', 'policy_epoch', 'epistemic_type', 'occurred_at',
+                     'source_event_ids']), batches, 'value'),
+        ('Web page sources by ids', lambda b: many({**unit_query, '_id': {'$in': b}}, fields(
+            'body_markdown', 'speaker', 'scope_key', 'generated_at', 'occurred_at', 'epistemic_type'), None, 12),
+         lambda b: owner.many(store, b, pairs=page_pairs, character=me, status='active').rows(limit=12, fields=[
+             'body_markdown', 'speaker', 'scope_key', 'generated_at', 'occurred_at', 'epistemic_type']), batches,
+         'value'),
+        ('her last thoughts here', lambda s: many({'kind': 'monologue', 'scope_key': s, 'status': 'active'}, fields(
+            'body_markdown', 'formed_at', 'episode_id', 'source'), [('formed_at', -1)], THOUGHTS),
+         lambda s: owner.of_kind(store, 'monologue', scope=s, status='active', by='formed_at').rows(
+             newest_first=True, limit=THOUGHTS, fields=['body_markdown', 'formed_at', 'episode_id', 'source']),
+         sorted({row['scope_key'] for row in scoped}), 'value'),
+        ('her last thoughts here, ids', lambda s: many({'kind': 'monologue', 'scope_key': s, 'status': 'active'},
+                                                       fields('_id'), [('formed_at', -1)], THOUGHTS),
+         lambda s: owner.of_kind(store, 'monologue', scope=s, status='active', by='formed_at').rows(
+             newest_first=True, limit=THOUGHTS, fields=['_id']), sorted({row['scope_key'] for row in scoped}),
+         'value'),
+        ('her group chat chunks', lambda s: many({'kind': 'chat_chunk', 'status': 'active', 'character_id': me,
+                                                 'scope_key': {'$in': [s]}}, fields(
+            'body_markdown', 'scope_key', 'epistemic_type', 'occurred_at', 'source_event_ids'), None, LIGHT),
+         lambda s: owner.of_kind(store, 'chat_chunk', scopes=[s], character=me, status='active').rows(
+             limit=LIGHT, fields=['body_markdown', 'scope_key', 'epistemic_type', 'occurred_at', 'source_event_ids']),
+         groups, 'value'),
+        ('thoughts from thinking', lambda _: many({'kind': 'monologue', 'source': 'thinking'}, fields('body_markdown'),
+                                                  None, LIGHT),
+         lambda _: owner.of_kind(store, 'monologue', source='thinking').rows(limit=LIGHT, fields=['body_markdown']),
+         [None], 'value'),
+        ('alive memories, their kinds', lambda _: many({'status': 'active'}, fields('kind'), None, LIGHT),
+         lambda _: owner.alive(store).rows(limit=LIGHT, fields=['kind']), [None], 'value'),
+        ('the development fallback', lambda r: many({'$or': [{'scope_key': s, 'policy_epoch': e}
+                                                            for s, e in readable_pairs(r)], 'status': 'active'},
+                                                    NOT_VECTOR, [('_id', 1)], 6),
+         lambda r: owner.readable(store, readable_pairs(r), by='_id').rows(limit=6, fields=U), epoched, 'value'),
+        ('her thoughts in her places', lambda r: many({**auth(r), 'kind': 'monologue'}, NOT_VECTOR,
+                                                      [('formed_at', -1), ('_id', -1)], 2048),
+         lambda r: owner.readable(store, readable_pairs(r), character=me, kind='monologue',
+                                  by=('formed_at', '_id')).rows(newest_first=True, limit=2048, fields=U), epoched,
+         'value'),
+        ('recall\'s lexical candidates', lambda r: many(auth(r), NOT_VECTOR, [('occurred_at', -1), ('_id', -1)], 4096),
+         lambda r: owner.readable(store, readable_pairs(r), character=me, by=('occurred_at', '_id')).rows(
+             newest_first=True, limit=4096, fields=U), epoched, 'value'),
+        ('memories waiting for their vector', lambda r: many({
+            'status': 'active', '$or': [{'embedding_status': {'$nin': ['READY', 'REFUSED']}},
+                                        {'embedding_revision': {'$ne': 'route-none'}}],
+            'scope_key': r['scope_key'], 'policy_epoch': r['policy_epoch']}, None, None, LIGHT),
+         lambda r: owner.pending_index(store, 'route-none', scope=r['scope_key'], epoch=r['policy_epoch']).rows(
+             limit=LIGHT), epoched, 'value'),
+        ('memories waiting for their vector, all', lambda _: many({
+            'status': 'active', '$or': [{'embedding_status': {'$nin': ['READY', 'REFUSED']}},
+                                        {'embedding_revision': {'$ne': 'route-none'}}]}, None, None, LIGHT),
+         lambda _: owner.pending_index(store, 'route-none').rows(limit=LIGHT), [None], 'value'),
+        ('memories depending on these', lambda r: many({'scope_key': r['scope_key'], '$or': [
+            {'depends_on': {'$in': r['source_event_ids'] or ['line-none']}},
+            {'source_event_ids': {'$in': r['source_event_ids'] or ['line-none']}}]}, NOT_VECTOR, None, LIGHT),
+         lambda r: owner.dependents(store, r['scope_key'], r['source_event_ids'] or ['line-none']).rows(
+             limit=LIGHT, fields=U), [row for row in scoped if isinstance(row.get('source_event_ids'), list)] or [
+             {**none, 'source_event_ids': []}], 'value'),
+        ('memories of a scope', lambda s: many({'scope_key': s}, NOT_VECTOR, None, LIGHT),
+         lambda s: owner.of_scope(store, s).rows(limit=LIGHT, fields=U), sorted({row['scope_key'] for row in scoped}),
+         'value'),
+        # the Web memory page: the aggregate against its reads (ids, own time, excerpt; 25 rows)
+        ('the Web memory page', page_old, page_new,
+         [('derived_summary', None), ('character_interpretation', None)] + [('derived_summary', w)
+                                                                            for w in got['search']],
+         'value'),
+    ]
+    return [case for case in cases if case[3]], got['reads']
+
+
+class _ReadOnlyStore:
+    """What `Retrieval` needs of a store, read only: its settings, the database for the reads that have not moved, the
+    owners' collections and the vector search; its audit writes nothing and a write is refused."""
+
+    def __init__(self, checked, db, config, name):
+        self.checked, self.db, self.config, self.name = checked, db, config, name
+
+    def collection(self, name):
+        return self.checked.collection(name)
+
+    def nearest(self, space, vector, k, where):
+        return self.checked.nearest(space, vector, k, where)
+
+    def audit(self, *args, **kwargs):
+        return None
+
+    def put(self, *args, **kwargs):
+        raise RuntimeError('ADR104_CHECK_READ_ONLY: the check writes nothing')
+
+
+class _NoEvidence:
+    def record(self, *args, **kwargs):
+        return None
+
+
+def _old_nearest(store, space, vector, k, where):
+    """state.Store.nearest as B7 replaced it: a tuple of fields maps to a list of value tuples (an `Or` of them), any
+    other field to a value or a list (`AnyOf`); no combination answers nothing without a search."""
+    from asuna.store.words import And, AnyOf, Or
+    values, pairs = {}, []
+    for key, value in where.items():
+        if isinstance(key, tuple):
+            combinations = [dict(zip(key, combination)) for combination in value]
+            if not combinations:
+                return []
+            pairs.append(Or(*combinations))
+        else:
+            values[key] = AnyOf(list(value)) if isinstance(value, (list, set, frozenset, tuple)) else value
+    return store.checked.nearest(space, vector, k, And(values, *pairs) if pairs else values)
+
+
+def _old_retrieval():
+    """retrieval.Retrieval with `search` and `_forget` as B7 replaced them (their memory reads with pymongo), the rest
+    as it is."""
+    import math
+    import time as clock
+    from collections import Counter
+    from datetime import datetime, timezone
+    from asuna.config import character_id
+    from asuna.evidence import canonical, sha
+    from asuna.records import messages as message_records
+    from asuna.retrieval import MEMORY, Retrieval, terms
+    from asuna.state import now
+    from asuna.visibility import is_owner_private_scope
+
+    class OldRetrieval(Retrieval):
+        def _forget(self, ranks, forgetting, sequences, automatic):
+            half_days = float(forgetting.get('half_life_days') or 0)
+            half_messages = float(forgetting.get('half_life_messages') or 0)
+            if not ranks or not (half_days or half_messages):
+                return set()
+            rows = {row['_id']: row for row in self.store.db.memory_units.find({'_id': {'$in': list(ranks)}}, {
+                'pinned': 1, 'salience': 1, 'occurred_at': 1, 'generated_at': 1, 'formed_at': 1, 'scene_seq': 1,
+                'source_window': 1, 'source_event_ids': 1, 'scope_key': 1, 'kind': 1})}
+            sources = {row['_id']: row for row in message_records.many(
+                self.store, [ids[-1] for row in rows.values() for ids in [row.get('source_event_ids') or []] if ids]
+            ).rows(fields=['scene_seq', 'summary_batch_id'])}
+            moment = datetime.now(timezone.utc)
+            floor, stepped = float(forgetting.get('step_back_below') or 0), set()
+            for key, row in rows.items():
+                if row.get('pinned') or (row.get('salience') or {}).get('pinned'):
+                    ranks[key]['freshness'] = 1.0
+                    continue
+                used = row.get('salience') or {}
+                stamp = used.get('last_ref_at') or row.get('occurred_at') or row.get('generated_at') or row.get(
+                    'formed_at')
+                try:
+                    days = max(0.0, (moment - datetime.fromisoformat(str(stamp).replace('Z', '+00:00'))
+                                     ).total_seconds() / 86400) if stamp else 0.0
+                except ValueError:
+                    days = 0.0
+                source = sources.get((row.get('source_event_ids') or [None])[-1]) or {}
+                window = row.get('source_window') if isinstance(row.get('source_window'), dict) else {}
+                anchor = used.get('last_ref_seq') or row.get('scene_seq') or window.get('to_seq') or window.get(
+                    'to') or source.get('scene_seq')
+                current = sequences.get(row.get('scope_key'))
+                messages = max(0, current - anchor) if isinstance(current, int) and isinstance(anchor, int) else 0
+                freshness = (0.5 ** (days / half_days) if half_days else 1.0) * (
+                    0.5 ** (messages / half_messages) if half_messages else 1.0)
+                ranks[key]['score'] *= freshness
+                ranks[key]['freshness'] = round(freshness, 4)
+                if automatic and freshness < floor and row.get('kind') == 'chat_chunk' and source.get(
+                        'summary_batch_id'):
+                    stepped.add(key)
+            return stepped
+
+        def search(self, scope, epoch, query, *, exclude_sources=(), require_vector=False, linked_scopes=(),
+                   private_scope=None, coverage_floor=0.0, forgetting=None, record_use=False, automatic=True):
+            linked = [item for item in dict.fromkeys(linked_scopes or ())
+                      if isinstance(item, str) and item and item not in ('global-safe', scope)
+                      and not is_owner_private_scope(item)]
+            if is_owner_private_scope(scope) or (private_scope is not None and not is_owner_private_scope(
+                    private_scope)):
+                raise ValueError('INVALID_RETRIEVAL_SCOPE')
+            readable = {scope} | set(linked)
+            pairs = [('global-safe', 1), (scope, epoch)] + [(item, epoch) for item in linked] + (
+                [(private_scope, 1)] if private_scope else [])
+            auth = {'$or': [{'scope_key': s, 'policy_epoch': e} for s, e in pairs],
+                    'character_id': character_id(self.store.config), 'status': 'active'}
+            where = {('scope_key', 'policy_epoch'): pairs, 'character_id': auth['character_id'], 'status': 'active',
+                     'embedding_revision': self.revision}
+            vector_filter = {'scope_key, policy_epoch': [list(p) for p in pairs],
+                             **{k: v for k, v in where.items() if isinstance(k, str)}}
+            rows = list(self.store.db.memory_units.find(auth, {'embedding': 0}).sort(
+                [('occurred_at', -1), ('_id', -1)]).limit(4096))
+            cacheable = len(rows) < 4096
+            heads = list(self.store.db.state_heads.find({'scope_key': {'$in': ['global-safe', scope] + linked + (
+                [private_scope] if private_scope else [])}}, {'_id': 1, 'revision_id': 1}).sort('_id', 1))
+            key_fields = {'scope': scope, 'private_scope': private_scope, 'policy_epoch': epoch,
+                          'character_id': character_id(self.store.config), 'query_sha256': sha(query.encode()),
+                          'embedding_revision': self.revision, 'linked_scopes': sorted(linked),
+                          'state_revision': sha(canonical([heads, [(m['_id'], m.get('revision'), m['status'])
+                                                                   for m in rows]]))}
+            cache_key = sha(canonical(key_fields))
+            cached = self.cache.get(cache_key)
+            cache_hit = bool(cacheable and cached and cached['expires'] > clock.monotonic())
+            vector, failure = [], None
+            try:
+                if cache_hit:
+                    vector = [dict(row) for row in cached['vector']]
+                    self.cache.move_to_end(cache_key)
+                else:
+                    v = self.embed([query], 'query')[0]
+                    self.vectors[sha(query.encode())] = v
+                    while len(self.vectors) > 16:
+                        self.vectors.popitem(last=False)
+                    vector = [{'_id': key, 'score': score}
+                              for key, score in _old_nearest(self.store, MEMORY, v, 24, where)]
+                    if cacheable:
+                        self.cache[cache_key] = {'expires': clock.monotonic() + 300,
+                                                 'vector': [dict(row) for row in vector]}
+                    while len(self.cache) > 128:
+                        self.cache.popitem(last=False)
+            except Exception as exc:
+                failure = type(exc).__name__
+                if require_vector:
+                    raise
+            qterms = terms(query)
+            document_terms = {m['_id']: terms(m['body_markdown']) for m in rows}
+            frequencies = Counter(term for values in document_terms.values() for term in values)
+            qterms = {t for t in qterms if frequencies[t] <= max(2, len(rows) * .5)}
+            aliases = {p['person_id'] for p in self.store.db.identities.find({})
+                       if p.get('display_name') and p['display_name'] in query}
+
+            def lexical_score(m):
+                return sum(math.log(1 + len(rows) / (1 + frequencies[t])) for t in qterms & document_terms[m['_id']]) \
+                    + 4 * len(aliases & set(m.get('subjects', [])))
+            lexical = sorted((m for m in rows if lexical_score(m) > 0), key=lambda m: (-lexical_score(m), m['_id']))[:24]
+            ranks = {}
+            for origin, candidates in [('vector', vector), ('lexical', lexical)]:
+                for rank, m in enumerate(candidates, 1):
+                    ranks.setdefault(m['_id'], {'score': 0, 'origins': {}})
+                    ranks[m['_id']]['score'] += 1 / (60 + rank)
+                    ranks[m['_id']]['origins'][origin] = rank
+            pending = sorted((m for m in rows if m.get('embedding_status') != 'READY'),
+                             key=lambda m: (m.get('occurred_at') or '', m['_id']), reverse=True)[:6]
+            for m in pending:
+                ranks.setdefault(m['_id'], {'score': 0, 'origins': {}})['origins']['pending_backread'] = True
+            sequences = self._scene_sequences([scope, *linked])
+            stepped = self._forget(ranks, forgetting or {}, sequences, automatic)
+            ordered = sorted(ranks, key=lambda key: (-ranks[key]['score'], key))
+            candidates, excluded = [], []
+            for key in ordered:
+                current = self.store.db.memory_units.find_one({'_id': key, **auth}, {'embedding': 0})
+                if not current or current.get('expires_at', '9999') <= now():
+                    excluded.append({'id': key, 'reason': 'authoritative_recheck'})
+                    continue
+                if key in exclude_sources or (current.get('kind') != 'monologue' and set(
+                        current.get('source_event_ids', [])) & set(exclude_sources)):
+                    excluded.append({'id': key, 'reason': 'source_in_recent_tail'})
+                    continue
+                if key in stepped:
+                    excluded.append({'id': key, 'reason': 'faded_and_summarized'})
+                    continue
+                candidates.append(current)
+            recent_sources = sorted((m for m in candidates if m.get('epistemic_type') == 'reported_speech'
+                                     and m['scope_key'] in readable), key=lambda m: m.get('scene_seq', 0),
+                                    reverse=True)[:2]
+            selected, seen = [], set()
+            for m in candidates[:1] + recent_sources + candidates:
+                if m['_id'] in seen:
+                    continue
+                seen.add(m['_id'])
+                selected.append(m)
+                if len(selected) == 6:
+                    break
+            for m in selected:
+                m['historical_sources'] = []
+                for old_id in m.get('supersedes', [])[:8]:
+                    old = self.store.db.memory_units.find_one({'_id': old_id, '$or': auth['$or'],
+                                                               'status': 'superseded'}, {'embedding': 0})
+                    if old:
+                        m['historical_sources'].append({k: old[k] for k in ('_id', 'body_markdown', 'status',
+                                                                            'epistemic_type')})
+            manifest = {'path': 'server_vector_rrf' if failure is None else 'scoped_lexical_recent_fallback',
+                        'filter': vector_filter, 'vector_ranks': vector, 'lexical_ids': [m['_id'] for m in lexical],
+                        'selected': [m['_id'] for m in selected], 'excluded': excluded}
+            return selected, manifest
+
+    return OldRetrieval
+
+
+def search_proof(store, old_db, config, max_ms):
+    """B7's own proof: retrieval's whole search old (its memory reads as pymongo) against new (through the owner) on
+    QUERIES_SEARCH queries chosen as step 1a chose them: her (scope, epoch) pairs with the most alive embedded memories
+    of hers, global-safe left out, SEARCH_CONVERSATIONS of them, SEARCH_PER_CONVERSATION random memories of each (not
+    her thoughts); each memory's text is the query and its stored vector the query's (no embedding call). Numbers
+    only: the same final six (ids and order), the same 24 vector candidates (ids, order, scores), times."""
+    import statistics
+    import time as clock
+    from asuna.records import memories as owner
+    from asuna.retrieval import Retrieval
+    col = old_db.memory_units
+    found = col.find_one({'status': 'active', 'embedding_status': 'READY'}, {'character_id': 1},
+                         max_time_ms=max_ms)
+    if not found:
+        return {'queries': 0, 'why': 'no alive embedded memory'}
+    me = found['character_id']
+    counts = list(col.aggregate([{'$match': {'status': 'active', 'embedding_status': 'READY', 'character_id': me}},
+                                 {'$group': {'_id': {'s': '$scope_key', 'e': '$policy_epoch'}, 'n': {'$sum': 1}}},
+                                 {'$sort': {'n': -1}}], maxTimeMS=max_ms))
+    chosen = [row['_id'] for row in counts if row['_id']['s'] != 'global-safe'][:SEARCH_CONVERSATIONS]
+    queries = []
+    for pair in chosen:
+        rows = list(col.aggregate([{'$match': {'scope_key': pair['s'], 'policy_epoch': pair['e'], 'status': 'active',
+                                               'embedding_status': 'READY', 'kind': {'$ne': 'monologue'}}},
+                                   {'$sample': {'size': SEARCH_PER_CONVERSATION}}, {'$project': {'_id': 1}}],
+                                  maxTimeMS=max_ms))
+        queries += [(row['_id'], pair['s'], pair['e']) for row in rows]
+    if not queries:
+        return {'queries': 0, 'why': 'no conversation with embedded memories'}
+    settings = dict(config, character_id=me)
+    read = _ReadOnlyStore(store, old_db, settings, old_db.name)
+    old, new = _old_retrieval()(read, _NoEvidence()), Retrieval(read, _NoEvidence())
+    revision = col.find_one({'_id': queries[0][0]}, {'embedding_revision': 1})['embedding_revision']
+    old.revision = new.revision = revision
+    out = {'queries': len(queries), 'conversations': len(chosen), 'same_six': 0, 'same_six_set': 0, 'same_24': 0,
+           'same_24_ids': 0, 'score_max_diff': 0.0, 'found_nothing': 0, 'paths_old': {}, 'paths_new': {}}
+    times = {'old': [], 'new': []}
+    try:
+        for memory_id, scope, epoch in queries:
+            unit = owner.get(store, memory_id, ['body_markdown', 'embedding'])
+            answers = {}
+            for side, retrieval in (('old', old), ('new', new)):
+                retrieval.embed = lambda texts, purpose, v=unit['embedding']: [v]
+                retrieval.cache.clear()
+                started = clock.perf_counter()
+                selected, manifest = retrieval.search(scope, epoch, unit['body_markdown'])
+                times[side].append((clock.perf_counter() - started) * 1000)
+                answers[side] = ([m['_id'] for m in selected],
+                                 [(row['_id'], row.get('score')) for row in manifest.get('vector_ranks') or []])
+                paths = out['paths_' + side]
+                paths[manifest.get('path')] = paths.get(manifest.get('path'), 0) + 1
+            (six_old, vec_old), (six_new, vec_new) = answers['old'], answers['new']
+            out['same_six'] += six_old == six_new
+            out['same_six_set'] += sorted(six_old) == sorted(six_new)
+            out['same_24_ids'] += [i for i, _ in vec_old] == [i for i, _ in vec_new]
+            out['same_24'] += vec_old == vec_new
+            out['found_nothing'] += not six_new or not vec_new
+            if [i for i, _ in vec_old] == [i for i, _ in vec_new]:
+                out['score_max_diff'] = max([out['score_max_diff'], *(
+                    abs(a - b) for (_, a), (_, b) in zip(vec_old, vec_new) if a is not None and b is not None)])
+    finally:
+        old.close()
+        new.close()
+    pct = lambda values, q: round(statistics.quantiles(values, n=20)[q], 1) if len(values) > 1 else (
+        round(values[0], 1) if values else None)
+    out.update({'ms_old_p50': pct(times['old'], 9), 'ms_old_p95': pct(times['old'], 18),
+                'ms_new_p50': pct(times['new'], 9), 'ms_new_p95': pct(times['new'], 18),
+                'differing': out['queries'] - out['same_six'] + out['queries'] - out['same_24']})
+    return out
+
+
 def sizes(db, collection, max_ms, timings=None):
     """The records of 512 KiB or more by their BSON size, and of those the ones whose BSON and JSON sizes (the
     in-memory adapter's measure) fall on different sides of the store's 1 MiB limit; read part by part like the
@@ -1805,6 +2325,15 @@ def check(batch, settings, database, out, max_ms):
             failing, accepted = slowdowns(batch, report['reads'])
             report['slowdowns'] = {'failing': failing, 'accepted': accepted,
                                    'rule': 'new p50 > %g x old and > %g ms above it' % (SLOWER, SLOWER_MS)}
+        if batch == 'b7':
+            from asuna.store import Checked
+            proof = report['search'] = search_proof(Checked(MongoAdapter(client, database), CATALOG),
+                                                    client.get_database(database), settings, max_ms)
+            if slower(proof.get('ms_old_p50'), proof.get('ms_new_p50')):
+                report['slowdowns']['failing'].append(('retrieval search, whole', proof['ms_old_p50'],
+                                                       proof['ms_new_p50'], None))
+            if not proof['queries']:
+                unchecked.append('retrieval search, whole: ' + proof.get('why', 'no query'))
     except ExecutionTimeout:
         print('UNCHECKED, a read case over the time limit')
         return 2
@@ -1878,7 +2407,8 @@ def check(batch, settings, database, out, max_ms):
     if 'slowdowns' in report:
         print('timing gate (%s):' % report['slowdowns']['rule'])
         for name, old, new, plan in report['slowdowns']['failing']:
-            first, again = report['reads'][name], report['reads'][name].get('confirm') or {}
+            first = report['reads'].get(name) or report.get('search') or {}
+            again = first.get('confirm') or {}
             print('SLOWER, fails the run: %s: old p50 %s ms, new p50 %s ms (%s), new plan %s'
                   % (name, old, new, 'timed again %d runs; first old %s, new %s' % (
                       again['runs'], first['ms_old_p50'], first['ms_new_p50']) if again.get('runs')
@@ -1901,6 +2431,14 @@ def check(batch, settings, database, out, max_ms):
                      entry['family'], family.get('ms_old_p50'), family.get('ms_new_p50')))
         if not report['slowdowns']['failing']:
             print('timing gate: no read case slower past the threshold')
+    if report.get('search', {}).get('queries'):
+        q = report['search']
+        print('retrieval search, whole, old against new: queries %d in %d conversations; the same final six %d '
+              '(as sets %d), the same 24 vector candidates %d (ids in order %d), score max difference %g; found '
+              'nothing %d; ms old p50 %s p95 %s, new p50 %s p95 %s; paths old %s, new %s'
+              % (q['queries'], q['conversations'], q['same_six'], q['same_six_set'], q['same_24'], q['same_24_ids'],
+                 q['score_max_diff'], q['found_nothing'], q['ms_old_p50'], q['ms_old_p95'], q['ms_new_p50'],
+                 q['ms_new_p95'], q['paths_old'], q['paths_new']))
     if 'queries' in report:
         q = report['queries']
         print('queries: %d (sampling %d, timed %d = %d samples x %d runs of each side, timed again %d, explain %d)'
@@ -1919,6 +2457,7 @@ def clean(report, totals, validators):
             and set(validators) <= {'same', 'not declared'} and not report['fields_differ']
             and not any((size or {}).get('sides_differ') for size in (report.get('sizes') or {}).values())
             and not (report.get('slowdowns') or {}).get('failing')
+            and not (report.get('search') or {}).get('differing')
             and not any(case['differing'] or (case['plans_differ'] and not case.get('plan_accepted'))
                         for case in (report.get('reads') or {}).values()))
 

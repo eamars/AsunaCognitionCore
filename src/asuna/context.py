@@ -24,6 +24,7 @@ from .records import episodes as episode_records
 from .records import receipts as receipt_records
 from .records import plans as plan_records
 from .records import tasks as task_records
+from .records import memories as memory_records
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -292,8 +293,8 @@ class ContextBuilder:
         """Her last thoughts here, each with when she had it on her clock face: a stamp, not "how long ago", which would
         change the block every turn with nothing new in it."""
         from . import reasons
-        rows=list(self.store.db.memory_units.find({'kind':'monologue','scope_key':scope,'status':'active'},
-            {'body_markdown':1,'formed_at':1,'episode_id':1,'source':1}).sort('formed_at',-1).limit(RECENT_THOUGHTS))
+        rows=memory_records.of_kind(self.store,'monologue',scope=scope,status='active',by='formed_at').rows(
+            newest_first=True,limit=RECENT_THOUGHTS,fields=['body_markdown','formed_at','episode_id','source'])
         out=[]
         for row in reversed(rows):
             when=schedule_rules.line_stamp(zone,row.get('formed_at'))
@@ -474,8 +475,9 @@ class ContextBuilder:
                                    else UNDELIVERED_WORDS.get(row.get('delivery_state'),row.get('delivery_state')))
         tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}
         # Her last few thoughts here reach every turn (recent_thoughts, or still on screen): in view like these lines.
-        tail_sources.update(m['_id'] for m in self.store.db.memory_units.find(
-            {'kind':'monologue','scope_key':scope,'status':'active'},{'_id':1}).sort('formed_at',-1).limit(RECENT_THOUGHTS))
+        tail_sources.update(m['_id'] for m in memory_records.of_kind(
+            self.store,'monologue',scope=scope,status='active',by='formed_at').rows(
+            newest_first=True,limit=RECENT_THOUGHTS,fields=['_id']))
         if source:
             for queued in message_records.inbound(self.store, scene['_id'], from_seq=source['scene_seq'],
                                                   by=None).rows(fields=['platform_event_id']):
@@ -557,10 +559,10 @@ class ContextBuilder:
                         own=[*own,_cue]
                         memories=memories[:memory_tiers.SLOTS-len(own)]
         else:
-            readable=[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}]
+            readable=[('global-safe',1),(scope,scene['policy_epoch'])]
             if session_class==visibility.OWNER_PRIVATE:
-                readable.append({'scope_key':visibility.owner_private_scope(persona),'policy_epoch':1})
-            memories=list(self.store.db.memory_units.find({'$or':readable,'status':'active'},{'embedding':0}).sort('_id',1).limit(6))
+                readable.append((visibility.owner_private_scope(persona),1))
+            memories=memory_records.readable(self.store,readable,by='_id').rows(limit=6,fields=memory_records.UNVECTORED)
             retrieval_manifest={'path':'scoped_recent_development_fallback','vector_verified':False}
         # scope_key 一起给出：联动场景召回的记忆要说得清是从哪个场景来的，不然「他说过」会没头没尾。
         facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','kind','source_event_ids','source_window','generated_at','status','historical_sources','speaker','scene_seq','occurred_at','scope_key','segment_index','segment_count','participants','source_by_speaker','attribution','corrected_by','entry_type','invented') if k in m} for m in memories]
@@ -657,8 +659,8 @@ class ContextBuilder:
         in_view=(retrieval_manifest.get('in_view') or []) if recall else []
         held_back=None
         if in_view:
-            said=sorted(filter(None,(self.said_at(u) for u in self.store.db.memory_units.find(
-                {'_id':{'$in':in_view}},{'kind':1,'scene_seq':1,'source_window':1,'scope_key':1,'occurred_at':1,'formed_at':1,'generated_at':1}))))
+            said=sorted(filter(None,(self.said_at(u) for u in memory_records.many(self.store,in_view).each(
+                fields=['kind','scene_seq','source_window','scope_key','occurred_at','formed_at','generated_at']))))
             earliest=schedule_rules.line_stamp(memory_zone,said[0]) if said else ''
             held_back='另有 %d 条相关的没重复给：都在你眼前这段对话里%s。'%(len(in_view),'（最早是 %s 那条）'%earliest if earliest else '')
         coverage_block=None

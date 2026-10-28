@@ -10,6 +10,7 @@ from .records import episodes as episode_records
 from .records import sessions as session_records
 from .records import receipts as receipt_records
 from .records import tasks as task_records
+from .records import memories as memory_records
 
 
 class PrivacyService:
@@ -17,7 +18,7 @@ class PrivacyService:
 
     def delete_memory(self,key,*,operator=False,active_lanes=()):
         if not operator:raise Denied('OPERATOR_ERASURE_REQUIRED')
-        db=self.store.db;memory=db.memory_units.find_one({'_id':key})
+        memory=memory_records.get(self.store,key)
         if not memory:raise ValueError('MEMORY_NOT_FOUND')
         scope=memory['scope_key']
         if scope=='global-safe':raise Denied('GLOBAL_ERASURE_REQUIRES_ALL_SCENE_MIGRATION')
@@ -33,7 +34,7 @@ class PrivacyService:
         from .understanding import PERSON_SCOPE
         db=self.store.db
         def tainted(rev):
-            return any((db.memory_units.find_one({'_id':source},{'scope_key':1}) or {}).get('scope_key')==scope
+            return any((memory_records.get(self.store,source,['scope_key']) or {}).get('scope_key')==scope
                        for source in rev.get('source_ids',[]))
         for head in db.state_heads.find({'scope_key':PERSON_SCOPE}):
             chain=[];rev=db.state_revisions.find_one({'_id':head['revision_id']})
@@ -60,7 +61,7 @@ class PrivacyService:
         sources=set(memory.get('source_event_ids',[]))|{key}
         affected={key}
         for _ in range(32):
-            rows=list(db.memory_units.find({'scope_key':scope,'$or':[{'depends_on':{'$in':list(sources)}},{'source_event_ids':{'$in':list(sources)}}]}))
+            rows=memory_records.dependents(self.store,scope,list(sources)).rows()
             new={m['_id'] for m in rows}-affected
             if not new:break
             affected|=new;sources|=new
@@ -88,11 +89,11 @@ class PrivacyService:
             session_records.invalidate(self.store,session['_id'],deletion)
         ep_ids={e['_id'] for e in episode_records.of_scope(self.store,scope,fields=['_id'])}
         task_ids={t['_id'] for t in task_records.of_scope(self.store,scope,fields=['_id'])}
-        for mem in db.memory_units.find({'scope_key':scope}):
+        for mem in memory_records.of_scope(self.store,scope).each():
             derived=mem.get('kind') in ('monologue','chat_chunk') and mem.get('episode_id') in ep_ids
             if mem['_id'] in affected or derived or mem.get('kind')=='chat_chunk':
-                db.memory_units.replace_one({'_id':mem['_id']},{'_id':mem['_id'],'schema_version':1,'revision':mem['revision']+1,'scope_key':scope,'status':'tombstone','deletion_id':deletion,'body_markdown':'','source_event_ids':[],'policy_epoch':scene['policy_epoch']+1})
-            else:db.memory_units.update_one({'_id':mem['_id']},{'$set':{'policy_epoch':scene['policy_epoch']+1}})
+                memory_records.tombstone(self.store,mem,deletion,scene['policy_epoch']+1)
+            else:memory_records.set_epoch(self.store,mem['_id'],scene['policy_epoch']+1)
         for collection in ('episodes','tasks','messages','artifacts','sink_receipts'):
             for doc in db[collection].find({'scope_key':scope}):
                 # A stored file or picture whose bytes erase_scope deleted keeps its row as marked (ADR-105: its name,

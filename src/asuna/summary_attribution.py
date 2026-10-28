@@ -20,10 +20,12 @@ try:                                  # 宿主按包加载
     from .discussion_digest import CORRECTION_CUES, SELF_REFERENCE_CUES, _first_cue
     from .state import Conflict, now
     from .records import messages as message_records
+    from .records import memories as memory_records
 except Exception:                     # 同目录平铺加载（离线自检）也认
     from discussion_digest import CORRECTION_CUES, SELF_REFERENCE_CUES, _first_cue
     from state import Conflict, now
     from asuna.records import messages as message_records
+    from asuna.records import memories as memory_records
 
 SNIPPET = 120            # 条目里只带显示片段，全文仍按 source_event_ids 回读
 MAX_CORRECTIONS = 8      # 一条摘要上最多带几条更正标注
@@ -127,7 +129,7 @@ def annotate_corrected(store, scene, items, current_key):
         prior = (row or {}).get('summary_batch_id')
         if not prior or prior == current_key:
             continue
-        unit = store.db.memory_units.find_one({'_id': prior})
+        unit = memory_records.get(store, prior)
         if not unit or unit.get('kind') not in CORRECTABLE_KINDS or unit.get('status') != 'active':
             continue
         before = list(unit.get('corrected_by') or [])
@@ -135,8 +137,8 @@ def annotate_corrected(store, scene, items, current_key):
         if marks == before:
             continue
         try:
-            store.put('memory_units', {**unit, 'corrected_by': marks, 'corrected_at': now()},
-                      expected=unit['revision'], stream=prior)
+            memory_records.save(store, {**unit, 'corrected_by': marks, 'corrected_at': now()},
+                                expected=unit['revision'], stream=prior)
         except Conflict:
             continue            # 有人同时在动这条：下一轮还会看见这条更正，不硬来
         applied.append({'unit': prior, 'by': item.get('message_id'), 'actor': item.get('actor'),

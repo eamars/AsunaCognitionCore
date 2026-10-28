@@ -13,6 +13,7 @@ from .queue import database_effects_lock
 from .records import messages as message_records
 from . import summary_attribution
 from .records import scenes as scene_records
+from .records import memories as memory_records
 
 try:                                  # 跨场景只读联动（A2）：关系记录落在哪一份由配置决定
     from . import scene_links
@@ -149,15 +150,14 @@ class MemoryService:
         """
         monologue=list(episode['monologue_refs'])
         for key in monologue:
-            if not self.store.db.memory_units.find_one({'_id':key,'episode_id':episode['_id'],
-                    'scope_key':scope,'policy_epoch':episode['policy_epoch'],'status':'active'}):
+            if not memory_records.get(self.store,key,episode=episode['_id'],scope=scope,
+                    epoch=episode['policy_epoch'],status='active'):
                 raise Denied('UNDERSTANDING_SOURCE_NOT_CURRENT: 这回合的心里话没对上这个对话（不是你的错）；重试也一样，下回合再更新')
         auto,skipped,stale=[],[],[]
         for key in episode.get('manifest',{}).get('selected',[]):
             if key in monologue:continue
-            unit=self.store.db.memory_units.find_one({'_id':key,'scope_key':scope,
-                    'policy_epoch':episode['policy_epoch'],'status':'active',
-                    'kind':{'$in':list(self.UNDERSTANDING_AUTO_SOURCES)}})
+            unit=memory_records.get(self.store,key,scope=scope,epoch=episode['policy_epoch'],status='active',
+                    kinds=self.UNDERSTANDING_AUTO_SOURCES)
             if not unit:continue
             covers,why=summary_attribution.covers_person(self.store,unit,person_id or episode['person_id'])
             if not covers:
@@ -168,7 +168,7 @@ class MemoryService:
             # ADR-099: a turn with no thought (the model did not think) takes the line she answers, made on demand.
             self.chunk(episode['scene_id'])
             key='chunk-'+sha(canonical(['in-'+episode['_id'],2,0]))
-            if self.store.db.memory_units.find_one({'_id':key,'scope_key':scope,'status':'active'},{'_id':1}):
+            if memory_records.get(self.store,key,['_id'],scope=scope,status='active'):
                 auto.append(key)
         if not monologue and not auto:
             raise Denied('UNDERSTANDING_NO_SOURCE: 这回合没有能挂上的来源（没有想法的记录，也没有这里的人说的话）；下回合再更新')
@@ -196,7 +196,7 @@ class MemoryService:
             if not target or target.get('status')=='tombstone' or target.get('deletion_id') or target['scope_key']!=scope:
                 raise Denied('ROLLBACK_TARGET_NOT_ACTIVE_ANCESTOR')
             for source in target.get('source_ids',[]):
-                memory=self.store.db.memory_units.find_one({'_id':source})
+                memory=memory_records.get(self.store,source)
                 if not memory or memory.get('status')=='tombstone' or memory['scope_key'] not in ('global-safe',scope):raise Denied('ROLLBACK_SOURCE_INVALIDATED')
             value={'_id':sha(canonical([operation,entity,scope])),'mutation_id':operation,'entity_key':head['_id'],'scope_key':scope,
                 'content':copy.deepcopy(target['content']),'source_ids':target.get('source_ids',[]),'processed_source_ids':current.get('processed_source_ids',[]),
@@ -222,8 +222,8 @@ class MemoryService:
             if part:parts.append(part)
             for index,body in enumerate(parts):
                 key='chunk-'+sha(canonical([row['_id'],2,index]))
-                if self.store.db.memory_units.find_one({'_id':key}):continue
-                made.append(self.store.put('memory_units',{'_id':key,'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],
+                if memory_records.get(self.store,key):continue
+                made.append(memory_records.save(self.store,{'_id':key,'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],
                     'character_id':character_id(self.store.config),'kind':'chat_chunk','body_markdown':body,
                     'epistemic_type':'reported_speech' if row['direction']=='inbound' else 'public_statement',
                     'speaker':row['author'],'scene_seq':row['scene_seq'],'occurred_at':row.get('occurred_at',row.get('received_at')),

@@ -19,6 +19,7 @@ from .peer_context import speaker_name
 from .records import scenes as scene_records
 from .records import episodes as episode_records
 from .records import sessions as session_records
+from .records import memories as memory_records
 
 DOCUMENT_KINDS = ('persona', 'voice', 'ledger', 'working')
 # The two scopes of the tab: what is the same in every conversation, and what this conversation reads.
@@ -144,9 +145,9 @@ class NativeMemory:
         self.heads = {f'{kind}:{persona}|global-safe': ('self', label('title.' + kind)) for kind in (
             'character_core', 'current_self')}
         # Operator view: owner-private imported entries are listed too, each with its scope label.
-        self.unit_query = {'status': 'active', 'character_id': character_id(self.store.config),
-                           '$or': self.scopes + [{'scope_key': 'global-safe', 'policy_epoch': 1},
-                                                 {'scope_key': 'owner-private:' + persona, 'policy_epoch': 1}]}
+        self.character = character_id(self.store.config)
+        self.unit_pairs = [(row['scope_key'], row['policy_epoch']) for row in self.scopes] + [
+            ('global-safe', 1), ('owner-private:' + persona, 1)]
         self.cognition = CognitionView(self)
 
     def scene_title(self, scene_id):
@@ -452,21 +453,16 @@ class NativeMemory:
                     text = row.pop('text', None)
                     row['excerpt'] = (text if isinstance(text, str) else '')[:200]
             else:
-                query = dict(self.unit_query)
-                if kind == 'summary':
-                    query['epistemic_type'] = 'derived_summary'
-                elif kind == 'interpretation':
-                    query['epistemic_type'] = 'character_interpretation'
-                if search:
-                    query = {'$and': [query, {'body_markdown': {'$regex': re.escape(search), '$options': 'i'}}]}
-                projection = {'scope_key': 1, 'scene_id': 1, 'author': 1, 'speaker': 1, 'kind': 1,
-                    'event.raw.asuna_peer': 1, 'epistemic_type': 1, 'generated_at': 1, 'occurred_at': 1,
-                    '_memory_time': 1, 'excerpt': {'$substrCP': [{'$ifNull': ['$body_markdown', '']}, 0, 200]}}
                 # Every memory carries its own time: a summary when it was made, a thought when she formed it.
-                result = self.store.db.memory_units.aggregate([{'$match': query}, {'$addFields': {
-                    '_memory_time': {'$ifNull': ['$generated_at', '$occurred_at', '$formed_at']}}},
-                    {'$sort': {'_memory_time': -1, '_id': -1}},
-                    {'$skip': skipped}, {'$limit': self.PAGE + 1 + len(heads)}, {'$project': projection}])
+                result = memory_records.web_page(
+                    self.store, self.unit_pairs, self.character,
+                    epistemic='derived_summary' if kind == 'summary' else 'character_interpretation',
+                    search=search or None, skip=skipped, limit=self.PAGE + 1 + len(heads),
+                    fields=['scope_key', 'scene_id', 'author', 'speaker', 'kind', 'event.raw.asuna_peer',
+                            'epistemic_type', 'body_markdown'])
+                for row in result:
+                    body = row.pop('body_markdown', None)
+                    row['excerpt'] = (body if isinstance(body, str) else '')[:200]
             for row in result:
                 source = row.get('scene_id') or row.get('scope_key', '').removeprefix('scene:')
                 rows.append({'id': ('source:' if messages else 'unit:') + row['_id'],
@@ -589,7 +585,8 @@ class NativeMemory:
                 result = {'id': identifier, 'body': label('hint.' + self.heads[key][0]),
                           'category': self.heads[key][0], 'status': 'empty', 'source_ids': []}
         elif kind == 'unit':
-            row = self.store.db.memory_units.find_one({**self.unit_query, '_id': key}, {'embedding': 0})
+            row = memory_records.get(self.store, key, memory_records.UNVECTORED, pairs=self.unit_pairs,
+                                     character=self.character, status='active')
             if row:
                 result = {'id': identifier, 'body': row.get('body_markdown', ''),
                           'category': row.get('epistemic_type') or 'other',
@@ -637,9 +634,9 @@ class NativeMemory:
             limit=12, fields=['text', 'author', 'scene_id', 'occurred_at', 'event.raw.asuna_peer'])
         # Self/relationship revisions can cite interpretation or summary units,
         # not only original messages. Keep the source type and the same scope.
-        for source in self.store.db.memory_units.find({**self.unit_query, '_id': {'$in': ids}},
-                {'body_markdown': 1, 'speaker': 1, 'scope_key': 1, 'generated_at': 1,
-                 'occurred_at': 1, 'epistemic_type': 1}).limit(12):
+        for source in memory_records.many(self.store, ids, pairs=self.unit_pairs, character=self.character,
+                                          status='active').rows(limit=12, fields=[
+                'body_markdown', 'speaker', 'scope_key', 'generated_at', 'occurred_at', 'epistemic_type']):
             result['sources'].append({'_id': source['_id'], 'text': source.get('body_markdown', ''),
                 'author': source.get('speaker'), 'scene_id': source.get('scope_key', '').removeprefix('scene:'),
                 'occurred_at': source.get('generated_at') or source.get('occurred_at'),

@@ -49,6 +49,6 @@ def test_a_turn_lacking_a_unique_index_field_is_refused_on_mongodb(episodes, fie
     with pytest.raises(RecordInvalid) as caught:
         rows.insert({key: value for key, value in whole.items() if key != field} | {'_id': 'lacking'})
     assert str(caught.value).startswith('RECORD_REQUIRED')
-    assert adapter.db['episodes'].count_documents({}) == 0, 'nothing reached the server'
+    assert rows.count() == 0, 'nothing reached the server'
     rows.insert(whole)
     assert rows.get('whole')[field] == whole[field]

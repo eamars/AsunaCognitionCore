@@ -14,6 +14,7 @@ result, a reply to her line, the night block (`for_call`, `for_message`). One ta
 from __future__ import annotations
 
 from .records import episodes as episode_records
+from .records import memories as memory_records
 
 SAID_CHARS = 40
 THOUGHT_CHARS = 400        # a thought is at most 360 characters; longer old ones keep the excerpt mark
@@ -195,7 +196,7 @@ def reason_of(episode, call_id):
 
 def thought(store, ref):
     """Her thought as she wrote it (the excerpt mark if ever cut), or one from the model's thinking as `shown`; None."""
-    unit = store.db.memory_units.find_one({'_id': ref, 'kind': 'monologue'}, {'body_markdown': 1, 'source': 1}) if ref else None
+    unit = memory_records.get(store, ref, ['body_markdown', 'source'], kind='monologue') if ref else None
     return shown(unit)
 
 

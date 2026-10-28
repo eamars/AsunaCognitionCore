@@ -27,7 +27,8 @@ from .adapters import Ensured, Size, Updated
 from .catalog import ID
 from .errors import BlobMissing, DuplicateKey, RecordInvalid, SchemaConflict, Unavailable
 from .words import (AddToSet, And, AnyOf, Contains, Count, Each, Exists, Holds, HoldsAny, Increase, IsNull, Larger,
-                    Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Push, Range, Set, Smaller, StartsWith, Unset)
+                    Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Push, Range, Set, Smaller, StartsWith, Unset,
+                    Without)
 
 KIND = 'mongodb'
 SECRETS = ('mongo_uri',)
@@ -82,6 +83,15 @@ def _now(seconds):
 
 def _prefix(prefix):
     return Regex('^' + re.escape(prefix))
+
+
+def projection(fields):
+    """A read's checked `fields` as a MongoDB projection: the paths to return, or those to leave out (`Without`)."""
+    if not fields:
+        return None
+    if isinstance(fields, Without):
+        return {path: 0 for path in fields.paths}
+    return {path: 1 for path in fields}
 
 
 def query(where):
@@ -405,10 +415,10 @@ class MongoAdapter:
 
     def get(self, coll, id, fields=None):
         with _Guard(coll):
-            return self.db[coll].find_one({ID.path: id}, {path: 1 for path in fields} if fields else None)
+            return self.db[coll].find_one({ID.path: id}, projection(fields))
 
     def find(self, coll, where, sort=(), skip=0, limit=None, fields=None):
-        cursor = self.db[coll].find(query(where), {path: 1 for path in fields} if fields else None,
+        cursor = self.db[coll].find(query(where), projection(fields),
                                     sort=list(sort) or None, skip=skip, limit=limit or 0)
         with _Guard(coll):
             yield from cursor

@@ -64,3 +64,13 @@ def test_every_accepted_or_watched_entry_says_why_and_when_it_is_looked_at_again
     for batch in check.ACCEPTED_SLOWDOWNS.values():
         assert all({'old_ms', 'new_ms', 'reason', 'recheck'} <= set(entry) for entry in batch.values())
     assert check.WATCHED['b4']['who wrote in these']['family'] == 'who wrote here'
+
+
+def test_the_run_is_not_clean_while_the_whole_search_differs(check):
+    """B7's own proof: a search whose final six or 24 vector candidates differ, old against new, fails the run."""
+    totals, validators = {'create': 0, 'make': 0, 'conflicts': 0}, {'same': 1}
+    report = {'fields_differ': [], 'reads': {}, 'slowdowns': {'failing': [], 'accepted': []},
+              'search': {'queries': 40, 'differing': 1}}
+    assert not check.clean(report, totals, validators)
+    report['search']['differing'] = 0
+    assert check.clean(report, totals, validators)

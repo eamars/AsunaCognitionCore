@@ -18,6 +18,7 @@ The read-only check of one ADR-104 batch against a deployment's database, before
 - def `slower` — Whether a new p50 is past the timing gate: more than SLOWER times the old and more than SLOWER_MS above it.
 - def `slowdowns` — (failing, accepted): the read cases past the timing gate (`slower`), by their confirmation's p50s when they were timed again (`confirm`), each (name, old p50, new p50, new plan); those the lead accepted (ACCEPTED_SLOWDOWNS) apart.
 - def `reads` — Each case's numbers: n, same, differing, plan stages and times, old against new; none are ids.
+- def `search_proof` — B7's own proof: retrieval's whole search old (its memory reads as pymongo) against new (through the owner) on QUERIES_SEARCH queries chosen as step 1a chose them: her (scope, epoch) pairs with the most alive embedded memories of hers, globa
 - def `sizes` — The records of 512 KiB or more by their BSON size, and of those the ones whose BSON and JSON sizes (the in-memory adapter's measure) fall on different sides of the store's 1 MiB limit; read part by part like the kinds.
 - def `check`
 - def `clean` — Whether a checked run found nothing: no collection to create, no index to make, no conflict, every validator the one ensure creates, every declared field holding only its kind, no record on different sides of 1 MiB, no read case slower past

@@ -19,6 +19,7 @@ from .evidence import canonical, sha
 from .state import Conflict, Denied, now
 from . import visibility
 from .records import scenes as scene_records
+from .records import memories as memory_records
 
 WRITE_METHODS = ('documents.upsert', 'documents.append', 'affect.import', 'memory.upsert', 'policy.set',
                  'artifacts.snapshot', 'report.put')
@@ -204,7 +205,7 @@ class PersonaDataAPI:
                    'source_identity': unit['source_identity'], 'source_event_ids': [], 'depends_on': [],
                    'status': 'active', 'embedding_status': 'PENDING', 'content_sha256': sha(canonical([body, unit.get('source_window'),
                                                                                                      bool(unit.get('invented')), vis]))}
-            existing = self.store.db.memory_units.find_one({'_id': doc['_id']})
+            existing = memory_records.get(self.store, doc['_id'])
             if existing and existing.get('content_sha256') == doc['content_sha256']:
                 report['unchanged'] += 1
                 continue
@@ -213,9 +214,9 @@ class PersonaDataAPI:
             if args.get('dry_run'):
                 continue
             if existing:
-                self.store.put('memory_units', {**existing, **doc}, expected=existing['revision'], stream='persona-data:' + origin)
+                memory_records.save(self.store, {**existing, **doc}, expected=existing['revision'], stream='persona-data:' + origin)
             else:
-                self.store.put('memory_units', doc, stream='persona-data:' + origin)
+                memory_records.save(self.store, doc, stream='persona-data:' + origin)
         return report
 
     def policy_set(self, args):

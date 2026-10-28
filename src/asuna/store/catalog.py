@@ -313,14 +313,20 @@ CATALOG = Catalog([
         Field('policy_epoch', 'number', nullable=True)),
         (index(('scene_id', 1), ('person_id', 1), ('status', 1)),),
         versioned=True),
-    _core('memory_units', 'records.memories',
-          index(('scope_key', 1), ('status', 1), ('policy_epoch', 1)),
-          index(('scope_key', 1), ('origin', 1), ('source_identity', 1), unique=True,
-                only_where_present=('source_identity',)),
-          fields=(Field('embedding', 'vector', dimensions=768, nullable=True),
-                  Field('policy_epoch', 'number', nullable=True),
-                  *_text('source_identity', 'scope_key', 'character_id', 'status', 'embedding_revision', 'kind')),
-          counters=('salience',), derived=('embedding',)),
+    # A memory (records/memories.py): the fields its owner names; the rest is stored and returned as written. Its
+    # times are ISO text, as the core writes them; its embedding is the vector space's.
+    Collection('memory_units', 'records.memories', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('scope_key', 'character_id', 'status', 'kind', 'source', 'episode_id', 'epistemic_type', 'body_markdown',
+               'embedding_status', 'embedding_revision', 'origin', 'source_identity', 'generated_at', 'occurred_at',
+               'formed_at'),
+        Field('policy_epoch', 'number', nullable=True),
+        *(Field(path, 'list', of='text', nullable=True) for path in ('source_event_ids', 'depends_on')),
+        Field('embedding', 'vector', dimensions=768, nullable=True)),
+        (index(('scope_key', 1), ('status', 1), ('policy_epoch', 1)),
+         index(('scope_key', 1), ('origin', 1), ('source_identity', 1), unique=True,
+               only_where_present=('source_identity',))),
+        versioned=True, counters=('salience',), derived=('embedding',)),
     _core('state_heads', 'records.heads'),
     _core('state_revisions', 'records.heads', index(('mutation_id', 1), unique=True)),
     # A native session's binding (records/sessions.py): the fields its owner names; the rest is stored as written.

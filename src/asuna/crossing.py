@@ -47,6 +47,7 @@ from .config import DATA, character_id, excerpt
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
+from .records import memories as memory_records
 
 RULES = ('all', 'own_lines', 'never')
 DEFAULT = 'own_lines'
@@ -197,11 +198,10 @@ def elsewhere(store, persona, here, query, zone):
     me = character_id(store.config)
     wanted = [unit for unit, scope, hers in lines_for(store, words)
               if scope in sources and (hers or sources[scope][1] == 'all')]
-    epochs = [{'scope_key': key, 'policy_epoch': scene.get('policy_epoch', 1)} for key, (scene, _) in sources.items()]
-    rows = list(store.db.memory_units.find({'_id': {'$in': wanted}, 'kind': 'chat_chunk', 'status': 'active',
-                                            'character_id': me, '$or': epochs},
-                                           {'body_markdown': 1, 'scope_key': 1, 'policy_epoch': 1, 'epistemic_type': 1,
-                                            'occurred_at': 1, 'source_event_ids': 1})) if wanted else []
+    epochs = [(key, scene.get('policy_epoch', 1)) for key, (scene, _) in sources.items()]
+    rows = memory_records.many(store, wanted, pairs=epochs, character=me, kind='chat_chunk', status='active').rows(
+        fields=['body_markdown', 'scope_key', 'policy_epoch', 'epistemic_type', 'occurred_at', 'source_event_ids']
+    ) if wanted else []
     rows = [unit for unit in rows if any(key_words.found(word, unit.get('body_markdown') or '') for word in words)]
     said = _said_at(store, rows)
     picked, seen = [], set()
@@ -288,11 +288,9 @@ def build(store, moment=None):
     from .state import now
     vocabulary(store)
     groups = _groups(store)
-    rows = list(store.db.memory_units.find({'kind': 'chat_chunk', 'status': 'active',
-                                            'character_id': character_id(store.config),
-                                            'scope_key': {'$in': [s['scope_key'] for s in groups.values()]}},
-                                           {'body_markdown': 1, 'scope_key': 1, 'epistemic_type': 1, 'occurred_at': 1,
-                                            'source_event_ids': 1}))
+    rows = memory_records.of_kind(store, 'chat_chunk', scopes=[s['scope_key'] for s in groups.values()],
+                                  character=character_id(store.config), status='active').rows(
+        fields=['body_markdown', 'scope_key', 'epistemic_type', 'occurred_at', 'source_event_ids'])
     times = _said_at(store, [unit for unit in rows if not unit.get('occurred_at')])
     scenes = {scene['scope_key']: scene_id for scene_id, scene in groups.items()}
     counts = Counter(word for unit in rows for word in key_words.cross_words(
@@ -355,10 +353,8 @@ def top_up(store):
         if upto != seqs.get(scene_id, 0):
             reached[scene_id] = upto
         if ids:
-            units += list(store.db.memory_units.find({'_id': {'$in': ids}, 'kind': 'chat_chunk', 'status': 'active',
-                                                      'character_id': me},
-                                                     {'body_markdown': 1, 'scope_key': 1, 'epistemic_type': 1,
-                                                      'occurred_at': 1, 'source_event_ids': 1}))
+            units += memory_records.many(store, ids, character=me, kind='chat_chunk', status='active').rows(
+                fields=['body_markdown', 'scope_key', 'epistemic_type', 'occurred_at', 'source_event_ids'])
     generation = mark['generation']
     since = _since()
     added = _postings(units, groups, _said_at(store, [u for u in units if not u.get('occurred_at')]), since)
@@ -421,8 +417,8 @@ def fetch(store, here, ref, zone):
     """recall sections {doc: elsewhere, section: ref}: the lines around one line of another group, the place rule
     checked again now, speakers as 你 or 别人. (section, None), or (None, why in words)."""
     from .visibility import is_owner_private_scope
-    unit = store.db.memory_units.find_one({'_id': ref, 'kind': 'chat_chunk', 'status': 'active'},
-                                          {'scope_key': 1, 'policy_epoch': 1, 'source_event_ids': 1, 'occurred_at': 1})
+    unit = memory_records.get(store, ref, ['scope_key', 'policy_epoch', 'source_event_ids', 'occurred_at'],
+                              kind='chat_chunk', status='active')
     scene = scene_records.by_scope(store, unit['scope_key'], kind='group',
                                   fields=['scope_key', 'policy_epoch']) if unit else None
     if not scene or is_owner_private_scope(scene.get('scope_key') or '') \

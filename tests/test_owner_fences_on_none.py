@@ -109,3 +109,22 @@ def test_plans_a_fence_of_none_reads_nothing_and_an_outcome_or_a_status_of_none_
     assert plan_records.of_conversation(store, 'g', epoch=None).rows() == []
     assert plan_records.with_outcome(store, None, ['settlement'], None).rows() == []
     assert asked == []
+
+
+def test_memories_a_fence_of_none_reads_nothing_and_a_kind_or_a_status_of_none_is_a_memory_without_one(store):
+    from asuna.records import memories as memory_records
+    memory_records.save(store, {'_id': 'mem-x', 'scope_key': 'scene:none', 'policy_epoch': 1, 'character_id': 'demo',
+                                'episode_id': 'ep-x'}, stream='mem-x')               # no `kind`, no `status`
+    assert [row['_id'] for row in memory_records.of_kind(store, None, scope='scene:none').rows()] == ['mem-x']
+    assert memory_records.get(store, 'mem-x', status=None, kind=None)['_id'] == 'mem-x'
+    assert memory_records.get(store, 'mem-x', pairs=[('scene:none', 1)])['_id'] == 'mem-x'
+    asked = counted(store)
+    assert memory_records.get(store, 'mem-x', scope=None) is None and memory_records.get(store, 'mem-x', epoch=None) is None
+    assert memory_records.get(store, 'mem-x', episode=None) is None and memory_records.get(store, None) is None
+    assert memory_records.get(store, 'mem-x', pairs=[('scene:none', None)]) is None
+    assert memory_records.readable(store, [(None, 1)]).rows() == [] and memory_records.of_scope(store, None).rows() == []
+    assert memory_records.summary_of(store, 'line', scope='scene:none', epoch=None) is None
+    assert memory_records.many(store, ['mem-x'], character=None).rows() == []
+    assert memory_records.pending_index(store, 'route-x', scope='scene:none', epoch=None).rows() == []
+    assert memory_records.dependents(store, None, ['line']).rows() == []
+    assert asked == []

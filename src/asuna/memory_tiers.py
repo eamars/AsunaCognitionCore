@@ -30,6 +30,7 @@ from .memory_pilot import FLOOR, OWN_SLOTS, SLOTS   # her own items: two of a tu
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
+from .records import memories as memory_records
 
 TIERS_VERSION = 1
 ENABLED = True                     # the switch (ADR-062 phase 2): hers and the owner's to turn on
@@ -858,8 +859,8 @@ def recalled(store, window_days, moment=None):
 def candidates(store, window_days, limit=20):
     """promotion_candidates with tiered memory on: what she recalled in different conversations."""
     picked = recalled(store, window_days)
-    rows = {row['_id']: row for row in store.db.memory_units.find({'_id': {'$in': list(picked)}, 'status': 'active'},
-                                                                 {'body_markdown': 1, 'kind': 1})}
+    rows = {row['_id']: row for row in memory_records.many(store, list(picked), status='active').each(
+        fields=['body_markdown', 'kind'])}
     return [{'memory_id': key, 'kind': rows[key].get('kind'), 'excerpt': rows[key].get('body_markdown', '')[:300],
              'episodes': episodes} for key, episodes in sorted(picked.items(), key=lambda kv: (-len(kv[1]), kv[0]))
             if key in rows][:limit]

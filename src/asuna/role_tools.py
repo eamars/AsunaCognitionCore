@@ -35,6 +35,7 @@ from .context_budget import SINGLE_BODY_CHARS
 from .records import episodes as episode_records
 from .records import plans as plan_records
 from .records import tasks as task_records
+from .records import memories as memory_records
 
 THOUGHT_CHARS = 120                  # what she is asked for: her first reaction, short (ADR-087 §4.1)
 THOUGHT_HARD_CHARS = 360             # refused past this; the room up to it is the model's, said in the result
@@ -1569,8 +1570,8 @@ class RoleTools:
             text = written('think', {'thought': excerpt(text, THINKING_STORED_CHARS)})['thought']
             memory_id = 'mono-' + ep['_id'] + ':' + anchor
             home = ep.get('errand') or ep               # an errand's thoughts are kept at home (ADR-066)
-            if not self.store.db.memory_units.find_one({'_id': memory_id}):
-                self.store.put('memory_units', {'_id': memory_id, 'character_id': character_id(self.store.config),
+            if not memory_records.get(self.store, memory_id):
+                memory_records.save(self.store, {'_id': memory_id, 'character_id': character_id(self.store.config),
                     'kind': 'monologue', 'source': 'thinking', 'scope_key': home['scope_key'],
                     'policy_epoch': home['policy_epoch'], 'body_markdown': text,
                     'epistemic_type': 'character_interpretation', 'source_event_ids': [ep['source_event_id']],
@@ -1604,8 +1605,8 @@ class RoleTools:
         from .config import character_id
         memory_id = 'mono-' + ep['_id'] + ':' + call_id
         home = ep.get('errand') or ep               # an errand's thoughts are kept at home (ADR-066)
-        if not self.store.db.memory_units.find_one({'_id': memory_id}):
-            self.store.put('memory_units', {'_id': memory_id, 'character_id': character_id(self.store.config),
+        if not memory_records.get(self.store, memory_id):
+            memory_records.save(self.store, {'_id': memory_id, 'character_id': character_id(self.store.config),
                 'kind': 'monologue', 'scope_key': home['scope_key'], 'policy_epoch': home['policy_epoch'],
                 'body_markdown': thought, 'epistemic_type': 'character_interpretation',
                 'source_event_ids': [ep['source_event_id']], 'depends_on': [ep['source_event_id']],
@@ -3363,7 +3364,7 @@ def _from_home(store, persona, source_ids, episodes):
     """Whether any source of a promotion was said in an owner-private conversation: a source turn's class, or a
     memory unit kept in her home scope."""
     home_scope = visibility.owner_private_scope(persona)
-    if store.db.memory_units.find_one({'_id': {'$in': list(source_ids)}, 'scope_key': home_scope}, {'_id': 1}):
+    if memory_records.many(store, list(source_ids), scope=home_scope).first(fields=['_id']):
         return True
     for row in episode_records.many(store, list(episodes)).rows(fields=['manifest.session_class', 'scene_id',
                                                                          'person_id']):
@@ -3397,7 +3398,7 @@ def promote(store, ep, item, *, key):
     picked = memory_tiers.recalled(store, window) if memory_tiers.ENABLED else selections(store, window)
     episodes = set()
     for source in item['source_ids']:
-        unit = store.db.memory_units.find_one({'_id': source}, {'episode_id': 1})
+        unit = memory_records.get(store, source, ['episode_id'])
         if episode_records.get(store, source, fields=['_id']):
             episodes.add(source)
         elif source.startswith('in-') and episode_records.get(store, source[3:], fields=['_id']):
@@ -3432,8 +3433,8 @@ def promote(store, ep, item, *, key):
            'epistemic_type': 'character_interpretation', 'source_ids': item['source_ids'],
            'source_event_ids': item['source_ids'], 'depends_on': item['source_ids'], 'episode_id': ep['_id'],
            'status': 'active', 'embedding_status': 'PENDING', 'origin': 'asuna', 'why': item['why']}
-    if not store.db.memory_units.find_one({'_id': doc['_id']}):
-        store.put('memory_units', doc, stream=ep['_id'])
+    if not memory_records.get(store, doc['_id']):
+        memory_records.save(store, doc, stream=ep['_id'])
         # ADR-017: what she brought home from other conversations, and why, in her own audited record.
         store.audit(ep['_id'], 'memory.promoted', {'memory_id': doc['_id'], 'scope_key': scope, 'why': item['why'],
                                                    'source_ids': item['source_ids']}, scope)

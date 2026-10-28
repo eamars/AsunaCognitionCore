@@ -189,7 +189,7 @@ The worker's store: every write goes through `Store.put` with an expected revisi
   - `put`
   - `recover_commits`
   - `ensure_vectors` — Create the space's index, or bring an existing one's filter fields up to the space's (the old one keeps serving meanwhile); True once it can be queried, False if it cannot yet after `timeout` seconds.
-  - `nearest` — The k records nearest to `vector` among those matching `where`, best first, as (id, cosine similarity in [-1, 1]); exact, never approximate.
+  - `nearest` — The k records nearest to `vector` among those matching `where` (the store's words: equality, `AnyOf`, `And`, `Or` on the space's filter fields), best first, as (id, cosine similarity in [-1, 1]); exact, never approximate.
   - `get`
   - `identity`
   - `seed` — Test-only synthetic world; persona paths are relative to the fixture file.
@@ -368,13 +368,14 @@ The words the core describes records with: conditions, changes, sorts and totals
 - class `AddToSet` — Adds each value the list does not hold yet; a missing field becomes the list.
 - class `Push` — Appends the values, then keeps the last `keep_last` elements.
 - class `OnCreate` — Sets each path only when the write creates the record.
+- class `Without` — Every field of a record but these paths (`_id` always comes back): a read's `fields` that leaves out a large one no caller of that read uses.
 - class `Count`
 - class `Max`
 - def `to_utc_ms` — An aware time in UTC, truncated to the millisecond (what every adapter stores).
 - def `check_where` — `where` validated against the declared collection; `now`: `Now` may bound a range (update and claim).
 - def `check_vector_where` — A vector search's filter: equality, `AnyOf`, `And` and `Or` on the space's filter fields.
 - def `check_sort` — [(field, 1 | -1)] on declared fields that are not lists, objects or vectors.
-- def `check_fields` — The paths to return (`_id` always comes back); None returns whole records.
+- def `check_fields` — The paths to return (`_id` always comes back), or `Without(paths)` to return all but those; None returns whole records.
 - def `check_page`
 - def `check_group` — (the `by` fields, the total): `by` names declared value fields; the total is `Count()`, `Max(field)` or None.
 - def `record_bytes` — A record's size as canonical JSON (UTF-8).
@@ -494,6 +495,7 @@ The MongoDB adapter: the store's words as MongoDB queries, the catalog's collect
 - def `where` — The server's identity, without credentials: its first host and port.
 - def `databases`
 - def `drop`
+- def `projection` — A read's checked `fields` as a MongoDB projection: the paths to return, or those to leave out (`Without`).
 - def `query` — A validated condition as a MongoDB filter.
 - def `update_of` — A validated change as MongoDB update operators, or as an update pipeline when it holds `Now` (then it holds only `Set` and `Unset`, which the shared layer checks).
 - class `Blobs` — Blobs in the GridFS bucket `artifact_blobs`, their metadata (scope_key, kind, source_ids) as GridFS metadata; an optional `name` in the metadata is the file's name.
@@ -715,3 +717,26 @@ The owner of `plans`: what she and the program scheduled (her plans in a convers
 - def `with_outcome` — View: the plans of these kinds in a conversation whose last outcome was `outcome`.
 - def `count_status` — How many plans are in a status.
 - def `save` — The revisioned write of a whole plan (`Store.put`: `expected`, `stream`, `reset_counters`).
+
+## `records/memories`
+
+[src/asuna/records/memories.py](../../src/asuna/records/memories.py)
+
+The owner of `memory_units`: her recall (the chat chunks of her conversations, their summaries, her thoughts, imported entries) and its vector space, read and written only through these operations.
+
+- def `get` — The memory with this id (in these (scope, epoch) pairs; of this scope, epoch, turn, character; of this kind or one of these; in this status; `erased=False`: not a tombstone), or None.
+- def `summary_of` — The alive summary of a conversation's epoch that covers this line, or None.
+- def `many` — View: the memories with these ids (in these (scope, epoch) pairs; of this scope and character; of this kind; in this status).
+- def `readable` — View: the alive memories in these (scope, epoch) pairs (of this character; of this kind), ordered by `by`.
+- def `of_kind` — View: the memories of a kind (in a scope or one of these; of this character; from this source, as where a thought came from; in this status), ordered by `by`.
+- def `pending_index` — View: the alive memories waiting for their vector (neither READY nor REFUSED), or embedded by another revision than `revision` (of this scope and epoch).
+- def `dependents` — View: the memories of a scope that depend on these sources or cite them.
+- def `of_scope` — View: every memory of a scope.
+- def `alive` — View: every alive memory.
+- def `web_page` — The Web memory page's memories: the alive ones in these (scope, epoch) pairs of this character (of this epistemic type; whose text contains `search`, case-blind), newest first by their own time (OWN_TIME: the first of them a memory holds; t
+- def `save` — The revisioned write of a whole memory (`Store.put`: `expected`, `stream`, `reset_counters`).
+- def `tombstone` — An erasure's tombstone in place of the memory: its id, scope and next revision, no text, no sources, the erasure's id and the conversation's new epoch.
+- def `set_epoch` — Move a memory to an epoch (an erasure keeps what it did not erase readable in the new one).
+- def `touch_salience` — A real turn used the memory: one more reference, and when and at which position of its conversation.
+- def `ensure_vectors` — The space's search index, made or brought up to the space's filter fields; True once it can be queried.
+- def `nearest` — The k memories nearest to `vector` in these (scope, epoch) pairs, of this character, status and embedding revision (of this kind), best first as (id, cosine); exact.

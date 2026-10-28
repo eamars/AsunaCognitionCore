@@ -8,13 +8,13 @@ import re
 import time
 from collections import Counter,OrderedDict
 from .evidence import Evidence, LocalHttp, canonical, sha
-from .state import Space, Store, now
+from .state import Store, now
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import memories as memory_records
 
-# kind: her own thoughts in other conversations are searched apart from their talk (own_thoughts).
-MEMORY = Space(name='asuna_memory_v1', collection='memory_units', path='embedding', dimensions=768,
-               fields=('scope_key', 'character_id', 'status', 'policy_epoch', 'embedding_revision', 'kind'))
+MEMORY = memory_records.SPACE
+UNVECTORED = memory_records.UNVECTORED
 
 
 def terms(text):
@@ -78,9 +78,8 @@ class Retrieval:
         return vectors
 
     def index_pending(self, batch_size=16, *, scope=None, epoch=None, stopping=None):
-        query={'status':'active','$or':[{'embedding_status':{'$nin':['READY','REFUSED']}},{'embedding_revision':{'$ne':self.revision}}]}
-        if scope is not None:query.update(scope_key=scope,policy_epoch=epoch)
-        pending=list(self.store.db.memory_units.find(query))
+        pending=(memory_records.pending_index(self.store,self.revision,scope=scope,epoch=epoch) if scope is not None
+                 else memory_records.pending_index(self.store,self.revision)).rows()
         indexed=0
         for start in range(0,len(pending),batch_size):
             if stopping is not None and stopping.is_set():break
@@ -98,7 +97,7 @@ class Retrieval:
         return indexed
 
     def _ready(self, mem, vector, opening=None):
-        self.store.put('memory_units',{**mem,'embedding':vector,'embedding_revision':self.revision,'embedding_model':self.cfg['model'],
+        memory_records.save(self.store,{**mem,'embedding':vector,'embedding_revision':self.revision,'embedding_model':self.cfg['model'],
             'embedding_dim':self.dim,'embedding_status':'READY','content_sha256':sha(mem['body_markdown'].encode()),
             **({'embedding_opening_chars':opening} if opening else {})},expected=mem['revision'],stream='index')
 
@@ -112,13 +111,13 @@ class Retrieval:
                 continue
             self._ready(mem,vector,opening)
             return 1
-        self.store.put('memory_units',{**mem,'embedding_status':'REFUSED','embedding_revision':self.revision,
+        memory_records.save(self.store,{**mem,'embedding_status':'REFUSED','embedding_revision':self.revision,
             'embedding_model':self.cfg['model']},expected=mem['revision'],stream='index')
         self.store.audit('retrieval','embedding.refused',{'memory_unit':mem['_id'],'chars':len(body)})
         return 0
 
     def ensure_index(self, timeout=45):
-        ready=self.store.ensure_vectors(MEMORY,timeout)
+        ready=memory_records.ensure_vectors(self.store,timeout)
         self.evidence.record('vector.index',{'database':self.store.name,'space':MEMORY.name,'fields':list(MEMORY.fields),'ready':ready})
         return ready
 
@@ -139,9 +138,9 @@ class Retrieval:
         half_messages = float(forgetting.get('half_life_messages') or 0)
         if not ranks or not (half_days or half_messages):
             return set()
-        rows = {row['_id']: row for row in self.store.db.memory_units.find({'_id': {'$in': list(ranks)}}, {
-            'pinned': 1, 'salience': 1, 'occurred_at': 1, 'generated_at': 1, 'formed_at': 1, 'scene_seq': 1,
-            'source_window': 1, 'source_event_ids': 1, 'scope_key': 1, 'kind': 1})}
+        rows = {row['_id']: row for row in memory_records.many(self.store, list(ranks)).each(fields=[
+            'pinned', 'salience', 'occurred_at', 'generated_at', 'formed_at', 'scene_seq', 'source_window',
+            'source_event_ids', 'scope_key', 'kind'])}
         sources = {row['_id']: row for row in message_records.many(
             self.store, [ids[-1] for row in rows.values() for ids in [row.get('source_event_ids') or []] if ids]).rows(
             fields=['scene_seq', 'summary_batch_id'])}
@@ -175,15 +174,15 @@ class Retrieval:
         the talk around them; callers decide where she may read them (at home)."""
         if not scopes:
             return []
-        auth={'$or':[{'scope_key':scope,'policy_epoch':epoch} for scope,epoch in scopes],'kind':'monologue',
-              'character_id':character_id(self.store.config),'status':'active'}
+        me=character_id(self.store.config)
         try:
             v=self.embed([query],'query')[0]
-            vector=self.store.nearest(MEMORY,v,12,{('scope_key','policy_epoch'):list(scopes),'kind':'monologue',
-                'character_id':character_id(self.store.config),'status':'active','embedding_revision':self.revision})
+            vector=memory_records.nearest(self.store,v,12,list(scopes),character=me,revision=self.revision,
+                                          kind='monologue')
         except Exception:
             vector=[]
-        rows=list(self.store.db.memory_units.find(auth,{'embedding':0}).sort([('formed_at',-1),('_id',-1)]).limit(2048))
+        rows=memory_records.readable(self.store,scopes,character=me,kind='monologue',by=('formed_at','_id')).rows(
+            newest_first=True,limit=2048,fields=UNVECTORED)
         qterms=terms(query)
         scored=sorted(((len(qterms & terms(m.get('body_markdown') or '')),m['_id']) for m in rows),reverse=True)
         lexical=[key for hits,key in scored if hits][:12]
@@ -193,7 +192,8 @@ class Retrieval:
                 ranks[key]=ranks.get(key,0)+1/(60+rank)
         out=[]
         for key in sorted(ranks,key=lambda k:(-ranks[k],k)):
-            current=self.store.db.memory_units.find_one({'_id':key,**auth},{'embedding':0})
+            current=memory_records.get(self.store,key,UNVECTORED,pairs=scopes,character=me,kind='monologue',
+                                       status='active')
             if current:
                 out.append(current)
             if len(out)==limit:
@@ -210,19 +210,19 @@ class Retrieval:
             raise ValueError('INVALID_RETRIEVAL_SCOPE')
         readable={scope} | set(linked)
         pairs=[('global-safe',1),(scope,epoch)]+[(item,epoch) for item in linked]+([(private_scope,1)] if private_scope else [])
-        auth={'$or':[{'scope_key':s,'policy_epoch':e} for s,e in pairs],'character_id':character_id(self.store.config),'status':'active'}
-        where={('scope_key','policy_epoch'):pairs,'character_id':auth['character_id'],'status':'active','embedding_revision':self.revision}
-        vector_filter={'scope_key, policy_epoch':[list(p) for p in pairs],**{k:v for k,v in where.items() if isinstance(k,str)}}
+        me=character_id(self.store.config)
+        vector_filter={'scope_key, policy_epoch':[list(p) for p in pairs],'character_id':me,'status':'active','embedding_revision':self.revision}
         # Cache contains IDs/scores only, never bodies, vectors or raw queries.
         # Every hit still passes the authoritative read below. State revision
         # and scope epoch are part of the key even for an identical query.
         # Recent lexical fallback is bounded; vector search still covers the
         # entire authorized history. A growing scene must not abort a turn.
-        rows=list(self.store.db.memory_units.find(auth,{'embedding':0}).sort([('occurred_at',-1),('_id',-1)]).limit(4096))
+        rows=memory_records.readable(self.store,pairs,character=me,by=('occurred_at','_id')).rows(
+            newest_first=True,limit=4096,fields=UNVECTORED)
         cacheable=len(rows)<4096  # A sample cannot fingerprint the full scope.
         heads=list(self.store.db.state_heads.find({'scope_key':{'$in':['global-safe',scope]+linked+([private_scope] if private_scope else [])}},{'_id':1,'revision_id':1}).sort('_id',1))
         # 联动集合进缓存键：同一句话在「联动着读」和「只读本场景」下不是同一个结果，不能互相顶。
-        key_fields={'scope':scope,'private_scope':private_scope,'policy_epoch':epoch,'character_id':character_id(self.store.config),'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'linked_scopes':sorted(linked),'state_revision':sha(canonical([heads,[(m['_id'],m.get('revision'),m['status']) for m in rows]]))}
+        key_fields={'scope':scope,'private_scope':private_scope,'policy_epoch':epoch,'character_id':me,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'linked_scopes':sorted(linked),'state_revision':sha(canonical([heads,[(m['_id'],m.get('revision'),m['status']) for m in rows]]))}
         cache_key=sha(canonical(key_fields));cached=self.cache.get(cache_key)
         cache_hit=bool(cacheable and cached and cached['expires']>time.monotonic())
         vector=[]; failure=None
@@ -233,7 +233,8 @@ class Retrieval:
                 v=self.embed([query],'query')[0]
                 self.vectors[sha(query.encode())]=v
                 while len(self.vectors)>16:self.vectors.popitem(last=False)
-                vector=[{'_id':key,'score':score} for key,score in self.store.nearest(MEMORY,v,24,where)]
+                vector=[{'_id':key,'score':score} for key,score in memory_records.nearest(
+                    self.store,v,24,pairs,character=me,revision=self.revision)]
                 if cacheable:self.cache[cache_key]={'expires':time.monotonic()+300,'vector':[dict(row) for row in vector]}
                 while len(self.cache)>128:self.cache.popitem(last=False)
         except Exception as exc:
@@ -266,7 +267,7 @@ class Retrieval:
         ordered=sorted(ranks,key=lambda key:(-ranks[key]['score'],key))
         candidates=[];excluded=[]
         for key in ordered:
-            current=self.store.db.memory_units.find_one({'_id':key,**auth},{'embedding':0})
+            current=memory_records.get(self.store,key,UNVECTORED,pairs=pairs,character=me,status='active')
             if not current or current.get('expires_at', '9999')<=now():
                 excluded.append({'id':key,'reason':'authoritative_recheck'});continue
             # In view: a record from a line she still sees, or one of her last thoughts (by its own id).
@@ -293,7 +294,7 @@ class Retrieval:
         for m in selected:
             m['historical_sources']=[]
             for old_id in m.get('supersedes',[])[:8]:
-                old=self.store.db.memory_units.find_one({'_id':old_id,'$or':auth['$or'],'status':'superseded'},{'embedding':0})
+                old=memory_records.get(self.store,old_id,UNVECTORED,pairs=pairs,status='superseded')
                 if old:m['historical_sources'].append({k:old[k] for k in ('_id','body_markdown','status','epistemic_type')})
         # Evidence sufficiency (ADR-009 MEMORY §5.2): RRF ranks only; it never decides "enough".
         if failure is None and vector:
@@ -308,8 +309,7 @@ class Retrieval:
         moment=now()
         for m in selected if record_use else ():
             # Rehearsal: a memory a real turn used is fresh again, in time and in conversation volume.
-            self.store.db.memory_units.update_one({'_id':m['_id']},{'$inc':{'salience.ref_count':1},'$set':{
-                'salience.last_ref_at':moment,'salience.last_ref_seq':sequences.get(m['scope_key'])}})
+            memory_records.touch_salience(self.store,m['_id'],moment,sequences.get(m['scope_key']))
         manifest={'path':'server_vector_rrf' if failure is None else 'scoped_lexical_recent_fallback',
                   'coverage':coverage,'coverage_score':coverage_score,'coverage_basis':coverage_basis,'vector_verified':failure is None,'failure':failure,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'embedding_weight_revision_verified':self.weight_verified,'filter':vector_filter,'exact':True,'vector_ranks':vector,'lexical_ids':[m['_id'] for m in lexical],'ranks':ranks,'selected':[m['_id'] for m in selected],'excluded':excluded,'in_view':in_view,'pending_backread':[m['_id'] for m in pending]}
         manifest.update(cache_key=key_fields,cache_key_sha256=cache_key,cache_hit=cache_hit,cache_contains='ids_and_scores_only',

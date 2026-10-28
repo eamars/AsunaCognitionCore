@@ -41,6 +41,7 @@ from asuna.state import Store                                        # noqa: E40
 from asuna.testing import dispose_test_store, suite_config            # noqa: E402
 from asuna.records import scenes as scene_records  # noqa: E402
 from asuna.records import messages as message_records                 # noqa: E402
+from asuna.records import memories as memory_records                 # noqa: E402
 
 FIXTURES = ROOT / 'tools' / 'fixtures' / 'refusal_probe'
 WORLD = ROOT / 'tests' / 'fixtures' / 'world.json'
@@ -356,10 +357,10 @@ def run_sequence(store, lane, seq, index, name):
         line_event = lambda line, key, aside=False: event(scene_id, group, number, line, key, name, aside=aside)
     lane.schemas = dsh_schemas(store, scene_id)
     for text in seq.get('memories', []):
-        store.put('memory_units', {'_id': 'mem-%d-%s' % (index, uuid.uuid4().hex[:8]), 'scope_key': 'scene:' + scene_id,
-                                   'epistemic_type': 'observed_fact', 'subjects': [], 'body_markdown': text,
-                                   'source_event_ids': [], 'status': 'active', 'supersedes': [], 'kind': 'episodic',
-                                   'character_id': 'demo', 'occurred_at': now(), 'revision': 1})
+        memory_records.save(store, {'_id': 'mem-%d-%s' % (index, uuid.uuid4().hex[:8]), 'scope_key': 'scene:' + scene_id,
+                                    'epistemic_type': 'observed_fact', 'subjects': [], 'body_markdown': text,
+                                    'source_event_ids': [], 'status': 'active', 'supersedes': [], 'kind': 'episodic',
+                                    'character_id': 'demo', 'occurred_at': now(), 'revision': 1})
     history = seq.get('history', [])
     lines = [history[i % len(history)] for i in range(seq['filler'])] + history if seq.get('filler') else history
     coordinator = Coordinator(store, lane)
@@ -532,7 +533,7 @@ def probe(args, provider=None):
                                                      store.db.audit_events.find({'type': 'thought.none'})))}
         if keep_text and thoughts == 'thinking':
             with open(keep_text.replace('.jsonl', '-thoughts.jsonl'), 'w', encoding='utf-8') as out:
-                for unit in store.db.memory_units.find({'kind': 'monologue', 'source': 'thinking'}, {'body_markdown': 1}):
+                for unit in memory_records.of_kind(store, 'monologue', source='thinking').each(fields=['body_markdown']):
                     out.write(json.dumps({'_id': unit['_id'], 'text': unit['body_markdown']}, ensure_ascii=False) + '\n')
     finally:
         dispose_test_store(store)

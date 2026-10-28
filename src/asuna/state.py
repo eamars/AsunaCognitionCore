@@ -18,7 +18,7 @@ from .evidence import canonical, sha
 from .store import Checked
 from .store.catalog import CATALOG, Space
 from .store.errors import DuplicateKey
-from .store.words import And, AnyOf, Exists, Or
+from .store.words import Exists
 
 COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memory_units','state_heads',
                'state_revisions','sessions','audit_events','artifacts','sink_receipts','lane_receipts',
@@ -210,21 +210,12 @@ class Store:
         serving meanwhile); True once it can be queried, False if it cannot yet after `timeout` seconds."""
         return self.checked.ensure_vectors(space, timeout)
 
-    def nearest(self, space: Space, vector, k: int, where: dict) -> list[tuple[str, float]]:
-        """The k records nearest to `vector` among those matching `where`, best first, as (id, cosine similarity in
-        [-1, 1]); exact, never approximate. `where` maps a declared field to a value or a list of values (any of
-        them), or a tuple of declared fields to a list of value tuples (any of those combinations); every entry holds.
-        Equal scores come in id order; which of several records tied at the k-th score are returned is the database's."""
-        values, pairs = {}, []
-        for key, value in where.items():
-            if isinstance(key, tuple):
-                combinations = [dict(zip(key, combination)) for combination in value]
-                if not combinations:
-                    return []                        # any of none: nothing matches
-                pairs.append(Or(*combinations))
-            else:
-                values[key] = AnyOf(list(value)) if isinstance(value, (list, set, frozenset, tuple)) else value
-        return self.checked.nearest(space, vector, k, And(values, *pairs) if pairs else values)
+    def nearest(self, space: Space, vector, k: int, where) -> list[tuple[str, float]]:
+        """The k records nearest to `vector` among those matching `where` (the store's words: equality, `AnyOf`, `And`,
+        `Or` on the space's filter fields), best first, as (id, cosine similarity in [-1, 1]); exact, never
+        approximate. Equal scores come in id order; which of several records tied at the k-th score are returned is
+        the database's."""
+        return self.checked.nearest(space, vector, k, where)
 
     def get(self, collection: str, key: str, scope: str, *, operator: bool=False):
         if collection not in COLLECTIONS:
@@ -302,8 +293,9 @@ class Store:
             raise Denied('MUTATION_REQUIRES_SOURCES')
         if reason is not None and (not isinstance(reason,str) or not 1<=len(reason)<=2000):raise Denied('INVALID_MUTATION_REASON')
         if change_class not in (None,'persona','relationship','interpretation','scene_affect'):raise Denied('INVALID_CHANGE_CLASS')
+        from .records import memories as memory_records
         for source in sources:
-            row=self.db.memory_units.find_one({'_id':source,'status':{'$ne':'tombstone'}})
+            row=memory_records.get(self,source,erased=False)
             if not row or row['scope_key'] not in readable_scopes:
                 raise Denied('MUTATION_SOURCE_DENIED')
         head,base=self.head(entity,scope) or (None,None)
@@ -329,7 +321,7 @@ class Store:
             if len(visited)>512:raise Denied('SOURCE_GRAPH_LIMIT')
             if key in visited:return
             visited.add(key)
-            row=self.db.memory_units.find_one({'_id':key})
+            row=memory_records.get(self,key)
             if row:
                 if row.get('status')=='tombstone' or row['scope_key'] not in readable_scopes:raise Denied('DERIVED_SOURCE_SCOPE_DENIED')
                 descendants=row.get('source_event_ids',[])

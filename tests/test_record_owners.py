@@ -13,10 +13,18 @@ OWNERS = {'scenes': 'src/asuna/records/scenes.py', 'messages': 'src/asuna/record
           'episodes': 'src/asuna/records/episodes.py', 'sessions': 'src/asuna/records/sessions.py',
           'lane_receipts': 'src/asuna/records/receipts.py', 'sink_receipts': 'src/asuna/records/receipts.py',
           'tasks': 'src/asuna/records/tasks.py', 'task_messages': 'src/asuna/records/tasks.py',
-          'plans': 'src/asuna/records/plans.py'}
+          'plans': 'src/asuna/records/plans.py', 'memory_units': 'src/asuna/records/memories.py'}
 AREAS = ('src/asuna', 'tools')
 # The per-batch check makes the old calls on purpose: they are the old side it compares the owner with.
 ALLOWED = {'tools/adr104_equivalence.py'}
+# The census puts every call of the store's vector search on memory_units: in its owner that is the owner's own call,
+# and in the adapter's integration tests it searches the contract suite's own collection.
+VECTORS = ('Store.nearest', 'Store.ensure_vectors')
+
+
+def elsewhere(row):
+    return not (row['method'] in VECTORS and (row['file'] == OWNERS[row['collection']]
+                                              or row['file'].startswith('integration/')))
 
 
 def census():
@@ -28,7 +36,7 @@ def census():
 
 def test_no_direct_database_call_reaches_a_moved_collection():
     found = ['%s:%s %s' % (row['file'], row['line'], row['method']) for row in census()
-             if row['collection'] in OWNERS and row['file'] not in ALLOWED]
+             if row['collection'] in OWNERS and row['file'] not in ALLOWED and elsewhere(row)]
     assert found == [], 'call the owner (%s) instead: %s' % (', '.join(OWNERS.values()), found[:10])
 
 

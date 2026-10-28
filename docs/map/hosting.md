@@ -670,7 +670,7 @@ What the owners of `episodes`, `sessions` and the receipts share: a named read (
 - def `is_number`
 - def `texts`
 - def `fenced` — `where` with each fence given ({field: (value, kind check)}), or None when one holds nothing (a value missing or not of its kind).
-- def `pinned` — The condition `where` with each pin given ({field: (value, kind check)}), where a value of None stands for "has none": the field null or missing, as the replaced read's equality on null matched.
+- def `pinned` — The condition `where` with each value condition given ({field: (value, kind check)}), where a value of None stands for "has none": the field null or missing, as the replaced read's equality on null matched.
 - class `View` — A named read on one collection: its condition and its order ((field, 1 | -1), ...).
   - `each` — The rows, read as they come.
   - `rows`

@@ -88,7 +88,7 @@ export function killTree(child, platform = process.platform) {
 
 /**
  * The loop. `d` gives the world:
- *   prepare(rung)            sync/selection for that rung (may throw)
+ *   prepare(rung, {fastForward, id})  sync/selection for that rung of the restart `id` (may throw)
  *   spawnHost()              a running DSH child (emits 'exit')
  *   ready(since)             whether the worker is ready since that time
  *   takeRequest()            her due restart request, removed once taken, else null
@@ -116,7 +116,7 @@ export async function supervise(d) {
     let child = null, outcome, code = null;
     try {
       // Only the first start of a restart she asked for brings origin/main in; the owner's starts never do.
-      const prepared = await d.prepare(rung, { fastForward: asked && rung === 0 });
+      const prepared = await d.prepare(rung, { fastForward: asked && rung === 0, id: record.id });
       asked = false;
       reverted.push(...((Array.isArray(prepared) ? prepared : prepared?.notes) ?? []));
       if (prepared?.checkout && record) record.checkout = prepared.checkout;
@@ -159,7 +159,7 @@ export async function supervise(d) {
       record.result = real === 0 && !reverted.length ? 'running' : 'fell_back';
       record.rung = RUNGS[rung];
       if (reverted.length) record.reverted = [...reverted];
-      record.loaded = await d.loaded();
+      record.loaded = { result: record.result, ...await d.loaded() };
       await d.writeRecord(record);
       record = null;
     }
@@ -193,25 +193,30 @@ export async function supervise(d) {
   }
 }
 
-/** What actually runs after a start: the checkout's commit, and each package's digest. Only installed packages run
- * (launch.json's record of the last install); a selection (activation.json) changes the digest of the installed
- * package it is for, which a fallback changes without a new install. A selection is for the package named by its
- * folder (the core's) or by its id (a persona's, whose folder is a frozen snapshot); one for no installed package,
- * such as a removed channel's, runs nothing. A selection that fell back names the digest it returned from. */
-export async function loaded(base, launchFile, commitOf = () =>
-  spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true }).stdout) {
+/** What actually runs after a start: each package's digest and the commit it was installed from. Only installed
+ * packages run (launch.json's record of the last install); a selection (activation.json) changes the digest of the
+ * installed package it is for, which a fallback changes without a new install. A selection is for the package named
+ * by its folder (the core's) or by its id (a persona's, whose folder is a frozen snapshot); one for no installed
+ * package, such as a removed channel's, runs nothing. A selection that fell back names the digest it returned from.
+ * The commit is the checkout's at the install that put the running core in place (setup_native_profile records it,
+ * and `edited` when tracked files differed from it): never the checkout's commit now, which a start that failed to
+ * install did not run. A core running from a selection, or an install that recorded none, has no commit (null). */
+export async function loaded(base, launchFile) {
   const read = async file => { try { return JSON.parse(await fs.readFile(file, 'utf8')); } catch { return {}; } };
   const selection = await read(path.join(base, 'activation.json'));
   const launch = await read(launchFile);
   const short = sha => String(sha).slice(0, 12);
   const packages = Object.fromEntries(Object.entries(launch.installed ?? {}).map(([name, sha]) => [name, short(sha)]));
+  const installedCore = packages['@asuna/cognition-core'];
   for (const [id, selected] of Object.entries(selection.projects ?? {})) {
     const name = selected.packageRoot && selected.sha256
       && ['@asuna/' + path.basename(selected.packageRoot), '@asuna/' + id].find(each => each in packages);
     if (name) packages[name] = short(selected.sha256);
   }
+  const commit = launch.commit && packages['@asuna/cognition-core'] === installedCore ? launch.commit : null;
   return {
-    commit: (commitOf() || '').trim() || null,
+    commit,
+    ...(commit && launch.edited ? { edited: true } : {}),
     packages,
     selections: Object.fromEntries(Object.entries(selection.projects ?? {}).map(([id, s]) =>
       [id, { state: s.state, candidate: s.candidate ? short(s.candidate) : null,

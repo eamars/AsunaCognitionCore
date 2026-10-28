@@ -42,7 +42,8 @@ const spawnPrepare = argv => spawn(process.execPath, argv, { cwd: root, env: pro
  * Prepare one start (rung 0: sync the checkout and apply selections; rung 1: return selections to the previous
  * running version) in a fresh process of this script, so a change to it or to the tools it runs takes effect at her
  * next restart without restarting this launcher (ADR-034). The output goes to the console and to `logFile`
- * (<data>/restart/prepare.log, rewritten each start); a failure says its last lines and where the rest is.
+ * (<data>/restart/prepare-<restart id>-rung<rung>.log, prepareLog); a failure says its last lines and where the rest
+ * is.
  * Returns {notes, checkout}: the selection notes and, at her restart, what became of the checkout (fastForwardCheckout).
  */
 export async function prepareFresh(rung, args, { logFile, spawnChild = spawnPrepare,
@@ -71,6 +72,22 @@ export async function prepareFresh(rung, args, { logFile, spawnChild = spawnPrep
     return { notes: line ? JSON.parse(line.slice(NOTES_MARK.length)) : [],
       ...(checkout ? { checkout: JSON.parse(checkout.slice(CHECKOUT_MARK.length)) } : {}) };
   } finally { await log.close(); }
+}
+
+/** Each start's preparation log is its own: named by the restart's id (last.json's `id`) and the rung, so neither the
+ * next rung nor the next restart overwrites the log of one that failed. */
+export const prepareLog = (folder, id, rung) => path.join(folder, 'prepare-' + id + '-rung' + rung + '.log');
+export const PREPARE_LOGS_KEPT = 10;              // restarts whose preparation logs are kept
+
+/** Remove the preparation logs of all but the newest `keep` restarts (ids sort by time), and any other `prepare*.log`
+ * (a log of an earlier naming). Returns the names removed. */
+export async function pruneLogs(folder, keep = PREPARE_LOGS_KEPT) {
+  const names = (await fs.readdir(folder).catch(() => [])).filter(name => /^prepare.*\.log$/.test(name));
+  const idOf = name => /^prepare-(restart-\d+)-rung\d+\.log$/.exec(name)?.[1];
+  const kept = new Set([...new Set(names.map(idOf).filter(Boolean))].sort().slice(-keep));
+  const removed = names.filter(name => !kept.has(idOf(name)));
+  for (const name of removed) await fs.rm(path.join(folder, name), { force: true });
+  return removed;
 }
 
 const runGit = (repo, args) => new Promise(resolve => {
@@ -329,11 +346,17 @@ async function main() {
   // The supervisor reads and writes where her worker does: the profile's data folder, not the launcher's own.
   const data = { ...env, ASUNA_DATA_ROOT: dataFolder(launch.profile) };
   // This process only starts and watches DSH; each start is prepared fresh from the code on disk (prepareFresh).
-  const logFile = path.join(supervisor.restartFolder(data), 'prepare.log');
+  const restarts = supervisor.restartFolder(data);
   const keep = supervisor.hostLog(path.join(supervisor.restartFolder(data), 'host.log'));
   await supervisor.supervise({
-    prepare: async (rung, { fastForward = false } = {}) =>
-      rung < 2 ? prepareFresh(rung, fastForward ? [...argv, '--fast-forward'] : argv, { logFile }) : [],
+    prepare: async (rung, { fastForward = false, id } = {}) => {
+      if (rung >= 2) return [];
+      const logFile = prepareLog(restarts, id, rung);
+      await fs.mkdir(restarts, { recursive: true });
+      await fs.writeFile(logFile, '');                // this restart counts among the kept ones before older ones go
+      await pruneLogs(restarts);
+      return prepareFresh(rung, fastForward ? [...argv, '--fast-forward'] : argv, { logFile });
+    },
     spawnHost: () => {
       // Its output goes to the console as before and into restart/host.log, so a start that dies leaves its words.
       const child = spawn(process.execPath, [dsh, ...host], { cwd: root, env: { ...env, ASUNA_SUPERVISED: '1' },

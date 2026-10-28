@@ -41,6 +41,9 @@ Stable entry: native Web and repair tools boot without importing Python code.
 
 - def `packageManagerEnv`
 - def `prepareFresh` — Prepare one start (rung 0: sync the checkout and apply selections; rung 1: return selections to the previous running version) in a fresh process of this script, so a change to it or to the tools it runs takes effect at her next restart with
+- def `prepareLog` — Each start's preparation log is its own: named by the restart's id (last.json's `id`) and the rung, so neither the next rung nor the next restart overwrites the log of one that failed.
+- def `PREPARE_LOGS_KEPT`
+- def `pruneLogs` — Remove the preparation logs of all but the newest `keep` restarts (ids sort by time), and any other `prepare*.log` (a log of an earlier naming).
 - def `fastForwardCheckout` — Her restart brings origin/main into the checkout when it can (owner 2026-10-13, ADR-065): fetch, then a fast-forward only when the branch is main, tracked files are unchanged and main is behind origin/main.
 - def `checkoutPython`
 - def `changedPackages` — Which packed packages differ from the ones this profile last installed, or were never installed (a channel package newly added to the profile), by name; all of them when nothing is recorded.
@@ -74,7 +77,7 @@ The Host supervisor (ADR-034): the launcher stays as DSH's parent, restarts it w
 - def `revertSelections` — A selection being applied goes straight back to the one that ran before it (rung 1).
 - def `killTree`
 - def `supervise` — The loop.
-- def `loaded` — What actually runs after a start: the checkout's commit, and each package's digest.
+- def `loaded` — What actually runs after a start: each package's digest and the commit it was installed from.
 - def `takeRequest`
 - def `writeRecord`
 - def `HISTORY_KEPT` — history.jsonl keeps the newest HISTORY_KEPT finished restarts, one line each.
@@ -103,6 +106,25 @@ ADR-096's install checks, read only: what the turns carry is what carried() says
 
 Read the public release tag without changing the project or global runtime.
 
+
+## `check_prepared_start.py`
+
+[tools/check_prepared_start.py](../../tools/check_prepared_start.py)
+
+Run the launcher's start preparation (rung 0) for one commit in a scratch folder and check what it installed.
+
+- def `git`
+- def `blob_id` — The id git gives these bytes as a blob (`git hash-object --no-filters`).
+- def `link`
+- def `unlink` — Remove a link made by link() without touching what it points at.
+- def `remove`
+- def `prepare` — Rung 0 as the launcher runs it, for a fresh profile of the tree.
+- def `byte_check` — Problems of the installed core against the commit and the packed artifact, and the counts checked.
+- def `lock_environment` — The worker's environment as the plugin builds it on first start (python-env.js): uv when on PATH, else venv and pip.
+- def `configured_python` — The interpreter the profile's worker is set to (the core's `python` setting), or None.
+- def `lender` — The checkout whose .venv and node_modules the prepared tree uses: this one when it has both, else the main checkout of the repository (a fresh worktree has neither).
+- def `venv_python`
+- def `main`
 
 ## `check_staged_secrets.py`
 
@@ -208,13 +230,11 @@ ADR-005 P5 离线自检：不需要 Mongo、不需要 pytest，直接跑话题�
 
 Build the core plugin and the persona and channel packages passed with --persona / --channel; no local state or secrets.
 
-- def `runtime_modules`
-- def `store_modules` — The store package's modules (src/asuna/store/), which ship with the worker's.
-- def `prepare_store` — Copy the store package next to the worker modules.
-- def `prepare_resources` — Copy behavior resources next to the worker modules; no npm, no network.
+- def `worker_sources` — The tracked files of src/asuna that ship with the worker (posix paths relative to root), in git's order.
+- def `stage_worker` — Copy the worker's files (worker_sources, and RUNTIME_API.md into its resources) into `destination` (the package's python/asuna), replacing what was there.
+- def `check_worker_imports` — Run IMPORT_CHECK with `python` on the prepared tree (the folder holding asuna/) as the worker starts: from its data folder, with the tree as PYTHONPATH.
 - def `pinned_requirements` — The worker's dependency closure at the exact versions this tested environment has (ADR-010 D2): the plugin builds its first-start environment from it.
-- def `prepare_sandbox_site` — What her confined commands load from the worker's package (sandbox_backend.SITE): the sitecustomize their Pythons start with and git's askpass program.
-- def `bundle_python` — An explicit runtime allowlist; no debug CLI, local state or secrets.
+- def `bundle_python` — The worker's copy in the core package (stage_worker; no debug CLI, local state or secrets), its manifest, project file and lock, checked by importing it with this interpreter.
 - def `prune` — Remove packed files that neither this manifest nor any profile's installed packages or activation still name.
 - def `main`
 
@@ -364,6 +384,7 @@ Install the core, one persona package and its channel packages into a local-only
 - def `profile_base` — The owner's original profile keeps its existing location; others are isolated.
 - def `data_folder` — (dataRoot, stateDir) of a profile set up from this checkout (ADR-010 D3).
 - def `with_pnpm` — DSH installs plugins with `pnpm` from PATH; without one, use the pnpm Node ships through corepack.
+- def `installed_commit` — The checkout's commit this install is made from, and `edited` when tracked files differ from it (what is on disk is installed); nothing outside a checkout.
 - def `persona_package` — Read the persona package's npm name, project id and agent preset from its own files.
 - def `channel_package` — A channel package's npm name, project id and kind module (its one python/<module> package).
 - def `move_secrets` — Settings written before ADR-010 D6 carried plaintext under `secrets` and path-named references ({"$secret": "embedding/api_key"}).

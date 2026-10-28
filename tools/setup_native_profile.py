@@ -16,9 +16,12 @@ import sys
 import tarfile
 import yaml
 
-from asuna import channel_kinds
-from asuna.config import ROOT, load
-from asuna.native_settings import credential_ref, export_settings
+# This tree's own source comes first: an environment shared with another checkout (an editable install) would
+# otherwise give that checkout's ROOT, and the profile would be installed there.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+from asuna import channel_kinds, repo_files  # noqa: E402
+from asuna.config import ROOT, load  # noqa: E402
+from asuna.native_settings import credential_ref, export_settings  # noqa: E402
 
 
 class ProfileLoader(yaml.SafeLoader):
@@ -70,6 +73,19 @@ def with_pnpm(env):
         (shim / 'pnpm').write_text(f'#!/bin/sh\nexec "{corepack}" pnpm "$@"\n', encoding='utf-8')
         (shim / 'pnpm').chmod(0o755)
     return {**env, 'PATH': str(shim) + os.pathsep + env.get('PATH', ''), 'COREPACK_ENABLE_DOWNLOAD_PROMPT': '0'}
+
+
+def installed_commit():
+    """The checkout's commit this install is made from, and `edited` when tracked files differ from it (what is on
+    disk is installed); nothing outside a checkout. The supervisor reports it as what runs (asuna-supervisor.mjs)."""
+    if not repo_files.checkout(ROOT):
+        return {}
+    git = lambda *args: subprocess.run(['git', *args], cwd=ROOT, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    head = git('rev-parse', '--short', 'HEAD')
+    if head.returncode != 0:
+        return {}
+    changed = git('status', '--porcelain', '--untracked-files=no')
+    return {'commit': head.stdout.strip(), **({'edited': True} if changed.returncode != 0 or changed.stdout.strip() else {})}
 
 
 def persona_package(directory):
@@ -293,7 +309,8 @@ def main():
         'profile': args.profile,
         'setup': {'persona_package': relative(args.persona_package),
                   'channel_packages': [relative(directory) for directory in args.channel_package]},
-        'installed': {artifact['name']: artifact['sha256'] for artifact in manifest}}, indent=2), encoding='utf-8')
+        'installed': {artifact['name']: artifact['sha256'] for artifact in manifest}, **installed_commit()}, indent=2),
+        encoding='utf-8')
     suffix = '' if args.profile == 'asuna-native' else ' --profile %s --config %s' % (args.profile, args.config)
     print('Installed native profile. Start with start-asuna.cmd (Windows) or ./start-asuna.sh' + suffix
           + ' (Web port %s)' % (port or 8780))

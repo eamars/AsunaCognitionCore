@@ -64,12 +64,13 @@ test("the launcher's own start is recorded, so the record always describes the H
   const [record] = w.records;
   assert.equal(record.asked, 'launcher'); assert.equal(record.result, 'running');
   assert.ok(record.id && record.down_at && record.back_at);
-  assert.deepEqual(record.loaded, { commit: 'abc1234', packages: {} });
+  assert.deepEqual(record.loaded, { result: 'running', commit: 'abc1234', packages: {} });
   assert.equal(record.checkout, undefined, "the launcher's start never fetches");
   const failing = world({ starts: ['exit'], events: [{ stop: true }] });
   await supervise(failing.d);
   assert.equal(failing.interim[0].asked, 'launcher'); assert.equal(failing.interim[0].result, 'not_back');
   assert.equal(failing.records[0].asked, 'launcher'); assert.equal(failing.records[0].result, 'fell_back');
+  assert.equal(failing.records[0].loaded.result, 'fell_back', 'what loaded says it is a fallback');
 });
 
 test('her restart comes back on the same packages and the record says what loaded', async () => {
@@ -206,11 +207,33 @@ test('the record says what runs: a selection that fell back reports the package 
     await fs.writeFile(path.join(base, 'activation.json'), JSON.stringify({ projects: { core: {
       state: 'ACTIVE', sha256: 'fb763b01ca4c4725', packageRoot: path.join('profiles', 'node_modules', '@asuna', 'cognition-core'),
       reverted_from: { sha256: '59273e56719b8c09', starts: 1, by: 'supervisor' } } } }));
-    const record = await loaded(base, path.join(base, 'launch.json'), () => 'abc1234\n');
-    assert.equal(record.commit, 'abc1234');
+    const record = await loaded(base, path.join(base, 'launch.json'));
+    assert.equal(record.commit, null, 'a core running from a selection has no install commit');
     assert.equal(record.packages['@asuna/cognition-core'], 'fb763b01ca4c', 'the running selection, not the last install');
     assert.equal(record.packages['@deepseek-ai/dsh-client-ui-chat'], 'cd35f89fef65');
     assert.deepEqual(record.selections.core, { state: 'ACTIVE', candidate: null, reverted_from: '59273e56719b' });
+  } finally {
+    await fs.rm(base, { recursive: true, force: true });
+  }
+});
+
+test('the commit is the one the running core was installed from, never the checkout a failed install left', async () => {
+  // A start whose packing failed fell back to the installed core, and the record named the checkout's new commit.
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-loaded-'));
+  try {
+    const launch = fields => fs.writeFile(path.join(base, 'launch.json'), JSON.stringify({ ...fields,
+      installed: { '@asuna/cognition-core': '52789db1de70a04d' } }));
+    await launch({ commit: 'b1b0aaaa' });
+    await fs.writeFile(path.join(base, 'activation.json'), JSON.stringify({ projects: { core: {
+      state: 'ACTIVE', sha256: '52789db1de70a04d', packageRoot: path.join('profiles', 'node_modules', '@asuna', 'cognition-core') } } }));
+    const record = await loaded(base, path.join(base, 'launch.json'));
+    assert.equal(record.commit, 'b1b0aaaa');
+    assert.equal(record.edited, undefined);
+    assert.equal(record.packages['@asuna/cognition-core'], '52789db1de70');
+    await launch({ commit: 'b1b0aaaa', edited: true });
+    assert.equal((await loaded(base, path.join(base, 'launch.json'))).edited, true, 'an install with edits says so');
+    await launch({});
+    assert.equal((await loaded(base, path.join(base, 'launch.json'))).commit, null, 'an install that recorded none has none');
   } finally {
     await fs.rm(base, { recursive: true, force: true });
   }
@@ -224,7 +247,7 @@ test('the record lists only installed packages: a persona selection by its id, a
     await fs.writeFile(path.join(base, 'activation.json'), JSON.stringify({ projects: {
       'persona-a': { state: 'ACTIVE', sha256: '2222222222222222', packageRoot: path.join('development', 'persona-a', 'frozen', 'a392bdbbbd6ed478') },
       'old-channel': { state: 'ACTIVE', sha256: '3333333333333333', packageRoot: path.join('profiles', 'node_modules', '@asuna', 'old-channel') } } }));
-    const record = await loaded(base, path.join(base, 'launch.json'), () => 'abc1234\n');
+    const record = await loaded(base, path.join(base, 'launch.json'));
     assert.deepEqual(record.packages, { '@asuna/cognition-core': '59273e56719b', '@asuna/persona-a': '222222222222' });
   } finally {
     await fs.rm(base, { recursive: true, force: true });

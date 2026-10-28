@@ -136,8 +136,8 @@ a fixed line:
   wait of 20 s without data ends the fetch, and after 20 s it ends at the next piece, so a host that drips can hold
   it about 40 s (her reading of 5f4a8f3ac50f). With that cap the bytes stay in memory until they are checked and stored: no partial file on any disk.
 - **Off the channel's path.** The worker fetches from QQ's file host itself; the adapter and NapCat take no part, so a
-  download cannot hold an inbound or outbound lane. What a fetch can hold is her own tool call, for at most 20 s, as
-  `read_image` does today with a cap eight times larger.
+  download cannot hold an inbound or outbound lane. What a fetch can hold is her own tool call, for the time limit above (20 s
+  without data, about 40 s at most for a host that drips), as `read_image` does today with a cap eight times larger.
 - **No link, or a dead one** (the 5 of 153; a link QQ no longer serves): she is told plainly, in words, with the
   platform's status. Asking the adapter for a fresh link (`get_group_file_url`, a new adapter capability) is not
   built.
@@ -184,7 +184,8 @@ types one way.
   again from the item's link. Fetched: the page, with `前一份字节在%s到期删了，这次是重新拉的`. Not fetched, one
   sentence: `这个文件%s拉过，字节在%s到期删了；现在链接失效了（平台答%s），拿不回来了。这一份存在过、有内容。`
 - **What finds a file.** A ref is found among the newest 8 files and pictures of the last 50 messages others sent in
-  the conversation (each linked conversation its own 50), or among those of its last 7 days (the picture function;
+  the conversation (each linked conversation its own 50), or among all of those of its last 7 days: there the listing's
+  8 and 50 do not apply, the cap of 8 items in one message still does (the picture function;
   her reading of 5f4a8f3ac50f, and her point at fae57e0a01f0 that "lines" was not exact), so it lives as long as that scan: 7
   days (`REF_DAYS`); after that the words are the ones a picture's old ref gets. A kept file is found by its own row,
   so its ref never ends and `kept` lists refs that keep working. Every line that tells her a file can still be got back
@@ -192,8 +193,10 @@ types one way.
   count from the message, the bytes' 7 days from `created_at`.)
 - **Privacy:** the bytes stay in the deployment's own database and go with their lifecycle; logs and the audit name
   a file by its ref, never by its name or content. **Erasure** follows ADR-105, the one place the rule is written:
-  an operator erasure deletes the conversation's bytes, kept files included, and marks each row erased; `read`,
-  `kept` and `copy` then answer with the ADR-105 sentence. The row keeps its name (the owner).
+  an operator erasure deletes the conversation's bytes, kept files included, and marks each row erased; every
+  operation then answers with the ADR-105 sentence: her four (`read` refuses with it and says the link is closed
+  too, `keep` refuses with it, `let_go` takes the row off with it, `kept` lists the row with it) and the action
+  brain's `copy`, which refuses with it. The row keeps its name (the owner).
 - **Keep:** `keep` marks the row kept (`kept_at`, her `why`); the origin and marks do not change. The quota is
   **20 MiB or 50 files**, whichever comes first (the owner took Claude's and Xiaoman's proposal, 2026-10-27). With
   files of at most 1 MiB, the 20 MiB comes first (at 21 full-size files). Over the quota the keep is refused with the
@@ -217,7 +220,7 @@ a ref from home is not found from outside. The task binds the scope; no argument
 | A ref is recognized for | 7 days (`REF_DAYS`) | 7 days, the same constant |
 | Fetched bytes kept | 7 days (`PULLED_DAYS`) | 3 days, unless she keeps it |
 | Over the cap | a fetch stops at the cap (`IMAGE_TOO_LARGE`); a video declared over 32 MiB is not fetched | not fetched when declared over; a fetch stops at the first byte over |
-| A fetch may take | 15 s (`vision.DEFAULT_TIMEOUT_SECONDS`) | 20 s |
+| A fetch may take | 15 s (`vision.DEFAULT_TIMEOUT_SECONDS`) | 20 s without data; about 40 s at most for a host that drips |
 
 ### 7. The action brain's copy
 
@@ -258,7 +261,7 @@ The research changed four of them; the owner had agreed to them, so they are nam
 1. **Bytes in the blob store, not on disk with a description file beside them.** Files she sends, pictures and stickers
    already live there with a swept lifecycle; a second store would be a second lifecycle. The argument for the disk
    (cleanup while MongoDB is down) does not hold: without MongoDB the worker is not running at all.
-2. **A bounded fetch in her tool call, not a queue of its own.** With 1 MiB and 20 s, the fetch is what `read_image`
+2. **A bounded fetch in her tool call, not a queue of its own.** With 1 MiB and that time limit, the fetch is what `read_image`
    does today; a queue would add states (asked, fetching, ready) and a second turn to come back for the file. The
    lanes are protected because the fetch never passes through the adapter.
 3. **The link already on the item, not the adapter's file API.** The adapter is needed only to refresh a dead link,
@@ -272,7 +275,7 @@ The research changed four of them; the owner had agreed to them, so they are nam
 |---|---|
 | No link on the item | Offered as `拿不到`; no fetch. |
 | The link is dead or refused (HTTP 403/404/410) | `链接失效了（平台答 %s）`; asking the sender again is hers to decide. |
-| QQ's host is slow or drops halfway | The 20 s limit ends it; nothing stored; `下载没成功：%s，可以过一会再试`. |
+| QQ's host is slow or drops halfway | The time limit ends it (20 s without data, about 40 s at most); nothing stored; `下载没成功：%s，可以过一会再试`. |
 | The declared size lies | The cap counts bytes read; the read stops at 1 MiB + 1. |
 | A redirect leaves the host list | Refused, as for pictures. |
 | A `.txt` that is a program | Not stored, not shown; the disagreement named. |
@@ -344,7 +347,8 @@ pictures sent as files (`read_image` handles pictures).
   row's own fields. Tests: `tests/test_received_files.py`.
 - Part 2: the `received_file` tool for both halves (`received_files.run`: `read`, `keep`, `let_go`, `kept`), the
   note under a line (`line_note`, in `people.py`), fetching through `vision.download` (shared with pictures: one
-  redirect fence, one cap on bytes read, and a deadline for the whole fetch), judging (`judge`; `outbound_files.sniff`
+  redirect fence, one cap on bytes read, and a time limit: 20 s without data, about 40 s at most for a host that
+  drips), judging (`judge`; `outbound_files.sniff`
   learned programs and GB18030), pages and `find`, bytes fetched again onto their own row (`BlobStore.restore`),
   `FILE_HOSTS` (`channel_kinds.file_hosts`; NapCat `.ftn.qq.com`). Its cost: one tool more in each half (her 30 -> 31,
   the action brain's 26 -> 27), descriptions +499 characters for her and +291 for the action brain

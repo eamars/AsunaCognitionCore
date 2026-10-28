@@ -39,6 +39,7 @@ VIDEO_MAX_MB = 32
 VIDEO_MAX_BYTES = VIDEO_MAX_MB * 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 15
 MAX_ITEMS_PER_MESSAGE = 8
+LISTING_ITEMS = 8               # the newest attachments a conversation's listing offers (not per message)
 SCENE_SCAN_MESSAGES = 50
 # A ref she copied stays readable this long: the listing a turn shows is the newest few, a ref is looked up wider.
 REF_DAYS = 7
@@ -351,7 +352,7 @@ def readable_image_scenes(store, task, config):
     return out
 
 
-def scene_attachments(store, task, config, *, limit=MAX_ITEMS_PER_MESSAGE, scan=SCENE_SCAN_MESSAGES,
+def scene_attachments(store, task, config, *, limit=LISTING_ITEMS, scan=SCENE_SCAN_MESSAGES,
                       entries=None):
     """本场景（外加按配置只读联动的场景）最近的入站图片。范围由任务绑定，参数换不了它。
     ``entries`` (message, config) -> items: what a message offers; pictures by default, received files with theirs

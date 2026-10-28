@@ -333,9 +333,9 @@ nothing to lift out, and the install path (the plugin, the floor, releases) chan
 
 ## Built
 
-- Step 1a (2026-10-28, not installed): `Space`, `Store.ensure_vectors` and `Store.nearest` (`src/asuna/state.py`);
+- Step 1a (2026-10-28, installed the same day): `Space`, `Store.ensure_vectors` and `Store.nearest` (`src/asuna/state.py`);
   `retrieval.py` asks the store for both of its searches (`MEMORY`, 24 for `search` and 12 for `own_thoughts` as
-  before) and imports nothing of MongoDB. The search stays what it was: approximate, `CANDIDATES_PER_RESULT` 8 (96
+  before) and imports nothing of MongoDB. Its search stayed what it was: approximate, `CANDIDATES_PER_RESULT` 8 (the constant left with 1b; 96
   and 192 as before), no defined order among equal scores. Checked on her real memory, read only, against two references (Xiaoman asked that each
   be named): (a) for 30 queries of both kinds `nearest` returned the same records in the same order at the same
   scores as the `$vectorSearch` stage retrieval built, rebuilt in the check script (`check_nearest_1a.py`); (b) for

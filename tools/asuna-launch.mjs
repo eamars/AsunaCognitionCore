@@ -42,7 +42,8 @@ const spawnPrepare = argv => spawn(process.execPath, argv, { cwd: root, env: pro
  * Prepare one start (rung 0: sync the checkout and apply selections; rung 1: return selections to the previous
  * running version) in a fresh process of this script, so a change to it or to the tools it runs takes effect at her
  * next restart without restarting this launcher (ADR-034). The output goes to the console and to `logFile`
- * (<data>/restart/prepare.log, rewritten each start); a failure says its last lines and where the rest is.
+ * (<data>/restart/prepare-rung<rung>.log, rewritten by the next start on that rung, so a failed rung's log outlives
+ * the rung after it); a failure says its last lines and where the rest is.
  * Returns {notes, checkout}: the selection notes and, at her restart, what became of the checkout (fastForwardCheckout).
  */
 export async function prepareFresh(rung, args, { logFile, spawnChild = spawnPrepare,
@@ -329,11 +330,12 @@ async function main() {
   // The supervisor reads and writes where her worker does: the profile's data folder, not the launcher's own.
   const data = { ...env, ASUNA_DATA_ROOT: dataFolder(launch.profile) };
   // This process only starts and watches DSH; each start is prepared fresh from the code on disk (prepareFresh).
-  const logFile = path.join(supervisor.restartFolder(data), 'prepare.log');
+  const prepareLog = rung => path.join(supervisor.restartFolder(data), 'prepare-rung' + rung + '.log');
+  await fs.rm(path.join(supervisor.restartFolder(data), 'prepare.log'), { force: true });   // the one log all rungs shared
   const keep = supervisor.hostLog(path.join(supervisor.restartFolder(data), 'host.log'));
   await supervisor.supervise({
     prepare: async (rung, { fastForward = false } = {}) =>
-      rung < 2 ? prepareFresh(rung, fastForward ? [...argv, '--fast-forward'] : argv, { logFile }) : [],
+      rung < 2 ? prepareFresh(rung, fastForward ? [...argv, '--fast-forward'] : argv, { logFile: prepareLog(rung) }) : [],
     spawnHost: () => {
       // Its output goes to the console as before and into restart/host.log, so a start that dies leaves its words.
       const child = spawn(process.execPath, [dsh, ...host], { cwd: root, env: { ...env, ASUNA_SUPERVISED: '1' },

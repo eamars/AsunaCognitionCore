@@ -18,6 +18,9 @@ from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import tasks as task_records
 
+# Where the current thread's input admission spent its time (channels.receive reports a slow one).
+INGRESS_TIMING = threading.local()
+
 
 class SceneQueue(Queue):
     """Queue's existing condition/unfinished-task accounting with scene fairness."""
@@ -92,8 +95,6 @@ class Chat:
         self.active_task = None
         self.latest_task = None
         self.ingress_lock = threading.RLock()
-        # Where an input's admission spent its time, per thread (channels.receive reports a slow one).
-        self.ingress_timing = threading.local()
         self.enqueued = set()
         self.reconfiguring = False
         self.on_turn_finished = None
@@ -247,7 +248,7 @@ class Chat:
                 if granted:
                     # The same decision the router makes, so the stored input and the handled one agree.
                     event = {**event, 'integration_profile': granted}
-            timing, mark = self.ingress_timing, time.monotonic()
+            timing, mark = INGRESS_TIMING, time.monotonic()
             row, created = persist_input(self.app.store, event, managed=True)
             timing.persist, mark = time.monotonic() - mark, time.monotonic()
             if self.on_input_received:

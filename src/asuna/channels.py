@@ -331,10 +331,9 @@ class Channels:
 
     def receive(self, channel_id, body):
         # Admission and input persistence share the controller's existing fence.
+        from .chat import INGRESS_TIMING as timing
         started, waited = time.monotonic(), None
-        timing = getattr(self.controller, 'ingress_timing', None)
-        if timing is not None:
-            timing.__dict__.clear()
+        timing.__dict__.clear()
         try:
             with self.controller.ingress_lock:
                 waited = time.monotonic() - started
@@ -344,7 +343,7 @@ class Channels:
         finally:
             total = time.monotonic() - started
             if total >= INBOUND_SLOW_SECONDS:
-                self._record_slow(channel_id, total, waited, vars(timing) if timing is not None else {})
+                self._record_slow(channel_id, total, waited, dict(vars(timing)))
 
     def _record_slow(self, channel_id, total, waited, stages):
         """Where a slow admission spent its seconds: the fence (`fence_wait`), the line's write (`persist`), its projection

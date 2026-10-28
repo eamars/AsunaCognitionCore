@@ -380,6 +380,7 @@ class BusinessWorker:
         self.pending = {}
         self.pending_lock = threading.Lock()
         self.output_lock = threading.Lock()
+        self.emit_timing = threading.local()      # this thread's last emit: the output lock's wait, the write (seconds)
         self.navigation_ready = threading.Event()
         self.app = None
         self.controller = None
@@ -403,16 +404,14 @@ class BusinessWorker:
             with self.pending_lock:
                 self.host_pending.pop(request_id, None)
 
-    def emit(self, value, timing=None):
+    def emit(self, value):
         line = json.dumps(value, ensure_ascii=False, default=str) + '\n'
         mark = time.monotonic()
         with self.output_lock:
-            if timing is not None:
-                timing.output_lock_wait, mark = time.monotonic() - mark, time.monotonic()
+            waited, mark = time.monotonic() - mark, time.monotonic()
             sys.stdout.write(line)
             sys.stdout.flush()
-            if timing is not None:
-                timing.output_write = time.monotonic() - mark
+            self.emit_timing.output_lock_wait, self.emit_timing.output_write = waited, time.monotonic() - mark
 
     def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, native_sessions=None,
                    deployment=None, secrets=None, admission='explicit', apply_integrations=False,
@@ -949,11 +948,13 @@ class BusinessWorker:
             # delivers its spool. The row is durable; navigation.ready projects it.
             return
         if not receipt_records.sink_get(self.app.store, 'native-input:' + row['_id']):
-            timing, mark = getattr(self.controller, 'ingress_timing', None), time.monotonic()
+            from .chat import INGRESS_TIMING as timing
+            mark = time.monotonic()
             value = {'kind': 'channel_input', **self.channel_input(row)}
-            if timing is not None:
-                timing.channel_input = time.monotonic() - mark
-            self.emit(value, timing)
+            timing.channel_input = time.monotonic() - mark
+            self.emit_timing.__dict__.clear()
+            self.emit(value)
+            timing.__dict__.update(vars(self.emit_timing))
 
     def channel_title(self, route):
         """Conversation title a person can read (content only): the configured name, else the group name or

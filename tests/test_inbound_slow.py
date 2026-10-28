@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from asuna import channels as channels_module
 from asuna.channels import Channels
+from asuna.chat import INGRESS_TIMING
 
 
 class Evidence:
@@ -18,13 +19,13 @@ class Evidence:
 
 
 def channels_over(evidence, admit):
-    controller = SimpleNamespace(ingress_lock=threading.RLock(), ingress_timing=threading.local(), reconfiguring=False,
-                                 stopping=threading.Event(), app=SimpleNamespace(evidence=evidence))
+    controller = SimpleNamespace(ingress_lock=threading.RLock(), reconfiguring=False, stopping=threading.Event(),
+                                 app=SimpleNamespace(evidence=evidence))
     channels = Channels.__new__(Channels)
     channels.controller = controller
 
     def _receive(channel_id, body):
-        return admit(controller.ingress_timing)
+        return admit(INGRESS_TIMING)
     channels._receive = _receive
     return channels
 
@@ -61,5 +62,14 @@ def test_a_failure_to_record_is_not_the_admission_s(monkeypatch):
 def test_the_timing_of_one_admission_does_not_carry_into_the_next():
     evidence = Evidence()
     channels = channels_over(evidence, lambda timing: {'kept': sorted(vars(timing))})
-    channels.controller.ingress_timing.persist = 7.0          # left by an earlier admission on this thread
+    INGRESS_TIMING.persist = 7.0                              # left by an earlier admission on this thread
     assert channels.receive('qq', {}) == {'kept': []}
+
+
+def test_an_emit_notes_its_output_lock_wait_and_its_write(capsys):
+    from asuna.native_worker import BusinessWorker
+    worker = BusinessWorker()
+    worker.emit({'kind': 'probe'})
+    assert capsys.readouterr().out == '{"kind": "probe"}\n'
+    assert set(vars(worker.emit_timing)) == {'output_lock_wait', 'output_write'}
+    assert all(value >= 0 for value in vars(worker.emit_timing).values())

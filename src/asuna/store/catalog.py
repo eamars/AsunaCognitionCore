@@ -303,8 +303,18 @@ CATALOG = Catalog([
     _core('journal_revisions', 'documents', index(('mutation_id', 1), unique=True),
           index(('persona', 1), ('slug', 1), ('created_at', -1)), index(('entry_id', 1), ('created_at', 1))),
     _core('questions', 'questions'),
-    # Its fault counts leave 30 days (lane_faults.KEEP_DAYS) after their hour, by today's TTL index, until
-    # lane_faults.forget_old replaces it.
-    _core('lane_faults', 'lane_faults', index(('channel_id', 1), ('hour', 1)),
-          index(('lane', 1), ('stage', 1), ('error', 1), ('hour', 1)), index(('hour_at', 1), expire_after=30 * 86400)),
+    # Its fault counts leave KEEP_DAYS after their hour through lane_faults.forget_old, which replaces the TTL index.
+    Collection('lane_faults', 'lane_faults', (
+        Field('_last_op', 'text'), Field('schema_version', 'number', required=True),
+        *(Field(path, 'text', required=True) for path in ('channel_id', 'lane', 'stage', 'error', 'hour')),
+        Field('hour_at', 'time', required=True), Field('count', 'number', required=True),
+        Field('first_posted_at', 'time'), Field('last_posted_at', 'time')),
+        (index(('channel_id', 1), ('hour', 1)), index(('lane', 1), ('stage', 1), ('error', 1), ('hour', 1))),
+        retired=('hour_at_1',), versioned=True),
+    # One record, `host`: the Host holding the database (host_lease.py).
+    Collection('host_leases', 'host_lease', (
+        Field('instance', 'text', required=True), Field('host', 'text', nullable=True),
+        Field('persona', 'text', nullable=True), Field('pid', 'number', nullable=True),
+        Field('since', 'time'), Field('expires_at', 'time', required=True), Field('planned_stop', 'object'),
+        Field('planned_stop.at', 'time'), Field('planned_stop.by', 'text', nullable=True))),
 ])

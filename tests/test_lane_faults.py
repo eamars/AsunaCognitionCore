@@ -32,9 +32,12 @@ def test_counts_add_up_by_signature_and_hour_and_carry_no_message(store):
     assert docs[hour]['hour_at'].strftime(lane_faults.HOUR_FORMAT) == hour
 
 
-def test_counts_leave_after_their_days_by_a_ttl_on_the_hour(store):
-    ttl = [index for index in store.db.lane_faults.list_indexes() if 'expireAfterSeconds' in index]
-    assert [(list(index['key']), index['expireAfterSeconds']) for index in ttl] == [(['hour_at'], lane_faults.KEEP_DAYS * 86400)]
+def test_counts_leave_after_their_days_on_the_next_write(store):
+    now = datetime.now(timezone.utc)
+    lane_faults.record(store, 'qq', 'inbound', 'post', 'old', moment=now - timedelta(days=lane_faults.KEEP_DAYS, hours=2))
+    lane_faults.record(store, 'qq', 'inbound', 'post', 'kept', moment=now - timedelta(days=lane_faults.KEEP_DAYS - 1))
+    assert [doc['error'] for doc in store.db.lane_faults.find()] == ['kept']
+    assert not [index for index in store.db.lane_faults.list_indexes() if 'expireAfterSeconds' in index]
 
 
 @pytest.mark.parametrize('body, code', [

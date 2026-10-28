@@ -402,6 +402,7 @@ Faults of the channel lanes, counted by signature and hour (ADR-095 §5.6, step 
 - def `hour_of` — The UTC hour a fault is counted in, as `YYYY-MM-DDTHH`.
 - def `receive` — An adapter's counts: {'counts': [{'lane', 'stage', 'error', 'hour', 'count'}]}, at most MAX_ROWS rows; all of them or none are counted.
 - def `record` — Count `count` faults of one signature in its hour (the current one unless `moment` is given).
+- def `forget_old` — Forget the counts whose hour started more than KEEP_DAYS ago; how many went.
 
 ## `media_children`
 

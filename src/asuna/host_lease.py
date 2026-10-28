@@ -8,19 +8,24 @@ holds it. Expiry uses the database server's clock, so clocks on different machin
 
 A clean stop deletes the lease. Finding this deployment's own lease at start means the last Host did not stop by
 itself: `left_behind` is then about when it was last alive, and `planned` whether someone marked that stop as a
-planned restart first (`mark_planned`, host_stops).
+planned restart first (`mark_planned`, host_stops). This module is the owner of `host_leases`: it reads and writes
+the lease through the store's words, `Now` being the database's clock.
 """
 import os
 import socket
 import threading
 import uuid
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from pymongo import MongoClient
-from pymongo.errors import DuplicateKeyError
 
 from .config import DATA
 from .state import Denied
+from .store import Checked
+from .store.catalog import CATALOG
+from .store.errors import DuplicateKey
+from .store.mongodb import MongoAdapter
+from .store.words import And, Now, Or, Range, Set, Unset
 
 LEASE_SECONDS = 90
 RENEW_SECONDS = 30
@@ -40,11 +45,20 @@ def host_id(root=None):
         return value
 
 
+def _leases(config, **timeouts):
+    """(client, the lease collection's handle) on the configured database."""
+    client = MongoClient(config['mongo_uri'], serverSelectionTimeoutMS=5000, timeoutMS=10000, **timeouts)
+    return client, Checked(MongoAdapter(client, config['database']), CATALOG).collection(COLLECTION)
+
+
+def _utc(moment):
+    """A lease time as this module has always handed it on: UTC, without its zone."""
+    return moment.astimezone(timezone.utc).replace(tzinfo=None) if hasattr(moment, 'astimezone') else moment
+
+
 class DatabaseLease:
     def __init__(self, config, *, persona=None, root=None, renew_seconds=RENEW_SECONDS):
-        self.client = MongoClient(config['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
-                                  timeoutMS=10000)
-        self.leases = self.client[config['database']][COLLECTION]
+        self.client, self.leases = _leases(config, connectTimeoutMS=5000)
         self.me = host_id(root)
         self.holder = {'instance': self.me, 'host': socket.gethostname(), 'persona': persona, 'pid': os.getpid()}
         self.renew_seconds = renew_seconds
@@ -54,36 +68,33 @@ class DatabaseLease:
         self.planned = False
         self.planned_by = None          # who marked the planned stop (`mark_planned --by`), when it said
 
-    def _expiry(self):
-        return {'$add': ['$$NOW', LEASE_SECONDS * 1000]}
-
     def acquire(self):
-        mine = self.leases.find_one({'_id': 'host', 'instance': self.me}, {'expires_at': 1, 'planned_stop': 1})
+        mine = next(self.leases.find({'_id': 'host', 'instance': self.me}, fields=['expires_at', 'planned_stop'],
+                                     limit=1), None)
         if mine and mine.get('expires_at'):
-            self.left_behind = mine['expires_at'] - timedelta(seconds=LEASE_SECONDS)
+            self.left_behind = _utc(mine['expires_at']) - timedelta(seconds=LEASE_SECONDS)
             mark = mine.get('planned_stop') or {}
-            marked = mark.get('at')
+            marked = _utc(mark.get('at'))
             self.planned = bool(marked) and self.left_behind - marked <= timedelta(seconds=PLANNED_SECONDS)
             self.planned_by = (str(mark['by'])[:40] or None) if self.planned and mark.get('by') else None
         # A planned-restart mark belongs to the Host that was stopped, never to this one.
-        take = [{'$set': {**self.holder, 'since': '$$NOW', 'expires_at': self._expiry()}}, {'$unset': 'planned_stop'}]
-        free_or_mine = {'$or': [{'$lt': ['$expires_at', '$$NOW']}, {'$eq': ['$instance', self.me]}]}
-        if self.leases.update_one({'_id': 'host', '$expr': free_or_mine}, take).matched_count:
+        take = [Set({**self.holder, 'since': Now(), 'expires_at': Now(LEASE_SECONDS)}), Unset('planned_stop')]
+        free_or_mine = And({'_id': 'host'}, Or({'expires_at': Range(lt=Now())}, {'instance': self.me}))
+        if self.leases.update(free_or_mine, take).matched:
             return self                 # expired, or this deployment's own
         try:
-            # No lease yet: insert one (an upsert may not filter with $expr). One that exists is someone else's.
-            self.leases.update_one({'_id': 'host', 'instance': {'$exists': False}}, take, upsert=True)
-        except DuplicateKeyError:
-            held = self.leases.find_one({'_id': 'host'}) or {}
+            # No lease yet: insert one. One that exists is someone else's.
+            self.leases.insert({'_id': 'host', **self.holder, 'since': Now(), 'expires_at': Now(LEASE_SECONDS)})
+        except DuplicateKey:
+            held = self.leases.get('host') or {}
             raise Denied('DATABASE_IN_USE: %s on %s holds it until %s' % (
-                held.get('persona'), held.get('host'), held.get('expires_at'))) from None
+                held.get('persona'), held.get('host'), _utc(held.get('expires_at')))) from None
         return self
 
     def _renew(self):
         while not self.stopping.wait(self.renew_seconds):
             try:
-                self.leases.update_one({'_id': 'host', 'instance': self.me},
-                                       [{'$set': {'expires_at': self._expiry()}}])
+                self.leases.update({'_id': 'host', 'instance': self.me}, Set({'expires_at': Now(LEASE_SECONDS)}))
             except Exception:
                 pass                    # a missed renewal is retried; the lease outlives three of them
 
@@ -98,7 +109,7 @@ class DatabaseLease:
         if self.thread:
             self.thread.join(timeout=5)
         try:
-            self.leases.delete_one({'_id': 'host', 'instance': self.me})
+            self.leases.delete({'_id': 'host', 'instance': self.me})
         finally:
             self.client.close()
 
@@ -106,9 +117,8 @@ class DatabaseLease:
 def mark_planned(config, by):
     """Before stopping a running Host on purpose where a clean stop is not possible (a killed process tree): the
     next start then records a planned restart, not an external termination. False when no Host holds the lease."""
-    client = MongoClient(config['mongo_uri'], serverSelectionTimeoutMS=5000, timeoutMS=10000)
+    client, leases = _leases(config)
     try:
-        return bool(client[config['database']][COLLECTION].update_one(
-            {'_id': 'host'}, [{'$set': {'planned_stop': {'at': '$$NOW', 'by': str(by)[:40]}}}]).matched_count)
+        return bool(leases.update({'_id': 'host'}, Set({'planned_stop': {'at': Now(), 'by': str(by)[:40]}})).matched)
     finally:
         client.close()

@@ -4,18 +4,18 @@ A signature is what failed, never the message: the channel, the lane (`inbound`,
 the Host's own as later steps add them), the stage, and the error class. Lane, stage and error are names, not words:
 only CLASS_CHARS, so no text of a line or of an answer can come in, and one fault class stays one signature. An
 adapter keeps its counts and posts them every few minutes (`POST /v1/channels/<id>/faults`, `receive`); the Host's own
-faults are counted where they happen (`record`). Each is one document per channel, signature and hour in
-`lane_faults`, its count raised with `$inc`; `hour_at` is the hour's start, and the collection keeps
-KEEP_DAYS of them (a TTL index, state.py). Counts are at least once: a post re-sent after its answer was lost counts
-again in the same hour. Nothing here interprets them: telling a persistent fault from a burst is a later step's
-(§5.6).
+faults are counted where they happen (`record`). Each is one record per channel, signature and hour in
+`lane_faults` (this module is its owner), its count raised in the same write that creates it; `hour_at` is the hour's
+start, and each write forgets the counts whose hour is more than KEEP_DAYS old (`forget_old`). Counts are at least
+once: a post re-sent after its answer was lost counts again in the same hour. Nothing here interprets them: telling a
+persistent fault from a burst is a later step's (§5.6).
 """
 from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta, timezone
 
-from pymongo import UpdateOne
+from .store.words import Increase, OnCreate, Range, Set
 
 LANES = ('inbound', 'chat', 'bulk', 'receipts', 'transcriber', 'video', 'watchdog')
 CLASS_CHARS = re.compile(r'[A-Za-z0-9_.:-]{1,80}')
@@ -68,7 +68,9 @@ def receive(store, channel_id, body):
             raise ValueError('FAULTS_COUNT_INVALID: count 是 1–%d 的整数' % MAX_COUNT)
         hour, start = _hour(row, now)
         checked.append((lane, _name(row, 'stage'), _name(row, 'error'), hour, start, count))
-    store.db.lane_faults.bulk_write([_upsert(channel_id, *row, now) for row in checked], ordered=False)
+    for row in checked:
+        _count(store, channel_id, *row, now)
+    forget_old(store, now)
     return {'status': 'recorded', 'rows': len(checked)}
 
 
@@ -80,13 +82,20 @@ def record(store, channel_id, lane, stage, error, moment=None, count=1):
     for name in row[:3]:
         if not CLASS_CHARS.fullmatch(name):
             raise ValueError('FAULTS_FIELD_INVALID: %r is not a class name' % name)
-    store.db.lane_faults.bulk_write([_upsert(channel_id, *row, now)])
+    _count(store, channel_id, *row, now)
+    forget_old(store, now)
 
 
-def _upsert(channel_id, lane, stage, error, hour, start, count, now):
-    return UpdateOne(
+def _count(store, channel_id, lane, stage, error, hour, start, count, now):
+    store.collection('lane_faults').update(
         {'_id': '|'.join((channel_id, lane, stage, error, hour))},
-        {'$inc': {'count': count}, '$set': {'last_posted_at': now},
-         '$setOnInsert': {'schema_version': 1, 'channel_id': channel_id, 'lane': lane, 'stage': stage, 'error': error,
-                          'hour': hour, 'hour_at': start, 'first_posted_at': now}},
-        upsert=True)
+        [Increase('count', count), Set({'last_posted_at': now}),
+         OnCreate({'schema_version': 1, 'channel_id': channel_id, 'lane': lane, 'stage': stage, 'error': error,
+                   'hour': hour, 'hour_at': start, 'first_posted_at': now})],
+        create=True)
+
+
+def forget_old(store, now=None):
+    """Forget the counts whose hour started more than KEEP_DAYS ago; how many went."""
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=KEEP_DAYS)
+    return store.collection('lane_faults').delete({'hour_at': Range(lt=cutoff)}, many=True)

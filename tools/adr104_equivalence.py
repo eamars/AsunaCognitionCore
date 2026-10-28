@@ -1,15 +1,17 @@
 """The read-only check of one ADR-104 batch against a deployment's database, before the batch merges: numbers only,
 never a record id or a value.
 
-  python tools/adr104_equivalence.py b1b [--config config/local.json] [--out <folder>] [--max-ms 2000]
+  python tools/adr104_equivalence.py b1b|b2 [--config config/local.json] [--out <folder>] [--max-ms 2000]
 
-b1b: what the store's `ensure` would do there, as a dry run (collections it would create, indexes it would make or
-drop, indexes of a declared name that differ, validators), and for every field the catalog declares in a collection,
-its stored records by BSON type, the nulls, the records missing a required field and, for a vector, the lengths that
-differ. Each query is read-only and bounded by `--max-ms`. The numbers go to `<out>/b1b.json` (default
-`<data>/private/adr104-evidence/b1b/`) and to the console. Exit 0 when nothing would be created, made, dropped or
-refused, every validator is the one ensure creates and every declared field holds only its kind; 1 when something
-differs; 2 when a check could not run (a query over its time limit, the server out of reach).
+Each batch: what the store's `ensure` would do there, as a dry run (collections it would create, indexes it would
+make, retired indexes it would drop, indexes of a declared name that differ, validators), and for every field the
+catalog declares in the batch's collections (b1b: all of them; b2: `host_leases` and `lane_faults`), its stored
+records by BSON type, the nulls, the records missing a required field and, for a vector, the lengths that differ.
+Each query is read-only and bounded by `--max-ms`. The numbers go to `<out>/<batch>.json` (default
+`<data>/private/adr104-evidence/<batch>/`) and to the console. Exit 0 when nothing would be created, made or refused,
+every validator is the one ensure creates and every declared field holds only its kind (the retired indexes to drop
+are reported: dropping them is the batch's change); 1 when something differs; 2 when a check could not run (a query
+over its time limit, the server out of reach).
 """
 from __future__ import annotations
 import argparse
@@ -72,7 +74,11 @@ def differs(collection, counts):
     return wrong
 
 
-def b1b(settings, database, out, max_ms):
+# The collections whose declared fields each batch counts (None: every collection).
+BATCHES = {'b1b': None, 'b2': ('host_leases', 'lane_faults')}
+
+
+def check(batch, settings, database, out, max_ms):
     client = MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000)
     report, unchecked = {'database_collections': len(CATALOG.names())}, []
     try:
@@ -83,6 +89,8 @@ def b1b(settings, database, out, max_ms):
         report['conflicts'] = [[name, index] for name, plan in plans.items() for index, _ in plan['conflicts']]
         report['fields'], report['fields_differ'] = {}, []
         for collection in CATALOG.collections():
+            if BATCHES[batch] is not None and collection.name not in BATCHES[batch]:
+                continue
             try:
                 counts = kinds(adapter.db, collection, max_ms)
             except ExecutionTimeout:
@@ -103,7 +111,7 @@ def b1b(settings, database, out, max_ms):
         validators[plan['validator']] = validators.get(plan['validator'], 0) + 1
     report['totals'], report['validators'] = totals, validators
     out.mkdir(parents=True, exist_ok=True)
-    (out / 'b1b.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    (out / (batch + '.json')).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
     print('ensure, dry run: collections to create %(create)d, indexes to make %(make)d, to drop %(drop)d, '
           'conflicting %(conflicts)d' % totals)
     print('validators: ' + ', '.join('%s %d' % item for item in sorted(validators.items())))
@@ -118,16 +126,17 @@ def b1b(settings, database, out, max_ms):
         print('differs from its declaration: %s.%s' % (name, path))
     for name in unchecked:
         print('UNCHECKED, over the time limit: %s' % name)
-    print('numbers written to %s' % (out / 'b1b.json'))
+    print('numbers written to %s' % (out / (batch + '.json')))
     if unchecked:
         return 2
-    clean = (not any(totals.values()) and set(validators) <= {'same', 'not declared'} and not report['fields_differ'])
+    clean = (not (totals['create'] or totals['make'] or totals['conflicts'])
+             and set(validators) <= {'same', 'not declared'} and not report['fields_differ'])
     return 0 if clean else 1
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    parser.add_argument('batch', choices=['b1b'])
+    parser.add_argument('batch', choices=sorted(BATCHES))
     parser.add_argument('--config', default=str(ROOT / 'config' / 'local.json'))
     parser.add_argument('--out')
     parser.add_argument('--max-ms', type=int, default=2000)
@@ -139,7 +148,7 @@ def main(argv=None):
         return 2
     data = Path(os.environ.get('ASUNA_DATA_ROOT') or ROOT / '.runtime')
     out = Path(args.out) if args.out else data / 'private' / 'adr104-evidence' / args.batch
-    return b1b(config, config['database'], out, args.max_ms)
+    return check(args.batch, config, config['database'], out, args.max_ms)
 
 
 if __name__ == '__main__':

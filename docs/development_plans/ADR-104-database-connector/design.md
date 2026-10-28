@@ -412,7 +412,9 @@ is used; the double an injected clock (`MemoryAdapter(clock=...)`), which tests 
 `planned_stop.at` are `time` fields. Today's insert path is an upsert filtered on `instance` missing; the design's
 insert is the same effect (it fails when any lease exists). Not changed: a paused holder is not fenced after expiry
 (today's behaviour; the file lock stops a second Host on one machine). Races `R03`: two holders for an expired lease,
-one wins, the other gets `DuplicateKey` or zero matched.
+one wins, the other gets `DuplicateKey` or zero matched. As built (B2): `host_lease` hands its times on as before, UTC
+without a zone (`left_behind`, the planned-stop mark, the `DATABASE_IN_USE` text), keeps its own client and its
+timeouts, and its unit tests run against a server in `integration/test_lease_and_faults.py`.
 
 **5.4 Unique keys, including "only where a field exists".** Section 3.5. Today's 18 unique indexes
 (`state.py:139-186`) map one to one: five are `$type: string` partial ones (`messages` platform events and

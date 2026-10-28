@@ -230,10 +230,9 @@ def apply(doc, change, now, creating=False):
             if not present or (value is None and isinstance(word, Larger)):
                 _put(doc, word.path, copy.deepcopy(word.value))
             elif value is not None:
-                if kind_of(value) != kind_of(word.value):
-                    raise RecordInvalid('RECORD_KIND: "%s" 存的是 %s，和 %s 比不了'
-                                        % (word.path, kind_of(value), kind_of(word.value)))
-                if (word.value > value) if isinstance(word, Larger) else (word.value < value):
+                # A declared field holds one kind; an undeclared one is compared in the sort's order of kinds.
+                new, old = _order(word.value), _order(value)
+                if (new > old) if isinstance(word, Larger) else (new < old):
                     _put(doc, word.path, copy.deepcopy(word.value))
         elif isinstance(word, AddToSet):
             items = list(_listed(doc, word.path))

@@ -371,7 +371,7 @@ def _test(collection, field, test, now, depth):
     if isinstance(test, Each):
         if field.kind != 'list' or field.of != 'object':
             raise QueryInvalid('QUERY_WORD_KIND: Each 只能用在对象的列表上（"%s" 是 %s）' % (field.path, field.kind))
-        return Each(_where(collection, test.where, now, field.path, depth + 1))
+        return Each(_where(collection, test.where, False, field.path, depth + 1))
     raise QueryInvalid('QUERY_WORD_MISPLACED: %s 不是条件里的词（"%s"）' % (name, field.path))
 
 
@@ -576,9 +576,20 @@ def _listed(collection, path, values, word):
         _declared_values(collection, list(values), path)
 
 
-def check_change(collection, change):
+def holds_now(value) -> bool:
+    if isinstance(value, Now):
+        return True
+    if isinstance(value, Mapping):
+        return any(holds_now(v) for v in value.values())
+    if isinstance(value, list):
+        return any(holds_now(v) for v in value)
+    return False
+
+
+def check_change(collection, change, *, create=False):
     """A change validated: a list of change words, each value copied with times in UTC ms; two words never write
-    one path or a path inside another."""
+    one path or a path inside another. A change that writes `Now` holds only `Set` and `Unset` and creates nothing
+    (a server writes it with an update pipeline)."""
     words = list(change) if isinstance(change, (list, tuple)) else [change]
     if not words:
         raise QueryInvalid('QUERY_CHANGE_EMPTY: 没有要改的；至少写一个 Set、Unset、Increase……')
@@ -640,6 +651,9 @@ def check_change(collection, change):
         for b in paths:
             if a is not b and (a == b or b.startswith(a + '.')):
                 raise QueryInvalid('QUERY_CHANGE_CONFLICT: 同一次改动里 "%s" 和 "%s" 写到了一处；分成两次' % (a, b))
+    if any(isinstance(w, (Set, OnCreate)) and holds_now(w.values) for w in checked) and (
+            create or not all(isinstance(w, (Set, Unset)) for w in checked)):
+        raise QueryInvalid('QUERY_NOW_MISPLACED: 写 Now() 的改动只能有 Set 和 Unset，也不能新建记录；分成两次写')
     return checked
 
 

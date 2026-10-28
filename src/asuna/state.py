@@ -1,23 +1,25 @@
-"""The worker's MongoDB store: every write goes through `Store.put` with an expected revision and is recorded in a
+"""The worker's store: every write goes through `Store.put` with an expected revision and is recorded in a
 hash-chained audit stream.
 
-`migrate` creates the collections and indexes, `get` refuses reads outside the caller's scope, and `mutate` writes
-her relationship and scene-affect revisions only from sources she may read.
+`put`, `audit`, `recover_commits`, `ensure` (`migrate`), `nearest` and `ensure_vectors` go through the store's
+MongoDB adapter and the shared layer's checks (asuna.store); `collection(name)` is a declared collection's handle,
+and `db` the database itself for the code that still reads it directly. `get` refuses reads outside the caller's
+scope, and `mutate` writes her relationship and scene-affect revisions only from sources she may read.
 """
 from __future__ import annotations
 from datetime import datetime, timezone
 import copy
 import json
-import time
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
-from bson import BSON
-from pymongo import ASCENDING, MongoClient, ReturnDocument, WriteConcern
-from pymongo.errors import DuplicateKeyError
-from pymongo.operations import SearchIndexModel
+from pymongo import MongoClient, WriteConcern
 from .config import validate_database, character_id
 from .evidence import canonical, sha
+from .store import Checked
+from .store.catalog import CATALOG, Space
+from .store.errors import DuplicateKey
+from .store.mongodb import MongoAdapter
+from .store.words import And, AnyOf, Exists, Or
 
 COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memory_units','state_heads',
                'state_revisions','sessions','audit_events','artifacts','sink_receipts','lane_receipts',
@@ -101,18 +103,6 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
-@dataclass(frozen=True)
-class Space:
-    """Vectors searched by cosine similarity: each record of `collection` holds its vector in `path`, written with the
-    record by `put` (the store indexes it in the same write), and a search may filter on `fields`, declared with the
-    index. A change of dimensions or fields is a new space."""
-    name: str
-    collection: str
-    path: str
-    dimensions: int
-    fields: tuple[str, ...]
-
-
 class Conflict(RuntimeError):
     pass
 
@@ -128,89 +118,39 @@ class Store:
         self.client = MongoClient(config['mongo_uri'], serverSelectionTimeoutMS=5000,
                                   connectTimeoutMS=5000, timeoutMS=20000)
         self.db = self.client.get_database(self.name, write_concern=WriteConcern(w='majority', j=True))
+        self.adapter = MongoAdapter(self.client, self.name)
+        self.checked = Checked(self.adapter, CATALOG)
         self.fail_audit = False
 
+    def collection(self, name):
+        """The handle of a declared collection: the store's words, checked against the catalog."""
+        return self.checked.collection(name)
+
+    def ensure(self) -> dict:
+        """Create every declared collection with its validator and indexes, and drop the retired indexes;
+        {collection: Ensured}. An index of a declared name that differs stops it (SchemaConflict)."""
+        return self.checked.ensure()
+
     def migrate(self):
-        existing = set(self.db.list_collection_names())     # one round trip, not one per collection
-        for name in COLLECTIONS:
-            if name not in existing:
-                self.db.create_collection(name, validator={'$jsonSchema':{'bsonType':'object','required':['_id','schema_version'],'properties':{'schema_version':{'enum':[1]}}}})
-        from . import lane_faults
-        specs = {
-            'identities': [([('platform',1),('account_id',1)], {'unique':True})],
-            'messages': [([('adapter_id',1),('scene_id',1),('platform_event_id',1)], {'unique':True,'partialFilterExpression':{'platform_event_id':{'$type':'string'}}}),
-                         ([('publication_key',1)],{'unique':True,'partialFilterExpression':{'publication_key':{'$type':'string'}}}),
-                         ([('scene_id',1),('scene_seq',1)],{}),
-                         ([('host_managed',1),('ingress_state',1),('received_at',1)],{}),
-                         ([('channel_id',1),('delivery_state',1),('scene_seq',1)],{}),
-                         ([('author',1),('direction',1)],{}),
-                         # A turn's own lines (speaking, reply parts, visit outcomes, recovery): without it each
-                         # lookup scans every message.
-                         ([('episode_id',1)],{}),
-                         # Her errands (the daily cap, what came of them at home): only visit rows carry it.
-                         ([('event.visit.intent',1),('received_at',1)],{'partialFilterExpression':{'event.visit.intent':{'$exists':True}}})],
-            'episodes': [([('scene_id',1),('source_event_id',1),('episode_kind',1)], {'unique':True}),
-                         ([('person_id',1),('state',1)],{})],             # familiarity: turns she answered someone
-            'tasks': [([('request_key',1)], {'unique':True})],
-            'plans': [([('scene_id',1),('person_id',1),('status',1)],{})],
-            'memory_units': [([('scope_key',1),('status',1),('policy_epoch',1)],{}),
-                             ([('scope_key',1),('origin',1),('source_identity',1)],{'unique':True,'partialFilterExpression':{'source_identity':{'$type':'string'}}})],
-            'state_revisions': [([('mutation_id',1)], {'unique':True})],
-            'sessions': [([('binding_key',1)], {'unique':True})],
-            'audit_events': [([('stream_id',1),('seq',1)], {'unique':True}), ([('type',1),('occurred_at',1)], {}), ([('occurred_at',1)], {})],
-            'affect_events': [([('persona',1),('ts',1)],{}),
-                              ([('persona',1),('origin',1),('source_identity',1)],{'unique':True,'partialFilterExpression':{'source_identity':{'$type':'string'}}})],
-            'affect_amendments': [([('target',1)],{}),
-                                  ([('persona',1),('origin',1),('source_identity',1)],{'unique':True,'partialFilterExpression':{'source_identity':{'$type':'string'}}})],
-            'affect_proposals': [([('persona',1),('kind_row',1),('created_at',1)],{})],
-            # One fixed label per person per scene (people.py).
-            'scene_people': [([('scene_id',1),('handle',1)],{'unique':True})],
-            'task_messages': [([('task_id',1),('created_at',1)],{}), ([('thread',1),('created_at',1)],{})],
-            'ideas': [([('persona',1),('state',1),('created_at',1)],{})],
-            'stickers': [([('persona',1),('name',1)],{'unique':True}), ([('persona',1),('identity',1)],{'unique':True})],
-            'sticker_pool': [([('last_seen',1)],{}), ([('artifact_id',1)],{})],
-            'sticker_memory': [([('persona',1),('key',1)],{'unique':True})],
-            'watches': [([('persona',1),('person',1),('state',1)],{})],
-            'notes': [([('to_scene',1),('created_at',-1)],{}), ([('from_scene',1),('created_at',-1)],{}),
-                      ([('persona',1),('created_at',-1)],{}), ([('reply_to',1)],{})],
-            'developer_inbox': [([('persona',1),('created_at',-1)],{}), ([('state',1),('created_at',1)],{})],
-            'host_stops': [([('how',1),('back_at',-1)],{})],
-            'switches': [([('state',1),('kind',1),('until',1)],{}), ([('persona',1),('state',1)],{})],
-            'own_mutes': [([('muted',1)],{})],
-            # a fault count leaves after lane_faults.KEEP_DAYS days of its hour (ADR-095)
-            'lane_faults': [([('channel_id',1),('hour',1)],{}), ([('lane',1),('stage',1),('error',1),('hour',1)],{}),
-                            ([('hour_at',1)],{'expireAfterSeconds': lane_faults.KEEP_DAYS * 86400})],
-            'journal_entries': [([('persona',1),('slug',1),('seq',1)],{'unique':True}),
-                                ([('persona',1),('slug',1),('sid',1)],{'unique':True}), ([('last_mutation',1)],{})],
-            'journal_revisions': [([('mutation_id',1)],{'unique':True}), ([('persona',1),('slug',1),('created_at',-1)],{}),
-                                  ([('entry_id',1),('created_at',1)],{})],
-        }
-        for name, indexes in specs.items():
-            for keys, options in indexes:
-                self.db[name].create_index(keys, **options)
-        return {'database': self.name, 'collections':list(COLLECTIONS),'migration':3}
+        self.ensure()
+        return {'database': self.name, 'collections': list(COLLECTIONS), 'migration': 3}
 
     def audit(self, stream: str, kind: str, payload: dict, scope: str='operator') -> dict:
         if self.fail_audit:
             raise OSError('AUDIT_UNAVAILABLE')
+        events = self.collection('audit_events')
         for _ in range(50):
-            previous = self.db.audit_events.find_one({'stream_id':stream}, sort=[('seq',-1)])
+            previous = next(events.find({'stream_id': stream}, sort=[('seq', -1)], limit=1), None)
             event = {'_id':str(uuid.uuid4()),'schema_version':1,'stream_id':stream,'seq':previous['seq']+1 if previous else 1,
                      'type':kind,'scope_key':scope,'occurred_at':now(),'payload':copy.deepcopy(payload),
                      'prev_hash':previous['event_hash'] if previous else '0'*64}
             event['event_hash'] = sha(canonical(event))
-            self._size(event)
             try:
-                self.db.audit_events.insert_one(event)
+                events.insert(event)
                 return event
-            except DuplicateKeyError:
-                continue
+            except DuplicateKey:
+                continue                     # a racing append took this seq: read the stream's newest again
         raise Conflict('AUDIT_STREAM_BUSY')
-
-    @staticmethod
-    def _size(document):
-        if len(BSON.encode(document)) > 1024*1024:
-            raise ValueError('DOCUMENT_TOO_LARGE_USE_ARTIFACT')
 
     def put(self, collection: str, document: dict, *, expected: int | None = None, stream: str='state',
             reset_counters: bool=False) -> dict:
@@ -223,26 +163,21 @@ class Store:
             doc.setdefault('created_at' if collection == 'state_revisions' else 'formed_at', now())
         operation = str(uuid.uuid4())
         doc['_last_op'] = operation
-        self._size(doc)
+        records = self.collection(collection)
         # No intent record before the write (ADR-067): a single-document write is atomic, and a commit that never got
-        # its record is found by the document's own _last_op (recover_commits).
+        # its record is found by the document's own _last_op (recover_commits). The record is checked (its size, its
+        # declared fields) before anything is written.
         try:
             if expected is None:
-                self.db[collection].insert_one(doc)
+                records.insert(doc)
             else:
                 # The document comes from an earlier read: its counters (COUNTER_FIELDS) keep the values they reached
                 # since, in the same write. Only a put that starts the record over (reset_counters) writes them.
                 kept = () if reset_counters else COUNTER_FIELDS.get(collection, ())
-                match = {'_id':doc['_id'],'revision':expected}
-                if kept:
-                    fields = {k:{'$literal':v} for k,v in doc.items() if k not in kept and k != '_id'}
-                    result = self.db[collection].update_one(match,[{'$project':{**fields,**{k:1 for k in kept}}}])
-                else:
-                    result = self.db[collection].replace_one(match,doc)
-                if result.modified_count != 1:
+                if not records.replace(doc, expected=expected, keep=kept):
                     self.audit(stream,'state.conflict',{'operation':operation,'collection':collection,'id':doc['_id'],'expected':expected,'reason':'STALE_REVISION'},doc.get('scope_key','operator'))
                     raise Conflict('STALE_REVISION: 这条记录刚被别处改过，这次没有写进去；不是参数的问题：读一次最新的再做')
-        except DuplicateKeyError as exc:
+        except DuplicateKey as exc:
             self.audit(stream,'state.conflict',{'operation':operation,'collection':collection,'id':doc['_id'],'expected':expected,'reason':'DUPLICATE_ID'},doc.get('scope_key','operator'))
             raise Conflict('DUPLICATE_ID') from exc
         self.audit(stream,'state.commit',commit_payload(operation,collection,doc),doc.get('scope_key','operator'))
@@ -250,12 +185,13 @@ class Store:
 
     def recover_commits(self):
         repaired = 0
+        commits = self.collection('audit_events')
         for name in COLLECTIONS:
             if name in INSERT_ONLY:
                 continue
-            for doc in self.db[name].find({'_last_op':{'$exists':True}}):
+            for doc in self.collection(name).find({'_last_op': Exists(True)}):
                 op = doc['_last_op']
-                if not self.db.audit_events.find_one({'type':'state.commit','payload.operation':op}):
+                if not commits.count({'type': 'state.commit', 'payload.operation': op}, limit=1):
                     self.audit('recovery','state.commit',commit_payload(op,name,doc,reconciled=True),doc.get('scope_key','operator'))
                     repaired += 1
         return repaired
@@ -263,53 +199,23 @@ class Store:
     def ensure_vectors(self, space: Space, timeout: float = 45) -> bool:
         """Create the space's index, or bring an existing one's filter fields up to the space's (the old one keeps
         serving meanwhile); True once it can be queried, False if it cannot yet after `timeout` seconds."""
-        collection = self.db[space.collection]
-        definition = {'fields': [{'type': 'vector', 'path': space.path, 'numDimensions': space.dimensions,
-                                  'similarity': 'cosine'}, *[{'type': 'filter', 'path': key} for key in space.fields]]}
-        current = list(collection.list_search_indexes(space.name))
-        if not current:
-            collection.create_search_index(SearchIndexModel(name=space.name, type='vectorSearch', definition=definition))
-        elif ({f.get('path') for f in (current[0].get('latestDefinition') or {}).get('fields') or []
-               if f.get('type') == 'filter'} != set(space.fields)):
-            collection.update_search_index(space.name, definition)
-        until = time.monotonic() + timeout
-        while True:
-            rows = list(collection.list_search_indexes(space.name))
-            if rows and rows[0].get('status') == 'READY' and rows[0].get('queryable'):
-                return True
-            if time.monotonic() > until:
-                return False
-            time.sleep(.5)
+        return self.checked.ensure_vectors(space, timeout)
 
     def nearest(self, space: Space, vector, k: int, where: dict) -> list[tuple[str, float]]:
         """The k records nearest to `vector` among those matching `where`, best first, as (id, cosine similarity in
         [-1, 1]); exact, never approximate. `where` maps a declared field to a value or a list of values (any of
         them), or a tuple of declared fields to a list of value tuples (any of those combinations); every entry holds.
         Equal scores come in id order; which of several records tied at the k-th score are returned is the database's."""
-        if not 1 <= k <= 100:
-            raise ValueError('VECTOR_K')
-        if len(vector) != space.dimensions or not any(vector):
-            raise ValueError('VECTOR_SHAPE')
-        parts = []
+        values, pairs = {}, []
         for key, value in where.items():
-            names = key if isinstance(key, tuple) else (key,)
-            if any(name not in space.fields for name in names):
-                raise ValueError('VECTOR_FIELD_NOT_DECLARED')
-            if isinstance(key, tuple) or isinstance(value, (list, set, frozenset)):
-                value = list(value)
-                if not value:
+            if isinstance(key, tuple):
+                combinations = [dict(zip(key, combination)) for combination in value]
+                if not combinations:
                     return []                        # any of none: nothing matches
-                parts.append({'$or': [dict(zip(names, combo)) for combo in value]} if isinstance(key, tuple)
-                             else {key: {'$in': value}})
+                pairs.append(Or(*combinations))
             else:
-                parts.append({key: value})
-        stage = {'index': space.name, 'path': space.path, 'queryVector': list(vector), 'exact': True, 'limit': k}
-        if parts:
-            stage['filter'] = parts[0] if len(parts) == 1 else {'$and': parts}
-        rows = self.db[space.collection].aggregate([{'$vectorSearch': stage},
-                                                    {'$project': {'_id': 1, 'score': {'$meta': 'vectorSearchScore'}}}])
-        # MongoDB scores cosine as (1 + cosine) / 2.
-        return sorted(((row['_id'], 2 * row['score'] - 1) for row in rows), key=lambda hit: (-hit[1], hit[0]))
+                values[key] = AnyOf(list(value)) if isinstance(value, (list, set, frozenset, tuple)) else value
+        return self.checked.nearest(space, vector, k, And(values, *pairs) if pairs else values)
 
     def get(self, collection: str, key: str, scope: str, *, operator: bool=False):
         if collection not in COLLECTIONS:

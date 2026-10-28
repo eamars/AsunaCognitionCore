@@ -97,7 +97,9 @@ class Space:
 class Collection:
     """A declared collection. Flags: `versioned` (every record carries `schema_version`), `insert_only` (a ledger),
     `counters` (fields a revisioned write keeps at their stored values), `derived` (fields computed from the record's
-    own content, left out of its audit)."""
+    own content, left out of its audit), `pending` (its owner still reads it directly: only the fields the store
+    itself names are declared, and its indexes may name fields not declared yet; a unique index's `only_where_present`
+    fields are declared, their kind giving the index's filter)."""
     name: str
     owner: str
     fields: tuple = ()
@@ -107,6 +109,7 @@ class Collection:
     insert_only: bool = False
     counters: tuple = ()
     derived: tuple = ()
+    pending: bool = False
     _paths: dict = _field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self):
@@ -138,12 +141,15 @@ class Collection:
                 raise _invalid('%s: index %s declared twice or also retired' % (self.name, index.name))
             names.add(index.name)
             for path, direction in index.keys:
-                if path not in paths or direction not in (1, -1):
+                if direction not in (1, -1) or (path not in paths and not self.pending):
                     raise _invalid('%s: index %s names %r' % (self.name, index.name, path))
-                if index.unique:
+                if index.unique and path in index.only_where_present and path not in paths:
+                    raise _invalid('%s: unique index %s: declare %s, whose kind gives its filter'
+                                   % (self.name, index.name, path))
+                if index.unique and path in paths:
                     if paths[path].kind in ('list', 'object', 'vector'):
                         raise _invalid('%s: unique index %s on %s' % (self.name, index.name, path))
-                    if not paths[path].required and path not in index.only_where_present:
+                    if not (paths[path].required or path in index.only_where_present or self.pending):
                         raise _invalid('%s: unique index %s: %s is neither required nor only_where_present'
                                        % (self.name, index.name, path))
             if not set(index.only_where_present) <= {path for path, _ in index.keys}:
@@ -204,4 +210,98 @@ class Catalog:
                 raise _invalid('space %s filters on %s, not a declared value field' % (space.name, path))
 
 
-CATALOG = Catalog()
+def index(*keys, unique=False, only_where_present=()):
+    """An index named as MongoDB names one by default (`scene_id_1_scene_seq_1`)."""
+    return Index('_'.join('%s_%s' % key for key in keys), tuple(keys), unique, tuple(only_where_present))
+
+
+def _core(name, owner, *indexes, fields=(), **flags):
+    """A collection of the core's: versioned, pending until its owner moves, and carrying the commit mark `_last_op`
+    that recovery reads."""
+    return Collection(name, owner, (Field('_last_op', 'text'), *fields), tuple(indexes), versioned=True, pending=True,
+                      **flags)
+
+
+def _text(*paths):
+    return tuple(Field(path, 'text', nullable=True) for path in paths)
+
+
+CATALOG = Catalog([
+    _core('identities', 'records.people', index(('platform', 1), ('account_id', 1), unique=True)),
+    _core('scenes', 'records.scenes', counters=('sequence',)),
+    _core('messages', 'records.messages',
+          index(('adapter_id', 1), ('scene_id', 1), ('platform_event_id', 1), unique=True,
+                only_where_present=('platform_event_id',)),
+          index(('publication_key', 1), unique=True, only_where_present=('publication_key',)),
+          index(('scene_id', 1), ('scene_seq', 1)),
+          index(('host_managed', 1), ('ingress_state', 1), ('received_at', 1)),
+          index(('channel_id', 1), ('delivery_state', 1), ('scene_seq', 1)),
+          index(('author', 1), ('direction', 1)),
+          index(('episode_id', 1)),
+          index(('event.visit.intent', 1), ('received_at', 1), only_where_present=('event.visit.intent',)),
+          fields=_text('platform_event_id', 'publication_key')),
+    _core('episodes', 'records.episodes',
+          index(('scene_id', 1), ('source_event_id', 1), ('episode_kind', 1), unique=True),
+          index(('person_id', 1), ('state', 1))),
+    _core('tasks', 'records.tasks', index(('request_key', 1), unique=True)),
+    _core('plans', 'records.plans', index(('scene_id', 1), ('person_id', 1), ('status', 1))),
+    _core('memory_units', 'records.memories',
+          index(('scope_key', 1), ('status', 1), ('policy_epoch', 1)),
+          index(('scope_key', 1), ('origin', 1), ('source_identity', 1), unique=True,
+                only_where_present=('source_identity',)),
+          fields=(Field('embedding', 'vector', dimensions=768, nullable=True),
+                  Field('policy_epoch', 'number', nullable=True),
+                  *_text('source_identity', 'scope_key', 'character_id', 'status', 'embedding_revision', 'kind')),
+          counters=('salience',), derived=('embedding',)),
+    _core('state_heads', 'records.heads'),
+    _core('state_revisions', 'records.heads', index(('mutation_id', 1), unique=True)),
+    _core('sessions', 'records.sessions', index(('binding_key', 1), unique=True)),
+    _core('audit_events', 'audit',
+          index(('stream_id', 1), ('seq', 1), unique=True), index(('type', 1), ('occurred_at', 1)),
+          index(('occurred_at', 1)),
+          fields=(Field('stream_id', 'text', required=True), Field('seq', 'number', required=True),
+                  Field('type', 'text'), Field('payload', 'object'), Field('payload.operation', 'text', nullable=True)),
+          insert_only=True),
+    _core('artifacts', 'records.artifacts'),
+    _core('sink_receipts', 'records.receipts'),
+    _core('lane_receipts', 'records.receipts'),
+    _core('affect_events', 'affect',
+          index(('persona', 1), ('ts', 1)),
+          index(('persona', 1), ('origin', 1), ('source_identity', 1), unique=True,
+                only_where_present=('source_identity',)),
+          fields=_text('source_identity'), insert_only=True),
+    _core('affect_amendments', 'affect',
+          index(('target', 1)),
+          index(('persona', 1), ('origin', 1), ('source_identity', 1), unique=True,
+                only_where_present=('source_identity',)),
+          fields=_text('source_identity'), insert_only=True),
+    _core('affect_proposals', 'affect', index(('persona', 1), ('kind_row', 1), ('created_at', 1)), insert_only=True),
+    _core('scene_people', 'records.people', index(('scene_id', 1), ('handle', 1), unique=True)),
+    _core('task_messages', 'records.tasks', index(('task_id', 1), ('created_at', 1)),
+          index(('thread', 1), ('created_at', 1))),
+    _core('ideas', 'records.ideas', index(('persona', 1), ('state', 1), ('created_at', 1))),
+    _core('stickers', 'stickers', index(('persona', 1), ('name', 1), unique=True),
+          index(('persona', 1), ('identity', 1), unique=True)),
+    _core('sticker_pool', 'stickers', index(('last_seen', 1)), index(('artifact_id', 1))),
+    _core('sticker_memory', 'stickers', index(('persona', 1), ('key', 1), unique=True)),
+    _core('watches', 'watches', index(('persona', 1), ('person', 1), ('state', 1)),
+          counters=('last_seen_at', 'appeared')),
+    _core('notes', 'notes', index(('to_scene', 1), ('created_at', -1)), index(('from_scene', 1), ('created_at', -1)),
+          index(('persona', 1), ('created_at', -1)), index(('reply_to', 1)), counters=('seen_in',)),
+    _core('developer_inbox', 'developer_inbox', index(('persona', 1), ('created_at', -1)),
+          index(('state', 1), ('created_at', 1))),
+    _core('group_members', 'group_members'),
+    _core('host_stops', 'host_stops', index(('how', 1), ('back_at', -1))),
+    _core('switches', 'switches', index(('state', 1), ('kind', 1), ('until', 1)), index(('persona', 1), ('state', 1))),
+    _core('own_mutes', 'own_mute', index(('muted', 1))),
+    _core('journal_entries', 'documents',
+          index(('persona', 1), ('slug', 1), ('seq', 1), unique=True),
+          index(('persona', 1), ('slug', 1), ('sid', 1), unique=True), index(('last_mutation', 1))),
+    _core('journal_revisions', 'documents', index(('mutation_id', 1), unique=True),
+          index(('persona', 1), ('slug', 1), ('created_at', -1)), index(('entry_id', 1), ('created_at', 1))),
+    _core('questions', 'questions'),
+    # The TTL index of its fault counts (hour_at) is not declared: ensure leaves it as it is, until
+    # lane_faults.forget_old replaces it.
+    _core('lane_faults', 'lane_faults', index(('channel_id', 1), ('hour', 1)),
+          index(('lane', 1), ('stage', 1), ('error', 1), ('hour', 1))),
+])

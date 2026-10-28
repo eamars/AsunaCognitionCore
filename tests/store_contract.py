@@ -9,6 +9,7 @@ import hashlib
 import io
 import math
 import random
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -407,7 +408,8 @@ class TestC:
         t.update({'_id': 'a'}, [Larger('rank', 9), Smaller('low', 2), Larger('at', T0 + timedelta(days=1))])
         assert (t.get('a')['rank'], t.get('a')['low'], t.get('a')['at']) == (9, 2, T0 + timedelta(days=1))
         refused(RecordInvalid, lambda: t.update({'_id': 'a'}, Larger('rank', 'z')), 'RECORD_KIND')
-        refused(RecordInvalid, lambda: t.update({'_id': 'a'}, Smaller('low', 'z')), 'RECORD_KIND')
+        t.update({'_id': 'a'}, [Smaller('low', 'z'), Larger('high', 'z')])
+        assert (t.get('a')['low'], t.get('a')['high']) == (2, 'z')       # undeclared: numbers before text
 
     def test_C07_add_to_set(self, store):
         t = things(store)
@@ -615,6 +617,9 @@ class TestT:
         assert lease['planned_stop']['at'] == lease['since']
         refused(QueryInvalid, lambda: l.replace({'_id': 'host', 'since': Now()}), 'QUERY_NOW_MISPLACED')
         refused(QueryInvalid, lambda: l.update({'_id': 'host'}, Set({'instance': Now()})), 'QUERY_NOW_MISPLACED')
+        refused(QueryInvalid, lambda: l.update({'_id': 'host'}, [Set({'since': Now()}), Increase('n')]),
+                'QUERY_NOW_MISPLACED')
+        refused(QueryInvalid, lambda: l.update({'_id': 'new'}, Set({'since': Now()}), create=True), 'QUERY_NOW_MISPLACED')
 
 
 class TestV:
@@ -715,6 +720,15 @@ def vectors(open_store):
         # Made first with fewer filter fields, so the next ensure_vectors has to bring it up to the space's.
         assert opened.ensure_vectors(Space(SPACE.name, SPACE.collection, SPACE.path, DIM, ('scope_key',)), timeout=120)
         assert opened.ensure_vectors(SPACE, timeout=180)
+        until = time.monotonic() + 120              # a server's updated index may serve its old definition a moment
+        while True:
+            try:
+                opened.nearest(SPACE, rows[0]['embedding'], 3, {'kind': 'turn'})
+                break
+            except Exception:
+                if time.monotonic() > until:
+                    raise
+                time.sleep(1)
         yield opened, rows, [rows[10]['embedding']] + [[rng.uniform(-1, 1) for _ in range(DIM)] for _ in range(9)]
 
 

@@ -60,13 +60,13 @@ class Handle:
         return self.adapter.replace(self.name, record, expected, keep, bool(create))
 
     def update(self, where, change, many=False, create=False):
-        where, change = check_where(self.declared, where, now=True), check_change(self.declared, change)
+        where, change = check_where(self.declared, where, now=True), check_change(self.declared, change, create=create)
         if create:
             change = check_create(self.declared, where, change)
         return self.adapter.update(self.name, where, change, bool(many), bool(create))
 
     def claim(self, where, change, sort=(), create=False):
-        where, change = check_where(self.declared, where, now=True), check_change(self.declared, change)
+        where, change = check_where(self.declared, where, now=True), check_change(self.declared, change, create=create)
         sort = check_sort(self.declared, sort)
         if create:
             change = check_create(self.declared, where, change)

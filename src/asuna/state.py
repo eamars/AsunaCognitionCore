@@ -238,12 +238,6 @@ class Store:
             raise Denied('OPERATOR_ONLY_MONOLOGUE')
         return doc
 
-    def authorize(self, scene_id: str, person_id: str) -> dict:
-        scene = self.db.scenes.find_one({'_id':scene_id})
-        if not scene or person_id not in scene['members']:
-            raise Denied('SCENE_MEMBERSHIP_DENIED: 这个人不在这个对话的成员里（或对话已经不在），这一步不能代他做；重试也一样')
-        return scene
-
     def identity(self, platform: str, account_id: str):
         doc = self.db.identities.find_one({'platform':platform,'account_id':account_id})
         if not doc:
@@ -367,6 +361,7 @@ class Store:
         return revision
 
     def public_messages(self, scene: str, person: str):
-        self.authorize(scene,person)
+        from .records import scenes as scene_records          # the owner imports this module
+        scene_records.authorize(self, scene, person)
         return [{k:row[k] for k in ('_id','scene_id','text','author','reply_to','delivery_state') if k in row}
                 for row in self.db.messages.find({'scene_id':scene,'direction':'outbound','delivery_state':'DELIVERED'}).sort('scene_seq',1)]

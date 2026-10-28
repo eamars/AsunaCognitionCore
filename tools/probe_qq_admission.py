@@ -26,6 +26,7 @@ from asuna.config import load
 from asuna.ingress import persist_input
 from asuna.native_worker import BusinessWorker
 from asuna.state import Store, Denied
+from asuna.records import scenes as scene_records
 
 
 def probe():
@@ -73,7 +74,7 @@ def probe():
             channel_admission.restore_admissions(store)
             assert config['channels'][channel_id]['routes'] == original_routes
             host.prepare_channels(store)
-            assert store.db.scenes.find_one({'_id': first['scene_id']})['policy_epoch'] == 1
+            assert scene_records.get(store, first['scene_id'])['policy_epoch'] == 1
             config['channels'][channel_id]['blocked_senders'] = ['990000000001']
             try:
                 channel.receive(channel_id, envelope)

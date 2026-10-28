@@ -8,6 +8,7 @@ longer listed. A group turn sees that group's; a heartbeat at home sees every gr
 from __future__ import annotations
 
 from datetime import timedelta
+from .records import scenes as scene_records
 
 HORIZON = timedelta(hours=1)
 SHOWN_HOME = 5
@@ -31,7 +32,7 @@ def pending(store, scene_ids, moment, persona=None):
     people, me, since = People(store, persona), character_id(store.config), (moment - HORIZON).isoformat()
     found = []
     for scene_id in scene_ids:
-        scene = store.db.scenes.find_one({'_id': scene_id}, {'kind': 1})
+        scene = scene_records.get(store, scene_id, fields=['kind'])
         if not scene or scene.get('kind') != 'group':
             continue
         by_handle = {str(doc.get('handle')): doc for doc in people.roster(scene_id).values()
@@ -79,7 +80,7 @@ def block(store, scene_ids, moment, persona=None, *, home=False):
                'waiting_on_you': True,
                'your_line': _excerpt(item['text'])}
         if home:
-            scene = store.db.scenes.find_one({'_id': item['scene_id']}) or {'_id': item['scene_id']}
+            scene = scene_records.get(store, item['scene_id']) or {'_id': item['scene_id']}
             row = {'place': places.place_id(item['scene_id']), 'group': people.scene_title(scene), **row}
         shown.append(row)
     result = {'items': shown, 'note': NOTE}

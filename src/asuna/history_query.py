@@ -1054,6 +1054,7 @@ def render(result, header="查到的授权历史", snippet=RENDER_SNIPPET, zone=
 import hashlib
 import json as _json
 import re as _re
+from .records import scenes as scene_records
 
 
 try:                                  # 宿主内：复用已有的 Denied 语义（409 失败回执走原路径）
@@ -1229,7 +1230,7 @@ class HistoryQueryService:
         if unknown:
             raise ValueError("HISTORY_ARGUMENT_DENIED: 不认识的参数 %s；只收 %s"
                              % ("、".join(sorted(unknown)), "、".join(HISTORY_TOOL["parameters"])))
-        scene = self.store.db.scenes.find_one({"_id": task["scene_id"]})
+        scene = scene_records.get(self.store, task["scene_id"])
         if (not isinstance(scene, dict) or scene.get("scope_key") != task["scope_key"]
                 or scene.get("policy_epoch") != task["policy_epoch"]):
             # 场景与任务不同步就拒查，不猜

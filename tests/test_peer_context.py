@@ -2,6 +2,7 @@ from copy import deepcopy
 
 from asuna.peer_context import snapshot_event
 from asuna.router import Router
+from asuna.records import scenes as scene_records
 
 
 def qq_event():
@@ -36,11 +37,11 @@ def test_peer_snapshot_rejects_mismatched_sender_and_group():
         assert snapshot_event(event) is None
 
 
-def test_router_persists_only_verified_peer_slot_for_awake_input():
-    class Store:
-        def authorize(self, scene_id, person_id):
-            return {'_id': scene_id, 'kind': 'group', 'scope_key': 'scope:123'}
+def test_router_persists_only_verified_peer_slot_for_awake_input(monkeypatch):
+    monkeypatch.setattr(scene_records, 'authorize',
+                        lambda store, scene_id, person_id: {'_id': scene_id, 'kind': 'group', 'scope_key': 'scope:123'})
 
+    class Store:
         def audit(self, *args):
             pass
 

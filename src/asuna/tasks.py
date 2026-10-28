@@ -217,7 +217,7 @@ def require_current_feedback(store, episode):
     source = store.db.messages.find_one({'_id': 'in-' + episode['_id']})
     event = (source or {}).get('event', {})
     task = store.db.tasks.find_one({'_id': event.get('task_id')})
-    scene = store.db.scenes.find_one({'_id': episode['scene_id']})
+    scene = scene_records.get(store, episode['scene_id'])
     if (not task or not scene or task['state'] in ('CANCELLED', 'STALE', 'PAUSED')
             or task['intent_revision'] != event.get('intent_revision')
             or (task['scene_id'], task['requester_id'], task['scope_key'], task['policy_epoch']) !=
@@ -384,7 +384,7 @@ def place_words(store, scene_id):
         return '家里'
     if channel_kinds.home(scene_id):
         return '家里的另一条线'
-    scene = store.db.scenes.find_one({'_id': scene_id}, {'kind': 1}) or {}
+    scene = scene_records.get(store, scene_id, fields=['kind']) or {}
     return '一个群' if scene.get('kind') == 'group' else '一个私聊'
 
 
@@ -419,6 +419,7 @@ WORKSPACE_TOOLS.append(NOTE_IDEA_TOOL)
 # 是否声明了图片输入（见 route_filtered_tool_names），不按模型名字猜。
 WORKSPACE_TOOLS.append(READ_IMAGE_TOOL)
 from .received_files import RECEIVED_FILE_TASK_TOOL, TOOL_NAME as RECEIVED_FILE_TOOL_NAME
+from .records import scenes as scene_records
 WORKSPACE_TOOLS.append(RECEIVED_FILE_TASK_TOOL)
 
 
@@ -463,7 +464,7 @@ class TaskService:
 
     def valid(self,task,*,state='RUNNING'):
         current=self.store.db.tasks.find_one({'_id':task['_id']})
-        scene=self.store.db.scenes.find_one({'_id':task['scene_id']})
+        scene=scene_records.get(self.store, task['scene_id'])
         if not current or current['state']!=state or current['intent_revision']!=task['intent_revision'] or current['fencing_token']!=task['fencing_token'] or scene['policy_epoch']!=task['policy_epoch']:
             raise Denied('STALE_TASK_FENCE: '+stale_reason(task,current,scene)+'，这次调用不算数，也没有执行；不是你出错，重试也一样：'
                          '停下，不再调工具，在报告里写做到了哪里')
@@ -519,7 +520,7 @@ class TaskService:
         """Hand a finished task's result back to her in a turn of her own. `again`: the watchdog hands back a result
         whose earlier hand-back was lost; `short`: only her brief, the report's words and when it finished (ADR-030)."""
         current=self.store.db.tasks.find_one({'_id':task['_id']})
-        scene=self.store.db.scenes.find_one({'_id':task['scene_id']})
+        scene=scene_records.get(self.store, task['scene_id'])
         handed=current.get('feedback_state')
         if current['state'] not in TERMINAL or handed in (*handover.TAKEN,None) or handed!='READY' and not again:return None
         if current['state'] in ('CANCELLED','STALE') or current['intent_revision']!=task['intent_revision'] or scene['policy_epoch']!=task['policy_epoch']:
@@ -830,14 +831,14 @@ class ToolBroker:
                 # 按路径读盘上的图只在家里：会话类别按任务绑定现算（同 credentials.home_task 那条算法），
                 # /task/ 指向这个任务自己的工作区。
                 if not getattr(self, 'vision', None):raise Denied('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
-                scene_row=self.service.store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']}
+                scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
                 result=self.vision.read_image(task,args,session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']),task_dir=sandbox.task_dir)
                 with self.service.lock:self.service.valid(task)
             elif tool==RECEIVED_FILE_TOOL_NAME:
                 # A file someone sent (ADR-102): the scene is the task's binding, as for read_image; the fetch waits
                 # without the effects lock.
                 from . import received_files
-                scene_row=self.service.store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']}
+                scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
                 result=received_files.run(self.service.store,task,self.service.store.config,args,
                                           persona=self.service.store.config['chat']['persona'],
                                           session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']),
@@ -851,7 +852,7 @@ class ToolBroker:
                 def source(ref):
                     # The picture to edit: only one this task may look at (read_image's fence, this task's class).
                     if not getattr(self,'vision',None):raise ValueError('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
-                    scene_row=self.service.store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']}
+                    scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
                     picture=self.vision.picture_to_edit(task,ref,task_dir=sandbox.task_dir,
                         session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']))
                     # Her own drawing edited stays hers; anyone else's goes back where it came from.
@@ -1025,7 +1026,7 @@ class Executor:
         grant=workspace_grant(self.service.store.config,task['scene_id'],task['requester_id'])
         store=self.service.store
         # Who she is, at the class of the conversation the task came from (render.action_persona).
-        scene=store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']}
+        scene=scene_records.get(store, task['scene_id']) or {'_id':task['scene_id']}
         cls=visibility.session_class(store.config,store.db,scene,task['requester_id'])
         system=(prompt_path(store.config,'executor.md').read_text(encoding='utf-8')
                 +action_values(store,cls=cls,place=visibility.place_of(store.config,scene,cls)))

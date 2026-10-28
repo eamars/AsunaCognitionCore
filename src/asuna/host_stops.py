@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
+from .records import scenes as scene_records
 
 SHOWN_HOURS = 24
 LISTED = 3                    # stops listed at most; the count says how many there were
@@ -190,7 +191,7 @@ def missed_looks(store, persona, since):
         return None
     from .people import People
     people = People(store, persona)
-    return '、'.join('%s %d 次（%s）' % (people.scene_title(store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}), n,
+    return '、'.join('%s %d 次（%s）' % (people.scene_title(scene_records.get(store, scene_id) or {'_id': scene_id}), n,
                                        '，'.join('%s %d' % (MISSED_CAUSES.get(c, MISSED_CAUSES['error']), k)
                                                 for c, k in sorted(causes[scene_id].items(), key=lambda kv: -kv[1])))
                     for scene_id, n in sorted(counts.items(), key=lambda kv: -kv[1]))

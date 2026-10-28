@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from .state import Conflict, now
+from .records import scenes as scene_records
 
 SOURCES = ('notice', 'lookup')                     # what the adapter may post; receipts add send_failed and sent
 REASON = 'muted'                                   # a failed receipt's response.reason for a send refused by a mute
@@ -94,7 +95,7 @@ def apply(store, scene, *, muted, source, whole_group=False, until=None, by=None
 def _scene_of_group(store, channel_id, group):
     from .group_members import routed_group
     route = routed_group(store, channel_id, group, 'OWN_MUTE')
-    scene = store.db.scenes.find_one({'_id': route['scene_id']})
+    scene = scene_records.get(store, route['scene_id'])
     if not scene:
         raise PermissionError('OWN_MUTE_SCENE_UNKNOWN: 这个群还没有对话记录；有人说过话以后再送')
     return scene
@@ -133,7 +134,7 @@ def receive(store, channel_id, body):
 
 def after_receipt(store, row, state, body):
     """A send's receipt: refused for a mute sets the slot; one the platform accepted clears it."""
-    scene = store.db.scenes.find_one({'_id': row.get('scene_id')}) if row.get('scene_id') else None
+    scene = scene_records.get(store, row.get('scene_id')) if row.get('scene_id') else None
     if not scene or scene.get('kind') != 'group':
         return None
     if state == 'FAILED' and (body.get('response') or {}).get('reason') == REASON:

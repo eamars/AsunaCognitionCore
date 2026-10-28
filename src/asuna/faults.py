@@ -11,6 +11,7 @@ import re
 from datetime import datetime, timezone
 
 from . import developer_inbox
+from .records import scenes as scene_records
 
 CODE = re.compile(r'\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b')
 DEV_TEXT = '她的%s回合在程序里出错没跑成（%s）：今天第一次，场景 %s，回合 %s。同一天同样的错再来只加计数（count）。'
@@ -38,8 +39,7 @@ def turn_failed(store, ep, error, now=None):
                                 key=['turn_failed', kind, name, moment.date().isoformat()],
                                 source={'by': 'program', 'kind': 'turn_failed', 'cause': name})
     store.db.developer_inbox.update_one({'_id': row['_id']}, {'$inc': {'count': 1}})
-    store.db.scenes.update_one({'_id': ep.get('scene_id')},
-                               {'$set': {'fault': {'at': moment.isoformat(), 'cause': name, 'kind': kind}}})
+    scene_records.note_fault(store, ep.get('scene_id'), {'at': moment.isoformat(), 'cause': name, 'kind': kind})
 
 
 def her_line(store, scene, zone):
@@ -57,10 +57,9 @@ def told(store, ep):
     still the mark that was shown (a newer one set meanwhile stays for the next turn)."""
     shown = (ep.get('manifest') or {}).get('told') or {}
     if shown.get('fault'):
-        store.db.scenes.update_one({'_id': ep['scene_id'], 'fault.at': shown['fault']}, {'$unset': {'fault': ''}})
+        scene_records.clear_fault(store, ep['scene_id'], shown['fault'])
     if shown.get('unsent'):
-        store.db.scenes.update_one({'_id': ep['scene_id'], 'unsent.episode_id': shown['unsent']},
-                                   {'$unset': {'unsent': ''}})
+        scene_records.clear_unsent(store, ep['scene_id'], shown['unsent'])
     if shown.get('host_stops'):
         # ADR-101: the outages it showed stay until such a turn commits, and at least a day (host_stops.listed).
         from . import host_stops

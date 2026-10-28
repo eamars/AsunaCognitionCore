@@ -15,6 +15,7 @@ import uuid
 from gridfs import GridFSBucket
 from .evidence import sha
 from .state import Denied, now
+from .records import scenes as scene_records
 
 STREAM_PIECE = 1024 * 1024          # what put_stream reads and verifies at a time
 ERASED = 'erased'                   # a row's storage once a privacy erasure deleted its bytes (ADR-105)
@@ -70,7 +71,7 @@ class BlobStore:
 
     def _scope_known(self,scope):
         # owner-private:<persona> holds source snapshots and job reports (ADR-009 §2.2); reads stay operator-only.
-        if scope not in ('operator','global-safe') and not scope.startswith('owner-private:') and not self.store.db.scenes.find_one({'scope_key':scope}):raise Denied('ARTIFACT_SCOPE_UNKNOWN: 要存进的对话范围已经不存在；不是参数的问题，重试也一样：不存这份，照实写进结果')
+        if scope not in ('operator','global-safe') and not scope.startswith('owner-private:') and not scene_records.by_scope(self.store, scope):raise Denied('ARTIFACT_SCOPE_UNKNOWN: 要存进的对话范围已经不存在；不是参数的问题，重试也一样：不存这份，照实写进结果')
 
     def put_stream(self,handle,scope:str,kind:str,*,source_ids=(),media_type=None,fields=None):
         """Store what an open binary handle holds, hashing while it copies; the stored bytes are read back in pieces
@@ -143,7 +144,7 @@ class BlobStore:
         only then, with ADR-105's sentence when an erasure deleted its bytes."""
         item=self.store.db.artifacts.find_one({'_id':key,'state':'DONE'})
         if not item or item['scope_key'] not in ('global-safe',scope):raise Denied('ARTIFACT_SCOPE_DENIED: 没有这份文件，或它不在这个对话的范围里；照抄这个对话里给出的 artifact_id')
-        scene=self.store.db.scenes.find_one({'scope_key':item['scope_key']},{'_id':1})
+        scene=scene_records.by_scope(self.store, item['scope_key'], fields=['_id'])
         refuse_erased(self.store,item,(scene or {}).get('_id'))
         if item.get('storage')!='gridfs':raise Denied('ARTIFACT_SCOPE_DENIED: 没有这份文件，或它不在这个对话的范围里；照抄这个对话里给出的 artifact_id')
         return item

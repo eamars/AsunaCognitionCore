@@ -32,6 +32,7 @@ from . import answers, visibility, outbound_media, role_tools
 from .state import Store, Denied, now
 from .tasks import FeedbackStale, require_current_feedback
 from .queue import database_effects_lock
+from .records import scenes as scene_records
 
 
 class ProtocolFailure(RuntimeError):
@@ -91,7 +92,7 @@ class Coordinator:
 
     def ingest(self, event: dict, *, persona='P1'):
         with self.lock:
-            scene=self.store.authorize(event['scene_id'],event['person_id'])
+            scene=scene_records.authorize(self.store, event['scene_id'], event['person_id'])
             ep_id='ep-'+sha(canonical([event['scene_id'],event['event_id'],event.get('episode_kind','external')]))[:32]
             existing=self.store.db.episodes.find_one({'_id':ep_id})
             if existing:
@@ -151,7 +152,7 @@ class Coordinator:
         if not isinstance(args.get('context',''),str):raise ValueError('CONSULT_CONTEXT_MUST_BE_TEXT')
         with self.lock:
             self.tasks.valid(task)
-            scene=self.store.authorize(task['scene_id'],task['requester_id'])
+            scene=scene_records.authorize(self.store, task['scene_id'], task['requester_id'])
             # She answers in the conversation the task belongs to: for one begun on an errand, the home turn that sent
             # it, whose place, person and scope the task carries (delegate).
             from . import errands
@@ -294,8 +295,8 @@ class Coordinator:
                     issue,note='unsent',UNSENT_NOTE%speech          # whole, as written: she may reply it as is
                 if issue is None or attempt==answers.REPAIRS:
                     if speech:
-                        self.store.db.scenes.update_one({'_id':ep['scene_id']},{'$set':{'unsent':{
-                            'text':excerpt(' '.join(speech.split()),UNSENT_CHARS),'episode_id':ep['_id']}}})
+                        scene_records.hold_unsent(self.store, ep['scene_id'], {
+                            'text':excerpt(' '.join(speech.split()),UNSENT_CHARS),'episode_id':ep['_id']})
                         self.store.audit(ep['_id'],'turn.unsent_body',{'chars':len(speech)},ep['scope_key'])
                     elif pieces:
                         # Her ending after she spoke: kept as a count for the operator, never told back to her.
@@ -390,7 +391,7 @@ class Coordinator:
             'request_refs':value.request_refs,'receipt':value.receipt,'delivery':value.delivery},ep['scope_key'])
         if getattr(value,'prompt_tokens',None):
             # ADR-049: words about the conversation's length come from this; the number is never shown to her.
-            self.store.db.scenes.update_one({'_id':ep['scene_id']},{'$set':{'conversation_tokens':int(value.prompt_tokens)}})
+            scene_records.note_tokens(self.store, ep['scene_id'], int(value.prompt_tokens))
         require_current_feedback(self.store, ep)
         return value
 
@@ -414,12 +415,12 @@ class Coordinator:
         times=pacing(texts,start,effective(model,'speak.chars_per_second',policy) or 12,
                      effective(model,'speak.min_gap_s',policy) or 1,effective(model,'speak.max_gap_s',policy) or 5)[-len(planned):]
         first=len(earlier)
-        scene=self.store.db.scenes.find_one({'_id':ep['scene_id']},{'channel_id':1})
+        scene=scene_records.get(self.store, ep['scene_id'], fields=['channel_id'])
         queued=[]
         for offset,part in enumerate(planned):
             index=first+offset
             key=ep_id+':speak:'+str(index)
-            sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
+            sequence=scene_records.next_seq(self.store, ep['scene_id'])
             row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,
                  'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':part['text'],'direction':'outbound',
                  'author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,
@@ -448,7 +449,7 @@ class Coordinator:
         ep_id=ep['_id']
         key=ep_id+':speak:0'
         if not self.store.db.messages.find_one({'_id':key}):
-            sequence=self.store.db.scenes.find_one_and_update({'_id':ep['scene_id']},{'$inc':{'sequence':1}},return_document=True)['sequence']
+            sequence=scene_records.next_seq(self.store, ep['scene_id'])
             row={'_id':key,'publication_key':key,'episode_id':ep_id,'scene_id':ep['scene_id'],'scene_seq':sequence,'scope_key':ep['scope_key'],'policy_epoch':ep['policy_epoch'],'text':ep['speech'],'direction':'outbound','author':character_id(self.store.config),'phase':'SPEAK','reply_to':'in-'+ep_id,'monologue_refs':ep['monologue_refs'],'delivery_state':'READY',**({'errand':True} if ep.get('errand') else {})}
             # 这一回合被程序接受的那张图（没有就 None）：字节仍在 BlobStore，行上只写元数据。
             attach_meta=outbound_media.attachment_for_speak(ep)
@@ -465,7 +466,7 @@ class Coordinator:
         from . import attend
         from .state import content_ref
         event=ep['attend_event']
-        scene=self.store.authorize(ep['scene_id'],ep['person_id'])
+        scene=scene_records.authorize(self.store, ep['scene_id'], ep['person_id'])
         row=self.store.db.messages.find_one({'_id':'in-'+ep['_id']})
         operation=ep['_id']+':ATTEND:0'
         self.store.audit(ep['_id'],'phase.started',{'operation':operation,'phase':'ATTEND'},ep['scope_key'])
@@ -556,7 +557,7 @@ class Coordinator:
             if self.native_session_resolver and not ep.get('native_session_id'):
                 ep=self._update(ep,native_session_id=self.native_session_resolver(ep))
             if ep['state']=='FAILED_PROTOCOL' and ep.get('episode_kind')=='task_feedback':
-                scene=self.store.authorize(ep['scene_id'],ep['person_id'])
+                scene=scene_records.authorize(self.store, ep['scene_id'], ep['person_id'])
                 if scene['policy_epoch']!=ep['policy_epoch']:
                     raise Denied('FEEDBACK_POLICY_STALE')
                 ep=self._update(ep,resume_diagnostic=ep.get('failure',''))
@@ -617,7 +618,7 @@ class Coordinator:
         ep=errands.home_turn(self.store,ep)
         source=self.store.db.messages.find_one({'_id':'in-'+ep['_id']}) or {}
         event=source.get('event',{})
-        scene=self.store.db.scenes.find_one({'_id':ep['scene_id']}) or {'_id':ep['scene_id']}
+        scene=scene_records.get(self.store, ep['scene_id']) or {'_id':ep['scene_id']}
         development=ep.get('episode_kind')!='consult' and development_granted(self.store,scene,
             {**event,'episode_kind':ep.get('episode_kind'),'task_id':ep.get('task_id'),'person_id':ep['person_id']},
             (ep.get('manifest') or {}).get('session_class'))
@@ -700,7 +701,7 @@ class Coordinator:
 
     def _zone(self, ep):
         from .schedule_rules import scene_timezone
-        return scene_timezone(self.store.config, self.store.db.scenes.find_one({'_id':ep['scene_id']}) or {})
+        return scene_timezone(self.store.config, scene_records.get(self.store, ep['scene_id']) or {})
 
     def message_action(self, ep, call_id, task, message):
         """Her words to the action brain about one task: steered into a running one, or continuing a finished one."""

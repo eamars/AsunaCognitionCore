@@ -22,6 +22,7 @@ import time
 from urllib.parse import quote, quote_plus
 
 from .state import Denied
+from .records import scenes as scene_records
 
 NAME = re.compile(r'[a-z][a-z0-9-]{1,31}')
 ENV_NAME = re.compile(r'[A-Z][A-Z0-9_]{1,47}')
@@ -176,5 +177,5 @@ def scrub(value):
 def home_task(store, task):
     """Whether this task came from home (credentials are for home tasks only)."""
     from . import visibility
-    scene = store.db.scenes.find_one({'_id': task['scene_id']}) or {'_id': task['scene_id']}
+    scene = scene_records.get(store, task['scene_id']) or {'_id': task['scene_id']}
     return visibility.session_class(store.config, store.db, scene, task['requester_id']) == visibility.OWNER_PRIVATE

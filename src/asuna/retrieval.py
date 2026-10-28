@@ -9,6 +9,7 @@ import time
 from collections import Counter,OrderedDict
 from .evidence import Evidence, LocalHttp, canonical, sha
 from .state import Space, Store, now
+from .records import scenes as scene_records
 
 # kind: her own thoughts in other conversations are searched apart from their talk (own_thoughts).
 MEMORY = Space(name='asuna_memory_v1', collection='memory_units', path='embedding', dimensions=768,
@@ -122,8 +123,8 @@ class Retrieval:
 
     def _scene_sequences(self, scopes):
         """Current message count of each scene scope (conversation volume)."""
-        return {row['scope_key']: row.get('sequence', 0) for row in self.store.db.scenes.find(
-            {'scope_key': {'$in': list(scopes)}}, {'scope_key': 1, 'sequence': 1})}
+        return {row['scope_key']: row.get('sequence', 0)
+                for row in scene_records.in_scopes(self.store, list(scopes), fields=['scope_key', 'sequence'])}
 
     def _forget(self, ranks, forgetting, sequences, automatic):
         """Multiply each candidate's score by its freshness (persona model memory.forgetting).

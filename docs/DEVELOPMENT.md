@@ -8,7 +8,7 @@ in [NATIVE_PLUGIN.md](../NATIVE_PLUGIN.md), and the contracts in [RUNTIME_API.md
 
 | Path | What it holds |
 |---|---|
-| `src/asuna/` | The Python business worker (queues, cognition, memory, channels, integration supervision). `resources/prompts` and `resources/schemas` are the neutral core prompts and JSON schemas. |
+| `src/asuna/` | The Python business worker (queues, cognition, memory, channels, integration supervision). `resources/prompts` and `resources/schemas` are the neutral core prompts and JSON schemas; `store/` is the store's interface and adapters, `records/` the owners of the collections read across the core (each the only code that reads or writes its collection). |
 | `packages/cognition-core/` | The Host plugin: `src/` (JS), `test/` (node tests), `skills/` (core skills), `locale/`, `meta/` (the preset, floor and persistence plugins' locales), `cordis.patch.yml` (its presets). `runtime-manifest.json` is written by the packer; `python/` is the packer's ignored copy of `src/asuna`. |
 | `packages/channels/<name>/` | A channel package: `src/index.js` (`registerChannel`), `python/<module>/` (the kind module), `cordis.patch.yml`, `locale/`, and where it has them `integration/` (a managed adapter), `skills/`, `test/`. |
 | `packages/personas/<name>/` | A persona package: `src/index.js` (`registerPersona`), `persona-model.json`, `seeds/`, `skills/`, `cordis.patch.yml` (its role preset), `locale/`, `icon.*`. |

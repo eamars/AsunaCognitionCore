@@ -14,6 +14,7 @@ import statistics
 from datetime import datetime, timedelta, timezone
 
 from .config import excerpt
+from .records import scenes as scene_records
 
 TABLES_VERSION = 1
 WEEK_DAYS = 7
@@ -188,7 +189,7 @@ def _lists(store):
     local = (store.config.get('chat') or {}).get('scene_id')
     picks = {'home': (local, visibility.OWNER_PRIVATE)}
     for kind in ('group', 'dm'):
-        scene = store.db.scenes.find_one({'kind': kind, 'channel_id': {'$exists': True}}, {'_id': 1})
+        scene = scene_records.channel_scenes(store, kind)
         if scene:
             picks[kind] = (scene['_id'], visibility.PUBLIC)
     for kind, (scene_id, cls) in picks.items():
@@ -245,7 +246,7 @@ def _local_roots(store, persona, since, until):
                 where = LANE_WORDS[lane]
             else:
                 binding = store.db.sessions.find_one({'_id': item.get('session_id')}, {'scene_id': 1}) or {}
-                scene = store.db.scenes.find_one({'_id': binding.get('scene_id')}) if binding.get('scene_id') else None
+                scene = scene_records.get(store, binding.get('scene_id')) if binding.get('scene_id') else None
                 where = people.scene_title(scene)
             seen = places.setdefault(where, [0, 0])
             seen[0] += int(item.get('rewritten') or 0)

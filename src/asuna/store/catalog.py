@@ -231,7 +231,15 @@ def _text(*paths):
 
 CATALOG = Catalog([
     _core('identities', 'records.people', index(('platform', 1), ('account_id', 1), unique=True)),
-    _core('scenes', 'records.scenes', counters=('sequence',)),
+    # A conversation (records/scenes.py): the fields its owner names; the rest is stored and returned as written.
+    Collection('scenes', 'records.scenes', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'), Field('kind', 'text'), Field('scope_key', 'text'),
+        Field('policy_epoch', 'number'), Field('sequence', 'number'), Field('members', 'list', of='text'),
+        Field('channel_id', 'text', nullable=True), Field('condense_wanted', 'object', nullable=True),
+        Field('condensed_at', 'text', nullable=True), Field('fault', 'object', nullable=True),
+        Field('fault.at', 'text', nullable=True), Field('unsent', 'object', nullable=True),
+        Field('unsent.episode_id', 'text', nullable=True), Field('asides_shown_seq', 'number')),
+        versioned=True, counters=('sequence',)),
     _core('messages', 'records.messages',
           index(('adapter_id', 1), ('scene_id', 1), ('platform_event_id', 1), unique=True,
                 only_where_present=('platform_event_id',)),

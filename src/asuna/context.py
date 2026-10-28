@@ -18,6 +18,7 @@ from .state import Store, Denied
 from .people import People
 from .familiarity import words as familiarity_words
 from . import attend, caught_up, notices, own_mute
+from .records import scenes as scene_records
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -250,7 +251,7 @@ class ContextBuilder:
             row['reply_to'] = reply
             from .channels import reply_parent
             from .people import People
-            source = self.store.db.scenes.find_one({'_id': row.get('scene_id', scene['_id'])})
+            source = scene_records.get(self.store, row.get('scene_id', scene['_id']))
             parent = reply_parent(self.store, source or scene, reply,
                                   row.get('occurred_at') or row.get('receipt_at') or row.get('received_at'))
             # The quoted line in the one form every pointer has (ADR-079 §9.3); unknown to the program, said so.
@@ -303,7 +304,7 @@ class ContextBuilder:
             return []
         from datetime import datetime, timezone
         from . import reasons
-        groups={s['scope_key']:s for s in self.store.db.scenes.find({'kind':'group'},{'scope_key':1,'policy_epoch':1,'kind':1,'channel_id':1})}
+        groups={s['scope_key']:s for s in scene_records.of_kind(self.store, 'group', fields=['scope_key','policy_epoch','kind','channel_id'])}
         units=self.retrieval.own_thoughts([(key,s.get('policy_epoch',1)) for key,s in groups.items()],query)
         people=People(self.store)
         zone=schedule_rules.scene_timezone(self.store.config,scene)
@@ -349,7 +350,7 @@ class ContextBuilder:
             anchors_shown(event['scene_id'])        # her thought under a line of hers: once a turn
 
     def _prepare(self, event, persona, recall, turn_kind):
-        scene=self.store.authorize(event['scene_id'],event['person_id'])
+        scene=scene_records.authorize(self.store, event['scene_id'], event['person_id'])
         shown_stops=[]                  # the outages this turn shows (host_from_program, home turns only)
         from . import memory_tiers
         if memory_tiers.ENABLED and not recall:
@@ -811,7 +812,7 @@ class ContextBuilder:
                 _rows=list(self.store.db.plans.find({'scene_id':_line['scene_id'],'status':{'$in':['CREATING','ACTIVE']},
                     'kind':{'$nin':['self_development','presence','settlement','condense']}}).sort('created_at',-1).limit(3))
                 if _rows:
-                    _scene=self.store.db.scenes.find_one({'_id':_line['scene_id']}) or {'_id':_line['scene_id']}
+                    _scene=scene_records.get(self.store, _line['scene_id']) or {'_id':_line['scene_id']}
                     _item['your_plans_there']=[{k:v for k,v in schedule_rules.project(r,schedule_rules.scene_timezone(
                         self.store.config,_scene,r),moment).items() if k in ('intent','description','next_fire_at')} for r in _rows]
         people=People(self.store,persona)
@@ -1229,7 +1230,7 @@ class ContextBuilder:
                         'source_scope':{'$nin':[visibility.owner_private_scope(persona),'global-safe']}},{'source_scope':1}):
                     scope_key=row.get('source_scope')
                     if scope_key not in titles:
-                        titles[scope_key]=people.scene_title(self.store.db.scenes.find_one({'scope_key':scope_key}))
+                        titles[scope_key]=people.scene_title(scene_records.by_scope(self.store, scope_key))
                     where[row['_id']]='在%s记的'%titles[scope_key]
             read=interpret(m,mood,session_class,where,scope=scope)
             if read:                                    # ADR-086 D4: nothing at a quiet band outside home

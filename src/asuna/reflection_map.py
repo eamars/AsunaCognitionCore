@@ -14,6 +14,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from .config import excerpt
+from .records import scenes as scene_records
 
 TABLES_VERSION = 1
 SHOWN = 'review.map'
@@ -116,7 +117,7 @@ def block(store, persona, moment=None, *, tag=None):
     index = []
 
     # Her group notes, by group, newest first, each with the reasons she gave.
-    groups = {group_admin.notes_slug(s['_id']): s for s in store.db.scenes.find({'kind': 'group'})}
+    groups = {group_admin.notes_slug(s['_id']): s for s in scene_records.of_kind(store, 'group')}
     totals = [0, 0, 0, 0]
     notes = []
     for head in _heads(store, 'doc:%s:group' % persona):
@@ -213,7 +214,7 @@ def block(store, persona, moment=None, *, tag=None):
         looked[scene_id] += (row.get('payload') or {}).get('choice') == 'join'
     attention = []
     for scene_id, n in seen.most_common():
-        scene = store.db.scenes.find_one({'_id': scene_id})
+        scene = scene_records.get(store, scene_id)
         attention.append('%s：看了 %d 行，叫你看了 %d 行' % (people.scene_title(scene) if scene else '一个现在已经没有的对话',
                                                     n, looked[scene_id]))
 

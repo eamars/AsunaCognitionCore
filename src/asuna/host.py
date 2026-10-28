@@ -15,6 +15,7 @@ from .config import DATA
 from .memory_indexer import MemoryIndexer
 from . import handover
 from .state import Denied, now
+from .records import scenes as scene_records
 
 # How often the host's existing watch thread also checks that her heartbeat still beats (ADR-012 §4.3), so a
 # lost heartbeat is found on a day when nobody talks to her too. It only checks; the clock stays DSH's.
@@ -40,6 +41,9 @@ def prepare_channels(store, *, dry_run=False):
     scene_ids, tokens = set(), set()
     def put(collection, document, **kwargs):
         return document if dry_run else store.put(collection, document, **kwargs)
+
+    def save_scene(document, **kwargs):
+        return document if dry_run else scene_records.save(store, document, **kwargs)
     local = store.config['chat']
     local_workspace = Path(local['workspace']).resolve()
     ordered_workspaces = [os.path.normcase(str(local_workspace))]
@@ -112,9 +116,9 @@ def prepare_channels(store, *, dry_run=False):
             joins = channel_kinds.owner_joins(scene_id) and local.get('person_id') not in people
             if joins:
                 people.append(local['person_id'])
-            scene = store.db.scenes.find_one({'_id': scene_id})
+            scene = scene_records.get(store, scene_id)
             if scene is None:
-                put('scenes', {'_id': scene_id, 'scene_id': scene_id, 'kind': kind,
+                save_scene({'_id': scene_id, 'scene_id': scene_id, 'kind': kind,
                                'members': people, 'scope_key': 'scene:' + scene_id,
                                'policy_epoch': 1, 'sequence': 0, 'channel_id': channel_id,
                                'channel_account_id': channel['account_id']}, stream='host:setup')
@@ -129,7 +133,7 @@ def prepare_channels(store, *, dry_run=False):
                     # The owner joining his own home line opens it to nobody else: the conversation goes on.
                     joined = set(people) - set(scene['members']) - ({local['person_id']} if joins else set())
                     bump = bool(revoked) or (channel.get('admission') != 'automatic' and bool(joined))
-                    put('scenes', {**scene, 'members': people,
+                    save_scene({**scene, 'members': people,
                         'policy_epoch': scene['policy_epoch'] + int(bump)},
                         expected=scene['revision'], stream='channel-membership:' + scene_id)
     if scene_links and not dry_run:

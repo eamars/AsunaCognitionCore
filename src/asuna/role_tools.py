@@ -503,6 +503,7 @@ UPDATE_SELF = {'description': '已并入 write_document（doc=self 或 core）�
                               'content': _s('完整的新正文'), 'why': _s('为什么改')}}
 # ADR-060: what she is shown is each parameter's new name; handlers read the old ones (param_names.inbound).
 from . import param_names as _names
+from .records import scenes as scene_records
 TOOLS = {name: {**spec, 'parameters': _names.shown(name, spec['parameters'])} for name, spec in TOOLS.items()}
 TOOL_NAMES = tuple(TOOLS)
 
@@ -686,7 +687,7 @@ def session_specs(store, scene_id, person_id=None):
     all_specs. Given when the session starts, so a session's tools never change. `person_id`: who the conversation is
     with (the session's), which decides a private chat's class."""
     from . import capabilities
-    scene = store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}
+    scene = scene_records.get(store, scene_id) or {'_id': scene_id}
     cls = conversation_class(store, scene, person_id)
     listed = abilities(store, {'scene_id': scene_id, 'manifest': {'session_class': cls}})
     out = [placed_spec(spec, cls, scene.get('kind'), listed) for spec in all_specs()]
@@ -842,7 +843,7 @@ def _turn_rules(store, ep):
         names.append('attach_image')
     if context.get('stickers_from_program') or context.get('stickers_review_from_program')             or context.get('sticker_candidates_from_program'):
         names.append('sticker')
-    scene_kind = (store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
+    scene_kind = (scene_records.get(store, ep['scene_id'], fields=['kind']) or {}).get('kind')
     if (cls == visibility.OWNER_PRIVATE or scene_kind == 'group') and not outside:
         names.append('write_document')
     if kind in ('external', 'task_feedback'):
@@ -923,7 +924,7 @@ def abilities(store, ep):
     from .render import model_and_policy
     from .vision import vision_capability
     config = store.config
-    scene = store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+    scene = scene_records.get(store, ep['scene_id']) or {'_id': ep['scene_id']}
     # Its place (visibility.place) from the class the program gave the conversation: one class per conversation.
     cls = (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
     where = visibility.place_of(config, scene, cls)
@@ -1091,7 +1092,7 @@ def turn_pictures(store, ep):
     pulled is left out (read_image still reaches it)."""
     from .blobs import BlobStore
     from .vision import attachments_of, read_image_for_task, vision_capability
-    scene = store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1})
+    scene = scene_records.get(store, ep['scene_id'], fields=['kind'])
     if (scene or {}).get('kind') != 'group' or not vision_capability(store.config, 'character')['supported']:
         return [], None
     source = store.db.messages.find_one({'_id': 'in-' + ep['_id'], 'scene_id': ep['scene_id']})
@@ -1649,13 +1650,13 @@ class RoleTools:
         # At home her recall also reaches what she herself thought in her groups (her own words, never theirs).
         elsewhere = []
         if self._cls(ep) == visibility.OWNER_PRIVATE and query:
-            scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+            scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
             elsewhere = c.context.own_thoughts_elsewhere(scene, query)
         # ADR-097 D3: lines of her other groups that may leave them, and past versions of her notes, by the word.
         crossed, before = [], []
         if query:
             from . import crossing, schedule_rules
-            here = self.store.db.scenes.find_one({'_id': where['scene_id']}) or {'_id': where['scene_id']}
+            here = scene_records.get(self.store, where['scene_id']) or {'_id': where['scene_id']}
             zone = schedule_rules.scene_timezone(self.store.config, here)
             crossed = crossing.elsewhere(self.store, ep['persona'], here, query, zone)
             before = crossing.before(self.store, ep['persona'], here, self._cls(ep), query, zone)                 if memory_tiers.ENABLED else []
@@ -1666,7 +1667,7 @@ class RoleTools:
         # Every recall is kept (ADR-032): what she asked, what came back, in which kind of turn and place, so a later
         # review counts her real reads and misses from records, not from memory.
         from .visibility import place
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         self.store.audit(ep['_id'], 'recall.read', {
             'query': query, 'sections_asked': sections,
             'sections_read': [{'doc': d.get('doc'), 'sid': d.get('sid')} for d in documents or []],
@@ -1750,7 +1751,7 @@ class RoleTools:
         at home 「名单」 lists everyone she has written. Never touches the embedding route. A turn a note from outside
         opened reads as the place it acts for (_as_place)."""
         where = self._as_place(ep)
-        scene = self.store.db.scenes.find_one({'_id': where['scene_id']}) or {'_id': where['scene_id']}
+        scene = scene_records.get(self.store, where['scene_id']) or {'_id': where['scene_id']}
         home = self._cls(ep) == visibility.OWNER_PRIVATE and self._place(ep) == visibility.OWNER_PRIVATE
         text = ' '.join(str(value).split())
         c = self.coordinator
@@ -1782,7 +1783,7 @@ class RoleTools:
         if op == 'block':
             return self._block(ep, args.get('hours') if args.get('hours') is not None else 24, args.get('person')), False
         if op == 'on':
-            if (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind') not in ('group', 'dm'):
+            if (scene_records.get(self.store, ep['scene_id'], fields=['kind']) or {}).get('kind') not in ('group', 'dm'):
                 raise Refused('这里不是群或私聊，盯不了人：到看得到他的群或私聊里再用 on。')
             return watches.add(self.store, ep, ep['persona'], self._place(ep), args), False
         if op == 'off':
@@ -1808,7 +1809,7 @@ class RoleTools:
         from .render import model_and_policy
         ep = self._fresh(ep)
         replaced = 0
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         kinds = speak_kinds(self.store, scene)
         parts = args.get('parts')
         if not isinstance(parts, list) or not parts:
@@ -2139,7 +2140,7 @@ class RoleTools:
                                                    'policy_epoch': ep['policy_epoch']}, {'requester_id': 1})
             if theirs:
                 from .people import People
-                scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+                scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
                 who = People(self.store, ep.get('persona')).speaker(scene, theirs['requester_id'])
                 raise Refused(OTHERS_TASK % (task_id, who))
             close = [row['_id'] for row in self.store.db.tasks.find(
@@ -2198,8 +2199,7 @@ class RoleTools:
         artifact = self._text(args, 'artifact_id', 200)
         self._text(args, 'why', 500)
         cls = self._place(ep)
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']},
-                                              {'_id': 1, 'channel_id': 1, 'kind': 1, 'scope_key': 1, 'members': 1})
+        scene = scene_records.get(self.store, ep['scene_id'], fields=['_id', 'channel_id', 'kind', 'scope_key', 'members'])
         allowed, reason = outbound_media.target_allowed(self.store.config, scene, cls)
         if not allowed:
             raise Denied('ATTACH_TARGET_NOT_ALLOWED: %s；重试也一样，这回合只说话不带图'
@@ -2242,7 +2242,7 @@ class RoleTools:
         if op == 'shelf':
             # At home the shelf is listed only in the turns that tidy it; any other turn asks for it here.
             listed = stickers.block(self.store, ep['persona'],
-                                    self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']},
+                                    scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']},
                                     at_home=self._place(ep) == visibility.OWNER_PRIVATE)
             if not listed:
                 return {'items': [], 'note': '架子是空的。'}, False
@@ -2262,7 +2262,7 @@ class RoleTools:
         cls = self._cls(ep)
         if item['doc'] == 'group_notes':
             from .group_admin import notes_slug
-            scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1})
+            scene = scene_records.get(self.store, ep['scene_id'], fields=['kind'])
             if (scene or {}).get('kind') != 'group' or item.get('op') not in group_note_ops():
                 raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: ' + ('这里不是群' if (scene or {}).get('kind') != 'group'
                                                                   else 'do「%s」不行' % item.get('op')))
@@ -2451,7 +2451,7 @@ class RoleTools:
         if layer not in ('person', 'here'):
             raise Refused('UNDERSTANDING_LAYER_REQUIRED: layer 要写 person（人那层，哪儿都看得到）或 here（这里那层，只在这个对话里）；'
                           '给的是 %r。拿不准就问自己：这条换个群还成立吗，成立是 person，不成立是 here' % (layer,))
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         group = scene.get('kind') == 'group'
         if group and turn_kind(ep) == 'visit' and not args.get('person'):
             raise Refused('串门时要写 person：照抄你要写的那个人的标签。')
@@ -2551,7 +2551,7 @@ class RoleTools:
         from .people import People
         if self._place(ep) == visibility.OWNER_PRIVATE:
             raise Refused('家里的人屏蔽不了：watch 的 block 只在家外的对话里用。')
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         people = People(self.store, ep.get('persona'))
         if person:
             found = people.resolve(scene, person)
@@ -2588,7 +2588,7 @@ class RoleTools:
         unknown = [t for t in tools if t not in TOOLS or t in switches.KEEP]
         if unknown:
             raise Refused('这些关不了：%s（不是工具，或是一回合离不了的 think、recall、stay_silent）。' % '、'.join(unknown))
-        scene = self.store.db.scenes.find_one({'_id': found[0]}) or {'_id': found[0]}
+        scene = scene_records.get(self.store, found[0]) or {'_id': found[0]}
         from .people import People
         label = People(self.store, ep.get('persona')).scene_title(scene)
         current = switches.on(self.store, kind='tools_off', scene_id=found[0])
@@ -2681,7 +2681,7 @@ class RoleTools:
         the global mood (a guess would put false state on a real person). Returns (fields, where it landed)."""
         from .affect import kind_key, kind_label, person_kinds
         kind = kind_key(ledger.model, fields.get('kind'))
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         if kind not in person_kinds(ledger.model):
             if fields.get('who'):
                 raise Refused('「%s」不是对人的心情，不用写 who；去掉 who 再记。' % kind_label(ledger.model, kind))
@@ -2793,11 +2793,11 @@ class RoleTools:
         except ValueError as exc:
             # 换算/校验类失败（时间已过、钟点不存在、形状不对）回给她自己改，带上现在的钟面。
             clock = schedule_rules.local_clock(schedule_rules.scene_timezone(
-                self.store.config, self.store.db.scenes.find_one({'_id': ep['scene_id']})), schedule_rules.now_utc())
+                self.store.config, scene_records.get(self.store, ep['scene_id'])), schedule_rules.now_utc())
             # The code stays in the record (words()); she reads the cause and the fix.
             raise Refused('没安排成：%s。现在是 %s（%s，%s）。' % (words(exc).rstrip('。'), clock['now_local'],
                                                             clock['weekday'], clock['timezone'])) from None
-        there = outside and self.store.db.scenes.find_one({'_id': plan.get('scene_id')})
+        there = outside and scene_records.get(self.store, plan.get('scene_id'))
         if there:
             from .people import People
             there = PLAN_THERE % People(self.store, ep['persona']).scene_title(there)
@@ -2915,7 +2915,7 @@ class RoleTools:
             raise Refused('do 是 preview、request、drill 或 cancel%s。' % _given(args, 'op'))
         why = self._text(args, 'why', 200)
         from .people import People
-        where = People(self.store, ep['persona']).scene_title(self.store.db.scenes.find_one({'_id': ep['scene_id']}))
+        where = People(self.store, ep['persona']).scene_title(scene_records.get(self.store, ep['scene_id']))
         try:
             pending = desk.request(why, args.get('when') or 'quiet', drill=op == 'drill', where=where)
         except PermissionError as exc:
@@ -2984,12 +2984,12 @@ class RoleTools:
             return {'groups': focus.listing(self.store, ep['persona']), 'usual': '平常常驻 %d 个以内' %
                     focus.soft_limit(self.store.config)}, False
         place = self._text(args, 'place', 40, required=False)
-        here = self.store.db.scenes.find_one({'_id': ep['scene_id']})
+        here = scene_records.get(self.store, ep['scene_id'])
         if place:
             found = places.find(self.store.config, place)
             if not found:
                 raise Refused('没有「%s」这个群；place 照抄 group_focus 的 list 或 places_from_program 里的 place。' % place)
-            scene = self.store.db.scenes.find_one({'_id': found[0]})
+            scene = scene_records.get(self.store, found[0])
         elif (here or {}).get('kind') == 'group':
             scene = here
         else:
@@ -3035,7 +3035,7 @@ class RoleTools:
 
     def tool_find_member(self, ep, call_id, args):
         from . import group_members
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']})
+        scene = scene_records.get(self.store, ep['scene_id'])
         return group_members.find(self.store, scene, ep['persona'], self._text(args, 'name', 20)), False
 
     # ── her questions (ADR-061) ─────────────────────────────────────
@@ -3046,7 +3046,7 @@ class RoleTools:
         people = People(self.store, ep['persona'])
         wanted = ' '.join(str(wanted or '').split())
         if wanted in questions.HERE or wanted == places.place_id(ep['scene_id']):
-            scene = self.store.db.scenes.find_one({'_id': ep['scene_id']})
+            scene = scene_records.get(self.store, ep['scene_id'])
             return {'to': places.place_id(ep['scene_id']), 'scene_id': ep['scene_id'], 'kind': 'here',
                     'name': people.scene_title(scene)}
         if wanted == questions.ACTION:
@@ -3055,9 +3055,9 @@ class RoleTools:
         place = notes._resolve(self.store, ep['persona'], found, wanted, visibility.OWNER_PRIVATE)
         homes = {p: sid for p, (sid, kind) in found.items() if kind == 'home'}
         if place and (place in homes or not homes_only):
-            scene = self.store.db.scenes.find_one({'_id': found[place][0]})
+            scene = scene_records.get(self.store, found[place][0])
             return {'to': place, 'scene_id': found[place][0], 'kind': 'home', 'name': people.scene_title(scene)}
-        names = '、'.join('%s（%s）' % (people.scene_title(self.store.db.scenes.find_one({'_id': sid})), p)
+        names = '、'.join('%s（%s）' % (people.scene_title(scene_records.get(self.store, sid)), p)
                          for p, sid in homes.items())
         if place:
             raise Refused('ASK_PLACE_NOT_HOME: 「%s」不是家里的对话：ask 问的是家里的几处（%s）、这里和行动脑；'
@@ -3299,7 +3299,7 @@ def idea_place(store, people, source):
     if not first and source.get('turn') == 'note':
         return IDEA_PLACE_UNKNOWN
     scene_id = (first or {}).get('from_scene') or source.get('scene_id')
-    scene = store.db.scenes.find_one({'_id': scene_id}) if scene_id else None
+    scene = scene_records.get(store, scene_id) if scene_id else None
     if not scene:
         return None
     title = people.scene_title(scene)
@@ -3330,7 +3330,7 @@ def read_sections(store, ep, items, cls):
                 section, why = forwards.read(store, ep['scene_id'], item['sid'])
             else:
                 from . import schedule_rules
-                here = store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+                here = scene_records.get(store, ep['scene_id']) or {'_id': ep['scene_id']}
                 section, why = crossing.fetch(store, here, item['sid'], schedule_rules.scene_timezone(store.config, here))
             out.append(section) if section else missing.append(why)
             continue
@@ -3367,7 +3367,7 @@ def _from_home(store, persona, source_ids, episodes):
                                                                           'person_id': 1}):
         cls = (row.get('manifest') or {}).get('session_class')
         if cls is None:
-            scene = store.db.scenes.find_one({'_id': row.get('scene_id')}) or {'_id': row.get('scene_id')}
+            scene = scene_records.get(store, row.get('scene_id')) or {'_id': row.get('scene_id')}
             cls = visibility.session_class(store.config, store.db, scene, row.get('person_id'))
         if cls == visibility.OWNER_PRIVATE:
             return True

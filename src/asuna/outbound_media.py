@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from .records import scenes as scene_records
 
 try:                                  # 宿主内：与 channels / history_query 同一套围栏
     from .state import Denied
@@ -191,7 +192,7 @@ def _row_scope(store, row):
     row = row or {}
     if row.get('scope_key'):
         return row['scope_key']
-    scene = store.db.scenes.find_one({'_id': row.get('scene_id')}, {'scope_key': 1}) if row.get('scene_id') else None
+    scene = scene_records.get(store, row.get('scene_id'), fields=['scope_key']) if row.get('scene_id') else None
     return (scene or {}).get('scope_key')
 
 
@@ -261,7 +262,7 @@ def row_own_only(store, row):
         return True
     row = row or {}
     try:
-        scene = store.db.scenes.find_one({'_id': row.get('scene_id')}) or {'_id': row.get('scene_id')}
+        scene = scene_records.get(store, row.get('scene_id')) or {'_id': row.get('scene_id')}
         person = _route_person(store.config, scene, row.get('channel_id'))
         return visibility is None or not person or             visibility.session_class(store.config, store.db, scene, person) != OWNER_PRIVATE
     except Exception:
@@ -377,7 +378,7 @@ def image_scopes(store, config, scene, session_cls=None, person_id=None):
         return out
     for peer_id in _linked_scene_ids(config, scene_id):
         try:
-            peer = store.db.scenes.find_one({'_id': peer_id})
+            peer = scene_records.get(store, peer_id)
         except Exception:
             continue
         if not isinstance(peer, dict) or peer.get('kind') != 'dm' or not peer.get('scope_key'):
@@ -401,7 +402,7 @@ def row_is_group(store, row):
     """这条消息是不是发往一个群：按行自己的场景与路由现算。"""
     row = row or {}
     try:
-        scene = store.db.scenes.find_one({'_id': row.get('scene_id')}) or {}
+        scene = scene_records.get(store, row.get('scene_id')) or {}
     except Exception:
         return False
     if not scene.get('channel_id') and row.get('channel_id'):
@@ -413,7 +414,7 @@ def row_image_scopes(store, row):
     """这条消息那一轮能引用哪些 scope：全部从行自己算（场景、路由上的人、session_class）。"""
     row = row or {}
     try:
-        scene = store.db.scenes.find_one({'_id': row.get('scene_id')}) or {}
+        scene = scene_records.get(store, row.get('scene_id')) or {}
     except Exception:
         scene = {}
     if not scene.get('scope_key'):

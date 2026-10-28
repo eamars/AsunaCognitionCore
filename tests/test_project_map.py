@@ -15,7 +15,7 @@ CORE = ROOT / 'src' / 'asuna'
 def test_every_module_has_an_area_and_a_description():
     listed = [name for _, _, names in project_map.AREAS.values() for name in names]
     modules = {path.stem for path in CORE.glob('*.py') if path.stem != '__init__'}
-    modules |= {'store/' + path.stem for path in CORE.glob('store/*.py')}
+    modules |= {package + '/' + path.stem for package in ('store', 'records') for path in CORE.glob(package + '/*.py')}
     assert len(listed) == len(set(listed)), 'a module is in two areas'
     assert modules - set(listed) == set(), 'give these modules an area in tools/project_map.py'
     assert set(listed) - modules == set(), 'these modules in tools/project_map.py no longer exist'

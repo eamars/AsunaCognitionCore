@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import channel_kinds
 from .people import People, safe_name
+from .records import scenes as scene_records
 
 MAX_MEMBERS = 5000                       # one group's list; a larger one is refused, not cut
 RECENT_ACTIVE = 20                       # the most recently active members always shown; find_member reaches the rest
@@ -72,7 +73,7 @@ def receive(store, channel_id, body):
                          % (MAX_MEMBERS, len(members) if isinstance(members, list) else type(members).__name__))
     account = channel_kinds.of_channel(channel_id).ACCOUNT
     rows = [row for row in (_member(raw, account) for raw in members) if row]
-    scene = store.db.scenes.find_one({'_id': route['scene_id']}, {'scope_key': 1})
+    scene = scene_records.get(store, route['scene_id'], fields=['scope_key'])
     if not scene:
         raise PermissionError('MEMBERS_SCENE_UNKNOWN: 这个群还没有对话记录；有人说过话以后再送')
     current = store.db.group_members.find_one({'_id': route['scene_id']})

@@ -23,6 +23,7 @@ from .config import excerpt
 from .ingress import NOT_CORE_NOTICE, PROGRAM_AUTHOR
 from .peer_context import channel_of, peer_from_message, verify_peer
 from .state import Conflict, now
+from .records import scenes as scene_records
 
 NAME_LIMIT = 20
 # Applied after NFKC, which already folds ［］＃＜＞ into their ASCII forms.
@@ -146,7 +147,7 @@ class People:
         """The platform account she speaks with in this conversation: its channel's, kept on the scene by the host."""
         cache = self.__dict__.setdefault('_own_accounts', {})
         if scene_id not in cache:
-            doc = self.db.scenes.find_one({'_id': scene_id}, {'channel_account_id': 1}) if scene_id else None
+            doc = scene_records.get(self.store, scene_id, fields=['channel_account_id']) if scene_id else None
             cache[scene_id] = str((doc or {}).get('channel_account_id') or '') or None
         return cache[scene_id]
 
@@ -650,7 +651,7 @@ class People:
         cache = self.__dict__.setdefault('_scenes', {})
         key = scene_id or 'scope:' + str(scope_key)
         if key not in cache:
-            cache[key] = self.db.scenes.find_one({'_id': scene_id} if scene_id else {'scope_key': scope_key})
+            cache[key] = (scene_records.get(self.store, scene_id) if scene_id else scene_records.by_scope(self.store, scope_key))
         return cache[key]
 
     def scene_title(self, scene):

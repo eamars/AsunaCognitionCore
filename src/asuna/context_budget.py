@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
+from .records import scenes as scene_records
 
 BUDGET_VERSION = 1
 
@@ -288,7 +289,7 @@ def review_block(store, persona, moment):
     people = People(store, persona)
     tidy = {row['_id'] for row in store.db.episodes.find({'episode_kind': 'settlement'}, {'_id': 1})}
     names = {notes_slug(scene['_id']): people.scene_title(scene) + '的笔记'
-             for scene in store.db.scenes.find({'kind': 'group'}, {'_id': 1, 'kind': 1})}
+             for scene in scene_records.of_kind(store, 'group', fields=['_id', 'kind'])}
     from .carried import placed
     due = []
     for slug in docs.slugs():

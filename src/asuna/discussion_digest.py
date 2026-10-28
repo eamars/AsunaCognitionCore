@@ -32,6 +32,7 @@ import hashlib
 import json
 import re
 from datetime import timedelta
+from .records import scenes as scene_records
 
 try:                                  # 宿主内：按包加载
     from .history_query import (DEFAULT_LIMIT, DEFAULT_WINDOW_DAYS, MAX_LIMIT, HISTORY_TOOL_NAME,
@@ -909,7 +910,7 @@ class DiscussionDigestService:
         if unknown:
             raise ValueError("DIGEST_ARGUMENT_DENIED: 不认识的参数 %s；只收 %s"
                              % ("、".join(sorted(unknown)), "、".join(DIGEST_TOOL["parameters"])))
-        scene = self.store.db.scenes.find_one({"_id": task["scene_id"]})
+        scene = scene_records.get(self.store, task["scene_id"])
         if (not isinstance(scene, dict) or scene.get("scope_key") != task["scope_key"]
                 or scene.get("policy_epoch") != task["policy_epoch"]):
             # 场景与任务不同步就拒查，不猜

@@ -1,6 +1,7 @@
 """Durable input boundary. No retrieval or model calls are allowed here."""
 from .evidence import canonical, sha
 from .state import Conflict, Denied, now
+from .records import scenes as scene_records
 
 
 INTERNAL_KINDS = {'self_development': 'self-development', 'presence': 'presence', 'settlement': 'settlement',
@@ -39,7 +40,7 @@ def episode_id(event):
 
 
 def persist_input(store, event, *, managed=False):
-    scene = store.authorize(event['scene_id'], event['person_id'])
+    scene = scene_records.authorize(store, event['scene_id'], event['person_id'])
     # Host-origin opportunities (no user message): self-development, heartbeat, nightly settlement.
     internal = event.get('episode_kind') in INTERNAL_KINDS
     where = INTERNAL_SCENE_KIND.get(event.get('episode_kind'), 'dm')
@@ -63,8 +64,7 @@ def persist_input(store, event, *, managed=False):
                 or previous.get('event', {}).get('integration_profile') != event.get('integration_profile')):
             raise Denied('INPUT_IDENTITY_OR_CONTENT_CONFLICT')
         return previous, False
-    sequence = store.db.scenes.find_one_and_update(
-        {'_id': scene['_id']}, {'$inc': {'sequence': 1}}, return_document=True)['sequence']
+    sequence = scene_records.next_seq(store, scene['_id'])
     message = {'_id': 'in-' + key, 'episode_id': key,
                'adapter_id': event.get('adapter_id', 'fixture'),
                'platform_event_id': event['event_id'], 'scene_id': scene['_id'],

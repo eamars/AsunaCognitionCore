@@ -29,6 +29,7 @@ from . import channel_kinds
 from .context_budget import ROUGH_AGO, STICKER_REVIEW, STICKER_SHELF, _tier
 from .evidence import sha
 from .state import Denied, now
+from .records import scenes as scene_records
 
 TOKEN = re.compile(r'\[表情包:([^\[\]\n]{1,12})\]')
 FACE_TOKEN = re.compile(r'\[表情:([^\[\]\s:]{1,12})\]')
@@ -282,7 +283,7 @@ def speech_problem(store, ep, speech):
     faces = FACE_TOKEN.findall(speech or '')
     if not stickers and not faces:
         return None
-    scene = store.db.scenes.find_one({'_id': ep['scene_id']}, {'_id': 1, 'channel_id': 1})
+    scene = scene_records.get(store, ep['scene_id'], fields=['_id', 'channel_id'])
     if not sends(scene):
         return '这里发不出表情包或小黄脸：把「[表情包:…]」「[表情:…]」去掉，用话说。'
     for name in stickers:
@@ -397,7 +398,7 @@ def pool_seen(store, blobs, config, message_id):
     row = store.db.messages.find_one({'_id': message_id})
     if not row or row.get('direction') != 'inbound':
         return 0
-    scene = store.db.scenes.find_one({'_id': row['scene_id']})
+    scene = scene_records.get(store, row['scene_id'])
     if not scene or scene.get('kind') != 'group':
         return 0
     task = {'scene_id': scene['_id'], 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
@@ -468,7 +469,7 @@ def candidates_block(store, moment, scene_id=None):
     people = People(store)
     items = []
     for row in rows:
-        where = '、'.join(people.scene_title(store.db.scenes.find_one({'_id': s}) or {'_id': s}) for s in row['scenes'][-2:])
+        where = '、'.join(people.scene_title(scene_records.get(store, s) or {'_id': s}) for s in row['scenes'][-2:])
         hours = _hours(moment, row['last_seen'])
         items.append({'candidate': row['artifact_id'], 'seen': '%s见过%s' % (where, _tier(SEEN_WORDS, row['seen'])),
                       **({'last': _tier(ROUGH_AGO, hours)} if hours is not None else {})})

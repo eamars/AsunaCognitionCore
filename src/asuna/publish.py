@@ -9,6 +9,7 @@ from .state import Store, Denied, Conflict, now
 from .evidence import sha
 from .queue import database_effects_lock
 from .config import character_id
+from .records import scenes as scene_records
 
 
 class PublishService:
@@ -53,7 +54,7 @@ class PublishService:
         if msg['delivery_state'] in ('DELIVERED','UNKNOWN','FAILED','CANCELLED_AFTER_FAILURE'):
             return msg
         ep=db.episodes.find_one({'_id':msg['episode_id']})
-        scene=db.scenes.find_one({'_id':msg['scene_id']})
+        scene=scene_records.get(self.store, msg['scene_id'])
         # A part of her reply leaves while her turn still runs (ADR-064 phase 2); words leave once the turn accepted them.
         speaking=('SPEAK_ACCEPTED','COMMITTED')+(('TURN',) if msg.get('reply_part') else ())
         if not ep or ep['state'] not in speaking or ep['policy_epoch']!=scene['policy_epoch'] or msg['scope_key']!=scene['scope_key']:

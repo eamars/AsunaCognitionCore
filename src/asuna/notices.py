@@ -30,6 +30,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from .state import Denied, now
+from .records import scenes as scene_records
 
 KEY = 'asuna_notice'
 GATES = ('poked', 'reacted')
@@ -212,7 +213,7 @@ def home(store, controller, channel_id, body, delay=HOME_BATCH_SECONDS):
     if '{g}' in words:
         from .group_members import routed_group
         try:
-            scene = store.db.scenes.find_one({'_id': routed_group(store, channel_id, group, 'NOTICE')['scene_id']})
+            scene = scene_records.get(store, routed_group(store, channel_id, group, 'NOTICE')['scene_id'])
         except PermissionError:
             scene = None
         title = people.scene_title(scene) if scene else ''
@@ -328,7 +329,7 @@ def answer(store, ep, item, key):
     if not request:
         raise Denied('GROUP_ACTION_REQUEST_NOT_FOUND: 「%s」不是等你回的请求；%s' % (
             item.get('who'), '现在等你回的是 ' + '、'.join(sorted(found)) if found else '现在没有等你回的请求，重试也一样'))
-    scene = store.db.scenes.find_one({'_id': ep['scene_id']}) or {}
+    scene = scene_records.get(store, ep['scene_id']) or {}
     row_id = 'ga-' + sha(canonical([ep['_id'], 'group_action', key]))[:24]
     if not store.db.artifacts.find_one({'_id': row_id}):
         store.put('artifacts', {'_id': row_id, 'kind': 'group_action', 'channel_id': request['channel_id'],

@@ -39,6 +39,7 @@ from asuna.ingress import persist_input                              # noqa: E40
 from asuna.lanes import LaneResult                                   # noqa: E402
 from asuna.state import Store                                        # noqa: E402
 from asuna.testing import dispose_test_store, suite_config            # noqa: E402
+from asuna.records import scenes as scene_records  # noqa: E402
 
 FIXTURES = ROOT / 'tools' / 'fixtures' / 'refusal_probe'
 WORLD = ROOT / 'tests' / 'fixtures' / 'world.json'
@@ -325,9 +326,9 @@ def probe_config(name, thoughts='tool'):
 def home_scene(store):
     """Her local chat, the home scene a `home` sequence runs in (the owner writing in the Web composer)."""
     chat = store.config['chat']
-    if not store.db.scenes.find_one({'_id': chat['scene_id']}, {'_id': 1}):
-        store.put('scenes', {'_id': chat['scene_id'], 'kind': 'dm', 'scope_key': 'scene:' + chat['scene_id'],
-                             'policy_epoch': 1, 'sequence': 0, 'members': [chat['person_id']]})
+    if not scene_records.get(store, chat['scene_id'], fields=['_id']):
+        scene_records.save(store, {'_id': chat['scene_id'], 'kind': 'dm', 'scope_key': 'scene:' + chat['scene_id'],
+                                  'policy_epoch': 1, 'sequence': 0, 'members': [chat['person_id']]})
     return chat['scene_id']
 
 
@@ -348,9 +349,9 @@ def run_sequence(store, lane, seq, index, name):
         store.config['channels']['qq']['routes']['g%d' % index] = {
             'scene_id': scene_id, 'target': {'type': 'group', 'id': group},
             'members': {n: {'person_id': 'qq:' + n} for n in number.values()}}
-        store.put('scenes', {'_id': scene_id, 'kind': 'group', 'scope_key': 'scene:' + scene_id,
-                             'channel_account_id': BOT, 'channel_id': 'qq', 'policy_epoch': 1, 'sequence': 0,
-                             'members': ['qq:' + n for n in number.values()]})
+        scene_records.save(store, {'_id': scene_id, 'kind': 'group', 'scope_key': 'scene:' + scene_id,
+                                  'channel_account_id': BOT, 'channel_id': 'qq', 'policy_epoch': 1, 'sequence': 0,
+                                  'members': ['qq:' + n for n in number.values()]})
         line_event = lambda line, key, aside=False: event(scene_id, group, number, line, key, name, aside=aside)
     lane.schemas = dsh_schemas(store, scene_id)
     for text in seq.get('memories', []):
@@ -407,7 +408,7 @@ def event(scene_id, group, number, line, key, name, aside=False):
 def mine(store, scene_id, text, i, index=0):
     """A line she said before the conversation starts: delivered, with a platform id (her recall can name it). `index`
     is the run of the conversation: the home conversation runs in her one local chat on every repeat."""
-    seq = store.db.scenes.find_one_and_update({'_id': scene_id}, {'$inc': {'sequence': 1}}, return_document=True)['sequence']
+    seq = scene_records.next_seq(store, scene_id)
     store.put('messages', {'_id': 'mine-%s-%d-%d' % (scene_id[-5:], index, i), 'scene_id': scene_id, 'scope_key': 'scene:' + scene_id,
                            'policy_epoch': 1, 'direction': 'outbound', 'author': 'demo', 'phase': 'SPEAK', 'text': text,
                            'scene_seq': seq, 'delivery_state': 'DELIVERED', 'episode_id': 'ep-before',

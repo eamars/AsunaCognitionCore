@@ -19,6 +19,7 @@ from datetime import datetime, time, timedelta, timezone
 
 from .config import excerpt
 from .evidence import sha
+from .records import scenes as scene_records
 
 EXAMPLE_CHARS = 80
 TASK_STATES = {'READY': '排着', 'RUNNING': '在做', 'PAUSED': '停着', 'RETURNED': '交回来了', 'FAILED': '没做成',
@@ -77,7 +78,7 @@ def block(store, persona, zone_name, moment=None):
 
     def where(scene_id):
         if scene_id not in title:
-            scene = store.db.scenes.find_one({'_id': scene_id})
+            scene = scene_records.get(store, scene_id)
             title[scene_id] = people.scene_title(scene) if scene else '一个现在已经没有的对话'
         return title[scene_id]
 
@@ -153,7 +154,7 @@ def exchanges(store, persona, zone_name, moment=None):
         by_scene[row['scene_id']].append(row)
     found = {}
     for scene_id, lines in by_scene.items():
-        scene = store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}
+        scene = scene_records.get(store, scene_id) or {'_id': scene_id}
         seqs = [row.get('scene_seq') or 0 for row in lines]
         rows = list(store.db.messages.find({'scene_id': scene_id, 'scene_seq': {'$gte': min(seqs),
                                                                                 '$lte': max(seqs) + LOOK_AHEAD}})

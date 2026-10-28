@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from .records import scenes as scene_records
 
 PERSON_SCOPE = 'person'
 LAYERS = ('person', 'here')
@@ -54,7 +55,7 @@ def _written(store, revision, moment):
     """(where it was last written, when) or None; the time is a field, shown on the local clock."""
     from .people import People
     origin = revision.get('origin') or {}
-    scene = store.db.scenes.find_one({'_id': origin.get('scene_id')}) if origin.get('scene_id') else None
+    scene = scene_records.get(store, origin.get('scene_id')) if origin.get('scene_id') else None
     try:
         datetime.fromisoformat(origin['at'])
     except (KeyError, TypeError, ValueError):
@@ -228,12 +229,12 @@ def _everyone(store, persona):
         body = (revision.get('content') or {}).get('body') or ''
         if scope == PERSON_SCOPE:
             origin = revision.get('origin') or {}
-            where = store.db.scenes.find_one({'_id': origin.get('scene_id')}) if origin.get('scene_id') else None
+            where = scene_records.get(store, origin.get('scene_id')) if origin.get('scene_id') else None
             layer = {'layer': '人那层', 'chars': len(body),
                      'written_in': people.scene_title(where) if where else '一个现在已经没有的对话',
                      'written_at': origin.get('at') or revision.get('created_at')}
         else:
-            where = store.db.scenes.find_one({'scope_key': scope})
+            where = scene_records.by_scope(store, scope)
             layer = {'layer': '这里那层：%s' % (people.scene_title(where) if where else '一个现在已经没有的对话'),
                      'chars': len(body), 'written_at': revision.get('created_at')}
         layer['short'] = (revision.get('content') or {}).get('short') or '没有'      # every row says which it is

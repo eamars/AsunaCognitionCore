@@ -365,6 +365,16 @@ map.
 The full one-line meaning of each operation is in `owner_ops.py` (`python owner_ops.py --markdown` prints this table
 with them).
 
+As built, `records.scenes` (B3): every operation of its row, under those names; call sites import it as
+`scene_records`. A missing id finds nothing, as before; a missing scope finds nothing, where MongoDB's equality on
+null matched a record without `scope_key` (8.3's counts show whether her data has one). `Store.authorize` is gone:
+the owner's `authorize` raises the same `SCENE_MEMBERSHIP_DENIED`. A function that holds a database handle rather than
+a store (`skills.skill_directories`, `scene_links`, `dbread`'s `place`) reaches the owner through `records.on(db)`.
+The owner imports only `asuna.store`, and `state`'s `Denied` inside `authorize`. Tests that faked the store's
+`authorize` or `db.scenes` stub the owner's operation instead; the offline case modules' fake stores get
+`collection(name)` from `tests/fake_collections.py`, the in-memory adapter over their own rows.
+`tests/test_record_owners.py` is the guard of 8.2's B13 row for the owners moved so far.
+
 **The shared layer's own surface** (no collection's owner; 21 map rows): `Store.put` and `Store.audit` (stay; owners
 call `put` through `save`, every module calls `audit`), `Store.ensure` (replaces `migrate`), `Store.recover_commits`,
 `Store.seed` (tests), the **maintenance surface** (`store.maintenance.record(collection, id)`,

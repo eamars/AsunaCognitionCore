@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta, timezone
+from .records import scenes as scene_records
 
 FULL = re.compile(r'^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}')
 KEYS = ('at', 'until', 'since')
@@ -70,5 +71,5 @@ def for_model(node, zone, now=None):
 def zone_of(store, scene_id):
     """The time zone a conversation's times are read in (schedule_rules.scene_timezone)."""
     from .schedule_rules import scene_timezone
-    scene = store.db.scenes.find_one({'_id': scene_id}) if scene_id else None
+    scene = scene_records.get(store, scene_id) if scene_id else None
     return scene_timezone(store.config, scene or {'_id': scene_id})

@@ -5,6 +5,7 @@ import pytest
 from asuna.native_worker import BusinessWorker, prune_host_reports, KEPT_HOST_REPORTS
 from asuna.state import Denied
 from asuna.router import Router
+from asuna.records import scenes as scene_records
 from asuna.config import DATA, ROOT
 from concurrent.futures import Future
 
@@ -24,7 +25,8 @@ def test_task_fence_ends_old_pending_stage_without_ending_its_successor():
     assert len(events)==1
 
 
-def test_tool_operation_cannot_inherit_mutable_session_successor_grant(tmp_path):
+def test_tool_operation_cannot_inherit_mutable_session_successor_grant(tmp_path, monkeypatch):
+    monkeypatch.setattr(scene_records, 'get', lambda *a, **k: None)
     worker=BusinessWorker(); calls=[]
     worker.session=lambda _: {'lane':'executor','task_id':'successor'}
     def valid(task):
@@ -32,7 +34,7 @@ def test_tool_operation_cannot_inherit_mutable_session_successor_grant(tmp_path)
     worker.app=SimpleNamespace(service=SimpleNamespace(valid=valid),broker=SimpleNamespace(
         bind=lambda session,task,cwd:calls.append((session,task['_id'],cwd)),
         call=lambda *args:{'accepted':True}),
-        store=SimpleNamespace(config={},db=SimpleNamespace(scenes=SimpleNamespace(find_one=lambda *a,**k:None))))
+        store=SimpleNamespace(config={}))
     for token,task in (('old-stage','old'),('new-stage','successor')):
         future=Future();future.asuna_lane='executor';future.asuna_session_id='source'
         future.asuna_task={'_id':task,'scene_id':'s'};future.asuna_binding={'cwd':str(tmp_path)}
@@ -58,7 +60,7 @@ def test_group_role_is_continuous_across_speakers_but_not_scenes_or_authorizatio
         assert BusinessWorker.role_session_id({**ep, **changed}) != session_id
 
 
-def test_group_actor_changes_reauthorize_while_action_task_actor_is_immutable():
+def test_group_actor_changes_reauthorize_while_action_task_actor_is_immutable(monkeypatch):
     worker = BusinessWorker()
     prior = {'_id': 'group', 'revision': 1, 'lane': 'character', 'scene_id': 'group',
              'person_id': 'alice', 'persona': 'xiaoman', 'cwd': 'authorized', 'policy_epoch': 1}
@@ -68,9 +70,10 @@ def test_group_actor_changes_reauthorize_while_action_task_actor_is_immutable():
         if person not in ('alice', 'bob'):
             raise Denied('NOT_A_MEMBER')
         return {'policy_epoch': 1}
+    monkeypatch.setattr(scene_records, 'authorize', lambda store, scene, person: authorize(scene, person))
     worker.app = SimpleNamespace(store=SimpleNamespace(
         db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda _: prior)),
-        authorize=authorize, put=lambda _, values, **kw: values))
+        put=lambda _, values, **kw: values))
     assert worker.bind_session('group', {**prior, 'person_id': 'bob'})['person_id'] == 'bob'
     assert calls[-1] == ('group', 'bob')
     with pytest.raises(Denied, match='NOT_A_MEMBER'):
@@ -80,12 +83,12 @@ def test_group_actor_changes_reauthorize_while_action_task_actor_is_immutable():
         worker.bind_session('action', {**prior, 'person_id': 'bob'})
 
 
-def test_bound_session_checks_current_authorization_epoch():
+def test_bound_session_checks_current_authorization_epoch(monkeypatch):
     worker = BusinessWorker()
     record = {'scene_id': 'scene', 'person_id': 'person', 'policy_epoch': 1}
+    monkeypatch.setattr(scene_records, 'authorize', lambda store, scene, person: {'policy_epoch': 2})
     worker.app = SimpleNamespace(store=SimpleNamespace(
-        db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda query: record)),
-        authorize=lambda scene, person: {'policy_epoch': 2}))
+        db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda query: record))))
     with pytest.raises(Denied, match='NATIVE_SESSION_EPOCH_CHANGED'):
         worker.session('native-session')
 
@@ -123,10 +126,10 @@ def test_web_input_requires_the_real_local_workspace(workspace, tmp_path):
 
 
 @pytest.mark.parametrize('channel', [None, {'id': 'qq'}])
-def test_only_private_host_input_preserves_native_binding(channel):
+def test_only_private_host_input_preserves_native_binding(channel, monkeypatch):
     captured = []
-    store = SimpleNamespace(config={}, authorize=lambda *_: {'_id': 'scene', 'scope_key': 'scope', 'kind': 'dm'},
-                            audit=lambda *_: None)
+    monkeypatch.setattr(scene_records, 'authorize', lambda *_: {'_id': 'scene', 'scope_key': 'scope', 'kind': 'dm'})
+    store = SimpleNamespace(config={}, audit=lambda *_: None)
     coordinator = SimpleNamespace(ingest=lambda event, **_: captured.append(event) or {'state': 'COMMITTED'})
     event = {'event_id': 'id', 'scene_id': 'scene', 'person_id': 'person', 'text': 'hello',
              'native_session_id': 'native-session', 'native_message_ids': ['native-message']}
@@ -212,14 +215,14 @@ def test_a_tool_error_is_its_own_words_and_a_fault_says_it_is_not_hers():
     assert error_text('status', KeyError('x')) == "KeyError: 'x'"            # only tool calls are told how to act
 
 
-def test_the_session_binding_names_its_conversations_clock():
+def test_the_session_binding_names_its_conversations_clock(monkeypatch):
     """web_search (a Host tool) puts publication times on this clock, as every time a model reads is."""
     worker = BusinessWorker()
     record = {'_id': 'native-session', 'scene_id': 'scene', 'person_id': 'person', 'policy_epoch': 1}
+    monkeypatch.setattr(scene_records, 'get', lambda *a, **k: None)
+    monkeypatch.setattr(scene_records, 'authorize', lambda store, scene, person: {'policy_epoch': 1})
     worker.app = SimpleNamespace(store=SimpleNamespace(config={'timezone': 'Pacific/Auckland'},
-        db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda query: record),
-                           scenes=SimpleNamespace(find_one=lambda query: None)),
-        authorize=lambda scene, person: {'policy_epoch': 1}))
+        db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda query: record))))
     binding = worker.dispatch('session', {'session_id': 'native-session'})
     assert binding['timezone'] == 'Pacific/Auckland' and binding['utc_offset_minutes'] in (720, 780)
     assert binding['scene_id'] == 'scene'
@@ -258,7 +261,7 @@ def test_one_long_run_keeps_its_newest_records_and_their_chain(tmp_path):
 
 
 @pytest.mark.parametrize('member', [True, False])
-def test_the_owner_writes_on_an_agent_line_he_joins(member, tmp_path):
+def test_the_owner_writes_on_an_agent_line_he_joins(member, tmp_path, monkeypatch):
     """ADR-051: the composer is open on an agent line whose members include the owner; his words go to that line."""
     from asuna import channel_kinds
     channel_kinds.load([{'python': ROOT / 'packages' / 'channels' / 'agent-line' / 'python', 'module': 'agent_line'}])
@@ -268,10 +271,10 @@ def test_the_owner_writes_on_an_agent_line_he_joins(member, tmp_path):
     rows = {'line': line, 'qq': qq}
     members = ['agent:claude-code'] + (['owner'] if member else [])
     worker = BusinessWorker()
+    monkeypatch.setattr(scene_records, 'get', lambda *a, **k: {'members': members})
     worker.app = SimpleNamespace(config={'chat': {'scene_id': 'local', 'person_id': 'owner', 'workspace': str(tmp_path / 'local')}},
         store=SimpleNamespace(db=SimpleNamespace(
-            sessions=SimpleNamespace(find=lambda _: list(rows.values()), find_one=lambda query: rows.get(query['_id'])),
-            scenes=SimpleNamespace(find_one=lambda *_: {'members': members}))))
+            sessions=SimpleNamespace(find=lambda _: list(rows.values()), find_one=lambda query: rows.get(query['_id'])))))
     accepted = []
     worker.controller = SimpleNamespace(submit=lambda text, **kw: accepted.append((text, kw['scene_id'])))
     policies = worker.dispatch('input_policies', {'sessions': [{'id': 'line', 'cwd': line['cwd']}, {'id': 'qq'}]})

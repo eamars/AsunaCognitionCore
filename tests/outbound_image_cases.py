@@ -142,6 +142,7 @@ from asuna.channels import ChannelServer, Channels                    # noqa: E4
 from asuna.coordinator import Coordinator                             # noqa: E402
 from asuna.lanes import FakeLane, FakeTurn                            # noqa: E402
 from asuna.state import Conflict, Denied                              # noqa: E402
+import fake_collections                                               # noqa: E402
 
 # ── 假世界 ────────────────────────────────────────────────────────────────────
 # 规则：代码／测试／文档里不写真实 QQ 号、群号、地址，全用这里的假占位值。
@@ -364,6 +365,7 @@ class FakeStore:
     def __init__(self, config=None):
         self.config = config if config is not None else CONFIG
         self.db = DB()
+        self.collection = fake_collections.collections(self.db)     # the record owners' way to the same rows
         self.audited = []
 
     def audit(self, stream, kind, payload, scope='operator'):

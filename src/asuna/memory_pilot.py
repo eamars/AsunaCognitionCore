@@ -24,6 +24,7 @@ from collections import Counter
 from .evidence import canonical, sha
 from .retrieval import EMBED_OPENING_CHARS, refused, terms
 from .state import now
+from .records import scenes as scene_records
 
 TIERS_VERSION = 1
 SHADOW_PILOT = False              # the pilot's turn rows (ADR-062 phase 1, closed); the index runs without it
@@ -80,7 +81,7 @@ def own_items(store, persona):
         kind = 'ledger' if content.get('kind') == 'ledger' else slug if slug in ('self', 'core') else None
         for section in content.get('sections') or [] if kind else []:
             add(kind, slug, section, scope_of(section))
-    for scene in store.db.scenes.find({'kind': 'group'}, {'scope_key': 1}):
+    for scene in scene_records.of_kind(store, 'group', fields=['scope_key']):
         content = docs.read(notes_slug(scene['_id']))[1]
         for section in (content or {}).get('sections') or []:
             add('group_notes', notes_slug(scene['_id']), section, scene['scope_key'])

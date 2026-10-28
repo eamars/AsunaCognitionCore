@@ -10,6 +10,7 @@ starts after the earlier one, so the block appears once, and not at all after a 
 from __future__ import annotations
 
 from datetime import timedelta
+from .records import scenes as scene_records
 
 NIGHT_KINDS = ('self_development', 'settlement')
 LOOKBACK = timedelta(hours=48)
@@ -31,7 +32,7 @@ def _what(store, persona, tool, args):
     op = args.get('op')
     if tool == 'group_focus':
         found = places.find(store.config, args.get('place'))
-        scene = store.db.scenes.find_one({'_id': found[0]}) if found else None
+        scene = scene_records.get(store, found[0]) if found else None
         title = People(store, persona).scene_title(scene) if scene else args.get('place')
         return '让%s%s' % (title, '常驻' if op == 'active' else '歇着')
     if tool == 'set_policy':
@@ -56,7 +57,7 @@ def _what(store, persona, tool, args):
         doc = str(args.get('doc') or '')
         if doc.startswith('group:'):
             found = places.find(store.config, 'g' + doc[6:12])         # a group's notes: slug and place share the hash
-            scene = store.db.scenes.find_one({'_id': found[0]}) if found else None
+            scene = scene_records.get(store, found[0]) if found else None
             doc = '%s的群笔记' % (People(store, persona).scene_title(scene) if scene else '一个群')
         return '%s 的「%s」：%s' % (doc, _short(args.get('heading') or args.get('sid'), 30), args.get('op'))
     from .reasons import _action

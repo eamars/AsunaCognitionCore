@@ -16,6 +16,7 @@ from . import carried, channel_kinds, scene_links
 from .ingress import NOT_CORE_NOTICE
 from .native_cognition import CognitionView
 from .peer_context import speaker_name
+from .records import scenes as scene_records
 
 DOCUMENT_KINDS = ('persona', 'voice', 'ledger', 'working')
 # The two scopes of the tab: what is the same in every conversation, and what this conversation reads.
@@ -129,9 +130,9 @@ class NativeMemory:
     def __init__(self, worker, session_id):
         self.store = worker.app.store
         self.binding = worker.session(session_id)
-        self.scene = self.store.authorize(self.binding['scene_id'], self.binding['person_id'])
+        self.scene = scene_records.authorize(self.store, self.binding['scene_id'], self.binding['person_id'])
         self.read = scene_links.read_scope(self.store.config, self.scene)
-        scenes = list(self.store.db.scenes.find({'_id': {'$in': self.read['scene_ids']}}))
+        scenes = scene_records.many(self.store, self.read['scene_ids'])
         # Current epochs are resolved independently for each explicit A2 source.
         self.scopes = [{'scope_key': row['scope_key'], 'policy_epoch': row['policy_epoch']} for row in scenes]
         self.sources = [{'scene_id': row['_id'], 'policy_epoch': row['policy_epoch']} for row in scenes]
@@ -336,7 +337,7 @@ class NativeMemory:
         if any(pair and pair[1] is None for pair in map(docs.head, docs.slugs())):
             raise Denied('MEMORY_REVISION_UNAVAILABLE')      # a broken head is never shown as an empty document
         status = render_status(self.store, self.persona) if docs.head('persona') else None
-        groups = {notes_slug(row['_id']): row['_id'] for row in self.store.db.scenes.find({'kind': 'group'}, {'_id': 1})}
+        groups = {notes_slug(row['_id']): row['_id'] for row in scene_records.of_kind(self.store, 'group', fields=['_id'])}
         rows = []
         for slug in docs.slugs():
             if slug in groups:

@@ -191,7 +191,6 @@ The worker's store: every write goes through `Store.put` with an expected revisi
   - `ensure_vectors` — Create the space's index, or bring an existing one's filter fields up to the space's (the old one keeps serving meanwhile); True once it can be queried, False if it cannot yet after `timeout` seconds.
   - `nearest` — The k records nearest to `vector` among those matching `where`, best first, as (id, cosine similarity in [-1, 1]); exact, never approximate.
   - `get`
-  - `authorize`
   - `identity`
   - `seed` — Test-only synthetic world; persona paths are relative to the fixture file.
   - `init_head`
@@ -523,3 +522,43 @@ The MongoDB adapter: the store's words as MongoDB queries, the catalog's collect
   - `size`
   - `ping`
   - `close`
+
+## `records/__init__`
+
+[src/asuna/records/__init__.py](../../src/asuna/records/__init__.py)
+
+The owners of the collections read across many domains: one module per collection, the only code that names its fields and builds its conditions (ADR-104). Each takes a store (anything with `collection(name)`) as its first argument; a call site calls the owner's named operations and never sees a condition.
+
+- def `on` — The store's checked collections over a database handle a caller holds instead of a store.
+
+## `records/scenes`
+
+[src/asuna/records/scenes.py](../../src/asuna/records/scenes.py)
+
+The owner of `scenes`: a conversation's record (its kind, members, scope and epoch, its position counter, and the marks the program keeps on it), read and written only through these operations.
+
+- def `get` — The conversation with this id, or None.
+- def `by_scope` — A conversation of this scope (of this kind, at this epoch), or None.
+- def `of_kind` — Every conversation of this kind (`dm`, `group`, ...), but `besides`.
+- def `many` — The conversations with these ids (of this kind).
+- def `in_scopes` — The conversations of these scopes.
+- def `all` — Every conversation.
+- def `condense_wanted` — The groups she marked to have their conversation condensed.
+- def `channel_scenes` — One conversation of this kind on a channel (its id only), or None.
+- def `authorize` — The conversation, when this person is one of its members; else SCENE_MEMBERSHIP_DENIED.
+- def `next_seq` — The conversation's next position, taken in one step.
+- def `save` — The revisioned write of a whole record (`Store.put`: `expected`, `stream`, `reset_counters`).
+- def `want_condense`
+- def `clear_condense`
+- def `set_condense_floor`
+- def `apply_condense` — A condense is done: its marks go; `condensed` (when it compacted) is what it records.
+- def `told_condensed` — The turn that tells her of this condense (only while it is still the latest).
+- def `note_size`
+- def `note_tokens`
+- def `set_character_context`
+- def `set_timezone` — The conversation's time zone; None takes it away.
+- def `note_fault`
+- def `clear_fault` — The fault mark goes, if it is still the one shown (`fault.at`).
+- def `hold_unsent`
+- def `clear_unsent` — The unsent mark goes, if it is still that turn's.
+- def `asides_shown` — The asides shown so far reach this position (it never moves back).

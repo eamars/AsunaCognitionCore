@@ -20,6 +20,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import p2_summary_loop_cases as base                      # noqa: E402  装好第三方假件＋假集合
+import fake_collections                                    # noqa: E402
 
 
 from asuna import proactive                                # noqa: E402
@@ -384,10 +385,11 @@ def topic_is_derived_for_every_group_row():
                     'event': {'channel': {'platform_event_id': 'evt-woken'},
                               'group_context': {'wake_reason': 'mentioned_account',
                                                 'topic_id': 'topic-B', 'topic_via': 'mentioned'}}}
-    store = SimpleNamespace(config={'character_id': 'demo'}, db=base.FakeDB({
+    db = base.FakeDB({
         'scenes': [{'_id': GROUP, 'kind': 'group', 'policy_epoch': EPOCH, 'members': [PERSON]}],
-        'messages': [parent_overheard, parent_woken]}),
-        head=lambda entity, scope: None)        # no persona policy written: People reads the model defaults
+        'messages': [parent_overheard, parent_woken]})
+    store = SimpleNamespace(config={'character_id': 'demo'}, db=db, collection=fake_collections.collections(db),
+                            head=lambda entity, scope: None)   # no persona policy written: People reads the defaults
     route = {'scene_id': GROUP}
     over = group_context(store, route, {'account_id': BOT, 'mentioned_account_ids': [],
                                         'reply_to': 'evt-parent'}, 'evt-new')

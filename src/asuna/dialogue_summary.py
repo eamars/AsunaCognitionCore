@@ -19,6 +19,7 @@ from .people import People
 from .evidence import canonical, sha
 from .state import Conflict, now
 from .config import character_id
+from .records import scenes as scene_records
 
 
 
@@ -53,12 +54,12 @@ class DialogueSummarizer:
     def initialize(self):
         """Do not bulk-summarize pre-feature history on host startup."""
         for scene_id in self.scene_ids:
-            scene = self.store.db.scenes.find_one({'_id': scene_id})
+            scene = scene_records.get(self.store, scene_id)
             if not scene or scene.get('kind') not in self.SCENE_KINDS:
                 continue
             if 'summary_start_seq' not in scene:
-                self.store.put('scenes', {**scene, 'summary_start_seq': scene.get('sequence', 0)},
-                               expected=scene['revision'], stream='summary:init:' + scene_id)
+                scene_records.save(self.store, {**scene, 'summary_start_seq': scene.get('sequence', 0)},
+                                   expected=scene['revision'], stream='summary:init:' + scene_id)
 
     def _pending(self, scene):
         query = {'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
@@ -112,7 +113,7 @@ class DialogueSummarizer:
         if self.paused.is_set() or time.monotonic() < self.next_attempt.get(scene_id, 0.0) \
                 or not self.can_run():
             return None
-        scene = self.store.db.scenes.find_one({'_id': scene_id})
+        scene = scene_records.get(self.store, scene_id)
         if not scene or scene.get('kind') not in self.SCENE_KINDS or 'summary_start_seq' not in scene:
             return None
         from . import focus

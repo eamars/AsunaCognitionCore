@@ -31,6 +31,7 @@ from .people import People
 from .skills import skill_directories
 from .state import Denied, now, Conflict
 from .queue import RuntimeLease
+from .records import scenes as scene_records
 
 
 KEPT_HOST_REPORTS = 5     # this start's evidence and the starts just before it
@@ -145,12 +146,11 @@ class NativeLane:
             # A repair (answers.py) is the same stage asked again in the same session: parse its base operation.
             base = re.sub(r':fix-\d+$', '', operation)
             if self.lane == 'summary':
-                scene = self.store.db.scenes.find_one({'scope_key': kwargs['scope_key'],
-                                                       'policy_epoch': kwargs['policy_epoch']})
+                scene = scene_records.by_scope(self.store, kwargs['scope_key'], epoch=kwargs['policy_epoch'])
                 if not scene:
                     raise Denied('SUMMARY_SCENE_STALE')
                 person = scene['members'][0]
-                self.store.authorize(scene['_id'], person)
+                scene_records.authorize(self.store, scene['_id'], person)
                 ep = {'_id': base, 'scene_id': scene['_id'], 'person_id': person,
                       'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
                       'character_context': scene.get('character_context'),
@@ -209,7 +209,7 @@ class NativeLane:
                 # One tool-free appraiser session per persona, owned by the local operator scene;
                 # each request carries only that episode's own visible material.
                 local = self.store.config['chat']
-                owner = self.store.authorize(local['scene_id'], local['person_id'])
+                owner = scene_records.authorize(self.store, local['scene_id'], local['person_id'])
                 grant, ep = local, {**ep, 'scene_id': owner['_id'], 'person_id': local['person_id'],
                                     'scope_key': owner['scope_key'], 'policy_epoch': owner['policy_epoch']}
             else:
@@ -250,7 +250,7 @@ class NativeLane:
                                                 **kwargs['context']}}
             else:
                 carried = None
-            scene_kind = (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
+            scene_kind = (scene_records.get(self.store, ep['scene_id'], fields=['kind']) or {}).get('kind')
             request = {'kind': 'stage', 'token': operation, 'session_id': native_id, 'scene_kind': scene_kind,
                        'lane': self.lane, 'phase': phase, 'text': text, 'system': system,
                        'episode_id': ep['_id'], 'binding': record, 'title': self.child_title(task, role_id, ep),
@@ -518,7 +518,7 @@ class BusinessWorker:
         first = not any(row.get('navigation_version') == 1 for row in bindings)
         entries, retire = [], set()
         for scene_id, person, workspace, title in scenes:
-            scene = store.authorize(scene_id, person)
+            scene = scene_records.authorize(store, scene_id, person)
             scene_bindings = [row for row in bindings if row.get('lane') == 'character' and not row.get('errand')
                               and row['scene_id'] == scene_id and row['persona'] == local['persona']]
             candidates = [row for row in scene_bindings
@@ -623,10 +623,10 @@ class BusinessWorker:
                 return self.continued_session(session_id)
             if not old.get('main_conversation') or (old.get('carry') and not old['carry'].get('delivered')):
                 return None
-            scene = store.authorize(old['scene_id'], old['person_id'])
+            scene = scene_records.authorize(store, old['scene_id'], old['person_id'])
             context = 'carried-' + uuid.uuid4().hex[:16]
             # $set, not a whole-document write: ingress increments the scene's sequence concurrently.
-            store.db.scenes.update_one({'_id': scene['_id']}, {'$set': {'character_context': context}})
+            scene_records.set_character_context(store, scene['_id'], context)
             successor = self.role_session_id({'scene_id': scene['_id'], 'persona': old['persona'],
                                               'policy_epoch': scene['policy_epoch'], 'character_context': context})
             summary = str((carry or {}).get('summary') or '').strip()
@@ -775,7 +775,7 @@ class BusinessWorker:
         session_id = self_review.reflection_session_id(ep['_id'])
         if store.db.sessions.find_one({'_id': session_id}):
             return session_id
-        scene = store.authorize(ep['scene_id'], ep['person_id'])
+        scene = scene_records.authorize(store, ep['scene_id'], ep['person_id'])
         home = store.db.sessions.find_one({'_id': home_id}) or {}
         cwd = home.get('cwd') or str(Path(workspace_grant(self.app.config, scene['_id'], ep['person_id'])['workspace']).resolve())
         self.bind_session(session_id, {
@@ -797,7 +797,7 @@ class BusinessWorker:
         session_id = errands.session_id(ep['_id'])
         if store.db.sessions.find_one({'_id': session_id}):
             return session_id
-        scene = store.authorize(ep['scene_id'], ep['person_id'])
+        scene = scene_records.authorize(store, ep['scene_id'], ep['person_id'])
         source = store.db.sessions.find_one({'_id': source_id}) or {}
         platform = channel_kinds.of(scene['_id'])
         cwd = source.get('cwd') or (self.channel_workspace(platform) if platform
@@ -851,7 +851,7 @@ class BusinessWorker:
         if not session or session.get('lane') != 'character' or session.get('successor_id') or session.get('retired') \
                 or not session.get('cwd') or not channel_kinds.owner_joins(session.get('scene_id')):
             return None
-        scene = self.app.store.db.scenes.find_one({'_id': session['scene_id']}, {'members': 1}) or {}
+        scene = scene_records.get(self.app.store, session['scene_id'], fields=['members']) or {}
         return session['scene_id'] if self.app.config['chat']['person_id'] in scene.get('members', ()) else None
 
     @staticmethod
@@ -865,7 +865,7 @@ class BusinessWorker:
             identity += ('person_id',)
         if prior and any(prior.get(k) != values.get(k) for k in identity):
             raise Denied('NATIVE_BINDING_IDENTITY_CHANGED')
-        scene = self.app.store.authorize(values['scene_id'], values['person_id'])
+        scene = scene_records.authorize(self.app.store, values['scene_id'], values['person_id'])
         if scene['policy_epoch'] != values['policy_epoch']:
             raise Denied('NATIVE_SESSION_EPOCH_CHANGED')
         # Bindings keep a hash of the stage system prompt, never its full text.
@@ -880,7 +880,7 @@ class BusinessWorker:
         record = self.app.store.db.sessions.find_one({'_id': session_id, 'native_host': True})
         if not record:
             raise Denied('NATIVE_SESSION_NOT_BOUND')
-        scene = self.app.store.authorize(record['scene_id'], record['person_id'])
+        scene = scene_records.authorize(self.app.store, record['scene_id'], record['person_id'])
         if scene['policy_epoch'] != record['policy_epoch']:
             raise Denied('NATIVE_SESSION_EPOCH_CHANGED')
         return record
@@ -978,7 +978,7 @@ class BusinessWorker:
         unnamed = target if len(target) <= 20 else ('群聊 ' if group else '私聊 ') + target[:6]
         name = ' '.join(str(name or '').split())[:40] or unnamed
         from . import focus
-        scene = self.app.store.db.scenes.find_one({'_id': route['scene_id']}) if group else None
+        scene = scene_records.get(self.app.store, route['scene_id']) if group else None
         return focus.RESTING_MARK + name if scene and not focus.active(self.app.store, scene) else name
 
     def retitle_scene(self, scene_id):
@@ -1003,7 +1003,7 @@ class BusinessWorker:
         """A real processed platform receipt, including quiet/error outcomes; never a model turn."""
         from .channels import route_for_scene
         store, config = self.app.store, self.app.config
-        scene = store.authorize(row['scene_id'], row['author'])
+        scene = scene_records.authorize(store, row['scene_id'], row['author'])
         if row['policy_epoch'] != scene['policy_epoch']:
             raise Denied('NATIVE_SESSION_EPOCH_CHANGED')
         route = route_for_scene(config, row['event']['channel']['id'], row['scene_id'])
@@ -1152,8 +1152,8 @@ class BusinessWorker:
             local = self.app.config['chat']['scene_id']
             rows = list(self.app.store.db.sessions.find({'_id': {'$in': list(args['session_ids'])[:500]},
                 'native_host': True, 'lane': 'character', 'scene_id': {'$ne': local}}, {'scene_id': 1}))
-            kinds = {scene['_id']: scene.get('kind') for scene in self.app.store.db.scenes.find(
-                {'_id': {'$in': [row['scene_id'] for row in rows]}}, {'kind': 1})}
+            kinds = {scene['_id']: scene.get('kind') for scene in scene_records.many(
+                self.app.store, [row['scene_id'] for row in rows], fields=['kind'])}
             return {row['_id']: kinds[row['scene_id']] for row in rows if kinds.get(row['scene_id']) in ('group', 'dm')}
         if method == 'input':
             session_id = args['session_id']
@@ -1176,7 +1176,7 @@ class BusinessWorker:
             if args.get('images'):
                 # Pictures the owner attached: DSH shows them to her; the program keeps its own record.
                 from .vision import local_uploads
-                scene = self.app.store.db.scenes.find_one({'_id': scene_id}, {'scope_key': 1})
+                scene = scene_records.get(self.app.store, scene_id, fields=['scope_key'])
                 media = local_uploads(self.app.store, scene['scope_key'], args['images'], args['message_ids'][0])
             return self.controller.submit(args['text'], event_id=args['message_ids'][0], scene_id=scene_id,
                 native_session_id=session_id, native_message_ids=args['message_ids'], media=media)
@@ -1430,7 +1430,7 @@ class NativeDevelopmentBridge:
 
     def call(self, task, tool, args):
         from . import visibility
-        scene = self.store.db.scenes.find_one({'_id': task['scene_id']}) or {'_id': task['scene_id']}
+        scene = scene_records.get(self.store, task['scene_id']) or {'_id': task['scene_id']}
         if not task.get('development_grant') or visibility.session_class(
                 self.config, self.store.db, scene, task['requester_id']) != visibility.OWNER_PRIVATE:
             from .tasks import capability_refusal

@@ -29,6 +29,7 @@ from .config import excerpt
 from .evidence import canonical, sha
 from .state import Conflict, now
 from . import visibility
+from .records import scenes as scene_records
 
 TABLES_VERSION = 1
 # Patience words -> minutes (None: until it is answered, for a report).
@@ -294,7 +295,7 @@ def _source_now(store, qid, source, persona, moment):
         return ('not_asked' if episode and episode.get('state') in ENDED else 'pending'), []
     if line.get('delivery_state') == 'FAILED':
         return 'not_sent', []
-    scene = store.db.scenes.find_one({'_id': source['scene_id']}) or {'_id': source['scene_id']}
+    scene = scene_records.get(store, source['scene_id']) or {'_id': source['scene_id']}
     people = People(store, persona)
     lines = _group_answers(store, source, line) if source.get('kind') == 'group' else _lines_after(store, qid, source, line)
     found = [_answer(row, people, scene) for row in lines]

@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timedelta, timezone
+from .records import scenes as scene_records
+from . import records
 
 LIMIT = 50
 MOST = 500
@@ -197,7 +199,7 @@ class Reader:
         """Which conversation a place code (g + six hex, as her notes and plans name places) stands for."""
         from .evidence import sha
         code = str(code).strip()
-        found = [scene for scene in self.db.scenes.find({}, {'_id': 1, 'kind': 1})
+        found = [scene for scene in scene_records.all(records.on(self.db), fields=['_id', 'kind'])
                  if 'g' + sha(str(scene['_id']).encode())[:6] == code]
         return self._answer('scenes', {'place': code}, [{'place': code, 'scene_id': scene['_id'], 'kind': scene.get('kind')}
                                                          for scene in found])

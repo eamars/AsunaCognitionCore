@@ -25,6 +25,7 @@ from . import animated, channel_kinds, media_children, visibility
 from .evidence import canonical, sha
 from .scene_links import message_times, read_scope
 from .state import Denied
+from .records import scenes as scene_records
 
 MEDIA_KEY = 'asuna_media'
 READ_IMAGE_TOOL_NAME = 'read_image'
@@ -338,14 +339,14 @@ def readable_image_scenes(store, task, config):
     也不能把别人的场景说成自己的。本场景与任务记录不同步仍然拒（不猜）；联动场景在库里
     查不到、或纪元与本任务不同步，就照实不扫它——那条边本来只是「额外能读」，缺了不算围栏不对。
     """
-    scene = store.db.scenes.find_one({'_id': task['scene_id']})
+    scene = scene_records.get(store, task['scene_id'])
     if (not isinstance(scene, dict) or scene.get('scope_key') != task['scope_key']
             or scene.get('policy_epoch') != task['policy_epoch']):
         raise Denied('VISION_SCENE_FENCE_MISMATCH: 这个对话和任务记录对不上了（换了纪元或范围）；不是参数的问题，'
                      '重试也一样：停下这一步，把没看成写进结果')
     out = [{'scene_id': scene.get('_id'), 'linked': False}]
     for scene_id in read_scope(config, scene)['linked_scenes']:
-        doc = store.db.scenes.find_one({'_id': scene_id})
+        doc = scene_records.get(store, scene_id)
         if not isinstance(doc, dict) or doc.get('policy_epoch') != task['policy_epoch']:
             continue
         out.append({'scene_id': scene_id, 'linked': True})
@@ -406,7 +407,7 @@ def attachment_by_ref(store, task, config, ref, session_class=visibility.PUBLIC,
     if session_class == visibility.OWNER_PRIVATE:
         fenced = {scope['scene_id'] for scope in scopes}
         scopes += [{'scene_id': doc['_id'], 'linked': True, 'home_reach': True, 'policy_epoch': doc.get('policy_epoch')}
-                   for doc in store.db.scenes.find({}, {'_id': 1, 'policy_epoch': 1}) if doc['_id'] not in fenced]
+                   for doc in scene_records.all(store, fields=['_id', 'policy_epoch']) if doc['_id'] not in fenced]
     for scope in scopes:
         rows = store.db.messages.find({'scene_id': scope['scene_id'], 'policy_epoch': scope['policy_epoch'],
                                        'direction': 'inbound', 'received_at': {'$gte': cutoff},
@@ -804,7 +805,7 @@ def media_source_url(store, task, config, entry):
     epoch = task['policy_epoch']
     if entry.get('home_reach'):
         # Found from home by attachment_by_ref (owner_private only): read back in its own scene and epoch.
-        epoch = (store.db.scenes.find_one({'_id': scene_id}, {'policy_epoch': 1}) or {}).get('policy_epoch')
+        epoch = (scene_records.get(store, scene_id, fields=['policy_epoch']) or {}).get('policy_epoch')
     elif scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
         return ''
     row = store.db.messages.find_one({'_id': entry['source_message_id'], 'scene_id': scene_id,
@@ -916,7 +917,7 @@ def picture_to_edit(store, blobs, task, config, ref, *, session_class=visibility
     elif seen.get('path'):
         own, back = False, task['scope_key']         # a file from this machine: it stays where the task is
     else:
-        scene = store.db.scenes.find_one({'_id': seen.get('image_scene_id') or task['scene_id']}, {'scope_key': 1})
+        scene = scene_records.get(store, seen.get('image_scene_id') or task['scene_id'], fields=['scope_key'])
         own, back = False, (scene or {}).get('scope_key') or task['scope_key']
     return {'data': data, 'own': own, 'back_to': back}
 

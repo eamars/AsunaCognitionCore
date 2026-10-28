@@ -17,6 +17,7 @@ from .queue import database_effects_lock
 from .state import Denied, now
 from .ingress import PROGRAM_AUTHOR
 from .people import People
+from .records import scenes as scene_records
 
 try:                                  # 出站图片附件：元数据、字节端点的围栏都在 outbound_media
     from . import outbound_media
@@ -184,7 +185,7 @@ def group_context(store, route, body, event_id, person_id=None):
     reply = body.get('reply_to')
     if reply is not None and (not isinstance(reply, str) or not 1 <= len(reply) <= 200):
         raise ValueError('INVALID_REPLY_ID')
-    scene = store.db.scenes.find_one({'_id': route['scene_id']})
+    scene = scene_records.get(store, route['scene_id'])
     parent = None
     if reply:
         parent = reply_parent(store, scene, reply, body.get('occurred_at'),
@@ -394,7 +395,7 @@ class Channels:
         media_keys.saw(event)                              # a signed picture link that just arrived (ADR-035)
         from . import notices
         notice = event['raw'].get(notices.KEY)
-        scene = self.store.db.scenes.find_one({'_id': route['scene_id']}) if notice else None
+        scene = scene_records.get(self.store, route['scene_id']) if notice else None
         if notice:
             # A notice reads as the program's line (people.transcript); its {line} is the line it is about.
             text, hers, line_row = notices.fill(self.store, scene or {'_id': route['scene_id']}, notice, body['text'])
@@ -415,7 +416,7 @@ class Channels:
                                               mentioned_account_ids=body.get('mentioned_account_ids', []))
         elif body.get('reply_to'):
             # ADR-079: a quote in a private chat binds to the line it quotes, as a group's does (group_context).
-            here = self.store.db.scenes.find_one({'_id': route['scene_id']})
+            here = scene_records.get(self.store, route['scene_id'])
             parent = reply_parent(self.store, here, body['reply_to'], body.get('occurred_at'),
                                   outbound_author=character_id(self.store.config)) if here else None
             event['reply'] = {'reply_to': body['reply_to'], 'reply_message_id': parent['_id'] if parent else None}
@@ -447,7 +448,7 @@ class Channels:
             from . import focus
             reason = event['group_context']['wake_reason']
             kept = reason if notice and notice.get('gate') else focus.wake(
-                self.store, self.store.db.scenes.find_one({'_id': route['scene_id']}), reason)
+                self.store, scene_records.get(self.store, route['scene_id']), reason)
             if kept != reason:
                 event['group_context'].update(wake_reason=kept, resting=reason)
             if notice and not event['group_context']['wake_reason']:
@@ -474,7 +475,7 @@ class Channels:
             allowed.clear()
         if not episode or episode['person_id'] not in allowed:
             raise Denied('PUBLICATION_MEMBER_REVOKED')
-        scene = self.store.authorize(message['scene_id'], episode['person_id'])
+        scene = scene_records.authorize(self.store, message['scene_id'], episode['person_id'])
         if (message['policy_epoch'] != scene['policy_epoch'] or message['scope_key'] != scene['scope_key']
                 or message['target'] != route['target']
                 or message['channel_account_id'] != self.store.config['channels'][channel_id]['account_id']):
@@ -618,7 +619,7 @@ class Channels:
                         changes.pop(outbound_media.SKIPPED_KEY, None)
                     self.store.put('messages', changes, expected=row['revision'], stream=row['episode_id'])
                     # Her @[label] becomes the adapter's @qq:<account> here, at the edge (people.py).
-                    scene = self.store.db.scenes.find_one({'_id': row['scene_id']})
+                    scene = scene_records.get(self.store, row['scene_id'])
                     text = People(self.store).outbound(scene, row['text']) if scene else row['text']
                     item = {'publication_id': row['_id'], 'attempt_id': attempt,
                             'target': row['target'], 'text': text,

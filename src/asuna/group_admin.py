@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from .evidence import canonical, sha
 from .state import Denied, now
+from .records import scenes as scene_records
 
 KINDS = ('mute', 'unmute', 'recall', 'kick')
 KIND_WORDS = {'mute': '禁言', 'unmute': '解除禁言', 'recall': '撤回', 'kick': '移出群', 'accept': '接受请求',
@@ -74,7 +75,7 @@ def queue(store, ep, index, item, key=None):
     replayed call after a crash does not queue a second one.
     """
     from .people import People
-    scene = store.authorize(ep['scene_id'], ep['person_id'])
+    scene = scene_records.authorize(store, ep['scene_id'], ep['person_id'])
     if scene.get('kind') != 'group':
         raise Denied('GROUP_ACTION_NOT_A_GROUP: 管理动作只在群里用；重试也一样')
     if not enabled(store.config, scene):

@@ -24,6 +24,7 @@ from __future__ import annotations
 import re
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
+from .records import scenes as scene_records
 
 TABLES_VERSION = 1
 # Average incoming lines a day over the last week → minutes of quiet before condensing (measured by the character,
@@ -127,8 +128,8 @@ def main_session(store, scene, persona):
 # ---- her choice -------------------------------------------------------------------------------------------------
 def mark(store, scene, ep, moment=None):
     moment = moment or datetime.now(timezone.utc)
-    store.db.scenes.update_one({'_id': scene['_id']}, {'$set': {'condense_wanted': {
-        'at': moment.isoformat(), 'episode_id': ep['_id'], 'turn': ep.get('turn_kind') or ep.get('episode_kind')}}})
+    scene_records.want_condense(store, scene['_id'], {
+        'at': moment.isoformat(), 'episode_id': ep['_id'], 'turn': ep.get('turn_kind') or ep.get('episode_kind')})
     store.audit(ep['_id'], 'condense.wanted', {'scene_id': scene['_id']}, ep['scope_key'])
     minutes = quiet_minutes(store, scene['_id'], moment)
     return {'done': '记下了：等这个群安静下来就压一压这段对话',
@@ -138,13 +139,13 @@ def mark(store, scene, ep, moment=None):
 
 
 def unmark(store, scene, ep):
-    store.db.scenes.update_one({'_id': scene['_id']}, {'$unset': {'condense_wanted': ''}})
+    scene_records.clear_condense(store, scene['_id'])
     store.audit(ep['_id'], 'condense.kept', {'scene_id': scene['_id']}, ep['scope_key'])
     return {'done': '好，这个群的对话先不压了'}
 
 
 def marked(store):
-    return list(store.db.scenes.find({'condense_wanted': {'$exists': True}, 'kind': 'group'}))
+    return scene_records.condense_wanted(store)
 
 
 # ---- the plan's look --------------------------------------------------------------------------------------------
@@ -152,7 +153,7 @@ def watched(store):
     """The groups the plan looks at: the marked ones and every group she is routed to."""
     from .places import groups
     ids = {scene_id for scene_id, _, _ in groups(store.config)} | {scene['_id'] for scene in marked(store)}
-    return list(store.db.scenes.find({'_id': {'$in': sorted(ids)}, 'kind': 'group'}))
+    return scene_records.many(store, sorted(ids), kind='group')
 
 
 def _condense(store, scene, found, compact, moment, by):
@@ -165,13 +166,12 @@ def _condense(store, scene, found, compact, moment, by):
         return False
     if answer.get('reason') in UNAVAILABLE and by == 'mark':
         # This Host cannot condense at all: the mark is taken back rather than tried every few minutes.
-        store.db.scenes.update_one({'_id': scene['_id']}, {'$unset': {'condense_wanted': ''}})
+        scene_records.clear_condense(store, scene['_id'])
     done = bool(answer.get('compacted') or answer.get('reason') == 'nothing_to_compact')
     if done:
-        update = {'$unset': {'condense_wanted': '', 'condense_floor': '', 'condensed_told': ''}}
-        if answer.get('compacted'):
-            update['$set'] = {'condensed_at': moment.isoformat(), 'condensed_by': by, 'conversation_tokens': None}
-        store.db.scenes.update_one({'_id': scene['_id']}, update)
+        scene_records.apply_condense(store, scene['_id'], {'condensed_at': moment.isoformat(), 'condensed_by': by,
+                                                         'conversation_tokens': None}
+                                     if answer.get('compacted') else None)
     store.audit('condense', 'condense.result', {'scene_id': scene['_id'], 'session_id': found[0], 'by': by,
                                                 **{k: answer.get(k) for k in ('compacted', 'items', 'tokens', 'reason')}})
     return done
@@ -193,8 +193,7 @@ def _past_floor(store, scene, found, size, moment):
     if not answer.get('floor'):
         return False
     tokens, floor = int(answer.get('tokens') or 0), int(answer['floor'])
-    store.db.scenes.update_one({'_id': scene['_id']}, {'$set': {'conversation_size': {
-        'tokens': tokens, 'floor': floor, 'at': moment.isoformat()}}})
+    scene_records.note_size(store, scene['_id'], {'tokens': tokens, 'floor': floor, 'at': moment.isoformat()})
     return tokens >= floor
 
 
@@ -214,7 +213,7 @@ def look(store, persona, compact, moment=None, size=None, offer_notes=None):
         found = main_session(store, scene, persona)
         if not found:
             if wanted:
-                store.db.scenes.update_one({'_id': scene['_id']}, {'$unset': {'condense_wanted': ''}})
+                scene_records.clear_condense(store, scene['_id'])
                 store.audit('condense', 'condense.no_conversation', {'scene_id': scene['_id']})
             continue
         if wanted:
@@ -233,7 +232,7 @@ def look(store, persona, compact, moment=None, size=None, offer_notes=None):
                     done.append(scene['_id'])
                 continue
             store.audit('condense', 'condense.notes_visit_failed', {'scene_id': scene['_id'], 'event_id': floor['visit']})
-            store.db.scenes.update_one({'_id': scene['_id']}, {'$set': {'condense_floor': {'failed_at': moment.isoformat()}}})
+            scene_records.set_condense_floor(store, scene['_id'], {'failed_at': moment.isoformat()})
             continue
         if floor.get('failed_at') and moment - _at(floor['failed_at']) < timedelta(minutes=OFFER_AGAIN_MINUTES):
             continue
@@ -241,8 +240,7 @@ def look(store, persona, compact, moment=None, size=None, offer_notes=None):
             continue
         event_id = offer_notes(scene)
         if event_id:
-            store.db.scenes.update_one({'_id': scene['_id']}, {'$set': {'condense_floor': {
-                'visit': event_id, 'at': moment.isoformat()}}})
+            scene_records.set_condense_floor(store, scene['_id'], {'visit': event_id, 'at': moment.isoformat()})
             store.audit('condense', 'condense.notes_visit', {'scene_id': scene['_id'], 'event_id': event_id})
     return done
 
@@ -255,8 +253,7 @@ def condensed_block(store, scene, event_id, moment=None):
     if told and told != event_id:
         return None
     if not told:
-        store.db.scenes.update_one({'_id': scene['_id'], 'condensed_at': scene['condensed_at']},
-                                   {'$set': {'condensed_told': event_id}})
+        scene_records.told_condensed(store, scene['_id'], scene['condensed_at'], event_id)
     from .config import ago
     moment = moment or datetime.now(timezone.utc)
     hours = max(0.0, (moment - _at(scene['condensed_at'])).total_seconds() / 3600)

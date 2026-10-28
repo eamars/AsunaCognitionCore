@@ -12,6 +12,7 @@ from . import handover
 from .config import redact_text as redact
 from .ingress import episode_id, persist_input, input_state
 from .router import FairQueue
+from .records import scenes as scene_records
 
 
 class SceneQueue(Queue):
@@ -61,10 +62,10 @@ def prepare_local_scene(store, settings):
     if not store.db.identities.find_one({'_id': person}):
         store.put('identities', {'_id': person, 'person_id': person, 'platform': 'local',
                   'account_id': person, 'display_name': '本机用户'}, stream='local-setup')
-    if not store.db.scenes.find_one({'_id': scene}):
-        store.put('scenes', {'_id': scene, 'scene_id': scene, 'kind': 'dm', 'members': [person],
-                  'scope_key': scope, 'policy_epoch': 1, 'sequence': 0}, stream='local-setup')
-    authorized = store.authorize(scene, person)
+    if not scene_records.get(store, scene):
+        scene_records.save(store, {'_id': scene, 'scene_id': scene, 'kind': 'dm', 'members': [person],
+                           'scope_key': scope, 'policy_epoch': 1, 'sequence': 0}, stream='local-setup')
+    authorized = scene_records.authorize(store, scene, person)
     if authorized['kind'] != 'dm' or authorized['scope_key'] != scope:
         raise PermissionError('LOCAL_CHAT_SCENE_CONFIG_MISMATCH')
     seed_documents(store, settings)
@@ -271,7 +272,7 @@ class Chat:
         if not woken and not (event.get('channel') and 'group_context' in event):
             return None, None, None          # 不是通道群消息：没有旁听行可判断
         row = self.app.store.db.messages.find_one({'_id': 'in-' + episode})
-        scene = self.app.store.db.scenes.find_one({'_id': event['scene_id']})
+        scene = scene_records.get(self.app.store, event['scene_id'])
         if not scene or scene.get('kind') != 'group' or not row:
             return None, None, None
         from . import focus
@@ -413,7 +414,7 @@ class Chat:
                         # normal queue turn; do not ingest or rerun the action.
                         self.pending.put((event, task['episode_id']))
                 else:
-                    scene = self.app.store.authorize(event['scene_id'], event['person_id'])
+                    scene = scene_records.authorize(self.app.store, event['scene_id'], event['person_id'])
                     source = self.app.store.db.messages.find_one({'_id': 'in-' + episode})
                     if source['policy_epoch'] != scene['policy_epoch']:
                         raise PermissionError('INPUT_POLICY_STALE')
@@ -455,7 +456,7 @@ class Chat:
                     input_state(self.app.store, episode, 'COMPLETE', result_state=result['state'])
                     self._proactive_consider(event, episode, result)
                     self._sticker_pool(event, episode)
-                self.app.store.authorize(event['scene_id'], event['person_id'])
+                scene_records.authorize(self.app.store, event['scene_id'], event['person_id'])
                 messages = list(self.app.store.db.messages.find({
                     'episode_id': episode, 'scene_id': event['scene_id'],
                     'direction': 'outbound', 'phase': 'SPEAK', 'delivery_state': 'DELIVERED'

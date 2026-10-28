@@ -14,6 +14,7 @@ import threading
 from .channels import route_for_scene, route_members
 from .integration import event_profile
 from .state import Conflict, Denied, now
+from .records import scenes as scene_records
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -151,7 +152,7 @@ class ScheduleService:
                 native = live[-1] if live else None
             if not native:
                 rule = plan['rule']
-                scene = self.store.authorize(plan['scene_id'], plan['person_id'])
+                scene = scene_records.authorize(self.store, plan['scene_id'], plan['person_id'])
                 moment = datetime.now(timezone.utc)
                 if 'every_seconds' in rule:
                     timing = {'every_seconds': rule['every_seconds']}
@@ -236,7 +237,7 @@ class ScheduleService:
 
     def _ensure_development_plan(self, plan_id, interval, intent, **fields):
         scene_id, person_id = self.controller.settings['scene_id'], self.controller.settings['person_id']
-        scene = self.store.authorize(scene_id, person_id)
+        scene = scene_records.authorize(self.store, scene_id, person_id)
         plan = self.store.db.plans.find_one({'_id': plan_id})
         if plan and (plan.get('kind') != 'self_development' or plan['scene_id'] != scene_id
                      or plan['person_id'] != person_id or plan['policy_epoch'] != scene['policy_epoch']):
@@ -307,7 +308,7 @@ class ScheduleService:
 
     def _owner_private_target(self, scene_id, label):
         from . import visibility
-        scene = self.store.db.scenes.find_one({'_id': scene_id})
+        scene = scene_records.get(self.store, scene_id)
         if not scene:
             raise Denied(label + '_TARGET_UNKNOWN')
         person = self.app.config['chat']['person_id'] if scene_id == self.app.config['chat']['scene_id'] else scene['members'][0]
@@ -543,7 +544,7 @@ class ScheduleService:
         if not effective(model, 'heartbeat.visits', policy):
             raise ValueError('VISIT_OFF: heartbeat.visits 关着；想出门先用 set_policy 把它设成 true，不然这回就不去')
         found = places.find(self.app.config, place)
-        scene = found and self.store.db.scenes.find_one({'_id': found[0]})
+        scene = found and scene_records.get(self.store, found[0])
         if not scene:
             raise ValueError('VISIT_PLACE_UNKNOWN: 「%s」不在 places_from_program 里；照抄那里的 place' % place)
         _, route, channel = found
@@ -585,7 +586,7 @@ class ScheduleService:
         home is the program's status only."""
         from . import errands, places
         found = places.find_errand(self.app.config, place)
-        scene = found and self.store.db.scenes.find_one({'_id': found[0]})
+        scene = found and scene_records.get(self.store, found[0])
         if not scene or not scene.get('channel_id'):
             raise ValueError('ERRAND_PLACE_UNKNOWN: 「%s」不在 errand_places_from_program 里；照抄那里的 place' % place)
         _, route, channel = found
@@ -631,7 +632,7 @@ class ScheduleService:
         draft, existing = notes.prepare(self.store, ep, cls, args, call_id, moment, question=question)
         if existing:
             return notes.result(self.store, existing)
-        scene = self.store.db.scenes.find_one({'_id': draft['to_scene']})
+        scene = scene_records.get(self.store, draft['to_scene'])
         counted = deferred = None
         if draft['mode'] == notes.WAKE and draft['kind'] == 'group' and draft['trust'] == notes.TRUSTED:
             persona, model, policy = self._persona()
@@ -784,13 +785,13 @@ class ScheduleService:
         if not isinstance(intent, str) or not 1 <= len(intent.strip()) <= 1000:
             raise ValueError('PLAN_INTENT_INVALID: ' + intent_problem(intent))
         rule = schedule_rules.normalize_rule(spec)          # 形状/间隔/钟点先判完，不碰库
-        scene = self.store.authorize(ep['scene_id'], ep['person_id'])
+        scene = scene_records.authorize(self.store, ep['scene_id'], ep['person_id'])
         if scene['policy_epoch'] != ep['policy_epoch']:
             raise Denied(SOURCE_STALE)
         target = {'scene_id': ep['scene_id'], 'person_id': ep['person_id'], 'scope_key': ep['scope_key'],
                   'policy_epoch': ep['policy_epoch']}
         if where:
-            scene = self.store.authorize(where['scene_id'], where['person_id'])
+            scene = scene_records.authorize(self.store, where['scene_id'], where['person_id'])
             target = {'scene_id': scene['_id'], 'person_id': where['person_id'], 'scope_key': scene['scope_key'],
                       'policy_epoch': scene['policy_epoch']}
         zone = self.zone_of(scene)
@@ -840,7 +841,7 @@ class ScheduleService:
             raise Denied(NOT_IN_SCOPE % plan_id)
         if plan['status'] not in ('CREATING', 'ACTIVE'):
             raise Denied('SCHEDULE_PLAN_NOT_ACTIVE: 「%s」已经是 %s，改不了；要再安排就新建一条' % (plan_id, plan['status']))
-        scene = self.store.authorize(ep['scene_id'], ep['person_id'])
+        scene = scene_records.authorize(self.store, ep['scene_id'], ep['person_id'])
         if scene['policy_epoch'] != ep['policy_epoch']:
             raise Denied(SOURCE_STALE)
         zone = self.zone_of(scene, plan)
@@ -920,7 +921,7 @@ class ScheduleService:
         plan = self.store.db.plans.find_one({'_id': plan_id})
         if not plan or plan['status'] in ('CANCELLED', 'FIRED', 'SUSPENDED'):
             return
-        zone = self.zone_of(self.store.db.scenes.find_one({'_id': plan['scene_id']}), plan)
+        zone = self.zone_of(scene_records.get(self.store, plan['scene_id']), plan)
         moment = schedule_rules._aware(now()) if not floor else \
             max(schedule_rules._aware(now()), schedule_rules._aware(floor))   # 比时刻，不比字符串
         try:
@@ -1080,7 +1081,7 @@ class ScheduleService:
                 plan['scope_key'])
             return None
         try:
-            scene = self.store.authorize(plan['scene_id'], plan['person_id'])
+            scene = scene_records.authorize(self.store, plan['scene_id'], plan['person_id'])
             if scene['policy_epoch'] != plan['policy_epoch']:
                 raise Denied('SCHEDULE_POLICY_STALE')
             if plan.get('kind') == 'self_development' and plan.get('night'):
@@ -1131,7 +1132,7 @@ class ScheduleService:
         extra = {}
         if current.get('native_recurring') and status == 'ACTIVE':
             # The native rule repeats by itself; only the displayed next occurrence moves on.
-            zone = self.zone_of(self.store.db.scenes.find_one({'_id': current['scene_id']}), current)
+            zone = self.zone_of(scene_records.get(self.store, current['scene_id']), current)
             moment = max(schedule_rules._aware(now()), schedule_rules._aware(native.get('scheduledAt') or now()))
             # DSH's own next target when it has already moved on; otherwise computed from the rule.
             next_fire_at = native['scheduledAt'] if native.get('scheduledAt') and \

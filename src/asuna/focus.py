@@ -11,6 +11,7 @@ groups (`active_groups`, default 4) is a soft limit: going past it works and say
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from .records import scenes as scene_records
 
 ACTIVE_GROUPS = 4
 # What still wakes her in a resting group: words addressed to her, and the people she is waiting for.
@@ -70,7 +71,7 @@ def listing(store, persona, moment=None):
     moment = moment or datetime.now(timezone.utc)
     people, rows = People(store, persona), {'active': [], 'resting': []}
     for scene_id, _, _ in places.groups(store.config):
-        scene = store.db.scenes.find_one({'_id': scene_id})
+        scene = scene_records.get(store, scene_id)
         if not scene:
             continue
         item = {'place': places.place_id(scene_id), 'group': people.scene_title(scene),
@@ -94,7 +95,7 @@ def set_focus(store, ep, scene, on, persona):
         # Summaries start from now: the resting days stay as kept, searchable lines, not a backlog of summaries.
         changed['summary_start_seq'] = max(scene.get('summary_start_seq') or 0, scene.get('sequence') or 0)
     try:
-        store.put('scenes', changed, expected=scene['revision'], stream=scene['_id'])
+        scene_records.save(store, changed, expected=scene['revision'], stream=scene['_id'])
     except Conflict:
         raise ValueError('这个群的记录刚被别处改过，没改成；再来一次就行。') from None
     if _changed:

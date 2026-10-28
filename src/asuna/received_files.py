@@ -27,6 +27,7 @@ from datetime import datetime, timedelta, timezone
 from .blobs import BlobStore, erased, erased_words, refuse_erased
 from .outbound_files import removed, size_words
 from .state import Denied, now
+from .records import scenes as scene_records
 
 KIND = 'received_file'             # its own kind: put_once matches kind, so it is never matched to a file of hers
 SOURCE = 'received-file:'          # the source id prefix (media_life.POLICY)
@@ -478,9 +479,9 @@ def reach(store, where, config, session_class):
     from . import visibility
     from .vision import readable_image_scenes
     if session_class == visibility.OWNER_PRIVATE:
-        return {doc['scope_key'] for doc in store.db.scenes.find({}, {'scope_key': 1}) if doc.get('scope_key')}
+        return {doc['scope_key'] for doc in scene_records.all(store, fields=['scope_key']) if doc.get('scope_key')}
     ids = [scope['scene_id'] for scope in readable_image_scenes(store, where, config)]
-    return {doc['scope_key'] for doc in store.db.scenes.find({'_id': {'$in': ids}}, {'scope_key': 1})
+    return {doc['scope_key'] for doc in scene_records.many(store, ids, fields=['scope_key'])
             if doc.get('scope_key')}
 
 
@@ -507,7 +508,7 @@ def found(store, where, config, ref, session_class):
 def _sender(store, persona, entry):
     """Who sent it, as the line names them; the owner by the persona's own word for them."""
     from .people import People
-    scene = store.db.scenes.find_one({'_id': entry.get('scene_id')}) or {'_id': entry.get('scene_id')}
+    scene = scene_records.get(store, entry.get('scene_id')) or {'_id': entry.get('scene_id')}
     line = store.db.messages.find_one({'_id': entry['source_message_id']})
     people = People(store, persona)
     doc = people.entry(scene, (line or {}).get('author'), line)
@@ -549,7 +550,7 @@ def read(store, where, config, args, *, persona, session_class, moment=None):
         else:                                    # never fetched, or the link now serves other bytes: a row of its own
             sender = _sender(store, persona, entry)
             line = store.db.messages.find_one({'_id': entry['source_message_id']}, {'received_at': 1}) or {}
-            scene = store.db.scenes.find_one({'_id': entry.get('scene_id')}, {'scope_key': 1}) or {}
+            scene = scene_records.get(store, entry.get('scene_id'), fields=['scope_key']) or {}
             stored = stash(store, data, scene['scope_key'], message_id=entry['source_message_id'],
                            index=entry['index'], name=entry['name'], sender=sender, message_at=line.get('received_at'),
                            declared_size=entry['declared_bytes'], encoding=encoding,
@@ -758,7 +759,7 @@ def received_from(store, task, sha256):
     from . import visibility
     if not task.get('scene_id'):
         return None
-    scene = store.db.scenes.find_one({'_id': task['scene_id']}) or {'_id': task['scene_id']}
+    scene = scene_records.get(store, task['scene_id']) or {'_id': task['scene_id']}
     cls = visibility.session_class(store.config, store.db, scene, task.get('requester_id'))
     try:
         scopes = reach(store, task, store.config, cls)

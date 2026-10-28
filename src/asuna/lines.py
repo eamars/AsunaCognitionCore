@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import channel_kinds
 from .state import now
+from .records import scenes as scene_records
 
 CLOSE_FOR = ('an_hour', 'until_morning', 'until_reopened')
 MORNING_HOUR = 8
@@ -53,7 +54,7 @@ def asides(store, zone):
             continue
         rows = list(store.db.messages.find(query, {'text': 1, 'received_at': 1, 'scene_seq': 1})
                     .sort('scene_seq', -1).limit(ASIDES_SHOWN))
-        store.db.scenes.update_one({'_id': line['scene_id']}, {'$max': {'asides_shown_seq': rows[0]['scene_seq']}})
+        scene_records.asides_shown(store, line['scene_id'], rows[0]['scene_seq'])
         out.append({'place': line['label'], 'items': [{'at': line_stamp(zone, row.get('received_at')),
                                                      'text': excerpt(' '.join((row.get('text') or '').split()), ASIDE_EXCERPT)}
                                                     for row in reversed(rows)],
@@ -74,7 +75,7 @@ def asides_full(store):
     of her view. Once shown, waiting for her answer loses nothing (her rule: lost wakes her, late does not)."""
     for line in peer_lines(store):
         query = _unseen(store, line['scene_id'])
-        shown = (store.db.scenes.find_one({'_id': line['scene_id']}, {'asides_shown_seq': 1}) or {}).get('asides_shown_seq')
+        shown = (scene_records.get(store, line['scene_id'], fields=['asides_shown_seq']) or {}).get('asides_shown_seq')
         if shown is not None:
             query['scene_seq'] = {'$gt': max(shown, query.get('scene_seq', {}).get('$gt', shown))}
         if store.db.messages.count_documents(query) >= ASIDES_SHOWN:

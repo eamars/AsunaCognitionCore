@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from .channels import route_members
 from .config import ago, character_id, excerpt
 from .evidence import sha
+from .records import scenes as scene_records
 
 TABLES_VERSION = 1
 # Lines in the group over the last hour → how it reads.
@@ -120,7 +121,7 @@ def errand_places(store, persona):
     people = People(store, persona)
     items = []
     for scene_id, route, _ in errand_targets(store.config):
-        scene = store.db.scenes.find_one({'_id': scene_id})
+        scene = scene_records.get(store, scene_id)
         if scene:
             items.append({'place': place_id(scene_id), 'name': people.scene_title(scene),
                           'kind': '群' if route['target']['type'] == 'group' else '私聊'})
@@ -153,7 +154,7 @@ def errands_block(store, persona, moment):
                 .sort('received_at', -1).limit(ERRANDS_SHOWN))
     items = []
     for row in rows:
-        scene = store.db.scenes.find_one({'_id': row['scene_id']}) or {'_id': row['scene_id']}
+        scene = scene_records.get(store, row['scene_id']) or {'_id': row['scene_id']}
         state = outcome(store, {'scene_id': row['scene_id'], 'event_id': row['event']['event_id']})
         words = (errands.interrupted_words(store, row['_id'][len('in-'):]) if state == 'interrupted'
                  else errands.STATES['late'] if state == 'late' else ERRAND_STATES.get(state, state))
@@ -209,9 +210,9 @@ def set_zone(store, place, name):
         zone = schedule_rules._zone(name)
         if zone['zone_unavailable'] is not None:
             raise ValueError('「%s」不是一个时区名：写 IANA 名，比如 Asia/Shanghai、America/Los_Angeles' % name)
-        store.db.scenes.update_one({'_id': found[0]}, {'$set': {'timezone': name}})
+        scene_records.set_timezone(store, found[0], name)
     else:
-        store.db.scenes.update_one({'_id': found[0]}, {'$unset': {'timezone': ''}})
+        scene_records.set_timezone(store, found[0], None)
     return found[0]
 
 
@@ -220,7 +221,7 @@ def zones(store, persona, moment):
     from .people import People
     people, rows = People(store, persona), []
     for scene_id, _, _ in groups(store.config):
-        scene = store.db.scenes.find_one({'_id': scene_id})
+        scene = scene_records.get(store, scene_id)
         if not scene:
             continue
         time = their_time(scene, moment)
@@ -377,7 +378,7 @@ def places_block(store, persona, model, policy, plan, moment, date):
     zone, _ = persona_timezone(model, policy, store.config)
     home = schedule_rules._zone(zone if schedule_rules.is_iana(zone) else 'UTC')['tz']
     for scene_id, route, channel in groups(store.config):
-        scene = store.db.scenes.find_one({'_id': scene_id})
+        scene = scene_records.get(store, scene_id)
         if not scene:
             continue
         here = room(store, scene, moment)
@@ -435,7 +436,7 @@ def last_visits_block(store, persona, plan, moment):
     people = People(store, persona)
     rows = []
     for visit, done in shown:
-        scene = store.db.scenes.find_one({'_id': visit['scene_id']})
+        scene = scene_records.get(store, visit['scene_id'])
         rows.append({'group': people.scene_title(scene), 'at': _stamp(_at(visit['at'])),
                      'went_to': INTENTS.get(visit.get('intent'), ''), 'what': OUTCOMES[done]})
     return {'items': rows, 'note': VISITS_NOTE}
@@ -544,7 +545,7 @@ def elsewhere(store, persona, moment, home, private=()):
     people = People(store, persona)
     items = []
     for scene_id, place in sorted(places.items(), key=lambda kv: kv[1]['last'] or moment, reverse=True)[:ELSEWHERE_PLACES]:
-        scene = store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}
+        scene = scene_records.get(store, scene_id) or {'_id': scene_id}
         did = []
         if place['lines']:
             did.append('说了%s' % _lines_word(place['lines']))

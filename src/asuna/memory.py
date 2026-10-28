@@ -12,6 +12,7 @@ from .state import Store,Denied,Conflict,now
 from .queue import database_effects_lock
 from .ingress import NOT_CORE_NOTICE
 from . import summary_attribution
+from .records import scenes as scene_records
 
 try:                                  # 跨场景只读联动（A2）：关系记录落在哪一份由配置决定
     from . import scene_links
@@ -41,7 +42,7 @@ class MemoryService:
         person_id=person_id or episode['person_id']
         own=person_id==episode['person_id']
         scope=episode['scope_key'];operation=episode['_id']+(':understanding' if layer=='here' else ':understanding:person')+('' if own else ':'+person_id)
-        scene=self.store.authorize(episode['scene_id'],episode['person_id'])
+        scene=scene_records.authorize(self.store, episode['scene_id'], episode['person_id'])
         if (scene['scope_key'],scene['policy_epoch'])!=(scope,episode['policy_epoch']):
             raise Denied('UNDERSTANDING_SCOPE_OR_EPOCH_CHANGED: 这个对话的授权刚变过（不是你的错），这次理解存不了；重试也一样，下回合再更新')
         if body.strip()=='不更新' and short is None:
@@ -205,7 +206,7 @@ class MemoryService:
             return revision
 
     def chunk(self,scene_id):
-        scene=self.store.db.scenes.find_one({'_id':scene_id})
+        scene=scene_records.get(self.store, scene_id)
         rows=list(self.store.db.messages.find({'scene_id':scene_id,**NOT_CORE_NOTICE,'$or':[{'direction':'inbound'},{'delivery_state':'DELIVERED'}]}).sort('scene_seq',1))
         made=[]
         for row in rows:

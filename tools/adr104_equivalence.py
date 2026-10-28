@@ -1,12 +1,16 @@
 """The read-only check of one ADR-104 batch against a deployment's database, before the batch merges: numbers only,
 never a record id or a value.
 
-  python tools/adr104_equivalence.py b1b|b2 [--config config/local.json] [--out <folder>] [--max-ms 2000]
+  python tools/adr104_equivalence.py b1b|b2|b3 [--config config/local.json] [--out <folder>] [--max-ms 2000]
 
 Each batch: what the store's `ensure` would do there, as a dry run (collections it would create, indexes it would
 make, retired indexes it would drop, indexes of a declared name that differ, validators), and for every field the
-catalog declares in the batch's collections (b1b: all of them; b2: `host_leases` and `lane_faults`), its stored
-records by BSON type, the nulls, the records missing a required field and, for a vector, the lengths that differ.
+catalog declares in the batch's collections (b1b: all of them; b2: `host_leases` and `lane_faults`; b3: `scenes`),
+its stored records by BSON type, the nulls, the records missing a required field and, for a vector, the lengths that
+differ. b3 also runs its read cases: each read the batch moved, as the replaced code wrote it with pymongo and as the
+owner (`records.scenes`) now answers it, on parameters sampled through the owner (at most 20 a case, at most 1,000
+queries in all, serial, `--max-ms` each, three runs for the times): the same ids in the same order, the same records,
+the same plan stages; numbers only.
 Each query is read-only and bounded by `--max-ms`. The numbers go to `<out>/<batch>.json` (default
 `<data>/private/adr104-evidence/<batch>/`) and to the console. Exit 0 when nothing would be created, made or refused,
 every validator is the one ensure creates and every declared field holds only its kind (the retired indexes to drop
@@ -75,11 +79,144 @@ def differs(collection, counts):
 
 
 # The collections whose declared fields each batch counts (None: every collection).
-BATCHES = {'b1b': None, 'b2': ('host_leases', 'lane_faults')}
+BATCHES = {'b1b': None, 'b2': ('host_leases', 'lane_faults'), 'b3': ('scenes',)}
+QUERIES = 1000
+RUNS = 3
+
+
+def _stages(plan):
+    """The stage names of a query plan, root first, with the index each scan uses."""
+    out = []
+    while plan:
+        out.append(plan.get('stage', '?') + (':' + plan['indexName'] if plan.get('indexName') else ''))
+        plan = plan.get('inputStage') or (plan.get('inputStages') or [None])[0]
+    return out
+
+
+def _plain(value):
+    """A record as compared: times as UTC without a zone (the old client reads them naive, the adapter aware)."""
+    from datetime import timezone
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_plain(v) for v in value]
+    if hasattr(value, 'tzinfo') and getattr(value, 'tzinfo', None) is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+class _Recording(MongoAdapter):
+    """The MongoDB adapter, keeping the last read it sent (to explain it)."""
+    sent = None
+
+    def get(self, coll, id, fields=None):
+        self.sent = (coll, {'_id': id}, (), 0, 1, fields)
+        return super().get(coll, id, fields)
+
+    def find(self, coll, where, sort=(), skip=0, limit=None, fields=None):
+        from asuna.store.mongodb import query
+        self.sent = (coll, query(where), sort, skip, limit or 0, fields)
+        return super().find(coll, where, sort, skip, limit, fields)
+
+
+def _cases(db, store):
+    """(name, old(param), new(param), parameters) for each read B3 moved, the old as the replaced code wrote it."""
+    from asuna.records import scenes as owner
+    rows = sorted(owner.all(store, fields=['_id', 'scope_key', 'policy_epoch', 'kind']), key=lambda r: r['_id'])
+    ids, kinds = [r['_id'] for r in rows], ['group', 'dm']
+    scopes = [r['scope_key'] for r in rows if isinstance(r.get('scope_key'), str)]
+    pairs = [(r['scope_key'], r.get('policy_epoch')) for r in rows if isinstance(r.get('scope_key'), str)]
+    batches = [ids[n:n + 5] for n in range(0, len(ids), 5)]
+    scenes = db.scenes
+    one = lambda filter, proj=None: ('find_one', filter, proj)
+    many = lambda filter, proj=None: ('find', filter, proj)
+    return [
+        ('get', lambda i: one({'_id': i}), lambda i: owner.get(store, i), ids),
+        ('get fields', lambda i: one({'_id': i}, {'kind': 1}), lambda i: owner.get(store, i, fields=['kind']), ids),
+        ('by_scope', lambda s: one({'scope_key': s}), lambda s: owner.by_scope(store, s), scopes),
+        ('by_scope group fields', lambda s: one({'scope_key': s, 'kind': 'group'}, {'scope_key': 1, 'policy_epoch': 1}),
+         lambda s: owner.by_scope(store, s, kind='group', fields=['scope_key', 'policy_epoch']), scopes),
+        ('by_scope epoch', lambda p: one({'scope_key': p[0], 'policy_epoch': p[1]}),
+         lambda p: owner.by_scope(store, p[0], epoch=p[1]), pairs),
+        ('of_kind fields', lambda k: many({'kind': k}, {'scope_key': 1, 'policy_epoch': 1, 'kind': 1, 'channel_id': 1}),
+         lambda k: owner.of_kind(store, k, fields=['scope_key', 'policy_epoch', 'kind', 'channel_id']), kinds),
+        ('of_kind besides', lambda i: many({'kind': 'group', '_id': {'$ne': i}}, {'scope_key': 1, 'policy_epoch': 1, 'kind': 1}),
+         lambda i: owner.of_kind(store, 'group', besides=i, fields=['scope_key', 'policy_epoch', 'kind']), ids),
+        ('of_kind whole', lambda k: many({'kind': k}), lambda k: owner.of_kind(store, k), kinds),
+        ('many fields', lambda b: many({'_id': {'$in': b}}, {'kind': 1}), lambda b: owner.many(store, b, fields=['kind']),
+         batches),
+        ('many group', lambda b: many({'_id': {'$in': b}, 'kind': 'group'}), lambda b: owner.many(store, b, kind='group'),
+         batches),
+        ('in_scopes', lambda b: many({'scope_key': {'$in': b}}, {'scope_key': 1, 'sequence': 1}),
+         lambda b: owner.in_scopes(store, b, fields=['scope_key', 'sequence']),
+         [scopes[n:n + 5] for n in range(0, len(scopes), 5)]),
+        ('all fields', lambda _: many({}, {'_id': 1, 'kind': 1}), lambda _: owner.all(store, fields=['_id', 'kind']), [None]),
+        ('condense_wanted', lambda _: many({'condense_wanted': {'$exists': True}, 'kind': 'group'}),
+         lambda _: owner.condense_wanted(store), [None]),
+        ('channel_scenes', lambda k: one({'kind': k, 'channel_id': {'$exists': True}}, {'_id': 1}),
+         lambda k: owner.channel_scenes(store, k), kinds),
+    ], scenes
+
+
+def _old(scenes, call):
+    method, filter, proj = call
+    if method == 'find_one':
+        return scenes.find_one(filter, proj), scenes.find(filter, proj).limit(1)
+    return list(scenes.find(filter, proj)), scenes.find(filter, proj)
+
+
+def reads(client, database, max_ms):
+    """Each case's numbers: n, same, differing, plan stages and times, old against new; none are ids."""
+    import statistics
+    import time as clock
+    from asuna.store import Checked
+    old_db = client.get_database(database)
+    adapter = _Recording(client, database)
+    store = Checked(adapter, CATALOG)
+    cases, scenes = _cases(old_db, store)
+    per_case = max(1, min(20, (QUERIES - 2 * len(cases)) // (len(cases) * 2 * RUNS)))
+    out, queries = {}, 0
+    for name, old_call, new_call, params in cases:
+        chosen = params[::max(1, len(params) // per_case)][:per_case] if params else []
+        same = differing = plans_differ = 0
+        times = {'old': [], 'new': []}
+        old_plan = new_plan = None
+        for param in chosen:
+            results = {}
+            for _ in range(RUNS):
+                started = clock.perf_counter()
+                old_value, old_cursor = _old(scenes, old_call(param))
+                times['old'].append((clock.perf_counter() - started) * 1000)
+                started = clock.perf_counter()
+                new_value = new_call(param)
+                times['new'].append((clock.perf_counter() - started) * 1000)
+                queries += 2
+                results = {'old': _plain(old_value), 'new': _plain(new_value)}
+            if results['old'] == results['new']:
+                same += 1
+            else:
+                differing += 1
+            if old_plan is None or new_plan is None or param is chosen[-1]:
+                coll, filter, sort, skip, limit, fields = adapter.sent
+                new_cursor = adapter.db[coll].find(filter, {f: 1 for f in fields} if fields else None,
+                                                   sort=list(sort) or None, skip=skip, limit=limit)
+                old_plan = _stages(old_cursor.explain()['queryPlanner']['winningPlan'])
+                new_plan = _stages(new_cursor.explain()['queryPlanner']['winningPlan'])
+                queries += 2
+                plans_differ += old_plan != new_plan
+        pct = lambda values, q: round(statistics.quantiles(values, n=20)[q], 2) if len(values) > 1 else (
+            round(values[0], 2) if values else None)
+        out[name] = {'n': len(chosen), 'same': same, 'differing': differing, 'plans_differ': plans_differ,
+                     'plan_old': old_plan, 'plan_new': new_plan,
+                     'ms_old_p50': pct(times['old'], 9), 'ms_old_p95': pct(times['old'], 18),
+                     'ms_new_p50': pct(times['new'], 9), 'ms_new_p95': pct(times['new'], 18)}
+    return out, queries
+
 
 
 def check(batch, settings, database, out, max_ms):
-    client = MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000)
+    client = MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
+                         **({'timeoutMS': max_ms} if batch == 'b3' else {}))
     report, unchecked = {'database_collections': len(CATALOG.names())}, []
     try:
         adapter = MongoAdapter(client, database)
@@ -98,6 +235,11 @@ def check(batch, settings, database, out, max_ms):
                 continue
             report['fields'][collection.name] = counts
             report['fields_differ'] += [[collection.name, path] for path in differs(collection, counts)]
+        if batch == 'b3':
+            report['reads'], report['queries'] = reads(client, database, max_ms)
+    except ExecutionTimeout:
+        print('UNCHECKED, a read case over the time limit')
+        return 2
     except PyMongoError as error:
         print('ADR104_CHECK_UNREACHABLE: %s' % type(error).__name__)
         return 2
@@ -126,11 +268,19 @@ def check(batch, settings, database, out, max_ms):
         print('differs from its declaration: %s.%s' % (name, path))
     for name in unchecked:
         print('UNCHECKED, over the time limit: %s' % name)
+    for name, case in (report.get('reads') or {}).items():
+        print('read %s: n %d, same %d, differing %d, plans differing %d (%s | %s), ms old p50 %s p95 %s, new p50 %s p95 %s'
+              % (name, case['n'], case['same'], case['differing'], case['plans_differ'],
+                 ' > '.join(case['plan_old'] or []), ' > '.join(case['plan_new'] or []),
+                 case['ms_old_p50'], case['ms_old_p95'], case['ms_new_p50'], case['ms_new_p95']))
+    if 'queries' in report:
+        print('queries: %d' % report['queries'])
     print('numbers written to %s' % (out / (batch + '.json')))
     if unchecked:
         return 2
     clean = (not (totals['create'] or totals['make'] or totals['conflicts'])
-             and set(validators) <= {'same', 'not declared'} and not report['fields_differ'])
+             and set(validators) <= {'same', 'not declared'} and not report['fields_differ']
+             and not any(case['differing'] or case['plans_differ'] for case in (report.get('reads') or {}).values()))
     return 0 if clean else 1
 
 

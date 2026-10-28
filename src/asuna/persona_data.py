@@ -18,6 +18,7 @@ from .documents import (DocumentError, DocumentStore, PREAMBLE, _section, slugif
 from .evidence import canonical, sha
 from .state import Conflict, Denied, now
 from . import visibility
+from .records import scenes as scene_records
 
 WRITE_METHODS = ('documents.upsert', 'documents.append', 'affect.import', 'memory.upsert', 'policy.set',
                  'artifacts.snapshot', 'report.put')
@@ -264,7 +265,7 @@ class PersonaDataAPI:
     def _probe_scope(self, as_class):
         if as_class == visibility.OWNER_PRIVATE:
             local = self.store.config['chat']
-            scene = self.store.db.scenes.find_one({'_id': local['scene_id']})
+            scene = scene_records.get(self.store, local['scene_id'])
             return scene['scope_key'], scene['policy_epoch'], visibility.owner_private_scope(self.persona)
         if as_class == visibility.PUBLIC:
             return 'scene:__probe_public__', 1, None      # a public view sees global-safe only

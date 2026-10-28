@@ -10,6 +10,8 @@ discovers a root's own `.md` files as skills, so an allowed skill's folder is pa
 import re
 import sys
 from pathlib import Path
+from .records import scenes as scene_records
+from . import records
 
 SCENE_KINDS = ('home', 'group', 'dm')
 FIELD = 'scene_kinds'
@@ -93,7 +95,7 @@ def skill_directories(config, scene_id, person_id, db=None):
     chat = config.get('chat', {})
     if (scene_id, person_id) == (chat.get('scene_id'), chat.get('person_id')):
         return _roots(config)
-    scene = (db.scenes.find_one({'_id': scene_id}) if db is not None else None) or {'_id': scene_id}
+    scene = (scene_records.get(records.on(db), scene_id) if db is not None else None) or {'_id': scene_id}
     if db is not None and visibility.session_class(config, db, scene, person_id) == visibility.OWNER_PRIVATE:
         return _roots(config)
     kind = 'group' if scene.get('kind') == 'group' else 'dm'

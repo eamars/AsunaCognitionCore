@@ -44,6 +44,7 @@ from datetime import datetime, timezone
 
 from . import key_words
 from .config import DATA, character_id, excerpt
+from .records import scenes as scene_records
 
 RULES = ('all', 'own_lines', 'never')
 DEFAULT = 'own_lines'
@@ -159,8 +160,7 @@ def _sources(store, here_id):
     """The groups whose lines may leave, other than this conversation: {scope_key: (scene, rule)}."""
     from .visibility import is_owner_private_scope
     out = {}
-    for scene in store.db.scenes.find({'kind': 'group', '_id': {'$ne': here_id}},
-                                      {'scope_key': 1, 'policy_epoch': 1, 'kind': 1}):
+    for scene in scene_records.of_kind(store, 'group', besides=here_id, fields=['scope_key', 'policy_epoch', 'kind']):
         if is_owner_private_scope(scene.get('scope_key') or '') or rule(scene['_id']) == 'never':
             continue
         out[scene['scope_key']] = (scene, rule(scene['_id']))
@@ -230,7 +230,7 @@ def elsewhere(store, persona, here, query, zone):
 # ── the word index ───────────────────────────────────────────────
 def _groups(store):
     from .visibility import is_owner_private_scope
-    return {s['_id']: s for s in store.db.scenes.find({'kind': 'group'}, {'scope_key': 1, 'policy_epoch': 1})
+    return {s['_id']: s for s in scene_records.of_kind(store, 'group', fields=['scope_key', 'policy_epoch'])
             if not is_owner_private_scope(s.get('scope_key') or '')}
 
 
@@ -424,8 +424,8 @@ def fetch(store, here, ref, zone):
     from .visibility import is_owner_private_scope
     unit = store.db.memory_units.find_one({'_id': ref, 'kind': 'chat_chunk', 'status': 'active'},
                                           {'scope_key': 1, 'policy_epoch': 1, 'source_event_ids': 1, 'occurred_at': 1})
-    scene = store.db.scenes.find_one({'scope_key': unit['scope_key'], 'kind': 'group'},
-                                     {'scope_key': 1, 'policy_epoch': 1}) if unit else None
+    scene = scene_records.by_scope(store, unit['scope_key'], kind='group',
+                                  fields=['scope_key', 'policy_epoch']) if unit else None
     if not scene or is_owner_private_scope(scene.get('scope_key') or '') \
             or unit.get('policy_epoch', 1) != scene.get('policy_epoch', 1):
         return None, MISSING['gone'] % (DOC, ref)

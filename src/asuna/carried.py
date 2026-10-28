@@ -23,6 +23,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import visibility
 from .evidence import canonical, sha
+from .records import scenes as scene_records
 
 IDENTITY = ('persona', 'voice', 'self', 'core')
 SELF_BLOCKS = (('current_self', 'self'), ('character_core', 'core'))    # the context names of the self and core blocks
@@ -425,7 +426,7 @@ def _turns(store, persona, start, end):
             out.append((mark['at'], (mark['place'], mark['class']), [*mark['refs'], *(mark.get('notes') or [])],
                         [*(mark.get('brought_up') or []), *(mark.get('would_surface') or [])], False))
             continue
-        scene = store.db.scenes.find_one({'_id': ep.get('scene_id')}, {'kind': 1}) or {}
+        scene = scene_records.get(store, ep.get('scene_id'), fields=['kind']) or {}
         cls = (ep.get('manifest') or {}).get('session_class') or visibility.PUBLIC
         place = visibility.place_of(store.config, {**scene, '_id': ep.get('scene_id')}, cls)
         past = past or _Past(store, persona)

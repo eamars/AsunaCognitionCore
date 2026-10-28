@@ -13,6 +13,7 @@ The read-only check of one ADR-104 batch against a deployment's database, before
 - def `dry_run` — {collection: plan and validator}; nothing is written.
 - def `kinds` — Per declared field: {bson type: records}, and the records whose vector length differs from the declared one.
 - def `differs` — The declared fields whose stored records the declaration refuses: another kind, null where not nullable, a required field missing, a vector of another length.
+- def `reads` — Each case's numbers: n, same, differing, plan stages and times, old against new; none are ids.
 - def `check`
 - def `main`
 

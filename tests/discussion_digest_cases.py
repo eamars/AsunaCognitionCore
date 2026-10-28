@@ -20,6 +20,7 @@ for _path in (os.path.dirname(SRC), SRC, HERE):
 from asuna import discussion_digest as dd           # noqa: E402
 from asuna import history_query as hq                # noqa: E402
 from asuna import channel_kinds                      # noqa: E402
+import fake_collections                              # noqa: E402
 
 
 def _qq_kind():
@@ -192,6 +193,7 @@ class FakeStore:
         self.db.scenes = FakeCollection(scenes if scenes is not None else [scene_row()])
         if sink is not None:
             self.db.sink_receipts = FakeCollection(sink)
+        self.collection = fake_collections.collections(self.db)     # the record owners' way to the same rows
 
 
 def digest_of(rows, args=None, **kwargs):

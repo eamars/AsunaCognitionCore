@@ -5,6 +5,7 @@ import uuid
 from .config import DATA, ROOT
 from .evidence import canonical,sha,write_json
 from .state import Denied,now
+from .records import scenes as scene_records
 
 
 class PrivacyService:
@@ -47,8 +48,8 @@ class PrivacyService:
         db=self.store.db;scope=memory['scope_key']
         deletion='erase-'+uuid.uuid4().hex
         self.store.audit(deletion,'privacy.intent',{'memory_id':key,'scope':scope},scope)
-        scene=db.scenes.find_one({'scope_key':scope})
-        self.store.put('scenes',{**scene,'policy_epoch':scene['policy_epoch']+1},expected=scene['revision'],stream=deletion)
+        scene=scene_records.by_scope(self.store, scope)
+        scene_records.save(self.store, {**scene,'policy_epoch':scene['policy_epoch']+1},expected=scene['revision'],stream=deletion)
         # Immediate fencing precedes potentially slow file cleanup.
         from .blobs import BlobStore
         erased_blobs=BlobStore(self.store).erase_scope(scope,deletion)

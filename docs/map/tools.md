@@ -15,9 +15,12 @@ The read-only check of one ADR-104 batch against a deployment's database, before
 - def `kinds` — Per declared field: {bson type: records}, the records whose vector length differs from the declared one, and for a list {element bson type: records}.
 - def `differing` — Per declared field, the records whose value the declaration refuses (another kind, null where not nullable, a list element of another kind; a record holding several such counts once per kind), 0 for none.
 - def `differs` — The declared fields whose stored records the declaration refuses: another kind, null where not nullable, a required field missing, a vector of another length, a list holding an element of another kind.
+- def `slower` — Whether a new p50 is past the timing gate: more than SLOWER times the old and more than SLOWER_MS above it.
+- def `slowdowns` — (failing, accepted): the read cases past the timing gate (`slower`), by their confirmation's p50s when they were timed again (`confirm`), each (name, old p50, new p50, new plan); those the lead accepted (ACCEPTED_SLOWDOWNS) apart.
 - def `reads` — Each case's numbers: n, same, differing, plan stages and times, old against new; none are ids.
 - def `sizes` — The records of 512 KiB or more by their BSON size, and of those the ones whose BSON and JSON sizes (the in-memory adapter's measure) fall on different sides of the store's 1 MiB limit; read part by part like the kinds.
 - def `check`
+- def `clean` — Whether a checked run found nothing: no collection to create, no index to make, no conflict, every validator the one ensure creates, every declared field holding only its kind, no record on different sides of 1 MiB, no read case slower past
 - def `main`
 
 ## `agent_line.py`

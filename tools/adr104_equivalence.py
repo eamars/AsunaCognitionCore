@@ -1,21 +1,28 @@
 """The read-only check of one ADR-104 batch against a deployment's database, before the batch merges: numbers only,
 never a record id or a value.
 
-  python tools/adr104_equivalence.py b1b|b2|b3|b4 [--config config/local.json] [--out <folder>] [--max-ms 2000]
+  python tools/adr104_equivalence.py b1b|b2|b3|b4|b5 [--config config/local.json] [--out <folder>] [--max-ms 2000]
 
 Each batch: what the store's `ensure` would do there, as a dry run (collections it would create, indexes it would
 make, retired indexes it would drop, indexes of a declared name that differ, validators), and for every field the
 catalog declares in the batch's collections (b1b: all of them; b2: `host_leases` and `lane_faults`; b3: `scenes`;
-b4: `messages`), its stored records by BSON type, the nulls, the records missing a required field and, for a vector,
-the lengths that differ; b4 also the records of 512 KiB or more and those whose BSON and JSON sizes fall on different
-sides of 1 MiB. b3 and b4 also run their read cases: each read the batch moved, as the replaced code wrote it with
-pymongo and as the owner (`records.scenes`, `records.messages`) now answers it, on parameters sampled through the
+b4: `messages`; b5: `episodes`, `sessions`, `sink_receipts`, `lane_receipts`), its stored records by BSON type, the
+nulls, the records missing a required field and, for a vector, the lengths that differ; b4 and b5 also, per
+collection (SIZED), the records of 512 KiB or more and those whose BSON and JSON sizes fall on different sides of
+1 MiB. b3, b4 and b5 also run their read cases: each read the batch moved, as the replaced code wrote it with
+pymongo and as the owner (`records.scenes`, `records.messages`, `records.episodes`, `records.sessions`,
+`records.receipts`) now answers it, on parameters sampled through the
 owners (at most 20 a case, at most 1,000 queries in all, serial, `--max-ms` each, three runs for the times): the same
 ids in the same order, the same records (values in one order for a distinct), the same plan stages (a distinct or an
 aggregate has no plan of its own to compare; the new plan is reported), and how many rows each side answered; per
 declared field, the records whose value its declaration refuses; numbers only. The collections to create, the
 indexes to make and the validators count for the collections the batch declares (the rest are reported apart); a
-plan difference the lead accepted (ACCEPTED_PLAN_DIFFERENCES) is reported with its times and does not fail the run.
+plan difference the lead accepted (ACCEPTED_PLAN_DIFFERENCES) is reported with its reason, recheck and times and
+does not fail the run. The timing gate: a read case whose new p50 is more than SLOWER times its old p50 and more than
+SLOWER_MS above it, and still past it when timed again (CONFIRM_RUNS runs of each side), fails the run, named with
+both times and the new plan, unless the lead accepted it (ACCEPTED_SLOWDOWNS: the times when accepted, the reason,
+when it is looked at again; each reported on every run); the cases watched under the threshold (WATCHED) are
+reported beside their family with their times.
 The field counts are many small reads (parts of at most PART_RECORDS records by `_id`, FIELDS_PER_READ fields
 each), each bounded by `--max-ms` on the server; a read over its limit leaves its fields unchecked, named in the
 report (exit 2). Each query is read-only and bounded by `--max-ms`. The numbers go to `<out>/<batch>.json` (default
@@ -222,13 +229,55 @@ def differs(collection, counts):
 
 
 # The collections whose declared fields each batch counts (None: every collection).
-BATCHES = {'b1b': None, 'b2': ('host_leases', 'lane_faults'), 'b3': ('scenes',), 'b4': ('messages',)}
+BATCHES = {'b1b': None, 'b2': ('host_leases', 'lane_faults'), 'b3': ('scenes',), 'b4': ('messages',),
+           'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts')}
+# The collections whose records' sizes each batch counts (512 KiB or more; BSON and JSON on different sides of 1 MiB).
+SIZED = {'b4': ('messages',), 'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts')}
 QUERIES = 1000
-# Plan differences the lead accepted, by case: reported with their times, not counted against a clean run. The
-# archived stream's old read left out `legacy` by an exclusion projection, which the store does not have; the owner
-# drops it after the read (accepted for B4, 2026-10-28).
-ACCEPTED_PLAN_DIFFERENCES = {'search, archived lines', 'search, archived lines by person after both cursors'}
+_ARCHIVED = {'reason': "the archived stream's old read left out `legacy` by an exclusion projection, which the store "
+                       "does not have; the owner drops it after the read (accepted for B4, 2026-10-28)",
+             'recheck': 'recheck not recorded'}
+# Plan differences the lead accepted, by batch and case: reported with their reason and recheck, and their times,
+# not counted against a clean run.
+ACCEPTED_PLAN_DIFFERENCES = {'b4': {'search, archived lines': _ARCHIVED,
+                                    'search, archived lines by person after both cursors': _ARCHIVED}}
+# The timing gate: a read case whose new p50 is more than SLOWER times its old p50 and more than SLOWER_MS above it
+# fails the run, unless the lead accepted it here, by batch and case: {'old_ms', 'new_ms' (the p50s as measured when
+# accepted), 'reason', 'recheck' (when it is looked at again)}. Each accepted entry is reported on every run.
+SLOWER, SLOWER_MS = 2.0, 5.0
+# A case over the gate is timed again before it fails: CONFIRM_RUNS more runs of each side, alternating, on its first
+# sample, within the query budget; the confirmation's p50s decide (a server's jitter of a few tens of ms on a read of
+# one or two ms otherwise fails a run whose plans and records are the same, and passes the next).
+CONFIRM_RUNS = 10
+ACCEPTED_SLOWDOWNS = {}
+# Cases under the threshold that are watched, by batch and case: reported on every run with their times now, beside
+# the case they are of a family with, so they are seen, not passed silently.
+WATCHED = {'b4': {'who wrote in these': {
+    'family': 'who wrote here', 'old_ms': 12, 'new_ms': 19,
+    'note': 'same family, under threshold: a values read grouped by presence, as "who wrote here" (293 ms against 9 '
+            'before fa46c24132f6); measured at B4 old p50 ~12 ms, new ~19 ms, 1.55x'}}}
 RUNS = 3
+READ_CASES = ('b3', 'b4', 'b5')
+
+
+def slower(old, new):
+    """Whether a new p50 is past the timing gate: more than SLOWER times the old and more than SLOWER_MS above it."""
+    return old is not None and new is not None and new > SLOWER * old and new - old > SLOWER_MS
+
+
+def slowdowns(batch, cases):
+    """(failing, accepted): the read cases past the timing gate (`slower`), by their confirmation's p50s when they
+    were timed again (`confirm`), each (name, old p50, new p50, new plan); those the lead accepted
+    (ACCEPTED_SLOWDOWNS) apart."""
+    failing, accepted = [], []
+    for name, case in cases.items():
+        timing = case['confirm'] if (case.get('confirm') or {}).get('runs') else case
+        old, new = timing.get('ms_old_p50'), timing.get('ms_new_p50')
+        if not slower(old, new):
+            continue
+        found = (name, old, new, case.get('plan_new'))
+        (accepted if name in ACCEPTED_SLOWDOWNS.get(batch, {}) else failing).append(found)
+    return failing, accepted
 
 
 def _stages(plan):
@@ -366,9 +415,10 @@ def reads(client, database, max_ms, batch, config):
     old_db = client.get_database(database)
     adapter = _Recording(client, database)
     store = Checked(adapter, CATALOG)
-    cases, sampling = (_cases_b3(store), 1) if batch == 'b3' else _cases_b4(store, config)
+    cases, sampling = (_cases_b3(store), 1) if batch == 'b3' else {'b4': _cases_b4, 'b5': _cases_b5}[batch](
+        store, config)
     per_case = max(1, min(20, (QUERIES - sampling - 2 * len(cases)) // (len(cases) * 2 * RUNS)))
-    out, timed, explained = {}, 0, 0
+    out, timed, explained, confirmed = {}, 0, 0, 0
     for name, old_call, new_call, params, how in cases:
         chosen = params[::max(1, len(params) // per_case)][:per_case] if params else []
         same = differing = plans_differ = rows_old = rows_new = 0
@@ -407,16 +457,31 @@ def reads(client, database, max_ms, batch, config):
             round(values[0], 2) if values else None)
         out[name] = {'n': len(chosen), 'same': same, 'differing': differing, 'plans_differ': plans_differ,
                      'rows_old': rows_old, 'rows_new': rows_new,
-                     'plan_accepted': name in ACCEPTED_PLAN_DIFFERENCES,
+                     'plan_accepted': name in ACCEPTED_PLAN_DIFFERENCES.get(batch, {}),
                      'plans_compared': compared, 'plan_old': old_plan, 'plan_new': new_plan,
                      'ms_old_p50': pct(times['old'], 9), 'ms_old_p95': pct(times['old'], 18),
                      'ms_new_p50': pct(times['new'], 9), 'ms_new_p95': pct(times['new'], 18)}
+        if slower(out[name]['ms_old_p50'], out[name]['ms_new_p50']) and chosen:
+            if sampling + timed + confirmed + explained + 2 * CONFIRM_RUNS > QUERIES:
+                out[name]['confirm'] = {'runs': 0, 'why': 'over the query budget: not timed again'}
+                continue
+            again = {'old': [], 'new': []}
+            for _ in range(CONFIRM_RUNS):
+                started = clock.perf_counter()
+                _old(old_db, old_call(chosen[0]))
+                again['old'].append((clock.perf_counter() - started) * 1000)
+                started = clock.perf_counter()
+                new_call(chosen[0])
+                again['new'].append((clock.perf_counter() - started) * 1000)
+            confirmed += 2 * CONFIRM_RUNS
+            out[name]['confirm'] = {'runs': CONFIRM_RUNS, 'ms_old_p50': round(statistics.median(again['old']), 2),
+                                    'ms_new_p50': round(statistics.median(again['new']), 2)}
     samples = sum(case['n'] for case in out.values())
-    # What was run: the sampling reads, each case's samples x 2 sides x RUNS timed runs, and the explains (two per
-    # explained sample, one where the old form has no plan of its own).
-    return out, {'sampling': sampling, 'samples': samples, 'timed': timed, 'explain': explained,
-                 'total': sampling + timed + explained,
-                 'counted_as': 'sampling + samples x 2 sides x %d runs + explain' % RUNS}
+    # What was run: the sampling reads, each case's samples x 2 sides x RUNS timed runs, the confirmations of cases
+    # over the timing gate, and the explains (two per explained sample, one where the old form has no plan of its own).
+    return out, {'sampling': sampling, 'samples': samples, 'timed': timed, 'confirmed': confirmed,
+                 'explain': explained, 'total': sampling + timed + confirmed + explained,
+                 'counted_as': 'sampling + samples x 2 sides x %d runs + confirmations + explain' % RUNS}
 
 
 PROGRAM_AUTHOR = 'asuna:internal'                       # ingress.PROGRAM_AUTHOR as the replaced code named it
@@ -1195,6 +1260,221 @@ def _cases_b4(store, config):
     return [case for case in cases if case[3]], 1 + tried
 
 
+TURN = ['_id', 'scene_id', 'source_event_id', 'episode_kind', 'persona', 'person_id', 'scope_key', 'policy_epoch',
+        'native_session_id', 'state']
+BINDING = ['_id', 'scene_id', 'persona', 'policy_epoch', 'character_context', 'lane', 'scope_key', 'person_id',
+           'broker_session', 'parent_session_id', 'task_id', 'successor_id', 'main_conversation', 'native_host']
+TURN_KINDS = ('external', 'task_feedback', 'self_development', 'consult', 'visit', 'settlement')
+PUBLISH = 'self_development_publish'
+ANSWERED = ['COMMITTED', 'WAITING_TASK']                              # familiarity's and notes.FINISHED's states
+RUNNING = ['PREPARED', 'TURN', 'SPEAK_ACCEPTED']                     # coordinator.recover
+AT_WORK = ['ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED']        # schedule.night_stage_busy
+
+
+def _sample_b5(store):
+    """What the cases read with, through the owners: turns of each kind, the native sessions, the sink receipts of
+    her publications and some others, and the lane receipts of those sessions."""
+    from asuna.records import episodes as turns, receipts, sessions
+    found = {'turns': [], 'reads': 0}
+    for kind in TURN_KINDS:
+        found['turns'] += turns.of_kind(store, kind).rows(limit=6, fields=TURN)
+        found['reads'] += 1
+    found['bindings'] = sessions.native(store).rows(limit=60, fields=BINDING)
+    found['publications'] = receipts.sink_of_kind(store, PUBLISH).rows(limit=12, fields=['_id', 'state', 'project'])
+    found['sinks'] = receipts.sinks(store).rows(limit=12, fields=['_id', 'received_at', 'kind'])
+    found['lanes'] = receipts.lane_of_sessions(store, [row['_id'] for row in found['bindings']])[:12]
+    found['reads'] += 4
+    return found
+
+
+def _cases_b5(store, config):
+    """(name, old(param), new(param), parameters, compare) for each read B5 moved, the old as the replaced code wrote
+    it; parameters sampled through the owners, synthetic values where her records hold none (both sides then read
+    nothing, and the plans are still compared)."""
+    from asuna.records import episodes as turns, receipts, sessions
+    got = _sample_b5(store)
+    rows, bindings = got['turns'], got['bindings']
+    ids = [row['_id'] for row in rows] or ['turn-none']
+    batches = [ids[n:n + 5] for n in range(0, len(ids), 5)]
+    persons = [[row['person_id']] for row in rows if isinstance(row.get('person_id'), str)] or [['person-none']]
+    sources = [row for row in rows if isinstance(row.get('source_event_id'), str)]
+    feedback = [row for row in sources if row.get('episode_kind') == 'task_feedback'] or sources
+    scopes = sorted({row['scope_key'] for row in rows if isinstance(row.get('scope_key'), str)}) or ['scope-none']
+    fenced = [row for row in rows if all(isinstance(row.get(key), str) for key in (
+        'native_session_id', 'scope_key', 'scene_id', 'person_id', 'persona')) and isinstance(row.get('policy_epoch'), int)]
+    personas = [row for row in rows if isinstance(row.get('persona'), str)]
+    scenes = sorted({row['scene_id'] for row in rows if isinstance(row.get('scene_id'), str)})
+    session_ids = [row['_id'] for row in bindings] or ['session-none']
+    session_batches = [session_ids[n:n + 5] for n in range(0, len(session_ids), 5)]
+    main = [row for row in bindings if row.get('main_conversation') and isinstance(row.get('scene_id'), str)]
+    plain = [row for row in main if row.get('character_context') is None] or [
+        {'scene_id': 'scene-none', 'persona': 'persona-none', 'policy_epoch': 1, 'character_context': None}]
+    contexts = [row for row in main if isinstance(row.get('character_context'), str)] or [
+        {'scene_id': 'scene-none', 'persona': 'persona-none', 'policy_epoch': 1, 'character_context': 'context-none'}]
+    actions = [row for row in bindings if row.get('lane') == 'executor' and all(
+        isinstance(row.get(key), str) for key in ('broker_session', 'parent_session_id', 'scene_id', 'scope_key',
+                                                  'person_id', 'persona'))] or [
+        {'broker_session': 'broker-none', 'parent_session_id': 'parent-none', 'scene_id': 'scene-none',
+         'scope_key': 'scope-none', 'policy_epoch': 1, 'person_id': 'person-none', 'persona': 'persona-none',
+         'task_id': 'task-none'}]
+    local = (config.get('chat') or {}).get('scene_id') or 'local-none'
+    publications = got['publications']
+    projects = sorted({row['project'] for row in publications if isinstance(row.get('project'), str)}) or ['core']
+    sink_ids = [row['_id'] for row in got['sinks'] + publications] or ['sink-none']
+    stamps = sorted({row['received_at'] for row in got['sinks'] if isinstance(row.get('received_at'), str)}) or [
+        '2026-01-01T00:00:00+00:00']
+    lane_ids = [row['_id'] for row in got['lanes']] or ['lane-none']
+    one = lambda coll, filter, proj=None, sort=None: ('find_one', coll, filter, proj, sort)
+    many = lambda coll, filter, proj=None, sort=None, limit=0: ('find', coll, filter, proj, sort, limit)
+    count = lambda coll, filter, limit=0: ('count', coll, filter, limit)
+    fields = lambda *names: {name: 1 for name in names}
+    E, S, L, K = 'episodes', 'sessions', 'lane_receipts', 'sink_receipts'
+
+    def chain(row):
+        return dict(broker=row['broker_session'], parents=[row['parent_session_id']], scene=row['scene_id'],
+                    scope=row['scope_key'], epoch=row.get('policy_epoch'), person=row['person_id'],
+                    persona=row['persona'])
+
+    def action(row, task=False):
+        flt = {'native_host': True, 'lane': 'executor', 'broker_session': row['broker_session'],
+               'parent_session_id': {'$in': [row['parent_session_id']]}, 'scene_id': row['scene_id'],
+               'scope_key': row['scope_key'], 'policy_epoch': row.get('policy_epoch'), 'person_id': row['person_id'],
+               'persona': row['persona']}
+        return {**flt, 'task_id': row.get('task_id') or 'task-none'} if task else flt
+
+    newest = [('binding_updated_at', -1), ('_id', -1)]
+    cases = [
+        # episodes
+        ('turn by id', lambda i: one(E, {'_id': i}), lambda i: turns.get(store, i), ids, 'value'),
+        ('turn by id, fields', lambda i: one(E, {'_id': i}, fields('scene_id', 'scope_key', 'policy_epoch', 'person_id')),
+         lambda i: turns.get(store, i, fields=['scene_id', 'scope_key', 'policy_epoch', 'person_id']), ids, 'value'),
+        ('turn by id, nested fields', lambda i: one(E, {'_id': i}, fields(
+            'persona', 'scene_id', 'manifest.session_class', 'manifest.carried', 'context.memories')),
+         lambda i: turns.get(store, i, fields=['persona', 'scene_id', 'manifest.session_class', 'manifest.carried',
+                                                'context.memories']), ids, 'value'),
+        ('a carried turn of a persona', lambda r: one(E, {'_id': r['_id'], 'persona': r['persona'],
+                                                          'system_ref.carried': {'$exists': True}}, fields('system_ref')),
+         lambda r: turns.get(store, r['_id'], fields=['system_ref'], persona=r['persona'], carried=True), personas,
+         'value'),
+        ('a turn within the snapshot\'s fence', lambda r: one(E, {
+            'native_session_id': r['native_session_id'], 'scope_key': r['scope_key'], 'scene_id': r['scene_id'],
+            'person_id': r['person_id'], 'policy_epoch': r['policy_epoch'], 'persona': r['persona'], '_id': r['_id']},
+            fields('context', 'manifest', 'monologue_refs', 'understanding_seen')),
+         lambda r: turns.get(store, r['_id'], ['context', 'manifest', 'monologue_refs', 'understanding_seen'],
+                             session=r['native_session_id'], scope=r['scope_key'], scene=r['scene_id'],
+                             person=r['person_id'], epoch=r['policy_epoch'], persona=r['persona']), fenced, 'value'),
+        ('turns by ids, fields', lambda b: many(E, {'_id': {'$in': b}}, fields('scene_id')),
+         lambda b: turns.many(store, b).rows(fields=['scene_id']), batches, 'value'),
+        ('a finished turn among ids', lambda b: one(E, {'_id': {'$in': b}, 'state': {'$in': ANSWERED}}, fields('_id')),
+         lambda b: turns.many(store, b, states=ANSWERED).first(fields=['_id']), batches, 'value'),
+        ('finished turns among ids, counted', lambda b: count(E, {'_id': {'$in': b}, 'state': {'$in': ANSWERED}}),
+         lambda b: turns.many(store, b, states=ANSWERED).count(), batches, 'value'),
+        ('the turn of a source', lambda r: one(E, {'source_event_id': r['source_event_id']}, fields('silent_reason')),
+         lambda r: turns.of_source(store, r['source_event_id'], fields=['silent_reason']), sources, 'value'),
+        ('the feedback turn of a result', lambda r: one(E, {'source_event_id': r['source_event_id'],
+                                                            'episode_kind': 'task_feedback'}),
+         lambda r: turns.of_source(store, r['source_event_id'], kind='task_feedback'), feedback, 'value'),
+        ('the feedback turn of a result here', lambda r: one(E, {'scene_id': r['scene_id'],
+                                                                 'source_event_id': r['source_event_id'],
+                                                                 'episode_kind': 'task_feedback'}),
+         lambda r: turns.of_source(store, r['source_event_id'], kind='task_feedback', scene=r['scene_id']), feedback,
+         'value'),
+        ('settlement turns', lambda _: many(E, {'episode_kind': 'settlement'}, fields('_id')),
+         lambda _: turns.of_kind(store, 'settlement').rows(fields=['_id']), [None], 'value'),
+        ('outside turns in groups', lambda b: many(E, {'episode_kind': 'external', 'scene_id': {'$in': b}},
+                                                   fields('scene_id', 'native_session_id')),
+         lambda b: turns.of_kind(store, 'external', scenes=b).rows(fields=['scene_id', 'native_session_id']),
+         [scenes[n:n + 5] for n in range(0, len(scenes), 5)] or [['scene-none']], 'value'),
+        ('turns to recover', lambda _: many(E, {'state': {'$in': RUNNING}, 'episode_kind': {'$ne': 'consult'}}),
+         lambda _: turns.open(store, RUNNING, not_kind='consult').rows(), [None], 'value'),
+        ('a self-development turn at work', lambda _: one(E, {'episode_kind': 'self_development',
+                                                              'state': {'$in': AT_WORK}}, fields('_id')),
+         lambda _: turns.open(store, AT_WORK, kind='self_development').first(fields=['_id']), [None], 'value'),
+        ('turns answered with words, counted', lambda p: count(E, {'person_id': {'$in': p}, 'state': {'$in': ANSWERED},
+                                                                   'speech': {'$exists': True}}, 15),
+         lambda p: turns.answered(store, p, limit=15), persons, 'value'),
+        ('turns of a scope', lambda s: many(E, {'scope_key': s}, fields('_id')),
+         lambda s: turns.of_scope(store, s, fields=['_id']), scopes, 'value'),
+        # sessions
+        ('session by id', lambda i: one(S, {'_id': i}), lambda i: sessions.get(store, i), session_ids, 'value'),
+        ('session by id, fields', lambda i: one(S, {'_id': i}, fields('errand', 'reflection')),
+         lambda i: sessions.get(store, i, fields=['errand', 'reflection']), session_ids, 'value'),
+        ('native session by id', lambda i: one(S, {'_id': i, 'native_host': True}),
+         lambda i: sessions.get(store, i, native=True), session_ids, 'value'),
+        ('native sessions', lambda _: many(S, {'native_host': True}), lambda _: sessions.native(store).rows(), [None],
+         'value'),
+        ('native sessions by ids', lambda b: many(S, {'_id': {'$in': b}, 'native_host': True}),
+         lambda b: sessions.native(store, b).rows(), session_batches, 'value'),
+        ('platform conversations among sessions', lambda b: many(S, {'_id': {'$in': b}, 'native_host': True,
+                                                                     'lane': 'character', 'scene_id': {'$ne': local}},
+                                                                 fields('scene_id')),
+         lambda b: sessions.native(store, b, lane='character', besides_scene=local).rows(fields=['scene_id']),
+         session_batches, 'value'),
+        ('sessions continuing these', lambda b: many(S, {'successor_id': {'$in': b}}, fields('_id')),
+         lambda b: sessions.successors(store, b).rows(fields=['_id']), session_batches, 'value'),
+        ('the main session, no character context', lambda r: one(S, {
+            'native_host': True, 'main_conversation': True, 'scene_id': r['scene_id'], 'persona': r['persona'],
+            'policy_epoch': r.get('policy_epoch'), 'character_context': None}),
+         lambda r: sessions.main(store, r['scene_id'], persona=r['persona'], epoch=r.get('policy_epoch'), context=None),
+         plain, 'value'),
+        ('the main session, a character context', lambda r: one(S, {
+            'native_host': True, 'main_conversation': True, 'scene_id': r['scene_id'], 'persona': r['persona'],
+            'policy_epoch': r.get('policy_epoch'), 'character_context': r['character_context']}),
+         lambda r: sessions.main(store, r['scene_id'], persona=r['persona'], epoch=r.get('policy_epoch'),
+                                 context=r['character_context']), contexts, 'value'),
+        ('the main character session of a conversation', lambda r: one(S, {
+            'scene_id': r['scene_id'], 'lane': 'character', 'native_host': True, 'main_conversation': True}),
+         lambda r: sessions.main(store, r['scene_id'], lane='character'), main or plain, 'value'),
+        ('the titled main session', lambda r: one(S, {'scene_id': r['scene_id'], 'main_conversation': True,
+                                                      'native_title': {'$exists': True}}, fields('native_title')),
+         lambda r: sessions.titled(store, r['scene_id'], fields=['native_title']), main or plain, 'value'),
+        ('a task\'s action session', lambda r: one(S, action(r, task=True), None, newest),
+         lambda r: sessions.of_task(store, **chain(r), task=r.get('task_id') or 'task-none'), actions, 'value'),
+        ('a binding\'s newest action session', lambda r: one(S, action(r), None, newest),
+         lambda r: sessions.of_task(store, **chain(r)), actions, 'value'),
+        ('sessions of a scope', lambda s: many(S, {'scope_key': s}), lambda s: sessions.of_scope(store, s), scopes,
+         'value'),
+        # receipts
+        ('lane receipt by id', lambda i: one(L, {'_id': i}), lambda i: receipts.lane_get(store, i), lane_ids, 'value'),
+        ('lane receipts of sessions', lambda b: many(L, {'session_id': {'$in': b}}),
+         lambda b: receipts.lane_of_sessions(store, b), session_batches, 'value'),
+        ('sink receipt by id', lambda i: one(K, {'_id': i}), lambda i: receipts.sink_get(store, i), sink_ids, 'value'),
+        ('sink receipts by ids', lambda b: many(K, {'_id': {'$in': b}}), lambda b: receipts.sinks(store, b).rows(),
+         [sink_ids[n:n + 5] for n in range(0, len(sink_ids), 5)], 'value'),
+        ('sink receipts, counted', lambda _: count(K, {}), lambda _: receipts.sinks(store).count(), [None], 'value'),
+        ('a core publication applied', lambda _: one(K, {'kind': PUBLISH, 'state': 'APPLIED', 'project': 'core'}),
+         lambda _: receipts.sink_of_kind(store, PUBLISH, state='APPLIED', project='core').first(), [None], 'value'),
+        ('publications applied or active', lambda _: many(K, {'kind': PUBLISH, 'state': {'$in': ['APPLIED', 'ACTIVE']}}),
+         lambda _: receipts.sink_of_kind(store, PUBLISH, states=['APPLIED', 'ACTIVE']).rows(), [None], 'value'),
+        ('the newest publications', lambda _: many(K, {'kind': PUBLISH}, fields(
+            'project', 'state', 'changed_files', 'deleted_files', 'published_at', 'activated_at', 'task_id'),
+            [('published_at', -1)], 5),
+         lambda _: receipts.sink_of_kind(store, PUBLISH, by='published_at').rows(
+             newest_first=True, limit=5, fields=['project', 'state', 'changed_files', 'deleted_files', 'published_at',
+                                                 'activated_at', 'task_id']), [None], 'value'),
+        ('a publication still applied', lambda _: one(K, {'kind': PUBLISH, 'state': 'APPLIED'}, fields('_id')),
+         lambda _: receipts.sink_of_kind(store, PUBLISH, state='APPLIED').first(fields=['_id']), [None], 'value'),
+        ('publications waiting for a restart', lambda _: many(K, {'kind': PUBLISH, 'state': 'HOST_RESTART_REQUIRED'},
+                                                              fields('project', 'published_at'),
+                                                              [('published_at', 1)]),
+         lambda _: receipts.sink_of_kind(store, PUBLISH, state='HOST_RESTART_REQUIRED', by='published_at').rows(
+             fields=['project', 'published_at']), [None], 'value'),
+        ('a project\'s earlier publications', lambda p: many(K, {
+            'kind': PUBLISH, 'project': p[0], 'state': {'$in': ['APPLIED', 'HOST_RESTART_REQUIRED']},
+            '_id': {'$ne': p[1]}}),
+         lambda p: receipts.sink_of_kind(store, PUBLISH, project=p[0], states=['APPLIED', 'HOST_RESTART_REQUIRED'],
+                                         besides=p[1]).rows(), [(p, sink_ids[0]) for p in projects], 'value'),
+        ('receipts in a window', lambda w: many(K, {'received_at': {'$gte': w, '$lte': '9999-12-31T23:59:59Z'}}, None,
+                                                [('received_at', -1), ('_id', -1)], 200),
+         lambda w: receipts.sink_window(store, gte=w, lte='9999-12-31T23:59:59Z').rows(newest_first=True, limit=200),
+         [stamp[:10] for stamp in stamps], 'value'),
+        ('receipts before a cursor', lambda w: many(K, {'received_at': {'$lt': w}}, None,
+                                                    [('received_at', -1), ('_id', -1)], 200),
+         lambda w: receipts.sink_window(store, lt=w).rows(newest_first=True, limit=200), stamps, 'value'),
+    ]
+    return [case for case in cases if case[3]], got['reads']
+
+
 def sizes(db, collection, max_ms, timings=None):
     """The records of 512 KiB or more by their BSON size, and of those the ones whose BSON and JSON sizes (the
     in-memory adapter's measure) fall on different sides of the store's 1 MiB limit; read part by part like the
@@ -1228,7 +1508,7 @@ def sizes(db, collection, max_ms, timings=None):
 
 def check(batch, settings, database, out, max_ms):
     client = MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
-                         **({'timeoutMS': max_ms} if batch in ('b3', 'b4') else {}))
+                         **({'timeoutMS': max_ms} if batch in READ_CASES else {}))
     # The field counts' own client: no client-side time limit, only each read's `maxTimeMS` on the server, so a read
     # over its limit is the server's refusal of that read (its fields unchecked), never a connection timing out.
     counting = MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
@@ -1259,17 +1539,20 @@ def check(batch, settings, database, out, max_ms):
             report['fields'][collection.name] = counts
             report['fields_differ'] += [[collection.name, path] for path in differs(collection, counts)]
             report.setdefault('fields_differing_records', {})[collection.name] = differing(collection, counts)
-        if batch == 'b4':
-            report['sizes'] = sizes(counting.get_database(database), 'messages', max_ms, timings)
-            if report['sizes'] is None:
-                unchecked.append('messages sizes')
+        for name in SIZED.get(batch, ()):
+            report.setdefault('sizes', {})[name] = sizes(counting.get_database(database), name, max_ms, timings)
+            if report['sizes'][name] is None:
+                unchecked.append(name + ' sizes')
         ordered = sorted(timings)
         report['field_reads'] = {'reads': len(ordered), 'records_a_read': PART_RECORDS, 'fields_a_read': FIELDS_PER_READ,
                                  **({'ms_p50': round(ordered[len(ordered) // 2], 1),
                                      'ms_p95': round(ordered[int(len(ordered) * .95)], 1),
                                      'ms_max': round(ordered[-1], 1)} if ordered else {})}
-        if batch in ('b3', 'b4'):
+        if batch in READ_CASES:
             report['reads'], report['queries'] = reads(client, database, max_ms, batch, settings)
+            failing, accepted = slowdowns(batch, report['reads'])
+            report['slowdowns'] = {'failing': failing, 'accepted': accepted,
+                                   'rule': 'new p50 > %g x old and > %g ms above it' % (SLOWER, SLOWER_MS)}
     except ExecutionTimeout:
         print('UNCHECKED, a read case over the time limit')
         return 2
@@ -1326,9 +1609,10 @@ def check(batch, settings, database, out, max_ms):
     if report.get('field_reads', {}).get('reads'):
         print('field counts: %(reads)d reads of at most %(records_a_read)d records and %(fields_a_read)d fields, '
               'ms p50 %(ms_p50)s p95 %(ms_p95)s max %(ms_max)s' % report['field_reads'])
-    if report.get('sizes'):
-        print('records of 512 KiB or more by BSON: %(large)d; on different sides of 1 MiB by BSON and JSON: '
-              '%(sides_differ)d' % report['sizes'])
+    for name, size in sorted((report.get('sizes') or {}).items()):
+        if size:
+            print('%s: records of 512 KiB or more by BSON: %d; on different sides of 1 MiB by BSON and JSON: %d'
+                  % (name, size['large'], size['sides_differ']))
     for name, case in (report.get('reads') or {}).items():
         print('read %s: n %d, same %d, differing %d, rows old %d new %d, plans differing %d%s (%s | %s), ms old p50 %s '
               'p95 %s, new p50 %s p95 %s'
@@ -1337,18 +1621,54 @@ def check(batch, settings, database, out, max_ms):
                  ' > '.join(case['plan_old'] or ['no plan of its own']) if case.get('plans_compared', True)
                  else 'old: no plan of its own', ' > '.join(case['plan_new'] or []),
                  case['ms_old_p50'], case['ms_old_p95'], case['ms_new_p50'], case['ms_new_p95']))
+    for name, entry in sorted(ACCEPTED_PLAN_DIFFERENCES.get(batch, {}).items()):
+        print('accepted plan difference: %s: %s; %s' % (name, entry['reason'], entry['recheck']))
+    if 'slowdowns' in report:
+        print('timing gate (%s):' % report['slowdowns']['rule'])
+        for name, old, new, plan in report['slowdowns']['failing']:
+            first, again = report['reads'][name], report['reads'][name].get('confirm') or {}
+            print('SLOWER, fails the run: %s: old p50 %s ms, new p50 %s ms (%s), new plan %s'
+                  % (name, old, new, 'timed again %d runs; first old %s, new %s' % (
+                      again['runs'], first['ms_old_p50'], first['ms_new_p50']) if again.get('runs')
+                     else again.get('why', 'not timed again'), ' > '.join(plan or [])))
+        for name, case in sorted(report['reads'].items()):
+            again = case.get('confirm') or {}
+            if again.get('runs') and name not in {row[0] for row in report['slowdowns']['failing']}:
+                print('timed again, under the gate: %s: first old p50 %s, new %s; %d runs: old %s, new %s'
+                      % (name, case['ms_old_p50'], case['ms_new_p50'], again['runs'], again['ms_old_p50'],
+                         again['ms_new_p50']))
+        for name, entry in sorted(ACCEPTED_SLOWDOWNS.get(batch, {}).items()):
+            now = report['reads'].get(name, {})
+            print('accepted slowdown: %s: old p50 %s ms, new p50 %s ms when accepted (now old %s, new %s); %s; %s'
+                  % (name, entry['old_ms'], entry['new_ms'], now.get('ms_old_p50'), now.get('ms_new_p50'),
+                     entry['reason'], entry['recheck']))
+        for name, entry in sorted(WATCHED.get(batch, {}).items()):
+            now, family = report['reads'].get(name, {}), report['reads'].get(entry['family'], {})
+            print('watched: %s, beside %s: %s; now old p50 %s ms, new p50 %s ms (%s: old %s, new %s)'
+                  % (name, entry['family'], entry['note'], now.get('ms_old_p50'), now.get('ms_new_p50'),
+                     entry['family'], family.get('ms_old_p50'), family.get('ms_new_p50')))
+        if not report['slowdowns']['failing']:
+            print('timing gate: no read case slower past the threshold')
     if 'queries' in report:
         q = report['queries']
-        print('queries: %d (sampling %d, timed %d = %d samples x 2 sides x %d runs, explain %d)'
-              % (q['total'], q['sampling'], q['timed'], q['samples'], RUNS, q['explain']))
+        print('queries: %d (sampling %d, timed %d = %d samples x 2 sides x %d runs, timed again %d, explain %d)'
+              % (q['total'], q['sampling'], q['timed'], q['samples'], RUNS, q.get('confirmed', 0), q['explain']))
     print('numbers written to %s' % (out / (batch + '.json')))
     if unchecked or unchecked_fields:
         return 2
-    clean = (not (totals['create'] or totals['make'] or totals['conflicts'])
-             and set(validators) <= {'same', 'not declared'} and not report['fields_differ']
-             and not (report.get('sizes') or {}).get('sides_differ')
-             and not any(case['differing'] or (case['plans_differ'] and not case.get('plan_accepted')) for case in (report.get('reads') or {}).values()))
-    return 0 if clean else 1
+    return 0 if clean(report, totals, validators) else 1
+
+
+def clean(report, totals, validators):
+    """Whether a checked run found nothing: no collection to create, no index to make, no conflict, every validator
+    the one ensure creates, every declared field holding only its kind, no record on different sides of 1 MiB, no
+    read case slower past the timing gate, and every read case the same, its plan too (or accepted)."""
+    return (not (totals['create'] or totals['make'] or totals['conflicts'])
+            and set(validators) <= {'same', 'not declared'} and not report['fields_differ']
+            and not any((size or {}).get('sides_differ') for size in (report.get('sizes') or {}).values())
+            and not (report.get('slowdowns') or {}).get('failing')
+            and not any(case['differing'] or (case['plans_differ'] and not case.get('plan_accepted'))
+                        for case in (report.get('reads') or {}).values()))
 
 
 def main(argv=None):

@@ -42,6 +42,7 @@ from .records import tasks as task_records
 
 KEPT_HOST_REPORTS = 5     # this start's evidence and the starts just before it
 KEPT_HOST_RECORDS = 3000  # within one start, the newest records only: a busy hour writes about a thousand
+EFFECTS_WAIT_SECONDS = 1.0  # a task stage's wait for the effects lock this long or longer is recorded
 
 
 def prune_host_reports():
@@ -284,13 +285,7 @@ class NativeLane:
             future.asuna_session_id = native_id
             future.asuna_binding = record
             future.asuna_broker_session = record['broker_session'] + ':' + sha(operation.encode())[:16]
-            with self.worker.controller.ingress_lock, (self.worker.app.service.lock if task else nullcontext()), self.worker.pending_lock:
-                if self.worker.controller.reconfiguring:
-                    raise RuntimeError('HOST_RECONFIGURING')
-                if task:self.worker.app.service.valid(task)
-                if operation in self.worker.pending:
-                    raise RuntimeError('NATIVE_OPERATION_ALREADY_RUNNING')
-                self.worker.pending[operation] = future
+            self.worker.register_stage(operation, future, task)
             try:
                 self.worker.emit(request)
                 try:
@@ -389,6 +384,35 @@ class BusinessWorker:
         self.folded_stop = False        # a lease left behind was folded into the plugin's open span (ADR-101)
         self.stopping = threading.Event()
         self.carry_lock = threading.Lock()
+
+    def register_stage(self, operation, future, task):
+        """Admit a stage: the Host is not reconfiguring, its task (if any) is still valid, and the operation runs
+        once. A task's stage waits for the effects lock first and takes the ingress fence only for the check, so
+        no inbound line waits behind a tool call that holds the effects lock. A wait of EFFECTS_WAIT_SECONDS or
+        more is recorded (`host.effects_lock_wait`) once the stage is past it; a failure to record is not the
+        stage's."""
+        effects = self.app.service.lock if task else nullcontext()
+        holder = getattr(effects, 'holder', None)
+        asked, waited = time.monotonic(), None
+        try:
+            with effects:
+                waited = time.monotonic() - asked
+                with self.controller.ingress_lock, self.pending_lock:
+                    if self.controller.reconfiguring:
+                        raise RuntimeError('HOST_RECONFIGURING')
+                    if task:
+                        self.app.service.valid(task)
+                    if operation in self.pending:
+                        raise RuntimeError('NATIVE_OPERATION_ALREADY_RUNNING')
+                    self.pending[operation] = future
+        finally:
+            if task and waited is not None and waited >= EFFECTS_WAIT_SECONDS:
+                try:
+                    self.app.evidence.record('host.effects_lock_wait', {
+                        'seconds': round(waited, 3), 'lane': getattr(future, 'asuna_lane', None),
+                        **({'holder': holder} if holder else {})})
+                except Exception:
+                    pass
 
     def host_call(self, method, args, timeout=120):
         """A request the Host answers; `timeout` is how long to wait for it, which must cover any time the request

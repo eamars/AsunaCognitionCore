@@ -23,6 +23,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `wait` — The stage's result; her tool calls in the meantime run here, one at a time, in call order.
   - `close`
 - class `BusinessWorker`
+  - `register_stage` — Admit a stage: the Host is not reconfiguring, its task (if any) is still valid, and the operation runs once.
   - `host_call` — A request the Host answers; `timeout` is how long to wait for it, which must cover any time the request itself is allowed to take there.
   - `emit`
   - `initialize`

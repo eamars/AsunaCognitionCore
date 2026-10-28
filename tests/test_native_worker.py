@@ -1,4 +1,5 @@
 """Local adapter invariants. These tests do not create any Mongo database."""
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -290,3 +291,106 @@ def test_the_owner_writes_on_an_agent_line_he_joins(member, tmp_path, monkeypatc
             worker.dispatch('input', args)
     with pytest.raises(Denied, match='NATIVE_INPUT_WORKSPACE_MISMATCH'):
         worker.dispatch('input', {**args, 'session_id': 'qq', 'cwd': qq['cwd']})
+
+
+class Asked:
+    """A lock that says when a thread starts to wait for it."""
+    def __init__(self, inner):
+        self.inner, self.asked = inner, threading.Event()
+
+    def __enter__(self):
+        self.asked.set()
+        return self.inner.__enter__()
+
+    def __exit__(self, *args):
+        return self.inner.__exit__(*args)
+
+    @property
+    def holder(self):
+        return getattr(self.inner, 'holder', None)
+
+
+class Evidence:
+    def __init__(self, fail=False):
+        self.rows, self.fail = [], fail
+
+    def record(self, kind, payload):
+        if self.fail:
+            raise OSError('EVIDENCE_UNAVAILABLE')
+        self.rows.append((kind, payload))
+
+
+def stage_worker(effects, evidence=None):
+    worker = BusinessWorker()
+    worker.controller = SimpleNamespace(ingress_lock=threading.RLock(), reconfiguring=False)
+    worker.app = SimpleNamespace(service=SimpleNamespace(lock=effects, valid=lambda task: task),
+                                 evidence=evidence or Evidence())
+    return worker
+
+
+def executor_future():
+    future = Future()
+    future.asuna_lane = 'executor'
+    return future
+
+
+def hold(lock, seconds=None, name='tool-call'):
+    """A thread that holds `lock` until released (or for `seconds`); returns (thread, release)."""
+    release, taken = threading.Event(), threading.Event()
+
+    def run():
+        with lock:
+            taken.set()
+            release.wait(seconds if seconds is not None else 10)
+    thread = threading.Thread(target=run, name=name, daemon=True)
+    thread.start()
+    assert taken.wait(5)
+    return thread, release
+
+
+def test_a_stage_waiting_for_the_effects_lock_does_not_hold_the_ingress_fence():
+    """A tool call that holds the effects lock delays only the stages that need it: an inbound line takes the
+    ingress fence at once while a task's stage waits."""
+    effects = Asked(threading.RLock())
+    worker = stage_worker(effects)
+    holder, release = hold(effects.inner)
+    stage = threading.Thread(target=worker.register_stage, args=('op', executor_future(), {'_id': 'task'}),
+                             daemon=True)
+    try:
+        stage.start()
+        assert effects.asked.wait(5)
+        assert worker.controller.ingress_lock.acquire(timeout=1), 'an admission waited behind the effects lock'
+        worker.controller.ingress_lock.release()
+        assert 'op' not in worker.pending
+    finally:
+        release.set()
+        stage.join(5)
+        holder.join(5)
+    assert 'op' in worker.pending
+
+
+def test_a_long_wait_for_the_effects_lock_is_recorded_once_and_a_short_one_not_at_all(monkeypatch):
+    from asuna import native_worker
+    from asuna.queue import _DatabaseEffectsLock, effects_lock_path
+    from asuna.testing import remove_lock_files
+    monkeypatch.setattr(native_worker, 'EFFECTS_WAIT_SECONDS', 0.2)
+    name = 'asuna_v2_test_effects_wait'
+    effects = _DatabaseEffectsLock(name)
+    try:
+        evidence = Evidence()
+        worker = stage_worker(effects, evidence)
+        holder, _ = hold(effects, seconds=0.5)
+        worker.register_stage('long', executor_future(), {'_id': 'task'})
+        holder.join(5)
+        worker.register_stage('short', executor_future(), {'_id': 'task'})
+        [(kind, payload)] = evidence.rows
+        assert kind == 'host.effects_lock_wait'
+        assert payload['lane'] == 'executor' and payload['holder'] == 'tool-call' and payload['seconds'] >= 0.2
+        assert set(worker.pending) == {'long', 'short'}
+        failing = stage_worker(effects, Evidence(fail=True))
+        holder, _ = hold(effects, seconds=0.5)
+        failing.register_stage('unrecorded', executor_future(), {'_id': 'task'})
+        holder.join(5)
+        assert 'unrecorded' in failing.pending, 'a failure to record is not the stage\'s'
+    finally:
+        remove_lock_files(effects_lock_path(name))

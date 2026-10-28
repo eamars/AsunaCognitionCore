@@ -704,10 +704,15 @@ def search_messages(store, scene, query="", *, author=None, window=None, limit=D
         # 没给窗口就不加时间键；归档那一支的时间统一成归档的写法
         bounds = window and tuple(_archive_stamp(value) if value and key == ARCHIVED else value
                                   for value in window)
+        # Known defect, kept in B4 (ADR-104 design 8.2, B4's row): with a person filter, the archived stream also
+        # comes after the people's stream's cursor, as when one condition list was shared between the two streams;
+        # tools/adr104_equivalence.py b4's case "search, archived lines by person after both cursors" shows it.
+        cut_too = pairs.get(INBOUND) if key == ARCHIVED and (authors is not None or values) else None
         try:
             found = message_records.search(store, parts["scene_ids"], parts["epoch"], key, text=query or None,
                                            case=case_sensitive, author=author or None, authors=authors,
-                                           person=values, window=bounds, after=pairs.get(key), limit=page + 1)
+                                           person=values, window=bounds, after=pairs.get(key), after_too=cut_too,
+                                           limit=page + 1)
         except Exception as exc:
             return {"hits": [], "degraded": True,
                     "why": "messages_search_failed:%s" % type(exc).__name__,

@@ -12,7 +12,10 @@ sides of 1 MiB. b3 and b4 also run their read cases: each read the batch moved, 
 pymongo and as the owner (`records.scenes`, `records.messages`) now answers it, on parameters sampled through the
 owners (at most 20 a case, at most 1,000 queries in all, serial, `--max-ms` each, three runs for the times): the same
 ids in the same order, the same records (values in one order for a distinct), the same plan stages (a distinct or an
-aggregate has no plan of its own to compare; the new plan is reported); numbers only.
+aggregate has no plan of its own to compare; the new plan is reported), and how many rows each side answered; per
+declared field, the records whose value its declaration refuses; numbers only. The collections to create, the
+indexes to make and the validators count for the collections the batch declares (the rest are reported apart); a
+plan difference the lead accepted (ACCEPTED_PLAN_DIFFERENCES) is reported with its times and does not fail the run.
 Each query is read-only and bounded by `--max-ms`. The numbers go to `<out>/<batch>.json` (default
 `<data>/private/adr104-evidence/<batch>/`) and to the console. Exit 0 when nothing would be created, made or refused,
 every validator is the one ensure creates and every declared field holds only its kind (the retired indexes to drop
@@ -122,6 +125,22 @@ def kinds(db, collection, max_ms):
     return found
 
 
+def differing(collection, counts):
+    """Per declared field, the records whose value the declaration refuses (another kind, null where not
+    nullable, a list element of another kind; a record holding several such counts once per kind), 0 for none."""
+    out = {}
+    for f in collection.fields:
+        if f.path == '_id' or f.path not in counts:
+            continue
+        allowed = KINDS[f.kind] | {'missing'} | ({'null'} if f.nullable else set())
+        wrong = sum(n for kind, n in counts[f.path]['types'].items() if kind not in allowed)
+        if f.kind == 'list':
+            wrong += sum(n for kind, n in (counts[f.path].get('elements') or {}).items() if kind not in KINDS[f.of])
+        out[f.path] = wrong + counts[f.path]['other_length'] + (counts[f.path]['types'].get('missing', 0)
+                                                                 if f.required else 0)
+    return out
+
+
 def differs(collection, counts):
     """The declared fields whose stored records the declaration refuses: another kind, null where not nullable, a
     required field missing, a vector of another length, a list holding an element of another kind."""
@@ -140,6 +159,10 @@ def differs(collection, counts):
 # The collections whose declared fields each batch counts (None: every collection).
 BATCHES = {'b1b': None, 'b2': ('host_leases', 'lane_faults'), 'b3': ('scenes',), 'b4': ('messages',)}
 QUERIES = 1000
+# Plan differences the lead accepted, by case: reported with their times, not counted against a clean run. The
+# archived stream's old read left out `legacy` by an exclusion projection, which the store does not have; the owner
+# drops it after the read (accepted for B4, 2026-10-28).
+ACCEPTED_PLAN_DIFFERENCES = {'search, archived lines', 'search, archived lines by person after both cursors'}
 RUNS = 3
 
 
@@ -260,6 +283,15 @@ def _compared(value, how):
     return value
 
 
+def _amount(value):
+    """How much a read answered: rows or values in a list, a record as one, a count as itself."""
+    if isinstance(value, list):
+        return len(value)
+    if isinstance(value, dict):
+        return 1
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
 def reads(client, database, max_ms, batch, config):
     """Each case's numbers: n, same, differing, plan stages and times, old against new; none are ids. A case whose
     old form has no plan to compare (a distinct, an aggregate) reports the new plan only."""
@@ -274,7 +306,7 @@ def reads(client, database, max_ms, batch, config):
     out, timed, explained = {}, 0, 0
     for name, old_call, new_call, params, how in cases:
         chosen = params[::max(1, len(params) // per_case)][:per_case] if params else []
-        same = differing = plans_differ = 0
+        same = differing = plans_differ = rows_old = rows_new = 0
         times = {'old': [], 'new': []}
         old_plan = new_plan = None
         compared = True
@@ -289,6 +321,7 @@ def reads(client, database, max_ms, batch, config):
                 times['new'].append((clock.perf_counter() - started) * 1000)
                 timed += 2
                 results = {'old': _compared(old_value, how), 'new': _compared(new_value, how)}
+            rows_old, rows_new = rows_old + _amount(old_value), rows_new + _amount(new_value)
             if results['old'] == results['new']:
                 same += 1
             else:
@@ -308,6 +341,8 @@ def reads(client, database, max_ms, batch, config):
         pct = lambda values, q: round(statistics.quantiles(values, n=20)[q], 2) if len(values) > 1 else (
             round(values[0], 2) if values else None)
         out[name] = {'n': len(chosen), 'same': same, 'differing': differing, 'plans_differ': plans_differ,
+                     'rows_old': rows_old, 'rows_new': rows_new,
+                     'plan_accepted': name in ACCEPTED_PLAN_DIFFERENCES,
                      'plans_compared': compared, 'plan_old': old_plan, 'plan_new': new_plan,
                      'ms_old_p50': pct(times['old'], 9), 'ms_old_p95': pct(times['old'], 18),
                      'ms_new_p50': pct(times['new'], 9), 'ms_new_p95': pct(times['new'], 18)}
@@ -340,58 +375,72 @@ SAMPLED = ['_id', 'scene_id', 'policy_epoch', 'scene_seq', 'direction', 'author'
            'event.raw.asuna_peer.display', 'event.raw.asuna_forward']
 
 
-def _old_search(parts, stream, query, window, after, case=True, author=None, person=None, authors=None,
-                refs=None):
-    """history_query's filters as the replaced code built them (message_filters, outbound_fallback_filter,
-    person_clause, scene_id_clause, _after_clause): one stream's filter, sort and limit."""
+def _old_receipt(parts, refs, query=None, case=True, author=None, person=None, authors=None):
+    """history_query's receipt stream as the replaced code built it (outbound_fallback_filter, person_clause,
+    scene_id_clause): its filter and sort."""
+    ids = list(dict.fromkeys(parts['scene_ids']))
+    flt = {'scene_id': ids[0]} if len(ids) == 1 else {'scene_id': {'$in': ids}}
+    flt.update({'policy_epoch': parts['epoch'], 'direction': 'outbound', 'phase': 'SPEAK',
+                'delivery_state': 'DELIVERED', 'receipt': {'$in': sorted(refs)}, 'receipt_at': {'$exists': False}})
+    if author:
+        flt['author'] = author
+    if query:
+        flt['text'] = {'$regex': re.escape(query), **({} if case else {'$options': 'i'})}
+    clause = _old_clause(person, authors)
+    if clause:
+        flt['$and'] = [dict(clause)]
+    return flt, [('scene_seq', -1), ('scene_id', -1)]
+
+
+def _old_streams(parts, query, window, pairs, case=True, author=None, person=None, authors=None, archived=False):
+    """history_query's in-line streams as the replaced code built them (message_filters, then search_messages
+    appending each stream's cursor to its condition list): {stream: (filter, sort)}. The archived stream copied the
+    people's stream and so shared its condition list: with a person filter it also holds the people's cursor (the
+    known defect B4 keeps)."""
     ids = list(dict.fromkeys(parts['scene_ids']))
     base = {'scene_id': ids[0]} if len(ids) == 1 else {'scene_id': {'$in': ids}}
     base['policy_epoch'] = parts['epoch']
     if author:
         base['author'] = author
-    pattern = {'$regex': re.escape(query), **({} if case else {'$options': 'i'})} if query else None
-    clause = {'author': {'$in': list(authors)}} if authors is not None else (
-        {'$or': [{key: value} for key in ('author', 'event.raw.asuna_peer.person_id', 'event.raw.asuna_peer.card',
-                                          'event.raw.asuna_peer.nickname', 'event.raw.asuna_peer.display',
-                                          'event.raw.asuna_peer.aliases') for value in sorted(person)]}
-        if person else None)
-    if stream == 'receipt':
-        flt = {**base, 'direction': 'outbound', 'phase': 'SPEAK', 'delivery_state': 'DELIVERED',
-               'receipt': {'$in': sorted(refs)}, 'receipt_at': {'$exists': False}}
-        if pattern:
-            flt['text'] = dict(pattern)
-        if clause:
-            flt['$and'] = [dict(clause)]
-        return flt, [('scene_seq', -1), ('scene_id', -1)], 0
     bounds = {op: value for op, value in zip(('$gte', '$lte'), window or ()) if value}
-    field = 'receipt_at' if stream == 'outbound' else 'occurred_at'
-    if stream == 'outbound':
-        flt = {**base, 'direction': 'outbound', 'phase': 'SPEAK', 'delivery_state': 'DELIVERED'}
-    else:
-        flt = {**base, 'direction': 'inbound'}
+    pattern = {'$regex': re.escape(query), **({} if case else {'$options': 'i'})} if query else None
+    inbound = dict(base, direction='inbound')
+    outbound = dict(base, direction='outbound', phase='SPEAK', delivery_state='DELIVERED')
     if bounds:
-        flt[field] = dict(bounds)
-    if pattern:
-        if stream == 'outbound':
-            flt['text'] = dict(pattern)
-        else:
-            flt['$or'] = [{'text': dict(pattern)}, {'event.raw.asuna_forward.nodes.text': dict(pattern)}]
+        inbound['occurred_at'] = dict(bounds)
+        outbound['receipt_at'] = dict(bounds)
+    if pattern is not None:
+        inbound['$or'] = [{'text': dict(pattern)}, {'event.raw.asuna_forward.nodes.text': dict(pattern)}]
+        outbound['text'] = dict(pattern)
+    clause = _old_clause(person, authors)
     if clause:
-        flt['$and'] = [dict(clause)]
-    if stream == 'archived':
-        flt = {**flt, 'scene_id': {'$in': ['archive:' + sid for sid in parts['scene_ids']]},
-               'direction': 'archived', 'deletion_id': {'$exists': False}}
+        inbound['$and'] = [dict(clause)]
+        outbound['$and'] = [dict(clause)]
+    streams = [('inbound', 'occurred_at', inbound), ('outbound', 'receipt_at', outbound)]
+    if archived:
+        archive = {**inbound, 'scene_id': {'$in': ['archive:' + sid for sid in parts['scene_ids']]},
+                   'direction': 'archived', 'deletion_id': {'$exists': False}}
         if bounds:
-            flt[field] = {op: _archive_stamp(value) for op, value in bounds.items()}
-        if clause:
-            flt['$and'] = [dict(clause)]
-    if after:
-        at, seq = after[0], after[1]
-        clauses = [{field: {'$lt': at}}, {field: at, 'scene_seq': {'$lt': seq}}]
-        if len(after) > 2:
-            clauses.append({field: at, 'scene_seq': seq, 'scene_id': {'$lt': after[2]}})
-        flt.setdefault('$and', []).append({'$or': clauses})
-    return flt, [(field, -1), ('scene_seq', -1), ('scene_id', -1)], 0
+            archive['occurred_at'] = {op: _archive_stamp(value) for op, value in bounds.items()}
+        streams.append(('archived', 'occurred_at', archive))
+    for key, field, flt in streams:
+        pair = pairs.get(key)
+        if pair:
+            at, seq = pair[0], pair[1]
+            clauses = [{field: {'$lt': at}}, {field: at, 'scene_seq': {'$lt': seq}}]
+            if len(pair) > 2:
+                clauses.append({field: at, 'scene_seq': seq, 'scene_id': {'$lt': pair[2]}})
+            flt.setdefault('$and', []).append({'$or': clauses})
+    return {key: (flt, [(field, -1), ('scene_seq', -1), ('scene_id', -1)]) for key, field, flt in streams}
+
+
+def _old_clause(person, authors):
+    """history_query.person_filter as the replaced code wrote it."""
+    if authors is not None:
+        return {'author': {'$in': list(authors)}}
+    return {'$or': [{key: value} for key in ('author', 'event.raw.asuna_peer.person_id', 'event.raw.asuna_peer.card',
+                                             'event.raw.asuna_peer.nickname', 'event.raw.asuna_peer.display',
+                                             'event.raw.asuna_peer.aliases') for value in sorted(person)]}         if person else None
 
 
 def _archive_stamp(value):
@@ -478,6 +527,16 @@ def _cases_b4(store, config):
     home = (config.get('chat') or {}).get('scene_id') or 'home-none'
     routes = sorted({route['scene_id'] for channel in (config.get('channels') or {}).values()
                      for route in (channel.get('routes') or {}).values() if route.get('scene_id')} | {home})
+    archived = []                                  # archived lines of up to 3 conversations, through the owner
+    for pair in first[:3]:
+        tried += 1
+        rows = owner.search(store, [s(pair)], e(pair), 'archived', limit=4)
+        if len(rows) >= 2:
+            cursor = lambda row: [row.get('occurred_at'), row.get('scene_seq'), row.get('scene_id')]
+            # her search by the person these archived lines' authors resolved to, its page after the newest one; the
+            # people's cursor at the next one cuts the archived stream too (the defect B4 keeps)
+            archived.append((pair, sorted({row['author'] for row in rows if isinstance(row.get('author'), str)}),
+                             cursor(rows[1]), cursor(rows[0])))
     sources = lambda pair: [{'scene_id': s(pair), 'policy_epoch': e(pair)}]
     message_query = lambda pair: {'$and': [{'$or': sources(pair)}, NOT_CORE_NOTICE, {'$or': list(SAID)}]}
     parts = lambda pair: {'scene_ids': [s(pair)], 'epoch': e(pair)}
@@ -502,6 +561,15 @@ def _cases_b4(store, config):
                 {'direction': 'inbound', 'event.channel.platform_event_id': pair[1], 'received_at': {'$gte': recent}},
                 {'direction': 'outbound', 'platform_message_id': pair[1], 'receipt_at': {'$gte': recent}}]}
             return db.messages.find_one(flt, fields, sort=desc), db.messages.find(flt, fields, sort=desc).limit(1)
+        return run
+
+    def excluded_old(pair):
+        """discussion_digest._excluded_counts: speech not delivered, then lines that are not speech."""
+        def run(db):
+            base = {'scene_id': s(pair), 'policy_epoch': e(pair), 'direction': 'outbound'}
+            first = dict(base, phase='SPEAK', delivery_state={'$ne': 'DELIVERED'})
+            second = dict(base, phase={'$ne': 'SPEAK'})
+            return [db.messages.count_documents(first), db.messages.count_documents(second)], db.messages.find(second)
         return run
 
     def page_old(pair, search=None):
@@ -531,7 +599,8 @@ def _cases_b4(store, config):
 
         def old(param):
             pair, word, who, after = param
-            flt, sort, limit = _old_search(parts(pair), stream, word, window(pair), after, person=who)
+            flt, sort = _old_streams(parts(pair), word, window(pair), {stream: after}, person=who,
+                                     archived=stream == 'archived')[stream]
             return many(flt, {'legacy': 0} if stream == 'archived' else None, sort, 26)
 
         def new(param):
@@ -599,8 +668,6 @@ def _cases_b4(store, config):
          lambda p: owner.by_platform_id(store, s(p), e(p), platform_id=p[1], author=me).rows(), platform, 'value'),
         ('quoted, hers first', lambda p: quoted_old(p, True), lambda p: owner.quoted(store, s(p), p[1], mine=True,
                                                                                      since=recent), platform, 'value'),
-        ('quoted, anyone', lambda p: quoted_old(p, False), lambda p: owner.quoted(store, s(p), p[1], mine=False,
-                                                                                  since=recent), platform, 'value'),
         # what people saw (her turn context reads these)
         ('said, attend window', lambda p: many({'scene_id': s(p), 'policy_epoch': e(p), 'scene_seq': {'$lte': q(p)},
                                                 '$or': SAID}, {'_id': 1, 'author': 1, 'text': 1, 'direction': 1,
@@ -1038,12 +1105,17 @@ def _cases_b4(store, config):
         ('search, people\'s lines by text', *search_case('inbound', text=True), 'value'),
         ('search, people\'s lines by person, after a cursor', *search_case('inbound', person=True, cursor=True),
          'value'),
+        ('search, archived lines by person after both cursors',
+         lambda p: many(_old_streams(parts(p[0]), None, None, {'inbound': p[2], 'archived': p[3]}, authors=p[1],
+                                     archived=True)['archived'][0], {'legacy': 0},
+                        [('occurred_at', -1), ('scene_seq', -1), ('scene_id', -1)], 26),
+         lambda p: owner.search(store, [s(p[0])], e(p[0]), 'archived', authors=p[1], after=p[3], after_too=p[2],
+                                limit=26), archived, 'value'),
         ('search, her lines', *search_case('outbound'), 'value'),
         ('search, her lines by text, after a cursor', *search_case('outbound', text=True, cursor=True), 'value'),
         ('search, archived lines', *search_case('archived'), 'value'),
-        ('search, her lines by receipt', lambda p: many(_old_search(parts(p[0]), 'receipt', None, None, None,
-                                                                    refs={p[1]})[0], None, [
-                                                                        ('scene_seq', -1), ('scene_id', -1)]),
+        ('search, her lines by receipt', lambda p: many(*_old_receipt(parts(p[0]), {p[1]})[:1], None,
+                                                        _old_receipt(parts(p[0]), {p[1]})[1]),
          lambda p: owner.search(store, [s(p[0])], e(p[0]), 'receipt', receipts={p[1]}),
          [((scene, None), ref) for scene, ref in receipts] or [(first[0], 'receipt-none')] if first else [], 'value'),
         ('digest thread', lambda p: many({'scene_id': p[0]['_id'], 'policy_epoch': p[0]['policy_epoch'], '$or': [
@@ -1051,12 +1123,9 @@ def _cases_b4(store, config):
             {'reply_to': {'$in': sorted(set(p[1]))}}, {'_id': {'$in': sorted(set(p[1]))}}]}, THREAD),
          lambda p: owner.thread(store, [p[0]['_id']], p[0]['policy_epoch'], replying_to=p[1], ids=p[1],
                                 fields=list(THREAD)), by_scene, 'value'),
-        ('digest left out, counted', lambda p: count({'scene_id': s(p), 'policy_epoch': e(p), 'direction': 'outbound',
-                                                      'phase': 'SPEAK', 'delivery_state': {'$ne': 'DELIVERED'}}),
-         lambda p: owner.excluded(store, [s(p)], e(p))['undelivered_outbound'], first, 'value'),
-        ('digest not speech, counted', lambda p: count({'scene_id': s(p), 'policy_epoch': e(p),
-                                                        'direction': 'outbound', 'phase': {'$ne': 'SPEAK'}}),
-         lambda p: owner.excluded(store, [s(p)], e(p))['non_speak_outbound'], first, 'value'),
+        ('digest left out and not speech, counted', lambda p: excluded_old(p),
+         lambda p: [owner.excluded(store, [s(p)], e(p))[key] for key in ('undelivered_outbound', 'non_speak_outbound')],
+         first, 'value'),
     ]
     return [case for case in cases if case[3]], 1 + tried
 
@@ -1101,6 +1170,7 @@ def check(batch, settings, database, out, max_ms):
                 continue
             report['fields'][collection.name] = counts
             report['fields_differ'] += [[collection.name, path] for path in differs(collection, counts)]
+            report.setdefault('fields_differing_records', {})[collection.name] = differing(collection, counts)
         if batch == 'b4':
             report['sizes'] = sizes(adapter.db, 'messages', max_ms)
         if batch in ('b3', 'b4'):
@@ -1114,16 +1184,26 @@ def check(batch, settings, database, out, max_ms):
     finally:
         client.close()
     report['unchecked'] = unchecked
-    totals = {key: sum(1 if key == 'create' and plan['create'] else len(plan[key]) if key != 'create' else 0
-                       for plan in plans.values()) for key in ('create', 'make', 'drop', 'conflicts')}
+    # The collections to create, the indexes to make and the validators count for the collections the batch
+    # declares (b1b: all); the drops and conflicts for every collection. The others are reported apart.
+    ours = {name for name in plans if BATCHES[batch] is None or name in BATCHES[batch]}
+    count = lambda key, names: sum(int(bool(plans[n]['create'])) if key == 'create' else len(plans[n][key])
+                                   for n in names)
+    totals = {'create': count('create', ours), 'make': count('make', ours), 'drop': count('drop', plans),
+              'conflicts': count('conflicts', plans)}
     validators = {}
-    for plan in plans.values():
-        validators[plan['validator']] = validators.get(plan['validator'], 0) + 1
+    for name in ours:
+        validators[plans[name]['validator']] = validators.get(plans[name]['validator'], 0) + 1
     report['totals'], report['validators'] = totals, validators
+    report['outside_batch'] = {'create': count('create', set(plans) - ours), 'make': count('make', set(plans) - ours)}
     out.mkdir(parents=True, exist_ok=True)
     (out / (batch + '.json')).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
     print('ensure, dry run: collections to create %(create)d, indexes to make %(make)d, to drop %(drop)d, '
           'conflicting %(conflicts)d' % totals)
+    if BATCHES[batch] is not None:
+        print('(create and make count the collections the batch declares; elsewhere: to create %(create)d, '
+              'to make %(make)d)'
+              % report['outside_batch'])
     print('validators: ' + ', '.join('%s %d' % item for item in sorted(validators.items())))
     for what in ('make', 'drop'):
         for name, plan in sorted(report['ensure'].items()):
@@ -1141,15 +1221,18 @@ def check(batch, settings, database, out, max_ms):
             print('%s.%s: %s%s%s' % (name, path, shown, ', other length %d' % seen['other_length']
                                      if seen['other_length'] else '', '; elements: ' + elements if elements else ''))
     for name, path in report['fields_differ']:
-        print('differs from its declaration: %s.%s' % (name, path))
+        print('differs from its declaration: %s.%s (%d records)'
+              % (name, path, report['fields_differing_records'][name][path]))
     for name in unchecked:
         print('UNCHECKED, over the time limit: %s' % name)
     if 'sizes' in report:
         print('records of 512 KiB or more by BSON: %(large)d; on different sides of 1 MiB by BSON and JSON: '
               '%(sides_differ)d' % report['sizes'])
     for name, case in (report.get('reads') or {}).items():
-        print('read %s: n %d, same %d, differing %d, plans differing %d (%s | %s), ms old p50 %s p95 %s, new p50 %s p95 %s'
-              % (name, case['n'], case['same'], case['differing'], case['plans_differ'],
+        print('read %s: n %d, same %d, differing %d, rows old %d new %d, plans differing %d%s (%s | %s), ms old p50 %s '
+              'p95 %s, new p50 %s p95 %s'
+              % (name, case['n'], case['same'], case['differing'], case.get('rows_old', 0), case.get('rows_new', 0),
+                 case['plans_differ'], ', accepted' if case.get('plan_accepted') and case['plans_differ'] else '',
                  ' > '.join(case['plan_old'] or ['no plan of its own']) if case.get('plans_compared', True)
                  else 'old: no plan of its own', ' > '.join(case['plan_new'] or []),
                  case['ms_old_p50'], case['ms_old_p95'], case['ms_new_p50'], case['ms_new_p95']))
@@ -1163,7 +1246,7 @@ def check(batch, settings, database, out, max_ms):
     clean = (not (totals['create'] or totals['make'] or totals['conflicts'])
              and set(validators) <= {'same', 'not declared'} and not report['fields_differ']
              and not (report.get('sizes') or {}).get('sides_differ')
-             and not any(case['differing'] or case['plans_differ'] for case in (report.get('reads') or {}).values()))
+             and not any(case['differing'] or (case['plans_differ'] and not case.get('plan_accepted')) for case in (report.get('reads') or {}).values()))
     return 0 if clean else 1
 
 

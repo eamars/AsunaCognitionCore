@@ -547,14 +547,16 @@ def _person(values):
 
 
 def search(store, scene_ids, epoch, stream, *, text=None, case=True, author=None, authors=None, person=None,
-           window=None, after=None, receipts=None, limit=None):
+           window=None, after=None, after_too=None, receipts=None, limit=None):
     """History search: one stream's lines of these conversations in an epoch, newest first by the stream's time,
     then position and conversation. Streams: `inbound` (people's lines by `occurred_at`; text in the line or in a
     forward it carried), `outbound` (her delivered speech by `receipt_at`), `receipt` (her delivered speech without
     `receipt_at` that names one of `receipts`, by position) and `archived` (archived lines not deleted, by
     `occurred_at`; their `legacy` copy left out). `authors` (resolved ids) or `person` (values a person may be known
     by) narrow it; `window` is (from, to) of the stream's time; `after` the cursor (time, position[, conversation]):
-    the lines after it in the stream's order, a part of it that is None standing for a line without that field."""
+    the lines after it in the stream's order, a part of it that is None standing for a line without that field.
+    `after_too`: a second cursor the lines also come after (the archived stream's known defect, kept in B4: see
+    history_query.search_messages)."""
     ids = list(dict.fromkeys(_texts(scene_ids)))
     if not ids or not _number(epoch):
         return []
@@ -590,6 +592,8 @@ def search(store, scene_ids, epoch, stream, *, text=None, case=True, author=None
         extra.append({'author': AnyOf(_texts(authors))})
     elif person:
         extra.append(_person(person))
+    if after_too and clock:
+        extra.append(_after(clock, after_too))
     if after and clock:
         extra.append(_after(clock, after))
     order = (('scene_seq', -1), ('scene_id', -1)) if stream == 'receipt' else (

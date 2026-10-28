@@ -409,6 +409,27 @@ stream also comes after the people's cursor; the owner's `search` takes that cur
 Tests that read the store's insides changed: `tests/test_forwards.py` (the history filter is the owner's `search`),
 `tests/discussion_digest_cases.py` (the database failing and the linkage fence are watched on the owner's handle).
 
+As built, `records.episodes`, `records.sessions` and `records.receipts` (B5): every operation of their rows but
+`redact_scope`, under those names, and `of_task` as the row names it; call sites import them as `episode_records`,
+`session_records` and `receipt_records`. Their views share `records/view.py` (`View` with `rows`, `first`, `count`;
+the replaced read's sort, none where it had none, so no `_id` is added). `episodes.get` takes the fences the replaced
+reads wrote (persona, conversation, scope, person, epoch, native session, a carried system reference); `sessions.main`
+reads a character context of None as the field null or missing, as the replaced equality on null matched (`Or` of
+`IsNull` and `Exists(False)`; `sessions` has no index on the field, so the plan stays `COLLSCAN`); `receipts.sink_window`
+is history_query's receipt stream (its bounds from `history_query.sink_bounds`). The rest of B4's rule holds: a fence
+or id given as None, or not of its kind, finds nothing without a read. 161 map rows in 35 files moved (the map at
+`fa46c24132f6`: episodes 82, sessions 46, the receipts 33), none left, and the turn part of `Store.mutate`'s source check;
+`privacy._erase` keeps redacting `episodes` and `sink_receipts` in its loop over five collections until B10, as for
+`messages`, and `audit.py`'s replay reads `sink_receipts` through the maintenance surface. The four collections are
+declared (every field nullable but the fields of their plain unique indexes, which are required, 3.5:
+`episodes.scene_id`, `source_event_id`, `episode_kind`; `sessions.binding_key`) and no longer `pending`. The stand-in
+answers `$type: 'null'` (W18 leaves `tests/harness_skips.txt`). Tests that faked the store's insides stub the owner's
+operation instead (`tests/test_native_worker.py`, `tests/test_host.py`, `tests/test_carried_session.py`) or get the
+owners' collections over their own database (`tests/test_adr099_thoughts.py`; `tests/fake_collections.py` reads a
+collection its fake does not hold as empty); fixtures that wrote turns or bindings without their unique index's fields
+carry them (`tests/test_host.py`, `test_carried_session.py`, `test_credentials.py`, `test_errand_carries_home.py`,
+`test_handover_watchdog.py`, `test_native_product.py`, `test_night_development.py`, `test_reviews.py`).
+
 **The shared layer's own surface** (no collection's owner; 21 map rows): `Store.put` and `Store.audit` (stay; owners
 call `put` through `save`, every module calls `audit`), `Store.ensure` (replaces `migrate`), `Store.recover_commits`,
 `Store.seed` (tests), the **maintenance surface** (`store.maintenance.record(collection, id)`,
@@ -705,7 +726,7 @@ there only through `tests/harness_skips.txt` by the case's `[stand-in]` id. Two 
 |---|---|---|
 | `W` words | 31 | 3.2, each rule above, with records missing the field, null, empty list, list, other kind |
 | `O` order | 6 (+ `O05` on the double) | missing/null first and last, multi-key, explicit `_id` direction, a unique key last gives one order on every adapter, skip, limit, fields; `O05`: the double shuffles ties (two seeds give two orders, one seed the same) |
-| `G` group | 5 | count, max, two keys, values ascending (missing out, null in), count with limit |
+| `G` group | 7 | count, max, two keys, values ascending (missing out, null in), count with limit, values of a field no record holds, values of a field holding mixed kinds (B5) |
 | `C` changes | 12 | 3.4, create rules |
 | `X` writes | 15 | insert one and many (position, earlier kept), get missing, delete one and many, unique required and `only_where_present`, duplicate on insert, update and create, replace at a revision, stale, keep counters, claim order, counter, size (records exact, bytes growing) |
 | `T` time | 5 (+ the clock case on the double) | aware round trip, naive refused, ms truncation, `Now` in a range and in `Set` and `insert` (on the real clock); the double's injected clock moved past an expiry |
@@ -874,7 +895,7 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | B2 | `host_lease`, `lane_faults` (Now, create, the TTL index retired) | 9 | yes | lease taken, renewed and released across the restart (`host_stops` records a planned stop); fault counts keep rising; the TTL's deletion at 30 days becomes a sweep at the next fault write (rows older than 30 days stay until a new fault arrives; no code reads them), and a failed sweep is recorded in the audit (`lane_faults.forget_failed`: path, error code, cutoff), never the write's error; `hour_at` has no index, on purpose (the collection is bounded), so each sweep scans `lane_faults`, while `channel_id_1_hour_1` and `lane_1_stage_1_error_1_hour_1` stay; the cutoff is on the application's UTC clock, where the TTL used the server's; on throwaway databases, before: `integration/test_schema_and_vectors.py::test_a_fresh_database_gets_todays_ttl_index_from_b1bs_catalog` (B1b's catalog makes `hour_at_1` with `expireAfterSeconds` of 30 days), after: `integration/test_schema_and_vectors.py::test_b2s_ensure_drops_it_and_forget_old_takes_over`; `ensure_vectors`' two paths no case pinned: `integration/test_schema_and_vectors.py::test_the_old_index_answers_while_its_filter_fields_change`, `integration/test_schema_and_vectors.py::test_a_new_index_that_is_not_ready_answers_false` |
 | B3 | `records.scenes` | 221 in 60 files | yes | 8.3 on each view and get; the counter: positions contiguous after the restart |
 | B4 | `records.messages` | 229 in 54 files (as built: 225 in 53, the map at `85dd48275d22`) | yes | 8.3; her turn context built from the same lines (the `said`, `inbound`, `spoken` views compared). A later change of its own, not B4's: the history search's archived stream stops coming after the people's cursor under a person filter (a defect B4 keeps, section 4's as-built note) |
-| B5 | `records.episodes`, `records.sessions`, `records.receipts` | 166 | yes | 8.3 |
+| B5 | `records.episodes`, `records.sessions`, `records.receipts` | 166 (as built: 161 in 35 files, the map at `fa46c24132f6`) | yes | 8.3, its 44 read cases and the four collections' field kinds and sizes |
 | B6 | `records.tasks`, `records.plans` (the `$lookup` as reads) | 168 | yes | 8.3, and `recent_with_inputs` against the aggregate on 20 conversations: same 16 tasks, same order, time p50/p95 |
 | B7 | `records.memories` (retrieval's lexical reads; vector parts as built, 1b's pairs as an `Or` of dicts, an empty pair list answered without a call) | 67 | yes | 8.3; retrieval's whole search old against new on 40 queries (as 1a did): the same six and 24; `state.py:218-227`'s `if not combinations: return []` (the empty pair list) is production code with no test until `records.memories`' `test_an_empty_pair_list_answers_nothing_without_a_call` lands here |
 | B8 | `records.artifacts`, `blobs` (the blob interface), `media_life`, `outbound_files` | 126 | yes | 8.3; blob probe on a throwaway database; her stored files open and hash-check (20 sampled ids, read only) |
@@ -927,7 +948,10 @@ before its merge, as part of the lead's review of the batch (the owner is inform
    order, ties included, identical counts and values, and identical plan stages from `explain` (a new `SORT`,
    `COLLSCAN` or another index is a difference). Any difference stops the batch; the owner operation is corrected
    until its query, as the adapter sends it, gives what the old one gave. There is no "tie reorders" bucket: under
-   3.3 the adapter passes today's sort unchanged, so MongoDB's own tie order is what both sides see.
+   3.3 the adapter passes today's sort unchanged, so MongoDB's own tie order is what both sides see. Times are a gate
+   too (from B5, for every batch's cases): a case whose new p50 is more than twice its old and more than 5 ms above
+   it, still so when timed again (10 runs of each side), fails the run, named with both times and the new plan,
+   unless the lead accepted it in the check's table with its times, reason and when it is looked at again.
 5. **Before declaring a collection**: per declared field, counts of records by BSON type and of nulls (`$type` counts),
    of records missing a required unique field, of records whose BSON size and JSON size fall on different sides of 1
    MiB. Rule: the single type present gives the kind (int and double: `number`; string: `text`; date: `time`; bool;

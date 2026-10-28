@@ -475,16 +475,17 @@ precision is not verified). The 18 cases of `integration/test_mongo_vectors.py` 
 class. MongoDB's vector filter refuses an empty `$in`, so the adapter drops the branches that can match nothing and
 answers `[]` itself when none is left. `memory_units` declares `embedding` as `vector(768)`, the space's dimension.
 
-Where each of the 18 cases of `integration/test_mongo_vectors.py` (as at `b5c36121ac66`) went. Every `N` case runs on
-`[memory]`, is listed by its `[stand-in]` id (the stand-in has no vector search) and runs in the integration run on
-MongoDB:
+Where each of the 18 cases of `integration/test_mongo_vectors.py` (as at `b5c36121ac66`) went. Each new case is named
+by its `[memory]` node id; it also runs as `[stand-in]` (listed in `tests/harness_skips.txt`: the stand-in has no
+vector search) and as `integration/test_store_contract.py::TestN::<name>` on MongoDB:
 
-| old case | carried by | what differs |
-|---|---|---|
-| `test_the_index_is_brought_up_to_the_space` | `N01` | the old case read the index's filter fields (`list_search_indexes`); `N01` filters on a field only the second `ensure_vectors` added and compares with brute force, which on MongoDB fails while the index lacks it; on `[memory]` it shows nothing (no index) |
-| `test_nearest_is_exact_cosine[{k}-{filter}]`, 15 (k 1, 12, 24 by no filter, value, list, pairs, pairs and kind) | `N02` with the same 15 parameters | the filters are written in the store's words (a list as `AnyOf`, the pairs as `Or` of dicts with the other entries in `And`) |
-| `test_ties_come_in_id_order` | `N17` | none |
-| `test_empty_any_of_matches_nothing_and_bad_queries_are_refused` | `N18` | the empty any-of is `AnyOf([])` on one field; the old form, an empty list of pairs, is answered by `Store.nearest`'s translation (and from B7 by `records.memories`) without a call, and no case pins that: no home until B7's owner case. `N18` adds `VECTOR_FILTER_WORD` |
+| old case (node id) | what it asserted | pinned by (node id) | what differs |
+|---|---|---|---|
+| `integration/test_mongo_vectors.py::test_the_index_is_brought_up_to_the_space` | after `ensure_vectors` with one filter field, then with the space's, the search index's filter fields are the space's | `tests/test_store_contract.py::TestN::test_N01_the_index_is_brought_up_to_the_space[memory]` | it filters on `kind`, a field only the second `ensure_vectors` added, and compares with brute force: on MongoDB that fails while the index lacks the field; on `[memory]` it shows nothing (no index) |
+| `integration/test_mongo_vectors.py::test_nearest_is_exact_cosine[<k>-<filter>]`, 15: k 1, 12, 24 by filter `no filter`, `value`, `list`, `pairs`, `pairs and kind` | for each of 10 query vectors, the k nearest under the filter equal exact cosine by brute force (scores within 1e-4; above the k-th score the same ids in id order, at it any of the tied ids) | `tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[memory-<k>-<filter>]`, the same 15 | the filters are written in the store's words (a list as `AnyOf`, the pairs as `Or` of dicts, the other entries in `And`) |
+| `integration/test_mongo_vectors.py::test_ties_come_in_id_order` | two records with one vector come back in id order | `tests/test_store_contract.py::TestN::test_N17_ties_come_in_id_order[memory]` | none |
+| `integration/test_mongo_vectors.py::test_empty_any_of_matches_nothing_and_bad_queries_are_refused`, its refusals | a filter on an undeclared field, a vector of the wrong length, a zero vector, k 0 and k 101 are refused | `tests/test_store_contract.py::TestN::test_N18_empty_any_of_matches_nothing_and_bad_queries_are_refused[memory]` | each refusal by its code; it adds `VECTOR_FILTER_WORD`, and its empty any-of is `AnyOf([])` on one field |
+| `integration/test_mongo_vectors.py::test_empty_any_of_matches_nothing_and_bad_queries_are_refused` (no parameters), its first assertion | `nearest` with an empty list of `(scope_key, policy_epoch)` pairs answers `[]` | no home | `Store.nearest`'s translation answers it without a call, and no case pins that; from B7, `records.memories`' tests pin it as `test_an_empty_pair_list_answers_nothing_without_a_call` |
 
 **5.11 Large binary files and the record size limit.** The blob interface (methods 16-19). `blobs.py` keeps its rules in
 the core: it hashes while it streams into `blobs.write`, reads the bytes back through `blobs.open` in `STREAM_PIECE`
@@ -670,30 +671,32 @@ Size, per run (counted at B1b; times as measured, with where):
 - the integration run on MongoDB: the 112 shared, `R` (4) and `D` (1, 100 generated conditions), 117 cases in 46 s
   from the B1b worktree against the configured server, under the target of 60 s.
 
-Which cases pin each method of 2.2 (a case fails when the in-memory adapter lacks the method; checked at B1b by
-deleting each method in turn), and from which batch the core first calls it:
+Which cases pin each method of 2.2: the cases whose subject it is, named by their `[memory]` node id (each also runs as
+`[stand-in]` and as `integration/test_store_contract.py::<class>::<name>`); every case listed fails when the in-memory
+adapter lacks the method (checked at B1b by deleting each method in turn), and so do the other cases named after the
+`+`, which use it on the way. The last column is the batch from which the core first calls the method:
 
-| method | pinned by | first called by the core |
-|---|---|---|
-| `ensure` | every case (the `store` fixture ensures), `S01`-`S03` | B1b (`Store.ensure`, `migrate`) |
-| `ensure_vectors` | `N01`, `N02`, `N17`, `N18` | B1b (`Store.ensure_vectors`, retrieval as built) |
-| `get` | `X03` and 25 more (`C`, `O07`, `T`, `V`, `X`) | B2 (the lease's holder) |
-| `find` | the `W` cases that match records, `O01`-`O04`, `O06`, `O07`, `C11`, `T03`, `X02`, `X05` | B1b (`Store.audit`'s newest of a stream, `recover_commits`) |
-| `count` | `G05`, `X04` | B1b (`recover_commits`) |
-| `group` | `G01`-`G04` | B4 (messages' `distinct`, as `values`) |
-| `insert` | every case that writes, `X01`, `X02` | B1b (`Store.put` new, `Store.audit`) |
-| `replace` | `X09`-`X12` | B1b (`Store.put` at a revision) |
-| `update` | `C01`-`C12`, `O07`, `T04`, `T05`, `X08`, `X12` | B2 (the lease, the fault counts) |
-| `claim` | `C12`, `T04`, `X13`, `X14` | B3 (the conversation counter) |
-| `delete` | `X04`, `X05` | B2 (the lease released, old fault counts) |
-| `nearest` | `N01`, `N02`, `N17`, `N18` | B1b (`Store.nearest`, retrieval as built) |
-| `size` | `X15` | B10 (audit prune) |
-| `ping` | `S06` | no caller until B13 (`native_worker.py:1042`'s ping moves to it) |
-| `close` | `S06` | no caller until B13 (the core's `client.close()` calls move to it) |
-| `blobs.write` | `B01`-`B03`, `B05`, `B06` | B8 (`blobs.py`) |
-| `blobs.open` | `B01`-`B04`, `B06` | B8 |
-| `blobs.delete` | `B03` | B8 |
-| `blobs.of_scope` | `B05` | B8 (erasure by scope, ADR-105) |
+| method | pinned by (node id) | what that case asserts of the method | first called by the core |
+|---|---|---|---|
+| `ensure` | `tests/test_store_contract.py::TestS::test_S01_ensure_is_idempotent[memory]`, `tests/test_store_contract.py::TestS::test_S02_a_retired_index_is_dropped[memory]`, `tests/test_store_contract.py::TestS::test_S03_an_index_of_the_same_name_that_differs_is_refused[memory]`; + every case (the `store` fixture ensures) | it creates a collection and its indexes once, then nothing; drops a retired index; refuses an index of the same name with other keys or options | B1b (`Store.ensure`, `migrate`) |
+| `ensure_vectors` | `tests/test_store_contract.py::TestN::test_N01_the_index_is_brought_up_to_the_space[memory]`; + `N02`, `N17`, `N18` (the `vectors` fixture) | it answers True for a space, and again for the space with more filter fields | B1b (`Store.ensure_vectors`, retrieval as built) |
+| `get` | `tests/test_store_contract.py::TestX::test_X03_get[memory]`; + 25 cases that read a record back (`C`, `O07`, `T`, `V`, `X`) | a missing id gives None, `fields` returns those fields and `_id`, a non-text id is refused | B2 (the lease's holder) |
+| `find` | `tests/test_store_contract.py::TestO::test_O06_skip_and_limit[memory]`, `tests/test_store_contract.py::TestW::test_W01_equality_is_text_exactly[memory]`; + the other `W` cases that match records, `O01`-`O04`, `O07`, `C11`, `T03`, `X02`, `X05` | the records a condition matches, in the sort's order, paged by `skip` and `limit` | B1b (`Store.audit`'s newest of a stream, `recover_commits`) |
+| `count` | `tests/test_store_contract.py::TestG::test_G05_count_with_a_limit[memory]`; + `X04` | the records a condition matches, stopping at `limit` | B1b (`recover_commits`) |
+| `group` | `tests/test_store_contract.py::TestG::test_G01_count_by_one_key[memory]`, `tests/test_store_contract.py::TestG::test_G02_max[memory]`, `tests/test_store_contract.py::TestG::test_G03_two_keys_in_order[memory]`, `tests/test_store_contract.py::TestG::test_G04_values_ascending_without_records_missing_the_field[memory]` | rows by the `by` values in order, with `Count` or `Max`; values ascending, missing out and null in | B4 (messages' `distinct`, as `values`) |
+| `insert` | `tests/test_store_contract.py::TestX::test_X01_insert_one[memory]`, `tests/test_store_contract.py::TestX::test_X02_insert_many_stops_at_a_duplicate_and_keeps_what_came_before[memory]`; + every case that writes | a record comes back as written; an ordered insert stops at a duplicate at its position and keeps the earlier ones | B1b (`Store.put` new, `Store.audit`) |
+| `replace` | `tests/test_store_contract.py::TestX::test_X10_replace_at_a_revision[memory]`, `tests/test_store_contract.py::TestX::test_X11_a_stale_revision_writes_nothing[memory]`, `tests/test_store_contract.py::TestX::test_X12_replace_keeps_the_counters[memory]`, `tests/test_store_contract.py::TestX::test_X09_a_duplicate_on_replace[memory]` | it writes at the expected revision and not at another; kept fields keep their stored values; a repeated unique key is refused | B1b (`Store.put` at a revision) |
+| `update` | `tests/test_store_contract.py::TestC::test_C01_set_creates_missing_parents[memory]` to `tests/test_store_contract.py::TestC::test_C12_a_create_that_repeats_a_unique_key[memory]`; + `O07`, `T04`, `T05`, `X08`, `X12` | each change word's meaning (3.4) and the rules of a create | B2 (the lease, the fault counts) |
+| `claim` | `tests/test_store_contract.py::TestX::test_X13_claim_takes_the_first_by_sort_and_returns_it_changed[memory]`, `tests/test_store_contract.py::TestX::test_X14_the_counter[memory]`; + `C12`, `T04` | the first record by the sort, changed and returned in one step; the counter rises by one per call | B3 (the conversation counter) |
+| `delete` | `tests/test_store_contract.py::TestX::test_X04_delete_one[memory]`, `tests/test_store_contract.py::TestX::test_X05_delete_many[memory]` | one matching record or all of them go, and the count says how many | B2 (the lease released, old fault counts) |
+| `nearest` | `tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[memory-<k>-<filter>]` (15), `tests/test_store_contract.py::TestN::test_N17_ties_come_in_id_order[memory]`, `tests/test_store_contract.py::TestN::test_N18_empty_any_of_matches_nothing_and_bad_queries_are_refused[memory]`; + `N01` | exact cosine against brute force; ties in id order; refusals by code | B1b (`Store.nearest`, retrieval as built) |
+| `size` | `tests/test_store_contract.py::TestX::test_X15_size_counts_records_and_their_bytes[memory]` | the record count exactly, bytes above 0 that grow with a larger record | B10 (audit prune) |
+| `ping` | `tests/test_store_contract.py::TestS::test_S06_ping_and_close[memory]` | it answers None | no caller until B13 (`native_worker.py:1042`'s ping moves to it) |
+| `close` | `tests/test_store_contract.py::TestS::test_S06_ping_and_close[memory]` | it answers None | no caller until B13 (the core's `client.close()` calls move to it) |
+| `blobs.write` | `tests/test_store_contract.py::TestB::test_B01_write_and_open[memory]`, `tests/test_store_contract.py::TestB::test_B06_a_five_mebibyte_stream[memory]`; + `B02`, `B03`, `B05` | it stores a stream and answers its id and size; 5 MiB read back whole | B8 (`blobs.py`) |
+| `blobs.open` | `tests/test_store_contract.py::TestB::test_B02_a_blob_opens_seekable[memory]`, `tests/test_store_contract.py::TestB::test_B04_a_missing_blob[memory]`; + `B01`, `B03`, `B06` | the bytes come back seekable; a missing id is `BLOB_MISSING` | B8 |
+| `blobs.delete` | `tests/test_store_contract.py::TestB::test_B03_delete_twice[memory]` | True, then False; the blob no longer opens | B8 |
+| `blobs.of_scope` | `tests/test_store_contract.py::TestB::test_B05_blobs_of_a_scope[memory]` | the ids of a scope's blobs, and none of another's | B8 (erasure by scope, ADR-105) |
 
 Hypothesis is in the `dev` dependency group (`hypothesis==6.170.12`) for class `D`.
 

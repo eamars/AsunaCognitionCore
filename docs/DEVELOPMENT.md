@@ -86,6 +86,11 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
   both. The `store` fixture builds the fixture world once per session and resets a reused `asuna_v2_test_*` database
   of the stand-in for each test. A test the stand-in cannot carry is listed in `tests/harness_skips.txt` with what it
   lacks and skips as unchecked, not passed.
+- `src/asuna/store/` is the store's interface: the condition and change words, the catalog of declared collections,
+  the adapter registry and the in-memory adapter; the worker does not use it yet. `tests/store_contract.py` holds
+  the cases every adapter passes, and `tests/test_store_contract.py` runs them on the in-memory adapter. That adapter
+  returns records tied on every sort key in an order shuffled by one seed per run: a failure prints the seed, and
+  `ASUNA_STORE_SEED=<seed>` repeats it.
 - Native node tests and the native worker/product tests use synthetic inference and create no database.
 - `integration/` holds the database adapter's integration tests, outside the default run
   (`.\.venv\Scripts\python.exe -m pytest -q integration`). They reach the configured server only on a throwaway `asuna_v2_test_*`

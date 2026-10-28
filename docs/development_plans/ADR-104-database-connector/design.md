@@ -526,7 +526,12 @@ resource_root, python: 'python', module: 'asuna_mongodb', settings: {...}})` (no
 `asuna.store.adapters.load(entry)` imports it. `adapters.open(config)` looks the kind up and, when nothing of that kind
 was loaded, raises `AdapterNotInstalled('DATABASE_ADAPTER_NOT_INSTALLED: mongodb')`; it never returns a default or an
 empty store (the channel registry's trap: `channel_kinds.get` answers `None` and callers carry on; `of_channel` raises,
-and the adapter registry has only the raising form). The settings key that selects it is `database_adapter` (`mongodb`
+and the adapter registry has only the raising form). The difference is deliberate: a missing channel kind answers
+defaults everywhere but `of_channel`, because the core runs without any channel; a missing database always raises,
+because the store is required. The contract suite ships with the adapter packages' kit, so a person writing another
+adapter runs it without this repository: the shared classes (`store_contract.py`), what the `open_store` fixture must
+give (a context manager yielding `Checked` over the adapter on a throwaway database, dropped on exit), and how to run
+them against one's own adapter. The settings key that selects it is `database_adapter` (`mongodb`
 today; when exactly one database package is installed and the key is absent, that one; absent with none installed is
 `DATABASE_ADAPTER_NOT_INSTALLED`, absent with several `DATABASE_ADAPTER_NOT_CHOSEN`, both `AdapterNotInstalled`). Its
 connection setting stays the key `mongo_uri` her saved settings already use, now declared by the package (`SECRETS`), so
@@ -808,7 +813,7 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | B11b | `memory_tiers` (with `carried`'s room rows), `carried`, `memory_pilot`, `crossing`, `affect` | 125 | yes | 8.3 |
 | B12 | her read facade: `dbread`, `development_database_read` (section 6); she gets the list first | 8 | yes | the facade's answers for the reads her scripts make today, written in the new form by the builder in a scratch file outside her package: same counts and rows as the old form; for `usage_readout`'s comparison of two fields (section 6's list, her `$expr` at `usage_readout.py:732`), also the rows read before the comparison in Python |
 | B13 | `store.db` and pymongo leave the core outside the adapter module; repository guards: no `store.db`, no `pymongo`/`bson`/`gridfs` import and no `$`-key literal in `src/asuna` outside the adapter, `store.collection(name)` and `store.put(name, ...)` only in the owner of `name`, no collection `pending` (3.1); unit runs on the in-memory adapter, mongomock goes; the first core callers of `ping` (`native_worker.py:1042`) and `close` (the core's `client.close()` calls) | guards | yes | the guards; the unit run on the double (its time measured, 7.4); the integration contract run |
-| B14 | the package split (5.15): `packages/databases/mongodb/`, `registerDatabase`, the registry, the settings keys, the Python locks, `pack_plugins`, `release.py`, the profile's package list | install path | yes | after the restart her `ensure` creates nothing and changes nothing (same MongoDB, same database, same records); `audit.verify_documents` passes; the start fails with `DATABASE_ADAPTER_NOT_INSTALLED` in a demo profile without the package |
+| B14 | the package split (5.15): `packages/databases/mongodb/`, `registerDatabase`, the registry, the settings keys, the Python locks, `pack_plugins`, `release.py`, the profile's package list; the contract suite in the adapter packages' kit (5.15: the shared classes, the `open_store` fixture's contract, how to run them against one's own adapter), and the registry that always raises for a missing database, unlike the channel registry, on purpose | install path | yes | after the restart her `ensure` creates nothing and changes nothing (same MongoDB, same database, same records); `audit.verify_documents` passes; the start fails with `DATABASE_ADAPTER_NOT_INSTALLED` in a demo profile without the package |
 | B15 | the suite reset (7.4) | tests only | no | before and after: test count and run time on the double, the landing run's (7.4) |
 
 **The stand-in is checked against the meaning table, not trusted.** From B1b the unit run also runs the shared

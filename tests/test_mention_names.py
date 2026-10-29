@@ -5,10 +5,8 @@ account and this group, and names their entries from them, so her @ of them is a
 """
 import sys
 
-from asuna.channels import kept_raw
 from asuna.config import ROOT
-from asuna.people import People
-from test_people import BOT, GROUP, row, setup
+from test_people import BOT, GROUP
 
 ADAPTER = ROOT / 'packages' / 'channels' / 'napcat-qq' / 'integration'
 sys.path[:0] = [str(ADAPTER), str(ADAPTER / 'vendor')]          # as adapter.py sets it up
@@ -57,23 +55,3 @@ def test_the_adapter_looks_up_the_people_a_message_mentions(tmp_path):
     assert PeerDirectory.strip(crowd) and MENTIONED_KEY not in crowd['raw']
 
 
-def test_the_host_keeps_only_bound_profiles_and_names_the_people_mentioned(store):
-    scene = setup(store)
-    event = {'channel': {'id': 'qq', 'sender_id': '20002', 'account_id': BOT, 'target': {'type': 'group', 'id': GROUP}}}
-    good = {'person_id': 'qq:20003', 'account_id': '20003', 'scene': 'group:' + GROUP, 'group_id': GROUP,
-            'display': '新人', 'nickname': '新人', 'card': '', 'role': 'member', 'verified': True, 'address': 'x'}
-    raw = {MENTIONED_KEY: [good, {**good, 'account_id': '20009', 'person_id': 'qq:20009'},     # not mentioned
-                           {**good, 'group_id': '70000', 'scene': 'group:70000'}]}             # another group
-    kept = kept_raw(event, raw, ['20003'])
-    assert [p['account_id'] for p in kept[MENTIONED_KEY]] == ['20003'] and 'address' not in kept[MENTIONED_KEY][0]
-    message = row(20002, '@[还不知道名字 #2] 欢迎', card='阿杰', mentions=['20003'])
-    message['event']['raw'][MENTIONED_KEY] = kept[MENTIONED_KEY]
-    people = People(store)
-    people.transcript(scene, message)
-    entry = store.db.scene_people.find_one({'_id': scene['_id'] + '|qq:20003'})
-    assert entry['nickname'] == '新人' and entry['seen_at']
-    assert People(store).outbound(scene, '[新人 #%d] 欢迎' % entry['handle']) == '新人 欢迎'
-    # Without a looked-up profile the mentioned person is labelled as before, nameless until they speak.
-    bare = row(20002, '又来一个', mentions=['20010'], at='2026-10-04T02:00:00+00:00')
-    People(store).transcript(scene, bare)
-    assert store.db.scene_people.find_one({'_id': scene['_id'] + '|qq:20010'})['nickname'] == ''

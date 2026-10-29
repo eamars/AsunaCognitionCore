@@ -33,6 +33,7 @@ Index persisted local dialogue off the generation thread; restart scans pending 
 The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
 
 - def `own_items` — Her items as the pilot indexes them: [{key, store, doc, sid, scope_key, visibility, inject, text, heading, tags, lexical}].
+- def `rows` — View: the rows of a kind (at or after `since`, ISO text; of this status; scored at least `min_score`).
 - def `prune` — Delete the pilot's turn rows (and recall and failure rows) older than `days`; items and pairs stay.
 - def `attach` — Start the item index for a context builder that retrieves: the Pilot, else None.
 - def `rank` — Her items the way retrieval ranks memories: vector and lexical ranks fused (terms common to over half of the items say nothing).
@@ -58,9 +59,15 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 - def `store_of` — Which store a document is, or None when it is not tiered (her working documents).
 - def `item_id`
 - def `ref`
+- def `items` — View: a persona's items (rows `item`) whose fields equal these (or meet these words), ordered by `by` (none: the database's order).
+- def `personas` — The personas with tier items, ascending.
+- def `moves` — View: a persona's moves (rows `move`).
+- def `room_told` — The identity room last told in a conversation (carried.room_block's row), or None.
+- def `tell_room` — The identity room told in a conversation, kept to say it again only when its words change.
 - class `Tiers`
   - `items`
   - `item`
+  - `last_move` — The latest move of an item, or None.
   - `sync` — Every item has a row.
   - `placed` — A document as the turn reads it: each section's `inject` follows its place (a copy; the text untouched).
   - `move` — One item to another place: the row, a `move` row told once per conversation, one audit line.
@@ -142,6 +149,7 @@ What she learned elsewhere comes back when she asks (ADR-097 D3, D4): lines from
 - def `kind`
 - def `query_words` — The words of a recall's query that reach other places: cross words this place says at most `said_here` times.
 - def `elsewhere` — recall: lines of her other groups that have a word of the query that may cross, at most ELSEWHERE_SHOWN, best first.
+- def `fire_rows` — View: the count rows of these kinds (of a persona) at or after `since` (ISO text).
 - def `vocabulary` — The learned words of the index's build, learned in this process once per build; `ensure` builds the index first when there is none (a place's words must be cut as the index cuts them).
 - def `build` — Build the word index again from every chat line of her groups, as a new generation; the old one goes once the new one is in place.
 - def `top_up` — Add the group lines said since the index's mark: each group's chunked lines after its last indexed one, up to the first line the indexer has not chunked yet.
@@ -316,6 +324,14 @@ Affect ledger and projection (ADR-009 ARCHITECTURE §6).
 - def `person_feelings` — Her live feelings toward one person, from that person's projection: the strongest PERSON_FEELINGS_SHOWN, each the feeling and how long ago; at home its reason too.
 - def `recording_guide` — How she records a feeling, in words.
 - def `affect_model` — Persona model ``affect`` merged over core defaults, with policy overrides for affect.* keys.
+- def `insert` — One row into a ledger; a repeated id or source identity raises DuplicateKey.
+- def `ledger_row` — A ledger's row with this id (of this persona; a proposal of this kind of row), or None.
+- def `of_identity` — The ledger's row an import of this origin wrote for this source identity, or None.
+- def `events_of` — View: a persona's events (of these ids; whose source scope is none of `scopes_besides`; whose id starts with `prefix`), ordered by `by` (none: the database's order).
+- def `count_events` — How many events a persona has (written since `since`, ISO text; still open or not).
+- def `amendments_of` — View: the amendments (of a persona; of an event, or of any of several; of these ops), ordered by `by` (none: the database's order).
+- def `proposals_of` — View: a persona's proposals (rows of kind `proposal`), oldest first.
+- def `proposal_of_turn` — A proposal row written for this turn (its id only), or None.
 - class `AffectError`
 - class `AffectLedger`
   - `enabled`

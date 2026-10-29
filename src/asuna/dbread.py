@@ -97,8 +97,10 @@ class Reader:
 
     @classmethod
     def from_host(cls):
-        """The database the Host named for this command, else the checkout's local config."""
+        """The database the Host named for this command, else the checkout's local config; refused in a unit run."""
         from pymongo import MongoClient
+        from .store.errors import refuse_in_unit_run
+        refuse_in_unit_run('dbread 读库')
         uri, name = os.environ.get(ENV['uri']), os.environ.get(ENV['database'])
         if not (uri and name):
             from .config import ROOT, load
@@ -267,7 +269,8 @@ def development_rows(config, database, collection, query, projection=None, sort=
     from bson.errors import BSONError
     from pymongo import MongoClient
     from pymongo.errors import OperationFailure
-    from .store.errors import QueryInvalid
+    from .store.errors import QueryInvalid, refuse_in_unit_run
+    refuse_in_unit_run('development_database_read')
     client = MongoClient(config['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000, timeoutMS=20000)
     try:
         cursor = client[database][collection].find(query, projection)

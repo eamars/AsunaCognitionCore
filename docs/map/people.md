@@ -192,6 +192,8 @@ Group administration where she is an admin (owner direction 2026-10-04: on by de
 
 Who is in a group (owner 2026-10-08, her design in member-list-eval): the channel adapter fetches each admitted group's member list when it starts and periodically, and posts it when it changed. The host keeps one list per group in `group_members`, apart from `scene_people` (that roster stays "people who appeared here": a thousand members there would change what a label means and make every turn scan them). A group turn shows a chosen slice in words — the people she already knows here, the most recently active, anyone @-mentioned lately — and `find_member` searches the whole list. Names, roles and when someone last spoke (a timestamp field, shown on the local clock); never raw numbers.
 
+- def `get` — The member list of this group conversation, or None.
+- def `save` — The revisioned write of a group's list (`Store.put`: `expected`, `stream`).
 - def `routed_group` — The admitted route of a group (not a blocked one), else `<code>_GROUP_NOT_ROUTED`.
 - def `receive` — POST /v1/channels/<id>/members: one group's whole list from the adapter.
 - def `block` — members_from_program for a group turn, or None when no list was received.
@@ -203,6 +205,12 @@ Who is in a group (owner 2026-10-08, her design in member-list-eval): the channe
 
 Her watchlist (owner 2026-10-06): people she wants to hear about when they speak, in any conversation.
 
+- def `get` — The watch with this id (of this persona, in this state), or None.
+- def `active` — View: a persona's watches that are on, the soonest to end first.
+- def `of_person` — View: a persona's watches on this person that are on and not past their end at `moment`.
+- def `count_active` — How many of a persona's watches are on and not past their end at `moment`, other than `besides`.
+- def `mark_seen` — The watch saw its person at `moment`, if its `last_seen_at` is still the one read (None: none yet); `appeared` counts one more appearance.
+- def `save` — The revisioned write of a watch (`Store.put`: `expected`, `stream`, `reset_counters`).
 - def `add` — Watch someone she can see in this conversation (a label, #number or name that names exactly one person).
 - def `stop`
 - def `seen` — A line from this person, in any of her conversations: the watch that fires for it, else None.
@@ -292,10 +300,13 @@ Her active and resting groups (ADR-039): she stays present in a few groups and l
 
 Her switches (ADR-052): mute a group, turn tools off in a conversation, block a person.
 
+- def `get` — The switch with this id (of this persona, in this state), or None.
+- def `on` — The switches on now (not cleared, not past their end), the soonest to end first.
+- def `changed` — A persona's switches that ended after `since` (ISO text) and by `moment`: run out, or cleared by her.
+- def `save` — The revisioned write of a switch (`Store.put`: `expected`, `stream`).
 - def `hours_of` — The hours a switch lasts: DEFAULT_HOURS when not given, else a whole number 1..MAX_HOURS.
 - def `set_switch` — One switch per kind and target; setting it again replaces it (a new end, new tools).
 - def `clear`
-- def `on` — The switches on now (not cleared, not past their end).
 - def `muted`
 - def `tools_off` — tool name -> the switch that turned it off in this conversation.
 - def `blocked`
@@ -308,7 +319,8 @@ Her switches (ADR-052): mute a group, turn tools off in a conversation, block a 
 
 Her own mute in a group: one state slot per group conversation, so she knows where her words cannot go out.
 
-- def `row_of`
+- def `get` — Her mute slot in this group conversation, or None.
+- def `save` — The revisioned write of a slot (`Store.put`: `expected`, `stream`).
 - def `active` — The mute on her in this group now, or None (not muted, lifted, or past its end).
 - def `apply` — Set or clear the slot; returns what it now says ('muted', 'cleared', 'unchanged' or 'not_her').
 - def `receive` — POST /v1/channels/<id>/own_mute: {group_id, source, muted, whole_group?, until?, operator_id?, at?}.
@@ -344,6 +356,16 @@ Quiet-time upkeep of a group (ADR-049): what she learns there and condensing its
 Notes between her own conversations (ADR-018, owner 2026-10-07).
 
 - class `NoteRefused` — A note the program did not send: the message says why, in words for her.
+- def `get` — The note with this id, or None.
+- def `first_reply` — A note that replies to this one (its id only), or None.
+- def `last_seen_from` — The newest note from `from_scene` to `to_scene` that this turn was shown, or None.
+- def `count_sent` — How many notes this turn wrote that carry no question.
+- def `count_day` — How many of a persona's notes since `since` (ISO text) are not replies, from and to these conversations, of this trust and kind; `between`: (a, b), from either one to the other.
+- def `count_since` — How many notes a persona wrote since `since` (ISO text).
+- def `mark_seen` — This turn was shown the note (`seen_in`, outside a revision).
+- def `received` — View: the notes to a conversation since `since` (ISO text) that carry no question, other than `besides`.
+- def `sent` — View: the notes from a conversation since `since` (ISO text) that carry no question.
+- def `save` — The revisioned write of a note (`Store.put`: `stream`).
 - def `trust_of`
 - def `targets` — {place: (scene_id, kind)} a note from this conversation may go to; kind is home, group or dm.
 - def `owner_chats` — The owner's own direct chats: home, but never the local chat, a peer line or an agent line.
@@ -375,6 +397,15 @@ Notes between her own conversations (ADR-018, owner 2026-10-07).
 
 Her questions (ADR-061): one question, or a problem report, to one or more of her home places or the action brain, each place with a patience; what came back is kept with the question, never judged.
 
+- def `get` — The question with this id (of this persona), or None.
+- def `open_in` — View: the open questions with a group source in this conversation.
+- def `closed_untold` — View: the questions the program closed that were not told in `told_in` yet: a persona's (by when asked), or those with a group source in conversation `group`.
+- def `of_persona` — View: a persona's questions (in this state).
+- def `asked` — View: a persona's questions asked since `since` (ISO text), to a source in this conversation, or (`action`) to the action brain; by when asked.
+- def `migrated` — The developer-inbox rows of these ids already moved into questions (their ids).
+- def `count_open` — How many of a persona's questions are not closed.
+- def `mark_told` — These questions were told in this conversation (`told_in`, outside a revision).
+- def `save` — The revisioned write of a question (`Store.put`: `expected`, `stream`).
 - def `question_id`
 - def `until`
 - def `developer_place` — The home line of the agent that changes her program: a home route marked `developer`, else the route named `claude-code` (the route for Claude Code).
@@ -405,7 +436,7 @@ Her questions (ADR-061): one question, or a problem report, to one or more of he
 - def `scene_id_filter` — 场景过滤条件：没联动时保持原来的单值形状（查询条件一行都不多写），联动了才换成 $in。
 - def `sync_scene_docs` — 把派生出来的 readable_scenes 写进 scenes 文档（只为可观察；读路径现算自配置）。
 - def `canonical_map` — {别名 person_id: canonical person_id}；自指与非字符串条目照实丢掉。
-- def `canonical_person_id` — 别名 → canonical，只看配置；没配映射就是本人 id。db 参数保留给调用方签名，不读。
+- def `canonical_person_id` — 别名 → canonical，只看配置；没配映射就是本人 id。store 参数保留给调用方签名，不读。
 - def `person_classes` — {person_id: [同一个人的全部 person_id]}：只包含真的不止一个人的那几组，含本人。
 - def `extra_person_values` — 按人过滤时要一起算进来的其他 person_id（同一个人的其他入口）；没有就空。
 - def `relationship_target` — 这个人在这一轮的关系／偏好状态该落在哪一份 head。

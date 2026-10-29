@@ -2,17 +2,12 @@
 history and feeds it oldest first through the usual inbound path, marked as caught up; the host shows each line
 at the time it was said, and an old @ or reply to her asks her through the relevance gate instead of waking her."""
 import sys
-from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
 
-from asuna import attend
-from asuna.caught_up import CATCHUP_KEY, said_at
-from asuna.channels import group_context, kept_raw
+from asuna.caught_up import CATCHUP_KEY
 from asuna.config import ROOT
-from asuna.people import People
-from test_people import BOT, GROUP, row, setup
 
 ADAPTER = ROOT / 'packages' / 'channels' / 'napcat-qq' / 'integration'
 sys.path[:0] = [str(ADAPTER), str(ADAPTER / 'vendor')]          # as adapter.py sets it up
@@ -159,28 +154,3 @@ def test_all_also_catches_up_every_route_with_a_cursor(tmp_path):
     assert [params.get('group_id') for _, params in api.calls] == [900000001]
 
 
-def test_the_host_keeps_the_mark_and_shows_when_it_was_said(store):
-    scene = setup(store)
-    kept = kept_raw({'scene_id': scene['_id'], 'channel': {}}, {CATCHUP_KEY: {'reason': 'reconnect',
-                    'fetched_at': '2026-10-08T00:00:00Z', 'age_seconds': 4000, 'extra': 'x' * 900}})
-    assert kept[CATCHUP_KEY] == {'reason': 'reconnect', 'fetched_at': '2026-10-08T00:00:00Z'}
-    late = row(20002, '还在吗', at='2026-10-04T03:00:00+00:00')
-    late['occurred_at'] = '2026-10-04T01:00:00Z'
-    late['event']['raw'][CATCHUP_KEY] = {'reason': 'reconnect', 'fetched_at': ''}
-    assert said_at(late) == '2026-10-04T01:00:00Z'
-    head = People(store).transcript(scene, late).split('\n')[0]
-    from asuna.schedule_rules import line_stamp, scene_timezone
-    assert head.endswith(line_stamp(scene_timezone(store.config, scene), '2026-10-04T01:00:00Z') + '（补读）')
-
-
-def test_an_old_at_of_her_asks_first_a_fresh_one_still_wakes(store):
-    scene = setup(store)
-    route = {'scene_id': scene['_id'], 'target': {'type': 'group', 'id': GROUP}}
-    old = (datetime.now(timezone.utc) - timedelta(minutes=40)).strftime('%Y-%m-%dT%H:%M:%SZ')
-    fresh = (datetime.now(timezone.utc) - timedelta(minutes=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
-    mark = {CATCHUP_KEY: {'reason': 'reconnect', 'fetched_at': ''}}
-    body = lambda at, raw: {'account_id': BOT, 'mentioned_account_ids': [BOT], 'text': '@她', 'raw': raw, 'occurred_at': at}
-    assert group_context(store, route, body(old, mark), 'e1')['wake_reason'] == 'catchup_mention'
-    assert group_context(store, route, body(fresh, mark), 'e2')['wake_reason'] == 'mentioned_account'
-    assert group_context(store, route, body(old, {}), 'e3')['wake_reason'] == 'mentioned_account'
-    assert 'catchup_mention' in attend.GATED

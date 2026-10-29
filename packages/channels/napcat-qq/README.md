@@ -185,6 +185,5 @@ own account ([Running several characters](../../../RUN_ASUNA.md#running-several-
    until started again.
    The NapCat account id, the host token, routes and allowlists are derived from `channels.qq`; do not repeat them.
 5. **Save and apply** on the settings card, then check the card's status line and send her a DM.
-   `python tools/probe_qq_admission.py packages/channels/napcat-qq` checks the admission policy offline.
 
 Tokens typed into the settings card go to DSH's credential store; the settings keep only references.

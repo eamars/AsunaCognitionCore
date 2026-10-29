@@ -125,6 +125,11 @@ Role system prompt rendering (ADR-009 §8.1).
 
 What she carries: one function says it for every reader (ADR-096).
 
+- def `count_day` — A local day's count rows, each written whole (made or replaced).
+- def `mark_day` — A persona's local day (an ISO date) is counted, with how many count rows it has.
+- def `counted_days` — The days counted for a persona (ISO dates).
+- def `forget_days` — A persona's count rows and day marks of days before `before` (an ISO date) go; how many count rows went.
+- def `note_section` — A section was carried from `start` to `end`: its first and last time carried, kept.
 - def `number`
 - def `pairs` — The (place, class) pairs a turn can have: the four places, and a group read at home when one is configured.
 - def `contents`

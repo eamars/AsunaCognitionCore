@@ -2,8 +2,12 @@
 
 `QueryInvalid` is a condition, sort or change the meaning table refuses, raised before any adapter sees it;
 `RecordInvalid` a value a record cannot hold (from the shared layer, or from an adapter for a change the stored record
-cannot take). The rest name one situation each.
+cannot take). The rest name one situation each. `refuse_in_unit_run` is the unit run's lock: in a process with
+`ASUNA_UNIT_RUN=1` (tests/conftest.py sets it; every process the run starts inherits it) nothing opens a database.
 """
+import os
+
+UNIT_RUN = 'ASUNA_UNIT_RUN'
 
 
 class StoreError(Exception):
@@ -74,4 +78,15 @@ class BlobMissing(StoreError, LookupError):
 
 
 class AdapterNotInstalled(StoreError, RuntimeError):
-    """No adapter of the configured kind is installed; there is never a default."""
+    """No adapter of the asked kind is installed."""
+
+
+class InUnitRun(RuntimeError):
+    """A database was asked for in a unit run. Not a StoreError: no caller takes it for an outage and goes on."""
+
+
+def refuse_in_unit_run(what):
+    """Raise InUnitRun when this process is a unit run's: unit tests never need a database."""
+    if os.environ.get(UNIT_RUN) == '1':
+        raise InUnitRun('DATABASE_IN_UNIT_RUN: %s：单元测试不连数据库（%s=1）；要数据库的测试写在 integration/'
+                        % (what, UNIT_RUN))

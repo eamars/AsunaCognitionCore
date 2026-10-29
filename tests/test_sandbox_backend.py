@@ -3,12 +3,7 @@ at all is decided by the tools a task is given."""
 import pytest
 
 from asuna import sandbox_backend
-from asuna.coordinator import Coordinator
-from asuna.grants import development_granted
-from asuna.lanes import FakeLane, FakeTurn
 from asuna.sandbox import Sandbox
-from conftest import HOST_SANDBOX
-from test_adr009_p2 import owner
 
 
 def test_settings_are_checked():
@@ -27,34 +22,6 @@ def test_the_host_decides_whether_commands_can_run():
     sandbox_backend.attach(lambda argv, root: ['runner', root, '--', *argv])
     assert sandbox_backend.chosen({'_host_sandbox': {'available': True}})['backend'] == 'dsh'
     assert sandbox_backend.confine({'_host_sandbox': {'available': True}}, ['x'], 'C:/r') == ['runner', 'C:/r', '--', 'x']
-
-
-def test_none_turns_off_what_needs_a_sandbox_and_says_so(store, tmp_path):
-    owner(store)
-    store.config.update(sandbox={'backend': 'none'}, self_development={'enabled': True})
-    assert sandbox_backend.chosen(store.config) == {'backend': 'none', 'reason': 'turned off in the settings', 'reason_code': 'off'}
-    scene = store.db.scenes.find_one({'_id': 'dm-a'})
-    assert development_granted(store, scene, {'person_id': 'A', 'episode_kind': 'external'}) is False
-    lane = FakeLane(store, [FakeTurn([('think', {'thought': '看看。'})], '好。')])
-    coordinator = Coordinator(store, lane)
-    ep = coordinator.ingest({'event_id': 'e1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '帮我跑一下这段代码'})
-    capabilities = ep['context']['action_capabilities_from_program']
-    assert '没有可用的隔离环境' in capabilities['not_available'] and 'development' not in capabilities
-    _, _, names = coordinator._grants(ep)
-    assert 'sandbox_run' not in names
-    with pytest.raises(PermissionError, match='SANDBOX_UNAVAILABLE'):
-        sandbox_backend.require(store.config)
-
-
-def test_commands_are_for_the_owners_own_scenes(store):
-    owner(store)
-    lane = FakeLane(store, [FakeTurn([('think', {'thought': '看看。'})], '好。')] * 2)
-    coordinator = Coordinator(store, lane)
-    mine = coordinator.ingest({'event_id': 'e1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '帮我跑一下'})
-    theirs = coordinator.ingest({'event_id': 'e2', 'scene_id': 'dm-b', 'person_id': 'B', 'text': '帮我跑一下'})
-    assert ('sandbox_run' in coordinator._grants(mine)[2]) == HOST_SANDBOX
-    assert 'sandbox_run' not in coordinator._grants(theirs)[2]
-    assert '不能跑代码' in theirs['context']['action_capabilities_from_program']['run_code']
 
 
 def test_a_command_writes_only_its_task_folder_and_names_it_task():

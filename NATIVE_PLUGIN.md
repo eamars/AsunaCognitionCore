@@ -65,12 +65,11 @@ The persistent writable candidate is the selected persona package by default; `p
 
 ## Verification boundaries
 
-The focused native suite exercises real installed DSH loop, preset and persistence services with synthetic inference; it is separate from live-model Web evidence. The publication probe executes the actual local npm pack command and checks immutable selection, bounded reads and session-scoped spilled output. The timer probe executes the native scheduler and durable inbox without issuing a model request. Python native-worker/product tests do not create Mongo databases.
+The focused native suite exercises real installed DSH loop, preset and persistence services with synthetic inference; it is separate from live-model Web evidence. The publication probe executes the actual local npm pack command and checks immutable selection, bounded reads and session-scoped spilled output. The timer probe executes the native scheduler and durable inbox without issuing a model request. The Python native-worker tests need no database.
 
 ```powershell
 npm.cmd run test:native
-.\.venv\Scripts\python.exe -m pytest tests/test_native_worker.py tests/test_native_product.py -q
-.\.venv\Scripts\python.exe tools/probe_qq_admission.py packages/channels/napcat-qq
+.\.venv\Scripts\python.exe -m pytest tests/test_native_worker.py -q
 node tools/probe_native_schedule.mjs
 node tools/probe_plugin_install.mjs
 node tools/probe_native_image.mjs

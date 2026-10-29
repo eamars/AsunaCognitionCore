@@ -25,7 +25,7 @@ BLOBS = ('gridfs:artifact_blobs', 'artifact_blobs.files', 'artifact_blobs.chunks
 AREAS = ('src/asuna', 'tools')
 # The per-batch check makes the old calls on purpose: they are the old side it compares the owner with.
 # dbread is her MongoDB read tool (ADR-104 decision 9): its place lookup reads scenes over its own client.
-ALLOWED = {'tools/adr104_equivalence.py', 'src/asuna/dbread.py'}
+ALLOWED = {'src/asuna/dbread.py'}
 # The census puts every call of the store's vector search on memory_units: in its owner that is the owner's own call,
 # and in the adapter's integration tests it searches the contract suite's own collection.
 VECTORS = ('Store.nearest', 'Store.ensure_vectors')

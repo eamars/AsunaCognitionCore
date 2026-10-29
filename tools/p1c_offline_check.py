@@ -2,8 +2,7 @@
 """ADR-005 P1-c 离线自检：不需要 Mongo、不需要 pytest，直接跑同一套整理用例。
 
 用法：python3 tools/p1c_offline_check.py
-它验证的是整理逻辑与围栏（假集合真算过滤/排序/分页）；真实 Mongo 的三支时间与游标
-由 tests/test_discussion_digest.py 在隔离宿主里复测，两者不互相代替。
+它验证的是整理逻辑与围栏（假集合真算过滤/排序/分页），不验证真实 Mongo 上的时间与游标。
 """
 import os
 import sys

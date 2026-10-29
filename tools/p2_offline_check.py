@@ -6,7 +6,6 @@
   python3 tools/p2_offline_check.py --baseline      # 换成 P2 第一片（改动前）的基线再跑
   python3 tools/p2_offline_check.py --baseline p1c  # 换成 P1C 基线再跑
 基线反证用来证明这批用例真的在测这次的改动，不是自说自话。
-真实 Mongo 下的同一批结论由操作员在隔离宿主跑 tests/test_p2_summary_loop.py 复测。
 """
 import os
 import shutil

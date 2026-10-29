@@ -188,18 +188,18 @@ The worker's store: every write goes through `Store.put` with an expected revisi
   - `checked` — The shared layer over the MongoDB adapter on this store's database, derived from `db` as it is now.
   - `adapter`
   - `collection` — The handle of a declared collection: the store's words, checked against the catalog.
+  - `maintenance` — Store-wide reads and writes by declared name (record, records, restore); used only by `audit.py`.
   - `blobs` — The blob store (write, open, delete, of_scope), each blob's metadata checked; used only by `blobs.py`.
   - `ensure` — Create every declared collection with its validator and indexes, and drop the retired indexes; {collection: Ensured}.
+  - `ping` — Whether the database answers: None, or the store's `Unavailable`.
+  - `close` — Close the store's connection to its database.
   - `migrate`
   - `audit`
   - `put`
   - `recover_commits`
   - `ensure_vectors` — Create the space's index, or bring an existing one's filter fields up to the space's (the old one keeps serving meanwhile); True once it can be queried, False if it cannot yet after `timeout` seconds.
   - `nearest` — The k records nearest to `vector` among those matching `where` (the store's words: equality, `AnyOf`, `And`, `Or` on the space's filter fields), best first, as (id, cosine similarity in [-1, 1]); exact, never approximate.
-  - `get`
-  - `identity`
   - `seed` — Test-only synthetic world; persona paths are relative to the fixture file.
-  - `public_messages`
 
 ## `clock`
 
@@ -214,8 +214,14 @@ The core's one clock: the time now, in UTC, never the same twice in this process
 
 [src/asuna/audit.py](../../src/asuna/audit.py)
 
-Checks and replays the store's audit trail: `verify` walks each stream's hash chain, `verify_documents` compares stored documents with their last audited commit, and `replay` rebuilds the state in an empty test database.
+The owner of the audit trail (`audit_events`), and its checks and replays: `verify` walks each stream's hash chain, `verify_documents` compares stored documents with their last audited commit, and `replay` rebuilds the state in an empty test database.
 
+- def `events` — View: the audit records of a kind (or of any of `kinds`), in a stream (or any of `streams`), of a scope, at or after `since`, after `after`, before `before` (ISO text); and by what their payload says: the persona a review was shown to, whet
+- def `count` — How many audit records of a kind there are (at or after `since`, before `before`).
+- def `commit_of` — The audited commit that wrote this document into this collection inline, or None.
+- def `prepared_for` — The newest `context.prepared` records (stream and time only) of turns in this scope with this person at this policy epoch, at most `limit`, newest first (ties by id).
+- def `streams` — Every stream of the audit trail, ascending.
+- def `redact_streams` — An erasure's declared rebase of the audit chain (ADR-105): in every stream, each record of the scope, of a stream of one of `streams_of` (a turn's or a task's id, or one of their sub-streams), or whose payload names one of `session_ids` has
 - def `reconcile_calls`
 - def `prune` — Delete the audit records past retention, then the oldest while the audit is over its cap.
 - def `verify` — Each event's own hash, and each stream's chain.
@@ -280,6 +286,14 @@ Her restarts (ADR-034): the worker side of the Host supervisor (tools/asuna-supe
 
 When the Host was taken away from outside, she should not have to infer from a gap in the logs whether she was away. A clean stop deletes the database lease (host_lease); a Host killed from outside leaves its own lease behind. The next start finds it, records one row in `host_stops` — about when the old Host was last alive (the lease's expiry less its length, within one renewal) and when the new one came up — and her home turns for the next day carry it in words. Nothing about the process tree or who stopped it: only that it did not stop by itself, and for how long nothing ran. A stop marked beforehand as a planned restart (`python -m asuna.host_stops planned`, before a deploy kills the Host) is recorded as `planned` and not shown. A Host that exited on its own is recorded as `crashed` with its exit code: the supervisor writes that exit to its restart record before it starts the next Host (restarts.last), and the next start reads it.
 
+- def `get` — The stop with this id, or None.
+- def `unshown` — View: the stops of these kinds that came back since `since` (ISO text), or that no committed turn showed yet (`shown_at` null), by when they came back.
+- def `last_back` — The newest stop of this kind back at or after `since` (ISO text), or None.
+- def `mark_shown` — Stamp `shown_at` on each of these stops where it is still null or missing.
+- def `save` — The revisioned write of a stop (`Store.put`: `stream`).
+- def `note_missed` — One look the gate could not decide (by its turn's id, written again when it comes again).
+- def `forget_missed` — The missed looks from before `before` (ISO text) go.
+- def `missed` — View: the missed looks since `since` (ISO text).
 - def `crash_code` — The exit code of a Host that exited on its own, when the supervisor's record of this start says so: a restart nobody asked for, not back yet, that went down within one planned-stop window of the lease's last renewal.
 - def `record` — One stop that left the lease behind, found at startup: alive_until is the old Host's last known moment.
 - def `open_span` — The Host plugin's open span (outage.js), read from the data folder and never written here: a dict, or None when there is none or it cannot be read.
@@ -341,6 +355,10 @@ The store: the core's way to its database, with no database named.
   - `open`
   - `delete`
   - `of_scope`
+- class `Maintenance` — Store-wide reads and writes by declared name, for the audit trail's verify, trace and replay (audit.py) only: a record by id, a collection's records in id order, and a record written back whole (created if missing).
+  - `record`
+  - `records`
+  - `restore`
 - class `Checked` — The shared layer over one adapter and the catalog its records are declared in.
   - `collection`
   - `ensure` — Create each declared collection and its indexes (all of them when `names` is None), and drop the retired ones; {name: Ensured}.
@@ -367,6 +385,7 @@ The words the core describes records with: conditions, changes, sorts and totals
 - class `Contains` — Text that contains `text` literally; `case=False` folds each character that folds to one character.
 - class `Holds` — A list with an element equal to the value.
 - class `HoldsAny` — A list with an element equal to one of the values.
+- class `HoldsNone` — A list with no element equal to any of the values; a list missing or null matches.
 - class `NonEmpty` — A list with at least one element.
 - class `Each` — A list of objects with one element that meets every entry of `where` (paths relative to the element).
 - class `And`
@@ -440,7 +459,9 @@ The store's errors: what the shared layer and an adapter raise, each a message t
 - class `SchemaConflict` — The database holds an index of a declared name with other keys or options.
 - class `Unavailable` — The database cannot be reached.
 - class `BlobMissing` — No stored blob has that id.
-- class `AdapterNotInstalled` — No adapter of the configured kind is installed; there is never a default.
+- class `AdapterNotInstalled` — No adapter of the asked kind is installed.
+- class `InUnitRun` — A database was asked for in a unit run.
+- def `refuse_in_unit_run` — Raise InUnitRun when this process is a unit run's: unit tests never need a database.
 
 ## `store/adapters`
 
@@ -454,15 +475,16 @@ The registry of database adapters, and the results adapters return.
 - def `register` — Make an adapter module's kind available to `open`.
 - def `load` — Import a database package's adapter module: {'kind': ..., 'python': <directory>, 'module': <name>}.
 - def `loaded`
-- def `module` — The adapter module the settings select.
-- def `open` — An open adapter of the selected kind on `database`.
-- def `drop` — Drop a test database; any name outside `asuna_v2_test_*` is refused.
+- def `module` — The adapter module the settings select (`mongodb` when they name none).
+- def `open` — An open adapter of the selected kind on `database`; refused in a unit run (DATABASE_IN_UNIT_RUN).
+- def `over` — The built-in MongoDB adapter over a database handle already held (a store's own, while it holds one).
+- def `drop` — Drop a test database; any name outside `asuna_v2_test_*` is refused, and so is any in a unit run.
 
 ## `store/memory`
 
 [src/asuna/store/memory.py](../../src/asuna/store/memory.py)
 
-The in-memory adapter: the meaning table of the store's words written as code, its reference, and the unit tests' database.
+The in-memory adapter: the meaning table of the store's words written as code. It is the fake under the offline checks (tests/fake_collections.py, read by tools/p1c_offline_check.py, p2, p5 and outbound_image's cases), which run without pytest and without a database; no unit test and no deployment opens it.
 
 - class `Database` — One in-memory database: records by collection and id (in write order), the indexes `ensure` made, blobs.
 - def `open` — The adapter on the named in-memory database; `settings` may give `seed`.
@@ -543,7 +565,6 @@ The MongoDB adapter: the store's words as MongoDB queries, the catalog's collect
 
 The owners of the collections read across many domains: one module per collection, the only code that names its fields and builds its conditions (ADR-104). Each takes a store (anything with `collection(name)`) as its first argument; a call site calls the owner's named operations and never sees a condition.
 
-- def `on` — The store's checked collections over a database handle a caller holds instead of a store.
 
 ## `records/scenes`
 
@@ -552,7 +573,7 @@ The owners of the collections read across many domains: one module per collectio
 The owner of `scenes`: a conversation's record (its kind, members, scope and epoch, its position counter, and the marks the program keeps on it), read and written only through these operations.
 
 - def `get` — The conversation with this id, or None.
-- def `by_scope` — A conversation of this scope (of this kind, at this epoch), or None.
+- def `by_scope` — A conversation of this scope (of this kind; at this epoch, a fence: None finds nothing), or None.
 - def `of_kind` — Every conversation of this kind (`dm`, `group`, ...), but `besides`.
 - def `many` — The conversations with these ids (of this kind).
 - def `in_scopes` — The conversations of these scopes.
@@ -623,6 +644,7 @@ The owner of `messages`: the lines of every conversation (what people wrote, her
 - def `thread` — The lines of these conversations in an epoch that reply to these lines (people's by their quoted line, hers by the line she answered), and the lines with these ids (a digest's thread).
 - def `excluded` — Counts of her lines a digest leaves out in these conversations and epoch: speech not delivered (`undelivered_outbound`) and lines that are not speech (`non_speak_outbound`).
 - def `save` — The revisioned write of a whole line (`Store.put`: `expected`, `stream`).
+- def `redact_scope` — An erasure of a scope's lines (`view.redact`).
 - def `mark_recalled` — Her line was taken back on the platform at `at`.
 - def `note_failure` — A file line whose bytes were gone: whether its original is still there, and the words that say so.
 - def `mark_errands_told` — These errand visits were told in their conversation at `at`.
@@ -641,6 +663,7 @@ The owner of `episodes`: her turns (what woke her, what she was given, what she 
 - def `answered` — How many turns she answered these people with words (at most `limit`).
 - def `of_scope` — The turns of a scope.
 - def `save` — The revisioned write of a whole turn (`Store.put`: `expected`, `stream`, `reset_counters`).
+- def `redact_scope` — An erasure of a scope's turns (`view.redact`).
 
 ## `records/sessions`
 
@@ -669,9 +692,10 @@ The owner of `lane_receipts` and `sink_receipts`: what a model lane answered for
 - def `lane_invalidate` — An erasure replaced this lane receipt by its invalidated form (its result and request gone).
 - def `save_lane` — The revisioned write of a lane receipt (`Store.put`).
 - def `sink_get` — The sink's receipt with this id, or None.
-- def `sinks` — View: the sink receipts with these ids (None: every one).
+- def `sinks` — View: the sink receipts with these ids (not given: every one).
 - def `sink_of_kind` — View: the sink receipts of a kind (in a state or one of several; of a project, None: of none; but one), ordered by `by` (None: the database's order).
-- def `sink_window` — View: the sink receipts received within these bounds (text times as the core writes them), ordered by when they were received, then by id.
+- def `sink_window` — View: the sink receipts received within these bounds (text times as the core writes them; a bound given None holds nothing), ordered by when they were received, then by id.
+- def `redact_scope` — An erasure of a scope's sink receipts (`view.redact`).
 - def `save_sink` — The revisioned write of a sink receipt (`Store.put`).
 
 ## `records/view`
@@ -685,6 +709,7 @@ What the owners of `episodes`, `sessions` and the receipts share: a named read (
 - def `texts`
 - def `fenced` — `where` with each fence given ({field: (value, kind check)}), or None when one holds nothing (a value missing or not of its kind).
 - def `pinned` — The condition `where` with each value condition given ({field: (value, kind check)}), where a value of None stands for "has none": the field null or missing, as the replaced read's equality on null matched.
+- def `redact` — An erasure of `scope` in one collection: each record of the scope but those `left` holds is replaced whole by the fields kept (REDACTION_KEEPS), the deletion's id, its marks and the scope's new policy epoch.
 - class `View` — A named read on one collection: its condition and its order ((field, 1 | -1), ...).
   - `each` — The rows, read as they come.
   - `rows`
@@ -713,6 +738,7 @@ The owner of `tasks` and `task_messages`: the work she hands to the action brain
 - def `of_scope` — The tasks of a scope.
 - def `thread` — View: a task's messages (from one side; delivered or not), in the order they were written.
 - def `recent_with_inputs` — A conversation's RECENT most relevant tasks in an epoch: the running and queued first, then by the newest time one of their input lines was received (those without one last), then by id; each with the SHOWN fields it has, `_active` (1 runni
+- def `redact_scope` — An erasure of a scope's tasks (`view.redact`).
 - def `save` — The revisioned write of a whole task (`Store.put`: `expected`, `stream`, `reset_counters`).
 - def `save_message` — The revisioned write of a task message (`Store.put`).
 
@@ -772,13 +798,14 @@ The owner of `artifacts`: the rows of what she and the program keep apart from t
 - def `with_copies` — View: the rows of a kind with copies in task folders, whose storage is not `besides_storage`.
 - def `stored` — View: every row whose bytes are in the blob store.
 - def `count_tool` — How many rows of a tool are in a state.
-- def `save` — The revisioned write of a whole row (`Store.put`: `expected`, `stream`).
+- def `save` — The revisioned write of a whole row (`Store.put`: `expected`, `stream`); its touches are kept, and a write that would start them over (`reset_counters`) is refused: no write of a row means that.
+- def `redact_scope` — An erasure of a scope's rows (`view.redact`); a row whose bytes the erasure deleted (`ERASED`) keeps its marks (ADR-105: its name, size, sender and when stay, and every reader says it was erased).
 - def `insert` — A new row written as it is, without a revision (a held notice, a passed line, a channel's declared functions).
-- def `replace` — The row of this id replaced by `row`, as it is; False when there is none.
+- def `replace` — The row of this id replaced by `row`, its touches kept as they are stored (as `save` keeps them); False when there is none.
 - def `delete` — Delete one row.
 - def `delete_many` — Delete the rows with these ids (of this kind); how many went.
 - def `mark_read` — A page of a stored file of a kind was read (only inside these scopes, in state DONE): `last_read_at`.
-- def `mark_sent` — A row of a kind was sent: `last_sent_at`.
+- def `mark_sent` — A row of a kind was sent: `last_sent_at` (an update of its own, as `mark_read`).
 - def `restore_bytes` — Bytes fetched again are back on a row whose bytes expired, if it is still `REMOVED`; whether it was.
 - def `bytes_removed` — A row's bytes went (expired): `storage` `REMOVED` with when, its blob no longer named.
 - def `erase_scope` — Every row of a scope whose bytes are stored or expired, marked `ERASED` by this erasure (ADR-105).

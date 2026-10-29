@@ -694,8 +694,7 @@ def search_messages(store, scene, query="", *, author=None, window=None, limit=D
         bounds = window and tuple(_archive_stamp(value) if value and key == ARCHIVED else value
                                   for value in window)
         # Known defect, kept in B4 (ADR-104 design 8.2, B4's row): with a person filter, the archived stream also
-        # comes after the people's stream's cursor, as when one condition list was shared between the two streams;
-        # tools/adr104_equivalence.py b4's case "search, archived lines by person after both cursors" shows it.
+        # comes after the people's stream's cursor, as when one condition list was shared between the two streams.
         cut_too = pairs.get(INBOUND) if key == ARCHIVED and (authors is not None or values) else None
         try:
             found = message_records.search(store, parts["scene_ids"], parts["epoch"], key, text=query or None,

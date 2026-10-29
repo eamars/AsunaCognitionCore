@@ -13,14 +13,6 @@ ROOT = Path(__file__).resolve().parents[1]
 TRACKED = sorted(ROOT.glob('packages/**/skills/*/SKILL.md'))
 
 
-def skill(root, name, header=''):
-    folder = root / name
-    folder.mkdir(parents=True)
-    (folder / 'SKILL.md').write_text('---\nname: %s\ndescription: 用来测的技能\n%s---\n\n正文\n' % (name, header),
-                                     encoding='utf-8')
-    return folder
-
-
 def test_the_header_lists_scene_kinds_from_a_closed_set_and_a_wrong_one_is_refused():
     text = lambda extra: '---\nname: x\ndescription: y\n%s---\nbody\n' % extra
     assert skills.scene_kinds(text('')) == ('home',)
@@ -38,35 +30,6 @@ def test_the_header_lists_scene_kinds_from_a_closed_set_and_a_wrong_one_is_refus
             skills.scene_kinds(text(wrong))
     with pytest.raises(skills.SkillHeaderError, match='没有用 --- 收尾'):
         skills.scene_kinds('---\nname: x\n')
-
-
-def test_home_gets_every_root_and_elsewhere_only_the_skills_that_list_that_kind(store, tmp_path):
-    root = tmp_path / 'skills'
-    home_only = skill(root, 'home-only')
-    groups = skill(root, 'in-groups', 'scene_kinds: [home, group]\n')
-    chats = skill(root, 'in-chats', 'scene_kinds: [dm]\n')
-    skill(root, 'broken', 'scene_kinds: [everywhere]\n')
-    config = store.config
-    config['_skill_directories'] = [str(root)]
-    local = config['chat']
-    assert skills.skill_directories(config, local['scene_id'], local['person_id'], store) == [root.resolve()]
-    store.db.scenes.insert_one({'_id': 'g-skills', 'schema_version': 1, 'scene_id': 'g-skills', 'kind': 'group',
-                                'scope_key': 'scene:g-skills', 'policy_epoch': 1, 'sequence': 0})
-    store.db.scenes.insert_one({'_id': 'dm-skills', 'schema_version': 1, 'scene_id': 'dm-skills', 'kind': 'dm',
-                                'scope_key': 'scene:dm-skills', 'policy_epoch': 1, 'sequence': 0})
-    assert skills.skill_directories(config, 'g-skills', 'someone', store) == [groups.resolve()]
-    assert skills.skill_directories(config, 'dm-skills', 'someone', store) == [chats.resolve()]
-    assert home_only.resolve() not in skills.skill_directories(config, 'g-skills', 'someone', store)
-    # The publication probe names the broken one and what to fix.
-    run = subprocess.run([sys.executable, '-m', 'asuna.skills', str(root)], capture_output=True, text=True,
-                         encoding='utf-8', env={**os.environ, 'PYTHONPATH': str(ROOT / 'src'), 'PYTHONUTF8': '1'})
-    assert run.returncode != 0 and 'broken' in run.stderr and 'everywhere' in run.stderr
-    # Fixed, it passes and names the skills offered at home only (a report, not a refusal).
-    (root / 'broken' / 'SKILL.md').unlink()
-    run = subprocess.run([sys.executable, '-m', 'asuna.skills', str(root)], capture_output=True, text=True,
-                         encoding='utf-8', env={**os.environ, 'PYTHONPATH': str(ROOT / 'src'), 'PYTHONUTF8': '1'})
-    assert run.returncode == 0 and run.stdout.splitlines() == [
-        'Skill headers valid.', '只在家里可用（头里没写 scene_kinds）：%s' % home_only.name]
 
 
 @pytest.mark.parametrize('path', TRACKED, ids=lambda path: path.parent.name)

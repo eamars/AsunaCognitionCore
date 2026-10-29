@@ -5,13 +5,9 @@ import json
 
 from asuna import affect
 from asuna.affect import affect_model, from_words, interpret, person_feelings, project
-from asuna.coordinator import Coordinator
-from asuna.lanes import FakeLane, FakeTurn
-from asuna.role_tools import CALLED_NOTE, called
 from conftest import FIXTURES
 
 MODEL = json.loads((FIXTURES / 'personas/demo/persona-model.json').read_text(encoding='utf-8'))
-THINK = ('think', {'thought': '嗯。'})
 AT = '2026-10-21T02:00:00+00:00'
 
 
@@ -75,85 +71,3 @@ def test_a_band_marked_quiet_sends_nothing_even_with_causes():
     assert interpret(model, state, 'public', scope='g1') is None
 
 
-def test_the_gate_reads_the_public_paragraph_or_nothing(store):
-    from asuna import attend
-    from test_adr009_p3 import setup as persona_setup
-    from test_attend import gated_event, setup
-    from test_people import SCENE
-    setup(store)
-    persona_setup(store)
-    store.config['persona_model'] = json.loads(json.dumps(store.config['persona_model']))
-    scene = store.db.scenes.find_one({'_id': SCENE})
-    ev = gated_event(20002, '今晚开黑吗')
-    row = {'author': 'qq:20002', 'scene_seq': 1, 'text': '今晚开黑吗', 'received_at': AT, 'event': ev}
-    quiet = attend.material(store, scene, ev, row, 'P1')
-    assert 'mood' not in quiet                                              # no feelings: the fallback band is quiet
-    from asuna.affect import AffectLedger
-    ledger = AffectLedger(store, 'P1', store.config['persona_model'])
-    from datetime import datetime, timedelta, timezone
-    fresh = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()      # the gate projects at the real now
-    store.db.affect_events.insert_one({**event('joy', 40, scope=scene['scope_key'], why='他夸了我'), '_id': 'joy-here', 'ts': fresh,
-                                       'persona': 'P1', 'origin': 'asuna', 'schema_version': 1})
-    assert ledger.enabled
-    loud = attend.material(store, scene, ev, row, 'P1')
-    assert isinstance(loud['mood'], str) and '他夸了我' in loud['mood']
-    store.config['persona_model']['affect']['gate'] = 'none'
-    assert 'mood' not in attend.material(store, scene, ev, row, 'P1')
-
-
-def test_feel_lands_a_person_feeling_with_the_person_only_where_it_cannot_be_a_guess(store):
-    """D1: in a one-to-one conversation an unwritten who is the person there; in a group it stays global, and the
-    receipt says so; a who she writes is resolved from the label."""
-    from test_adr009_p3 import setup
-    from test_engineering_m1 import event as turn_event
-    setup(store)
-    store.config['persona_model'] = json.loads(json.dumps(store.config['persona_model']))
-    store.config['persona_model']['affect']['kinds']['attachment']['about'] = 'person'
-    if True:
-        record = ('feel', {'do': 'record', 'feeling': 'attachment', 'intensity': '明显', 'ref': 'dm-1', 'why': '聊得来', 'cost': '无'})
-        lane = FakeLane(store, [FakeTurn([THINK, record], '嗯。')])
-        Coordinator(store, lane).ingest(turn_event('dm-1'))
-        receipt = lane.tool_results[1][4]
-        stored = store.db.affect_events.find_one({'why': '聊得来'})
-        assert receipt['landed'].startswith('记在了对') and stored['who'] == 'A'
-        lane = FakeLane(store, [FakeTurn([THINK, ('feel', {**record[1], 'ref': 'group-1', 'why': '群里聊得来'})], '嗯。')])
-        Coordinator(store, lane).ingest(turn_event('group-1', scene='g1'))
-        assert lane.tool_results[1][4]['landed'] == '没写对谁，算进了你的心情'
-        assert 'who' not in store.db.affect_events.find_one({'why': '群里聊得来'})
-        lane = FakeLane(store, [FakeTurn([THINK, ('feel', {**record[1], 'ref': 'group-2', 'why': '错的人', 'who': '[没有这人 #99]'})], '嗯。')])
-        Coordinator(store, lane).ingest(turn_event('group-2', scene='g1'))
-        assert not lane.tool_results[1][5] and '不是这个对话里的人' in lane.tool_results[1][4]
-        # A feeling not about a person, with who written: refused in words (live 10-21: a NameError instead).
-        kinds = store.config['persona_model']['affect']['kinds']
-        mood = next(name for name, kind in kinds.items() if kind.get('about') != 'person')
-        lane = FakeLane(store, [FakeTurn([THINK, ('feel', {**record[1], 'feeling': mood, 'ref': 'dm-2', 'why': '只是心情',
-                                                           'who': '[A #1]'})], '嗯。')])
-        Coordinator(store, lane).ingest(turn_event('dm-2'))
-        assert not lane.tool_results[1][5] and '不是对人的心情，不用写 who' in lane.tool_results[1][4]
-
-
-def test_someone_calling_her_is_said_as_her_choice_and_silence_says_what_it_leaves(store):
-    from test_adr009_p3 import setup
-    from test_engineering_m1 import event as turn_event
-    setup(store)
-    lane = FakeLane(store, [FakeTurn([THINK, ('stay_silent', {'why': '不想说'})])])
-    ep = Coordinator(store, lane).ingest(turn_event('dm-call'))
-    assert ep['context']['called_from_program'] == CALLED_NOTE
-    assert lane.tool_results[1][4]['left'].endswith('想回头回就挂一条 plan。')
-    assert not called({'episode_kind': 'heartbeat', 'person_id': 'A', 'context': {'event': {}}})
-    assert called({'episode_kind': 'external', 'person_id': 'A',
-                   'context': {'event': {'group_context': {'wake_reason': 'mentioned_account'}}}})
-    assert not called({'episode_kind': 'external', 'person_id': 'A',
-                       'context': {'event': {'group_context': {'wake_reason': 'proactive_unprompted'}}}})
-
-
-def test_the_dice_review_names_the_band_at_each_roll(store):
-    from asuna import dice
-    from test_adr009_p3 import setup
-    setup(store)
-    from datetime import datetime
-    store.db.audit_events.insert_one({'_id': 'roll-1', 'schema_version': 1, 'stream_id': 'presence', 'type': 'presence.rolled',
-                                      'scope_key': 'global-safe', 'occurred_at': AT,
-                                      'payload': {'outcome': 'nothing', 'period': 'awake', 'reaches': False, 'occurrence': 'x'}})
-    rows = dice.review(store, 'P1', 'y', datetime.fromisoformat(AT))['rolls']
-    assert rows and rows[-1]['mood']

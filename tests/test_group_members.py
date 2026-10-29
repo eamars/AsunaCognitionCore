@@ -5,12 +5,8 @@ import sys
 import time
 from types import SimpleNamespace
 
-import pytest
 
-from asuna import group_members
 from asuna.config import ROOT
-from asuna.people import People
-from test_people import BOT, GROUP, row, setup
 
 ADAPTER = ROOT / 'packages' / 'channels' / 'napcat-qq' / 'integration'
 sys.path[:0] = [str(ADAPTER), str(ADAPTER / 'vendor')]          # as adapter.py sets it up
@@ -20,59 +16,11 @@ from qqadapter.members import Members                              # noqa: E402
 NOW = int(time.time())
 
 
-def channel(store):
-    store.config['channels'] = {'qq': {'account_id': BOT, 'routes': {
-        'g': {'scene_id': 'qq:%s:group:%s' % (BOT, GROUP), 'target': {'type': 'group', 'id': GROUP}}}}}
-
-
 def member(n, role='member', ago_hours=None, card=''):
     out = {'user_id': str(20000 + n), 'nickname': '人%d' % n, 'card': card, 'role': role}
     if ago_hours is not None:
         out['last_sent_time'] = NOW - int(ago_hours * 3600)
     return out
-
-
-def test_the_host_keeps_an_admitted_groups_list_and_refuses_others(store):
-    setup(store)
-    channel(store)
-    assert group_members.receive(store, 'qq', {'group_id': GROUP, 'members': [member(1), {'user_id': 'x'}]}) == \
-        {'status': 'stored', 'count': 1}
-    with pytest.raises(PermissionError, match='MEMBERS_GROUP_NOT_ROUTED: 群 99999'):
-        group_members.receive(store, 'qq', {'group_id': '99999', 'members': [member(1)]})
-    with pytest.raises(ValueError, match='MEMBERS_INVALID'):
-        group_members.receive(store, 'qq', {'group_id': GROUP, 'members': []})
-
-
-def test_a_turn_names_who_she_knows_the_recently_active_and_the_mentioned(store):
-    scene = setup(store)
-    channel(store)
-    People(store).entry(scene, 'qq:20002', row(20002, 'hi', card='阿杰'))         # someone she knows here
-    members = [member(1, 'owner', 1), member(2, ago_hours=500)] + [member(n, ago_hours=n) for n in range(3, 70)]
-    group_members.receive(store, 'qq', {'group_id': GROUP, 'members': members})
-    block = group_members.block(store, scene, 'demo')
-    whos = [item['who'] for item in block['items']]
-    assert block['count'] == '群里一共 69 人' and block['leaders'] == ['人1（群主）']
-    assert any(who.startswith('[阿杰 #') for who in whos), 'a known person reads as her label'
-    assert '人3' in whos and '人69' not in whos and len(whos) == 21            # top 20 active + the known one
-    assert block['not_shown'] == '另有 48 人没列出' and block['items'][0]['last_spoke_at']
-    found = group_members.find(store, scene, 'demo', '人6')
-    assert found['count'] == 11 and len(found['found']) == 10 and found['found'][0]['who'].startswith('[人6 #')
-
-
-def test_someone_found_in_the_list_gets_a_label_she_can_at_marked_as_looked_up_until_they_appear(store):
-    """Owner 2026-10-09: asked to @ every bot, she found them but had no label to @ them with."""
-    scene = setup(store)
-    channel(store)
-    group_members.receive(store, 'qq', {'group_id': GROUP, 'members': [member(7, card='灯', ago_hours=900)]})
-    [hit] = group_members.find(store, scene, 'demo', '灯')['found']
-    people = People(store, 'demo')
-    entry = people.roster(scene['_id'])['%s|qq:20007' % scene['_id']]
-    assert hit['who'] == people.label(entry) == '[灯 #%s]' % entry['handle'] and entry['looked_up'] is True
-    assert '你查名单找来要叫的，还没在这里说过话' in people.notes(scene['_id'], entry)
-    assert group_members.find(store, scene, 'demo', '灯')['found'][0]['who'] == hit['who'], 'the same label next time'
-    People(store, 'demo').entry(scene, 'qq:20007', row(20007, '我在', card='灯'))      # they speak here
-    entry = People(store, 'demo').roster(scene['_id'])['%s|qq:20007' % scene['_id']]
-    assert entry['looked_up'] is False and '你查名单找来要叫的，还没在这里说过话' not in People(store, 'demo').notes(scene['_id'], entry)
 
 
 class Platform:

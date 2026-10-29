@@ -245,7 +245,7 @@ Reading the character's database from her task scripts: `from asuna import dbrea
 - def `now` — Her clock now, as local_window takes it: '2026-10-13 12:05'.
 - def `recent` — The last `hours` up to now, as a local-time window.
 - class `Reader`
-  - `from_host` — The database the Host named for this command, else the checkout's local config.
+  - `from_host` — The database the Host named for this command, else the checkout's local config; refused in a unit run.
   - `collection`
   - `fields` — Field names seen in a sample of the collection (top level and one level down).
   - `find`
@@ -263,6 +263,7 @@ Reading the character's database from her task scripts: `from asuna import dbrea
 - def `fields`
 - def `collections`
 - def `show` — Print an answer whole, query first, as JSON.
+- def `development_rows` — The rows of her action brain's `development_database_read`: her MongoDB filter, projection and sort, as she wrote them, on the store's database over a client of this module's own.
 - def `environment` — What the Host gives a home task's commands: the database and her time zone.
 
 ## `image_generation`
@@ -377,6 +378,10 @@ Owner-local import of one artifact from an already configured integration endpoi
 
 Notes for the developer agent (the agent that changes her program, not the owner) that the program leaves itself: when a task's result could not be handed back to her (handover.py), one row in `developer_inbox`, marked `source.by: program`. The developer reads unseen rows (`unread`) and marks them `seen` or `answered` (`mark`); the audit records each without its text. Her own questions and reports to the developer are `ask` (questions.py); rows she left before that are moved into closed questions (questions.migrate).
 
+- def `get` — The row with this id, or None.
+- def `of_persona` — View: a persona's rows that the program did not leave (`source.by` other than `program`, or none).
+- def `bump` — One more of the failures a program note stands for (its `count`, outside a revision).
+- def `save` — The revisioned write of a row (`Store.put`: `expected`, `stream`).
 - def `leave` — One note from the program (idempotent by key).
-- def `unread` — For the developer: messages not yet seen, oldest first.
+- def `unread` — For the developer: messages not yet seen (of this level), oldest first.
 - def `mark` — The developer saw or answered a message.

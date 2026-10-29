@@ -223,7 +223,7 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`queue`](../../src/asuna/queue.py) — Process-wide and cross-process endpoint serialization, without cloud routes.
 - [`state`](../../src/asuna/state.py) — The worker's store: every write goes through `Store.put` with an expected revision and is recorded in a hash-chained audit stream.
 - [`clock`](../../src/asuna/clock.py) — The core's one clock: the time now, in UTC, never the same twice in this process.
-- [`audit`](../../src/asuna/audit.py) — Checks and replays the store's audit trail: `verify` walks each stream's hash chain, `verify_documents` compares stored documents with their last audited commit, and `replay` rebuilds the state in an empty test database.
+- [`audit`](../../src/asuna/audit.py) — The owner of the audit trail (`audit_events`), and its checks and replays: `verify` walks each stream's hash chain, `verify_documents` compares stored documents with their last audited commit, and `replay` rebuilds the state in an empty tes
 - [`evidence`](../../src/asuna/evidence.py) — File evidence for runs and probes: `Evidence` writes each event as a hash-chained JSON file in a new folder; `canonical` and `sha` are the stable JSON bytes and digests the store's audit chain also uses.
 - [`testing`](../../src/asuna/testing.py) — Explicit teardown for databases owned by isolated tests and probes.
 - [`restarts`](../../src/asuna/restarts.py) — Her restarts (ADR-034): the worker side of the Host supervisor (tools/asuna-supervisor.mjs).
@@ -235,7 +235,7 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`store/catalog`](../../src/asuna/store/catalog.py) — The catalog: every collection the core keeps, declared once, and the vector spaces searched in them.
 - [`store/errors`](../../src/asuna/store/errors.py) — The store's errors: what the shared layer and an adapter raise, each a message that starts with its code.
 - [`store/adapters`](../../src/asuna/store/adapters.py) — The registry of database adapters, and the results adapters return.
-- [`store/memory`](../../src/asuna/store/memory.py) — The in-memory adapter: the meaning table of the store's words written as code, its reference, and the unit tests' database.
+- [`store/memory`](../../src/asuna/store/memory.py) — The in-memory adapter: the meaning table of the store's words written as code.
 - [`store/mongodb`](../../src/asuna/store/mongodb.py) — The MongoDB adapter: the store's words as MongoDB queries, the catalog's collections, validators and indexes, blobs in the GridFS bucket `artifact_blobs`, and exact vector search.
 - [`records/__init__`](../../src/asuna/records/__init__.py) — The owners of the collections read across many domains: one module per collection, the only code that names its fields and builds its conditions (ADR-104).
 - [`records/scenes`](../../src/asuna/records/scenes.py) — The owner of `scenes`: a conversation's record (its kind, members, scope and epoch, its position counter, and the marks the program keeps on it), read and written only through these operations.
@@ -487,7 +487,6 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 
 Commands for setup, packing, launching, probes and maintenance.
 
-- [`adr104_equivalence.py`](../../tools/adr104_equivalence.py) — The read-only check of one ADR-104 batch against a deployment's database, before the batch merges: numbers only, never a record id or a value.
 - [`agent_line.py`](../../tools/agent_line.py) — A coding agent's line to her (ADR-033): post a message, poll her answers.
 - [`asuna-launch.mjs`](../../tools/asuna-launch.mjs) — Stable entry: native Web and repair tools boot without importing Python code.
 - [`asuna-supervisor.mjs`](../../tools/asuna-supervisor.mjs) — The Host supervisor (ADR-034): the launcher stays as DSH's parent, restarts it when she asks or when it exits on its own, and brings it back down a fallback ladder when a start fails.
@@ -514,7 +513,6 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`probe_native_image.mjs`](../../tools/probe_native_image.mjs) — Probe of a picture in the action brain's native tool loop: `read_image` returns an image that DSH stores as an attachment, the next model request carries it, and a cold reload of the session replays it unchanged.
 - [`probe_native_schedule.mjs`](../../tools/probe_native_schedule.mjs) — Probe of her reminders on DSH's own scheduler: a timer created through the scheduler session fires, reaches the worker boundary once without a model step, and is still recorded once after the session reloads.
 - [`probe_plugin_install.mjs`](../../tools/probe_plugin_install.mjs) — Probe of a clean install: the packed tarballs go into a new DSH profile outside this checkout, and every core export and persona package resolves and imports through DSH's public resolver.
-- [`probe_qq_admission.py`](../../tools/probe_qq_admission.py) — Offline adapter -> Core -> durable-state simulator.
 - [`project_map.py`](../../tools/project_map.py) — Write the project map (docs/map): what each module owns and what it offers, from the code's own docstrings.
 - [`publication_scan.py`](../../tools/publication_scan.py) — The checks that guard main, run on a candidate before it is published (`PublicationFloor.publish`, packages/cognition-core/src/floor.js), so a publication is refused where it can still be fixed:
 - [`refusal_probe.py`](../../tools/refusal_probe.py) — Refusal probe (ADR-080): can the model under test do what the character brain needs with the current design, without being refused? PASS or FAIL, for that model on that day.

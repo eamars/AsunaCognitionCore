@@ -6,7 +6,7 @@
   python3 tools/p5_offline_check.py --baseline # 换回 P4 基线（没有 proactive 模块）再跑
   python3 tools/p5_offline_check.py --hooks    # 只把 channels/context/chat 换回基线，模块留着
 基线反证用来说明这批用例确实在测这次的改动：全基线下它们连导入都过不去，
-只回退挂钩则钩住的那几条会红。真实 Mongo 那一层由操作员跑 tests/test_p5_proactive.py。
+只回退挂钩则钩住的那几条会红。
 """
 import os
 import shutil

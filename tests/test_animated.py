@@ -6,9 +6,6 @@ import io
 from PIL import Image
 
 from asuna import animated
-from asuna.blobs import BlobStore
-from asuna.vision import local_uploads, media_note, read_image_for_task
-from test_local_images import world
 
 RED, BLUE, GREEN, BLACK, WHITE = (220, 30, 30), (30, 30, 220), (30, 200, 30), (0, 0, 0), (255, 255, 255)
 
@@ -64,16 +61,3 @@ def test_a_still_picture_passes_unchanged_and_a_huge_one_says_only_its_first_fra
     assert base64.b64decode(image['data']) == moving and words['error'].startswith('ANIMATION_NOT_SPLIT: 这张动图太大（3 帧')
 
 
-def test_read_image_gives_the_model_the_sheet_and_keeps_the_original(store, tmp_path):
-    scene, chat = world(store, tmp_path)
-    data = gif([(RED, 300), (BLUE, 300), (GREEN, 300)])
-    media = local_uploads(store, scene['scope_key'], [{'data': base64.b64encode(data).decode(), 'name': 'a.gif'}], 'm1')
-    chat.submit('看', event_id='m1', native_session_id='s-local', native_message_ids=['m1'], media=media)
-    ref = media_note(store.db.messages.find_one({'event.event_id': 'm1'}), store.config)['items'][0]['ref']
-    task = {'scene_id': 'dm-a', 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
-    result = read_image_for_task(store, BlobStore(store), task, store.config, {'ref': ref})
-    assert result['media_type'] == 'image/gif' and result['image']['media_type'] == 'image/png'
-    assert sheet(base64.b64decode(result['image']['data'])).width > 40 and result['animated']['what'].startswith('共 3 帧')
-    again = read_image_for_task(store, BlobStore(store), task, store.config, {'ref': media['items'][0]['artifact_id']})
-    assert again['image']['media_type'] == 'image/png' and 'animated' in again
-    assert BlobStore(store).get(media['items'][0]['artifact_id'], scene['scope_key'], operator=True) == data

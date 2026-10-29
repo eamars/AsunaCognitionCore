@@ -156,8 +156,27 @@ Merged forwards in her conversations (QQ 合并转发): what a forward carried, 
 
 Her sticker shelf and the platform's own faces (ADR-016).
 
-- def `shelf`
-- def `find`
+- def `shelf` — Her shelf, by name.
+- def `find` — The sticker of hers with this name, or None.
+- def `shelf_size`
+- def `holding` — The shelf row holding this sticker (of this persona): by its identity, or (`picture` given) by its picture too; or None.
+- def `holds_picture` — Whether a shelf row keeps this picture.
+- def `drop_sticker` — A shelf row goes, if it is still at this revision.
+- def `save` — The revisioned write of a shelf row (`Store.put`: `expected`, `stream`).
+- def `candidate_of` — The candidate in the pool whose picture this is, or None.
+- def `pooled` — The candidate with this id, or None.
+- def `pool_size`
+- def `pool` — View: the candidates (posted in this conversation since `since`, ISO text), the most seen first, then the most recently seen.
+- def `least_seen` — The `count` candidates seen least recently (identity and revision).
+- def `drop_candidate` — A candidate goes (if it is still at this revision).
+- def `pooled_as` — A candidate known by this fingerprint (its picture only), or None.
+- def `drop_pooled` — The candidates of this identity, or known by this fingerprint, go.
+- def `save_candidate` — The revisioned write of a candidate (`Store.put`: `expected`, `stream`).
+- def `memory` — What she knows of one sticker by its row's id, or None.
+- def `known_as` — What she knows of a sticker by this fingerprint (its key or one of its aliases), or (`picture` given) by its picture; her own (`persona`) or anyone's.
+- def `memory_of` — What she knows of a sticker by its key alone, or by its picture, or None.
+- def `save_memory` — The revisioned write of what she knows of a sticker (`Store.put`: `expected`, `stream`).
+- def `artifact_ids` — The pictures the shelf and the pool keep (their artifact ids).
 - def `erased_pictures` — {artifact_id: artifacts row} of the shelf pictures a privacy erasure deleted.
 - def `refuse_erased` — A sticker named in speak whose picture an erasure deleted: ADR-105's sentence in that call, so it is never accepted and then failed when the adapter asks for its bytes.
 - def `fullness`

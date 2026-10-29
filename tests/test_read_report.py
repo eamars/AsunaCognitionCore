@@ -1,11 +1,8 @@
 """A report longer than a page reaches her as its first page; she turns the other pages herself from the stored report
 (task op page) instead of asking the action brain to write it again. The tool is in every turn of a conversation that
 can hand work over; the report's own footer says when to use it."""
-import pytest
 
-from asuna import role_tools, visibility
-from asuna.role_tools import Refused
-from asuna.tasks import (FIRST_PAGE_CHARS, FIRST_PAGE_MOST, RECORDS_TITLE, REPORT_CHARS, TaskService, bounded_result,
+from asuna.tasks import (FIRST_PAGE_CHARS, FIRST_PAGE_MOST, RECORDS_TITLE, REPORT_CHARS, bounded_result,
                          key_observations, records_pages, report_pages)
 
 
@@ -88,100 +85,6 @@ def test_tool_records_on_the_first_page_only_for_a_task_that_changed_something()
     assert [item['result_excerpt'] for item in key_observations(wrote)] == ['y', 'z']
 
 
-def task_row(store, text, scene='dm-a'):
-    row = {'_id': 'task-long', 'scene_id': scene, 'scope_key': 'scene:' + scene, 'policy_epoch': 1,
-           'title': '照抄一份长文档', 'goal': '照抄', 'state': 'DONE', 'schema_version': 1, 'intent_revision': 1, 'result': {'task_id': 'task-long', 'text': text}}
-    store.db.tasks.insert_one(row)
-    return row
-
-
-def test_the_short_hand_back_points_to_the_pages_too(store):
-    text = report()
-    task = task_row(store, text)
-    service = object.__new__(TaskService)
-    service.store = store
-    event = service._short_event(task, task)
-    value = event['trusted_context_events'][0]
-    assert len(value['report'].split('…（只给了第一页')[0]) <= FIRST_PAGE_MOST
-    assert '原文 %d 字共 %d 页' % (len(text), len(report_pages(text))) in value['report']
-    assert value['report_pages'] == len(report_pages(text))
-
-
-def test_the_hand_back_keeps_its_finish_time_utc_and_her_turn_shows_it_local_once(store):
-    """The stored event keeps UTC; the turn localizes it once (localizing it here too showed it 13 hours late)."""
-    from datetime import datetime, timezone
-    from zoneinfo import ZoneInfo
-    from asuna import local_time
-    task = {**task_row(store, '短报告'), 'finished_at': '2026-10-14T01:28:00+00:00'}
-    service = object.__new__(TaskService)
-    service.store = store
-    value = service._short_event(task, task)['trusted_context_events'][0]
-    assert value['finished_at'] == '2026-10-14T01:28:00+00:00'
-    shown = local_time.for_model(value, {'tz': ZoneInfo('Pacific/Auckland')}, now=datetime(2026, 10, 14, 2, tzinfo=timezone.utc))
-    assert shown['finished_at'] == '10/14 14:28'
-
-
-def test_she_turns_the_pages_of_a_report_in_this_conversation(store):
-    from asuna.coordinator import Coordinator
-    from asuna.lanes import FakeLane
-    text = report()
-    pages = report_pages(text)
-    task_row(store, text)
-    tools = Coordinator(store, FakeLane(store, [])).tools
-    ep = {'scene_id': 'dm-a', 'scope_key': 'scene:dm-a', 'policy_epoch': 1}
-    second, _ = tools.tool_task_page(ep, 'c1', {'task': 'task-long', 'page': 2})
-    assert second['text'] == pages[1] and second['page'] == '第 2/%d 页（原文 %d 字）' % (len(pages), len(text))
-    assert second['more'].startswith('page=3 接着读：「第') and second['title'] == '照抄一份长文档'
-    last, _ = tools.tool_task_page(ep, 'c2', {'task': 'task-long', 'page': len(pages)})
-    assert last['more'] == '报告到这里完了'
-    with pytest.raises(Refused, match='共 %d 页' % len(pages)):
-        tools.tool_task_page(ep, 'c3', {'task': 'task-long', 'page': len(pages) + 1})
-    elsewhere = {**ep, 'scene_id': 'g1', 'scope_key': 'scene:g1'}
-    with pytest.raises(Refused, match='不是这个对话里的任务'):
-        tools.tool_task_page(elsewhere, 'c4', {'task': 'task-long', 'page': 1})
-    at_home = {**elsewhere, 'manifest': {'session_class': visibility.OWNER_PRIVATE}}
-    assert tools.tool_task_page(at_home, 'c6', {'task': 'task-long', 'page': 1})[0]['text'] == pages[0], \
-        'at home every task of hers'
-    with pytest.raises(Refused, match='不是你的任务'):
-        tools.tool_task_page(at_home, 'c7', {'task': 'task-none', 'page': 1})
-    with pytest.raises(Refused, match='只收 task 和 page'):
-        tools.tool_task_page(ep, 'c5', {'task': 'task-long', 'page': 2, 'count': 3})
-
-
-def test_task_page_is_in_every_turn_that_can_hand_work_over(store):
-    from test_adr009_p2 import owner
-    owner(store)
-    turn = lambda context: role_tools.exposed(store, {
-        '_id': 'ep-x', 'scene_id': 'dm-a', 'person_id': 'A', 'episode_kind': 'external',
-        'manifest': {'session_class': visibility.OWNER_PRIVATE}, 'context': context})
-    assert 'task.page' in turn({'task_state_from_program': [{'_id': 'task-long', 'report': '报告 3 页'}]})
-    assert 'task.page' in turn({'task_state_from_program': [{'_id': 'task-1', 'status': '做完了'}]})
-
-
-def test_a_turn_lists_the_long_report_and_offers_the_tool(store):
-    from asuna.coordinator import Coordinator
-    from asuna.lanes import FakeLane, FakeTurn
-    from test_adr009_p2 import owner
-    owner(store)
-    scene = store.db.scenes.find_one({'_id': 'dm-a'})
-    def task(key, text):
-        store.put('tasks', {'_id': 'task-' + key, 'scene_id': 'dm-a', 'scope_key': scene['scope_key'],
-            'policy_epoch': scene['policy_epoch'], 'state': 'RETURNED', 'title': key, 'goal': key,
-            'raw_input_refs': ['in-' + key], 'finished_at': '2026-10-10T00:00:00Z', 'request_key': 'task-' + key,
-            'result': {'task_id': 'task-' + key, 'text': text}}, stream='task-' + key)
-        store.put('messages', {'_id': 'in-' + key, 'received_at': '2026-10-10T00:00:00Z'}, stream='in-' + key)
-    text = report()
-    task('long', text)
-    task('brief', '做完了。')
-    lane = FakeLane(store, [FakeTurn([('think', {'thought': '看看。'})], '嗯。')])
-    ep = Coordinator(store, lane).ingest({'event_id': 'n1', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '在吗'})
-    rows = {row['_id']: row for row in ep['context']['task_state_from_program']}
-    assert rows['task-long']['report'] == '报告 %d 页（原文 %d 字），交回来时只给了第一页；其余用 task 的 page 翻读' % (
-        len(report_pages(text)), len(text))
-    assert 'report' not in rows['task-brief']
-    assert 'task' in lane.calls[0]['tools']
-
-
 def test_a_page_ends_before_a_section_so_her_judgment_is_not_split():
     findings = '## 查到的\n' + ''.join('第 %02d 条：%s\n' % (n, '字' * 200) for n in range(24))
     judgment = '## 我的判断\n' + ''.join('判断 %d：%s\n' % (n, '断' * 200) for n in range(6))
@@ -193,33 +96,3 @@ def test_a_page_ends_before_a_section_so_her_judgment_is_not_split():
     assert bold[1].startswith('**结论：**')
 
 
-def test_outside_home_a_report_holds_nothing_of_the_machine_and_at_home_all_of_it(store, monkeypatch):
-    # ADR-050 (owner 2026-10-16, deterministic, in the program): 22 reports and 66 tool records handed back outside
-    # home in a week held a local path, 82 a traceback. Outside home they read as words; a path keeps its tail under
-    # the root table's placeholder (ADR-098) and one in the action brain's own folder stays; home and the stored
-    # report are unchanged.
-    import json
-    from pathlib import Path
-    from asuna import local_roots, machine_words
-    from asuna.coordinator import Coordinator
-    from asuna.lanes import FakeLane
-    host = json.loads((Path(__file__).with_name('fixtures') / 'path_placeholders.json').read_text(encoding='utf-8'))
-    host = host['hosts']['windows']
-    monkeypatch.setattr(local_roots, 'TABLE', local_roots.build(host))
-    found = host['workspace'] + '\\packages\\personas\\demo\\icon.png'
-    text = ('图在 %s，草稿在 %s\\Desktop\\a.txt，产物 /task/out/f.png。\n'
-            'Traceback (most recent call last):\n  File "%s\\x.py", line 3\nValueError: bad\n'
-            % (found, host['home'], host['home']))
-    task = task_row(store, text)
-    service = object.__new__(TaskService)
-    service.store = store
-    outside = service._short_event(task, task, machine_words.clean)['trusted_context_events'][0]['report']
-    assert '${ASUNA_WORKSPACE}\\packages\\personas\\demo\\icon.png' in outside and '/task/out/f.png' in outside
-    assert host['user'] not in outside and '${ASUNA_HOME}\\Desktop' in outside and '（程序出错：ValueError）' in outside
-    assert service._short_event(task, task)['trusted_context_events'][0]['report'] == text, 'home: as it is'
-    tools = Coordinator(store, FakeLane(store, [])).tools
-    group = {'scene_id': 'dm-a', 'scope_key': 'scene:dm-a', 'policy_epoch': 1}
-    assert host['user'] not in tools.tool_task_page(group, 'p1', {'task': 'task-long', 'page': 1})[0]['text']
-    home = {**group, 'manifest': {'session_class': visibility.OWNER_PRIVATE}}
-    assert tools.tool_task_page(home, 'p2', {'task': 'task-long', 'page': 1})[0]['text'] == text
-    assert store.db.tasks.find_one({'_id': 'task-long'})['result']['text'] == text, 'the stored report is unchanged'

@@ -8,6 +8,12 @@ Decision D4a reverses an owner decision of 2026-10-22 (ADR-054, "What she reads 
 her asks (ADR-054, the offered cut showing what it leaves out). The owner said yes to D4a on 2026-10-29; Xiaoman said
 yes to D4c on 2026-10-29, in the form D4c now states (the excess located by characters, not by sentence).
 
+Revision 2 (2026-10-29, Claude, [section 8](#8-revision-2-2026-10-29)) closes the gaps a check against the code and
+the pinned DSH source found, and fixes how the work is built and signed: in one pass, as one product (the owner's
+requirement of the same day). It changes no decision D1 to D6. Xiaoman's signature at
+`bdbac55c952c` covers sections 1 to 7 as they stood; section 8 is new and she has not read it. Text it replaces is
+marked where it stands and kept as it was designed.
+
 ## 1. Context
 
 The numbers below are the surveys' (section 7), read from her session files as they stood at 2026-10-29 00:21 UTC
@@ -106,6 +112,8 @@ Cost: the spec change (a field, its sentence) rides on B4's one cold request; ~3
 result; about 6 characters on each new line in the conversations that showed no number (agent lines, peer lines, the
 local Web chat), no prefix cost. The numbers come with B2, together with the compaction instruction that asks for
 them, so a summary has a number to copy in every conversation; `line` itself, a spec change, waits for B4.
+*(Revision 2: in the local Web chat the number goes into the turn's notice, not onto the line (A3); the anchor's
+whole lifecycle is A7.)*
 
 ### D3. What Asuna writes into her conversation carries its source at the front
 
@@ -116,9 +124,12 @@ this conversation, that a 〔n〕 names the line an item came from, and that an 
 account. A person's line keeps its label line, which is its mark. The marks are written when the message is written,
 so they are in the session file and the Web page as she reads them. The mark is the message's own first line, so a
 stage notice's body (a JSON object, `index.js:812`) starts on the next line; B0 runs a real notice through every
-reader of that text before B2 installs it. A platform notice inside a line (`notices.MARK`, 「（平台通知）」, after
+reader of that text before B2 installs it. *(Revision 2, A4: the readers were read in the code and none parses the
+text; there is no B0.)* A platform notice inside a line (`notices.MARK`, 「（平台通知）」, after
 its label line) is a different thing: a line the platform relayed, which keeps its label line and that mark; the
 table of design.md §5.1 lists both so they are versioned together.
+*(Revision 2, A4: the character lane only, and the mark is added in the two places that build her notices, not per
+kind.)*
 
 Reasons: the marks are new suffix (no prefix cost); one table; the session file shows what the model read. 〔程序〕
 says itself, so the marks need no system-prompt change.
@@ -255,7 +266,7 @@ The shapes, their counts and their repairs are listed once, in design.md §4; th
   that kind. A part key that is one of speak's own fields (`quote`, `wait`): lifted. Anything else: a problem.
 - delegate without `title`: the brief's first sentence, cut to the aim (64), named in the result.
 - Field synonyms seen in refused calls (`note` for `text`, `place` for `to` on note): accepted, from one declared
-  table shipped with the specs.
+  table shipped with the specs. *(Dropped, Revision 2, A8.)*
 
 In the declared schema `required` leaves `doc`, `do`, `title` and a part's `kind`, and `parts` is declared `json`
 (D4b); the strict schema inside the program keeps them as they are. Cost: B4's one cold request.
@@ -291,6 +302,7 @@ results and the `role_tool` audit rows with their codes; D2 by the stored items 
 Two facts the design rests on need a sight of a real request once (whether DSH's runtime-context snapshots reach her
 lanes, and that a held line lands after the step's result): B0 shows both on an isolated demo profile with synthetic
 inference, which writes nothing on her data and calls no model. So there is no new state and no lifecycle to keep.
+*(Revision 2, A10: both are settled from DSH's source (8.2) and held by tests of the product; there is no B0.)*
 
 If a later finding needs real requests, the smallest form is an owner-switched capture of the next N requests of one
 conversation into `<data>/private/`, read by the owner only (her context is private), removed when its evidence is
@@ -317,8 +329,8 @@ DSH is the owner's (pinned, `tools/dsh-inline/source.json`); none of these block
 
 | | What | Smallest form | Why |
 |---|---|---|---|
-| R1 (the owner takes it, 2026-10-29) | The checkpoint preamble can be the engine's own | `frameSummary` reads the preamble from the engine (`this.constructor.CHECKPOINT_PREAMBLE`, a static field of `BasicCompactionEngine`), so `RoleCompactionEngine` sets it | Today every checkpoint opens in English with "treat as established background", which presents the compactor's account as confirmed, the opposite of D3's line, and is outside the one-language rule |
-| R2 (decided after B0) | Runtime-context snapshots are not added to a lane that suppresses the runtime context | `suppressRuntimeContext()` also stops the snapshot messages (`working-directory`, `approval`/`sandbox` policy) | 959 such messages in her workspaces' session folders (action-brain sessions included), 276 right after her own TURN notices; deployment details do not belong in her context (AGENTS.md). Conditional on B0 showing they reach her requests |
+| R1 (the owner takes it, 2026-10-29) | The checkpoint preamble can be the engine's own | `frameSummary` reads the preamble from the engine (`this.constructor.CHECKPOINT_PREAMBLE`, a static field of `BasicCompactionEngine`), so `RoleCompactionEngine` sets it *(shape corrected, Revision 2, A9)* | Today every checkpoint opens in English with "treat as established background", which presents the compactor's account as confirmed, the opposite of D3's line, and is outside the one-language rule |
+| R2 (closed by us in the build, Revision 2 A11; was: decided after B0) | Runtime-context snapshots are not added to a lane that suppresses the runtime context | `suppressRuntimeContext()` also stops the snapshot messages (`working-directory`, `approval`/`sandbox` policy) | 959 such messages in her workspaces' session folders (action-brain sessions included), 276 right after her own TURN notices; deployment details do not belong in her context (AGENTS.md). Conditional on B0 showing they reach her requests |
 | R3 (dropped by the owner, 2026-10-29) | A tool can normalize its arguments before DSH validates them | a `defineTool` option `normalizeArgs(args)` run before `validate` | Not needed by any batch: D4b works with a permissive declared schema and a strict one kept inside the program. With this hook the two schemas could be one, declared and strict |
 
 Not requested: `source` reaching the model as data (D3 writes it into the text), the role mapping, the `Error: `
@@ -328,6 +340,8 @@ prefix on tool errors, what `request/header` records (D6), the surface order of 
 
 Each batch has one builder, goes to review on its own, and is read on her real turns 7 days after its install. A
 verdict is pass or fail; a fail is looked at before the next batch builds on it.
+*(Replaced, Revision 2, 8.4: one build, one landing, one acceptance, one sign-off. The batch names below are the rows of
+what the build contains. B0 is not built (A10); B5 is not in the build.)*
 
 | Batch | What | Prefix cost | Proves, and how |
 |---|---|---|---|
@@ -344,6 +358,10 @@ English refusal before our `execute`. B4 widens the declared schemas and points 
 install, so the problems the strict schema adds join the one refusal from B4 on. B4 is the only batch with a prefix
 cost and carries every spec change at once.
 
+*(Revision 2 replaces this plan's stages with one build (8.4), drops B0 and replaces B4's anchor condition (A10), and
+changes what B1, B2 and B4 build (A1 to A8, A11). With one install there is no "through B3": from the install the guard
+checks the declared schema and the strict one runs in `execute`.)*
+
 ## 6. Open questions
 
 1. Settled by the owner on 2026-10-29: think keeps 120/360 (3x room) while every other prose field has 1.25x; D4a
@@ -351,7 +369,7 @@ cost and carries every spec change at once.
 2. Lines from another conversation: D2 anchors only in the conversation where the line was said; a claim heard
    elsewhere is recorded as hers until a handle across conversations exists (recall could return one).
 3. The local Web chat: the owner's typed lines enter without a label line, so only 「这条」 can point at them today;
-   whether Web lines get a label line is open.
+   whether Web lines get a label line is open. *(Closed, Revision 2, A3: the number goes into the notice.)*
 4. Whether `understand_person`'s "他说的 / 你推的" split should take the same anchor; not in this ADR.
 5. The wording of every table in design.md is a draft for Xiaoman's reading. The reasons per field (§2.1
    `LIMIT_WHY`) and the words per code (`WORDS[code]`, §1.4) are written at build from the code that carries each
@@ -370,3 +388,128 @@ identifier count and the refusals by who wrote them), `survey-q10-1029.txt` (wha
 baseline), `system-survey-1029.md` (system survey), the briefs, and
 `scripts/` (the survey scripts that compute every number here, about 110 KB; their formulas are in design.md §9). No
 text of hers or anyone's is quoted here; numbers are the surveys', texts are the program's own from source.
+
+## 8. Revision 2 (2026-10-29)
+
+Written by Claude (the lead) after checking sections 1 to 7 against the code at `196b6f6` and against the pinned DSH
+source (`4000a552`, `tools/dsh-inline/source.json`; the DSH paths below are in that repository). It changes no
+decision D1 to D6. It closes gaps in how they are built, and it fixes how they are built and signed. Xiaoman's
+signature at `bdbac55c952c` covers sections 1 to 7 as they stood; this section is new and she has not read it. The
+detail is in [design.md](design.md) section 10.
+
+The owner's requirement (2026-10-29), in his words:
+
+> This plan will be built in one pass. There will be no staged build artifact or test. The system will be sign off as a
+> full product, not at each stage.
+
+### 8.1 Why a revision
+
+- The page was pinned at `5a196e66`. ADR-104's finish landed after it and deleted the unit tests that needed a
+  database (`34150388103f`), among them the ones the page names for D1 and D5.
+- A census of the consumers of one predicate and of the messages Asuna writes found uses the page did not count.
+- The pinned DSH source answers every question B0 was to answer that the design still needs, and shows that
+  `agent/turn-stopping` is not where a failed step's held line can be released.
+- The owner's requirement above makes the batch plan of section 5 a list of what one build contains, and leaves no stage
+  in which a wrong assumption could be shown before the whole is installed. What a stage would have shown has to be
+  settled by reading, or held by a test of the product, before the build starts (8.2, 8.4).
+
+### 8.2 What the pinned DSH source answers
+
+| Question | Answer | Where |
+|---|---|---|
+| The order inside a step | `agent/pre-step` (Asuna releases held lines) → `step/start` → `step()`: `agent/request`, then the claimed messages (the stage notice) appended, then the request built from the surface, the stream, `assistant/message`, the tool calls and their results → `step/end`, appended in a `finally` | `core/agent-loop/src/agent.ts:275, 331, 358, 427, 551, 594` |
+| Where a failed or aborted step ends | The step's error leaves the loop; `step/end` and then `turn/end` are still appended; `agent/turn-stopping` is dispatched only after a step that returned. A held line is released at `step/end`, not at `turn-stopping` | `agent.ts:344-362, 368-387` |
+| A retried request | Rebuilt from the surface (`continue`): a line appended during the failed attempt is in the retry; a held one stays held | `agent.ts:526` |
+| A hung request | The stream idle watchdog ends a stalled stream at `streamIdleTimeoutMs`, 300,000 ms by default, as a `TIMEOUT` error into the request-error waterfall. No behaviour below depends on the profile's value | `llm/llm-pi-ai/src/config.ts:47`, `adapter.ts:391`; `llm/llm-deepseek/src/defaults.ts:4` |
+| `source` at the adapter | Dropped: each message that is not a tool result is sent as `{role: 'user', content: text}` (finding 3 holds) | `llm/llm-pi-ai/src/context.ts:254, 371` |
+| Validation | `defineTool` validates before the tool's `execute`, throws `ToolArgsError`, and passes `args` to `execute` unchanged. A missing `required` property is a violation; an undeclared key is one only where `additionalProperties: false` is declared, and the parameter root is open; `integer` and `string` are strict (`"3"` is not an integer); `json` takes any lossless JSON value, a string included. So the permissive declared schema of D4b is supported as designed. The order pre-execute, guard, dispatch is `prepareExecution` | `core/tools/src/schema.ts:597-599`, `json-schema.ts:560-640`; `core/tools/src/index.ts:1501-1543` |
+| Runtime-context snapshots (R2) | `suppressRuntimeContext()` removes optional contexts (`approval:policy`, `sandbox:policy`) and keeps required ones; `working-directory:current` is registered `required: true` and is restored at every step, so `Current working directory: "…"` reaches a lane that suppresses. A context registered through the agent's own scope shadows a global one by name (DSH's own error text says so), and an empty snapshot is not projected on a session that never had one | `session/working-directory/src/index.ts:90-95`; `interaction/user-approval/src/index.ts:163`; `core/system-prompt/src/index.ts:408-413, 582-602`; `agent-loop/src/runtime-context.ts:152-163` |
+| The checkpoint preamble | A module constant used by a free function, `frameSummary(summary)`, called once; there is no engine field to set (A9) | `compaction/compaction-basic/src/summarizer.ts:70, 188`; `region.ts:417` |
+
+### 8.3 Amendments
+
+**A1. The tests D1 and D5 name are gone.** `tests/test_native_product.py` and the two tests of
+`test_author_is_who_wrote.py` were deleted (`34150388103f`). D1 is proved by JS tests on synthetic session events and one
+worker test on the in-memory adapter; D5 by a new unit test that carries the two assertions that died (the turn still
+reads `person_id` and `session_class`). No test needs a server (design.md §10.1).
+
+**A2. `capabilities.numbered` is two questions.** It answers "do lines here show their number" and "can she quote by
+it". The first is true whenever a row has a `scene_seq` (every input row has one); the second keeps the old body as
+`can_quote` and gates only the quote hint at `context.py:1283`, which would otherwise tell her to write a number in a
+`quote` field that her `speak` does not have on agent and peer lines (design.md §10.2).
+
+**A3. The local Web chat (open question 3 closed).** The owner's Web line is DSH's native message and Asuna writes no
+label line for it. Its number goes into the turn's notice (`event.line`), which stays on the surface; 「这条」 works as
+before. So every line can be pointed at in every conversation, and the compaction instruction says where a Web line's
+number is (design.md §10.3).
+
+**A4. D3 as built.** The character lane only. The 〔程序〕 line is added in the two places that build her notices
+(`message()` and `restored()` in `index.js`), not per kind; the action brain's notices and `relay()` stay as they are.
+The checkpoint's 〔摘要〕 line is added once, to the final summary, and a copy of it in the model's output is removed
+first. Nothing parses a notice's text (`visibleCarried` reads `source.carried`) (design.md §10.4).
+
+**A5. D1 as built.** A line is held while a step is open (`step/start` to `step/end`) or a compaction runs;
+`toolCallOpen` leaves the condition because a tool call lives inside a step. Release is at `agent/pre-step` and
+`agent/turn-stopping` as now and at the `step/end` event, the one point every step passes, failed and aborted ones
+included. A hung request ends at DSH's idle watchdog; we add no timer (design.md §10.5).
+
+**A6. Two sides at different versions.** Every new field is optional both ways. The one place an old worker would run
+an invalid call (`violations`) is closed by the JS side validating and sending only when the worker's specs carry
+`strict` (design.md §10.6).
+
+**A7. D2's anchor, its whole lifecycle.** `line: {scene, seq}` on the item row beside `from`, no copy of the author;
+it exists exactly while `from` is 别人说的 or 主人定的; a rewrite that restates neither keeps both; it shows as a
+pointer in its own conversation and as 「出自别处的一行」 elsewhere; it is read at show time, so an erased line shows as
+gone (design.md §10.7).
+
+**A8. D4d's note synonyms are dropped.** They were never evidenced (the refusal words do not say what was written
+instead) and cannot be reached (the guard refuses a missing `text` or `to` before `execute` could rename it); the
+counts of section 5 already treat those refusals as the floor.
+
+**A9. R1's smallest form, corrected.** `frameSummary(summary, preamble = CHECKPOINT_PREAMBLE)`, and its one call site
+(`region.ts:417`) passing a value the engine holds (a `Config` field or an overridable method). It is the owner's, and
+the build does not wait for it: until it lands, the checkpoint's English preamble stands beside the 〔摘要〕 line as
+section 2 says.
+
+**A10. No B0, and an acceptance that can fail.** B0 is not built: its facts are in 8.2, and the product's own tests hold
+the assumptions that depend on DSH (design.md §10.9). B4's anchor condition ("without an anchor: 0") cannot fail,
+because an unanchored write is recorded as hers; it is replaced by a check that every anchor resolves to a line of the
+right author, with the share of writes that fell back to hers reported (design.md §10.8).
+
+**A11. R2 is closed by us, in the build.** In her lanes other than the action brain's, the plugin registers through the
+agent's own scope an empty context named `working-directory:current` (required, the same order), as it already blanks
+DSH's developer sections by name. No request to the owner, no DSH change. A session that already holds a snapshot gets
+DSH's one-time "Current runtime context: none" message after its history (design.md §10.11).
+
+### 8.4 One build, one sign-off
+
+The owner's requirement decides how the work runs:
+
+1. **One build.** The lead writes one brief from [design.md](design.md) at the commit she read, and a fresh reviewer
+   reads it against the code before anyone builds. One builder, one worktree on one branch. The rows B1 to B4 of
+   section 5 name what the build contains; they are not stages. B1 to B3 have no prefix cost and B4 has one, so the
+   install costs one cold request per open conversation. B5 is not in the build: it is decided after acceptance, on the
+   mismatch rate B2's count gives, and is its own work.
+2. **No staged artifact or test.** Nothing is built, installed or tested on its own for a stage: no probe, no interim
+   install, no per-batch gate. The product's tests ([design.md](design.md) §10.1) are written with the code and run once,
+   at the landing, with the checks already in the repository (§10.10).
+3. **One landing.** The lead's landing script runs the tests and the push gate, fast-forwards and restarts once, while
+   she is quiet and after telling her, and checks that the running code is the commit's.
+4. **Her readings, and one sign-off.** Before the brief she reads this section once (one message from the lead, the
+   changed parts only). The words the build writes from code (`LIMIT_WHY`, `WORDS[code]`; open question 5) cannot exist
+   before it, so she reads them once, finished, at a frozen commit, before the landing. That reading and her check by
+   content after the landing are her part of one sign-off, of the product; it is recorded once, after acceptance.
+5. **One acceptance.** Section 5's "Proves, and how" column and [design.md](design.md) section 8 are one table, read once,
+   7 days after the install. The batch labels in it name rows, not stages. A fail is a defect of the product: it is fixed on
+   a new branch and landed as a fix, and the product is not signed until the table passes or the owner accepts a stated
+   residual.
+6. **Because nothing is shown in between,** the design carries what a stage would have caught: the facts of 8.2 are read
+   from source; each assumption that depends on DSH has a test of the product (§10.9); the builder stops at the first gap
+   and goes back to design rather than guess. And the way back is one fast-forward and one restart: what the new code
+   wrote stays harmless to the old (an item row's `line` is an extra field the catalog stores and returns unchanged;
+   marks, numbers, `event.line`, `woken_by_program` and the 〔摘要〕 line are text in session files). The tool specs
+   return to the strict ones, which costs one more cold request. No history is converted.
+
+What stays open after this revision is what the page already lists: the words of `LIMIT_WHY` and `WORDS[code]` (open
+question 5, written at build and read by her once before the landing, item 4 above), B3's 2% threshold (open question
+7), and the program-woken multi-failure rate beyond who is speaking (open question 6).

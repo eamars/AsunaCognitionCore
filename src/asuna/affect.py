@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from pymongo.errors import DuplicateKeyError
-
 from . import clock
 from .evidence import canonical, sha
 from .state import Denied, now
@@ -19,6 +17,9 @@ from . import visibility
 from .context_budget import AFFECT_REASONS, rough_ago
 from .records import episodes as episode_records
 from .records import memories as memory_records
+from .records.view import ANY, View, fenced, is_text
+from .store.errors import DuplicateKey
+from .store.words import AnyOf, NoneOf, Range, StartsWith
 
 SHORT_ID = 12                 # event ids as she reads and quotes them; a unique prefix resolves to the event
 
@@ -373,6 +374,84 @@ def _refs(ep):
     from .context import refs
     return refs(ep['context'])
 
+# ── the owner of `affect_events`, `affect_amendments` and `affect_proposals` ──
+# Insert-only ledgers, read and written only through these: a row as stored (`fields` names what to return; `_id`
+# always comes back). None follows the store's rule (ADR-104 section 4): an id, the persona, an event a row is about
+# or a turn given None, or a value not of its kind, finds nothing without a read. Views are `View`s, in the replaced
+# read's order.
+EVENTS, AMENDMENTS, PROPOSALS = COLLECTIONS
+
+
+def insert(store, collection, doc):
+    """One row into a ledger; a repeated id or source identity raises DuplicateKey."""
+    if collection not in COLLECTIONS:
+        raise Denied('AFFECT_COLLECTION_ONLY')
+    store.collection(collection).insert(doc)
+
+
+def ledger_row(store, collection, row_id, fields=None, *, persona=ANY, kind_row=ANY):
+    """A ledger's row with this id (of this persona; a proposal of this kind of row), or None."""
+    if not is_text(row_id):
+        return None
+    if persona is ANY and kind_row is ANY:
+        return store.collection(collection).get(row_id, fields)
+    where = fenced({'_id': row_id}, {'persona': (persona, is_text), 'kind_row': (kind_row, is_text)})
+    return View(store, collection, where).first(fields=fields)
+
+
+def of_identity(store, collection, persona, origin, source_identity):
+    """The ledger's row an import of this origin wrote for this source identity, or None."""
+    where = fenced({}, {'persona': (persona, is_text), 'origin': (origin, is_text),
+                        'source_identity': (source_identity, is_text)})
+    return View(store, collection, where).first()
+
+
+def events_of(store, persona, *, ids=ANY, scopes_besides=None, prefix=None, by=None):
+    """View: a persona's events (of these ids; whose source scope is none of `scopes_besides`; whose id starts with
+    `prefix`), ordered by `by` (none: the database's order)."""
+    where = fenced({}, {'persona': (persona, is_text)})
+    if where is not None and ids is not ANY:
+        where['_id'] = AnyOf([value for value in ids if is_text(value)])
+    if where is not None and scopes_besides is not None:
+        where['source_scope'] = NoneOf(list(scopes_besides))
+    if where is not None and prefix is not None:
+        where = {**where, '_id': StartsWith(prefix)} if is_text(prefix) else None
+    return View(store, EVENTS, where, ((by, 1),) if by else ())
+
+
+def count_events(store, persona, *, since=ANY, still_open=ANY):
+    """How many events a persona has (written since `since`, ISO text; still open or not)."""
+    where = fenced({}, {'persona': (persona, is_text)})
+    if where is not None and since is not ANY:
+        where = {**where, 'created_at': Range(gte=since)} if is_text(since) else None
+    if where is not None and still_open is not ANY:
+        where['open'] = bool(still_open)
+    return View(store, EVENTS, where).count()
+
+
+def amendments_of(store, *, persona=ANY, target=ANY, targets=ANY, ops=ANY, by=None):
+    """View: the amendments (of a persona; of an event, or of any of several; of these ops), ordered by `by` (none:
+    the database's order)."""
+    where = fenced({}, {'persona': (persona, is_text), 'target': (target, is_text)})
+    if where is not None and targets is not ANY:
+        where['target'] = AnyOf([value for value in targets if is_text(value)])
+    if where is not None and ops is not ANY:
+        ops = list(ops)
+        where['op'] = ops[0] if len(ops) == 1 else AnyOf(ops)
+    return View(store, AMENDMENTS, where, ((by, 1),) if by else ())
+
+
+def proposals_of(store, persona):
+    """View: a persona's proposals (rows of kind `proposal`), oldest first."""
+    return View(store, PROPOSALS, fenced({'kind_row': 'proposal'}, {'persona': (persona, is_text)}),
+                (('created_at', 1),))
+
+
+def proposal_of_turn(store, episode_id):
+    """A proposal row written for this turn (its id only), or None."""
+    return View(store, PROPOSALS, fenced({}, {'episode_id': (episode_id, is_text)})).first(fields=['_id'])
+
+
 class AffectError(ValueError):
     def __init__(self, code, detail=''):
         super().__init__(code + (': ' + str(detail) if detail else ''))
@@ -394,10 +473,10 @@ class AffectLedger:
             raise Denied('AFFECT_COLLECTION_ONLY')
         doc = {**doc, 'schema_version': 1}
         try:
-            self.store.db[collection].insert_one(doc)
-        except DuplicateKeyError:
-            existing = self.store.db[collection].find_one({'_id': doc['_id']}) or self.store.db[collection].find_one(
-                {'persona': doc.get('persona'), 'origin': doc.get('origin'), 'source_identity': doc.get('source_identity')})
+            insert(self.store, collection, doc)
+        except DuplicateKey:
+            existing = ledger_row(self.store, collection, doc['_id']) or of_identity(
+                self.store, collection, doc.get('persona'), doc.get('origin'), doc.get('source_identity'))
             core = lambda row: {k: v for k, v in row.items() if k not in ('created_at', 'schema_version', 'ts')}
             if existing and core(existing) == core(doc):
                 return existing, False
@@ -408,10 +487,10 @@ class AffectLedger:
         return doc, True
 
     def events(self):
-        return [{**row, 'id': row['_id']} for row in self.store.db.affect_events.find({'persona': self.persona})]
+        return [{**event, 'id': event['_id']} for event in events_of(self.store, self.persona).each()]
 
     def amendments(self):
-        return list(self.store.db.affect_amendments.find({'persona': self.persona}))
+        return amendments_of(self.store, persona=self.persona).rows()
 
     def projection(self, at=None, who=None):
         return project(self.model, self.events(), self.amendments(), at or clock.now(), who=who)
@@ -428,8 +507,8 @@ class AffectLedger:
             return None
         state = self.projection(at)
         if cls == visibility.OWNER_PRIVATE:
-            scopes = {row['_id']: row.get('source_scope') for row in self.store.db.affect_events.find(
-                {'persona': self.persona}, {'source_scope': 1})}
+            scopes = {event['_id']: event.get('source_scope') for event in events_of(self.store, self.persona).each(
+                fields=['source_scope'])}
             for row in state['contributions']:
                 row['source_scope'] = scopes.get(row['event_id'])
         return describe(self.model, state, cls)
@@ -508,12 +587,10 @@ class AffectLedger:
         event at the same position does not collide with this one, and replaying the same item
         returns the amendment already made instead of reporting it as a second, impossible change.
         """
-        target, found = self.store.db.affect_events.find_one({'_id': item['event_id'], 'persona': self.persona}), []
+        target, found = ledger_row(self.store, EVENTS, item['event_id'], persona=self.persona), []
         if not target and len(str(item['event_id'])) >= 8:
             # She reads short ids (interpret): a prefix that names exactly one of her events is that event.
-            import re
-            found = list(self.store.db.affect_events.find({'_id': {'$regex': '^' + re.escape(str(item['event_id']))},
-                                                           'persona': self.persona}).limit(2))
+            found = events_of(self.store, self.persona, prefix=str(item['event_id'])).rows(limit=2)
             target = found[0] if len(found) == 1 else None
         if not target:
             raise AffectError('AFFECT_EVENT_UNKNOWN', 'event_id「%s」%s；照抄 affect_from_program.reasons 里那一笔的 event_id'
@@ -524,14 +601,14 @@ class AffectLedger:
         if item['op'] == 'void' and not str(item.get('why') or '').strip():
             raise AffectError('VOID_REQUIRES_WHY', 'void 要写 why：为什么这一笔的前提不成立')
         key = [ep['_id'], 'affect_ops', key if key is not None else index]
-        made = self.store.db.affect_amendments.find_one({'_id': sha(canonical(['amendment', self.persona, *key]))})
+        made = ledger_row(self.store, AMENDMENTS, sha(canonical(['amendment', self.persona, *key])))
         if made:
             return made          # 这一处修订已经记过了：同一轮重复、回想那一轮之前记过、崩溃重放
         if item['op'] == 'close':
             if not target.get('open'):
                 raise AffectError('CLOSE_REQUIRES_OPEN', '「%s」记的时候没挂着（unresolved 不是 yes），没有可了结的；'
                                   '它会自己淡下去，不用管；前提不成立就用 void' % item['event_id'])
-            if self.store.db.affect_amendments.find_one({'target': target['_id'], 'op': 'close'}):
+            if amendments_of(self.store, target=target['_id'], ops=['close']).first(fields=['_id']):
                 raise AffectError('ALREADY_CLOSED', '「%s」已经了结过了，不用再 close' % item['event_id'])
         return self.amendment(target['_id'], item['op'], why=item.get('why', ''), by='character',
                               key=key, scope=target.get('source_scope'))
@@ -557,7 +634,7 @@ class AffectLedger:
         return self._insert('affect_proposals', doc, 'affect-propose:' + ep['_id'])[0]
 
     def proposal_state(self, proposal, at=None):
-        decided = self.store.db.affect_proposals.find_one({'_id': 'decision:' + proposal['_id']})
+        decided = ledger_row(self.store, PROPOSALS, 'decision:' + proposal['_id'])
         if decided:
             return decided['decision']
         ttl = float(self.model.get('proposal_ttl_h') or 24)
@@ -568,41 +645,40 @@ class AffectLedger:
     def proposals(self, ep_scope, cls, at=None):
         """Pending and newly expired proposals readable here; expiry is recorded, never silent."""
         out = []
-        for row in self.store.db.affect_proposals.find({'persona': self.persona, 'kind_row': 'proposal'}).sort('created_at', 1):
-            if not self.readable(row['source_scope'], ep_scope, cls):
+        for item in proposals_of(self.store, self.persona).each():
+            if not self.readable(item['source_scope'], ep_scope, cls):
                 continue
-            state = self.proposal_state(row, at)
+            state = self.proposal_state(item, at)
             if state == 'expired':
                 # Said once, on the turn it lapses; after that it is decided (expired) and leaves the view.
-                if self.store.db.affect_proposals.find_one({'_id': 'decision:' + row['_id']}):
+                if ledger_row(self.store, PROPOSALS, 'decision:' + item['_id']):
                     continue
-                self._insert('affect_proposals', {'_id': 'decision:' + row['_id'], 'persona': self.persona,
-                             'kind_row': 'decision', 'proposal_id': row['_id'], 'decision': 'expired',
-                             'why': 'proposal_ttl_h elapsed', 'created_at': now(), 'source_scope': row['source_scope']},
-                             'affect-propose:' + row['_id'])
+                self._insert('affect_proposals', {'_id': 'decision:' + item['_id'], 'persona': self.persona,
+                             'kind_row': 'decision', 'proposal_id': item['_id'], 'decision': 'expired',
+                             'why': 'proposal_ttl_h elapsed', 'created_at': now(), 'source_scope': item['source_scope']},
+                             'affect-propose:' + item['_id'])
             if state in ('pending', 'expired'):
                 # In words, like everything else she reads about her feelings.
                 scale = self.model.get('scale') or CORE['scale']
-                out.append({'proposal_id': row['_id'], 'status': '待定' if state == 'pending' else '已过期',
-                            'feeling': kind_label(self.model, row.get('kind')),
-                            'direction': '好' if row.get('val', 0) >= 0 else '坏',
-                            'intensity': _word(scale['val'], abs(row.get('val', 0))),
-                            'arousal': _word(scale['arl'], row.get('arl', 0)),
-                            **{k: row[k] for k in ('ref', 'why', 'cost', 'open') if k in row}})
+                out.append({'proposal_id': item['_id'], 'status': '待定' if state == 'pending' else '已过期',
+                            'feeling': kind_label(self.model, item.get('kind')),
+                            'direction': '好' if item.get('val', 0) >= 0 else '坏',
+                            'intensity': _word(scale['val'], abs(item.get('val', 0))),
+                            'arousal': _word(scale['arl'], item.get('arl', 0)),
+                            **{k: item[k] for k in ('ref', 'why', 'cost', 'open') if k in item}})
         return out
 
     def adopt(self, ep, index, item, cls, *, key=None):
-        proposal = self.store.db.affect_proposals.find_one({'_id': item['proposal_id'], 'persona': self.persona,
-                                                            'kind_row': 'proposal'})
+        proposal = ledger_row(self.store, PROPOSALS, item['proposal_id'], persona=self.persona, kind_row='proposal')
         if not proposal or not self.readable(proposal['source_scope'], ep['scope_key'], cls):
             raise AffectError('AFFECT_PROPOSAL_UNKNOWN', '没有 proposal_id「%s」；照抄 affect_proposals_from_program 里的 '
                               'proposal_id' % item['proposal_id'])
         word = 'accepted_edited' if item['decision'] == 'edit' else item['decision']
-        decided = self.store.db.affect_proposals.find_one({'_id': 'decision:' + proposal['_id']})
+        decided = ledger_row(self.store, PROPOSALS, 'decision:' + proposal['_id'])
         if decided and decided.get('episode_id') == ep['_id'] and decided.get('decision') == word:
             # 这一轮已经这样决定过这条提案（同一轮重复、回想那一轮之前决定过、崩溃重放）：
             # 不再插一条决定，也不把它当成「已经不是待定」而退回。
-            return self.store.db.affect_events.find_one({'_id': decided['event_id']}) if decided.get('event_id') else None
+            return ledger_row(self.store, EVENTS, decided['event_id']) if decided.get('event_id') else None
         if self.proposal_state(proposal) != 'pending':
             state = self.proposal_state(proposal)
             raise AffectError('AFFECT_PROPOSAL_NOT_PENDING', '这条提案已经%s，不能再决定；想记这份心情就用 do=record 自己记一笔'
@@ -627,7 +703,7 @@ class AffectLedger:
         for item in events:
             try:
                 doc = self._import_doc(origin, item)
-                existing = self.store.db.affect_events.find_one({'_id': doc['_id']})
+                existing = ledger_row(self.store, EVENTS, doc['_id'])
                 if existing:
                     same = {k: existing.get(k) for k in doc if k not in ('created_at',)} == \
                            {k: v for k, v in doc.items() if k not in ('created_at',)}
@@ -644,10 +720,10 @@ class AffectLedger:
         for item in amendments:
             try:
                 target = sha(canonical([self.persona, origin, item['target_source_identity']]))
-                if not self.store.db.affect_events.find_one({'_id': target}) and not dry_run:
+                if not ledger_row(self.store, EVENTS, target) and not dry_run:
                     raise AffectError('AMENDMENT_TARGET_UNKNOWN', item['target_source_identity'])
                 key = ['import', origin, item['source_identity']]
-                if self.store.db.affect_amendments.find_one({'_id': sha(canonical(['amendment', self.persona, *key]))}):
+                if ledger_row(self.store, AMENDMENTS, sha(canonical(['amendment', self.persona, *key]))):
                     report['amendments_existing'] += 1
                     continue
                 if item['op'] not in ('close', 'void', 'fix_ts', 'fix_kind'):
@@ -706,7 +782,7 @@ class Appraiser:
             return []
         model, policy = model_and_policy(self.store, ep['persona'])
         ledger = AffectLedger(self.store, ep['persona'], model, policy)
-        if not ledger.enabled or self.store.db.affect_proposals.find_one({'episode_id': episode_id}):
+        if not ledger.enabled or proposal_of_turn(self.store, episode_id):
             return []
         from .reasons import shown
         monologues = [shown(row, len(row.get('body_markdown') or '') or 1) or '' for row in memory_records.many(

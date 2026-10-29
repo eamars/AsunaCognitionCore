@@ -1204,14 +1204,14 @@ class ContextBuilder:
             # One heart per persona: the state is global; reasons, who and numbers stay owner-private (§6.5).
             m=ledger.model
             # Words only (AGENTS.md: interpreted state): her mood, its hints and reasons, and how to record one.
-            from .affect import interpret, recording_guide
+            from .affect import events_of, interpret, recording_guide
             where,mood=None,ledger.projection()
             if session_class==visibility.OWNER_PRIVATE:
                 # ADR-018 §6: reasons she wrote outside say where she wrote them.
                 titles,where={},{}
-                for row in self.store.db.affect_events.find({'persona':persona,
-                        '_id':{'$in':[item['event_id'] for item in mood.get('contributions') or ()]},
-                        'source_scope':{'$nin':[visibility.owner_private_scope(persona),'global-safe']}},{'source_scope':1}):
+                for row in events_of(self.store,persona,
+                        ids=[item['event_id'] for item in mood.get('contributions') or ()],
+                        scopes_besides=[visibility.owner_private_scope(persona),'global-safe']).each(fields=['source_scope']):
                     scope_key=row.get('source_scope')
                     if scope_key not in titles:
                         titles[scope_key]=people.scene_title(scene_records.by_scope(self.store, scope_key))
@@ -1293,10 +1293,10 @@ class ContextBuilder:
         if event.get('episode_kind')=='settlement':
             from .rhythm import promotion_candidates
             from .affect import kind_label
-            from .affect import SHORT_ID
+            from .affect import SHORT_ID, amendments_of
             open_events=[{'event_id':e['_id'][:SHORT_ID],'feeling':kind_label(ledger.model,e.get('kind')),'why':e.get('why'),'ts':e.get('ts')}
                          for e in ledger.events() if e.get('open')
-                         and not self.store.db.affect_amendments.find_one({'target':e['_id'],'op':{'$in':['close','void']}})] if ledger.enabled else []
+                         and not amendments_of(self.store,target=e['_id'],ops=['close','void']).first(fields=['_id'])] if ledger.enabled else []
             context['settlement_from_program']={'open_affect_events':open_events,
                 'promotion_candidates':(memory_tiers.candidates(self.store,effective(model,'memory.promotion.window_days',policy) or 7)
                                         if memory_tiers.ENABLED else promotion_candidates(self.store,model,policy)),

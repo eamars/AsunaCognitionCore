@@ -102,7 +102,8 @@ def _fill(entries, budget, slim, left_words):
 
 def block(store, persona, moment=None, *, tag=None):
     """The map since the last one she saw (at most WINDOW_DAYS); records the showing."""
-    from . import group_admin, places, self_review, switches
+    from . import affect, group_admin, places, questions, self_review, switches
+    from . import notes as note_owner
     from .people import People
     moment = moment or clock.now()
     last = store.db.audit_events.find_one({'type': SHOWN, 'payload.persona': persona}, sort=[('occurred_at', -1)])
@@ -188,15 +189,14 @@ def block(store, persona, moment=None, *, tag=None):
         moves = store.db.audit_events.count_documents({'type': 'memory.moved', 'occurred_at': {'$gte': since}})
         index.append('分层的条目：' + '、'.join('%s %d' % kv for kv in tiers.items()) + '；上次以来挪动 %d 次' % moves)
     index.append('感受：一共 %d 笔，上次以来 %d 笔，还挂着没了的 %d 笔（feel）' % (
-        store.db.affect_events.count_documents({'persona': persona}),
-        store.db.affect_events.count_documents({'persona': persona, 'created_at': {'$gte': since}}),
-        store.db.affect_events.count_documents({'persona': persona, 'open': True})))
+        affect.count_events(store, persona), affect.count_events(store, persona, since=since),
+        affect.count_events(store, persona, still_open=True)))
     ideas = collections.Counter(i.get('state') for i in idea_records.of_persona(store, persona, by=None).rows(fields=['state']))
     index.append('想法本：没处理 %d、暂缓 %d（ideas 的 read）' % (ideas.get('open', 0), ideas.get('deferred', 0)))
     index.append('计划：生效中 %d（plans_from_program）；问题：还开着 %d（ask 的 read）' % (
         plan_records.count_status(store, 'ACTIVE'),
-        store.db.questions.count_documents({'persona': persona, 'state': {'$ne': 'closed'}})))
-    index.append('便条：上次以来写了 %d 张' % store.db.notes.count_documents({'persona': persona, 'created_at': {'$gte': since}}))
+        questions.count_open(store, persona)))
+    index.append('便条：上次以来写了 %d 张' % note_owner.count_since(store, persona, since))
     errands = (places.errands_block(store, persona, moment) or {}).get('items') or []
     on_way = [e for e in errands if e.get('state') in (places.ERRAND_STATES['pending'], places.ERRAND_STATES['sending'])]
     index.append('差事：最近 %d 趟，还在路上 %d 趟（下场在 errands_from_program）' % (len(errands), len(on_way)))

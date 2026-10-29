@@ -378,17 +378,30 @@ CATALOG = Catalog([
     Collection('lane_receipts', 'records.receipts', (
         Field('_last_op', 'text'), Field('schema_version', 'number'), *_text('session_id')),
         versioned=True),
-    _core('affect_events', 'affect',
-          index(('persona', 1), ('ts', 1)),
-          index(('persona', 1), ('origin', 1), ('source_identity', 1), unique=True,
-                only_where_present=('source_identity',)),
-          fields=_text('source_identity'), insert_only=True),
-    _core('affect_amendments', 'affect',
-          index(('target', 1)),
-          index(('persona', 1), ('origin', 1), ('source_identity', 1), unique=True,
-                only_where_present=('source_identity',)),
-          fields=_text('source_identity'), insert_only=True),
-    _core('affect_proposals', 'affect', index(('persona', 1), ('kind_row', 1), ('created_at', 1)), insert_only=True),
+    # Her feelings' ledgers, insert only (affect.py): the fields their owner names and writes itself; what a feeling
+    # carries from her or an import (its numbers, words, half-lives) is stored as written. Their times are ISO text.
+    Collection('affect_events', 'affect', (
+        Field('schema_version', 'number'),
+        *_text('persona', 'origin', 'source_identity', 'ts', 'ts_original', 'ref_kind', 'source_scope', 'episode_id',
+               'created_at', 'proposal_id'),
+        Field('open', 'bool', nullable=True)),
+        (index(('persona', 1), ('ts', 1)),
+         index(('persona', 1), ('origin', 1), ('source_identity', 1), unique=True,
+               only_where_present=('source_identity',))),
+        versioned=True, insert_only=True),
+    Collection('affect_amendments', 'affect', (
+        Field('schema_version', 'number'),
+        *_text('persona', 'target', 'op', 'at', 'by', 'origin', 'created_at', 'source_identity')),
+        (index(('target', 1)),
+         index(('persona', 1), ('origin', 1), ('source_identity', 1), unique=True,
+               only_where_present=('source_identity',))),
+        versioned=True, insert_only=True),
+    Collection('affect_proposals', 'affect', (
+        Field('schema_version', 'number'),
+        *_text('persona', 'kind_row', 'status', 'source_scope', 'episode_id', 'created_at', 'proposal_id',
+               'decision', 'event_id')),
+        (index(('persona', 1), ('kind_row', 1), ('created_at', 1)),),
+        versioned=True, insert_only=True),
     # How a conversation labels each person (records/people.py): the fields of its plain unique index are required
     # (3.5); its times are ISO text.
     Collection('scene_people', 'records.people', (

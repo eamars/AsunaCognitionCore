@@ -386,9 +386,10 @@ class NativeMemory:
         # "Now" sorts first: the mood is computed for this moment.
         rows = [{'id': 'affect:state', 'kind': 'affect', 'title': label('title.mood'), 'excerpt': mood_line(view),
                  'updated_at': clock.now().astimezone().isoformat()}]
-        events = list(self.store.db.affect_events.find({'persona': self.persona}).sort('ts', -1).limit(20))
-        closed = {row['target'] for row in self.store.db.affect_amendments.find(
-            {'target': {'$in': [event['_id'] for event in events]}, 'op': {'$in': ['close', 'void']}}, {'target': 1})}
+        from .affect import amendments_of, events_of
+        events = events_of(self.store, self.persona, by='ts').rows(newest_first=True, limit=20)
+        closed = {row['target'] for row in amendments_of(
+            self.store, targets=[event['_id'] for event in events], ops=['close', 'void']).each(fields=['target'])}
         scenes = {row['_id']: row['scene_id'] for row in episode_records.many(
             self.store, [event.get('episode_id') for event in events]).rows(fields=['scene_id'])}
         for event in events:
@@ -528,8 +529,9 @@ class NativeMemory:
                 result = row and {'id': identifier, 'body': mood_body(ledger.model, row), 'interpretation': True,
                                   'category': 'affect', 'source_ids': []}
             else:
-                row = self.store.db.affect_events.find_one({'_id': key, 'persona': self.persona})
-                amendments = list(self.store.db.affect_amendments.find({'target': key}).sort('at', 1))
+                from .affect import EVENTS, amendments_of, ledger_row
+                row = ledger_row(self.store, EVENTS, key, persona=self.persona)
+                amendments = amendments_of(self.store, target=key, by='at').rows()
                 result = row and {'id': identifier, 'body': event_body(ledger.model, row, amendments), 'category': 'affect_event',
                                   'interpretation': True, 'source_ids': [], 'scope_key': row.get('source_scope')}
         elif kind == 'doc':

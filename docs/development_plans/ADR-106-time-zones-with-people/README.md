@@ -1,11 +1,11 @@
 # ADR-106: Time zones with people, not with groups
 
 Status: requirements recorded 2026-10-27; designed to final 2026-10-29 with the owner's three decisions below (the
-question tool, his recommended options each time). Not built. Built on `claude/eloquent-shannon-fcxodi`; the local
-Claude Code lands it and brings it to Xiaoman.
+question tool, his recommended options each time) and one fresh review whose findings are fixed in this page. Not
+built. Built on `claude/eloquent-shannon-fcxodi`; the local Claude Code lands it and brings it to Xiaoman.
 
 The ask, in one line: **she lives on one clock in every conversation, and no zone is hard-coded per group**. Anything
-wider (her usage-readout skill, other ADRs' times) is not in this ADR.
+wider is not in this ADR (`Not in this ADR` lists what was found and left out).
 
 ## The owner's words (2026-10-27, verbatim)
 
@@ -40,9 +40,9 @@ re-read before building (`Before building`).
 |---|---|---|
 | a group's zone | `scenes.timezone`, written only by her `place_timezone` tool (`places.set_zone`) | `schedule_rules.scene_timezone` (every conversation's clock), `places.group_zone` (the "their clock" line) |
 | a route's zone | `routes.<id>.schedule.timezone`, `routes.<id>.timezone`, `routes.<id>.schedule.utc_offset_minutes` in the deployment's settings; nothing in the program writes them | `scene_timezone` |
-| the deployment's zone | top-level setting `timezone` (the Web settings card's "Time zone"; no check on the value) | `scene_timezone` (4th), `persona_model.timezone` (2nd) |
+| the deployment's zone | top-level setting `timezone` (the Web settings card's "Time zone"; no check on the value) | `scene_timezone` (4th), `persona_model.timezone` (2nd), `tools/memory_pilot_report.py` |
 | her rhythm's zone | policy key `rhythm.timezone` (a "private" key: a package may not default it; she can still write it with `set_policy`) | `persona_model.timezone`: rhythm block, nightly settlement, night stage, visit counts, heartbeat pause, her home tasks' `ASUNA_TIMEZONE` |
-| a plan's zone | `plans.timezone` and `plans.tz_source` (written at create and update); a daily or weekly plan's zone is also held by DSH's own scheduler (`time_zone`) | `scene_timezone` (1st) |
+| a plan's zone | `plans.timezone` and `plans.tz_source`, written at create and update **for every kind of plan**; a daily or weekly plan's zone is also held by DSH's own scheduler (`time_zone`) | `scene_timezone` (1st) |
 
 ### The order a conversation's clock is resolved in
 
@@ -51,7 +51,9 @@ the machine cannot load falls to the route's fixed offset, then to the host's cl
 rules). Counted by `grep` on `cc8c00627132`: 47 call sites in 20 modules ask `scene_timezone` or `local_time.zone_of`
 (`context.py` 11, `schedule.py` 6, `role_tools.py` 5); `persona_model.timezone` (her rhythm's resolver, a second one) is
 imported at 15 sites in 8 modules; 24 modules in all. Five helpers resolve a zone again on their own:
-`Scheduler.zone_of`, `Coordinator._zone`, `carried._zone`, `restarts._zone` and `self_review._zone`.
+`ScheduleService.zone_of`, `Coordinator._zone`, `carried._zone`, `restarts._zone` and `self_review._zone`. Six sites
+write `zone if is_iana(zone) else 'UTC'`, so a name the zone database loads but that is not `Area/Location` gets two
+clocks (`schedule.py` 284, 298, 709; `places.py` 333, 376; `role_tools.py` 2646).
 
 ### The root cause
 
@@ -59,20 +61,26 @@ The program treats the clock as a property of the room. Her `place_timezone` too
 你在那个群定的计划，都按那个群的钟"): one field, `scenes.timezone`, is at once "where those people are" (what she knows
 about them) and "which clock every time in that room is drawn on and every plan made there fires by". The same text
 ("20:00") then names different moments in different rooms. The broken invariant: **one time text must name one moment for
-her, in every room.** A rule that fixes the group zone case and leaves the class (a time drawn on a clock that is not
-hers) would be a bandage; the class has these instances, found in this reading:
+her, in every room.** A rule that fixes the group-zone case and leaves the class (a time drawn on a clock that is not
+hers because of where it was read) would be a bandage. The instances of the class, found in this reading and the
+review, each checked on the code:
 
 1. A reminder written "20:00" in a room whose zone is not hers fires at another hour on her clock (Xiaoman's own
    account, question 4 below).
 2. A plan written with an explicit offset (`20:00+09:00`) is worded on the **UTC** face (`schedule_rules.describe`
-   passes `timezone.utc` for an `at_utc` rule), while its `next_fire_at` in the same row is on the room's face. Measured
-   2026-10-29 on the module with a demo zone: description `10/30 11:00`, the same moment on the zone's face `10/31 00:00`.
+   passes `timezone.utc` for an `at_utc` rule), while the same moment on the room's face reads differently. Measured
+   2026-10-29 with a demo zone: description `10/30 11:00`, the moment on the zone's face `10/31 00:00`.
 3. The plans of other rooms she sees at home (`your_plans_there`) are worded on each room's own face and sit beside
-   home's `next_fire_at`.
-4. Changing a plan's timing keeps its old zone (`Scheduler.update` reads the plan's stored zone first), so an edit she
-   writes on her clock is read on the room's.
-5. Her usage-readout skill's own record: a task wrote an offset it never read, because no program source gave her one.
-   The fix is on the program's side (one clock, converted by the program), not another rule for her to follow.
+   home's `next_fire_at`; the projection's notes are dropped by a whitelist (`context.py:809`).
+4. The block she reads when a plan fires (`scheduled_plan_from_program`, `context.py:969`) carries the plan's raw
+   `rule`. A wall-time `at` is naive, `local_time._moment` reads it as UTC and shifts it: a `20:00` plan in a demo zone
+   nine hours ahead of UTC reads `10/31 05:00` there (measured 2026-10-29). A `clock` rule shows its bare `HH:MM`.
+5. Changing a plan's timing keeps its old zone (`ScheduleService.update` reads the plan's stored zone first), so an
+   edit she writes on her clock is read on the room's; and restating the same timing returns early at
+   `schedule.py:863` (`current['rule'] == rule and current['intent'] == intent`), so an old plan could never be put on
+   her clock by saying the same time again.
+6. Her usage-readout skill's own record: a task wrote an offset it never read, because no program source gave her
+   one. The program converts; she is not given an offset to carry.
 
 ## Decided with the owner (2026-10-29, the question tool; his recommended options each time)
 
@@ -89,58 +97,74 @@ hers) would be a bandage; the class has these instances, found in this reading:
    script that needs her offset gets it from the program (`asuna.dbread` converts her face to UTC); what she keeps about
    her own place or anyone's is in her notes. Nothing is stored for this.
 
-Consequences of his words and of those three, not asked again (they are the "remove the hard coded TZ from the group"
-and "not a mechanical placeholder"): her `place_timezone` tool is removed, and with it the `their_clock` line of her
-places view and `scenes.timezone`. Whatever she knows about where a group's people are lives in her notes, which the
-program never reads. Nothing in the program converts a time for anyone else.
+Consequences of his words and of those three, not asked again (they are "remove the hard coded TZ from the group" and
+"not a mechanical placeholder"): her `place_timezone` tool is removed, and with it the `their_clock` line of her places
+view and `scenes.timezone`. Whatever she knows about where a group's people are lives in her notes, which the program
+never reads. Nothing in the program converts a time for anyone else.
 
 ## Design
 
 ### 1. One resolver, `schedule_rules.her_zone(config)`
 
-Returns `{'name', 'tz', 'source'}` with `source` one of `setting`, `machine`, `unset`:
+Returns `{'name', 'tz', 'source', 'setting_unreadable'}` with `source` one of `setting`, `machine`, `unset`:
 
 1. `config['timezone']` when the zone database can load it → `setting`.
 2. Else the machine's zone, from the environment variable `ASUNA_HOST_TIMEZONE` (set by the Host, §7), else `TZ`, each
    only when it loads → `machine`.
 3. Else UTC → `unset`.
 
-Pure and cheap (no I/O, no store): `ZoneInfo` caches. It replaces `scene_timezone`, `local_time.zone_of`,
-`persona_model.timezone` and their fixed-offset and host-local fallbacks (`_zone`, `zone_unavailable`, `tz_source`,
-`utc_offset_minutes`). The `tzdata` package is a pinned dependency, so a name that is valid always loads. Every call
-site that took a scene for its zone takes none (the 47 sites above; the arguments go with the function, not left as
-dead parameters). The five helpers above become `her_zone` calls or go. `schedule_rules.plan_zone(plan, her)` is the one
-other resolver: the plan's stored zone when it loads, else hers. `local_time.for_model`, `stamp`, `face` and `line_stamp` keep their shape; only the zone they are given changes.
+`setting_unreadable` is true when a setting was given and does not load (it then falls to 2, 3). Pure and cheap (no I/O,
+no store): `ZoneInfo` caches. It replaces `scene_timezone`, `local_time.zone_of`, `persona_model.timezone` and the
+fixed-offset and host-local fallbacks (`_zone`, `zone_unavailable`, `tz_source`, `utc_offset_minutes`). The `tzdata`
+package is a pinned dependency, so a name that is valid always loads. Every call site that took a scene for its zone
+takes none (the 47 sites above; the arguments go with the function, not left as dead parameters). The five helpers
+above become `her_zone` calls or go. `is_iana` stays only where DSH needs an `Area/Location` name: `native_recurring`
+and `ensure_settlement`; the six `if is_iana(zone) else 'UTC'` sites use `her['tz']`.
+`local_time.for_model`, `stamp`, `face` and `line_stamp` keep their shape; only the zone they are given changes.
 
 ### 2. Her clock block
 
 `schedule_rules.local_clock` returns `{'now_local', 'weekday'}`. `timezone` and `tz_note` go; so do the rhythm block's
 `timezone` and `note` (its `local_time` already drops when it equals `now_local`, and now always does), the plan tool's
-echo of `timezone`, and the zone in the plan tool's refusal ("现在是 …（周几）"). `block_guide.py` says the `_at` fields
-are on the clock of `clock_from_program`.
+echo of `timezone`, and the zone in the plan tool's refusal ("现在是 …（周几）"). `dbread`'s window receipt
+(`Window.asked`) drops its `zone` name and keeps `local` and `utc`. `block_guide.py` says the `_at` fields are on the
+clock of `clock_from_program`.
 
 ### 3. Plans
 
-- **Create.** `zone = her_zone`; `next_fire` computes the moment as today; an `at` written without an offset is then
-  stored as that moment (`{'at': <ISO moment with offset>, 'at_utc': True}`, the form an `at` with an offset already
-  takes), so an appointment no longer needs a zone. `after`, `every` need none. `clock` (daily, weekly) is a habit and
-  follows her clock: the plan stores her zone's name (`plans.timezone`), and DSH is given the same name
-  (`native_recurring`, as today). `tz_source` is no longer written. The retry check ("same plan, same content") compares
-  the stored rule with the moment-pinned rule, which is deterministic for one zone.
-- **Update.** With a timing in the call, the zone is hers, `plans.timezone` becomes hers, and the result carries one
-  line when the plan's zone was another ("这条原来按另一个钟面排，现在按你的钟"). With a wording change alone, the
-  plan keeps its zone and its timing, as it does today.
+Two pure functions in `schedule_rules` carry the decisions, so they test without a scheduler: `has_wall_zone(rule)`
+(true for a `clock` rule and for an `at` written without an offset: the rules whose meaning depends on a zone) and
+`pin_at(rule, fire_at)` (a wall `at` becomes `{'at': <moment with offset>, 'at_utc': True}`, the form an `at` with an
+offset already takes). `plan_zone(plan, her)` is the plan's stored zone when the rule has a wall zone and the zone
+loads and differs from hers, else hers; a plan zone that does not load reads on her clock and says so without the name.
+
+- **Create.** `zone = her_zone`; `next_fire` computes the moment; `rule = pin_at(rule, fire_at)`; only a `clock` plan
+  stores a zone (`plans.timezone`, her name; DSH is given the same name through `native_recurring`, as today).
+  `after`, `every` and a moment need none, so they store none and `tz_source` is not written. The retry check compares
+  the stored rule with the pinned rule (deterministic for one zone).
+- **Update with a timing.** The zone is hers; the rule is pinned; the early return ("nothing changed") applies only when
+  the pinned rule and the wording are equal **and** the plan does not move (`has_wall_zone(rule)` and its stored zone is
+  not hers). A plan that moves is saved with `timezone` = hers (or none when its new rule has no wall zone) and
+  `last_update.from_timezone` = the old name; native handling is the existing in-place or re-create path with her zone.
+  The tool's result carries the line in its own key `clock_note` ("这条原来按另一个钟面排，比你的钟快（慢）N 小时；
+  现在按你的钟"), not in `note`, whose key the create-by-inference and fired-plan lines already use.
+- **Update with a wording alone.** The plan keeps its zone and its rule; `timezone` is not written; the moment is
+  computed with the plan's zone, as today.
 - **Re-arm and dispatch** (`_rearm`, the native-recurring branch, the legacy migration) use `plan_zone`: a plan fires by
-  the zone it was made in. `ensure_settlement` and the night stage use `her_zone`; settlement still needs a zone that is
-  known (`source != 'unset'`) and an `Area/Location` name for DSH's daily rule.
+  the zone it was made in. `ensure_settlement` and the night stage use `her_zone`; settlement needs `source != 'unset'`
+  and an `Area/Location` name for DSH's daily rule.
 - **What she reads.** `schedule_rules.project(plan, her, moment)`: a `clock` rule and a legacy wall-time `at` are
-  worded on the plan's zone; an `at_utc` rule, `next_fire_at` and everything else on hers (this fixes instance 2). When
-  the plan's zone and hers read different hours at the plan's next fire, the row gains `clock_note`: "这条的钟点写在另一个钟面上，
-  比你的钟快（慢）N 小时；到点以 next_fire_at 为准" (hours, and minutes when there are any, as `places.clock_gap` words a
-  gap today; that function goes with the group zone and its wording moves here). No note when
-  they read alike, and none for a plan with no next fire. A plan zone the database cannot load keeps today's
-  `timezone_note` wording, without the name (the plan is read on her clock).
-- `your_plans_there` (other rooms' plans, at home) is projected the same way.
+  worded on the plan's zone; a moment, `next_fire_at` and every other rule on hers (this fixes instance 2). **Only** a
+  rule with a wall zone can carry `clock_note`, and only when the plan's zone and hers read different hours at the plan's
+  next fire: "这条的钟点写在另一个钟面上，比你的钟快（慢）N 小时；到点以 next_fire_at 为准" (hours, and minutes when there
+  are any, as `places.clock_gap` words a gap today; that function goes with the group zone and its wording moves here). No
+  note when they read alike, for an `after`, `every` or moment rule whatever zone the old row stored, and none for a plan
+  with no next fire.
+- **One brief.** `schedule_rules.plan_brief(plan, her, moment)` is `project` cut to `intent`, `description`,
+  `next_fire_at`, `clock_note`. `your_plans_there` (other rooms' plans at home) uses it, which puts `clock_note` through
+  the whitelist (instance 3). The due-plan block (`scheduled_plan_from_program`) drops its raw `rule` and takes
+  `description` and `clock_note` from the same function (instance 4), keeping `last_occurrence_id`, `last_outcome` and
+  `your_thought_then`.
 
 ### 4. The group's zone leaves
 
@@ -148,14 +172,15 @@ Removed: the `place_timezone` tool (spec, `tool_place_timezone`, the name lists 
 Host's labels, icon and key map in `client.js`); `places.group_zone`, `their_time`, `clock_gap`, `set_zone`, `zones`
 and the `their_clock` row; `records/scenes.py:set_timezone`. The scene row's `timezone` is cleared by §8 and nothing
 reads it. The route keys (`schedule.timezone`, `timezone`, `schedule.utc_offset_minutes`) are no longer read; the
-deployment reading (`Before building`) says whether any route sets them.
+deployment reading (`Before building`) says whether any route sets them. `tools/memory_pilot_report.py` reads
+`her_zone(config)['name']` instead of `config.get('timezone')`.
 
 ### 5. Her rhythm key
 
-`rhythm.timezone` leaves `PRIVATE_KEYS`, the core defaults and the schema's reserved names (a package that names it now
-fails the schema's `additionalProperties`, as any unknown key). `set_policy` no longer offers it. A value already in the
-policy ledger stays there: the ledger is append-only history, and nothing reads the key. Her rhythm (block, settlement,
-night stage, visits, heartbeat pause, `ASUNA_TIMEZONE` for home tasks) uses `her_zone`.
+`rhythm.timezone` leaves `PRIVATE_KEYS`, the core defaults and the schema's reserved names and description (a package
+that names it fails the schema's `additionalProperties`, as any unknown key). `set_policy` no longer offers it. A value
+already in the policy ledger stays there: the ledger is append-only history, and nothing reads the key. Her rhythm
+(block, settlement, night stage, visits, heartbeat pause, `ASUNA_TIMEZONE` for home tasks) uses `her_zone`.
 
 ### 6. Her notes about people
 
@@ -174,25 +199,32 @@ a newer Host with an older worker is ignored by it. Neither direction fails.
 ### 8. Data, once, at landing
 
 `records/scenes.py:clear_timezones(store)` clears `timezone` from every scene that has it and returns the count (idempotent).
-`tools/clear_scene_zones.py` calls it: dry run by default, `--apply` to write, prints the count only. It is a detour:
-the lead runs it once after the new code is installed and verified, and the next commit deletes both (the tool and the
+`tools/clear_scene_zones.py` calls it: dry run by default, `--apply` to write, prints the count only. It stays because the
+owner's word is to remove the zone information from the database, and a zone name is personal data. It is a detour: the
+lead runs it once after the new code is installed and verified, and the next commit deletes both (the tool and the
 function). Order is safe either way: once the new code runs nothing reads the stored value, and if the removal ran
-first the old code would fall to the deployment's zone, which is the new behaviour. `plans.tz_source`
-and `plans.timezone` on existing plans stay (the plan's own zone, §3); the policy ledger stays (§5).
+first the old code would fall to the deployment's zone, which is the new behaviour. `plans.tz_source` and
+`plans.timezone` on existing plans stay (the plan's own zone, §3); the policy ledger stays (§5).
 
 ### 9. Start evidence
 
-One line per worker start in `reports/native-host-*`, no zone name: `clock.zone {source, setting_set, setting_loads}`.
-Two states are failures the owner would want to see: the setting is set but cannot load (a typo, now silent to her),
-and nothing is known (`unset`, she lives on UTC). It is the only place they show; nothing is added to a turn.
+One record per worker start in `reports/native-host-*`, **pinned** (`Evidence(..., pinned=('runtime.ready',
+'clock.zone'))`, or an unpinned kind would be pruned within hours: the file keeps its newest 3,000 records), no zone
+name: `clock.zone {source, setting_set, setting_unreadable}`. The failures the owner would want to see: the setting is
+set but does not load (a typo, now silent to her), and nothing is known (`unset`, she lives on UTC). A set-but-unreadable
+setting is read as not set, so it falls to the machine's zone. There is no owner-facing card for it (a card is UI of our
+own; it needs his approval first), so this record is where the lead sees it at landing and in readings; nothing is added
+to a turn.
 
 ### 10. References changed in the same commits
 
-`RUNTIME_API.md` (the `timezone` row and what it governs, the private-keys row, the clock block, the plan tool's result
-and `clock_note`, the tool list), `RUN_ASUNA.md` (the `timezone` sentence), `docs/map/` (regenerated by
-`tools/project_map.py`; hand-written answers that name the removed tool), `deploy/docker/README.md` only if its `TZ` row
-no longer says what holds, the `asuna-database` skill's `scenes` line, the module docstrings of `local_time.py` and
-`schedule_rules.py`. Current references show the present state, no history.
+`RUNTIME_API.md`: the `timezone` row (what it governs: the one clock, and the machine's zone when unset), the private-keys
+row, the settlement row ("a zone is known"), and a new subsection under "Schedules" for the clock block, the plan tool's
+result and `clock_note`; `RUN_ASUNA.md` (the `timezone` sentence; the systemd `TZ` line read against the new meaning);
+`deploy/docker/README.md` (the `TZ` row, read against it); `docs/map/` (regenerated by `tools/project_map.py`, plus any
+hand-written answer naming the removed tool); the `asuna-database` skill's `scenes` line and receipt lines;
+`persona-model.schema.json`'s description; the docstrings of `local_time.py`, `schedule_rules.py`, `persona_model.py`
+and `PRIVATE_KEYS`; the ADR index row. Current references show the present state, no history.
 
 ## Failure modes
 
@@ -201,11 +233,12 @@ variables. For a slow, failing or hung item: nothing waits.
 
 | State | What happens | Who sees it |
 |---|---|---|
-| setting set to a name that cannot load | machine's zone, else UTC | the start evidence line (`setting_loads: false`); she is not told |
-| setting unset, Host reports a zone | she lives on the machine's zone | evidence `source: machine` |
-| setting unset, no Host zone, no `TZ` | UTC | evidence `source: unset`; settlement is retired as today |
-| a plan's stored zone cannot load | the plan is read and fires on her clock; its row says the zone is unreadable | her plans block |
-| the deployment's zone is changed later | new plans use it; old plans keep theirs and say so when they differ; DSH's daily plans keep theirs | her plans block |
+| setting set to a name that cannot load | read as not set: the machine's zone, else UTC | the pinned start record (`setting_unreadable: true`); she is not told |
+| setting unset, Host reports a zone | she lives on the machine's zone; **at landing, a deployment whose setting is unset today moves from UTC to it** | the start record `source: machine`; the landing reading (1) |
+| setting unset, no Host zone, no `TZ` | UTC | the start record `source: unset`; settlement is retired as today |
+| a plan's stored zone cannot load | the plan is read and fires on her clock; its row says its zone is unreadable | her plans block |
+| the deployment's zone is changed later | new plans use it; old `clock` plans keep theirs and say so when they differ; DSH's daily plans keep theirs | her plans block |
+| an old plan is put on her clock by restating its time | not a no-op: it moves, and the result says so (§3) | the tool result |
 | the one-off removal is not run, or stopped halfway | nothing reads the stored value; run again | the tool's count |
 | the new code is rolled back after the removal | the old code falls to the deployment's zone, which is the new behaviour | none |
 | an older worker with a newer Host, or the reverse | the variable is ignored, or absent (§7) | none |
@@ -216,28 +249,46 @@ conversion). One line to her at landing says so.
 
 ## Tests that earn their place
 
-Unit, on the in-memory store, fast:
+Unit, on the in-memory store, fast. `tests/conftest.py` gets an autouse fixture that removes `TZ` and
+`ASUNA_HOST_TIMEZONE` for every test (the resolver reads them; the suite and `tests/fixtures/world.json` assume UTC),
+and a test that wants one sets it itself.
 
-1. **One face** (`tests/test_her_clock.py`): the same moment gives the same `clock_from_program`, line stamp and plan
-   row in two scenes when one carries a stale `timezone` and its route carries the old keys. Guards the silent
-   leftover: data the removal missed must be inert.
-2. **The resolver's four states** (the same file): setting; unset with `ASUNA_HOST_TIMEZONE`; unset with `TZ`; nothing →
-   UTC; a setting that cannot load falls through. Guards "a typo makes her live on UTC without a sign".
-3. **A plan row reads on one face** (`tests/test_plan_view.py`): description and `next_fire_at` agree for a wall-time
-   rule, a moment-pinned rule and a `clock` rule; `clock_note` appears exactly when the plan's zone reads another hour at
-   the next fire, with the right sign and span, and not otherwise. Guards instance 2 and the "other clock" confusion.
-4. **Create pins an appointment, update moves a plan onto her clock** (`tests/test_schedule_rules.py` and the
-   scheduler's own tests where they exist): an `at` without an offset is stored as a moment that does not change when
-   the setting changes; a timing update rewrites the plan's zone and a wording update does not.
-5. **The removal** (`tests/test_her_clock.py`, the `store` fixture on the memory adapter): `clear_timezones` clears only that field,
-   returns the count, is idempotent, and leaves other scene fields as they were. It is a path that removes records, which
-   AGENTS.md ranks first.
-6. **The tool is gone** (`tests/test_tool_budget.py`, `tests/test_adr011_turns.py` updated): she is not offered
-   `place_timezone`; the refusal that lists writable policy keys no longer names `rhythm.timezone`.
-7. **The schema** (existing persona-model tests): a package that sets `rhythm.timezone` is refused.
+1. **No second resolver** (`tests/test_one_zone.py`, a static check in the style of `test_one_clock`): `src/asuna` and
+   `tools` name `scene_timezone`, `zone_of(` and `persona_model.timezone`, or read the config's `timezone`, only in
+   `her_zone`. Guards the class: a future call site that draws a room's clock again. (A test that gives `her_zone` two
+   scenes would compare nothing, since it takes none.)
+2. **The resolver's states** (`tests/test_her_clock.py`): setting; unset with `ASUNA_HOST_TIMEZONE`; unset with `TZ`;
+   nothing → UTC; a setting that cannot load falls through and says so. A stale `scenes.timezone` on a scene row and
+   old route keys in the config change nothing in the clock block, a line stamp or a plan row built for that scene.
+   Guards "a typo makes her live on UTC without a sign" and the silent leftover.
+3. **No zone name reaches a model** (the same file): with the setting set to a sentinel zone, the clock block, the
+   rhythm block, a plan row, the due-plan block, the plan tool's refusal and result, and a `dbread` window receipt
+   contain no sentinel text. Guards decision 3 across the producers the review found.
+4. **A plan row reads on one face** (`tests/test_plan_view.py`): description and `next_fire_at` agree for a wall-time
+   rule, a moment, a `clock` rule; `clock_note` appears exactly when a rule with a wall zone reads another hour at its next
+   fire, with the right sign and span, and not for an `after`, `every` or moment rule whatever zone its row stores;
+   `plan_brief` keeps `clock_note`; the due-plan block has no raw `rule`. Guards instances 2, 3 and 4.
+5. **The decisions in pure functions** (`tests/test_schedule_rules.py`, stdlib only so her offline checks still run it):
+   `pin_at` gives a moment that does not move when the setting changes; `has_wall_zone` by kind; `plan_zone`; the update
+   decision (a restated timing on another zone moves, on hers is a no-op; a wording alone keeps zone and rule).
+   There is no test of `ScheduleService.create` and `update` end to end: no harness exists (`test_p3_schedule.py`, named
+   in that file's docstring, does not exist), and building one for this ADR is wider than the ask. The decisions are in
+   the pure functions; the service only applies them, and the landing's check by content reads a plan made on the real
+   system.
+6. **The removal** (`tests/test_her_clock.py`, the `store` fixture): `clear_timezones` clears only that field, returns
+   the count, is idempotent, and leaves other scene fields as they were. It is a path that removes records, which
+   AGENTS.md ranks first; it is the weakest of the seven and the only one that dies with the detour.
+7. **The tool and the key are gone**: `place_timezone` is not offered; the refusal that lists writable policy keys does
+   not name `rhythm.timezone`; a package that sets it is refused by the schema.
+
+Existing tests that change with the behaviour: `tests/test_tool_budget.py` (the exact tool counts and sizes, the `COPIED`
+pairs and `== CHARACTER[1]`), `tests/test_adr011_turns.py`, `tests/test_native_worker.py` (the session binding),
+`tests/test_plan_view.py` (the zone dict), `tests/test_dbread.py` (the receipt's `zone`), the six `scene_timezone` tests
+in `tests/test_schedule_rules.py`, `tests/test_persona_her_edits.py` and `tests/test_profile_compose.py` where they name
+the key. A fixture zone carries the `personal-scan: ok` marker.
 
 Not tested, on purpose: the wording of `clock_note` beyond its sign and span; the Host's one-line environment variable
-(its absence is covered by test 2, and the landing's check by content reads the evidence line on the real system).
+(its absence is covered by test 2, and the landing's check by content reads the start record on the real system).
 
 The static checks and repository guards run unchanged: `test_store_boundary` (the owner module is the only code that
 touches `scenes`), `test_one_clock`, `test_project_map`, `test_no_undefined_names`, `test_line_endings`.
@@ -250,7 +301,7 @@ One landing by the local Claude Code, after Xiaoman has read the page (step 4 of
 2. Tests, the push gate, fast-forward to main.
 3. The planned restart while she is quiet; tell her first; the running code is the commit's (`loaded.commit`).
 4. Verify by content on the real system: a turn's `clock_from_program` has two keys; her plans block reads on one face;
-   `place_timezone` is not in her tool list; the start evidence line names the source.
+   `place_timezone` is not in her tool list; the pinned start record names the source.
 5. `python tools/clear_scene_zones.py` (dry run), then `--apply`; the count before and after, nothing else printed.
 6. One message to her: what changed for her (below), and that earlier lines in the rooms that had a zone keep that face.
 7. The next commit deletes the one-off tool and the function (§8).
@@ -259,7 +310,8 @@ One landing by the local Claude Code, after Xiaoman has read the page (step 4 of
 
 Zones are personal data: each answer is a count or one of *same / different / absent*, never the name.
 
-1. Is the top-level `timezone` setting set, and does it load?
+1. Is the top-level `timezone` setting set, and does it load? **If it is not set, she moves at landing from UTC to the
+   machine's zone: the owner is told before.**
 2. Is `rhythm.timezone` in her policy? Same as the setting, different, or absent? **If different, the owner chooses
    which one is hers and sets the setting to it before landing**: her rhythm moves to the setting at landing.
 3. The Host's zone, a worker process's, a sandbox process's, and the setting: same or different? (Her own readout skill
@@ -267,8 +319,9 @@ Zones are personal data: each answer is a count or one of *same / different / ab
    machine's zone" is ambiguous and the setting must be set.)
 4. Scenes that carry `timezone`: how many; how many read another hour than the setting now, and in six months.
 5. Routes that carry `schedule.timezone`, `timezone` or `schedule.utc_offset_minutes`: how many.
-6. Plans in `CREATING`, `ACTIVE` or `SUSPENDED` that carry `timezone`: how many; how many read another hour than the
-   setting at their next fire; how many of those are `clock` plans held by DSH.
+6. Plans in `CREATING`, `ACTIVE` or `SUSPENDED` **whose rule has a wall zone** (`clock`, or an `at` without an offset)
+   and that carry `timezone`: how many; how many read another hour than the setting at their next fire; how many of
+   those are held by DSH.
 
 The answers decide whether `clock_note` ever shows (6 = 0 means it will not at landing; it stays for the day the setting
 changes), and whether the landing message to her has a rooms sentence (4 = 0 means it does not).
@@ -279,19 +332,38 @@ changes), and whether the landing message to her has a rooms sentence (4 = 0 mea
 - `place_timezone` and the "their clock" line of her places view are gone; what she knows about a group's people she
   keeps in her notes, if she wants it.
 - A plan she writes is on her clock; a one-time plan is a moment; a plan from before may say it is on another clock.
+  The block she reads when a plan fires gives the plan in words, not its stored rule.
 - Her policy no longer has `rhythm.timezone`.
 - Her usage-readout skill's text about offsets is hers; this ADR does not touch it.
+
+## The review of 2026-10-29 and where each finding is handled
+
+One fresh reviewer read the first version of this page against the code (read-only). Its findings, each checked by me
+on the code before it was taken; the numbers are its own.
+
+| # | Finding | Handled |
+|---|---|---|
+| 1 | update's "nothing changed" return defeats decision 2; update must pin; the old zone must reach the tool; two `note` keys collide | §3 update; instance 5; `clock_note` is its own key |
+| 2 | instances missed: the due-plan block, the `your_plans_there` whitelist, a zone name in `dbread` receipts, the six `is_iana ... 'UTC'` sites | §3 one brief; §2; §1; instances 3, 4 |
+| 2 | UTC-sliced clock text in the digest, the week readout, the switch list, the self-review day | not this ADR (below) |
+| 3 | tests read `TZ`; the suite assumes UTC | the autouse fixture |
+| 4 | the service has no test harness; the class is `ScheduleService`; `test_p3_schedule.py` does not exist | decisions in pure functions, test 5; the name corrected |
+| 5 | the start record would be pruned; a typo fails open | §9: pinned, and `setting_unreadable`; the residual (no owner card) is stated |
+| 6 | the note and the update line must depend on the rule kind; only wall-zone rules store a zone | §3 |
+| 7 | missing guards: a sentinel sweep, a static guard; test 1 as first worded compared nothing | tests 1, 3, 4 |
+| 8, 9, 10 | existing tests, docs and the landing gap omitted | the lists above; reading 1; `tools/memory_pilot_report.py` |
+| 11 | the scene-clearing detour removes only an inert field | kept for the owner's word; §8 says why |
 
 ## What the "real person" test answered (the questions of 2026-10-27)
 
 | # | Question | Outcome |
 |---|---|---|
-| 1 | Which zone information leaves the database | the scenes' zones, her `rhythm.timezone` value's reader, the route keys' reader; the plans' zones stay as the plan's own (decision 2); the deployment setting stays as the one source (decision 1). An appointment is a moment; a habit follows her clock |
+| 1 | Which zone information leaves the database | the scenes' zones; her `rhythm.timezone` value's reader; the route keys' reader; the zone a plan stored for a rule that has no wall zone; the plans' zones for `clock` rules stay as the plan's own (decision 2); the deployment setting stays as the one source (decision 1). An appointment is a moment; a habit follows her clock |
 | 2 | "Only the local TZ" when the deployment moves | the setting is set once for her; the machine's zone only when it is not set (decision 1; Xiaoman's position holds when the setting is set) |
 | 3 | Does the program read her note about a person | never; a reminder is on her clock (§6) |
 | 4 | What she confused | a group line's clock (her own account); fixed at the class (the root cause above), not by a rule for her |
 | 5 | A group with members in several zones | a group has no clock; there is hers and what she knows of each person |
-| 6 | The zone is personal data | the setting and any note are in the settings and the database, never in tracked files; start evidence carries no name; her own skill text with the machine's offset is hers to change |
+| 6 | The zone is personal data | the setting and any note are in the settings and the database, never in tracked files; the start record carries no name; her own skill text with the machine's offset is hers to change |
 | 7 | Migration | none: scenes' zones are cleared once (§8), plans keep theirs, the ledger keeps history |
 | 8 | What her clock shows | the face and the weekday, never a zone name (decision 3) |
 
@@ -351,7 +423,19 @@ herself). The owner, 2026-10-27: "Yes totally, but only after all ADRs prior to 
 
 ## Not in this ADR
 
-Her usage-readout skill and other skill text of hers (hers to change); the history of earlier ADRs' times; moving a plan
-the owner or she made in another zone onto her clock at landing (decision 2); a Web settings card check on the zone's
-value (a UI of our own; it needs the owner's approval first); ADR-103, ADR-107 and ADR-108 (107 and 108 build after this
-one and touch the same context code, so they rebase on it).
+Found while reading, wider than the ask, with data; the owner decides whether either enters:
+
+1. **Clock texts the program cuts from a UTC string.** `discussion_digest.py` (`item["at"][11:16]`, the window stamps
+   in `render()`), `tools_week.py` (the window as `since[:16]`, `until[:16]`), `reflection_map.py` (`r['until'][:16]` of
+   a switch whose `until` is written with `isoformat()` of a UTC moment, `switches.py:99`) and `self_review.py` (the day
+   of a note by UTC `%m-%d`) put a UTC hour or day into text beside faces on her clock. Read at the slicing lines; the
+   digest's own `at` source is not traced. They are the same class as this ADR's invariant, but they do not depend on
+   a room's zone, and this ADR does not change them.
+2. **A wording-only plan update recomputes `next_fire_at` from now** (`schedule.py:861,892`). For an `after` or `every`
+   plan the stored `next_fire_at`, which is what she reads and what she judges a plan by, then differs from the native
+   scheduler's timing, which that update leaves alone.
+
+Also not here: her usage-readout skill and other skill text of hers (hers to change); the history of earlier ADRs'
+times; moving a plan made in another zone onto her clock at landing (decision 2); a Web settings card check on the
+zone's value (a UI of our own; it needs the owner's approval first); ADR-103, ADR-107 and ADR-108 (107 and 108 build
+after this one and touch the same context code, so they rebase on it).

@@ -74,6 +74,25 @@ A fresh reviewer read the first version of this page against the code (read-only
 | S17 Landing 1 mixes a refactor with behaviour changes. | The extraction of `admit`'s checks was proven identical before anything else was added: 840 cases (both modes, block lists, route ids, listed and unlisted senders and groups) gave the same result from the old and the new function. The commits are ordered so (section 10). |
 | N18–N20 counts, line numbers, blob, F3's wording, `DEVELOPMENT.md` and `tools/README.md`, an exit code for the pre-install check, "the core never parses ids", `known:false` carries a configured route's id. | Corrected in place; `--require-admission` exits 1; the core owns the `auto-…` scheme (4.1); `judge` returns the holding route's id. |
 
+### 2.1 The second review (the built code)
+
+A second fresh reviewer read the four commits (`git diff 196b6f6..HEAD`), ran the suites and two probes against the real
+`ChannelServer` and `HostApi`, and returned 14 findings (1 blocker). They are fixed in the commits after the first four,
+except those marked as known.
+
+| Finding | Handling |
+|---|---|
+| The routes list is unpaged; with about 2,900 routes it exceeds what the adapter's client reads and catch-up `"all"` fails and retries forever. | Paged (5.2); a rejected ask no longer re-requests a catch-up run; a test drives 3,500 routes through the real server and the adapter's own client. |
+| A short core outage at the adapter's start blanks member lists and mute sweeps for 6 hours. | `groups()` raises `GroupsUnavailable`; the member round is tried again in 60 s and the mute sweep asks for itself again from a timer (7.3). |
+| The lane never read its cache, so a burst from an unlisted group cost one ask per line. | The lane uses `cached` first (7.2); a test: a burst from an unlisted group costs one ask. While the core is away nothing can be judged, so lines wait in the spool and the spool grows with the traffic (held, never dropped; lanes rule 5). |
+| A refused group's notice could reach her home while the core was away. | A notice about a group waits while the core does not answer and is then dropped and counted, never let through (7.3). |
+| The bridge returns "away" for a persistent 4xx and blocks every conversation behind that line; its answer map never evicts. | Five tries, then the line is set aside; the map is swept and bounded (8). |
+| The gate-prompt sentence said every admitted line is asked of her once; the gate is asked only for lines with a wake reason. | Reworded to say only that the number of times it asks has no cap (6.6). |
+| Departures dropped a first 403 `CHANNEL_AUTH_REQUIRED` that asks treat as "away". | Retried like any away (7.4). |
+| A cached refusal can outlive a core restart by its ttl, so the first minute of a newly listed group's lines is lost at the reader. | The epoch also comes with every outbox claim, so a restart is seen within one poll, and a poll that fails drops the cache (7.1). |
+| Smaller: `judge` scans every route per ask; the home notice looked up the group's name for every notice; `RUNTIME_API` gave a reason; a test left a folder on failure; the agreement test asserted only one direction. | An index built once per request; the name only where the core holds no route; the sentence is gone; cleanup in `finally`; the agreement test now also asserts that a refusal or block is `admit`'s with the same code, which found `judge` checking a bad group id before a bad sender (now in `admit`'s order). |
+| **Known, not fixed:** a leave posted later than the same person's return (the post retries for about 25 s) marks them ended again, and their next line carries one spurious 「退群后又回来了」; `depart` holds the ingress lock for a copy and a write of the whole route; `ADMITTED_VERSION` is a constant, not stored on the line. | Each needs a person to leave and be back within seconds, a burst of leaves in a very large group, or a wording change; none loses or admits wrongly. Noted here rather than built for. |
+
 ## 3. In plain words
 
 A person writes to the account. The adapter, which knows only QQ, asks the core one question: "may this sender speak
@@ -125,12 +144,14 @@ identity or scene. Body limit 256 KiB; unknown fields are refused; a route key c
   preparation checks (a scene id distinct from the others, folders that overlap, an identity bound to another account)
   stay `admit`'s own and surface as a 4xx at the post; they are listed in the code, not here.
 - `epoch` names this start of the worker. Settings are applied by a new start, so a package that sees it change drops
-  every answer it kept.
+  every answer it kept. It is also on the routes list and on every outbox claim, so an adapter that polls learns of a
+  new start within one poll without asking; a poll that gets no answer drops what was kept too.
 
 ### 5.2 `GET /v1/channels/{channel_id}/routes`
 
-`{routes: [{route_id, conversation}], epoch}`: every route, listed or admitted, that no block list stops. Catch-up reads
-it for `"all"`.
+`?after=<route id>&limit=<1..1000>` → `{routes: [{route_id, conversation}], next, epoch}`: the routes, listed or
+admitted, that no block list stops, in order of route id, a page at a time (an unpaged list of an open deployment's
+thousands of routes is larger than the 256 KiB the adapter's client reads). Catch-up reads the pages for `"all"`.
 
 ### 5.3 `POST /v1/channels/{channel_id}/departures`
 
@@ -194,10 +215,11 @@ No folder is made at admission or at a start. `host.prepare_channels` and `prepa
 
 ### 6.6 Where she reads that the missing cap is deliberate (Xiaoman's ask 6)
 
-One plain line in `stage_attend.md`, the gate's own prompt (where she decides whether to take a line): every admitted
-line is asked of her once, the program sets no cap on them, deliberately, not forgotten; what to take and how much is her
-judgement. It is 57 characters (`tests/test_tool_budget.py`: 445 to 502). Her prompt: it gets her reading and observation
-time on real turns before the next step builds on it, and it lands on its own, last.
+One plain line in `stage_attend.md`, the gate's own prompt (where she decides whether to take a line): the program sets
+no cap on how often it asks her, deliberately, not forgotten; what to take and how much is her judgement. (The gate is
+asked only for a line with a wake reason, `attend.GATED`, so the line says "how often it asks", not "every line".) It is
+40 characters (`tests/test_tool_budget.py`: 445 to 485). Her prompt: it gets her reading and observation time on real
+turns before the next step builds on it, and it lands on its own, last.
 
 ### 6.7 Admin actions
 
@@ -222,7 +244,7 @@ counted, a held admission fills in the route id, no answer spools the line witho
 watch key and the seen set use the **conversation key** (`group:<id>`, `dm:<id>`), the same for a conversation's lines
 whether or not their route is known, so order inside a conversation holds.
 
-The lane (`_submit_one`) asks before it prepares: refused → the spool file is removed and counted, with no journal row;
+The lane (`_submit_one`) uses what it has kept, else asks, before it prepares: refused → the spool file is removed and counted, with no journal row;
 admitted → the route id goes into the envelope and the spool file, the catch-up cursor is noted, then the line is
 prepared and posted as before; away → it waits as for a host that is away, nothing dropped; unsupported → it waits, adds
 a lane fault `inbound/admission/unsupported` and says so once a minute; rejected → counted like a host error and set
@@ -231,16 +253,20 @@ take the same path.
 
 ### 7.3 Platform work after the verdict
 
-Member lists (`ask_many`, `known` only), mutes (the route check moves out of the reader thread: a cached refusal drops
-the report, anything else is posted and the core refuses an unrouted group), home notices for a group (asked in the home
-poster's thread: away goes through to its own retries, unsupported or rejected drops), catch-up (route names resolved
-with `ask_routes`; `"all"` adds `GET …/routes`; away holds the run and it asks for itself again; the run notes the cursor
-of every row it fed), outbound (the three target checks are gone; a shape check, digits, stays).
+Member lists (`ask_many`, `known` only; a round that cannot list the groups is tried again in 60 s), mutes (the route
+check moves out of the reader thread: a cached refusal drops the report, anything else is posted and the core refuses
+an unrouted group; a sweep that cannot list the groups asks for itself again from a timer), home notices for a group
+(asked in the home poster's thread: while the core does not answer the notice waits, and after its tries it is dropped
+and counted, never let through; the core names a group it holds a route for), catch-up (route names resolved with
+`ask_routes`; `"all"` adds the pages of `GET …/routes`; away or unsupported holds the run and it asks for itself again, a
+rejected ask gives the run up until the next trigger; the run notes the cursor of every row it fed), outbound (the three
+target checks are gone; a shape check, digits, stays).
 
 ### 7.4 Leaves
 
 `notices.departure` reads the raw `group_decrease` (`leave` or `kick` of someone other than the account) and
-`Departures`, a class with its own thread, posts it: 5 tries, 5 s apart, then dropped and counted. `kick_me`, `disband`
+`Departures`, a class with its own thread, posts it: 5 tries, 5 s apart (a 403 `CHANNEL_AUTH_REQUIRED` counts as the
+core not taking requests, like a 5xx), then dropped and counted. `kick_me`, `disband`
 and the account's own leave post nothing here.
 
 ### 7.5 What the adapter's configuration loses
@@ -311,22 +337,30 @@ rewritten here.
   admission cases of 7.2 to 7.4, in both modes, with the three ways the core can fail, order across a conversation's
   known and unknown routes, the epoch, leaves, the journals.
 - **Bridge test** (`test/bridge.test.js`): the route from the core, once per ttl; a refusal drops; an old or absent core
-  holds; nothing of ours goes on the wire.
+  holds; a line whose question the core keeps refusing is set aside after five tries and the ones behind it go; the
+  answers kept are bounded; nothing of ours goes on the wire.
+- **The real server and the adapter's own client** (in `tests/test_channel_admission.py`): 3,500 routes paged through
+  `ChannelServer` and `HostApi`/`Admission`, the answers, the departure, the epoch on an outbox claim, the key not taken,
+  the unknown path: what a double of the core cannot show (body sizes, status mapping, paths).
 - **Ported:** `test_catchup`, `test_group_members`, `test_notices`, `test_own_mute`, `test_stickers`, `test_tool_budget`.
 - Not written: a test per function, of the three program phrases' wording, that a cap is absent.
 
 ### 10.2 What was run
 
-On the build (all numbers read from the run, 2026-10-29, in the cloud checkout, Linux):
+On the build (numbers read from the runs, 2026-10-29, in the cloud checkout, Linux; the tree as committed):
 
 - `pytest tests`: the same four failures as on the untouched tree (`test_integration` snapshot run, `test_no_server`,
   `test_refusal_probe`: no `config/local.json`, `test_sandbox_backend`: no confining sandbox in this container), nothing
-  else.
-- `npm run test:native`: the same failing tests as on the untouched tree (compaction ×4 cancelled, ADR-098 ×3 on a
-  Windows path, ADR-065 ×1), plus the two new bridge tests passing.
-- Adapter self-test offline: `pass=415 fail=0 skip=3` (from 409).
+  else. Run on each landing's tree separately: landing 1 with the old adapter, landing 2 with the new, each with only
+  those four.
+- `npm run test:native`: 269 tests; the same failing tests as on the untouched tree (compaction ×2 failing and ×2
+  cancelled, ADR-098 ×3 on a Windows path, ADR-065 ×1), and the four new bridge tests passing.
+- Adapter self-test offline: `pass=423 fail=0 skip=3` (from 409); at landing 1 the old self-test still gives 409.
 - The refactor proof: `admit` before and after on 840 cases, identical.
+- The core's contract tests (`tests/test_channel_admission.py`) 20, the real server with the adapter's client 1.
 - Not run here: the MongoDB integration layer (no server), the live system, the running Host. Nothing is installed.
+- The personal-data scan of the whole tree: 53 hits before and after, the same ones (none from this change); the
+  secrets scan needs `config/local.json` and was not run.
 
 ### 10.3 Landings
 

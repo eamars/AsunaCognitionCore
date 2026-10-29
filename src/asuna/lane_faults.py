@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from .store.words import Increase, OnCreate, Range, Set
 from . import clock
 
-LANES = ('inbound', 'chat', 'bulk', 'receipts', 'transcriber', 'video', 'watchdog')
+LANES = ('inbound', 'chat', 'bulk', 'receipts', 'transcriber', 'video', 'watchdog', 'data', 'tools')
 CLASS_CHARS = re.compile(r'[A-Za-z0-9_.:-]{1,80}')
 MAX_ROWS = 200
 MAX_COUNT = 100000

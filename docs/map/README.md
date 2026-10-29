@@ -319,6 +319,8 @@ What she remembers, how it is recalled, her documents, mood and blobs.
 - [`history_query`](../../src/asuna/history_query.py) — 查宿主保存的授权消息（P1-b）：字面检索覆盖完整 messages，原文整条回读。
 - [`dialogue_summary`](../../src/asuna/dialogue_summary.py) — Low-priority, source-bound summaries for new dialogue batches (DM and authorized groups).
 - [`discussion_digest`](../../src/asuna/discussion_digest.py) — ADR-005 P1-c：按需整理当前授权群里指定时间／主题的讨论（同一来源、同一授权）。
+- [`data_children`](../../src/asuna/data_children.py) — The action brain's history search and discussion digest, run in the data child (data_worker.py) while the Host runs, so their work, however long, never holds the worker's interpreter lock and ends at its deadline.
+- [`data_worker`](../../src/asuna/data_worker.py) — The data child (data_children.py): `python -X utf8 -P -m asuna.data_worker <host pid>`.
 - [`summary_trigger`](../../src/asuna/summary_trigger.py) — ADR-005 P2：自动摘要什么时候该动手——触发点从场景自己真实出现过的节奏里算出来。
 - [`summary_attribution`](../../src/asuna/summary_attribution.py) — ADR-005 P2：摘要条目上的说话人归属与更正——由程序从真实行算出来，不让模型自己认领。
 - [`documents`](../../src/asuna/documents.py) — Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).

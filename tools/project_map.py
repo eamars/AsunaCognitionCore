@@ -38,7 +38,7 @@ AREAS = {
         'attend', 'proactive', 'rhythm', 'dice', 'self_review', 'tools_week', 'reflection_map', 'people', 'peer_context', 'familiarity', 'group_admin', 'group_members',
         'watches', 'waiting', 'places', 'errands', 'focus', 'switches', 'own_mute', 'condense', 'notes', 'questions', 'scene_links', 'visibility', 'understanding', 'private_words']),
     'memory': ('Memory', 'What she remembers, how it is recalled, her documents, mood and blobs.', [
-        'memory', 'memory_indexer', 'memory_pilot', 'memory_tiers', 'key_words', 'crossing', 'retrieval', 'history_query', 'dialogue_summary', 'discussion_digest',
+        'memory', 'memory_indexer', 'memory_pilot', 'memory_tiers', 'key_words', 'crossing', 'retrieval', 'history_query', 'dialogue_summary', 'discussion_digest', 'data_children', 'data_worker',
         'summary_trigger', 'summary_attribution', 'documents', 'self_state', 'night', 'affect', 'blobs', 'privacy']),
     'persona': ('Persona', 'The persona package, its model and policies, her skills and ideas.', [
         'persona_model', 'persona_data', 'persona_jobs', 'policy', 'skills']),

@@ -224,6 +224,34 @@ ADR-005 P1-c：按需整理当前授权群里指定时间／主题的讨论（�
 - class `DiscussionDigestService` — Application/Host 装配用：复用宿主已有的 Store 与 Retrieval，不新开连接、不另起服务。
   - `digest_for_task`
 
+## `data_children`
+
+[src/asuna/data_children.py](../../src/asuna/data_children.py)
+
+The action brain's history search and discussion digest, run in the data child (data_worker.py) while the Host runs, so their work, however long, never holds the worker's interpreter lock and ends at its deadline.
+
+- class `DataFault` — The data child's own code failed on a job (not the job's content).
+- def `start` — The Host's data child, started in the background (warm for the first job).
+- def `stop` — The data child stops with the Host: a job asked for afterwards is UNAVAILABLE, never run in this process.
+- def `run` — The tool's result for one call: in the data child while the Host runs, else in this process.
+
+## `data_worker`
+
+[src/asuna/data_worker.py](../../src/asuna/data_worker.py)
+
+The data child (data_children.py): `python -X utf8 -P -m asuna.data_worker <host pid>`. It runs the action brain's history search and discussion digest on its own Store and Retrieval, so their work, however long, never holds the worker's interpreter lock. It says it is ready, then answers one job at a time on stdout in media_children's frames; stdout carries frames only.
+
+- def `refusal_class` — The known refusal class an exception is, most specific first; None for any other.
+- class `Collected` — The evidence of one job, kept for the worker to record.
+  - `record`
+- class `Services` — The child's Stores, Retrieval and channel plugins, kept from job to job.
+  - `store`
+  - `retrieval_for`
+  - `run` — The tool's result for one job (its refusals raised as the tool raises them).
+  - `close`
+- def `answer` — One job's answer frame (header, payload) from its payload; an error of this program raises.
+- def `main`
+
 ## `summary_trigger`
 
 [src/asuna/summary_trigger.py](../../src/asuna/summary_trigger.py)

@@ -702,9 +702,10 @@ def given_text(value):
 
 class ToolBroker:
     """Trusted host process; no DB/publication credentials enter model or child tools."""
-    def __init__(self, service:TaskService):
+    def __init__(self, service:TaskService, evidence):
         # Native Host tools use the private worker connection; there is no HTTP broker.
         self.service,self.store=service,service.store
+        self.evidence=evidence          # the worker's: the data child's records are kept here (data_children.py)
         self.bindings={}
 
     @property
@@ -817,18 +818,12 @@ class ToolBroker:
                         'scope_key':task['scope_key'],'created_at':now()},stream=task['_id'])
                 self.service.collab(task,'progress',{'from':'action','text':note.strip()},'progress:'+key)
                 result={'noted':True,'note':'说话的那一半下一回合会看到；要不要转告别人由那一半决定。'}
-            elif tool==HISTORY_TOOL_NAME:
-                # Read-only scoped history: the scene comes from the task binding, never
-                # from arguments. The effects lock stays released during the query so a
-                # cancellation or lease renewal cannot queue behind a Mongo read.
-                if not getattr(self, 'history', None):raise Denied('HISTORY_QUERY_UNAVAILABLE: 历史查询服务这会儿没接上；'+UNAVAILABLE)
-                result=self.history.query_for_task(task,args)
-                with self.service.lock:self.service.valid(task)
-            elif tool==DIGEST_TOOL_NAME:
-                # P1-c read-only discussion digest: same rule as history — scene from the
-                # task binding, no effects lock held across the Mongo reads.
-                if not getattr(self, 'digest', None):raise Denied('DISCUSSION_DIGEST_UNAVAILABLE: 群讨论整理服务这会儿没接上；'+UNAVAILABLE)
-                result=self.digest.digest_for_task(task,args)
+            elif tool in (HISTORY_TOOL_NAME,DIGEST_TOOL_NAME):
+                # Read-only scoped history and the discussion digest: the scene comes from the task binding, never
+                # from arguments. They run in the data child (data_children.py), with a deadline, and the effects
+                # lock stays released meanwhile, so a cancellation or lease renewal cannot queue behind them.
+                from . import data_children
+                result=data_children.run(tool,task,args,self.store.config,self.store.name,self.evidence)
                 with self.service.lock:self.service.valid(task)
             elif tool==READ_IMAGE_TOOL_NAME:
                 # Pull 模式看图：场景仍由任务绑定，参数换不了范围；拉取期间不持副作用锁，

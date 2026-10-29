@@ -50,6 +50,7 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 
 - def `register`
 - def `load` — Import each plugin's kind module: [{'python': <directory>, 'module': <name>}].
+- def `loaded` — The plugin entries this process loaded, in the order it loaded them (a data child loads the same).
 - def `get`
 - def `of` — The kind of a scene or person id, by its prefix; None for local ids and unknown kinds.
 - def `of_channel`
@@ -434,6 +435,7 @@ Voice and video decoding in child processes (ADR-095 §5.3.1): one long-lived ch
 - class `StartFailed` — The child exited, or did not say it was ready, while starting.
 - class `Closed` — The kind is closing (the Host stops): a job it ended is not the job's failure.
 - class `Timeout` — The job's try ran past its deadline, or the call's budget ran out.
+- class `Busy` — The job waited out its kind's lock-wait limit behind the kind's other jobs or a start; it never ran.
 - class `Died` — The child exited, or answered something that is not a frame, during the job.
 - class `JobError` — The job could not be done; `program` when the child's own code failed (not the job's content).
 - def `write_frame`

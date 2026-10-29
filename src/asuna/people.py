@@ -427,6 +427,20 @@ class People:
         key = name_key(text)
         return [d for d in docs if key and key in {name_key(self.shown(d)), name_key(d.get('card')), name_key(d.get('nickname'))}]
 
+    def copyable(self, scene, doc):
+        """A person as she is to copy them, for a refusal that lists who she may name (ADR-108 D4c): the first form of the
+        label that `resolve` takes back as that one person. What a refusal lists is what the same predicate accepts: the
+        owner's full label (the persona's word beside the bracket) is not one it takes, so it is never offered."""
+        forms = [self.label(doc), '[%s #%s]' % (self.shown(doc) or UNKNOWN_NAME, doc.get('handle')), '#%s' % doc.get('handle')]
+        for form in forms:
+            if {d.get('person') for d in self.resolve(scene, form)} == {doc.get('person')}:
+                return form
+        return forms[-1]
+
+    def copyable_author(self, scene, author):
+        """`copyable` for a stored author (a person id)."""
+        return self.copyable(scene, self.entry(scene, author))
+
     def account_of(self, scene, doc):
         """The platform account behind a person in this scene, for the adapter's @ marker; None when unknown."""
         platform = channel_kinds.of(scene['_id'])

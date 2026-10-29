@@ -679,6 +679,10 @@ Her tools: `src/asuna/role_tools.py` (`TOOLS`; where each is offered: `EVERYWHER
 |---|---|
 | parameter names she is shown, and old names still taken | `src/asuna/param_names.py` (`RENAMED`, `STILL_TAKEN`) |
 | a conversation's tool list and the options it shows (an option no turn there can use is left out, one spec per place and class), fixed when its session starts | `src/asuna/role_tools.py` (`session_specs`, `placed_spec`) |
+| the schema the model reads and the plugin's guard checks (permissive: a field the program fills in is not required, `speak`'s `parts` is one JSON value, no field declares an enum), the strict schema the worker checks a call against, and the shapes it repairs first | `src/asuna/tool_schema.py` (`declared`, `violations`, `repair`) |
+| a call's layers (permission stops alone; everything else is collected into one numbered refusal, her own first thought first, every code in the audit row), the handlers that collect (`SPLIT`) and what a length refusal says | `src/asuna/role_tools.py` (`RoleTools.call`, `combined`, `checkpoint`, `_text`), `src/asuna/config.py` (`too_long`, `over`) |
+| what woke a turn when no one spoke, in the head where `speaker` is for a person's line | `src/asuna/wake_words.py` |
+| the mark at the head of what the program writes into her conversation, and the head of a checkpoint | `packages/cognition-core/src/marks.js` |
 | the context blocks a turn carries, their limits, and their words; what of her identity each place carries | `src/asuna/context.py` (`ContextBuilder`), `src/asuna/context_budget.py`, `src/asuna/block_guide.py`, `src/asuna/carried.py` |
 | the checks on a turn's end, the gate's answer, an appraisal | `src/asuna/answers.py` |
 | the relevance gate and group focus | `src/asuna/attend.py`, `src/asuna/focus.py` |
@@ -779,7 +783,8 @@ No local root of this computer reaches the character brain; the action brain wor
 - **Toward her.** Every request of her lanes (her persona preset, the relevance gate, the appraiser, the background
   summaries, by the session's preset as it stands now) is rewritten at DSH's `llm/stream`: text, reasoning, the system
   text and earlier tool calls' arguments. The action brain and the recovery session are not rewritten.
-  DSH's working-folder line is a required runtime context and is rewritten with the rest. The DSH session, stored
+  DSH's working-folder line is a required runtime context that its suppression keeps; her lanes shadow it with an empty
+  one of the same name, so none of her requests carries it (the action brain's does). The DSH session, stored
   messages and the Web page keep the real text. Without a table her lanes' requests fail with
   `ASUNA_ROOT_TABLE_MISSING` (a program fault: her next turn there says a turn did not run, the developer inbox gets a
   note, the audit one `roots.refused`) and the settings card says so; the action lane runs. Otherwise the settings card

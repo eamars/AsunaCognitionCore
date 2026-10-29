@@ -230,7 +230,8 @@ Every error a tool call can return is read by a model that has to act on it, so 
 
 - Form: `CODE: 原因（带实际值）；怎么办`, in Chinese. The code comes first and stays stable; tests, logs and the
   character brain's `WORDS` table (`role_tools.py`) key on it. A code has an underscore.
-- The cause carries the values the raise site knows: what was given, the limit, the allowed set.
+- The cause carries the values the raise site knows: what was given, the limit, the allowed set. It never repeats her
+  prose: a short identifier she wrote (a ref, a label, an enum value) may be named, nothing longer.
 - The fix is concrete: the correction, the program list that holds the valid values (named as her context names
   it), or, when no retry can help, `重试也一样` and what to do instead.
 - A condition that is not the caller's fault (a service missing, a task fenced off) says so.
@@ -240,9 +241,15 @@ Every error a tool call can return is read by a model that has to act on it, so 
   arrives as `TOOL_FAULT: 程序内部出错（Class: message）…`, which tells the caller its arguments are not the cause.
 - The character brain sees `WORDS[code]` followed by the detail written in words, never the code (`role_tools.words`;
   the code stays in the record); a coded error raised without a detail must have a `WORDS` entry
-  (`tests/test_refusal_words.py`); a `Refused` raised in `role_tools.py` is shown as written. A call that fails the
-  tool's schema never reaches the worker: the Host plugin refuses it in the same form, keeping DSH's own line
-  verbatim at the end (`tool-args.js`).
+  (`tests/test_refusal_words.py`); a `Refused` raised in `role_tools.py` is shown as written.
+- A call is checked in layers (`RoleTools.call`). The Host plugin's guard checks the schema the worker ships
+  (`tool_schema.declared`, permissive), in her words with DSH's own line verbatim at the end (`tool-args.js`). In the
+  worker: a permission refusal stops alone and names what does the job here (`INSTEAD`); everything else is collected
+  into one refusal, numbered, her call's own first thought first, the codes of all of them in the record: the strict
+  schema (`tool_schema.violations`, on the call as she wrote it after `tool_schema.repair`), the call cap, and the
+  checks of a handler in `RoleTools.SPLIT`, which ends its check part with `checkpoint()` before its first effect. Any
+  other handler refuses at its first failure once those have passed. A length refusal is `config.too_long`: the line,
+  how far over she went, the aim, why the line is where it is (`LIMIT_WHY`) and where the excess starts.
 
 ## Writing docs and recording decisions
 

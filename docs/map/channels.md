@@ -85,7 +85,7 @@ What a channel's running adapter says it carries (ADR-079 §9.7).
 - def `supports` — The names a channel's adapter last declared; empty when it never did.
 - def `limit` — The largest size in bytes a channel's adapter declared for one of its functions (`file:<bytes>`); None when it declared none.
 - def `carries` — Whether the scene's channel declares any of these.
-- def `numbered` — Lines there show their number: the channel carries quotes, out or in (ADR-079 §9.2).
+- def `can_quote` — She can quote a line by its number there: the channel carries quotes, out or in (ADR-079 §9.2).
 - def `forget`
 
 ## `channel_admission`

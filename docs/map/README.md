@@ -267,6 +267,8 @@ From an input to her words: queueing, context, her tools, the checks, publishing
 - [`role_tools`](../../src/asuna/role_tools.py) — Her mind's tools: what the character brain may do in one native turn (ADR-011 §3, §5.1).
 - [`param_names`](../../src/asuna/param_names.py) — ADR-060: one name per idea in what a tool shows, and the old names still working for a while.
 - [`tool_args`](../../src/asuna/tool_args.py) — What she plainly meant, before a tool checks its arguments (owner 2026-10-06).
+- [`tool_schema`](../../src/asuna/tool_schema.py) — The two schemas of one tool of hers (ADR-108 D4b), and the shapes the program repairs.
+- [`wake_words`](../../src/asuna/wake_words.py) — What woke her when no one spoke (ADR-108 D5): one versioned table by episode kind.
 - [`answers`](../../src/asuna/answers.py) — Deterministic checks on a model's answer wherever the program needs one to continue (owner 2026-10-05).
 - [`publish`](../../src/asuna/publish.py) — Sends her accepted lines: `PublishService.publish` checks the turn is still current, then queues a platform line for its channel route or delivers a local-chat line with an idempotent receipt.
 - [`lines`](../../src/asuna/lines.py) — Her own open/close of a peer line (ADR-013 §6).
@@ -410,11 +412,13 @@ The DSH plugin (JavaScript): the worker it starts, her sessions, the action brai
 - [`collab.js`](../../packages/cognition-core/src/collab.js) — The two brains' collaboration thread in her conversation (ADR-011 §7.1).
 - [`compaction.js`](../../packages/cognition-core/src/compaction.js) — Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoint.
 - [`context-delivery.js`](../../packages/cognition-core/src/context-delivery.js) — Per-turn context delivery for the character brain: of the whole context the worker prepares every turn, only what her session does not still show is sent.
+- [`contexts.js`](../../packages/cognition-core/src/contexts.js) — What the host adds to her requests that is deployment detail and not hers (ADR-108 A11).
 - [`fetch.js`](../../packages/cognition-core/src/fetch.js) — Her web_fetch, underneath (ADR-026 §6): one fetch provider on DSH's web seam.
 - [`floor.js`](../../packages/cognition-core/src/floor.js) — Minimal publication floor, deliberately independent of the business worker.
 - [`image-refusal.js`](../../packages/cognition-core/src/image-refusal.js) — A model that refuses a picture must not end her turn, nor leave the conversation resending it (owner 2026-10-06).
 - [`index.js`](../../packages/cognition-core/src/index.js) — The Host plugin's core: `CognitionCore` starts the Python worker and runs the turns it prepares in her native DSH sessions, with her role and action tools served by the worker.
 - [`log-sink.js`](../../packages/cognition-core/src/log-sink.js) — Asuna's own log lines, kept.
+- [`marks.js`](../../packages/cognition-core/src/marks.js) — What Asuna writes at the head of what it puts into her conversation, so a message says whose it is (ADR-108 D3).
 - [`navigation.js`](../../packages/cognition-core/src/navigation.js) — Her conversations as DSH sessions: `organizeNativeWorkspaces` creates and titles the workspaces and sessions the worker plans, and `recordChannelInput` writes a received platform line into its conversation without starting a turn.
 - [`outage.js`](../../packages/cognition-core/src/outage.js) — The span she was down while the Host ran on (ADR-101).
 - [`pairing.js`](../../packages/cognition-core/src/pairing.js) — A tool call and its result stay adjacent in her conversation, and a compaction sees the surface it summarizes.

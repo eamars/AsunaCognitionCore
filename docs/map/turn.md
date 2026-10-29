@@ -54,6 +54,7 @@ One character turn per episode (ADR-011 §3).
 
 Builds what her turn shows her: `ContextBuilder.prepare` reads one event's scene, persona, relationship, memories, history, tasks and other state, and returns the system text, the context blocks and a manifest of them.
 
+- def `local_line` — The number of the line that called her when that line has no label line to carry it, else None (ADR-108 D2, A3).
 - def `landing_lost` — The parts of her delivered line the platform did not store, in words; None when it stored what was sent.
 - def `refs` — Every id she may cite in this turn: the turn's own event, ref_index, the document sections, and the memories and tasks shown in their own blocks.
 - def `catch_up` — A group's history for her turn (newest first): the last 12 lines, plus every line since she last spoke there, reaching back at least 10 and at most 60 minutes (attend.py's window), at most 40 lines.
@@ -172,6 +173,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `tools` — The tool specs her brain is shown: tiered memory's when its switch is on, else as they are; `delegate` takes a tier when the owner configured the action brain's 高 (ADR-075).
 - def `tiered_delegate`
 - def `developer_ask` — message_developer's arguments as ask's: a question to the developer's line, a wake as an hour's patience and a note as until it is answered (ADR-061).
+- def `infer_doc_op` — The do a write_document without one plainly is, by its fields (ADR-108 D4d): a heading and no section is a new section; a section and content is its rewrite; a section with only tag fields is a tag change.
 - def `infer_op` — The option a call without op plainly is, by its fields; None when they say none or several.
 - def `written` — Her arguments with every local root contracted (ADR-098 D4), except a field bound for the action brain (D3) and her speech, whose replacements `tool_speak` counts (D5).
 - def `ability` — What a call does: its tool, or for a tool with options the option ('task.message').
@@ -182,6 +184,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `all_specs` — Her tools, and each old name registered but never listed, so a call by it still reaches the worker.
 - def `speak_kinds` — The parts speak takes in this conversation: its kind's parts, a pointer part only where the channel's adapter declared it (ADR-079 §9.7: not declared is not carried, so it is not shown).
 - def `speak_spec` — speak as a conversation with these parts shows it, with `quote` only where her line can quote.
+- def `declared_specs` — Specs as DSH registers them and the model reads them: each tool's parameters declared (tool_schema.declared).
 - def `session_specs` — Her tools as one conversation shows them: `speak` with the parts and the quote its channel's adapter declared (ADR-079 §9.7), and each option left out that no turn there can use (`placed_spec`, ADR-087 §4.3); the rest as all_specs.
 - def `conversation_class` — The class of a conversation's turns: the local chat's is its person's, a private chat's the person it is with, a group's its own.
 - def `placed_spec` — One tool's spec as a conversation of this class and kind shows it, `listed` being what it lists (abilities).
@@ -190,7 +193,8 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `exposed` — What this turn may use, by option: the turn's own rules (its kind, context and grants, §2.6) within the conversation's list (abilities).
 - def `toolbox` — The tools her conversation lists, the same in each of its turns (what the model is shown).
 - def `abilities` — What her conversation lists, by option, the same in each of its turns: decided by its place, its channel and the configuration, never by the turn's kind or context.
-- def `not_now` — Why her conversation's tool or option `name` is not in this turn, and when it can be used.
+- def `instead_words` — The sentence naming what does the job here, or '' when nothing in this turn does.
+- def `not_now` — Why her conversation's tool or option `name` is not in this turn, when it can be used, and what does the job here.
 - def `offered_pictures` — The artifact ids her turn may send (image_artifacts_from_program): she may also look at them.
 - def `her_pictures` — Whether she can look at a picture this turn: her own route takes images and the conversation's recent pictures (the same window read_image reads) include one that can be pulled.
 - def `turn_pictures` — ([(ref, payload)] to attach to her group turn, pictures_from_program or None).
@@ -199,9 +203,11 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `called` — Whether this turn is someone calling her: an addressed group line, or a person's line in a one-to-one conversation (home, a private chat, a line); never a heartbeat, a visit, a note or a task's hand-back.
 - def `spoken` — (lines, texts) of this turn's text parts that left or may still leave, read from its outbox each time: a failure the platform reports after the call gives its lines back too.
 - def `chat_lines` — How many lines a text part is in a chat (owner 2026-10-14: in online chat a line break is another message): each line with words counts, a blank line does not, a fenced code block counts as one.
-- def `reply_receipt` — What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2); where the conversation shows line numbers, each sent line's own (ADR-079).
+- def `reply_receipt` — What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2); and each sent line's own number in the conversation (ADR-079, ADR-108 D2).
 - class `RoleTools` — Runs one tool call for one episode, on the coordinator's thread (it holds the coordinator lock).
   - `call` — (result, concludes_turn).
+  - `checkpoint` — End of a handler's check part: refuses with everything found, or lets the effect begin.
+  - `combined` — The one refusal for a call: its problems numbered, the call's own first thought first, her words in none of them; one problem stands alone.
   - `take_thought` — ADR-099: in a turn that does not ask for her thought, the model's first thinking in it becomes her 心里话: the same monologue unit, `source` thinking, stored contracted (ADR-098), anchored to the call it came with ('end' when the turn made non
   - `thought_not_carried` — ADR-101: a turn that does not ask for her thought leaves one row.
   - `tool_think`
@@ -273,6 +279,25 @@ What she plainly meant, before a tool checks its arguments (owner 2026-10-06).
 - def `as_list` — argv written as a string that holds a list: '["python3", "-c", "…"]' or "['python3', …]".
 - def `as_flag`
 - def `normalize` — (arguments as she meant them, notes on what the program changed).
+
+## `tool_schema`
+
+[src/asuna/tool_schema.py](../../src/asuna/tool_schema.py)
+
+The two schemas of one tool of hers (ADR-108 D4b), and the shapes the program repairs.
+
+- def `declared` — A tool's parameters as DSH registers them and the model reads them (see the module docstring).
+- def `violations` — Every way `args` fails the strict `parameters` of `tool`, as [(code, text, field)], in field order.
+- def `title_of` — The brief's first sentence, cut to the aim (a title is a name, not her words repeated).
+- def `repair` — (a copy of the call's arguments repaired, what was repaired): the stateless shapes she writes that the program reads as she meant (ADR-108 D4d).
+
+## `wake_words`
+
+[src/asuna/wake_words.py](../../src/asuna/wake_words.py)
+
+What woke her when no one spoke (ADR-108 D5): one versioned table by episode kind.
+
+- def `woken_by` — The words for a program-woken turn, or None for a person's line (the kind `external`, which keeps `speaker`).
 
 ## `answers`
 

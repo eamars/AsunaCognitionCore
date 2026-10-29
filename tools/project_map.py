@@ -32,7 +32,7 @@ AREAS = {
         'records/sessions', 'records/receipts', 'records/view', 'records/tasks', 'records/plans',
         'records/memories', 'records/artifacts', 'records/heads', 'records/people', 'records/ideas']),
     'turn': ('A turn', 'From an input to her words: queueing, context, her tools, the checks, publishing.', [
-        'ingress', 'router', 'coordinator', 'context', 'context_budget', 'block_guide', 'render', 'carried', 'role_tools', 'param_names', 'tool_args',
+        'ingress', 'router', 'coordinator', 'context', 'context_budget', 'block_guide', 'render', 'carried', 'role_tools', 'param_names', 'tool_args', 'tool_schema', 'wake_words',
         'answers', 'publish', 'lines', 'chat', 'handover', 'reasons']),
     'people': ('Groups and people', 'Who is talking, whether she joins in, her places, notes between conversations.', [
         'attend', 'proactive', 'rhythm', 'dice', 'self_review', 'tools_week', 'reflection_map', 'people', 'peer_context', 'familiarity', 'group_admin', 'group_members',

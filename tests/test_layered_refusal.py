@@ -157,3 +157,118 @@ def test_a_long_refusal_cuts_each_candidate_list_and_drops_no_problem(world):
     assert len(numbered(said)) == 2 and said.count('文档399') == 0 and '还有 397 个' in said and '2. 再说乙。' in said
     tools.problems = [('A', '短。', '短。'), ('B', '再说乙。')]
     assert tools.combined().args[0] == '这次调用有 2 处要改，改好一起再调用一次：\n1. 短。\n2. 再说乙。'
+
+
+def test_a_permission_refusal_ends_with_what_does_the_job_here_only_from_this_turns_tools(world):
+    here = turn(world, thought=True, tools=['think', 'task.message', 'plan'])
+    said = role_tools.not_now(world.store, here, 'task.answer')
+    assert said.endswith('这一回合能做这件事的是：task 的 message（给行动脑补话、改目标）。'), said
+    assert role_tools.not_now(world.store, turn(world, tools=['think']), 'task.answer') == role_tools._why_not_now(
+        world.store, turn(world, tools=['think']), 'task.answer'), 'nothing here does it: when it can be used, as before'
+    assert role_tools.instead_words(here, 'visit') == '这一回合能做这件事的是：plan（把这件事留到将来再想）。'
+    assert role_tools.instead_words(turn(world, tools=['visit']), 'errand') == '这一回合能做这件事的是：visit（自己出门去那个群看看）。'
+    assert role_tools.instead_words(here, 'recall') == '', 'an ability with no entry says nothing more'
+
+
+def test_every_instead_entry_names_an_ability_that_exists():
+    abilities = {name for name in role_tools.TOOLS}
+    abilities |= {'%s.%s' % (tool, op) for tool, ops in role_tools.OPS.items() for op in ops}
+    for refused, entries in role_tools.INSTEAD.items():
+        assert refused in abilities, refused
+        for ability, what in entries:
+            assert ability in abilities and what, ability
+
+
+def test_a_refusal_lists_who_she_may_name_in_the_forms_the_lookup_takes_back(world):
+    from asuna.people import People
+    from asuna.records import messages as message_records
+    from test_people import row
+    world.store.config['canonical_persons'] = {'qq:20001': 'local-user'}
+    for number, card in ((20001, '阿杰'), (20002, '小林')):
+        message_records.save(world.store, {**row(number, '在吗', card=card), 'scene_seq': number - 19999,
+                                           'direction': 'inbound'}, stream='seed-%d' % number)
+    scene = scene_records.get(world.store, SCENE)
+    people = People(world.store, 'demo')
+    docs = [doc for doc in people.ensure_roster(scene).values() if doc.get('person') != people.self_id]
+    assert len(docs) == 2
+    for doc in docs:
+        form = people.copyable(scene, doc)
+        assert [d['person'] for d in people.resolve(scene, form)] == [doc['person']], (form, doc)
+    owner = next(doc for doc in docs if people.is_owner(doc))
+    assert people.label(owner).startswith(people.owner_label + ' ['), 'the full label has the persona\'s word beside the bracket'
+    assert people.resolve(scene, people.label(owner)) == [], 'which the lookup does not take back: it must never be offered'
+    assert people.copyable(scene, owner) == '[阿杰 #%s]' % owner['handle']
+
+
+def test_a_plan_with_a_long_intent_and_a_timing_that_does_not_parse_says_both_and_makes_nothing(world):
+    world.tools.coordinator.scheduler = SimpleNamespace()          # a scheduler exists; nothing may reach it
+    ep = turn(world)
+    outcome, said, codes = call(world, ep, 'plan', {'do': 'create', 'intent': '之后再想。' * 300, 'at': '明天下午',
+                                                    'after_seconds': 60})
+    assert outcome == 'refused' and said.startswith('这次调用有 2 处要改'), said
+    assert numbered(said)[0].startswith('intent 太长了：1500 字，过了 1000 字的线 500 字（要求 800 字以内）。')
+    assert numbered(said)[1].startswith('没安排成：') and '给了' in numbered(said)[1]
+    assert codes == ('TEXT_TOO_LONG', 'INVALID_SCHEDULE_SPEC'), codes
+    outcome, said, codes = call(world, ep, 'plan', {'do': 'cancel'})
+    assert said == 'plan_id 要写内容（160 字以内）。' and codes == ('TEXT_EMPTY',), (said, codes)
+
+
+def test_a_task_reference_that_is_not_one_is_named_beside_a_message_that_is_too_long(world):
+    ep = turn(world, thought=False)
+    outcome, said, codes = call(world, ep, 'task', {'do': 'message', 'task': 'task-nope', 'message': '补充。' * 8000})
+    assert outcome == 'refused' and said.startswith('这次调用有 3 处要改'), said
+    lines = numbered(said)
+    assert lines[0] == role_tools.THINK_FIRST
+    assert any('「task-nope」不是这个对话里的任务' in line for line in lines)
+    assert any(line.startswith('message 太长了：24000 字，最多 20000 字。') for line in lines), 'a failure catch: no aim, no band'
+    assert set(codes) >= {'THINK_FIRST', 'TASK_UNKNOWN', 'TEXT_TOO_LONG'}
+
+
+def test_a_delegate_past_the_hand_off_limit_and_with_no_brief_says_both(world):
+    ep = turn(world)
+    ep = world.store.put('episodes', {**ep, 'delegation_depth': role_tools.DELEGATION_DEPTH_MAX}, expected=ep['revision'], stream=ep['_id'])
+    outcome, said, codes = call(world, ep, 'delegate', {'title': '查天气'})
+    assert outcome == 'refused' and said.startswith('这次调用有 2 处要改')
+    assert any('先停下来' in line for line in numbered(said)) and any(line.startswith('缺 brief') for line in numbered(said))
+    assert codes == ('ARGS_MISSING', 'DELEGATION_DEPTH')
+
+
+def test_speak_keeps_its_nothing_was_sent_framing_for_one_problem_and_for_several(world):
+    ep = turn(world, tools=['think', 'speak'])
+    outcome, said, codes = call(world, ep, 'speak', {'parts': [{'text': ''}]})
+    assert said == '这次一条都没发：第 1 条是空的。改好再调用一次 speak。' and codes == ('SPEAK_PART',)
+    outcome, said, codes = call(world, ep, 'speak', {'parts': [{'text': ''}, {'text': '好'}], 'quote': '3', 'wait': 'no'})
+    assert said.startswith('这次调用有 2 处要改，这次一条都没发，改好一起再调用一次：') and 'quote：' in said, said
+    outcome, said, codes = call(world, ep, 'speak', {'parts': '[{"text": "好"}, {"name": ""}]'})
+    assert 'sticker 要写 name' in said, 'a string of parts is read, a part with no kind is completed, then checked'
+
+
+def test_the_document_stores_problems_contain_what_apply_would_raise(world):
+    """apply stays the authority and refuses at the first it meets; `problems` finds them together and has that one
+    among them, in the same words."""
+    from asuna.documents import DocumentError
+    docs = DocumentStore(world.store, 'demo')
+    docs.apply('ledger-a', {'op': 'append_section', 'heading': '第一节', 'reason': '开', 'kind': 'ledger'}, '正文',
+               base_revision_id=None, author='character', mutation_id='m-a')
+    base = docs.read('ledger-a')[0]
+    bad = [
+        ({'op': 'replace_section', 'sid': 'nope', 'reason': 'r'}, '改后的正文'),
+        ({'op': 'replace_section', 'sid': '第一节', 'reason': 'r', 'visibility': 'secret'}, '改'),
+        ({'op': 'replace_section', 'sid': '第一节', 'reason': 'r'}, '   '),
+        ({'op': 'append_section', 'reason': 'r'}, '正文'),
+        ({'op': 'append_section', 'heading': 'h', 'reason': 'r', 'tags': ['place:nowhere']}, '正文'),
+        ({'op': 'set_tags', 'sid': 'nope', 'reason': 'r', 'inject': 'sometimes'}, None),
+        ({'op': 'correction', 'sid': '第一节', 'reason': 'r', 'kind': 'working'}, '更正'),
+    ]
+    for intent, body in bad:
+        found = docs.problems('ledger-a', intent, body)
+        with pytest.raises(DocumentError) as raised:
+            docs.apply('ledger-a', intent, body, base_revision_id=base, author='character', mutation_id='m-bad')
+        assert str(raised.value) in [str(error) for error in found], (intent, found, raised.value)
+    # Independent problems come back together; a check whose input a problem spoiled is not run on a guess.
+    found = docs.problems('ledger-a', {'op': 'replace_section', 'sid': 'nope', 'reason': 'r', 'visibility': 'secret',
+                                       'inject': 'sometimes', 'kind': 'working'}, '   ')
+    assert [error.code for error in found] == ['DOC_BODY_REQUIRED', 'DOC_TAGS_INVALID', 'DOC_TAGS_INVALID', 'DOC_KIND_FIXED',
+                                               'DOC_SECTION_NOT_FOUND'], found
+    assert docs.problems('ledger-a', {'op': 'set_tags', 'sid': '第一节', 'reason': 'r', 'visibility': 'public'}) == []
+    assert docs.problems('nobody', {'op': 'replace_section', 'sid': 'x', 'reason': 'r'}, 'x')[0].code == 'DOC_NOT_FOUND'

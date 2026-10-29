@@ -1062,8 +1062,31 @@ HOME_AUTHORITY = frozenset(('delegate', 'task.message', 'task.stop', 'errand', '
                             'ideas.review', 'peer_line', 'group_action'))
 
 
+# ADR-108 D4c: what does the job when the tool or option she reached for is not in this turn: one table, each entry an ability
+# with what it does, intersected with this turn's tools. A test holds that every entry names an ability that exists.
+INSTEAD = {
+    'task.answer': (('task.message', '给行动脑补话、改目标'),),
+    'task.message': (('delegate', '把一件新的事交给行动脑'),),
+    'attach_image': (('delegate', '先让行动脑把图画出来'),),
+    'errand': (('visit', '自己出门去那个群看看'),),
+    'visit': (('plan', '把这件事留到将来再想'),),
+}
+INSTEAD_WORDS = '这一回合能做这件事的是：%s。'
+
+
+def instead_words(ep, name):
+    """The sentence naming what does the job here, or '' when nothing in this turn does."""
+    here = ep.get('turn_tools') or ()
+    found = ['%s（%s）' % (named(ability), what) for ability, what in INSTEAD.get(name, ()) if ability in here]
+    return INSTEAD_WORDS % '；'.join(found) if found else ''
+
+
 def not_now(store, ep, name):
-    """Why her conversation's tool or option `name` is not in this turn, and when it can be used."""
+    """Why her conversation's tool or option `name` is not in this turn, when it can be used, and what does the job here."""
+    return _why_not_now(store, ep, name) + instead_words(ep, name)
+
+
+def _why_not_now(store, ep, name):
     from . import local_time, switches
     off = switches.tools_off(store, ep['scene_id']).get(name.split('.')[0])
     if off:
@@ -2830,7 +2853,7 @@ class RoleTools:
         if person:
             found = people.resolve(scene, person)
             if len(found) != 1:
-                usable = [people.label(doc) for doc in sorted(people.ensure_roster(scene).values(),
+                usable = [people.copyable(scene, doc) for doc in sorted(people.ensure_roster(scene).values(),
                                                               key=lambda doc: str(doc.get('seen_at') or ''), reverse=True)
                           if doc.get('person') != people.self_id and people.person(doc.get('person')) != people.owner]
                 raise Refused(('「%s」对得上不止一个人：%s。' % (person, '、'.join(people.label(d) for d in found[:5])) if found

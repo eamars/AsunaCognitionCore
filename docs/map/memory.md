@@ -95,6 +95,8 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 - def `claim_chars` — A gist's length without its basis lines: the basis is never what the 160 characters squeeze out.
 - def `has_basis`
 - def `declared_nature` — The nature and source she gave a write ({} when neither): her word for the nature wins over the source's.
+- def `anchor_field` — {'line': anchor} when the write names a source that is someone's word and the program resolved the line it rests on (`intent['anchor']`, set by the handler and never by her), else {}.
+- def `sources` — {section id: where its claim rests} for a document's items that rest on a line, as `scene` reads them (ADR-108 D2: People.source_of).
 - def `told` — A move as her result or the moved line says it, in words.
 - def `night_list` — The night list (settlement, ADR-062 §4.2 step 8): at most NIGHT_ITEMS, chosen by rule and each told why, none of them a keep or drop choice: lapsed long or dated items waiting for their gist (写一句意思), items met in different conversations (几处
 - def `recalled` — {memory id: [episode ids]} for memories she recalled herself (`recall.read`) in at least two different conversations within the window: promotion's candidates come from her acts, not from what she was shown.
@@ -281,6 +283,7 @@ Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).
   - `revision`
   - `slugs`
   - `seed` — Import a package seed only when the head is missing (package upgrades never overwrite).
+  - `problems` — Every problem this write would meet before anything is written, as [DocumentError] (ADR-108 D4b): the intent's own fields, then the document's state, then the budget on the document the write would leave.
   - `apply` — One write intent.
   - `adopt_seed` — Merge a newer package seed by sid; sections both sides changed are listed, never overwritten.
 
@@ -343,6 +346,7 @@ Affect ledger and projection (ADR-009 ARCHITECTURE §6).
   - `readable`
   - `check` — Program gates for a committed event (§6.4): any failure refuses only this item.
   - `commit` — A character-committed event: host timestamp, origin asuna, source scope from the session class.
+  - `record_problems` — Every gate `record` would refuse this feeling at, found without writing: [AffectError], in the order the gates come.
   - `record` — A feeling she recorded in words (DECIDE): mapped to numbers here, then the usual gates.
   - `amend` — One amendment of an existing event; ``key`` names which effect it is (DECIDE dedups by it).
   - `amendment`

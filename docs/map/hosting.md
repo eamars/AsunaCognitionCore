@@ -123,8 +123,9 @@ Paths and checks every module shares: `ROOT` (the source tree), `DATA` (this pro
 - def `soft` — The length she is asked for: four fifths of the limit the program refuses past, which stays where it was.
 - def `refs_usable` — What a refusal that named a wrong reference adds (ADR-087 §4.5): the ones that can be used there, a few.
 - def `over` — Words for a text kept although longer than she was asked for (`ask`, by default soft(limit)), or None.
+- def `excess_line` — (s, t): the line of a text that holds its first character past `limit`, and how many lines it has, as split on line breaks once trailing blank lines are gone.
+- def `too_long` — The refusal for a text past the line (ADR-108 D4c): the line, by how much she went over, the aim, where the line comes from, and where the excess starts, by characters.
 - def `cut` — An over-long text of hers cut to fit `limit` with the mark included: the beginning kept, the end cut at the last sentence end that fits (else at the limit), and the mark saying how much was cut, so that sending it as it is can never pass fo
-- def `cut_offer` — The cut version as a refusal offers it, on its own lines ready to copy, and the part that cut leaves out, so what would be lost is seen before it is sent (her ask, 2026-10-20).
 - def `excerpt` — Bounded text for a context block; a cut always says so and how long the original was.
 
 ## `repo_files`

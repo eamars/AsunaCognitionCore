@@ -2,6 +2,8 @@
 
 Start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): the repository map, where state lives, tests, and how to write a persona or channel package. The rules below are binding.
 
+Before any development work, read [`.agents/skills/big-sis/SKILL.md`](.agents/skills/big-sis/SKILL.md). Its discipline (how a piece of work is designed, reviewed, shown to her, built and landed) binds every coding agent here. Its first part says who leads development: Claude Code, whom the owner calls big sis. Other agents keep their own names and roles.
+
 - Skills for coding agents are in `.agents/skills/`; read a skill's `SKILL.md` before its task. To see how much of her model traffic was read from cache, or how a compaction went, use `asuna-cache-readout` instead of a one-off script.
 - `start-asuna.cmd` (Windows) or `start-asuna.sh` (Linux, macOS) launches the installed native DSH Web profile; `start-asuna-ui.cmd` is an alias and `asuna ui` selects the same profile. Interaction with her goes through that Web UI; there is no terminal chat.
 - An agent that talks to a persona through any shared interface (her Web chat, a channel such as QQ, a peer bridge) says who it is when it starts and whenever it could be mistaken: which agent it is and that it is not the owner. It never writes as the owner or lets a message pass for the owner's.

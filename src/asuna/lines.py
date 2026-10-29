@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from . import clock
 from . import channel_kinds
 from .state import now
+from .records import artifacts as artifact_records
 from .records import scenes as scene_records
 from .records import messages as message_records
 
@@ -84,7 +85,7 @@ def asides_full(store):
 
 
 def _row(store, scene_id):
-    return store.db.artifacts.find_one({'_id': 'peer-line:' + scene_id})
+    return artifact_records.get(store, 'peer-line:' + scene_id)
 
 
 def closed_until(store, scene_id, moment=None):
@@ -122,7 +123,7 @@ def set_line(store, scene_id, *, closed, choice=None, zone='UTC', moment=None, b
         else:
             until = moment + timedelta(hours=1) if choice == 'an_hour' else _morning(moment, zone)
             value['closed_until'] = until.isoformat()
-    return store.put('artifacts', value, expected=row.get('revision'), stream='peer-line:' + scene_id)
+    return artifact_records.save(store, value, expected=row.get('revision'), stream='peer-line:' + scene_id)
 
 
 def describe(until, zone):

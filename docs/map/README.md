@@ -247,6 +247,7 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`records/tasks`](../../src/asuna/records/tasks.py) — The owner of `tasks` and `task_messages`: the work she hands to the action brain (its request, lease, state, result and hand-back) and the messages between her and the action session about it, read and written only through these operations.
 - [`records/plans`](../../src/asuna/records/plans.py) — The owner of `plans`: what she and the program scheduled (her plans in a conversation, the rhythms of the heartbeat, settlement, self-development and condensing, their next fire and last outcome), read and written only through these operati
 - [`records/memories`](../../src/asuna/records/memories.py) — The owner of `memory_units`: her recall (the chat chunks of her conversations, their summaries, her thoughts, imported entries) and its vector space, read and written only through these operations.
+- [`records/artifacts`](../../src/asuna/records/artifacts.py) — The owner of `artifacts`: the rows of what she and the program keep apart from the conversation (stored files and pictures with their bytes' manifest, the action brain's tool records, held notices and passed lines, requests and group action
 
 ### [A turn](turn.md)
 
@@ -321,7 +322,7 @@ What she remembers, how it is recalled, her documents, mood and blobs.
 - [`self_state`](../../src/asuna/self_state.py) — Role-owned self descriptions, stored in the existing revision ledger.
 - [`night`](../../src/asuna/night.py) — What her night turns changed, for her first heartbeat after them.
 - [`affect`](../../src/asuna/affect.py) — Affect ledger and projection (ADR-009 ARCHITECTURE §6).
-- [`blobs`](../../src/asuna/blobs.py) — Scoped, hash-verified GridFS storage for bounded-document overflow.
+- [`blobs`](../../src/asuna/blobs.py) — Scoped, hash-verified storage of bytes past the record size limit: the `blobs` owner, the only user of the store's blob interface (write, open, delete, of_scope).
 - [`privacy`](../../src/asuna/privacy.py) — Explicit operator erasure, with scope invalidation and auditable redaction roots.
 
 ### [Persona](persona.md)
@@ -503,7 +504,7 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`p2_offline_check.py`](../../tools/p2_offline_check.py) — ADR-005 P2 离线自检：不需要 Mongo、不需要 pytest，直接跑摘要闭环那批用例。
 - [`p5_offline_check.py`](../../tools/p5_offline_check.py) — ADR-005 P5 离线自检：不需要 Mongo、不需要 pytest，直接跑话题追踪＋主动参与那批用例。
 - [`pack_plugins.py`](../../tools/pack_plugins.py) — Build the core plugin and the persona and channel packages passed with --persona / --channel; no local state or secrets.
-- [`probe_blob.py`](../../tools/probe_blob.py) — Probe of large-file storage on a real MongoDB: a synthetic blob over 1 MB goes into GridFS, wrong-scope and non-operator reads are refused, and deleting its memory removes it.
+- [`probe_blob.py`](../../tools/probe_blob.py) — Probe of large-file storage on a real MongoDB: a synthetic blob over 1 MB goes into the blob store (GridFS), wrong-scope and non-operator reads are refused, and deleting its memory removes it (its blob is no longer stored).
 - [`probe_fresh_profile.mjs`](../../tools/probe_fresh_profile.mjs) — Sets up a brand-new DSH profile in an empty home that installs the packed or released tarballs with `dsh plugin add` and takes nothing else from this checkout.
 - [`probe_host_seam.py`](../../tools/probe_host_seam.py) — --debug only: isolated host replay, fake cognition, real Mongo and loopback HTTP.
 - [`probe_native_atomicity.mjs`](../../tools/probe_native_atomicity.mjs) — Probe of DSH's installed compaction: a cut through a tool call and its result, or a summary that fails, leaves the session's history and its saved log unchanged.

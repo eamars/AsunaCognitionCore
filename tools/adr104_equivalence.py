@@ -1,17 +1,18 @@
 """The read-only check of one ADR-104 batch against a deployment's database, before the batch merges: numbers only,
 never a record id or a value.
 
-  python tools/adr104_equivalence.py b1b|b2|b3|b4|b5|b6|b7 [--config config/local.json] [--out <folder>] [--max-ms 2000]
+  python tools/adr104_equivalence.py b1b|b2|b3|b4|b5|b6|b7|b8 [--config config/local.json] [--out <folder>] [--max-ms 2000]
 
 Each batch: what the store's `ensure` would do there, as a dry run (collections it would create, indexes it would
 make, retired indexes it would drop, indexes of a declared name that differ, validators), and for every field the
 catalog declares in the batch's collections (b1b: all of them; b2: `host_leases` and `lane_faults`; b3: `scenes`;
 b4: `messages`; b5: `episodes`, `sessions`, `sink_receipts`, `lane_receipts`; b6: `tasks`, `task_messages`,
-`plans`; b7: `memory_units`), its stored records by BSON type, the nulls, the records missing a required field and,
-for a vector, the lengths that differ; b4 to b7 also, per collection (SIZED), the records of 512 KiB or more and those
-whose BSON and JSON sizes fall on different sides of 1 MiB. b3 to b7 also run their read cases: each read the batch
-moved, as the replaced code wrote it with pymongo and as the owner (`records.scenes`, `records.messages`,
-`records.episodes`, `records.sessions`, `records.receipts`, `records.tasks`, `records.plans`, `records.memories`) now
+`plans`; b7: `memory_units`; b8: `artifacts`), its stored records by BSON type, the nulls, the records missing a
+required field and, for a vector, the lengths that differ; b4 to b8 also, per collection (SIZED), the records of 512 KiB
+or more and those whose BSON and JSON sizes fall on different sides of 1 MiB. b3 to b8 also run their read cases: each
+read the batch moved, as the replaced code wrote it with pymongo and as the owner (`records.scenes`, `records.messages`,
+`records.episodes`, `records.sessions`, `records.receipts`, `records.tasks`, `records.plans`, `records.memories`,
+`records.artifacts`) now
 answers it (b6 also the conversation context's task aggregate against `records.tasks.recent_with_inputs` on up to 20
 conversations, rows and their fields in order; b7 the Web memory page's aggregate against `records.memories.web_page`,
 and a read that takes a whole conversation or every memory at most LIGHT records on both sides), on parameters
@@ -31,6 +32,11 @@ b7 also runs B7's own proof (`search_proof`): retrieval's whole search, old (its
 search's pairs translated as state.py did) against new, on QUERIES_SEARCH queries chosen as step 1a chose them (each a
 memory's text with its stored vector, no embedding call; nothing written): the same final six and the same 24 vector
 candidates, under the same timing gate; its reads are counted apart from the read cases' budget.
+b8 also runs B8's own proof (`blob_probe`): the store's blob interface on a throwaway database of the same server
+(`asuna_v2_test_blobprobe_*`, the only writes the check makes, dropped at the end and on failure): a synthetic stream of
+PROBE_BYTES written, read back in pieces and with a seek, its hash and size compared, listed by its scope, deleted
+twice, missing after; and, read only on hers (`stored_files`), up to STORED_FILES rows whose bytes are stored, each
+blob opened and read in pieces, its size and sha256 compared with its row.
 The field counts are many small reads (parts of at most PART_RECORDS records by `_id`, FIELDS_PER_READ fields
 each), each bounded by `--max-ms` on the server; a read over its limit leaves its fields unchecked, named in the
 report (exit 2). Each query is read-only and bounded by `--max-ms`. The numbers go to `<out>/<batch>.json` (default
@@ -242,10 +248,10 @@ def differs(collection, counts):
 # The collections whose declared fields each batch counts (None: every collection).
 BATCHES = {'b1b': None, 'b2': ('host_leases', 'lane_faults'), 'b3': ('scenes',), 'b4': ('messages',),
            'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts'), 'b6': ('tasks', 'task_messages', 'plans'),
-           'b7': ('memory_units',)}
+           'b7': ('memory_units',), 'b8': ('artifacts',)}
 # The collections whose records' sizes each batch counts (512 KiB or more; BSON and JSON on different sides of 1 MiB).
 SIZED = {'b4': ('messages',), 'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts'),
-         'b6': ('tasks', 'task_messages', 'plans'), 'b7': ('memory_units',)}
+         'b6': ('tasks', 'task_messages', 'plans'), 'b7': ('memory_units',), 'b8': ('artifacts',)}
 QUERIES = 1000
 _ARCHIVED = {'reason': "the archived stream's old read left out `legacy` by an exclusion projection, which the store "
                        "does not have; the owner drops it after the read (accepted for B4, 2026-10-28)",
@@ -270,7 +276,7 @@ WATCHED = {'b4': {'who wrote in these': {
     'note': 'same family, under threshold: a values read grouped by presence, as "who wrote here" (293 ms against 9 '
             'before fa46c24132f6); measured at B4 old p50 ~12 ms, new ~19 ms, 1.55x'}}}
 RUNS = 3
-READ_CASES = ('b3', 'b4', 'b5', 'b6', 'b7')
+READ_CASES = ('b3', 'b4', 'b5', 'b6', 'b7', 'b8')
 
 
 def timed_out(error):
@@ -448,8 +454,8 @@ def reads(client, database, max_ms, batch, config):
     old_db = client.get_database(database)
     adapter = _Recording(client, database)
     store = Checked(adapter, CATALOG)
-    cases, sampling = (_cases_b3(store), 1) if batch == 'b3' else {'b4': _cases_b4, 'b5': _cases_b5,
-                                                                   'b6': _cases_b6, 'b7': _cases_b7}[batch](store, config)
+    cases, sampling = (_cases_b3(store), 1) if batch == 'b3' else {
+        'b4': _cases_b4, 'b5': _cases_b5, 'b6': _cases_b6, 'b7': _cases_b7, 'b8': _cases_b8}[batch](store, config)
     # A case may name how many samples it takes (a sixth item: B6's proof on 20 conversations); its reads (one old,
     # up to two new a run) come off the budget first, and the other cases share the rest.
     fixed = [case for case in cases if len(case) > 5]
@@ -2273,6 +2279,296 @@ def search_proof(store, old_db, config, max_ms):
     return out
 
 
+ARTIFACT = ['_id', 'kind', 'state', 'storage', 'scope_key', 'scene_id', 'channel_id', 'task_id', 'intent_revision',
+            'tool', 'sha256', 'ref', 'source_ids', 'answer', 'gridfs_id', 'size']
+# The kinds of rows the moved reads ask for (vision, outbound_files, received_files, group_admin, notices, attend,
+# channel_admission, capabilities, native_api), each sampled apart.
+ARTIFACT_KINDS = ('image', 'file', 'received_file', 'group_action', 'held_notice', 'passed_line', 'platform_request',
+                  'channel_admission', 'persona_job_report', 'source_snapshot', 'channel_capabilities',
+                  'capability_change')
+STORED_FILES = 20                                   # her stored files opened and hash-checked (read only)
+PROBE_BYTES = 5 * 1024 * 1024 + 123                 # the blob probe's synthetic stream: more than a few chunks
+
+
+def _sample_b8(store):
+    """What the cases read with, through the owners: rows of each kind the moved reads ask for, rows whose bytes are
+    stored, tasks with their tool records, and conversations holding notices or passed lines."""
+    from asuna.records import artifacts as owner
+    from asuna.records import tasks
+    found = {'reads': len(ARTIFACT_KINDS) + 3}
+    for kind in ARTIFACT_KINDS:
+        found[kind] = owner.of_kind(store, kind).rows(limit=20, fields=ARTIFACT)
+    found['stored'] = owner.stored(store).rows(limit=20, fields=ARTIFACT)
+    task_ids = [row['_id'] for row in tasks.created(store, '2000-01-01').rows(limit=20, fields=['_id'])]
+    found['task_ids'] = task_ids
+    found['tools'] = [row for row in owner.of_tasks(store, task_ids).rows(limit=40, fields=ARTIFACT)
+                      if isinstance(row.get('task_id'), str) and isinstance(row.get('intent_revision'), int)]
+    return found
+
+
+def _cases_b8(store, config):
+    """(name, old(param), new(param), parameters, compare) for each read B8 moved, the old as the replaced code wrote
+    it; parameters sampled through the owners, synthetic values where her records hold none (both sides then read
+    nothing, and the plans are still compared)."""
+    from datetime import timedelta
+    from asuna import clock
+    from asuna.records import artifacts as owner
+    got = _sample_b8(store)
+    none = {'_id': 'artifact-none', 'kind': 'kind-none', 'scope_key': 'scope-none', 'scene_id': 'scene-none',
+            'channel_id': 'channel-none', 'task_id': 'task-none', 'intent_revision': 1, 'sha256': '0' * 64,
+            'ref': 'ref-none', 'source_ids': ['source-none'], 'gridfs_id': '0' * 24}
+    of = lambda kind: got[kind] or [{**none, 'kind': kind}]
+    rows = [row for kind in ARTIFACT_KINDS for row in got[kind]] + got['stored'] + got['tools']
+    ids = sorted({row['_id'] for row in rows}) or [none['_id']]
+    batches = [ids[n:n + 5] for n in range(0, len(ids), 5)]
+    stored = got['stored'] or [{**none, 'storage': 'gridfs'}]
+    hashed = [row for row in stored if isinstance(row.get('sha256'), str) and isinstance(row.get('scope_key'), str)
+              and isinstance(row.get('kind'), str)] or [none]
+    sourced = lambda kind: [row for row in of(kind) if isinstance(row.get('scope_key'), str) and isinstance(
+        row.get('sha256'), str) and row.get('source_ids')] or [{**none, 'kind': kind}]
+    scoped = lambda kind: [row for row in of(kind) if isinstance(row.get('scope_key'), str)] or [{**none, 'kind': kind}]
+    tools = got['tools'] or [none]
+    task_batches = [got['task_ids'][n:n + 5] for n in range(0, len(got['task_ids']), 5)] or [['task-none']]
+    scenes = lambda kind: sorted({row['scene_id'] for row in of(kind) if isinstance(row.get('scene_id'), str)}) or [
+        'scene-none']
+    channels = sorted({row['channel_id'] for row in of('group_action') if isinstance(row.get('channel_id'), str)}) or [
+        'channel-none']
+    image_scopes = sorted({row['scope_key'] for row in scoped('image')})
+    persona = (config.get('chat') or {}).get('persona') or 'persona-none'
+    lease = (clock.now() - timedelta(seconds=300)).isoformat()      # channels.CHAT_LEASE_SECONDS
+    one = lambda filter, proj=None, sort=None: ('find_one', 'artifacts', filter, proj, sort)
+    many = lambda filter, proj=None, sort=None, limit=0: ('find', 'artifacts', filter, proj, sort, limit)
+    fields = lambda *names: {name: 1 for name in names}
+    DONE, STORED = 'DONE', owner.STORED
+    OFFERED = ['name', 'size', 'media_type', 'created_at', 'source_ids', 'received_from']
+    SWEPT = ['source_ids', 'created_at', 'gridfs_id', 'size', 'last_sent_at', 'kept_at', 'days_from']
+
+    def skipped(kind):
+        def old(scene):
+            def run(db):
+                cursor = lambda: db.artifacts.find({'kind': kind, 'scene_id': scene}, {'_id': 1}).sort(
+                    'received_at', -1).skip(50)
+                return list(cursor()), cursor()
+            return run
+        return old, lambda scene: owner.of_scene(store, kind, scene).rows(newest_first=True, skip=50, fields=['_id'])
+
+    cases = [
+        # single rows
+        ('row by id', lambda i: one({'_id': i}), lambda i: owner.get(store, i), ids, 'value'),
+        ('row by id, done', lambda i: one({'_id': i, 'state': DONE}), lambda i: owner.get(store, i, state=DONE), ids,
+         'value'),
+        ('row by id, its scope', lambda i: one({'_id': i}, fields('scope_key')),
+         lambda i: owner.get(store, i, ['scope_key']), ids, 'value'),
+        ('row by id, its scope and erasure', lambda i: one({'_id': i}, fields('scope_key', 'deletion_id')),
+         lambda i: owner.get(store, i, ['scope_key', 'deletion_id']), ids, 'value'),
+        ('row by id, whether it is there', lambda i: one({'_id': i}, fields('_id')),
+         lambda i: owner.get(store, i, ['_id']), ids, 'value'),
+        ('declared functions', lambda r: one({'_id': r['_id']}, fields('supports')),
+         lambda r: owner.get(store, r['_id'], ['supports']), of('channel_capabilities'), 'value'),
+        ('declared functions and limits', lambda r: one({'_id': r['_id']}, fields('supports', 'limits')),
+         lambda r: owner.get(store, r['_id'], ['supports', 'limits']), of('channel_capabilities'), 'value'),
+        ('a group action by id', lambda r: one({'_id': r['_id'], 'kind': 'group_action'}),
+         lambda r: owner.get(store, r['_id'], kind='group_action'), of('group_action'), 'value'),
+        ('a job report by id', lambda r: one({'_id': r['_id'], 'kind': 'persona_job_report'}),
+         lambda r: owner.get(store, r['_id'], kind='persona_job_report'), of('persona_job_report'), 'value'),
+        ('a sent file by id', lambda r: one({'_id': r['_id'], 'kind': 'file'}),
+         lambda r: owner.get(store, r['_id'], kind='file'), of('file'), 'value'),
+        ('a received file by id, done', lambda r: one({'_id': r['_id'], 'kind': 'received_file', 'state': DONE}),
+         lambda r: owner.get(store, r['_id'], kind='received_file', state=DONE), of('received_file'), 'value'),
+        ('a picture by id, done', lambda r: one({'_id': r['_id'], 'kind': 'image', 'state': DONE}),
+         lambda r: owner.get(store, r['_id'], kind='image', state=DONE), of('image'), 'value'),
+        ('a tool record of a task revision', lambda r: one({'_id': r['_id'], 'task_id': r['task_id'],
+                                                            'intent_revision': r['intent_revision']}),
+         lambda r: owner.get(store, r['_id'], task=r['task_id'], revision=r['intent_revision']), tools, 'value'),
+        # by content
+        ('stored bytes once', lambda r: one({'sha256': r['sha256'], 'scope_key': r['scope_key'], 'kind': r['kind'],
+                                             'state': DONE, 'storage': STORED}),
+         lambda r: owner.by_content(store, r['sha256'], r['kind'], scope=r['scope_key'], state=DONE, storage=STORED),
+         hashed, 'value'),
+        ('a snapshot by content', lambda r: one({'sha256': r['sha256'], 'kind': 'source_snapshot',
+                                                 'scope_key': r['scope_key']}),
+         lambda r: owner.by_content(store, r['sha256'], 'source_snapshot', scope=r['scope_key']),
+         sourced('source_snapshot'), 'value'),
+        ('a local picture by content', lambda r: one({'scope_key': r['scope_key'], 'kind': 'image',
+                                                      'sha256': r['sha256'], 'source_ids': r['source_ids'][0],
+                                                      'state': DONE, 'storage': STORED}),
+         lambda r: owner.by_content(store, r['sha256'], 'image', scope=r['scope_key'], source=r['source_ids'][0],
+                                    state=DONE, storage=STORED), sourced('image'), 'value'),
+        ('where a file came from', lambda r: one({'kind': 'received_file', 'sha256': r['sha256'],
+                                                  'scope_key': {'$in': [r['scope_key']]}}, fields('ref', 'sender'),
+                                                 [('created_at', 1)]),
+         lambda r: owner.by_content(store, r['sha256'], 'received_file', scopes=[r['scope_key']], by='created_at',
+                                    fields=['ref', 'sender']), sourced('received_file'), 'value'),
+        ('a received file by its item', lambda r: one({'kind': 'received_file', 'state': DONE,
+                                                       'scope_key': {'$in': [r['scope_key']]},
+                                                       'source_ids': r['source_ids'][0]}, None, [('created_at', -1)]),
+         lambda r: owner.of_kind(store, 'received_file', state=DONE, scopes=[r['scope_key']],
+                                 source=r['source_ids'][0], by='created_at').first(newest_first=True),
+         sourced('received_file'), 'value'),
+        ('a kept file by its ref', lambda r: one({'kind': 'received_file', 'state': DONE, 'ref': r.get('ref') or 'ref-none',
+                                                  'kept_at': {'$exists': True}, 'scope_key': {'$in': [r['scope_key']]}}),
+         lambda r: owner.kept(store, 'received_file', state=DONE, ref=r.get('ref') or 'ref-none',
+                              scopes=[r['scope_key']]).first(), scoped('received_file'), 'value'),
+        ('an answered request', lambda r: one({'kind': 'platform_request', 'answer': r['_id']}),
+         lambda r: owner.answer(store, 'platform_request', r['_id']), of('group_action'), 'value'),
+        # views
+        ('rows by ids, erased', lambda b: many({'_id': {'$in': b}, 'storage': 'erased'}),
+         lambda b: owner.by_ids(store, b, storage=owner.ERASED).rows(), batches, 'value'),
+        ('a task revision\'s tool records', lambda r: many({'task_id': r['task_id'],
+                                                            'intent_revision': r['intent_revision'],
+                                                            'state': {'$in': ['DONE', 'FAILED']}}),
+         lambda r: owner.of_task(store, r['task_id'], r['intent_revision'], states=['DONE', 'FAILED']).rows(), tools,
+         'value'),
+        ('a task revision\'s done records, ids', lambda r: many({'task_id': r['task_id'],
+                                                                 'intent_revision': r['intent_revision'],
+                                                                 'state': DONE}, fields('_id')),
+         lambda r: owner.of_task(store, r['task_id'], r['intent_revision'], state=DONE).rows(fields=['_id']), tools,
+         'value'),
+        ('a task revision\'s done records', lambda r: many({'task_id': r['task_id'],
+                                                            'intent_revision': r['intent_revision'], 'state': DONE}),
+         lambda r: owner.of_task(store, r['task_id'], r['intent_revision'], state=DONE).rows(), tools, 'value'),
+        ('the tools of tasks', lambda b: many({'task_id': {'$in': b}}, fields('task_id', 'tool')),
+         lambda b: owner.of_tasks(store, b).rows(fields=['task_id', 'tool']), task_batches, 'value'),
+        ('channel admissions', lambda _: many({'kind': 'channel_admission'}),
+         lambda _: owner.of_kind(store, 'channel_admission').rows(), [None], 'value'),
+        ('group actions in flight', lambda _: many({'kind': 'group_action', 'state': 'SENDING'}),
+         lambda _: owner.of_kind(store, 'group_action', state='SENDING').rows(), [None], 'value'),
+        ('a channel\'s action in flight', lambda c: one({'kind': 'group_action', 'channel_id': c, 'state': 'SENDING',
+                                                         'claimed_at': {'$gte': lease}}, fields('_id')),
+         lambda c: owner.admission(store, 'group_action', c, 'SENDING', claimed_since=lease).first(fields=['_id']),
+         channels, 'value'),
+        ('a channel\'s next queued action', lambda c: one({'kind': 'group_action', 'channel_id': c, 'state': 'QUEUED'},
+                                                          None, [('created_at', 1)]),
+         lambda c: owner.admission(store, 'group_action', c, 'QUEUED', by='created_at').first(), channels, 'value'),
+        ('the highest request number', lambda _: one({'kind': 'platform_request'}, fields('number'), [('number', -1)]),
+         lambda _: owner.of_kind(store, 'platform_request', by='number').first(newest_first=True, fields=['number']),
+         [None], 'value'),
+        ('open requests', lambda _: many({'kind': 'platform_request', 'state': 'open'}, None, [('number', 1)]),
+         lambda _: owner.of_kind(store, 'platform_request', state='open', by='number').rows(), [None], 'value'),
+        ('held notices here', lambda s: many({'kind': 'held_notice', 'scene_id': s}, None, [('received_at', 1)]),
+         lambda s: owner.of_scene(store, 'held_notice', s).rows(), scenes('held_notice'), 'value'),
+        ('held notices past the kept ones', *skipped('held_notice'), scenes('held_notice'), 'value'),
+        ('passed lines here', lambda s: many({'kind': 'passed_line', 'scene_id': s}, None, [('received_at', 1)]),
+         lambda s: owner.of_scene(store, 'passed_line', s).rows(), scenes('passed_line'), 'value'),
+        ('passed lines past the kept ones', *skipped('passed_line'), scenes('passed_line'), 'value'),
+        ('her job reports', lambda p: many({'kind': 'persona_job_report', 'scope_key': 'owner-private:' + p},
+                                           fields('_id', 'size'), [('_id', -1)], 20),
+         lambda p: owner.of_kind(store, 'persona_job_report', scope='owner-private:' + p, by='_id').rows(
+             newest_first=True, limit=20, fields=['_id', 'size']), [persona], 'value'),
+        ('files to offer', lambda _: many({'kind': 'file', 'state': DONE, 'storage': STORED}, fields(*OFFERED),
+                                          [('created_at', -1)], 200),
+         lambda _: owner.of_kind(store, 'file', state=DONE, storage=STORED, by='created_at').rows(
+             newest_first=True, limit=200, fields=OFFERED), [None], 'value'),
+        ('her newest pictures', lambda _: many({'kind': 'image', 'state': DONE, 'storage': STORED}, None,
+                                               [('created_at', -1)], 200),
+         lambda _: owner.of_kind(store, 'image', state=DONE, storage=STORED, by='created_at').rows(
+             newest_first=True, limit=200), [None], 'value'),
+        ('pictures of a scope', lambda s: many({'scope_key': s, 'kind': 'image', 'state': DONE, 'storage': STORED},
+                                               None, [('created_at', -1)], 50),
+         lambda s: owner.of_kind(store, 'image', state=DONE, storage=STORED, scope=s, by='created_at').rows(
+             newest_first=True, limit=50), image_scopes or ['scope-none'], 'value'),
+        ('pictures of scopes', lambda b: many({'scope_key': {'$in': b}, 'kind': 'image', 'state': DONE,
+                                               'storage': STORED}, None, [('created_at', -1)], 50),
+         lambda b: owner.of_kind(store, 'image', state=DONE, storage=STORED, scopes=b, by='created_at').rows(
+             newest_first=True, limit=50), [image_scopes[n:n + 2] for n in range(0, len(image_scopes), 2)] or [
+             ['scope-none', 'scope-other']], 'value'),
+        ('kept files stored', lambda _: many({'kind': 'received_file', 'kept_at': {'$exists': True},
+                                              'storage': STORED}),
+         lambda _: owner.kept(store, 'received_file', stored=True).rows(), [None], 'value'),
+        ('kept files', lambda _: many({'kind': 'received_file', 'kept_at': {'$exists': True}}),
+         lambda _: owner.kept(store, 'received_file').rows(), [None], 'value'),
+        ('copies of files whose bytes went', lambda _: many({'kind': 'received_file', 'storage': {'$ne': STORED},
+                                                             'copies.0': {'$exists': True}}, fields('copies')),
+         lambda _: owner.with_copies(store, 'received_file', besides_storage=STORED).rows(fields=['copies']), [None],
+         'value'),
+        ('rows whose bytes are stored', lambda _: many({'storage': STORED}, fields(*SWEPT), None, LIGHT),
+         lambda _: owner.stored(store).rows(limit=LIGHT, fields=SWEPT), [None], 'value'),
+        ('pictures she drew', lambda _: ('count', 'artifacts', {'tool': 'generate_image', 'state': DONE}, 0),
+         lambda _: owner.count_tool(store, 'generate_image', DONE), [None], 'value'),
+    ]
+    return [case for case in cases if case[3]], got['reads']
+
+
+def blob_probe(client):
+    """B8's own proof of the blob interface, on a throwaway database of this server (`asuna_v2_test_blobprobe_*`,
+    dropped at the end and on failure): a synthetic stream written, read back whole and in pieces with a seek, its hash
+    and size compared, listed by its scope, deleted twice, missing after. Numbers only."""
+    import hashlib
+    import io
+    import time as clock
+    import uuid
+    from asuna.store import Checked
+    from asuna.store.errors import BlobMissing
+    name = 'asuna_v2_test_blobprobe_' + uuid.uuid4().hex[:12]
+    data = bytes((n * 7 + 3) % 256 for n in range(PROBE_BYTES))
+    out = {'bytes': len(data)}
+    try:
+        blobs = Checked(MongoAdapter(client, name), CATALOG).blobs
+        started = clock.perf_counter()
+        blob_id, size = blobs.write(io.BytesIO(data), {'scope_key': 'scope-probe', 'kind': 'probe', 'name': 'probe'})
+        out['ms_write'] = round((clock.perf_counter() - started) * 1000, 1)
+        started, digest, read = clock.perf_counter(), hashlib.sha256(), 0
+        stream = blobs.open(blob_id)
+        for piece in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(piece)
+            read += len(piece)
+        out['ms_read'] = round((clock.perf_counter() - started) * 1000, 1)
+        seek = blobs.open(blob_id)
+        seek.seek(len(data) - 1000)
+        out.update(size_written=size, size_read=read, hash_same=digest.hexdigest() == hashlib.sha256(data).hexdigest(),
+                   seek_same=seek.read(500) == data[-1000:-500],
+                   of_scope=blobs.of_scope('scope-probe') == [blob_id], of_other_scope=blobs.of_scope('scope-x') == [],
+                   deleted=blobs.delete(blob_id), deleted_again=blobs.delete(blob_id))
+        try:
+            blobs.open(blob_id)
+            out['missing_after'] = False
+        except BlobMissing:
+            out['missing_after'] = True
+        out['scope_empty_after'] = blobs.of_scope('scope-probe') == []
+    finally:
+        if name.startswith('asuna_v2_test_'):
+            client.drop_database(name)
+    out['dropped'] = name not in client.list_database_names()
+    out['passed'] = all(out.get(key) for key in ('hash_same', 'seek_same', 'of_scope', 'of_other_scope', 'deleted',
+                                                 'missing_after', 'scope_empty_after', 'dropped')) and \
+        out.get('deleted_again') is False and out['size_written'] == out['size_read'] == len(data)
+    return out
+
+
+def stored_files(store):
+    """Read only, her own: up to STORED_FILES rows whose bytes are stored, spread over the stored rows, each blob opened
+    and read in pieces, its size and sha256 compared with its row. Numbers only."""
+    import hashlib
+    import time as clock
+    from asuna import blobs
+    from asuna.records import artifacts as owner
+    from asuna.store.errors import BlobMissing
+    rows = owner.stored(store).rows(limit=LIGHT * 5, fields=['_id', owner.BLOB_FIELD, 'sha256', 'size'])
+    chosen = rows[::max(1, len(rows) // STORED_FILES)][:STORED_FILES]
+    out = {'listed': len(rows), 'n': len(chosen), 'opened': 0, 'missing': 0, 'same': 0, 'differing': 0, 'bytes': 0}
+    times = []
+    for row in chosen:
+        started = clock.perf_counter()
+        try:
+            stream = blobs.open(store, row.get(owner.BLOB_FIELD))
+        except BlobMissing:
+            out['missing'] += 1
+            continue
+        out['opened'] += 1
+        digest, size = hashlib.sha256(), 0
+        for piece in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(piece)
+            size += len(piece)
+        times.append((clock.perf_counter() - started) * 1000)
+        out['bytes'] += size
+        same = size == row.get('size') and digest.hexdigest() == row.get('sha256')
+        out['same' if same else 'differing'] += 1
+    ordered = sorted(times)
+    if ordered:
+        out.update(ms_p50=round(ordered[len(ordered) // 2], 1), ms_max=round(ordered[-1], 1))
+    return out
+
+
 def sizes(db, collection, max_ms, timings=None):
     """The records of 512 KiB or more by their BSON size, and of those the ones whose BSON and JSON sizes (the
     in-memory adapter's measure) fall on different sides of the store's 1 MiB limit; read part by part like the
@@ -2367,6 +2663,12 @@ def check(batch, settings, database, out, max_ms):
                                                        proof['ms_new_p50'], None))
             if not proof['queries']:
                 unchecked.append('retrieval search, whole: ' + proof.get('why', 'no query'))
+        if batch == 'b8':
+            from asuna.store import Checked
+            doing[0] = 'blob probe (a throwaway database)'
+            report['blob_probe'] = blob_probe(counting)
+            doing[0] = 'her stored files, opened and hash-checked'
+            report['stored_files'] = stored_files(Checked(MongoAdapter(client, database), CATALOG))
     except PyMongoError as error:
         # Stopped where it was: the words say whether a query hit its limit (TIMED OUT, with where and the limit) or
         # the server could not be reached at all (UNREACHABLE); the report keeps what was counted before.
@@ -2481,6 +2783,12 @@ def check(batch, settings, database, out, max_ms):
               % (q['queries'], q['conversations'], q['same_six'], q['same_six_set'], q['same_24'], q['same_24_ids'],
                  q['score_max_diff'], q['found_nothing'], q['ms_old_p50'], q['ms_old_p95'], q['ms_new_p50'],
                  q['ms_new_p95'], q['paths_old'], q['paths_new']))
+    if 'blob_probe' in report:
+        print('blob probe (throwaway database): %s; ' % ('passed' if report['blob_probe']['passed'] else 'FAILED')
+              + ', '.join('%s %s' % item for item in sorted(report['blob_probe'].items()) if item[0] != 'passed'))
+    if 'stored_files' in report:
+        print('her stored files, opened and hash-checked: ' + ', '.join(
+            '%s %s' % item for item in sorted(report['stored_files'].items())))
     if 'queries' in report:
         q = report['queries']
         print('queries: %d (sampling %d, timed %d = %d samples x %d runs of each side, timed again %d, explain %d)'
@@ -2500,6 +2808,9 @@ def clean(report, totals, validators):
             and not any((size or {}).get('sides_differ') for size in (report.get('sizes') or {}).values())
             and not (report.get('slowdowns') or {}).get('failing')
             and not (report.get('search') or {}).get('differing')
+            and (report.get('blob_probe') or {'passed': True})['passed']
+            and not (report.get('stored_files') or {}).get('differing')
+            and not (report.get('stored_files') or {}).get('missing')
             and not any(case.get('timed_out') or case['differing']
                         or (case['plans_differ'] and not case.get('plan_accepted'))
                         for case in (report.get('reads') or {}).values()))

@@ -331,11 +331,14 @@ Affect ledger and projection (ADR-009 ARCHITECTURE §6).
 
 [src/asuna/blobs.py](../../src/asuna/blobs.py)
 
-Scoped, hash-verified GridFS storage for bounded-document overflow.
+Scoped, hash-verified storage of bytes past the record size limit: the `blobs` owner, the only user of the store's blob interface (write, open, delete, of_scope).
 
 - def `erased` — Whether a privacy erasure deleted this row's bytes.
 - def `erased_words` — ADR-105's sentence for an erased row: bytes the erasure deleted, or bytes that had expired before it.
 - def `refuse_erased` — Raise the sentence for an erased row; the caller has already checked the row is in its fence, so the words say nothing about a row the caller may not see.
+- def `open` — The stored bytes of a blob, readable and seekable; `BlobMissing` when it is not stored.
+- def `delete` — Delete a blob: True when it was stored, False when it was already gone.
+- def `exists` — Whether a blob is stored.
 - class `BlobStore`
   - `put_stream` — Store what an open binary handle holds, hashing while it copies; the stored bytes are read back in pieces and checked against that hash before the manifest is written.
   - `put`
@@ -343,7 +346,7 @@ Scoped, hash-verified GridFS storage for bounded-document overflow.
   - `restore` — Put bytes fetched again back on the row whose bytes expired (`storage` `removed`), when they are the same bytes (its sha256).
   - `get`
   - `get_range` — `length` bytes from `offset` of a stored blob (fewer at its end), read with a seek: a piece of a large file without reading the rest.
-  - `erase_scope` — Delete every stored byte of `scope`, then mark each of its rows whose bytes are gone (`gridfs`, and `removed`: an expired file must not be fetched again either) `erased`, by the row's own scope, so a row whose bytes were already missing is 
+  - `erase_scope` — Delete every stored byte of `scope` (the blob store's blobs of the scope), then mark each of its rows whose bytes are gone (`gridfs`, and `removed`: an expired file must not be fetched again either) `erased`, by the row's own scope, so a ro
 
 ## `privacy`
 

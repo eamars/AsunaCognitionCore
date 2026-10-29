@@ -18,6 +18,7 @@ from .config import excerpt
 from .records import scenes as scene_records
 from .records import plans as plan_records
 from .records import memories as memory_records
+from .records import artifacts as artifact_records
 
 TABLES_VERSION = 1
 SHOWN = 'review.map'
@@ -201,7 +202,7 @@ def block(store, persona, moment=None, *, tag=None):
     live = switches.on(store, moment=moment)
     index.append('你开着的开关：%d 个' % len(live) + ('，' + '；'.join('%s 到 %s' % (switches.WORDS[r['kind']] + '：' + r['label'],
                                                                          r['until'][:16]) for r in live[:6]) if live else ''))
-    pictures = store.db.artifacts.count_documents({'tool': 'generate_image', 'state': 'DONE'})
+    pictures = artifact_records.count_tool(store, 'generate_image', 'DONE')
     from . import stickers
     shelf = stickers.shelf(store, persona)
     index.append('你做的东西：画的图 %d 张；表情架 %d 个（sticker 的 shelf 列全）' % (pictures, len(shelf)))

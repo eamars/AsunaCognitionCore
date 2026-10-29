@@ -21,6 +21,7 @@ from .records import scenes as scene_records
 from .records import episodes as episode_records
 from .records import sessions as session_records
 from .records import memories as memory_records
+from .records import artifacts as artifact_records
 
 DOCUMENT_KINDS = ('persona', 'voice', 'ledger', 'working')
 # The two scopes of the tab: what is the same in every conversation, and what this conversation reads.
@@ -414,8 +415,8 @@ class NativeMemory:
 
     def job_rows(self):
         rows = []
-        for item in self.store.db.artifacts.find({'kind': 'persona_job_report', 'scope_key': 'owner-private:' + self.persona},
-                                                 {'_id': 1, 'size': 1}).sort('_id', -1).limit(20):
+        for item in artifact_records.of_kind(self.store, 'persona_job_report', scope='owner-private:' + self.persona,
+                                             by='_id').rows(newest_first=True, limit=20, fields=['_id', 'size']):
             rows.append({'id': 'report:' + item['_id'], 'kind': 'persona_job_report', 'title': label('title.job'),
                          'excerpt': item['_id'], 'scope_key': 'owner-private:' + self.persona})
         return rows
@@ -497,7 +498,7 @@ class NativeMemory:
         if kind == 'report':
             from .blobs import BlobStore
             import json as _json
-            row = self.store.db.artifacts.find_one({'_id': key, 'kind': 'persona_job_report'})
+            row = artifact_records.get(self.store, key, kind='persona_job_report')
             if row:
                 report = _json.loads(BlobStore(self.store).get(key, row['scope_key'], operator=True))
                 lines = paragraphs(label('report.status', status=report['status'], job=report['job'], run=report['run_id']),
@@ -598,8 +599,8 @@ class NativeMemory:
                 window = row.get('source_window') if isinstance(row.get('source_window'), dict) else None
                 if window and window.get('file_sha256'):
                     # Read back the exact lines from the snapshot taken at import (MEMORY §6.3).
-                    snapshot = self.store.db.artifacts.find_one({'sha256': window['file_sha256'], 'kind': 'source_snapshot',
-                                                                 'scope_key': row['scope_key']})
+                    snapshot = artifact_records.by_content(self.store, window['file_sha256'], 'source_snapshot',
+                                                           scope=row['scope_key'])
                     if snapshot:
                         from .blobs import BlobStore
                         lines = BlobStore(self.store).get(snapshot['_id'], row['scope_key'], operator=True).decode('utf-8').splitlines()

@@ -13,7 +13,11 @@ OWNERS = {'scenes': 'src/asuna/records/scenes.py', 'messages': 'src/asuna/record
           'episodes': 'src/asuna/records/episodes.py', 'sessions': 'src/asuna/records/sessions.py',
           'lane_receipts': 'src/asuna/records/receipts.py', 'sink_receipts': 'src/asuna/records/receipts.py',
           'tasks': 'src/asuna/records/tasks.py', 'task_messages': 'src/asuna/records/tasks.py',
-          'plans': 'src/asuna/records/plans.py', 'memory_units': 'src/asuna/records/memories.py'}
+          'plans': 'src/asuna/records/plans.py', 'memory_units': 'src/asuna/records/memories.py',
+          'artifacts': 'src/asuna/records/artifacts.py'}
+# The blob store: only the adapter reaches it (`blobs.py` through the store's blob interface), so the census finds no
+# call on its bucket or its two collections anywhere.
+BLOBS = ('gridfs:artifact_blobs', 'artifact_blobs.files', 'artifact_blobs.chunks')
 AREAS = ('src/asuna', 'tools')
 # The per-batch check makes the old calls on purpose: they are the old side it compares the owner with.
 ALLOWED = {'tools/adr104_equivalence.py'}
@@ -38,6 +42,12 @@ def test_no_direct_database_call_reaches_a_moved_collection():
     found = ['%s:%s %s' % (row['file'], row['line'], row['method']) for row in census()
              if row['collection'] in OWNERS and row['file'] not in ALLOWED and elsewhere(row)]
     assert found == [], 'call the owner (%s) instead: %s' % (', '.join(OWNERS.values()), found[:10])
+
+
+def test_no_code_reaches_the_blob_store_but_through_the_blob_interface():
+    found = ['%s:%s %s' % (row['file'], row['line'], row['method']) for row in census()
+             if row['collection'] in BLOBS and row['file'] not in ALLOWED]
+    assert found == [], 'call asuna.blobs (BlobStore, open, delete, exists) instead: %s' % found[:10]
 
 
 def test_only_the_owner_names_its_collection_to_the_store():

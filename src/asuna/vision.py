@@ -26,6 +26,7 @@ from . import animated, channel_kinds, media_children, visibility
 from .evidence import canonical, sha
 from .scene_links import message_times, read_scope
 from .state import Denied
+from .records import artifacts as artifact_records
 from .records import scenes as scene_records
 from .records import messages as message_records
 
@@ -212,8 +213,8 @@ def local_uploads(store, scope_key, images, event_id):
                                                                             else 'IMAGE_TYPE_UNSUPPORTED')})
             continue
         digest = sha(data)
-        stored = store.db.artifacts.find_one({'scope_key': scope_key, 'kind': 'image', 'sha256': digest,
-                                              'source_ids': source, 'state': 'DONE', 'storage': 'gridfs'})
+        stored = artifact_records.by_content(store, digest, 'image', scope=scope_key, source=source, state='DONE',
+                                             storage=artifact_records.STORED)
         artifact = stored['_id'] if stored else BlobStore(store).put(
             data, scope_key, 'image', media_type=media_type, source_ids=[source])['artifact_id']
         item = {'type': 'image', 'placeholder': f'[图片：{name}]', 'file': name, 'size': str(len(data)),
@@ -729,12 +730,12 @@ def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offere
     exactly like an unknown id, so the tool cannot be used to probe other people's pictures."""
     from .blobs import refuse_erased
     from .outbound_media import produced
-    row = store.db.artifacts.find_one({'_id': artifact_id, 'kind': 'image', 'state': 'DONE'})
+    row = artifact_records.get(store, artifact_id, kind='image', state='DONE')
     if (not blobs or not row or not (row.get('scope_key') == task.get('scope_key') or produced(row)
                                      or artifact_id in (offered or ()))):
         raise ValueError(NOT_READABLE % artifact_id)
     refuse_erased(store, row, task.get('scene_id'))          # in her fence: an erased picture says so (ADR-105)
-    if row.get('storage') != 'gridfs':
+    if row.get('storage') != artifact_records.STORED:
         raise ValueError(NOT_READABLE % artifact_id)
     data = blobs.get(artifact_id, row['scope_key'], operator=True)
     cap = min(int(max_bytes or vision_capability(config)['max_bytes']), HARD_MAX_BYTES)
@@ -772,13 +773,13 @@ def local_upload_bytes(store, blobs, task, config, entry, max_bytes=None):
     item = next((item for index, item in enumerate(items) if ref_of(row['_id'], index) == entry['ref']), None)
     if not local_upload_item(row, item):
         raise ValueError(LOCAL_NOT_IN_SCENE)
-    artifact = store.db.artifacts.find_one({'_id': item['artifact_id'], 'kind': 'image', 'state': 'DONE'})
+    artifact = artifact_records.get(store, item['artifact_id'], kind='image', state='DONE')
     if (not blobs or not artifact or artifact.get('scope_key') != row.get('scope_key')
             or LOCAL_UPLOAD + str(row['event'].get('event_id')) not in (artifact.get('source_ids') or [])):
         raise ValueError(SOURCE_UNAVAILABLE)
     from .blobs import refuse_erased
     refuse_erased(store, artifact, scene_id)                 # the owner's own picture, erased: said so (ADR-105)
-    if artifact.get('storage') != 'gridfs':
+    if artifact.get('storage') != artifact_records.STORED:
         raise ValueError(SOURCE_UNAVAILABLE)
     data = blobs.get(artifact['_id'], artifact['scope_key'], operator=True)
     cap = min(int(max_bytes or vision_capability(config)['max_bytes']), HARD_MAX_BYTES)
@@ -908,7 +909,7 @@ def picture_to_edit(store, blobs, task, config, ref, *, session_class=visibility
     seen = read_image_for_task(store, blobs, task, config, {'ref': ref}, session_class=session_class,
                                task_dir=task_dir, look=False)
     artifact_id = seen.get('artifact_id') or seen.get('blob_artifact')
-    row = store.db.artifacts.find_one({'_id': artifact_id}) if artifact_id else None
+    row = artifact_records.get(store, artifact_id) if artifact_id else None
     if not row:
         raise ValueError('SOURCE_IMAGE_NOT_STORED: 这张图读到了但没存下来，改不了；%s' % GIVE_UP)
     data = blobs.get(artifact_id, row['scope_key'], operator=True)

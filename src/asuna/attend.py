@@ -27,6 +27,7 @@ from datetime import datetime
 from . import clock
 from .caught_up import said_at
 from .config import ago, character_id, excerpt, prompt_path
+from .records import artifacts as artifact_records
 from .records import messages as message_records
 
 # Why she is being asked, in words; any other wake reason runs the full turn as before.
@@ -60,20 +61,20 @@ PASSED_NOTE = '上回合以后，你在这个群看过、当时没接的话：�
 def hold_passed(store, scene_id, message_id, received_at):
     """A line she let pass, kept until her next turn there lists it (ADR-086 §16, her condition)."""
     import uuid
-    store.db.artifacts.insert_one({'_id': 'passed-' + uuid.uuid4().hex, 'kind': PASSED_KIND, 'scene_id': scene_id,
-                                   'message_id': message_id, 'received_at': received_at, 'schema_version': 1})
-    extra = list(store.db.artifacts.find({'kind': PASSED_KIND, 'scene_id': scene_id}, {'_id': 1})
-                 .sort('received_at', -1).skip(PASSED_KEPT))
+    artifact_records.insert(store, {'_id': 'passed-' + uuid.uuid4().hex, 'kind': PASSED_KIND, 'scene_id': scene_id,
+                                    'message_id': message_id, 'received_at': received_at, 'schema_version': 1})
+    extra = artifact_records.of_scene(store, PASSED_KIND, scene_id).rows(newest_first=True, skip=PASSED_KEPT,
+                                                                        fields=['_id'])
     if extra:
-        store.db.artifacts.delete_many({'_id': {'$in': [doc['_id'] for doc in extra]}})
+        artifact_records.delete_many(store, [doc['_id'] for doc in extra])
 
 
 def take_passed(store, scene, persona=None):
     """The lines she let pass here since her last turn, oldest first, once: {'items': [...], 'more': ...} or None."""
-    held = list(store.db.artifacts.find({'kind': PASSED_KIND, 'scene_id': scene['_id']}).sort('received_at', 1))
+    held = artifact_records.of_scene(store, PASSED_KIND, scene['_id']).rows()
     if not held:
         return None
-    store.db.artifacts.delete_many({'_id': {'$in': [doc['_id'] for doc in held]}})
+    artifact_records.delete_many(store, [doc['_id'] for doc in held])
     from .people import People
     from .schedule_rules import line_stamp, scene_timezone
     rows = {row['_id']: row for row in message_records.many(store, [doc['message_id'] for doc in held]).rows(

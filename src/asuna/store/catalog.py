@@ -345,7 +345,15 @@ CATALOG = Catalog([
           fields=(Field('stream_id', 'text', required=True), Field('seq', 'number', required=True),
                   Field('type', 'text'), Field('payload', 'object'), Field('payload.operation', 'text', nullable=True)),
           insert_only=True),
-    _core('artifacts', 'records.artifacts'),
+    # A kept file or record apart from the conversation (records/artifacts.py): the fields its owner names; the rest
+    # is stored and returned as written. Its times are ISO text, as the core writes them.
+    Collection('artifacts', 'records.artifacts', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('kind', 'state', 'storage', 'scope_key', 'scene_id', 'channel_id', 'task_id', 'tool', 'sha256', 'ref',
+               'answer', 'claimed_at', 'kept_at', 'created_at', 'received_at'),
+        *(Field(path, 'number', nullable=True) for path in ('intent_revision', 'number')),
+        *(Field(path, 'list', of='text', nullable=True) for path in ('source_ids', 'copies'))),
+        versioned=True),
     # What a sink received, and what a model lane answered (records/receipts.py): the fields their owner names; the
     # rest is stored as written. Their times are ISO text, as the core and the Host write them.
     Collection('sink_receipts', 'records.receipts', (

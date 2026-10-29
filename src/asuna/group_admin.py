@@ -20,6 +20,7 @@ from __future__ import annotations
 from . import clock
 from .evidence import canonical, sha
 from .state import Denied, now
+from .records import artifacts as artifact_records
 from .records import scenes as scene_records
 
 KINDS = ('mute', 'unmute', 'recall', 'kick')
@@ -130,9 +131,9 @@ def queue(store, ep, index, item, key=None):
             admin['seconds'] = _mute_seconds(mute_minutes)
     route = _route(store.config, scene)
     row_id = 'ga-' + sha(canonical([ep['_id'], 'group_action', key if key is not None else index]))[:24]
-    made = store.db.artifacts.find_one({'_id': row_id})
+    made = artifact_records.get(store, row_id)
     if not made:
-        store.put('artifacts', {'_id': row_id, 'kind': 'group_action', 'channel_id': scene.get('channel_id'),
+        artifact_records.save(store, {'_id': row_id, 'kind': 'group_action', 'channel_id': scene.get('channel_id'),
                                 'scene_id': scene['_id'], 'scope_key': scene['scope_key'],
                                 'policy_epoch': scene['policy_epoch'], 'episode_id': ep['_id'],
                                 'target': route['target'], 'admin': admin, 'who': people.label(doc),
@@ -196,21 +197,20 @@ def claim(store, channel_id):
     from datetime import timedelta
     from .channels import CHAT_LEASE_SECONDS
     lease = (clock.now() - timedelta(seconds=CHAT_LEASE_SECONDS)).isoformat()
-    if store.db.artifacts.find_one({'kind': 'group_action', 'channel_id': channel_id, 'state': 'SENDING',
-                                    'claimed_at': {'$gte': lease}}, {'_id': 1}):
+    if artifact_records.admission(store, 'group_action', channel_id, 'SENDING', claimed_since=lease).first(
+            fields=['_id']):
         return None                     # ADR-095: one out at a time, so they happen in the order she chose them
-    row = store.db.artifacts.find_one({'kind': 'group_action', 'channel_id': channel_id, 'state': 'QUEUED'},
-                                      sort=[('created_at', 1)])
+    row = artifact_records.admission(store, 'group_action', channel_id, 'QUEUED', by='created_at').first()
     if not row:
         return None
     attempt = uuid.uuid4().hex
-    store.put('artifacts', {**row, 'state': 'SENDING', 'attempt_id': attempt, 'claimed_at': now()},
+    artifact_records.save(store, {**row, 'state': 'SENDING', 'attempt_id': attempt, 'claimed_at': now()},
               expected=row['revision'], stream=row['_id'])
     return {'publication_id': row['_id'], 'attempt_id': attempt, 'target': row['target'], 'admin': row['admin']}
 
 
 def receipt(store, channel_id, action_id, body):
-    row = store.db.artifacts.find_one({'_id': action_id, 'kind': 'group_action'})
+    row = artifact_records.get(store, action_id, kind='group_action')
     if not row or row.get('channel_id') != channel_id:
         raise Denied('PUBLICATION_NOT_FOUND')
     if body.get('attempt_id') != row.get('attempt_id'):
@@ -220,7 +220,7 @@ def receipt(store, channel_id, action_id, body):
     if row['state'] not in ('SENDING', 'UNKNOWN'):
         raise Denied('PUBLICATION_RECEIPT_CONFLICT')
     state = {'platform_accepted': 'DONE', 'failed': 'FAILED', 'unknown': 'UNKNOWN'}[body['status']]
-    store.put('artifacts', {**row, 'state': state, 'platform_receipt': body, 'receipt_at': now()},
+    artifact_records.save(store, {**row, 'state': state, 'platform_receipt': body, 'receipt_at': now()},
               expected=row['revision'], stream=row['_id'])
     store.audit(row['episode_id'], 'group_action.receipt', {'action': row['_id'], 'state': state}, row['scope_key'])
     if (row.get('target') or {}).get('type') == 'request':
@@ -231,8 +231,8 @@ def receipt(store, channel_id, action_id, body):
 
 def recover_sending(store):
     """A lost adapter answer may hide a real action: never retry it, only say we do not know."""
-    for row in store.db.artifacts.find({'kind': 'group_action', 'state': 'SENDING'}):
-        store.put('artifacts', {**row, 'state': 'UNKNOWN', 'recovery_reason': 'adapter_attempt_interrupted'},
+    for row in artifact_records.of_kind(store, 'group_action', state='SENDING').rows():
+        artifact_records.save(store, {**row, 'state': 'UNKNOWN', 'recovery_reason': 'adapter_attempt_interrupted'},
                   expected=row['revision'], stream=row['_id'])
         if (row.get('target') or {}).get('type') == 'request':
             from . import notices

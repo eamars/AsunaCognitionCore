@@ -134,6 +134,11 @@ class Store:
         """The handle of a declared collection: the store's words, checked against the catalog."""
         return self.checked.collection(name)
 
+    @property
+    def blobs(self):
+        """The blob store (write, open, delete, of_scope), each blob's metadata checked; used only by `blobs.py`."""
+        return self.checked.blobs
+
     def ensure(self) -> dict:
         """Create every declared collection with its validator and indexes, and drop the retired indexes;
         {collection: Ensured}. An index of a declared name that differs stops it (SchemaConflict)."""
@@ -334,7 +339,8 @@ class Store:
                 line=message_records.get(self,key,fields=['scope_key','deletion_id'])
                 known=[line] if line else []
                 from .records import episodes as episode_records
-                source=self.db.artifacts.find_one({'_id':key},{'scope_key':1,'deletion_id':1})
+                from .records import artifacts as artifact_records
+                source=artifact_records.get(self,key,['scope_key','deletion_id'])
                 if source:known.append(source)
                 turn=episode_records.get(self,key,fields=['scope_key','deletion_id'])
                 if turn:known.append(turn)

@@ -69,12 +69,12 @@ def test_a_program_named_as_text_is_refused_and_never_stored(store, files):
 
 
 def test_an_erased_file_is_never_fetched_again_and_an_expired_one_comes_back_onto_its_own_row(store, files):
-    from bson import ObjectId
+    from asuna import blobs
     here = scene(store, 'g1')
     ref = posted(store, 'g1')
     read(store, here, ref)
     row = store.db.artifacts.find_one({'kind': rf.KIND})
-    BlobStore(store).bucket.delete(ObjectId(row['gridfs_id']))           # the sweep's expiry
+    blobs.delete(store, row['gridfs_id'])                               # the sweep's expiry
     store.db.artifacts.update_one({'_id': row['_id']}, {'$set': {'storage': 'removed', 'bytes_removed_at': row['created_at']},
                                                         '$unset': {'gridfs_id': ''}})
     again = read(store, here, ref)

@@ -31,6 +31,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import clock
 from .state import Denied, now
+from .records import artifacts as artifact_records
 from .records import scenes as scene_records
 from .records import messages as message_records
 
@@ -114,18 +115,18 @@ REACTIONS_MAX = 5                            # lines reacted to, in that one lin
 
 def hold(store, scene_id, row):
     """Kept until her next turn there shows it (ADR-079: a restart loses none); the oldest beyond HELD_KEPT go."""
-    store.db.artifacts.insert_one({'_id': 'notice-' + uuid.uuid4().hex, 'kind': HELD_KIND, 'scene_id': scene_id,
-                                   'received_at': row.get('received_at') or now(), 'row': row, 'schema_version': 1})
-    extra = list(store.db.artifacts.find({'kind': HELD_KIND, 'scene_id': scene_id}, {'_id': 1})
-                 .sort('received_at', -1).skip(HELD_KEPT))
+    artifact_records.insert(store, {'_id': 'notice-' + uuid.uuid4().hex, 'kind': HELD_KIND, 'scene_id': scene_id,
+                                    'received_at': row.get('received_at') or now(), 'row': row, 'schema_version': 1})
+    extra = artifact_records.of_scene(store, HELD_KIND, scene_id).rows(newest_first=True, skip=HELD_KEPT,
+                                                                      fields=['_id'])
     if extra:
-        store.db.artifacts.delete_many({'_id': {'$in': [doc['_id'] for doc in extra]}})
+        artifact_records.delete_many(store, [doc['_id'] for doc in extra])
 
 
 def take(store, scene, persona=None, keep=False):
     """The notices held for this conversation, as she reads them, once: {'items': [...], 'more': ...} or None.
     `keep` (the relevance gate) leaves them for her turn if she takes it up; `drop_seen` ends them if she does not."""
-    held = list(store.db.artifacts.find({'kind': HELD_KIND, 'scene_id': scene['_id']}).sort('received_at', 1))
+    held = artifact_records.of_scene(store, HELD_KIND, scene['_id']).rows()
     if keep:
         with _lock:
             _peeked[scene['_id']] = [doc['_id'] for doc in held]
@@ -133,7 +134,7 @@ def take(store, scene, persona=None, keep=False):
         with _lock:
             _peeked.pop(scene['_id'], None)
         if held:
-            store.db.artifacts.delete_many({'_id': {'$in': [doc['_id'] for doc in held]}})
+            artifact_records.delete_many(store, [doc['_id'] for doc in held])
     rows = [doc['row'] for doc in held]
     if not rows:
         return None
@@ -173,7 +174,7 @@ def drop_seen(store, scene_id):
     with _lock:
         ids = _peeked.pop(scene_id, [])
     if ids:
-        store.db.artifacts.delete_many({'_id': {'$in': ids}, 'kind': HELD_KIND})
+        artifact_records.delete_many(store, ids, kind=HELD_KIND)
 
 
 def _place(people, scene, row):
@@ -268,12 +269,12 @@ def _keep_request(store, channel_id, request, line, moment):
     from .state import Conflict
     row_id = 'request-' + sha(('%s|%s' % (channel_id, request['flag'])).encode())[:24]
     for _ in range(5):
-        row = store.db.artifacts.find_one({'_id': row_id})
+        row = artifact_records.get(store, row_id)
         if row:
             return row
-        last = store.db.artifacts.find_one({'kind': REQUEST_KIND}, {'number': 1}, sort=[('number', -1)])
+        last = artifact_records.of_kind(store, REQUEST_KIND, by='number').first(newest_first=True, fields=['number'])
         try:
-            return store.put('artifacts', {'_id': row_id, 'kind': REQUEST_KIND, 'channel_id': channel_id,
+            return artifact_records.save(store, {'_id': row_id, 'kind': REQUEST_KIND, 'channel_id': channel_id,
                                            'number': (last or {}).get('number', 0) + 1, 'flag': request['flag'],
                                            'type': request['type'],
                                            **({'sub_type': request['sub_type']} if request['type'] == 'group' else {}),
@@ -286,7 +287,7 @@ def _keep_request(store, channel_id, request, line, moment):
 
 def pending(store):
     """The requests she may answer now, by number."""
-    rows = store.db.artifacts.find({'kind': REQUEST_KIND, 'state': 'open'}).sort('number', 1)
+    rows = artifact_records.of_kind(store, REQUEST_KIND, state='open', by='number').rows()
     return {_number(row): row for row in rows}
 
 
@@ -309,9 +310,9 @@ def remind_open(store, controller):
 
 def settled(store, action, state):
     """Her answer's receipt: the request is answered, gone from the platform, or its fate unknown."""
-    row = store.db.artifacts.find_one({'kind': REQUEST_KIND, 'answer': action['_id']})
+    row = artifact_records.answer(store, REQUEST_KIND, action['_id'])
     if row and state in ANSWERED:
-        store.put('artifacts', {**row, 'state': ANSWERED[state], 'settled_at': now()}, expected=row['revision'],
+        artifact_records.save(store, {**row, 'state': ANSWERED[state], 'settled_at': now()}, expected=row['revision'],
                   stream='requests')
 
 
@@ -327,8 +328,8 @@ def answer(store, ep, item, key):
             item.get('who'), '现在等你回的是 ' + '、'.join(sorted(found)) if found else '现在没有等你回的请求，重试也一样'))
     scene = scene_records.get(store, ep['scene_id']) or {}
     row_id = 'ga-' + sha(canonical([ep['_id'], 'group_action', key]))[:24]
-    if not store.db.artifacts.find_one({'_id': row_id}):
-        store.put('artifacts', {'_id': row_id, 'kind': 'group_action', 'channel_id': request['channel_id'],
+    if not artifact_records.get(store, row_id):
+        artifact_records.save(store, {'_id': row_id, 'kind': 'group_action', 'channel_id': request['channel_id'],
                                 'scene_id': ep['scene_id'], 'scope_key': scene.get('scope_key'),
                                 'policy_epoch': scene.get('policy_epoch'), 'episode_id': ep['_id'],
                                 'target': {'type': 'request', 'id': request['type']},
@@ -336,7 +337,7 @@ def answer(store, ep, item, key):
                                           **({'sub_type': request['sub_type']} if 'sub_type' in request else {})},
                                 'who': number, 'reason': item.get('reason', ''), 'state': 'QUEUED', 'created_at': now()},
                   stream=row_id)
-    store.put('artifacts', {**request, 'state': 'answering', 'answer': row_id, 'answered_at': now()},
+    artifact_records.save(store, {**request, 'state': 'answering', 'answer': row_id, 'answered_at': now()},
               expected=request['revision'], stream='requests')
     from .group_admin import KIND_WORDS, STATE_WORDS
     return {'action': KIND_WORDS[item['kind']], 'who': number, 'state': STATE_WORDS['QUEUED']}

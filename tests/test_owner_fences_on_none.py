@@ -128,3 +128,20 @@ def test_memories_a_fence_of_none_reads_nothing_and_a_kind_or_a_status_of_none_i
     assert memory_records.pending_index(store, 'route-x', scope='scene:none', epoch=None).rows() == []
     assert memory_records.dependents(store, None, ['line']).rows() == []
     assert asked == []
+
+
+def test_artifacts_a_fence_of_none_reads_nothing_and_a_kind_or_a_state_of_none_is_a_row_without_one(store):
+    from asuna.records import artifacts as artifact_records
+    artifact_records.save(store, {'_id': 'art-x', 'scope_key': 'scene:none', 'task_id': 't-x', 'intent_revision': 1,
+                                  'tool': 'look'}, stream='art-x')                # no `kind`, no `state`
+    assert artifact_records.get(store, 'art-x', kind=None, state=None)['_id'] == 'art-x'
+    assert [row['_id'] for row in artifact_records.of_task(store, 't-x', 1, state=None).rows()] == ['art-x']
+    assert artifact_records.count_tool(store, 'look', None) == 1
+    asked = counted(store)
+    assert artifact_records.get(store, 'art-x', task=None) is None and artifact_records.get(store, None) is None
+    assert artifact_records.get(store, 'art-x', revision=None) is None
+    assert artifact_records.of_task(store, 't-x', None).rows() == [] and artifact_records.of_task(store, None, 1).rows() == []
+    assert artifact_records.of_kind(store, 'k', scope=None).rows() == [] and artifact_records.of_scene(store, 'k', None).rows() == []
+    assert artifact_records.admission(store, 'group_action', None, 'QUEUED').first() is None
+    assert artifact_records.by_content(store, None, 'k') is None and artifact_records.answer(store, 'k', None) is None
+    assert asked == []

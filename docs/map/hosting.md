@@ -188,6 +188,7 @@ The worker's store: every write goes through `Store.put` with an expected revisi
   - `checked` — The shared layer over the MongoDB adapter on this store's database, derived from `db` as it is now.
   - `adapter`
   - `collection` — The handle of a declared collection: the store's words, checked against the catalog.
+  - `blobs` — The blob store (write, open, delete, of_scope), each blob's metadata checked; used only by `blobs.py`.
   - `ensure` — Create every declared collection with its validator and indexes, and drop the retired indexes; {collection: Ensured}.
   - `migrate`
   - `audit`
@@ -754,3 +755,41 @@ The owner of `memory_units`: her recall (the chat chunks of her conversations, t
 - def `touch_salience` — A real turn used the memory: one more reference, and when and at which position of its conversation.
 - def `ensure_vectors` — The space's search index, made or brought up to the space's filter fields; True once it can be queried.
 - def `nearest` — The k memories nearest to `vector` in these (scope, epoch) pairs, of this character, status and embedding revision (of this kind), best first as (id, cosine); exact.
+
+## `records/artifacts`
+
+[src/asuna/records/artifacts.py](../../src/asuna/records/artifacts.py)
+
+The owner of `artifacts`: the rows of what she and the program keep apart from the conversation (stored files and pictures with their bytes' manifest, the action brain's tool records, held notices and passed lines, requests and group actions, a channel's admissions and declared functions, a peer line's state), read and written only through these operations.
+
+- def `get` — The row with this id (of this kind, in this state and storage; of this task and its revision; in one of these scopes), or None.
+- def `by_content` — The first row holding these bytes (their sha256) of a kind (in this scope or one of these; in this state and storage; listing this source), by `by` (`newest_first` turns it); None when there is none.
+- def `answer` — The row of a kind that this answer settles (a request her group action answered), or None.
+- def `by_ids` — View: the rows with these ids (in this storage).
+- def `of_task` — View: the rows of a task's revision (its tool records) in this state or one of these.
+- def `of_tasks` — View: the rows of these tasks.
+- def `of_kind` — View: the rows of a kind (in this state and storage; in this scope or one of these; listing this source), ordered by `by`.
+- def `of_scene` — View: the rows of a kind held for a conversation (notices, passed lines), by when they came.
+- def `admission` — View: a channel's rows of a kind in a state (claimed at or after `claimed_since`, an ISO time), ordered by `by`: the outbox's group actions, the one in flight and the next queued.
+- def `kept` — View: the kept rows of a kind (`stored`: whose bytes are in the blob store; in this state; of this ref; in one of these scopes).
+- def `with_copies` — View: the rows of a kind with copies in task folders, whose storage is not `besides_storage`.
+- def `stored` — View: every row whose bytes are in the blob store.
+- def `count_tool` — How many rows of a tool are in a state.
+- def `save` — The revisioned write of a whole row (`Store.put`: `expected`, `stream`).
+- def `insert` — A new row written as it is, without a revision (a held notice, a passed line, a channel's declared functions).
+- def `replace` — The row of this id replaced by `row`, as it is; False when there is none.
+- def `delete` — Delete one row.
+- def `delete_many` — Delete the rows with these ids (of this kind); how many went.
+- def `mark_read` — A page of a stored file of a kind was read (only inside these scopes, in state DONE): `last_read_at`.
+- def `mark_sent` — A row of a kind was sent: `last_sent_at`.
+- def `restore_bytes` — Bytes fetched again are back on a row whose bytes expired, if it is still `REMOVED`; whether it was.
+- def `bytes_removed` — A row's bytes went (expired): `storage` `REMOVED` with when, its blob no longer named.
+- def `erase_scope` — Every row of a scope whose bytes are stored or expired, marked `ERASED` by this erasure (ADR-105).
+- def `set_days_from` — A stored file's days start again from `moment` (and it lists `source` too).
+- def `set_fields` — Set these fields of a row (a kept file's `kept_at` and `kept_why`).
+- def `keep_why`
+- def `unkeep` — A kept file is kept no more (an erased one leaves the list).
+- def `let_go` — A kept file let go: its days start from `moment`.
+- def `set_received_from` — Where a file a task registered came from (a received file with its bytes).
+- def `add_copy` — A copy of a stored file in a task folder.
+- def `set_copies`

@@ -21,6 +21,8 @@ The read-only check of one ADR-104 batch against a deployment's database, before
 - def `slowdowns` — (failing, accepted): the read cases past the timing gate (`slower`), by their confirmation's p50s when they were timed again (`confirm`), each (name, old p50, new p50, new plan); those the lead accepted (ACCEPTED_SLOWDOWNS) apart.
 - def `reads` — Each case's numbers: n, same, differing, plan stages and times, old against new; none are ids.
 - def `search_proof` — B7's own proof: retrieval's whole search old (its memory reads as pymongo) against new (through the owner) on QUERIES_SEARCH queries chosen as step 1a chose them: her (scope, epoch) pairs with the most alive embedded memories of hers, globa
+- def `blob_probe` — B8's own proof of the blob interface, on a throwaway database of this server (`asuna_v2_test_blobprobe_*`, dropped at the end and on failure): a synthetic stream written, read back whole and in pieces with a seek, its hash and size compared
+- def `stored_files` — Read only, her own: up to STORED_FILES rows whose bytes are stored, spread over the stored rows, each blob opened and read in pieces, its size and sha256 compared with its row.
 - def `sizes` — The records of 512 KiB or more by their BSON size, and of those the ones whose BSON and JSON sizes (the in-memory adapter's measure) fall on different sides of the store's 1 MiB limit; read part by part like the kinds.
 - def `check`
 - def `clean` — Whether a checked run found nothing: no collection to create, no index to make, no conflict, every validator the one ensure creates, every declared field holding only its kind, no record on different sides of 1 MiB, no read case slower past
@@ -248,7 +250,7 @@ Build the core plugin and the persona and channel packages passed with --persona
 
 [tools/probe_blob.py](../../tools/probe_blob.py)
 
-Probe of large-file storage on a real MongoDB: a synthetic blob over 1 MB goes into GridFS, wrong-scope and non-operator reads are refused, and deleting its memory removes it.
+Probe of large-file storage on a real MongoDB: a synthetic blob over 1 MB goes into the blob store (GridFS), wrong-scope and non-operator reads are refused, and deleting its memory removes it (its blob is no longer stored).
 
 
 ## `probe_fresh_profile.mjs`

@@ -937,6 +937,7 @@ class ToolBroker:
 # as "not done", and only her memory of its file name saved a rerun).
 LEFT_SHOWN, LEFT_SCAN, LEFT_HASH_BYTES = 20, 20000, 64 * 1024 * 1024
 LEFT_SKIP = frozenset(('.git', 'node_modules', '__pycache__', '.venv'))
+FILE_CLOCK_SLACK_SECONDS = 1.0
 STAGE_TIMEOUT = 'NATIVE_STAGE_TIMEOUT'
 STOPPED_AT_LIMIT = ('行动这一段跑到了时间上限（%d 分钟），还没交报告就停了；原目标有没有做完没有确认。'
                     '它在 /task 里留下的文件列在 files，先看这些再决定要不要重做。')
@@ -948,7 +949,9 @@ def files_left(workspace, since):
     the first 16 hex digits of the sha256. At most LEFT_SHOWN, the rest counted; the walk stops after LEFT_SCAN files."""
     from datetime import datetime
     try:
-        start = datetime.fromisoformat(str(since).replace('Z', '+00:00')).timestamp()
+        # A file's time comes from the file system's coarser clock (on Windows it moves in steps of up to 15.6 ms), so
+        # a file written just after the start can carry a time a little before it: a second's slack counts it in.
+        start = datetime.fromisoformat(str(since).replace('Z', '+00:00')).timestamp() - FILE_CLOCK_SLACK_SECONDS
     except ValueError:
         return []
     found, seen = [], 0

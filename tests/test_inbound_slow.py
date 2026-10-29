@@ -96,7 +96,7 @@ def test_a_slow_admission_carries_every_thread_s_stack_from_inside_it(monkeypatc
     finally:
         release.set()
     [(kind, payload)] = evidence.rows
-    assert payload['stacks_at'] >= 0.01
+    assert 0 <= payload['stacks_at'] <= payload['total']      # monotonic moves in steps of up to 15.6 ms on Windows
     stacks = payload['stacks']
     assert stacks['admission'][-1].endswith(' admit_slowly')
     assert any(line.endswith(' hold_the_line') for line in stacks['holder'])

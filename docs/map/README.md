@@ -248,6 +248,9 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`records/plans`](../../src/asuna/records/plans.py) — The owner of `plans`: what she and the program scheduled (her plans in a conversation, the rhythms of the heartbeat, settlement, self-development and condensing, their next fire and last outcome), read and written only through these operati
 - [`records/memories`](../../src/asuna/records/memories.py) — The owner of `memory_units`: her recall (the chat chunks of her conversations, their summaries, her thoughts, imported entries) and its vector space, read and written only through these operations.
 - [`records/artifacts`](../../src/asuna/records/artifacts.py) — The owner of `artifacts`: the rows of what she and the program keep apart from the conversation (stored files and pictures with their bytes' manifest, the action brain's tool records, held notices and passed lines, requests and group action
+- [`records/heads`](../../src/asuna/records/heads.py) — The owner of `state_heads` and `state_revisions`: her revisioned state (documents, relationships and the person layer, scene affect, policy, self descriptions), a head per entity and scope naming its current revision, read and written only 
+- [`records/people`](../../src/asuna/records/people.py) — The owner of `identities` and `scene_people`: who a person is on this machine (their identity: platform, account, the name the operator gave them) and how each conversation labels them (its label rows: number, card, nickname, role, when las
+- [`records/ideas`](../../src/asuna/records/ideas.py) — The owner of `ideas`: her improvement-idea notebook (each idea, why, its state and what she decided), read and written only through these operations.
 
 ### [A turn](turn.md)
 

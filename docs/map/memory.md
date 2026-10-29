@@ -245,6 +245,17 @@ ADR-005 P2：摘要条目上的说话人归属与更正——由程序从真实�
 
 Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).
 
+- def `entry` — A running record's entry by id, or None.
+- def `slugs` — The names of a persona's running records (the values of their entries' `slug`), ascending.
+- def `entries` — View: a running record's entries, in their order (`seq`).
+- def `entry_of` — An entry of a running record (the one this mutation last wrote), or None.
+- def `last_entry` — A running record's last entry (the highest `seq`), or None.
+- def `revision` — A running record's revision by id, or the one a mutation id wrote; None when there is none.
+- def `revisions` — View: a running record's revisions (of this section; `sectioned`: of any section), by `created_at`.
+- def `revision_of_body` — The revision of a section whose body had this hash, or None.
+- def `last_revision` — A running record's newest revision (by `created_at`, then `_id`), or None.
+- def `save_entry` — The revisioned write of an entry (`Store.put`: `expected`, `stream`).
+- def `save_revision` — The write of a running record's revision (`Store.put`).
 - class `DocumentError` — A refused document operation; ``code`` is the stable reason.
 - def `stale` — A Conflict message for a document someone else wrote between her read and her write.
 - def `missing_section`

@@ -14,6 +14,7 @@ from .records import messages as message_records
 from . import summary_attribution
 from .records import scenes as scene_records
 from .records import memories as memory_records
+from .records import heads as head_records
 
 try:                                  # 跨场景只读联动（A2）：关系记录落在哪一份由配置决定
     from . import scene_links
@@ -66,7 +67,7 @@ class MemoryService:
                                         or not entity.startswith('relationship:')):
                 raise Denied(NOT_THIS_SCENE)
             base_id=(base or {}).get('here') if base is not None else episode['manifest']['relationship_revision']
-            found=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':key}) if base_id else None
+            found=head_records.revision(self.store,base_id,entity=key) if base_id else None
             # No record yet (everyone starts with none): her first understanding creates it.
             if base_id and not found:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这回合看到的那份理解已经找不到了（不是你的错）；重试也一样，下回合再更新')
             content=self._content(found,body,short)
@@ -75,7 +76,7 @@ class MemoryService:
             else:
                 sources,auto,skipped,stale=self._understanding_sources(episode,scope,person_id)
                 try:
-                    revision=self.store.mutate(entity,target_scope,base_id,content,sources,scope,operation,
+                    revision=head_records.mutate(self.store,entity,target_scope,base_id,content,sources,scope,operation,
                         linked_scopes=linked,
                         reason='角色基于本轮真实输入、独白与本轮展示给角色的程序摘要形成的理解；来源由程序关联。',
                         change_class='interpretation')
@@ -119,7 +120,7 @@ class MemoryService:
         if key!=entity+'|'+PERSON_SCOPE:
             raise Denied('UNDERSTANDING_PERSON_NOT_IN_CONTEXT: 这回合没给你看他的人那层（不是你的错）；重试也一样，下回合再写')
         base_id=(base or {}).get('person') if base is not None else episode['manifest'].get('person_revision')
-        found=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':key}) if base_id else None
+        found=head_records.revision(self.store,base_id,entity=key) if base_id else None
         if base_id and not found:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这回合看到的那份理解已经找不到了（不是你的错）；重试也一样，下回合再更新')
         content=self._content(found,body,short)
         if content is None:
@@ -128,7 +129,7 @@ class MemoryService:
         common={'entity':entity,'target_scope':PERSON_SCOPE,'base_revision':base_id,'body':content['body'],'source_ids':sources,
                 'auto_source_ids':auto,'auto_source_skipped':skipped,'auto_stale_source_ids':stale}
         try:
-            revision=self.store.mutate(entity,PERSON_SCOPE,base_id,content,sources,scope,operation,
+            revision=head_records.mutate(self.store,entity,PERSON_SCOPE,base_id,content,sources,scope,operation,
                 linked_scopes=[scope],change_class='interpretation',
                 reason='角色在一个对话里写下的、她认为这个人在哪儿都成立的理解；来源由程序关联。',
                 origin={'scene_id':episode['scene_id'],'at':now()})
@@ -179,15 +180,15 @@ class MemoryService:
         if not operator:raise Denied('OPERATOR_ROLLBACK_REQUIRED')
         if not entity.startswith(('relationship:','scene_affect:')):raise Denied('POLICY_ENTITY_DENIED')
         with database_effects_lock(self.store.name):
-            pair=self.store.head(entity,scope)
+            pair=head_records.current(self.store,entity,scope)
             if not pair:raise Denied('UNKNOWN_STATE_ENTITY')
             head,current=pair;ancestors={};node=current
             for _ in range(512):
                 if not node:break
                 if node['_id'] in ancestors:raise Denied('REVISION_CYCLE')
                 ancestors[node['_id']]=node
-                node=self.store.db.state_revisions.find_one({'_id':node['parent_revision_id']}) if node.get('parent_revision_id') else None
-            prior=self.store.db.state_revisions.find_one({'mutation_id':operation})
+                node=head_records.revision(self.store,node['parent_revision_id']) if node.get('parent_revision_id') else None
+            prior=head_records.by_mutation(self.store,operation)
             if prior:
                 if prior.get('rollback_target')==target_id and prior.get('parent_revision_id')==base_id and prior['_id'] in ancestors:return prior
                 raise Conflict('ROLLBACK_OPERATION_REUSED_OR_UNCOMMITTED')
@@ -201,8 +202,8 @@ class MemoryService:
             value={'_id':sha(canonical([operation,entity,scope])),'mutation_id':operation,'entity_key':head['_id'],'scope_key':scope,
                 'content':copy.deepcopy(target['content']),'source_ids':target.get('source_ids',[]),'processed_source_ids':current.get('processed_source_ids',[]),
                 'parent_revision_id':base_id,'rollback_target':target_id,'change_class':'operator_rollback'}
-            revision=self.store.put('state_revisions',value,stream='rollback:'+operation)
-            self.store.put('state_heads',{**head,'revision_id':revision['_id']},expected=head['revision'],stream='rollback:'+operation)
+            revision=head_records.save_revision(self.store,value,stream='rollback:'+operation)
+            head_records.save_head(self.store,{**head,'revision_id':revision['_id']},expected=head['revision'],stream='rollback:'+operation)
             return revision
 
     def chunk(self,scene_id):

@@ -400,9 +400,6 @@ class FakeStore:
             raise Denied('SCENE_MEMBERSHIP_DENIED')
         return scene
 
-    def head(self, entity, scope):
-        return None
-
     def next_scene_seq(self, scene_id):
         return len(list(self.db.messages.find({'scene_id': scene_id}))) + 1
 

@@ -13,6 +13,8 @@ from .state import Store, now
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import memories as memory_records
+from .records import heads as head_records
+from .records import people as people_records
 
 MEMORY = memory_records.SPACE
 UNVECTORED = memory_records.UNVECTORED
@@ -221,7 +223,7 @@ class Retrieval:
         rows=memory_records.readable(self.store,pairs,character=me,by=('occurred_at','_id')).rows(
             newest_first=True,limit=4096,fields=UNVECTORED)
         cacheable=len(rows)<4096  # A sample cannot fingerprint the full scope.
-        heads=list(self.store.db.state_heads.find({'scope_key':{'$in':['global-safe',scope]+linked+([private_scope] if private_scope else [])}},{'_id':1,'revision_id':1}).sort('_id',1))
+        heads=head_records.heads(self.store,scopes=['global-safe',scope]+linked+([private_scope] if private_scope else []),by='_id').rows(fields=['_id','revision_id'])
         # 联动集合进缓存键：同一句话在「联动着读」和「只读本场景」下不是同一个结果，不能互相顶。
         key_fields={'scope':scope,'private_scope':private_scope,'policy_epoch':epoch,'character_id':me,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'linked_scopes':sorted(linked),'state_revision':sha(canonical([heads,[(m['_id'],m.get('revision'),m['status']) for m in rows]]))}
         cache_key=sha(canonical(key_fields));cached=self.cache.get(cache_key)
@@ -248,7 +250,7 @@ class Retrieval:
         # A corpus-wide boilerplate word (e.g. "record number") is not evidence
         # of exact relevance. Entity aliases come from identities, never gold.
         qterms={t for t in qterms if frequencies[t] <= max(2,len(rows)*.5)}
-        aliases={p['person_id'] for p in self.store.db.identities.find({})
+        aliases={p['person_id'] for p in people_records.all_identities(self.store).rows()
                  if p.get('display_name') and p['display_name'] in query}
         def lexical_score(m):
             return sum(math.log(1+len(rows)/(1+frequencies[t])) for t in qterms & document_terms[m['_id']])+4*len(aliases & set(m.get('subjects',[])))

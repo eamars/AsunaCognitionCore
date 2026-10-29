@@ -3,8 +3,8 @@ hash-chained audit stream.
 
 `put`, `audit`, `recover_commits`, `ensure` (`migrate`), `nearest` and `ensure_vectors` go through the store's
 MongoDB adapter and the shared layer's checks (asuna.store); `collection(name)` is a declared collection's handle,
-and `db` the database itself for the code that still reads it directly. `get` refuses reads outside the caller's
-scope, and `mutate` writes her relationship and scene-affect revisions only from sources she may read.
+`blobs` its blob store, and `db` the database itself for the code that still reads it directly. `get` refuses reads
+outside the caller's scope. Her revisioned state (heads, `mutate`) is `records.heads`'.
 """
 from __future__ import annotations
 import copy
@@ -234,7 +234,8 @@ class Store:
         return doc
 
     def identity(self, platform: str, account_id: str):
-        doc = self.db.identities.find_one({'platform':platform,'account_id':account_id})
+        from .records import people as people_records
+        doc = people_records.by_account(self, account_id, platform=platform)
         if not doc:
             raise Denied('UNKNOWN_ACCOUNT')
         return doc['person_id']
@@ -258,108 +259,9 @@ class Store:
             docs=DocumentStore(self,persona)
             if not docs.head('persona'):
                 docs.seed('persona','persona',(fixture.parent/path).read_text(encoding='utf-8'),path=Path(path).name)
+        from .records import heads as head_records
         for rel in world['relationships']:
-            self.init_head('relationship:'+rel['subject_id'],rel['scope_key'],rel,rel['source_ids'])
-
-    def init_head(self, entity: str, scope: str, content: dict, sources: list[str]):
-        key=entity+'|'+scope
-        head=self.db.state_heads.find_one({'_id':key})
-        if head:
-            return head
-        rev_id=str(uuid.uuid4())
-        self.put('state_revisions',{'_id':rev_id,'entity_key':key,'mutation_id':'seed:'+key,'scope_key':scope,'content':content,'source_ids':sources,'parent_revision_id':None},stream='seed')
-        return self.put('state_heads',{'_id':key,'scope_key':scope,'revision_id':rev_id},stream='seed')
-
-    def head(self, entity: str, scope: str):
-        head=self.db.state_heads.find_one({'_id':entity+'|'+scope})
-        if not head:
-            return None
-        revision=self.db.state_revisions.find_one({'_id':head['revision_id']})
-        return head,revision
-
-    def mutate(self, entity: str, scope: str, base_revision_id: str, content: dict,
-               sources: list[str], request_scope: str, mutation_id: str, actor='character',*,reason=None,change_class=None,linked_scopes=(),origin=None):
-        # A relationship is her understanding in prose; no level fields (nothing ever wrote them).
-        allowed = {'body', 'short'}           # her prose, and her one line for herself (ADR-082)
-        # 跨场景只读联动（A2）里唯一被放宽的是「关系/偏好状态落在哪一份」：配置认定同一个人时，
-        # 别名场景这一轮写的是 canonical 那一份。linked_scopes 就是本轮授权的那个场景 scope——
-        # 来源证据仍只许落在 global-safe、目标 scope 或它里面；不传就等于原来的行为。
-        linked = {item for item in (linked_scopes or ()) if isinstance(item, str) and item}
-        readable_scopes = {'global-safe', scope} | linked
-        # The persona is a document (ADR-009 §5); state heads hold only relationships and scene affect.
-        if actor!='character' or not entity.startswith(('relationship:','scene_affect:')) or not set(content).issubset(allowed):
-            raise Denied('POLICY_PATH_OR_ACTOR_DENIED')
-        if scope != request_scope and not (request_scope in linked
-                                           and entity.startswith(('relationship:',
-                                                                  'scene_affect:'))):
-            raise Denied('SCOPE_PROMOTION_DENIED')
-        if not sources:
-            raise Denied('MUTATION_REQUIRES_SOURCES')
-        if reason is not None and (not isinstance(reason,str) or not 1<=len(reason)<=2000):raise Denied('INVALID_MUTATION_REASON')
-        if change_class not in (None,'persona','relationship','interpretation','scene_affect'):raise Denied('INVALID_CHANGE_CLASS')
-        from .records import memories as memory_records
-        for source in sources:
-            row=memory_records.get(self,source,erased=False)
-            if not row or row['scope_key'] not in readable_scopes:
-                raise Denied('MUTATION_SOURCE_DENIED')
-        head,base=self.head(entity,scope) or (None,None)
-        existing=self.db.state_revisions.find_one({'mutation_id':mutation_id})
-        if existing:
-            if existing.get('content')!=content or existing.get('source_ids')!=sources or existing.get('parent_revision_id')!=base_revision_id or existing.get('entity_key')!=entity+'|'+scope or existing.get('reason')!=reason or existing.get('change_class')!=change_class:
-                raise Conflict('MUTATION_ID_CONTENT_CHANGED')
-            ancestor=base
-            for _ in range(512):
-                if not ancestor:break
-                if ancestor['_id']==existing['_id']:return existing
-                parent=ancestor.get('parent_revision_id')
-                ancestor=self.db.state_revisions.find_one({'_id':parent}) if parent else None
-            raise Conflict('MUTATION_ALREADY_ATTEMPTED')
-        # A relationship has no record until she first writes one: that write starts from no base.
-        first=head is None and base_revision_id is None and entity.startswith('relationship:')
-        if not first and (not head or head['revision_id']!=base_revision_id):
-            self.audit('mutation:'+mutation_id,'state.conflict',{'entity':entity,'base_revision_id':base_revision_id,'reason':'BASE_REVISION_STALE'},scope)
-            raise Conflict('BASE_REVISION_STALE')
-        evidence_ids=set();visited=set()
-        def roots(key,path):
-            if key in path:raise Denied('SOURCE_CYCLE')
-            if len(visited)>512:raise Denied('SOURCE_GRAPH_LIMIT')
-            if key in visited:return
-            visited.add(key)
-            row=memory_records.get(self,key)
-            if row:
-                if row.get('status')=='tombstone' or row['scope_key'] not in readable_scopes:raise Denied('DERIVED_SOURCE_SCOPE_DENIED')
-                descendants=row.get('source_event_ids',[])
-                if descendants:
-                    for child in descendants:roots(child,path|{key})
-                else:evidence_ids.add(key)
-            else:
-                # Derived memory may cite a message/artifact rather than
-                # another memory. Known internal sources retain their scope.
-                from .records import messages as message_records
-                line=message_records.get(self,key,fields=['scope_key','deletion_id'])
-                known=[line] if line else []
-                from .records import episodes as episode_records
-                from .records import artifacts as artifact_records
-                source=artifact_records.get(self,key,['scope_key','deletion_id'])
-                if source:known.append(source)
-                turn=episode_records.get(self,key,fields=['scope_key','deletion_id'])
-                if turn:known.append(turn)
-                known+=message_records.of_platform_event(self,key,fields=['scope_key','deletion_id'])
-                if any(item.get('deletion_id') or item.get('scope_key') not in readable_scopes for item in known):raise Denied('DERIVED_SOURCE_SCOPE_DENIED')
-                evidence_ids.add(key)
-        for source in sources:roots(source,set())
-        processed=set((base or {}).get('processed_source_ids',[]))
-        if evidence_ids and evidence_ids.issubset(processed):
-            raise Conflict('NO_NEW_SOURCE_EVENTS')
-        new_id=sha(canonical({'mutation_id':mutation_id,'entity':entity,'scope':scope}))
-        # origin: where and when a revision was written, for a record read in other conversations (understanding.py).
-        metadata={k:v for k,v in {'reason':reason,'change_class':change_class,'origin':origin}.items() if v is not None}
-        revision=self.put('state_revisions',{'_id':new_id,'mutation_id':mutation_id,'entity_key':entity+'|'+scope,'scope_key':scope,'content':content,'source_ids':sources,'processed_source_ids':sorted(processed|evidence_ids),'parent_revision_id':base_revision_id,**metadata},stream='mutation:'+mutation_id)
-        if first:
-            self.put('state_heads',{'_id':entity+'|'+scope,'scope_key':scope,'revision_id':new_id},stream='mutation:'+mutation_id)
-        else:
-            self.put('state_heads',{**head,'revision_id':new_id},expected=head['revision'],stream='mutation:'+mutation_id)
-        return revision
+            head_records.init(self,'relationship:'+rel['subject_id'],rel['scope_key'],rel,rel['source_ids'])
 
     def public_messages(self, scene: str, person: str):
         from .records import scenes as scene_records          # the owner imports this module

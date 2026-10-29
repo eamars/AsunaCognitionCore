@@ -18,10 +18,10 @@ One-to-one conversations keep the `relationship` block as before.
 """
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records import heads as head_records
 from . import clock
 
 PERSON_SCOPE = 'person'
@@ -48,9 +48,9 @@ def person_ids(config, db, person_id):
 
 
 def _elsewhere(store, person_id, here_scope):
-    ids = '|'.join(re.escape(i) for i in person_ids(store.config, store.db, person_id))
-    return sum(1 for head in store.db.state_heads.find({'_id': {'$regex': r'^relationship:(%s)\|scene:' % ids}},
-                                                       {'scope_key': 1}) if head.get('scope_key') != here_scope)
+    prefixes = ['relationship:%s|scene:' % i for i in person_ids(store.config, store.db, person_id)]
+    return sum(1 for head in head_records.with_prefix(store, *prefixes).rows(fields=['scope_key'])
+               if head.get('scope_key') != here_scope)
 
 
 def _written(store, revision, moment):
@@ -94,8 +94,8 @@ def layers(store, scene, person_id):
     """(person head, here head) of this person as this conversation reads them; each (head, revision) or None."""
     from .scene_links import relationship_target
     target = relationship_target(store.config, store.db, scene, person_id)
-    here = store.head(target['entity'], target['scope'])
-    person = store.head(person_entity(store.config, store.db, person_id), PERSON_SCOPE)
+    here = head_records.current(store, target['entity'], target['scope'])
+    person = head_records.current(store, person_entity(store.config, store.db, person_id), PERSON_SCOPE)
     return person, here
 
 
@@ -186,7 +186,8 @@ def _name(store, people, person):
     from .peer_context import speaker_name
     if people.named(person):
         return people.named(person)
-    seen = store.db.scene_people.find_one({'person': person}, {'card': 1, 'nickname': 1}, sort=[('seen_at', -1)])
+    from .records import people as people_records
+    seen = people_records.label_of_person(store, person, ['card', 'nickname'])
     return (safe_name((seen or {}).get('card')) or safe_name((seen or {}).get('nickname'))
             or speaker_name(store.config, person, None, store.db))
 
@@ -218,9 +219,9 @@ def _everyone(store, persona):
     """Everyone she has written, newest first."""
     from .people import People
     people = People(store, persona)
-    heads = list(store.db.state_heads.find({'_id': {'$regex': '^relationship:'}}))
-    revisions = {row['_id']: row for row in store.db.state_revisions.find(
-        {'_id': {'$in': [h['revision_id'] for h in heads]}}, {'content': 1, 'created_at': 1, 'origin': 1})}
+    heads = head_records.with_prefix(store, 'relationship:').rows()
+    revisions = {row['_id']: row for row in head_records.revisions(store, [h['revision_id'] for h in heads]).rows(
+        fields=['content', 'created_at', 'origin'])}
     found = {}
     for head in heads:
         entity, scope = head['_id'].rsplit('|', 1)

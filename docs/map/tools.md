@@ -103,8 +103,7 @@ Build the reviewed DSH patches from the pinned commit of the Asuna branch on the
 
 ADR-096's install checks, read only: what the turns carry is what carried() says, in numbers only.
 
-- class `ReadOnly` — What carried() needs of a store, with no way to write.
-  - `head`
+- class `ReadOnly` — What carried() needs of a store, with no way to write: the database for the reads that have not moved, and the owners' collections over it (her heads through records.heads).
   - `audit`
 - def `main`
 

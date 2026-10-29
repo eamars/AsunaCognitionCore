@@ -38,6 +38,7 @@ from .records import receipts as receipt_records
 from .records import sessions as session_records
 from .records import plans as plan_records
 from .records import artifacts as artifact_records
+from .records import people as people_records
 from .records import tasks as task_records
 
 
@@ -1006,7 +1007,7 @@ class BusinessWorker:
             if person and person == people.owner:
                 name = people.owner_label
             else:
-                saved = self.app.store.db.identities.find_one({'_id': person}, {'display_name': 1}) if person else None
+                saved = people_records.identity(self.app.store, person, ['display_name']) if person else None
                 name = (saved or {}).get('display_name')
         target = str(route['target']['id'])
         unnamed = target if len(target) <= 20 else ('群聊 ' if group else '私聊 ') + target[:6]

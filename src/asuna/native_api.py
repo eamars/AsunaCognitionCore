@@ -22,6 +22,9 @@ from .records import episodes as episode_records
 from .records import sessions as session_records
 from .records import memories as memory_records
 from .records import artifacts as artifact_records
+from .records import heads as head_records
+from .records import ideas as idea_records
+from .records import people as people_records
 
 DOCUMENT_KINDS = ('persona', 'voice', 'ledger', 'working')
 # The two scopes of the tab: what is the same in every conversation, and what this conversation reads.
@@ -219,21 +222,20 @@ class NativeMemory:
     def person_name(self, person):
         """A person as the owner reads them: the name this machine keeps, else the card or nickname they last had."""
         from .people import safe_name
-        row = self.store.db.identities.find_one({'_id': person}, {'display_name': 1})
+        row = people_records.identity(self.store, person, ['display_name'])
         kept = safe_name((row or {}).get('display_name'))
         if kept:
             return kept
-        seen = self.store.db.scene_people.find_one({'person': person}, {'card': 1, 'nickname': 1}, sort=[('seen_at', -1)])
+        seen = people_records.label_of_person(self.store, person, ['card', 'nickname'])
         return (safe_name((seen or {}).get('card')) or safe_name((seen or {}).get('nickname'))
                 or speaker_name(self.store.config, person, None, self.store.db))
 
     def relation_records(self, person=None):
         """{person: [(scope, short and body, time)]}: what holds of them anywhere (scope `person`) and how they are in each
         conversation (scope `scene:...`)."""
-        pattern = '^relationship:' + (re.escape(person) + '[|]' if person else '')
-        heads = list(self.store.db.state_heads.find({'_id': {'$regex': pattern}}))
-        revisions = {row['_id']: row for row in self.store.db.state_revisions.find(
-            {'_id': {'$in': [head['revision_id'] for head in heads]}}, {'content': 1, 'created_at': 1, 'generated_at': 1})}
+        heads = head_records.with_prefix(self.store, 'relationship:' + (person + '|' if person else '')).rows()
+        revisions = {row['_id']: row for row in head_records.revisions(
+            self.store, [head['revision_id'] for head in heads]).rows(fields=['content', 'created_at', 'generated_at'])}
         found = {}
         for head in heads:
             entity, scope = head['_id'].rsplit('|', 1)
@@ -298,10 +300,10 @@ class NativeMemory:
     def head_rows(self, kind, search=''):
         replaced = {f'{name}:{self.persona}|global-safe' for name in self.self_documents()}
         keys = [key for key, (category, _) in self.heads.items() if kind == category and key not in replaced]
-        heads = list(self.store.db.state_heads.find({'_id': {'$in': keys}}))
-        revisions = {row['_id']: row for row in self.store.db.state_revisions.find(
-            {'_id': {'$in': [head['revision_id'] for head in heads]}},
-            {'content': 1, 'updated_at': 1, 'generated_at': 1, 'created_at': 1})}
+        heads = head_records.heads(self.store, keys).rows()
+        revisions = {row['_id']: row for row in head_records.revisions(
+            self.store, [head['revision_id'] for head in heads]).rows(
+                fields=['content', 'updated_at', 'generated_at', 'created_at'])}
         by_key = {head['_id']: head for head in heads}
         rows = []
         for key in keys:
@@ -406,7 +408,7 @@ class NativeMemory:
         if not self.owner_view():
             return []
         rows = []
-        for row in self.store.db.ideas.find({'persona': self.persona}).sort('created_at', -1).limit(50):
+        for row in idea_records.of_persona(self.store, self.persona).rows(newest_first=True, limit=50):
             decided = (row.get('decisions') or [{}])[-1]
             rows.append({'id': 'idea:' + row['_id'], 'kind': 'idea', 'title': row['idea'],
                          'excerpt': [label('idea.state.' + row.get('state', 'open')), ' · ', decided.get('why') or row['why']],
@@ -507,7 +509,7 @@ class NativeMemory:
                 result = {'id': identifier, 'body': lines, 'interpretation': False, 'source_ids': [],
                           'category': 'persona_job_report', 'scope_key': row['scope_key']}
         elif kind == 'idea':
-            row = self.store.db.ideas.find_one({'_id': key, 'persona': self.persona}) if self.owner_view() else None
+            row = idea_records.get(self.store, key, persona=self.persona) if self.owner_view() else None
             source = (row or {}).get('source') or {}
             result = row and {'id': identifier, 'category': 'idea', 'interpretation': True, 'source_ids': [],
                               'status': 'idea.' + row.get('state', 'open'),
@@ -570,7 +572,7 @@ class NativeMemory:
                 result = self.person_detail(key)
         elif kind == 'head' and key in self.heads:
             entity, scope = key.rsplit('|', 1)
-            pair = self.store.head(entity, scope)
+            pair = head_records.current(self.store, entity, scope)
             row = pair[1] if pair else None
             if pair and not row:
                 raise Denied('MEMORY_REVISION_UNAVAILABLE')

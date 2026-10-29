@@ -1,4 +1,5 @@
 """How well she knows someone (familiarity.py): from records, in words, never from what a message claims."""
+from asuna.records import heads as head_records
 from asuna import familiarity
 from asuna.understanding import NO_HERE
 from asuna.context import ContextBuilder
@@ -58,7 +59,7 @@ def test_first_understanding_needs_no_placeholder_record(store):
     assert manifest['relationship_revision'] is None
     done = Coordinator(store, lane).ingest(event)
     assert done['state'] == 'COMMITTED'
-    head, revision = store.head('relationship:A', 'scene:dm-a')
+    head, revision = head_records.current(store, 'relationship:A', 'scene:dm-a')
     assert revision['content'] == {'body': text, 'short': '先说结论'} and revision['parent_revision_id'] is None
     _, after, _ = ContextBuilder(store).prepare({**event, 'event_id': 'later'})
     assert after['relationship']['here'] == text

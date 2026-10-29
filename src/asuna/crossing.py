@@ -49,6 +49,7 @@ from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import memories as memory_records
+from .records import heads as head_records
 
 RULES = ('all', 'own_lines', 'never')
 DEFAULT = 'own_lines'
@@ -472,11 +473,10 @@ _versions = {}
 
 def versions(store, persona, slug):
     """`history` of one document, kept while its ledger has no newer revision (one small read to check)."""
-    from .documents import DocumentStore
-    newest = [next(iter(store.db[name].find(query, {'created_at': 1, '_id': 1}).sort([('created_at', -1), ('_id', -1)])
-                        .limit(1)), None)
-              for name, query in (('state_revisions', {'entity_key': DocumentStore(store, persona).key(slug)}),
-                                  ('journal_revisions', {'persona': persona, 'slug': slug}))]
+    from . import documents
+    newest = [head_records.history(store, documents.DocumentStore(store, persona).key(slug), by=('created_at', '_id'))
+              .first(newest_first=True, fields=['created_at']),
+              documents.last_revision(store, persona, slug, ['created_at'])]
     mark = (store.name, persona, slug)
     seal = [(row or {}).get('_id') for row in newest]
     kept = _versions.get(mark)
@@ -494,15 +494,16 @@ def history(store, persona, slug):
     from .documents import DocumentStore
     docs = DocumentStore(store, persona)
     texts = {}                       # sid -> [(body, at, reason)] each time the text changed (or the section went)
-    for revision in store.db.state_revisions.find({'entity_key': docs.key(slug)},
-                                                  {'content.sections': 1, 'created_at': 1, 'reason': 1}).sort('created_at', 1):
+    for revision in head_records.history(store, docs.key(slug)).rows(fields=['content.sections', 'created_at',
+                                                                              'reason']):
         sections = {s['sid']: s.get('body') or '' for s in (revision.get('content') or {}).get('sections') or []}
         for sid in set(texts) | set(sections):
             body = sections.get(sid)
             if not texts.get(sid) or texts[sid][-1][0] != body:
                 texts.setdefault(sid, []).append((body, revision.get('created_at'), revision.get('reason')))
-    for row in store.db.journal_revisions.find({'persona': persona, 'slug': slug, 'sid': {'$exists': True}},
-                                               {'sid': 1, 'body': 1, 'created_at': 1, 'reason': 1}).sort('created_at', 1):
+    from . import documents
+    for row in documents.revisions(store, persona, slug, sectioned=True).rows(fields=['sid', 'body', 'created_at',
+                                                                                    'reason']):
         if not texts.get(row['sid']) or texts[row['sid']][-1][0] != row.get('body'):
             texts.setdefault(row['sid'], []).append((row.get('body'), row.get('created_at'), row.get('reason')))
     out = {}
@@ -526,7 +527,8 @@ def before(store, persona, here, cls, query, zone):
     from .documents import JOURNALS
     docs = DocumentStore(store, persona)
     slugs = [notes_slug(here['_id'])] if here.get('kind') == 'group' else []
-    slugs += sorted({*JOURNALS, *store.db.journal_entries.distinct('slug', {'persona': persona})})
+    from .documents import slugs as journals
+    slugs += sorted({*JOURNALS, *journals(store, persona)})
     judged = {(row['doc'], row['sid']) for row in Tiers(store, persona).items(**{'from': OWN_JUDGMENT})}
     ranges = settings()['history_excluded']
     found = []

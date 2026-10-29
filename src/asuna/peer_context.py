@@ -154,7 +154,12 @@ def snapshot_mentioned(event, raw, mentioned):
 def speaker_name(config, person_id, row=None, db=None):
     """Readable name for a stored author: a saved identity name, the character, the local user, or the platform profile saved with the row."""
     chat = config.get("chat", {})
-    identity = db.identities.find_one({"_id": person_id}, {"display_name": 1}) if db is not None and person_id else None
+    if db is not None and person_id:
+        from . import records
+        from .records import people as people_records
+        identity = people_records.identity(records.on(db), person_id, ["display_name"])
+    else:
+        identity = None
     if identity and _clean(identity.get("display_name")):
         return _clean(identity["display_name"])
     if person_id == (config.get("character_id") or chat.get("persona")):

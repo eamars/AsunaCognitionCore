@@ -12,6 +12,7 @@ from . import clock
 from . import channel_kinds
 from .state import now
 from .records import artifacts as artifact_records
+from .records import people as people_records
 from .records import scenes as scene_records
 from .records import messages as message_records
 
@@ -29,7 +30,7 @@ def peer_lines(store):
         for route in channel.get('routes', {}).values():
             if route['target']['type'] != 'dm':
                 continue
-            identity = store.db.identities.find_one({'_id': route['person_id']}, {'display_name': 1}) or {}
+            identity = people_records.identity(store, route['person_id'], ['display_name']) or {}
             out.append({'scene_id': route['scene_id'], 'person_id': route['person_id'],
                         'label': identity.get('display_name') or route['person_id']})
     return out

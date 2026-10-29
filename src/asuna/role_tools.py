@@ -37,6 +37,7 @@ from .records import episodes as episode_records
 from .records import plans as plan_records
 from .records import tasks as task_records
 from .records import memories as memory_records
+from .records import ideas as idea_records
 
 THOUGHT_CHARS = 120                  # what she is asked for: her first reaction, short (ADR-087 §4.1)
 THOUGHT_HARD_CHARS = 360             # refused past this; the room up to it is the model's, said in the result
@@ -2491,7 +2492,8 @@ class RoleTools:
                 raise Denied('UNDERSTANDING_UPDATE_NOT_AVAILABLE')
             base = None
         mutation = ep['_id'] + (':understanding' if layer == 'here' else ':understanding:person') + ('' if own else ':' + person_id)
-        saved = self.store.db.state_revisions.find_one({'mutation_id': mutation}, {'_id': 1})
+        from .records import heads as head_records
+        saved = head_records.by_mutation(self.store, mutation, ['_id'])
         if saved:
             # Saved before this turn was interrupted: once per episode, person and layer, never a second revision.
             update = {'state': 'COMMITTED', 'accepted_revision': saved['_id']}
@@ -3212,13 +3214,13 @@ class RoleTools:
         why = self._text(args, 'why', IDEA_CHARS)
         if decision not in ('adopt', 'defer', 'drop'):
             raise Refused('decision 是 adopt、defer 或 drop%s。' % _given(args, 'decision'))
-        row = self.store.db.ideas.find_one({'_id': idea_id, 'persona': ep['persona']})
+        row = idea_records.get(self.store, idea_id, persona=ep['persona'])
         if not row or row.get('state') not in ('open', 'deferred'):
             raise Refused('「%s」不是想法本里还没处理完的一条；照 ideas_from_program 或 ideas 的 read 里的原样抄 _id。%s'
                           % (idea_id, refs_usable(row['_id'] for row in idea_rows(self.store, ep['persona'], None))))
         state = {'adopt': 'adopted', 'defer': 'deferred', 'drop': 'dropped'}[decision]
         from .state import now
-        self.store.put('ideas', {**row, 'state': state, 'decisions': [*(row.get('decisions') or []),
+        idea_records.save(self.store, {**row, 'state': state, 'decisions': [*(row.get('decisions') or []),
             {'decision': decision, 'why': why, 'episode_id': ep['_id'], 'at': now()}]},
             expected=row['revision'], stream=idea_id)
         note = {'adopt': '采纳了：用 delegate 把要做的事交代给行动脑。', 'defer': '暂缓了，下次自我改进时还会看到它。',
@@ -3243,9 +3245,9 @@ def note_idea(store, persona, idea, why, *, key, source):
     """One entry in her improvement-idea notebook, from either brain; read only in her self-improvement turns."""
     from .state import now
     idea_id = 'idea-' + sha(canonical(key))[:32]
-    row = store.db.ideas.find_one({'_id': idea_id})
+    row = idea_records.get(store, idea_id)
     if not row:
-        row = store.put('ideas', {'_id': idea_id, 'persona': persona, 'idea': idea, 'why': why, 'state': 'open',
+        row = idea_records.save(store, {'_id': idea_id, 'persona': persona, 'idea': idea, 'why': why, 'state': 'open',
                                   'source': source, 'decisions': [], 'created_at': now(),
                                   'scope_key': visibility.owner_private_scope(persona)}, stream=idea_id)
     return row
@@ -3254,12 +3256,8 @@ def note_idea(store, persona, idea, why, *, key, source):
 def idea_rows(store, persona, search=None):
     """Her undecided ideas in reading order: open ones first (oldest first), then deferred ones, so ideas she put
     off never crowd out new ones. search keeps those whose idea or reason contains it."""
-    import re
-    query = {'persona': persona}
-    if search:
-        query['$or'] = [{'idea': {'$regex': re.escape(search)}}, {'why': {'$regex': re.escape(search)}}]
     return [row for state in ('open', 'deferred')
-            for row in store.db.ideas.find({**query, 'state': state}).sort('created_at', 1)]
+            for row in idea_records.of_persona(store, persona, state=state, search=search).rows()]
 
 
 def ideas_block(store, persona, moment, limit=None, page=1, search=None):
@@ -3310,7 +3308,7 @@ def idea_place(store, people, source):
 
 def ideas_left(store, persona, shown):
     """Words for the open or deferred ideas a listing of ``shown`` items leaves out, or None."""
-    waiting = store.db.ideas.count_documents({'persona': persona, 'state': {'$in': ['open', 'deferred']}})
+    waiting = idea_records.count(store, persona, ['open', 'deferred'])
     return ('还有 %d 条没列出：ideas 的 read 翻页（page）或按字找（search），处理掉几条也会轮到它们。' % (waiting - shown)
             if waiting > shown else None)
 

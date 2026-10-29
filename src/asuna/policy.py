@@ -11,6 +11,7 @@ import json
 from .evidence import canonical, sha
 from .persona_model import check_value, key_spec, value_words, writable_keys
 from .state import Conflict, Denied, now
+from .records import heads as head_records
 
 SCOPE = 'global-safe'
 REFUSED_CLASSES = ('secret', 'counter')
@@ -28,7 +29,7 @@ class PolicyStore:
 
     def read(self):
         """(head revision id or None, {key: {value, what, class}})."""
-        pair = self.store.head(self.entity, SCOPE)
+        pair = head_records.current(self.store, self.entity, SCOPE)
         if not pair:
             return None, {}
         return pair[0]['revision_id'], dict(pair[1]['content'].get('params', {}))
@@ -68,12 +69,12 @@ class PolicyStore:
         if not isinstance(reason, str) or not 1 <= len(reason) <= 2000:
             raise ValueError('POLICY_REASON_REQUIRED')
         changes = self.validate(items)
-        existing = self.store.db.state_revisions.find_one({'mutation_id': mutation_id})
+        existing = head_records.by_mutation(self.store, mutation_id)
         if existing:
             if existing.get('entity_key') != self.key or existing['content'].get('changes') != changes:
                 raise Conflict('MUTATION_ID_CONTENT_CHANGED')
             return existing
-        head = self.store.db.state_heads.find_one({'_id': self.key})
+        head = head_records.head(self.store, self.key)
         current = head['revision_id'] if head else None
         if current != base_revision_id:
             self.store.audit('policy:' + mutation_id, 'state.conflict', {'entity': self.entity,
@@ -82,18 +83,18 @@ class PolicyStore:
         params = self.read()[1] if head else {}
         params.update(changes)
         revision_id = sha(canonical({'mutation_id': mutation_id, 'entity': self.entity}))
-        revision = self.store.put('state_revisions', {
+        revision = head_records.save_revision(self.store, {
             '_id': revision_id, 'mutation_id': mutation_id, 'entity_key': self.key, 'scope_key': SCOPE,
             'content': {'params': params, 'changes': changes}, 'source_ids': list(sources),
             'parent_revision_id': current, 'reason': reason, 'author': author, 'created_at': now()},
             stream='policy:' + mutation_id)
         try:
             if head:
-                self.store.put('state_heads', {**head, 'revision_id': revision_id}, expected=head['revision'],
-                               stream='policy:' + mutation_id)
+                head_records.save_head(self.store, {**head, 'revision_id': revision_id}, expected=head['revision'],
+                                       stream='policy:' + mutation_id)
             else:
-                self.store.put('state_heads', {'_id': self.key, 'scope_key': SCOPE, 'revision_id': revision_id},
-                               stream='policy:' + mutation_id)
+                head_records.save_head(self.store, {'_id': self.key, 'scope_key': SCOPE, 'revision_id': revision_id},
+                                       stream='policy:' + mutation_id)
         except Conflict:
             # A concurrent writer moved the head first; this revision stays unreferenced.
             self.store.audit('policy:' + mutation_id, 'state.conflict', {'entity': self.entity,

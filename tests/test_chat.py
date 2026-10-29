@@ -3,6 +3,7 @@ import threading
 from types import SimpleNamespace
 
 
+from asuna.records import heads as head_records
 from asuna.chat import Chat, prepare_local_scene, redact
 from asuna.coordinator import Coordinator
 from asuna.evidence import Evidence
@@ -157,10 +158,10 @@ def test_local_setup_does_not_reset_existing_persona_or_load_fixture_memories(st
                 'persona_file': str(persona)}
     memories = store.db.memory_units.count_documents({})
     prepare_local_scene(store, settings)
-    first = store.head('persona:local-new', 'global-safe')
+    first = head_records.current(store, 'persona:local-new', 'global-safe')
     persona.write_text('不能覆盖已保存人物', encoding='utf-8')
     prepare_local_scene(store, settings)
-    assert store.head('persona:local-new', 'global-safe') == first
+    assert head_records.current(store, 'persona:local-new', 'global-safe') == first
     assert store.db.memory_units.count_documents({}) == memories
 
 

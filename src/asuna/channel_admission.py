@@ -70,7 +70,8 @@ def admit(controller, channel_id, body):
         'target': {'type': kind, 'id': target}}           # its name comes from the platform's messages
     if route['target'] != {'type': kind, 'id': target}:
         raise Denied('CHANNEL_GROUP_DENIED')
-    identity = store.db.identities.find_one({'platform': channel_id, 'account_id': sender})
+    from .records import people as people_records
+    identity = people_records.by_account(store, sender, platform=channel_id)
     # One id form for every person on a platform, configured or admitted (qq:<account>).
     person = identity['person_id'] if identity else platform.person_id(sender)
     grant = {'person_id': person, 'workspace': str(DATA / 'channels' /

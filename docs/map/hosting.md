@@ -199,9 +199,6 @@ The worker's store: every write goes through `Store.put` with an expected revisi
   - `get`
   - `identity`
   - `seed` — Test-only synthetic world; persona paths are relative to the fixture file.
-  - `init_head`
-  - `head`
-  - `mutate`
   - `public_messages`
 
 ## `clock`
@@ -793,3 +790,54 @@ The owner of `artifacts`: the rows of what she and the program keep apart from t
 - def `set_received_from` — Where a file a task registered came from (a received file with its bytes).
 - def `add_copy` — A copy of a stored file in a task folder.
 - def `set_copies`
+
+## `records/heads`
+
+[src/asuna/records/heads.py](../../src/asuna/records/heads.py)
+
+The owner of `state_heads` and `state_revisions`: her revisioned state (documents, relationships and the person layer, scene affect, policy, self descriptions), a head per entity and scope naming its current revision, read and written only through these operations.
+
+- def `head` — The head with this id (`<entity>|<scope>`), or None.
+- def `current` — (head, its revision) of an entity in a scope, or None when it has no head.
+- def `revision` — The revision with this id (of this entity's key), or None.
+- def `by_mutation` — The revision a mutation id wrote, or None.
+- def `with_prefix` — View: the heads whose id starts with any of these prefixes.
+- def `heads` — View: the heads with these ids, or of this scope or one of these, ordered by `by`.
+- def `revisions` — View: the revisions with these ids.
+- def `history` — View: an entity's revisions (written at or after `since`, or before `before`, ISO times), by `by`.
+- def `stale_revisions` — View: a scope's revisions but these (the ones no head points at, when `besides` are its heads' revisions).
+- def `save_head` — The revisioned write of a head (`Store.put`: `expected`, `stream`).
+- def `save_revision` — The write of a revision (`Store.put`).
+- def `point_to` — An erasure moves a head to an older revision (its own revision number given).
+- def `drop_head` — Delete a head (only while it still names `revision_id`); how many went.
+- def `tombstone_revision` — An erasure empties a revision: no content, no sources, a tombstone of this erasure.
+- def `init` — The head of an entity in a scope, created with its first revision when it has none; the head.
+- def `mutate` — Her relationship or scene-affect revision, from sources she may read in this scope (or the linked ones), on the head at `base_revision_id`; the revision.
+
+## `records/people`
+
+[src/asuna/records/people.py](../../src/asuna/records/people.py)
+
+The owner of `identities` and `scene_people`: who a person is on this machine (their identity: platform, account, the name the operator gave them) and how each conversation labels them (its label rows: number, card, nickname, role, when last seen), read and written only through these operations.
+
+- def `identity` — The identity of a person (its id is the person's), or None.
+- def `by_account` — The identity of an account (on this platform), or None.
+- def `of_person` — The identity whose `person_id` is this, or None.
+- def `all_identities` — View: every identity.
+- def `save_identity` — The revisioned write of an identity (`Store.put`: `expected`, `stream`).
+- def `label` — A conversation's label row by its id (`<conversation>|<person>`), or None.
+- def `labels` — View: a conversation's label rows (not this person's).
+- def `label_of_person` — A person's label row seen last, in any conversation, or None.
+- def `first_label` — A conversation's first label row by `by` (`newest_first` turns it: the highest number), or None.
+- def `save_label` — The revisioned write of a label row (`Store.put`: `expected`, `stream`).
+
+## `records/ideas`
+
+[src/asuna/records/ideas.py](../../src/asuna/records/ideas.py)
+
+The owner of `ideas`: her improvement-idea notebook (each idea, why, its state and what she decided), read and written only through these operations.
+
+- def `get` — The idea with this id (of this persona), or None.
+- def `of_persona` — View: a persona's ideas (in this state; whose idea or reason contains `search`, case kept), ordered by `by` (none: the database's order).
+- def `count` — How many of a persona's ideas are in these states.
+- def `save` — The revisioned write of an idea (`Store.put`: `expected`, `stream`).

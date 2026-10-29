@@ -1,18 +1,19 @@
 """The read-only check of one ADR-104 batch against a deployment's database, before the batch merges: numbers only,
 never a record id or a value.
 
-  python tools/adr104_equivalence.py b1b|b2|b3|b4|b5|b6|b7|b8 [--config config/local.json] [--out <folder>] [--max-ms 2000]
+  python tools/adr104_equivalence.py b1b|b2|b3|b4|b5|b6|b7|b8|b9 [--config config/local.json] [--out <folder>] [--max-ms 2000]
 
 Each batch: what the store's `ensure` would do there, as a dry run (collections it would create, indexes it would
 make, retired indexes it would drop, indexes of a declared name that differ, validators), and for every field the
 catalog declares in the batch's collections (b1b: all of them; b2: `host_leases` and `lane_faults`; b3: `scenes`;
 b4: `messages`; b5: `episodes`, `sessions`, `sink_receipts`, `lane_receipts`; b6: `tasks`, `task_messages`,
-`plans`; b7: `memory_units`; b8: `artifacts`), its stored records by BSON type, the nulls, the records missing a
-required field and, for a vector, the lengths that differ; b4 to b8 also, per collection (SIZED), the records of 512 KiB
-or more and those whose BSON and JSON sizes fall on different sides of 1 MiB. b3 to b8 also run their read cases: each
-read the batch moved, as the replaced code wrote it with pymongo and as the owner (`records.scenes`, `records.messages`,
-`records.episodes`, `records.sessions`, `records.receipts`, `records.tasks`, `records.plans`, `records.memories`,
-`records.artifacts`) now
+`plans`; b7: `memory_units`; b8: `artifacts`; b9: `state_heads`, `state_revisions`, `journal_entries`,
+`journal_revisions`, `identities`, `scene_people`, `ideas`), its stored records by BSON type, the nulls, the records
+missing a required field and, for a vector, the lengths that differ; b4 to b9 also, per collection (SIZED), the records
+of 512 KiB or more and those whose BSON and JSON sizes fall on different sides of 1 MiB. b3 to b9 also run their read
+cases: each read the batch moved, as the replaced code wrote it with pymongo and as the owner (`records.scenes`,
+`records.messages`, `records.episodes`, `records.sessions`, `records.receipts`, `records.tasks`, `records.plans`,
+`records.memories`, `records.artifacts`, `records.heads`, `documents`, `records.people`, `records.ideas`) now
 answers it (b6 also the conversation context's task aggregate against `records.tasks.recent_with_inputs` on up to 20
 conversations, rows and their fields in order; b7 the Web memory page's aggregate against `records.memories.web_page`,
 and a read that takes a whole conversation or every memory at most LIGHT records on both sides), on parameters
@@ -246,12 +247,15 @@ def differs(collection, counts):
 
 
 # The collections whose declared fields each batch counts (None: every collection).
+B9_COLLECTIONS = ('state_heads', 'state_revisions', 'journal_entries', 'journal_revisions', 'identities',
+                  'scene_people', 'ideas')
 BATCHES = {'b1b': None, 'b2': ('host_leases', 'lane_faults'), 'b3': ('scenes',), 'b4': ('messages',),
            'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts'), 'b6': ('tasks', 'task_messages', 'plans'),
-           'b7': ('memory_units',), 'b8': ('artifacts',)}
+           'b7': ('memory_units',), 'b8': ('artifacts',), 'b9': B9_COLLECTIONS}
 # The collections whose records' sizes each batch counts (512 KiB or more; BSON and JSON on different sides of 1 MiB).
 SIZED = {'b4': ('messages',), 'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts'),
-         'b6': ('tasks', 'task_messages', 'plans'), 'b7': ('memory_units',), 'b8': ('artifacts',)}
+         'b6': ('tasks', 'task_messages', 'plans'), 'b7': ('memory_units',), 'b8': ('artifacts',),
+         'b9': B9_COLLECTIONS}
 QUERIES = 1000
 _ARCHIVED = {'reason': "the archived stream's old read left out `legacy` by an exclusion projection, which the store "
                        "does not have; the owner drops it after the read (accepted for B4, 2026-10-28)",
@@ -276,7 +280,7 @@ WATCHED = {'b4': {'who wrote in these': {
     'note': 'same family, under threshold: a values read grouped by presence, as "who wrote here" (293 ms against 9 '
             'before fa46c24132f6); measured at B4 old p50 ~12 ms, new ~19 ms, 1.55x'}}}
 RUNS = 3
-READ_CASES = ('b3', 'b4', 'b5', 'b6', 'b7', 'b8')
+READ_CASES = ('b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9')
 
 
 def timed_out(error):
@@ -455,7 +459,8 @@ def reads(client, database, max_ms, batch, config):
     adapter = _Recording(client, database)
     store = Checked(adapter, CATALOG)
     cases, sampling = (_cases_b3(store), 1) if batch == 'b3' else {
-        'b4': _cases_b4, 'b5': _cases_b5, 'b6': _cases_b6, 'b7': _cases_b7, 'b8': _cases_b8}[batch](store, config)
+        'b4': _cases_b4, 'b5': _cases_b5, 'b6': _cases_b6, 'b7': _cases_b7, 'b8': _cases_b8,
+        'b9': _cases_b9}[batch](store, config)
     # A case may name how many samples it takes (a sixth item: B6's proof on 20 conversations); its reads (one old,
     # up to two new a run) come off the budget first, and the other cases share the rest.
     fixed = [case for case in cases if len(case) > 5]
@@ -2485,6 +2490,232 @@ def _cases_b8(store, config):
          lambda _: owner.stored(store).rows(limit=LIGHT, fields=SWEPT), [None], 'value'),
         ('pictures she drew', lambda _: ('count', 'artifacts', {'tool': 'generate_image', 'state': DONE}, 0),
          lambda _: owner.count_tool(store, 'generate_image', DONE), [None], 'value'),
+    ]
+    return [case for case in cases if case[3]], got['reads']
+
+
+HEAD = ['_id', 'scope_key', 'revision_id']
+REVISION = ['_id', 'entity_key', 'mutation_id', 'scope_key', 'created_at', 'parent_revision_id']
+ENTRY = ['_id', 'persona', 'slug', 'sid', 'seq', 'last_mutation']
+JOURNAL_REVISION = ['_id', 'persona', 'slug', 'sid', 'mutation_id', 'body_sha256', 'created_at']
+LABEL = ['_id', 'scene_id', 'person', 'handle', 'seen_at']
+
+
+def _sample_b9(store, config):
+    """What the cases read with, through the owners: her documents' and relationships' heads and their revisions,
+    her running records' entries and revisions, identities, conversation labels and ideas."""
+    from asuna import documents
+    from asuna.records import heads, ideas, people, scenes
+    persona = (config.get('chat') or {}).get('persona') or 'persona-none'
+    found = {'reads': 9, 'persona': persona}
+    found['docs'] = heads.with_prefix(store, 'doc:%s:' % persona).rows(limit=20, fields=HEAD)
+    found['relations'] = heads.with_prefix(store, 'relationship:').rows(limit=20, fields=HEAD)
+    found['revisions'] = heads.revisions(store, [row['revision_id'] for row in found['docs'] + found['relations']
+                                                 if isinstance(row.get('revision_id'), str)]).rows(fields=REVISION)
+    found['slugs'] = documents.slugs(store, persona)[:6]
+    found['entries'] = [row for slug in found['slugs'][:3] for row in documents.entries(store, persona, slug).rows(
+        limit=10, fields=ENTRY)]
+    found['journal_revisions'] = [row for slug in found['slugs'][:3] for row in documents.revisions(
+        store, persona, slug).rows(limit=10, fields=JOURNAL_REVISION)]
+    found['identities'] = people.all_identities(store).rows(limit=20)
+    found['scenes'] = [row['_id'] for row in scenes.all(store, fields=['_id'])][:20]
+    found['labels'] = [row for scene in found['scenes'][:5] for row in people.labels(store, scene).rows(
+        limit=5, fields=LABEL)]
+    found['ideas'] = ideas.of_persona(store, persona).rows(limit=20, fields=['_id', 'persona', 'state', 'idea'])
+    found['reads'] += 3 + 2 * min(3, len(found['slugs'])) + min(5, len(found['scenes']))
+    return found
+
+
+def _cases_b9(store, config):
+    """(name, old(param), new(param), parameters, compare) for each read B9 moved, the old as the replaced code wrote
+    it; parameters sampled through the owners, synthetic values where her records hold none (both sides then read
+    nothing, and the plans are still compared)."""
+    from asuna import documents
+    from asuna.records import heads, ideas, people
+    got = _sample_b9(store, config)
+    persona = got['persona']
+    none_head = {'_id': 'entity-none|scope-none', 'scope_key': 'scope-none', 'revision_id': 'revision-none'}
+    head_rows = (got['docs'] + got['relations']) or [none_head]
+    head_ids = [row['_id'] for row in head_rows]
+    revision_rows = got['revisions'] or [{'_id': 'revision-none', 'entity_key': 'entity-none|scope-none',
+                                          'mutation_id': 'mutation-none', 'created_at': '2026-01-01T00:00:00+00:00'}]
+    revision_ids = [row['_id'] for row in revision_rows]
+    keyed = [row for row in revision_rows if isinstance(row.get('entity_key'), str)] or revision_rows
+    timed = [row for row in keyed if isinstance(row.get('created_at'), str)] or [
+        {**revision_rows[0], 'created_at': '2026-01-01T00:00:00+00:00'}]
+    mutated = [row for row in revision_rows if isinstance(row.get('mutation_id'), str)] or [
+        {'mutation_id': 'mutation-none'}]
+    scopes = sorted({row['scope_key'] for row in head_rows if isinstance(row.get('scope_key'), str)}) or ['scope-none']
+    slugs = got['slugs'] or ['slug-none']
+    entries = got['entries'] or [{'_id': 'entry-none', 'slug': 'slug-none', 'sid': 'sid-none',
+                                  'last_mutation': 'mutation-none'}]
+    journal_revisions = got['journal_revisions'] or [{'_id': 'jrev-none', 'slug': 'slug-none', 'sid': 'sid-none',
+                                                      'mutation_id': 'mutation-none', 'body_sha256': None}]
+    identities = got['identities'] or [{'_id': 'person-none', 'person_id': 'person-none', 'platform': 'platform-none',
+                                        'account_id': 'account-none'}]
+    labels = got['labels'] or [{'_id': 'scene-none|person-none', 'scene_id': 'scene-none', 'person': 'person-none'}]
+    scenes = got['scenes'] or ['scene-none']
+    people_ids = sorted({row['person'] for row in labels if isinstance(row.get('person'), str)}) or ['person-none']
+    idea_rows = got['ideas'] or [{'_id': 'idea-none', 'idea': 'none'}]
+    search = [row['idea'][:2] for row in idea_rows if isinstance(row.get('idea'), str) and len(row['idea']) >= 2][:1]
+    batch = lambda ids: [ids[n:n + 5] for n in range(0, len(ids), 5)]
+    one = lambda coll, filter, proj=None, sort=None: ('find_one', coll, filter, proj, sort)
+    many = lambda coll, filter, proj=None, sort=None, limit=0: ('find', coll, filter, proj, sort, limit)
+    fields = lambda *names: {name: 1 for name in names}
+    H, R, E, J, I, L, D = ('state_heads', 'state_revisions', 'journal_entries', 'journal_revisions', 'identities',
+                           'scene_people', 'ideas')
+    regex = lambda prefix: {'$regex': '^' + re.escape(prefix)}
+    either = lambda ids, tail: {'$regex': '^relationship:(%s)%s' % ('|'.join(re.escape(i) for i in ids), tail)}
+    persons = [sorted({row['_id'].split('|', 1)[0].split(':', 1)[1] for row in got['relations']})[:3]] if got[
+        'relations'] else [['person-none']]
+
+    cases = [
+        # heads
+        ('head by id', lambda i: one(H, {'_id': i}), lambda i: heads.head(store, i), head_ids, 'value'),
+        ('revision by id', lambda i: one(R, {'_id': i}), lambda i: heads.revision(store, i), revision_ids, 'value'),
+        ('revision of its entity', lambda r: one(R, {'_id': r['_id'], 'entity_key': r['entity_key']}),
+         lambda r: heads.revision(store, r['_id'], entity=r['entity_key']), keyed, 'value'),
+        ('revision for the map', lambda i: one(R, {'_id': i}, fields('content', 'created_at', 'entity_key')),
+         lambda i: heads.revision(store, i, ['content', 'created_at', 'entity_key']), revision_ids, 'value'),
+        ('revision of a mutation', lambda r: one(R, {'mutation_id': r['mutation_id']}),
+         lambda r: heads.by_mutation(store, r['mutation_id']), mutated, 'value'),
+        ('revision of a mutation, its id', lambda r: one(R, {'mutation_id': r['mutation_id']}, fields('_id')),
+         lambda r: heads.by_mutation(store, r['mutation_id'], ['_id']), mutated, 'value'),
+        ('her documents\' heads', lambda p: many(H, {'_id': regex('doc:%s:' % p)}, fields('_id')),
+         lambda p: heads.with_prefix(store, 'doc:%s:' % p).rows(fields=['_id']), [persona], 'value'),
+        ('her group notes\' heads', lambda p: many(H, {'_id': {'$regex': '^doc:%s:group' % p}},
+                                                  fields('_id', 'revision_id')),
+         lambda p: heads.with_prefix(store, 'doc:%s:group' % p).rows(fields=['_id', 'revision_id']), [persona],
+         'value'),
+        ('relationship heads', lambda _: many(H, {'_id': {'$regex': '^relationship:'}}, None, None, LIGHT),
+         lambda _: heads.with_prefix(store, 'relationship:').rows(limit=LIGHT), [None], 'value'),
+        ('a person\'s relationship heads', lambda p: many(H, {'_id': {'$regex': '^relationship:' + re.escape(p[0])
+                                                                       + '[|]'}}),
+         lambda p: heads.with_prefix(store, 'relationship:' + p[0] + '|').rows(), persons, 'value'),
+        ('known, by relationship', lambda p: one(H, {'_id': either(p, r'\|')}, fields('_id')),
+         lambda p: heads.with_prefix(store, *('relationship:%s|' % i for i in p)).first(fields=['_id']), persons,
+         'value'),
+        ('relationships elsewhere', lambda p: many(H, {'_id': either(p, r'\|scene:')}, fields('scope_key')),
+         lambda p: heads.with_prefix(store, *('relationship:%s|scene:' % i for i in p)).rows(fields=['scope_key']),
+         persons, 'value'),
+        ('heads by ids', lambda b: many(H, {'_id': {'$in': b}}), lambda b: heads.heads(store, b).rows(),
+         batch(head_ids), 'value'),
+        ('heads of a scope', lambda s: many(H, {'scope_key': s}), lambda s: heads.heads(store, scope=s).rows(), scopes,
+         'value'),
+        ('heads of scopes, by id', lambda b: many(H, {'scope_key': {'$in': b}}, fields('_id', 'revision_id'),
+                                                  [('_id', 1)]),
+         lambda b: heads.heads(store, scopes=b, by='_id').rows(fields=['_id', 'revision_id']), batch(scopes), 'value'),
+        ('revisions by ids', lambda b: many(R, {'_id': {'$in': b}}, fields('content', 'created_at', 'origin')),
+         lambda b: heads.revisions(store, b).rows(fields=['content', 'created_at', 'origin']), batch(revision_ids),
+         'value'),
+        ('an entity\'s history', lambda r: many(R, {'entity_key': r['entity_key']}, fields('mutation_id', 'created_at'),
+                                                [('created_at', 1)]),
+         lambda r: heads.history(store, r['entity_key']).rows(fields=['mutation_id', 'created_at']), keyed, 'value'),
+        ('an entity\'s section history', lambda r: many(R, {'entity_key': r['entity_key']}, fields(
+            'created_at', 'content.sections.sid', 'content.sections.body_sha256'), [('created_at', 1)]),
+         lambda r: heads.history(store, r['entity_key']).rows(fields=['created_at', 'content.sections.sid',
+                                                                      'content.sections.body_sha256']), keyed,
+         'value'),
+        ('an entity before a time', lambda r: one(R, {'entity_key': r['entity_key'], 'created_at': {
+            '$lt': r['created_at']}}, fields('content'), [('created_at', -1)]),
+         lambda r: heads.history(store, r['entity_key'], before=r['created_at']).first(newest_first=True,
+                                                                                        fields=['content']),
+         timed, 'value'),
+        ('an entity\'s reasons since', lambda r: many(R, {'entity_key': r['entity_key'], 'created_at': {
+            '$gte': r['created_at']}}, fields('reason'), [('created_at', -1)]),
+         lambda r: heads.history(store, r['entity_key'], since=r['created_at']).rows(newest_first=True,
+                                                                                      fields=['reason']),
+         timed, 'value'),
+        ('an entity\'s newest revision', lambda r: many(R, {'entity_key': r['entity_key']},
+                                                        fields('created_at', '_id'), [('created_at', -1), ('_id', -1)],
+                                                        1),
+         lambda r: [row for row in [heads.history(store, r['entity_key'], by=('created_at', '_id')).first(
+             newest_first=True, fields=['created_at'])] if row], keyed, 'value'),
+        ('a scope\'s revisions no head names', lambda s: many(R, {'scope_key': s, '_id': {'$nin': revision_ids[:5]}},
+                                                             None, None, LIGHT),
+         lambda s: heads.stale_revisions(store, s, revision_ids[:5]).rows(limit=LIGHT), scopes, 'value'),
+        # running records
+        ('an entry by id', lambda r: one(E, {'_id': r['_id']}), lambda r: documents.entry(store, r['_id']), entries,
+         'value'),
+        ('whether an entry is there', lambda r: one(E, {'_id': r['_id']}, fields('_id')),
+         lambda r: documents.entry(store, r['_id'], ['_id']), entries, 'value'),
+        ('her running records', lambda p: ('distinct', E, 'slug', {'persona': p}),
+         lambda p: documents.slugs(store, p), [persona], 'values'),
+        ('a record\'s entries', lambda s: many(E, {'persona': persona, 'slug': s}, None, [('seq', 1)]),
+         lambda s: documents.entries(store, persona, s).rows(), slugs, 'value'),
+        ('whether a record has rows', lambda s: one(E, {'persona': persona, 'slug': s}, fields('_id')),
+         lambda s: documents.entry_of(store, persona, s, fields=['_id']), slugs, 'value'),
+        ('the entry a mutation wrote', lambda r: one(E, {'persona': persona, 'slug': r['slug'],
+                                                         'last_mutation': r.get('last_mutation')}),
+         lambda r: documents.entry_of(store, persona, r['slug'], mutation=r.get('last_mutation')), entries, 'value'),
+        ('a record\'s last entry', lambda s: one(E, {'persona': persona, 'slug': s}, fields('seq'), [('seq', -1)]),
+         lambda s: documents.last_entry(store, persona, s, ['seq']), slugs, 'value'),
+        ('a record\'s revision by id', lambda r: one(J, {'_id': r['_id']}), lambda r: documents.revision(store, r['_id']),
+         journal_revisions, 'value'),
+        ('a record\'s revision of a mutation', lambda r: one(J, {'mutation_id': r['mutation_id']}),
+         lambda r: documents.revision(store, mutation=r['mutation_id']), journal_revisions, 'value'),
+        ('a record\'s section revisions', lambda s: many(J, {'persona': persona, 'slug': s, 'sid': {'$exists': True}},
+                                                         fields('sid', 'body', 'created_at', 'reason'),
+                                                         [('created_at', 1)]),
+         lambda s: documents.revisions(store, persona, s, sectioned=True).rows(fields=['sid', 'body', 'created_at',
+                                                                                       'reason']), slugs, 'value'),
+        ('a section\'s revisions, newest first', lambda r: many(J, {'persona': persona, 'slug': r['slug'],
+                                                                    'sid': r.get('sid')}, None, [('created_at', -1)]),
+         lambda r: documents.revisions(store, persona, r['slug'], sid=r.get('sid')).rows(newest_first=True),
+         journal_revisions, 'value'),
+        ('a section\'s revision of a body', lambda r: one(J, {'persona': persona, 'slug': r['slug'], 'sid': r.get('sid'),
+                                                              'body_sha256': r.get('body_sha256')}),
+         lambda r: documents.revision_of_body(store, persona, r['slug'], r.get('sid'), r.get('body_sha256')),
+         journal_revisions, 'value'),
+        ('a record\'s newest revision', lambda s: one(J, {'persona': persona, 'slug': s}, fields('_id'),
+                                                      [('created_at', -1), ('_id', -1)]),
+         lambda s: documents.last_revision(store, persona, s, ['_id']), slugs, 'value'),
+        # people
+        ('identity by id', lambda r: one(I, {'_id': r['_id']}), lambda r: people.identity(store, r['_id']), identities,
+         'value'),
+        ('identity\'s name', lambda r: one(I, {'_id': r['_id']}, fields('display_name')),
+         lambda r: people.identity(store, r['_id'], ['display_name']), identities, 'value'),
+        ('identity of an account here', lambda r: one(I, {'platform': r.get('platform'),
+                                                          'account_id': r.get('account_id')}),
+         lambda r: people.by_account(store, r.get('account_id'), platform=r.get('platform')),
+         [row for row in identities if isinstance(row.get('platform'), str) and isinstance(row.get('account_id'), str)]
+         or identities[:1], 'value'),
+        ('person of an account', lambda r: one(I, {'account_id': str(r.get('account_id'))}, fields('person_id')),
+         lambda r: people.by_account(store, str(r.get('account_id')), fields=['person_id']), identities, 'value'),
+        ('identity of a person id', lambda r: one(I, {'person_id': r.get('person_id') or 'person-none'},
+                                                  fields('account_id')),
+         lambda r: people.of_person(store, r.get('person_id') or 'person-none', ['account_id']), identities,
+         'value'),
+        ('every identity', lambda _: many(I, {}), lambda _: people.all_identities(store).rows(), [None], 'value'),
+        ('a label by id', lambda r: one(L, {'_id': r['_id']}), lambda r: people.label(store, r['_id']), labels,
+         'value'),
+        ('a label\'s role', lambda r: one(L, {'_id': r['_id']}, fields('role')),
+         lambda r: people.label(store, r['_id'], ['role']), labels, 'value'),
+        ('a conversation\'s roster', lambda s: many(L, {'scene_id': s, 'person': {'$ne': PROGRAM_AUTHOR}}),
+         lambda s: people.labels(store, s, besides=PROGRAM_AUTHOR).rows(), scenes, 'value'),
+        ('a person\'s last label', lambda p: one(L, {'person': p}, fields('card', 'nickname'), [('seen_at', -1)]),
+         lambda p: people.label_of_person(store, p, ['card', 'nickname']), people_ids, 'value'),
+        ('a conversation\'s highest number', lambda s: one(L, {'scene_id': s}, fields('handle'), [('handle', -1)]),
+         lambda s: people.first_label(store, s, by='handle', newest_first=True, fields=['handle']), scenes, 'value'),
+        # ideas
+        ('an idea by id', lambda r: one(D, {'_id': r['_id']}), lambda r: ideas.get(store, r['_id']), idea_rows,
+         'value'),
+        ('an idea\'s words', lambda r: one(D, {'_id': r['_id']}, fields('idea')),
+         lambda r: ideas.get(store, r['_id'], ['idea']), idea_rows, 'value'),
+        ('her idea by id', lambda r: one(D, {'_id': r['_id'], 'persona': persona}),
+         lambda r: ideas.get(store, r['_id'], persona=persona), idea_rows, 'value'),
+        ('her newest ideas', lambda p: many(D, {'persona': p}, None, [('created_at', -1)], 50),
+         lambda p: ideas.of_persona(store, p).rows(newest_first=True, limit=50), [persona], 'value'),
+        ('her ideas\' states', lambda p: many(D, {'persona': p}, fields('state')),
+         lambda p: ideas.of_persona(store, p, by=None).rows(fields=['state']), [persona], 'value'),
+        ('her ideas in a state', lambda s: many(D, {'persona': persona, 'state': s}, None, [('created_at', 1)]),
+         lambda s: ideas.of_persona(store, persona, state=s).rows(), ['open', 'deferred'], 'value'),
+        ('her ideas in a state, by words', lambda w: many(D, {'persona': persona, '$or': [
+            {'idea': {'$regex': re.escape(w)}}, {'why': {'$regex': re.escape(w)}}], 'state': 'open'}, None,
+            [('created_at', 1)]),
+         lambda w: ideas.of_persona(store, persona, state='open', search=w).rows(), search or ['none'], 'value'),
+        ('her ideas left', lambda p: ('count', D, {'persona': p, 'state': {'$in': ['open', 'deferred']}}, 0),
+         lambda p: ideas.count(store, p, ['open', 'deferred']), [persona], 'value'),
     ]
     return [case for case in cases if case[3]], got['reads']
 

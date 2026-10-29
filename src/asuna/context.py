@@ -26,6 +26,7 @@ from .records import receipts as receipt_records
 from .records import plans as plan_records
 from .records import tasks as task_records
 from .records import memories as memory_records
+from .records import heads as head_records
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -388,11 +389,11 @@ class ContextBuilder:
                 if scene_links else {'entity':'relationship:'+event['person_id'],'scope':scope,
                                      'canonical':event['person_id'],'shared':False,'linked_scopes':[]})
         # 没配 canonical 映射时 target 就是原来那一份（relationship:<本人>｜本场景 scope）。
-        relation=self.store.head(target['entity'],target['scope'])
+        relation=head_records.current(self.store,target['entity'],target['scope'])
         # The person layer (understanding.py): one record for this person, read wherever she meets them.
         from . import understanding as _understanding
         person_entity=_understanding.person_entity(self.store.config,self.store.db,event['person_id'])
-        person_head=self.store.head(person_entity,_understanding.PERSON_SCOPE)
+        person_head=head_records.current(self.store,person_entity,_understanding.PERSON_SCOPE)
         from .self_state import SelfState
         self_state=SelfState(self.store).read(persona,scope)
         # ADR-096: what this turn carries of her identity, for its (place, class) pair: one function for every reader.

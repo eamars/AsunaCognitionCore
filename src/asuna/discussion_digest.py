@@ -209,6 +209,7 @@ MAX_THREAD_ROWS = 60            # 一条讨论流最多带这么多链内后续�
 MAX_THREAD_ROUNDS = 8           # 每轮一条查询（找谁的回复＋找被回复的那条），不按行轮询
 MAX_THREAD_CARRY = 64           # 跨页去重集合随游标往下带的上限（cursor 有 1024 字上限）
 MAX_THREAD_PENDING = 64         # 随游标带下去的待走环节上限：超了照实说丢了分支
+CURSOR_LIMIT = 1024             # 发出去的游标和收进来的游标是同一个上限：发出的必须收得回
 
 
 def _lookup_doc(doc, key):
@@ -681,8 +682,8 @@ def _notes(meta, participants, undated):
         notes.append("本页是上一页讨论流的续读（字面命中已读完，只沿 reply 链接着走）："
                      "时间窗沿用发放游标那一页，不随现在漂")
     if thread.get("pending_truncated"):
-        notes.append("待走环节超出随游标携带的上限 %d 条：丢掉的分支这一页没读到，"
-                     "覆盖范围仍算部分完成" % MAX_THREAD_PENDING)
+        notes.append("待走环节超出随游标能携带的量（上限 %d 条、游标 %d 字）：丢掉的分支这一页没读到，"
+                     "覆盖范围仍算部分完成" % (MAX_THREAD_PENDING, CURSOR_LIMIT))
     if thread.get("truncated") or thread.get("why"):
         notes.append("讨论流没完全展开（%s）：覆盖范围算部分完成，这条主题可能还有别的行%s"
                      % ("%s／上限 %d 条 %d 轮" % (thread.get("why") or "到上限",
@@ -846,6 +847,24 @@ def _wrap_cursor(inner, fingerprint, delivered=(), state=None):
                                     .encode("utf-8")).decode("ascii")
 
 
+def _fit_cursor(inner, fingerprint, carry, state, thread):
+    """把游标收进 CURSOR_LIMIT：去重集合先让位（宁可重送一条），再让待走环节（标 lost，
+    下一页照实说丢了分支）；续页入口本身不让。每一步都减到零为止，循环必然结束。"""
+    while True:
+        wrapped = _wrap_cursor(inner, fingerprint, carry, state)
+        if len(wrapped) <= CURSOR_LIMIT:
+            return wrapped
+        if carry:
+            carry = carry[:len(carry) // 2]
+            thread["carry_truncated"] = True
+        elif state.get("frontier") or state.get("wanted"):
+            longer = "frontier" if len(state.get("frontier") or []) >= len(state.get("wanted") or []) else "wanted"
+            state[longer] = state[longer][:len(state[longer]) // 2]
+            state["lost"] = True
+        else:
+            return wrapped
+
+
 def _unwrap_cursor(value):
     """只认本服务发放的信封；P1-b 的游标、裸位置游标、乱写的都拒，不当第一页重跑。"""
     if value is None or value == "":
@@ -915,7 +934,7 @@ class DiscussionDigestService:
                 raise _bad_stamp("INVALID_DIGEST_", name, value)
         window_days = _bounded_int(args.get("window_days"), 1, 90, "WINDOW_DAYS")
         limit = _bounded_int(args.get("limit"), 1, MAX_LIMIT, "LIMIT")
-        cursor = _bounded_text(args.get("cursor"), 1024, "CURSOR")
+        cursor = _bounded_text(args.get("cursor"), CURSOR_LIMIT, "CURSOR")
         case_sensitive = args.get("case_sensitive", True)
         if not isinstance(case_sensitive, bool):
             raise _bad_flag("INVALID_DIGEST_", "CASE_SENSITIVE", case_sensitive)
@@ -1011,12 +1030,7 @@ class DiscussionDigestService:
             if not result.get("more"):
                 next_state["literal_done"] = True
                 next_state["window"] = list(result.get("window") or [])
-            while True:
-                wrapped = _wrap_cursor(result.get("next_cursor"), mark, carry, next_state)
-                if len(wrapped) <= 1024 or not carry:
-                    break
-                carry = carry[:max(len(carry) // 2, 1)]   # 去重集合先让位：宁可重送一条也不能丢续页入口
-                thread["carry_truncated"] = True
+            wrapped = _fit_cursor(result.get("next_cursor"), mark, carry, next_state, thread)
         digest["coverage"]["cursor"] = wrapped or ""
         payload = {"degraded": False, "why": "", "text": render(digest),
                    "coverage": digest["coverage"], "participants": digest["participants"],

@@ -192,7 +192,7 @@ The core decides who may speak to her, once. A channel package forwards what its
 - An admission is kept in `artifacts` (kind `channel_admission`) and restored at start while the channel is open; closing the deployment drops the restored routes at the next start, and opening it again brings them back. It checks and prepares only the new member's grant, by the same rules as the start (`src/asuna/host.py` `prepare_admission`), against the workspaces the start collected and the admissions since have added. A target that already has a route keeps it (`CHANNEL_TARGET_ALREADY_BOUND` for a second). Refusals: `CHANNEL_SENDER_INVALID`, `CHANNEL_BLOCKED`, `CHANNEL_GROUP_DENIED`, `CHANNEL_ROUTE_NOT_AUTHORIZED` (`src/asuna/channel_admission.py`).
 - **How a person came in.** The line that admits a person into a conversation carries `event.admitted`: `new` the first time, `returned` after their admission ended. Her conversation says it once after the time of that line (`src/asuna/people.py` `ADMITTED_WORDS`). A notice that is held or dropped uses the mark up.
 - **The end.** A group member's admission ends when the platform says they left ([Post a departure](#post-a-departure)), and only then: never because a member list or a lookup lacks them. An end marks the grant `ended_at`; it changes nothing of who they are (person, scene, roster, lines, folder). Their next line is admitted again as `returned`, unless the platform dated it before they left. A direct chat's admission does not end; a member the owner listed does not end.
-- Every admitted line can wake her relevance gate (a model call). Nothing caps that, deliberately; the block lists are the off switch.
+- Every admitted line can wake her relevance gate (a model call). Nothing caps that; the block lists are the off switch.
 
 ### Ask what the core admits
 
@@ -220,14 +220,14 @@ The answer is `{"answers": [...], "epoch": "<id of this start>"}`, one answer pe
 | `{"verdict": "blocked", "code": "CHANNEL_BLOCKED", "scope", "ttl_seconds": 60}` | a block list names the sender or the group |
 
 - `scope: "conversation"` holds for every sender there; `scope: "sender"` for that sender alone.
-- A package keeps an answer for at most `ttl_seconds`, drops all it kept when `epoch` changes or the core does not answer, and drops the answer for a sender when the core refuses a line it had judged admitted. The core decides again at every event, so a kept answer costs at most one refused post.
+- A package keeps an answer for at most `ttl_seconds`, drops all it kept when `epoch` changes (it is also on the routes list and on every outbox claim, so a package that polls sees a new start within one poll) or the core does not answer, and drops the answer for a sender when the core refuses a line it had judged admitted. The core decides again at every event, so a kept answer costs at most one refused post.
 - Admission is the policy: an event can still be refused for a binding the start would also refuse (`CHANNEL_SCENE_MUST_BE_DISTINCT`, `CHANNEL_WORKSPACE_OVERLAP`, …).
 - `HOST_RECONFIGURING` and `HOST_STOPPING` (503) while settings are being applied or the worker stops: wait and ask again. An older core answers `404 UNKNOWN_CHANNEL_ENDPOINT`: a package then holds its lines and posts none.
 - A route key reaches none of this (`ROUTE_KEY_ENDPOINT_DENIED`).
 
 ### The routes the core serves
 
-`GET /v1/channels/{channel_id}/routes` — `{"routes": [{"route_id", "conversation": {type, id}}], "epoch"}`: every route of the channel, listed or admitted, that no block list stops. A package that works on every conversation (catch-up after a gap) reads it, then asks about the ones it has kept state for.
+`GET /v1/channels/{channel_id}/routes?after=<route id>&limit=<1..1000, default 500>` — `{"routes": [{"route_id", "conversation": {type, id}}], "next", "epoch"}`: the routes of the channel, listed or admitted, that no block list stops, in order of route id and a page at a time; `next` is the `after` of the following page, `null` after the last (`INVALID_ROUTES_QUERY`, 400). A package that works on every conversation (catch-up after a gap) reads the pages, then asks about the ones it has kept state for.
 
 ### Post a departure
 
@@ -385,7 +385,7 @@ A recall, a poke, a reaction and the like come as an event from the person who d
 | `quote_in`, `react_in` | passes on what others quote, and reactions |
 | `voice_in` | settles each voice of a line before posting the line ([post a voice](#post-a-voice)) |
 
-The answer is `{"items": [], "lane": …}` or `{"items": [item], "lane": …}`. Each claim marks the item `SENDING` under a fresh `attempt_id`; claiming is not delivery. An adapter may claim again before the last item settles: on the `chat` lane a conversation with a chat item `SENDING` is held (claimed within the last 300 s, `CHAT_LEASE_SECONDS`; one out longer stays `SENDING` for its receipt but holds nothing), so two chat items of one conversation are never out at once. A file holds nothing while it is on its way: the parts of a reply after it are handed out without waiting for its upload; it waits for the parts before it; one that failed cancels the parts after it that have not gone, as any failed part does. Group admin actions go one at a time per channel, in the order they were chosen.
+The answer is `{"items": [], "lane": …, "epoch": …}` or `{"items": [item], "lane": …, "epoch": …}` (`epoch`: this start of the worker, as in [Ask what the core admits](#ask-what-the-core-admits)). Each claim marks the item `SENDING` under a fresh `attempt_id`; claiming is not delivery. An adapter may claim again before the last item settles: on the `chat` lane a conversation with a chat item `SENDING` is held (claimed within the last 300 s, `CHAT_LEASE_SECONDS`; one out longer stays `SENDING` for its receipt but holds nothing), so two chat items of one conversation are never out at once. A file holds nothing while it is on its way: the parts of a reply after it are handed out without waiting for its upload; it waits for the parts before it; one that failed cancels the parts after it that have not gone, as any failed part does. Group admin actions go one at a time per channel, in the order they were chosen.
 
 | Item field | Meaning |
 |---|---|

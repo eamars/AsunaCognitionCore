@@ -165,11 +165,12 @@ def _key(channel_id, channel, route_id):
     return 'channel-admission-' + sha(canonical([channel_id, channel['account_id'], route_id]))
 
 
-def judge(store, channel_id, ask, account_id):
+def judge(store, channel_id, ask, account_id, held=None):
     """What the core would do with one ask of a channel package (POST …/admission), and for how long the answer may be
     reused. Pure: it writes nothing and makes no route, folder, identity or scene.
 
-    `ask` is {conversation: {type, id}, sender_id?} or {route_id}. The answer is {verdict: admitted | refused |
+    `held` is {(type, id): (route id, route)} of the routes the core has (built once for a request of many asks; built
+    here for one). `ask` is {conversation: {type, id}, sender_id?} or {route_id}. The answer is {verdict: admitted | refused |
     blocked, …}; `admitted` names the route (`known`: it exists and, when a sender was asked, has them as a member;
     not known: open admission will admit it on its first event under that route id)."""
     channel = store.config['channels'][channel_id]
@@ -193,12 +194,12 @@ def judge(store, channel_id, ask, account_id):
         conversation = ask['conversation']
         sender = ask.get('sender_id')
     kind, target = conversation['type'], conversation['id']
-    if not isinstance(target, str) or not platform.ACCOUNT.fullmatch(target):
-        return refused('CHANNEL_GROUP_DENIED' if kind == 'group' else 'CHANNEL_SENDER_INVALID', 'conversation')
     if kind == 'dm':
         sender = target if sender is None else sender
         if sender != target:
             return refused('CHANNEL_GROUP_DENIED', 'conversation')
+    if sender is None and (not isinstance(target, str) or not platform.ACCOUNT.fullmatch(target)):
+        return refused('CHANNEL_GROUP_DENIED', 'conversation')       # (a sender's ask is checked below, in admit's order)
     scope = 'conversation' if kind == 'dm' or sender is None else 'sender'
     if sender is not None:
         try:
@@ -212,9 +213,13 @@ def judge(store, channel_id, ask, account_id):
             return refused(code, scope)
     elif kind == 'group' and target in channel.get('blocked_groups', []):
         return refused('CHANNEL_BLOCKED', 'conversation', 'blocked')
-    held = next(((route_id, route) for route_id, route in list(routes.items()) if route['target'] == conversation), None)
-    if held:
-        route_id, route = held
+    if held is None:
+        held = {}
+        for route_id, route in list(routes.items()):
+            held.setdefault((route['target']['type'], route['target']['id']), (route_id, route))
+    holder = held.get((kind, target))
+    if holder:
+        route_id, route = holder
         if sender is None or _member(route, sender):
             return {'verdict': 'admitted', 'route_id': route_id, 'conversation': conversation, 'known': True,
                     'ttl_seconds': TTL_SECONDS['known']}
@@ -222,7 +227,7 @@ def judge(store, channel_id, ask, account_id):
             return refused('CHANNEL_IDENTITY_DENIED', 'sender')
     elif not open_:
         return refused('CHANNEL_IDENTITY_DENIED', 'conversation')
-    route_id = held[0] if held else 'auto-' + kind + '-' + target
+    route_id = holder[0] if holder else 'auto-' + kind + '-' + target
     return {'verdict': 'admitted', 'route_id': route_id, 'conversation': conversation, 'known': False,
             'ttl_seconds': TTL_SECONDS['would_admit']}
 

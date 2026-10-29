@@ -34,7 +34,7 @@ Authenticated transport-neutral adapter seam. Platform protocol belongs to the a
   - `voice` — One voice of a line about to be posted, transcribed now; its outcome waits for the line (voice.py).
   - `own_mute`
   - `admission` — POST …/admission: what the core would do with these senders and conversations, and for how long a package may reuse the answer (channel_admission.judge).
-  - `routes` — GET …/routes: the routes the core serves on this channel (listed or admitted) that no block list stops, each with its conversation: how a package learns which conversations to work on (catch-up).
+  - `routes` — GET …/routes: the routes the core serves on this channel (listed or admitted) that no block list stops, each with its conversation, in order of route id and a page at a time (`after`, `limit` up to 1000): how a package learns which conversa
   - `departures` — POST …/departures: a person is no longer in a group; their admission ends (channel_admission.depart).
   - `receive`
   - `claim`

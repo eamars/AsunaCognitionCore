@@ -136,7 +136,6 @@ def test_a_home_line_is_never_open_whatever_the_deployment_says(desk):
 
 
 def test_the_answer_changes_nothing_and_is_the_admission_s(desk):
-    from conftest import memory_store
     senders = ('alice', 'bobby', 'mallory', 'x')
     conversations = [{'type': 'group', 'id': 'crew'}, {'type': 'group', 'id': 'tribe'}, {'type': 'group', 'id': 'trouble'},
                      {'type': 'dm', 'id': 'bobby'}, {'type': 'dm', 'id': 'alice'}, {'type': 'group', 'id': 'BAD'}]
@@ -149,9 +148,14 @@ def test_the_answer_changes_nothing_and_is_the_admission_s(desk):
                 answer = asked(store, conversation, sender)
                 assert (copy.deepcopy(store.config['channels']), store.collection('scenes').count({}),
                         store.collection('artifacts').count({}), store.collection('identities').count({})) == before
-                if sender is None or answer['verdict'] != 'admitted':
+                if sender is None or conversation['type'] == 'dm' and sender != conversation['id']:
                     continue
-                body = event(sender, conversation['id'] if conversation['type'] == 'group' else None, answer['route_id'])
+                group = conversation['id'] if conversation['type'] == 'group' else None
+                if answer['verdict'] != 'admitted':
+                    # a refusal or a block is the admission's too: the same code, whatever route id is posted
+                    assert code(admit, store, event(sender, group)) == answer['code']
+                    continue
+                body = event(sender, group, answer['route_id'])
                 admit(store, body)                       # the answer's route id is the one the core takes
                 assert admit(store, body)[1] is None
 
@@ -234,10 +238,13 @@ def test_no_folder_is_made_by_a_start_or_an_admission_only_by_a_task(desk):
     host.prepare_channels(store)
     route, _ = admit(store, event('carolyn'))
     folder = Path(route['workspace'])
-    assert not listed.exists() and not folder.exists()
-    assert grants.workspace_folder(store.config, route['scene_id'], 'acme:carolyn') == folder.resolve()
-    assert folder.is_dir()
-    folder.rmdir()
+    try:
+        assert not listed.exists() and not folder.exists()
+        assert grants.workspace_folder(store.config, route['scene_id'], 'acme:carolyn') == folder.resolve()
+        assert folder.is_dir()
+    finally:
+        if folder.is_dir():
+            folder.rmdir()
 
 
 def test_the_routes_a_package_may_work_on_are_the_ones_served_and_not_blocked(desk):
@@ -323,3 +330,22 @@ def test_a_platform_kind_that_cannot_be_open_is_named_when_the_deployment_opens_
         assert channel_admission.closed_by_kind(store.config) == ['old']
     finally:
         channel_kinds._KINDS.pop('old', None)
+
+
+def test_the_routes_come_a_page_at_a_time_in_order(desk):
+    store = desk('automatic')
+    channels = Channels(controller(store))
+    for index in range(7):
+        store.config['channels']['acme']['routes']['auto-dm-user%d' % index] = {
+            'scene_id': 'x%d' % index, 'target': {'type': 'dm', 'id': 'user%d' % index}}
+    seen, after = [], ''
+    while True:
+        page = channels.routes('acme', {'limit': ['3'], 'after': [after]})
+        seen += [row['route_id'] for row in page['routes']]
+        after = page['next']
+        if not after:
+            break
+    assert seen == sorted(store.config['channels']['acme']['routes']) and len(seen) == 8
+    for bad in ({'limit': ['0']}, {'limit': ['x']}, {'limit': ['1001']}):
+        with pytest.raises(ValueError, match='INVALID_ROUTES_QUERY'):
+            channels.routes('acme', bad)

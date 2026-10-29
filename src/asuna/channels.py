@@ -378,18 +378,36 @@ class Channels:
                                  '可带 sender_id）或 route_id，二选一' % index)
         if self.controller.reconfiguring or self.controller.stopping.is_set():
             raise RuntimeError('HOST_RECONFIGURING')
-        return {'answers': [judge(self.store, channel_id, ask, body['account_id']) for ask in asks], 'epoch': self.epoch}
+        held = {}
+        for route_id, route in list(self.store.config['channels'][channel_id].get('routes', {}).items()):
+            held.setdefault((route['target']['type'], route['target']['id']), (route_id, route))
+        return {'answers': [judge(self.store, channel_id, ask, body['account_id'], held) for ask in asks],
+                'epoch': self.epoch}
 
-    def routes(self, channel_id):
+    ROUTES_PAGE = 500
+
+    def routes(self, channel_id, query=None):
         """GET …/routes: the routes the core serves on this channel (listed or admitted) that no block list stops, each
-        with its conversation: how a package learns which conversations to work on (catch-up)."""
+        with its conversation, in order of route id and a page at a time (`after`, `limit` up to 1000): how a package
+        learns which conversations to work on (catch-up). `next` is the `after` of the following page, or None."""
         if self.controller.reconfiguring or self.controller.stopping.is_set():
             raise RuntimeError('HOST_RECONFIGURING')
+        query = query or {}
+        try:
+            limit = int(query.get('limit', [self.ROUTES_PAGE])[0])
+        except ValueError:
+            limit = 0
+        if not 1 <= limit <= 1000:
+            raise ValueError('INVALID_ROUTES_QUERY: limit 是 1..1000 的整数；after 是上一页给的 next')
+        after = query.get('after', [''])[0]
         channel = self.store.config['channels'][channel_id]
         blocked = {'group': set(channel.get('blocked_groups', [])), 'dm': set(channel.get('blocked_senders', []))}
-        return {'routes': [{'route_id': route_id, 'conversation': dict(route['target'])}
-                           for route_id, route in list(channel.get('routes', {}).items())
-                           if route['target']['id'] not in blocked[route['target']['type']]], 'epoch': self.epoch}
+        rows = sorted(({'route_id': route_id, 'conversation': dict(route['target'])}
+                       for route_id, route in list(channel.get('routes', {}).items())
+                       if route['target']['id'] not in blocked[route['target']['type']] and route_id > after),
+                      key=lambda row: row['route_id'])
+        page = rows[:limit]
+        return {'routes': page, 'next': page[-1]['route_id'] if len(rows) > limit else None, 'epoch': self.epoch}
 
     def departures(self, channel_id, body):
         """POST …/departures: a person is no longer in a group; their admission ends (channel_admission.depart)."""
@@ -950,7 +968,7 @@ class ChannelServer:
                     elif self.command == 'POST' and parts[3:] == ['departures']:
                         value = channels.departures(channel_id, body)
                     elif self.command == 'GET' and parts[3:] == ['routes']:
-                        value = channels.routes(channel_id)
+                        value = channels.routes(channel_id, parse_qs(url.query))
                     elif self.command == 'POST' and parts[3:] == ['members']:
                         value = channels.members(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['media_keys']:
@@ -980,6 +998,7 @@ class ChannelServer:
                                                    lane=lane)
                         if owner:
                             value = {**value, 'owner_lines': owner}
+                        value = {**value, 'epoch': channels.epoch}      # a package that polls learns of a new start from it
                     elif self.command == 'GET' and len(parts) == 6 and parts[3] == 'outbox' and parts[5] == 'attachment':
                         payload = channels.attachment(channel_id, parts[4], parse_qs(url.query))
                         raw = payload if isinstance(payload, tuple) else None

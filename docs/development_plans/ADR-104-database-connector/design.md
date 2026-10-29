@@ -1337,7 +1337,9 @@ lease's claim under two clients, each module on one throwaway database whose col
 The first pass had moved 194 tests to `integration/`, 61 of them functional guards of her turns in `integration/world/`
 (the lead's first rule, which was wrong); they are deleted, with `test_message_order.py`, `test_recall_fences.py`,
 the lease's renewal and left-behind cases and the fault counts' other cases, their assertions not rewritten
-elsewhere. Of the 1,444 unit test functions at the base (counted by name), 927 are gone. Gone as well: mongomock, the
+elsewhere. Of the 1,444 unit test functions at the base (counted by name), 927 are gone. The unit run at
+`b5106d8d5703` (`suite_at.sh`): 732 passed in 102 s (before, at `0d785a2891e7`: 1,782 passed and 45 skipped in 205 s);
+the integration run there: 132 passed in 44 s, no test database left. Gone as well: mongomock, the
 stand-in, its skip list, the timing gate test, `tools/adr104_equivalence.py` and `tools/probe_qq_admission.py`;
 `hypothesis` stays for class D. The in-memory adapter is also the fake under the five offline checks
 (`tests/fake_collections.py`); the p2 cases are a real `Store` over it (`Store.over`). The p1c check keeps

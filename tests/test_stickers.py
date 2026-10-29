@@ -53,7 +53,7 @@ def test_the_adapter_sends_faces_in_the_words_and_a_sticker_alone():
 def test_a_store_sticker_goes_out_with_no_words_and_reads_back_as_a_picture():
     sent, receipts = [], []
     outbound = Outbound(
-        cfg=SimpleNamespace(route_for_target=lambda ttype, tid: {'id': 'g'}, napcat={'account_id': BOT}),
+        cfg=SimpleNamespace(napcat={'account_id': BOT}),
         host=SimpleNamespace(post_receipt=lambda pub, payload: receipts.append(payload) or SimpleNamespace(kind='ok', code=200)),
         onebot=SimpleNamespace(api_call=lambda action, params, timeout=None, meta=None:
                                sent.append((action, params)) or {'retcode': 0, 'data': {'message_id': 77}}),
@@ -81,7 +81,7 @@ def test_napcats_send_timeout_is_an_unknown_send_not_a_failed_one():
     napcat_said = {'status': 'failed', 'retcode': 1200, 'data': None, 'wording': '',
                'message': 'Timeout: NTEvent serviceAndMethod:NodeIKernelMsgService/sendMsg ListenerName:NodeIKernelMsgListener/onMsgInfoListUpdate EventRet:\n{}\n'}
     outbound = Outbound(
-        cfg=SimpleNamespace(route_for_target=lambda ttype, tid: {'id': 'g'}, napcat={'account_id': BOT}),
+        cfg=SimpleNamespace(napcat={'account_id': BOT}),
         host=SimpleNamespace(post_receipt=lambda pub, payload: receipts.append(payload) or SimpleNamespace(kind='ok', code=200)),
         onebot=SimpleNamespace(api_call=lambda action, params, timeout=None, meta=None: napcat_said),
         journal=SimpleNamespace(append=lambda *a, **k: None), counters=SimpleNamespace(inc=lambda *a: None),

@@ -27,6 +27,9 @@ import urllib.request
 # `wait_seconds`), so declaring is safe before the host learns about it.
 CAPABILITIES = ("image", "sticker")
 
+# How long a question to the core about who may speak waits for its answer (admission.py).
+ADMISSION_TIMEOUT = 5
+
 
 def file_capability(max_bytes):
     """The `file` entry of a claim's declaration: the largest file this adapter sends (adapter.napcat.max_file_mb),
@@ -116,6 +119,27 @@ class HostApi:
                 res = Result("duplicate", res.code, res.obj)
             elif status == "accepted":
                 res = Result("accepted", res.code, res.obj)
+        return res
+
+    def post_admission(self, body):
+        """What the core would do with these senders and conversations (admission.py); `accepted` with its answers."""
+        res = self._request("POST", "/v1/channels/%s/admission" % self.channel_id, body, timeout=ADMISSION_TIMEOUT)
+        if res.kind == "ok" and isinstance(res.obj, dict) and isinstance(res.obj.get("answers"), list):
+            res = Result("accepted", res.code, res.obj)
+        return res
+
+    def get_routes(self):
+        """The routes the core serves, admitted or listed (admission.py); `accepted` with the list."""
+        res = self._request("GET", "/v1/channels/%s/routes" % self.channel_id, None, timeout=ADMISSION_TIMEOUT * 2)
+        if res.kind == "ok" and isinstance(res.obj, dict) and isinstance(res.obj.get("routes"), list):
+            res = Result("accepted", res.code, res.obj)
+        return res
+
+    def post_departure(self, body):
+        """A person left a group (notices.py Departures); `accepted` once the core answered."""
+        res = self._request("POST", "/v1/channels/%s/departures" % self.channel_id, body, timeout=15)
+        if res.kind == "ok" and isinstance(res.obj, dict) and res.obj.get("status") in ("ended", "unchanged"):
+            res = Result("accepted", res.code, res.obj)
         return res
 
     def post_members(self, body):

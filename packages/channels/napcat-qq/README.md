@@ -14,7 +14,7 @@ with Core (`registerChannel`).
 - The people a group message @-mentions are looked up like its sender (`get_group_member_info`, the same refresh and
   cache windows, at most three lookups per message) and ride on the event as `raw.asuna_mentioned`.
 - After a gap (the adapter starting, or its event socket coming back) the messages missed on the routes
-  `adapter_config.catchup.routes` names are fetched from history (`get_group_msg_history` /
+  `adapter_config.catchup.routes` names, or on every route Core serves under `"all"`, and that Core admits, are fetched from history (`get_group_msg_history` /
   `get_friend_msg_history`, from a per-route time cursor in the adapter's data folder however old it is; a
   route without one looks back `lookback_hours`, 1–24) and fed oldest first through the usual inbound path,
   marked `raw.asuna_catchup`. At most 5 pages of 100 forward from the cursor, then the newest page: a longer gap
@@ -76,9 +76,14 @@ with Core (`registerChannel`).
   or a private chat; the item's `reply_to`, the line her words answer, is not shown.
 - A `recall` action in her reply takes back a message of hers (`delete_msg` on its id); the platform's retcode is
   the receipt.
-- Duplicate detection binds the route, platform message ID and original send time in whole seconds. A pushed message and its catch-up copy use the same key; an ID reused at a later time is a new message. Reply attribution selects the newest matching line at or before the reply's send time.
-- Each admitted group's member list (`get_group_list`, then `get_group_member_list` for the groups the admission
-  policy admits) is fetched when the adapter starts and every 6 hours, reduced to id, names, role and activity times,
+- Duplicate detection binds the conversation, platform message ID and original send time in whole seconds. A pushed message and its catch-up copy use the same key; an ID reused at a later time is a new message. Reply attribution selects the newest matching line at or before the reply's send time.
+- Who may speak is Core's, never this adapter's: it asks Core's `admission` endpoint (a sender in a conversation) and
+  reuses an answer for the time Core names. A line nobody has judged is spooled without a route; its conversation's
+  lane asks before it looks anything up on the platform, so a refused sender costs the platform no lookup. Core not
+  answering holds the lines, an older Core without the endpoint holds them too and raises a lane fault. A member's
+  leave or removal (`group_decrease`) is posted to Core's `departures` endpoint.
+- Each admitted group's member list (`get_group_list`, then `get_group_member_list` for the groups Core has a route
+  for) is fetched when the adapter starts and every 6 hours, reduced to id, names, role and activity times,
   and posted to Core's `members` endpoint only when it changed.
 - Picture links from the NT media host are signed (`rkey`) for minutes; the picture stays. Every 4 minutes (a
   minute after a failed round) the adapter asks NapCat for its current download keys — `get_rkey`, else
@@ -161,7 +166,7 @@ own account ([Running several characters](../../../RUN_ASUNA.md#running-several-
      folder unless the route or member names an absolute `workspace` there. With **外部渠道接入策略** (Channel admission) `automatic` (or `--channel-admission
      automatic` at install), new DMs and groups get routes on their first valid message, so only the owner's DM
      needs configuring;
-   - optional `blocked_senders` / `blocked_groups`.
+   - optional `blocked_senders` / `blocked_groups` (Core's: the adapter does not read them).
 3. **Link the owner** at the top level: `canonical_persons` maps `qq:<owner id>` to the local chat's person, so her
    owner in QQ and at home is one person; `context_links` (`{"<local scene>": ["<QQ DM scene>"]}`) lets the local chat read the owner's DM.
 4. **Configure the adapter** (`integration` in the deployment; on a first install, `integration.local.json`):
@@ -176,14 +181,15 @@ own account ([Running several characters](../../../RUN_ASUNA.md#running-several-
      value it cannot use is the default, said once in the log (`CONFIG_NOTE`);
    - `adapter_config.host`: `{"base_url": "http://127.0.0.1:<alias port>", "channel_id": "qq"}`;
    - optional `adapter_config.catchup`: `{"routes": ["<route id>", …] or "all", "lookback_hours": 6}` turns on
-     catch-up after a gap for those routes (the keys of `channels.qq.routes`; under automatic admission a group or DM
-     without one is `auto-group-<id>` / `auto-dm-<id>`; `"all"` means the configured routes and every admitted
-     route the adapter has a cursor for).
+     catch-up after a gap for those routes (route ids as Core names them: the keys of `channels.qq.routes`, or
+     `auto-group-<id>` / `auto-dm-<id>` for a group or DM that open admission admitted; Core says which it admits;
+     `"all"` means every route Core serves and every route the adapter has a cursor for).
    With `enabled: true`, the adapter starts by itself on the first start (`python3 /app/adapter.py --service`) and
    restarts with her from then on, unless its integration settings changed since it last ran other than by applying
    the settings card (it then stays stopped until `integration_start`); after an `integration_stop` it stays stopped
    until started again.
-   The NapCat account id, the host token, routes and allowlists are derived from `channels.qq`; do not repeat them.
+   The NapCat account id and the host token are derived from `channels.qq`; do not repeat them. The adapter holds no
+   route, allowlist or block list: Core decides who may speak.
 5. **Save and apply** on the settings card, then check the card's status line and send her a DM.
 
 Tokens typed into the settings card go to DSH's credential store; the settings keep only references.

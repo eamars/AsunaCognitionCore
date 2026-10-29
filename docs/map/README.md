@@ -454,6 +454,7 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 - [`dsh-peer/src/index.js`](../../packages/channels/dsh-peer/src/index.js) — The DSH peer channel plugin: registers the channel kind `dsh` and, when a peer session is configured, runs the bridge (bridge.js) between her and one session of another DSH Web server.
 - [`napcat-qq/integration/adapter.py`](../../packages/channels/napcat-qq/integration/adapter.py) — NapCat/OneBot v11 adapter entry point for the managed integration runner.
 - [`napcat-qq/integration/qqadapter/__init__.py`](../../packages/channels/napcat-qq/integration/qqadapter/__init__.py) — NapCat / OneBot v11 forward-WebSocket adapter for the Asuna runtime host.
+- [`napcat-qq/integration/qqadapter/admission.py`](../../packages/channels/napcat-qq/integration/qqadapter/admission.py) — The core's answer to "may this sender speak in this conversation?" (ADR-107).
 - [`napcat-qq/integration/qqadapter/catchup.py`](../../packages/channels/napcat-qq/integration/qqadapter/catchup.py) — Catch-up after a gap: the messages she missed while this adapter or its event socket was down.
 - [`napcat-qq/integration/qqadapter/config.py`](../../packages/channels/napcat-qq/integration/qqadapter/config.py) — Load and validate /integration/config.json.
 - [`napcat-qq/integration/qqadapter/faces.py`](../../packages/channels/napcat-qq/integration/qqadapter/faces.py) — QQ's own faces (小黄脸): id <-> name, from faces.json next to this file.

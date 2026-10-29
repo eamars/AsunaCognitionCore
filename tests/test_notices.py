@@ -138,15 +138,25 @@ def test_the_adapter_posts_her_batch_counts_every_kind_and_keeps_the_counts(tmp_
 
 
 def test_a_notice_passes_the_gates_of_a_message():
+    from qqadapter.admission import Admission
+    from qqadapter.journal import Counters
     seen = inbound.SeenLRU(64)
+    asking = Admission(fixtures.FakeCore(), fixtures.ACCOUNT, Counters())      # the core's answers, as a message meets them
     poke = adapter_notices.project(EVERY_KIND[2], OWN)
-    assert adapter_notices.envelope(poke, EVERY_KIND[2], CFG, seen)[0] is not None
-    assert adapter_notices.envelope(poke, EVERY_KIND[2], CFG, seen) == (None, 'duplicate_local')
+    asking.ask(('group', G1), MEMBER)
+    envelope = adapter_notices.envelope(poke, EVERY_KIND[2], CFG, seen, asking)[0]
+    assert envelope is not None and envelope['route_id'] == 'group-' + G1
+    assert adapter_notices.envelope(poke, EVERY_KIND[2], CFG, seen, asking) == (None, 'duplicate_local')
     outsider = adapter_notices.project(notice('notify', 'poke', user_id=int(fixtures.OUTSIDER), target_id=int(OWN)), OWN)
-    assert adapter_notices.envelope(outsider, EVERY_KIND[2], CFG, seen)[1] == 'unauthorized_group_member'
+    asking.ask(('group', G1), fixtures.OUTSIDER)
+    assert adapter_notices.envelope(outsider, EVERY_KIND[2], CFG, seen, asking)[1] == 'unauthorized_group_member'
     stranger = adapter_notices.project(notice('notify', 'poke', group=fixtures.UNKNOWN_GROUP, user_id=int(MEMBER),
                                               target_id=int(OWN)), OWN)
-    assert adapter_notices.envelope(stranger, EVERY_KIND[2], CFG, seen)[1] == 'group_not_allowed'
+    asking.ask(('group', fixtures.UNKNOWN_GROUP), MEMBER)
+    assert adapter_notices.envelope(stranger, EVERY_KIND[2], CFG, seen, asking)[1] == 'group_not_allowed'
+    unasked = adapter_notices.project(notice('notify', 'poke', user_id=int(MEMBER), target_id=int(OWN), group=fixtures.GROUPS[1]), OWN)
+    fresh = adapter_notices.envelope(unasked, EVERY_KIND[2], CFG, seen, asking)[0]
+    assert fresh is not None and 'route_id' not in fresh, 'nobody has asked about it: its lane asks before it goes'
 
 
 def test_the_home_poster_names_people_and_groups_by_read_only_calls():
@@ -157,7 +167,10 @@ def test_the_home_poster_names_people_and_groups_by_read_only_calls():
             calls.append(action)
             return {'retcode': 0, 'data': {'nickname': '小{明}', 'group_name': '新群'}}
     host = Recorder()
-    poster = adapter_notices.HomePoster(CFG, Api(), host, SimpleNamespace(inc=lambda *a: None), log=lambda _m: None)
+    from qqadapter.admission import Admission
+    poster = adapter_notices.HomePoster(CFG, Api(), host, SimpleNamespace(inc=lambda *a: None),
+                                        Admission(fixtures.FakeCore(), fixtures.ACCOUNT, SimpleNamespace(inc=lambda *a: None)),
+                                        log=lambda _m: None)
     poster.post(adapter_notices.project(EVERY_KIND[25], OWN), AT)
     assert calls == ['get_stranger_info', 'get_group_info']
     assert host.posted[0] == {'kind': 'request_invite', 'words': '邀请你进群{g}', 'actor_name': '小｛明｝',

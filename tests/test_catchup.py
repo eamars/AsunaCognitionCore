@@ -41,14 +41,24 @@ class History:
         return {'status': 'ok', 'retcode': 0, 'data': {'messages': [dict(r) for r in page]}}
 
 
-def catchup(tmp_path, api, routes=('group-900000001',), hours=6, every=False):
-    route = SimpleNamespace(route_id='group-900000001', message_type='group', target_id='900000001')
-    dm = SimpleNamespace(route_id='owner-dm', message_type='private', target_id='900000010')
-    known = {r.route_id: r for r in (route, dm)}
-    cfg = SimpleNamespace(routes=known, napcat={'account_id': ACCOUNT}, route_by_id=known.get,
-                          catchup_routes=frozenset(routes), catchup_lookback_hours=hours, catchup_every=every)
+class Core:
+    """The core's answers catch-up asks for (admission.py): it serves two routes; any other name is not admitted."""
+    served = {'group-900000001': ('group', '900000001'), 'owner-dm': ('dm', '900000010')}
+
+    def ask_routes(self, names):
+        return {name: SimpleNamespace(admitted=name in self.served, route_id=name, conversation=self.served.get(name))
+                for name in names}
+
+    def routes(self):
+        return list(self.served.items())
+
+
+def catchup(tmp_path, api, routes=('group-900000001',), hours=6, every=False, core=None):
+    cfg = SimpleNamespace(napcat={'account_id': ACCOUNT}, catchup_routes=frozenset(routes),
+                          catchup_lookback_hours=hours, catchup_every=every)
     fed = []
-    return Catchup(cfg, str(tmp_path), api, fed.append, Counters(), log=lambda _m: None, clock=lambda: NOW), fed
+    return Catchup(cfg, str(tmp_path), api, fed.append, Counters(), core or Core(), log=lambda _m: None,
+                   clock=lambda: NOW, sleep=lambda _s: None), fed
 
 
 def test_the_owner_names_the_routes_and_nothing_runs_by_default():
@@ -57,24 +67,15 @@ def test_the_owner_names_the_routes_and_nothing_runs_by_default():
     raw['adapter']['catchup'] = {'routes': [fixtures.DM_ROUTE], 'lookback_hours': 2}
     cfg = Config(raw, 'x')
     assert cfg.catchup_routes == {fixtures.DM_ROUTE} and cfg.catchup_lookback_hours == 2 and 'catchup=owner-dm/2h' in cfg.describe()
-    raw['adapter']['catchup'] = {'routes': 'all'}
-    assert len(Config(raw, 'x').catchup_routes) == 5
-    raw['adapter']['catchup'] = {'routes': ['nope']}
-    with pytest.raises(ConfigError, match='unknown routes nope'):
-        Config(raw, 'x')
-    raw['adapter']['catchup'] = {'routes': ['auto-group-900000077']}       # explicit admission: no automatic routes
-    with pytest.raises(ConfigError, match='unknown routes auto-group-900000077'):
-        Config(raw, 'x')
-    auto = fixtures.raw_config(admission='automatic')
-    auto['adapter']['catchup'] = {'routes': ['auto-group-900000077']}
-    cfg = Config(auto, 'x')
-    assert cfg.catchup_routes == {'auto-group-900000077'} and cfg.route_by_id('auto-group-900000077').target_id == '900000077'
-    assert cfg.route_by_id('group-900000001').route_id == 'group-900000001' and cfg.route_by_id('auto-dm-x') is None
+    raw['adapter']['catchup'] = {'routes': ['auto-group-900000077', 'not-listed']}     # names are the core's: taken as given
+    assert Config(raw, 'x').catchup_routes == {'auto-group-900000077', 'not-listed'}
     raw['adapter']['catchup'] = {'routes': 'all', 'lookback_hours': 24}
-    assert Config(raw, 'x').catchup_every and 'catchup=all/24h' in Config(raw, 'x').describe()
-    raw['adapter']['catchup'] = {'routes': 'all', 'lookback_hours': 25}
-    with pytest.raises(ConfigError, match='1..24'):
-        Config(raw, 'x')
+    cfg = Config(raw, 'x')
+    assert cfg.catchup_every and cfg.catchup_routes == frozenset() and 'catchup=all/24h' in cfg.describe()
+    for bad in ({'routes': 5}, {'routes': ['']}, {'routes': 'all', 'lookback_hours': 25}):
+        raw['adapter']['catchup'] = bad
+        with pytest.raises(ConfigError):
+            Config(raw, 'x')
 
 
 def test_from_the_cursor_forward_oldest_first_without_her_own_lines(tmp_path):
@@ -97,7 +98,7 @@ def test_without_a_cursor_the_newest_page_inside_the_window(tmp_path):
     job, fed = catchup(tmp_path, History(old + new))
     job.run('startup')
     assert [r['message_seq'] for r in fed] == [1000, 1001, 1002, 1003, 1004]
-    assert job.cursor('group-900000001') == {}                               # the inbound path moves the cursor
+    assert job.cursor('group-900000001')['seq'] == 1004                       # the run notes the newest line it fed
 
 
 def test_a_route_not_named_is_never_fetched_and_cursors_survive_a_restart(tmp_path):
@@ -143,14 +144,26 @@ def test_a_run_waits_for_the_api_socket_and_asks_again_instead_of_failing_every_
     assert job.run(job._reason)['routes'] == 1 and len(api.calls) == 1
 
 
-def test_all_also_catches_up_every_route_with_a_cursor(tmp_path):
+def test_all_catches_up_every_route_the_core_serves_and_every_cursor_it_admits(tmp_path):
     api = History([history_row(1, NOW - 60)])
     job, fed = catchup(tmp_path, api, routes=(), every=True)
     job.note('group-900000001', history_row(1, NOW - 120))
-    job.note('auto-group-123456', {'time': NOW - 100, 'message_id': 5})         # no longer admitted: skipped
+    job.note('auto-group-123456', {'time': NOW - 100, 'message_id': 5})         # the core does not admit it: skipped
     job.request('startup')
     assert job._due.is_set()
     job.run('startup')
-    assert [params.get('group_id') for _, params in api.calls] == [900000001]
+    assert sorted(params.get('group_id') or params.get('user_id') for _, params in api.calls) == [900000001, 900000010]
+
+
+def test_a_core_that_does_not_answer_holds_the_run_and_it_asks_for_itself_again(tmp_path):
+    from qqadapter.admission import AdmissionAway
+
+    class Away(Core):
+        def ask_routes(self, names):
+            raise AdmissionAway()
+    api = History([history_row(1, NOW - 60)])
+    job, fed = catchup(tmp_path, api, core=Away())
+    assert job.run('reconnect') is None and not api.calls and job._due.is_set()
+    assert job.counters.snapshot().get('catchup_waiting_admission') == 1
 
 

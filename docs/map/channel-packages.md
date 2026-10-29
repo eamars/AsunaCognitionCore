@@ -90,6 +90,28 @@ NapCat/OneBot v11 adapter entry point for the managed integration runner.
 NapCat / OneBot v11 forward-WebSocket adapter for the Asuna runtime host.
 
 
+## `napcat-qq/integration/qqadapter/admission.py`
+
+[packages/channels/napcat-qq/integration/qqadapter/admission.py](../../packages/channels/napcat-qq/integration/qqadapter/admission.py)
+
+The core's answer to "may this sender speak in this conversation?" (ADR-107).
+
+- class `AdmissionAway` — The core did not answer, or is not taking requests now (no answer, 5xx, its key not taken): wait and ask again.
+- class `AdmissionUnsupported` — The core predates the admission endpoint (404): lines wait, nothing is posted without a verdict.
+- class `AdmissionRejected` — The core refused the request itself (a 4xx other than the two above): a bug in this adapter's ask.
+- class `Answer`
+  - `admitted`
+- def `lane_key` — The name a conversation's lines share, whether or not their route is known: order is a property of it.
+- def `conversation_of` — The conversation an envelope (or a spooled line) belongs to.
+- class `Admission`
+  - `cached` — The answer still good for this sender in this conversation, or None.
+  - `forget`
+  - `clear`
+  - `ask` — The core's answer for one sender in one conversation (or for the conversation alone).
+  - `ask_many` — The answers for conversations alone, in order (the groups a member-list round may fetch).
+  - `ask_routes` — {route id: its answer} for route ids the core named (catch-up's cursors and the settings' names).
+  - `routes` — [(route id, conversation)] the core serves and no block list stops (catch-up's `all`).
+
 ## `napcat-qq/integration/qqadapter/catchup.py`
 
 [packages/channels/napcat-qq/integration/qqadapter/catchup.py](../../packages/channels/napcat-qq/integration/qqadapter/catchup.py)
@@ -113,16 +135,7 @@ Load and validate /integration/config.json.
 
 - class `ConfigError`
 - def `redacted` — Config tree with secret-looking leaves replaced by their length.
-- class `Route`
-  - `member_count`
-  - `accepts_sender`
 - class `Config`
-  - `route_for_sender`
-  - `route_by_id` — A configured route, or the automatic route that id names (None when blocked or not admitted).
-  - `route_for_group`
-  - `route_for_target`
-  - `is_allowed_private`
-  - `is_group_member`
   - `describe`
 - def `load`
 
@@ -154,11 +167,14 @@ This adapter's lane faults, counted by signature and hour and posted to the host
 
 Built-in placeholder fixtures for the offline self checks.
 
-- def `group_route` — The route blob the real parser expects for one authorized group.
-- def `group_routes`
-- def `dm_route`
-- def `preview` — The built-in stand-in for the old machine-local group-route dump: every allowed group has a route, every route is allowed.
 - def `raw_config` — A complete config document with placeholder ids, valid for `Config`.
+- class `Policy` — What the fixture deployment's core would decide: the owner's DM and the four groups listed (with their member snapshots) when closed; anyone not blocked when open.
+  - `listed` — {route id: ("dm" or "group", id)} of the routes the owner listed.
+  - `judge`
+- class `FakeCore` — SUBSTITUTE for the core's admission and departure endpoints: answers from a `Policy`, keeps every question it was asked, and can be made to fail the three ways a core can (`down`: away, unsupported or rejected).
+  - `post_admission`
+  - `get_routes`
+  - `post_departure`
 - def `load_config` — The same document through the real parser, so fixtures are validated exactly like a deployment config.
 - def `raw_of` — A deep copy of a loaded config's raw document, for mutation cases.
 - def `members_of`
@@ -187,6 +203,9 @@ HTTP client for the runtime host channel API (stdlib only).
 - class `Result`
 - class `HostApi`
   - `post_event`
+  - `post_admission` — What the core would do with these senders and conversations (admission.py); `accepted` with its answers.
+  - `get_routes` — The routes the core serves, admitted or listed (admission.py); `accepted` with the list.
+  - `post_departure` — A person left a group (notices.py Departures); `accepted` once the core answered.
   - `post_members` — One group's member list (members.py); `accepted` once the host stored it.
   - `post_faults` — This adapter's lane faults by signature and hour (faults.py, ADR-095); `accepted` once the host counted them.
   - `post_media_keys` — NapCat's current picture-link keys (media_keys.py); `accepted` once the host holds them.
@@ -222,6 +241,7 @@ OneBot message event -> host envelope, with the authorization gate.
 
 Disk-backed spool, journals and counters.
 
+- def `rotate` — Set `path` aside as `path`.1 when it has reached `max_bytes`; True when it did.
 - class `Counters`
   - `inc`
   - `set`
@@ -278,7 +298,7 @@ Group member lists for the host (0.7.1): who is in each admitted group, not only
 
 Her own mute in each admitted group, told to the host (`POST /v1/channels/<id>/own_mute`).
 
-- def `notice_body` — The state report for a mute notice about her (or the whole group) in an admitted group, else None.
+- def `notice_body` — The state report for a mute notice about her (or the whole group) in a group the core has not refused, else None.
 - def `look_body` — The state report from one look, or None when either answer is missing.
 - class `Mutes`
   - `notice`
@@ -304,10 +324,16 @@ NapCat notices and requests as one-off lines (ADR-064 phase 1): every kind proje
   - `add`
   - `save`
   - `summary`
+- def `departure` — (group id, account) of a person the platform says left a group: a member's leave, or a kick of a member.
 - def `envelope` — (the event to post for a shown group or private-chat line, None) or (None, why it is dropped): the same gates as a message from the person who did it.
+- class `Departures` — Posts the groups' leave notices to the core from a thread of their own: a person who left is no longer admitted there (POST …/departures); their next line is admitted again.
+  - `put`
+  - `loop`
+  - `post`
 - class `HomePoster` — Posts the lines about her own account to the host from its own thread, with the names they need (read-only `get_stranger_info` for who did it, `get_group_info` for a group she has no conversation in).
   - `put`
   - `loop`
+  - `wanted` — Whether the core admits the group a notice is about (an invitation to a group she is not in is about no conversation of hers and always goes).
   - `body`
   - `post`
 
@@ -415,6 +441,8 @@ Offline + live self checks. Nothing here invents an inbound message: synthetic e
   - `post_receipt`
   - `get_attachment` — SUBSTITUTE for the host byte endpoint: records the call, answers the canned Result.
   - `last`
+- def `policy_of`
+- def `admission_of` — The adapter's asking over the fixture core, for this deployment (the double of who may speak).
 - class `StubPlatformVerify` — SUBSTITUTE platform for the read-back checks: answers the send, then answers `get_msg` from a script and records every id it was asked for.
   - `api_call`
 - class `StubImageOneBot` — SUBSTITUTE answering both the send and the one `get_msg` read-back.
@@ -563,7 +591,7 @@ The bridge between Asuna's channel API and the official QQ Bot open platform (AD
   - `gatewayLoop`
   - `session` — One connection, until it closes; resolves with the close code.
   - `dispatch`
-  - `routeFor` — The route a message belongs to: the configured route for this conversation, else the one admission names.
+  - `admission` — What the core says about a sender in a conversation of this bot (POST …/admission): its route, or that it is not admitted, kept for the time the core names (ADR-107).
   - `receive`
   - `groupName` — The group's name as the platform gives it (`/v2/groups/{openid}/info`), read once a day per group and kept with when it was read; null when the platform gives none or refuses this bot the lookup.
   - `remember` — A received message she may answer as a reply while the platform takes replies to it.

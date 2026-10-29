@@ -3,12 +3,9 @@
 Secrets stay inside this object; `describe()` is the only thing allowed into
 logs, journals or chat output.
 
-Two route kinds are supported:
-  private: message_type=private, target.type=dm,    sender_id=<peer>
-  group:   message_type=group,   target.type=group, target.id=<group id>,
-           allowed_sender_ids=[<member ids>]   (the authorized member snapshot)
-Explicit admission is bounded by the configured allowlists. Automatic admission
-uses deterministic routes for new targets under the owner's admission policy.
+This adapter keeps only what it needs to reach its platform and the core: NapCat's address and token, the core's
+address and token, the account, media and catch-up settings. Who may speak, which groups and people are listed, and
+the block lists are the core's (ADR-107): the adapter asks it (`admission.py`) and holds no copy.
 """
 import json
 import os
@@ -29,9 +26,6 @@ class ConfigError(Exception):
 SECRET_RE = re.compile(r"token|password|secret|key|auth|cookie", re.I)
 DIGITS = re.compile(r"^[0-9]{4,20}$")
 
-PRIVATE_ROUTE_KEYS = {"message_type", "sender_id", "target"}
-GROUP_ROUTE_KEYS = {"message_type", "allowed_sender_ids", "target"}
-
 
 def redacted(node, path=""):
     """Config tree with secret-looking leaves replaced by their length."""
@@ -45,68 +39,6 @@ def redacted(node, path=""):
     return node
 
 
-def _id_list(values, label, route_id=""):
-    if not isinstance(values, list) or not values:
-        raise ConfigError("route %s: %s must be a non-empty list" % (route_id, label))
-    out = []
-    for val in values:
-        sval = str(val)
-        if not DIGITS.match(sval):
-            raise ConfigError("route %s: %s contains a non-digit id" % (route_id, label))
-        if sval not in out:
-            out.append(sval)
-    return out
-
-
-class Route:
-    __slots__ = ("route_id", "message_type", "sender_id", "target_type", "target_id", "allowed_senders")
-
-    def __init__(self, route_id, blob):
-        if not isinstance(blob, dict):
-            raise ConfigError("route %s: not an object" % route_id)
-        self.route_id = route_id
-        self.message_type = blob.get("message_type")
-        self.sender_id = blob.get("sender_id")
-        target = blob.get("target") or {}
-        if not isinstance(target, dict):
-            raise ConfigError("route %s: target must be an object" % route_id)
-        self.target_type = target.get("type")
-        self.target_id = target.get("id")
-        self.allowed_senders = frozenset()
-        if self.message_type == "private":
-            unknown = sorted(set(blob) - PRIVATE_ROUTE_KEYS)
-            if unknown:
-                raise ConfigError("route %s: unknown keys for a private route: %s" % (route_id, ",".join(unknown)))
-            if self.target_type != "dm":
-                raise ConfigError("route %s: target.type %r unsupported for a private route" % (route_id, self.target_type))
-            if not isinstance(self.sender_id, str) or not DIGITS.match(self.sender_id):
-                raise ConfigError("route %s: sender_id must be a digit string" % route_id)
-            if not isinstance(self.target_id, str) or not DIGITS.match(self.target_id):
-                raise ConfigError("route %s: target.id must be a digit string" % route_id)
-            self.allowed_senders = frozenset([self.sender_id])
-        elif self.message_type == "group":
-            unknown = sorted(set(blob) - GROUP_ROUTE_KEYS)
-            if unknown:
-                raise ConfigError("route %s: unknown keys for a group route: %s" % (route_id, ",".join(unknown)))
-            if self.target_type != "group":
-                raise ConfigError("route %s: target.type %r unsupported for a group route" % (route_id, self.target_type))
-            if not isinstance(self.target_id, str) or not DIGITS.match(self.target_id):
-                raise ConfigError("route %s: target.id must be a digit group id" % route_id)
-            if "sender_id" in blob:
-                raise ConfigError("route %s: a group route must not pin sender_id" % route_id)
-            self.sender_id = None
-            self.allowed_senders = frozenset(_id_list(blob.get("allowed_sender_ids"), "allowed_sender_ids", route_id))
-        else:
-            raise ConfigError("route %s: message_type %r unsupported" % (route_id, self.message_type))
-
-    @property
-    def member_count(self):
-        return len(self.allowed_senders)
-
-    def accepts_sender(self, sender_id):
-        return sender_id in self.allowed_senders
-
-
 class Config:
     def __init__(self, raw, path):
         self.path = path
@@ -118,24 +50,10 @@ class Config:
         adapter = raw.get("adapter")
         if not isinstance(adapter, dict):
             raise ConfigError("adapter section missing")
-        self.admission = adapter.get('admission', 'explicit')
-        if self.admission not in ('explicit', 'automatic'):
-            raise ConfigError('adapter.admission must be explicit or automatic')
-        self.blocked_senders = set(adapter.get('blocked_senders', []))
-        self.blocked_groups = set(adapter.get('blocked_groups', []))
-        private = adapter.get('allowed_private_user_ids') or []
-        self.allowed_private = self._id_list(private, "allowed_private_user_ids") if private else []
-        groups = adapter.get("allowed_group_ids") or []
-        if not isinstance(groups, list):
-            raise ConfigError("allowed_group_ids must be a list")
-        self.allowed_groups = self._id_list(groups, "allowed_group_ids") if groups else []
         self.napcat = self._napcat(adapter.get("napcat"))
         self.host = self._host(adapter.get("host"))
-        self.routes = self._routes(adapter.get("routes"))
         self.media_mode = self._media_mode(adapter.get("media_mode"))
-        self.catchup_routes, self.catchup_lookback_hours, self.catchup_every = self._catchup(
-            adapter.get("catchup"), self.routes, self.admission)
-        self._cross_check()
+        self.catchup_routes, self.catchup_lookback_hours, self.catchup_every = self._catchup(adapter.get("catchup"))
 
     # ---- sections -------------------------------------------------------
     @staticmethod
@@ -148,26 +66,18 @@ class Config:
         return value
 
     @staticmethod
-    def _catchup(node, routes, admission):
-        """(route ids caught up after a gap, look-back hours, every); absent means off (catchup.py). Under
-        automatic admission a target without a configured route is named by its automatic route id
-        (auto-group-<id>, auto-dm-<id>); "all" means the configured routes and every admitted route the
-        adapter has seen a message on."""
+    def _catchup(node):
+        """(route ids caught up after a gap, look-back hours, every); absent means off (catchup.py). A route id is a name
+        the core gave (a listed route's, or `auto-group-<id>` / `auto-dm-<id>`): the adapter takes it as it is and asks
+        the core at run time whether it is served. "all" means every route the core serves and every cursor kept."""
         if node is None:
             return frozenset(), 6, False
         if not isinstance(node, dict):
             raise ConfigError("adapter.catchup must be an object {routes, lookback_hours}")
         wanted = node.get("routes", [])
         if wanted == "all":
-            chosen = frozenset(routes)
-        elif isinstance(wanted, list) and all(isinstance(r, str) for r in wanted):
-            automatic = re.compile(r"auto-(group|dm)-\d{4,20}") if admission == "automatic" else None
-            unknown = sorted(r for r in set(wanted) - set(routes) if not (automatic and automatic.fullmatch(r)))
-            if unknown:
-                raise ConfigError("adapter.catchup.routes names unknown routes %s (routes are %s%s)"
-                                  % (",".join(unknown), ",".join(sorted(routes)),
-                                     ", or auto-group-<id> / auto-dm-<id> under automatic admission"
-                                     if admission == "automatic" else ""))
+            chosen = frozenset()
+        elif isinstance(wanted, list) and all(isinstance(r, str) and r for r in wanted):
             chosen = frozenset(wanted)
         else:
             raise ConfigError('adapter.catchup.routes must be "all" or a list of route ids')
@@ -258,98 +168,9 @@ class Config:
             "channel_id": channel,
         }
 
-    def _routes(self, node):
-        if not isinstance(node, dict) or not node and self.admission != 'automatic':
-            raise ConfigError("adapter.routes missing")
-        routes = {}
-        for route_id, blob in node.items():
-            routes[route_id] = Route(route_id, blob)
-        return routes
-
-    def _cross_check(self):
-        seen_group_targets = {}
-        for route in self.routes.values():
-            if route.message_type == "private":
-                if route.sender_id not in self.allowed_private:
-                    raise ConfigError("route %s sender %s not in allowed_private_user_ids" % (route.route_id, route.sender_id))
-                if route.target_id not in self.allowed_private:
-                    raise ConfigError("route %s target %s not in allowed_private_user_ids" % (route.route_id, route.target_id))
-                continue
-            if route.target_id not in self.allowed_groups:
-                raise ConfigError("route %s group %s not in allowed_group_ids" % (route.route_id, route.target_id))
-            if route.target_id in seen_group_targets:
-                raise ConfigError("routes %s and %s both bind group %s" % (seen_group_targets[route.target_id],
-                                                                          route.route_id, route.target_id))
-            seen_group_targets[route.target_id] = route.route_id
-
-    @staticmethod
-    def _id_list(node, label):
-        if not isinstance(node, list) or not node:
-            raise ConfigError("%s must be a non-empty list" % label)
-        out = []
-        for val in node:
-            sval = str(val)
-            if not DIGITS.match(sval):
-                raise ConfigError("%s contains a non-digit id" % label)
-            if sval not in out:
-                out.append(sval)
-        return out
-
-    # ---- lookups --------------------------------------------------------
-    def route_for_sender(self, sender_id):
-        if sender_id in self.blocked_senders or not DIGITS.fullmatch(sender_id):
-            return None
-        for route in self.routes.values():
-            if route.message_type == "private" and route.sender_id == sender_id:
-                return route
-        if self.admission == 'automatic':
-            return Route('auto-dm-' + sender_id, {'message_type': 'private', 'sender_id': sender_id,
-                'target': {'type': 'dm', 'id': sender_id}})
-        return None
-
-    def route_by_id(self, route_id):
-        """A configured route, or the automatic route that id names (None when blocked or not admitted)."""
-        if route_id in self.routes:
-            return self.routes[route_id]
-        match = re.fullmatch(r"auto-(group|dm)-(\d{4,20})", route_id or "")
-        if not match or self.admission != "automatic":
-            return None
-        route = (self.route_for_group if match.group(1) == "group" else self.route_for_sender)(match.group(2))
-        return route if route is not None and route.route_id == route_id else None
-
-    def route_for_group(self, group_id):
-        if group_id in self.blocked_groups or not DIGITS.fullmatch(group_id):
-            return None
-        if group_id not in self.allowed_groups and self.admission != 'automatic':
-            return None
-        for route in self.routes.values():
-            if route.message_type == "group" and route.target_id == group_id:
-                return route
-        if self.admission == 'automatic':
-            return Route('auto-group-' + group_id, {'message_type': 'group',
-                'allowed_sender_ids': [self.napcat['account_id']], 'target': {'type': 'group', 'id': group_id}})
-        return None
-
-    def route_for_target(self, target_type, target_id):
-        if target_type == "dm":
-            return self.route_for_sender(target_id)
-        if target_type == "group":
-            return self.route_for_group(target_id)
-        return None
-
-    def is_allowed_private(self, target_id):
-        return self.route_for_sender(target_id) is not None
-
-    def is_group_member(self, group_id, sender_id):
-        route = self.route_for_group(group_id)
-        return bool(route and sender_id not in self.blocked_senders and DIGITS.fullmatch(sender_id)
-                    and (self.admission == 'automatic' or route.accepts_sender(sender_id)))
-
     def describe(self):
-        group_routes = [r for r in self.routes.values() if r.message_type == "group"]
         return (
-            "account=%s shared_account=%s napcat=%s(%s) host=%s(%s) channel=%s "
-            "routes=%s allowed_private=%s allowed_groups=%s group_members=%s media_mode=%s catchup=%s max_file_mb=%d"
+            "account=%s shared_account=%s napcat=%s(%s) host=%s(%s) channel=%s media_mode=%s catchup=%s max_file_mb=%d"
             % (
                 self.napcat["account_id"],
                 self.napcat["shared_account"],
@@ -358,10 +179,6 @@ class Config:
                 self.host["base_url"],
                 self.host["endpoint"],
                 self.host["channel_id"],
-                ",".join(sorted(self.routes)),
-                ",".join(self.allowed_private),
-                ",".join(self.allowed_groups) or "-",
-                ",".join("%s:%d" % (r.route_id, r.member_count) for r in sorted(group_routes, key=lambda r: r.route_id)) or "-",
                 self.media_mode,
                 ("all/%dh" % self.catchup_lookback_hours if self.catchup_every
                  else "%s/%dh" % (",".join(sorted(self.catchup_routes)), self.catchup_lookback_hours)

@@ -26,6 +26,7 @@ import time
 from datetime import datetime, timezone
 
 from . import faces
+from .admission import AdmissionAway, AdmissionRejected, AdmissionUnsupported, lane_key
 
 WORDS_VERSION = 1
 # Her first batch (owner 2026-10-13): what asks her to act or tells her her own state. Flip a kind on to show it.
@@ -317,31 +318,45 @@ def _stamp(ts):
         return None
 
 
-def envelope(proj, event, cfg, seen):
+def departure(event, own):
+    """(group id, account) of a person the platform says left a group: a member's leave, or a kick of a member. Her own
+    removal (`kick_me`) and a disbanded group are about the conversation, not about a member, and say nothing here."""
+    if not isinstance(event, dict) or event.get('post_type') != 'notice' or event.get('notice_type') != 'group_decrease':
+        return None
+    if str(event.get('self_id')) != str(own) or event.get('sub_type') not in ('leave', 'kick'):
+        return None
+    group, user = _id(event.get('group_id')), _id(event.get('user_id'))
+    return (group, user) if group and user and user != str(own) else None
+
+
+def envelope(proj, event, cfg, seen, admission):
     """(the event to post for a shown group or private-chat line, None) or (None, why it is dropped): the same
-    gates as a message from the person who did it."""
+    gates as a message from the person who did it. A route the core has not been asked about yet is left out, as for a
+    message: the lane that posts it asks first."""
     own, actor, group = str(cfg.napcat['account_id']), proj.get('actor') or '', proj.get('group_id') or ''
     if str(event.get('self_id')) != own:
         return None, 'wrong_self'
-    if not actor or actor in cfg.blocked_senders or not 4 <= len(actor) <= 20:
+    if not actor or not 4 <= len(actor) <= 20:
         return None, 'unauthorized_sender'
-    route = cfg.route_for_group(group) if group else cfg.route_for_sender(actor)
-    if route is None:
-        return None, 'group_not_allowed' if group else 'unauthorized_sender'
-    if group and not cfg.is_group_member(group, actor):
-        return None, 'unauthorized_group_member'
+    conversation = ('group', group) if group else ('dm', actor)
+    answer = admission.cached(conversation, actor)
+    if answer is not None and not answer.admitted:
+        return None, ('group_not_allowed' if answer.scope == 'conversation' else 'unauthorized_group_member') \
+            if group else 'unauthorized_sender'
     occurred = _stamp(event.get('time'))
     ident = proj.get('message_id') or str(event.get('target_id') or '')
     event_id = 'notice-%s-%s-%s' % (proj['kind'], ident or '-', actor)
-    if not seen.add_if_new((route.route_id, event_id, occurred)):
+    if not seen.add_if_new((lane_key(conversation), event_id, occurred)):
         return None, 'duplicate_local'
     block = {'kind': proj['kind'], 'words_version': WORDS_VERSION}
     if group and proj['kind'] in GATES:
         block['gate'] = GATES[proj['kind']]
     if proj.get('message_id'):
         block['line'] = {'message_id': proj['message_id'][:40], 'mine': proj['kind'] == 'reaction'}
-    out = {'route_id': route.route_id, 'account_id': own, 'sender_id': actor, 'event_id': event_id[:200],
+    out = {'account_id': own, 'sender_id': actor, 'event_id': event_id[:200],
            'text': proj['words'], 'raw': {'asuna_notice': block}}
+    if answer is not None:
+        out['route_id'] = answer.route_id
     if occurred:
         out['occurred_at'] = occurred
     if group:
@@ -350,14 +365,63 @@ def envelope(proj, event, cfg, seen):
     return out, None
 
 
+class Departures:
+    """Posts the groups' leave notices to the core from a thread of their own: a person who left is no longer admitted
+    there (POST …/departures); their next line is admitted again. A post that does not go in is tried a few times,
+    then dropped and counted: a missed one leaves the person as they were, which costs nothing."""
+
+    TRIES, WAIT = 5, 5.0
+
+    def __init__(self, cfg, host, counters, admission, log=print, sleep=time.sleep):
+        self.cfg, self.host, self.counters, self.admission, self.log, self.sleep = cfg, host, counters, admission, log, sleep
+        self.jobs = queue.Queue()
+
+    def put(self, group, user, at=None):
+        self.jobs.put((group, user, at))
+
+    def loop(self, stop):
+        while not stop.is_set():
+            try:
+                job = self.jobs.get(timeout=1.0)
+            except queue.Empty:
+                continue
+            try:
+                self.post(*job)
+            except Exception as exc:
+                self.counters.inc('departure_error')
+                self.log('DEPARTURE_ERROR type=%s' % type(exc).__name__)
+
+    def post(self, group, user, at=None):
+        body = {'account_id': str(self.cfg.napcat['account_id']), 'conversation': {'type': 'group', 'id': group},
+                'sender_id': user, 'event_id': 'departure-%s-%s-%s' % (group, user, at or '-')}
+        stamp = _stamp(at) if at else None
+        if stamp:
+            body['occurred_at'] = stamp
+        self.admission.forget(('group', group), user)
+        for tries in range(self.TRIES):
+            if tries:
+                self.sleep(self.WAIT)
+            res = self.host.post_departure(body)
+            if res.kind == 'accepted':
+                self.counters.inc('departure_posted')
+                self.log('DEPARTURE status=%s' % (res.obj or {}).get('status'))
+                return 'posted'
+            if res.kind != 'retry':
+                break
+        self.counters.inc('departure_failed')
+        self.log('DEPARTURE_FAILED http=%s error=%s' % (res.code, str((res.obj or {}).get('error', '') if isinstance(res.obj, dict) else res.error)[:160]))
+        return 'failed'
+
+
 class HomePoster:
     """Posts the lines about her own account to the host from its own thread, with the names they need (read-only
     `get_stranger_info` for who did it, `get_group_info` for a group she has no conversation in)."""
 
     TRIES, WAIT, TIMEOUT = 5, 5.0, 5.0
 
-    def __init__(self, cfg, onebot, host, counters, log=print, sleep=time.sleep):
+    def __init__(self, cfg, onebot, host, counters, admission, notice_counts=None, log=print, sleep=time.sleep):
         self.cfg, self.onebot, self.host, self.counters, self.log, self.sleep = cfg, onebot, host, counters, log, sleep
+        self.admission, self.notice_counts = admission, notice_counts
         self.jobs = queue.Queue()
 
     def put(self, proj, event):
@@ -383,14 +447,27 @@ class HomePoster:
         data = resp.get('data') if isinstance(resp, dict) and resp.get('retcode') == 0 else None
         return _text(data.get(field), NAME_CHARS) if isinstance(data, dict) else ''
 
+    def wanted(self, proj):
+        """Whether the core admits the group a notice is about (an invitation to a group she is not in is about no
+        conversation of hers and always goes). A core that does not answer now is asked again by the post itself."""
+        if not proj.get('group_id') or proj['kind'] == 'request_invite':
+            return True
+        conversation = ('group', proj['group_id'])
+        try:
+            answer = self.admission.cached(conversation) or self.admission.ask(conversation)
+        except AdmissionAway:
+            return True                     # the post below tries again as often as any notice does
+        except (AdmissionUnsupported, AdmissionRejected):
+            return False                    # a core that cannot say is not asked to take a group's notice
+        return answer.admitted
+
     def body(self, proj, at):
         body = {'kind': proj['kind'], 'words': proj['words']}
         if proj.get('actor'):
             body['actor_name'] = self._name('get_stranger_info', {'user_id': int(proj['actor'])}, 'nickname')
         if proj.get('group_id'):
             body['group_id'] = proj['group_id']
-            if self.cfg.route_for_group(proj['group_id']) is None:
-                body['group_name'] = self._name('get_group_info', {'group_id': int(proj['group_id'])}, 'group_name')
+            body['group_name'] = self._name('get_group_info', {'group_id': int(proj['group_id'])}, 'group_name')
         if proj.get('request'):
             body['request'] = proj['request']
         if type(at) is int and at > 0:
@@ -398,6 +475,11 @@ class HomePoster:
         return {key: value for key, value in body.items() if value != ''}
 
     def post(self, proj, at):
+        if not self.wanted(proj):
+            self.counters.inc('notice_home_not_admitted')
+            if self.notice_counts is not None:
+                self.notice_counts.add(proj['kind'], 'group_not_allowed')
+            return 'not_admitted'
         body = self.body(proj, at)
         for tries in range(self.TRIES):
             if tries:

@@ -125,29 +125,13 @@ def outbound_mention(account):
 
 
 def adapter_config(adapter, channel):
-    """Fill the adapter's derived settings from the channel it serves (host token is set by the core)."""
+    """Fill the adapter's derived settings from the channel it serves (host token is set by the core). Who may speak is
+    the core's to decide and the adapter asks it, so nothing of that is derived (ADR-107)."""
     adapter.setdefault('napcat', {})['account_id'] = channel['account_id']
-    adapter.update(admission=channel['admission'], blocked_senders=channel.get('blocked_senders', []),
-                   blocked_groups=channel.get('blocked_groups', []))
-    adapter['routes'], adapter['allowed_private_user_ids'], adapter['allowed_group_ids'] = {}, [], []
-    for route_id, route in channel.get('routes', {}).items():
-        target = route['target']
-        if target['type'] == 'dm':
-            adapter['allowed_private_user_ids'].append(target['id'])
-            adapter['routes'][route_id] = {'message_type': 'private', 'sender_id': route['sender_id'], 'target': target}
-        elif target['type'] == 'group':
-            adapter['allowed_group_ids'].append(target['id'])
-            adapter['routes'][route_id] = {'message_type': 'group', 'allowed_sender_ids': list(route['members']),
-                                           'target': target}
-        else:
-            raise ValueError('INVALID_CHANNEL_TARGET')
     return adapter
 
 
 def strip_derived(adapter):
     """Remove what adapter_config derives, so exported settings keep only what the owner set."""
-    for key in ('routes', 'allowed_private_user_ids', 'allowed_group_ids', 'admission',
-                'blocked_senders', 'blocked_groups'):
-        adapter.pop(key, None)
     adapter.get('napcat', {}).pop('account_id', None)
     return adapter

@@ -1,8 +1,9 @@
 """Group member lists for the host (0.7.1): who is in each admitted group, not only who spoke.
 
 When the adapter is READY and every EVERY_SECONDS after, it asks the platform which groups this account is in
-(`get_group_list`), keeps those the admission policy admits (`Config.route_for_group`: configured routes, or
-automatic admission, never a blocked group), fetches each one's members (`get_group_member_list`), keeps only
+(`get_group_list`), keeps those the core serves (`Admission.ask_many`: an admitted group that already has its
+route; the adapter holds no policy of its own),
+fetches each one's members (`get_group_member_list`), keeps only
 user_id / nickname / card / role / last_sent_time / join_time, and posts the list to the host
 (`POST /v1/channels/<id>/members`) only when it differs from the last one posted (a hash in
 `<data>/members/posted.json`). One call per group per round, a pause between groups, no retry loop: a failure is
@@ -13,6 +14,8 @@ import json
 import os
 import threading
 import time
+
+from .admission import AdmissionAway, AdmissionRejected, AdmissionUnsupported
 
 EVERY_SECONDS = 6 * 3600
 GROUP_PAUSE = 1.0
@@ -26,8 +29,9 @@ def _project(raw):
 
 
 class Members:
-    def __init__(self, cfg, data_dir, onebot, host, counters, log=print, clock=time.time):
+    def __init__(self, cfg, data_dir, onebot, host, counters, admission, log=print, clock=time.time):
         self.cfg, self.onebot, self.host, self.counters, self.log, self.clock = cfg, onebot, host, counters, log, clock
+        self.admission = admission
         self.path = os.path.join(data_dir, "members", "posted.json")
         self._lock = threading.Lock()
         try:
@@ -61,12 +65,14 @@ class Members:
         if resp.get("retcode") != 0 or not isinstance(data, list):
             self.log("MEMBERS_GROUPS_REFUSED retcode=%s" % (resp.get("retcode") if isinstance(resp, dict) else "-"))
             return []
-        found = []
-        for row in data:
-            group = str((row or {}).get("group_id") or "")
-            if group.isdigit() and self.cfg.route_for_group(group) is not None:
-                found.append(group)
-        return sorted(set(found))
+        found = sorted({str((row or {}).get("group_id") or "") for row in data if str((row or {}).get("group_id") or "").isdigit()})
+        try:
+            answers = self.admission.ask_many([("group", group) for group in found])
+        except (AdmissionAway, AdmissionUnsupported, AdmissionRejected) as exc:
+            self.counters.inc("members_admission_unavailable")
+            self.log("MEMBERS_ADMISSION_UNAVAILABLE type=%s" % type(exc).__name__)
+            return []
+        return [group for group, answer in zip(found, answers) if answer.admitted and answer.known]   # a route the core holds
 
     def run(self):
         totals = {"groups": 0, "posted": 0, "same": 0, "failed": 0}

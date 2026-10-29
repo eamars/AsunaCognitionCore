@@ -26,8 +26,9 @@ POST_TRIES = 5
 RETRY_WAIT = 5.0
 
 
-def notice_body(event, cfg):
-    """The state report for a mute notice about her (or the whole group) in an admitted group, else None."""
+def notice_body(event, cfg, admission=None):
+    """The state report for a mute notice about her (or the whole group) in a group the core has not refused, else
+    None. A group nobody has asked about yet is reported: the core takes it only for a group it admitted."""
     if not isinstance(event, dict) or event.get("post_type") != "notice" or event.get("notice_type") != "group_ban":
         return None
     account = str(cfg.napcat["account_id"])
@@ -35,7 +36,10 @@ def notice_body(event, cfg):
         return None
     group = str(event.get("group_id") or "")
     user = str(event.get("user_id") if event.get("user_id") is not None else "")
-    if user not in (account, "0") or cfg.route_for_group(group) is None:
+    if user not in (account, "0") or not group.isdigit():
+        return None
+    refused = admission.cached(("group", group)) if admission is not None else None
+    if refused is not None and not refused.admitted:
         return None
     whole = user == "0"
     body = {"group_id": group, "source": "notice", "muted": event["sub_type"] == "ban", "whole_group": whole}

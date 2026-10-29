@@ -39,7 +39,12 @@ def test_a_mute_notice_about_her_or_the_whole_group_becomes_a_state_report_and_o
     whole = adapter_mutes.notice_body(ban(0, duration=-1), CFG)
     assert whole['whole_group'] is True and whole['muted'] is True and 'until' not in whole
     assert adapter_mutes.notice_body(ban('900000102'), CFG) is None, "someone else's mute is not hers"
-    assert adapter_mutes.notice_body(ban(ACCOUNT, group=fixtures.UNKNOWN_GROUP), CFG) is None, 'not an admitted group'
+    from qqadapter.admission import Admission
+    from qqadapter.journal import Counters
+    asking = Admission(fixtures.FakeCore(), ACCOUNT, Counters())
+    assert adapter_mutes.notice_body(ban(ACCOUNT, group=fixtures.UNKNOWN_GROUP), CFG, asking) is not None, 'not asked: reported'
+    asking.ask(('group', fixtures.UNKNOWN_GROUP))
+    assert adapter_mutes.notice_body(ban(ACCOUNT, group=fixtures.UNKNOWN_GROUP), CFG, asking) is None, 'the core refused it'
     assert adapter_mutes.notice_body({**ban(ACCOUNT), 'notice_type': 'group_recall'}, CFG) is None
 
 

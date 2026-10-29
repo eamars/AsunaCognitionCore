@@ -139,6 +139,9 @@ export class QQBotBridge {
     this.api = null;
     this.status = 'starting';
     this.failures = 0;
+    this.admissions = new Map();                      // conversation (and sender) -> the core's answer and until when
+    this.epoch = null;                                // the core's start those answers belong to
+    this.unsupportedSaid = 0;
   }
 
   async start() {
@@ -275,12 +278,47 @@ export class QQBotBridge {
   }
 
   // ── inbound: messages pushed by the platform ──────────────────────
-  /** The route a message belongs to: the configured route for this conversation, else the one admission names. */
-  routeFor(settings, scope, target) {
-    for (const [id, route] of Object.entries(settings.routes ?? {})) {
-      if (route?.target?.type === scope && route.target.id === target) return id;
+  /**
+   * What the core says about a sender in a conversation of this bot (POST …/admission): its route, or that it is not
+   * admitted, kept for the time the core names (ADR-107). This bridge builds no route id and holds no policy.
+   * Resolves 'away' when the core does not answer now and 'unsupported' when it predates the endpoint: the line waits.
+   */
+  async admission(host, ask, sender) {
+    const conversation = ask.type + ':' + ask.id + ':', key = conversation + (ask.type === 'group' ? sender : '');
+    const now = this.now();
+    for (const name of [conversation, key]) {
+      const kept = this.admissions.get(name);
+      if (kept && kept.until > now && (name === key || !kept.answer.admitted || ask.type === 'dm')) return kept.answer;
     }
-    return 'auto-' + scope + '-' + target;
+    let res, json;
+    try {
+      res = await this.fetch(`${host.url}/v1/channels/${host.channelId}/admission`, { method: 'POST',
+        headers: { authorization: 'Bearer ' + host.token, 'content-type': 'application/json' },
+        body: JSON.stringify({ account_id: host.accountId, asks: [{ conversation: ask,
+          ...(ask.type === 'group' && sender ? { sender_id: sender } : {}) }] }), signal: AbortSignal.timeout(5000) });
+      json = await res.json().catch(() => null);
+    } catch { this.admissions.clear(); return 'away'; }
+    if (res.status === 404 && json?.error === 'UNKNOWN_CHANNEL_ENDPOINT') {
+      if (this.now() - this.unsupportedSaid > 60000) {
+        this.unsupportedSaid = this.now();
+        this.log('admission: the core does not know the admission endpoint; inbound lines wait until a core that does is installed');
+      }
+      return 'unsupported';
+    }
+    if (res.status >= 500 || (res.status === 403 && json?.error === 'CHANNEL_AUTH_REQUIRED')) { this.admissions.clear(); return 'away'; }
+    const answer = json?.answers?.[0];
+    if (res.status !== 200 || !['admitted', 'refused', 'blocked'].includes(answer?.verdict)) {
+      this.log('admission: the core refused the question (' + res.status + ' ' + (json?.error ?? '') + ')');
+      return 'away';
+    }
+    if (json.epoch !== undefined && json.epoch !== this.epoch) { this.admissions.clear(); this.epoch = json.epoch; }
+    const ttl = Number(answer.ttl_seconds);
+    const kept = { admitted: answer.verdict === 'admitted', route_id: answer.route_id ?? null };
+    if (ttl > 0 && ttl <= 3600) {
+      this.admissions.set(!kept.admitted && answer.scope === 'conversation' || ask.type === 'dm' ? conversation : key,
+        { answer: kept, until: this.now() + ttl * 1000 });
+    }
+    return kept;
   }
 
   async receive(scope, d, mentionsMe) {
@@ -308,7 +346,7 @@ export class QQBotBridge {
       ...(d.mentions ?? []).filter(m => !m?.is_you && !m?.bot).map(m => m?.member_openid ?? m?.id).filter(id => OPENID.test(String(id ?? '')))])] : [];
     const occurred = isoOf(d.timestamp);
     const groupName = group ? await this.groupName(group) : null;
-    this.state.pending.push({ route_id: this.routeFor(host.settings, scope, target), account_id: host.accountId,
+    this.state.pending.push({ _ask: { type: scope, id: target }, account_id: host.accountId,
       sender_id: sender, event_id: String(d.id), text, ...(occurred ? { occurred_at: occurred } : {}),
       ...(group ? { group_id: group, mentioned_account_ids: mentions } : {}),
       raw: { ...(peer ? { asuna_peer: peer } : {}), ...(media.length ? { asuna_media: { count: media.length, items: media } } : {}),
@@ -352,12 +390,22 @@ export class QQBotBridge {
       const host = await this.endpoint();
       if (!host?.token) return;
       while (this.state.pending.length) {
-        const item = this.state.pending[0];
+        const { _ask, ...item } = this.state.pending[0];
+        if (!item.route_id) {
+          // Not yet judged: the core names the route, or says the sender is not admitted (the line is dropped).
+          const answer = await this.admission(host, _ask, item.sender_id);
+          if (answer === 'away' || answer === 'unsupported') return;       // the line waits, nothing is dropped
+          if (!answer.admitted) { this.state.pending.shift(); await this.save(); continue; }
+          item.route_id = answer.route_id;
+        }
         const res = await this.fetch(`${host.url}/v1/channels/${host.channelId}/events`, { method: 'POST',
           headers: { authorization: 'Bearer ' + host.token, 'content-type': 'application/json' },
           body: JSON.stringify(item), signal: AbortSignal.timeout(30000) });
         if (res.status >= 500) return;                         // the host is restarting: retry later
-        if (res.status >= 400) this.log('inbound refused (' + res.status + '): ' + (await res.text()).slice(0, 200));
+        if (res.status >= 400) {
+          this.log('inbound refused (' + res.status + '): ' + (await res.text()).slice(0, 200));
+          this.admissions.clear();                             // the core did not take what it said it would
+        }
         this.state.pending.shift();
         await this.save();
       }

@@ -37,12 +37,14 @@ class Platform:
 def test_the_adapter_posts_admitted_groups_only_when_they_changed(tmp_path, monkeypatch):
     import qqadapter.members as module
     monkeypatch.setattr(module, 'GROUP_PAUSE', 0)
-    cfg = SimpleNamespace(route_for_group=lambda g: object() if g == '111111' else None)
+    cfg = SimpleNamespace()
+    core = SimpleNamespace(ask_many=lambda groups: [SimpleNamespace(admitted=g == ('group', '111111'), known=g == ('group', '111111'))
+                                                    for g in groups])
     posted = []
     host = SimpleNamespace(post_members=lambda body: posted.append(body) or SimpleNamespace(kind='accepted'))
     platform = Platform(['111111', '222222'], [{'user_id': 30001, 'nickname': 'a', 'qq_level': 0, 'role': 'member'}])
-    job = Members(cfg, str(tmp_path), platform, host, Counters(), log=lambda _m: None)
+    job = Members(cfg, str(tmp_path), platform, host, Counters(), core, log=lambda _m: None)
     assert job.run() == {'groups': 1, 'posted': 1, 'same': 0, 'failed': 0}
     assert posted[0]['group_id'] == '111111' and posted[0]['members'] == [{'user_id': 30001, 'nickname': 'a', 'role': 'member'}]
-    again = Members(cfg, str(tmp_path), platform, host, Counters(), log=lambda _m: None)
+    again = Members(cfg, str(tmp_path), platform, host, Counters(), core, log=lambda _m: None)
     assert again.run()['same'] == 1 and len(posted) == 1                          # unchanged: not posted again

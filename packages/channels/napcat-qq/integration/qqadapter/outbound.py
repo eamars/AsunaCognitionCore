@@ -659,10 +659,6 @@ class Outbound:
             return
         if not pub or not attempt:
             return
-        if target.get("type") != "request" and                 self.cfg.route_for_target(str(target.get("type") or ""), str(target.get("id") or "")) is None:
-            # a request is answered by its flag: it has no route, and accepting it admits nobody
-            self.report(pub, receipt_payload("failed", attempt, {"reason": "target_not_authorized"}), "target_not_authorized")
-            return
         action, params = self.admin_call(item, self.cfg.napcat["account_id"])
         if action is None:
             self.report(pub, receipt_payload("failed", attempt, {"reason": params}), params)
@@ -718,15 +714,11 @@ class Outbound:
         """A poke or a reaction: one platform call; the receipt carries no message id (none is made)."""
         pub = str(item.get("publication_id") or "")
         attempt = str(item.get("attempt_id") or "")
-        target = item.get("target") or {}
         self.counters.inc("action_claims")
         if stopping:
             self.report(pub, receipt_payload("unknown", attempt, {"reason": "adapter_stopping_before_send"}), "stopping")
             return
         if not pub or not attempt:
-            return
-        if self.cfg.route_for_target(str(target.get("type") or ""), str(target.get("id") or "")) is None:
-            self.report(pub, receipt_payload("failed", attempt, {"reason": "target_not_authorized"}), "target_not_authorized")
             return
         action, params = self.action_call(item)
         if action is None:
@@ -772,10 +764,9 @@ class Outbound:
             self.counters.inc("outbox_shape_reject")
             self.log("OUTBOX_SHAPE pub=%s missing publication_id/attempt_id" % pub)
             return
-        route = self.cfg.route_for_target(ttype, tid)
-        if route is None:
-            # covers a group target outside adapter.allowed_group_ids as well as
-            # an unknown target.type: nothing is sent, the host gets a real failed
+        if ttype not in ("dm", "group") or not tid.isdigit():
+            # nothing is sent to a target this adapter has no way to address: the host gets a real failed. Whether the
+            # target is admitted is the core's (it hands out only what it routes)
             self.counters.inc("outbox_target_reject")
             self.report(pub, receipt_payload("failed", attempt,
                                             {"reason": "target_not_authorized", "target_type": ttype, "target_id": tid}),

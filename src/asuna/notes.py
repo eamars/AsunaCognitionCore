@@ -140,7 +140,7 @@ def count_sent(store, episode):
     return View(store, COLLECTION, fenced(dict(NO_QUESTION), {'from_episode': (episode, is_text)})).count()
 
 
-def count_day(store, persona, since, *, from_scene=ANY, to_scene=ANY, trust=ANY, kind=ANY, between=None):
+def count_day(store, persona, since, *, from_scene=ANY, to_scene=ANY, trust=ANY, kind=ANY, between=ANY):
     """How many of a persona's notes since `since` (ISO text) are not replies, from and to these conversations, of
     this trust and kind; `between`: (a, b), from either one to the other."""
     if not is_text(since):
@@ -149,8 +149,8 @@ def count_day(store, persona, since, *, from_scene=ANY, to_scene=ANY, trust=ANY,
                           {'persona': (persona, is_text), 'from_scene': (from_scene, is_text),
                            'to_scene': (to_scene, is_text)}),
                    {'trust': (trust, is_text), 'kind': (kind, is_text), 'reply_to': (None, is_text)})
-    if where is not None and between is not None:
-        a, b = between
+    if where is not None and between is not ANY:
+        a, b = between if isinstance(between, (list, tuple)) and len(between) == 2 else (None, None)
         pair = Or({'from_scene': a, 'to_scene': b}, {'from_scene': b, 'to_scene': a})
         where = And(where, pair) if is_text(a) and is_text(b) else None
     return View(store, COLLECTION, where).count()

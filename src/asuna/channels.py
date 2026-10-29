@@ -187,7 +187,7 @@ def reply_parent(store, scene, reply, at=None, *, outbound_author=None):
     ceiling = moment(at) or clock.now()
     undated = datetime.min.replace(tzinfo=timezone.utc)
     candidates = message_records.by_platform_id(store, scene['_id'], scene['policy_epoch'], platform_id=reply,
-                                                author=outbound_author or None).rows()
+                                                **({'author': outbound_author} if outbound_author else {})).rows()
     eligible = []
     for row in candidates:
         field = 'occurred_at' if row['direction'] == 'inbound' else 'receipt_at'
@@ -613,7 +613,8 @@ class Channels:
                 files = True if lane == 'bulk' else (
                     False if lane == 'chat' and outbound_files.CAPABILITY in (supports or ()) else None)
                 # a route key claims only its own line's words (ADR-033)
-                queued = message_records.queued(self.store, channel_id, files=files, target=target or None)
+                queued = message_records.queued(self.store, channel_id, files=files,
+                                                **({'target': target} if target else {}))
                 row = self._next(channel_id, queued, chat=lane != 'bulk')
                 if row:
                     try:

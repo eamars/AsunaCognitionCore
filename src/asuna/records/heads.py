@@ -65,10 +65,13 @@ def with_prefix(store, *prefixes):
     return _heads(store, {'_id': StartsWith(*prefixes)} if prefixes else None)
 
 
-def heads(store, ids=None, *, scope=ANY, scopes=None, by=()):
+def heads(store, ids=ANY, *, scope=ANY, scopes=ANY, by=()):
     """View: the heads with these ids, or of this scope or one of these, ordered by `by`."""
-    where = {} if ids is None else {'_id': AnyOf(texts(ids))}
-    if scopes is not None:
+    listed = (list, tuple, set)
+    if not (ids is ANY or isinstance(ids, listed)) or not (scopes is ANY or isinstance(scopes, listed)):
+        return _heads(store, None, by)
+    where = {} if ids is ANY else {'_id': AnyOf(texts(ids))}
+    if scopes is not ANY:
         where['scope_key'] = AnyOf(texts(scopes))
     return _heads(store, fenced(where, {'scope_key': (scope, is_text)}), by)
 

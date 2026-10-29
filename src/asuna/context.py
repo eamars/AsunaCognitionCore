@@ -412,7 +412,7 @@ class ContextBuilder:
         source = message_records.get(self.store, 'in-' + episode_id(event))
         # Newly accepted/future queued inputs must not enter an earlier turn.
         history_said = message_records.said(self.store, scene['_id'], scene['policy_epoch'],
-                                             heard_before=source['scene_seq'] if source else None)
+                                             **({'heard_before': source['scene_seq']} if source else {}))
         history_projection={'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1,
             'platform_reply_to':1,'event.group_context':1,'scene_seq':1,'episode_id':1,'received_at':1,'receipt_at':1,
             'attachment':1,'attachment_skipped':1,   # 附件位：只多带这两个小字段，字节仍在 BlobStore

@@ -6,6 +6,7 @@ missing id or scope finds nothing. `next_seq` is the conversation's position cou
 revisioned write (`Store.put`). The other writes each change one mark of the record.
 """
 from ..store.words import AnyOf, Exists, Increase, Larger, Not, Set, Unset
+from .view import ANY, pinned
 
 COLLECTION = 'scenes'
 MEMBERSHIP_DENIED = 'SCENE_MEMBERSHIP_DENIED: 这个人不在这个对话的成员里（或对话已经不在），这一步不能代他做；重试也一样'
@@ -19,6 +20,10 @@ def _text(value):
     return isinstance(value, str) and bool(value)
 
 
+def _number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
 # Reads.
 
 def get(store, scene_id, fields=None):
@@ -26,13 +31,13 @@ def get(store, scene_id, fields=None):
     return _rows(store).get(scene_id, fields) if _text(scene_id) else None
 
 
-def by_scope(store, scope_key, *, kind=None, epoch=None, fields=None):
-    """A conversation of this scope (of this kind, at this epoch), or None."""
-    if not _text(scope_key):
+def by_scope(store, scope_key, *, kind=ANY, epoch=ANY, fields=None):
+    """A conversation of this scope (of this kind; at this epoch, a fence: None finds nothing), or None."""
+    if not _text(scope_key) or not (epoch is ANY or _number(epoch)):
         return None
-    where = {'scope_key': scope_key, **({'kind': kind} if kind is not None else {}),
-             **({'policy_epoch': epoch} if epoch is not None else {})}
-    return next(_rows(store).find(where, fields=fields, limit=1), None)
+    where = pinned({'scope_key': scope_key, **({'policy_epoch': epoch} if epoch is not ANY else {})},
+                   {'kind': (kind, _text)})
+    return None if where is None else next(_rows(store).find(where, fields=fields, limit=1), None)
 
 
 def of_kind(store, kind, *, besides=None, fields=None):
@@ -41,10 +46,11 @@ def of_kind(store, kind, *, besides=None, fields=None):
     return list(_rows(store).find(where, fields=fields))
 
 
-def many(store, scene_ids, *, kind=None, fields=None):
+def many(store, scene_ids, *, kind=ANY, fields=None):
     """The conversations with these ids (of this kind)."""
     ids = [scene_id for scene_id in scene_ids if _text(scene_id)]
-    return list(_rows(store).find({'_id': AnyOf(ids), **({'kind': kind} if kind is not None else {})}, fields=fields))
+    where = pinned({'_id': AnyOf(ids)}, {'kind': (kind, _text)})
+    return [] if where is None else list(_rows(store).find(where, fields=fields))
 
 
 def in_scopes(store, scope_keys, fields=None):

@@ -60,7 +60,7 @@ def pending(store, scene_ids, moment, persona=None):
                 # a task result or a due plan answers nobody's wait
                 after = message_records.inbound(
                     store, scene_id, after=line.get('scene_seq') or 0, people_only=True,
-                    authors=(people.authors_of(person, [scene_id]) or [person]) if person is not None else None,
+                    **({'authors': people.authors_of(person, [scene_id]) or [person]} if person is not None else {}),
                     by=None)
                 if not after.first(fields=['_id']):
                     found.append({'scene_id': scene_id, 'person': person, 'doc': doc, 'at': line.get('receipt_at'),

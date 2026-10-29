@@ -258,8 +258,9 @@ def _group_answers(store, source, line):
     ids = [row['_id'] for row in mine]
     platform = [row['platform_message_id'] for row in mine if row.get('platform_message_id')]
     # the program's lines answer nothing
+    until = source.get('until')
     return message_records.inbound(store, source['scene_id'], people_only=True, after=line.get('scene_seq') or 0,
-                                   until=source.get('until') or None, answers_to=(ids, platform)).rows()
+                                   **({'until': until} if until else {}), answers_to=(ids, platform)).rows()
 
 
 def told_many(told):

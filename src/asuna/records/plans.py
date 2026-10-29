@@ -32,26 +32,36 @@ def get(store, plan_id, fields=None, *, scene=ANY, scope=ANY, person=ANY, epoch=
     return _view(store, fenced({'_id': plan_id}, _fences(scene, scope, person, epoch))).first(fields=fields)
 
 
-def in_status(store, *, status=ANY, statuses=None, kinds=None):
+def _listed(values):
+    return isinstance(values, (list, tuple, set))
+
+
+def in_status(store, *, status=ANY, statuses=ANY, kinds=ANY):
     """View: the plans in a status (None: none) or one of several (of these kinds)."""
+    if not (statuses is ANY or _listed(statuses)) or not (kinds is ANY or _listed(kinds)):
+        return _view(store, None)
     where = {}
-    if statuses is not None:
+    if statuses is not ANY:
         where['status'] = AnyOf(list(statuses))
-    if kinds is not None:
+    if kinds is not ANY:
         where['kind'] = AnyOf(texts(kinds))
     return _view(store, pinned(where, {'status': (status, is_text)}))
 
 
 def due(store, until, *, not_kinds):
     """View: the active plans due by `until` (ISO text), not of these kinds."""
+    if not is_text(until):
+        return _view(store, None)
     return _view(store, {'status': 'ACTIVE', 'next_fire_at': Range(lte=until), 'kind': NoneOf(texts(not_kinds))})
 
 
-def of_conversation(store, scene_id, *, scope=ANY, person=ANY, epoch=ANY, statuses=None, not_kinds=None,
+def of_conversation(store, scene_id, *, scope=ANY, person=ANY, epoch=ANY, statuses=ANY, not_kinds=None,
                     by='created_at'):
     """View: a conversation's plans (of a scope, person and epoch; in these statuses; not of these kinds), in the
     order they were created."""
-    where = {} if statuses is None else {'status': AnyOf(list(statuses))}
+    if not (statuses is ANY or _listed(statuses)):
+        return _view(store, None)
+    where = {} if statuses is ANY else {'status': AnyOf(list(statuses))}
     if not_kinds is not None:
         where['kind'] = NoneOf(texts(not_kinds))
     return _view(store, fenced(where, _fences(scene_id, scope, person, epoch)), by)

@@ -44,16 +44,22 @@ def sink_get(store, receipt_id, fields=None):
     return store.collection(SINKS).get(receipt_id, fields) if is_text(receipt_id) else None
 
 
-def sinks(store, receipt_ids=None):
-    """View: the sink receipts with these ids (None: every one)."""
-    return View(store, SINKS, {} if receipt_ids is None else {'_id': AnyOf(texts(receipt_ids))})
+def sinks(store, receipt_ids=ANY):
+    """View: the sink receipts with these ids (not given: every one)."""
+    if receipt_ids is ANY:
+        return View(store, SINKS, {})
+    if not isinstance(receipt_ids, (list, tuple, set)):
+        return View(store, SINKS, None)
+    return View(store, SINKS, {'_id': AnyOf(texts(receipt_ids))})
 
 
-def sink_of_kind(store, kind, *, state=ANY, states=None, project=ANY, besides=None, by=None):
+def sink_of_kind(store, kind, *, state=ANY, states=ANY, project=ANY, besides=None, by=None):
     """View: the sink receipts of a kind (in a state or one of several; of a project, None: of none; but one),
     ordered by `by` (None: the database's order)."""
     where = {}
-    if states is not None:
+    if states is not ANY:
+        if not isinstance(states, (list, tuple, set)):
+            return View(store, SINKS, None)
         where['state'] = AnyOf(list(states))
     if besides is not None:
         where['_id'] = Not(besides)
@@ -61,10 +67,12 @@ def sink_of_kind(store, kind, *, state=ANY, states=None, project=ANY, besides=No
                                              'project': (project, is_text)}), ((by, 1),) if by else ())
 
 
-def sink_window(store, *, gte=None, lte=None, lt=None):
-    """View: the sink receipts received within these bounds (text times as the core writes them), ordered by when
-    they were received, then by id."""
-    bounds = {name: value for name, value in (('gte', gte), ('lte', lte), ('lt', lt)) if value is not None}
+def sink_window(store, *, gte=ANY, lte=ANY, lt=ANY):
+    """View: the sink receipts received within these bounds (text times as the core writes them; a bound given None
+    holds nothing), ordered by when they were received, then by id."""
+    bounds = {name: value for name, value in (('gte', gte), ('lte', lte), ('lt', lt)) if value is not ANY}
+    if not all(is_text(value) for value in bounds.values()):
+        return View(store, SINKS, None, (('received_at', 1), ('_id', 1)))
     return View(store, SINKS, {'received_at': Range(**bounds)} if bounds else {},
                 (('received_at', 1), ('_id', 1)))
 

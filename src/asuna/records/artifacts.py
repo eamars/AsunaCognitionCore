@@ -30,11 +30,13 @@ def _view(store, where, by=()):
     return View(store, COLLECTION, where, tuple((path, 1) for path in by))
 
 
-def _where(where, *, fences=None, pins=None, scopes=None):
+def _where(where, *, fences=None, pins=None, scopes=ANY):
     """`where` with its fences, its scopes (an any-of, when given) and its value conditions, or None when one of them
-    holds nothing."""
+    holds nothing (scopes given None included)."""
     where = fenced(where, fences or {})
-    if where is not None and scopes is not None:
+    if where is not None and scopes is not ANY:
+        if not isinstance(scopes, (list, tuple, set)):
+            return None
         where['scope_key'] = AnyOf(texts(scopes))
     return pinned(where, pins or {}) if where is not None else None
 
@@ -51,19 +53,19 @@ def _pins(kind=ANY, state=ANY, storage=ANY, tool=ANY):
 
 # Single records.
 
-def get(store, artifact_id, fields=None, *, kind=ANY, state=ANY, storage=ANY, task=ANY, revision=ANY, scopes=None):
+def get(store, artifact_id, fields=None, *, kind=ANY, state=ANY, storage=ANY, task=ANY, revision=ANY, scopes=ANY):
     """The row with this id (of this kind, in this state and storage; of this task and its revision; in one of these
     scopes), or None."""
     if not is_text(artifact_id):
         return None
-    if scopes is None and all(value is ANY for value in (kind, state, storage, task, revision)):
+    if scopes is ANY and all(value is ANY for value in (kind, state, storage, task, revision)):
         return store.collection(COLLECTION).get(artifact_id, fields)
     where = _where({'_id': artifact_id}, fences=_fences(task=task, revision=revision), pins=_pins(kind, state, storage),
                    scopes=scopes)
     return _view(store, where).first(fields=fields)
 
 
-def by_content(store, sha256, kind, *, scope=ANY, scopes=None, state=ANY, storage=ANY, source=ANY, by=(),
+def by_content(store, sha256, kind, *, scope=ANY, scopes=ANY, state=ANY, storage=ANY, source=ANY, by=(),
                newest_first=False, fields=None):
     """The first row holding these bytes (their sha256) of a kind (in this scope or one of these; in this state and
     storage; listing this source), by `by` (`newest_first` turns it); None when there is none."""
@@ -92,9 +94,11 @@ def by_ids(store, artifact_ids, *, storage=ANY):
     return _view(store, _where({'_id': AnyOf(texts(artifact_ids))}, pins=_pins(storage=storage)))
 
 
-def of_task(store, task_id, revision, *, state=ANY, states=None):
+def of_task(store, task_id, revision, *, state=ANY, states=ANY):
     """View: the rows of a task's revision (its tool records) in this state or one of these."""
-    where = {} if states is None else {'state': AnyOf(list(states))}
+    if not (states is ANY or isinstance(states, (list, tuple, set))):
+        return _view(store, None)
+    where = {} if states is ANY else {'state': AnyOf(list(states))}
     return _view(store, _where(where, fences=_fences(task=task_id, revision=revision), pins=_pins(state=state)))
 
 
@@ -103,7 +107,7 @@ def of_tasks(store, task_ids):
     return _view(store, {'task_id': AnyOf(texts(task_ids))})
 
 
-def of_kind(store, kind, *, state=ANY, storage=ANY, scope=ANY, scopes=None, source=ANY, by=()):
+def of_kind(store, kind, *, state=ANY, storage=ANY, scope=ANY, scopes=ANY, source=ANY, by=()):
     """View: the rows of a kind (in this state and storage; in this scope or one of these; listing this source),
     ordered by `by`."""
     where = {}
@@ -131,7 +135,7 @@ def admission(store, kind, channel_id, state, *, claimed_since=ANY, by=()):
     return _view(store, _where(where, fences=_fences(channel=channel_id), pins=_pins(kind=kind, state=state)), by)
 
 
-def kept(store, kind, *, stored=False, state=ANY, ref=ANY, scopes=None):
+def kept(store, kind, *, stored=False, state=ANY, ref=ANY, scopes=ANY):
     """View: the kept rows of a kind (`stored`: whose bytes are in the blob store; in this state; of this ref; in one
     of these scopes)."""
     where = {'kept_at': Exists(True)}

@@ -54,11 +54,11 @@ def thread_message(store, message_id, *, sender=ANY):
 
 # Views.
 
-def many(store, task_ids, *, states=None):
+def many(store, task_ids, *, states=ANY):
     """View: the tasks with these ids (in these states)."""
     where = {'_id': AnyOf(texts(task_ids))}
-    if states is not None:
-        where['state'] = AnyOf(list(states))
+    if states is not ANY:
+        where = {**where, 'state': AnyOf(list(states))} if isinstance(states, (list, tuple, set)) else None
     return _view(store, where)
 
 
@@ -94,16 +94,16 @@ def awaiting_feedback(store, finished, taken):
 
 def lease_expired(store, moment):
     """View: the running tasks whose lease expired before `moment` (seconds since the epoch)."""
-    return _view(store, {'state': 'RUNNING', 'lease_expires_at': Range(lt=moment)})
+    return _view(store, {'state': 'RUNNING', 'lease_expires_at': Range(lt=moment)} if is_number(moment) else None)
 
 
-def paused(store, reason, *, states=None, since=None):
+def paused(store, reason, *, states=ANY, since=ANY):
     """View: the paused tasks paused for `reason` (that were in these states; paused since a time)."""
     where = {'state': 'PAUSED'}
-    if states is not None:
-        where['paused_state'] = AnyOf(list(states))
-    if since is not None:
-        where['paused_at'] = Range(gte=since)
+    if states is not ANY:
+        where = {**where, 'paused_state': AnyOf(list(states))} if isinstance(states, (list, tuple, set)) else None
+    if where is not None and since is not ANY:
+        where = {**where, 'paused_at': Range(gte=since)} if is_text(since) else None
     return _view(store, pinned(where, {'pause_reason': (reason, is_text)}))
 
 
@@ -112,14 +112,17 @@ def of_conversations(store, scene_ids, by=None):
     return _view(store, {'scene_id': AnyOf(texts(scene_ids))}, by)
 
 
-def created(store, since, *, until=None, scenes=None, besides=None, by=None):
+def created(store, since, *, until=ANY, scenes=ANY, besides=None, by=None):
     """View: the tasks created since a time (before `until`; of these conversations, an empty list being those of
     none; not of `besides`)."""
-    window = Range(gte=since, lt=until) if until is not None else Range(gte=since)
+    if not is_text(since) or not (until is ANY or is_text(until)) or not (
+            scenes is ANY or isinstance(scenes, (list, tuple, set))):
+        return _view(store, None)
+    window = Range(gte=since, lt=until) if until is not ANY else Range(gte=since)
     parts = [{'created_at': window}]
     if besides is not None:
         parts.append({'scene_id': NoneOf(texts(besides))})
-    if scenes is not None:
+    if scenes is not ANY:
         ids = texts(scenes)
         parts.append({'scene_id': AnyOf(ids)} if ids else pinned({}, {'scene_id': (None, is_text)}))
     return _view(store, parts[0] if len(parts) == 1 else And(*parts), by)
@@ -132,7 +135,7 @@ def of_episode(store, episode_id):
 
 def finished_since(store, since, fields=None):
     """A task that finished after a time, or None."""
-    return _view(store, {'finished_at': Range(gt=since)}).first(fields=fields)
+    return _view(store, {'finished_at': Range(gt=since)} if is_text(since) else None).first(fields=fields)
 
 
 def of_scope(store, scope_key, fields=None):

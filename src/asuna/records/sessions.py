@@ -29,10 +29,12 @@ def get(store, session_id, fields=None, *, native=False):
     return _view(store, {'_id': session_id, 'native_host': True}).first(fields=fields)
 
 
-def native(store, session_ids=None, *, lane=ANY, besides_scene=None):
+def native(store, session_ids=ANY, *, lane=ANY, besides_scene=None):
     """View: the sessions the native Host binds (these ids; of a lane; not of a conversation)."""
     where = {}
-    if session_ids is not None:
+    if session_ids is not ANY:
+        if not isinstance(session_ids, (list, tuple, set)):
+            return _view(store, None)
         where['_id'] = AnyOf(texts(session_ids))
     where['native_host'] = True
     if besides_scene is not None:

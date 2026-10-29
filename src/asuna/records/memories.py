@@ -39,12 +39,15 @@ def _pairs(pairs):
     return Or(*branches) if branches else None
 
 
-def _where(where, *, pairs=None, fences=None, pins=None):
-    """`where` with its fences, value conditions and pairs, or None when one of them holds nothing."""
+def _where(where, *, pairs=ANY, fences=None, pins=None):
+    """`where` with its fences, value conditions and pairs, or None when one of them holds nothing (pairs given None
+    included)."""
     where = fenced(where, fences or {})
     where = pinned(where, pins or {}) if where is not None else None
-    if where is None or pairs is None:
+    if where is None or pairs is ANY:
         return where
+    if not isinstance(pairs, (list, tuple, set)):
+        return None
     either = _pairs(pairs)
     if either is None:
         return None
@@ -63,17 +66,19 @@ def _pins(kind=ANY, status=ANY, source=ANY, epistemic=ANY):
 
 # Single records.
 
-def get(store, memory_id, fields=None, *, pairs=None, scope=ANY, epoch=ANY, episode=ANY, character=ANY, kind=ANY,
-        kinds=None, status=ANY, erased=ANY):
+def get(store, memory_id, fields=None, *, pairs=ANY, scope=ANY, epoch=ANY, episode=ANY, character=ANY, kind=ANY,
+        kinds=ANY, status=ANY, erased=ANY):
     """The memory with this id (in these (scope, epoch) pairs; of this scope, epoch, turn, character; of this kind or
     one of these; in this status; `erased=False`: not a tombstone), or None."""
     if not is_text(memory_id):
         return None
-    if pairs is None and kinds is None and erased is ANY and all(
+    if pairs is ANY and kinds is ANY and erased is ANY and all(
             value is ANY for value in (scope, epoch, episode, character, kind, status)):
         return store.collection(COLLECTION).get(memory_id, fields)
     where = {'_id': memory_id}
-    if kinds is not None:
+    if kinds is not ANY:
+        if not isinstance(kinds, (list, tuple, set)):
+            return None
         where['kind'] = AnyOf(texts(kinds))
     if erased is not ANY:
         where['status'] = Not(ERASED) if erased is False else ERASED
@@ -92,7 +97,7 @@ def summary_of(store, source_id, *, scope, epoch, fields=None):
 
 # Views.
 
-def many(store, memory_ids, *, pairs=None, scope=ANY, character=ANY, kind=ANY, status=ANY):
+def many(store, memory_ids, *, pairs=ANY, scope=ANY, character=ANY, kind=ANY, status=ANY):
     """View: the memories with these ids (in these (scope, epoch) pairs; of this scope and character; of this kind; in
     this status)."""
     return _view(store, _where({'_id': AnyOf(texts(memory_ids))}, pairs=pairs,
@@ -105,10 +110,12 @@ def readable(store, pairs, *, character=ANY, kind=ANY, by=()):
                                pins=_pins(kind=kind)), by)
 
 
-def of_kind(store, kind, *, scope=ANY, scopes=None, character=ANY, source=ANY, status=ANY, by=()):
+def of_kind(store, kind, *, scope=ANY, scopes=ANY, character=ANY, source=ANY, status=ANY, by=()):
     """View: the memories of a kind (in a scope or one of these; of this character; from this source, as where a
     thought came from; in this status), ordered by `by`."""
-    where = {} if scopes is None else {'scope_key': AnyOf(texts(scopes))}
+    if not (scopes is ANY or isinstance(scopes, (list, tuple, set))):
+        return _view(store, None)
+    where = {} if scopes is ANY else {'scope_key': AnyOf(texts(scopes))}
     return _view(store, _where(where, fences=_fences(scope=scope, character=character),
                                pins=_pins(kind=kind, status=status, source=source)), by)
 

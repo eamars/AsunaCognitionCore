@@ -105,7 +105,7 @@ def rows(store, kind, *, since=ANY, status=ANY, min_score=ANY):
     if where is not None and status is not ANY:
         where['status'] = status
     if where is not None and min_score is not ANY:
-        where['score'] = Range(gte=min_score)
+        where = {**where, 'score': Range(gte=min_score)} if isinstance(min_score, (int, float)) else None
     return View(store, COLLECTION, where)
 
 

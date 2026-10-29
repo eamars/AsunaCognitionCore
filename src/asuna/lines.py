@@ -72,7 +72,7 @@ def _unseen(store, scene_id, shown=None):
     after = mine['scene_seq'] if mine else None
     if shown is not None:
         after = max(shown, shown if after is None else after)
-    return message_records.inbound(store, scene_id, asides=True, after=after)
+    return message_records.inbound(store, scene_id, asides=True, **({'after': after} if after is not None else {}))
 
 
 def asides_full(store):

@@ -406,7 +406,7 @@ def of_identity(store, collection, persona, origin, source_identity):
     return View(store, collection, where).first()
 
 
-def events_of(store, persona, *, ids=ANY, scopes_besides=None, prefix=None, by=None):
+def events_of(store, persona, *, ids=ANY, scopes_besides=None, prefix=ANY, by=None):
     """View: a persona's events (of these ids; whose source scope is none of `scopes_besides`; whose id starts with
     `prefix`), ordered by `by` (none: the database's order)."""
     where = fenced({}, {'persona': (persona, is_text)})
@@ -414,7 +414,7 @@ def events_of(store, persona, *, ids=ANY, scopes_besides=None, prefix=None, by=N
         where['_id'] = AnyOf([value for value in ids if is_text(value)])
     if where is not None and scopes_besides is not None:
         where['source_scope'] = NoneOf(list(scopes_besides))
-    if where is not None and prefix is not None:
+    if where is not None and prefix is not ANY:
         where = {**where, '_id': StartsWith(prefix)} if is_text(prefix) else None
     return View(store, EVENTS, where, ((by, 1),) if by else ())
 

@@ -38,11 +38,11 @@ def get(store, episode_id, fields=None, *, persona=ANY, scene=ANY, scope=ANY, pe
     return _view(store, where).first(fields=fields)
 
 
-def many(store, episode_ids, *, states=None):
+def many(store, episode_ids, *, states=ANY):
     """View: the turns with these ids (in these states)."""
     where = {'_id': AnyOf(texts(episode_ids))}
-    if states is not None:
-        where['state'] = AnyOf(list(states))
+    if states is not ANY:
+        where = {**where, 'state': AnyOf(list(states))} if isinstance(states, (list, tuple, set)) else None
     return _view(store, where)
 
 
@@ -61,12 +61,12 @@ def of_source(store, source_event_id, *, kind=ANY, scene=ANY, fields=None):
     return _view(store, where).first(fields=fields)
 
 
-def of_kind(store, kind, *, scenes=None):
+def of_kind(store, kind, *, scenes=ANY):
     """View: the turns of a kind (in these conversations)."""
-    if not is_text(kind):
+    if not is_text(kind) or not (scenes is ANY or isinstance(scenes, (list, tuple, set))):
         return _view(store, None)
     where = {'episode_kind': kind}
-    if scenes is not None:
+    if scenes is not ANY:
         where['scene_id'] = AnyOf(texts(scenes))
     return _view(store, where)
 

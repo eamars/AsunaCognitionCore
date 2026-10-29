@@ -61,7 +61,7 @@ def on(store, *, kind=ANY, scene_id=ANY, person_id=ANY, moment=None):
 
 def changed(store, persona, since, moment):
     """A persona's switches that ended after `since` (ISO text) and by `moment`: run out, or cleared by her."""
-    where = fenced({}, {'persona': (persona, is_text)})
+    where = fenced({}, {'persona': (persona, is_text)}) if is_text(since) else None
     if where is not None:
         where = And(where, Or({'state': 'on', 'until': Range(lte=moment.isoformat(), gt=since)},
                               {'state': 'cleared', 'cleared_at': Range(gt=since)}))

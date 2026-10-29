@@ -439,7 +439,8 @@ def check_fields(fields):
         return None
     left_out = isinstance(fields, Without)
     paths = fields.paths if left_out else fields
-    if isinstance(paths, str) or not all(isinstance(p, str) and p and all(p.split('.')) for p in paths):
+    # A dict (MongoDB's projection) would be read as the list of its keys, {'embedding': 0} as "embedding only".
+    if isinstance(paths, (str, Mapping)) or not all(isinstance(p, str) and p and all(p.split('.')) for p in paths):
         raise QueryInvalid('QUERY_FIELDS_FORM: 要返回的字段写成字段名的列表（给的是 %s）' % _shown(fields))
     paths = list(dict.fromkeys(paths))
     if left_out and (not paths or '_id' in paths):

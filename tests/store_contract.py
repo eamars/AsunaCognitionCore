@@ -331,6 +331,8 @@ class TestO:
             '_id': 'a', 'name': 'Alpha', 'meta': {'kind': 'k1'}, 'loose': {'deep': 1}}
         assert list(t.find({'_id': 'd'}, fields=['name'])) == [{'_id': 'd'}]
         refused(QueryInvalid, lambda: t.find({}, fields=['meta', 'meta.kind']), 'QUERY_FIELDS_FORM')
+        refused(QueryInvalid, lambda: t.find({}, fields={'tags': 0}), 'QUERY_FIELDS_FORM')
+        refused(QueryInvalid, lambda: t.get('a', fields={'name': 1}), 'QUERY_FIELDS_FORM')
 
     def test_O08_fields_left_out(self, store):
         t = things(store)

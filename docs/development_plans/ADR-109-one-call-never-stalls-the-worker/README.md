@@ -84,7 +84,9 @@ spun is the digest.
 **D1. History and the digest run in a child process, with a deadline and a kill.**
 
 A new child kind `data`, supervised by `media_children.Child`, runs `query_authorized_history` and
-`digest_authorized_discussion` (`HistoryQueryService.query_for_task`, `DiscussionDigestService.digest_for_task`).
+`digest_authorized_discussion` whenever it can open the database itself (a built-in server adapter: MongoDB). A job
+on an in-process database, or on an adapter loaded from a database package, runs in the worker as before: the first
+lives only there, the second is loaded only there (`HistoryQueryService.query_for_task`, `DiscussionDigestService.digest_for_task`).
 Validation before and after the body stays in the worker, as today (both tools run without the effects lock and
 re-check `service.valid` after the body, `tasks.py:820-832`).
 
@@ -116,8 +118,9 @@ re-check `service.valid` after the body, `tasks.py:820-832`).
   its own budget (no background start, which would queue on the same lock).
 - *Changes to `media_children.Child`*: a `tries` setting (1 for `data`; voice and video keep 2), a lock-wait limit
   separate from the budget, `Busy` for a job that waited out the lock-wait limit (distinct from `Timeout`), and `data`
-  and `tools` in `lane_faults.LANES` (`lane_faults.py:22`) and `FAULT_LANES` (`media_children.py:39`), without which
-  their faults are refused and lost.
+  and `tools` in `lane_faults.LANES` (`lane_faults.py:22`) and `FAULT_LANES` (`media_children.py:39`); without the
+  second, the Host's fault thread fails with a KeyError and the fault is lost (`lane_faults.record` itself does not
+  check the list; the adapter's `receive` does).
 - *What she reads*: the three outcomes come back as a result carrying `error`, the form `failure_words` closes FAILED
   (`tasks.py:918-922`), so her next call is a new call and never `TOOL_DELIVERY_UNKNOWN` (`tasks.py:772-774`).
 
@@ -125,7 +128,11 @@ re-check `service.valid` after the body, `tasks.py:820-832`).
   |---|---|
   | past the deadline | `QUERY_TIMEOUT: 这次查询超过 30 秒被停下了，没有结果；把范围收窄（时间窗、人、话题、limit）再试` |
   | the child busy or starting past its wait | `QUERY_BUSY: 做查询的后台程序这会儿腾不出来，这次没有结果；过一会儿再试` |
-  | the child will not start | `QUERY_UNAVAILABLE: 做这次查询的后台程序这会儿没起来，这次没有结果；过一会儿再试` |
+  | the child will not start, has stopped with the Host, or died in the job | `QUERY_UNAVAILABLE: 做这次查询的后台程序这会儿没起来，这次没有结果；过一会儿再试` |
+
+  An error of the child's own code (not of the job) is a `program` answer: the call fails as any tool fault does
+  (`TOOL_FAULT`, `native_worker.py:1537-1548`), with the traceback's tail, redacted as every recorded traceback is,
+  in the evidence record `host.data_program_error`.
 
 **D2. No body holds the effects lock across a wait outside the process or an unbounded walk.**
 - `persona_job_run` joins the set that runs without the lock and re-checks `service.valid` after the body

@@ -721,7 +721,7 @@ A task's tools are fixed when she hands it over (`src/asuna/coordinator.py` `Coo
 
 - `ask_character` asks her for a judgment and waits for her answer; `report_progress` leaves her a note without waiting. Neither creates a public reply, a task or a grant.
 - `list_files` walks the task folder up to 2,000 entries (files and folders) and lists the files it found, sorted by path; when the folder has more, its answer also has `limited`, in words (`tasks.py` `LIST_FILES_MOST`).
-- History search and the discussion digest run in the data child ([Process layout](#process-layout)): 30 seconds a call, a call at a time, at most 30 seconds behind another call or the child's start. A call that did not run to its end is `FAILED` with one of these (`src/asuna/data_children.py`):
+- History search and the discussion digest run in the data child ([Process layout](#process-layout)): 30 seconds a call, a call at a time, at most 30 seconds behind another call or the child's start. On a database the child cannot open itself (an in-process one, or an adapter loaded from a database package) they run in the worker, without these limits. A call that did not run to its end is `FAILED` with one of these (`src/asuna/data_children.py`):
 
 | Case | Words |
 |---|---|

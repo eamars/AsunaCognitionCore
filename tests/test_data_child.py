@@ -110,6 +110,49 @@ def test_a_result_that_is_not_json_comes_back_converted_with_its_evidence(world,
     assert evidence.records == [('retrieval.selection', {'at': str(when)})], 'recorded by the worker, once'
 
 
+def test_a_database_the_child_cannot_open_runs_its_jobs_here(world, monkeypatch):
+    """An in-process database lives only in the worker, and an adapter from a database package is loaded only there:
+    with a child running, their jobs still run in this process; a built-in server adapter goes to the child."""
+    from asuna.store import adapters
+    assert data_children.reachable({**world.config, adapters.SETTING: 'mongodb'}) is True
+    assert data_children.reachable({**world.config, adapters.SETTING: 'memory'}) is False
+    monkeypatch.setattr(adapters, 'module', lambda settings: SimpleNamespace(KIND='from-a-package'))
+    assert data_children.reachable(world.config) is False
+    monkeypatch.undo()
+
+    class Untouched:
+        def call(self, *a, **k):
+            raise AssertionError('the child was asked for an in-process database')
+    data_children.DATA = Untouched()
+    try:
+        task = seeded(world)
+        result = data_children.run(HISTORY_TOOL_NAME, task, dict(WINDOW), world.config, world.name, Recorded())
+    finally:
+        data_children.DATA = None
+    assert [hit['message_id'] for hit in result['hits']] == ['line-1']
+
+
+def test_a_program_error_reaches_the_evidence_and_her_words_without_credentials(world, monkeypatch):
+    from asuna.media_children import JobError
+    secret = 'mongodb://reader:pa55word@db.example.invalid/'
+    config = {**world.config, 'mongo_uri': secret}
+
+    class Broken:
+        def call(self, *a, **k):
+            raise JobError('ServerSelectionTimeoutError: %s unreachable' % secret, True, 'Traceback: %s' % secret)
+    monkeypatch.setattr(data_children, 'reachable', lambda config: True)
+    data_children.DATA = Broken()
+    evidence = Recorded()
+    try:
+        with pytest.raises(data_children.DataFault) as raised:
+            data_children.run(HISTORY_TOOL_NAME, seeded(world), {}, config, world.name, evidence)
+    finally:
+        data_children.DATA = None
+    [(kind, record)] = evidence.records
+    assert kind == 'host.data_program_error'
+    assert secret not in record['error'] + record['trace'] + str(raised.value), (record, str(raised.value))
+
+
 # ---- the routing in ToolBroker.call, against a scripted child ---------------------------------------------------------
 SCRIPT = textwrap.dedent('''
     import os, sys, threading, time
@@ -143,6 +186,7 @@ def test_a_call_the_child_did_not_finish_closes_failed_with_its_words(world, tmp
     script = tmp_path / 'child.py'
     script.write_text(SCRIPT, encoding='utf-8')
     monkeypatch.setattr(data_children, 'DEADLINE', 1)
+    monkeypatch.setattr(data_children, 'reachable', lambda config: True)   # the scripted child opens no database
     faults = []
     child = Child('data', command=[PYTHON, str(script), 'fail-start' if case == 'unavailable' else 'serve'], tries=1,
                   lock_wait=0.5, start_seconds=10, fault=lambda stage, error: faults.append((stage, error)))
@@ -222,6 +266,7 @@ def test_a_spinning_job_is_killed_at_its_deadline_and_never_slows_the_worker(wor
     began = time.monotonic()
     task = seeded(world)
     monkeypatch.setattr(data_children, 'DEADLINE', 4)
+    monkeypatch.setattr(data_children, 'reachable', lambda config: True)   # the spinning child opens no database
     faults = []
     child = Child('data', command=[PYTHON, '-X', 'utf8', '-c', SPIN, str(os.getpid())], tries=1, lock_wait=5,
                   start_seconds=15, fault=lambda stage, error: faults.append((stage, error)))

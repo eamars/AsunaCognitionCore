@@ -11,7 +11,9 @@ runs, so their work, however long, never holds the worker's interpreter lock and
   tool raises it in the worker; any other error of the child's code is DataFault (and a lane fault), its traceback
   tail in the evidence (`host.data_program_error`).
 - The job's evidence records come back with its answer and are recorded here.
-- With no Host running (tools, offline checks, tests) the job runs in this process: DATA is None until `start`.
+- With no Host running (tools, offline checks, tests) the job runs in this process: DATA is None until `start`. So
+  does a job on a database the child cannot open itself (`reachable`: an in-process one, or an adapter loaded from a
+  database package).
 """
 from __future__ import annotations
 
@@ -55,12 +57,21 @@ def _raised(name, words):
     return {'Denied': Denied, 'Conflict': Conflict, 'PermissionError': PermissionError}.get(name, ValueError)(words)
 
 
+def reachable(config):
+    """Whether the data child can open this database itself: a built-in adapter that reaches a server. An in-process
+    database lives only in this process, and an adapter loaded from a database package is loaded only here."""
+    from .store import adapters
+    kind = adapters.module(config).KIND
+    return kind in adapters.BUILT_IN and kind not in adapters.IN_PROCESS
+
+
 def run(tool, task, args, config, database, evidence):
-    """The tool's result for one call: in the data child while the Host runs, else in this process."""
+    """The tool's result for one call: in the data child while the Host runs and the child can reach the database,
+    else in this process."""
     from . import channel_kinds
     job = json.dumps({'tool': tool, 'task': task, 'args': args, 'config': dict(config), 'database': database,
                       'channels': channel_kinds.loaded()}, ensure_ascii=False, default=str).encode('utf-8')
-    child = DATA
+    child = DATA if reachable(config) else None
     if child is None:
         services = data_worker.Services()
         try:
@@ -77,8 +88,11 @@ def run(tool, task, args, config, database, evidence):
         except (StartFailed, Died):
             return {'error': UNAVAILABLE}
         except JobError as exc:
-            evidence.record('host.data_program_error', {'tool': tool, 'error': str(exc)[:400], 'trace': exc.trace})
-            raise DataFault(str(exc)) from None
+            # Database addresses and credentials never reach the evidence, as with every traceback recorded here.
+            from .config import redact_text
+            evidence.record('host.data_program_error', {'tool': tool, 'error': redact_text(str(exc)[:400], config),
+                                                        'trace': redact_text(exc.trace, config)})
+            raise DataFault(redact_text(str(exc), config)) from None
     body = json.loads(payload.decode('utf-8'))
     for kind, record in body.get('evidence') or ():
         evidence.record(kind, record)

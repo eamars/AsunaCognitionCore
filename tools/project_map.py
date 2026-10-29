@@ -26,7 +26,7 @@ BEGIN, END = '<!-- map:modules -->', '<!-- /map:modules -->'
 AREAS = {
     'hosting': ('Entry and hosting', 'The worker the Host plugin starts, its store, configuration and audit.', [
         'native_worker', 'host', 'application', 'cli', 'config', 'repo_files', 'native_settings', 'lanes', 'queue', 'state', 'clock',
-        'audit', 'evidence', 'testing', 'restarts', 'host_stops', 'host_lease', 'local_time',
+        'audit', 'evidence', 'testing', 'restarts', 'host_stops', 'host_lease', 'local_time', 'tool_watch',
         'store/__init__', 'store/words', 'store/catalog', 'store/errors', 'store/adapters', 'store/memory',
         'store/mongodb', 'records/__init__', 'records/scenes', 'records/messages', 'records/episodes',
         'records/sessions', 'records/receipts', 'records/view', 'records/tasks', 'records/plans',

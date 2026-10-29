@@ -20,7 +20,7 @@ import time
 import uuid
 
 from . import clock
-from . import sandbox_backend, channel_kinds, errands
+from . import sandbox_backend, channel_kinds, errands, tool_watch
 from .application import Application
 from .host import RuntimeHost
 from .config import DATA, ROOT, database_lock, redact_text
@@ -291,7 +291,7 @@ class NativeLane:
             try:
                 self.worker.emit(request)
                 try:
-                    value = self.wait(future, self.store.config['workflow_timeout_seconds'])
+                    value = self.wait(future, self.store.config['workflow_timeout_seconds'], ep)
                 except TimeoutError:
                     # Stop the native run this stage waited for: nothing reads its result any more, its tools
                     # are already refused, and a continuation of the same task would meet it still running.
@@ -329,9 +329,10 @@ class NativeLane:
                 session_records.save(self.store, {**row, 'retired': True}, expected=row['revision'],
                                stream='native-binding:' + session_id)
 
-    @staticmethod
-    def wait(future, timeout):
-        """The stage's result; her tool calls in the meantime run here, one at a time, in call order."""
+    def wait(self, future, timeout, ep):
+        """The stage's result; her tool calls in the meantime run here, one at a time, in call order, each timed for
+        her episode `ep` (tool_watch.py)."""
+        from .role_tools import Refused
         deadline = time.monotonic() + timeout
         while not future.done():
             remaining = deadline - time.monotonic()
@@ -349,7 +350,10 @@ class NativeLane:
                     raise Denied('ROLE_TOOLS_NOT_EXPOSED')
                 # ADR-099: the thinking her first call of a stage came with, recorded as her thought before it runs.
                 extra = {'thinking': call['thinking']} if 'thinking' in call else {}
-                reply.set_result(future.asuna_handler(call['call_id'], call['tool'], call.get('args') or {}, **extra))
+                with self.worker.calls.timed('character', call['call_id'], call['tool'], call.get('args'), ep,
+                                             failed=(Refused,)):
+                    value = future.asuna_handler(call['call_id'], call['tool'], call.get('args') or {}, **extra)
+                reply.set_result(value)
             except BaseException as exc:
                 reply.set_exception(exc)
         while True:                      # calls that arrived as the turn ended get a plain answer
@@ -386,6 +390,7 @@ class BusinessWorker:
         self.folded_stop = False        # a lease left behind was folded into the plugin's open span (ADR-101)
         self.stopping = threading.Event()
         self.carry_lock = threading.Lock()
+        self.calls = tool_watch.Calls()           # every tool call of both brains, timed and watched
 
     def register_stage(self, operation, future, task):
         """Admit a stage: the Host is not reconfiguring, its task (if any) is still valid, and the operation runs
@@ -524,6 +529,13 @@ class BusinessWorker:
             config, evidence, lane_factory=lambda *a: NativeLane(self, *a),
             schedule_lane=NativeScheduleLane(self, config) if schedule else False, configure_controller=configure,
             development_factory=lambda c,s: NativeDevelopmentBridge(self,c,s), awaits_activation=True))
+        # Every tool call is timed from here on, and one that runs long is recorded (tool_watch.py); a fault is
+        # counted in a thread of its own, as the media children's are.
+        from . import lane_faults
+        store = self.app.store
+        self.calls.attach(store, evidence, lambda stage, error: threading.Thread(
+            target=lane_faults.record, args=(store, 'host', 'tools', stage, error), daemon=True).start())
+        self.stack.callback(self.calls.close)
         self.watch = threading.Thread(target=self.watch_host, name='native-lifecycle', daemon=True)
         self.watch.start()
         threading.Thread(target=self.audit_retention, name='audit-retention', daemon=True).start()
@@ -1290,8 +1302,10 @@ class BusinessWorker:
             self.app.broker.bind(broker_session, task, Path(binding['cwd']))
             # The action brain reads tool results on the local clock; receipts keep UTC (local_time.py).
             from . import local_time
-            return local_time.for_model(self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args']),
-                                        local_time.zone_of(self.app.store, task['scene_id']))
+            from .tasks import ToolFailed
+            with self.calls.timed('action', args['call_id'], args['tool'], args['args'], task, failed=(ToolFailed,)):
+                result = self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args'])
+            return local_time.for_model(result, local_time.zone_of(self.app.store, task['scene_id']))
         if method == 'tool_specs':
             # One list: the broker's, which is also what every call is checked against.
             return self.app.broker.specs

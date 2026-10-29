@@ -230,6 +230,7 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`host_stops`](../../src/asuna/host_stops.py) — When the Host was taken away from outside, she should not have to infer from a gap in the logs whether she was away.
 - [`host_lease`](../../src/asuna/host_lease.py) — One running Host per database, across machines (ADR-020 M1).
 - [`local_time`](../../src/asuna/local_time.py) — Times a model reads are on the local clock (owner 2026-10-08): stored records keep UTC for the program, and everything handed to a model passes `for_model` first.
+- [`tool_watch`](../../src/asuna/tool_watch.py) — Every tool call of both brains, timed where the worker dispatches it (native_worker.py): the calls in flight, one `tool.time` audit row as each ends, and a watchdog that records a call running past its limit, once.
 - [`store/__init__`](../../src/asuna/store/__init__.py) — The store: the core's way to its database, with no database named.
 - [`store/words`](../../src/asuna/store/words.py) — The words the core describes records with: conditions, changes, sorts and totals, their JSON form for her read tool, and their validation against a collection's declaration before any adapter sees them.
 - [`store/catalog`](../../src/asuna/store/catalog.py) — The catalog: every collection the core keeps, declared once, and the vector spaces searched in them.

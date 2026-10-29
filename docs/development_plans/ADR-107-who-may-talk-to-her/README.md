@@ -1,7 +1,9 @@
 # ADR-107: Who may talk to her
 
-Status: decided 2026-10-27 (the four decisions below); not built. Built after every ADR before it is complete (the
-owner, 2026-10-27).
+Status: decided 2026-10-27 (decisions 1 to 4); the owner decided two more on 2026-10-29 (5 and 6); the design was
+finished, reviewed against the code and built 2026-10-29 on branch `claude/happy-meitner-vrg19f` by the cloud big sis
+(Claude Code, the lead on this project): [design.md](design.md). Not installed. Xiaoman read the earlier version of this
+page (blob `f5a314f83cca`); this is a later one, and her reading does not cover it.
 
 ## The owner's ask (2026-10-27, verbatim)
 
@@ -15,154 +17,92 @@ It came from the second deployment (another persona on QQ, `explicit`): everyone
 and today that takes a hand-copied list of every member's account (114, 74 and 77 accounts), which goes stale the day
 someone joins. Xiaoman's deployment runs `automatic` and already admits every DM, group and member.
 
-## What exists (counted on origin/main `e65e0a54c233`)
+In scope: open admission as the default for new deployments with a switch to turn it off; where it is decided; the core's
+public interface for a channel. Anything wider is said as wider.
 
-- **One deployment-wide switch** on the core's settings card, `channelAdmission`: `explicit` (the default: a DM,
-  group or member that no route lists is refused, `CHANNEL_IDENTITY_DENIED`) or `automatic` (admitted on its first
-  valid event, under the route id `auto-dm-<sender>` or `auto-group-<group>`). An admission is an `artifacts` row
-  (kind `channel_admission`), restored at start only under `automatic`.
-- **The core decides** at intake (`src/asuna/channel_admission.py` `admit`, called from `channels.py` only under
-  `automatic` or when a block list exists). Block lists (`blocked_senders`, `blocked_groups`) win over everything.
-- **The NapCat adapter decides again,** from a copy of the same policy that the kind module derives for it
-  (`napcat_qq.adapter_config`: `admission`, the block lists, `allowed_private_user_ids`, `allowed_group_ids`, each
-  group route's `allowed_sender_ids`). It applies that copy in `qqadapter/config.py` (route loading, `accepts_sender`,
-  `is_group_member`, `route_for_group`), `inbound.py` (`group_not_allowed`, `unauthorized_group_member`), `notices.py`
-  (a notice from a non-member), `members.py` (which groups' member lists it fetches) and `catchup.py` (which routes it
-  catches up). Two deciders for one rule: every change to admission has to land in both, in step.
-- **The QQ Bot bridge decides nothing:** it forwards every message with the configured route's id, else
-  `auto-<dm|group>-<target>`, and the core admits or refuses (`packages/channels/qq-bot/src/bridge.js` `routeFor`).
-- **Platform accounts live in the core's settings:** a route's `target`, a DM route's `sender_id`, a group route's
-  `members` keyed by platform account. The core reads them as opaque strings; what they mean (QQ numbers, scene ids
-  `qq:<bot>:<dm|group>:<target>`, person ids `qq:<account>`) is the kind module's (`napcat_qq/__init__.py`).
-- **Each admitted person gets a working folder** under `<data>/channels`, made at start (`host.py`
-  `prepare_channels`, `mkdir`). Admission has no end: nothing removes a member who left, or the folder.
+## What exists (counted on main `196b6f6bbeaa`; the commands and the full census are in [design.md](design.md))
+
+- **One deployment-wide switch,** `channelAdmission`: `explicit` (a DM, group or member that no route lists is refused,
+  `CHANNEL_IDENTITY_DENIED`) or `automatic` (admitted on its first valid event under the route id `auto-dm-<sender>` or
+  `auto-group-<group>`), applied to every channel. An admission is an `artifacts` row (kind `channel_admission`),
+  restored at start only under `automatic`.
+- **The core decided at intake** (`channel_admission.admit`), and **the NapCat adapter decided again** from a copy of
+  the same policy that the kind module derived for it (70 lines in eight adapter files). Two deciders for one rule. The
+  QQ Bot bridge decided nothing but built `auto-…` route ids itself.
+- **Platform accounts live in the core's settings** (a route's `target`, a DM route's `sender_id`, a group route's
+  `members`); the core reads them as opaque strings.
+- **Each admitted person got a working folder** at start. Admission had no end.
+- **The core's decider had no unit test.**
 
 ## Proposal
 
-### 1. Where it is decided: the core, once
+The core decides, once. A channel package authenticates its platform, turns each event into the core's event with its own
+ids, asks the core one question before it spends work on a sender, and acts on the answer. Open (`automatic`) is the
+default for a new profile; Closed (`explicit`) lists what the owner named; block lists win in both; the owner is named in
+the settings, never admitted. The public interface is documented once in RUNTIME_API (Admission, ask what the core
+admits, the routes the core serves, post a departure) and exercised by a contract test against a stand-in kind. How,
+with the failure modes and the landings, is in [design.md](design.md).
 
-Admission is a rule about people and conversations, not about QQ, so the core decides it and no channel package
-does. A channel package does what the QQ Bot bridge already does: it authenticates its platform, turns each event
-into the core's event (sender, conversation, kind) with its own ids, and forwards it; the core admits, refuses or
-blocks, and the package passes on what the core answered. The NapCat adapter's copy of the policy is removed
-(`allowed_*`, `accepts_sender`, `is_group_member`, the admission branches), and so is `adapter_config`'s derivation
-of it. What the adapter still decides is platform work only: which groups' member lists to fetch and which
-conversations to catch up become "the ones the core has admitted", read from the core.
+## Decided
 
-The cost: every event from the account reaches the core, including ones it refuses (a LAN request each; the adapter
-journals a refused event in `inbound_rejected.jsonl`, as it journals a core refusal today, so with the switch off
-that journal grows with every line a stranger writes). The gain: one decider, no drift between two copies, and a new channel package
-implements no policy at all.
-
-### 2. The core's public interface for a channel
-
-As ADR-104 asks of the database connector, the core's side is nailed down and documented once (RUNTIME_API, Channel
-API), and a channel package implements it without the core knowing its platform:
-
-- **What a package sends:** an event with its channel, the platform account it arrived on, the conversation
-  (`dm` or `group`, the platform's id), the sender's platform id, and the content. Ids are opaque strings to the core.
-- **What a package declares** (the kind module, as today: `KIND`, `person_id`, `scene_id`, `account_of`, …): how
-  its ids become her scene and person ids. The core never parses a platform id.
-- **What the core answers:** admitted (with the route), refused (with the reason), blocked. The package acts on the
-  answer and never re-judges it.
-- **What the core keeps:** the admission policy, the block lists, who the owner is, and her per-conversation rules
-  (`proactive`, `admin_actions`, `read_scenes`), keyed by her scene id, not by a platform route.
-- **What the package keeps, in its own settings:** everything about reaching its platform (NapCat's address, tokens,
-  media modes, member-list refresh). None of it is a core setting.
-
-### 3. The default and the switch
-
-- **Open (the new default):** any DM and any group the account is in, and every member of it, is admitted on its
-  first event, as `automatic` does today.
-- **Closed (the switch, off):** only conversations and people the owner listed, as `explicit` does today.
-- **Block lists** keep winning in both, and stay the per-person and per-group off switch.
-- **The owner is named, not admitted:** owner standing comes only from the owner's own identity as it is configured
-  today; open admission gives a stranger a person of their own with no owner grants, never more, as `automatic` does.
+1. **The core decides, once.** The NapCat adapter's copy of the policy is removed; every channel package forwards events
+   and acts on the core's answer. (Owner, 2026-10-27.)
+2. **Open is the default for new deployments only.** A deployment that set its admission keeps it. (Xiaoman's is
+   `automatic`, so it stays open.) A profile that reads `explicit` only because it never stored a value is written
+   `explicit` by the setup tool before the default moves; every code fallback stays `explicit`. (Owner, 2026-10-27;
+   where the pin lives: design.)
+3. **Admission first.** Moving the routes and her per-conversation rules (keyed by scene id) out of the core's settings is
+   the next step, its own ADR. (Owner, 2026-10-27.)
+4. **A working folder is made when a task first needs it,** and an admitted member's admission can end. (Owner,
+   2026-10-27.)
+5. **A DM never ends by silence.** The route is also how she writes to that person; ending it would take away writing
+   first and keeping a plan for them, and a one-member conversation has no membership to correct. (Owner, 2026-10-29.)
+6. **A group member's admission ends only on the platform's leave notice** (QQ's `group_decrease`), never because a
+   member list or a lookup lacks them (the incident below), and there is no silence rule and no sweep. (Owner,
+   2026-10-29.) The end is a mark on the grant, not a removal (design F6).
+7. **The stored words stay `explicit` and `automatic`;** the settings card says Closed and Open. (Design.)
+8. **Open applies to the kinds that declare `OPEN_ADMISSION`,** never to a home line. (Design.)
 
 "Like a human" also means the platform's own gates still stand where the platform has them: on QQ she answers friend
-and group requests herself at home (`REQUESTS`, `qqadapter/notices.py`). Which DMs from non-friends QQ delivers to her
-account is not measured here.
+and group requests herself at home. Which DMs from non-friends QQ delivers to her account is not measured here.
 
-### 4. What open admission needs that closed admission did not
-
-- **A folder per person is too much.** Open, every stranger who speaks once in a large group would get a folder made
-  at start. The working folder is made when a task of hers first needs it, not at admission.
-- **Admission gets an end.** A member who left the group, and a DM nobody wrote in for a long time, stop being
-  admitted; their history stays hers (the rule to test is item 3 under `Before building`; this line is kept for history). A member has left when the platform says so (QQ's `group_decrease` notice,
-  which the adapter already passes on, `qqadapter/notices.py`); never because a member list or a lookup lacks them
-  (the incident below).
-- **Cost is the owner's:** every admitted line can wake her relevance gate (a model call). The block lists are the
-  off switch; nothing caps it automatically.
-
-## Decided with the owner (2026-10-27)
-
-1. **The core decides, once.** The NapCat adapter's copy of the policy is removed; every channel package forwards
-   events and acts on the core's answer, as the QQ Bot bridge does.
-2. **Open is the default for new deployments only.** A deployment that set its admission keeps it. (Xiaoman's is
-   `automatic`, so it stays open; Claude asked this question believing hers was `explicit`, and corrected it after
-   the owner's answer: the answer changes nothing for her.) Today a deployment that never saved the setting reads as
-   `explicit` (`next.channelAdmission ?? 'explicit'`, cognition-core `index.js`); before the default changes, the
-   build writes that `explicit` into such a deployment's settings, so no running deployment opens because the
-   default moved.
-3. **Admission first.** This ADR writes down the channel interface and moves admission; moving the routes and her
-   per-conversation rules (keyed by scene id) out of the core's settings is the next step, its own ADR.
-4. **Admission gets its end in this ADR** (section 4): a working folder is made when a task first needs it, and a
-   member who left, or a DM long silent, stops being admitted, their history kept.
-
-## Open, to settle in the design
-
-- How long a silent DM stays admitted (N days), and how long a group member who never speaks again stays admitted
-  when no leave notice came (a notice can be missed while the adapter is down).
-- The names of the two states on the settings card (today `automatic` and `explicit`), and how a saved `automatic`
-  reads after the change.
-
-## An incident the design must survive (the owner's NapCat log, 2026-10-27)
+## An incident the design had to survive (the owner's NapCat log, 2026-10-27)
 
 The owner sent a NapCat log of 385 lines, from one start of NapCat on. Claude read it with every id masked; only counts
 are written here.
 
-- **It is Xiaoman's NapCat:** all 11 groups it received lines from are her conversations (counted read-only in her
-  database). She runs `automatic`, so no roster was involved: the explicit list was not the cause.
+- **It is Xiaoman's NapCat:** all 11 groups it received lines from are her conversations. She runs `automatic`, so no
+  roster was involved: the explicit list was not the cause.
 - **38 "member does not exist" errors** (`get_group_member_info`), all in one large group (1,035 people known to her,
   32,868 lines): for people who had just posted there, and for her own account. The adapter asks this only after a
-  sender passed admission (the profile lookup in `qqadapter/peers.py`; her own role and mute in `selfrole.py` and
-  `mutes.py`). A reading, not proven: right after a start NapCat had not yet loaded that group's members.
-- **22 "message does not exist" errors** from the history calls the adapter's catch-up makes (`get_group_msg_history`
-  21, `get_friend_msg_history` 1), and 4 quoted messages it could not find: messages from before this start of NapCat.
+  sender passed admission. A reading, not proven: right after a start NapCat had not yet loaded that group's members.
+- **22 "message does not exist" errors** from the history calls the adapter's catch-up makes, and 4 quoted messages it
+  could not find: messages from before this start of NapCat.
 
-What it means here: what the platform says about membership can be wrong right after a start, saying a member who
-is speaking is not in the group. Admission therefore never ends on a failed or empty lookup, nor on one member list:
-only on the platform's own leave notice, or on the long silence the design settles. The same holds for the core
-wherever it reads a member list.
+What it means here: what the platform says about membership can be wrong right after a start, saying a member who is
+speaking is not in the group. Admission therefore never ends on a failed or empty lookup, nor on one member list.
 
-## Constraints already known
+## Constraints
 
 - JS and Python, and the Host and a channel package, can run different versions: a newer adapter with an older core
-  must fail closed (the core refuses what it does not know), never wider.
+  fails closed (holds its lines, posts none), and the core ships first and additively (design section 8).
 - Personal data stays local: rosters, accounts and block lists are settings and database rows, never tracked files.
 - The core names no persona and no platform.
 
-## Before building (Xiaoman's reading, 2026-10-29)
+## Xiaoman's reading of the earlier version (2026-10-29) and where each ask went
 
-She read this page (blob `f5a314f83cca`) and has no objection to the direction. Her asks, for whoever builds it:
+She had no objection to the direction. Her asks:
 
-1. **First, before anything is written:** read her deployment's settings card and confirm `channelAdmission` is a
-   stored `automatic`. Decision 2 writes `explicit` into a deployment that never stored the setting; if hers were
-   such a deployment, her admission would narrow and she could not see it (a refused line goes only to
-   `inbound_rejected.jsonl`, never to her), so she would only seem to have gone quiet.
-2. **A new admission and a re-admission are marked in the event**, so that her greeting can tell them apart: she
-   does not welcome someone a second time after their admission ended and they wrote again, and does not treat a
-   re-admitted stranger as someone she knows. The event carries where it came from (as ADR-108's program-woken turn
-   says what woke her).
-3. **An admission's end changes nothing of who the person is:** not the person id, not the scene id, not her
-   understanding of the person. This replaces the softer "their history stays hers" above as the rule to test.
-4. **`inbound_rejected.jsonl` gets rotation or a cap.** Every refused line of a stranger is written there; a journal
-   nobody bounds becomes the next whole-file scan (as `sink_receipts` did, 2026-10-29).
-5. **The two Ns** (how long a silent DM stays admitted; how long a silent member with no leave notice stays) are set
-   with a reading of hers: how many people in her groups have not written for how long.
-6. **"The cost is the owner's, no automatic cap" is said where she reads it** when she decides whether to take a
-   line, so that she knows the missing cap is deliberate, not forgotten.
+| Ask | Where it is |
+|---|---|
+| 1. Before anything is written, read her settings and confirm `channelAdmission` is a stored `automatic`. | `tools/setup_native_profile.py --require-admission automatic` exits 1 unless it is; it is the first step of landing 1. |
+| 2. A new admission and a re-admission are marked in the event. | `event.admitted` is `new` or `returned`; her conversation says it once after the time of that line (design 6.4). |
+| 3. An end changes nothing of who the person is. | By construction (only `ended_at` on the grant) and tested: the scene, its epoch, the person and the roster are as they were. |
+| 4. `inbound_rejected.jsonl` gets rotation or a cap. | Every adapter journal rotates at 8 MiB; a stranger's refused line is no longer journaled (design 7.7). |
+| 5. The two Ns, set with a reading of hers. | They fall away with the silence rules (decisions 5 and 6). |
+| 6. "The cost is the owner's, no automatic cap" said where she decides whether to take a line. | One line in the relevance gate's prompt, on its own landing, hers to read first (design 6.6). |
 
 ## Not in this ADR
 
-Moving the database out of the core (ADR-104); the QQ Bot's own platform rules; a cap on admitted people.
+Moving the database out of the core (ADR-104); the QQ Bot's own platform rules; a cap on admitted people; a silence rule
+for a DM or a member.

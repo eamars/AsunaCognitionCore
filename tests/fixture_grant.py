@@ -14,14 +14,3 @@ def fixture_grant(config, name):
         'dm-a': {'scene_id': 'dm-a', 'sender_id': 'A', 'person_id': 'A', 'target': {'type': 'dm', 'id': 'A'},
                  'workspace': str(work), 'read_only_paths': []}}}}
     return work
-
-
-def returned(store, task, text, refs):
-    """A task returned the way tasks.Executor returns it: natural language plus program-attached receipts."""
-    from asuna.state import now
-    current = store.db.tasks.find_one({'_id': task['_id']})
-    result = {'task_id': task['_id'], 'intent_revision': current['intent_revision'], 'text': text,
-              'finish_reason': 'stop', 'artifact_refs': list(refs), 'diagnostic': None,
-              'facts': [{'text': text, 'evidence_refs': list(refs)}], 'uncertainties': []}
-    return store.put('tasks', {**current, 'state': 'RETURNED', 'result': result, 'finished_at': now(),
-                               'feedback_state': 'READY'}, expected=current['revision'], stream=task['_id'])

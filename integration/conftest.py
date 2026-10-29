@@ -5,11 +5,13 @@ end, failures included.
 `settings` (session): the registry's settings for that server, from the address in config/local.json and nothing else
 of it; every test that takes it skips when no server is named or the server does not answer. `store`: a `Store` on a
 database of its own (`asuna_v2_test_<test name>_<hex>`), every declared collection made, holding nothing a test does
-not write itself. `world`: the same, holding the unit suite's synthetic world (tests/fixtures/world.json: three people,
-four conversations, twelve memories, three personas) and a turn's settings (the tracked example settings, the fixture
-route's workspace, fixture models), for a test that runs her turns. Each database is dropped when its test ends and its
-being gone is checked; a workspace made for it is removed. A test here holds a few hundred synthetic records at most.
-Nothing here prints the server's address.
+not write itself. `world`: the same, holding the synthetic world (tests/fixtures/world.json: three people, four
+conversations, twelve memories, three personas) and a turn's settings (the tracked example settings, the fixture
+route's workspace, fixture models), for a test that runs her turns; in a module marked `world` (integration/world/),
+`store` is that world. Every such store also has `raw`, the same database through the driver, for what a test writes
+or reads beside the code under test. Each database is dropped when its test ends and its being gone is checked; a
+workspace made for it is removed. A test here holds a few hundred synthetic records at most. Nothing here prints the
+server's address.
 """
 import contextlib
 import json
@@ -19,6 +21,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from pymongo import MongoClient
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tests'))         # the fixture world's helpers (fixture_grant, reply_parts)
@@ -33,8 +36,11 @@ from asuna.testing import remove_workspace  # noqa: E402
 LOCAL = ROOT / 'config' / 'local.json'
 EXAMPLE = ROOT / 'config' / 'local.example.json'
 WORLD = ROOT / 'tests' / 'fixtures' / 'world.json'
-# The world's scenes and people are fixture ones, the QQ ones a few tests name: the channel package's kind.
-channel_kinds.load([{'python': ROOT / 'packages' / 'channels' / 'napcat-qq' / 'python', 'module': 'napcat_qq'}])
+# The world's scenes and people are fixture ones; the places tests name (a QQ group, an agent line, a peer line) are
+# their channel packages' kinds, every one of them loaded as a Host with all four would load them.
+channel_kinds.load([{'python': ROOT / 'packages' / 'channels' / folder / 'python', 'module': module}
+                    for folder, module in (('qq-bot', 'qq_bot'), ('agent-line', 'agent_line'),
+                                           ('dsh-peer', 'dsh_peer'), ('napcat-qq', 'napcat_qq'))])
 
 
 def _local():
@@ -73,17 +79,27 @@ def throwaway_store(settings, label, config=None):
     assert name != live
     config = {**(config or {}), 'mongo_uri': settings['mongo_uri'], 'database': name, 'allowed_databases': []}
     opened = Store(config, name)
+    client = MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000)
+    opened.raw = client[name]
     try:
         opened.ensure()
         yield opened
     finally:
+        client.close()
         opened.close()
         adapters.drop(settings, name)
         assert name not in adapters.module(settings).databases(settings), 'the test database is gone'
 
 
+def pytest_configure(config):
+    config.addinivalue_line('markers', 'world: in this test, `store` is the fixture world (the `world` fixture)')
+
+
 @pytest.fixture
 def store(settings, request):
+    if request.node.get_closest_marker('world'):
+        yield request.getfixturevalue('world')
+        return
     with throwaway_store(settings, request.node.name) as opened:
         yield opened
 

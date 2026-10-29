@@ -15,10 +15,6 @@ for _path in (os.path.dirname(SRC), SRC, HERE):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-# The cases check the digest by names, without people.py's labels (history_query's fallback when People cannot be
-# loaded). People is kept out on purpose; it used to fail to load in this layout only by accident (src/asuna's
-# queue.py shadows the standard library's, which pymongo imported through state.py).
-sys.modules["asuna.people"] = None
 from asuna import discussion_digest as dd           # noqa: E402
 from asuna import history_query as hq                # noqa: E402
 from asuna import channel_kinds                      # noqa: E402

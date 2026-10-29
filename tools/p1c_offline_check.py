@@ -9,6 +9,10 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
+# The cases check the digest by names, without people.py's labels (history_query's fallback when People cannot be
+# loaded): People is kept out of this run on purpose. It used to fail to load here only by accident (the cases put
+# src/asuna on the path, whose queue.py shadows the standard library's, which pymongo imported through state.py).
+sys.modules["asuna.people"] = None
 import discussion_digest_cases as cases          # noqa: E402
 
 results = cases.run_all()

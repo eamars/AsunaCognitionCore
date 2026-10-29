@@ -26,6 +26,8 @@ from .evidence import canonical, sha
 from .retrieval import EMBED_OPENING_CHARS, refused, terms
 from .state import now
 from .records import scenes as scene_records
+from .records.view import ANY, View, is_text
+from .store.words import AddToSet, AnyOf, Increase, Range, Set, Without
 
 TIERS_VERSION = 1
 SHADOW_PILOT = False              # the pilot's turn rows (ADR-062 phase 1, closed); the index runs without it
@@ -91,13 +93,29 @@ def own_items(store, persona):
     return out
 
 
+# ── the owner of `memory_shadow` ──
+# Its rows by kind (`row`: item, pair, turn, recall, failure), as stored (`fields` names what to return; `_id` always
+# comes back). A time bound given None finds nothing (ADR-104 section 4); not given is `ANY`. Only this module writes
+# them.
+def rows(store, kind, *, since=ANY, status=ANY, min_score=ANY):
+    """View: the rows of a kind (at or after `since`, ISO text; of this status; scored at least `min_score`)."""
+    where = {'row': kind}
+    if since is not ANY:
+        where = {**where, 'at': Range(gte=since)} if is_text(since) else None
+    if where is not None and status is not ANY:
+        where['status'] = status
+    if where is not None and min_score is not ANY:
+        where['score'] = Range(gte=min_score)
+    return View(store, COLLECTION, where)
+
+
 def prune(store, moment=None, days=TURN_ROWS_DAYS):
     """Delete the pilot's turn rows (and recall and failure rows) older than `days`; items and pairs stay. Their `at` is
     an ISO string, so a TTL index cannot do it. Returns how many went."""
     from datetime import timedelta
     cutoff = ((moment or clock.now()) - timedelta(days=days)).isoformat()
-    return store.db[COLLECTION].delete_many({'row': {'$in': ['turn', 'recall', 'failure']},
-                                             'at': {'$lt': cutoff}}).deleted_count
+    return store.collection(COLLECTION).delete({'row': AnyOf(['turn', 'recall', 'failure']), 'at': Range(lt=cutoff)},
+                                               many=True)
 
 
 def _unit(vector):
@@ -154,11 +172,10 @@ class Pilot:
         self.jobs = queue.Queue(QUEUE_SIZE)
         self.stopping = threading.Event()
         self.worker = threading.Thread(target=self._run, name='asuna-memory-pilot', daemon=True)
-        self.collection = store.db[COLLECTION]
+        self.collection = store.collection(COLLECTION)
 
     def start(self):
-        self.collection.create_index([('row', 1), ('at', 1)])
-        self.worker.start()
+        self.worker.start()             # its index (row, at) is the catalog's, made by the store's ensure
         return self
 
     def close(self):
@@ -192,8 +209,8 @@ class Pilot:
                 self.run_job(job)
             except Exception as exc:          # a measurement never disturbs her turns; its failure stays with its rows
                 try:
-                    self.collection.insert_one({'_id': 'failure:' + uuid.uuid4().hex, 'row': 'failure', 'at': now(),
-                                                'error_type': type(exc).__name__})
+                    self.collection.insert({'_id': 'failure:' + uuid.uuid4().hex, 'row': 'failure', 'at': now(),
+                                            'error_type': type(exc).__name__})
                 except Exception:
                     pass
 
@@ -222,17 +239,17 @@ class Pilot:
                'top': top, 'surfaced': [{'item': key, 'store': stores[key], 'score': round(scores[key], 4)} for key in surfaced],
                'vector_reused': reused, 'previous_submit_ms': job.get('previous_submit_ms'), 'dropped_before': self.dropped}
         row['job_ms'] = round((time.perf_counter() - started) * 1000, 1)
-        self.collection.insert_one(row)
+        self.collection.insert(row)
         if surfaced and not job['recall']:
             # Which conversation surfaced what: an item counts as memorable only from two different ones (ADR-062).
-            self.collection.update_many({'_id': {'$in': surfaced}}, {'$addToSet': {'surfaced_in': job['scene_id']},
-                                                                    '$inc': {'surfaced': 1}})
+            self.collection.update({'_id': AnyOf(surfaced)}, [AddToSet('surfaced_in', job['scene_id']),
+                                                              Increase('surfaced')], many=True)
         return row
 
     def sync(self):
         """Embed new and changed items, mark the ones gone, and write the near-duplicate pairs the changes made."""
         current = own_items(self.store, self.persona)
-        known = {row['_id']: row for row in self.collection.find({'row': 'item'})}
+        known = {row['_id']: row for row in rows(self.store, 'item').each()}
         revision = self.retrieval.revision
         changed = [item for item in current if (known.get(item['key']) or {}).get('content_sha256') != sha(item['text'].encode())
                    or (known.get(item['key']) or {}).get('embedding_revision') != revision]
@@ -246,18 +263,18 @@ class Pilot:
                 vectors = [self._embed_one(item['text']) for item in batch]
             for item, (vector, opening) in zip(batch, vectors):
                 fields = {k: item[k] for k in ('store', 'doc', 'sid', 'scope_key', 'visibility', 'inject')}
-                self.collection.update_one({'_id': item['key']}, {'$set': {
+                self.collection.update({'_id': item['key']}, Set({
                     'row': 'item', **fields, 'chars': len(item['text']), 'content_sha256': sha(item['text'].encode()),
                     'embedding': vector, 'embedding_revision': revision, 'embedding_opening_chars': opening,
-                    'status': 'active' if vector else 'refused', 'synced_at': now()}}, upsert=True)
+                    'status': 'active' if vector else 'refused', 'synced_at': now()}), create=True)
         present = {item['key'] for item in current}
         gone = [key for key, row in known.items() if key not in present and row.get('status') != 'gone']
         if gone:
-            self.collection.update_many({'_id': {'$in': gone}}, {'$set': {'status': 'gone', 'synced_at': now()}})
-        rows = {row['_id']: row for row in self.collection.find({'row': 'item', 'status': 'active'})}
+            self.collection.update({'_id': AnyOf(gone)}, Set({'status': 'gone', 'synced_at': now()}), many=True)
+        active = {row['_id']: row for row in rows(self.store, 'item', status='active').each()}
         self.items = []
         for item in current:
-            row = rows.get(item['key'])
+            row = active.get(item['key'])
             if row and row.get('embedding'):
                 self.items.append({**item, 'unit': _unit(row['embedding']), 'terms': terms(item['lexical'])})
         self._pairs({item['key'] for item in changed})
@@ -284,9 +301,9 @@ class Pilot:
                 score = _score(a['unit'], b['unit'])
                 if score >= DUPLICATE_ABOVE:
                     first, second = sorted((a['key'], b['key']))
-                    self.collection.update_one({'_id': 'pair:' + sha(canonical([first, second]))[:32]}, {'$set': {
+                    self.collection.update({'_id': 'pair:' + sha(canonical([first, second]))[:32]}, Set({
                         'row': 'pair', 'store': a['store'], 'items': [first, second], 'score': round(score, 4),
-                        'at': now()}}, upsert=True)
+                        'at': now()}), create=True)
 
 
 # ── the daily report (counts only; tools/memory_pilot_report.py) ──────
@@ -306,11 +323,10 @@ def report(store, zone, since=None):
     from datetime import datetime
     from zoneinfo import ZoneInfo
     tz = ZoneInfo(zone)
-    shadow = store.db[COLLECTION]
-    when = {'at': {'$gte': since}} if since else {}
-    items = list(shadow.find({'row': 'item'}, {'embedding': 0}))
-    turns = list(shadow.find({'row': 'turn', **when}))
-    recalls = list(shadow.find({'row': 'recall', **when}))
+    when = {'since': since} if since else {}
+    items = rows(store, 'item').rows(fields=Without('embedding'))
+    turns = rows(store, 'turn', **when).rows()
+    recalls = rows(store, 'recall', **when).rows()
 
     def day(row):
         return datetime.fromisoformat(str(row['at']).replace('Z', '+00:00')).astimezone(tz).date().isoformat()
@@ -338,19 +354,20 @@ def report(store, zone, since=None):
     memorable = Counter(store_of.get(key) for key, scenes in places.items() if len(scenes) >= 2)
     once = Counter(store_of.get(key) for key, scenes in places.items() if len(scenes) == 1)
     active = {row['_id'] for row in items if row.get('status') == 'active'}
-    pairs = [row for row in shadow.find({'row': 'pair'}) if set(row['items']) <= active]
+    pairs = [row for row in rows(store, 'pair').each() if set(row['items']) <= active]
     by_ref = {(row.get('doc'), row.get('sid')): row for row in items}
     read = Counter()
-    for event in store.db.audit_events.find({'type': 'recall.read', **({'occurred_at': {'$gte': since}} if since else {})},
-                                            {'payload.sections_read': 1}):
+    from . import audit as audit_trail
+    recalls_read = audit_trail.events(store, 'recall.read', **({'since': since} if since else {}), by=None)
+    for event in recalls_read.each(fields=['payload.sections_read']):
         for section in (event.get('payload') or {}).get('sections_read') or []:
             row = by_ref.get((section.get('doc'), section.get('sid')))
             if row:
                 read[row['_id']] += 1
     query_hits = Counter(hit['item'] for row in recalls for hit in row['top'] if hit['score'] >= FLOOR)
-    rows = turns + recalls
-    jobs = [row['job_ms'] for row in rows if row.get('job_ms') is not None]
-    submits = [row['previous_submit_ms'] for row in rows if row.get('previous_submit_ms') is not None]
+    logged = turns + recalls
+    jobs = [row['job_ms'] for row in logged if row.get('job_ms') is not None]
+    submits = [row['previous_submit_ms'] for row in logged if row.get('previous_submit_ms') is not None]
     return {
         'items': {kind: dict(Counter(row.get('status') for row in items if row.get('store') == kind))
                   for kind in sorted({row.get('store') for row in items})},
@@ -366,7 +383,7 @@ def report(store, zone, since=None):
                    'reads_by_heading': sum(read.values())},
         'cost': {'job_ms_median': _quantile(jobs, .5), 'job_ms_p90': _quantile(jobs, .9), 'job_ms_max': max(jobs, default=None),
                  'reply_path_ms_median': _quantile(submits, .5), 'reply_path_ms_max': max(submits, default=None),
-                 'query_vector_reused': sum(1 for row in rows if row.get('vector_reused')), 'rows': len(rows),
-                 'dropped': max((row.get('dropped_before') or 0 for row in rows), default=0),
-                 'failures': shadow.count_documents({'row': 'failure', **when})},
+                 'query_vector_reused': sum(1 for row in logged if row.get('vector_reused')), 'rows': len(logged),
+                 'dropped': max((row.get('dropped_before') or 0 for row in logged), default=0),
+                 'failures': rows(store, 'failure', **when).count()},
     }

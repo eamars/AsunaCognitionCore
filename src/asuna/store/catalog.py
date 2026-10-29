@@ -4,7 +4,7 @@ A collection declares its fields (path, kind, nullable, required), its indexes, 
 (`retired`), its owner module and its flags. Only declared fields can be named in a condition, sort, group or index;
 other fields are stored and returned unchanged. A dotted path is a field inside a declared `object`, or inside the
 objects of a declared `list` of `object` (queried only through `Each`). A nested required field is required wherever
-its parent is present. `CATALOG` holds the core's collections; each is declared when its owner moves onto the store.
+its parent is present. `CATALOG` holds the core's collections, each with its owner module.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field as _field
@@ -101,9 +101,7 @@ class Space:
 class Collection:
     """A declared collection. Flags: `versioned` (every record carries `schema_version`), `insert_only` (a ledger),
     `counters` (fields a revisioned write keeps at their stored values), `derived` (fields computed from the record's
-    own content, left out of its audit), `pending` (its owner still reads it directly: only the fields the store
-    itself names are declared, and its indexes may name fields not declared yet; a unique index's `only_where_present`
-    fields are declared, their kind giving the index's filter)."""
+    own content, left out of its audit)."""
     name: str
     owner: str
     fields: tuple = ()
@@ -113,7 +111,6 @@ class Collection:
     insert_only: bool = False
     counters: tuple = ()
     derived: tuple = ()
-    pending: bool = False
     _paths: dict = _field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self):
@@ -145,16 +142,13 @@ class Collection:
                 raise _invalid('%s: index %s declared twice or also retired' % (self.name, index.name))
             names.add(index.name)
             for path, direction in index.keys:
-                if direction not in (1, -1) or (path not in paths and not self.pending):
+                if direction not in (1, -1) or path not in paths:
                     raise _invalid('%s: index %s names %r' % (self.name, index.name, path))
-                if index.unique and path in index.only_where_present and path not in paths:
-                    raise _invalid('%s: unique index %s: declare %s, whose kind gives its filter'
-                                   % (self.name, index.name, path))
-                if index.unique and path in paths:
+                if index.unique:
                     if paths[path].kind in ('list', 'object', 'vector'):
                         raise _invalid('%s: unique index %s on %s' % (self.name, index.name, path))
                     # Inside a partial index (only_where_present) its other fields may be missing: indexed as null.
-                    if not (paths[path].required or index.only_where_present or self.pending):
+                    if not (paths[path].required or index.only_where_present):
                         raise _invalid('%s: unique index %s: %s is neither required nor in a partial index'
                                        % (self.name, index.name, path))
             if not set(index.only_where_present) <= {path for path, _ in index.keys}:
@@ -218,13 +212,6 @@ class Catalog:
 def index(*keys, unique=False, only_where_present=(), expire_after=None):
     """An index named as MongoDB names one by default (`scene_id_1_scene_seq_1`)."""
     return Index('_'.join('%s_%s' % key for key in keys), tuple(keys), unique, tuple(only_where_present), expire_after)
-
-
-def _core(name, owner, *indexes, fields=(), **flags):
-    """A collection of the core's: versioned, pending until its owner moves, and carrying the commit mark `_last_op`
-    that recovery reads."""
-    return Collection(name, owner, (Field('_last_op', 'text'), *fields), tuple(indexes), versioned=True, pending=True,
-                      **flags)
 
 
 def _text(*paths):
@@ -354,12 +341,19 @@ CATALOG = Catalog([
         Field('policy_epoch', 'number', nullable=True)),
         (index(('binding_key', 1), unique=True),),
         versioned=True),
-    _core('audit_events', 'audit',
-          index(('stream_id', 1), ('seq', 1), unique=True), index(('type', 1), ('occurred_at', 1)),
-          index(('occurred_at', 1)),
-          fields=(Field('stream_id', 'text', required=True), Field('seq', 'number', required=True),
-                  Field('type', 'text'), Field('payload', 'object'), Field('payload.operation', 'text', nullable=True)),
-          insert_only=True),
+    # The hash-chained audit trail (audit.py), insert only: its record's own fields, and of its payload (an object
+    # each kind of record fills its own way) only the paths a condition names. Its times are ISO text.
+    Collection('audit_events', 'audit', (
+        Field('schema_version', 'number'), Field('stream_id', 'text', required=True),
+        Field('seq', 'number', required=True), *_text('type', 'scope_key', 'occurred_at', 'event_hash', 'prev_hash'),
+        Field('payload', 'object'),
+        *_text(*('payload.' + key for key in ('operation', 'persona', 'refused', 'outcome', 'occurrence', 'id',
+                                              'collection'))),
+        Field('payload.reaches', 'bool', nullable=True), Field('payload.document', 'object', nullable=True),
+        *_text('payload.document._id')),
+        (index(('stream_id', 1), ('seq', 1), unique=True), index(('type', 1), ('occurred_at', 1)),
+         index(('occurred_at', 1))),
+        versioned=True, insert_only=True),
     # A kept file or record apart from the conversation (records/artifacts.py): the fields its owner names; the rest
     # is stored and returned as written. Its times are ISO text, as the core writes them.
     Collection('artifacts', 'records.artifacts', (
@@ -373,7 +367,7 @@ CATALOG = Catalog([
     # rest is stored as written. Their times are ISO text, as the core and the Host write them.
     Collection('sink_receipts', 'records.receipts', (
         Field('_last_op', 'text'), Field('schema_version', 'number'),
-        *_text('kind', 'state', 'project', 'published_at', 'received_at')),
+        *_text('kind', 'state', 'project', 'published_at', 'received_at', 'scope_key')),
         versioned=True),
     Collection('lane_receipts', 'records.receipts', (
         Field('_last_op', 'text'), Field('schema_version', 'number'), *_text('session_id')),
@@ -536,6 +530,47 @@ CATALOG = Catalog([
         Field('first_posted_at', 'time'), Field('last_posted_at', 'time')),
         (index(('channel_id', 1), ('hour', 1)), index(('lane', 1), ('stage', 1), ('error', 1), ('hour', 1))),
         retired=('hour_at_1',), versioned=True),
+    # Tiered memory (memory_tiers.py): one collection of rows of several kinds (`row`: item, move, over, fold, rarity,
+    # told, offer, room_told), not versioned; the fields its code names or writes itself, its times ISO text.
+    Collection('memory_tiers', 'memory_tiers', (
+        *_text('row', 'persona', 'doc', 'sid', 'store', 'place', 'item', 'from', 'to', 'reason', 'by', 'at', 'what',
+               'day', 'scene_id', 'heading', 'visibility', 'nature', 'added', 'memorable_at', 'stay_from',
+               'last_use_at', 'moved_at', 'superseded_at', 'rewritten_at', 'recalled_at', 'confirmed', 'since', 'night',
+               'last_moment', 'body_sha256', 'keep'),
+        *(Field(path, 'number', nullable=True) for path in ('stay_days', 'stays', 'uses', 'chars', 'tiers_version',
+                                                             'lines', 'limit', 'version')),
+        *(Field(path, 'bool', nullable=True) for path in ('fact', 'doubled', 'felt')),
+        *(Field(path, 'list', of='text', nullable=True) for path in ('told_in', 'recalled_in', 'surfaced_in',
+                                                                     'shown_in', 'order', 'common', 'said')),
+        *(Field(path, 'object', nullable=True) for path in ('gist', 'detail_of', 'words')))),
+    # The item index of tiered memory and its pilot's rows (memory_pilot.py), not versioned: the fields its code names
+    # or writes itself (a vector, and the pilot's per-row counts and lists, are stored as written).
+    Collection('memory_shadow', 'memory_pilot', (
+        *_text('row', 'at', 'status', 'doc', 'sid', 'store', 'scope_key', 'visibility', 'inject', 'content_sha256',
+               'embedding_revision', 'synced_at', 'event_id', 'turn_kind', 'scene_id', 'scene_kind', 'session_class',
+               'query_sha256', 'error_type'),
+        *(Field(path, 'number', nullable=True) for path in ('score', 'chars', 'tiers_version', 'floor',
+                                                             'readable_items', 'job_ms', 'dropped_before',
+                                                             'previous_submit_ms')),
+        Field('vector_reused', 'bool', nullable=True),
+        *(Field(path, 'list', of='text', nullable=True) for path in ('items', 'surfaced_in'))),
+        (index(('row', 1), ('at', 1)),)),
+    # The word index of her groups' lines and the count rows of what came back (crossing.py), not versioned.
+    Collection('crossing_words', 'crossing', (
+        *_text('row', 'word', 'build', 'at'), Field('generation', 'number', nullable=True),
+        Field('seqs', 'object', nullable=True))),
+    Collection('memory_fires', 'crossing', (
+        *_text('kind', 'persona', 'scene_id', 'event_id', 'episode_id', 'at', 'word', 'ref', 'by', 'latest'),
+        *(Field(path, 'number', nullable=True) for path in ('scene_seq', 'seq', 'new', 'line_seq', 'lines')),
+        Field('kind_set', 'bool', nullable=True))),
+    # What was carried, counted per section, pair and local day (carried.py), not versioned.
+    Collection('carried_counts', 'carried', (
+        *_text('persona', 'day', 'pair', 'section'),
+        *(Field(path, 'number', nullable=True) for path in ('pair_turns', 'program_score', 'recall_hits',
+                                                             'turns_carried')),
+        Field('reconstructed', 'bool', nullable=True))),
+    Collection('carried_days', 'carried', (*_text('persona', 'day', 'at'), Field('rows', 'number', nullable=True))),
+    Collection('carried_sections', 'carried', _text('persona', 'section', 'first_carried_at', 'last_carried_at')),
     # One record, `host`: the Host holding the database (host_lease.py).
     Collection('host_leases', 'host_lease', (
         Field('instance', 'text', required=True), Field('host', 'text', nullable=True),

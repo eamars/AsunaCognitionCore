@@ -1,8 +1,10 @@
 """Read-only cognitive state coverage for the existing native Memory view."""
 import json
 
+from . import audit as audit_trail
 from .records import episodes as episode_records
 from .records import tasks as task_records
+from .records.view import ANY
 
 
 class CognitionView:
@@ -16,9 +18,7 @@ class CognitionView:
         # Episodes have no wall-clock field. Use the real context-prepared audit,
         # then reauthorize its episode; never sort opaque episode IDs as time.
         scope = self.memory.scene['scope_key']
-        query = {'type': 'context.prepared', 'scope_key': scope,
-                 'payload.context.person_id': self.binding['person_id'],
-                 'payload.context.policy_epoch': self.binding['policy_epoch']}
+        stream = ANY
         role = self.binding.get('role_session_id') or self.binding['_id']
         fence = {'session': role, 'scope': scope, 'scene': self.binding['scene_id'],
                  'person': self.binding['person_id'], 'epoch': self.binding['policy_epoch'],
@@ -32,9 +32,9 @@ class CognitionView:
             from .errands import home_turn
             begun = home_turn(self.store, episode_records.get(self.store, task['episode_id'], fields=['errand'])
                               or {'_id': task['episode_id']})
-            query['stream_id'] = begun['_id']
-        for audit in self.store.db.audit_events.find(query, {
-                'stream_id': 1, 'occurred_at': 1}).sort([('occurred_at', -1), ('_id', -1)]).limit(24):
+            stream = begun['_id']
+        for audit in audit_trail.prepared_for(self.store, scope, self.binding['person_id'], self.binding['policy_epoch'],
+                                              stream=stream):
             episode = episode_records.get(self.store, audit['stream_id'],
                                           ['context', 'manifest', 'monologue_refs', 'understanding_seen'], **fence)
             if episode:

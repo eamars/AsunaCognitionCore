@@ -127,8 +127,8 @@ def then(store, unit):
         episode = episode_records.get(store, episode_id, fields=['speech']) or {}
         said = _short(episode.get('speech'), SAID_CHARS)
         return ['所以我说了「%s」' % said] if said else []
-    calls = list(store.db.audit_events.find({'stream_id': episode_id, 'type': 'role_tool'},
-                                            {'payload': 1}).sort('seq', 1))
+    from . import audit as audit_trail
+    calls = audit_trail.events(store, 'role_tool', stream=episode_id, by='seq').rows(fields=['payload'])
     names = [(c['payload'].get('call_id'), c['payload'].get('tool')) for c in calls]
     position = next((i for i, (cid, _) in enumerate(names) if cid == call_id), None)
     if position is None:

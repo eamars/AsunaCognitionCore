@@ -116,8 +116,8 @@ def test_her_own_judgment_is_not_offered_as_a_fact_until_someone_confirms_it(on)
     tiers.surfaced([('work_log', sid)], 'g1')
     [entry] = night_list(on, 'P1', NIGHT)['items']
     assert entry['what'] == '几处都提到' and '记成事实' not in entry['how']
-    tiers.rows.update_one({'_id': tiers.item('work_log', sid)['_id']}, {'$set': {'confirmed': NIGHT.isoformat()}})
-    tiers.rows.delete_many({'row': 'offer'})
+    tiers.store.db['memory_tiers'].update_one({'_id': tiers.item('work_log', sid)['_id']}, {'$set': {'confirmed': NIGHT.isoformat()}})
+    tiers.store.db['memory_tiers'].delete_many({'row': 'offer'})
     assert '记成事实' in night_list(on, 'P1', NIGHT)['items'][0]['how'], 'confirmed from elsewhere, it may be'
 
 
@@ -163,7 +163,7 @@ def test_near_duplicates_in_a_fact_store_must_merge_and_meeting_one_elsewhere_is
     a = append(on, 'persona', '松饼一', '周六烤松饼')
     b = append(on, 'persona', '松饼二', '周六要烤松饼')
     tiers = Tiers(on, 'P1')
-    tiers.rows.update_one({'_id': tiers.item('persona', b)['_id']}, {'$set': {'scene_id': 'g1'}})
+    tiers.store.db['memory_tiers'].update_one({'_id': tiers.item('persona', b)['_id']}, {'$set': {'scene_id': 'g1'}})
     shadow = on.db[memory_pilot.COLLECTION]
     for key, sid in (('sa', a), ('sb', b)):
         shadow.insert_one({'_id': key, 'row': 'item', 'status': 'active', 'doc': 'persona', 'sid': sid})
@@ -192,7 +192,7 @@ def test_her_weekly_reading_shows_what_left_whether_she_recalled_it_one_put_away
     lapse(on, 'persona', kept)
     tiers.used([('persona', kept)], 'recalled', 'dm-a')
     old = append(on, 'work_log', '旧事', '很早以前的一件事，原话都在')
-    tiers.rows.update_one({'_id': tiers.item('work_log', old)['_id']}, {'$set': {'place': PUT_AWAY}})
+    tiers.store.db['memory_tiers'].update_one({'_id': tiers.item('work_log', old)['_id']}, {'$set': {'place': PUT_AWAY}})
     rewrite(on, 'persona', kept, '一条放下后又想起的，改过了')
     zone = {'tz': timezone.utc, 'name': 'UTC'}
     reading = memory_tiers.week(on, 'P1', zone)

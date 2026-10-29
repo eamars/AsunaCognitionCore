@@ -1,7 +1,11 @@
-"""Checks and replays the store's audit trail: `verify` walks each stream's hash chain, `verify_documents` compares
-stored documents with their last audited commit, and `replay` rebuilds the state in an empty test database.
+"""The owner of the audit trail (`audit_events`), and its checks and replays: `verify` walks each stream's hash chain,
+`verify_documents` compares stored documents with their last audited commit, and `replay` rebuilds the state in an
+empty test database.
 
-`render_html` writes a readable trace page. `asuna inspect` and `asuna replay` (cli.py) and the tests use this module.
+Every read of `audit_events` outside the shared layer (`Store.audit` appends, `Store.recover_commits`) goes through
+this module's operations; verify, trace and replay read the other collections through the store's maintenance
+surface. `render_html` writes a readable trace page. `asuna inspect` and `asuna replay` (cli.py) and the tests use
+this module.
 """
 from __future__ import annotations
 import copy
@@ -11,7 +15,119 @@ import json
 from pathlib import Path
 from . import clock
 from .evidence import canonical,sha
+from .records.view import ANY, View, fenced, is_text
 from .state import Store,Denied,content_digest,without_derived
+from .store.words import AnyOf, Exists, Max, NoneOf, Not, Or, Range
+
+
+# ── the owner of `audit_events` ──
+# A record as stored (`fields` names what to return; `_id` always comes back). None follows the store's rule (ADR-104
+# section 4): a stream, a scope, a persona or a reference given None, or a value not of its kind, finds nothing
+# without a read, and so does a time bound given None. Not given is `ANY`. Views are `View`s, ordered as the replaced
+# read was: by `occurred_at` (the default), by `seq`, by stream then `seq`, or none.
+COLLECTION = 'audit_events'
+ORDERS = {'occurred_at': (('occurred_at', 1),), 'seq': (('seq', 1),), 'stream': (('stream_id', 1), ('seq', 1)),
+          None: ()}
+
+
+def _bound(where, path, word, value):
+    """`where` with one more bound on `path` (`word`: gt, gte or lt); None when the bound is None."""
+    if value is ANY or where is None:
+        return where
+    if value is None:
+        return None
+    test = where.get(path)
+    where[path] = Range(**{**(test.bounds() if isinstance(test, Range) else {}), word: value})
+    return where
+
+
+def events(store, kind=ANY, *, kinds=ANY, stream=ANY, streams=ANY, scope=ANY, since=ANY, after=ANY, before=ANY,
+           persona=ANY, refused=ANY, outcome=ANY, reaches=ANY, besides_occurrence=ANY, ref=ANY, by='occurred_at'):
+    """View: the audit records of a kind (or of any of `kinds`), in a stream (or any of `streams`), of a scope, at or
+    after `since`, after `after`, before `before` (ISO text); and by what their payload says: the persona a review
+    was shown to, whether a tool call was refused, a roll's outcome and whether it reached her, a roll of another
+    occurrence than `besides_occurrence`, the record a mark is about (`ref`)."""
+    where = fenced({}, {'type': (kind, is_text), 'stream_id': (stream, is_text), 'scope_key': (scope, is_text),
+                        'payload.persona': (persona, is_text), 'payload.outcome': (outcome, is_text),
+                        'payload.id': (ref, is_text)})
+    if where is not None and kinds is not ANY:
+        where['type'] = AnyOf(list(kinds))
+    if where is not None and streams is not ANY:
+        where['stream_id'] = AnyOf([value for value in streams if is_text(value)])
+    if where is not None and refused is not ANY:
+        where['payload.refused'] = Exists(bool(refused))
+    if where is not None and reaches is not ANY:
+        where['payload.reaches'] = bool(reaches)
+    if where is not None and besides_occurrence is not ANY:
+        where = {**where, 'payload.occurrence': Not(besides_occurrence)} if is_text(besides_occurrence) else None
+    where = _bound(_bound(_bound(where, 'occurred_at', 'gte', since), 'occurred_at', 'gt', after),
+                   'occurred_at', 'lt', before)
+    return View(store, COLLECTION, where, ORDERS[by])
+
+
+def count(store, kind, *, since=ANY, before=ANY):
+    """How many audit records of a kind there are (at or after `since`, before `before`)."""
+    return events(store, kind, since=since, before=before, by=None).count()
+
+
+def commit_of(store, collection, document_id, fields=None):
+    """The audited commit that wrote this document into this collection inline, or None."""
+    where = fenced({'type': 'state.commit'}, {'payload.collection': (collection, is_text),
+                                              'payload.document._id': (document_id, is_text)})
+    return View(store, COLLECTION, where).first(fields=fields)
+
+
+def prepared_for(store, scope, person, epoch, *, stream=ANY, limit=24, page=200):
+    """The newest `context.prepared` records (stream and time only) of turns in this scope with this person at this
+    policy epoch, at most `limit`, newest first (ties by id). Who a turn was with is in each record's payload, which
+    some kinds of records write as text: it is read with the record and compared here, page by page in that order."""
+    if not (is_text(person) and isinstance(epoch, (int, float)) and not isinstance(epoch, bool)):
+        return []
+    view = View(store, COLLECTION, fenced({'type': 'context.prepared'}, {'scope_key': (scope, is_text),
+                                                                        'stream_id': (stream, is_text)}),
+                (('occurred_at', 1), ('_id', 1)))
+    found, skip = [], 0
+    while len(found) < limit:
+        rows = view.rows(newest_first=True, limit=page, skip=skip,
+                         fields=['stream_id', 'occurred_at', 'payload.context.person_id',
+                                 'payload.context.policy_epoch'])
+        for row in rows:
+            context = (row.get('payload') or {}).get('context')
+            if isinstance(context, dict) and context.get('person_id') == person and context.get('policy_epoch') == epoch:
+                found.append({key: row[key] for key in ('_id', 'stream_id', 'occurred_at') if key in row})
+        if len(rows) < page:
+            break
+        skip += page
+    return found[:limit]
+
+
+def streams(store):
+    """Every stream of the audit trail, ascending."""
+    return store.collection(COLLECTION).group({}, ['stream_id'], None)
+
+
+def redact_streams(store, scope, deletion, streams_of, session_ids):
+    """An erasure's declared rebase of the audit chain (ADR-105): in every stream, each record of the scope, of a
+    stream of one of `streams_of` (a turn's or a task's id, or one of their sub-streams), or whose payload names one
+    of `session_ids` has its payload replaced by the deletion's mark and its payload's hash; every record is
+    re-chained. (previous roots, new roots), by stream."""
+    previous_roots, new_roots = {}, {}
+    rows = store.collection(COLLECTION)
+    for stream in streams(store):
+        previous = '0' * 64
+        chain = events(store, stream=stream, by='seq').rows()
+        previous_roots[stream] = chain[-1]['event_hash']
+        for event in chain:
+            of_turn = any(stream == key or stream.startswith(key + ':') for key in streams_of)
+            if event['scope_key'] == scope or of_turn or any(sid in str(event.get('payload', {})) for sid in session_ids):
+                event['payload'] = {'redacted_by': deletion, 'previous_payload_sha256': sha(canonical(event['payload']))}
+            event['prev_hash'] = previous
+            event.pop('event_hash')
+            event['event_hash'] = sha(canonical(event))
+            previous = event['event_hash']
+            rows.replace(event)
+        new_roots[stream] = previous
+    return previous_roots, new_roots
 
 
 def reconcile_calls(observed_body_hashes,events):
@@ -35,11 +151,21 @@ LATEST_KEPT=('review.tools_week','review.tools_week.started','review.exchanges',
 CAP_BYTES=6*10**9
 
 
+LATEST_PAGE=500
+
+
 def _latest(store):
-    """The _ids of the newest record of each LATEST_KEPT kind in each stream (by the stream's seq): never pruned."""
-    return [row['id'] for row in store.db.audit_events.aggregate([
-        {'$match':{'type':{'$in':list(LATEST_KEPT)}}},{'$sort':{'seq':-1}},
-        {'$group':{'_id':{'type':'$type','stream':'$stream_id'},'id':{'$first':'$_id'}}}])]
+    """The _ids of the newest record of each LATEST_KEPT kind in each stream (by its time): never pruned. Two records
+    of one kind in one stream at the same moment are both kept."""
+    rows=store.collection(COLLECTION)
+    heads=rows.group({'type':AnyOf(list(LATEST_KEPT))},('type','stream_id'),Max('occurred_at'))
+    out=[]
+    for start in range(0,len(heads),LATEST_PAGE):
+        page=heads[start:start+LATEST_PAGE]
+        out+=[row['_id'] for row in rows.find(Or(*[{'type':head['type'],'stream_id':head['stream_id'],
+                                                         'occurred_at':head['total']} for head in page]),
+                                                fields=['_id'])]
+    return out
 
 
 def prune(store, moment=None, cap=None):
@@ -51,28 +177,27 @@ def prune(store, moment=None, cap=None):
     started=time.monotonic()
     moment=moment or clock.now()
     cap=CAP_BYTES if cap is None else cap
-    first=store.db.command('collStats','audit_events')
+    rows=store.collection(COLLECTION)
+    first=rows.size()
     keep=_latest(store)
     cutoff=(moment-timedelta(days=RETENTION_DAYS)).isoformat()
-    deleted=store.db.audit_events.delete_many({'occurred_at':{'$lt':cutoff},'_id':{'$nin':keep},
-                                               'type':{'$nin':list(KEPT_DAYS)}}).deleted_count
+    deleted=rows.delete({'occurred_at':Range(lt=cutoff),'_id':NoneOf(keep),'type':NoneOf(list(KEPT_DAYS))},many=True)
     for kind,days in KEPT_DAYS.items():
-        deleted+=store.db.audit_events.delete_many({'type':kind,'occurred_at':{
-            '$lt':(moment-timedelta(days=days)).isoformat()}}).deleted_count
+        deleted+=rows.delete({'type':kind,'occurred_at':Range(lt=(moment-timedelta(days=days)).isoformat())},many=True)
     before,by=cutoff,{'time':deleted} if deleted else {}
-    stats=store.db.command('collStats','audit_events')
-    if stats.get('size',0)>cap and stats.get('count'):
+    stats=rows.size()
+    if stats.bytes>cap and stats.records:
         # as many of the oldest as the excess holds at the average record size; the boundary is the next one's time
-        over=-(-(stats['size']-cap)*stats['count']//stats['size'])
-        nxt=list(store.db.audit_events.find({'_id':{'$nin':keep}},{'occurred_at':1}).sort('occurred_at',1).skip(over).limit(1))
+        over=-(-(stats.bytes-cap)*stats.records//stats.bytes)
+        nxt=list(rows.find({'_id':NoneOf(keep)},[('occurred_at',1)],over,1,['occurred_at']))
         if nxt:
             before=max(before,nxt[0]['occurred_at'])
-            by['size']=store.db.audit_events.delete_many({'occurred_at':{'$lt':before},'_id':{'$nin':keep}}).deleted_count
+            by['size']=rows.delete({'occurred_at':Range(lt=before),'_id':NoneOf(keep)},many=True)
             deleted+=by['size']
-    last=store.db.command('collStats','audit_events')
+    last=rows.size()
     store.audit('audit-retention','audit.pruned',{'before':before,'deleted':deleted,'by':by,
-                                                 'records':[first.get('count',0),last.get('count',0)],
-                                                 'bytes':[first.get('size',0),last.get('size',0)],
+                                                 'records':[first.records,last.records],
+                                                 'bytes':[first.bytes,last.bytes],
                                                  'seconds':round(time.monotonic()-started,1),'days':RETENTION_DAYS,
                                                  'kept_days':KEPT_DAYS,'latest_kept':list(LATEST_KEPT),'cap_bytes':cap})
     return deleted
@@ -111,7 +236,7 @@ def verify_documents(events: list[dict], store: Store):
             latest[_commit_key(event['payload'])]=event['payload']
     tampered=[]
     for (collection,key),payload in latest.items():
-        doc=store.db[collection].find_one({'_id':key})
+        doc=store.maintenance.record(collection,key)
         if doc is not None and payload.get('derived_left_out'):
             doc=without_derived(collection,doc,payload['derived_left_out'])[0]
         expected=payload.get('document')
@@ -132,7 +257,7 @@ def trace_contents(events: list[dict], store: Store):
     for event in events:
         payload=event['payload']
         if event['type']=='state.commit' and 'content_sha256' in payload:
-            doc=store.db[payload['collection']].find_one({'_id':payload['id']})
+            doc=store.maintenance.record(payload['collection'],payload['id'])
             if doc is not None and payload.get('derived_left_out'):
                 doc=without_derived(payload['collection'],doc,payload['derived_left_out'])[0]
             if doc is not None and content_digest(payload['collection'],doc)==payload['content_sha256']:
@@ -149,7 +274,7 @@ def replay(events: list[dict], target: Store, contents: dict | None=None):
     for event in sorted(events,key=lambda e:(e['occurred_at'],e['stream_id'],e['seq'])):
         if event['type']=='state.commit':
             last[_commit_key(event['payload'])]=event['_id']
-    if any(target.db[c].count_documents({}) for c in ('state_heads','tasks','messages')):
+    if any(next(iter(target.maintenance.records(c)),None) is not None for c in ('state_heads','tasks','messages')):
         raise Denied('REPLAY_TARGET_NOT_EMPTY')
     target.migrate()
     # Only state projections; this function has no lane/tool/publication dependency.
@@ -166,14 +291,14 @@ def replay(events: list[dict], target: Store, contents: dict | None=None):
                     continue
                 if content_digest(collection,doc)!=payload['content_sha256']:
                     raise ValueError('REPLAY_CONTENT_MISMATCH: '+collection+'/'+str(payload['id']))
-            current=target.db[collection].find_one({'_id':doc['_id']})
+            current=target.maintenance.record(collection,doc['_id'])
             if not current or current.get('revision',0)<doc.get('revision',0):
-                target.db[collection].replace_one({'_id':doc['_id']},copy.deepcopy(doc),upsert=True)
+                target.maintenance.restore(collection,copy.deepcopy(doc))
     return projection(target)
 
 
 def projection(store):
-    data={name:list(store.db[name].find({}).sort('_id',1)) for name in ('state_heads','tasks','messages','sink_receipts')}
+    data={name:list(store.maintenance.records(name)) for name in ('state_heads','tasks','messages','sink_receipts')}
     return {'sha256':sha(canonical(data)),'data':data}
 
 

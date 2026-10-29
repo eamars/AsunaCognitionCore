@@ -106,7 +106,7 @@ def test_her_own_note_on_the_word_comes_first_and_takes_its_place(turn):
     sid = write(docs, slug, '破甲', '绕过安全锁的意思')
     tiers = Tiers(store, 'P1')
     tiers.sync()
-    tiers.rows.update_one({'_id': tiers.item(slug, sid)['_id']}, {'$set': {'place': AT_HAND}})
+    tiers.store.db['memory_tiers'].update_one({'_id': tiers.item(slug, sid)['_id']}, {'$set': {'place': AT_HAND}})
     builder.pilot.sync()
     context = prepare('e-1', '破甲是什么')
     assert [m.get('kind') for m in context['memories'] if m.get('kind') in ('own_item', 'cue')] == ['own_item']
@@ -120,7 +120,7 @@ def test_what_came_back_is_counted_and_told_once_a_day_in_words(turn):
     sid = write(docs, slug, '破甲', '绕过安全锁的意思')
     tiers = Tiers(store, 'P1')
     tiers.sync()
-    tiers.rows.update_one({'_id': tiers.item(slug, sid)['_id']}, {'$set': {'place': AT_HAND}})
+    tiers.store.db['memory_tiers'].update_one({'_id': tiers.item(slug, sid)['_id']}, {'$set': {'place': AT_HAND}})
     builder.pilot.sync()
     told = prepare('e-1', '破甲是什么')['things_from_program']['came_back']
     row = store.db[crossing.FIRES].find_one({'kind': 'note'})

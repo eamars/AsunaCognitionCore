@@ -32,6 +32,8 @@ from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import memories as memory_records
+from .records.view import View, fenced, is_text
+from .store.words import AddToSet, AnyOf, HoldsNone, Increase, NoneOf, OnCreate, Range, Set
 
 TIERS_VERSION = 1
 ENABLED = True                     # the switch (ADR-062 phase 2): hers and the owner's to turn on
@@ -199,17 +201,57 @@ def ref(doc, sid):
     return 'doc:%s#%s' % (doc, sid)
 
 
+# ── the owner of `memory_tiers` ──
+# Its rows (`row`: item, move, over, fold, rarity, told, offer, room_told), read and written only through `Tiers` and
+# these. A persona given None finds nothing (ADR-104 section 4).
+def items(store, persona, /, *, by=None, **where):
+    """View: a persona's items (rows `item`) whose fields equal these (or meet these words), ordered by `by` (none: the
+    database's order)."""
+    return View(store, COLLECTION, fenced({'row': 'item', **where}, {'persona': (persona, is_text)}),
+                ((by, 1),) if by else ())
+
+
+def moves(store, persona):
+    """View: a persona's moves (rows `move`)."""
+    return View(store, COLLECTION, fenced({'row': 'move'}, {'persona': (persona, is_text)}))
+
+
+def room_told(store, key):
+    """The identity room last told in a conversation (carried.room_block's row), or None."""
+    return store.collection(COLLECTION).get(key) if is_text(key) else None
+
+
+def tell_room(store, key, persona, scene_id, words, version, at):
+    """The identity room told in a conversation, kept to say it again only when its words change."""
+    store.collection(COLLECTION).update({'_id': key}, Set({'row': 'room_told', 'persona': persona,
+                                                           'scene_id': scene_id, 'words': words, 'version': version,
+                                                           'at': at}), create=True)
+
+
 class Tiers:
     def __init__(self, store, persona):
         self.store, self.persona = store, persona
-        self.rows = store.db[COLLECTION]
+        self.rows = store.collection(COLLECTION)
 
     # ── items ──────────────────────────────────────────────────────
     def items(self, **query):
-        return list(self.rows.find({'row': 'item', 'persona': self.persona, **query}))
+        return items(self.store, self.persona, **query).rows()
 
     def item(self, doc, sid):
-        return self.rows.find_one({'_id': item_id(self.persona, doc, sid)})
+        return self.rows.get(item_id(self.persona, doc, sid))
+
+    def _first(self, where, *, by=None, fields=None):
+        """The first row meeting `where` (newest first by `by`), or None."""
+        return next(self.rows.find(where, ((by, -1),) if by else (), 0, 1, fields), None)
+
+    def _make(self, row):
+        """Write a row once: a row of this id already there is left as it is. Returns the stored row."""
+        self.rows.update({'_id': row['_id']}, OnCreate({k: v for k, v in row.items() if k != '_id'}), create=True)
+        return self.rows.get(row['_id'])
+
+    def last_move(self, item):
+        """The latest move of an item, or None."""
+        return self._first({'row': 'move', 'item': item}, by='at')
 
     def _new(self, doc, sid, kind, section, place, moment, *, scene_id=None, felt=False):
         row = {'_id': item_id(self.persona, doc, sid), 'row': 'item', 'tiers_version': TIERS_VERSION,
@@ -221,8 +263,7 @@ class Tiers:
                'body_sha256': section.get('body_sha256') or sha((section.get('body') or '').encode()),
                'chars': len(section.get('body') or ''), 'surfaced_in': [], 'recalled_in': [],
                **({'scene_id': scene_id} if scene_id else {}), **({'felt': True} if felt else {})}
-        self.rows.update_one({'_id': row['_id']}, {'$setOnInsert': row}, upsert=True)
-        return self.rows.find_one({'_id': row['_id']})
+        return self._make(row)
 
     def sync(self, moment=None):
         """Every item has a row. One the program has not seen takes its place from its `inject` (always 随身,
@@ -231,8 +272,7 @@ class Tiers:
         from .documents import DocumentStore
         moment = moment or clock.now()
         docs = DocumentStore(self.store, self.persona)
-        known = {(row['doc'], row['sid']) for row in self.rows.find({'row': 'item', 'persona': self.persona},
-                                                                     {'doc': 1, 'sid': 1})}
+        known = {(row['doc'], row['sid']) for row in items(self.store, self.persona).each(fields=['doc', 'sid'])}
         switch_on = not known
         for slug in docs.slugs():
             content = docs.read(slug)[1] or {}
@@ -248,15 +288,15 @@ class Tiers:
                 usual = int(row.get('stay_days') or STAY_DAYS)
                 if switch_on and usual < STAY_CAP_DAYS:
                     spread = int(sha(row['_id'].encode())[:8], 16) % (min(usual, STAY_CAP_DAYS - usual) + 1)
-                    self.rows.update_one({'_id': row['_id']}, {'$set': {'stay_days': usual + spread}})
+                    self.rows.update({'_id': row['_id']}, Set({'stay_days': usual + spread}))
 
     def placed(self, slug, content, override=None):
         """A document as the turn reads it: each section's `inject` follows its place (a copy; the text untouched).
         `override` ({sid: place}) is where a write will leave the sections it moves (placement_after)."""
         if not content or not content.get('sections'):
             return content
-        places = {row['sid']: row['place'] for row in self.rows.find(
-            {'row': 'item', 'persona': self.persona, 'doc': slug}, {'sid': 1, 'place': 1})}
+        places = {row['sid']: row['place'] for row in items(self.store, self.persona, doc=slug).each(
+            fields=['sid', 'place'])}
         places.update(override or {})
         if not places:
             return content
@@ -277,13 +317,13 @@ class Tiers:
             fields['superseded_at'] = _iso(moment)
         if reason == 'stay':
             fields['stays'] = int(row.get('stays') or 0) + 1
-        self.rows.update_one({'_id': row['_id']}, {'$set': fields})
+        self.rows.update({'_id': row['_id']}, Set(fields))
         by = moved_by({'reason': reason})
         move = {'_id': 'move:' + sha(canonical([row['_id'], row['place'], to, _iso(moment)]))[:32], 'row': 'move',
                 'persona': self.persona, 'item': row['_id'], 'doc': row['doc'], 'sid': row['sid'],
                 'heading': row.get('heading'), 'store': row['store'], 'visibility': row.get('visibility'),
                 'from': row['place'], 'to': to, 'reason': reason, 'by': by, 'at': _iso(moment), 'told_in': []}
-        self.rows.update_one({'_id': move['_id']}, {'$setOnInsert': move}, upsert=True)
+        self._make(move)
         self.store.audit('memory:' + self.persona, 'memory.moved', {'item': row['_id'], 'doc': row['doc'],
                          'sid': row['sid'], 'from': row['place'], 'to': to, 'reason': reason, 'by': by,
                          **({'scene_id': scene_id} if scene_id else {})}, 'global-safe')
@@ -293,7 +333,7 @@ class Tiers:
         """Lapses whose stay ran out and memories cooled by disuse; facts never cool. Returns the moves."""
         moment = moment or clock.now()
         moves = []
-        for row in self.items(place={'$in': [CARRIED, AT_HAND]}):
+        for row in self.items(place=AnyOf([CARRIED, AT_HAND])):
             if row['place'] == CARRIED:
                 start = _at(row.get('memorable_at')) or moment
                 if moment - start > timedelta(days=float(row.get('stay_days') or STAY_DAYS)):
@@ -314,7 +354,7 @@ class Tiers:
         fields = {'memorable_at': _iso(moment), 'last_use_at': _iso(moment), 'last_moment': why}
         if not row.get('doubled'):
             fields.update(stay_days=min(STAY_CAP_DAYS, float(row.get('stay_days') or STAY_DAYS) * 2), doubled=True)
-        self.rows.update_one({'_id': row['_id']}, {'$set': fields, '$inc': {'uses': 1}})
+        self.rows.update({'_id': row['_id']}, [Set(fields), Increase('uses')])
 
     PER_DOC = ('ledger', 'group_notes', 'self', 'core')
 
@@ -340,18 +380,18 @@ class Tiers:
         carried = self._carried(doc, kind)
         key = 'over:%s:%s' % (self.persona, doc if kind in self.PER_DOC else 'store:' + kind)
         if not cap or len(carried) <= cap:
-            self.rows.delete_one({'_id': key})
+            self.rows.delete({'_id': key})
             return []
-        pending = self.rows.find_one({'_id': key})
+        pending = self.rows.get(key)
         order = self._lapse_order([row for row in carried if row['_id'] not in (keep, (pending or {}).get('keep'))])
         if not pending or not pending.get('shown_in'):
             # Waiting for her: one item over at most; more than that lapses by the rule now (her choice is the last).
-            self.rows.update_one({'_id': key}, {'$setOnInsert': {'row': 'over', 'persona': self.persona, 'doc': doc,
-                                                                 'store': kind, 'since': _iso(moment), 'shown_in': []},
-                                                '$set': {'keep': keep}}, upsert=True)
+            self.rows.update({'_id': key}, [OnCreate({'row': 'over', 'persona': self.persona, 'doc': doc,
+                                                      'store': kind, 'since': _iso(moment), 'shown_in': []}),
+                                            Set({'keep': keep})], create=True)
             return [move for move in (self.move(row, AT_HAND, 'overflow', moment)
                                       for row in order[:max(0, len(carried) - cap - 1)]) if move]
-        self.rows.delete_one({'_id': key})
+        self.rows.delete({'_id': key})
         return [move for move in (self.move(row, AT_HAND, 'overflow', moment) for row in order[:len(carried) - cap])
                 if move]
 
@@ -368,7 +408,7 @@ class Tiers:
             carried = self._carried(pending['doc'], pending['store'])
             cap = CAPS.get(pending['store'])
             if not cap or len(carried) <= cap:
-                self.rows.delete_one({'_id': pending['_id']})
+                self.rows.delete({'_id': pending['_id']})
                 continue
             def unused(row):
                 last = max(filter(None, (_at(row.get('memorable_at')), _at(row.get('last_use_at')))), default=moment)
@@ -379,7 +419,7 @@ class Tiers:
                                       '；'.join('「%s」%d 天没用到' % (row.get('heading') or row['sid'], unused(row))
                                                for row in listed),
                                       oldest.get('heading') or oldest['sid']))
-            self.rows.update_one({'_id': pending['_id']}, {'$addToSet': {'shown_in': scene_id}})
+            self.rows.update({'_id': pending['_id']}, AddToSet('shown_in', scene_id))
         return lines
 
     # ── her writes ─────────────────────────────────────────────────
@@ -451,10 +491,10 @@ class Tiers:
         for sid in [sid for sid in new if sid not in old]:
             # Encoding: what she just wrote is fresh in mind, unless she wrote it tucked away herself.
             row = self.item(slug, sid) or self._new(slug, sid, kind, new[sid], start, moment)
-            self.rows.update_one({'_id': row['_id']}, {'$set': {
+            self.rows.update({'_id': row['_id']}, Set({
                 'place': (plan.get(sid) or [(row['place'], None)])[-1][0], 'heading': new[sid].get('heading') or sid,
                 'visibility': new[sid].get('visibility'),
-                **({'scene_id': scene_id} if scene_id else {}), **({'felt': True} if felt else {})}})
+                **({'scene_id': scene_id} if scene_id else {}), **({'felt': True} if felt else {})}))
             if self.item(slug, sid)['place'] == CARRIED:
                 moves += self._overflow(slug, kind, row['_id'], moment)
             if op == 'correction' and new[sid].get('corrects') in old:
@@ -466,26 +506,26 @@ class Tiers:
             # What she says an item is, or where it came from, when she writes or tags it.
             for sid in ([sid for sid in new if sid not in old] if op in ('append_section', 'correction')
                         else [intent.get('sid')] if intent.get('sid') in new else []):
-                self.rows.update_one({'_id': item_id(self.persona, slug, sid)}, {'$set': declared})
+                self.rows.update({'_id': item_id(self.persona, slug, sid)}, Set(declared))
         sid = intent.get('sid')
         if op == 'replace_section' and sid in old and sid in new:
             row = self.item(slug, sid)
             changed = old[sid].get('body_sha256') != new[sid].get('body_sha256')
             if self._gist_rewrite(slug, intent, old, new):
                 body = new[sid].get('body') or ''
-                self.rows.update_one({'_id': row['_id']}, {'$set': {
+                self.rows.update({'_id': row['_id']}, Set({
                     'gist.done': _iso(moment), 'detail_of': {'revision_id': before_revision,
                                                              'body_sha256': old[sid].get('body_sha256')},
-                    'body_sha256': new[sid].get('body_sha256'), 'chars': len(body)}})
+                    'body_sha256': new[sid].get('body_sha256'), 'chars': len(body)}))
                 self._refold(slug, kind, after)
                 return [move for move in moves if move]
             if row:
-                self.rows.update_one({'_id': row['_id']}, {'$set': {
+                self.rows.update({'_id': row['_id']}, Set({
                     'heading': new[sid].get('heading') or sid, 'visibility': new[sid].get('visibility'),
-                    'body_sha256': new[sid].get('body_sha256'), 'chars': len(new[sid].get('body') or '')}})
+                    'body_sha256': new[sid].get('body_sha256'), 'chars': len(new[sid].get('body') or '')}))
             if row and changed:
                 self.memorable(row, 'rewritten', moment, scene_id=scene_id)
-                self.rows.update_one({'_id': row['_id']}, {'$set': {'rewritten_at': _iso(moment)}})
+                self.rows.update({'_id': row['_id']}, Set({'rewritten_at': _iso(moment)}))
         if op in ('replace_section', 'set_tags') and sid in old and sid in new:
             for place, reason in plan.get(sid) or []:
                 # The lift a changed rewrite brings, then the let_go a tag that tucks it away is.
@@ -517,14 +557,14 @@ class Tiers:
         """Recompute and keep a group's fold order (on her write and at settlement, not every turn, so the block is
         not re-sent for it)."""
         order = self.fold_order(slug, content)
-        self.rows.update_one({'_id': 'fold:%s:%s' % (self.persona, slug)}, {'$set': {
-            'row': 'fold', 'persona': self.persona, 'doc': slug, 'order': order, 'at': _iso(moment or clock.now())}},
-            upsert=True)
+        self.rows.update({'_id': 'fold:%s:%s' % (self.persona, slug)}, Set({
+            'row': 'fold', 'persona': self.persona, 'doc': slug, 'order': order, 'at': _iso(moment or clock.now())}),
+            create=True)
         return order
 
     def folding(self, slug, content):
         """The kept fold order of a group's notes, made once when there is none."""
-        row = self.rows.find_one({'_id': 'fold:%s:%s' % (self.persona, slug)}, {'order': 1})
+        row = self.rows.get('fold:%s:%s' % (self.persona, slug), ['order'])
         return row['order'] if row else self.refold(slug, content)
 
     # ── a place's common words, for her items' keys (ADR-097) ───────
@@ -547,11 +587,11 @@ class Tiers:
                'limit': key_words.limit(len(lines)), 'common': key_words.common(lines),
                'said': key_words.said(lines, platform.INBOUND_MENTION if platform else None, crossing.number('said_here')),
                'openings': key_words.openings(lines), 'at': _iso(moment or clock.now())}
-        self.rows.update_one({'_id': 'rarity:%s:%s' % (self.persona, scene_id)}, {'$set': row}, upsert=True)
+        self.rows.update({'_id': 'rarity:%s:%s' % (self.persona, scene_id)}, Set(row), create=True)
         return row
 
     def _rated(self, scene_id, field):
-        row = self.rows.find_one({'_id': 'rarity:%s:%s' % (self.persona, scene_id)}, {field: 1})
+        row = self.rows.get('rarity:%s:%s' % (self.persona, scene_id), [field])
         return set((row if row and field in row else self.rerate(scene_id))[field])
 
     def rarity(self, scene_id):
@@ -574,7 +614,7 @@ class Tiers:
         places = sorted(set(message_records.inbound(self.store, since=since).values('scene_id')))
         for scene_id in places:
             self.rerate(scene_id, moment)
-        self.rows.delete_many({'row': 'rarity', 'persona': self.persona, 'scene_id': {'$nin': places}})
+        self.rows.delete({'row': 'rarity', 'persona': self.persona, 'scene_id': NoneOf(places)}, many=True)
         return len(places)
 
     def let_go(self, slug, sid, *, scene_id=None, moment=None):
@@ -591,8 +631,8 @@ class Tiers:
             row = self.item(doc, sid)
             if row:
                 if why == 'recalled':
-                    self.rows.update_one({'_id': row['_id']}, {'$addToSet': {'recalled_in': scene_id},
-                                                               '$set': {'recalled_at': _iso(moment or clock.now())}})
+                    self.rows.update({'_id': row['_id']}, [AddToSet('recalled_in', scene_id),
+                                                           Set({'recalled_at': _iso(moment or clock.now())})])
                 self.memorable(row, why, moment, scene_id=scene_id)
 
     def surfaced(self, refs, scene_id, moment=None):
@@ -602,8 +642,8 @@ class Tiers:
             if not row:
                 continue
             seen = set(row.get('surfaced_in') or [])
-            self.rows.update_one({'_id': row['_id']}, {'$addToSet': {'surfaced_in': scene_id},
-                                                       '$set': {'last_use_at': _iso(moment or clock.now())}})
+            self.rows.update({'_id': row['_id']}, [AddToSet('surfaced_in', scene_id),
+                                                   Set({'last_use_at': _iso(moment or clock.now())})])
             if scene_id not in seen and seen:
                 self.memorable(row, 'surfaced_again', moment, scene_id=scene_id)
 
@@ -638,7 +678,7 @@ class Tiers:
                        else words(COUNT_WORDS, n)) for place, n in tally.items())
                   for kind, tally in sorted(counts.items())}
         moves = [move for move in self.rows.find({'row': 'move', 'persona': self.persona,
-                                                  'told_in': {'$ne': scene['_id']}}).sort('at', -1)
+                                                  'told_in': HoldsNone([scene['_id']])}, [('at', -1)])
                  if here(move)][:MOVED_SHOWN]
         block = {'places': places}
         from .carried import room_block
@@ -650,9 +690,9 @@ class Tiers:
             block['over'] = over
         if moves:
             block['moved'] = ['%s %s' % (line_stamp(zone, move['at']), told(move)) for move in reversed(moves)]
-            self.rows.update_many({'_id': {'$in': [move['_id'] for move in moves]}},
-                                  {'$addToSet': {'told_in': scene['_id']}})
-        if home and not self.rows.find_one({'row': 'item', 'persona': self.persona, 'doc': SELF_DOC}):
+            self.rows.update({'_id': AnyOf([move['_id'] for move in moves])}, AddToSet('told_in', scene['_id']),
+                             many=True)
+        if home and not items(self.store, self.persona, doc=SELF_DOC).first():
             block['self_items'] = SELF_OFFER
         came = self.came_back(here, scene, zone, moment)
         if came:
@@ -665,11 +705,11 @@ class Tiers:
         from . import crossing
         day = moment.astimezone(zone['tz'] if isinstance(zone, dict) else timezone.utc).date().isoformat()
         key = 'came_back:%s:%s' % (self.persona, scene['_id'])
-        if (self.rows.find_one({'_id': key}, {'day': 1}) or {}).get('day') == day:
+        if (self.rows.get(key, ['day']) or {}).get('day') == day:
             return None
         since = _iso(moment - timedelta(days=1))
-        rows = list(self.store.db[crossing.FIRES].find({'persona': self.persona, 'kind': {'$in': [k for k, _ in CAME_BACK_KINDS]},
-                                                        'at': {'$gte': since}}, {'kind': 1, 'ref': 1}))
+        rows = crossing.fire_rows(self.store, since, persona=self.persona,
+                                  kinds=[k for k, _ in CAME_BACK_KINDS]).rows(fields=['kind', 'ref'])
         tally = {kind: sum(1 for row in rows if row['kind'] == kind) for kind, _ in CAME_BACK_KINDS}
         notes = {}
         for row in rows:
@@ -685,8 +725,8 @@ class Tiers:
                 break
         parts = ['%s %s' % (label, words(TIMES_WORDS, tally[kind])) + ('（%s）' % '、'.join(named) if kind == 'note' and named else '')
                  for kind, label in CAME_BACK_KINDS]
-        self.rows.update_one({'_id': key}, {'$set': {'row': 'told', 'persona': self.persona, 'scene_id': scene['_id'],
-                                                     'day': day}}, upsert=True)
+        self.rows.update({'_id': key}, Set({'row': 'told', 'persona': self.persona, 'scene_id': scene['_id'],
+                                            'day': day}), create=True)
         return '最近一天：' + '；'.join(parts)
 
 
@@ -772,8 +812,8 @@ def night_list(store, persona, moment=None, *, excerpt_chars=600):
         gist = row.get('gist') or {}
         if gist.get('done'):
             continue
-        lapsed = tiers.rows.find_one({'row': 'move', 'item': row['_id'], 'from': CARRIED, 'to': AT_HAND,
-                                      'reason': {'$in': ['stay', 'overflow']}})
+        lapsed = tiers._first({'row': 'move', 'item': row['_id'], 'from': CARRIED, 'to': AT_HAND,
+                               'reason': AnyOf(['stay', 'overflow'])})
         text = body(row) if lapsed else ''
         # Her answer: an item of 160 characters or fewer is already short and never appears on the list.
         if not lapsed or len(text) <= GIST_CHARS or not (len(text) > GIST_LIST_ABOVE or DATED.search(text)):
@@ -783,17 +823,18 @@ def night_list(store, persona, moment=None, *, excerpt_chars=600):
         if len(gist.get('nights') or []) >= GIST_NIGHTS and night not in gist['nights']:
             if row.get('fact'):
                 # A fact never goes put away by disuse: its verbatim stays at hand, no longer listed.
-                tiers.rows.update_one({'_id': row['_id']}, {'$set': {'gist.skipped': _iso(moment)}})
+                tiers.rows.update({'_id': row['_id']}, Set({'gist.skipped': _iso(moment)}))
             else:
                 tiers.move(row, PUT_AWAY, 'gist_skipped', moment)
             continue
         items.append(('gist', entry('gist', row, NIGHT_WHY['gist']), [row]))
     # 合并: near-duplicate pairs in one store (the item index's pairs), facts first.
-    rows = {(row['doc'], row['sid']): row for row in tiers.items(place={'$in': [CARRIED, AT_HAND]})}
-    shadow = {row['_id']: (row.get('doc'), row.get('sid')) for row in store.db['memory_shadow'].find(
-        {'row': 'item', 'status': 'active'}, {'doc': 1, 'sid': 1})}
+    from . import memory_pilot
+    rows = {(row['doc'], row['sid']): row for row in tiers.items(place=AnyOf([CARRIED, AT_HAND]))}
+    shadow = {row['_id']: (row.get('doc'), row.get('sid')) for row in memory_pilot.rows(
+        store, 'item', status='active').each(fields=['doc', 'sid'])}
     pairs = []
-    for pair in store.db['memory_shadow'].find({'row': 'pair', 'score': {'$gte': DUPLICATE_SCORE}}):
+    for pair in memory_pilot.rows(store, 'pair', min_score=DUPLICATE_SCORE).each():
         a, b = (rows.get(shadow.get(key)) for key in pair['items'])
         if a and b and a['store'] == b['store'] and a['doc'] == b['doc']:
             pairs.append((not a.get('fact'), a, b))
@@ -804,7 +845,7 @@ def night_list(store, persona, moment=None, *, excerpt_chars=600):
                     tiers.memorable(row, 'duplicate_elsewhere', moment)       # met again from another conversation
                 if elsewhere or other.get('from') in OTHERS_SAID:
                     # The same from someone else confirms a judgment of hers: it may now be made a fact.
-                    tiers.rows.update_one({'_id': row['_id']}, {'$set': {'confirmed': _iso(moment)}})
+                    tiers.rows.update({'_id': row['_id']}, Set({'confirmed': _iso(moment)}))
     for _, a, b in sorted(pairs, key=lambda p: (p[0], p[1]['_id'])):
         merged = entry('merge', a, NIGHT_WHY['merge'])
         merged['what'] = NIGHT_WHAT['merge']
@@ -818,7 +859,7 @@ def night_list(store, persona, moment=None, *, excerpt_chars=600):
         places = set(row.get('surfaced_in') or []) | set(row.get('recalled_in') or [])
         if len(places) < REPEATED_PLACES and int(row.get('stays') or 0) < REPEATED_STAYS:
             continue
-        if tiers.rows.find_one({'row': 'offer', 'item': row['_id'], 'what': 'repeated', 'at': {'$gte': week}}):
+        if tiers._first({'row': 'offer', 'item': row['_id'], 'what': 'repeated', 'at': Range(gte=week)}):
             continue
         items.append(('repeated', entry('repeated', row, NIGHT_WHY['repeated']), [row]))
     order = {'gist': 0, 'merge_fact': 1, 'merge': 2, 'repeated': 3}
@@ -828,12 +869,11 @@ def night_list(store, persona, moment=None, *, excerpt_chars=600):
     for kind, _, rows_ in items:
         for row in rows_:
             what = 'gist' if kind == 'gist' else 'merge' if kind.startswith('merge') else kind
-            tiers.rows.update_one({'_id': 'offer:' + sha(canonical([row['_id'], what, night]))[:32]}, {'$setOnInsert': {
+            tiers.rows.update({'_id': 'offer:' + sha(canonical([row['_id'], what, night]))[:32]}, OnCreate({
                 'row': 'offer', 'persona': persona, 'item': row['_id'], 'what': what, 'night': night,
-                'at': _iso(moment)}}, upsert=True)
+                'at': _iso(moment)}), create=True)
             if kind == 'gist':
-                tiers.rows.update_one({'_id': row['_id']}, {'$set': {'gist.listed': True},
-                                                            '$addToSet': {'gist.nights': night}})
+                tiers.rows.update({'_id': row['_id']}, [Set({'gist.listed': True}), AddToSet('gist.nights', night)])
     def how(kind, rows_):
         if kind != 'repeated':
             return NIGHT_HOW[kind]
@@ -853,8 +893,9 @@ def recalled(store, window_days, moment=None):
     moment = moment or clock.now()
     since = (moment - timedelta(days=float(window_days or 7))).isoformat()
     seen = {}
-    for row in store.db.audit_events.find({'type': 'recall.read', 'occurred_at': {'$gte': since}},
-                                          {'stream_id': 1, 'scope_key': 1, 'payload.memories': 1}):
+    from . import audit as audit_trail
+    for row in audit_trail.events(store, 'recall.read', since=since, by=None).each(
+            fields=['stream_id', 'scope_key', 'payload.memories']):
         for memory_id in (row.get('payload') or {}).get('memories') or []:
             if isinstance(memory_id, str) and not memory_id.startswith('doc:'):
                 entry = seen.setdefault(memory_id, ({}, set()))
@@ -926,11 +967,12 @@ def week(store, persona, zone, moment=None):
     moment = moment or clock.now()
     tiers = Tiers(store, persona)
     since = (moment - timedelta(days=LOOK_BACK_DAYS)).isoformat()
-    if tiers.rows.find_one({'row': 'offer', 'persona': persona, 'what': 'week', 'at': {'$gte': since}}):
+    if tiers._first({'row': 'offer', 'persona': persona, 'what': 'week', 'at': Range(gte=since)}):
         return None
     left = []
-    for move in tiers.rows.find({'row': 'move', 'persona': persona, 'from': CARRIED, 'at': {'$gte': since}}).sort('at', 1):
-        row = tiers.rows.find_one({'_id': move['item']}) or {}
+    for move in tiers.rows.find({'row': 'move', 'persona': persona, 'from': CARRIED, 'at': Range(gte=since)},
+                                [('at', 1)]):
+        row = tiers.rows.get(move['item']) or {}
         again = (row.get('recalled_at') or '') > move['at']
         left.append('%s「%s」放到了%s（%s）；之后你%s' % (line_stamp(zone, move['at']), move.get('heading') or move['sid'],
                                                     move['to'], REASONS.get(move['reason'], move['reason']),
@@ -947,8 +989,8 @@ def week(store, persona, zone, moment=None):
                                  'text': excerpt(text, WEEK_TEXT_CHARS)}
     changed = [row.get('heading') or row['sid'] for row in tiers.items() if (row.get('rewritten_at') or '') >= since]
     block['changed'] = ('这周你改过：' + '、'.join('「%s」' % name for name in changed)) if changed else '这周你没改过哪一条。'
-    tiers.rows.update_one({'_id': 'offer:week:%s:%d-%d' % (persona, *week_id)}, {'$setOnInsert': {
-        'row': 'offer', 'persona': persona, 'what': 'week', 'at': _iso(moment)}}, upsert=True)
+    tiers.rows.update({'_id': 'offer:week:%s:%d-%d' % (persona, *week_id)}, OnCreate({
+        'row': 'offer', 'persona': persona, 'what': 'week', 'at': _iso(moment)}), create=True)
     return block
 
 
@@ -1063,7 +1105,7 @@ def headings(store, persona, pilot, query, readable, cls, scene_id, shown=()):
     brings an item back by), beyond the bodies it returns, each with the word that matched."""
     from . import visibility
     tiers = Tiers(store, persona)
-    rows = {(row['doc'], row['sid']): row for row in tiers.items(place={'$in': [AT_HAND, PUT_AWAY]})}
+    rows = {(row['doc'], row['sid']): row for row in tiers.items(place=AnyOf([AT_HAND, PUT_AWAY]))}
     indexed = {(item['doc'], item['sid']): item for item in getattr(pilot, 'items', None) or []}
     table = tiers.rarity(scene_id)
     found = []

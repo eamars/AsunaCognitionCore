@@ -97,9 +97,9 @@ def block(store, persona, zone_name, moment=None):
              for row in task_records.created(store, since, by='created_at').each(
                  fields=['title', 'goal', 'scene_id', 'state', 'created_at', 'failure_type'])]
     refused = collections.OrderedDict()
-    for row in store.db.audit_events.find({'type': 'role_tool', 'occurred_at': {'$gte': since},
-                                           'payload.refused': {'$exists': True}},
-                                          {'payload.tool': 1, 'payload.refused': 1, 'occurred_at': 1}).sort('occurred_at', 1):
+    from . import audit as audit_trail
+    for row in audit_trail.events(store, 'role_tool', since=since, refused=True).each(
+            fields=['payload.tool', 'payload.refused', 'occurred_at']):
         tool = (row.get('payload') or {}).get('tool')
         item = refused.setdefault(tool, {'tool': tool, 'times': 0, 'first': excerpt(row['payload']['refused'], EXAMPLE_CHARS),
                                          'first_at': row['occurred_at']})
@@ -141,7 +141,8 @@ def exchanges(store, persona, zone_name, moment=None):
     from .people import People
     from .schedule_rules import line_stamp
     moment = moment or clock.now()
-    last = store.db.audit_events.find_one({'type': SHOWN, 'payload.persona': persona}, sort=[('occurred_at', -1)])
+    from . import audit as audit_trail
+    last = audit_trail.events(store, SHOWN, persona=persona).first(newest_first=True)
     floor = moment - timedelta(days=WINDOW_DAYS)
     since = max(_at(last['occurred_at']), floor) if last else floor
     store.audit('review:' + persona, SHOWN, {'persona': persona})

@@ -485,8 +485,8 @@ def review_block(store, persona, moment):
     rows = shelf(store, persona)
     if not rows:
         return None
-    last = store.db.audit_events.find_one({'stream_id': 'stickers:' + persona, 'type': 'sticker.review_offered'},
-                                          sort=[('occurred_at', -1)])
+    from . import audit as audit_trail
+    last = audit_trail.events(store, 'sticker.review_offered', stream='stickers:' + persona).first(newest_first=True)
     since = _hours(moment, (last or {}).get('occurred_at'))
     full = len(rows) >= STICKER_SHELF * 0.8
     if since is not None and since < REVIEW_EVERY_DAYS * 24 and not full:

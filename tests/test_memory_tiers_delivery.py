@@ -54,8 +54,8 @@ def setup(store, monkeypatch):
     tiers.sync()
     for key in ('baking', 'stars'):
         row = tiers.item('persona', sids[key])
-        tiers.rows.update_one({'_id': row['_id']}, {'$set': {'place': AT_HAND}})
-    tiers.rows.update_one({'_id': tiers.item('persona', sids['mountain'])['_id']}, {'$set': {'place': PUT_AWAY}})
+        tiers.store.db['memory_tiers'].update_one({'_id': row['_id']}, {'$set': {'place': AT_HAND}})
+    tiers.store.db['memory_tiers'].update_one({'_id': tiers.item('persona', sids['mountain'])['_id']}, {'$set': {'place': PUT_AWAY}})
     pilot = memory_pilot.Pilot(store, 'P1', Route())
     pilot.sync()
     builder = ContextBuilder(store, Retrieval([{'_id': 'chunk-%d' % n, 'body_markdown': '聊过的事 %d' % n,

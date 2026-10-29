@@ -13,6 +13,8 @@ author condition given to a view replaces "people only". "Said" is what people w
 from ..store.words import (And, AnyOf, Contains, Each, Exists, Holds, IsNull, NonEmpty, NoneOf, Not, Or, Range, Set,
                            StartsWith)
 
+from .view import redact
+
 COLLECTION = 'messages'
 # A line's author is who wrote it (ADR-089): the program for every row it makes.
 PROGRAM_AUTHOR = 'asuna:internal'
@@ -659,6 +661,11 @@ def excluded(store, scene_ids, epoch):
 def save(store, line, **kwargs):
     """The revisioned write of a whole line (`Store.put`: `expected`, `stream`)."""
     return store.put(COLLECTION, line, **kwargs)
+
+
+def redact_scope(store, scope, deletion, epoch):
+    """An erasure of a scope's lines (`view.redact`)."""
+    redact(store, COLLECTION, scope, deletion, epoch)
 
 
 def mark_recalled(store, line_id, at):

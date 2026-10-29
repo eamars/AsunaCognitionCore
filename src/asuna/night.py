@@ -74,8 +74,9 @@ def _kinds(store, ids):
 
 def _last_heartbeat(store, current, since):
     """When the latest earlier heartbeat turn started (or `since`)."""
-    started = [row for row in store.db.audit_events.find({'type': 'turn.started', 'occurred_at': {'$gte': since}},
-                                                         {'stream_id': 1, 'occurred_at': 1})
+    from . import audit as audit_trail
+    started = [row for row in audit_trail.events(store, 'turn.started', since=since, by=None).each(
+                   fields=['stream_id', 'occurred_at'])
                if row['stream_id'] != current]
     kinds = _kinds(store, {row['stream_id'] for row in started})
     beats = [row['occurred_at'] for row in started if kinds.get(row['stream_id']) == 'presence']
@@ -87,9 +88,9 @@ def block(store, persona, zone, moment, current):
     from .schedule_rules import line_stamp
     since = _last_heartbeat(store, current, (moment - LOOKBACK).isoformat())
     from . import reasons
-    calls = [row for row in store.db.audit_events.find(
-        {'type': 'role_tool', 'occurred_at': {'$gt': since}, 'payload.refused': {'$exists': False}},
-        {'stream_id': 1, 'occurred_at': 1, 'payload': 1}).sort('occurred_at', 1)]
+    from . import audit as audit_trail
+    calls = audit_trail.events(store, 'role_tool', after=since, refused=False).rows(
+        fields=['stream_id', 'occurred_at', 'payload'])
     kinds = _kinds(store, {row['stream_id'] for row in calls})
     items, journal = [], []
     for row in calls:

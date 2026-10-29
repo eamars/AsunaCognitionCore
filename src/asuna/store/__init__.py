@@ -105,6 +105,25 @@ class Blobs:
         return self.adapter.blobs.of_scope(scope)
 
 
+class Maintenance:
+    """Store-wide reads and writes by declared name, for the audit trail's verify, trace and replay (audit.py) only:
+    a record by id, a collection's records in id order, and a record written back whole (created if missing)."""
+
+    def __init__(self, checked):
+        self.checked = checked
+
+    def record(self, collection, record_id):
+        if not isinstance(record_id, str) or not record_id:
+            return None
+        return self.checked.collection(collection).get(record_id)
+
+    def records(self, collection):
+        return self.checked.collection(collection).find({}, [('_id', 1)])
+
+    def restore(self, collection, record):
+        return self.checked.collection(collection).replace(record, create=True)
+
+
 class Checked:
     """The shared layer over one adapter and the catalog its records are declared in."""
 

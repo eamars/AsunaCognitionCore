@@ -10,7 +10,7 @@ missing. The other reads are views (`View`: `rows`, `each`, `first`, `count`), i
 where it had none). `save` and `save_message` are the revisioned writes (`Store.put`). `recent_with_inputs` answers what the conversation-context aggregate did, by reads.
 """
 from ..store.words import And, AnyOf, Exists, NoneOf, Not, Range, StartsWith
-from .view import ANY, View, fenced, is_number, is_text, pinned, texts
+from .view import ANY, View, fenced, is_number, is_text, pinned, redact, texts
 
 COLLECTION, MESSAGES = 'tasks', 'task_messages'
 ACTIVE = ('READY', 'RUNNING')
@@ -179,6 +179,11 @@ def _refs(task):
 
 
 # Writes.
+
+def redact_scope(store, scope, deletion, epoch):
+    """An erasure of a scope's tasks (`view.redact`)."""
+    redact(store, COLLECTION, scope, deletion, epoch)
+
 
 def save(store, task, **kwargs):
     """The revisioned write of a whole task (`Store.put`: `expected`, `stream`, `reset_counters`)."""

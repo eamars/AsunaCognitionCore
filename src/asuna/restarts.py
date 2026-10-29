@@ -323,7 +323,8 @@ def call_after_fallback(store, controller, config, root=None, moment=None):
         return False
     if moment - _aware(record['back_at']) > timedelta(minutes=30):
         return False
-    if store.db.audit_events.find_one({'type': 'restart.called', 'payload.id': record['id']}, {'_id': 1}):
+    from . import audit as audit_trail
+    if audit_trail.events(store, 'restart.called', ref=record['id'], by=None).first(fields=['_id']):
         return False
     chat = config['chat']
     text = ('这是监工的通知，不是有人跟你说话：刚才那次重启新版本没起来，现在跑的是上一个能跑的版本。'

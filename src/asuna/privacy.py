@@ -3,10 +3,13 @@ import copy
 from pathlib import Path
 import uuid
 from .config import DATA, ROOT
-from .evidence import canonical,sha,write_json
+from .evidence import write_json
 from .state import Denied,now
+from . import audit as audit_trail
 from .records import scenes as scene_records
 from .records import episodes as episode_records
+from .records import messages as message_records
+from .records import artifacts as artifact_records
 from .records import sessions as session_records
 from .records import receipts as receipt_records
 from .records import tasks as task_records
@@ -51,7 +54,7 @@ class PrivacyService:
                 head_records.tombstone_revision(store,rev['_id'],deletion)
 
     def _erase(self,key,memory):
-        db=self.store.db;scope=memory['scope_key']
+        scope=memory['scope_key']
         deletion='erase-'+uuid.uuid4().hex
         self.store.audit(deletion,'privacy.intent',{'memory_id':key,'scope':scope},scope)
         scene=scene_records.by_scope(self.store, scope)
@@ -95,16 +98,11 @@ class PrivacyService:
             if mem['_id'] in affected or derived or mem.get('kind')=='chat_chunk':
                 memory_records.tombstone(self.store,mem,deletion,scene['policy_epoch']+1)
             else:memory_records.set_epoch(self.store,mem['_id'],scene['policy_epoch']+1)
-        for collection in ('episodes','tasks','messages','artifacts','sink_receipts'):
-            for doc in db[collection].find({'scope_key':scope}):
-                # A stored file or picture whose bytes erase_scope deleted keeps its row as marked (ADR-105: its name,
-                # size, sender and when stay, and every reader says it was erased).
-                if collection=='artifacts' and doc.get('storage')=='erased':continue
-                # Conservative scope erasure includes generated paraphrases and
-                # unfinished work. Retain identity/state/hash, never old bodies.
-                retained={k:doc[k] for k in ('_id','schema_version','revision','scope_key','scene_id','source_event_id','episode_kind','publication_key','request_key','binding_key','content_hash','scene_seq','direction','author','adapter_id','platform_event_id') if k in doc}
-                retained.update(deletion_id=deletion,state='INVALIDATED',delivery_state='REDACTED',text='[deleted]',policy_epoch=scene['policy_epoch']+1)
-                db[collection].replace_one({'_id':doc['_id']},retained)
+        # Conservative scope erasure includes generated paraphrases and unfinished work: each owner keeps
+        # identity/state/hash, never old bodies (records.view.redact); a stored file or picture whose bytes erase_scope
+        # deleted keeps its row as marked (ADR-105).
+        for owner in (episode_records,task_records,message_records,artifact_records,receipt_records):
+            owner.redact_scope(self.store,scope,deletion,scene['policy_epoch']+1)
         for receipt in receipt_records.lane_of_sessions(self.store,list(session_ids)):
             receipt_records.lane_invalidate(self.store,receipt['_id'],deletion)
         for head in head_records.heads(self.store,scope=scope).rows():
@@ -119,17 +117,7 @@ class PrivacyService:
             head_records.tombstone_revision(self.store,rev['_id'],deletion)
         # Intentional erasure is a declared chain rebase, not a claim that the
         # original chain still verifies. Preserve old terminal hashes only.
-        previous_roots={};new_roots={}
-        for stream in db.audit_events.distinct('stream_id'):
-            previous='0'*64
-            events=list(db.audit_events.find({'stream_id':stream}).sort('seq',1))
-            previous_roots[stream]=events[-1]['event_hash']
-            for event in events:
-                if event['scope_key']==scope or any(stream==key or stream.startswith(key+':') for key in ep_ids|task_ids) or any(sid in str(event.get('payload',{})) for sid in session_ids):
-                    event['payload']={'redacted_by':deletion,'previous_payload_sha256':sha(canonical(event['payload']))}
-                event['prev_hash']=previous;event.pop('event_hash');event['event_hash']=sha(canonical(event));previous=event['event_hash']
-                db.audit_events.replace_one({'_id':event['_id']},event)
-            new_roots[stream]=previous
+        previous_roots,new_roots=audit_trail.redact_streams(self.store,scope,deletion,ep_ids|task_ids,session_ids)
         removed_files=0
         for root in roots:
             if not root:continue

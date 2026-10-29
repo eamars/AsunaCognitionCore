@@ -16,7 +16,7 @@ whose bytes are in the blob store says `storage` `STORED` ('gridfs'), and names 
 ('gridfs_id').
 """
 from ..store.words import AddToSet, AnyOf, Exists, Holds, NonEmpty, Not, Range, Set, Unset
-from .view import ANY, View, fenced, is_number, is_text, pinned, texts
+from .view import ANY, View, fenced, is_number, is_text, pinned, redact, texts
 
 COLLECTION = 'artifacts'
 STORED = 'gridfs'               # a row's `storage` while its bytes are in the blob store (a stored name)
@@ -164,6 +164,12 @@ def count_tool(store, tool, state):
 def save(store, row, **kwargs):
     """The revisioned write of a whole row (`Store.put`: `expected`, `stream`)."""
     return store.put(COLLECTION, row, **kwargs)
+
+
+def redact_scope(store, scope, deletion, epoch):
+    """An erasure of a scope's rows (`view.redact`); a row whose bytes the erasure deleted (`ERASED`) keeps its marks
+    (ADR-105: its name, size, sender and when stay, and every reader says it was erased)."""
+    redact(store, COLLECTION, scope, deletion, epoch, left=lambda row: row.get('storage') == ERASED)
 
 
 def insert(store, row):

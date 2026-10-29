@@ -167,13 +167,12 @@ def review(store, persona, occurrence, moment=None):
     from .render import model_and_policy
     moment = moment or clock.now()
     floor = (moment - timedelta(days=REVIEW_DAYS)).isoformat()
-    rolled = {'type': 'presence.rolled', 'occurred_at': {'$gte': floor}, 'payload.occurrence': {'$ne': occurrence}}
-    last = store.db.audit_events.find_one({**rolled, 'payload.outcome': 'review_dice', 'payload.reaches': True},
-                                          {'occurred_at': 1}, sort=[('occurred_at', -1)])
-    if last:
-        rolled['occurred_at'] = {'$gt': last['occurred_at']}
-    rows = list(store.db.audit_events.find(rolled, {'occurred_at': 1, 'payload': 1})
-                .sort('occurred_at', -1).limit(REVIEW_ROLLS))[::-1]
+    from . import audit as audit_trail
+    last = audit_trail.events(store, 'presence.rolled', since=floor, besides_occurrence=occurrence,
+                              outcome='review_dice', reaches=True).first(newest_first=True, fields=['occurred_at'])
+    rolled = (audit_trail.events(store, 'presence.rolled', after=last['occurred_at'], besides_occurrence=occurrence)
+              if last else audit_trail.events(store, 'presence.rolled', since=floor, besides_occurrence=occurrence))
+    rows = rolled.rows(newest_first=True, limit=REVIEW_ROLLS, fields=['occurred_at', 'payload'])[::-1]
     out = []
     from .affect import AffectLedger, first_rule, project
     model, policy = model_and_policy(store, persona)
@@ -198,8 +197,8 @@ def review(store, persona, occurrence, moment=None):
             if not ep:
                 item['reached'] = '叫了你，那拍还没跑或没留下记录'
             else:
-                tools = collections.Counter(a['payload'].get('tool') for a in store.db.audit_events.find(
-                    {'type': 'role_tool', 'stream_id': ep['_id']}, {'payload.tool': 1}))
+                tools = collections.Counter(a['payload'].get('tool') for a in audit_trail.events(
+                    store, 'role_tool', stream=ep['_id'], by=None).each(fields=['payload.tool']))
                 item['tools'] = dict(tools)
                 from .records import messages as message_records
                 item['said'] = message_records.turn_parts(store, ep['_id'], outbound=True).count()

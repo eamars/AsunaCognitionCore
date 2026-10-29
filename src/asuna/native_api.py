@@ -319,8 +319,8 @@ class NativeMemory:
                        or (revision or {}).get('updated_at') or (revision or {}).get('created_at')}
             if revision and not row['updated_at']:
                 # Older revisions carry no time of their own; the audited commit has it.
-                commit = self.store.db.audit_events.find_one({'type': 'state.commit', 'payload.collection': 'state_revisions',
-                                                              'payload.document._id': revision['_id']}, {'occurred_at': 1})
+                from . import audit as audit_trail
+                commit = audit_trail.commit_of(self.store, 'state_revisions', revision['_id'], fields=['occurred_at'])
                 row['updated_at'] = (commit or {}).get('occurred_at')
             if not revision:
                 row.update(status='empty', excerpt=label('hint.' + category))

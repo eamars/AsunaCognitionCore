@@ -1344,6 +1344,7 @@ class BusinessWorker:
             return {'value': value, 'conclude': bool(conclude)}
         if method == 'persona.sources':
             # Settings card: source roots (path masked to its last segment), states, jobs and recent runs.
+            from . import audit as audit_trail
             from .persona_data import persona_sources, persona_runtime
             from .render import render_status
             persona = self.app.config['chat']['persona']
@@ -1352,7 +1353,7 @@ class BusinessWorker:
             jobs = [{'id': j['id'], 'sources': j['sources'], 'grants': j['grants']}
                     for j in (self.app.config.get('persona_contribution') or {}).get('jobs') or []]
             runs = [{k: e['payload'].get(k) for k in ('run_id', 'job', 'status', 'exit_code', 'dry_run', 'counts', 'report_artifact_ids')}
-                    for e in self.app.store.db.audit_events.find({'type': 'persona_job.finished'}).sort('occurred_at', -1).limit(5)]
+                    for e in audit_trail.events(self.app.store, 'persona_job.finished').rows(newest_first=True, limit=5)]
             return {'persona': persona, 'sources': sources, 'jobs': jobs, 'runs': runs,
                     'export_configured': bool(persona_runtime(self.app.config, persona).get('export_dir')),
                     'render': render_status(self.app.store, persona)}

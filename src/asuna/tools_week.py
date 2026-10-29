@@ -53,15 +53,16 @@ def _iso(moment):
 
 def last_shown(store, persona):
     """The audit record of the last showing, or None."""
-    return store.db.audit_events.find_one({'type': SHOWN, 'payload.persona': persona}, sort=[('occurred_at', -1)])
+    from . import audit as audit_trail
+    return audit_trail.events(store, SHOWN, persona=persona).first(newest_first=True)
 
 
 def due(store, persona, moment=None):
     """'week' when a week has passed since the last showing (or there was none), 'floor' when nine days have: the next
     home heartbeat carries it then whatever it rolled; None when it was shown within the week."""
     moment = moment or clock.now()
-    last = last_shown(store, persona) or store.db.audit_events.find_one(
-        {'type': STARTED, 'payload.persona': persona}, sort=[('occurred_at', -1)])
+    from . import audit as audit_trail
+    last = last_shown(store, persona) or audit_trail.events(store, STARTED, persona=persona).first(newest_first=True)
     if not last:                        # never shown: the floor counts from the first time it was asked about
         store.audit('review:' + persona, STARTED, {'persona': persona})
         return 'week'
@@ -73,10 +74,10 @@ def due(store, persona, moment=None):
 
 
 def _calls(store, since, until):
-    return list(store.db.audit_events.find({'type': 'role_tool', 'occurred_at': {'$gte': since, '$lt': until}},
-                                           {'stream_id': 1, 'seq': 1, 'occurred_at': 1, 'payload.tool': 1,
-                                            'payload.args': 1, 'payload.refused': 1, 'payload.code': 1,
-                                            'payload.old_names': 1}).sort([('occurred_at', 1)]))
+    from . import audit as audit_trail
+    return audit_trail.events(store, 'role_tool', since=since, before=until).rows(
+        fields=['stream_id', 'seq', 'occurred_at', 'payload.tool', 'payload.args', 'payload.refused', 'payload.code',
+                'payload.old_names'])
 
 
 def _ability(payload):
@@ -171,8 +172,9 @@ def _action_brain(store, since, until):
     for row in artifact_records.of_tasks(store, ids).rows(fields=['task_id', 'tool']):
         used[row['task_id']].add(row.get('tool'))
         tools[row.get('tool')] += 1
-    rejected = list(store.db.audit_events.find({'type': 'execution.rejected', 'occurred_at': {'$gte': since, '$lt': until}},
-                                               {'payload.problem': 1}))
+    from . import audit as audit_trail
+    rejected = audit_trail.events(store, 'execution.rejected', since=since, before=until, by=None).rows(
+        fields=['payload.problem'])
     lookups = sum(1 for task in ids if used[task] and used[task] <= set(READING))
     from . import action_tiers
     tiers = action_tiers.weekly(tasks)
@@ -234,13 +236,13 @@ def _local_roots(store, persona, since, until):
     rewritten per conversation (normally above 0)."""
     from . import local_roots
     from .people import People
-    window = {'occurred_at': {'$gte': since, '$lt': until}}
-    spoken = sum(int((row.get('payload') or {}).get('count') or 0) for row in store.db.audit_events.find(
-        {'type': local_roots.SPEECH_EVENT, **window}, {'payload.count': 1}))
+    from . import audit as audit_trail
+    spoken = sum(int((row.get('payload') or {}).get('count') or 0) for row in audit_trail.events(
+        store, local_roots.SPEECH_EVENT, since=since, before=until, by=None).each(fields=['payload.count']))
     places = {}
     people = People(store, persona)
-    for row in store.db.audit_events.find({'type': local_roots.TALLY, 'stream_id': 'roots:' + persona, **window},
-                                          {'payload.sessions': 1}):
+    for row in audit_trail.events(store, local_roots.TALLY, stream='roots:' + persona, since=since, before=until,
+                                  by=None).each(fields=['payload.sessions']):
         for item in (row.get('payload') or {}).get('sessions') or ():
             lane = item.get('lane')
             if lane in LANE_WORDS:
@@ -268,10 +270,10 @@ THOUGHTS_FROM = '这些是程序从模型自己的思考里替你抓下的（那
 def _thoughts(store, since, until):
     """Turns that recorded a summary of the model's thinking as her thought, and those that did not, by why; None
     when the week had neither."""
-    window = {'occurred_at': {'$gte': since, '$lt': until}}
-    taken = store.db.audit_events.count_documents({'type': 'thought.taken', **window})
-    none = collections.Counter((row.get('payload') or {}).get('why') for row in store.db.audit_events.find(
-        {'type': 'thought.none', **window}, {'payload.why': 1}))
+    from . import audit as audit_trail
+    taken = audit_trail.count(store, 'thought.taken', since=since, before=until)
+    none = collections.Counter((row.get('payload') or {}).get('why') for row in audit_trail.events(
+        store, 'thought.none', since=since, before=until, by=None).each(fields=['payload.why']))
     if not taken and not none:
         return None
     missing = '、'.join('%s %d' % (THOUGHT_WHY.get(why, why), n) for why, n in none.most_common())

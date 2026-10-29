@@ -50,6 +50,8 @@ from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import memories as memory_records
 from .records import heads as head_records
+from .records.view import ANY, View, is_text
+from .store.words import AddToSet, AnyOf, Larger, Not, OnCreate, Push, Range, Set
 
 RULES = ('all', 'own_lines', 'never')
 DEFAULT = 'own_lines'
@@ -263,6 +265,18 @@ def _postings(units, groups, times, since):
     return out
 
 
+# ── the owner of `crossing_words` and `memory_fires` ──
+# The word index (a `mark` row and one `word` row per word and generation) and the count rows (`kind`: what came
+# back, and the `seen` marks), read and written only through these and this module's own code. A conversation, a
+# persona or a time given None finds nothing (ADR-104 section 4); not given is `ANY`.
+def fire_rows(store, since, *, persona=ANY, kinds=FIRE_KINDS):
+    """View: the count rows of these kinds (of a persona) at or after `since` (ISO text)."""
+    where = {'kind': AnyOf(list(kinds)), 'at': Range(gte=since)} if is_text(since) else None
+    if where is not None and persona is not ANY:
+        where = {**where, 'persona': persona} if is_text(persona) else None
+    return View(store, FIRES, where)
+
+
 def _since(moment=None):
     from datetime import timedelta
     return ((moment or clock.now()) - timedelta(days=number('window_days'))).isoformat()
@@ -271,10 +285,10 @@ def _since(moment=None):
 def vocabulary(store, ensure=False):
     """The learned words of the index's build, learned in this process once per build; `ensure` builds the index
     first when there is none (a place's words must be cut as the index cuts them)."""
-    mark = store.db[WORDS].find_one({'_id': 'mark'}, {'build': 1, 'vocabulary': 1})
+    mark = store.collection(WORDS).get('mark', ['build', 'vocabulary'])
     if not mark and ensure:
         build(store)
-        return store.db[WORDS].find_one({'_id': 'mark'}, {'build': 1})
+        return store.collection(WORDS).get('mark', ['build'])
     if mark and _loaded.get('build') != mark.get('build'):
         key_words.learn(mark.get('vocabulary') or [])
         _loaded['build'] = mark.get('build')
@@ -301,8 +315,8 @@ def build(store, moment=None):
     learned = key_words.vocabulary(counts)
     key_words.learn(learned)
     words = _postings(rows, groups, times, _since(moment))
-    column = store.db[WORDS]
-    mark = column.find_one({'_id': 'mark'}) or {}
+    column = store.collection(WORDS)
+    mark = column.get('mark') or {}
     generation = int(mark.get('generation') or 0) + 1
     seqs = {scene_id: (message_records.lines(store, scene_id).first(newest_first=True, fields=['scene_seq'])
                        or {}).get('scene_seq', 0) for scene_id in groups}
@@ -312,25 +326,25 @@ def build(store, moment=None):
               'seen': [[scope, lines, latest] for scope, (lines, latest) in entry['seen'].items()]}
              for word, entry in words.items()]
     for start in range(0, len(batch), 1000):
-        column.insert_many(batch[start:start + 1000], ordered=False)
+        column.insert(batch[start:start + 1000], ordered=False)
     import uuid
     built = uuid.uuid4().hex
-    column.update_one({'_id': 'mark'}, {'$set': {'row': 'mark', 'generation': generation, 'seqs': seqs, 'build': built,
-                                                 'vocabulary': learned, 'at': moment.isoformat() if moment else now()}},
-                      upsert=True)
+    column.update({'_id': 'mark'}, Set({'row': 'mark', 'generation': generation, 'seqs': seqs, 'build': built,
+                                        'vocabulary': learned, 'at': moment.isoformat() if moment else now()}),
+                  create=True)
     _loaded['build'] = built
-    column.delete_many({'row': 'word', 'generation': {'$ne': generation}})
+    column.delete({'row': 'word', 'generation': Not(generation)}, many=True)
     return len(batch)
 
 
 def top_up(store):
     """Add the group lines said since the index's mark: each group's chunked lines after its last indexed one, up to
     the first line the indexer has not chunked yet. Returns the generation to read."""
-    column = store.db[WORDS]
-    mark = column.find_one({'_id': 'mark'})
+    column = store.collection(WORDS)
+    mark = column.get('mark')
     if not mark:
         build(store)
-        return column.find_one({'_id': 'mark'})['generation']
+        return column.get('mark')['generation']
     vocabulary(store)
     from .evidence import canonical, sha
     from .ingress import PROGRAM_AUTHOR
@@ -361,36 +375,38 @@ def top_up(store):
     generation = mark['generation']
     since = _since()
     added = _postings(units, groups, _said_at(store, [u for u in units if not u.get('occurred_at')]), since)
-    kept = {row['word']: row for row in column.find({'_id': {'$in': ['%d:%s' % (generation, w) for w in added]}},
-                                                    {'word': 1, 'seen': 1})}
+    kept = {row['word']: row for row in column.find({'_id': AnyOf(['%d:%s' % (generation, w) for w in added])},
+                                                    fields=['word', 'seen'])}
     for word, entry in added.items():
         seen = {scope: [lines, latest] for scope, lines, latest in (kept.get(word) or {}).get('seen') or []}
         for scope, (lines, latest) in entry['seen'].items():
             was = seen.get(scope, [0, ''])
             seen[scope] = [was[0] + lines, max(was[1], latest)]
-        column.update_one({'_id': '%d:%s' % (generation, word)}, {
-            '$setOnInsert': {'row': 'word', 'generation': generation, 'word': word},
-            '$set': {'seen': [[scope, lines, latest] for scope, (lines, latest) in seen.items()]},
-            '$addToSet': {'hers': {'$each': entry['hers']}},
-            '$push': {'theirs': {'$each': entry['theirs'], '$slice': -OTHERS_KEPT}}}, upsert=True)
+        # An empty list adds nothing to a stored row; a new row is made with it, as an upsert of `$each: []` does.
+        empty = {key: [] for key in ('hers', 'theirs') if not entry[key]}
+        column.update({'_id': '%d:%s' % (generation, word)}, [
+            OnCreate({'row': 'word', 'generation': generation, 'word': word, **empty}),
+            Set({'seen': [[scope, lines, latest] for scope, (lines, latest) in seen.items()]}),
+            *([AddToSet('hers', *entry['hers'])] if entry['hers'] else []),
+            *([Push('theirs', *entry['theirs'], keep_last=OTHERS_KEPT)] if entry['theirs'] else [])], create=True)
     if reached:
-        column.update_one({'_id': 'mark', 'generation': generation},
-                          {'$max': {'seqs.' + scene_id: seq for scene_id, seq in reached.items()}})
+        column.update({'_id': 'mark', 'generation': generation},
+                      [Larger('seqs.' + scene_id, seq) for scene_id, seq in reached.items()])
     return generation
 
 
 def seen_for(store, words):
     """{word: [(scope, lines in the window, latest)]} from the index, topped up first."""
     generation = top_up(store)
-    return {row['word']: row.get('seen') or [] for row in store.db[WORDS].find(
-        {'_id': {'$in': ['%d:%s' % (generation, word) for word in words]}}, {'word': 1, 'seen': 1})}
+    return {row['word']: row.get('seen') or [] for row in store.collection(WORDS).find(
+        {'_id': AnyOf(['%d:%s' % (generation, word) for word in words])}, fields=['word', 'seen'])}
 
 
 def lines_for(store, words):
     """[(unit id, scope, hers)] of the lines that have one of the words, the index topped up first."""
     generation = top_up(store)
     out = []
-    for row in store.db[WORDS].find({'_id': {'$in': ['%d:%s' % (generation, word) for word in words]}}):
+    for row in store.collection(WORDS).find({'_id': AnyOf(['%d:%s' % (generation, word) for word in words])}):
         out += [(unit, scope, True) for unit, scope in row.get('hers') or []]
         out += [(unit, scope, False) for unit, scope, _ in row.get('theirs') or []]
     return out
@@ -570,11 +586,13 @@ def cue(store, persona, scene, event, history, own, zone, moment=None, *, free=T
     if scene.get('kind') != 'group':
         return None
     seq = _line_seq(store, event)
-    mark = store.db[FIRES].find_one({'_id': 'seen:%s:%s' % (persona, scene['_id'])}) or {}
+    counts = store.collection(FIRES)
+    mark = counts.get('seen:%s:%s' % (persona, scene['_id'])) or {}
     upto = mark.get('seq') or 0
     reached = max([upto, seq or 0, *[s for s, _, _ in history if isinstance(s, int)]])
-    store.db[FIRES].update_one({'_id': 'seen:%s:%s' % (persona, scene['_id'])}, {'$max': {'seq': reached},
-                               '$set': {'kind': 'seen', 'persona': persona, 'scene_id': scene['_id']}}, upsert=True)
+    counts.update({'_id': 'seen:%s:%s' % (persona, scene['_id'])},
+                  [Larger('seq', reached), Set({'kind': 'seen', 'persona': persona, 'scene_id': scene['_id']})],
+                  create=True)
     if not free or (event.get('episode_kind') or 'external') != 'external':
         return None
     text = event.get('text') if isinstance(event.get('text'), str) else ''
@@ -601,8 +619,8 @@ def cue(store, persona, scene, event, history, own, zone, moment=None, *, free=T
         return None
     moment = moment or clock.now()
     recent = (moment - timedelta(minutes=number('repeat_minutes'))).isoformat()
-    words = [word for word in first if not store.db[FIRES].find_one(
-        {'kind': 'cue', 'scene_id': scene['_id'], 'word': word, 'at': {'$gte': recent}}, {'_id': 1})]
+    words = [word for word in first if not View(store, FIRES, {'kind': 'cue', 'scene_id': scene['_id'], 'word': word,
+                                                               'at': Range(gte=recent)}).first(fields=['_id'])]
     if not words:
         return None
     groups = {group['scope_key']: group_id for group_id, group in _groups(store).items()
@@ -635,10 +653,10 @@ def fired(store, persona, what, scene, event, moment=None, *, episode=None, **fi
     import uuid
     episode = episode or _episode(event)
     line = message_records.get(store, 'in-' + episode, fields=['scene_seq']) or {}
-    store.db[FIRES].insert_one({'_id': 'fire:' + uuid.uuid4().hex, 'kind': what, 'persona': persona,
-                                'scene_id': scene['_id'], 'event_id': event.get('event_id'), 'episode_id': episode,
-                                'scene_seq': line.get('scene_seq'), 'at': (moment or clock.now()).isoformat(),
-                                **fields})
+    store.collection(FIRES).insert({'_id': 'fire:' + uuid.uuid4().hex, 'kind': what, 'persona': persona,
+                                    'scene_id': scene['_id'], 'event_id': event.get('event_id'), 'episode_id': episode,
+                                    'scene_seq': line.get('scene_seq'), 'at': (moment or clock.now()).isoformat(),
+                                    **fields})
 
 
 def recalled(store, persona, ep, here, returned, crossed, before):
@@ -676,7 +694,7 @@ def prune(store, moment=None):
     """At settlement: fire rows older than FIRES_DAYS go. Returns how many."""
     from datetime import timedelta
     cutoff = ((moment or clock.now()) - timedelta(days=FIRES_DAYS)).isoformat()
-    return store.db[FIRES].delete_many({'kind': {'$in': list(FIRE_KINDS)}, 'at': {'$lt': cutoff}}).deleted_count
+    return store.collection(FIRES).delete({'kind': AnyOf(list(FIRE_KINDS)), 'at': Range(lt=cutoff)}, many=True)
 
 
 # ── the reading (tools/memory_fires_report.py), counts only ─────────
@@ -686,8 +704,7 @@ def report(store, since, compactions=None):
     her notes back by word and by meaning, recall's lines from elsewhere (hers, others') and past versions, W6. With
     `compactions` ({DSH session id: [compaction end, ms]}), the minutes from the last compaction of the turn's session
     to each cue and note. Places are numbered by their turns and shown with their kind when set: never ids or names."""
-    db = store.db
-    fires = list(db[FIRES].find({'kind': {'$in': list(FIRE_KINDS)}, 'at': {'$gte': since}}))
+    fires = fire_rows(store, since).rows()
     groups = set(_groups(store))
     episodes = {ep['_id']: ep for ep in episode_records.of_kind(store, 'external', scenes=sorted(groups)).rows(
         fields=['scene_id', 'native_session_id'])}
@@ -704,8 +721,8 @@ def report(store, since, compactions=None):
     following = {key: (scene_turns[i + 1][1] if i + 1 < len(scene_turns) else None)
                  for scene_turns in turns.values() for i, (_, key) in enumerate(scene_turns)}
     recalls = {}
-    for row in db.audit_events.find({'type': 'recall.read', 'occurred_at': {'$gte': since}},
-                                    {'stream_id': 1, 'payload.query': 1}):
+    from . import audit as audit_trail
+    for row in audit_trail.events(store, 'recall.read', since=since, by=None).each(fields=['stream_id', 'payload.query']):
         recalls.setdefault(row['stream_id'], []).append((row.get('payload') or {}).get('query') or '')
     order = sorted({*turns, *(f['scene_id'] for f in fires if f['scene_id'] in groups)},
                    key=lambda scene_id: (-len(turns.get(scene_id, [])), scene_id))

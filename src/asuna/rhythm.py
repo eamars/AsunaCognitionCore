@@ -67,8 +67,9 @@ def episode_dates(store, episode_ids, zone):
     """{episode id: local date} from the audited context preparation of each episode."""
     from zoneinfo import ZoneInfo
     out = {}
-    for row in store.db.audit_events.find({'type': 'context.prepared', 'stream_id': {'$in': list(episode_ids)}},
-                                          {'stream_id': 1, 'occurred_at': 1}):
+    from . import audit as audit_trail
+    for row in audit_trail.events(store, 'context.prepared', streams=list(episode_ids), by=None).each(
+            fields=['stream_id', 'occurred_at']):
         moment = datetime.fromisoformat(row['occurred_at'].replace('Z', '+00:00')).astimezone(ZoneInfo(zone))
         out[row['stream_id']] = moment.date().isoformat()
     return out
@@ -80,8 +81,9 @@ def selections(store, window_days, *, moment=None):
     moment = moment or clock.now()
     since = (moment - timedelta(days=float(window_days or 7))).isoformat()
     out = {}
-    for row in store.db.audit_events.find({'type': 'context.prepared', 'occurred_at': {'$gte': since}},
-                                          {'stream_id': 1, 'payload.manifest.selected': 1}):
+    from . import audit as audit_trail
+    for row in audit_trail.events(store, 'context.prepared', since=since, by=None).each(
+            fields=['stream_id', 'payload.manifest.selected']):
         for memory_id in ((row.get('payload') or {}).get('manifest') or {}).get('selected') or []:
             out.setdefault(memory_id, [])
             if row['stream_id'] not in out[memory_id]:

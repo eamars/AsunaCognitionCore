@@ -15,7 +15,7 @@ from pymongo import MongoClient, WriteConcern
 from . import clock
 from .config import validate_database, character_id
 from .evidence import canonical, sha
-from .store import Checked
+from .store import Checked, Maintenance
 from .store.catalog import CATALOG, Space
 from .store.errors import DuplicateKey
 from .store.words import Exists
@@ -133,6 +133,11 @@ class Store:
     def collection(self, name):
         """The handle of a declared collection: the store's words, checked against the catalog."""
         return self.checked.collection(name)
+
+    @property
+    def maintenance(self):
+        """Store-wide reads and writes by declared name (record, records, restore); used only by `audit.py`."""
+        return Maintenance(self.checked)
 
     @property
     def blobs(self):

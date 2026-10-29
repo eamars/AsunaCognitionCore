@@ -26,6 +26,8 @@ from . import visibility
 from .evidence import canonical, sha
 from .records import scenes as scene_records
 from .records import episodes as episode_records
+from .records.view import is_text
+from .store.words import Larger, Range, Set, Smaller
 
 IDENTITY = ('persona', 'voice', 'self', 'core')
 SELF_BLOCKS = (('current_self', 'self'), ('character_core', 'core'))    # the context names of the self and core blocks
@@ -58,6 +60,43 @@ COUNTS = 'carried_counts'          # section × pair × day, COUNT_DAYS kept
 COUNTED = 'carried_days'           # the days counted
 SECTIONS = 'carried_sections'      # each section's first and last time carried, never pruned
 COUNT_DAYS = 30
+
+
+# ── the owner of carried_counts, carried_days and carried_sections ──
+# Read and written only through these. A persona given None finds nothing (ADR-104 section 4).
+def count_day(store, rows):
+    """A local day's count rows, each written whole (made or replaced)."""
+    counts = store.collection(COUNTS)
+    for row in rows:
+        counts.replace(row, create=True)
+
+
+def mark_day(store, persona, day, rows, at):
+    """A persona's local day (an ISO date) is counted, with how many count rows it has."""
+    store.collection(COUNTED).replace({'_id': 'day:%s:%s' % (persona, day), 'persona': persona, 'day': day,
+                                       'rows': rows, 'at': at}, create=True)
+
+
+def counted_days(store, persona):
+    """The days counted for a persona (ISO dates)."""
+    return set(store.collection(COUNTED).group({'persona': persona}, ['day'], None)) if is_text(persona) else set()
+
+
+def forget_days(store, persona, before):
+    """A persona's count rows and day marks of days before `before` (an ISO date) go; how many count rows went."""
+    if not is_text(persona):
+        return 0
+    where = {'persona': persona, 'day': Range(lt=before)}
+    deleted = store.collection(COUNTS).delete(where, many=True)
+    store.collection(COUNTED).delete(dict(where), many=True)
+    return deleted
+
+
+def note_section(store, persona, ref, start, end):
+    """A section was carried from `start` to `end`: its first and last time carried, kept."""
+    store.collection(SECTIONS).update({'_id': 'section:' + sha(canonical([persona, ref]))[:32]},
+                                      [Set({'persona': persona, 'section': ref}), Smaller('first_carried_at', start),
+                                       Larger('last_carried_at', end)], create=True)
 
 
 def number(value):
@@ -263,7 +302,7 @@ def tier_line(store, persona, slug, section):
     row = tiers.item(slug, section['sid'])
     if not row or memory_tiers.TO_INJECT[row['place']] == section.get('inject'):
         return None
-    last = tiers.rows.find_one({'row': 'move', 'item': row['_id']}, sort=[('at', -1)])
+    last = tiers.last_move(row['_id'])
     history = (TIER_LAST % (_local(store, persona, last['at']), BY_WORDS[memory_tiers.moved_by(last)],
                             memory_tiers.REASONS.get(last['reason'], last['reason'])) if last else TIER_NONE)
     return TIER_LINE % (row['place'], section.get('inject')) + '\n' + history
@@ -315,19 +354,17 @@ def gate(store, persona):
 def room_block(store, persona, cls, scene_id):
     """things_from_program: how full each pair readable here is, in coarse words, only when the words changed since
     this conversation was last told; None otherwise."""
-    from .memory_tiers import COLLECTION
+    from . import memory_tiers
     ceiling = limit(store, persona)
     if not ceiling:
         return None
     words = {PAIR_WORDS[pair]: room_word(size, ceiling)
              for pair, size in identity(store, persona).items() if visibility.readable(pair[1], cls)}
     key = 'room:%s:%s' % (persona, sha(str(scene_id).encode())[:24])
-    told = store.db[COLLECTION].find_one({'_id': key})
+    told = memory_tiers.room_told(store, key)
     if told and told.get('words') == words and told.get('version') == ROOM_VERSION:
         return None
-    store.db[COLLECTION].update_one({'_id': key}, {'$set': {'row': 'room_told', 'persona': persona, 'scene_id': scene_id,
-                                                            'words': words, 'version': ROOM_VERSION,
-                                                            'at': clock.now().isoformat()}}, upsert=True)
+    memory_tiers.tell_room(store, key, persona, scene_id, words, ROOM_VERSION, clock.now().isoformat())
     return words
 
 
@@ -367,8 +404,7 @@ class _Past:
         rows = memory_tiers.Tiers(store, persona).items()
         self.items = {row['_id']: row for row in rows}
         self.moves = {}
-        for move in store.db[memory_tiers.COLLECTION].find({'row': 'move', 'persona': persona},
-                                                           {'item': 1, 'from': 1, 'to': 1, 'at': 1}):
+        for move in memory_tiers.moves(store, persona).each(fields=['item', 'from', 'to', 'at']):
             self.moves.setdefault(move['item'], []).append((move['at'], move['from'], move['to']))
         for moves in self.moves.values():
             moves.sort()
@@ -413,8 +449,9 @@ def _turns(store, persona, start, end):
     """The day's turns, found through their `turn.output` audit rows (indexed by type and time): (time, pair, refs
     carried, refs the program scored, reconstructed)."""
     past, seen, out = None, set(), []
-    for row in store.db.audit_events.find({'type': 'turn.output', 'occurred_at': {'$gte': start, '$lt': end}},
-                                          {'stream_id': 1, 'occurred_at': 1}).sort('occurred_at', 1):
+    from . import audit as audit_trail
+    for row in audit_trail.events(store, 'turn.output', since=start, before=end).each(
+            fields=['stream_id', 'occurred_at']):
         if row['stream_id'] in seen:
             continue
         seen.add(row['stream_id'])
@@ -441,8 +478,9 @@ def _recalls(store, persona, start, end):
     """Her recalls of her sections that day: [(pair, ref)], from `recall.read` (the sections she read and her own
     items that came back), the pair from the turn's place and class."""
     out = []
-    for row in store.db.audit_events.find({'type': 'recall.read', 'occurred_at': {'$gte': start, '$lt': end}},
-                                          {'stream_id': 1, 'payload': 1}):
+    from . import audit as audit_trail
+    for row in audit_trail.events(store, 'recall.read', since=start, before=end, by=None).each(
+            fields=['stream_id', 'payload']):
         payload = row.get('payload') or {}
         ep = episode_records.get(store, row.get('stream_id'), fields=['persona', 'manifest.session_class'])
         if not ep or ep.get('persona') != persona:
@@ -504,28 +542,20 @@ def count_days(store, persona, moment=None):
     zone = _zone(store, persona)
     today = moment.astimezone(zone).date()
     oldest = today - timedelta(days=COUNT_DAYS)
-    rows, counted, spans = store.db[COUNTS], store.db[COUNTED], store.db[SECTIONS]
-    deleted = rows.delete_many({'persona': persona, 'day': {'$lt': oldest.isoformat()}}).deleted_count
-    counted.delete_many({'persona': persona, 'day': {'$lt': oldest.isoformat()}})
-    first = store.db[memory_tiers.COLLECTION].find_one({'row': 'item', 'persona': persona}, {'added': 1},
-                                                       sort=[('added', 1)])
+    deleted = forget_days(store, persona, oldest.isoformat())
+    first = memory_tiers.items(store, persona, by='added').first(fields=['added'])
     if not first or not first.get('added'):
         return {'days': 0, 'rows': 0, 'deleted': deleted}
     began = datetime.fromisoformat(str(first['added']).replace('Z', '+00:00')).astimezone(zone).date()
-    done = set(counted.distinct('day', {'persona': persona}))
+    done = counted_days(store, persona)
     day, days, written = max(oldest, began), 0, 0
     while day < today:
         if day.isoformat() not in done:
             found, carried_at = day_counts(store, persona, day, zone)
-            for row in found:
-                rows.replace_one({'_id': row['_id']}, row, upsert=True)
+            count_day(store, found)
             for ref, (start, end) in carried_at.items():
-                spans.update_one({'_id': 'section:' + sha(canonical([persona, ref]))[:32]},
-                                 {'$set': {'persona': persona, 'section': ref},
-                                  '$min': {'first_carried_at': start}, '$max': {'last_carried_at': end}}, upsert=True)
-            counted.replace_one({'_id': 'day:%s:%s' % (persona, day.isoformat())},
-                                {'persona': persona, 'day': day.isoformat(), 'rows': len(found),
-                                 'at': moment.isoformat()}, upsert=True)
+                note_section(store, persona, ref, start, end)
+            mark_day(store, persona, day.isoformat(), len(found), moment.isoformat())
             days, written = days + 1, written + len(found)
         day += timedelta(days=1)
     return {'days': days, 'rows': written, 'deleted': deleted}
@@ -556,7 +586,8 @@ def install_checks(store, persona):
     from . import memory_tiers
     from .documents import DocumentError
     out, ep = [], None
-    for row in store.db.audit_events.find({'type': 'turn.output'}, {'stream_id': 1}).sort('occurred_at', -1).limit(50):
+    from . import audit as audit_trail
+    for row in audit_trail.events(store, 'turn.output').rows(newest_first=True, limit=50, fields=['stream_id']):
         ep = episode_records.get(store, row['stream_id'], fields=['system_ref'], persona=persona, carried=True)
         if ep:
             break

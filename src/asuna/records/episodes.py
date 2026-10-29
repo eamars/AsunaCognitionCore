@@ -8,7 +8,7 @@ views (`View`: `rows`, `first`, `count`), in the database's order, as the replac
 revisioned write (`Store.put`).
 """
 from ..store.words import AnyOf, Exists, Not
-from .view import ANY, View, fenced, is_number, is_text, texts
+from .view import ANY, View, fenced, is_number, is_text, redact, texts
 
 COLLECTION = 'episodes'
 # The states of a turn that ended with her answer: it committed, or it waits on the task it handed work to.
@@ -97,3 +97,8 @@ def of_scope(store, scope_key, fields=None):
 def save(store, episode, **kwargs):
     """The revisioned write of a whole turn (`Store.put`: `expected`, `stream`, `reset_counters`)."""
     return store.put(COLLECTION, episode, **kwargs)
+
+
+def redact_scope(store, scope, deletion, epoch):
+    """An erasure of a scope's turns (`view.redact`)."""
+    redact(store, COLLECTION, scope, deletion, epoch)

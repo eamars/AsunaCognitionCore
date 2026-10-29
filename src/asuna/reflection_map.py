@@ -106,7 +106,8 @@ def block(store, persona, moment=None, *, tag=None):
     from . import notes as note_owner
     from .people import People
     moment = moment or clock.now()
-    last = store.db.audit_events.find_one({'type': SHOWN, 'payload.persona': persona}, sort=[('occurred_at', -1)])
+    from . import audit as audit_trail
+    last = audit_trail.events(store, SHOWN, persona=persona).first(newest_first=True)
     floor = moment - timedelta(days=WINDOW_DAYS)
     since_at = max(_at(last['occurred_at']), floor) if last else floor
     since = _iso(since_at)
@@ -183,11 +184,11 @@ def block(store, persona, moment=None, *, tag=None):
     kinds = collections.Counter(m.get('kind') for m in memory_records.alive(store).each(fields=['kind']))
     words = {'chat_chunk': '聊天片段', 'dialogue_summary': '对话摘要', 'monologue': '你的心里话'}
     index.append('记忆：' + '、'.join('%s %d' % (words.get(k, k), n) for k, n in kinds.most_common(4)))
-    if 'memory_tiers' in store.db.list_collection_names():
-        tiers = collections.Counter(r.get('place') for r in store.db.memory_tiers.find({'row': 'item', 'persona': persona},
-                                                                                        {'place': 1}))
-        moves = store.db.audit_events.count_documents({'type': 'memory.moved', 'occurred_at': {'$gte': since}})
-        index.append('分层的条目：' + '、'.join('%s %d' % kv for kv in tiers.items()) + '；上次以来挪动 %d 次' % moves)
+    # memory_tiers is declared, so the store's ensure makes it at every start: it is always there to be counted.
+    from . import memory_tiers
+    tiers = collections.Counter(r.get('place') for r in memory_tiers.items(store, persona).each(fields=['place']))
+    moves = audit_trail.count(store, 'memory.moved', since=since)
+    index.append('分层的条目：' + '、'.join('%s %d' % kv for kv in tiers.items()) + '；上次以来挪动 %d 次' % moves)
     index.append('感受：一共 %d 笔，上次以来 %d 笔，还挂着没了的 %d 笔（feel）' % (
         affect.count_events(store, persona), affect.count_events(store, persona, since=since),
         affect.count_events(store, persona, still_open=True)))
@@ -212,8 +213,8 @@ def block(store, persona, moment=None, *, tag=None):
 
     # Attention: per group, lines her relevance gate saw and how many it gave her a look at.
     seen, looked = collections.Counter(), collections.Counter()
-    for row in store.db.audit_events.find({'type': 'attend.verdict', 'occurred_at': {'$gte': since}},
-                                          {'scope_key': 1, 'payload.choice': 1}):
+    for row in audit_trail.events(store, 'attend.verdict', since=since, by=None).each(
+            fields=['scope_key', 'payload.choice']):
         scene_id = str(row.get('scope_key') or '')[len('scene:'):]
         seen[scene_id] += 1
         looked[scene_id] += (row.get('payload') or {}).get('choice') == 'join'

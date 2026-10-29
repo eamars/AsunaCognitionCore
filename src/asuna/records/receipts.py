@@ -9,7 +9,7 @@ the receipts whose field is null or missing, as the replaced equality on None di
 `save_sink` are the revisioned writes (`Store.put`).
 """
 from ..store.words import AnyOf, Not, Range
-from .view import ANY, View, is_text, pinned, texts
+from .view import ANY, View, is_text, pinned, redact, texts
 
 LANES, SINKS = 'lane_receipts', 'sink_receipts'
 
@@ -67,6 +67,11 @@ def sink_window(store, *, gte=None, lte=None, lt=None):
     bounds = {name: value for name, value in (('gte', gte), ('lte', lte), ('lt', lt)) if value is not None}
     return View(store, SINKS, {'received_at': Range(**bounds)} if bounds else {},
                 (('received_at', 1), ('_id', 1)))
+
+
+def redact_scope(store, scope, deletion, epoch):
+    """An erasure of a scope's sink receipts (`view.redact`)."""
+    redact(store, SINKS, scope, deletion, epoch)
 
 
 def save_sink(store, receipt, **kwargs):

@@ -52,10 +52,10 @@ def throwaway(settings):
 
 
 def b1b_lane_faults():
-    """`lane_faults` as B1b's catalog declared it: pending, today's TTL index on the hour."""
+    """`lane_faults` as B1b's catalog declared it: today's indexes and the TTL index on the hour."""
     today = CATALOG.collection('lane_faults')
-    return Collection('lane_faults', 'lane_faults', (), (*today.indexes, index(('hour_at', 1), expire_after=30 * 86400)),
-                      versioned=True, pending=True)
+    return Collection('lane_faults', 'lane_faults', today.fields,
+                      (*today.indexes, index(('hour_at', 1), expire_after=30 * 86400)), versioned=True)
 
 
 def test_a_fresh_database_gets_todays_ttl_index_from_b1bs_catalog(settings):

@@ -55,6 +55,28 @@ def pinned(where, pins):
     return And(where, *nones) if where else (nones[0] if len(nones) == 1 else And(*nones))
 
 
+# What a privacy erasure keeps of a record of the erased scope (ADR-105): its identity, state and hashes, never a body.
+REDACTION_KEEPS = ('_id', 'schema_version', 'revision', 'scope_key', 'scene_id', 'source_event_id', 'episode_kind',
+                   'publication_key', 'request_key', 'binding_key', 'content_hash', 'scene_seq', 'direction', 'author',
+                   'adapter_id', 'platform_event_id')
+
+
+def redact(store, collection, scope, deletion, epoch, *, left=lambda doc: False):
+    """An erasure of `scope` in one collection: each record of the scope but those `left` holds is replaced whole by
+    the fields kept (REDACTION_KEEPS), the deletion's id, its marks and the scope's new policy epoch. No revision and no
+    commit: an erasure is a declared rebase, not a revision. A scope given None, or not text, changes nothing."""
+    if not is_text(scope):
+        return
+    rows = store.collection(collection)
+    for doc in rows.find({'scope_key': scope}):
+        if left(doc):
+            continue
+        kept = {key: doc[key] for key in REDACTION_KEEPS if key in doc}
+        kept.update(deletion_id=deletion, state='INVALIDATED', delivery_state='REDACTED', text='[deleted]',
+                    policy_epoch=epoch)
+        rows.replace(kept)
+
+
 class View:
     """A named read on one collection: its condition and its order ((field, 1 | -1), ...)."""
 

@@ -71,7 +71,10 @@ def main():
                     if 'private' in path.relative_to(ROOT/'reports').parts:continue
                     item=json.loads(path.read_text(encoding='utf-8'))
                     if item.get('payload',{}).get('call_id')==args.id:value.append(item)
-            else:value=list(store.db.audit_events.find({} if args.kind=='trace' else {'stream_id':args.id}).sort([('stream_id',1),('seq',1)]))
+            else:
+                from . import audit as audit_trail
+                value=(audit_trail.events(store,by='stream') if args.kind=='trace'
+                       else audit_trail.events(store,stream=args.id,by='stream')).rows()
             if not value:raise ValueError('UNKNOWN_AUDIT_OBJECT')
             if args.format=='html':
                 if not args.out:raise ValueError('OUT_REQUIRED')

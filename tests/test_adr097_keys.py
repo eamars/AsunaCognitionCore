@@ -58,7 +58,7 @@ def group(store, monkeypatch):
     tiers = Tiers(store, 'P1')
     tiers.sync()
     for doc, sid in [(slug, sids['version']), (slug, sids['common']), (slug, sids['body']), ('persona', sids['persona'])]:
-        tiers.rows.update_one({'_id': tiers.item(doc, sid)['_id']}, {'$set': {'place': AT_HAND}})
+        tiers.store.db['memory_tiers'].update_one({'_id': tiers.item(doc, sid)['_id']}, {'$set': {'place': AT_HAND}})
     at = datetime.now(timezone.utc) - timedelta(hours=1)
     store.db.messages.insert_many([{'_id': 'line-%d' % n, 'schema_version': 1, 'scene_id': 'g1', 'policy_epoch': 1, 'direction': 'inbound', 'scene_seq': n,
                                     'text': '大家早', 'received_at': at.isoformat()} for n in range(10)])
@@ -83,7 +83,7 @@ def test_a_group_note_comes_back_by_its_rare_heading_word_and_says_so(group):
     assert not own(plain), 'a heading word common in this place is not a key'
     _, body, _ = builder.prepare(event('e-3', scene='g1', text='破甲是啥'), 'P1')
     assert not own(body), 'a word in the body is not a key'
-    assert tiers.rows.find_one({'_id': 'rarity:P1:g1'})['lines'] == 10, 'the place table is kept'
+    assert tiers.store.db['memory_tiers'].find_one({'_id': 'rarity:P1:g1'})['lines'] == 10, 'the place table is kept'
 
 
 def test_her_tag_is_a_key_on_any_item_and_she_is_told_how_common_it_is_here(group):
@@ -107,7 +107,7 @@ def recall_turn(store, builder, args, scene='g1'):
 
 def test_recall_with_the_bare_word_finds_the_note_and_lists_headings_by_the_same_keys(group):
     store, builder, sids, tiers, slug = group
-    tiers.rows.update_one({'_id': tiers.item(slug, sids['version'])['_id']}, {'$set': {'place': PUT_AWAY}})
+    tiers.store.db['memory_tiers'].update_one({'_id': tiers.item(slug, sids['version'])['_id']}, {'$set': {'place': PUT_AWAY}})
     found = recall_turn(store, builder, {'query': '1017'})
     assert [m['_id'] for m in found['memories'] if m.get('kind') == 'own_item'] == ['doc:%s#%s' % (slug, sids['version'])], \
         'the bare word is enough, put away too'
@@ -128,10 +128,10 @@ def test_the_exact_word_still_works_when_the_embedding_route_is_down(group):
 
 def test_settlement_counts_every_place_again_and_drops_a_silent_one(group):
     store, builder, sids, tiers, slug = group
-    tiers.rows.insert_one({'_id': 'rarity:P1:gone', 'row': 'rarity', 'persona': 'P1', 'scene_id': 'gone', 'common': []})
+    tiers.store.db['memory_tiers'].insert_one({'_id': 'rarity:P1:gone', 'row': 'rarity', 'persona': 'P1', 'scene_id': 'gone', 'common': []})
     assert tiers.rerate_all() == 1
-    assert tiers.rows.find_one({'_id': 'rarity:P1:g1'})['lines'] == 10
-    assert not tiers.rows.find_one({'_id': 'rarity:P1:gone'})
+    assert tiers.store.db['memory_tiers'].find_one({'_id': 'rarity:P1:g1'})['lines'] == 10
+    assert not tiers.store.db['memory_tiers'].find_one({'_id': 'rarity:P1:gone'})
 
 
 def test_learned_words_are_cut_whole_and_forgetting_gives_the_dictionary_back():

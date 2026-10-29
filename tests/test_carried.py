@@ -249,7 +249,7 @@ def test_a_group_s_notes_fold_by_last_surfacing_and_a_folded_one_comes_up_when_a
     write(store, slug, {'op': 'set_tags', 'sid': anchor, 'pin': True}, mutation='n4')
     baking, hiking = sid_of(store, slug, '松饼'), sid_of(store, slug, '登山')
     for sid, days in ((baking, 20), (anchor, 30)):
-        tiers.rows.update_one({'_id': tiers.item(slug, sid)['_id']}, {'$set': {
+        tiers.store.db['memory_tiers'].update_one({'_id': tiers.item(slug, sid)['_id']}, {'$set': {
             'added': (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()}})
     tiers.used([(slug, hiking)], 'recalled', 'g1')             # her recall counts as surfacing
     assert tiers.folding(slug, DocumentStore(store, 'P1').read(slug)[1])[:2] == [baking, hiking], 'kept, not recomputed'

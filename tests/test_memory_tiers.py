@@ -40,7 +40,7 @@ def test_with_the_switch_off_nothing_is_kept_and_her_turn_has_no_things_block(st
     monkeypatch.setattr(memory_tiers, 'ENABLED', False)
     owner(store)
     Coordinator(store, FakeLane(store, [FakeTurn([THINK], '在呢。')])).ingest(event('e-off'))
-    assert memory_tiers.COLLECTION not in store.db.list_collection_names()
+    assert store.db[memory_tiers.COLLECTION].count_documents({}) == 0     # declared, so ensure made it: no rows
     _, context, _ = ContextBuilder(store).prepare(event('e-off-2'), 'P1')
     assert 'things_from_program' not in context
 
@@ -68,7 +68,7 @@ def test_a_carried_item_lapses_when_its_stay_runs_out_and_leaves_the_prompt(stor
     row = next(r for r in tiers.items(doc='persona') if r['place'] == CARRIED)
     body = next(s['body'] for s in DocumentStore(store, 'P1').read('persona')[1]['sections'] if s['sid'] == row['sid'])
     assert body in render_system(store, 'P1')[0]
-    tiers.rows.update_one({'_id': row['_id']}, {'$set': {'memorable_at': ago(row['stay_days'] + 1)}})
+    tiers.store.db['memory_tiers'].update_one({'_id': row['_id']}, {'$set': {'memorable_at': ago(row['stay_days'] + 1)}})
     [move] = tiers.tick()
     assert (move['from'], move['to'], move['reason']) == (CARRIED, AT_HAND, 'stay')
     assert tiers.item('persona', row['sid'])['place'] == AT_HAND
@@ -82,7 +82,7 @@ def test_a_memorable_moment_starts_the_stay_again_and_doubles_it_once_per_stay(s
     tiers = Tiers(store, 'P1')
     tiers.sync()
     row = tiers.items(doc='persona')[0]
-    tiers.rows.update_one({'_id': row['_id']}, {'$set': {'memorable_at': ago(10)}})
+    tiers.store.db['memory_tiers'].update_one({'_id': row['_id']}, {'$set': {'memorable_at': ago(10)}})
     tiers.used([('persona', row['sid'])], 'recalled', 'dm-a')
     tiers.used([('persona', row['sid'])], 'cited', 'dm-a')
     after = tiers.item('persona', row['sid'])
@@ -101,7 +101,7 @@ def test_on_the_switch_on_day_first_stays_spread_over_two_weeks_and_later_items_
     stays = [row['stay_days'] for row in tiers.items(doc='persona')]
     assert all(14 <= days <= 28 for days in stays) and len(set(stays)) > 3, stays
     again = Tiers(store, 'P1')
-    again.rows.delete_many({'row': 'item'})
+    again.store.db['memory_tiers'].delete_many({'row': 'item'})
     again.sync()
     assert [row['stay_days'] for row in again.items(doc='persona')] == stays, 'the same spread every time'
     before, after = write(docs, 'persona', {'op': 'append_section', 'heading': '后来写的'}, '后来写的一节')
@@ -132,7 +132,7 @@ def test_a_new_item_starts_carried_and_over_the_cap_she_is_shown_the_carried_lis
         moves = tiers.written('persona', {'op': 'append_section'}, before, after, scene_id='dm-a')
         if n == 0:
             oldest = after['sections'][-1]['sid']
-            tiers.rows.update_one({'_id': memory_tiers.item_id('P1', 'persona', oldest)},
+            tiers.store.db['memory_tiers'].update_one({'_id': memory_tiers.item_id('P1', 'persona', oldest)},
                                   {'$set': {'memorable_at': ago(3)}})
     newest = after['sections'][-1]['sid']
     assert tiers.item('persona', newest)['place'] == CARRIED
@@ -179,7 +179,7 @@ def test_memories_cool_by_disuse_facts_do_not_and_a_correction_supersedes(store,
     promise = tiers.items(doc='promises')[0]
     assert journal['place'] == AT_HAND and promise['place'] == CARRIED and promise['fact'] and not journal['fact']
     for row in (journal, promise):
-        tiers.rows.update_one({'_id': row['_id']}, {'$set': {'memorable_at': ago(200), 'place': AT_HAND}})
+        tiers.store.db['memory_tiers'].update_one({'_id': row['_id']}, {'$set': {'memorable_at': ago(200), 'place': AT_HAND}})
     tiers.tick()
     assert tiers.item('work_log', journal['sid'])['place'] == PUT_AWAY, 'a memory cools'
     assert tiers.item('promises', promise['sid'])['place'] == AT_HAND, 'a fact never cools by disuse'
@@ -194,7 +194,7 @@ def test_a_rewrite_that_changes_an_item_brings_it_back_and_one_that_does_not_is_
     docs, tiers = DocumentStore(store, 'P1'), Tiers(store, 'P1')
     tiers.sync()
     row = tiers.items(doc='persona')[0]
-    tiers.rows.update_one({'_id': row['_id']}, {'$set': {'place': AT_HAND}})
+    tiers.store.db['memory_tiers'].update_one({'_id': row['_id']}, {'$set': {'place': AT_HAND}})
     body = next(s['body'] for s in docs.read('persona')[1]['sections'] if s['sid'] == row['sid'])
     before, after = write(docs, 'persona', {'op': 'replace_section', 'sid': row['sid']}, body, 'same')
     assert tiers.written('persona', {'op': 'replace_section', 'sid': row['sid']}, before, after) == []
@@ -235,7 +235,7 @@ def test_a_tag_lets_an_item_go_down_but_never_carries_it_back_up(store, tiers_on
     tiers.sync()
     up = next(r for r in tiers.items(doc='persona') if r['place'] == CARRIED and r['visibility'] == 'public')
     down = next(r for r in tiers.items(doc='persona') if r['place'] == CARRIED and r['_id'] != up['_id'])
-    tiers.rows.update_one({'_id': up['_id']}, {'$set': {'place': AT_HAND}})
+    tiers.store.db['memory_tiers'].update_one({'_id': up['_id']}, {'$set': {'place': AT_HAND}})
     pin = {'doc': 'persona', 'do': 'set_tags', 'section': up['sid'], 'when_shown': 'always', 'why': '想一直带着'}
     tuck = {'doc': 'persona', 'do': 'set_tags', 'section': down['sid'], 'when_shown': 'on_demand', 'why': '收起来'}
     lane = FakeLane(store, [FakeTurn([THINK, ('write_document', pin), ('write_document', tuck)], '好。')])
@@ -277,7 +277,7 @@ def test_an_item_is_a_fact_or_a_memory_by_what_she_says_not_by_its_store(store, 
     assert (mine['nature'], mine['from'], mine['fact']) == ('记忆', '我自己的判断', False)
     assert (fact['nature'], fact['from'], fact['fact']) == ('事实', '查过的', True)
     for row in (mine, fact):
-        tiers.rows.update_one({'_id': row['_id']}, {'$set': {'memorable_at': ago(400), 'place': AT_HAND}})
+        tiers.store.db['memory_tiers'].update_one({'_id': row['_id']}, {'$set': {'memorable_at': ago(400), 'place': AT_HAND}})
     tiers.tick()
     assert tiers.item('persona', mine['sid'])['place'] == PUT_AWAY, 'her judgment follows the cycle'
     assert tiers.item('self', fact['sid'])['place'] == AT_HAND, 'a checked fact does not fade'

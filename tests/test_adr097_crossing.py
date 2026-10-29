@@ -165,7 +165,7 @@ def test_a_past_version_comes_back_for_a_word_its_section_lost(places, monkeypat
     assert 'before' not in recall(store, builder, {'query': '1017'}, key='excluded'), 'an excluded day'
     rules(path, {})
     tiers = Tiers(store, 'P1')
-    tiers.rows.update_one({'_id': tiers.item(slug, sid)['_id']}, {'$set': {'from': crossing.OWN_JUDGMENT}})
+    tiers.store.db['memory_tiers'].update_one({'_id': tiers.item(slug, sid)['_id']}, {'$set': {'from': crossing.OWN_JUDGMENT}})
     assert 'before' not in recall(store, builder, {'query': '1017'}, key='judged'), 'her marked judgment'
 
 

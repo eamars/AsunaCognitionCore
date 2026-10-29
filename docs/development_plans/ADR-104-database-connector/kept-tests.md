@@ -54,14 +54,14 @@ when none does.
 |---|---|
 | `mark_sent` / `mark_read` are updates of their own | `tests/test_store_counters.py::test_a_touch_is_an_update_of_its_own` |
 | the counter fields (`COUNTER_FIELDS`), artifacts' `last_sent_at` and `last_read_at` included, kept by a revisioned write and counted in the bumps | `tests/counter_bumps.py` (the `artifacts` row of `BUMPS`), `tests/test_store_counters.py::test_every_counter_collection_has_a_case`, `::test_a_counter_moved_after_a_read_survives_the_put`, `::test_a_replace_keeps_the_touches` |
-| `keep`: what a revisioned `put` or `replace` keeps as stored (read here as the kept counters) | `tests/test_store_counters.py::test_a_replace_keeps_the_touches`, `::test_a_put_that_starts_the_record_over_writes_its_counters` |
+| `keep`: what a revisioned `put` or `replace` keeps as stored (read here as the kept counters) | `tests/test_store_counters.py::test_a_replace_keeps_the_touches`, and its counter-example `::test_a_put_that_starts_the_record_over_writes_its_counters` (`reset_counters=True` writes the counters back) |
 | `save` refuses `reset_counters` on a stored file | `tests/test_store_counters.py::test_a_stored_file_is_never_started_over` |
 | the touch fields leave their audit commit | no test holds it |
 | the record-owner guard | `tests/test_record_owners.py`, `tests/test_store_boundary.py` |
 | the shared layer's own reads of `audit_events` are not owner reads (`Store.audit`, `Store.recover_commits`) | `tests/test_store_boundary.py` (`SHARED_FUNCTIONS`) |
 | the required unique fields | `tests/test_required_unique_fields.py`, `integration/test_required_fields.py` |
-| `fields` given a dict, or a malformed `Without`, is refused (`QUERY_FIELDS_FORM`, `store/words.py`) | the shared contract cases at `integration/store_contract.py:334`-`347`, run on both adapters |
-| `Without`'s own meaning: every field except those named | no test holds it |
+| `fields` given a dict, or a malformed `Without`, is refused (`QUERY_FIELDS_FORM`, `store/words.py`) | the refusals in the shared cases `TestO::test_O07_fields` (`integration/store_contract.py:334`-`336`, a dict) and `TestO::test_O08_fields_left_out` (`:345`-`347`, a malformed `Without`), run on both adapters |
+| `Without`'s own meaning: every field except those named | the shared case `TestO::test_O08_fields_left_out` (`integration/store_contract.py:338`-`344`), run on both adapters |
 | the None rule of design section 4 | `tests/test_owner_fences_on_none.py` |
 | erasure through each owner's `redact_scope` | `tests/test_erasure.py`, `tests/test_moderate_writes.py` |
 

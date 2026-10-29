@@ -45,3 +45,20 @@ def test_a_written_file_holds_the_text_as_given(tmp_path):
     assert (tmp_path / 'notes.md').read_bytes() == '一\n二\n'.encode('utf-8')
 
 
+
+
+def test_list_files_walks_at_most_its_bound_and_says_so(tmp_path, monkeypatch):
+    """A task folder of any size is listed within a count bound, the effects lock held: never a walk of everything."""
+    from asuna import tasks
+    for name in ('b.txt', 'a/z.txt', 'a/b/c.txt', 'Z.txt'):
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text(name, encoding='utf-8')
+    old = [{'path': p.relative_to(tmp_path).as_posix(), 'size': p.stat().st_size}
+           for p in sorted(tmp_path.rglob('*')) if p.is_file()]
+    assert tasks.workspace_file(tmp_path, [], 'list_files', {}) == {'files': old}, 'within the bound: as before'
+    monkeypatch.setattr(tasks, 'LIST_FILES_MOST', 6)                       # 4 files and 2 folders: all of it
+    assert tasks.workspace_file(tmp_path, [], 'list_files', {}) == {'files': old}
+    monkeypatch.setattr(tasks, 'LIST_FILES_MOST', 3)
+    listed = tasks.workspace_file(tmp_path, [], 'list_files', {})
+    assert listed['limited'] == tasks.LIST_FILES_LIMITED and 0 < len(listed['files']) < len(old)
+    assert all(row in old for row in listed['files'])

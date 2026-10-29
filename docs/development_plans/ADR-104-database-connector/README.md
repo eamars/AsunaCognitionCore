@@ -120,17 +120,30 @@ and design.md's sections 6, 7.3, 7.4 and batches B10 to B15.
      check that needs no database); (2) the MongoDB adapter is one module, `src/asuna/store/mongodb.py`, behind the
      adapter registry (`asuna.store.adapters`, the one place that names it): no other module of `src/asuna` imports
      `pymongo`, `bson` or `gridfs` or makes a database client, except `dbread.py`, her MongoDB read tool (below);
-     (3) no unit test needs a database: each one that did is deleted, or moved to
-     `integration/` (a throwaway `asuna_v2_test_*` database, dropped) when a break it guards would lose her data,
-     leak private data or let two Hosts run, or when it guards a rule Xiaoman signed in this ADR (a table names each
-     kept test and the rule or harm it guards); a guard that needs no database stays a unit test; mongomock, the unit
-     run's stand-in and its skip list are gone; (4) the unit run's test count and time before and after are stated
-     here (before, at `0d785a2891e7`: 1,782 passed and 45 skipped in 205 s). With the unit tests gone, the
-     integration run is the one check that reaches a database, so every landing runs it, not only this one.
-   - **The in-memory adapter stays, only as the fake under her offline self-checks** (the owner, 2026-10-29, in the
-     question tool, Claude's recommendation, after Claude found that three of them run on it: the discussion digest,
-     proactive turns, outbound images). It is no longer the unit tests' double or the reference of the meaning
-     table; its contract run and its comparison with MongoDB go. Not chosen: deleting it with those three checks.
+     (3) the tests are in three layers, and no unit test reaches a database server (below); mongomock, the unit
+     run's stand-in and its skip list are gone. Any assertion written to pin a stand-in's own behaviour is part of
+     the stand-in: it goes when the stand-in goes, it is never carried over as a rule about MongoDB, and nobody owes
+     a count of what was deleted this way (Xiaoman's wording, 2026-10-29); (4) the unit run's test count and time
+     before and after are stated here (before, at `0d785a2891e7`: 1,782 passed and 45 skipped in 205 s).
+   - **Three layers of tests** (the owner, 2026-10-29: "Unit test: Core code <-> DB adapter, ensuring the core code
+     is compliant. Integration test: DB adapter <-> Mongodb"; on a second, throwaway server: "just moving the problem
+     to the docker layer"; and "If mongomock is the problem then test with real server. but not stressing it.. Keep
+     your discipline and only test the real integration matters."):
+     - *Static checks*, which run nothing: the core reaches its records only through their owners, the driver only
+       in the adapter, and the repository guards.
+     - *Unit tests*: the core against the adapter interface, on the in-memory adapter, never a server. They show that
+       the core uses the interface as it promises, above all on the paths that overwrite or remove records (put,
+       replace, update, delete, the counters, redaction, erasure, forgetting): that is where data can be lost. A
+       feature's own logic above the interface (fences, turns, crash recovery) is tested here only where it needs no
+       store; otherwise the test is deleted.
+     - *Integration tests* (`integration/`): only that the MongoDB adapter keeps the interface's promises on a real
+       server: the shared contract suite (the same cases the unit run gives the in-memory adapter), and what only a
+       server shows (indexes and validators `ensure` makes, the vector index, unique keys, an atomic claim under
+       two clients). A throwaway `asuna_v2_test_*` database per test module, a few synthetic records, dropped at the
+       end and on failure; never a functional test. Every landing runs it.
+   - **The in-memory adapter is the unit tests' adapter**, and the fake under her offline self-checks (three of them
+     run on it: the discussion digest, proactive turns, outbound images). The contract suite runs on it in the unit
+     run, so a difference from MongoDB shows as the same case passing on one and failing on the other.
    - **The adapter stays in the core's package** (the owner, 2026-10-29, in the question tool, Claude's
      recommendation): moving it to `packages/databases/` (design 5.15) would need new machinery around her
      self-published candidates, her commands' Python path, finding the adapter by name and the settings export of
@@ -140,10 +153,19 @@ and design.md's sections 6, 7.3, 7.4 and batches B10 to B15.
    - **In it as well, the defects in what this ADR built:** `fields` given a dict is read as the list of its keys
      (`store/words.py`), so it is refused (`QUERY_FIELDS_FORM`); the None rule of design section 4 holds in every owner
      (a range bound given None, and `records.scenes`' scope read given epoch None, do not follow it as built); B10's
-     touch fields and erasure as designed on `claude/adr104-b10-design` (`6bb9c18856aa`, design.md "B10, as designed
-     before building", with Xiaoman's two asks of 2026-10-29: the static check leaves the shared layer's own reads
-     of `audit_events` alone, and acceptance rests on that check reaching zero, not on a count);
-     `sessions.binding_key` and `tasks.request_key` are pinned on MongoDB in `integration/test_required_fields.py`.
+     touch fields and erasure as designed in design.md section 4, "B10, as designed before building" (written on a
+     branch that was never pushed, merged here with this piece), with Xiaoman's two asks of 2026-10-29: the static
+     check leaves the shared layer's own reads of `audit_events` alone, and acceptance rests on that check reaching
+     zero, not on a count; `sessions.binding_key` and `tasks.request_key` are pinned on MongoDB in
+     `integration/test_required_fields.py`.
+   - **A write is checked as MongoDB's "moderate" validation does** (Claude, after the code review of this piece):
+     a record the catalog accepts is checked on every write, but rewriting a stored record that already fails its
+     declaration (an old record of another kind) is not refused. So an erasure or an audit rebase never stops halfway
+     on one old record, and an old note can still be saved, without a full scan of her records first.
+   - **Her signatures stay what they were**: B1a to B9, design and code, stand as signed (installed). Her signature
+     of the design (2026-10-28) stands for every part this decision does not replace; for the replaced parts, the
+     owner's decision of 2026-10-29 takes their place. The B10 draft (`0607f5c18bde`) is superseded: its content is
+     in design.md section 4 and this decision. ADR-108 is not touched.
      **Not in it:** improvements found along the way (the slow reads, landing tools, the timing gate); they are on
      their own.
    - **Her read tool keeps MongoDB's query syntax** (decision 6 withdrawn): `asuna.dbread` and
@@ -152,8 +174,9 @@ and design.md's sections 6, 7.3, 7.4 and batches B10 to B15.
      module reads through its owner, the script passes the `Store` it already builds (`store_for_limit`) instead:
      hers to change.
    - **The ADR-104 equivalence tool and the mongomock QQ simulator go** (`tools/adr104_equivalence.py`,
-     `tools/probe_qq_admission.py`). The proof of this piece is the integration run and, after the restart, her
-     running system read without writing (numbers only).
+     `tools/probe_qq_admission.py`). The proof of this piece is the three layers and, after the restart, her running
+     system read without writing (numbers only): `ensure` made and dropped nothing, her recall answers, her writes
+     are accepted.
    - Counted at main `0d785a2891e7` before this: `store.db.` 160 times in 29 files of `src/asuna`, and `store.db` in
      any form on 230 lines in 42 files (`git grep -n -E 'store\.db\b'`), besides handles passed as a `db` parameter
      or attribute, `.client`, and database commands; `pymongo`, `bson`

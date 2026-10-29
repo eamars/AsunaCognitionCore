@@ -25,6 +25,7 @@ from . import fixtures
 from . import faces as faces_mod
 from . import outbound as outbound_mod
 from . import peers as peers_mod
+from . import shapes as shapes_mod
 from . import voice as voice_mod
 from .peers import PEER_KEY, PeerDirectory
 from .config import MAX_FILE_MB_MOST, Config, ConfigError
@@ -1729,6 +1730,7 @@ def run(cfg, data_dir, live=True, live_config=True):
     _check_admission(rep, root)
     _check_group_inbound(rep, gcfg)
     _check_media(rep, gcfg, root)
+    _check_shapes(rep, gcfg, root)
     _check_voice(rep, gcfg, root)
     _check_markdown(rep, gcfg, root)
     _check_lanes(rep, gcfg, root)
@@ -2948,6 +2950,66 @@ def _check_faults(rep, gcfg, root):
         raised = exc
     rep.check("faults_damaged_pending_ignored_and_add_never_raises", raised is None and len(damaged.pending) == 2
               and all(len(k[2]) <= faults_mod.NAME_CHARS for k in damaged.pending), str(raised))
+
+
+def _check_shapes(rep, gcfg, root):
+    """ADR-103: the shapes of non-text segments are counted by day with no content, from accepted messages only,
+    within a bound, and never hold a line. Offline: synthetic events, no platform call."""
+    groups = sorted(gcfg.allowed_groups)
+    grp = groups[0]
+    member = sorted(gcfg.route_for_group(grp).allowed_senders)[0]
+    face = {"type": "face", "data": {"id": "277", "chainCount": 3, "raw": {"faceText": "/狗头", "faceType": 2,
+                                                                          "resultId": 5, "packId": "secret-pack"}}}
+    words = {"type": "text", "data": {"text": "秘密正文"}}
+
+    adapter = Adapter(gcfg, os.path.join(root, "shapes"))
+    adapter.log = lambda line: None
+    adapter.on_event(_group_event(gcfg, grp, member, 7101, message=[words, face]))
+    adapter.on_event(_group_event(gcfg, grp, fixtures.OUTSIDER, 7102, message=[face]))
+    adapter.on_event(_group_event(gcfg, grp, member, 7103, message=[words, {"type": "at", "data": {"qq": member}},
+                                                                    {"type": "reply", "data": {"id": 1}}]))
+    summary = adapter.shapes.summary()
+    shown = json.dumps(summary, ensure_ascii=False, sort_keys=True)
+    rep.check("shapes_counted_once_from_accepted_only", summary["shapes"] == 1 and
+              list(summary["last_7_days"].values()) == [1], shown[:200])
+    rep.check("shapes_keys_and_small_numbers_not_content",
+              "face|data:chainCount,id,raw|raw:faceText,faceType,packId,resultId|values:chainCount=3,raw.faceType=2,"
+              "raw.resultId=5" in summary["last_7_days"] and not any(
+                  word in shown for word in ("狗头", "秘密正文", "secret-pack", "277")), shown[:300])
+    rep.check("shapes_health_carries_them", adapter.health_snapshot().get("media_shapes") == summary, "")
+
+    counted = shapes_mod.Shapes(os.path.join(root, "shapes-unit"))
+    counted.add_event({"message": [{"type": "dice", "data": {"result": "12345"}},
+                                   {"type": "rps", "data": {"result": "x", "other": 7}},
+                                   {"type": "Odd Type!", "data": {}}]})
+    got = sorted(counted.summary()["last_7_days"])
+    rep.check("shapes_value_only_when_one_to_four_digits", got == ["dice|data:result", "other|data:",
+                                                                   "rps|data:other,result"], json.dumps(got))
+
+    capped = shapes_mod.Shapes(os.path.join(root, "shapes-cap"))
+    capped.add_event({"message": [{"type": "t%d" % n, "data": {}} for n in range(shapes_mod.SHAPES_PER_DAY + 50)]})
+    day = next(iter(capped.days.values()))
+    rep.check("shapes_a_day_is_bounded", len(day) == shapes_mod.SHAPES_PER_DAY + 1 and day[shapes_mod.OVERFLOW] == 50,
+              "%d shapes, overflow %s" % (len(day), day.get(shapes_mod.OVERFLOW)))
+
+    capped.save()
+    again = shapes_mod.Shapes(os.path.join(root, "shapes-cap"))
+    rep.check("shapes_survive_a_restart", again.days == capped.days, "")
+
+    blocked = os.path.join(root, "shapes-blocked")
+    with open(blocked, "w", encoding="utf-8") as handle:
+        handle.write("a file where the folder should be")
+    broken = shapes_mod.Shapes(blocked)
+    try:
+        for event in (None, {"message": 5}, {"message": [None, {"type": 7}, {"type": "face", "data": []}]},
+                      {"message": [{"type": "face", "data": {"id": "1"}}]}):
+            broken.add_event(event)
+        broken.save()
+        ok = broken.summary()["shapes"] == 2          # "face|data:" and "face|data:id"
+    except Exception as exc:
+        ok = False
+        print("SHAPES_ERROR %s" % type(exc).__name__, flush=True)
+    rep.check("shapes_never_raise_and_a_failed_save_keeps_the_counts", ok, "")
 
 
 def _check_voice(rep, gcfg, root):

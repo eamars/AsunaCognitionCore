@@ -45,7 +45,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'tool.errand': '差事', 'tool.find_member': '找群友', 'tool.group_focus': '群里的心思', 'tool.note': '便条', 'tool.peer_line': '旧居的线',
       'tool.place_timezone': '地方的时区', 'tool.private_words': '私密名单', 'tool.restart': '重启',
       'tool.sticker': '表情包架子', 'tool.watch': '盯人',
-      'speak.sticker': '［贴纸：{name}］', 'speak.picture': '［图片］', 'speak.file': '［文件］', 'speak.poke': '［戳了 {who}］', 'speak.react': '［给 {line} 点了「{face}」］',
+      'speak.sticker': '［表情包：{name}］', 'speak.picture': '［图片］', 'speak.file': '［文件］', 'speak.poke': '［戳了 {who}］', 'speak.react': '［给 {line} 点了「{face}」］',
       'speak.recall': '［撤回 {line}：{why}］', 'speak.other': '［{kind}］', 'tool.recall': '回想', 'tool.delegate': '交给行动脑', 'tool.message_action': '给行动脑补话',
       'tool.stop_action': '叫停', 'tool.answer_action': '回答行动脑', 'tool.task': '行动脑的事', 'tool.ideas': '想法本', 'tool.stay_silent': '不说话',
       'tool.attach_image': '配图', 'tool.received_file': '读文件', 'tool.write_document': '写文档', 'tool.update_self': '更新自我',

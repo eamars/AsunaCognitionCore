@@ -17,6 +17,7 @@ from . import forward as forward_mod
 from . import inbound as inbound_mod
 from . import mutes as mutes_mod
 from . import notices as notices_mod
+from . import shapes as shapes_mod
 from .catchup import Catchup
 from .media_keys import MediaKeys
 from .members import Members
@@ -132,6 +133,8 @@ class Adapter:
         self.out.on_muted = self.mutes.look_now
         # notices and requests: every kind projected and counted, the shown ones posted (notices.py)
         self.notice_counts = notices_mod.Counts(data_dir)
+        # what the segments of an accepted message look like, by shape and never by content (shapes.py, ADR-103)
+        self.shapes = shapes_mod.Shapes(data_dir)
         self.home_notices = notices_mod.HomePoster(cfg, self.onebot, self.host, self.counters, log=self.log)
         self.onebot.on_up = self._on_up
         self.stop = threading.Event()
@@ -179,6 +182,7 @@ class Adapter:
         result, reason = inbound_mod.classify(event, self.cfg, self.seen)
         if reason == "accepted":
             envelope, meta = result
+            self.shapes.add_event(event)
             self.catchup.note(meta["route_id"], event)
             # the spool key carries the route: one platform message_id seen in a
             # group and in the private chat are two different items
@@ -569,6 +573,7 @@ class Adapter:
             "identity": self.identity,
             "peers": self.peers.summary() if self.peers is not None else None,
             "notices": self.notice_counts.summary(),
+            "media_shapes": self.shapes.summary(),
             "lanes": self.lanes_state(),
         })
         return snap
@@ -774,6 +779,7 @@ class Adapter:
                 self.notice_counts.save()
             except Exception:
                 pass
+            self.shapes.save()
             self.journal.release_lock()
             self.log("SHUTDOWN spool_inbound=%d spool_receipts=%d counters=%s"
                      % (len(self.journal.spool_list("inbound")), len(self.journal.spool_list("receipts")),

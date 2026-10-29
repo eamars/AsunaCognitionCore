@@ -36,6 +36,7 @@ def notes():
         'lines_from_program': (lines.VIEW_NOTE,),
         'peer_asides_from_program': (lines.ASIDES_NOTE,),
         'stickers_from_program': (stickers.HOME_NOTE, stickers.SEND_NOTE),
+        'faces_from_program': (stickers.FACES_NOTE,),
         'night_from_program': (night.NOTE,),
         'restart_from_program': (restarts.NOTE,),
         'host_from_program': (host_stops.NOTE,),

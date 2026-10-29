@@ -303,6 +303,19 @@ The checks that guard main, run on a candidate before it is published (`Publicat
 - def `scan_reason` — The publication's reason, which becomes a public commit message: the private list and the release's personal-data checks (not persona names: she may say who she is in her own commit).
 - def `main`
 
+## `qq_face_census.py`
+
+[tools/qq_face_census.py](../../tools/qq_face_census.py)
+
+ADR-103: what the faces, stickers and face clicks people send her look like in the stored rows, in counts only.
+
+- def `top`
+- class `Tally` — The counts of one run.
+  - `add` — Count one stored inbound line.
+  - `report`
+- def `read` — (the tally, the scenes read by kind, the first moment, whether the cap cut the read).
+- def `main`
+
 ## `refusal_probe.py`
 
 [tools/refusal_probe.py](../../tools/refusal_probe.py)

@@ -453,6 +453,18 @@ Wiring: WS reader -> durable spool -> one lane per conversation -> host, host ou
   - `verify_identity`
   - `run`
 
+## `napcat-qq/integration/qqadapter/shapes.py`
+
+[packages/channels/napcat-qq/integration/qqadapter/shapes.py](../../packages/channels/napcat-qq/integration/qqadapter/shapes.py)
+
+What the segments of an accepted message look like, counted by shape and never by content (ADR-103).
+
+- def `shape_of` — One segment's shape as text, or None when it is not counted.
+- class `Shapes` — The counts of segment shapes by UTC day; kept across restarts.
+  - `add_event` — Count the segments of one accepted message event.
+  - `save` — Write the counts; a failure keeps them in memory.
+  - `summary`
+
 ## `napcat-qq/integration/qqadapter/voice.py`
 
 [packages/channels/napcat-qq/integration/qqadapter/voice.py](../../packages/channels/napcat-qq/integration/qqadapter/voice.py)

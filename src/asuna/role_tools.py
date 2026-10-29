@@ -141,7 +141,7 @@ AFFECT_FIELDS = {
 # ADR-079 §9.4: one way to point at a line, in every tool: its number in this conversation, or 这条.
 QUOTE_LINE = ('引用哪条：写那条的编号（只写数字，编号在每行末尾的〔〕里），或「这条」＝叫你的那条；不写就不引用。'
               '你自己说过的话也能引，用来改口或补一句。一句话回好几条时不用引。编号只用来挑引用，别写进 text。')
-REACT_LINE_REACT = 'react：点哪条，写它的编号（只写数字）或「这条」＝叫你的那条。点表情挂在那条上；贴纸是你发的一条新消息，两样都行。'
+REACT_LINE_REACT = 'react：点哪条，写它的编号（只写数字）或「这条」＝叫你的那条。点表情挂在那条上；表情包是你发的一条新消息，两样都行。'
 REACT_LINE_RECALL = 'recall：撤你自己的哪一句，写它的编号'
 REACT_LINE = REACT_LINE_REACT + REACT_LINE_RECALL
 # Her own line taken back (her ask, the owner's yes, 2026-10-18): still queued it is cancelled, delivered it is recalled.
@@ -1920,7 +1920,7 @@ class RoleTools:
             if why:
                 problems.append('quote：' + why)
             elif not any(row['kind'] in ('text', 'picture') for row in planned):
-                problems.append('quote 要跟一条 text 或 picture 一起发（贴纸、戳、点表情带不了引用）')
+                problems.append('quote 要跟一条 text 或 picture 一起发（表情包、戳、点表情带不了引用）')
         if wait not in (None, 'no', 'question'):
             problems.append('wait 是 no 或 question')
         if wait and not group:

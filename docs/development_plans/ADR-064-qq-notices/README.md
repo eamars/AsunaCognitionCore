@@ -182,7 +182,7 @@ the line reads `撤回了一条消息`. Nothing is marked or written, and histor
 
 ### Small content fixes (same batch)
 
-- `dice` and `rps` show their result: `[骰子:5]`, `[猜拳:石头]`.
+- `dice` and `rps` show their result: `[骰子:5]`, `[猜拳:石头]`. Not built (checked 2026-10-29); ADR-103 part 2 owns it.
 - Cards keep a bounded payload (title, description, link, at most 2 KB) on the stored message, in its media item.
   Her turn still shows the title placeholder only; nothing reads the card by default. If she hands a card to the
   action brain (`delegate`), it reads the stored message with the read access it already has (dbread). No tool is

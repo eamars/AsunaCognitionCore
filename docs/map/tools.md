@@ -15,6 +15,8 @@ The read-only check of one ADR-104 batch against a deployment's database, before
 - def `kinds` — Per declared field: {bson type: records}, the records whose vector length differs from the declared one, and for a list {element bson type: records}.
 - def `differing` — Per declared field, the records whose value the declaration refuses (another kind, null where not nullable, a list element of another kind; a record holding several such counts once per kind), 0 for none.
 - def `differs` — The declared fields whose stored records the declaration refuses: another kind, null where not nullable, a required field missing, a vector of another length, a list holding an element of another kind.
+- def `timed_out` — Whether a query was stopped by its time limit (`--max-ms`: MongoDB's MaxTimeMSExpired, or the client's operation or socket timeout), not by a server out of reach (server selection failing is UNREACHABLE).
+- def `failure` — The words of a check stopped by a database error: TIMED OUT with where and the limit it hit, UNREACHABLE only for a server that cannot be reached at all, any other refusal by its class.
 - def `slower` — Whether a new p50 is past the timing gate: more than SLOWER times the old and more than SLOWER_MS above it.
 - def `slowdowns` — (failing, accepted): the read cases past the timing gate (`slower`), by their confirmation's p50s when they were timed again (`confirm`), each (name, old p50, new p50, new plan); those the lead accepted (ACCEPTED_SLOWDOWNS) apart.
 - def `reads` — Each case's numbers: n, same, differing, plan stages and times, old against new; none are ids.

@@ -37,7 +37,10 @@ report (exit 2). Each query is read-only and bounded by `--max-ms`. The numbers 
 `<data>/private/adr104-evidence/<batch>/`) and to the console. Exit 0 when nothing would be created, made or refused,
 every validator is the one ensure creates and every declared field holds only its kind (the retired indexes to drop
 are reported: dropping them is the batch's change); 1 when something differs; 2 when a check could not run (a query
-over its time limit, the server out of reach).
+over its time limit, the server out of reach). The report holds the `--max-ms` the run used. A query stopped by its
+limit (MongoDB's MaxTimeMSExpired, the client's operation or socket timeout) is TIMED OUT, named with where it was
+(the read case, the field counts of a collection, ...) and the limit it hit; a read case that times out is marked so
+and the other cases go on. UNREACHABLE is only a server that cannot be reached at all.
 """
 from __future__ import annotations
 import argparse
@@ -51,7 +54,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
 from pymongo import MongoClient  # noqa: E402
-from pymongo.errors import ExecutionTimeout, PyMongoError  # noqa: E402
+from pymongo.errors import ConnectionFailure, ExecutionTimeout, PyMongoError, ServerSelectionTimeoutError  # noqa: E402
 
 from asuna.store.catalog import CATALOG  # noqa: E402
 from asuna.store.mongodb import MongoAdapter, projection  # noqa: E402
@@ -270,6 +273,23 @@ RUNS = 3
 READ_CASES = ('b3', 'b4', 'b5', 'b6', 'b7')
 
 
+def timed_out(error):
+    """Whether a query was stopped by its time limit (`--max-ms`: MongoDB's MaxTimeMSExpired, or the client's
+    operation or socket timeout), not by a server out of reach (server selection failing is UNREACHABLE)."""
+    return (isinstance(error, PyMongoError) and bool(getattr(error, 'timeout', False))
+            and not isinstance(error, ServerSelectionTimeoutError))
+
+
+def failure(error, where, max_ms):
+    """The words of a check stopped by a database error: TIMED OUT with where and the limit it hit, UNREACHABLE only
+    for a server that cannot be reached at all, any other refusal by its class."""
+    if timed_out(error):
+        return 'TIMED OUT: %s: a query stopped at its limit of %d ms (%s)' % (where, max_ms, type(error).__name__)
+    if isinstance(error, ConnectionFailure):
+        return 'ADR104_CHECK_UNREACHABLE: %s (during %s)' % (type(error).__name__, where)
+    return 'ADR104_CHECK_FAILED: %s (during %s)' % (type(error).__name__, where)
+
+
 def slower(old, new):
     """Whether a new p50 is past the timing gate: more than SLOWER times the old and more than SLOWER_MS above it."""
     return old is not None and new is not None and new > SLOWER * old and new - old > SLOWER_MS
@@ -438,65 +458,71 @@ def reads(client, database, max_ms, batch, config):
     per_case = max(1, min(20, (QUERIES - sampling - reserved - 2 * shared) // (shared * 2 * RUNS)))
     out, timed, explained, confirmed = {}, 0, 0, 0
     for name, old_call, new_call, params, how, *samples in cases:
-        if samples:
-            chosen = params[:samples[0]]
-        else:
-            chosen = params[::max(1, len(params) // per_case)][:per_case] if params else []
-        same = differing = plans_differ = rows_old = rows_new = 0
-        times = {'old': [], 'new': []}
-        old_plan = new_plan = None
-        compared = True
-        for param in chosen:
-            results = {}
-            for _ in range(RUNS):
-                started = clock.perf_counter()
-                old_value, old_cursor = _old(old_db, old_call(param))
-                times['old'].append((clock.perf_counter() - started) * 1000)
-                started, before = clock.perf_counter(), adapter.calls
-                new_value = new_call(param)
-                times['new'].append((clock.perf_counter() - started) * 1000)
-                timed += 1 + max(1, adapter.calls - before)
-                results = {'old': _compared(old_value, how), 'new': _compared(new_value, how)}
-            rows_old, rows_new = rows_old + _amount(old_value), rows_new + _amount(new_value)
-            if results['old'] == results['new']:
-                same += 1
+        try:
+            if samples:
+                chosen = params[:samples[0]]
             else:
-                differing += 1
-            if old_plan is None or new_plan is None or param is chosen[-1]:
-                coll, filter, sort, skip, limit, fields = adapter.sent
-                new_cursor = adapter.db[coll].find(filter, projection(fields), sort=list(sort) or None, skip=skip,
-                                                   limit=limit)
-                new_plan = _stages(new_cursor.explain()['queryPlanner']['winningPlan'])
-                explained += 1
-                if old_cursor is None:
-                    compared = False
+                chosen = params[::max(1, len(params) // per_case)][:per_case] if params else []
+            same = differing = plans_differ = rows_old = rows_new = 0
+            times = {'old': [], 'new': []}
+            old_plan = new_plan = None
+            compared = True
+            for param in chosen:
+                results = {}
+                for _ in range(RUNS):
+                    started = clock.perf_counter()
+                    old_value, old_cursor = _old(old_db, old_call(param))
+                    times['old'].append((clock.perf_counter() - started) * 1000)
+                    started, before = clock.perf_counter(), adapter.calls
+                    new_value = new_call(param)
+                    times['new'].append((clock.perf_counter() - started) * 1000)
+                    timed += 1 + max(1, adapter.calls - before)
+                    results = {'old': _compared(old_value, how), 'new': _compared(new_value, how)}
+                rows_old, rows_new = rows_old + _amount(old_value), rows_new + _amount(new_value)
+                if results['old'] == results['new']:
+                    same += 1
                 else:
-                    old_plan = _stages(old_cursor.explain()['queryPlanner']['winningPlan'])
+                    differing += 1
+                if old_plan is None or new_plan is None or param is chosen[-1]:
+                    coll, filter, sort, skip, limit, fields = adapter.sent
+                    new_cursor = adapter.db[coll].find(filter, projection(fields), sort=list(sort) or None, skip=skip,
+                                                       limit=limit)
+                    new_plan = _stages(new_cursor.explain()['queryPlanner']['winningPlan'])
                     explained += 1
-                    plans_differ += old_plan != new_plan
-        pct = lambda values, q: round(statistics.quantiles(values, n=20)[q], 2) if len(values) > 1 else (
-            round(values[0], 2) if values else None)
-        out[name] = {'n': len(chosen), 'same': same, 'differing': differing, 'plans_differ': plans_differ,
-                     'rows_old': rows_old, 'rows_new': rows_new,
-                     'plan_accepted': name in ACCEPTED_PLAN_DIFFERENCES.get(batch, {}),
-                     'plans_compared': compared, 'plan_old': old_plan, 'plan_new': new_plan,
-                     'ms_old_p50': pct(times['old'], 9), 'ms_old_p95': pct(times['old'], 18),
-                     'ms_new_p50': pct(times['new'], 9), 'ms_new_p95': pct(times['new'], 18)}
-        if slower(out[name]['ms_old_p50'], out[name]['ms_new_p50']) and chosen:
-            if sampling + timed + confirmed + explained + 2 * CONFIRM_RUNS > QUERIES:
-                out[name]['confirm'] = {'runs': 0, 'why': 'over the query budget: not timed again'}
-                continue
-            again = {'old': [], 'new': []}
-            for _ in range(CONFIRM_RUNS):
-                started = clock.perf_counter()
-                _old(old_db, old_call(chosen[0]))
-                again['old'].append((clock.perf_counter() - started) * 1000)
-                started = clock.perf_counter()
-                new_call(chosen[0])
-                again['new'].append((clock.perf_counter() - started) * 1000)
-            confirmed += 2 * CONFIRM_RUNS
-            out[name]['confirm'] = {'runs': CONFIRM_RUNS, 'ms_old_p50': round(statistics.median(again['old']), 2),
-                                    'ms_new_p50': round(statistics.median(again['new']), 2)}
+                    if old_cursor is None:
+                        compared = False
+                    else:
+                        old_plan = _stages(old_cursor.explain()['queryPlanner']['winningPlan'])
+                        explained += 1
+                        plans_differ += old_plan != new_plan
+            pct = lambda values, q: round(statistics.quantiles(values, n=20)[q], 2) if len(values) > 1 else (
+                round(values[0], 2) if values else None)
+            out[name] = {'n': len(chosen), 'same': same, 'differing': differing, 'plans_differ': plans_differ,
+                         'rows_old': rows_old, 'rows_new': rows_new,
+                         'plan_accepted': name in ACCEPTED_PLAN_DIFFERENCES.get(batch, {}),
+                         'plans_compared': compared, 'plan_old': old_plan, 'plan_new': new_plan,
+                         'ms_old_p50': pct(times['old'], 9), 'ms_old_p95': pct(times['old'], 18),
+                         'ms_new_p50': pct(times['new'], 9), 'ms_new_p95': pct(times['new'], 18)}
+            if slower(out[name]['ms_old_p50'], out[name]['ms_new_p50']) and chosen:
+                if sampling + timed + confirmed + explained + 2 * CONFIRM_RUNS > QUERIES:
+                    out[name]['confirm'] = {'runs': 0, 'why': 'over the query budget: not timed again'}
+                    continue
+                again = {'old': [], 'new': []}
+                for _ in range(CONFIRM_RUNS):
+                    started = clock.perf_counter()
+                    _old(old_db, old_call(chosen[0]))
+                    again['old'].append((clock.perf_counter() - started) * 1000)
+                    started = clock.perf_counter()
+                    new_call(chosen[0])
+                    again['new'].append((clock.perf_counter() - started) * 1000)
+                confirmed += 2 * CONFIRM_RUNS
+                out[name]['confirm'] = {'runs': CONFIRM_RUNS, 'ms_old_p50': round(statistics.median(again['old']), 2),
+                                        'ms_new_p50': round(statistics.median(again['new']), 2)}
+        except PyMongoError as error:
+            if not timed_out(error):
+                raise
+            # A query over its limit: this case is TIMED OUT, named with the limit; the other cases go on.
+            out[name] = {'n': len(chosen), 'timed_out': {'limit_ms': max_ms, 'error': type(error).__name__}}
     samples = sum(case['n'] for case in out.values())
     # What was run: the sampling reads, each case's samples x RUNS timed runs (the old side's read, and every read the
     # new side sent), the confirmations of cases over the timing gate, and the explains (two per explained sample, one
@@ -2286,8 +2312,9 @@ def check(batch, settings, database, out, max_ms):
     counting = MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
                            socketTimeoutMS=max_ms + 30000)
     # Nothing is written: ensure is planned, not run, and every read is read-only.
-    report, unchecked = {'mode': 'dry_run', 'database_collections': len(CATALOG.names())}, []
-    timings, unchecked_fields = [], {}
+    report = {'mode': 'dry_run', 'database_collections': len(CATALOG.names()), 'max_ms': max_ms}
+    unchecked, timings, unchecked_fields = [], [], {}
+    doing = ['ensure, dry run']          # what the check is at, named when a database error stops it
     try:
         adapter = MongoAdapter(client, database)
         plans = dry_run(adapter)
@@ -2301,6 +2328,7 @@ def check(batch, settings, database, out, max_ms):
             if BATCHES[batch] is not None and collection.name not in BATCHES[batch]:
                 continue
             missed = set()
+            doing[0] = 'field counts of %s' % collection.name
             try:
                 counts = kinds(counting.get_database(database), collection, max_ms, timings, missed)
             except ExecutionTimeout:
@@ -2312,6 +2340,7 @@ def check(batch, settings, database, out, max_ms):
             report['fields_differ'] += [[collection.name, path] for path in differs(collection, counts)]
             report.setdefault('fields_differing_records', {})[collection.name] = differing(collection, counts)
         for name in SIZED.get(batch, ()):
+            doing[0] = 'sizes of %s' % name
             report.setdefault('sizes', {})[name] = sizes(counting.get_database(database), name, max_ms, timings)
             if report['sizes'][name] is None:
                 unchecked.append(name + ' sizes')
@@ -2321,12 +2350,16 @@ def check(batch, settings, database, out, max_ms):
                                      'ms_p95': round(ordered[int(len(ordered) * .95)], 1),
                                      'ms_max': round(ordered[-1], 1)} if ordered else {})}
         if batch in READ_CASES:
+            doing[0] = 'read cases (sampling, or a read outside a case)'
             report['reads'], report['queries'] = reads(client, database, max_ms, batch, settings)
+            unchecked += ['read %s: TIMED OUT at its limit of %d ms' % (name, case['timed_out']['limit_ms'])
+                          for name, case in report['reads'].items() if case.get('timed_out')]
             failing, accepted = slowdowns(batch, report['reads'])
             report['slowdowns'] = {'failing': failing, 'accepted': accepted,
                                    'rule': 'new p50 > %g x old and > %g ms above it' % (SLOWER, SLOWER_MS)}
         if batch == 'b7':
             from asuna.store import Checked
+            doing[0] = 'retrieval search, whole'
             proof = report['search'] = search_proof(Checked(MongoAdapter(client, database), CATALOG),
                                                     client.get_database(database), settings, max_ms)
             if slower(proof.get('ms_old_p50'), proof.get('ms_new_p50')):
@@ -2334,11 +2367,16 @@ def check(batch, settings, database, out, max_ms):
                                                        proof['ms_new_p50'], None))
             if not proof['queries']:
                 unchecked.append('retrieval search, whole: ' + proof.get('why', 'no query'))
-    except ExecutionTimeout:
-        print('UNCHECKED, a read case over the time limit')
-        return 2
     except PyMongoError as error:
-        print('ADR104_CHECK_UNREACHABLE: %s' % type(error).__name__)
+        # Stopped where it was: the words say whether a query hit its limit (TIMED OUT, with where and the limit) or
+        # the server could not be reached at all (UNREACHABLE); the report keeps what was counted before.
+        said = failure(error, doing[0], max_ms)
+        report['stopped'] = {'during': doing[0], 'error': type(error).__name__, 'timed_out': timed_out(error)}
+        out.mkdir(parents=True, exist_ok=True)
+        (out / (batch + '.json')).write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + '\n',
+                                             encoding='utf-8')
+        print(said)
+        print('numbers written to %s' % (out / (batch + '.json')))
         return 2
     finally:
         client.close()
@@ -2384,7 +2422,7 @@ def check(batch, settings, database, out, max_ms):
         print('differs from its declaration: %s.%s (%d records)'
               % (name, path, report['fields_differing_records'][name][path]))
     for name in unchecked:
-        print('UNCHECKED, over the time limit: %s' % name)
+        print('UNCHECKED: %s' % name if name.startswith('read ') else 'UNCHECKED, over the time limit: %s' % name)
     for name, paths in sorted(unchecked_fields.items()):
         print('UNCHECKED, a read over the time limit: %s fields %s' % (name, ', '.join(paths)))
     if report.get('field_reads', {}).get('reads'):
@@ -2395,6 +2433,10 @@ def check(batch, settings, database, out, max_ms):
             print('%s: records of 512 KiB or more by BSON: %d; on different sides of 1 MiB by BSON and JSON: %d'
                   % (name, size['large'], size['sides_differ']))
     for name, case in (report.get('reads') or {}).items():
+        if case.get('timed_out'):
+            print('TIMED OUT: read %s: a query stopped at its limit of %d ms (%s)'
+                  % (name, case['timed_out']['limit_ms'], case['timed_out']['error']))
+            continue
         print('read %s: n %d, same %d, differing %d, rows old %d new %d, plans differing %d%s (%s | %s), ms old p50 %s '
               'p95 %s, new p50 %s p95 %s'
               % (name, case['n'], case['same'], case['differing'], case.get('rows_old', 0), case.get('rows_new', 0),
@@ -2458,7 +2500,8 @@ def clean(report, totals, validators):
             and not any((size or {}).get('sides_differ') for size in (report.get('sizes') or {}).values())
             and not (report.get('slowdowns') or {}).get('failing')
             and not (report.get('search') or {}).get('differing')
-            and not any(case['differing'] or (case['plans_differ'] and not case.get('plan_accepted'))
+            and not any(case.get('timed_out') or case['differing']
+                        or (case['plans_differ'] and not case.get('plan_accepted'))
                         for case in (report.get('reads') or {}).values()))
 
 

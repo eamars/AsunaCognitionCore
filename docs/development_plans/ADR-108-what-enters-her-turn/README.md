@@ -5,8 +5,8 @@ the same day (structural and system, section 7). Nothing is built. Next: the lea
 Xiaoman once. The detail each decision needs to be built is in [design.md](design.md).
 
 Decision D4a reverses an owner decision of 2026-10-22 (ADR-054, "What she reads names only the ask") and D4c one of
-her asks (ADR-054, the offered cut showing what it leaves out). Both are marked where they occur and need his and her
-explicit yes.
+her asks (ADR-054, the offered cut showing what it leaves out). The owner said yes to D4a on 2026-10-29; D4c needs
+her yes.
 
 ## 1. Context
 
@@ -138,7 +138,7 @@ Reasons: the house already states both numbers for counts, on her evidence that 
 do not (ADR-084 §4, her change 3); prose is the one kind that hides its line, and the kind with the most length
 refusals (308 + 128 + 165). This is her 10-22 condition (2) in ADR-054, which the owner declined that morning with the
 rule that both numbers come back if the refusals rise; whether that reading has fired was not measured by the
-surveys. **Needs the owner's yes.** Cost: description wording, in B4's one cold request.
+surveys. **The owner said yes on 2026-10-29.** Cost: description wording, in B4's one cold request.
 
 Not chosen: one number that is the line (a model that does not count would be refused near it, and carried length
 drifts toward the stated number, as thoughts grew after 10-14, ADR-087 §3); keeping the hidden line (the inconsistency
@@ -269,9 +269,9 @@ DSH is the owner's (pinned, `tools/dsh-inline/source.json`); none of these block
 
 | | What | Smallest form | Why |
 |---|---|---|---|
-| R1 | The checkpoint preamble can be the engine's own | `frameSummary` reads the preamble from the engine (`this.constructor.CHECKPOINT_PREAMBLE`, a static field of `BasicCompactionEngine`), so `RoleCompactionEngine` sets it | Today every checkpoint opens in English with "treat as established background", which presents the compactor's account as confirmed, the opposite of D3's line, and is outside the one-language rule |
-| R2 | Runtime-context snapshots are not added to a lane that suppresses the runtime context | `suppressRuntimeContext()` also stops the snapshot messages (`working-directory`, `approval`/`sandbox` policy) | 959 such messages in her workspaces' session folders (action-brain sessions included), 276 right after her own TURN notices; deployment details do not belong in her context (AGENTS.md). Conditional on B0 showing they reach her requests |
-| R3 (optional) | A tool can normalize its arguments before DSH validates them | a `defineTool` option `normalizeArgs(args)` run before `validate` | Not needed by any batch: D4b works with a permissive declared schema and a strict one kept inside the program. With this hook the two schemas could be one, declared and strict |
+| R1 (the owner takes it, 2026-10-29) | The checkpoint preamble can be the engine's own | `frameSummary` reads the preamble from the engine (`this.constructor.CHECKPOINT_PREAMBLE`, a static field of `BasicCompactionEngine`), so `RoleCompactionEngine` sets it | Today every checkpoint opens in English with "treat as established background", which presents the compactor's account as confirmed, the opposite of D3's line, and is outside the one-language rule |
+| R2 (decided after B0) | Runtime-context snapshots are not added to a lane that suppresses the runtime context | `suppressRuntimeContext()` also stops the snapshot messages (`working-directory`, `approval`/`sandbox` policy) | 959 such messages in her workspaces' session folders (action-brain sessions included), 276 right after her own TURN notices; deployment details do not belong in her context (AGENTS.md). Conditional on B0 showing they reach her requests |
+| R3 (dropped by the owner, 2026-10-29) | A tool can normalize its arguments before DSH validates them | a `defineTool` option `normalizeArgs(args)` run before `validate` | Not needed by any batch: D4b works with a permissive declared schema and a strict one kept inside the program. With this hook the two schemas could be one, declared and strict |
 
 Not requested: `source` reaching the model as data (D3 writes it into the text), the role mapping, the `Error: `
 prefix on tool errors, what `request/header` records (D6), the surface order of appended messages (D1 holds instead).
@@ -298,8 +298,8 @@ with a prefix cost and carries every spec change at once.
 
 ## 6. Open questions
 
-1. Whether think keeps 3x room (120/360) while every other prose field has 1.25x; D4a keeps the owner's numbers and
-   changes only what she reads. The owner's.
+1. Settled by the owner on 2026-10-29: think keeps 120/360 (3x room) while every other prose field has 1.25x; D4a
+   changes only what she reads.
 2. Lines from another conversation: D2 anchors only in the conversation where the line was said; a claim heard
    elsewhere is recorded as hers until a handle across conversations exists (recall could return one).
 3. The local Web chat: the owner's typed lines enter without a label line, so only 「这条」 can point at them today;

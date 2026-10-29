@@ -314,6 +314,7 @@ with a prefix cost and carries every spec change at once.
 
 ## 7. Evidence
 
-`.runtime/private/tool-failures/` (local, never committed, about 88 KB): `survey-out-1029.txt` (structural survey),
+`.runtime/private/tool-failures/` (local, never committed, about 95 KB): `survey-out-1029.txt` (structural survey,
+Q1-Q5), `survey-q67-1029.txt` (its Q6-Q7: incident turns and wake classes),
 `system-survey-1029.md` (system survey), and the two briefs. No text of hers or anyone's is quoted here; numbers are
 the surveys', texts are the program's own from source.

@@ -407,10 +407,31 @@ CATALOG = Catalog([
         *_text('persona', 'state', 'idea', 'why', 'created_at')),
         (index(('persona', 1), ('state', 1), ('created_at', 1)),),
         versioned=True),
-    _core('stickers', 'stickers', index(('persona', 1), ('name', 1), unique=True),
-          index(('persona', 1), ('identity', 1), unique=True)),
-    _core('sticker_pool', 'stickers', index(('last_seen', 1)), index(('artifact_id', 1))),
-    _core('sticker_memory', 'stickers', index(('persona', 1), ('key', 1), unique=True)),
+    # Her sticker shelf, the candidates people posted in her groups, and the stickers she knows (stickers.py): the
+    # fields their owner names; the rest is stored as written. The fields of their plain unique indexes are required
+    # (3.5); their times are ISO text.
+    Collection('stickers', 'stickers', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'), Field('revision', 'number', nullable=True),
+        *(Field(path, 'text', required=True) for path in ('persona', 'name', 'identity')),
+        *_text('when', 'kept_at', 'kept_in', 'last_sent_at', 'last_sent_in', 'origin', 'kind', 'artifact_id', 'sha256',
+               'media_type', 'md5', 'picture'),
+        *(Field(path, 'number', nullable=True) for path in ('sent', 'size')), Field('market', 'object', nullable=True)),
+        (index(('persona', 1), ('name', 1), unique=True), index(('persona', 1), ('identity', 1), unique=True)),
+        versioned=True),
+    Collection('sticker_pool', 'stickers', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'), Field('revision', 'number', nullable=True),
+        *_text('identity', 'kind', 'artifact_id', 'sha256', 'md5', 'picture', 'media_type', 'first_seen', 'last_seen',
+               'source_message_id'),
+        *(Field(path, 'number', nullable=True) for path in ('seen', 'size')),
+        Field('scenes', 'list', of='text', nullable=True), Field('market', 'object', nullable=True)),
+        (index(('last_seen', 1)), index(('artifact_id', 1))),
+        versioned=True),
+    Collection('sticker_memory', 'stickers', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *(Field(path, 'text', required=True) for path in ('persona', 'key')),
+        *_text('name', 'note', 'how', 'identity', 'picture', 'at'), Field('aliases', 'list', of='text', nullable=True)),
+        (index(('persona', 1), ('key', 1), unique=True),),
+        versioned=True),
     # Her watchlist (watches.py): the fields its owner names; the rest is stored as written. Its times are ISO text;
     # a sighting moves `last_seen_at` and `appeared` outside a revision.
     Collection('watches', 'watches', (

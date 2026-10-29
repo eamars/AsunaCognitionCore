@@ -45,9 +45,9 @@ def life(row):
 
 def named(store):
     """Artifact ids a lasting row names."""
-    db = store.db
-    ids = set(db.stickers.distinct('artifact_id')) | set(db.sticker_pool.distinct('artifact_id'))
+    from . import stickers
     from .records import messages as message_records
+    ids = stickers.artifact_ids(store)
     ids |= set(message_records.artifact_refs(store, 'attachment'))
     return ids
 

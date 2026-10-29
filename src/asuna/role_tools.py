@@ -1076,7 +1076,8 @@ def her_pictures(store, ep):
         return True                       # at home a ref from any of her conversations is readable (owner 2026-10-11)
     if offered_pictures(ep) or ((ep.get('context') or {}).get('your_pictures_from_program') or {}).get('items'):
         return True                       # she can look before she sends, and at her own pictures at home
-    if (ep.get('context') or {}).get('stickers_from_program') and store.db.sticker_pool.find_one({}, {'_id': 1}):
+    from . import stickers
+    if (ep.get('context') or {}).get('stickers_from_program') and stickers.pool_size(store, limit=1):
         return True                       # what sticker op=pool lists, she looks at before she keeps
     try:
         listing = scene_attachments(store, ep, store.config)

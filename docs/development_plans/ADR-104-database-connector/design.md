@@ -828,6 +828,9 @@ is the stack's own file.
 
 ## 6. Her read tool
 
+*Replaced by decision 9 of [README.md](README.md); kept as it was designed.*
+
+
 `dbread` (her task scripts and skills) and `development_database_read` (her action brain's tool,
 `native_worker.py:1438`, which takes a MongoDB filter today) become one read-only facade over the same words, given
 as JSON-like dicts:
@@ -935,7 +938,7 @@ Size, per run (counted at B1b; times as measured, with where). `tests/test_store
 and 4 without the adapter parameter (`S05`, `O05`, the skip-line guard test, the injected-clock case):
 - the in-memory run: the 111 `[memory]` cases and the 4 without the parameter, 115; the 111 `[memory]` cases took
   0.25-0.26 s in the B1b worktree (B1a's run of 112 took 0.69-0.72 s in another checkout of the same machine);
-- the stand-in run: the 111 `[stand-in]` cases, of which 80 pass and 31 are skipped by 31 lines of
+- *(replaced by decision 9: gone)* the stand-in run: the 111 `[stand-in]` cases, of which 80 pass and 31 are skipped by 31 lines of
   `tests/harness_skips.txt` with the file prefix `tests/test_store_contract.py` (16 of them literally `[stand-in]`,
   15 parametrized as `[stand-in-<k>-<filter>]`); 0.09 s in the B1b worktree;
 - the integration run on MongoDB: the 112 shared, `R` (4) and `D` (1, 100 generated conditions), 117 cases in 46 s
@@ -976,6 +979,9 @@ How call sites compose (the right view with the right parameters) is shown per b
 only (8.3): the old query against the new owner operation, same ids in the same order.
 
 ### 7.3 Unit tests can never reach a server
+
+*Replaced by decision 9 of [README.md](README.md); kept as it was designed.*
+
 
 Enforced by the test setup, from batch B0:
 
@@ -1024,6 +1030,9 @@ then fail relied on MongoDB's or mongomock's own behaviour and are fixed or go (
 - B13 deletes the file with the harness.
 
 ### 7.4 The suite reset (requirement 6)
+
+*Replaced by decision 9 of [README.md](README.md); kept as it was designed.*
+
 
 Today: 193 test files, 1,285 test functions (parametrised ones count once; pytest collects about 1,500), 868 of
 them need a database through the `store` fixture or a fixture of their file that takes it, in 139 files; 5 files use

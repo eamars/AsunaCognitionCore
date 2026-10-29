@@ -1,8 +1,9 @@
 # ADR-108: Her tool interface, and what enters her turn
 
 Status: **Proposed** 2026-10-29. Written by the design agent (Claude) from the lead's brief, after two surveys of
-the same day (structural and system, section 7). Nothing is built. Next: the lead's review, then the owner, then
-Xiaoman once. The detail each decision needs to be built is in [design.md](design.md).
+the same day (structural and system, section 7). Built in one pass on the branch `claude/keen-turing-nylmyr`
+(section 9); not landed. Next: the lead integrates it, Xiaoman reads section 8 and the finished words once, one
+landing. The detail each decision needs to be built is in [design.md](design.md).
 
 Decision D4a reverses an owner decision of 2026-10-22 (ADR-054, "What she reads names only the ask") and D4c one of
 her asks (ADR-054, the offered cut showing what it leaves out). The owner said yes to D4a on 2026-10-29; Xiaoman said
@@ -42,6 +43,10 @@ per open conversation (median 89-130 k tokens re-read, 3-6x the request time); m
 anything that differs per turn in the prefix costs on every turn. Every decision below is priced in those terms.
 
 ## 2. Decisions
+
+*(Revision 2, 8.4 item 7: in this section and the next, "B1" to "B4" name rows of section 5, and "from B3", "through
+B3", "waits for B4", "B4's one cold request", "before B2 installs" and "the next batch" mean the one build and its one
+install.)*
 
 ### D1. A line that arrives during her turn joins the conversation at the next step boundary
 
@@ -451,11 +456,12 @@ first. Nothing parses a notice's text (`visibleCarried` reads `source.carried`) 
 **A5. D1 as built.** A line is held while a step is open (`step/start` to `step/end`) or a compaction runs;
 `toolCallOpen` leaves the condition because a tool call lives inside a step. Release is at `agent/pre-step` and
 `agent/turn-stopping` as now and at the `step/end` event, the one point every step passes, failed and aborted ones
-included. A hung request ends at DSH's idle watchdog; we add no timer (design.md §10.5).
+included. A stalled request ends at DSH's idle watchdog (300 s by default, per attempt, with its retries); a step that
+is still open when the worker's fence (`workflow_timeout_seconds`, 1,800 s by default) fires is cancelled by the host,
+and `step/end` releases the line. We add no timer of our own (design.md §10.5).
 
-**A6. Two sides at different versions.** Every new field is optional both ways. The one place an old worker would run
-an invalid call (`violations`) is closed by the JS side validating and sending only when the worker's specs carry
-`strict` (design.md §10.6).
+**A6. Two sides at different versions.** *(Superseded by A12: the build adds no field between the two sides, so there
+is nothing to skew.)*
 
 **A7. D2's anchor, its whole lifecycle.** `line: {scene, seq}` on the item row beside `from`, no copy of the author;
 it exists exactly while `from` is 别人说的 or 主人定的; a rewrite that restates neither keeps both; it shows as a
@@ -479,37 +485,100 @@ right author, with the share of writes that fell back to hers reported (design.m
 **A11. R2 is closed by us, in the build.** In her lanes other than the action brain's, the plugin registers through the
 agent's own scope an empty context named `working-directory:current` (required, the same order), as it already blanks
 DSH's developer sections by name. No request to the owner, no DSH change. A session that already holds a snapshot gets
-DSH's one-time "Current runtime context: none" message after its history (design.md §10.11).
+DSH's one-time "Current runtime context: none" message after its history, and, for a session that had a snapshot before
+the install, DSH's empty-snapshot line again after each later compaction (design.md §10.11).
+
+**A12. The strict check runs in the worker, and no new field crosses between the sides.** The worker ships each tool's
+declared (permissive) schema in `role_tool_specs`; DSH validates the call against it and the guard (`tool-args.js`)
+checks it. The call reaches the worker's `RoleTools.call`, which repairs a copy of it, checks the copy against the strict
+schema the program keeps (`tool_schema.py`), and joins every violation with the other layers' problems into one
+numbered refusal. The JS sends the call as DSH passed it; it has no `strict` flag and sends no `given` or `violations`.
+So an old guard with a new worker, and a new guard with an old worker, each do what they did before (design.md §10.6).
+
+**A13. What the build does not do, and said so.** Each is a limit of this build, not an open decision:
+
+- Layer 4a (state checks) is collected for the handlers that were split: think, delegate, the task answer, message and
+  stop, the ideas note, feel, plan (making a plan, with its timing), write_document and speak. A plan's update and
+  cancel, and `note` (the tool that sends a note), stop at their first failure as they did; `note`'s destination checks
+  were not separated from its effect.
+- A body rewrite of an item keeps its anchor: the anchor is where the item came from, and says nothing for the new text.
+- An item written as 别人说的 or 主人定的 before the install stays as it is: no history is converted.
+- An item's source is shown where the ledgers, the night list, her own-notes block and a group's notes are shown. The
+  system-prompt blocks of the persona and the voice show none.
+- A line erased after an anchor was set shows as gone, not as the line.
 
 ### 8.4 One build, one sign-off
 
 The owner's requirement decides how the work runs:
 
-1. **One build.** The lead writes one brief from [design.md](design.md) at the commit she read, and a fresh reviewer
-   reads it against the code before anyone builds. One builder, one worktree on one branch. The rows B1 to B4 of
-   section 5 name what the build contains; they are not stages. B1 to B3 have no prefix cost and B4 has one, so the
-   install costs one cold request per open conversation. B5 is not in the build: it is decided after acceptance, on the
-   mismatch rate B2's count gives, and is its own work.
-2. **No staged artifact or test.** Nothing is built, installed or tested on its own for a stage: no probe, no interim
-   install, no per-batch gate. The product's tests ([design.md](design.md) §10.1) are written with the code and run once,
-   at the landing, with the checks already in the repository (§10.10).
+1. **One build.** One builder, one branch (`claude/keen-turing-nylmyr`), one pass over [design.md](design.md). The rows
+   B1 to B4 of section 5 name what the build contains; they are not stages. B1 to B3 have no prefix cost and B4 has one, so
+   the install costs one cold request per open conversation. A fresh reviewer read the finished diff against the code
+   before it was handed over, and what it found is fixed (section 9). B5 is not in the build: it is decided after
+   acceptance, on the mismatch rate B2's count gives, and is its own work.
+2. **No staged artifact or test.** Nothing is installed, probed or signed for a stage: no probe, no interim install, no
+   per-batch gate. The product's tests ([design.md](design.md) §10.1) are written with the code; the builder runs them as
+   it writes, as its own checks and not as gates, and the landing runs them again once with the checks already in the
+   repository (§10.10).
 3. **One landing.** The lead's landing script runs the tests and the push gate, fast-forwards and restarts once, while
    she is quiet and after telling her, and checks that the running code is the commit's.
-4. **Her readings, and one sign-off.** Before the brief she reads this section once (one message from the lead, the
-   changed parts only). The words the build writes from code (`LIMIT_WHY`, `WORDS[code]`; open question 5) cannot exist
-   before it, so she reads them once, finished, at a frozen commit, before the landing. That reading and her check by
-   content after the landing are her part of one sign-off, of the product; it is recorded once, after acceptance.
+4. **Her readings, and one sign-off.** Before the landing she reads this section once (one message from the lead, the
+   changed parts only). The words the build writes from code (`LIMIT_WHY`, `WORDS[code]`, `INSTEAD`, `WAKE_WORDS`, the
+   marks and the compaction rules) are in the build, finished; she reads them once at a frozen commit, before the
+   landing. If she asks for other words, they change in those tables only (each table is one file, with a version
+   constant that is raised with the text), as a text change on the same branch before the landing; no mechanism changes
+   with a word, and she reads only what changed. That reading and her check by content after the landing are her part of
+   one sign-off, of the product; it is recorded once, after acceptance.
 5. **One acceptance.** Section 5's "Proves, and how" column and [design.md](design.md) section 8 are one table, read once,
    7 days after the install. The batch labels in it name rows, not stages. A fail is a defect of the product: it is fixed on
    a new branch and landed as a fix, and the product is not signed until the table passes or the owner accepts a stated
    residual.
 6. **Because nothing is shown in between,** the design carries what a stage would have caught: the facts of 8.2 are read
    from source; each assumption that depends on DSH has a test of the product (§10.9); the builder stops at the first gap
-   and goes back to design rather than guess. And the way back is one fast-forward and one restart: what the new code
-   wrote stays harmless to the old (an item row's `line` is an extra field the catalog stores and returns unchanged;
-   marks, numbers, `event.line`, `woken_by_program` and the 〔摘要〕 line are text in session files). The tool specs
-   return to the strict ones, which costs one more cold request. No history is converted.
+   and goes back to design rather than guess. And the way back is one revert commit, landed by the same script: her
+   self-development commits are made in the same checkout under her own name, so the branch is never reset. What the
+   new code wrote stays harmless to the old (an item row's `line` is an extra field the catalog stores and returns
+   unchanged; marks, numbers, `event.line`, `woken_by_program` and the 〔摘要〕 line are text in session files). The tool
+   specs return to the strict ones, which costs one more cold request. No history is converted.
+7. **Reading the staged words.** Where sections 2 to 7 and design.md say "from B3", "through B3", "waits for B4", "B4's
+   one cold request", "before B2 installs", "the next batch" or "when B0 lands", they mean the one build and its one
+   install, as the notes at section 2 and section 5 say; the rows B1 to B4 are the same rows of one acceptance table.
 
-What stays open after this revision is what the page already lists: the words of `LIMIT_WHY` and `WORDS[code]` (open
-question 5, written at build and read by her once before the landing, item 4 above), B3's 2% threshold (open question
-7), and the program-woken multi-failure rate beyond who is speaking (open question 6).
+What stays open after this revision is what the page already lists: Xiaoman's reading of the finished words (open
+question 5, item 4 above), B3's 2% threshold (open question 7), and the program-woken multi-failure rate beyond who is
+speaking (open question 6).
+
+## 9. As built
+
+Built by Claude in the cloud, on the branch `claude/keen-turing-nylmyr`, in one pass; the commits after Revision 2
+(`160968c`) are one build and are landed as one. The owner's pattern: the builder does everything that can be done
+without her, then the lead integrates the build and talks to Xiaoman (a cloud session cannot reach her).
+
+| Decision | Built in | Held by |
+|---|---|---|
+| D1 | `pairing.js` (`stepOpen`, `mustHold`, `releaseAtBoundary`), `navigation.js`; `coordinator._absorb` | `pairing.test.js`, `navigation.test.js` on a real DSH session with a step open; `test_woken_by_program.py`'s absorb cases |
+| D2 | `role_tools.py` (`line`, `_anchored`, `_resolve`), `memory_tiers.py` (the anchor and its lifecycle), `people.py` (`source_of`), `carried.py`, `group_admin.py`; the compaction rules in `compaction.js` | `test_line_anchor.py` |
+| D3 | `marks.js`, `index.js` (`message`, `restored`), `compaction.js` (`withCheckpointHead`) | `marks.test.js` |
+| D4a to D4d | `tool_schema.py`, `role_tools.py` (the layered `call`, the nine splits, `INSTEAD`), `config.py` (`too_long`), `documents.py` (`problems`), `affect.py` (`record_problems`), `native_worker.py` (`role_tool_specs`) | `test_tool_schema.py`, `test_layered_refusal.py`, `test_length_refusal.py`, `test_tool_budget.py`, `tool-args.test.js` |
+| D5 | `wake_words.py`, `context.py` (`CONTEXT_HEAD`, `local_line`), `context-delivery.js`, `turn.md`, `turn_thinking.md` | `test_woken_by_program.py`, `context-delivery.test.js` |
+| D6 | nothing is added | |
+| A2, A3 | `capabilities.can_quote`; every line shows its number; `event.line` | `test_adr079_pointers.py`, `test_woken_by_program.py` |
+| A11 | `contexts.js`, `index.js` | `marks.test.js`, `native-loop.test.js` (through DSH's own `agentPresets.mount`) |
+
+Checks run in the build container (Linux, the in-memory adapter): `pytest tests` 773 passed, 9 skipped (the skips are
+the personal-words list, the private-words scene tests and the voice model, none present there); `npm run test:native`
+276 passed and 8 failed, the same 8 that fail on `160968c`: four turn-end compaction tests that need the fork's
+engine, three ADR-098 root tests with Windows path fixtures, and the working-copy test. A reviewer who had not seen
+the build read the diff against the code; its findings (the dedup list in `context-delivery.js` dropping
+`woken_by_program`, a test that contradicted itself, two more) are fixed, each with a test that fails without the fix.
+
+Not run, and for the lead:
+
+- `pytest integration` (needs a Mongo server) and `tools/check_prepared_start.py`.
+- The private-words list: `tools/check_staged_secrets.py` (both modes) and `tools/publication_scan.py` over the 59 files
+  the build changed found nothing, but the machine has no private-words list, so that part is unchecked, not clean.
+- The ADR-098 root tests and the four compaction tests, on Windows and with the fork.
+- The survey numbers of section 1, which need her session files.
+- Xiaoman's reading: section 8 once, and the finished words once, at the frozen commit (8.4 item 4).
+- A look at the Web page for a notice that begins with the mark (design.md §10.4), after the landing.
+- Removing the scratch `config/local.json` the build container created (it is ignored by git).

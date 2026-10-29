@@ -3,7 +3,8 @@
 The page is [README.md](README.md); this file holds the layers, the tables and the proofs. Every model-facing text
 below is a draft (Chinese, 你, one language) for Xiaoman's reading. Code names and line numbers were read at
 `5a196e66` (some at `fea9e355`); they move, and each is checked again when B0 lands, before a batch builds on it. *(Revision 2: there is no B0; the
-builder checks each place before editing it, and §10 was read at `196b6f6`.)*
+builder checks each place before editing it, and §10 was read at `196b6f6`. README 8.4 item 7 says how to read "B1" to
+"B4", "from B3" and "the next batch" in this file: the one build and its one install. §11 says what the build changed.)*
 
 ## 0. Held lines (D1)
 
@@ -374,8 +375,7 @@ kept by a rewrite that restates neither, shown in another conversation, row gone
 D4, `tests/` and JS: one refusal carries the problems of layers 3 and 4a together, and layers 0 and 2 stop alone; no
 refusal holds 20 consecutive characters of the call's prose (the program check the acceptance counts on, run on
 synthetic calls); every field the declared schema relaxes has a repair entry and a description stating the strict form
-(promised in §1.1); every `INSTEAD` entry names an existing ability (promised in §2.3); §10.6's two directions for one
-tool.
+(promised in §1.1); every `INSTEAD` entry names an existing ability (promised in §2.3).
 
 The declared schema, JS, with DSH's real `defineTool` and `validateArgs`: for each repair-table entry the shape she writes
 passes the declared schema and `execute` receives it unchanged (an absent `doc`, `do`, `title` or a part's `kind`;
@@ -452,23 +452,25 @@ The waits, as the discipline asks. Who waits: the lines of that one conversation
 slow step: until its `step/end` (median 3.3 to 10.7 s at high cache share, about 28 s cold). A failing step:
 `step/end` is appended in a `finally` (`agent.ts:358`), so the release comes with it. A hung step: DSH's idle watchdog
 ends a stalled stream at `streamIdleTimeoutMs` (300 s by default, per attempt, with `llm-retry`'s retries), the step
-ends, the line is released; a hung tool is bounded by its own `timeoutMs`, as a tool-open hold is today. We add no
-timer. A Host stop: the memory map is lost, the receipts stay unacknowledged and are projected again at the next
+ends, the line is released. A tool call that does not return has no timeout of its own in general (a few have:
+`fetch` 30 s, web search 60 s); what bounds it is the worker's fence, `workflow_timeout_seconds` (1,800 s by default):
+the worker answers `task_fenced`, the host cancels the agent, `step/end` is appended and the line is released. So a
+line waits at most one step, and a step at most the fence. We add no timer. A Host stop: the memory map is lost, the receipts stay unacknowledged and are projected again at the next
 start (§0).
 
-### 10.6 Two sides at different versions (A6)
+### 10.6 Two sides at different versions (A6, A12)
 
 The build ships both sides together (`tools/check_prepared_start.py` checks the installed core against the commit), so
-skew lasts across one restart only. The rules make it harmless anyway, by interface:
+skew lasts across one restart only. It is harmless by construction, because no field is added between the two sides:
+`role_tool_specs` carries each tool's declared schema in the field it always had, the JS sends the call as DSH passed
+it, and the strict schema, the repairs and the collection live in the worker alone (`tool_schema.py`,
+`RoleTools.call`).
 
 | Interface | Old JS, new worker | New JS, old worker |
 |---|---|---|
 | Held lines and `_absorb` | A line she saw in a turn without `speak` gets one more turn of its own (it is also in her history) | The line is absorbed as today |
 | Marks, numbers, `event.line`, `woken_by_program` | None of the new text; nothing breaks | The same; `can_quote` is Python only |
-| `role_tool` fields `given`, `violations` | The worker reads them with `.get`: absent, it checks as before | The JS sends them and an old worker ignores unknown fields; an old worker's specs carry no `strict` and its declared schema is the strict one, so the guard has already refused anything invalid |
-| `role_tool_specs` with `strict` | The old guard checks the permissive declared schema and sends unrepaired arguments; the worker applies the same repair table itself and its handlers' own checks stand | Specs without `strict`: the JS takes declared for strict, does not validate in `execute` and sends no `violations`, because an old worker would run an invalid call; with `strict` it validates and sends |
-
-A test holds the last row's two directions for one tool.
+| The tool call | The old guard checks the permissive declared schema; the worker repairs the call and checks it against the strict one | The old worker ships the strict schema as its declared one; the guard checks it as today |
 
 ### 10.7 The anchor's lifecycle (A7)
 
@@ -541,6 +543,47 @@ appended at a step is built from `refreshContext` (`agent.ts:411-413`), which re
 blank is what the model sees; the R2 test (§10.1) is the proof. If it fails, R2 goes back to the owner as a DSH request
 and the build does not carry it.
 
-A session that already holds a snapshot gets DSH's one-time "Current runtime context: none. Earlier runtime-context
-snapshots no longer apply." message after its history (`runtime-context.ts:152-163`); a session that never had one gets
-nothing.
+A session that already holds a snapshot gets DSH's "Current runtime context: none. Earlier runtime-context snapshots no
+longer apply." message after its history (`runtime-context.ts:152-163`), and again after each later compaction, because
+the compaction drops the earlier one; a session that never had a snapshot gets nothing. That line is DSH's own text and
+carries no deployment detail.
+
+## 11. As built: where the build differs from sections 1 to 10
+
+Each item is a place where the code is not what an earlier section of this file says, or where a section left a choice
+to the builder.
+
+- **One schema check, in the worker (A12).** §1.1's "layer 0 against the strict schema through B3" and §10.6's `strict`
+  flag, `given` and `violations` fields do not exist. The guard checks the declared schema; `RoleTools.call` repairs a
+  copy of the call, runs `tool_schema.violations` against the strict schema and puts the result in layer 3.
+- **The declared schema** (`tool_schema.declared`) drops every enum into the field's description, relaxes the fields of
+  `REQUIRED_FILLED` (`write_document` `doc` and `do`, `delegate` `title`) with a sentence saying what the program does
+  when they are missing, and declares `speak`'s `parts` as `json` with the part fields' words merged into its
+  description. A field that is `FILLED_LATER` (`doc`, `title`) is not a layer-3 violation when missing: the handler infers
+  it, or says what it could not find in layer 4 with the candidates.
+- **Splitting** (§1.3): `SPLIT` in `role_tools.py` names the ten handlers that collect: `think`, `delegate`, the task
+  answer, message and stop, the ideas note, `feel`, `plan`, `write_document`, `speak`. `plan`'s update and cancel, and
+  `note` (the tool that sends a note), keep their first-failure checks; `note`'s destination checks are not separate from
+  its effect. The pipeline refuses to run an unsplit handler in collecting mode.
+- **Limits** (§2.1, §3): `LIMIT_WORDS` states the soft number and the hard one (「（%d 字以内，过了 %d 字不收）」);
+  `SAFETY_CAP` (20,000 characters) is the hard number of a field with no stated one. `config.too_long` writes the length
+  refusal without her words and without an offered cut (`cut_offer` and `TAIL_SHOWN` are gone; `cut` and `CUT_MARK` stay
+  for the places that cut).
+- **INSTEAD** (§2.3): `instead_words(ability)` and `not_now` give what to do now in the words of the ability she has; a
+  test holds that every entry names an existing ability. The owner's full label as an author is written in the form
+  `resolve` takes back (`People.copyable`).
+- **Repairs** (§4): `speak` `parts` written as a JSON string; a part's `kind` from its one telling field; `quote` and
+  `wait` written inside a part lifted to the call; `delegate` `title` from the brief's first sentence (64 characters at
+  most). `write_document` `doc` and `do` are inferred in the handler (`_infer_doc`, `infer_doc_op`). The note synonyms
+  are not built (A8).
+- **Anchors** (§6, §10.7): `line` is stored only while `from` is 别人说的 or 主人定的, and `People.source_of` reads it at
+  show time (same scene: the pointer without the words; another scene: 「出自别处的一行（<time>）」; a missing or erased row:
+  「出自的那一行已不在」). A write that cannot resolve its `line` is recorded as 「我自己的判断」 with the reason in the
+  result, and its nature is dropped when it was 事实.
+- **Wake words** (§5.2): `WAKE_WORDS` has eight entries and `GENERIC` for a kind not in it; a test holds that every kind
+  the program opens a turn with has one. `context-delivery.js` lists `woken_by_program` with `speaker` among the keys that
+  are always sent and kept in the head, so the dedup cannot drop it.
+- **Marks** (§5.1, §10.4): the mark text is a fixed five characters outside the ceiling, on the character lane only.
+  `withCheckpointHead` removes a copied head with a regular expression on the line's start, and adds its own.
+- **Budget** (§10.1 and the tool-spec size): `tests/test_tool_budget.py` measures the declared specs, which are what the
+  model reads: 31 tools and 20,990 characters for the character preset, 21,426 with the tiered tools.

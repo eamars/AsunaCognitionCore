@@ -1254,9 +1254,10 @@ it finds nothing: 113 collection calls resolve to their owner, the rest are `aff
 
 **Tests.** No unit test needs a database. The registry and `dbread` refuse to open one in a unit run
 (`DATABASE_IN_UNIT_RUN`, `ASUNA_UNIT_RUN=1`, inherited by every process the run starts); `tests/conftest.py` keeps
-its `.invalid` address and nothing else of the database. About 920 unit test functions that needed one are deleted;
-those whose break would lose her data, leak private data or let two Hosts run, or that guard a rule Xiaoman signed,
-run on MongoDB in `integration/` (the table, with each test's rule or harm, is
+its `.invalid` address and nothing else of the database. Of the 1,444 unit test functions at the base (counted by
+name), 859 are deleted, 397 stay in `tests/` (6 new), and 194 run on MongoDB in `integration/` (the store's contract
+cases among them): those whose break would lose her data, leak private data or let two Hosts run, or that guard a
+rule Xiaoman signed (the table, with each test's rule or harm, is
 `<data>/private/adr104-evidence/finish/kept-tests.md`): the audit chain, erasure, forgetting, the host lease, message
 order, recall, the None rule, the BUMPS table and the touches, the required unique fields, the lane fault counts
 (already there), and in `integration/world/` 61 guards of her turns on the fixture world (owner-private material,

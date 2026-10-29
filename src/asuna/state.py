@@ -57,7 +57,9 @@ AUDIT_INLINE_LIMIT = 16 * 1024
 # Counters written with $inc outside a revision (scene sequence, retrieval salience); not part of a document's digest.
 COUNTER_FIELDS = {'scenes': ('sequence',), 'memory_units': ('salience',),
                   'watches': ('last_seen_at', 'appeared'),     # every line of a watched person moves these
-                  'notes': ('seen_in',)}                       # every turn that shows a note adds itself
+                  'notes': ('seen_in',),                       # every turn that shows a note adds itself
+                  # a stored file's last send drives its expiry, its last read the quota's order (records.artifacts)
+                  'artifacts': ('last_sent_at', 'last_read_at')}
 
 
 # Fields computed from a document's own content (a memory's embedding vector): a commit leaves them out and names

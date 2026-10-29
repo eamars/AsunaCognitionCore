@@ -227,8 +227,9 @@ def _commit_key(payload):
 def verify_documents(events: list[dict], store: Store):
     """Compare each document's latest audited commit with the collection (ADR-009 D-4).
 
-    Inline commits are compared by value, reference commits by content_sha256. A document
-    whose stored revision differs from the trace's latest is outside the trace and not judged.
+    Inline commits are compared by their content digest (content_digest: the document without its counter fields,
+    state.COUNTER_FIELDS), reference commits by content_sha256. A document whose stored revision differs from the
+    trace's latest is outside the trace and not judged.
     """
     latest={}
     for event in sorted(events,key=lambda e:(e['occurred_at'],e['stream_id'],e['seq'])):

@@ -1,8 +1,10 @@
 """Counters written outside a document's revision (state.COUNTER_FIELDS: a scene's sequence, a memory's salience, a
-watch's sightings, a note's seen_in) move with atomic $inc/$set while a writer holds an earlier read of the document.
-Putting that read back keeps what the counters reached; only a put that starts the record over writes them."""
+watch's sightings, a note's seen_in, a stored file's touches) move with atomic $inc/$set while a writer holds an earlier
+read of the document. Putting that read back keeps what the counters reached; only a put that starts the record over
+writes them, and a stored file's row is never started over (records.artifacts.save refuses it)."""
 import pytest
 
+from asuna.records import artifacts as artifact_records
 from asuna.state import COUNTER_FIELDS, Conflict
 
 # collection: (counters at the read, the atomic write its real writer makes, the counters after it)
@@ -15,6 +17,10 @@ BUMPS = {
                 {'$set': {'last_seen_at': '2026-10-23T01:00:00+00:00'}, '$inc': {'appeared': 1}},
                 {'appeared': 1, 'last_seen_at': '2026-10-23T01:00:00+00:00'}),
     'notes': ({'seen_in': ['ep-1']}, {'$addToSet': {'seen_in': 'ep-2'}}, {'seen_in': ['ep-1', 'ep-2']}),  # notes
+    'artifacts': ({'last_sent_at': '2026-10-28T01:00:00+00:00', 'last_read_at': '2026-10-28T01:00:00+00:00'},
+                  {'$set': {'last_sent_at': '2026-10-29T01:00:00+00:00',                          # mark_sent
+                            'last_read_at': '2026-10-29T02:00:00+00:00'}},                        # mark_read
+                  {'last_sent_at': '2026-10-29T01:00:00+00:00', 'last_read_at': '2026-10-29T02:00:00+00:00'}),
 }
 
 
@@ -47,3 +53,28 @@ def test_a_put_that_starts_the_record_over_writes_its_counters(store):
               expected=current['revision'], reset_counters=True)
     stored = store.db.watches.find_one({'_id': 'w'})
     assert stored['state'] == 'on' and stored['appeared'] == 0 and stored['last_seen_at'] is None
+
+
+def test_a_stored_file_is_never_started_over():
+    with pytest.raises(ValueError, match='ARTIFACT_COUNTERS_KEPT'):
+        artifact_records.save(None, {'_id': 'a'}, expected=1, reset_counters=True)
+
+
+def test_a_touch_is_an_update_of_its_own(store):
+    """A revisioned write keeps the touches as stored, so it can never write the first one: mark_sent and mark_read
+    stay updates."""
+    row = artifact_records.save(store, {'_id': 'f', 'scope_key': 'global-safe', 'kind': 'file', 'state': 'DONE'})
+    artifact_records.save(store, {**row, 'last_sent_at': '2026-10-29T01:00:00+00:00'}, expected=row['revision'])
+    assert 'last_sent_at' not in store.db.artifacts.find_one({'_id': 'f'}), 'a kept field is not written by a put'
+    artifact_records.mark_sent(store, 'f', 'file', '2026-10-29T01:00:00+00:00')
+    assert store.db.artifacts.find_one({'_id': 'f'})['last_sent_at'] == '2026-10-29T01:00:00+00:00'
+
+
+def test_a_replace_keeps_the_touches(store):
+    artifact_records.insert(store, {'_id': 'r', 'schema_version': 1, 'scope_key': 'global-safe', 'kind': 'x',
+                                    'state': 'DONE'})
+    artifact_records.mark_sent(store, 'r', 'x', '2026-10-29T01:00:00+00:00')
+    assert artifact_records.replace(store, {'_id': 'r', 'schema_version': 1, 'scope_key': 'global-safe', 'kind': 'x',
+                                            'state': 'ANSWERED', 'last_sent_at': '2026-10-01T00:00:00+00:00'})
+    stored = store.db.artifacts.find_one({'_id': 'r'})
+    assert stored['state'] == 'ANSWERED' and stored['last_sent_at'] == '2026-10-29T01:00:00+00:00'

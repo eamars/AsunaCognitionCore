@@ -165,8 +165,18 @@ def count_tool(store, tool, state):
 
 # Writes.
 
+# A stored file's touches (its last send, its last read), written outside a revision by `mark_sent` and `mark_read`:
+# every revisioned write and every replace keeps them (state.COUNTER_FIELDS).
+TOUCHED = ('last_sent_at', 'last_read_at')
+COUNTERS_KEPT = ('ARTIFACT_COUNTERS_KEPT: 一份记录的 last_sent_at、last_read_at 不能从头写（reset_counters）：那会挪动'
+                 '它的到期和配额里的先后；不写 reset_counters 再存')
+
+
 def save(store, row, **kwargs):
-    """The revisioned write of a whole row (`Store.put`: `expected`, `stream`)."""
+    """The revisioned write of a whole row (`Store.put`: `expected`, `stream`); its touches are kept, and a write
+    that would start them over (`reset_counters`) is refused: no write of a row means that."""
+    if kwargs.get('reset_counters'):
+        raise ValueError(COUNTERS_KEPT)
     return store.put(COLLECTION, row, **kwargs)
 
 
@@ -182,8 +192,9 @@ def insert(store, row):
 
 
 def replace(store, row):
-    """The row of this id replaced by `row`, as it is; False when there is none."""
-    return store.collection(COLLECTION).replace(row)
+    """The row of this id replaced by `row`, its touches kept as they are stored (as `save` keeps them); False when
+    there is none."""
+    return store.collection(COLLECTION).replace(row, keep=TOUCHED)
 
 
 def delete(store, artifact_id):
@@ -202,13 +213,14 @@ def _set(store, artifact_id, change, where=None):
 
 
 def mark_read(store, artifact_id, kind, scopes, moment):
-    """A page of a stored file of a kind was read (only inside these scopes, in state DONE): `last_read_at`."""
+    """A page of a stored file of a kind was read (only inside these scopes, in state DONE): `last_read_at`. An update
+    of its own: a write that keeps the touches could never write the first one."""
     return _set(store, artifact_id, Set({'last_read_at': moment}),
                 {'kind': kind, 'state': 'DONE', 'scope_key': AnyOf(texts(scopes))})
 
 
 def mark_sent(store, artifact_id, kind, moment):
-    """A row of a kind was sent: `last_sent_at`."""
+    """A row of a kind was sent: `last_sent_at` (an update of its own, as `mark_read`)."""
     return _set(store, artifact_id, Set({'last_sent_at': moment}), {'kind': kind})
 
 

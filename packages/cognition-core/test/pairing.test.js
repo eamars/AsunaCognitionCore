@@ -109,6 +109,18 @@ test('a line held through a compaction that ends inside a step waits for the ste
   assert.deepEqual(appended, ['r1']);
 });
 
+test('a release that throws is logged and never an uncaught exception', async () => {
+  const events = [{ type: 'system/message' }, { type: 'step/start' }];
+  const { core, session, fire } = boundary(events), warned = [];
+  core.ctx.logger.warn = text => warned.push(text);
+  session.append = () => { throw new Error('the log refused the append'); };
+  hold(core, 's', line('r1'));
+  fire('step/end');
+  await tick();
+  assert.equal(warned.length, 1);
+  assert.match(warned[0], /not released: Error: the log refused the append/);
+});
+
 test('a line held when the next step starts before the microtask runs is not written twice', async () => {
   const events = [{ type: 'system/message' }, { type: 'step/start' }];
   const { core, session, appended, fire } = boundary(events);

@@ -77,10 +77,14 @@ export function release(core, session) {
 export function releaseAtBoundary(core) {
   return core.ctx.on('session/event', (session, event) => {
     if ((event.type !== 'compaction/end' && event.type !== 'step/end') || !core.held.get(session.id)?.length) return;
+    // A microtask that throws is an uncaught exception, and this runs at the end of every step of a conversation with
+    // held lines, aborts and the worker's fence included: a failure here is logged, never left to the process.
     queueMicrotask(() => {
-      const events = session.snapshotEvents();
-      if (!stepOpen(events) && !compactionOpen(events) && release(core, session))
-        core.ctx.sessions.flush(session).catch(error => core.ctx.logger.warn('Asuna: lines held during a step or a compaction: ' + String(error)));
+      try {
+        const events = session.snapshotEvents();
+        if (!stepOpen(events) && !compactionOpen(events) && release(core, session))
+          core.ctx.sessions.flush(session).catch(error => core.ctx.logger.warn('Asuna: lines held during a step or a compaction: ' + String(error)));
+      } catch (error) { core.ctx.logger.warn('Asuna: lines held during a step or a compaction were not released: ' + String(error)); }
     });
   });
 }

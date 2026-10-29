@@ -505,13 +505,15 @@ class People:
             return me or self.self_name
         return self.label(self.entry(scene, author, row))
 
-    def pointed(self, scene, row):
+    def pointed(self, scene, row, words=True):
         """A line another line points at (a quote, a reaction, a recall), in the one form every pointer has
         (ADR-079 §9.3), the same as its own label line: its number, its speaker (hers as 你), when it was said on her
         clock, its first words. Number, speaker and time say which line; the words say what it was (her choice: one
-        length, POINTED_CHARS). Every line has its number in every conversation (ADR-108 D2)."""
+        length, POINTED_CHARS). Every line has its number in every conversation (ADR-108 D2). `words=False`: the pointer
+        alone, which says which line and not what it said."""
         from .caught_up import CATCHUP_KEY, said_at
         from .schedule_rules import line_stamp, scene_timezone
+        words_wanted = words
         said = self.mentions if row.get('direction') == 'outbound' else self.heard
         words = ' '.join(said(scene, row.get('text')).split())
         number = '〔%d〕 ' % row['scene_seq'] if row.get('scene_seq') else ''
@@ -519,8 +521,30 @@ class People:
             row = {**row, **(message_records.get(self.store, row['_id'], fields=[
                 'received_at', 'receipt_at', 'occurred_at', 'event.occurred_at', 'event.raw.' + CATCHUP_KEY]) or {})}
         stamp = line_stamp(scene_timezone(self.config, scene), said_at(row))
-        return '%s%s%s：%s' % (number, self.speaker(scene, row.get('author'), me='你'), ' ' + stamp if stamp else '',
-                              words if len(words) <= POINTED_CHARS else words[:POINTED_CHARS] + '…')
+        head = '%s%s%s' % (number, self.speaker(scene, row.get('author'), me='你'), ' ' + stamp if stamp else '')
+        if not words_wanted:
+            return head.rstrip()
+        return '%s：%s' % (head, words if len(words) <= POINTED_CHARS else words[:POINTED_CHARS] + '…')
+
+    # ADR-108 D2: where an item that says someone said something rests, for whoever reads the item.
+    SOURCE_GONE = '出自的那一行已不在'
+    SOURCE_ELSEWHERE = '出自别处的一行（%s）'
+
+    def source_of(self, scene, anchor):
+        """Where an item's claim rests, read when the item is shown (ADR-108 D2): in the conversation of its line, that
+        line's pointer without its words (which line, who, when); in another conversation only when it was said, because
+        another scene's label would mislead. A line that is gone, or that an erasure redacted, shows that and nothing else
+        (not who said it, not when). None for no anchor."""
+        if not isinstance(anchor, dict) or not anchor.get('scene') or not isinstance(anchor.get('seq'), int):
+            return None
+        row = message_records.pointable(self.store, anchor['scene'], seq=anchor['seq']).first()
+        if not row or row.get('delivery_state') == 'REDACTED':      # an erasure keeps the position and takes the words
+            return self.SOURCE_GONE
+        if anchor['scene'] != (scene or {}).get('_id'):
+            from .caught_up import said_at
+            from .schedule_rules import line_stamp, scene_timezone
+            return self.SOURCE_ELSEWHERE % (line_stamp(scene_timezone(self.config, scene), said_at(row)) or '时间不详')
+        return self.pointed(scene, row, words=False)
 
     def thought_then(self, row, once_in=None):
         """Under a line of hers that someone else points at (a quote, a reaction, a recall, an essence): what she

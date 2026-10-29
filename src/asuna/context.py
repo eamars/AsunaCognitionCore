@@ -214,10 +214,12 @@ def _section_view(section):
             for k in ('sid', 'heading', 'body', 'visibility', 'entry_date', 'tags') if k in section}
 
 
-def ledger_block(docs, cls):
-    """Every ledger she can read here, each within its per-turn limit (context_budget.note_view)."""
+def ledger_block(docs, cls, scene=None):
+    """Every ledger she can read here, each within its per-turn limit (context_budget.note_view). A section that says
+    someone said something shows the line it rests on (ADR-108 D2), as `scene` reads it."""
     from .carried import placed, sections as carried_sections
     from .context_budget import NOTE_CHARS, note_view
+    from . import memory_tiers
     out = []
     for slug in docs.slugs():
         revision, content = docs.read(slug)
@@ -226,8 +228,10 @@ def ledger_block(docs, cls):
         sections = carried_sections(placed(docs.store, docs.persona, slug, content), cls)
         if sections:
             kept, about = note_view(sections, NOTE_CHARS['ledger'])
+            sources = memory_tiers.sources(docs.store, docs.persona, slug, scene)
             out.append({'doc': slug, 'revision': revision, 'title': content.get('title'),
-                        'sections': [_section_view(s) for s in kept], **about})
+                        'sections': [{**_section_view(s), **({'source': sources[s['sid']]} if sources.get(s['sid']) else {})}
+                                     for s in kept], **about})
     return out
 
 
@@ -417,7 +421,7 @@ class ContextBuilder:
             # ADR-062: once she has written herself as items, the carried ones are what she reads of herself.
             for name,slug in _carried.SELF_BLOCKS:
                 if (identity.get(slug) or {}).get('sections'):
-                    self_state[name]=_carried.self_block(slug,carried_here[slug])
+                    self_state[name]=_carried.self_block(slug,carried_here[slug],memory_tiers.sources(self.store,persona,slug,scene))
         from .ingress import episode_id
         source = message_records.get(self.store, 'in-' + episode_id(event))
         # Newly accepted/future queued inputs must not enter an earlier turn.
@@ -1053,7 +1057,7 @@ class ContextBuilder:
             context['group_continuity_from_program'] = continuity
         model,policy=model_and_policy(self.store,persona)
         documents={'persona':system_ref['persona_doc_revision'],'voice':system_ref['voice_doc_revision']}
-        ledgers=ledger_block(docs,session_class)
+        ledgers=ledger_block(docs,session_class,scene)
         if memory_tiers.ENABLED and not recall:
             # ADR-062: where her things are, in words, and what the program moved since this conversation was told.
             from .group_admin import notes_slug as _notes_slug

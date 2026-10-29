@@ -138,6 +138,9 @@ AFFECT_FIELDS = {
     'who': _s('对谁的心情（种类是对人的那几种时）：照抄对方的标签；一对一的对话里不写就是对方。群里不写，这笔就算进你整体的心情'),
 }
 
+# ADR-108 D2: a claim that someone said something points at the line that said it.
+LINE_FOR_CLAIM = ('这一节记的是别人（或主人）说过的话时，写它出自哪一行：那一行的编号（只写数字，编号在每行末尾的〔〕里），'
+                  '或「这条」＝叫你的那条。程序按那一行是谁的，把 from 记成主人定的或别人说的，并在这一节旁边留着出处')
 # ADR-079 §9.4: one way to point at a line, in every tool: its number in this conversation, or 这条.
 QUOTE_LINE = ('引用哪条：写那条的编号（只写数字，编号在每行末尾的〔〕里），或「这条」＝叫你的那条；不写就不引用。'
               '你自己说过的话也能引，用来改口或补一句。一句话回好几条时不用引。编号只用来挑引用，别写进 text。')
@@ -524,7 +527,8 @@ def _tiered(tools):
     write['description'] += 'let_go 把一节放下一层。'
     write['parameters']['do']['enum'] = [*write['parameters']['do']['enum'], 'let_go']
     write['parameters']['nature'] = _s('这一节是', enum=['事实', '记忆'])
-    write['parameters']['from'] = _s('它从哪来', enum=['主人定的', '查过的', '别人说的', '我自己的判断'])
+    write['parameters']['from'] = _s('它从哪来；别人说的、主人定的要同时写 line，没写 line 就记成我自己的判断', enum=['主人定的', '查过的', '别人说的', '我自己的判断'])
+    write['parameters']['line'] = _s(LINE_FOR_CLAIM)
     out['recall']['description'] += 'sections 只写 doc 就列出它的标题。'
     out['recall']['parameters']['sections']['items']['properties']['section'] = _s('节的 section')
     out['promote_memory']['parameters']['about'] = _s('关于', enum=['self', 'person', 'place', 'world'])
@@ -1404,6 +1408,7 @@ class RoleTools:
                 result, conclude = {'ended': CALLS_ENDED % CALLS_HARD}, True
             else:
                 self.over = []
+                self.__dict__.pop('report', None)
                 result, conclude = getattr(self, 'tool_' + can.replace('.', '_'))(ep, call_id, args)
                 if made > CALLS_HARD:
                     conclude = True
@@ -1442,6 +1447,7 @@ class RoleTools:
                 memory_tiers.Tiers(self.store, ep['persona']).used(cited, 'cited', ep['scene_id'])
         # A picture's bytes go back to the turn only: the record keeps the receipt (the bytes are in the blob store).
         self._record(ep_id, call_id, name, args, conclude=conclude, called_as=called_as, olds=olds,
+                     report=self.__dict__.pop('report', None),
                      result=picture_receipt(result) if name == _READ_IMAGE['name'] else result)
         return self._local(ep, result), conclude
 
@@ -1451,7 +1457,7 @@ class RoleTools:
         return local_time.for_model(result, local_time.zone_of(self.store, ep['scene_id']))
 
     def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False, called_as=None, code=None,
-                olds=None):
+                olds=None, report=None):
         c = self.coordinator
         ep = episode_records.get(self.store, ep_id)
         calls = dict(ep.get('tool_calls') or {})
@@ -1472,6 +1478,7 @@ class RoleTools:
                                               **({'old_names': olds} if olds else {}),
                                               **({'refused': refused} if refused else {'result': result}),
                                               **({'code': code} if code else {}),
+                                              **({'report': report} if report else {}),
                                               **({'reason_ref': reason} if reason else {})},
                          ep['scope_key'])
 
@@ -2298,10 +2305,13 @@ class RoleTools:
                 item = {**item, 'sid': named['sid']}
         mutation_id = f"{ep['_id']}:write:{call_id}"
         from . import memory_tiers
+        item.pop('anchor', None)                 # the line an item rests on is set by the program and never by her
+        source = None
         if memory_tiers.ENABLED:
             for field, allowed in (('nature', memory_tiers.NATURES), ('from', memory_tiers.SOURCES)):
                 if item.get(field) is not None and item[field] not in allowed:
                     raise Refused('%s 写 %s 之一%s。' % (field, '、'.join(allowed), _given(item, field)))
+            item, source = self._anchored(ep, item)
         if item.get('op') == 'let_go' and memory_tiers.ENABLED:
             return self._let_go(ep, slug, item.get('sid'), before), False
         if memory_tiers.ENABLED and item.get('op') == 'replace_section' and item.get('sid'):
@@ -2339,7 +2349,7 @@ class RoleTools:
             tiers.written(slug, item, before, before, scene_id=ep['scene_id'])
             return {'doc': slug, 'op': 'set_tags', 'sid': item['sid'], 'note': '记下了：%s。'
                     % '、'.join(filter(None, (memory_tiers.declared_nature(item).get('nature'), item.get('from')))),
-                    **({'place': kept_away} if kept_away else {})}, False
+                    **({'source': source} if source else {}), **({'place': kept_away} if kept_away else {})}, False
         if item.get('op') == 'adopt_seed':
             kind, text = _seed_text(self.store, slug)
             if text is None:
@@ -2354,7 +2364,7 @@ class RoleTools:
         revision = docs.apply(slug, item, body, base_revision_id=base, author='character', mutation_id=mutation_id,
                               budget=budget_gate(self.store, ep['persona']))
         result = {'doc': slug, 'op': item['op'], 'revision_id': revision['_id'], 'sid': item.get('sid'),
-                  'heading': item.get('heading'), 'note': '已写下。'}
+                  'heading': item.get('heading'), 'note': '已写下。', **({'source': source} if source else {})}
         after = docs.read(slug)[1]
         sections = (after or {}).get('sections', [])
         if memory_tiers.ENABLED:
@@ -2391,6 +2401,78 @@ class RoleTools:
                 result['pin'] = (PIN_NOTE % (NOTE_CHARS['group_notes'], memory_tiers.CAPS['group_notes'])
                                  if item['pin'] is True else UNPIN_NOTE)
         return result, False
+
+    # ADR-108 D2: what a result says about the line a claim rests on.
+    SOURCE_NOTED = '记成「%s」，出自 %s'
+    SOURCE_CHANGED = '你写的 from 是「%s」，那一行是%s说的，按那一行改了'
+    SOURCE_NOT_USED = 'line 没用上：from 是「%s」，不是别人或主人说的话'
+    SOURCE_MINE = '记成「%s」：%s'
+    SOURCE_LATER = '；找到那一行以后，用 do=set_tags 写 section、from 和 line，补上出处，不用改正文'
+    SOURCE_NOT_A_FACT = '也没有记成事实：你自己的判断要等别人印证才算事实'
+    SOURCE_WRITTEN_BY_HER = '那一行是你自己说的'
+    SOURCE_WITHOUT_LINE = '没有指到哪一行'
+
+    def _anchored(self, ep, item):
+        """`_resolve`, and what it decided, structured, for the call's audit row (`report`: what she asked, what was recorded,
+        whether it rests on a line), so the acceptance counts it by field and not by wording (ADR-108 D4c)."""
+        asked, named = item.get('from'), item.get('line') is not None
+        out, note = self._resolve(ep, item)
+        if asked is not None or named:
+            self.__dict__['report'] = {'asked': asked, 'line_named': named, 'recorded': out.get('from'),
+                                       'anchored': 'anchor' in out}
+        return out, note
+
+    def _resolve(self, ep, item):
+        """(item, what to tell her): a claim that someone said something rests on the line that said it, resolved in this
+        conversation (ADR-108 D2). With `line` the program sets `from` itself: 主人定的 for the owner's line, 别人说的 for
+        another person's, and the item remembers the line (`item['anchor']`). 别人说的 or 主人定的 without a line, or a line
+        that is not one, is recorded as her own judgment and the result says so; 查过的 and 我自己的判断 stand as she
+        wrote them. A line of hers or one the program wrote is nobody's word."""
+        from . import memory_tiers
+        from .config import character_id
+        from .people import People
+        from .ingress import PROGRAM_AUTHOR
+        from . import scene_links
+        item = {key: value for key, value in item.items() if key != 'anchor'}
+        line, given = item.pop('line', None), item.get('from')
+        hers = memory_tiers.OWN_JUDGMENT
+        if given is not None and given not in memory_tiers.OTHERS_SAID:
+            return item, (self.SOURCE_NOT_USED % given if line is not None else None)
+        if line is None:
+            if given is None:
+                return item, None
+            kept = memory_tiers.Tiers(self.store, ep['persona']).item(item.get('doc'), item.get('sid')) if item.get('sid') else None
+            if kept and kept.get('line') and kept.get('from') == given:
+                return item, None                       # restated beside a line it already rests on: it stays
+            return self._hers(item, self.SOURCE_WITHOUT_LINE)
+        scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
+        people = People(self.store, ep['persona'])
+        row, why = people.line_of(scene, ep['_id'], line)
+        if row is None:
+            return self._hers(item, why)
+        author = row.get('author')
+        if row.get('direction') == 'outbound' or author == character_id(self.store.config):
+            return self._hers(item, self.SOURCE_WRITTEN_BY_HER, later=False)
+        if author == PROGRAM_AUTHOR:
+            return self._hers(item, '那一行是程序写的，不是谁说的话', later=False)
+        owner = visibility.owner_id(self.store.config)
+        said = (memory_tiers.OTHERS_SAID[1] if owner and scene_links.canonical_person_id(self.store.config, self.store, author)
+                == owner else memory_tiers.OTHERS_SAID[0])
+        note = self.SOURCE_NOTED % (said, people.pointed(scene, row))
+        if given is not None and given != said:
+            note += '；' + self.SOURCE_CHANGED % (given, '主人' if said == memory_tiers.OTHERS_SAID[1] else '别人')
+        return {**item, 'from': said, 'anchor': {'scene': ep['scene_id'], 'seq': row['scene_seq']}}, note
+
+    def _hers(self, item, why, later=True):
+        """The write recorded as her own judgment, which goes through (ADR-108 D2): a nature she gave as fact is dropped with
+        it, because her own judgment is a fact only once someone confirms it (memory_tiers.signing)."""
+        from . import memory_tiers
+        hers = memory_tiers.OWN_JUDGMENT
+        note = self.SOURCE_MINE % (hers, why) + (self.SOURCE_LATER if later else '')
+        if item.get('nature') == memory_tiers.FACT:
+            item = {key: value for key, value in item.items() if key != 'nature'}
+            note += '；' + self.SOURCE_NOT_A_FACT
+        return {**item, 'from': hers}, note
 
     def _carried_lines(self, ep, slug, section, result, was=0):
         """ADR-096: a write to her identity, or a let_go, says the section's weight and each place's room, in exact
@@ -3355,6 +3437,12 @@ def read_sections(store, ep, items, cls):
                     item['doc'], section['sid']))
                 if verbatim:
                     out[-1]['detail'] = verbatim
+                # What a claim that someone said something rests on (ADR-108 D2), as this conversation reads it.
+                source = memory_tiers.sources(store, ep['persona'], item['doc'],
+                                              scene_records.get(store, ep['scene_id']) or {'_id': ep['scene_id']}
+                                              ).get(section['sid'])
+                if source:
+                    out[-1]['source'] = source
     return out, missing
 
 

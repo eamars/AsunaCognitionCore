@@ -124,7 +124,9 @@ and design.md's sections 6, 7.3, 7.4 and batches B10 to B15.
      run's stand-in and its skip list are gone. Any assertion written to pin a stand-in's own behaviour is part of
      the stand-in: it goes when the stand-in goes, it is never carried over as a rule about MongoDB, and nobody owes
      a count of what was deleted this way (Xiaoman's wording, 2026-10-29); (4) the unit run's test count and time
-     before and after are stated here (before, at `0d785a2891e7`: 1,782 passed and 45 skipped in 205 s).
+     before and after are stated here (before, at `0d785a2891e7`: 1,782 passed and 45 skipped in 205 s; after, at
+     `000138d9b35d`: 732 passed, 0 skipped, in 104 s, run by the builder through `suite_at.sh`; the integration run at
+     `b5106d8d5703`, which differs from it only in design.md: 132 cases passed in 44 s, 0 test databases left).
    - **Three layers of tests** (the owner, 2026-10-29: "Unit test: Core code <-> DB adapter, ensuring the core code
      is compliant. Integration test: DB adapter <-> Mongodb"; on a second, throwaway server: "just moving the problem
      to the docker layer"; and "If mongomock is the problem then test with real server. but not stressing it.. Keep

@@ -1,54 +1,28 @@
-"""What `ensure` and `ensure_vectors` do on a real server, each on a throwaway `asuna_v2_test_*` database, dropped at
-the end, failures included: the fault counts' TTL index as B1b's catalog makes it and as B2's drops it once
-`lane_faults.forget_old` takes over; the old vector index still answering while its filter fields change; a new index
-that is not ready yet answering False."""
+"""What `ensure` and `ensure_vectors` do on a real server, on the module's throwaway `asuna_v2_test_*` database
+(conftest.py), its collections dropped before each case: the fault counts' TTL index as B1b's catalog makes it and as
+B2's drops it once `lane_faults.forget_old` takes over; the old vector index still answering while its filter fields
+change; a new index that is not ready yet answering False."""
 import contextlib
-import json
 import random
-import secrets
-import sys
 import time
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
-import pytest
-from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'tests'))
-
-from asuna import lane_faults  # noqa: E402
-from asuna.store import Checked, mongodb  # noqa: E402
-from asuna.store.catalog import CATALOG, Catalog, Collection, Space, index  # noqa: E402
-import store_contract  # noqa: E402
+from asuna import lane_faults
+from asuna.store import Checked
+from asuna.store.catalog import CATALOG, Catalog, Collection, Space, index
+from conftest import emptied
+import store_contract
 
 TTL = 'hour_at_1'
 
 
-@pytest.fixture(scope='module')
-def settings():
-    path = ROOT / 'config' / 'local.json'
-    if not path.exists():
-        pytest.skip('no config/local.json: no MongoDB server named')
-    config = json.loads(path.read_text(encoding='utf-8'))
-    try:
-        MongoClient(config['mongo_uri'], serverSelectionTimeoutMS=3000).admin.command('ping')
-    except PyMongoError:
-        pytest.skip('MongoDB is not reachable')
-    return {'mongo_uri': config['mongo_uri']}
-
-
 @contextlib.contextmanager
-def throwaway(settings):
-    name = 'asuna_v2_test_integration_' + secrets.token_hex(6)
-    adapter = mongodb.open(settings, name)
-    try:
-        yield adapter
-    finally:
-        adapter.close()
-        mongodb.drop(settings, name)
-        assert name not in mongodb.databases(settings)
+def throwaway(settings, database):
+    """The MongoDB adapter on the module's database (conftest.py), every collection dropped first."""
+    with emptied(settings, database) as store:
+        yield store.adapter
 
 
 def b1b_lane_faults():
@@ -58,16 +32,16 @@ def b1b_lane_faults():
                       (*today.indexes, index(('hour_at', 1), expire_after=30 * 86400)), versioned=True)
 
 
-def test_a_fresh_database_gets_todays_ttl_index_from_b1bs_catalog(settings):
-    with throwaway(settings) as adapter:
+def test_a_fresh_database_gets_todays_ttl_index_from_b1bs_catalog(settings, database):
+    with throwaway(settings, database) as adapter:
         made = Checked(adapter, Catalog([b1b_lane_faults()])).ensure()
         assert TTL in made['lane_faults'].indexes_made
         info = adapter.db.lane_faults.index_information()[TTL]
         assert [tuple(key) for key in info['key']] == [('hour_at', 1)] and info['expireAfterSeconds'] == 30 * 86400
 
 
-def test_b2s_ensure_drops_it_and_forget_old_takes_over(settings):
-    with throwaway(settings) as adapter:
+def test_b2s_ensure_drops_it_and_forget_old_takes_over(settings, database):
+    with throwaway(settings, database) as adapter:
         Checked(adapter, Catalog([b1b_lane_faults()])).ensure()
         store = Checked(adapter, CATALOG)
         assert store.ensure(['lane_faults'])['lane_faults'].dropped == (TTL,)
@@ -89,17 +63,17 @@ def _units(store, count=60):
     return rows
 
 
-def test_a_new_index_that_is_not_ready_answers_false(settings):
-    with throwaway(settings) as adapter:
+def test_a_new_index_that_is_not_ready_answers_false(settings, database):
+    with throwaway(settings, database) as adapter:
         store = Checked(adapter, store_contract.CATALOG)
         store.ensure(['units'])
         _units(store)
         assert store.ensure_vectors(store_contract.SPACE, timeout=0) is False
 
 
-def test_the_old_index_answers_while_its_filter_fields_change(settings):
+def test_the_old_index_answers_while_its_filter_fields_change(settings, database):
     small = Space(store_contract.SPACE.name, 'units', 'embedding', store_contract.DIM, ('scope_key',))
-    with throwaway(settings) as adapter:
+    with throwaway(settings, database) as adapter:
         store = Checked(adapter, store_contract.CATALOG)
         store.ensure(['units'])
         rows = _units(store)

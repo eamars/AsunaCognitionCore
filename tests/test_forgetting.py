@@ -1,6 +1,6 @@
-"""On MongoDB: memory fades with time and with conversation volume since its last real use (persona model
+"""Forgetting, where memories are rewritten: memory fades with time and with conversation volume since its last real use (persona model
 memory.forgetting); a pinned memory and one a turn just used hold, faded raw chat a summary covers steps back from
-automatic recall and explicit recall still reaches it. On a throwaway database holding the fixture world
+automatic recall and explicit recall still reaches it. On the unit run's store holding the fixture world
 (conftest.py)."""
 from datetime import datetime, timedelta, timezone
 

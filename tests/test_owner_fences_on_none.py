@@ -4,8 +4,8 @@ kind, lane, project, character context) given None finds the records whose field
 `{field: None}` did.
 
 Guards: a publication result without a project still supersedes the project-less publications waiting before it (else
-one of them asks for a Host restart forever), and a conversation without an epoch still finds its main session. On
-MongoDB, on a throwaway database (conftest.py)."""
+one of them asks for a Host restart forever), and a conversation without an epoch still finds its main session. On the
+unit run's store (conftest.py)."""
 from asuna import condense
 from asuna.records import episodes as episode_records
 from asuna.records import receipts as receipt_records

@@ -1,6 +1,6 @@
 """The counters written outside a document's revision (state.COUNTER_FIELDS), one case each: the counters at a read,
-the write their real writer makes (in the store's words), and the counters after it. The table the counter cases of
-integration/test_store_counters.py run, and tests/test_store_counters.py checks complete."""
+the write their real writer makes (in the store's words), and the counters after it. tests/test_store_counters.py
+runs a case for each and checks the table complete."""
 from asuna.store.words import AddToSet, Increase, Set
 
 THEN, NOW = '2026-10-28T01:00:00+00:00', '2026-10-29T01:00:00+00:00'

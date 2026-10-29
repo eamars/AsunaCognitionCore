@@ -1,7 +1,7 @@
-"""On MongoDB: an operator erasure (ADR-009 E20, ADR-105). It deletes a conversation's stored bytes and marks each of
+"""An operator erasure (ADR-009 E20, ADR-105), where records are overwritten and removed. It deletes a conversation's stored bytes and marks each of
 its rows erased, and no other; a privacy erasure marks them with its own deletion id and redacts every other row of
 the scope; it keeps the unique keys, fences the scope's context at a new epoch, tombstones the memory and leaves an
-audit chain that verifies; her next turn neither fails nor sees what went. On a throwaway database holding the fixture
+audit chain that verifies; her next turn neither fails nor sees what went. On the unit run's store holding the fixture
 world (conftest.py)."""
 import json
 

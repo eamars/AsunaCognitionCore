@@ -1,7 +1,7 @@
-"""On MongoDB: the audit chain (ADR-067, ADR-074). A commit leaves out a memory's embedding and the document check
-still holds and still finds a change made outside a commit; past retention, and over the size cap, records go while
-the chain still verifies, its gaps explained by the retention run's record, which stays. On a throwaway database
-(conftest.py)."""
+"""The audit chain (ADR-067, ADR-074), where records are rewritten and removed. A commit leaves out a memory's embedding
+and the document check still holds and still finds a change made outside a commit; past retention, and over the size
+cap, records go while the chain still verifies, its gaps explained by the retention run's record, which stays; a
+turn's audit replays into an empty database to the same state. On the unit run's store (conftest.py)."""
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -100,19 +100,19 @@ def test_over_its_cap_the_oldest_go_first_whatever_their_kind_and_the_latest_sho
     audit.verify(audit.events(store, by=None).rows())
 
 
-def test_E23_state_replay_and_tamper(world, settings, tmp_path):
+def test_E23_state_replay_and_tamper(world, tmp_path):
     """A turn's audit verifies, replays into an empty database to the same state, and a changed record breaks it; its
     trace page carries no script (ADR-009 E23)."""
     from asuna.coordinator import Coordinator
     from asuna.lanes import FakeLane, FakeTurn
-    from conftest import throwaway_store
+    from conftest import memory_store
     store = world
     Coordinator(store, FakeLane(store, [FakeTurn([('think', {'thought': 'PRIVATE_INTERNAL_THOUGHT_TEST_ONLY'})],
                                                  '回来了。')])).ingest(
         {'event_id': 'e', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '我回来了。'})
     events = audit.events(store, by=None).rows()
     audit.verify(events)
-    with throwaway_store(settings, 'replay') as target:
+    with memory_store() as target:
         target_events = audit.trace_contents(events, store)
         assert audit.replay(events, target, target_events)['sha256'] == audit.projection(store)['sha256']
     modified = [dict(event) for event in events]

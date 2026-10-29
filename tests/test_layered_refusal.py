@@ -272,3 +272,43 @@ def test_the_document_stores_problems_contain_what_apply_would_raise(world):
                                                'DOC_SECTION_NOT_FOUND'], found
     assert docs.problems('ledger-a', {'op': 'set_tags', 'sid': '第一节', 'reason': 'r', 'visibility': 'public'}) == []
     assert docs.problems('nobody', {'op': 'replace_section', 'sid': 'x', 'reason': 'r'}, 'x')[0].code == 'DOC_NOT_FOUND'
+
+
+def test_a_layered_refusal_passes_the_workers_timed_dispatch_unchanged(world):
+    """Where the two meet (ADR-109 times a character call where the worker dispatches it, around `RoleTools.call`): the
+    refusal reaches the reply as the same `Refused` with every code, the call is timed as failed, and the timing row holds
+    none of her words; a call that works is timed as done."""
+    from concurrent.futures import Future
+    from queue import Queue
+    from asuna import audit
+    from asuna.native_worker import BusinessWorker, NativeLane
+    from test_data_child import Recorded
+    ep = turn(world, thought=False)
+    worker = BusinessWorker()
+    worker.calls.attach(world.store, Recorded(), lambda stage, error: None)
+    future = Future()
+    future.asuna_calls = Queue()
+    secret = '明天开会的内容'
+    bad = {'doc': 'notes', 'section': 'meeting', 'content': secret, 'why': '因为这样。' * 500, 'from': '瞎写'}
+
+    def handler(call_id, tool, args, **extra):
+        if tool == 'last':
+            future.set_result({'ended': True})
+            return {'ok': True}, False
+        return world.tools.call(ep['_id'], call_id, tool, args)
+    future.asuna_handler = handler
+    replies = [Future(), Future(), Future()]
+    for call_id, tool, args, reply in (('c1', 'write_document', bad, replies[0]), ('c2', 'think', {'thought': '想一想'}, replies[1]),
+                                       ('c3', 'last', {}, replies[2])):
+        future.asuna_calls.put(({'call_id': call_id, 'tool': tool, 'args': args}, reply))
+    try:
+        row = episode_records.get(world.store, ep['_id'])
+        assert NativeLane.wait(SimpleNamespace(worker=worker), future, 10, row) == {'ended': True}
+        refused = replies[0].exception()
+        assert isinstance(refused, Refused) and refused.codes[0] == 'THINK_FIRST' and 'TEXT_TOO_LONG' in refused.codes
+        assert numbered(str(refused)) and secret not in str(refused)
+        timed = sorted(audit.events(world.store, 'tool.time', stream=ep['_id']).rows(), key=lambda r: r['seq'])
+        assert [(r['payload']['call_id'], r['payload']['outcome']) for r in timed] == [('c1', 'failed'), ('c2', 'done'), ('c3', 'done')]
+        assert secret not in repr([r['payload'] for r in timed])
+    finally:
+        worker.calls.close()

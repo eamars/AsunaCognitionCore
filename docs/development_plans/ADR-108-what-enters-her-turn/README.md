@@ -565,16 +565,33 @@ without her, then the lead integrates the build and talks to Xiaoman (a cloud se
 | A2, A3 | `capabilities.can_quote`; every line shows its number; `event.line` | `test_adr079_pointers.py`, `test_woken_by_program.py` |
 | A11 | `contexts.js`, `index.js` | `marks.test.js`, `native-loop.test.js` (through DSH's own `agentPresets.mount`) |
 
-Checks run in the build container (Linux, the in-memory adapter): `pytest tests` 786 passed, 9 skipped (the skips are
+Checks run in the build container (Linux, the in-memory adapter): `pytest tests` 811 passed, 9 skipped (the skips are
 the personal-words list, the private-words scene tests and the voice model, none present there); `npm run test:native`
 276 passed and 8 failed, the same 8 that fail on `160968c`: four turn-end compaction tests that need the fork's
 engine, three ADR-098 root tests with Windows path fixtures, and the working-copy test. A reviewer who had not seen
 the build read the diff against the code; its findings (the dedup list in `context-delivery.js` dropping
 `woken_by_program`, a test that contradicted itself, two more) are fixed, each with a test that fails without the fix.
 
+Merged with main at `48e20f7` (ADR-109: the data child and the timing of every tool call). Two files conflicted: the
+index of this folder (both rows kept) and `runtime-manifest.json` (regenerated); `docs/map/` came out up to date. The
+two meet in three places, each read and held by a test:
+
+- ADR-109 times a character call where the worker dispatches it (`NativeLane.wait`), outside `RoleTools.call`, and counts
+  a `Refused` as a failed call. A layered refusal passes it unchanged, with every code, and the timing row holds no
+  text of hers (`test_layered_refusal.py`, last test, which fails when the dispatch stops counting `Refused`).
+- The data child runs history search and the discussion digest. They label people through `People.row_head` and
+  `label`, which this build did not change, and not through the lines' numbers or `pointed`.
+- Each ADR has its own restart (ADR-109 section 7); the lead lands them in the order they are ready.
+
+On the merged tree `npm run test:native` gives the same 276 passed and 8 failed as before the merge, and
+`pytest integration` ran against a throwaway MongoDB 8.3 (Atlas Local in a container, removed afterwards, no test database
+left): 114 passed, and 19 vector-index cases did not pass: the 18 of `test_store_contract.py` TestN (the server answers
+`"mappings" is required` to the search-index definition) and one in `test_schema_and_vectors.py`. The same 19 fail the same
+way on `origin/main` alone against that server, so they say something about the test server and not about either branch.
+
 Not run, and for the lead:
 
-- `pytest integration` (needs a Mongo server) and `tools/check_prepared_start.py`.
+- `tools/check_prepared_start.py`.
 - The private-words list: `tools/check_staged_secrets.py` (both modes) and `tools/publication_scan.py` over the 59 files
   the build changed found nothing, but the machine has no private-words list, so that part is unchecked, not clean.
 - The ADR-098 root tests and the four compaction tests, on Windows and with the fork.

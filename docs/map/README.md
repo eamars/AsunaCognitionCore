@@ -230,6 +230,7 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`host_stops`](../../src/asuna/host_stops.py) — When the Host was taken away from outside, she should not have to infer from a gap in the logs whether she was away.
 - [`host_lease`](../../src/asuna/host_lease.py) — One running Host per database, across machines (ADR-020 M1).
 - [`local_time`](../../src/asuna/local_time.py) — Times a model reads are on the local clock (owner 2026-10-08): stored records keep UTC for the program, and everything handed to a model passes `for_model` first.
+- [`tool_watch`](../../src/asuna/tool_watch.py) — Every tool call of both brains, timed where the worker dispatches it (native_worker.py): the calls in flight, one `tool.time` audit row as each ends, and a watchdog that records a call running past its limit, once.
 - [`store/__init__`](../../src/asuna/store/__init__.py) — The store: the core's way to its database, with no database named.
 - [`store/words`](../../src/asuna/store/words.py) — The words the core describes records with: conditions, changes, sorts and totals, their JSON form for her read tool, and their validation against a collection's declaration before any adapter sees them.
 - [`store/catalog`](../../src/asuna/store/catalog.py) — The catalog: every collection the core keeps, declared once, and the vector spaces searched in them.
@@ -321,6 +322,8 @@ What she remembers, how it is recalled, her documents, mood and blobs.
 - [`history_query`](../../src/asuna/history_query.py) — 查宿主保存的授权消息（P1-b）：字面检索覆盖完整 messages，原文整条回读。
 - [`dialogue_summary`](../../src/asuna/dialogue_summary.py) — Low-priority, source-bound summaries for new dialogue batches (DM and authorized groups).
 - [`discussion_digest`](../../src/asuna/discussion_digest.py) — ADR-005 P1-c：按需整理当前授权群里指定时间／主题的讨论（同一来源、同一授权）。
+- [`data_children`](../../src/asuna/data_children.py) — The action brain's history search and discussion digest, run in the data child (data_worker.py) while the Host runs, so their work, however long, never holds the worker's interpreter lock and ends at its deadline.
+- [`data_worker`](../../src/asuna/data_worker.py) — The data child (data_children.py): `python -X utf8 -P -m asuna.data_worker <host pid>`.
 - [`summary_trigger`](../../src/asuna/summary_trigger.py) — ADR-005 P2：自动摘要什么时候该动手——触发点从场景自己真实出现过的节奏里算出来。
 - [`summary_attribution`](../../src/asuna/summary_attribution.py) — ADR-005 P2：摘要条目上的说话人归属与更正——由程序从真实行算出来，不让模型自己认领。
 - [`documents`](../../src/asuna/documents.py) — Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).

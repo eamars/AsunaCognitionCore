@@ -20,7 +20,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `child_title` — A child session's title: content only (her task's title, or the conversation it serves), since DSH shows a stored title as it is and UI words must follow the viewer's language (ADR-011 §2.8).
   - `generate` — One stage of a native turn.
   - `turn_done` — Her turn has no further stage (coordinator._turn): the plugin ends the native turn.
-  - `wait` — The stage's result; her tool calls in the meantime run here, one at a time, in call order.
+  - `wait` — The stage's result; her tool calls in the meantime run here, one at a time, in call order, each timed for her episode `ep` (tool_watch.py).
   - `close`
 - class `BusinessWorker`
   - `register_stage` — Admit a stage: the Host is not reconfiguring, its task (if any) is still valid, and the operation runs once.
@@ -333,6 +333,20 @@ Times a model reads are on the local clock (owner 2026-10-08): stored records ke
 - def `stamp` — One time on the local clock face (`face`); the value as it was when it is no time.
 - def `for_model` — A copy of a context block or tool result with every timestamp field on the local clock.
 - def `zone_of` — The time zone a conversation's times are read in (schedule_rules.scene_timezone).
+
+## `tool_watch`
+
+[src/asuna/tool_watch.py](../../src/asuna/tool_watch.py)
+
+Every tool call of both brains, timed where the worker dispatches it (native_worker.py): the calls in flight, one `tool.time` audit row as each ends, and a watchdog that records a call running past its limit, once.
+
+- def `limit_of` — The seconds a call may run before it is recorded as an overrun.
+- def `stack_of` — A thread's innermost frames as `file:line function`; empty when the thread is gone.
+- class `Calls` — The worker's tool calls in flight, and their watchdog.
+  - `attach` — Write from now on, and start the watchdog.
+  - `close`
+  - `timed` — Around one call of `brain` ('action' or 'character') for `row` (its task or its episode); `failed`: the exception classes that are the tool's own failure.
+  - `look` — Record each call past its limit not yet recorded; the calls recorded.
 
 ## `store/__init__`
 

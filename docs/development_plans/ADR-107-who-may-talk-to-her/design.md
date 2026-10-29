@@ -364,7 +364,17 @@ On the build (numbers read from the runs, 2026-10-29, in the cloud checkout, Lin
 
 ### 10.3 Landings
 
-All three keep an old adapter working. Commits on the branch are ordered so each landing is a prefix.
+All three keep an old adapter working. The branch is linear, and the fixes after the second review came after the first
+commit of landing 3, so a landing is a set of commits, taken in this order (cherry-picked or merged as the lead chooses):
+
+| Landing | Commits |
+|---|---|
+| Design pages | `c0b701194b03`, `de52d94681a4` |
+| 1, the core | `4d3f94c72474`, then `cff4f847aab0` |
+| 2, the adapters and the bridge | `655e0b8df882`, then `3fd871d73707` |
+| 3, her prompt line | `7ede56cbb08c`, then `db8deb2ec80b` (the second replaces the first's wording) |
+
+Each set was run on its own tree (10.2).
 
 **Landing 1, the core (additive).** Design and docs; the core (`channel_admission`, `channels`, `host`, `grants`, `chat`,
 `native_worker` lane `cwd`, `people`, `group_admin`); the `OPEN_ADMISSION` lines of `napcat_qq` and `qq_bot`; the setup

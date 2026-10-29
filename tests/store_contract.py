@@ -19,7 +19,7 @@ from asuna.store.adapters import Ensured, Updated
 from asuna.store.catalog import Catalog, Collection, Field, Index, Space
 from asuna.store.errors import (AdapterNotInstalled, BlobMissing, DuplicateKey, NotSupported, QueryInvalid,
                                 RecordInvalid, RecordTooLarge, SchemaConflict)
-from asuna.store.words import (AddToSet, And, AnyOf, Contains, Each, Exists, Holds, HoldsAny, Increase, IsNull,
+from asuna.store.words import (AddToSet, And, AnyOf, Contains, Each, Exists, Holds, HoldsAny, HoldsNone, Increase, IsNull,
                                Larger, Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Push, Range, Set, Smaller,
                                StartsWith, Unset, Without)
 
@@ -246,6 +246,13 @@ class TestW:
         assert found(t, {'tags': HoldsAny(['x', 'zz'])}) == ['a']
         assert found(t, {'tags': HoldsAny(['y'])}) == ['a', 'c']
         assert found(t, {'tags': HoldsAny([])}) == []
+
+    def test_W26b_holds_none_matches_a_list_without_them_and_a_missing_one(self, store):
+        t = things(store)
+        assert found(t, {'tags': HoldsNone(['x'])}) == ['b', 'c', 'd', 'e']
+        assert found(t, {'tags': HoldsNone(['x', 'y'])}) == ['b', 'd', 'e']
+        assert found(t, {'tags': HoldsNone([])}) == ['a', 'b', 'c', 'd', 'e']
+        refused(QueryInvalid, lambda: t.find({'name': HoldsNone(['x'])}), 'QUERY_WORD_KIND')
 
     def test_W27_non_empty(self, store):
         t = things(store)

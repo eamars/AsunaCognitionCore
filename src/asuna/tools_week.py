@@ -286,8 +286,7 @@ def _last_time(store, persona, since):
     if not scene_id:
         return []
     out = []
-    for row in store.db.questions.find({'persona': persona, 'asked_at': {'$gte': since},
-                                        'sources.scene_id': scene_id}).sort('asked_at', 1):
+    for row in questions.asked(store, persona, since, scene_id=scene_id).each():
         source = next(s for s in row['sources'] if s.get('scene_id') == scene_id)
         answers = []
         for answer in source.get('answers') or []:

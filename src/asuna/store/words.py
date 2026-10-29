@@ -117,6 +117,14 @@ class HoldsAny(Word):
         self.values = list(values)
 
 
+class HoldsNone(Word):
+    """A list with no element equal to any of the values; a list missing or null matches."""
+    __slots__ = ('values',)
+
+    def __init__(self, values):
+        self.values = list(values)
+
+
 class NonEmpty(Word):
     """A list with at least one element."""
     __slots__ = ()
@@ -369,13 +377,13 @@ def _test(collection, field, test, now, depth):
             raise QueryInvalid('QUERY_EMPTY_TEXT: Contains 要一段不空的文字，case 是 True 或 False（"%s"）'
                                % field.path)
         return test
-    if isinstance(test, (Holds, HoldsAny)):
+    if isinstance(test, (Holds, HoldsAny, HoldsNone)):
         _needs(field, ('list',), name)
         if field.of == 'object':
             raise QueryInvalid('QUERY_EQUALITY_ON_OBJECT: "%s" 的元素是对象，不能比相等；用 Each({...})' % field.path)
         if isinstance(test, Holds):
             return Holds(_value(field, test.value, element=True))
-        return HoldsAny([_value(field, value, element=True) for value in test.values])
+        return type(test)([_value(field, value, element=True) for value in test.values])
     if isinstance(test, NonEmpty):
         _needs(field, ('list',), name)
         return test
@@ -698,14 +706,15 @@ def check_create(collection, where, change):
 
 # The JSON form (her read tool).
 
-_JSON_ONE = {'any_of': AnyOf, 'none_of': NoneOf, 'not': Not, 'holds': Holds, 'holds_any': HoldsAny}
+_JSON_ONE = {'any_of': AnyOf, 'none_of': NoneOf, 'not': Not, 'holds': Holds, 'holds_any': HoldsAny,
+             'holds_none': HoldsNone}
 _MONGO = {'$eq': '直接写值', '$in': '{"any_of": [...]}', '$nin': '{"none_of": [...]}', '$ne': '{"not": 值}',
           '$gt': '{"range": {"gt": 值}}', '$gte': '{"range": {"gte": 值}}', '$lt': '{"range": {"lt": 值}}',
           '$lte': '{"range": {"lte": 值}}', '$exists': '{"exists": true}', '$type': '{"is_null": true}',
           '$regex': '{"starts_with": [...]} 或 {"contains": "...", "case": false}', '$elemMatch': '{"each": {...}}',
           '$size': '{"non_empty": true}', '$all': '"and": [{"字段": {"holds": 值}}, ...]'}
 WORDS_JSON = ('any_of', 'none_of', 'not', 'range', 'exists', 'is_null', 'starts_with', 'contains', 'holds',
-              'holds_any', 'non_empty', 'each')
+              'holds_any', 'holds_none', 'non_empty', 'each')
 
 
 def _mongo(key, field=None):

@@ -38,7 +38,7 @@ def turn_failed(store, ep, error, now=None):
                                 DEV_TEXT % (KINDS.get(kind, kind), name, ep.get('scene_id'), ep.get('_id')),
                                 key=['turn_failed', kind, name, moment.date().isoformat()],
                                 source={'by': 'program', 'kind': 'turn_failed', 'cause': name})
-    store.db.developer_inbox.update_one({'_id': row['_id']}, {'$inc': {'count': 1}})
+    developer_inbox.bump(store, row['_id'])
     scene_records.note_fault(store, ep.get('scene_id'), {'at': moment.isoformat(), 'cause': name, 'kind': kind})
 
 

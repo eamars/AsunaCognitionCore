@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from . import clock
 from .state import Conflict, now
 from .records import scenes as scene_records
+from .records.view import is_text
 
 SOURCES = ('notice', 'lookup')                     # what the adapter may post; receipts add send_failed and sent
 REASON = 'muted'                                   # a failed receipt's response.reason for a send refused by a mute
@@ -40,13 +41,25 @@ def _iso(epoch):
     return datetime.fromtimestamp(epoch, timezone.utc).isoformat()
 
 
-def row_of(store, scene_id):
-    return store.db.own_mutes.find_one({'_id': 'own-mute|' + scene_id})
+# ── the owner of `own_mutes` ──
+# One row per group conversation (`own-mute|<scene id>`), as stored. A scene id given None, or not text, finds nothing
+# without a read (ADR-104 section 4).
+COLLECTION = 'own_mutes'
+
+
+def get(store, scene_id):
+    """Her mute slot in this group conversation, or None."""
+    return store.collection(COLLECTION).get('own-mute|' + scene_id) if is_text(scene_id) else None
+
+
+def save(store, row, **kwargs):
+    """The revisioned write of a slot (`Store.put`: `expected`, `stream`)."""
+    return store.put(COLLECTION, row, **kwargs)
 
 
 def active(store, scene_id, moment=None):
     """The mute on her in this group now, or None (not muted, lifted, or past its end)."""
-    row = row_of(store, scene_id)
+    row = get(store, scene_id)
     if not row or not row.get('muted'):
         return None
     if row.get('until') and row['until'] <= _moment(moment).isoformat():
@@ -65,7 +78,7 @@ def apply(store, scene, *, muted, source, whole_group=False, until=None, by=None
     if muted and whole_group and _her_role(store, scene) in ('owner', 'admin'):
         return 'not_her'                                  # a whole-group mute does not hold the owner or an admin
     for _ in range(3):
-        current = row_of(store, scene['_id'])
+        current = get(store, scene['_id'])
         on = active(store, scene['_id'], moment)
         base = {'_id': 'own-mute|' + scene['_id'], 'scene_id': scene['_id'], 'scope_key': scene.get('scope_key'),
                 'updated_at': now(), 'source': source}
@@ -85,8 +98,7 @@ def apply(store, scene, *, muted, source, whole_group=False, until=None, by=None
             doc = {**base, 'muted': False, 'whole_group': bool(on.get('whole_group')), 'since': on.get('since'),
                    'until': on.get('until'), 'by': on.get('by'), 'cleared_at': now(), 'cleared_by': source}
         try:
-            store.put('own_mutes', doc, expected=current['revision'] if current else None,
-                      stream='own_mute:' + scene['_id'])
+            save(store, doc, expected=current['revision'] if current else None, stream='own_mute:' + scene['_id'])
             return 'muted' if muted else 'cleared'
         except Conflict:
             continue

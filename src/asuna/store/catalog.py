@@ -411,16 +411,64 @@ CATALOG = Catalog([
           index(('persona', 1), ('identity', 1), unique=True)),
     _core('sticker_pool', 'stickers', index(('last_seen', 1)), index(('artifact_id', 1))),
     _core('sticker_memory', 'stickers', index(('persona', 1), ('key', 1), unique=True)),
-    _core('watches', 'watches', index(('persona', 1), ('person', 1), ('state', 1)),
-          counters=('last_seen_at', 'appeared')),
-    _core('notes', 'notes', index(('to_scene', 1), ('created_at', -1)), index(('from_scene', 1), ('created_at', -1)),
-          index(('persona', 1), ('created_at', -1)), index(('reply_to', 1)), counters=('seen_in',)),
-    _core('developer_inbox', 'developer_inbox', index(('persona', 1), ('created_at', -1)),
-          index(('state', 1), ('created_at', 1))),
-    _core('group_members', 'group_members'),
-    _core('host_stops', 'host_stops', index(('how', 1), ('back_at', -1))),
-    _core('switches', 'switches', index(('state', 1), ('kind', 1), ('until', 1)), index(('persona', 1), ('state', 1))),
-    _core('own_mutes', 'own_mute', index(('muted', 1))),
+    # Her watchlist (watches.py): the fields its owner names; the rest is stored as written. Its times are ISO text;
+    # a sighting moves `last_seen_at` and `appeared` outside a revision.
+    Collection('watches', 'watches', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('persona', 'person', 'name', 'set_in', 'set_class', 'why', 'mode', 'state', 'created_at', 'until',
+               'last_seen_at', 'ended_at'),
+        Field('appeared', 'number', nullable=True)),
+        (index(('persona', 1), ('person', 1), ('state', 1)),),
+        versioned=True, counters=('last_seen_at', 'appeared')),
+    # Notes between her conversations (notes.py): the fields its owner names; the rest is stored as written. Its times
+    # are ISO text; each turn that shows a note adds itself to `seen_in` outside a revision.
+    Collection('notes', 'notes', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('persona', 'from_scene', 'from_class', 'from_episode', 'to_scene', 'kind', 'place', 'text', 'trust',
+               'mode', 'reply_to', 'created_at', 'owner_line', 'question', 'event_id'),
+        *(Field(path, 'number', nullable=True) for path in ('hop', 'tables_version')),
+        Field('seen_in', 'list', of='text', nullable=True)),
+        (index(('to_scene', 1), ('created_at', -1)), index(('from_scene', 1), ('created_at', -1)),
+         index(('persona', 1), ('created_at', -1)), index(('reply_to', 1))),
+        versioned=True, counters=('seen_in',)),
+    # The program's notes to the developer agent (developer_inbox.py): the fields its owner names; the rest is stored
+    # as written. Its times are ISO text; a note's `count` rises outside a revision.
+    Collection('developer_inbox', 'developer_inbox', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('persona', 'level', 'text', 'state', 'scope_key', 'created_at', 'seen_at', 'answered_at'),
+        Field('source', 'object', nullable=True), *_text('source.by'), Field('count', 'number', nullable=True)),
+        (index(('persona', 1), ('created_at', -1)), index(('state', 1), ('created_at', 1))),
+        versioned=True),
+    # Who is in each group, as the channel adapter last fetched it (group_members.py), one row per conversation.
+    Collection('group_members', 'group_members', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('scene_id', 'group_id', 'channel_id', 'fetched_at', 'received_at', 'scope_key'),
+        Field('members', 'list', of='object', nullable=True), Field('count', 'number', nullable=True)),
+        versioned=True),
+    # A Host taken away from outside, found at the next start (host_stops.py); its times are ISO text.
+    Collection('host_stops', 'host_stops', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('how', 'alive_until', 'back_at', 'scope_key', 'shown_at', 'by', 'cause'),
+        *(Field(path, 'number', nullable=True) for path in ('exit_code', 'tries', 'inside'))),
+        (index(('how', 1), ('back_at', -1)),),
+        versioned=True),
+    # A look the relevance gate could not decide (host_stops.py), by its turn's id; its time is ISO text.
+    Collection('missed_looks', 'host_stops', _text('scene_id', 'at', 'cause')),
+    # Her switches (switches.py): the fields its owner names; the rest is stored as written. Its times are ISO text.
+    Collection('switches', 'switches', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('persona', 'kind', 'label', 'scene_id', 'person_id', 'until', 'state', 'set_at', 'set_in', 'why',
+               'cleared_at'),
+        Field('tools', 'list', of='text', nullable=True)),
+        (index(('state', 1), ('kind', 1), ('until', 1)), index(('persona', 1), ('state', 1))),
+        versioned=True),
+    # Her own mute in each group, as the platform last said it (own_mute.py); its times are ISO text.
+    Collection('own_mutes', 'own_mute', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('scene_id', 'scope_key', 'updated_at', 'source', 'since', 'until', 'by', 'cleared_at', 'cleared_by'),
+        *(Field(path, 'bool', nullable=True) for path in ('muted', 'whole_group'))),
+        (index(('muted', 1)),),
+        versioned=True),
     # Her running records, one row per entry and each change beside it (documents.py): the fields of their plain
     # unique indexes are required (3.5); their times are ISO text.
     Collection('journal_entries', 'documents', (
@@ -436,7 +484,16 @@ CATALOG = Catalog([
         (index(('mutation_id', 1), unique=True), index(('persona', 1), ('slug', 1), ('created_at', -1)),
          index(('entry_id', 1), ('created_at', 1))),
         versioned=True),
-    _core('questions', 'questions'),
+    # Her questions, each to one or more places, with what came back (questions.py): the fields its owner names; the
+    # rest is stored as written. Its times are ISO text; a source is one element of `sources`.
+    Collection('questions', 'questions', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('persona', 'scope_key', 'text', 'scene_id', 'episode_id', 'asked_at', 'patience', 'state',
+               'migrated_from'),
+        Field('tables_version', 'number', nullable=True), Field('told_in', 'list', of='text', nullable=True),
+        Field('sources', 'list', of='object', nullable=True), *_text('sources.scene_id', 'sources.kind'),
+        Field('closed', 'object', nullable=True), *_text('closed.by')),
+        versioned=True),
     # Its fault counts leave KEEP_DAYS after their hour through lane_faults.forget_old, which replaces the TTL index.
     Collection('lane_faults', 'lane_faults', (
         Field('_last_op', 'text'), Field('schema_version', 'number', required=True),

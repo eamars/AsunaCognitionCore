@@ -252,8 +252,8 @@ def planned_mark(store, down_at):
     """The planned-stop row of the start a record is about (the newest one back since it went down), or None."""
     if not down_at:
         return None
-    return store.db.host_stops.find_one({'how': 'planned', 'back_at': {'$gte': _aware(down_at).isoformat()}},
-                                        sort=[('back_at', -1)])
+    from . import host_stops
+    return host_stops.last_back(store, 'planned', _aware(down_at).isoformat())
 def block(store, zone, moment=None, root=None, integration_state=None):
     """restart_from_program for a home turn: a request waiting at the desk, and the supervisor's latest record, for a
     day."""

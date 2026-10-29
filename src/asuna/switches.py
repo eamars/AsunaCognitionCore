@@ -17,7 +17,9 @@ from datetime import timedelta
 
 from . import clock
 from .evidence import sha
+from .records.view import ANY, View, fenced, is_text, pinned
 from .state import Denied, now
+from .store.words import And, Or, Range
 
 DEFAULT_HOURS = 24
 MAX_HOURS = 168
@@ -30,6 +32,45 @@ NOTE = ('你自己开着的开关（静音、关工具、屏蔽），until_at �
 
 def _moment(moment=None):
     return moment or clock.now()
+
+
+# ── the owner of `switches` ──
+# Read and written only through these: a switch as stored. None follows the store's rule (ADR-104 section 4): an id,
+# the persona, a conversation or a person given None, or a value not of its kind, finds nothing without a read; a
+# kind or a state given None finds the switches without one. Not given is `ANY`.
+COLLECTION = 'switches'
+
+
+def get(store, switch_id, *, persona=ANY, state=ANY):
+    """The switch with this id (of this persona, in this state), or None."""
+    if not is_text(switch_id):
+        return None
+    if persona is ANY and state is ANY:
+        return store.collection(COLLECTION).get(switch_id)
+    where = pinned(fenced({'_id': switch_id}, {'persona': (persona, is_text)}), {'state': (state, is_text)})
+    return View(store, COLLECTION, where).first()
+
+
+def on(store, *, kind=ANY, scene_id=ANY, person_id=ANY, moment=None):
+    """The switches on now (not cleared, not past their end), the soonest to end first."""
+    where = pinned(fenced({'state': 'on', 'until': Range(gt=_moment(moment).isoformat())},
+                          {'scene_id': (scene_id, is_text), 'person_id': (person_id, is_text)}),
+                   {'kind': (kind, is_text)})
+    return View(store, COLLECTION, where, (('until', 1),)).rows()
+
+
+def changed(store, persona, since, moment):
+    """A persona's switches that ended after `since` (ISO text) and by `moment`: run out, or cleared by her."""
+    where = fenced({}, {'persona': (persona, is_text)})
+    if where is not None:
+        where = And(where, Or({'state': 'on', 'until': Range(lte=moment.isoformat(), gt=since)},
+                              {'state': 'cleared', 'cleared_at': Range(gt=since)}))
+    return View(store, COLLECTION, where).rows()
+
+
+def save(store, row, **kwargs):
+    """The revisioned write of a switch (`Store.put`: `expected`, `stream`)."""
+    return store.put(COLLECTION, row, **kwargs)
 
 
 def hours_of(value):
@@ -51,34 +92,25 @@ def set_switch(store, ep, kind, *, label, scene_id=None, person_id=None, tools=N
     moment = _moment(moment)
     target = scene_id if kind != 'block' else person_id
     _id = 'switch-' + sha('|'.join([ep['persona'], kind, target]).encode())[:16]
-    current = store.db.switches.find_one({'_id': _id})
+    current = get(store, _id)
     doc = {'_id': _id, 'persona': ep['persona'], 'kind': kind, 'label': label,
            **({'scene_id': scene_id} if scene_id else {}), **({'person_id': person_id} if person_id else {}),
            **({'tools': sorted(set(tools))} if tools is not None else {}),
            'until': (moment + timedelta(hours=hours_of(hours))).isoformat(), 'state': 'on', 'set_at': now(),
            'set_in': ep['_id'], **({'why': why} if why else {})}
-    store.put('switches', doc, expected=current and current['revision'], stream='switches:' + ep['persona'])
+    save(store, doc, expected=current and current['revision'], stream='switches:' + ep['persona'])
     store.audit(ep['_id'], 'switch.set', {k: v for k, v in doc.items() if k != 'revision'}, ep['scope_key'])
     return doc
 
 
 def clear(store, ep, switch_id):
-    row = store.db.switches.find_one({'_id': str(switch_id or '').strip(), 'persona': ep['persona'], 'state': 'on'})
+    row = get(store, str(switch_id or '').strip(), persona=ep['persona'], state='on')
     if not row:
         raise Denied('SWITCH_NOT_FOUND: ' + ('没写是哪个开关' if not switch_id else '「%s」不是开着的开关（可能已经到期了）' % switch_id))
-    store.put('switches', {**row, 'state': 'cleared', 'cleared_at': now()}, expected=row['revision'],
-              stream='switches:' + ep['persona'])
+    save(store, {**row, 'state': 'cleared', 'cleared_at': now()}, expected=row['revision'],
+         stream='switches:' + ep['persona'])
     store.audit(ep['_id'], 'switch.cleared', {'switch': row['_id'], 'kind': row['kind']}, ep['scope_key'])
     return row
-
-
-def on(store, *, kind=None, scene_id=None, person_id=None, moment=None):
-    """The switches on now (not cleared, not past their end)."""
-    query = {'state': 'on', 'until': {'$gt': _moment(moment).isoformat()}}
-    for key, value in (('kind', kind), ('scene_id', scene_id), ('person_id', person_id)):
-        if value is not None:
-            query[key] = value
-    return list(store.db.switches.find(query).sort('until', 1))
 
 
 def muted(store, scene_id, moment=None):
@@ -112,9 +144,7 @@ def home_block(store, persona, moment=None):
     moment = _moment(moment)
     rows = [row for row in on(store, moment=moment) if row['persona'] == persona]
     since = (moment - ENDED_SHOWN).isoformat()
-    ended = list(store.db.switches.find({'persona': persona, '$or': [
-        {'state': 'on', 'until': {'$lte': moment.isoformat(), '$gt': since}},
-        {'state': 'cleared', 'cleared_at': {'$gt': since}}]}))
+    ended = changed(store, persona, since, moment)
     if not rows and not ended:
         return None
     return {'note': NOTE, **({'items': [_item(row) for row in rows]} if rows else {}),

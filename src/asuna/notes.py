@@ -31,6 +31,8 @@ from . import scene_links, visibility
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
+from .records.view import ANY, View, fenced, is_text, pinned
+from .store.words import AddToSet, And, Exists, Holds, Not, Or, Range
 
 TABLES_VERSION = 1
 NOTE_CHARS = 300                 # a note that crosses between home and outside
@@ -104,6 +106,91 @@ class NoteRefused(Exception):
         self.code = code
 
 
+# ── the owner of `notes` ──
+# Read and written only through these: a note as stored (`fields` names what to return; `_id` always comes back). None
+# follows the store's rule (ADR-104 section 4): an id, the persona, a conversation or a turn given None, or a value not
+# of its kind, finds nothing without a read; a value condition (trust, kind) given None finds the notes without one.
+# Views are `View`s, in the replaced read's order. A note that carries one of her questions (`question`) is left out of
+# what a conversation sends and receives.
+COLLECTION = 'notes'
+NO_QUESTION = {'question': Exists(False)}
+
+
+def get(store, note_id, fields=None):
+    """The note with this id, or None."""
+    return store.collection(COLLECTION).get(note_id, fields) if is_text(note_id) else None
+
+
+def first_reply(store, note_id):
+    """A note that replies to this one (its id only), or None."""
+    return View(store, COLLECTION, fenced({}, {'reply_to': (note_id, is_text)})).first(fields=['_id'])
+
+
+def last_seen_from(store, from_scene, to_scene, episode):
+    """The newest note from `from_scene` to `to_scene` that this turn was shown, or None."""
+    where = fenced({}, {'from_scene': (from_scene, is_text), 'to_scene': (to_scene, is_text),
+                        'seen_in': (episode, is_text)})
+    if where is not None:
+        where['seen_in'] = Holds(episode)
+    return View(store, COLLECTION, where, (('created_at', 1),)).first(newest_first=True)
+
+
+def count_sent(store, episode):
+    """How many notes this turn wrote that carry no question."""
+    return View(store, COLLECTION, fenced(dict(NO_QUESTION), {'from_episode': (episode, is_text)})).count()
+
+
+def count_day(store, persona, since, *, from_scene=ANY, to_scene=ANY, trust=ANY, kind=ANY, between=None):
+    """How many of a persona's notes since `since` (ISO text) are not replies, from and to these conversations, of
+    this trust and kind; `between`: (a, b), from either one to the other."""
+    if not is_text(since):
+        return 0
+    where = pinned(fenced({'created_at': Range(gte=since)},
+                          {'persona': (persona, is_text), 'from_scene': (from_scene, is_text),
+                           'to_scene': (to_scene, is_text)}),
+                   {'trust': (trust, is_text), 'kind': (kind, is_text), 'reply_to': (None, is_text)})
+    if where is not None and between is not None:
+        a, b = between
+        pair = Or({'from_scene': a, 'to_scene': b}, {'from_scene': b, 'to_scene': a})
+        where = And(where, pair) if is_text(a) and is_text(b) else None
+    return View(store, COLLECTION, where).count()
+
+
+def count_since(store, persona, since):
+    """How many notes a persona wrote since `since` (ISO text)."""
+    where = fenced({}, {'persona': (persona, is_text)}) if is_text(since) else None
+    return View(store, COLLECTION, None if where is None else {**where, 'created_at': Range(gte=since)}).count()
+
+
+def mark_seen(store, note_id, episode):
+    """This turn was shown the note (`seen_in`, outside a revision)."""
+    if is_text(note_id):
+        store.collection(COLLECTION).update({'_id': note_id}, AddToSet('seen_in', episode))
+
+
+def received(store, to_scene, since, *, besides=None):
+    """View: the notes to a conversation since `since` (ISO text) that carry no question, other than `besides`."""
+    where = fenced(dict(NO_QUESTION), {'to_scene': (to_scene, is_text)}) if is_text(since) else None
+    if where is not None:
+        where['created_at'] = Range(gte=since)
+        if besides is not None:
+            where['_id'] = Not(besides)
+    return View(store, COLLECTION, where, (('created_at', 1),))
+
+
+def sent(store, from_scene, since):
+    """View: the notes from a conversation since `since` (ISO text) that carry no question."""
+    where = fenced(dict(NO_QUESTION), {'from_scene': (from_scene, is_text)}) if is_text(since) else None
+    if where is not None:
+        where['created_at'] = Range(gte=since)
+    return View(store, COLLECTION, where, (('created_at', 1),))
+
+
+def save(store, note, **kwargs):
+    """The revisioned write of a note (`Store.put`: `stream`)."""
+    return store.put(COLLECTION, note, **kwargs)
+
+
 def _at(value):
     if not value:
         return None
@@ -148,7 +235,7 @@ def owner_chats(config):
 def opening_for(store, event):
     """The note an input carries (a home note turn, or a visit a note opened), or None."""
     note_id = (event.get('note') or {}).get('id') or (event.get('visit') or {}).get('note')
-    return store.db.notes.find_one({'_id': note_id}) if note_id else None
+    return get(store, note_id) if note_id else None
 
 
 def opening(store, ep):
@@ -271,7 +358,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
     from .people import People
     moment = moment or clock.now()
     note_id = 'note-' + sha(canonical([ep['_id'], call_id]))[:20]
-    existing = store.db.notes.find_one({'_id': note_id})
+    existing = get(store, note_id)
     if existing:
         return None, existing
     persona, trust = ep['persona'], trust_of(cls)
@@ -302,8 +389,8 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
                                             '① 压到 %d 字以内，删哪段你自己定；② 原样拆成两张接着发，开头标 1/2、2/2，'
                                             '让那边知道是接续（一回合最多 %d 张）。')
                           % (KIND_WORDS[kind], ask, len(text), len(text) - ask, ask, PER_TURN))
-    reply = None if question else first if first and first['from_scene'] == to_scene else store.db.notes.find_one(
-        {'from_scene': to_scene, 'to_scene': ep['scene_id'], 'seen_in': ep['_id']}, sort=[('created_at', -1)])
+    reply = None if question else first if first and first['from_scene'] == to_scene else last_seen_from(
+        store, to_scene, ep['scene_id'], ep['_id'])
     if reply and reply.get('hop', 1) >= MAX_HOP:
         # A reply shown in a turn something else opened (a person, a task: D2 delivers it next time) ended its chain;
         # a note from here starts a new one and counts as one (ADR-091). A turn a reply opened stops at can_send.
@@ -317,7 +404,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
         match = borrowed(store, ep['scene_id'], text, moment)
         if match:
             raise NoteRefused('NOTE_NOT_OWN_WORDS', copied_words(store, persona, ep['scene_id'], match))
-    sent_here = store.db.notes.count_documents({'from_episode': ep['_id'], 'question': {'$exists': False}})
+    sent_here = count_sent(store, ep['_id'])
     if not question and sent_here >= PER_TURN:
         raise NoteRefused('NOTE_TURN_LIMIT', '这一回合已经写了 %d 张便条（上限 %d 张），先到这里；还要说的下回合再写。'
                           % (sent_here, PER_TURN))
@@ -330,17 +417,14 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
     # conversations is counted per day (owner, 2026-10-12). A reply is neither capped nor counted: it answers a note
     # written to here and ends the chain (note, reply, stop), so replies never outnumber notes (owner, 2026-10-19).
     since = (moment - timedelta(days=1)).isoformat()
-    day = {'persona': persona, 'created_at': {'$gte': since}, 'reply_to': None}
-    if not reply and trust == UNTRUSTED and kind == 'home' and store.db.notes.count_documents(
-            {**day, 'from_scene': ep['scene_id'], 'to_scene': to_scene}) >= PUBLIC_HOME_PER_SCENE:
+    if not reply and trust == UNTRUSTED and kind == 'home' and count_day(
+            store, persona, since, from_scene=ep['scene_id'], to_scene=to_scene) >= PUBLIC_HOME_PER_SCENE:
         raise NoteRefused('NOTE_HOME_LIMIT', '今天从这里往那边写的便条（%d 张）写满了，明天再写。' % PUBLIC_HOME_PER_SCENE)
     if not reply and trust == UNTRUSTED and kind == 'group':
-        outside = {**day, 'trust': UNTRUSTED, 'kind': 'group'}
-        if store.db.notes.count_documents(outside) >= PUBLIC_TOTAL:
+        if count_day(store, persona, since, trust=UNTRUSTED, kind='group') >= PUBLIC_TOTAL:
             raise NoteRefused('NOTE_OUTSIDE_LIMIT', '今天群和群之间的便条（%d 张）写满了，明天再写。' % PUBLIC_TOTAL)
-        pair = {'$or': [{'from_scene': ep['scene_id'], 'to_scene': to_scene},
-                        {'from_scene': to_scene, 'to_scene': ep['scene_id']}]}
-        if store.db.notes.count_documents({**outside, **pair}) >= PUBLIC_PAIR:
+        if count_day(store, persona, since, trust=UNTRUSTED, kind='group',
+                     between=(ep['scene_id'], to_scene)) >= PUBLIC_PAIR:
             raise NoteRefused('NOTE_PAIR_LIMIT', '今天这两个群之间的便条（%d 张）写满了，明天再写。' % PUBLIC_PAIR)
     said = owner_line(store, ep) if trust == UNTRUSTED and kind == 'home' else None
     return {'_id': note_id, 'persona': persona, 'from_scene': ep['scene_id'], 'from_class': cls,
@@ -364,7 +448,7 @@ def owner_line(store, ep):
 
 
 def record(store, draft, event_id=None):
-    row = store.put('notes', {**draft, **({'event_id': event_id} if event_id else {})}, stream='notes:' + draft['persona'])
+    row = save(store, {**draft, **({'event_id': event_id} if event_id else {})}, stream='notes:' + draft['persona'])
     store.audit(draft['from_episode'], 'note.sent', {'note': draft['_id'], 'to_scene': draft['to_scene'],
         'trust': draft['trust'], 'mode': draft['mode'], 'hop': draft['hop'], 'chars': len(draft['text'])},
         (scene_records.get(store, draft['from_scene'], fields=['scope_key']) or {}).get('scope_key') or 'operator')
@@ -389,7 +473,7 @@ def result(store, row):
 
 # ── what a turn sees ────────────────────────────────────────────────
 def state(store, row, moment):
-    if store.db.notes.find_one({'reply_to': row['_id']}, {'_id': 1}):
+    if first_reply(store, row['_id']):
         return 'replied'
     seen = row.get('seen_in') or []
     if seen and episode_records.many(store, seen, states=FINISHED).first(fields=['_id']):
@@ -405,7 +489,7 @@ def read_elsewhere(store, event, episode):
     answered, and a turn of its own would answer it twice. An outside note waiting at home is never marked seen in
     other home turns (ADR-088 §4.4), so its own turn always runs."""
     note_id = (event.get('note') or {}).get('id') or (event.get('visit') or {}).get('note')
-    row = store.db.notes.find_one({'_id': note_id}, {'seen_in': 1}) if note_id else None
+    row = get(store, note_id, ['seen_in']) if note_id else None
     seen = [other for other in (row or {}).get('seen_in') or [] if other != episode]
     return bool(seen) and episode_records.many(store, seen, states=FINISHED).count() > 0
 
@@ -421,7 +505,7 @@ def waited(row, moment):
 
 
 def _seen(store, row, episode):
-    store.db.notes.update_one({'_id': row['_id']}, {'$addToSet': {'seen_in': episode}})
+    mark_seen(store, row['_id'], episode)
 
 
 def opening_block(store, persona, row, cls, episode, moment):
@@ -475,8 +559,7 @@ def received_block(store, persona, scene_id, cls, kind, episode, moment, skip=No
     reads a summary (ADR-018 §5.5)."""
     from .people import People
     since = (moment - timedelta(hours=KEEP_HOURS)).isoformat()
-    rows = list(store.db.notes.find({'to_scene': scene_id, 'created_at': {'$gte': since}, 'question': {'$exists': False},
-                                     '_id': {'$ne': (skip or {}).get('_id')}}).sort('created_at', -1).limit(SHOWN))
+    rows = received(store, scene_id, since, besides=(skip or {}).get('_id')).rows(newest_first=True, limit=SHOWN)
     if not rows:
         return None
     people = People(store, persona)
@@ -509,8 +592,7 @@ def sent_block(store, persona, scene_id, moment):
     """notes_sent_from_program: what came of the notes she wrote here, in program words only."""
     from .people import People
     since = (moment - timedelta(hours=KEEP_HOURS + 24)).isoformat()
-    rows = list(store.db.notes.find({'from_scene': scene_id, 'created_at': {'$gte': since}, 'question': {'$exists': False}})
-                .sort('created_at', -1).limit(SHOWN))
+    rows = sent(store, scene_id, since).rows(newest_first=True, limit=SHOWN)
     if not rows:
         return None
     people = People(store, persona)

@@ -34,6 +34,8 @@ from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import tasks as task_records
+from .records.view import ANY, View, fenced, is_text, pinned
+from .store.words import AddToSet, AnyOf, Each, HoldsNone, Not, Range
 
 TABLES_VERSION = 1
 # Patience words -> minutes (None: until it is answered, for a report).
@@ -76,6 +78,84 @@ KEEP_HINT = ('要记下学到的：别人告诉你的，写的时候 from 写 �
 
 
 
+# ── the owner of `questions` ──
+# Read and written only through these: a question as stored (`fields` names what to return; `_id` always comes back).
+# None follows the store's rule (ADR-104 section 4): an id, the persona or a conversation given None, or a value not of
+# its kind, finds nothing without a read; a state given None finds the questions without one. Views are `View`s, in
+# the replaced read's order. A source is one element of `sources`, matched whole (`Each`).
+COLLECTION = 'questions'
+
+
+def get(store, qid, fields=None, *, persona=ANY):
+    """The question with this id (of this persona), or None."""
+    if not is_text(qid):
+        return None
+    if persona is ANY:
+        return store.collection(COLLECTION).get(qid, fields)
+    return View(store, COLLECTION, fenced({'_id': qid}, {'persona': (persona, is_text)})).first(fields=fields)
+
+
+def open_in(store, scene_id):
+    """View: the open questions with a group source in this conversation."""
+    where = {'state': 'open', 'sources': Each({'scene_id': scene_id, 'kind': 'group'})} if is_text(scene_id) else None
+    return View(store, COLLECTION, where)
+
+
+def closed_untold(store, told_in, *, persona=ANY, group=ANY):
+    """View: the questions the program closed that were not told in `told_in` yet: a persona's (by when asked), or
+    those with a group source in conversation `group`."""
+    where = fenced({'state': 'closed', 'closed.by': 'program'}, {'persona': (persona, is_text)})
+    if where is not None and group is not ANY:
+        where = {**where, 'sources': Each({'scene_id': group, 'kind': 'group'})} if is_text(group) else None
+    if where is not None:
+        where = {**where, 'told_in': HoldsNone([told_in])} if is_text(told_in) else None
+    return View(store, COLLECTION, where, (('asked_at', 1),) if group is ANY else ())
+
+
+def of_persona(store, persona, *, state=ANY):
+    """View: a persona's questions (in this state)."""
+    return View(store, COLLECTION, pinned(fenced({}, {'persona': (persona, is_text)}), {'state': (state, is_text)}))
+
+
+def asked(store, persona, since, *, scene_id=ANY, action=False):
+    """View: a persona's questions asked since `since` (ISO text), to a source in this conversation, or (`action`)
+    to the action brain; by when asked."""
+    where = fenced({}, {'persona': (persona, is_text)}) if is_text(since) else None
+    if where is not None:
+        where['asked_at'] = Range(gte=since)
+        if action:
+            where['sources'] = Each({'kind': 'action'})
+        elif scene_id is not ANY:
+            where = {**where, 'sources': Each({'scene_id': scene_id})} if is_text(scene_id) else None
+    return View(store, COLLECTION, where, (('asked_at', 1),))
+
+
+def migrated(store, ids):
+    """The developer-inbox rows of these ids already moved into questions (their ids)."""
+    ids = [row_id for row_id in ids if is_text(row_id)]
+    if not ids:
+        return set()
+    return {row['migrated_from'] for row in View(store, COLLECTION, {'migrated_from': AnyOf(ids)}).each(
+        fields=['migrated_from'])}
+
+
+def count_open(store, persona):
+    """How many of a persona's questions are not closed."""
+    return View(store, COLLECTION, fenced({'state': Not('closed')}, {'persona': (persona, is_text)})).count()
+
+
+def mark_told(store, ids, scene_id):
+    """These questions were told in this conversation (`told_in`, outside a revision)."""
+    ids = [qid for qid in ids if is_text(qid)]
+    if ids:
+        store.collection(COLLECTION).update({'_id': AnyOf(ids)}, AddToSet('told_in', scene_id), many=True)
+
+
+def save(store, row, **kwargs):
+    """The revisioned write of a question (`Store.put`: `expected`, `stream`)."""
+    return store.put(COLLECTION, row, **kwargs)
+
+
 def _at(value):
     if not value:
         return None
@@ -110,11 +190,11 @@ def developer_place(config):
 # ── asking ─────────────────────────────────────────────────────────
 def record(store, ep, qid, text, patience, sources):
     """The question as asked (idempotent by its id). `sources`: [{to, scene_id, kind, name, episode|note|task}]."""
-    row = store.db.questions.find_one({'_id': qid})
+    row = get(store, qid)
     if row:
         return row
     asked = now()
-    row = store.put('questions', {
+    row = save(store, {
         '_id': qid, 'persona': ep['persona'], 'scope_key': visibility.owner_private_scope(ep['persona']),
         'text': text, 'scene_id': ep['scene_id'], 'episode_id': ep['_id'], 'asked_at': asked,
         'patience': patience, 'state': 'open', 'tables_version': TABLES_VERSION, 'told_in': [],
@@ -149,8 +229,7 @@ def ask_in_group(store, ep, scene, text, patience):
 
 def _open_here(store, scene_id):
     """Her open questions with a group source in this conversation."""
-    return list(store.db.questions.find({'state': 'open', 'sources': {'$elemMatch': {'scene_id': scene_id,
-                                                                                     'kind': 'group'}}}))
+    return open_in(store, scene_id).rows()
 
 
 def wants_look(store, scene, person_id, moment=None):
@@ -200,8 +279,7 @@ def group_block(store, persona, scene, moment=None):
     rows = sorted((row for row in rows if row.get('state') == 'open'), key=lambda row: row['asked_at'], reverse=True)
     more = len(rows) - SHOWN                  # the newest only: a long list buries that something is still open (her ask)
     rows = rows[:SHOWN]
-    told = list(store.db.questions.find({'state': 'closed', 'closed.by': 'program', 'told_in': {'$ne': scene['_id']},
-                                         'sources': {'$elemMatch': {'scene_id': scene['_id'], 'kind': 'group'}}}))
+    told = closed_untold(store, scene['_id'], group=scene['_id']).rows()
     if not rows and not told:
         return None
     zone = scene_timezone(store.config, scene)
@@ -210,7 +288,7 @@ def group_block(store, persona, scene, moment=None):
     else:
         items = ['%s 你 %s 问的：%s' % (row['_id'], line_stamp(zone, row['asked_at']), row['closed']['took']) for row in told]
     if told:
-        store.db.questions.update_many({'_id': {'$in': [row['_id'] for row in told]}}, {'$addToSet': {'told_in': scene['_id']}})
+        mark_told(store, [row['_id'] for row in told], scene['_id'])
     for row in rows:
         source = next(s for s in row['sources'] if s.get('kind') == 'group')
         words = '%s 你 %s 问的：%s' % (row['_id'], line_stamp(zone, row['asked_at']), STATE_WORDS[source['state']])
@@ -228,7 +306,7 @@ def answer_tail(store, persona, qid, zone):
     """The program's last line on a note that brings a group's answer home: who answered and when, and where the
     original lines are (never their text)."""
     from .schedule_rules import line_stamp
-    row = store.db.questions.find_one({'_id': qid, 'persona': persona})
+    row = get(store, qid, persona=persona)
     if not row:
         return None
     row = refresh(store, row)
@@ -329,9 +407,9 @@ def refresh(store, row, moment=None):
     if not changed:
         return row
     try:
-        row = store.put('questions', {**row, **update}, expected=row['revision'], stream=row['_id'])
+        row = save(store, {**row, **update}, expected=row['revision'], stream=row['_id'])
     except Conflict:
-        return store.db.questions.find_one({'_id': row['_id']}) or row
+        return get(store, row['_id']) or row
     for kind, payload in events:
         store.audit(row['_id'], kind, {'question': row['_id'], **payload}, row['scope_key'])
     return row
@@ -383,9 +461,9 @@ def place_words(source):
 def migrate(store, persona):
     """Her developer-inbox messages become closed questions to the developer's line, once each (by the row's id); the
     program's own notes there stay where they are."""
-    rows = list(store.db.developer_inbox.find({'persona': persona, 'source.by': {'$ne': 'program'}}))
-    done = {row['migrated_from'] for row in store.db.questions.find(
-        {'migrated_from': {'$in': [row['_id'] for row in rows]}}, {'migrated_from': 1})} if rows else set()
+    from . import developer_inbox
+    rows = developer_inbox.of_persona(store, persona).rows()
+    done = migrated(store, [row['_id'] for row in rows]) if rows else set()
     rows = [row for row in rows if row['_id'] not in done]
     if not rows:
         return 0
@@ -394,7 +472,7 @@ def migrate(store, persona):
     for inbox in rows:
         qid = question_id(['developer_inbox', inbox['_id']])
         answered = inbox.get('state') == 'answered'
-        store.put('questions', {
+        save(store, {
             '_id': qid, 'persona': persona, 'scope_key': visibility.owner_private_scope(persona),
             'text': inbox.get('text') or '', 'scene_id': (inbox.get('source') or {}).get('scene_id'),
             'asked_at': inbox.get('created_at'), 'patience': '一小时' if inbox.get('level') == 'wake' else '回了为止',
@@ -413,10 +491,9 @@ def block(store, persona, scene_id, moment=None, opening=None):
     moment = moment or clock.now()
     from .config import excerpt
     # Every open one is brought up to date, shown or not: one past its end closes now, not when it reaches the top.
-    rows = [refresh(store, row, moment) for row in store.db.questions.find({'persona': persona, 'state': 'open'})]
+    rows = [refresh(store, row, moment) for row in of_persona(store, persona, state='open').each()]
     rows = sorted((row for row in rows if row.get('state') == 'open'), key=lambda row: row['asked_at'], reverse=True)[:SHOWN]
-    told = list(store.db.questions.find({'persona': persona, 'state': 'closed', 'closed.by': 'program',
-                                         'told_in': {'$ne': scene_id}}).sort('asked_at', -1))
+    told = closed_untold(store, scene_id, persona=persona).rows(newest_first=True)
     many = len(told) > SHOWN                  # many closed at once: one line with the counts, not a list (her ask)
     if not many:
         rows += told
@@ -433,8 +510,7 @@ def block(store, persona, scene_id, moment=None, opening=None):
             item['took'] = row['closed']['took']
         items.append(item)
     if told:
-        store.db.questions.update_many({'_id': {'$in': [row['_id'] for row in told]}},
-                                       {'$addToSet': {'told_in': scene_id}})
+        mark_told(store, [row['_id'] for row in told], scene_id)
     return {'items': items, 'note': BLOCK_NOTE}
 
 
@@ -443,7 +519,7 @@ def read(store, persona, qid, moment=None, outside=False):
     paths and tracebacks: machine_words)."""
     from .tasks import report_pages
     from . import machine_words
-    row = store.db.questions.find_one({'_id': qid, 'persona': persona})
+    row = get(store, qid, persona=persona)
     if not row:
         return None
     row = refresh(store, row, moment)
@@ -489,9 +565,9 @@ def history(store, persona, scene_id, name, moment=None):
     since = (moment - timedelta(days=READ_DAYS)).isoformat()
     def here(source):
         return source['kind'] == 'action' if scene_id is None else source.get('scene_id') == scene_id
-    where = {'sources.kind': 'action'} if scene_id is None else {'sources.scene_id': scene_id}
-    rows = list(store.db.questions.find({'persona': persona, 'asked_at': {'$gte': since}, **where})
-                .sort('asked_at', -1).limit(READ_SHOWN))
+    view = asked(store, persona, since, action=True) if scene_id is None else asked(store, persona, since,
+                                                                                     scene_id=scene_id)
+    rows = view.rows(newest_first=True, limit=READ_SHOWN)
     if not rows:
         return {'items': [], 'searched': '这 %d 天问过「%s」的问题里找了：没有' % (READ_DAYS, name)}
     items = []
@@ -513,7 +589,7 @@ def history(store, persona, scene_id, name, moment=None):
 def close(store, persona, qid, took, moment=None):
     """She closes a question with what she took from it. Returns (row, words)."""
     from . import memory_tiers
-    row = store.db.questions.find_one({'_id': qid, 'persona': persona})
+    row = get(store, qid, persona=persona)
     if not row:
         return None, None
     row = refresh(store, row, moment)
@@ -523,13 +599,13 @@ def close(store, persona, qid, took, moment=None):
         before = (row.get('closed') or {}).get('took', '')
         if not took or took == before:
             return row, '这个问题已经结束了（%s）。' % before
-        row = store.put('questions', {**row, 'closed': {**row['closed'], 'took': took, 'retaken_at': (moment or clock.now()).isoformat()}},
-                        expected=row['revision'], stream=row['_id'])
+        row = save(store, {**row, 'closed': {**row['closed'], 'took': took, 'retaken_at': (moment or clock.now()).isoformat()}},
+                   expected=row['revision'], stream=row['_id'])
         store.audit(row['_id'], 'question.retaken', {'question': row['_id'], 'chars': len(took)}, row['scope_key'])
         return row, RETAKEN % before
-    row = store.put('questions', {**row, 'state': 'closed',
-                                  'closed': {'at': (moment or clock.now()).isoformat(), 'by': 'her', 'took': took}},
-                    expected=row['revision'], stream=row['_id'])
+    row = save(store, {**row, 'state': 'closed',
+                       'closed': {'at': (moment or clock.now()).isoformat(), 'by': 'her', 'took': took}},
+               expected=row['revision'], stream=row['_id'])
     store.audit(row['_id'], 'question.closed', {'question': row['_id'], 'by': 'her', 'chars': len(took)}, row['scope_key'])
     who = [answer.get('by') for source in row['sources'] for answer in source.get('answers') or [] if answer.get('by')]
     words = THANKS % '、'.join(dict.fromkeys(who)) if who else NOBODY

@@ -18,8 +18,8 @@ import uuid
 from .adapters import Ensured, Size, Updated
 from .catalog import is_number, kind_of
 from .errors import BlobMissing, DuplicateKey, RecordInvalid, SchemaConflict
-from .words import (AddToSet, And, AnyOf, Contains, Count, Each, Exists, Holds, HoldsAny, Increase, IsNull, Larger,
-                    Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Push, Range, Set, Smaller, StartsWith, Unset,
+from .words import (AddToSet, And, AnyOf, Contains, Count, Each, Exists, Holds, HoldsAny, HoldsNone, Increase, IsNull,
+                    Larger, Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Push, Range, Set, Smaller, StartsWith, Unset,
                     Without, record_bytes, to_utc_ms)
 
 KIND = 'memory'
@@ -173,6 +173,8 @@ def _holds(doc, path, test, now):
         return isinstance(value, list) and any(same(x, test.value) for x in value)
     if isinstance(test, HoldsAny):
         return isinstance(value, list) and any(same(x, v) for x in value for v in test.values)
+    if isinstance(test, HoldsNone):
+        return not (isinstance(value, list) and any(same(x, v) for x in value for v in test.values))
     if isinstance(test, NonEmpty):
         return isinstance(value, list) and bool(value)
     if isinstance(test, Each):

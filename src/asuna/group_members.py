@@ -14,6 +14,7 @@ from . import channel_kinds
 from .people import People, safe_name
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .records.view import is_text
 
 MAX_MEMBERS = 5000                       # one group's list; a larger one is refused, not cut
 RECENT_ACTIVE = 20                       # the most recently active members always shown; find_member reaches the rest
@@ -54,6 +55,22 @@ def _member(raw, account):
     return out
 
 
+# ── the owner of `group_members` ──
+# One row per group conversation, by its scene id; a row as stored (`fields` names what to return; `_id` always comes
+# back). An id given None, or not text, finds nothing without a read (ADR-104 section 4).
+COLLECTION = 'group_members'
+
+
+def get(store, scene_id, fields=None):
+    """The member list of this group conversation, or None."""
+    return store.collection(COLLECTION).get(scene_id, fields) if is_text(scene_id) else None
+
+
+def save(store, row, **kwargs):
+    """The revisioned write of a group's list (`Store.put`: `expected`, `stream`)."""
+    return store.put(COLLECTION, row, **kwargs)
+
+
 def routed_group(store, channel_id, group, code):
     """The admitted route of a group (not a blocked one), else `<code>_GROUP_NOT_ROUTED`."""
     channel = store.config['channels'][channel_id]
@@ -78,12 +95,12 @@ def receive(store, channel_id, body):
     scene = scene_records.get(store, route['scene_id'], fields=['scope_key'])
     if not scene:
         raise PermissionError('MEMBERS_SCENE_UNKNOWN: 这个群还没有对话记录；有人说过话以后再送')
-    current = store.db.group_members.find_one({'_id': route['scene_id']})
-    store.put('group_members', {'_id': route['scene_id'], 'scene_id': route['scene_id'], 'group_id': group,
-                                'channel_id': channel_id, 'members': rows, 'count': len(rows),
-                                'fetched_at': str(body.get('fetched_at') or now())[:40], 'received_at': now(),
-                                'scope_key': scene['scope_key']},
-              expected=current['revision'] if current else None, stream=route['scene_id'])
+    current = get(store, route['scene_id'])
+    save(store, {'_id': route['scene_id'], 'scene_id': route['scene_id'], 'group_id': group,
+                 'channel_id': channel_id, 'members': rows, 'count': len(rows),
+                 'fetched_at': str(body.get('fetched_at') or now())[:40], 'received_at': now(),
+                 'scope_key': scene['scope_key']},
+         expected=current['revision'] if current else None, stream=route['scene_id'])
     return {'status': 'stored', 'count': len(rows)}
 
 
@@ -140,7 +157,7 @@ def _active(member, moment):
 def block(store, scene, persona, moment=None):
     """members_from_program for a group turn, or None when no list was received."""
     from .context_budget import MEMBER_LINES
-    doc = store.db.group_members.find_one({'_id': scene['_id']})
+    doc = get(store, scene['_id'])
     if not doc or not doc.get('members'):
         return None
     moment = moment or clock.now()
@@ -181,7 +198,7 @@ def block(store, scene, persona, moment=None):
 
 def find(store, scene, persona, query, moment=None):
     """find_member: members whose name contains the words (at most FIND_LIMIT), in words."""
-    doc = store.db.group_members.find_one({'_id': scene['_id']})
+    doc = get(store, scene['_id'])
     if not doc:
         raise ValueError('MEMBERS_NOT_AVAILABLE: 这个群还没有成员名单（适配器还没拉过，或这个群没开）；重试也一样，等名单来了再找')
     moment = moment or clock.now()

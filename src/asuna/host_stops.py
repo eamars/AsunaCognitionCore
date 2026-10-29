@@ -19,6 +19,8 @@ import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from .records import scenes as scene_records
+from .records.view import View, is_text, pinned
+from .store.words import And, AnyOf, IsNull, Or, Range, Set
 from . import clock
 
 SHOWN_HOURS = 24
@@ -41,6 +43,64 @@ SINCE_UNKNOWN = '这一段从什么时候开始不知道（记录读坏了），
 MISSED = '过去一天里，群里有该让你判断接不接话的时候，程序没判出来（出错了，不是你选的不理），那几句你没看到：%s'
 NOTE = ('这些时段里你没有在运行：你没有收到、也没有处理任何东西。之后补进来的消息不代表你当时在场；'
         '这一条是程序按记录写的，不用回复，也不用为它做什么。')
+
+
+# ── the owner of `host_stops` and `missed_looks` ──
+# Read and written only through these: a stop or a missed look as stored. None follows the store's rule (ADR-104
+# section 4): an id given None, or a value not of its kind, finds nothing without a read; a time bound given None
+# finds nothing.
+COLLECTION, MISSED_LOOKS = 'host_stops', 'missed_looks'
+
+
+def get(store, stop_id):
+    """The stop with this id, or None."""
+    return store.collection(COLLECTION).get(stop_id) if is_text(stop_id) else None
+
+
+def unshown(store, hows, since):
+    """View: the stops of these kinds that came back since `since` (ISO text), or that no committed turn showed yet
+    (`shown_at` null), by when they came back."""
+    if not is_text(since):
+        return View(store, COLLECTION, None)
+    where = And({'how': AnyOf(list(hows))}, Or({'back_at': Range(gte=since)}, {'shown_at': IsNull()}))
+    return View(store, COLLECTION, where, (('back_at', 1),))
+
+
+def last_back(store, how, since):
+    """The newest stop of this kind back at or after `since` (ISO text), or None."""
+    where = {'how': how, 'back_at': Range(gte=since)} if is_text(how) and is_text(since) else None
+    return View(store, COLLECTION, where, (('back_at', 1),)).first(newest_first=True)
+
+
+def mark_shown(store, ids, moment):
+    """Stamp `shown_at` on each of these stops where it is still null or missing."""
+    ids = [stop_id for stop_id in ids if is_text(stop_id)]
+    if ids:
+        store.collection(COLLECTION).update(pinned({'_id': AnyOf(ids)}, {'shown_at': (None, is_text)}),
+                                            Set({'shown_at': moment}), many=True)
+
+
+def save(store, row, **kwargs):
+    """The revisioned write of a stop (`Store.put`: `stream`)."""
+    return store.put(COLLECTION, row, **kwargs)
+
+
+def note_missed(store, turn_id, scene_id, at, cause):
+    """One look the gate could not decide (by its turn's id, written again when it comes again)."""
+    if is_text(turn_id):
+        store.collection(MISSED_LOOKS).update({'_id': turn_id}, Set({'scene_id': scene_id, 'at': at, 'cause': cause}),
+                                              create=True)
+
+
+def forget_missed(store, before):
+    """The missed looks from before `before` (ISO text) go."""
+    if is_text(before):
+        store.collection(MISSED_LOOKS).delete({'at': Range(lt=before)}, many=True)
+
+
+def missed(store, since):
+    """View: the missed looks since `since` (ISO text)."""
+    return View(store, MISSED_LOOKS, {'at': Range(gte=since)} if is_text(since) else None)
 
 
 def _aware(value):
@@ -69,7 +129,7 @@ def record(store, alive_until, back_at=None, planned=False, exit_code=None, by=N
     row = {'_id': 'stop-' + uuid.uuid4().hex[:16], 'how': how, 'alive_until': _aware(alive_until).isoformat(),
            'back_at': back_at, 'scope_key': 'operator', 'shown_at': None,
            **({'exit_code': exit_code} if how == 'crashed' else {}), **({'by': by} if how == 'planned' else {})}
-    store.put('host_stops', row, stream=row['_id'])
+    save(store, row, stream=row['_id'])
     return row
 
 
@@ -133,13 +193,13 @@ def worker_down(store, value, back_at=None):
     span = span_of(value)
     key = span['since'] or 'unknown-' + (span['opened'] or 'none')
     row_id = 'down-' + re.sub(r'[^0-9A-Za-z]', '', key)[:40]
-    found = store.db.host_stops.find_one({'_id': row_id})
+    found = get(store, row_id)
     if found:
         return found
     row = {'_id': row_id, 'how': 'worker_down', 'alive_until': span['since'], 'back_at': back_at or now(),
            'cause': span['cause'], 'tries': span['tries'], 'inside': span['inside'], 'scope_key': 'operator',
            'shown_at': None}
-    store.put('host_stops', row, stream=row_id)
+    save(store, row, stream=row_id)
     return row
 
 
@@ -174,16 +234,15 @@ def missed_cause(error=None, finish_reason=None, unanswered=False):
 def missed_look(store, ep, cause='error'):
     """One look the gate could not decide, in its own small collection (the home turn counts them)."""
     from .state import now
-    store.db.missed_looks.update_one({'_id': ep['_id']}, {'$set': {'scene_id': ep['scene_id'], 'at': now(),
-                                                                    'cause': cause}}, upsert=True)
+    note_missed(store, ep['_id'], ep['scene_id'], now(), cause)
 
 
 def missed_looks(store, persona, since):
     """'某群 3 次、某群 1 次' for the gate's failed looks since then, or None."""
     old = (datetime.fromisoformat(since) - timedelta(days=MISSED_KEPT_DAYS)).isoformat()
-    store.db.missed_looks.delete_many({'at': {'$lt': old}})
+    forget_missed(store, old)
     counts, causes = {}, {}
-    for row in store.db.missed_looks.find({'at': {'$gte': since}}, {'scene_id': 1, 'cause': 1}):
+    for row in missed(store, since).each(fields=['scene_id', 'cause']):
         counts[row['scene_id']] = counts.get(row['scene_id'], 0) + 1
         why = causes.setdefault(row['scene_id'], {})
         cause = row.get('cause') or 'error'
@@ -204,8 +263,7 @@ def listed(store, moment=None):
     the day alone."""
     moment = moment or clock.now()
     since = (moment - timedelta(hours=SHOWN_HOURS)).isoformat()
-    return list(store.db.host_stops.find({'how': {'$in': list(OUTAGES)}, '$or': [
-        {'back_at': {'$gte': since}}, {'shown_at': {'$exists': True, '$eq': None}}]}).sort('back_at', -1))
+    return unshown(store, OUTAGES, since).rows(newest_first=True)
 
 
 def cause_words(row):
@@ -277,8 +335,7 @@ def shown(store, ids, moment=None):
     was rendered in front of her in a committed turn, never that she took it in (ADR-101)."""
     from .state import now
     if ids:
-        store.db.host_stops.update_many({'_id': {'$in': list(ids)}, 'shown_at': None},
-                                        {'$set': {'shown_at': moment or now()}})
+        mark_shown(store, ids, moment or now())
 
 
 def main(argv=None):

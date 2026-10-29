@@ -2888,7 +2888,8 @@ class RoleTools:
             return self._note(ep, call_id, args, visibility.OWNER_PRIVATE)
         if qid is not None:
             # ADR-061 step 2 (her answer a): a group's answer goes home in her words; the program adds who and where.
-            row = self.store.db.questions.find_one({'_id': str(qid), 'persona': ep['persona']})
+            from . import questions
+            row = questions.get(self.store, str(qid), persona=ep['persona'])
             if not row or not any(s.get('kind') == 'group' and s.get('scene_id') == ep['scene_id'] for s in row['sources']):
                 raise Refused('question「%s」不是你在这里问的问题：照抄 questions_from_program 里的 q-…' % qid)
             args = {**args, 'answers': row['_id']}
@@ -3092,7 +3093,7 @@ class RoleTools:
         toward = self._toward_action(ep, text) if any(s['kind'] == 'action' for s in sources) else None
         text = local_roots.contract(text)
         qid = questions.question_id([ep['_id'], call_id])
-        row = self.store.db.questions.find_one({'_id': qid})
+        row = questions.get(self.store, qid)
         if not row:
             for source in sources:
                 if source['kind'] == 'here':
@@ -3107,7 +3108,7 @@ class RoleTools:
                             '%s:ask:%s' % (call_id, source['to']), question=qid)
                     except notes.NoteRefused as exc:
                         raise Refused('ASK_NOT_SENT: 问不到「%s」：%s' % (source['name'], exc)) from None
-                    note = self.store.db.notes.find_one({'_id': sent['note']})
+                    note = notes.get(self.store, sent['note'])
                     source['note'] = note['_id']
                     source['episode'] = ingress.episode_id({'scene_id': note['to_scene'], 'event_id': note.get('event_id'),
                                                             'episode_kind': 'note'})

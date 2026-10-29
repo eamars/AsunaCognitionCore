@@ -26,8 +26,8 @@ from pymongo.operations import SearchIndexModel
 from .adapters import Ensured, Size, Updated
 from .catalog import ID
 from .errors import BlobMissing, DuplicateKey, RecordInvalid, SchemaConflict, Unavailable
-from .words import (AddToSet, And, AnyOf, Contains, Count, Each, Exists, Holds, HoldsAny, Increase, IsNull, Larger,
-                    Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Push, Range, Set, Smaller, StartsWith, Unset,
+from .words import (AddToSet, And, AnyOf, Contains, Count, Each, Exists, Holds, HoldsAny, HoldsNone, Increase, IsNull,
+                    Larger, Max, NonEmpty, NoneOf, Not, Now, OnCreate, Or, Push, Range, Set, Smaller, StartsWith, Unset,
                     Without)
 
 KIND = 'mongodb'
@@ -141,6 +141,9 @@ def _condition(path, test, clock):
         return path, test.value
     if isinstance(test, HoldsAny):
         return path, {'$in': list(test.values)}
+    if isinstance(test, HoldsNone):
+        # On a list MongoDB's $ne and $nin compare each element: no element equal, a missing list included.
+        return path, {'$ne': test.values[0]} if len(test.values) == 1 else {'$nin': list(test.values)}
     if isinstance(test, NonEmpty):
         return path + '.0', {'$exists': True}
     if isinstance(test, Each):

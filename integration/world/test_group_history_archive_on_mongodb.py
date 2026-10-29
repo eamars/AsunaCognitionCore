@@ -3,6 +3,7 @@ epoch, not erased), and never enters live cognition (leak)."""
 
 import pytest
 
+from asuna.records import scenes as scene_records
 from asuna.history_query import HistoryQueryService
 from asuna.familiarity import level
 from asuna.memory import MemoryService
@@ -16,7 +17,7 @@ SCENE = 'qq:' + BOT + ':group:90001'
 
 
 def setup(store):
-    store.put('scenes', {'_id': SCENE, 'scene_id': SCENE, 'kind': 'group',
+    scene_records.save(store, {'_id': SCENE, 'scene_id': SCENE, 'kind': 'group',
         'scope_key': 'scene:' + SCENE, 'policy_epoch': 1, 'sequence': 0, 'members': [PERSON]})
     return {'scene_id': SCENE, 'scope_key': 'scene:' + SCENE, 'policy_epoch': 1}
 

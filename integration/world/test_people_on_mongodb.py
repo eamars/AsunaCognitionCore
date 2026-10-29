@@ -4,6 +4,8 @@ import re
 
 import pytest
 
+from asuna.records import people as people_records
+from asuna.records import scenes as scene_records
 from asuna.people import People
 
 pytestmark = pytest.mark.world                # `store` is the fixture world
@@ -17,7 +19,7 @@ def setup(store):
                             'display_name': '演示'}
     store.config.pop('persona_model', None)                 # neutral model: the owner reads as 本机用户
     store.config['canonical_persons'] = {'qq:20001': 'local-user'}
-    store.put('scenes', {'_id': SCENE, 'kind': 'group', 'scope_key': 'scene:' + SCENE,
+    scene_records.save(store, {'_id': SCENE, 'kind': 'group', 'scope_key': 'scene:' + SCENE,
                          'channel_account_id': BOT, 'policy_epoch': 1, 'sequence': 0})
     return store.raw.scenes.find_one({'_id': SCENE})
 
@@ -69,7 +71,7 @@ def test_removing_an_owner_alias_revokes_owner_private_at_once(store):
     dm = {'_id': 'qq:%s:dm:20001' % BOT, 'kind': 'dm'}
     assert visibility.session_class(store.config, store, dm, 'qq:20001') == visibility.OWNER_PRIVATE
     # A leftover field in the database must not keep the old link alive: configuration is the only authority.
-    store.put('identities', {'_id': 'qq:20001', 'person_id': 'qq:20001', 'platform': 'qq', 'account_id': '20001',
+    people_records.save_identity(store, {'_id': 'qq:20001', 'person_id': 'qq:20001', 'platform': 'qq', 'account_id': '20001',
                              'canonical_person_id': 'local-user'})
     store.config['canonical_persons'] = {'qq:20009': 'local-user'}
     assert visibility.session_class(store.config, store, dm, 'qq:20001') == visibility.PUBLIC

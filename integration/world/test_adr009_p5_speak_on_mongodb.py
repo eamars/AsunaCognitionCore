@@ -5,6 +5,7 @@ import threading
 
 import pytest
 
+from asuna.records import scenes as scene_records
 from asuna import channel_kinds
 from asuna.channels import Channels
 from asuna.coordinator import Coordinator
@@ -30,7 +31,7 @@ def channel_scene(store, monkeypatch=None):
     store.config['channels'] = {'replay': {'token': 'x' * 32, 'account_id': 'bot', 'routes': {
         'peer': {'scene_id': 'dm-a', 'sender_id': 'peer', 'person_id': 'A', 'target': TARGET}}}}
     scene = store.raw.scenes.find_one({'_id': 'dm-a'})
-    store.put('scenes', {**scene, 'channel_id': 'replay'}, expected=scene['revision'])
+    scene_records.save(store, {**scene, 'channel_id': 'replay'}, expected=scene['revision'])
     if monkeypatch:
         # A kind where she speaks only through reply (the QQ kind declares this; the test channel stands in for it).
         monkeypatch.setattr(channel_kinds, 'reply_parts',

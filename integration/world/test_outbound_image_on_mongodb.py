@@ -6,6 +6,7 @@ import threading
 
 import pytest
 
+from asuna.records import scenes as scene_records
 from asuna import outbound_media
 from asuna.blobs import BlobStore
 from asuna.channels import Channels
@@ -42,11 +43,11 @@ def channel_scene(store, scene, *, person='A', target='dm', kind=None):
                  'target': {'type': target, 'id': 'peer'}}}}}
     row = store.raw.scenes.find_one({'_id': scene})
     if row is None:
-        store.put('scenes', {'_id': scene, 'kind': kind or ('dm' if target == 'dm' else 'group'),
+        scene_records.save(store, {'_id': scene, 'kind': kind or ('dm' if target == 'dm' else 'group'),
                              'scope_key': 'scene:' + scene, 'policy_epoch': 1, 'members': [person],
                              'channel_id': 'replay', 'sequence': 0}, stream='b7')
     else:
-        store.put('scenes', {**row, 'channel_id': 'replay'}, expected=row['revision'])
+        scene_records.save(store, {**row, 'channel_id': 'replay'}, expected=row['revision'])
 
 
 def link(store, reader, target):
@@ -60,7 +61,7 @@ def unlink(store, scene_id):
     """
     row = store.raw.scenes.find_one({'_id': scene_id})
     if row is not None and row.get('readable_scenes'):
-        store.put('scenes', {**row, 'readable_scenes': []}, expected=row['revision'])
+        scene_records.save(store, {**row, 'readable_scenes': []}, expected=row['revision'])
     return (row or {}).get('readable_scenes')
 
 

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from asuna.records import scenes as scene_records
 from asuna.channels import Channels
 from asuna.ingress import persist_input
 
@@ -34,7 +35,7 @@ def with_lines(store, tmp_path):
         'claude-code': route('claude-code', SCENE, tmp_path / 'channels'),
         'other': route('other', OTHER, tmp_path / 'channels')}}}
     for scene, person in ((SCENE, 'agent:claude-code'), (OTHER, 'agent:other')):
-        store.put('scenes', {'_id': scene, 'scene_id': scene, 'kind': 'dm', 'members': [person],
+        scene_records.save(store, {'_id': scene, 'scene_id': scene, 'kind': 'dm', 'members': [person],
                              'scope_key': 'scene:' + scene, 'policy_epoch': 1, 'sequence': 0,
                              'channel_id': 'agent', 'channel_account_id': 'home'})
 

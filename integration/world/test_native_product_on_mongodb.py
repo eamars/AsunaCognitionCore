@@ -4,6 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from asuna.records import episodes as episode_records
+from asuna.records import scenes as scene_records
 from asuna import config as asuna_config, host, channel_admission, native_worker, native_settings
 from asuna.channels import Channels
 from asuna.chat import Chat
@@ -24,7 +26,7 @@ def product(store, tmp_path, monkeypatch):
                    'channels': {'qq': {'account_id': '99990', 'token': 'fixture-' * 8,
                                        'admission': 'automatic', 'routes': {}}}})
     db = store
-    db.put('scenes', {'_id': 'local', 'scope_key': 'scene:local', 'policy_epoch': 1,
+    scene_records.save(db, {'_id': 'local', 'scope_key': 'scene:local', 'policy_epoch': 1,
                      'kind': 'dm', 'members': ['owner'], 'sequence': 0})
     app = SimpleNamespace(store=db, config=config, evidence=SimpleNamespace(record=lambda *_: None))
     worker = BusinessWorker()
@@ -49,7 +51,7 @@ def test_blocking_revokes_grants_and_queued_publications(product):
     p = product
     result = p.channel.receive('qq', envelope())
     message = p.store.raw.messages.find_one({'_id': 'in-' + result['episode_id']})
-    p.store.put('episodes', {'_id': result['episode_id'], 'scene_id': message['scene_id'],
+    episode_records.save(p.store, {'_id': result['episode_id'], 'scene_id': message['scene_id'],
                              'source_event_id': result['episode_id'], 'episode_kind': 'external',
                              'person_id': message['author'], 'state': 'SPEAK_ACCEPTED'})
     publication = {'channel_id': 'qq', 'scene_id': message['scene_id'], 'episode_id': result['episode_id']}
@@ -70,7 +72,7 @@ def test_epoch_change_retires_old_main_without_redirecting_or_importing_it(produ
     p.channel.receive('qq', envelope(group='22220'))
     old = p.events[0]['binding']
     scene = p.store.raw.scenes.find_one({'_id': old['scene_id']})
-    p.store.put('scenes', {**scene, 'policy_epoch': 2}, expected=scene['revision'])
+    scene_records.save(p.store, {**scene, 'policy_epoch': 2}, expected=scene['revision'])
     plan = p.worker.prepare_navigation([{'id': old['_id'], 'createdAt': 1}])
     current = next(entry for entry in plan['entries'] if entry['workspace'] == 'QQ')
     assert current['session_id'] != old['_id']

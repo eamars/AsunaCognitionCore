@@ -2,6 +2,7 @@
 value never reaches the model, a receipt or the audit, and the tool is offered at home only (leak)."""
 import pytest
 
+from asuna.records import episodes as episode_records
 from asuna import credentials, role_tools, sandbox_backend, visibility
 from asuna.state import Denied
 
@@ -81,7 +82,7 @@ def test_the_vault_tool_is_offered_at_home_only(store):
 
 def test_a_credential_value_never_reaches_the_audit(store, vault):
     # Her keep call carries the values once; the audit keeps the names and the note, never a value.
-    ep = store.put('episodes', {'_id': 'ep-cred', 'source_event_id': 'ep-cred', 'episode_kind': 'external',
+    ep = episode_records.save(store, {'_id': 'ep-cred', 'source_event_id': 'ep-cred', 'episode_kind': 'external',
                                 'scene_id': store.config['chat']['scene_id'], 'scope_key': 'scene:local',
                                 'tool_calls': {}}, stream='ep-cred')
     class Coordinator:              # what RoleTools._record uses: the store and a revision-checked write back
@@ -89,7 +90,7 @@ def test_a_credential_value_never_reaches_the_audit(store, vault):
             self.store = store
 
         def _update(self, ep, **changes):
-            return self.store.put('episodes', {**ep, **changes}, expected=ep['revision'], stream=ep['_id'])
+            return episode_records.save(self.store, {**ep, **changes}, expected=ep['revision'], stream=ep['_id'])
     handler = role_tools.RoleTools(Coordinator(store))
     args = {'op': 'keep', 'name': 'solar', 'note': '只读', 'env': {'SOLAR_PASSWORD': SECRET}}
     handler._record(ep['_id'], 'call-1', 'credential', args, result={'kept': 'solar'})

@@ -51,7 +51,8 @@ def _what(store, persona, tool, args):
         return '旧居那条线：' + ('开了' if op == 'open' else '关了')
     from .role_tools import ability
     if ability(tool, args) == 'ideas.review':          # its id was `idea` under the old name
-        idea = (store.db.ideas.find_one({'_id': args.get('id', args.get('idea'))}, {'idea': 1}) or {}).get('idea')
+        from .records import ideas as idea_records
+        idea = (idea_records.get(store, args.get('id', args.get('idea')), ['idea']) or {}).get('idea')
         return '想法%s：%s' % (DECISIONS.get(args.get('decision'), args.get('decision')), _short(idea, 30))
     if tool == 'watch':
         return '%s盯 %s' % ('开始' if op == 'on' else '不再', _short(args.get('person'), 20))

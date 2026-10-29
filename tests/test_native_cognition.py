@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import mongomock
 import pytest
 
+from asuna.records import heads as head_records
 from asuna.native_api import NativeMemory
 from asuna.native_worker import BusinessWorker
 from asuna.state import Denied, Store
@@ -25,15 +26,15 @@ def view():
     store.db.sessions.insert_one(binding)
     from asuna.documents import DocumentStore
     DocumentStore(store, 'p').seed('persona', 'persona', '真实人格正文', path='persona.md')   # the persona is a document
-    store.init_head('relationship:qq:11', 'scene:one', {'body': '这个人偏好简洁表达'}, [])
+    head_records.init(store, 'relationship:qq:11', 'scene:one', {'body': '这个人偏好简洁表达'}, [])
     worker = BusinessWorker()
     worker.app = SimpleNamespace(store=store)
     return store, worker, binding
 
 
 def snapshot(store, binding, **changes):
-    persona = store.head('doc:p:persona', 'global-safe')[0]
-    relation = store.head('relationship:qq:11', 'scene:one')[0]
+    persona = head_records.current(store, 'doc:p:persona', 'global-safe')[0]
+    relation = head_records.current(store, 'relationship:qq:11', 'scene:one')[0]
     episode = {'_id': 'ep', 'native_session_id': 'role', 'scene_id': binding['scene_id'],
                'person_id': binding['person_id'], 'scope_key': binding['scope_key'],
                'policy_epoch': 1, 'persona': 'p', 'monologue_refs': ['thought'],
@@ -78,7 +79,7 @@ def test_people_she_knows_and_people_here(view):
     # Owner 2026-10-16: People was only the person this conversation is bound to. Now every person she has written
     # about is listed everywhere (searchable), and a conversation lists the last people who spoke in it.
     store, worker, binding = view
-    store.init_head('relationship:qq:11', 'person', {'body': '哪儿都成立的那层'}, [])
+    head_records.init(store, 'relationship:qq:11', 'person', {'body': '哪儿都成立的那层'}, [])
     store.db.scene_people.insert_one({'_id': 'sp', 'person': 'qq:11', 'scene_id': binding['scene_id'], 'card': '同学',
                                       'seen_at': '2026-10-16T00:00:00+00:00'})
     people = NativeMemory(worker, 'role').page('people')
@@ -120,7 +121,7 @@ def test_the_tab_shows_her_memory_as_her_turns_read_it(view):
     sections = docs.read('self')[1]['sections']
     store.db.memory_tiers.insert_one({'_id': 'tier-1', 'row': 'item', 'persona': 'p', 'doc': 'self',
                                       'sid': sections[-1]['sid'], 'place': '收着', 'memorable_at': '2026-10-15T00:00:00+00:00'})
-    store.init_head('current_self:p', 'global-safe', {'body': '旧的一整段'}, [])
+    head_records.init(store, 'current_self:p', 'global-safe', {'body': '旧的一整段'}, [])
     rows = NativeMemory(worker, 'role').page('self')['rows']
     ids = [row['id'] for row in rows]
     assert len([i for i in ids if i.startswith('item:self#')]) == len(sections)

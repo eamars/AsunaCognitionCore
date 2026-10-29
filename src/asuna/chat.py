@@ -66,8 +66,9 @@ def prepare_local_scene(store, settings):
     """Initialize only missing local state; never reseed memories or revisions."""
     person, scene = settings['person_id'], settings['scene_id']
     scope = 'scene:' + scene
-    if not store.db.identities.find_one({'_id': person}):
-        store.put('identities', {'_id': person, 'person_id': person, 'platform': 'local',
+    from .records import people as people_records
+    if not people_records.identity(store, person):
+        people_records.save_identity(store, {'_id': person, 'person_id': person, 'platform': 'local',
                   'account_id': person, 'display_name': '本机用户'}, stream='local-setup')
     if not scene_records.get(store, scene):
         scene_records.save(store, {'_id': scene, 'scene_id': scene, 'kind': 'dm', 'members': [person],

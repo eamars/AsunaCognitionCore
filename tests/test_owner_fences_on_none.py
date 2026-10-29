@@ -128,3 +128,42 @@ def test_memories_a_fence_of_none_reads_nothing_and_a_kind_or_a_status_of_none_i
     assert memory_records.pending_index(store, 'route-x', scope='scene:none', epoch=None).rows() == []
     assert memory_records.dependents(store, None, ['line']).rows() == []
     assert asked == []
+
+
+def test_artifacts_a_fence_of_none_reads_nothing_and_a_kind_or_a_state_of_none_is_a_row_without_one(store):
+    from asuna.records import artifacts as artifact_records
+    artifact_records.save(store, {'_id': 'art-x', 'scope_key': 'scene:none', 'task_id': 't-x', 'intent_revision': 1,
+                                  'tool': 'look'}, stream='art-x')                # no `kind`, no `state`
+    assert artifact_records.get(store, 'art-x', kind=None, state=None)['_id'] == 'art-x'
+    assert [row['_id'] for row in artifact_records.of_task(store, 't-x', 1, state=None).rows()] == ['art-x']
+    assert artifact_records.count_tool(store, 'look', None) == 1
+    asked = counted(store)
+    assert artifact_records.get(store, 'art-x', task=None) is None and artifact_records.get(store, None) is None
+    assert artifact_records.get(store, 'art-x', revision=None) is None
+    assert artifact_records.of_task(store, 't-x', None).rows() == [] and artifact_records.of_task(store, None, 1).rows() == []
+    assert artifact_records.of_kind(store, 'k', scope=None).rows() == [] and artifact_records.of_scene(store, 'k', None).rows() == []
+    assert artifact_records.admission(store, 'group_action', None, 'QUEUED').first() is None
+    assert artifact_records.by_content(store, None, 'k') is None and artifact_records.answer(store, 'k', None) is None
+    assert asked == []
+
+
+def test_heads_people_ideas_and_records_a_fence_of_none_reads_nothing_and_a_value_of_none_is_a_row_without_one(store):
+    from asuna import documents
+    from asuna.records import heads as head_records
+    from asuna.records import ideas as idea_records
+    from asuna.records import people as people_records
+    head_records.init(store, 'doc:none:x', 'scope:none', {'body': 'b'}, [])
+    idea_records.save(store, {'_id': 'idea-x', 'persona': 'demo', 'idea': 'i', 'why': 'w'}, stream='idea-x')  # no state
+    documents.save_entry(store, {'_id': 'entry-x', 'persona': 'demo', 'slug': 'log', 'sid': 's', 'seq': 1},
+                         stream='entry-x')                                                  # no last_mutation
+    assert [row['_id'] for row in idea_records.of_persona(store, 'demo', state=None).rows()] == ['idea-x']
+    assert documents.entry_of(store, 'demo', 'log', mutation=None)['_id'] == 'entry-x'
+    asked = counted(store)
+    assert head_records.heads(store, scope=None).rows() == [] and head_records.history(store, None).rows() == []
+    assert head_records.revision(store, None) is None and head_records.by_mutation(store, None) is None
+    assert head_records.with_prefix(store).rows() == [] and head_records.stale_revisions(store, None, []).rows() == []
+    assert idea_records.get(store, 'idea-x', persona=None) is None and idea_records.count(store, None, ['open']) == 0
+    assert people_records.identity(store, None) is None and people_records.by_account(store, None) is None
+    assert people_records.labels(store, None).rows() == [] and people_records.label_of_person(store, None) is None
+    assert documents.entries(store, None, 'log').rows() == [] and documents.slugs(store, None) == []
+    assert asked == []

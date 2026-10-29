@@ -18,6 +18,10 @@ from .config import excerpt
 from .records import scenes as scene_records
 from .records import plans as plan_records
 from .records import memories as memory_records
+from .records import artifacts as artifact_records
+from .records import heads as head_records
+from .records import ideas as idea_records
+from .records import people as people_records
 
 TABLES_VERSION = 1
 SHOWN = 'review.map'
@@ -42,17 +46,16 @@ def _at(value):
 
 
 def _heads(store, prefix):
-    return list(store.db.state_heads.find({'_id': {'$regex': '^' + prefix}}, {'_id': 1, 'revision_id': 1}))
+    return head_records.with_prefix(store, prefix).rows(fields=['_id', 'revision_id'])
 
 
 def _revision(store, revision_id):
-    return store.db.state_revisions.find_one({'_id': revision_id}, {'content': 1, 'created_at': 1, 'entity_key': 1})         if revision_id else None
+    return head_records.revision(store, revision_id, ['content', 'created_at', 'entity_key']) if revision_id else None
 
 
 def _before(store, entity, since):
     """The entity's content as it was at `since` (its newest revision before it), or {}."""
-    row = store.db.state_revisions.find_one({'entity_key': entity, 'created_at': {'$lt': since}}, {'content': 1},
-                                            sort=[('created_at', -1)])
+    row = head_records.history(store, entity, before=since).first(newest_first=True, fields=['content'])
     return (row or {}).get('content') or {}
 
 
@@ -63,8 +66,7 @@ def _changed_sections(then, now):
 
 def _reasons(store, entity, since):
     seen = []
-    for row in store.db.state_revisions.find({'entity_key': entity, 'created_at': {'$gte': since}}, {'reason': 1},
-                                             sort=[('created_at', -1)]):
+    for row in head_records.history(store, entity, since=since).rows(newest_first=True, fields=['reason']):
         reason = (row.get('reason') or '').strip()
         if reason and reason not in seen:
             seen.append(reason)
@@ -80,7 +82,7 @@ def _who(store, people, person):
     from .people import safe_name
     if person == (store.config.get('chat') or {}).get('person_id'):
         return people.owner_label
-    seen = store.db.scene_people.find_one({'person': person}, {'card': 1, 'nickname': 1}, sort=[('seen_at', -1)])
+    seen = people_records.label_of_person(store, person, ['card', 'nickname'])
     return (people.named(person) or safe_name((seen or {}).get('card')) or safe_name((seen or {}).get('nickname'))
             or '一个没留下名字的人')
 
@@ -189,7 +191,7 @@ def block(store, persona, moment=None, *, tag=None):
         store.db.affect_events.count_documents({'persona': persona}),
         store.db.affect_events.count_documents({'persona': persona, 'created_at': {'$gte': since}}),
         store.db.affect_events.count_documents({'persona': persona, 'open': True})))
-    ideas = collections.Counter(i.get('state') for i in store.db.ideas.find({'persona': persona}, {'state': 1}))
+    ideas = collections.Counter(i.get('state') for i in idea_records.of_persona(store, persona, by=None).rows(fields=['state']))
     index.append('想法本：没处理 %d、暂缓 %d（ideas 的 read）' % (ideas.get('open', 0), ideas.get('deferred', 0)))
     index.append('计划：生效中 %d（plans_from_program）；问题：还开着 %d（ask 的 read）' % (
         plan_records.count_status(store, 'ACTIVE'),
@@ -201,7 +203,7 @@ def block(store, persona, moment=None, *, tag=None):
     live = switches.on(store, moment=moment)
     index.append('你开着的开关：%d 个' % len(live) + ('，' + '；'.join('%s 到 %s' % (switches.WORDS[r['kind']] + '：' + r['label'],
                                                                          r['until'][:16]) for r in live[:6]) if live else ''))
-    pictures = store.db.artifacts.count_documents({'tool': 'generate_image', 'state': 'DONE'})
+    pictures = artifact_records.count_tool(store, 'generate_image', 'DONE')
     from . import stickers
     shelf = stickers.shelf(store, persona)
     index.append('你做的东西：画的图 %d 张；表情架 %d 个（sticker 的 shelf 列全）' % (pictures, len(shelf)))

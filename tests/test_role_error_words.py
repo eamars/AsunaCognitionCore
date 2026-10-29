@@ -23,8 +23,7 @@ def test_a_timing_says_what_was_given():
 
 
 class _NoStore:
-    def head(self, *_):
-        return None
+    """A store the checks never read: validating a write reads no head."""
 
 
 def test_an_undeclared_policy_key_lists_the_writable_ones_and_a_bad_value_its_range():

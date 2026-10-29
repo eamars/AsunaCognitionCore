@@ -262,7 +262,7 @@ def bind_people(store, scene, scene_doc, person):
     scene_doc["labeler"] = people.row_head
     def archive_label(row):
         live_scene = row['scene_id'].removeprefix('archive:')
-        record = store.db.scene_people.find_one({'_id': live_scene + '|' + people.person(row['author'])})
+        record = people_records.label(store, live_scene + '|' + people.person(row['author']))
         if record:
             return people.label(record)
         from .people import safe_name
@@ -946,6 +946,7 @@ import re as _re
 from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import receipts as receipt_records
+from .records import people as people_records
 from . import clock
 
 

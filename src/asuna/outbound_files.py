@@ -2,7 +2,7 @@
 as speak's `file` part, read by the adapter in pieces, their bytes kept 7 days after they were last sent.
 
 - **Registration** (`register`, the action brain's `offer_file`): a file inside the task folder becomes a `file`
-  artifact in the task's own scope. The bytes stream into GridFS (`BlobStore.put_stream`); the program computes the
+  artifact in the task's own scope. The bytes stream into the blob store (`BlobStore.put_stream`); the program computes the
   sha256, the size and the type (`sniff`, from the first bytes: an unknown type is recorded as unknown and still
   goes). Her name for it passes her private words list: a hit warns, by category and entry line, and does not block.
 - **What a conversation may send** (`offer`, `file_artifacts_from_program`): a file any of her tasks registered may be
@@ -25,6 +25,7 @@ import traceback
 from pathlib import Path
 
 from .state import Denied, now
+from .records import artifacts as artifact_records
 from .records import messages as message_records
 
 KIND = 'file'                      # the artifacts row's kind, and the claim's and the row's field
@@ -35,7 +36,7 @@ PIECE_MAX = 8 * 1024 * 1024        # the largest piece the byte endpoint serves 
 MAX_OFFERED = 8
 HEAD_BYTES = 64 * 1024             # what the type is read from
 NAME_BYTES = 255                   # a file name, in UTF-8 bytes, as file systems take it
-REMOVED = 'removed'                # the artifacts row's storage once its bytes are gone
+REMOVED = artifact_records.REMOVED  # the artifacts row's storage once its bytes are gone
 UNKNOWN_TYPE = '类型没认出来'
 FAILED_CODES = ('CHANNEL_DOES_NOT_DECLARE_FILE', 'FILE_OVER_CHANNEL_LIMIT', 'FILE_BYTES_EXPIRED', 'FILE_ERASED',
                 'FILE_DESCRIPTOR_INVALID')
@@ -266,7 +267,7 @@ def register(store, task, root, args):
             from .received_files import received_from
             origin = received_from(store, task, stored['sha256'])       # a file someone sent (ADR-102 section 8)
             if origin:
-                store.db.artifacts.update_one({'_id': stored['artifact_id']}, {'$set': {'received_from': origin}})
+                artifact_records.set_received_from(store, stored['artifact_id'], origin)
     except Exception as exc:
         return {'error': 'TASK_OPERATION_FAILED: ' + workspace_reason(exc, 'offer_file', given),
                 'execution': {'exit_code': 1, 'stderr': traceback.format_exc(limit=1)}}
@@ -311,9 +312,9 @@ def offer(store, scene, *, limit=MAX_OFFERED):
     first; None when there are none or files do not go out here."""
     if not sends_here(store, scene):
         return None
-    cursor = store.db.artifacts.find({'kind': KIND, 'state': 'DONE', 'storage': 'gridfs'},
-                                     {'name': 1, 'size': 1, 'media_type': 1, 'created_at': 1,
-                                      'source_ids': 1, 'received_from': 1}).sort('created_at', -1).limit(200)
+    cursor = artifact_records.of_kind(store, KIND, state='DONE', storage=artifact_records.STORED,
+                                      by='created_at').rows(newest_first=True, limit=200, fields=[
+                                          'name', 'size', 'media_type', 'created_at', 'source_ids', 'received_from'])
     items = []
     for row in cursor:
         if not produced(row):
@@ -377,7 +378,7 @@ def check(store, ep, scene, artifact_id):
     """(descriptor, None) for a file her speak part may send here, else (None, why in words)."""
     from . import capabilities, local_time
     from .blobs import erased, erased_words
-    item = store.db.artifacts.find_one({'_id': artifact_id, 'kind': KIND}) if artifact_id else None
+    item = artifact_records.get(store, artifact_id, kind=KIND) if artifact_id else None
     if item and erased(item):
         return None, erased_words(store, item, (scene or {}).get('_id'))
     if item and removed(item):
@@ -385,10 +386,10 @@ def check(store, ep, scene, artifact_id):
     offered = ((ep.get('context') or {}).get('file_artifacts_from_program') or {}).get('items') or ()
     if artifact_id not in {row.get('artifact_id') for row in offered if isinstance(row, dict)}:
         return None, '不在 file_artifacts_from_program 里：artifact_id 照抄那里列出的'
-    if not item or item.get('state') != 'DONE' or item.get('storage') != 'gridfs':
+    if not item or item.get('state') != 'DONE' or item.get('storage') != artifact_records.STORED:
         return None, '这个文件已经不在了；换 file_artifacts_from_program 里别的'
-    from bson import ObjectId
-    if not store.db['artifact_blobs.files'].find_one({'_id': ObjectId(item['gridfs_id'])}, {'_id': 1}):
+    from . import blobs
+    if not blobs.exists(store, item[artifact_records.BLOB_FIELD]):
         return None, '这个文件的字节不在存储里了（不是你的错）；要再发就让任务从文件夹里重新登记'
     most = capabilities.limit(store, (scene or {}).get('channel_id'), CAPABILITY)
     if most is not None and item['size'] > most:
@@ -414,10 +415,10 @@ def claim_failure(store, row, limits):
     if not meta:
         return {'failure': 'FILE_DESCRIPTOR_INVALID', 'failure_detail': '这条消息记的文件信息不完整（不是你的错），发不了'}
     from .blobs import erased, erased_words
-    item = store.db.artifacts.find_one({'_id': meta['artifact_id']})
+    item = artifact_records.get(store, meta['artifact_id'])
     if erased(item):                    # erased while it was on its way: the same sentence (ADR-105)
         return {'failure': 'FILE_ERASED', 'failure_detail': erased_words(store, item, row.get('scene_id'))}
-    if not item or removed(item) or item.get('storage') != 'gridfs':
+    if not item or removed(item) or item.get('storage') != artifact_records.STORED:
         return {'failure': 'FILE_BYTES_EXPIRED', 'failure_detail': '这个文件的字节已经不在存储里了'}
     most = (limits or {}).get(CAPABILITY)
     if most is not None and meta['size'] > most:
@@ -433,7 +434,7 @@ def expired_source(store, row_id):
     from . import local_time
     row = message_records.get(store, row_id) or {}
     meta = descriptor(row.get(KIND))
-    item = store.db.artifacts.find_one({'_id': meta['artifact_id']}) if meta else None
+    item = artifact_records.get(store, meta['artifact_id']) if meta else None
     present = bool(item) and source_present(item)
     if item and removed(item):
         words = expired_words(item, local_time.zone_of(store, row.get('scene_id')), present)
@@ -466,12 +467,12 @@ def serve_piece(store, row, query):
         raise ValueError('FILE_PIECE_INVALID: length 要在 1..%d 之间，给的是 %d' % (PIECE_MAX, length))
     if offset >= meta['size']:
         raise ValueError('FILE_PIECE_INVALID: offset %d 不在文件里（文件 %d 字节）' % (offset, meta['size']))
-    item = store.db.artifacts.find_one({'_id': meta['artifact_id']})
+    item = artifact_records.get(store, meta['artifact_id'])
     if not item or item.get('kind') != KIND:
         raise Denied('FILE_ARTIFACT_UNAVAILABLE')
     from .blobs import refuse_erased
     refuse_erased(store, item, (row or {}).get('scene_id'))
-    if removed(item) or item.get('state') != 'DONE' or item.get('storage') != 'gridfs':
+    if removed(item) or item.get('state') != 'DONE' or item.get('storage') != artifact_records.STORED:
         raise Denied('FILE_BYTES_EXPIRED')
     if item.get('sha256') != meta['sha256'] or item.get('size') != meta['size']:
         raise Denied('FILE_SHA_MISMATCH')
@@ -484,7 +485,7 @@ def sent(store, row):
     """A delivered file row: its bytes are kept KEEP_DAYS from now."""
     meta = descriptor((row or {}).get(KIND))
     if meta:
-        store.db.artifacts.update_one({'_id': meta['artifact_id'], 'kind': KIND}, {'$set': {'last_sent_at': now()}})
+        artifact_records.mark_sent(store, meta['artifact_id'], KIND, now())
 
 
 # The adapter's reasons for a file it did not send, in her words (a code never reaches her).

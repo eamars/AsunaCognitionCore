@@ -957,16 +957,17 @@ def detail(store, persona, row):
     behind = (row or {}).get('detail_of') or {}
     if not behind:
         return None                     # not a gist (or no item at all, as for a working document): nothing behind
-    revision = store.db.state_revisions.find_one({'_id': behind.get('revision_id')}) if behind.get('revision_id') else None
+    from . import documents
+    from .records import heads as head_records
+    revision = head_records.revision(store, behind.get('revision_id')) if behind.get('revision_id') else None
     for section in ((revision or {}).get('content') or {}).get('sections') or []:
         if section.get('sid') == row['sid']:
             return section.get('body')
-    old = store.db.journal_revisions.find_one({'persona': persona, 'slug': row['doc'], 'sid': row['sid'],
-                                               'body_sha256': behind.get('body_sha256')}) if behind else None
+    old = documents.revision_of_body(store, persona, row['doc'], row['sid'], behind.get('body_sha256')) if behind \
+        else None
     if old:
         return old.get('body')
-    for change in store.db.journal_revisions.find({'persona': persona, 'slug': row['doc'], 'sid': row['sid']}).sort(
-            'created_at', -1):
+    for change in documents.revisions(store, persona, row['doc'], sid=row['sid']).rows(newest_first=True):
         if sha((change.get('body') or '').encode()) == behind.get('body_sha256'):
             return change.get('body')
     return None

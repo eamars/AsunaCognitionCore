@@ -21,6 +21,7 @@ from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import receipts as receipt_records
 from .records import tasks as task_records
+from .records import people as people_records
 
 # How often the host's existing watch thread also checks that her heartbeat still beats (ADR-012 §4.3), so a
 # lost heartbeat is found on a day when nobody talks to her too. It only checks; the clock stays DSH's.
@@ -75,8 +76,8 @@ def channel_workspaces(store):
 
 
 def _writers(store, dry_run):
-    def put(collection, document, **kwargs):
-        return document if dry_run else store.put(collection, document, **kwargs)
+    def put(document, **kwargs):
+        return document if dry_run else people_records.save_identity(store, document, **kwargs)
 
     def save_scene(document, **kwargs):
         return document if dry_run else scene_records.save(store, document, **kwargs)
@@ -104,8 +105,8 @@ def _checked_workspace(grant, workspaces):
 def _bind_identity(put, identities_by_id, channel_id, route, kind, sender, person):
     identity = identities_by_id.get(person)
     if identity is None:
-        created = put('identities', {'_id': person, 'person_id': person, 'platform': channel_id,
-                                          'account_id': sender}, stream='host:setup')
+        created = put({'_id': person, 'person_id': person, 'platform': channel_id, 'account_id': sender},
+                      stream='host:setup')
         identities_by_id[person] = created
     elif (identity['platform'], identity['account_id']) != (channel_id, sender):
         raise Denied('CHANNEL_IDENTITY_BINDING_CONFLICT')
@@ -116,7 +117,7 @@ def _bind_identity(put, identities_by_id, channel_id, route, kind, sender, perso
         raise ValueError('CHANNEL_DISPLAY_NAME_INVALID')
     if display and identities_by_id[person].get('display_name') != display:
         current = identities_by_id[person]
-        identities_by_id[person] = put('identities', {**current, 'display_name': display},
+        identities_by_id[person] = put({**current, 'display_name': display},
             **({'expected': current['revision']} if 'revision' in current else {}), stream='host:setup')
     # No relationship record is seeded: everyone starts with none, which her context says in
     # words, and her first written understanding creates it (familiarity.py, memory.py).
@@ -155,7 +156,7 @@ def prepare_channels(store, *, dry_run=False):
     put, save_scene = _writers(store, dry_run)
     local = store.config['chat']
     workspaces = ChannelWorkspaces(Path(local['workspace']).resolve(), store.config.get('channels'))
-    identities_by_id = {row['_id']: row for row in store.db.identities.find({})}
+    identities_by_id = {row['_id']: row for row in people_records.all_identities(store).rows()}
     for channel_id, channel in store.config.get('channels', {}).items():
         token = channel.get('token', '')
         if not isinstance(token, str) or not token.isascii() or len(token) < 24 or token in tokens:
@@ -229,7 +230,7 @@ def prepare_admission(store, channel_id, route_id, route, sender, *, dry_run=Fal
         raise Denied('CHANNEL_MEMBER_BINDING_INVALID')
     workspaces = channel_workspaces(store)
     workspace = _checked_workspace(grant, workspaces)
-    identity = store.db.identities.find_one({'_id': person})
+    identity = people_records.identity(store, person)
     _bind_identity(put, {person: identity} if identity else {}, channel_id, route, kind, sender, person)
     if not dry_run:
         workspace.mkdir(parents=True, exist_ok=True)

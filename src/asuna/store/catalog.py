@@ -232,7 +232,13 @@ def _text(*paths):
 
 
 CATALOG = Catalog([
-    _core('identities', 'records.people', index(('platform', 1), ('account_id', 1), unique=True)),
+    # Who a person is on this machine (records/people.py): the fields its owner names; the rest is stored as written.
+    # The fields of its plain unique index are required (3.5).
+    Collection('identities', 'records.people', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *(Field(path, 'text', required=True) for path in ('platform', 'account_id')), *_text('person_id')),
+        (index(('platform', 1), ('account_id', 1), unique=True),),
+        versioned=True),
     # A conversation (records/scenes.py): the fields its owner names; the rest is stored and returned as written.
     Collection('scenes', 'records.scenes', (
         Field('_last_op', 'text'), Field('schema_version', 'number'), Field('kind', 'text'), Field('scope_key', 'text'),
@@ -327,8 +333,17 @@ CATALOG = Catalog([
          index(('scope_key', 1), ('origin', 1), ('source_identity', 1), unique=True,
                only_where_present=('source_identity',))),
         versioned=True, counters=('salience',), derived=('embedding',)),
-    _core('state_heads', 'records.heads'),
-    _core('state_revisions', 'records.heads', index(('mutation_id', 1), unique=True)),
+    # Her revisioned state (records/heads.py): a head per entity and scope, and its revisions; the fields their owner
+    # names, the rest stored as written. A revision's mutation id is its plain unique index's field, required (3.5);
+    # its times are ISO text.
+    Collection('state_heads', 'records.heads', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'), *_text('revision_id', 'scope_key')),
+        versioned=True),
+    Collection('state_revisions', 'records.heads', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'), Field('mutation_id', 'text', required=True),
+        *_text('entity_key', 'scope_key', 'created_at')),
+        (index(('mutation_id', 1), unique=True),),
+        versioned=True),
     # A native session's binding (records/sessions.py): the fields its owner names; the rest is stored as written.
     Collection('sessions', 'records.sessions', (
         Field('_last_op', 'text'), Field('schema_version', 'number'), Field('binding_key', 'text', required=True),
@@ -345,7 +360,15 @@ CATALOG = Catalog([
           fields=(Field('stream_id', 'text', required=True), Field('seq', 'number', required=True),
                   Field('type', 'text'), Field('payload', 'object'), Field('payload.operation', 'text', nullable=True)),
           insert_only=True),
-    _core('artifacts', 'records.artifacts'),
+    # A kept file or record apart from the conversation (records/artifacts.py): the fields its owner names; the rest
+    # is stored and returned as written. Its times are ISO text, as the core writes them.
+    Collection('artifacts', 'records.artifacts', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('kind', 'state', 'storage', 'scope_key', 'scene_id', 'channel_id', 'task_id', 'tool', 'sha256', 'ref',
+               'answer', 'claimed_at', 'kept_at', 'created_at', 'received_at'),
+        *(Field(path, 'number', nullable=True) for path in ('intent_revision', 'number')),
+        *(Field(path, 'list', of='text', nullable=True) for path in ('source_ids', 'copies'))),
+        versioned=True),
     # What a sink received, and what a model lane answered (records/receipts.py): the fields their owner names; the
     # rest is stored as written. Their times are ISO text, as the core and the Host write them.
     Collection('sink_receipts', 'records.receipts', (
@@ -366,13 +389,24 @@ CATALOG = Catalog([
                 only_where_present=('source_identity',)),
           fields=_text('source_identity'), insert_only=True),
     _core('affect_proposals', 'affect', index(('persona', 1), ('kind_row', 1), ('created_at', 1)), insert_only=True),
-    _core('scene_people', 'records.people', index(('scene_id', 1), ('handle', 1), unique=True)),
+    # How a conversation labels each person (records/people.py): the fields of its plain unique index are required
+    # (3.5); its times are ISO text.
+    Collection('scene_people', 'records.people', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'), Field('scene_id', 'text', required=True),
+        Field('handle', 'number', required=True), *_text('person', 'seen_at')),
+        (index(('scene_id', 1), ('handle', 1), unique=True),),
+        versioned=True),
     Collection('task_messages', 'records.tasks', (
         Field('_last_op', 'text'), Field('schema_version', 'number'),
         *_text('task_id', 'thread', 'from', 'created_at'), Field('delivered', 'bool', nullable=True)),
         (index(('task_id', 1), ('created_at', 1)), index(('thread', 1), ('created_at', 1))),
         versioned=True),
-    _core('ideas', 'records.ideas', index(('persona', 1), ('state', 1), ('created_at', 1))),
+    # Her improvement ideas (records/ideas.py): the fields its owner names; the rest is stored as written.
+    Collection('ideas', 'records.ideas', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *_text('persona', 'state', 'idea', 'why', 'created_at')),
+        (index(('persona', 1), ('state', 1), ('created_at', 1)),),
+        versioned=True),
     _core('stickers', 'stickers', index(('persona', 1), ('name', 1), unique=True),
           index(('persona', 1), ('identity', 1), unique=True)),
     _core('sticker_pool', 'stickers', index(('last_seen', 1)), index(('artifact_id', 1))),
@@ -387,11 +421,21 @@ CATALOG = Catalog([
     _core('host_stops', 'host_stops', index(('how', 1), ('back_at', -1))),
     _core('switches', 'switches', index(('state', 1), ('kind', 1), ('until', 1)), index(('persona', 1), ('state', 1))),
     _core('own_mutes', 'own_mute', index(('muted', 1))),
-    _core('journal_entries', 'documents',
-          index(('persona', 1), ('slug', 1), ('seq', 1), unique=True),
-          index(('persona', 1), ('slug', 1), ('sid', 1), unique=True), index(('last_mutation', 1))),
-    _core('journal_revisions', 'documents', index(('mutation_id', 1), unique=True),
-          index(('persona', 1), ('slug', 1), ('created_at', -1)), index(('entry_id', 1), ('created_at', 1))),
+    # Her running records, one row per entry and each change beside it (documents.py): the fields of their plain
+    # unique indexes are required (3.5); their times are ISO text.
+    Collection('journal_entries', 'documents', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'),
+        *(Field(path, 'text', required=True) for path in ('persona', 'slug', 'sid')),
+        Field('seq', 'number', required=True), *_text('last_mutation')),
+        (index(('persona', 1), ('slug', 1), ('seq', 1), unique=True),
+         index(('persona', 1), ('slug', 1), ('sid', 1), unique=True), index(('last_mutation', 1))),
+        versioned=True),
+    Collection('journal_revisions', 'documents', (
+        Field('_last_op', 'text'), Field('schema_version', 'number'), Field('mutation_id', 'text', required=True),
+        *_text('persona', 'slug', 'sid', 'body_sha256', 'entry_id', 'created_at')),
+        (index(('mutation_id', 1), unique=True), index(('persona', 1), ('slug', 1), ('created_at', -1)),
+         index(('entry_id', 1), ('created_at', 1))),
+        versioned=True),
     _core('questions', 'questions'),
     # Its fault counts leave KEEP_DAYS after their hour through lane_faults.forget_old, which replaces the TTL index.
     Collection('lane_faults', 'lane_faults', (

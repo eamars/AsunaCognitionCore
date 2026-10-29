@@ -1,12 +1,14 @@
-"""Probe of large-file storage on a real MongoDB: a synthetic blob over 1 MB goes into GridFS, wrong-scope and
-non-operator reads are refused, and deleting its memory removes it.
+"""Probe of large-file storage on a real MongoDB: a synthetic blob over 1 MB goes into the blob store (GridFS),
+wrong-scope and non-operator reads are refused, and deleting its memory removes it (its blob is no longer stored).
 
 It uses its own test database, drops it afterwards, and writes its evidence under reports/.
 """
 import json,uuid
 from asuna.config import load,ROOT
 from asuna.state import Store,Denied
+from asuna import blobs as blob_owner
 from asuna.blobs import BlobStore
+from asuna.records import artifacts as artifact_records
 from asuna.privacy import PrivacyService
 from asuna.evidence import Evidence,write_json,sha
 from asuna.testing import dispose_test_store
@@ -21,8 +23,9 @@ try:
         try:blob.get(ref['artifact_id'],scope,operator=op)
         except Denied:pass
         else:raise AssertionError('IDOR_ACCEPTED')
+    blob_id=artifact_records.get(store,ref['artifact_id'])[artifact_records.BLOB_FIELD]
     deletion=PrivacyService(store).delete_memory('M09',operator=True)
-    assert deletion['gridfs_blobs_removed']==1 and store.db.artifact_blobs.files.count_documents({})==0 and store.db.artifact_blobs.chunks.count_documents({})==0
+    assert deletion['gridfs_blobs_removed']==1 and not blob_owner.exists(store,blob_id)
     status='PASS';ev.record('blob.probe',{'input_size':len(data),'input_sha256':sha(data),'reference':ref,'deletion_id':deletion['deletion_id']})
 except Exception as exc:ev.record('probe.error',{'type':type(exc).__name__,'message':str(exc)})
 finally:dispose_test_store(store)

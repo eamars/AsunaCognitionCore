@@ -11,6 +11,8 @@ from datetime import datetime, timedelta, timezone
 from . import clock
 from . import channel_kinds
 from .state import now
+from .records import artifacts as artifact_records
+from .records import people as people_records
 from .records import scenes as scene_records
 from .records import messages as message_records
 
@@ -28,7 +30,7 @@ def peer_lines(store):
         for route in channel.get('routes', {}).values():
             if route['target']['type'] != 'dm':
                 continue
-            identity = store.db.identities.find_one({'_id': route['person_id']}, {'display_name': 1}) or {}
+            identity = people_records.identity(store, route['person_id'], ['display_name']) or {}
             out.append({'scene_id': route['scene_id'], 'person_id': route['person_id'],
                         'label': identity.get('display_name') or route['person_id']})
     return out
@@ -84,7 +86,7 @@ def asides_full(store):
 
 
 def _row(store, scene_id):
-    return store.db.artifacts.find_one({'_id': 'peer-line:' + scene_id})
+    return artifact_records.get(store, 'peer-line:' + scene_id)
 
 
 def closed_until(store, scene_id, moment=None):
@@ -122,7 +124,7 @@ def set_line(store, scene_id, *, closed, choice=None, zone='UTC', moment=None, b
         else:
             until = moment + timedelta(hours=1) if choice == 'an_hour' else _morning(moment, zone)
             value['closed_until'] = until.isoformat()
-    return store.put('artifacts', value, expected=row.get('revision'), stream='peer-line:' + scene_id)
+    return artifact_records.save(store, value, expected=row.get('revision'), stream='peer-line:' + scene_id)
 
 
 def describe(until, zone):

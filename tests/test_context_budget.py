@@ -247,7 +247,8 @@ def test_the_identity_ceiling_is_the_owners_and_a_stored_legacy_budget_binds_not
     with pytest.raises(Denied, match='POLICY_KEY_UNDECLARED'):
         PolicyStore(store, 'P1', {}).validate([{'key': 'render.identity_tokens', 'value': 30000, 'what': '多带点'}])
     before = render.budget_limit(store, 'P1')
-    store.put('state_revisions', {'_id': 'policy-legacy', 'entity_key': 'policy:P1|global-safe', 'scope_key': 'global-safe',
+    store.put('state_revisions', {'_id': 'policy-legacy', 'mutation_id': 'policy-legacy',
+                                  'entity_key': 'policy:P1|global-safe', 'scope_key': 'global-safe',
                                   'content': {'params': {'render.budget_tokens': {'value': 6144, 'what': '探一下',
                                                                                   'class': 'param'}}}})
     store.put('state_heads', {'_id': 'policy:P1|global-safe', 'scope_key': 'global-safe', 'revision_id': 'policy-legacy'})

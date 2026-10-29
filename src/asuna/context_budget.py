@@ -14,6 +14,7 @@ import json
 from datetime import datetime, timedelta
 from .records import scenes as scene_records
 from .records import episodes as episode_records
+from .records import heads as head_records
 
 BUDGET_VERSION = 1
 
@@ -268,8 +269,7 @@ def carried_block(summary, why=None):
 def _last_tidied(store, docs, slug, tidy_episodes):
     """(when she last wrote this note in a settlement turn or else when it began, whether it changed since then,
     whether she has tidied it at all)."""
-    rows = list(store.db.state_revisions.find({'entity_key': docs.key(slug)}, {'mutation_id': 1, 'created_at': 1})
-                .sort('created_at', 1))
+    rows = head_records.history(store, docs.key(slug)).rows(fields=['mutation_id', 'created_at'])
     if not rows:
         return None, False, False
     mark, tidied = rows[0], False

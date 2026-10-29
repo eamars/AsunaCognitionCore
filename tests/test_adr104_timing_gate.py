@@ -1,7 +1,9 @@
 """The batch check's timing gate (tools/adr104_equivalence.py): a read case whose new p50 is more than twice its old
 and more than 5 ms above it fails the run, unless the lead accepted it; a watched or accepted case is reported, not
-passed silently. Synthetic timings only: nothing here reaches a database."""
+passed silently; a stopped query is TIMED OUT or UNREACHABLE by what stopped it. Synthetic timings only: nothing
+here reaches a database server (the words' case reads the stand-in)."""
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -64,6 +66,54 @@ def test_every_accepted_or_watched_entry_says_why_and_when_it_is_looked_at_again
     for batch in check.ACCEPTED_SLOWDOWNS.values():
         assert all({'old_ms', 'new_ms', 'reason', 'recheck'} <= set(entry) for entry in batch.values())
     assert check.WATCHED['b4']['who wrote in these']['family'] == 'who wrote here'
+
+
+def test_a_read_over_its_limit_is_timed_out_with_the_limit_and_a_server_out_of_reach_is_unreachable(
+        check, monkeypatch, tmp_path, capsys):
+    """The check's words for a stopped query: a query its time limit stopped (the server's MaxTimeMSExpired, the
+    client's socket timeout) is TIMED OUT, named with where it was and the limit; UNREACHABLE is only a server that
+    cannot be reached. On the stand-in, which holds no time limit of its own, so the limit's errors are raised by the
+    read itself, as pymongo raises them."""
+    from pymongo import MongoClient
+    from pymongo.errors import ExecutionTimeout, NetworkTimeout, OperationFailure, ServerSelectionTimeoutError
+    client = MongoClient('mongodb://unit-run.invalid:27017/')
+    assert getattr(client, 'unit_run', False), 'the stand-in, never a server'
+    database = 'asuna_v2_test_timeout_words'
+    client[database]['scenes'].insert_one({'_id': 'scene-a', 'kind': 'dm'})
+
+    def over(param):
+        raise ExecutionTimeout('operation exceeded time limit', 50)
+    cases = [('stopped at its limit', lambda param: ('find_one', 'scenes', {'_id': param}, None, None), over,
+              ['scene-a'], 'value')]
+    monkeypatch.setattr(check, '_cases_b5', lambda store, config: (cases, 1))
+    try:
+        found, _ = check.reads(client, database, 50, 'b5', {})
+    finally:
+        client.drop_database(database)
+    assert found['stopped at its limit']['timed_out'] == {'limit_ms': 50, 'error': 'ExecutionTimeout'}
+    totals, validators = {'create': 0, 'make': 0, 'conflicts': 0}, {'same': 1}
+    assert not check.clean({'fields_differ': [], 'reads': found}, totals, validators)
+
+    def stopped(error):
+        def dry_run(adapter):
+            raise error
+        monkeypatch.setattr(check, 'dry_run', dry_run)
+        settings = {'mongo_uri': 'mongodb://unit-run.invalid:27017/'}
+        assert check.check('b3', settings, database, tmp_path, 75) == 2
+        report = json.loads((tmp_path / 'b3.json').read_text(encoding='utf-8'))
+        assert report['max_ms'] == 75, 'the report holds the limit the run used'
+        return capsys.readouterr().out.splitlines()[0], report['stopped']
+
+    said, stop = stopped(NetworkTimeout('unit-run.invalid:27017: timed out (configured timeouts: socketTimeoutMS)'))
+    assert said == 'TIMED OUT: ensure, dry run: a query stopped at its limit of 75 ms (NetworkTimeout)'
+    assert stop == {'during': 'ensure, dry run', 'error': 'NetworkTimeout', 'timed_out': True}
+    said, stop = stopped(ExecutionTimeout('operation exceeded time limit', 50))
+    assert said.startswith('TIMED OUT: ensure, dry run: ') and '75 ms' in said
+    said, stop = stopped(ServerSelectionTimeoutError('unit-run.invalid:27017: getaddrinfo failed'))
+    assert said == 'ADR104_CHECK_UNREACHABLE: ServerSelectionTimeoutError (during ensure, dry run)'
+    assert stop['timed_out'] is False
+    said, _ = stopped(OperationFailure('not authorized', 13))
+    assert said == 'ADR104_CHECK_FAILED: OperationFailure (during ensure, dry run)', 'neither a time limit nor reach'
 
 
 def test_the_run_is_not_clean_while_the_whole_search_differs(check):

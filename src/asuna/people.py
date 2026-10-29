@@ -25,6 +25,7 @@ from .records import messages as message_records
 from .peer_context import channel_of, peer_from_message, verify_peer
 from .state import Conflict, now
 from .records import scenes as scene_records
+from .records import people as people_records
 
 NAME_LIMIT = 20
 # Applied after NFKC, which already folds ［］＃＜＞ into their ASCII forms.
@@ -158,7 +159,7 @@ class People:
         if scene_id and str(number) == self.own_account(scene_id):
             return self.self_id
         platform = platform or channel_kinds.of(scene_id)
-        row = self.db.identities.find_one({'account_id': str(number)}, {'person_id': 1})
+        row = people_records.by_account(self.store, str(number), fields=['person_id'])
         return (row or {}).get('person_id') or (platform.person_id(number) if platform else str(number))
 
     def is_owner(self, doc):
@@ -167,7 +168,7 @@ class People:
     # ---- her own place in a group ----------------------------------------
     def self_role(self, scene):
         """Her role in this group as the adapter last reported it (owner/admin/member), else None."""
-        doc = self.db.scene_people.find_one({'_id': scene['_id'] + '|' + str(self.self_id)}, {'role': 1})
+        doc = people_records.label(self.store, scene['_id'] + '|' + str(self.self_id), ['role'])
         return (doc or {}).get('role') if (doc or {}).get('role') in ROLES else None
 
     def note_self(self, scene, row):
@@ -177,23 +178,23 @@ class People:
         if role not in ROLES or not self.self_id:
             return
         key = scene['_id'] + '|' + str(self.self_id)
-        doc = self.db.scene_people.find_one({'_id': key})
+        doc = people_records.label(self.store, key)
         if doc and (doc.get('role') == role or str(doc.get('seen_at') or '') > moment):
             return
         values = {'_id': key, 'scene_id': scene['_id'], 'scope_key': scene['scope_key'], 'person': self.self_id,
                   'author': self.self_id, 'handle': 0, 'card': '', 'nickname': '', 'role': role, 'previous': [],
                   'seen_at': moment, 'created_at': (doc or {}).get('created_at') or now()}
         try:
-            self.store.put('scene_people', {**(doc or {}), **values}, expected=doc['revision'] if doc else None,
-                           stream='people:' + scene['_id'])
+            people_records.save_label(self.store, {**(doc or {}), **values}, expected=doc['revision'] if doc else None,
+                                      stream='people:' + scene['_id'])
         except Conflict:
             pass                                             # a newer report won; the next message says again
 
     # ---- records ----------------------------------------------------------
     def roster(self, scene_id):
         if scene_id not in self._rosters:
-            self._rosters[scene_id] = {doc['_id']: doc for doc in self.db.scene_people.find(
-                {'scene_id': scene_id, 'person': {'$ne': PROGRAM_AUTHOR}})}
+            self._rosters[scene_id] = {doc['_id']: doc for doc in people_records.labels(
+                self.store, scene_id, besides=PROGRAM_AUTHOR).rows()}
         return self._rosters[scene_id]
 
     def entry(self, scene, person_id, row=None, profile=None, looked_up=False):
@@ -208,7 +209,7 @@ class People:
         person = self.person(person_id)
         key = scene['_id'] + '|' + person
         roster = self.roster(scene['_id'])
-        doc = roster.get(key) or self.db.scene_people.find_one({'_id': key})
+        doc = roster.get(key) or people_records.label(self.store, key)
         if person == self.self_id:
             # Hers is number 0, kept from what the adapter reports of her (note_self); never a new number or names.
             return doc or {'_id': key, 'scene_id': scene['_id'], 'person': person, 'author': person, 'handle': 0,
@@ -216,16 +217,17 @@ class People:
         for _ in range(8):
             if doc:
                 break
-            last = self.db.scene_people.find_one({'scene_id': scene['_id']}, {'handle': 1}, sort=[('handle', -1)])
+            last = people_records.first_label(self.store, scene['_id'], by='handle', newest_first=True,
+                                              fields=['handle'])
             try:
-                doc = self.store.put('scene_people', {
+                doc = people_records.save_label(self.store, {
                     '_id': key, 'scene_id': scene['_id'], 'scope_key': scene['scope_key'], 'person': person,
                     'author': person_id,
                     'handle': (last or {}).get('handle', 0) + 1, 'card': '', 'nickname': '', 'role': '',
                     'previous': [], 'seen_at': '', 'created_at': now(), **({'looked_up': True} if looked_up else {})},
                     stream='people:' + scene['_id'])
             except Conflict:
-                doc = self.db.scene_people.find_one({'_id': key})      # someone else placed it, or took the number
+                doc = people_records.label(self.store, key)      # someone else placed it, or took the number
         if not doc:
             raise Conflict('SCENE_PERSON_UNAVAILABLE')
         if row is None and profile is None and not doc.get('seen_at') and person != self.self_id \
@@ -246,17 +248,18 @@ class People:
                 if old and new and new != old:
                     previous = (previous + [{'name': old, 'until': moment}])[-PREVIOUS_NAMES:]
                 try:
-                    doc = self.store.put('scene_people', {**doc, **fresh, 'previous': previous, 'seen_at': moment},
-                                         expected=doc['revision'], stream='people:' + scene['_id'])
+                    doc = people_records.save_label(self.store, {**doc, **fresh, 'previous': previous,
+                                                                 'seen_at': moment},
+                                                    expected=doc['revision'], stream='people:' + scene['_id'])
                 except Conflict:
-                    doc = self.db.scene_people.find_one({'_id': key}) or doc
+                    doc = people_records.label(self.store, key) or doc
         if row is not None and doc.get('looked_up'):
             # A message by or about them here: they have now appeared, not only been looked up.
             try:
-                doc = self.store.put('scene_people', {**doc, 'looked_up': False}, expected=doc['revision'],
-                                     stream='people:' + scene['_id'])
+                doc = people_records.save_label(self.store, {**doc, 'looked_up': False}, expected=doc['revision'],
+                                                stream='people:' + scene['_id'])
             except Conflict:
-                doc = self.db.scene_people.find_one({'_id': key}) or doc
+                doc = people_records.label(self.store, key) or doc
         roster[key] = doc
         return doc
 
@@ -299,7 +302,7 @@ class People:
         """A name the operator gave this person on this machine (identities), which outranks any self-chosen name."""
         cache = self.__dict__.setdefault('_named', {})
         if person not in cache:
-            row = self.db.identities.find_one({'_id': person}, {'display_name': 1}) if person else None
+            row = people_records.identity(self.store, person, ['display_name']) if person else None
             cache[person] = safe_name((row or {}).get('display_name'))
         return cache[person]
 
@@ -434,7 +437,7 @@ class People:
                 continue
             if platform.account_of(author):
                 return platform.account_of(author)
-            row = self.db.identities.find_one({'person_id': author}, {'account_id': 1})
+            row = people_records.of_person(self.store, author, ['account_id'])
             if row and platform.ACCOUNT.fullmatch(str(row.get('account_id') or '')):
                 return str(row['account_id'])
         return None

@@ -27,6 +27,7 @@ from datetime import datetime, timedelta, timezone
 from .blobs import BlobStore, erased, erased_words, refuse_erased
 from .outbound_files import removed, size_words
 from .state import Denied, now
+from .records import artifacts as artifact_records
 from .records import scenes as scene_records
 from .records import messages as message_records
 
@@ -73,21 +74,19 @@ def stash(store, data, scope, *, message_id, index, name, sender, message_at=Non
               'days_from': moment}
     stored = BlobStore(store).put_once(data, scope, KIND, source_ids=[source], fields=fields)
     if stored.get('deduplicated'):
-        store.db.artifacts.update_one({'_id': stored['artifact_id']},
-                                      {'$set': {'days_from': moment}, '$addToSet': {'source_ids': source}})
+        artifact_records.set_days_from(store, stored['artifact_id'], moment, source=source)
     return stored
 
 
 def mark_read(store, artifact_id, scopes, moment=None):
     """A page of it was read: the time a quota refusal sorts by, written only inside the fence like everything here
     (her review of db192bdff79e: else another conversation's id could reorder whom a refusal names)."""
-    store.db.artifacts.update_one({'_id': artifact_id, 'kind': KIND, 'state': 'DONE',
-                                   'scope_key': {'$in': sorted(scopes)}}, {'$set': {'last_read_at': moment or now()}})
+    artifact_records.mark_read(store, artifact_id, KIND, sorted(scopes), moment or now())
 
 
 def _row(store, artifact_id, scopes):
     """The row inside the fence, else not found: the fence comes before anything the row could say."""
-    row = store.db.artifacts.find_one({'_id': artifact_id, 'kind': KIND, 'state': 'DONE'})
+    row = artifact_records.get(store, artifact_id, kind=KIND, state='DONE')
     if not row or row.get('scope_key') not in set(scopes):
         raise Denied(NOT_FOUND)
     return row
@@ -95,7 +94,7 @@ def _row(store, artifact_id, scopes):
 
 def _kept_rows(store):
     """Every kept file whose bytes are stored, in all her conversations: what the quota counts."""
-    return list(store.db.artifacts.find({'kind': KIND, 'kept_at': {'$exists': True}, 'storage': 'gridfs'}))
+    return artifact_records.kept(store, KIND, stored=True).rows()
 
 
 def _quota_words(rows):
@@ -135,7 +134,7 @@ def keep(store, artifact_id, why, scopes, scene_id=None, moment=None):
     why = str(why or '').strip()[:200]
     if row.get('kept_at'):
         if why:
-            store.db.artifacts.update_one({'_id': row['_id']}, {'$set': {'kept_why': why}})
+            artifact_records.keep_why(store, row['_id'], why)
         return {'kept': True, 'note': ALREADY_KEPT % _stamp(store, row['kept_at'], scene_id)}
     rows = _kept_rows(store)
     size = int(row.get('size') or 0)
@@ -144,7 +143,7 @@ def keep(store, artifact_id, why, scopes, scene_id=None, moment=None):
     change = {'kept_at': moment or now()}
     if why:
         change['kept_why'] = why
-    store.db.artifacts.update_one({'_id': row['_id']}, {'$set': change})
+    artifact_records.set_fields(store, row['_id'], change)
     rows = _kept_rows(store)
     return {'kept': True, 'note': KEPT % (len(rows), size_words(sum(int(r.get('size') or 0) for r in rows)),
                                           size_words(QUOTA_BYTES), QUOTA_FILES)}
@@ -171,13 +170,12 @@ def let_go(store, artifact_id, scopes, scene_id=None, moment=None):
     from .vision import REF_DAYS
     row = _row(store, artifact_id, scopes)
     if erased(row):
-        store.db.artifacts.update_one({'_id': row['_id']}, {'$unset': {'kept_at': '', 'kept_why': ''}})
+        artifact_records.unkeep(store, row['_id'])
         return {'let_go': True, 'note': erased_words(store, row, scene_id) + LET_GO_ERASED}
     if not row.get('kept_at'):
         return {'let_go': False, 'note': NOT_KEPT}
     moment = moment or now()
-    store.db.artifacts.update_one({'_id': row['_id']}, {'$set': {'days_from': moment, 'let_go_at': moment},
-                                                        '$unset': {'kept_at': '', 'kept_why': ''}})
+    artifact_records.let_go(store, row['_id'], moment)
     start = _moment(moment)
     note = LET_GO % (KEEP_DAYS, _stamp(store, (start + timedelta(days=KEEP_DAYS)).isoformat(), scene_id))
     sent = _moment(row.get('message_at'))
@@ -195,8 +193,7 @@ def kept(store, scopes, scene_id=None):
     kept in other conversations are counted, never named, with the quota's ruler (kept files whose bytes are stored),
     so the two counts on one screen add up (her review of db192bdff79e)."""
     scopes = set(scopes)
-    rows = sorted(store.db.artifacts.find({'kind': KIND, 'kept_at': {'$exists': True}}),
-                  key=lambda r: _when(r.get('kept_at')), reverse=True)
+    rows = sorted(artifact_records.kept(store, KIND).rows(), key=lambda r: _when(r.get('kept_at')), reverse=True)
     entries = []
     for row in (r for r in rows if r.get('scope_key') in scopes):
         entry = _entry(store, row, scene_id)
@@ -495,12 +492,10 @@ def found(store, where, config, ref, session_class):
     scopes = reach(store, where, config, session_class)
     row = None
     if entry:
-        row = store.db.artifacts.find_one({'kind': KIND, 'state': 'DONE', 'scope_key': {'$in': sorted(scopes)},
-                                           'source_ids': source_of(entry['source_message_id'], entry['index'])},
-                                          sort=[('created_at', -1)])
+        row = artifact_records.of_kind(store, KIND, state='DONE', scopes=sorted(scopes), source=source_of(
+            entry['source_message_id'], entry['index']), by='created_at').first(newest_first=True)
     if not row:
-        row = store.db.artifacts.find_one({'kind': KIND, 'state': 'DONE', 'ref': ref, 'kept_at': {'$exists': True},
-                                           'scope_key': {'$in': sorted(scopes)}})
+        row = artifact_records.kept(store, KIND, state='DONE', ref=ref, scopes=sorted(scopes)).first()
     if not entry and not row:
         raise Denied(REF_NOT_FOUND % (REF_DAYS, ref))
     return entry, row, scopes
@@ -528,7 +523,7 @@ def read(store, where, config, args, *, persona, session_class, moment=None):
     note = None
     if row and erased(row):
         raise Denied('ARTIFACT_ERASED: ' + erased_words(store, row, scene_id) + ERASED_LINK)
-    if row and row.get('storage') == 'gridfs':
+    if row and row.get('storage') == artifact_records.STORED:
         text = BlobStore(store).get(row['_id'], row['scope_key'], operator=True).decode(row.get('encoding') or 'utf-8')
     else:
         if not entry.get('pullable'):
@@ -547,7 +542,7 @@ def read(store, where, config, args, *, persona, session_class, moment=None):
         if row:
             note = REFETCHED % _stamp(store, row.get('bytes_removed_at'), scene_id)
         if row and BlobStore(store).restore(row['_id'], data):
-            store.db.artifacts.update_one({'_id': row['_id']}, {'$set': {'days_from': moment}})
+            artifact_records.set_days_from(store, row['_id'], moment)
         else:                                    # never fetched, or the link now serves other bytes: a row of its own
             sender = _sender(store, persona, entry)
             line = message_records.get(store, entry['source_message_id'], fields=['received_at']) or {}
@@ -557,7 +552,7 @@ def read(store, where, config, args, *, persona, session_class, moment=None):
                            declared_size=entry['declared_bytes'], encoding=encoding,
                            marks=marks_of(text, entry['name'], sender), moment=moment)
             row = {'_id': stored['artifact_id']}
-        row = store.db.artifacts.find_one({'_id': row['_id']})
+        row = artifact_records.get(store, row['_id'])
     mark_read(store, row['_id'], scopes, moment)
     return _answer(store, row, text, args, scene_id, note)
 
@@ -699,7 +694,7 @@ def copy(store, where, config, args, *, task_dir, session_class):
     if not row:
         raise Denied(NOT_READ_YET % 'copy')
     refuse_erased(store, row, where.get('scene_id'))
-    if row.get('storage') != 'gridfs':
+    if row.get('storage') != artifact_records.STORED:
         raise Denied(NOT_STORED)
     data = BlobStore(store).get(row['_id'], row['scope_key'], operator=True)
     folder = Path(task_dir) / COPY_DIR
@@ -715,7 +710,7 @@ def copy(store, where, config, args, *, task_dir, session_class):
     target.write_bytes(data)
     if os.name != 'nt':
         os.chmod(target, 0o600)
-    store.db.artifacts.update_one({'_id': row['_id']}, {'$addToSet': {'copies': str(target)}})
+    artifact_records.add_copy(store, row['_id'], str(target))
     shown = '/task/%s/%s' % (COPY_DIR, target.name)
     out = {'ref': ref, 'path': shown, 'marks': row.get('marks') or [], 'note': COPIED % shown}
     if not denied:
@@ -728,8 +723,8 @@ def drop_copies(store):
     deleted now (locked on Windows) stays listed and is tried again at the next sweep. Returns (removed, failed)."""
     from pathlib import Path
     removed = failed = 0
-    for row in store.db.artifacts.find({'kind': KIND, 'storage': {'$ne': 'gridfs'}, 'copies.0': {'$exists': True}},
-                                       {'copies': 1}):
+    for row in artifact_records.with_copies(store, KIND, besides_storage=artifact_records.STORED).rows(
+            fields=['copies']):
         left = []
         for path in row.get('copies') or []:
             try:
@@ -738,7 +733,7 @@ def drop_copies(store):
             except OSError:
                 left.append(path)
                 failed += 1
-        store.db.artifacts.update_one({'_id': row['_id']}, {'$set': {'copies': left}})
+        artifact_records.set_copies(store, row['_id'], left)
     return removed, failed
 
 
@@ -766,6 +761,6 @@ def received_from(store, task, sha256):
         scopes = reach(store, task, store.config, cls)
     except Denied:                       # the task's fence does not hold: no origin is claimed; registering goes on
         return None
-    row = store.db.artifacts.find_one({'kind': KIND, 'sha256': sha256, 'scope_key': {'$in': sorted(scopes)}},
-                                      {'ref': 1, 'sender': 1}, sort=[('created_at', 1)])
+    row = artifact_records.by_content(store, sha256, KIND, scopes=sorted(scopes), by='created_at',
+                                      fields=['ref', 'sender'])
     return {'ref': row.get('ref'), 'sender': row.get('sender')} if row else None

@@ -1,5 +1,6 @@
 import json
 import pytest
+from asuna.records import heads as head_records
 from asuna.context import ContextBuilder
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane, FakeTurn
@@ -20,7 +21,7 @@ def setup_turn(store, reflection):
 def test_role_update_survives_interruption_without_double_commit_or_scope_leak(store,monkeypatch):
     text='我此前过多解释过程；A 更看重先听结论。这只适用于与 A 的这段关系。'
     coordinator,lane,event=setup_turn(store,text)
-    before=store.head('relationship:A','scene:dm-a')[1]
+    before=head_records.current(store, 'relationship:A','scene:dm-a')[1]
     original=MemoryService.commit_understanding
     def interrupted(service,ep,body,layer='here',**kwargs):
         result=original(service,ep,body,layer,**kwargs)
@@ -36,7 +37,7 @@ def test_role_update_survives_interruption_without_double_commit_or_scope_leak(s
     assert [c['phase'] for c in lane.calls]==['TURN','TURN']
     assert '这一回合中断前已经生效的工具调用（不用再做一遍）：think' in lane.calls[1]['messages'][-1]['content']
     assert done['understanding_update']['state']=='COMMITTED'
-    revision=store.head('relationship:A','scene:dm-a')[1]
+    revision=head_records.current(store, 'relationship:A','scene:dm-a')[1]
     assert revision['content']=={'body':text,'short':'A 要先听结论。'}
     assert revision['parent_revision_id']==before['_id']
     assert revision['source_ids']==done['monologue_refs']

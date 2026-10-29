@@ -37,6 +37,8 @@ from .records import episodes as episode_records
 from .records import receipts as receipt_records
 from .records import sessions as session_records
 from .records import plans as plan_records
+from .records import artifacts as artifact_records
+from .records import people as people_records
 from .records import tasks as task_records
 
 
@@ -172,8 +174,8 @@ class NativeLane:
                     if base.split(':execute:', 1)[1].split(':', 1)[0] != str(task['intent_revision']):
                         raise Denied('STALE_TASK_FENCE')
                 else:
-                    artifact = self.store.db.artifacts.find_one({'_id':base.split(':consult:',1)[1],
-                        'task_id':task_id,'intent_revision':task['intent_revision']})
+                    artifact = artifact_records.get(self.store, base.split(':consult:',1)[1], task=task_id,
+                                                    revision=task['intent_revision'])
                     if not artifact:
                         raise Denied('STALE_TASK_FENCE')
                 # The turn the task works for: on an errand, the home turn that sent it (errands.home_turn).
@@ -507,9 +509,9 @@ class BusinessWorker:
                 # ADR-101: the plugin's open span, read from the data folder (the worker never writes it).
                 self.folded_stop = host_stops.left_behind(self.app.store, lease, host_stops.open_span())
             self.navigation = self.prepare_navigation(native_sessions or [])
-            self.projection_start = self.app.store.db.artifacts.find_one({'_id': 'native-channel-projection'})
+            self.projection_start = artifact_records.get(self.app.store, 'native-channel-projection')
             if not self.projection_start:
-                self.projection_start = self.app.store.put('artifacts', {'_id': 'native-channel-projection',
+                self.projection_start = artifact_records.save(self.app.store, {'_id': 'native-channel-projection',
                     'kind': 'native-channel-projection', 'since': now(), 'scope_key': 'operator'}, stream='native-channel-projection')
             self.controller.on_input_received = self.project_input
             self.controller.on_episode_finished = self.episode_finished
@@ -1005,7 +1007,7 @@ class BusinessWorker:
             if person and person == people.owner:
                 name = people.owner_label
             else:
-                saved = self.app.store.db.identities.find_one({'_id': person}, {'display_name': 1}) if person else None
+                saved = people_records.identity(self.app.store, person, ['display_name']) if person else None
                 name = (saved or {}).get('display_name')
         target = str(route['target']['id'])
         unnamed = target if len(target) <= 20 else ('群聊 ' if group else '私聊 ') + target[:6]

@@ -68,13 +68,15 @@ def own_items(store, persona):
         for section in (docs.read(slug)[1] or {}).get('sections') or []:
             add(slug, slug, section, scope_of(section))
     # current_self as it is split today: its list lines of some length (ADR-062 §1.1).
-    head = store.head('current_self:' + persona, 'global-safe')
+    from .records import heads as head_records
+    head = head_records.current(store, 'current_self:' + persona, 'global-safe')
     for line in ((head[1]['content'].get('body') or '') if head else '').splitlines():
         if SELF_ITEM.match(line) and len(line.strip()) >= SELF_ITEM_CHARS:
             add('self', 'current_self', {'sid': sha(line.strip().encode())[:16], 'body': line.strip(),
                                          'visibility': 'public'}, 'global-safe')
-    for slug in store.db.journal_entries.distinct('slug', {'persona': persona}):
-        for row in store.db.journal_entries.find({'persona': persona, 'slug': slug}).sort('seq', 1):
+    from . import documents
+    for slug in documents.slugs(store, persona):
+        for row in documents.entries(store, persona, slug).rows():
             add('journal', slug, row, scope_of(row))
     # Her ledgers and her self described as items (`self`, `core`), when she has them.
     for slug in docs.slugs():

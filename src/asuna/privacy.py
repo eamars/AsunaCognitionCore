@@ -11,6 +11,7 @@ from .records import sessions as session_records
 from .records import receipts as receipt_records
 from .records import tasks as task_records
 from .records import memories as memory_records
+from .records import heads as head_records
 
 
 class PrivacyService:
@@ -32,22 +33,22 @@ class PrivacyService:
         source from the erased conversation goes, and the record falls back to the newest revision before it that
         cites none (or is deleted when there is none)."""
         from .understanding import PERSON_SCOPE
-        db=self.store.db
+        store=self.store
         def tainted(rev):
             return any((memory_records.get(self.store,source,['scope_key']) or {}).get('scope_key')==scope
                        for source in rev.get('source_ids',[]))
-        for head in db.state_heads.find({'scope_key':PERSON_SCOPE}):
-            chain=[];rev=db.state_revisions.find_one({'_id':head['revision_id']})
+        for head in head_records.heads(store,scope=PERSON_SCOPE).rows():
+            chain=[];rev=head_records.revision(store,head['revision_id'])
             while rev:
                 chain.append(rev)
-                rev=db.state_revisions.find_one({'_id':rev['parent_revision_id']}) if rev.get('parent_revision_id') else None
+                rev=head_records.revision(store,rev['parent_revision_id']) if rev.get('parent_revision_id') else None
             bad=[i for i,rev in enumerate(chain) if tainted(rev)]
             if not bad:continue
             keep=chain[bad[-1]+1] if bad[-1]+1<len(chain) else None
-            if keep:db.state_heads.update_one({'_id':head['_id']},{'$set':{'revision_id':keep['_id'],'revision':head['revision']+1}})
-            else:db.state_heads.delete_one({'_id':head['_id']})
+            if keep:head_records.point_to(store,head['_id'],keep['_id'],head['revision']+1)
+            else:head_records.drop_head(store,head['_id'])
             for rev in chain[:bad[-1]+1]:
-                db.state_revisions.update_one({'_id':rev['_id']},{'$set':{'content':{},'source_ids':[],'status':'tombstone','deletion_id':deletion}})
+                head_records.tombstone_revision(store,rev['_id'],deletion)
 
     def _erase(self,key,memory):
         db=self.store.db;scope=memory['scope_key']
@@ -106,16 +107,16 @@ class PrivacyService:
                 db[collection].replace_one({'_id':doc['_id']},retained)
         for receipt in receipt_records.lane_of_sessions(self.store,list(session_ids)):
             receipt_records.lane_invalidate(self.store,receipt['_id'],deletion)
-        for head in db.state_heads.find({'scope_key':scope}):
-            rev=db.state_revisions.find_one({'_id':head['revision_id']})
-            while rev and rev.get('parent_revision_id'):rev=db.state_revisions.find_one({'_id':rev['parent_revision_id']})
+        for head in head_records.heads(self.store,scope=scope).rows():
+            rev=head_records.revision(self.store,head['revision_id'])
+            while rev and rev.get('parent_revision_id'):rev=head_records.revision(self.store,rev['parent_revision_id'])
             if rev and not(set(rev.get('source_ids',[]))&sources):
-                db.state_heads.update_one({'_id':head['_id']},{'$set':{'revision_id':rev['_id'],'revision':head['revision']+1}})
-            else:db.state_heads.delete_one({'_id':head['_id']})
+                head_records.point_to(self.store,head['_id'],rev['_id'],head['revision']+1)
+            else:head_records.drop_head(self.store,head['_id'])
         self._erase_person_layer(scope,deletion)
-        active_revisions={h['revision_id'] for h in db.state_heads.find({'scope_key':scope})}
-        for rev in db.state_revisions.find({'scope_key':scope,'_id':{'$nin':list(active_revisions)}}):
-            db.state_revisions.update_one({'_id':rev['_id']},{'$set':{'content':{},'source_ids':[],'status':'tombstone','deletion_id':deletion}})
+        active_revisions={h['revision_id'] for h in head_records.heads(self.store,scope=scope).rows()}
+        for rev in head_records.stale_revisions(self.store,scope,list(active_revisions)).rows():
+            head_records.tombstone_revision(self.store,rev['_id'],deletion)
         # Intentional erasure is a declared chain rebase, not a claim that the
         # original chain still verifies. Preserve old terminal hashes only.
         previous_roots={};new_roots={}

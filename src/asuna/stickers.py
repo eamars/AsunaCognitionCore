@@ -29,6 +29,7 @@ from . import channel_kinds
 from .context_budget import ROUGH_AGO, STICKER_REVIEW, STICKER_SHELF, _tier
 from .evidence import sha
 from .state import Denied, now
+from .records import artifacts as artifact_records
 from .records import scenes as scene_records
 from .records import messages as message_records
 
@@ -77,7 +78,7 @@ def erased_pictures(store, rows):
     ids = [row['artifact_id'] for row in rows if row and row.get('artifact_id')]
     if not ids:
         return {}
-    return {item['_id']: item for item in store.db.artifacts.find({'_id': {'$in': ids}, 'storage': 'erased'})}
+    return {item['_id']: item for item in artifact_records.by_ids(store, ids, storage=artifact_records.ERASED).rows()}
 
 
 def refuse_erased(store, persona, name, scene_id):
@@ -141,11 +142,11 @@ def keep(store, blobs, ep, persona, args, config):
            'sent': 0, 'last_sent_at': None}
     if ARTIFACT_REF.fullmatch(ref):
         from .blobs import refuse_erased
-        row = store.db.artifacts.find_one({'_id': ref, 'kind': 'image', 'state': 'DONE'})
+        row = artifact_records.get(store, ref, kind='image', state='DONE')
         if not row or not produced(row):
             raise Denied('STICKER_NOT_YOURS: 「%s」不是你自己画好的图' % ref)
         refuse_erased(store, row, ep['scene_id'])           # hers, erased with the conversation it was made in
-        if row.get('storage') != 'gridfs':
+        if row.get('storage') != artifact_records.STORED:
             raise Denied('STICKER_NOT_YOURS: 「%s」不是你自己画好的图' % ref)
         doc.update(origin='own', kind='custom', artifact_id=ref, sha256=row['sha256'], size=row['size'],
                    media_type=row.get('media_type'), identity='sha:' + row['sha256'],
@@ -303,7 +304,7 @@ def leaving(store, row):
     sha, and serve refuses it and says why."""
     from .blobs import BlobStore
     from .outbound_media import sha256_of, without_text
-    item = store.db.artifacts.find_one({'_id': row['artifact_id']}, {'scope_key': 1}) or {}
+    item = artifact_records.get(store, row['artifact_id'], ['scope_key']) or {}
     try:
         data = without_text(BlobStore(store).get(row['artifact_id'], item.get('scope_key'), operator=True))
     except (Denied, ValueError):
@@ -585,7 +586,7 @@ def picture_key(data):
 
 def _blob(store, artifact_id):
     from .blobs import BlobStore
-    row = store.db.artifacts.find_one({'_id': artifact_id}, {'scope_key': 1})
+    row = artifact_records.get(store, artifact_id, ['scope_key'])
     return BlobStore(store).get(artifact_id, row['scope_key'], operator=True) if row else None
 
 

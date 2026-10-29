@@ -321,8 +321,8 @@ def test_a_claimed_file_whose_bytes_vanished_fails_as_expired_saying_whether_the
     world(store)
     registered, rows = queued_file(store, tmp_path, 'f-claim-gone-%s' % present)
     item = store.db.artifacts.find_one({'_id': registered['artifact_id']})
-    from bson import ObjectId
-    BlobStore(store).bucket.delete(ObjectId(item['gridfs_id']))
+    from asuna import blobs
+    blobs.delete(store, item['gridfs_id'])
     store.db.artifacts.update_one({'_id': item['_id']}, {'$set': {'storage': 'removed', 'bytes_removed_at': '2026-10-20T01:00:00+00:00'}})
     if not present:
         (tmp_path / 'report.pdf').unlink()

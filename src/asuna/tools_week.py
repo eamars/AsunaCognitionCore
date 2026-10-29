@@ -19,6 +19,7 @@ from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import sessions as session_records
 from .records import tasks as task_records
+from .records import artifacts as artifact_records
 
 TABLES_VERSION = 1
 WEEK_DAYS = 7
@@ -167,7 +168,7 @@ def _action_brain(store, since, until):
     ids = [task['_id'] for task in tasks]
     used = collections.defaultdict(set)
     tools = collections.Counter()
-    for row in store.db.artifacts.find({'task_id': {'$in': ids}}, {'task_id': 1, 'tool': 1}):
+    for row in artifact_records.of_tasks(store, ids).rows(fields=['task_id', 'tool']):
         used[row['task_id']].add(row.get('tool'))
         tools[row.get('tool')] += 1
     rejected = list(store.db.audit_events.find({'type': 'execution.rejected', 'occurred_at': {'$gte': since, '$lt': until}},

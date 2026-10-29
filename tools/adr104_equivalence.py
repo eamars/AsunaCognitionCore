@@ -1,17 +1,19 @@
 """The read-only check of one ADR-104 batch against a deployment's database, before the batch merges: numbers only,
 never a record id or a value.
 
-  python tools/adr104_equivalence.py b1b|b2|b3|b4|b5|b6|b7 [--config config/local.json] [--out <folder>] [--max-ms 2000]
+  python tools/adr104_equivalence.py b1b|b2|b3|b4|b5|b6|b7|b8|b9 [--config config/local.json] [--out <folder>] [--max-ms 2000]
 
 Each batch: what the store's `ensure` would do there, as a dry run (collections it would create, indexes it would
 make, retired indexes it would drop, indexes of a declared name that differ, validators), and for every field the
 catalog declares in the batch's collections (b1b: all of them; b2: `host_leases` and `lane_faults`; b3: `scenes`;
 b4: `messages`; b5: `episodes`, `sessions`, `sink_receipts`, `lane_receipts`; b6: `tasks`, `task_messages`,
-`plans`; b7: `memory_units`), its stored records by BSON type, the nulls, the records missing a required field and,
-for a vector, the lengths that differ; b4 to b7 also, per collection (SIZED), the records of 512 KiB or more and those
-whose BSON and JSON sizes fall on different sides of 1 MiB. b3 to b7 also run their read cases: each read the batch
-moved, as the replaced code wrote it with pymongo and as the owner (`records.scenes`, `records.messages`,
-`records.episodes`, `records.sessions`, `records.receipts`, `records.tasks`, `records.plans`, `records.memories`) now
+`plans`; b7: `memory_units`; b8: `artifacts`; b9: `state_heads`, `state_revisions`, `journal_entries`,
+`journal_revisions`, `identities`, `scene_people`, `ideas`), its stored records by BSON type, the nulls, the records
+missing a required field and, for a vector, the lengths that differ; b4 to b9 also, per collection (SIZED), the records
+of 512 KiB or more and those whose BSON and JSON sizes fall on different sides of 1 MiB. b3 to b9 also run their read
+cases: each read the batch moved, as the replaced code wrote it with pymongo and as the owner (`records.scenes`,
+`records.messages`, `records.episodes`, `records.sessions`, `records.receipts`, `records.tasks`, `records.plans`,
+`records.memories`, `records.artifacts`, `records.heads`, `documents`, `records.people`, `records.ideas`) now
 answers it (b6 also the conversation context's task aggregate against `records.tasks.recent_with_inputs` on up to 20
 conversations, rows and their fields in order; b7 the Web memory page's aggregate against `records.memories.web_page`,
 and a read that takes a whole conversation or every memory at most LIGHT records on both sides), on parameters
@@ -31,13 +33,21 @@ b7 also runs B7's own proof (`search_proof`): retrieval's whole search, old (its
 search's pairs translated as state.py did) against new, on QUERIES_SEARCH queries chosen as step 1a chose them (each a
 memory's text with its stored vector, no embedding call; nothing written): the same final six and the same 24 vector
 candidates, under the same timing gate; its reads are counted apart from the read cases' budget.
+b8 also runs B8's own proof (`blob_probe`): the store's blob interface on a throwaway database of the same server
+(`asuna_v2_test_blobprobe_*`, the only writes the check makes, dropped at the end and on failure): a synthetic stream of
+PROBE_BYTES written, read back in pieces and with a seek, its hash and size compared, listed by its scope, deleted
+twice, missing after; and, read only on hers (`stored_files`), up to STORED_FILES rows whose bytes are stored, each
+blob opened and read in pieces, its size and sha256 compared with its row.
 The field counts are many small reads (parts of at most PART_RECORDS records by `_id`, FIELDS_PER_READ fields
 each), each bounded by `--max-ms` on the server; a read over its limit leaves its fields unchecked, named in the
 report (exit 2). Each query is read-only and bounded by `--max-ms`. The numbers go to `<out>/<batch>.json` (default
 `<data>/private/adr104-evidence/<batch>/`) and to the console. Exit 0 when nothing would be created, made or refused,
 every validator is the one ensure creates and every declared field holds only its kind (the retired indexes to drop
 are reported: dropping them is the batch's change); 1 when something differs; 2 when a check could not run (a query
-over its time limit, the server out of reach).
+over its time limit, the server out of reach). The report holds the `--max-ms` the run used. A query stopped by its
+limit (MongoDB's MaxTimeMSExpired, the client's operation or socket timeout) is TIMED OUT, named with where it was
+(the read case, the field counts of a collection, ...) and the limit it hit; a read case that times out is marked so
+and the other cases go on. UNREACHABLE is only a server that cannot be reached at all.
 """
 from __future__ import annotations
 import argparse
@@ -51,7 +61,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
 from pymongo import MongoClient  # noqa: E402
-from pymongo.errors import ExecutionTimeout, PyMongoError  # noqa: E402
+from pymongo.errors import ConnectionFailure, ExecutionTimeout, PyMongoError, ServerSelectionTimeoutError  # noqa: E402
 
 from asuna.store.catalog import CATALOG  # noqa: E402
 from asuna.store.mongodb import MongoAdapter, projection  # noqa: E402
@@ -237,12 +247,15 @@ def differs(collection, counts):
 
 
 # The collections whose declared fields each batch counts (None: every collection).
+B9_COLLECTIONS = ('state_heads', 'state_revisions', 'journal_entries', 'journal_revisions', 'identities',
+                  'scene_people', 'ideas')
 BATCHES = {'b1b': None, 'b2': ('host_leases', 'lane_faults'), 'b3': ('scenes',), 'b4': ('messages',),
            'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts'), 'b6': ('tasks', 'task_messages', 'plans'),
-           'b7': ('memory_units',)}
+           'b7': ('memory_units',), 'b8': ('artifacts',), 'b9': B9_COLLECTIONS}
 # The collections whose records' sizes each batch counts (512 KiB or more; BSON and JSON on different sides of 1 MiB).
 SIZED = {'b4': ('messages',), 'b5': ('episodes', 'sessions', 'sink_receipts', 'lane_receipts'),
-         'b6': ('tasks', 'task_messages', 'plans'), 'b7': ('memory_units',)}
+         'b6': ('tasks', 'task_messages', 'plans'), 'b7': ('memory_units',), 'b8': ('artifacts',),
+         'b9': B9_COLLECTIONS}
 QUERIES = 1000
 _ARCHIVED = {'reason': "the archived stream's old read left out `legacy` by an exclusion projection, which the store "
                        "does not have; the owner drops it after the read (accepted for B4, 2026-10-28)",
@@ -267,7 +280,24 @@ WATCHED = {'b4': {'who wrote in these': {
     'note': 'same family, under threshold: a values read grouped by presence, as "who wrote here" (293 ms against 9 '
             'before fa46c24132f6); measured at B4 old p50 ~12 ms, new ~19 ms, 1.55x'}}}
 RUNS = 3
-READ_CASES = ('b3', 'b4', 'b5', 'b6', 'b7')
+READ_CASES = ('b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9')
+
+
+def timed_out(error):
+    """Whether a query was stopped by its time limit (`--max-ms`: MongoDB's MaxTimeMSExpired, or the client's
+    operation or socket timeout), not by a server out of reach (server selection failing is UNREACHABLE)."""
+    return (isinstance(error, PyMongoError) and bool(getattr(error, 'timeout', False))
+            and not isinstance(error, ServerSelectionTimeoutError))
+
+
+def failure(error, where, max_ms):
+    """The words of a check stopped by a database error: TIMED OUT with where and the limit it hit, UNREACHABLE only
+    for a server that cannot be reached at all, any other refusal by its class."""
+    if timed_out(error):
+        return 'TIMED OUT: %s: a query stopped at its limit of %d ms (%s)' % (where, max_ms, type(error).__name__)
+    if isinstance(error, ConnectionFailure):
+        return 'ADR104_CHECK_UNREACHABLE: %s (during %s)' % (type(error).__name__, where)
+    return 'ADR104_CHECK_FAILED: %s (during %s)' % (type(error).__name__, where)
 
 
 def slower(old, new):
@@ -428,8 +458,9 @@ def reads(client, database, max_ms, batch, config):
     old_db = client.get_database(database)
     adapter = _Recording(client, database)
     store = Checked(adapter, CATALOG)
-    cases, sampling = (_cases_b3(store), 1) if batch == 'b3' else {'b4': _cases_b4, 'b5': _cases_b5,
-                                                                   'b6': _cases_b6, 'b7': _cases_b7}[batch](store, config)
+    cases, sampling = (_cases_b3(store), 1) if batch == 'b3' else {
+        'b4': _cases_b4, 'b5': _cases_b5, 'b6': _cases_b6, 'b7': _cases_b7, 'b8': _cases_b8,
+        'b9': _cases_b9}[batch](store, config)
     # A case may name how many samples it takes (a sixth item: B6's proof on 20 conversations); its reads (one old,
     # up to two new a run) come off the budget first, and the other cases share the rest.
     fixed = [case for case in cases if len(case) > 5]
@@ -438,65 +469,71 @@ def reads(client, database, max_ms, batch, config):
     per_case = max(1, min(20, (QUERIES - sampling - reserved - 2 * shared) // (shared * 2 * RUNS)))
     out, timed, explained, confirmed = {}, 0, 0, 0
     for name, old_call, new_call, params, how, *samples in cases:
-        if samples:
-            chosen = params[:samples[0]]
-        else:
-            chosen = params[::max(1, len(params) // per_case)][:per_case] if params else []
-        same = differing = plans_differ = rows_old = rows_new = 0
-        times = {'old': [], 'new': []}
-        old_plan = new_plan = None
-        compared = True
-        for param in chosen:
-            results = {}
-            for _ in range(RUNS):
-                started = clock.perf_counter()
-                old_value, old_cursor = _old(old_db, old_call(param))
-                times['old'].append((clock.perf_counter() - started) * 1000)
-                started, before = clock.perf_counter(), adapter.calls
-                new_value = new_call(param)
-                times['new'].append((clock.perf_counter() - started) * 1000)
-                timed += 1 + max(1, adapter.calls - before)
-                results = {'old': _compared(old_value, how), 'new': _compared(new_value, how)}
-            rows_old, rows_new = rows_old + _amount(old_value), rows_new + _amount(new_value)
-            if results['old'] == results['new']:
-                same += 1
+        try:
+            if samples:
+                chosen = params[:samples[0]]
             else:
-                differing += 1
-            if old_plan is None or new_plan is None or param is chosen[-1]:
-                coll, filter, sort, skip, limit, fields = adapter.sent
-                new_cursor = adapter.db[coll].find(filter, projection(fields), sort=list(sort) or None, skip=skip,
-                                                   limit=limit)
-                new_plan = _stages(new_cursor.explain()['queryPlanner']['winningPlan'])
-                explained += 1
-                if old_cursor is None:
-                    compared = False
+                chosen = params[::max(1, len(params) // per_case)][:per_case] if params else []
+            same = differing = plans_differ = rows_old = rows_new = 0
+            times = {'old': [], 'new': []}
+            old_plan = new_plan = None
+            compared = True
+            for param in chosen:
+                results = {}
+                for _ in range(RUNS):
+                    started = clock.perf_counter()
+                    old_value, old_cursor = _old(old_db, old_call(param))
+                    times['old'].append((clock.perf_counter() - started) * 1000)
+                    started, before = clock.perf_counter(), adapter.calls
+                    new_value = new_call(param)
+                    times['new'].append((clock.perf_counter() - started) * 1000)
+                    timed += 1 + max(1, adapter.calls - before)
+                    results = {'old': _compared(old_value, how), 'new': _compared(new_value, how)}
+                rows_old, rows_new = rows_old + _amount(old_value), rows_new + _amount(new_value)
+                if results['old'] == results['new']:
+                    same += 1
                 else:
-                    old_plan = _stages(old_cursor.explain()['queryPlanner']['winningPlan'])
+                    differing += 1
+                if old_plan is None or new_plan is None or param is chosen[-1]:
+                    coll, filter, sort, skip, limit, fields = adapter.sent
+                    new_cursor = adapter.db[coll].find(filter, projection(fields), sort=list(sort) or None, skip=skip,
+                                                       limit=limit)
+                    new_plan = _stages(new_cursor.explain()['queryPlanner']['winningPlan'])
                     explained += 1
-                    plans_differ += old_plan != new_plan
-        pct = lambda values, q: round(statistics.quantiles(values, n=20)[q], 2) if len(values) > 1 else (
-            round(values[0], 2) if values else None)
-        out[name] = {'n': len(chosen), 'same': same, 'differing': differing, 'plans_differ': plans_differ,
-                     'rows_old': rows_old, 'rows_new': rows_new,
-                     'plan_accepted': name in ACCEPTED_PLAN_DIFFERENCES.get(batch, {}),
-                     'plans_compared': compared, 'plan_old': old_plan, 'plan_new': new_plan,
-                     'ms_old_p50': pct(times['old'], 9), 'ms_old_p95': pct(times['old'], 18),
-                     'ms_new_p50': pct(times['new'], 9), 'ms_new_p95': pct(times['new'], 18)}
-        if slower(out[name]['ms_old_p50'], out[name]['ms_new_p50']) and chosen:
-            if sampling + timed + confirmed + explained + 2 * CONFIRM_RUNS > QUERIES:
-                out[name]['confirm'] = {'runs': 0, 'why': 'over the query budget: not timed again'}
-                continue
-            again = {'old': [], 'new': []}
-            for _ in range(CONFIRM_RUNS):
-                started = clock.perf_counter()
-                _old(old_db, old_call(chosen[0]))
-                again['old'].append((clock.perf_counter() - started) * 1000)
-                started = clock.perf_counter()
-                new_call(chosen[0])
-                again['new'].append((clock.perf_counter() - started) * 1000)
-            confirmed += 2 * CONFIRM_RUNS
-            out[name]['confirm'] = {'runs': CONFIRM_RUNS, 'ms_old_p50': round(statistics.median(again['old']), 2),
-                                    'ms_new_p50': round(statistics.median(again['new']), 2)}
+                    if old_cursor is None:
+                        compared = False
+                    else:
+                        old_plan = _stages(old_cursor.explain()['queryPlanner']['winningPlan'])
+                        explained += 1
+                        plans_differ += old_plan != new_plan
+            pct = lambda values, q: round(statistics.quantiles(values, n=20)[q], 2) if len(values) > 1 else (
+                round(values[0], 2) if values else None)
+            out[name] = {'n': len(chosen), 'same': same, 'differing': differing, 'plans_differ': plans_differ,
+                         'rows_old': rows_old, 'rows_new': rows_new,
+                         'plan_accepted': name in ACCEPTED_PLAN_DIFFERENCES.get(batch, {}),
+                         'plans_compared': compared, 'plan_old': old_plan, 'plan_new': new_plan,
+                         'ms_old_p50': pct(times['old'], 9), 'ms_old_p95': pct(times['old'], 18),
+                         'ms_new_p50': pct(times['new'], 9), 'ms_new_p95': pct(times['new'], 18)}
+            if slower(out[name]['ms_old_p50'], out[name]['ms_new_p50']) and chosen:
+                if sampling + timed + confirmed + explained + 2 * CONFIRM_RUNS > QUERIES:
+                    out[name]['confirm'] = {'runs': 0, 'why': 'over the query budget: not timed again'}
+                    continue
+                again = {'old': [], 'new': []}
+                for _ in range(CONFIRM_RUNS):
+                    started = clock.perf_counter()
+                    _old(old_db, old_call(chosen[0]))
+                    again['old'].append((clock.perf_counter() - started) * 1000)
+                    started = clock.perf_counter()
+                    new_call(chosen[0])
+                    again['new'].append((clock.perf_counter() - started) * 1000)
+                confirmed += 2 * CONFIRM_RUNS
+                out[name]['confirm'] = {'runs': CONFIRM_RUNS, 'ms_old_p50': round(statistics.median(again['old']), 2),
+                                        'ms_new_p50': round(statistics.median(again['new']), 2)}
+        except PyMongoError as error:
+            if not timed_out(error):
+                raise
+            # A query over its limit: this case is TIMED OUT, named with the limit; the other cases go on.
+            out[name] = {'n': len(chosen), 'timed_out': {'limit_ms': max_ms, 'error': type(error).__name__}}
     samples = sum(case['n'] for case in out.values())
     # What was run: the sampling reads, each case's samples x RUNS timed runs (the old side's read, and every read the
     # new side sent), the confirmations of cases over the timing gate, and the explains (two per explained sample, one
@@ -2247,6 +2284,522 @@ def search_proof(store, old_db, config, max_ms):
     return out
 
 
+ARTIFACT = ['_id', 'kind', 'state', 'storage', 'scope_key', 'scene_id', 'channel_id', 'task_id', 'intent_revision',
+            'tool', 'sha256', 'ref', 'source_ids', 'answer', 'gridfs_id', 'size']
+# The kinds of rows the moved reads ask for (vision, outbound_files, received_files, group_admin, notices, attend,
+# channel_admission, capabilities, native_api), each sampled apart.
+ARTIFACT_KINDS = ('image', 'file', 'received_file', 'group_action', 'held_notice', 'passed_line', 'platform_request',
+                  'channel_admission', 'persona_job_report', 'source_snapshot', 'channel_capabilities',
+                  'capability_change')
+STORED_FILES = 20                                   # her stored files opened and hash-checked (read only)
+PROBE_BYTES = 5 * 1024 * 1024 + 123                 # the blob probe's synthetic stream: more than a few chunks
+
+
+def _sample_b8(store):
+    """What the cases read with, through the owners: rows of each kind the moved reads ask for, rows whose bytes are
+    stored, tasks with their tool records, and conversations holding notices or passed lines."""
+    from asuna.records import artifacts as owner
+    from asuna.records import tasks
+    found = {'reads': len(ARTIFACT_KINDS) + 3}
+    for kind in ARTIFACT_KINDS:
+        found[kind] = owner.of_kind(store, kind).rows(limit=20, fields=ARTIFACT)
+    found['stored'] = owner.stored(store).rows(limit=20, fields=ARTIFACT)
+    task_ids = [row['_id'] for row in tasks.created(store, '2000-01-01').rows(limit=20, fields=['_id'])]
+    found['task_ids'] = task_ids
+    found['tools'] = [row for row in owner.of_tasks(store, task_ids).rows(limit=40, fields=ARTIFACT)
+                      if isinstance(row.get('task_id'), str) and isinstance(row.get('intent_revision'), int)]
+    return found
+
+
+def _cases_b8(store, config):
+    """(name, old(param), new(param), parameters, compare) for each read B8 moved, the old as the replaced code wrote
+    it; parameters sampled through the owners, synthetic values where her records hold none (both sides then read
+    nothing, and the plans are still compared)."""
+    from datetime import timedelta
+    from asuna import clock
+    from asuna.records import artifacts as owner
+    got = _sample_b8(store)
+    none = {'_id': 'artifact-none', 'kind': 'kind-none', 'scope_key': 'scope-none', 'scene_id': 'scene-none',
+            'channel_id': 'channel-none', 'task_id': 'task-none', 'intent_revision': 1, 'sha256': '0' * 64,
+            'ref': 'ref-none', 'source_ids': ['source-none'], 'gridfs_id': '0' * 24}
+    of = lambda kind: got[kind] or [{**none, 'kind': kind}]
+    rows = [row for kind in ARTIFACT_KINDS for row in got[kind]] + got['stored'] + got['tools']
+    ids = sorted({row['_id'] for row in rows}) or [none['_id']]
+    batches = [ids[n:n + 5] for n in range(0, len(ids), 5)]
+    stored = got['stored'] or [{**none, 'storage': 'gridfs'}]
+    hashed = [row for row in stored if isinstance(row.get('sha256'), str) and isinstance(row.get('scope_key'), str)
+              and isinstance(row.get('kind'), str)] or [none]
+    sourced = lambda kind: [row for row in of(kind) if isinstance(row.get('scope_key'), str) and isinstance(
+        row.get('sha256'), str) and row.get('source_ids')] or [{**none, 'kind': kind}]
+    scoped = lambda kind: [row for row in of(kind) if isinstance(row.get('scope_key'), str)] or [{**none, 'kind': kind}]
+    tools = got['tools'] or [none]
+    task_batches = [got['task_ids'][n:n + 5] for n in range(0, len(got['task_ids']), 5)] or [['task-none']]
+    scenes = lambda kind: sorted({row['scene_id'] for row in of(kind) if isinstance(row.get('scene_id'), str)}) or [
+        'scene-none']
+    channels = sorted({row['channel_id'] for row in of('group_action') if isinstance(row.get('channel_id'), str)}) or [
+        'channel-none']
+    image_scopes = sorted({row['scope_key'] for row in scoped('image')})
+    persona = (config.get('chat') or {}).get('persona') or 'persona-none'
+    lease = (clock.now() - timedelta(seconds=300)).isoformat()      # channels.CHAT_LEASE_SECONDS
+    one = lambda filter, proj=None, sort=None: ('find_one', 'artifacts', filter, proj, sort)
+    many = lambda filter, proj=None, sort=None, limit=0: ('find', 'artifacts', filter, proj, sort, limit)
+    fields = lambda *names: {name: 1 for name in names}
+    DONE, STORED = 'DONE', owner.STORED
+    OFFERED = ['name', 'size', 'media_type', 'created_at', 'source_ids', 'received_from']
+    SWEPT = ['source_ids', 'created_at', 'gridfs_id', 'size', 'last_sent_at', 'kept_at', 'days_from']
+
+    def skipped(kind):
+        def old(scene):
+            def run(db):
+                cursor = lambda: db.artifacts.find({'kind': kind, 'scene_id': scene}, {'_id': 1}).sort(
+                    'received_at', -1).skip(50)
+                return list(cursor()), cursor()
+            return run
+        return old, lambda scene: owner.of_scene(store, kind, scene).rows(newest_first=True, skip=50, fields=['_id'])
+
+    cases = [
+        # single rows
+        ('row by id', lambda i: one({'_id': i}), lambda i: owner.get(store, i), ids, 'value'),
+        ('row by id, done', lambda i: one({'_id': i, 'state': DONE}), lambda i: owner.get(store, i, state=DONE), ids,
+         'value'),
+        ('row by id, its scope', lambda i: one({'_id': i}, fields('scope_key')),
+         lambda i: owner.get(store, i, ['scope_key']), ids, 'value'),
+        ('row by id, its scope and erasure', lambda i: one({'_id': i}, fields('scope_key', 'deletion_id')),
+         lambda i: owner.get(store, i, ['scope_key', 'deletion_id']), ids, 'value'),
+        ('row by id, whether it is there', lambda i: one({'_id': i}, fields('_id')),
+         lambda i: owner.get(store, i, ['_id']), ids, 'value'),
+        ('declared functions', lambda r: one({'_id': r['_id']}, fields('supports')),
+         lambda r: owner.get(store, r['_id'], ['supports']), of('channel_capabilities'), 'value'),
+        ('declared functions and limits', lambda r: one({'_id': r['_id']}, fields('supports', 'limits')),
+         lambda r: owner.get(store, r['_id'], ['supports', 'limits']), of('channel_capabilities'), 'value'),
+        ('a group action by id', lambda r: one({'_id': r['_id'], 'kind': 'group_action'}),
+         lambda r: owner.get(store, r['_id'], kind='group_action'), of('group_action'), 'value'),
+        ('a job report by id', lambda r: one({'_id': r['_id'], 'kind': 'persona_job_report'}),
+         lambda r: owner.get(store, r['_id'], kind='persona_job_report'), of('persona_job_report'), 'value'),
+        ('a sent file by id', lambda r: one({'_id': r['_id'], 'kind': 'file'}),
+         lambda r: owner.get(store, r['_id'], kind='file'), of('file'), 'value'),
+        ('a received file by id, done', lambda r: one({'_id': r['_id'], 'kind': 'received_file', 'state': DONE}),
+         lambda r: owner.get(store, r['_id'], kind='received_file', state=DONE), of('received_file'), 'value'),
+        ('a picture by id, done', lambda r: one({'_id': r['_id'], 'kind': 'image', 'state': DONE}),
+         lambda r: owner.get(store, r['_id'], kind='image', state=DONE), of('image'), 'value'),
+        ('a tool record of a task revision', lambda r: one({'_id': r['_id'], 'task_id': r['task_id'],
+                                                            'intent_revision': r['intent_revision']}),
+         lambda r: owner.get(store, r['_id'], task=r['task_id'], revision=r['intent_revision']), tools, 'value'),
+        # by content
+        ('stored bytes once', lambda r: one({'sha256': r['sha256'], 'scope_key': r['scope_key'], 'kind': r['kind'],
+                                             'state': DONE, 'storage': STORED}),
+         lambda r: owner.by_content(store, r['sha256'], r['kind'], scope=r['scope_key'], state=DONE, storage=STORED),
+         hashed, 'value'),
+        ('a snapshot by content', lambda r: one({'sha256': r['sha256'], 'kind': 'source_snapshot',
+                                                 'scope_key': r['scope_key']}),
+         lambda r: owner.by_content(store, r['sha256'], 'source_snapshot', scope=r['scope_key']),
+         sourced('source_snapshot'), 'value'),
+        ('a local picture by content', lambda r: one({'scope_key': r['scope_key'], 'kind': 'image',
+                                                      'sha256': r['sha256'], 'source_ids': r['source_ids'][0],
+                                                      'state': DONE, 'storage': STORED}),
+         lambda r: owner.by_content(store, r['sha256'], 'image', scope=r['scope_key'], source=r['source_ids'][0],
+                                    state=DONE, storage=STORED), sourced('image'), 'value'),
+        ('where a file came from', lambda r: one({'kind': 'received_file', 'sha256': r['sha256'],
+                                                  'scope_key': {'$in': [r['scope_key']]}}, fields('ref', 'sender'),
+                                                 [('created_at', 1)]),
+         lambda r: owner.by_content(store, r['sha256'], 'received_file', scopes=[r['scope_key']], by='created_at',
+                                    fields=['ref', 'sender']), sourced('received_file'), 'value'),
+        ('a received file by its item', lambda r: one({'kind': 'received_file', 'state': DONE,
+                                                       'scope_key': {'$in': [r['scope_key']]},
+                                                       'source_ids': r['source_ids'][0]}, None, [('created_at', -1)]),
+         lambda r: owner.of_kind(store, 'received_file', state=DONE, scopes=[r['scope_key']],
+                                 source=r['source_ids'][0], by='created_at').first(newest_first=True),
+         sourced('received_file'), 'value'),
+        ('a kept file by its ref', lambda r: one({'kind': 'received_file', 'state': DONE, 'ref': r.get('ref') or 'ref-none',
+                                                  'kept_at': {'$exists': True}, 'scope_key': {'$in': [r['scope_key']]}}),
+         lambda r: owner.kept(store, 'received_file', state=DONE, ref=r.get('ref') or 'ref-none',
+                              scopes=[r['scope_key']]).first(), scoped('received_file'), 'value'),
+        ('an answered request', lambda r: one({'kind': 'platform_request', 'answer': r['_id']}),
+         lambda r: owner.answer(store, 'platform_request', r['_id']), of('group_action'), 'value'),
+        # views
+        ('rows by ids, erased', lambda b: many({'_id': {'$in': b}, 'storage': 'erased'}),
+         lambda b: owner.by_ids(store, b, storage=owner.ERASED).rows(), batches, 'value'),
+        ('a task revision\'s tool records', lambda r: many({'task_id': r['task_id'],
+                                                            'intent_revision': r['intent_revision'],
+                                                            'state': {'$in': ['DONE', 'FAILED']}}),
+         lambda r: owner.of_task(store, r['task_id'], r['intent_revision'], states=['DONE', 'FAILED']).rows(), tools,
+         'value'),
+        ('a task revision\'s done records, ids', lambda r: many({'task_id': r['task_id'],
+                                                                 'intent_revision': r['intent_revision'],
+                                                                 'state': DONE}, fields('_id')),
+         lambda r: owner.of_task(store, r['task_id'], r['intent_revision'], state=DONE).rows(fields=['_id']), tools,
+         'value'),
+        ('a task revision\'s done records', lambda r: many({'task_id': r['task_id'],
+                                                            'intent_revision': r['intent_revision'], 'state': DONE}),
+         lambda r: owner.of_task(store, r['task_id'], r['intent_revision'], state=DONE).rows(), tools, 'value'),
+        ('the tools of tasks', lambda b: many({'task_id': {'$in': b}}, fields('task_id', 'tool')),
+         lambda b: owner.of_tasks(store, b).rows(fields=['task_id', 'tool']), task_batches, 'value'),
+        ('channel admissions', lambda _: many({'kind': 'channel_admission'}),
+         lambda _: owner.of_kind(store, 'channel_admission').rows(), [None], 'value'),
+        ('group actions in flight', lambda _: many({'kind': 'group_action', 'state': 'SENDING'}),
+         lambda _: owner.of_kind(store, 'group_action', state='SENDING').rows(), [None], 'value'),
+        ('a channel\'s action in flight', lambda c: one({'kind': 'group_action', 'channel_id': c, 'state': 'SENDING',
+                                                         'claimed_at': {'$gte': lease}}, fields('_id')),
+         lambda c: owner.admission(store, 'group_action', c, 'SENDING', claimed_since=lease).first(fields=['_id']),
+         channels, 'value'),
+        ('a channel\'s next queued action', lambda c: one({'kind': 'group_action', 'channel_id': c, 'state': 'QUEUED'},
+                                                          None, [('created_at', 1)]),
+         lambda c: owner.admission(store, 'group_action', c, 'QUEUED', by='created_at').first(), channels, 'value'),
+        ('the highest request number', lambda _: one({'kind': 'platform_request'}, fields('number'), [('number', -1)]),
+         lambda _: owner.of_kind(store, 'platform_request', by='number').first(newest_first=True, fields=['number']),
+         [None], 'value'),
+        ('open requests', lambda _: many({'kind': 'platform_request', 'state': 'open'}, None, [('number', 1)]),
+         lambda _: owner.of_kind(store, 'platform_request', state='open', by='number').rows(), [None], 'value'),
+        ('held notices here', lambda s: many({'kind': 'held_notice', 'scene_id': s}, None, [('received_at', 1)]),
+         lambda s: owner.of_scene(store, 'held_notice', s).rows(), scenes('held_notice'), 'value'),
+        ('held notices past the kept ones', *skipped('held_notice'), scenes('held_notice'), 'value'),
+        ('passed lines here', lambda s: many({'kind': 'passed_line', 'scene_id': s}, None, [('received_at', 1)]),
+         lambda s: owner.of_scene(store, 'passed_line', s).rows(), scenes('passed_line'), 'value'),
+        ('passed lines past the kept ones', *skipped('passed_line'), scenes('passed_line'), 'value'),
+        ('her job reports', lambda p: many({'kind': 'persona_job_report', 'scope_key': 'owner-private:' + p},
+                                           fields('_id', 'size'), [('_id', -1)], 20),
+         lambda p: owner.of_kind(store, 'persona_job_report', scope='owner-private:' + p, by='_id').rows(
+             newest_first=True, limit=20, fields=['_id', 'size']), [persona], 'value'),
+        ('files to offer', lambda _: many({'kind': 'file', 'state': DONE, 'storage': STORED}, fields(*OFFERED),
+                                          [('created_at', -1)], 200),
+         lambda _: owner.of_kind(store, 'file', state=DONE, storage=STORED, by='created_at').rows(
+             newest_first=True, limit=200, fields=OFFERED), [None], 'value'),
+        ('her newest pictures', lambda _: many({'kind': 'image', 'state': DONE, 'storage': STORED}, None,
+                                               [('created_at', -1)], 200),
+         lambda _: owner.of_kind(store, 'image', state=DONE, storage=STORED, by='created_at').rows(
+             newest_first=True, limit=200), [None], 'value'),
+        ('pictures of a scope', lambda s: many({'scope_key': s, 'kind': 'image', 'state': DONE, 'storage': STORED},
+                                               None, [('created_at', -1)], 50),
+         lambda s: owner.of_kind(store, 'image', state=DONE, storage=STORED, scope=s, by='created_at').rows(
+             newest_first=True, limit=50), image_scopes or ['scope-none'], 'value'),
+        ('pictures of scopes', lambda b: many({'scope_key': {'$in': b}, 'kind': 'image', 'state': DONE,
+                                               'storage': STORED}, None, [('created_at', -1)], 50),
+         lambda b: owner.of_kind(store, 'image', state=DONE, storage=STORED, scopes=b, by='created_at').rows(
+             newest_first=True, limit=50), [image_scopes[n:n + 2] for n in range(0, len(image_scopes), 2)] or [
+             ['scope-none', 'scope-other']], 'value'),
+        ('kept files stored', lambda _: many({'kind': 'received_file', 'kept_at': {'$exists': True},
+                                              'storage': STORED}),
+         lambda _: owner.kept(store, 'received_file', stored=True).rows(), [None], 'value'),
+        ('kept files', lambda _: many({'kind': 'received_file', 'kept_at': {'$exists': True}}),
+         lambda _: owner.kept(store, 'received_file').rows(), [None], 'value'),
+        ('copies of files whose bytes went', lambda _: many({'kind': 'received_file', 'storage': {'$ne': STORED},
+                                                             'copies.0': {'$exists': True}}, fields('copies')),
+         lambda _: owner.with_copies(store, 'received_file', besides_storage=STORED).rows(fields=['copies']), [None],
+         'value'),
+        ('rows whose bytes are stored', lambda _: many({'storage': STORED}, fields(*SWEPT), None, LIGHT),
+         lambda _: owner.stored(store).rows(limit=LIGHT, fields=SWEPT), [None], 'value'),
+        ('pictures she drew', lambda _: ('count', 'artifacts', {'tool': 'generate_image', 'state': DONE}, 0),
+         lambda _: owner.count_tool(store, 'generate_image', DONE), [None], 'value'),
+    ]
+    return [case for case in cases if case[3]], got['reads']
+
+
+HEAD = ['_id', 'scope_key', 'revision_id']
+REVISION = ['_id', 'entity_key', 'mutation_id', 'scope_key', 'created_at', 'parent_revision_id']
+ENTRY = ['_id', 'persona', 'slug', 'sid', 'seq', 'last_mutation']
+JOURNAL_REVISION = ['_id', 'persona', 'slug', 'sid', 'mutation_id', 'body_sha256', 'created_at']
+LABEL = ['_id', 'scene_id', 'person', 'handle', 'seen_at']
+
+
+def _sample_b9(store, config):
+    """What the cases read with, through the owners: her documents' and relationships' heads and their revisions,
+    her running records' entries and revisions, identities, conversation labels and ideas."""
+    from asuna import documents
+    from asuna.records import heads, ideas, people, scenes
+    persona = (config.get('chat') or {}).get('persona') or 'persona-none'
+    found = {'reads': 9, 'persona': persona}
+    found['docs'] = heads.with_prefix(store, 'doc:%s:' % persona).rows(limit=20, fields=HEAD)
+    found['relations'] = heads.with_prefix(store, 'relationship:').rows(limit=20, fields=HEAD)
+    found['revisions'] = heads.revisions(store, [row['revision_id'] for row in found['docs'] + found['relations']
+                                                 if isinstance(row.get('revision_id'), str)]).rows(fields=REVISION)
+    found['slugs'] = documents.slugs(store, persona)[:6]
+    found['entries'] = [row for slug in found['slugs'][:3] for row in documents.entries(store, persona, slug).rows(
+        limit=10, fields=ENTRY)]
+    found['journal_revisions'] = [row for slug in found['slugs'][:3] for row in documents.revisions(
+        store, persona, slug).rows(limit=10, fields=JOURNAL_REVISION)]
+    found['identities'] = people.all_identities(store).rows(limit=20)
+    found['scenes'] = [row['_id'] for row in scenes.all(store, fields=['_id'])][:20]
+    found['labels'] = [row for scene in found['scenes'][:5] for row in people.labels(store, scene).rows(
+        limit=5, fields=LABEL)]
+    found['ideas'] = ideas.of_persona(store, persona).rows(limit=20, fields=['_id', 'persona', 'state', 'idea'])
+    found['reads'] += 3 + 2 * min(3, len(found['slugs'])) + min(5, len(found['scenes']))
+    return found
+
+
+def _cases_b9(store, config):
+    """(name, old(param), new(param), parameters, compare) for each read B9 moved, the old as the replaced code wrote
+    it; parameters sampled through the owners, synthetic values where her records hold none (both sides then read
+    nothing, and the plans are still compared)."""
+    from asuna import documents
+    from asuna.records import heads, ideas, people
+    got = _sample_b9(store, config)
+    persona = got['persona']
+    none_head = {'_id': 'entity-none|scope-none', 'scope_key': 'scope-none', 'revision_id': 'revision-none'}
+    head_rows = (got['docs'] + got['relations']) or [none_head]
+    head_ids = [row['_id'] for row in head_rows]
+    revision_rows = got['revisions'] or [{'_id': 'revision-none', 'entity_key': 'entity-none|scope-none',
+                                          'mutation_id': 'mutation-none', 'created_at': '2026-01-01T00:00:00+00:00'}]
+    revision_ids = [row['_id'] for row in revision_rows]
+    keyed = [row for row in revision_rows if isinstance(row.get('entity_key'), str)] or revision_rows
+    timed = [row for row in keyed if isinstance(row.get('created_at'), str)] or [
+        {**revision_rows[0], 'created_at': '2026-01-01T00:00:00+00:00'}]
+    mutated = [row for row in revision_rows if isinstance(row.get('mutation_id'), str)] or [
+        {'mutation_id': 'mutation-none'}]
+    scopes = sorted({row['scope_key'] for row in head_rows if isinstance(row.get('scope_key'), str)}) or ['scope-none']
+    slugs = got['slugs'] or ['slug-none']
+    entries = got['entries'] or [{'_id': 'entry-none', 'slug': 'slug-none', 'sid': 'sid-none',
+                                  'last_mutation': 'mutation-none'}]
+    journal_revisions = got['journal_revisions'] or [{'_id': 'jrev-none', 'slug': 'slug-none', 'sid': 'sid-none',
+                                                      'mutation_id': 'mutation-none', 'body_sha256': None}]
+    identities = got['identities'] or [{'_id': 'person-none', 'person_id': 'person-none', 'platform': 'platform-none',
+                                        'account_id': 'account-none'}]
+    labels = got['labels'] or [{'_id': 'scene-none|person-none', 'scene_id': 'scene-none', 'person': 'person-none'}]
+    scenes = got['scenes'] or ['scene-none']
+    people_ids = sorted({row['person'] for row in labels if isinstance(row.get('person'), str)}) or ['person-none']
+    idea_rows = got['ideas'] or [{'_id': 'idea-none', 'idea': 'none'}]
+    search = [row['idea'][:2] for row in idea_rows if isinstance(row.get('idea'), str) and len(row['idea']) >= 2][:1]
+    batch = lambda ids: [ids[n:n + 5] for n in range(0, len(ids), 5)]
+    one = lambda coll, filter, proj=None, sort=None: ('find_one', coll, filter, proj, sort)
+    many = lambda coll, filter, proj=None, sort=None, limit=0: ('find', coll, filter, proj, sort, limit)
+    fields = lambda *names: {name: 1 for name in names}
+    H, R, E, J, I, L, D = ('state_heads', 'state_revisions', 'journal_entries', 'journal_revisions', 'identities',
+                           'scene_people', 'ideas')
+    regex = lambda prefix: {'$regex': '^' + re.escape(prefix)}
+    either = lambda ids, tail: {'$regex': '^relationship:(%s)%s' % ('|'.join(re.escape(i) for i in ids), tail)}
+    persons = [sorted({row['_id'].split('|', 1)[0].split(':', 1)[1] for row in got['relations']})[:3]] if got[
+        'relations'] else [['person-none']]
+
+    cases = [
+        # heads
+        ('head by id', lambda i: one(H, {'_id': i}), lambda i: heads.head(store, i), head_ids, 'value'),
+        ('revision by id', lambda i: one(R, {'_id': i}), lambda i: heads.revision(store, i), revision_ids, 'value'),
+        ('revision of its entity', lambda r: one(R, {'_id': r['_id'], 'entity_key': r['entity_key']}),
+         lambda r: heads.revision(store, r['_id'], entity=r['entity_key']), keyed, 'value'),
+        ('revision for the map', lambda i: one(R, {'_id': i}, fields('content', 'created_at', 'entity_key')),
+         lambda i: heads.revision(store, i, ['content', 'created_at', 'entity_key']), revision_ids, 'value'),
+        ('revision of a mutation', lambda r: one(R, {'mutation_id': r['mutation_id']}),
+         lambda r: heads.by_mutation(store, r['mutation_id']), mutated, 'value'),
+        ('revision of a mutation, its id', lambda r: one(R, {'mutation_id': r['mutation_id']}, fields('_id')),
+         lambda r: heads.by_mutation(store, r['mutation_id'], ['_id']), mutated, 'value'),
+        ('her documents\' heads', lambda p: many(H, {'_id': regex('doc:%s:' % p)}, fields('_id')),
+         lambda p: heads.with_prefix(store, 'doc:%s:' % p).rows(fields=['_id']), [persona], 'value'),
+        ('her group notes\' heads', lambda p: many(H, {'_id': {'$regex': '^doc:%s:group' % p}},
+                                                  fields('_id', 'revision_id')),
+         lambda p: heads.with_prefix(store, 'doc:%s:group' % p).rows(fields=['_id', 'revision_id']), [persona],
+         'value'),
+        ('relationship heads', lambda _: many(H, {'_id': {'$regex': '^relationship:'}}, None, None, LIGHT),
+         lambda _: heads.with_prefix(store, 'relationship:').rows(limit=LIGHT), [None], 'value'),
+        ('a person\'s relationship heads', lambda p: many(H, {'_id': {'$regex': '^relationship:' + re.escape(p[0])
+                                                                       + '[|]'}}),
+         lambda p: heads.with_prefix(store, 'relationship:' + p[0] + '|').rows(), persons, 'value'),
+        ('known, by relationship', lambda p: one(H, {'_id': either(p, r'\|')}, fields('_id')),
+         lambda p: heads.with_prefix(store, *('relationship:%s|' % i for i in p)).first(fields=['_id']), persons,
+         'value'),
+        ('relationships elsewhere', lambda p: many(H, {'_id': either(p, r'\|scene:')}, fields('scope_key')),
+         lambda p: heads.with_prefix(store, *('relationship:%s|scene:' % i for i in p)).rows(fields=['scope_key']),
+         persons, 'value'),
+        ('heads by ids', lambda b: many(H, {'_id': {'$in': b}}), lambda b: heads.heads(store, b).rows(),
+         batch(head_ids), 'value'),
+        ('heads of a scope', lambda s: many(H, {'scope_key': s}), lambda s: heads.heads(store, scope=s).rows(), scopes,
+         'value'),
+        ('heads of scopes, by id', lambda b: many(H, {'scope_key': {'$in': b}}, fields('_id', 'revision_id'),
+                                                  [('_id', 1)]),
+         lambda b: heads.heads(store, scopes=b, by='_id').rows(fields=['_id', 'revision_id']), batch(scopes), 'value'),
+        ('revisions by ids', lambda b: many(R, {'_id': {'$in': b}}, fields('content', 'created_at', 'origin')),
+         lambda b: heads.revisions(store, b).rows(fields=['content', 'created_at', 'origin']), batch(revision_ids),
+         'value'),
+        ('an entity\'s history', lambda r: many(R, {'entity_key': r['entity_key']}, fields('mutation_id', 'created_at'),
+                                                [('created_at', 1)]),
+         lambda r: heads.history(store, r['entity_key']).rows(fields=['mutation_id', 'created_at']), keyed, 'value'),
+        ('an entity\'s section history', lambda r: many(R, {'entity_key': r['entity_key']}, fields(
+            'created_at', 'content.sections.sid', 'content.sections.body_sha256'), [('created_at', 1)]),
+         lambda r: heads.history(store, r['entity_key']).rows(fields=['created_at', 'content.sections.sid',
+                                                                      'content.sections.body_sha256']), keyed,
+         'value'),
+        ('an entity before a time', lambda r: one(R, {'entity_key': r['entity_key'], 'created_at': {
+            '$lt': r['created_at']}}, fields('content'), [('created_at', -1)]),
+         lambda r: heads.history(store, r['entity_key'], before=r['created_at']).first(newest_first=True,
+                                                                                        fields=['content']),
+         timed, 'value'),
+        ('an entity\'s reasons since', lambda r: many(R, {'entity_key': r['entity_key'], 'created_at': {
+            '$gte': r['created_at']}}, fields('reason'), [('created_at', -1)]),
+         lambda r: heads.history(store, r['entity_key'], since=r['created_at']).rows(newest_first=True,
+                                                                                      fields=['reason']),
+         timed, 'value'),
+        ('an entity\'s newest revision', lambda r: many(R, {'entity_key': r['entity_key']},
+                                                        fields('created_at', '_id'), [('created_at', -1), ('_id', -1)],
+                                                        1),
+         lambda r: [row for row in [heads.history(store, r['entity_key'], by=('created_at', '_id')).first(
+             newest_first=True, fields=['created_at'])] if row], keyed, 'value'),
+        ('a scope\'s revisions no head names', lambda s: many(R, {'scope_key': s, '_id': {'$nin': revision_ids[:5]}},
+                                                             None, None, LIGHT),
+         lambda s: heads.stale_revisions(store, s, revision_ids[:5]).rows(limit=LIGHT), scopes, 'value'),
+        # running records
+        ('an entry by id', lambda r: one(E, {'_id': r['_id']}), lambda r: documents.entry(store, r['_id']), entries,
+         'value'),
+        ('whether an entry is there', lambda r: one(E, {'_id': r['_id']}, fields('_id')),
+         lambda r: documents.entry(store, r['_id'], ['_id']), entries, 'value'),
+        ('her running records', lambda p: ('distinct', E, 'slug', {'persona': p}),
+         lambda p: documents.slugs(store, p), [persona], 'values'),
+        ('a record\'s entries', lambda s: many(E, {'persona': persona, 'slug': s}, None, [('seq', 1)]),
+         lambda s: documents.entries(store, persona, s).rows(), slugs, 'value'),
+        ('whether a record has rows', lambda s: one(E, {'persona': persona, 'slug': s}, fields('_id')),
+         lambda s: documents.entry_of(store, persona, s, fields=['_id']), slugs, 'value'),
+        ('the entry a mutation wrote', lambda r: one(E, {'persona': persona, 'slug': r['slug'],
+                                                         'last_mutation': r.get('last_mutation')}),
+         lambda r: documents.entry_of(store, persona, r['slug'], mutation=r.get('last_mutation')), entries, 'value'),
+        ('a record\'s last entry', lambda s: one(E, {'persona': persona, 'slug': s}, fields('seq'), [('seq', -1)]),
+         lambda s: documents.last_entry(store, persona, s, ['seq']), slugs, 'value'),
+        ('a record\'s revision by id', lambda r: one(J, {'_id': r['_id']}), lambda r: documents.revision(store, r['_id']),
+         journal_revisions, 'value'),
+        ('a record\'s revision of a mutation', lambda r: one(J, {'mutation_id': r['mutation_id']}),
+         lambda r: documents.revision(store, mutation=r['mutation_id']), journal_revisions, 'value'),
+        ('a record\'s section revisions', lambda s: many(J, {'persona': persona, 'slug': s, 'sid': {'$exists': True}},
+                                                         fields('sid', 'body', 'created_at', 'reason'),
+                                                         [('created_at', 1)]),
+         lambda s: documents.revisions(store, persona, s, sectioned=True).rows(fields=['sid', 'body', 'created_at',
+                                                                                       'reason']), slugs, 'value'),
+        ('a section\'s revisions, newest first', lambda r: many(J, {'persona': persona, 'slug': r['slug'],
+                                                                    'sid': r.get('sid')}, None, [('created_at', -1)]),
+         lambda r: documents.revisions(store, persona, r['slug'], sid=r.get('sid')).rows(newest_first=True),
+         journal_revisions, 'value'),
+        ('a section\'s revision of a body', lambda r: one(J, {'persona': persona, 'slug': r['slug'], 'sid': r.get('sid'),
+                                                              'body_sha256': r.get('body_sha256')}),
+         lambda r: documents.revision_of_body(store, persona, r['slug'], r.get('sid'), r.get('body_sha256')),
+         journal_revisions, 'value'),
+        ('a record\'s newest revision', lambda s: one(J, {'persona': persona, 'slug': s}, fields('_id'),
+                                                      [('created_at', -1), ('_id', -1)]),
+         lambda s: documents.last_revision(store, persona, s, ['_id']), slugs, 'value'),
+        # people
+        ('identity by id', lambda r: one(I, {'_id': r['_id']}), lambda r: people.identity(store, r['_id']), identities,
+         'value'),
+        ('identity\'s name', lambda r: one(I, {'_id': r['_id']}, fields('display_name')),
+         lambda r: people.identity(store, r['_id'], ['display_name']), identities, 'value'),
+        ('identity of an account here', lambda r: one(I, {'platform': r.get('platform'),
+                                                          'account_id': r.get('account_id')}),
+         lambda r: people.by_account(store, r.get('account_id'), platform=r.get('platform')),
+         [row for row in identities if isinstance(row.get('platform'), str) and isinstance(row.get('account_id'), str)]
+         or identities[:1], 'value'),
+        ('person of an account', lambda r: one(I, {'account_id': str(r.get('account_id'))}, fields('person_id')),
+         lambda r: people.by_account(store, str(r.get('account_id')), fields=['person_id']), identities, 'value'),
+        ('identity of a person id', lambda r: one(I, {'person_id': r.get('person_id') or 'person-none'},
+                                                  fields('account_id')),
+         lambda r: people.of_person(store, r.get('person_id') or 'person-none', ['account_id']), identities,
+         'value'),
+        ('every identity', lambda _: many(I, {}), lambda _: people.all_identities(store).rows(), [None], 'value'),
+        ('a label by id', lambda r: one(L, {'_id': r['_id']}), lambda r: people.label(store, r['_id']), labels,
+         'value'),
+        ('a label\'s role', lambda r: one(L, {'_id': r['_id']}, fields('role')),
+         lambda r: people.label(store, r['_id'], ['role']), labels, 'value'),
+        ('a conversation\'s roster', lambda s: many(L, {'scene_id': s, 'person': {'$ne': PROGRAM_AUTHOR}}),
+         lambda s: people.labels(store, s, besides=PROGRAM_AUTHOR).rows(), scenes, 'value'),
+        ('a person\'s last label', lambda p: one(L, {'person': p}, fields('card', 'nickname'), [('seen_at', -1)]),
+         lambda p: people.label_of_person(store, p, ['card', 'nickname']), people_ids, 'value'),
+        ('a conversation\'s highest number', lambda s: one(L, {'scene_id': s}, fields('handle'), [('handle', -1)]),
+         lambda s: people.first_label(store, s, by='handle', newest_first=True, fields=['handle']), scenes, 'value'),
+        # ideas
+        ('an idea by id', lambda r: one(D, {'_id': r['_id']}), lambda r: ideas.get(store, r['_id']), idea_rows,
+         'value'),
+        ('an idea\'s words', lambda r: one(D, {'_id': r['_id']}, fields('idea')),
+         lambda r: ideas.get(store, r['_id'], ['idea']), idea_rows, 'value'),
+        ('her idea by id', lambda r: one(D, {'_id': r['_id'], 'persona': persona}),
+         lambda r: ideas.get(store, r['_id'], persona=persona), idea_rows, 'value'),
+        ('her newest ideas', lambda p: many(D, {'persona': p}, None, [('created_at', -1)], 50),
+         lambda p: ideas.of_persona(store, p).rows(newest_first=True, limit=50), [persona], 'value'),
+        ('her ideas\' states', lambda p: many(D, {'persona': p}, fields('state')),
+         lambda p: ideas.of_persona(store, p, by=None).rows(fields=['state']), [persona], 'value'),
+        ('her ideas in a state', lambda s: many(D, {'persona': persona, 'state': s}, None, [('created_at', 1)]),
+         lambda s: ideas.of_persona(store, persona, state=s).rows(), ['open', 'deferred'], 'value'),
+        ('her ideas in a state, by words', lambda w: many(D, {'persona': persona, '$or': [
+            {'idea': {'$regex': re.escape(w)}}, {'why': {'$regex': re.escape(w)}}], 'state': 'open'}, None,
+            [('created_at', 1)]),
+         lambda w: ideas.of_persona(store, persona, state='open', search=w).rows(), search or ['none'], 'value'),
+        ('her ideas left', lambda p: ('count', D, {'persona': p, 'state': {'$in': ['open', 'deferred']}}, 0),
+         lambda p: ideas.count(store, p, ['open', 'deferred']), [persona], 'value'),
+    ]
+    return [case for case in cases if case[3]], got['reads']
+
+
+def blob_probe(client):
+    """B8's own proof of the blob interface, on a throwaway database of this server (`asuna_v2_test_blobprobe_*`,
+    dropped at the end and on failure): a synthetic stream written, read back whole and in pieces with a seek, its hash
+    and size compared, listed by its scope, deleted twice, missing after. Numbers only."""
+    import hashlib
+    import io
+    import time as clock
+    import uuid
+    from asuna.store import Checked
+    from asuna.store.errors import BlobMissing
+    name = 'asuna_v2_test_blobprobe_' + uuid.uuid4().hex[:12]
+    data = bytes((n * 7 + 3) % 256 for n in range(PROBE_BYTES))
+    out = {'bytes': len(data)}
+    try:
+        blobs = Checked(MongoAdapter(client, name), CATALOG).blobs
+        started = clock.perf_counter()
+        blob_id, size = blobs.write(io.BytesIO(data), {'scope_key': 'scope-probe', 'kind': 'probe', 'name': 'probe'})
+        out['ms_write'] = round((clock.perf_counter() - started) * 1000, 1)
+        started, digest, read = clock.perf_counter(), hashlib.sha256(), 0
+        stream = blobs.open(blob_id)
+        for piece in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(piece)
+            read += len(piece)
+        out['ms_read'] = round((clock.perf_counter() - started) * 1000, 1)
+        seek = blobs.open(blob_id)
+        seek.seek(len(data) - 1000)
+        out.update(size_written=size, size_read=read, hash_same=digest.hexdigest() == hashlib.sha256(data).hexdigest(),
+                   seek_same=seek.read(500) == data[-1000:-500],
+                   of_scope=blobs.of_scope('scope-probe') == [blob_id], of_other_scope=blobs.of_scope('scope-x') == [],
+                   deleted=blobs.delete(blob_id), deleted_again=blobs.delete(blob_id))
+        try:
+            blobs.open(blob_id)
+            out['missing_after'] = False
+        except BlobMissing:
+            out['missing_after'] = True
+        out['scope_empty_after'] = blobs.of_scope('scope-probe') == []
+    finally:
+        if name.startswith('asuna_v2_test_'):
+            client.drop_database(name)
+    out['dropped'] = name not in client.list_database_names()
+    out['passed'] = all(out.get(key) for key in ('hash_same', 'seek_same', 'of_scope', 'of_other_scope', 'deleted',
+                                                 'missing_after', 'scope_empty_after', 'dropped')) and \
+        out.get('deleted_again') is False and out['size_written'] == out['size_read'] == len(data)
+    return out
+
+
+def stored_files(store):
+    """Read only, her own: up to STORED_FILES rows whose bytes are stored, spread over the stored rows, each blob opened
+    and read in pieces, its size and sha256 compared with its row. Numbers only."""
+    import hashlib
+    import time as clock
+    from asuna import blobs
+    from asuna.records import artifacts as owner
+    from asuna.store.errors import BlobMissing
+    rows = owner.stored(store).rows(limit=LIGHT * 5, fields=['_id', owner.BLOB_FIELD, 'sha256', 'size'])
+    chosen = rows[::max(1, len(rows) // STORED_FILES)][:STORED_FILES]
+    out = {'listed': len(rows), 'n': len(chosen), 'opened': 0, 'missing': 0, 'same': 0, 'differing': 0, 'bytes': 0}
+    times = []
+    for row in chosen:
+        started = clock.perf_counter()
+        try:
+            stream = blobs.open(store, row.get(owner.BLOB_FIELD))
+        except BlobMissing:
+            out['missing'] += 1
+            continue
+        out['opened'] += 1
+        digest, size = hashlib.sha256(), 0
+        for piece in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(piece)
+            size += len(piece)
+        times.append((clock.perf_counter() - started) * 1000)
+        out['bytes'] += size
+        same = size == row.get('size') and digest.hexdigest() == row.get('sha256')
+        out['same' if same else 'differing'] += 1
+    ordered = sorted(times)
+    if ordered:
+        out.update(ms_p50=round(ordered[len(ordered) // 2], 1), ms_max=round(ordered[-1], 1))
+    return out
+
+
 def sizes(db, collection, max_ms, timings=None):
     """The records of 512 KiB or more by their BSON size, and of those the ones whose BSON and JSON sizes (the
     in-memory adapter's measure) fall on different sides of the store's 1 MiB limit; read part by part like the
@@ -2286,8 +2839,9 @@ def check(batch, settings, database, out, max_ms):
     counting = MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000,
                            socketTimeoutMS=max_ms + 30000)
     # Nothing is written: ensure is planned, not run, and every read is read-only.
-    report, unchecked = {'mode': 'dry_run', 'database_collections': len(CATALOG.names())}, []
-    timings, unchecked_fields = [], {}
+    report = {'mode': 'dry_run', 'database_collections': len(CATALOG.names()), 'max_ms': max_ms}
+    unchecked, timings, unchecked_fields = [], [], {}
+    doing = ['ensure, dry run']          # what the check is at, named when a database error stops it
     try:
         adapter = MongoAdapter(client, database)
         plans = dry_run(adapter)
@@ -2301,6 +2855,7 @@ def check(batch, settings, database, out, max_ms):
             if BATCHES[batch] is not None and collection.name not in BATCHES[batch]:
                 continue
             missed = set()
+            doing[0] = 'field counts of %s' % collection.name
             try:
                 counts = kinds(counting.get_database(database), collection, max_ms, timings, missed)
             except ExecutionTimeout:
@@ -2312,6 +2867,7 @@ def check(batch, settings, database, out, max_ms):
             report['fields_differ'] += [[collection.name, path] for path in differs(collection, counts)]
             report.setdefault('fields_differing_records', {})[collection.name] = differing(collection, counts)
         for name in SIZED.get(batch, ()):
+            doing[0] = 'sizes of %s' % name
             report.setdefault('sizes', {})[name] = sizes(counting.get_database(database), name, max_ms, timings)
             if report['sizes'][name] is None:
                 unchecked.append(name + ' sizes')
@@ -2321,12 +2877,16 @@ def check(batch, settings, database, out, max_ms):
                                      'ms_p95': round(ordered[int(len(ordered) * .95)], 1),
                                      'ms_max': round(ordered[-1], 1)} if ordered else {})}
         if batch in READ_CASES:
+            doing[0] = 'read cases (sampling, or a read outside a case)'
             report['reads'], report['queries'] = reads(client, database, max_ms, batch, settings)
+            unchecked += ['read %s: TIMED OUT at its limit of %d ms' % (name, case['timed_out']['limit_ms'])
+                          for name, case in report['reads'].items() if case.get('timed_out')]
             failing, accepted = slowdowns(batch, report['reads'])
             report['slowdowns'] = {'failing': failing, 'accepted': accepted,
                                    'rule': 'new p50 > %g x old and > %g ms above it' % (SLOWER, SLOWER_MS)}
         if batch == 'b7':
             from asuna.store import Checked
+            doing[0] = 'retrieval search, whole'
             proof = report['search'] = search_proof(Checked(MongoAdapter(client, database), CATALOG),
                                                     client.get_database(database), settings, max_ms)
             if slower(proof.get('ms_old_p50'), proof.get('ms_new_p50')):
@@ -2334,11 +2894,22 @@ def check(batch, settings, database, out, max_ms):
                                                        proof['ms_new_p50'], None))
             if not proof['queries']:
                 unchecked.append('retrieval search, whole: ' + proof.get('why', 'no query'))
-    except ExecutionTimeout:
-        print('UNCHECKED, a read case over the time limit')
-        return 2
+        if batch == 'b8':
+            from asuna.store import Checked
+            doing[0] = 'blob probe (a throwaway database)'
+            report['blob_probe'] = blob_probe(counting)
+            doing[0] = 'her stored files, opened and hash-checked'
+            report['stored_files'] = stored_files(Checked(MongoAdapter(client, database), CATALOG))
     except PyMongoError as error:
-        print('ADR104_CHECK_UNREACHABLE: %s' % type(error).__name__)
+        # Stopped where it was: the words say whether a query hit its limit (TIMED OUT, with where and the limit) or
+        # the server could not be reached at all (UNREACHABLE); the report keeps what was counted before.
+        said = failure(error, doing[0], max_ms)
+        report['stopped'] = {'during': doing[0], 'error': type(error).__name__, 'timed_out': timed_out(error)}
+        out.mkdir(parents=True, exist_ok=True)
+        (out / (batch + '.json')).write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + '\n',
+                                             encoding='utf-8')
+        print(said)
+        print('numbers written to %s' % (out / (batch + '.json')))
         return 2
     finally:
         client.close()
@@ -2384,7 +2955,7 @@ def check(batch, settings, database, out, max_ms):
         print('differs from its declaration: %s.%s (%d records)'
               % (name, path, report['fields_differing_records'][name][path]))
     for name in unchecked:
-        print('UNCHECKED, over the time limit: %s' % name)
+        print('UNCHECKED: %s' % name if name.startswith('read ') else 'UNCHECKED, over the time limit: %s' % name)
     for name, paths in sorted(unchecked_fields.items()):
         print('UNCHECKED, a read over the time limit: %s fields %s' % (name, ', '.join(paths)))
     if report.get('field_reads', {}).get('reads'):
@@ -2395,6 +2966,10 @@ def check(batch, settings, database, out, max_ms):
             print('%s: records of 512 KiB or more by BSON: %d; on different sides of 1 MiB by BSON and JSON: %d'
                   % (name, size['large'], size['sides_differ']))
     for name, case in (report.get('reads') or {}).items():
+        if case.get('timed_out'):
+            print('TIMED OUT: read %s: a query stopped at its limit of %d ms (%s)'
+                  % (name, case['timed_out']['limit_ms'], case['timed_out']['error']))
+            continue
         print('read %s: n %d, same %d, differing %d, rows old %d new %d, plans differing %d%s (%s | %s), ms old p50 %s '
               'p95 %s, new p50 %s p95 %s'
               % (name, case['n'], case['same'], case['differing'], case.get('rows_old', 0), case.get('rows_new', 0),
@@ -2439,6 +3014,12 @@ def check(batch, settings, database, out, max_ms):
               % (q['queries'], q['conversations'], q['same_six'], q['same_six_set'], q['same_24'], q['same_24_ids'],
                  q['score_max_diff'], q['found_nothing'], q['ms_old_p50'], q['ms_old_p95'], q['ms_new_p50'],
                  q['ms_new_p95'], q['paths_old'], q['paths_new']))
+    if 'blob_probe' in report:
+        print('blob probe (throwaway database): %s; ' % ('passed' if report['blob_probe']['passed'] else 'FAILED')
+              + ', '.join('%s %s' % item for item in sorted(report['blob_probe'].items()) if item[0] != 'passed'))
+    if 'stored_files' in report:
+        print('her stored files, opened and hash-checked: ' + ', '.join(
+            '%s %s' % item for item in sorted(report['stored_files'].items())))
     if 'queries' in report:
         q = report['queries']
         print('queries: %d (sampling %d, timed %d = %d samples x %d runs of each side, timed again %d, explain %d)'
@@ -2458,7 +3039,11 @@ def clean(report, totals, validators):
             and not any((size or {}).get('sides_differ') for size in (report.get('sizes') or {}).values())
             and not (report.get('slowdowns') or {}).get('failing')
             and not (report.get('search') or {}).get('differing')
-            and not any(case['differing'] or (case['plans_differ'] and not case.get('plan_accepted'))
+            and (report.get('blob_probe') or {'passed': True})['passed']
+            and not (report.get('stored_files') or {}).get('differing')
+            and not (report.get('stored_files') or {}).get('missing')
+            and not any(case.get('timed_out') or case['differing']
+                        or (case['plans_differ'] and not case.get('plan_accepted'))
                         for case in (report.get('reads') or {}).values()))
 
 

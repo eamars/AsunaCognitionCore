@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 
 from .state import Conflict, Denied
+from .records import heads as head_records
 
 
 class SelfState:
@@ -16,7 +17,7 @@ class SelfState:
             ('character_core', 'character_core:' + persona, 'global-safe'),
             ('current_self', 'current_self:' + persona, 'global-safe'),
         ):
-            head = self.store.head(key, target_scope)
+            head = head_records.current(self.store, key, target_scope)
             result[name] = {'body': head[1]['content']['body'], 'revision_id': head[0]['revision_id']} if head else None
         return result
 
@@ -37,20 +38,20 @@ class SelfState:
         entity = target + ':' + episode['persona']
         key = entity + '|' + scope
         mutation = mutation or 'self-state:' + episode['_id']
-        old = self.store.db.state_revisions.find_one({'mutation_id': mutation})
+        old = head_records.by_mutation(self.store, mutation)
         if old:
             if old['entity_key'] != key or old['content'] != {'body': body}:
                 raise Conflict('SELF_STATE_MUTATION_CHANGED')
-            current = self.store.db.state_heads.find_one({'_id': key})
+            current = head_records.head(self.store, key)
             if not current or current['revision_id'] != old['_id']:
                 if (current or {}).get('revision_id') != old.get('parent_revision_id'):
                     raise Conflict('SELF_STATE_MUTATION_NOT_HEAD')
-                self.store.put('state_heads', {'_id':key,'scope_key':scope,'revision_id':old['_id']},
-                               expected=current['revision'] if current else None,stream=episode['_id'])
+                head_records.save_head(self.store, {'_id':key,'scope_key':scope,'revision_id':old['_id']},
+                                       expected=current['revision'] if current else None,stream=episode['_id'])
             return {'target': target, 'revision_id': old['_id'], 'committed': True}
-        head = self.store.db.state_heads.find_one({'_id': key})
+        head = head_records.head(self.store, key)
         revision_id = str(uuid.uuid4())
-        revision = self.store.put('state_revisions', {
+        revision = head_records.save_revision(self.store, {
             '_id': revision_id, 'entity_key': key, 'scope_key': scope,
             'mutation_id': mutation, 'content': {'body': body},
             'source_ids': episode.get('monologue_refs', []),
@@ -58,8 +59,8 @@ class SelfState:
         }, stream=episode['_id'])
         document = {'_id': key, 'scope_key': scope, 'revision_id': revision_id}
         try:
-            self.store.put('state_heads', document, expected=head['revision'] if head else None,
-                           stream=episode['_id'])
+            head_records.save_head(self.store, document, expected=head['revision'] if head else None,
+                                   stream=episode['_id'])
         except Conflict:
             raise Conflict('SELF_STATE_BASE_REVISION_STALE: %s 刚被别处改过（不是你的错）；再调用一次 update_self' % target)
         return {'target': target, 'revision_id': revision['_id'], 'committed': True}

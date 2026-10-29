@@ -245,6 +245,17 @@ ADR-005 P2：摘要条目上的说话人归属与更正——由程序从真实�
 
 Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).
 
+- def `entry` — A running record's entry by id, or None.
+- def `slugs` — The names of a persona's running records (the values of their entries' `slug`), ascending.
+- def `entries` — View: a running record's entries, in their order (`seq`).
+- def `entry_of` — An entry of a running record (the one this mutation last wrote), or None.
+- def `last_entry` — A running record's last entry (the highest `seq`), or None.
+- def `revision` — A running record's revision by id, or the one a mutation id wrote; None when there is none.
+- def `revisions` — View: a running record's revisions (of this section; `sectioned`: of any section), by `created_at`.
+- def `revision_of_body` — The revision of a section whose body had this hash, or None.
+- def `last_revision` — A running record's newest revision (by `created_at`, then `_id`), or None.
+- def `save_entry` — The revisioned write of an entry (`Store.put`: `expected`, `stream`).
+- def `save_revision` — The write of a running record's revision (`Store.put`).
 - class `DocumentError` — A refused document operation; ``code`` is the stable reason.
 - def `stale` — A Conflict message for a document someone else wrote between her read and her write.
 - def `missing_section`
@@ -331,11 +342,14 @@ Affect ledger and projection (ADR-009 ARCHITECTURE §6).
 
 [src/asuna/blobs.py](../../src/asuna/blobs.py)
 
-Scoped, hash-verified GridFS storage for bounded-document overflow.
+Scoped, hash-verified storage of bytes past the record size limit: the `blobs` owner, the only user of the store's blob interface (write, open, delete, of_scope).
 
 - def `erased` — Whether a privacy erasure deleted this row's bytes.
 - def `erased_words` — ADR-105's sentence for an erased row: bytes the erasure deleted, or bytes that had expired before it.
 - def `refuse_erased` — Raise the sentence for an erased row; the caller has already checked the row is in its fence, so the words say nothing about a row the caller may not see.
+- def `open` — The stored bytes of a blob, readable and seekable; `BlobMissing` when it is not stored.
+- def `delete` — Delete a blob: True when it was stored, False when it was already gone.
+- def `exists` — Whether a blob is stored.
 - class `BlobStore`
   - `put_stream` — Store what an open binary handle holds, hashing while it copies; the stored bytes are read back in pieces and checked against that hash before the manifest is written.
   - `put`
@@ -343,7 +357,7 @@ Scoped, hash-verified GridFS storage for bounded-document overflow.
   - `restore` — Put bytes fetched again back on the row whose bytes expired (`storage` `removed`), when they are the same bytes (its sha256).
   - `get`
   - `get_range` — `length` bytes from `offset` of a stored blob (fewer at its end), read with a seek: a piece of a large file without reading the rest.
-  - `erase_scope` — Delete every stored byte of `scope`, then mark each of its rows whose bytes are gone (`gridfs`, and `removed`: an expired file must not be fetched again either) `erased`, by the row's own scope, so a row whose bytes were already missing is 
+  - `erase_scope` — Delete every stored byte of `scope` (the blob store's blobs of the scope), then mark each of its rows whose bytes are gone (`gridfs`, and `removed`: an expired file must not be fetched again either) `erased`, by the row's own scope, so a ro
 
 ## `privacy`
 

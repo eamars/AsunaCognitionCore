@@ -36,6 +36,7 @@ from .vision import (READ_IMAGE_TOOL, READ_IMAGE_TOOL_NAME, inline_summary as re
                      route_filtered_tool_names, task_attachment_context)
 from .records import episodes as episode_records
 from .records import tasks as task_records
+from .records import artifacts as artifact_records
 
 # How many extra rounds one run takes for her words its turn ended before reading.
 MESSAGE_ROUNDS = 3
@@ -174,8 +175,8 @@ def observations_of(store, task, shown=lambda value: value):
     return [{'source': item['_id'], 'tool': item['tool'],
              'result_excerpt': excerpt(item['error'] if item['state'] == 'FAILED' else
                                        json.dumps(shown(item['result']), ensure_ascii=False), OBSERVATION_CHARS)}
-            for item in store.db.artifacts.find({'task_id': task['_id'], 'intent_revision': task.get('intent_revision'),
-                                                 'state': {'$in': ['DONE', 'FAILED']}})]
+            for item in artifact_records.of_task(store, task['_id'], task.get('intent_revision'),
+                                                 states=['DONE', 'FAILED']).rows()]
 
 
 def task_pages(store, task, shown=lambda value: value):
@@ -658,7 +659,7 @@ class TaskService:
             current=task_records.get(self.store, task['_id'])
             if not current or current['state']!='RUNNING' or current['fencing_token']!=task['fencing_token']:
                 return None
-            refs=[row['_id'] for row in self.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':current['intent_revision'],'state':'DONE'},{'_id':1})]
+            refs=[row['_id'] for row in artifact_records.of_task(self.store,task['_id'],current['intent_revision'],state='DONE').rows(fields=['_id'])]
             result={'task_id':task['_id'],'intent_revision':current['intent_revision'],'artifact_refs':refs,
                     'text':'行动脑这次执行中断了：它的进程不在了，没有交回报告。工具记录是它中断前做到的。',
                     'facts':[],'uncertainties':['中断前已发起而没有回执的操作须先核实，不可盲目重做。']}
@@ -761,7 +762,7 @@ class ToolBroker:
                     raise Denied('INTEGRATION_RUNNER_UNAVAILABLE: 集成运行器这会儿没启动（宿主没有沙箱或没装配它）；'+UNAVAILABLE)
             key='tool-'+sha(canonical([task['_id'],task['intent_revision'],call_id]))
             input_hash=sha(canonical([tool,args]))
-            old=self.store.db.artifacts.find_one({'_id':key})
+            old=artifact_records.get(self.store,key)
             if old:
                 if old['input_hash']!=input_hash:
                     raise Denied('CALL_ID_REUSED: 这个调用编号已经用在另一组参数的 %s 调用上；不是参数写错，'
@@ -773,7 +774,7 @@ class ToolBroker:
                                  '不要盲目重做：先查看它该留下的结果（list_files、读文件等）再决定')
                 return old['result']
             task_records.save(self.store, {**current,'tool_steps':current['tool_steps']+1,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
-            artifact=self.store.put('artifacts',{'_id':key,'scope_key':task['scope_key'],'task_id':task['_id'],'intent_revision':task['intent_revision'],'tool':tool,'args':args,'input_hash':input_hash,'state':'INTENT'},stream=task['_id'])
+            artifact=artifact_records.save(self.store,{'_id':key,'scope_key':task['scope_key'],'task_id':task['_id'],'intent_revision':task['intent_revision'],'tool':tool,'args':args,'input_hash':input_hash,'state':'INTENT'},stream=task['_id'])
             self.service.crash('before_tool')
         # Integration callbacks, role consultations and commands can wait on things outside this process.
         # Never hold the effects lock across such a wait: every outbox claim (her words to QQ, the agent lines)
@@ -917,7 +918,7 @@ class ToolBroker:
             failed=failure_words({**result,**({'adjusted':adjusted} if adjusted else {})})
             if failed:
                 failed=redact_text(failed,self.store.config)
-                self.store.put('artifacts',{**artifact,'state':'FAILED','error':failed,'result':result},expected=artifact['revision'],stream=task['_id'])
+                artifact_records.save(self.store,{**artifact,'state':'FAILED','error':failed,'result':result},expected=artifact['revision'],stream=task['_id'])
                 raise ToolFailed(failed)
             result['evidence_ref']=key
             result['artifact_ref']=key
@@ -925,7 +926,7 @@ class ToolBroker:
             # read_image 的 base64 只交给调用方，不进回执：一张图就能顶破普通 BSON 行的 1 MiB 上限，
             # 字节本身已经在 GridFS 里，回执留 blob 引用与内联摘要。
             stored_result=read_image_receipt(result) if tool==READ_IMAGE_TOOL_NAME else result
-            self.store.put('artifacts',{**artifact,'state':'DONE','result':stored_result},expected=artifact['revision'],stream=task['_id'])
+            artifact_records.save(self.store,{**artifact,'state':'DONE','result':stored_result},expected=artifact['revision'],stream=task['_id'])
             return result
 
     def close(self):
@@ -936,6 +937,7 @@ class ToolBroker:
 # as "not done", and only her memory of its file name saved a rerun).
 LEFT_SHOWN, LEFT_SCAN, LEFT_HASH_BYTES = 20, 20000, 64 * 1024 * 1024
 LEFT_SKIP = frozenset(('.git', 'node_modules', '__pycache__', '.venv'))
+FILE_CLOCK_SLACK_SECONDS = 1.0
 STAGE_TIMEOUT = 'NATIVE_STAGE_TIMEOUT'
 STOPPED_AT_LIMIT = ('行动这一段跑到了时间上限（%d 分钟），还没交报告就停了；原目标有没有做完没有确认。'
                     '它在 /task 里留下的文件列在 files，先看这些再决定要不要重做。')
@@ -947,7 +949,9 @@ def files_left(workspace, since):
     the first 16 hex digits of the sha256. At most LEFT_SHOWN, the rest counted; the walk stops after LEFT_SCAN files."""
     from datetime import datetime
     try:
-        start = datetime.fromisoformat(str(since).replace('Z', '+00:00')).timestamp()
+        # A file's time comes from the file system's coarser clock (on Windows it moves in steps of up to 15.6 ms), so
+        # a file written just after the start can carry a time a little before it: a second's slack counts it in.
+        start = datetime.fromisoformat(str(since).replace('Z', '+00:00')).timestamp() - FILE_CLOCK_SLACK_SECONDS
     except ValueError:
         return []
     found, seen = [], 0
@@ -1091,7 +1095,7 @@ class Executor:
                 break
             text='你在对话里又补充了（做事这边可能还没看到）：\n'+'\n'.join(row['text'] for row in late)
             self.delivered(late)
-        artifacts=list(self.service.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE'}))
+        artifacts=artifact_records.of_task(self.service.store,task['_id'],task['intent_revision'],state='DONE').rows()
         observations=artifacts
         # The model reports in natural language; identities and actual receipts
         # are attached by the program, never recopied or invented by the model.

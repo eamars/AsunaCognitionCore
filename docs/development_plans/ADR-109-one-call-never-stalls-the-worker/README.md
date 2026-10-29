@@ -160,7 +160,7 @@ there without it. `write_file`, `note_idea` and `report_progress` keep the lock 
   | `ask_character` | a turn of hers (no own bound) | 600 s |
   | history, digest | the data child's budget, 90 s | 150 s |
   | `read_image`, `received_file` (both brains) | the vision pull timeout plus the picture budget | that + 60 s |
-  | `recall` | two query embeddings at 180 s (`context.prepare` from `role_tools.py:1647`, then `memory_tiers.py:1062`) | 420 s |
+  | `recall` | at most two query embeddings at 180 s (`context.prepare` from `role_tools.py:1647`; `memory_tiers.py:1063` reuses the vector when it has one) | 420 s |
   | role calls that reach the Host (`credential`, `set_policy`, `plan`, `group_focus`, ...) | `host_call`, 120 s (`native_worker.py:419`) | 180 s |
   | every other call | none (store work, measured ≤ 0.93 s) | 120 s |
 

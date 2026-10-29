@@ -1305,13 +1305,14 @@ class BusinessWorker:
         if method == 'role_tool_specs':
             # A role session gets her tools as its conversation shows them (ADR-079 §9.7), fixed for the session.
             from .evidence import canonical
-            from .role_tools import all_specs, session_specs
+            from .role_tools import all_specs, declared_specs, session_specs
             record = (session_records.get(self.app.store, args['session_id'], native=True)
                       if args.get('session_id') else None)
             if not record:
-                return all_specs()
-            specs = session_specs(self.app.store, record['scene_id'], record.get('person_id'))
-            speak = next((spec for spec in specs if spec['name'] == 'speak'), None)
+                return declared_specs(all_specs())
+            strict = session_specs(self.app.store, record['scene_id'], record.get('person_id'))
+            speak = next((spec for spec in strict if spec['name'] == 'speak'), None)
+            specs = declared_specs(strict)          # what DSH registers and the model reads (ADR-108 D4b)
             self.app.store.audit(record['_id'], 'session.tools', {
                 'sha256': sha(canonical(specs)),
                 'speak_parts': speak['parameters']['parts']['items']['properties']['kind'].get('enum') if speak else None,

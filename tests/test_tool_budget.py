@@ -122,7 +122,7 @@ def test_every_length_she_can_be_refused_for_is_stated(tmp_path):
 
 # The harness prompt files (src/asuna/resources/prompts), characters at most. Same rule as the tools: growing one
 # raises its number here in the same change, with the cost stated in its ADR; a new file gets a line.
-PROMPTS = {'common.md': 418, 'turn.md': 639, 'turn_consult.md': 187, 'executor.md': 680, 'stage_attend.md': 502,
+PROMPTS = {'common.md': 418, 'turn.md': 639, 'turn_consult.md': 187, 'executor.md': 680, 'stage_attend.md': 485,
            'turn_thinking.md': 639, 'turn_consult_thinking.md': 187,          # ADR-099: their tool-mode twins' budgets
            'stage_appraise.md': 416}
 

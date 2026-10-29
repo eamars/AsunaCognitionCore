@@ -12,15 +12,11 @@ from datetime import datetime
 import re
 
 from . import clock
-from .persona_model import effective, timezone as persona_timezone
+from .persona_model import effective
+from .schedule_rules import her_zone
 from . import visibility
 from .local_time import face
 from .records import memories as memory_records
-
-try:
-    from zoneinfo import ZoneInfo
-except Exception:                                   # pragma: no cover
-    ZoneInfo = None
 
 
 def in_window(local: datetime, window: str | None) -> bool:
@@ -38,16 +34,13 @@ def in_window(local: datetime, window: str | None) -> bool:
 
 def rhythm_block(store, model, policy, cls, *, moment=None, owner_last_at=None):
     moment = moment or clock.now()
-    zone, source = persona_timezone(model, policy, store.config)
-    local = moment.astimezone(ZoneInfo(zone)) if ZoneInfo else moment
+    local = moment.astimezone(her_zone(store.config)['tz'])
     if cls != visibility.OWNER_PRIVATE:
         if not effective(model, 'rhythm.public_clock', policy):
             return None
         return {'local_time': face(local, local.tzinfo, year=True)}
-    block = {'local_time': face(local, local.tzinfo, year=True), 'timezone': zone,
+    block = {'local_time': face(local, local.tzinfo, year=True),
              'in_sleep_window': in_window(local, effective(model, 'rhythm.sleep_window', policy))}
-    if source == 'unset':
-        block['note'] = '未设置时区，以 UTC 显示'
     if owner_last_at:
         block['owner_last_message_at'] = owner_last_at
     return block

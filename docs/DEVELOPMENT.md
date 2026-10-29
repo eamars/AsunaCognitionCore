@@ -154,7 +154,8 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
   `test_lock_files` (both locks match `package.json` / `pyproject.toml`), `test_no_docker_in_core` (no Docker in
   `src/` or `packages/`), `test_platform_branches` (OS branches only in the files it lists),
   `test_one_clock` (the worker reads the time only through `asuna.clock`, which never gives the same time twice in a
-  process), `persona.test.js` (every persona and channel package registers).
+  process), `test_one_zone` (every time a model reads is drawn on `schedule_rules.her_zone`, never on a room's zone),
+  `persona.test.js` (every persona and channel package registers).
 - `tools/p*_offline_check.py`, `tools/integration_import_offline_check.py` and `tools/outbound_image_offline_check.py`
   run the `tests/*_cases.py` modules without a database or pytest, on the in-memory adapter over each case's own
   rows (`tests/fake_collections.py`); they are the character's own checks inside her sandbox.

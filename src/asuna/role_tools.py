@@ -437,15 +437,6 @@ TOOLS = {
                        'place': _s('哪个群：place，可省略（在群里就是这个群）'),
                        'hours': {'type': 'integer', 'description': 'mute：静音多少小时'}},
     },
-    'place_timezone': {
-        'description': ('你在的群各在哪个时区：设了以后，那边几点、你在那个群定的计划，都按那个群的钟。do=list 列出每个群设了什么、那边现在几点；'
-                         'set 给一个群设（place 照抄，timezone 写 IANA 名，如 Asia/Shanghai，'
-                         '回执里有那边现在几点）；clear 撤掉。拿不准的群不设，按宿主的钟。'),
-        'parameters': {'op': {'type': 'string', 'enum': ['list', 'set', 'clear'], 'description': 'list、set 或 clear',
-                              'required': True},
-                       'place': _s('哪个群：照抄 place（set、clear 要写）'),
-                       'timezone': _s('IANA 时区名（set 要写），比如 Asia/Shanghai')},
-    },
     'ask': {
         'description': ('问人或报问题，程序记着问了谁、谁答了、多久。do=ask 提问，可同时问几处，过了耐心就不等；read 读一个问题的回答，'
                          '或只写 to 看以前问那处怎样；close 结束一个问题。问家里别的对话（家里·私聊、主人的私聊、开发代理的线）'
@@ -865,7 +856,7 @@ def _turn_rules(store, ep):
     if cls == visibility.OWNER_PRIVATE:
         # restart: the Host supervisor (ADR-034), in every home turn: a plan or a note of her own that wakes her
         # to restart is when she needs it most.
-        names += ['set_policy', 'ask.ask', 'ask.read', 'ask.close', 'place_timezone', 'restart',
+        names += ['set_policy', 'ask.ask', 'ask.read', 'ask.close', 'restart',
                   'group_focus']
     if scene_kind == 'group':
         # ADR-082: in a group she writes about anyone whose lines are in front of her, visits included; a plan due
@@ -910,7 +901,7 @@ WITH_ACTION = ('delegate', 'task.message', 'task.stop', 'task.page', 'task.answe
 # Her home lines: the owner's own conversations and the trusted lines (his agents, her other self). Things about
 # herself go wherever she is at home; sending her on someone's errand is for the owner's conversations only.
 AT_HOME = ('write_document', 'note', 'set_policy', 'ideas.read', 'ideas.review',
-           'ask.ask', 'ask.read', 'ask.close', 'restart', 'place_timezone', 'group_focus')
+           'ask.ask', 'ask.read', 'ask.close', 'restart', 'group_focus')
 IN_GROUPS = ('write_document', 'note', 'await_answer', 'find_member', 'group_focus')
 # Her heartbeats, her nights and her vault are in the local chat.
 LOCAL_CHAT = ('visit', 'promote_memory', 'credential')
@@ -1015,7 +1006,7 @@ CONSULT_ONLY_THINKING = '行动脑在问你话：这一回合只用 task 的 ans
 OUTSIDE_NEEDS_HOME = ('这一回合是外面写来的便条叫起来的，带的是便条那边的权限；这件事要家里的权限。'
                       '真要做，就在这里说出来，主人在这里看得到。')
 HOME_AUTHORITY = frozenset(('delegate', 'task.message', 'task.stop', 'errand', 'visit', 'credential', 'write_document',
-                            'set_policy', 'restart', 'place_timezone', 'group_focus', 'ask.ask', 'ask.close',
+                            'set_policy', 'restart', 'group_focus', 'ask.ask', 'ask.close',
                             'ideas.review', 'peer_line', 'group_action'))
 
 
@@ -1025,7 +1016,7 @@ def not_now(store, ep, name):
     off = switches.tools_off(store, ep['scene_id']).get(name.split('.')[0])
     if off:
         return ('%s 是你在家里给这个对话关掉的（到 %s 自己恢复）；要提前用，回家用 set_policy 的 switch_off 结束它（id 是 %s）。'
-                % (name.split('.')[0], local_time.stamp(off['until'], local_time.zone_of(store, ep['scene_id'])), off['_id']))
+                % (name.split('.')[0], local_time.stamp(off['until'], local_time.her_zone(store)), off['_id']))
     kind = turn_kind(ep)
     if kind == CONSULT:
         return CONSULT_ONLY_THINKING if thinking_mode(store.config) else CONSULT_ONLY
@@ -1448,7 +1439,7 @@ class RoleTools:
     def _local(self, ep, result):
         """What she reads back is on the local clock; the record keeps UTC (local_time.py)."""
         from . import local_time
-        return local_time.for_model(result, local_time.zone_of(self.store, ep['scene_id']))
+        return local_time.for_model(result, local_time.her_zone(self.store))
 
     def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False, called_as=None, code=None,
                 olds=None):
@@ -1663,7 +1654,7 @@ class RoleTools:
         if query:
             from . import crossing, schedule_rules
             here = scene_records.get(self.store, where['scene_id']) or {'_id': where['scene_id']}
-            zone = schedule_rules.scene_timezone(self.store.config, here)
+            zone = schedule_rules.her_zone(self.store.config)
             crossed = crossing.elsewhere(self.store, ep['persona'], here, query, zone)
             before = crossing.before(self.store, ep['persona'], here, self._cls(ep), query, zone)                 if memory_tiers.ENABLED else []
         ep = self._fresh(ep)
@@ -2640,11 +2631,9 @@ class RoleTools:
             scheduler.ensure_settlement()
             if key == 'heartbeat.pause_min':
                 from . import schedule_rules
-                from .persona_model import timezone as persona_timezone
                 until = scheduler.pause_presence(args['value'])
-                zone, _ = persona_timezone(model, policy.params(), self.store.config)
-                zone = zone if schedule_rules.is_iana(zone) else 'UTC'
-                result['note'] = ('心跳会安静到 %s，然后自己恢复。' % schedule_rules.local_moment(zone, until).strftime('%H:%M')
+                her = schedule_rules.her_zone(self.store.config)['tz']
+                result['note'] = ('心跳会安静到 %s，然后自己恢复。' % schedule_rules.local_moment(her, until).strftime('%H:%M')
                                   if until else '心跳已经恢复。')
         return result, False
 
@@ -2798,20 +2787,20 @@ class RoleTools:
                               % _given(args, 'op'))
         except ValueError as exc:
             # 换算/校验类失败（时间已过、钟点不存在、形状不对）回给她自己改，带上现在的钟面。
-            clock = schedule_rules.local_clock(schedule_rules.scene_timezone(
-                self.store.config, scene_records.get(self.store, ep['scene_id'])), schedule_rules.now_utc())
+            clock = schedule_rules.local_clock(schedule_rules.her_zone(self.store.config), schedule_rules.now_utc())
             # The code stays in the record (words()); she reads the cause and the fix.
-            raise Refused('没安排成：%s。现在是 %s（%s，%s）。' % (words(exc).rstrip('。'), clock['now_local'],
-                                                            clock['weekday'], clock['timezone'])) from None
+            raise Refused('没安排成：%s。现在是 %s（%s）。' % (words(exc).rstrip('。'), clock['now_local'],
+                                                         clock['weekday'])) from None
         there = outside and scene_records.get(self.store, plan.get('scene_id'))
         if there:
             from .people import People
             there = PLAN_THERE % People(self.store, ep['persona']).scene_title(there)
+        shifted = schedule_rules.moved_note(plan, schedule_rules.her_zone(self.store.config))
         return {'plan_id': plan['_id'], 'status': plan['status'], 'scheduled_at': plan.get('scheduled_at'),
-                'next_fire_at': plan.get('next_fire_at'), 'timezone': plan.get('timezone'),
+                'next_fire_at': plan.get('next_fire_at'),
                 'plan_version': plan.get('plan_version', 1), **({'where': there} if there else {}),
                 **({'note': '没写 do：有 intent 和计时、没有 plan_id，按新建（create）办了。'} if inferred else {}),
-                **({'note': moved} if moved else {})}, False
+                **({'note': moved} if moved else {}), **({'clock_note': shifted} if shifted else {})}, False
 
     def _fired_here(self, ep, plan, op, timing):
         """Whether this call moves a one-shot plan in the very turn it fired (ADR-087 §4.4)."""
@@ -2899,8 +2888,7 @@ class RoleTools:
     # ── her own peer lines (ADR-013 §6) ─────────────────────────────
     def tool_restart(self, ep, call_id, args):
         from . import restarts
-        from .persona_model import timezone as persona_zone
-        from .render import model_and_policy
+        from .schedule_rules import her_zone
         desk = restarts.DESK
         if desk is None:
             raise Refused('这个宿主没有接重启请求的地方（不是正常起来的宿主）；要重启跟主人说。')
@@ -2910,8 +2898,7 @@ class RoleTools:
         if unknown:
             raise Refused('restart 不认识参数 %s：只收 do、why、when（时刻写在 when 里，如 when=23:55）；这次什么都没做。'
                           % '、'.join(unknown))
-        model, policy = model_and_policy(self.store, ep['persona'])
-        desk.zone = persona_zone(model, policy, self.store.config)[0]
+        desk.zone = her_zone(self.store.config)['name']
         op = args.get('op')
         if op == 'preview':
             return desk.preview(), False
@@ -2939,8 +2926,7 @@ class RoleTools:
 
     def tool_peer_line(self, ep, call_id, args):
         from . import lines
-        from .persona_model import timezone as persona_zone
-        from .render import model_and_policy
+        from .schedule_rules import her_zone
         wanted = self._text(args, 'line', 80)
         line = next((item for item in lines.peer_lines(self.store) if item['label'] == wanted), None)
         if not line:
@@ -2951,8 +2937,7 @@ class RoleTools:
             raise Refused('do 是 open 或 close%s。' % _given(args, 'op'))
         if op == 'close' and args.get('close_for') not in lines.CLOSE_FOR:
             raise Refused('关的时候要选 close_for：%s%s。' % ('、'.join(lines.CLOSE_FOR), _given(args, 'close_for')))
-        model, policy = model_and_policy(self.store, ep['persona'])
-        zone = persona_zone(model, policy, self.store.config)[0]
+        zone = her_zone(self.store.config)['name']
         lines.set_line(self.store, line['scene_id'], closed=op == 'close', choice=args.get('close_for'), zone=zone,
                        by='character:' + ep['_id'])
         return {'line': line['label'], 'state': lines.describe(lines.closed_until(self.store, line['scene_id']), zone)}, False
@@ -3020,24 +3005,6 @@ class RoleTools:
             return focus.set_focus(self.store, ep, scene, op == 'active', ep['persona']), False
         except ValueError as exc:
             raise Refused(str(exc)) from None
-
-    def tool_place_timezone(self, ep, call_id, args):
-        from . import places
-        moment = clock.now()
-        op = args.get('op')
-        if op == 'list':
-            return {'groups': places.zones(self.store, ep['persona'], moment)}, False
-        if op not in ('set', 'clear'):
-            raise Refused('do 是 list、set 或 clear%s。' % _given(args, 'op'))
-        place = self._text(args, 'place', 40)
-        name = self._text(args, 'timezone', 64) if op == 'set' else None
-        try:
-            scene_id = places.set_zone(self.store, place, name)
-        except ValueError as exc:
-            raise Refused(str(exc)) from exc
-        self.store.audit(ep['_id'], 'place.timezone', {'scene_id': scene_id, 'timezone': name}, ep['scope_key'])
-        row = next(row for row in places.zones(self.store, ep['persona'], moment) if row['place'] == place)
-        return {**row, 'note': '设好了：那边几点、你在那个群定的计划，从现在起按这个算。' if name else '撤掉了，这个群照旧按宿主的钟算。'}, False
 
     def tool_find_member(self, ep, call_id, args):
         from . import group_members
@@ -3333,7 +3300,7 @@ def read_sections(store, ep, items, cls):
             else:
                 from . import schedule_rules
                 here = scene_records.get(store, ep['scene_id']) or {'_id': ep['scene_id']}
-                section, why = crossing.fetch(store, here, item['sid'], schedule_rules.scene_timezone(store.config, here))
+                section, why = crossing.fetch(store, here, item['sid'], schedule_rules.her_zone(store.config))
             out.append(section) if section else missing.append(why)
             continue
         _, content = docs.read(item['doc'])
@@ -3379,9 +3346,10 @@ def _from_home(store, persona, source_ids, episodes):
 def promote(store, ep, item, *, key):
     """Settlement only: quota, ≥ min_roots different turns and ≥ min_dates local dates behind the sources."""
     from .config import character_id
-    from .persona_model import effective, timezone as persona_timezone
+    from .persona_model import effective
     from .render import model_and_policy
     from .rhythm import episode_dates, selections
+    from .schedule_rules import her_zone
     if ep.get('episode_kind') != 'settlement':
         raise Denied('PROMOTE_ONLY_IN_SETTLEMENT')
     model, policy = model_and_policy(store, ep['persona'])
@@ -3404,8 +3372,7 @@ def promote(store, ep, item, *, key):
             episodes.add(source[3:])
         elif unit:
             episodes.update([unit['episode_id']] if unit.get('episode_id') else picked.get(source, []))
-    zone, _ = persona_timezone(model, policy, store.config)
-    dates = set(episode_dates(store, episodes, zone).values())
+    dates = set(episode_dates(store, episodes, her_zone(store.config)['name']).values())
     need_roots = int(effective(model, 'memory.promotion.min_roots', policy) or 2)
     need_dates = int(effective(model, 'memory.promotion.min_dates', policy) or 2)
     if len(episodes) < need_roots or len(dates) < need_dates:

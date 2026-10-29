@@ -364,7 +364,7 @@ class Coordinator:
         context={**ep['context'],'pictures_from_program':shown} if shown else ep['context']
         # What she reads is on the local clock; the stored context keeps UTC for the program (local_time.py).
         from . import local_time
-        context=local_time.for_model(context,local_time.zone_of(self.store,ep['scene_id']))
+        context=local_time.for_model(context,local_time.her_zone(self.store))
         # What each block is for is in her system prompt; a block saying the same again arrives without it (ADR-056).
         from . import block_guide
         context=block_guide.strip(context)
@@ -479,7 +479,7 @@ class Coordinator:
         try:
             material=attend.material(self.store,scene,event,row,ep['persona'])
             from . import local_time
-            material=local_time.for_model(material,local_time.zone_of(self.store,ep['scene_id']))
+            material=local_time.for_model(material,local_time.her_zone(self.store))
             question=attend.instruction(self.store.config)+'\n'+json.dumps(material,ensure_ascii=False)
             system=attend.system(self.store,ep['persona'])
             def generate(attempt, note):
@@ -667,7 +667,7 @@ class Coordinator:
         said=None
         if not task and tier:
             from . import action_tiers
-            tier,said=action_tiers.at_dispatch(*tier,self._zone(ep))
+            tier,said=action_tiers.at_dispatch(*tier,self._zone())
         if not task:
             development,integration,names=self._grants(ep)
             source_ref=('in-'+authority['_id']) if authority.get('episode_kind')!='consult' else None
@@ -705,9 +705,9 @@ class Coordinator:
             raise role_tools.Refused('家里的会话这会儿找不到（不是你的错）：这件回家再交，或者记一个 plan 到时候交。')
         return found or session
 
-    def _zone(self, ep):
-        from .schedule_rules import scene_timezone
-        return scene_timezone(self.store.config, scene_records.get(self.store, ep['scene_id']) or {})
+    def _zone(self):
+        from .schedule_rules import her_zone
+        return her_zone(self.store.config)
 
     def message_action(self, ep, call_id, task, message):
         """Her words to the action brain about one task: steered into a running one, or continuing a finished one."""
@@ -746,7 +746,7 @@ class Coordinator:
             limit=idle_minutes(self.store.config,(task.get('tier') or {}).get('ran'))
             idle=(clock.now()-last_used(task)).total_seconds()/60
             fresh={'after_minutes':int(idle),'report_of':task['_id'],'limit':limit} if idle>limit else None
-            tier,said=action_tiers.carried(task.get('tier'),fresh,self._zone(ep))
+            tier,said=action_tiers.carried(task.get('tier'),fresh,self._zone())
             binding=(f"task:{task_id}:{ep['scope_key']}:{ep['policy_epoch']}:1" if fresh else
                      task.get('execution_binding') or f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}")
             source_ref='in-'+ep['_id']

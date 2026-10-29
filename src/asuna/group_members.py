@@ -116,13 +116,13 @@ def _yours(member):
 
 def _spoken(store, scene_id, moment):
     """Her last line here and today's count, in words (SPOKE_RECENT, SPOKE_DAYS, places' line words)."""
-    from .local_time import zone_of
+    from .local_time import her_zone
     from .places import _at, _lines_word
     last = message_records.spoken(store, scene_id, with_receipt=True, by='receipt_at').first(
         newest_first=True, fields=['receipt_at'])
     if not last:
         return NEVER_SPOKE
-    tz = zone_of(store, scene_id)['tz']
+    tz = her_zone(store)['tz']
     at, here = _at(last['receipt_at']).astimezone(tz), moment.astimezone(tz)
     minutes = (moment - at).total_seconds() / 60
     words = next((words for limit, words in SPOKE_RECENT if minutes < limit), None)

@@ -157,13 +157,13 @@ class ScheduleService:
                 native = live[-1] if live else None
             if not native:
                 rule = plan['rule']
-                scene = scene_records.authorize(self.store, plan['scene_id'], plan['person_id'])
+                scene_records.authorize(self.store, plan['scene_id'], plan['person_id'])      # still hers to arm
                 moment = clock.now()
                 if 'every_seconds' in rule:
                     timing = {'every_seconds': rule['every_seconds']}
                 elif 'clock' in rule:
                     timing = schedule_rules.native_payload(rule,
-                        schedule_rules.next_fire(rule, self.zone_of(scene, plan)['tz'], moment), moment)
+                        schedule_rules.next_fire(rule, schedule_rules.plan_zone(plan, self.her())['tz'], moment), moment)
                 else:
                     due = datetime.fromisoformat(plan['scheduled_at'].replace('Z', '+00:00'))
                     if due <= moment:
@@ -214,9 +214,9 @@ class ScheduleService:
         plan = plan_records.get(self.store, plan_id) or {'_id': plan_id}
         return self.lane.schedule('/schedule/create', {'plan_id': plan_id, 'title': plan_title(plan), **timing})
 
-    def zone_of(self, scene, plan=None):
-        """这个场景/这条计划用哪个钟面。计划上已落库的时区优先：改配置不追改旧安排。"""
-        return schedule_rules.scene_timezone(self.app.config, scene or {}, plan)
+    def her(self):
+        """她的钟面（schedule_rules.her_zone）：每个场景都一样。一条计划自己存着的钟面另算（plan_zone）。"""
+        return schedule_rules.her_zone(self.app.config)
 
     def ensure_self_development(self):
         """Register one native recurring opportunity, with no second host clock."""
@@ -269,7 +269,7 @@ class ScheduleService:
     def _night_stage(self, plan, occurrence):
         """One night stage when it is due (ADR-021): inside her window, her pace after the last stage, and nothing of
         an earlier stage still open; otherwise the reason it is not (recorded on the plan, no model call)."""
-        from .persona_model import effective, timezone as persona_timezone
+        from .persona_model import effective
         from .rhythm import NIGHT_STAGE_TEXT
         if (self.app.config.get('self_development') or {}).get('night') is False:
             return 'NIGHT_OFF'
@@ -279,9 +279,9 @@ class ScheduleService:
         every = int(effective(model, 'self_development.night_every_min', policy) or 30)
         if hours <= 0:
             return 'NIGHT_OFF'
-        zone, _ = persona_timezone(model, policy, self.app.config)
+        her = self.her()['tz']
         moment = schedule_rules._aware(now())
-        local = schedule_rules.local_moment(zone if schedule_rules.is_iana(zone) else 'UTC', moment)
+        local = schedule_rules.local_moment(her, moment)
         into = ((local.hour - start) % 24) * 60 + local.minute
         if into >= hours * 60:
             return 'OUTSIDE_NIGHT'
@@ -295,7 +295,7 @@ class ScheduleService:
         stage = {'window': '%02d:00–%02d:00' % (start, (start + hours) % 24), 'every_min': every,
                  'last_stage': left <= every}
         waiting = [{'project': project, 'published': schedule_rules.local_moment(
-                        zone if schedule_rules.is_iana(zone) else 'UTC', schedule_rules._aware(at)).strftime('%H:%M')
+                        her, schedule_rules._aware(at)).strftime('%H:%M')
                     if at else ''} for project, at in waiting_restart(self.store)]
         if waiting:
             stage['waiting_restart'] = waiting
@@ -449,11 +449,12 @@ class ScheduleService:
     def ensure_settlement(self):
         """Nightly settlement: native daily at rhythm.settle_at in an explicit IANA zone; once per local date."""
         from .persona_data import persona_runtime
-        from .persona_model import effective, timezone as persona_timezone
+        from .persona_model import effective
         persona, model, policy = self._persona()
         settle_at = effective(model, 'rhythm.settle_at', policy)
-        zone, source = persona_timezone(model, policy, self.app.config)
-        if not settle_at or source == 'unset' or not schedule_rules.is_iana(zone):
+        her = self.her()
+        zone = her['name']
+        if not settle_at or her['source'] == 'unset' or not schedule_rules.is_iana(zone):
             self._retire('plan-asuna-settlement', 'no settle_at or no IANA time zone')
             return None
         target = persona_runtime(self.app.config, persona).get('internal_scene') or self.app.config['chat']['scene_id']
@@ -556,7 +557,7 @@ class ScheduleService:
         if not scene.get('channel_id'):
             raise ValueError('VISIT_PLACE_UNKNOWN: 「%s」没接到平台，去不了（不是你的错）；挑 places_from_program 里别的' % place)
         moment = schedule_rules._aware(now())
-        date = places.local_date(self.app.config, model, policy, moment)
+        date = places.local_date(self.app.config, moment)
         plan = plan_records.get(self.store, PRESENCE_PLAN) or {}
         can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date)
         if not can:
@@ -642,7 +643,7 @@ class ScheduleService:
         if draft['mode'] == notes.WAKE and draft['kind'] == 'group' and draft['trust'] == notes.TRUSTED:
             persona, model, policy = self._persona()
             plan = plan_records.get(self.store, PRESENCE_PLAN) or {}
-            date = places.local_date(self.app.config, model, policy, moment)
+            date = places.local_date(self.app.config, moment)
             can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date)
             if not can and args.get('mode'):
                 raise notes.NoteRefused('NOTE_VISIT_NOT_NOW', ('现在叫不醒那个群：%s。想晚点叫醒就用 plan 定个时间，到时再递；'
@@ -701,12 +702,11 @@ class ScheduleService:
         """Deterministic pre-gates; a skip calls no model and leaves one counting audit. forced (the owner's
         /heartbeat) skips the gates; the beat still counts toward the day."""
         from .config import ago
-        from .persona_model import effective, timezone as persona_timezone
+        from .persona_model import effective
         from .rhythm import HEARTBEAT_EARLY, HEARTBEAT_RECONNECTED, HEARTBEAT_TEXT
         persona, model, policy = self._persona()
         moment = schedule_rules._aware(now())
-        zone, _ = persona_timezone(model, policy, self.app.config)
-        today = schedule_rules.local_moment(zone if schedule_rules.is_iana(zone) else 'UTC', moment).date().isoformat()
+        today = schedule_rules.local_moment(self.her()['tz'], moment).date().isoformat()
         beats = plan['beats'] if (plan.get('beats') or {}).get('date') == today else {'date': today, 'count': 0}
         reason = None
         with self.controller.pending.mutex:
@@ -799,8 +799,9 @@ class ScheduleService:
             scene = scene_records.authorize(self.store, where['scene_id'], where['person_id'])
             target = {'scene_id': scene['_id'], 'person_id': where['person_id'], 'scope_key': scene['scope_key'],
                       'policy_epoch': scene['policy_epoch']}
-        zone = self.zone_of(scene)
+        zone = self.her()
         fire_at = schedule_rules.next_fire(rule, zone['tz'], now())   # 已过/本地不存在都明确抛回
+        rule = schedule_rules.pin_at(rule, fire_at)       # 约好的时刻就是那一刻，不再依赖任何钟面
         # One turn may make several plans: each of her plan calls names its own (role_tools).
         plan_id = plan_id or 'plan-' + ep['_id'][3:]
         plan = plan_records.get(self.store, plan_id)
@@ -809,7 +810,7 @@ class ScheduleService:
             plan = plan_records.save(self.store, {'_id': plan_id, **target,
                 **({'from_scene_id': ep['scene_id']} if where else {}), 'source_episode_id': ep['_id'],
                 'intent': intent.strip(), 'rule': rule,
-                'timezone': zone['name'], 'tz_source': zone['source'],
+                **({'timezone': zone['name']} if schedule_rules.has_wall_zone(rule) else {}),
                 'next_fire_at': fire_at.isoformat(timespec='seconds'), 'plan_version': 1,
                 # 计划到期第一版不带窄授权（owner 2026-10-11 经 Claude 定）：agent_home 回合挂的计划，到期事件
                 # 里不带 integration_profile。这是定死的行为差异，不是漏改 —— 到期处（同一判断）一起定死。
@@ -849,25 +850,34 @@ class ScheduleService:
         scene = scene_records.authorize(self.store, ep['scene_id'], ep['person_id'])
         if scene['policy_epoch'] != ep['policy_epoch']:
             raise Denied(SOURCE_STALE)
-        zone = self.zone_of(scene, plan)
+        her = self.her()
         timing = spec.get('schedule') if isinstance(spec.get('schedule'), dict) else \
             {key: value for key, value in spec.items() if key not in ('plan_id', 'intent')}
-        # Only new wording: the plan keeps its timing (her plan tool, op=update with an intent alone).
+        # A new timing is written on her clock; only new wording keeps the plan's timing and the zone it is in
+        # (her plan tool, op=update with an intent alone).
+        zone = her if timing else schedule_rules.plan_zone(plan, her)
         rule = schedule_rules.normalize_rule(timing) if timing else plan['rule']
         intent = spec.get('intent') or plan['intent']
         if not isinstance(intent, str) or not 1 <= len(intent.strip()) <= 1000:
             raise ValueError('PLAN_INTENT_INVALID: ' + intent_problem(intent))
         intent = intent.strip()
         fire_at = schedule_rules.next_fire(rule, zone['tz'], now())
+        if timing:
+            rule = schedule_rules.pin_at(rule, fire_at)
         current = plan_records.get(self.store, plan_id)
-        if current['rule'] == rule and current['intent'] == intent:
-            return current                                  # 什么都没变就别动原生记录
+        # The plan was written on another clock than hers and now takes a timing: it moves onto hers, even when the
+        # timing she gives reads the same.
+        other = schedule_rules.moved_from(current, her, bool(timing))
+        from_other = other is not None
+        if current['rule'] == rule and current['intent'] == intent and not from_other:
+            # 什么都没变就别动原生记录；上一次改期留下的 last_update 不是这一次的，不带出去
+            return {key: value for key, value in current.items() if key != 'last_update'}
         recurring = schedule_rules.native_recurring(rule, zone['name'])
         change = recurring and {'kind': next(iter(recurring)), **recurring} or (
             {'kind': 'every', 'every_seconds': rule['every_seconds']} if 'every_seconds' in rule else None)
         native, title = None, plan_title({**current, 'intent': intent})
         in_place = None
-        if current.get('schedule_id') and current['rule'] == rule:
+        if current.get('schedule_id') and current['rule'] == rule and not from_other:
             # New wording only: the native record keeps its timing; its title follows the wording.
             in_place = {'id': current['schedule_id'], 'title': title}
         elif change and current.get('schedule_id') and (current.get('native_recurring') or 'every_seconds' in current['rule']):
@@ -887,14 +897,22 @@ class ScheduleService:
                 self.lane.schedule('/schedule/delete', {'id': stale})
             except BaseException as exc:                     # 旧的那条没删掉也不会重复行动
                 note = 'STALE_NATIVE_DELETE_FAILED: ' + str(exc)
-        updated = plan_records.save(self.store, {**current, 'rule': rule, 'intent': intent,
+        record = {**current, 'rule': rule, 'intent': intent,
             'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session, 'scheduled_at': native['scheduledAt'],
-            'next_fire_at': fire_at.isoformat(timespec='seconds'), 'timezone': zone['name'],
+            'next_fire_at': fire_at.isoformat(timespec='seconds'),
             'native_recurring': native.get('kind') in ('daily', 'weekly'),
-            'tz_source': zone['source'], 'plan_version': current.get('plan_version', 1) + 1,
+            'plan_version': current.get('plan_version', 1) + 1,
             'updated_at': now(), 'status': 'ACTIVE',
-            'last_update': {'from_rule': current['rule'], 'from_schedule_id': stale, 'note': note}},
-            expected=current['revision'], stream=plan_id)
+            'last_update': {'from_rule': current['rule'], 'from_schedule_id': stale, 'note': note,
+                            **({'from_timezone': other} if from_other else {})}}
+        if timing:
+            # The zone is stored only for a rule that has a wall zone, and then it is hers.
+            record.pop('tz_source', None)
+            if schedule_rules.has_wall_zone(rule):
+                record['timezone'] = her['name']
+            else:
+                record.pop('timezone', None)
+        updated = plan_records.save(self.store, record, expected=current['revision'], stream=plan_id)
         self.store.audit(plan_id, 'schedule.updated', {'from_rule': current['rule'], 'to_rule': rule,
             'from_schedule_id': stale, 'native_schedule_id': native['id'], 'note': note,
             'plan_version': updated['plan_version'], 'next_fire_at': updated['next_fire_at']},
@@ -925,7 +943,7 @@ class ScheduleService:
         plan = plan_records.get(self.store, plan_id)
         if not plan or plan['status'] in ('CANCELLED', 'FIRED', 'SUSPENDED'):
             return
-        zone = self.zone_of(scene_records.get(self.store, plan['scene_id']), plan)
+        zone = schedule_rules.plan_zone(plan, self.her())
         moment = schedule_rules._aware(now()) if not floor else \
             max(schedule_rules._aware(now()), schedule_rules._aware(floor))   # 比时刻，不比字符串
         try:
@@ -1136,7 +1154,7 @@ class ScheduleService:
         extra = {}
         if current.get('native_recurring') and status == 'ACTIVE':
             # The native rule repeats by itself; only the displayed next occurrence moves on.
-            zone = self.zone_of(scene_records.get(self.store, current['scene_id']), current)
+            zone = schedule_rules.plan_zone(current, self.her())
             moment = max(schedule_rules._aware(now()), schedule_rules._aware(native.get('scheduledAt') or now()))
             # DSH's own next target when it has already moved on; otherwise computed from the rule.
             next_fire_at = native['scheduledAt'] if native.get('scheduledAt') and \

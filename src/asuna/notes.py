@@ -332,7 +332,7 @@ def copied_words(store, persona, scene_id, match):
     from .people import People
     scene = scene_records.get(store, scene_id) or {'_id': scene_id}
     who = People(store, persona).speaker(scene, match['author'])
-    when = local_time.stamp(match['at'], local_time.zone_of(store, scene_id)) if match.get('at') else '刚才'
+    when = local_time.stamp(match['at'], local_time.her_zone(store)) if match.get('at') else '刚才'
     return NOT_OWN_WORDS % (match['first'], match['last'], who, when)
 
 
@@ -547,9 +547,9 @@ def answers_tail(store, persona, row):
     if not row.get('answers'):
         return None
     from . import questions
-    from .schedule_rules import scene_timezone
+    from .schedule_rules import her_zone
     scene = scene_records.get(store, row['from_scene']) or {'_id': row['from_scene']}
-    return questions.answer_tail(store, persona, row['answers'], scene_timezone(store.config, scene))
+    return questions.answer_tail(store, persona, row['answers'], her_zone(store.config))
 
 
 def received_block(store, persona, scene_id, cls, kind, episode, moment, skip=None):

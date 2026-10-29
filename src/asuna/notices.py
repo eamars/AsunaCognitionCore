@@ -140,9 +140,9 @@ def take(store, scene, persona=None, keep=False):
         return None
     from .caught_up import said_at
     from .people import People
-    from .schedule_rules import line_stamp, scene_timezone
+    from .schedule_rules import line_stamp, her_zone
     people = People(store, persona)
-    zone = scene_timezone(store.config, scene)
+    zone = her_zone(store.config)
     folded, reactions = {}, {}
     for row in rows:
         _place(people, scene, row)
@@ -246,7 +246,7 @@ def _send_home(store, controller):
     if not items:
         return None
     chat = store.config.get('chat') or {}
-    zone = local_time.zone_of(store, chat.get('scene_id'))
+    zone = local_time.her_zone(store)
     text = HOME_HEAD + '：\n' + '\n'.join('- %s %s' % (line_stamp(zone, moment.isoformat()), line)
                                           for moment, line in items)
     event_id = 'presence:notice-' + uuid.uuid4().hex[:16]
@@ -299,7 +299,7 @@ def remind_open(store, controller):
     if not rows:
         return None
     chat = store.config.get('chat') or {}
-    zone = local_time.zone_of(store, chat.get('scene_id'))
+    zone = local_time.her_zone(store)
     text = HOME_HEAD + '。' + OPEN_HEAD + '：\n' + '\n'.join(
         '- %s %s%s' % (line_stamp(zone, row['received_at']), row['line'], _hint(row)) for row in rows)
     event_id = 'presence:requests-' + uuid.uuid4().hex[:16]

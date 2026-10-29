@@ -229,7 +229,7 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`restarts`](../../src/asuna/restarts.py) — Her restarts (ADR-034): the worker side of the Host supervisor (tools/asuna-supervisor.mjs).
 - [`host_stops`](../../src/asuna/host_stops.py) — When the Host was taken away from outside, she should not have to infer from a gap in the logs whether she was away.
 - [`host_lease`](../../src/asuna/host_lease.py) — One running Host per database, across machines (ADR-020 M1).
-- [`local_time`](../../src/asuna/local_time.py) — Times a model reads are on the local clock (owner 2026-10-08): stored records keep UTC for the program, and everything handed to a model passes `for_model` first.
+- [`local_time`](../../src/asuna/local_time.py) — Times a model reads are on her one clock (owner 2026-10-08; one clock in every conversation, ADR-106): stored records keep UTC for the program, and everything handed to a model passes `for_model` first.
 - [`store/__init__`](../../src/asuna/store/__init__.py) — The store: the core's way to its database, with no database named.
 - [`store/words`](../../src/asuna/store/words.py) — The words the core describes records with: conditions, changes, sorts and totals, their JSON form for her read tool, and their validation against a collection's declaration before any adapter sees them.
 - [`store/catalog`](../../src/asuna/store/catalog.py) — The catalog: every collection the core keeps, declared once, and the vector spaces searched in them.
@@ -496,6 +496,7 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`check_prepared_start.py`](../../tools/check_prepared_start.py) — Run the launcher's start preparation (rung 0) for one commit in a scratch folder and check what it installed.
 - [`check_staged_secrets.py`](../../tools/check_staged_secrets.py) — Report paths only; never print configured secret values or matching bytes.
 - [`cleanup_test_databases.py`](../../tools/cleanup_test_databases.py) — Inventory or remove only explicitly inventoried Asuna test databases.
+- [`clear_scene_zones.py`](../../tools/clear_scene_zones.py) — ADR-106's one-off: take the time zone off every conversation that still carries one.
 - [`import_native_credentials.mjs`](../../tools/import_native_credentials.mjs) — One-time private migration through DSH's credential provider; never logs values.
 - [`integration_import_offline_check.py`](../../tools/integration_import_offline_check.py) — 集成产物导入的离线自检：不需要 Mongo、不需要 pytest、不需要 WSL，直接跑同一套用例。
 - [`make_demo_config.py`](../../tools/make_demo_config.py) — Create the ignored demo config (ADR-009 §0.3) from config/demo.example.json.

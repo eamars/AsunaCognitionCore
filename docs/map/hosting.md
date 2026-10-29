@@ -325,13 +325,13 @@ One running Host per database, across machines (ADR-020 M1).
 
 [src/asuna/local_time.py](../../src/asuna/local_time.py)
 
-Times a model reads are on the local clock (owner 2026-10-08): stored records keep UTC for the program, and everything handed to a model passes `for_model` first.
+Times a model reads are on her one clock (owner 2026-10-08; one clock in every conversation, ADR-106): stored records keep UTC for the program, and everything handed to a model passes `for_model` first.
 
 - def `is_time_key`
 - def `face` — An aware moment on the clock face she reads: `10/14 14:28`, or `2025/9/27 14:00` when `year` is asked, when it is another year, or when it is more than 90 days from now.
 - def `stamp` — One time on the local clock face (`face`); the value as it was when it is no time.
 - def `for_model` — A copy of a context block or tool result with every timestamp field on the local clock.
-- def `zone_of` — The time zone a conversation's times are read in (schedule_rules.scene_timezone).
+- def `her_zone` — Her one clock (schedule_rules.her_zone): the same in every conversation.
 
 ## `store/__init__`
 
@@ -589,7 +589,8 @@ The owner of `scenes`: a conversation's record (its kind, members, scope and epo
 - def `note_size`
 - def `note_tokens`
 - def `set_character_context`
-- def `set_timezone` — The conversation's time zone; None takes it away.
+- def `timezones` — How many conversations still carry a `timezone` (ADR-106).
+- def `clear_timezones` — ADR-106's one-off: take `timezone` off every conversation that has one.
 - def `note_fault`
 - def `clear_fault` — The fault mark goes, if it is still the one shown (`fault.at`).
 - def `hold_unsent`

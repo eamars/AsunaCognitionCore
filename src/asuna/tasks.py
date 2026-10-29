@@ -324,14 +324,8 @@ def home_env(store):
     """What a home task's commands are given besides the sandbox's own: her name on commits, and the database and her
     time zone for asuna.dbread."""
     from . import dbread
-    from .persona_model import timezone as persona_timezone
-    from .render import model_and_policy
-    persona=(store.config.get('chat') or {}).get('persona')
-    try:
-        zone=persona_timezone(*model_and_policy(store,persona),store.config)[0] if persona else None
-    except Exception:
-        zone=None
-    return {**sandbox_backend.git_identity(store.config),**dbread.environment(store.config,zone)}
+    from .schedule_rules import her_zone
+    return {**sandbox_backend.git_identity(store.config),**dbread.environment(store.config,her_zone(store.config)['name'])}
 
 
 SANDBOX_TOOL={'name':'sandbox_run','description':'Run argv in the task folder under the Host sandbox: it may write only there. Commands are native to the machine the Host runs on (on Windows there is no sh or Linux tools: write the work as a python3 script; python3 is Python 3.12, with httpx, websockets, paramiko, pymongo, PyYAML and PIL (Pillow) importable; read the database with asuna.dbread, skill asuna-database). An argument /task or /task/… names the task folder. git and ssh work with the keys and logins of the user the Host runs as; what you commit carries your own name. 30 s (timeout: up to 600), 256 KiB output; a stopped command returns its output so far. credentials: names from the program notes\' credentials; their environment variables are set for this one command only (a script reads os.environ). Values are never shown: output containing one comes back hidden. Never write a credential value into a script, file, brief or report.', 'parameters':{'argv':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'required':True},'credentials':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'description':'credential names for this command (home tasks only)'},'timeout':{'type':'integer','description':'seconds, up to 600'}}}
@@ -1051,7 +1045,7 @@ class Executor:
             vault=credentials.listing()
             if vault:facts['credentials']={'items':vault,'how':'sandbox_run 写 credentials（名字照抄），这些环境变量只在那一条命令里有；脚本用 os.environ 读，值不要写进文件、脚本、报告。'}
         from . import local_time                     # the action brain reads times on the local clock
-        facts=local_time.for_model(facts,local_time.zone_of(self.service.store,task['scene_id']))
+        facts=local_time.for_model(facts,local_time.her_zone(self.service.store))
         text+='\n\n—— 程序附注（不是你交代的话）——\n'+json.dumps(facts,ensure_ascii=False)
         if task.get('integration_profile') == 'owner':
             text+='\n本任务继承本机 owner 工作域的集成能力。适配器代码在通道包里，只用 development_* 工具（project 填通道包）修改。integration_test 把候选里的适配器目录冻结成一份（argv 里写 /app）来试跑；integration_start 只启用已发布（development_publish 之后）的适配器版本，宿主重启后也恢复已发布的版本。/data 可写，test 与启用数据分开。/integration/config.json 是端点与 adapter 配置。运行直接连配置里的端点，用的是真实配置：试跑也能真的对平台做动作，试跑只做读，发消息留给出站队列和已发布的适配器。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。import_integration_artifact 只能按配置里已有的端点别名取一个产物（不是任意 URL 下载器），字节由平台写进本次任务工作区的相对路径，默认不覆盖、有大小上限，失败会给出真实原因（端点未知、URL 被拒、路径越界、目标已存在、超限、HTTP 状态）。'

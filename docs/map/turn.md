@@ -234,7 +234,6 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `tool_ideas_note`
   - `tool_private_words`
   - `tool_group_focus`
-  - `tool_place_timezone`
   - `tool_find_member`
   - `tool_ask_ask`
   - `tool_ask_read`

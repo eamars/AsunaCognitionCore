@@ -20,7 +20,6 @@ Persona model: validation and effective parameter values (ADR-009 PERSONA_CONTRA
 - def `value_words` — What a key takes, in words: its type and its bounds or choices.
 - def `check_value`
 - def `effective` — policy store > persona model default > core default (None when nothing applies).
-- def `timezone` — (zone, source) for rhythm: policy rhythm.timezone > existing global config timezone > UTC.
 - def `self_development_minutes` — policy > existing local self_development.every_seconds (compat until P7) > model > 1440.
 
 ## `persona_data`

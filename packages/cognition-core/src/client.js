@@ -43,7 +43,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'duration.seconds': '{n} 秒', 'duration.minutes': '{n} 分钟', 'duration.hours': '{h} 小时 {m} 分钟',
       'tool.think': '心里话', 'tool.speak': '说话', 'tool.ask': '问主人', 'tool.await_answer': '等回话', 'tool.credential': '保险箱',
       'tool.errand': '差事', 'tool.find_member': '找群友', 'tool.group_focus': '群里的心思', 'tool.note': '便条', 'tool.peer_line': '旧居的线',
-      'tool.place_timezone': '地方的时区', 'tool.private_words': '私密名单', 'tool.restart': '重启',
+      'tool.private_words': '私密名单', 'tool.restart': '重启',
       'tool.sticker': '表情包架子', 'tool.watch': '盯人',
       'speak.sticker': '［贴纸：{name}］', 'speak.picture': '［图片］', 'speak.file': '［文件］', 'speak.poke': '［戳了 {who}］', 'speak.react': '［给 {line} 点了「{face}」］',
       'speak.recall': '［撤回 {line}：{why}］', 'speak.other': '［{kind}］', 'tool.recall': '回想', 'tool.delegate': '交给行动脑', 'tool.message_action': '给行动脑补话',
@@ -212,7 +212,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
       'duration.seconds': '{n}s', 'duration.minutes': '{n} min', 'duration.hours': '{h} h {m} min',
       'tool.think': 'Thought', 'tool.speak': 'Speak', 'tool.ask': 'Ask the owner', 'tool.await_answer': 'Wait for an answer',
       'tool.credential': 'Vault', 'tool.errand': 'Errand', 'tool.find_member': 'Find a member', 'tool.group_focus': 'Group focus',
-      'tool.note': 'Note', 'tool.peer_line': 'Peer line', 'tool.place_timezone': 'Place time zone', 'tool.private_words': 'Private words',
+      'tool.note': 'Note', 'tool.peer_line': 'Peer line', 'tool.private_words': 'Private words',
       'tool.restart': 'Restart', 'tool.sticker': 'Sticker shelf', 'tool.watch': 'Watch someone',
       'speak.sticker': '[sticker: {name}]', 'speak.picture': '[picture]', 'speak.file': '[file]', 'speak.poke': '[poked {who}]', 'speak.react': '[reacted {face} to {line}]',
       'speak.recall': '[recalled {line}: {why}]', 'speak.other': '[{kind}]', 'tool.recall': 'Recall', 'tool.delegate': 'Hand to the action brain',
@@ -671,7 +671,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     speak: 'IconSendOutlineRegular', reply: 'IconSendOutlineRegular', ask: 'IconQuestionOutlineRegular', await_answer: 'IconAlarmClockOutlineRegular',
     credential: 'IconArchiveOutlineRegular', errand: 'IconRightUpOutlineRegular', find_member: 'IconSearchOutlineRegular',
     group_focus: 'IconUsersOutlineRegular', note: 'IconListPenOutlineRegular', peer_line: 'IconPaperPlaneOutlineRegular',
-    place_timezone: 'IconAlarmClockOutlineRegular', private_words: 'IconChecklistOutlineRegular',
+    private_words: 'IconChecklistOutlineRegular',
     restart: 'IconInfoOutlineRegular', sticker: 'IconLikeOutlineRegular',
     watch: 'IconUserOutlineRegular' };
   // A record holds the call as she wrote it: the names she is shown (param_names.RENAMED), or an old name that still
@@ -696,7 +696,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
     understand_person: 'content', set_policy: 'key', feel: 'why', plan: 'intent', group_action: 'who',
     promote_memory: 'fact', note_idea: 'idea', review_idea: 'why', ask_character: 'question', report_progress: 'note',
     visit: 'topic', ask: 'question', await_answer: 'why', credential: 'name', errand: 'request', find_member: 'name',
-    group_focus: 'place', note: 'text', peer_line: 'place', place_timezone: 'place', private_words: 'category',
+    group_focus: 'place', note: 'text', peer_line: 'place', private_words: 'category',
     restart: 'why', sticker: 'name', watch: 'person' };
   const TOOL_BODY = { think: 'thought', delegate: 'brief', message_action: 'message', answer_action: 'answer',
     write_document: 'content', update_self: 'content', understand_person: 'content', note_idea: 'idea', ask_character: 'question',

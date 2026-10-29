@@ -18,7 +18,6 @@ SCHEMA = schema('persona-model.schema.json')
 # Values that belong to the deployer or the persona herself: a package may not
 # default or declare them; they are set only on this machine (policy store).
 PRIVATE_KEYS = {
-    'rhythm.timezone': {'type': 'string', 'what': '节律、沉淀与本地时刻所用的 IANA 时区'},
     'rhythm.sleep_window': {'type': 'string', 'what': '作息声明 HH:MM-HH:MM；是输入，不是闸门'},
     'rhythm.public_clock': {'type': 'boolean', 'what': '是否在 public 会话中给出本地时刻（会暴露时区）'},
 }
@@ -66,7 +65,7 @@ CORE_DEFAULTS = {
     'affect': {'enabled': False, 'close_mode': 'from_close', 'require_cost': False, 'allow_untyped': True,
                'max_delta': {'val': 100, 'arl': 100}, 'proposal_ttl_h': 24, 'kind_floor': 0,
                'kinds': {}, 'bands': [], 'policy': []},
-    'rhythm': {'settle_at': None, 'timezone': None, 'sleep_window': None, 'public_clock': False},
+    'rhythm': {'settle_at': None, 'sleep_window': None, 'public_clock': False},
     'heartbeat': {'enabled': False, 'every_min': 60, 'min_gap_min': 120, 'pause_min': 0,
                   'visits': False, 'visits_per_day': 4, 'idle_hint': IDLE_HINT,
                   'visits_per_beat': 1, 'dice_awake': '歇着 40、有趣 31、自我开发 10、自我评估 12、复盘 2、找人 5、待着 0',
@@ -191,19 +190,6 @@ def effective(model: dict, key: str, policy: dict | None = None):
         if value is not _MISSING:
             return copy.deepcopy(value)
     return None
-
-
-def timezone(model: dict, policy: dict | None, config: dict) -> tuple:
-    """(zone, source) for rhythm: policy rhythm.timezone > existing global config timezone > UTC.
-
-    A scene-level ``timezone`` still governs only that scene's plan timing (schedule_rules).
-    """
-    zone = effective(model, 'rhythm.timezone', policy)
-    if zone:
-        return zone, 'policy'
-    if (config or {}).get('timezone'):
-        return config['timezone'], 'config'
-    return 'UTC', 'unset'
 
 
 def self_development_minutes(model: dict, policy: dict | None, config: dict) -> tuple:

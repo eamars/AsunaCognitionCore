@@ -59,7 +59,7 @@ def lines(block, zone):
 
 def read(store, scene_id, sid):
     """A forward in this conversation as a section {doc, sid, heading, body, next?}, or the words why not."""
-    from .schedule_rules import scene_timezone
+    from .schedule_rules import her_zone
     ref, _, page = str(sid).partition(':')
     page = int(page) if page.isdigit() and int(page) > 0 else 1
     if not REF.match(ref):
@@ -70,7 +70,7 @@ def read(store, scene_id, sid):
         return None, 'forward#%s：这里没有这条合并转发（只能在它发来的那个对话里读）' % sid
     scene = scene_records.get(store, scene_id) or {'_id': scene_id}
     pages, current = [], []
-    for line in lines(block, scene_timezone(store.config, scene)):
+    for line in lines(block, her_zone(store.config)):
         if current and sum(len(x) + 1 for x in current) + len(line) > PAGE_CHARS:
             pages.append(current)
             current = []

@@ -104,7 +104,7 @@ def _quota_words(rows):
 
 def _stamp(store, value, scene_id):
     from . import local_time
-    return local_time.stamp(value, local_time.zone_of(store, scene_id))
+    return local_time.stamp(value, local_time.her_zone(store))
 
 
 def _entry(store, row, scene_id):

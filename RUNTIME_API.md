@@ -111,7 +111,7 @@ Checked when the worker starts or a proposal is validated (`src/asuna/native_set
 | `workflow_timeout_seconds` | `1800` | how long one native stage may run before it is fenced, 1–86,400 (`INVALID_TIMEOUT`) |
 | `sandbox.backend` | `auto` | `auto` or `none` ([Sandbox](#sandbox)) |
 | `home_groups` | none | group scene ids that read as home (owner-private) and are still groups (`visibility.home_group`) |
-| `timezone` | UTC | IANA time zone of her rhythms when her policy names none |
+| `timezone` | the machine's zone, else UTC | the IANA time zone of her one clock: every time she reads, her plans and her rhythms ([Her clock](#her-clock)) |
 | `context_links`, route `read_scenes` | none | read-only links between scenes (`src/asuna/scene_links.py`) |
 | `canonical_persons` | none | person id → canonical person (`src/asuna/scene_links.py`) |
 | `persona_runtime.<persona>.heartbeat_target` | none (no heartbeat) | the owner-private scene her heartbeat runs in |
@@ -572,7 +572,7 @@ The model is the package's defaults for the core's parameters, checked against `
 
 | Key group | Rule |
 |---|---|
-| `PRIVATE_KEYS` (`rhythm.timezone`, `rhythm.sleep_window`, `rhythm.public_clock`) | set only on the machine; a package may not default them |
+| `PRIVATE_KEYS` (`rhythm.sleep_window`, `rhythm.public_clock`) | set only on the machine; a package may not default them |
 | `CORE_WRITABLE_KEYS` (`heartbeat.*` pace and visits, `heartbeat.dice_*`, `self_development.night_*`) | a package may default them; she sets them with `set_policy` within their ranges |
 | `OWNER_KEYS` (`heartbeat.enabled`, `render.identity_tokens`) | a package may default them; only the owner changes them |
 | `policy_keys` | keys the package declares for her; may not redeclare core keys |
@@ -938,6 +938,25 @@ Her plans and the program's rhythms, on DSH's Schedule service. For operators an
 - A due plan wakes its conversation as a program notice, not a platform input; the plan's person must still be a member of the route, or the owner on a line he joins (`SCHEDULE_ROUTE_REVOKED`). What she says goes out on that conversation's route.
 - DSH's `schedule_*` tools are visible to every root agent in the Host; Asuna's presets restrict their own tools.
 
+### Her clock
+
+She has one clock, the same at home, in a group, in a DM and in the action brain (`schedule_rules.her_zone`). Its zone is
+the deployment setting `timezone`; when that is not set, the machine's own zone as the Host reports it (the worker's
+`ASUNA_HOST_TIMEZONE`, else `TZ`); when neither is known, UTC. A setting that does not load is read as not set. No room,
+route or group carries a zone of its own. The worker's start evidence (`reports/native-host-*`, record `clock.zone`) says
+which of the three is in force and whether a setting was given and failed to load, never the zone itself.
+
+- Stored records keep UTC; every time a model reads is on her clock (`10/14 14:28`, with the year when it is far or in
+  another year). `clock_from_program` carries `now_local` and `weekday`; no block, tool result or error names the zone.
+- A plan she writes is on her clock. A one-time plan (`at`) written without an offset is stored as the moment it names;
+  `after_seconds` and `every_seconds` carry no zone; a daily or weekly plan (`clock`) stores the zone it was made in, and
+  DSH's own scheduler holds the same zone. A plan whose stored zone is not hers reads on its own clock and carries
+  `clock_note` (how far its clock is from hers); giving a plan a timing moves it onto her clock, and the plan tool's
+  result says so in `clock_note`.
+- What she knows about where a person is stays in her notes; the program never reads it.
+- `asuna.dbread` converts her face to UTC bounds with her zone (`ASUNA_TIMEZONE`); a window's receipt holds the face she
+  wrote and the bounds.
+
 ### Rhythms
 
 The program's own plans (`schedule.RHYTHM_KINDS`): they never appear in her plan list, and her plan tool cannot cancel or retime them.
@@ -945,7 +964,7 @@ The program's own plans (`schedule.RHYTHM_KINDS`): they never appear in her plan
 | Rhythm | Plan id | Runs when |
 |---|---|---|
 | heartbeat (`presence`) | `plan-asuna-presence` | `heartbeat.enabled` and `persona_runtime.<persona>.heartbeat_target` are set; every `heartbeat.every_min` (15–240) |
-| nightly settlement | `plan-asuna-settlement` | her model or policy sets `rhythm.settle_at` and an IANA time zone is known |
+| nightly settlement | `plan-asuna-settlement` | her model or policy sets `rhythm.settle_at`, and her clock's zone is known and is an `Area/Location` name (DSH's daily rule) |
 | daily self-improvement | `plan-asuna-self-development` | `self_development.enabled` |
 | night self-improvement check | `plan-asuna-self-development-night` | `self_development.enabled` and not `self_development.night: false`; a tick that only decides whether a night stage is due (`self_development.night_*`) |
 | condensing quiet groups (`condense`) | `plan-asuna-condense` | while she is in any group |

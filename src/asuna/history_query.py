@@ -1135,8 +1135,8 @@ class HistoryQueryService:
             if value and not _STAMP_SHAPE.match(value):
                 raise _bad_stamp("INVALID_HISTORY_", name, value)
         # She reads times on the local clock (local_time.py), so a time without an offset is read in that zone.
-        from .local_time import zone_of
-        zone = zone_of(self.store, task["scene_id"])
+        from .local_time import her_zone
+        zone = her_zone(self.store)
         since, until = _utc(since, zone), _utc(until, zone)
         window_days = _bounded_int(args.get("window_days"), 1, 90, "WINDOW_DAYS")
         limit = _bounded_int(args.get("limit"), 1, MAX_LIMIT, "LIMIT")
@@ -1169,8 +1169,8 @@ class HistoryQueryService:
             query, person=person, window_days=window_days or DEFAULT_WINDOW_DAYS,
             since=since or None, until=until or None, limit=limit or DEFAULT_LIMIT,
             cursor=inner, case_sensitive=case_sensitive)
-        from .local_time import zone_of
-        return self._payload(result, inner, mark, zone_of(self.store, task["scene_id"]))
+        from .local_time import her_zone
+        return self._payload(result, inner, mark, her_zone(self.store))
 
     @staticmethod
     def _payload(result, inner_cursor, mark, zone=None):

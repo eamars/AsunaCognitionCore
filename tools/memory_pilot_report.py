@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from asuna import memory_pilot          # noqa: E402
 from asuna.config import load           # noqa: E402
+from asuna.schedule_rules import her_zone  # noqa: E402
 from asuna.state import Store           # noqa: E402
 
 
@@ -34,7 +35,7 @@ def main():
                 client.close()
             print(json.dumps({'dropped': memory_pilot.COLLECTION}))
             return
-        print(json.dumps(memory_pilot.report(store, config.get('timezone') or 'UTC', args.since),
+        print(json.dumps(memory_pilot.report(store, her_zone(config)['name'], args.since),
                          ensure_ascii=False, indent=1))
     finally:
         store.close()

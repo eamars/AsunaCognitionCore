@@ -512,14 +512,14 @@ class People:
         words say what it was (her choice: one length, POINTED_CHARS)."""
         from .capabilities import numbered
         from .caught_up import CATCHUP_KEY, said_at
-        from .schedule_rules import line_stamp, scene_timezone
+        from .schedule_rules import line_stamp, her_zone
         said = self.mentions if row.get('direction') == 'outbound' else self.heard
         words = ' '.join(said(scene, row.get('text')).split())
         number = '〔%d〕 ' % row['scene_seq'] if row.get('scene_seq') and numbered(self.store, scene) else ''
         if not (row.get('received_at') or row.get('receipt_at')) and row.get('_id'):
             row = {**row, **(message_records.get(self.store, row['_id'], fields=[
                 'received_at', 'receipt_at', 'occurred_at', 'event.occurred_at', 'event.raw.' + CATCHUP_KEY]) or {})}
-        stamp = line_stamp(scene_timezone(self.config, scene), said_at(row))
+        stamp = line_stamp(her_zone(self.config), said_at(row))
         return '%s%s%s：%s' % (number, self.speaker(scene, row.get('author'), me='你'), ' ' + stamp if stamp else '',
                               words if len(words) <= POINTED_CHARS else words[:POINTED_CHARS] + '…')
 
@@ -571,9 +571,9 @@ class People:
         self.note_self(scene, row)
         doc = self.entry(scene, row['author'], row)
         # When it was said, on her clock face: the conversation keeps every line, so its age must be readable.
-        from .schedule_rules import line_stamp, scene_timezone
+        from .schedule_rules import line_stamp, her_zone
         from .caught_up import CAUGHT_UP_WORD, is_caught_up, said_at
-        stamp = line_stamp(scene_timezone(self.config, scene), said_at(row))
+        stamp = line_stamp(her_zone(self.config), said_at(row))
         if stamp and is_caught_up(row):
             stamp += '（%s）' % CAUGHT_UP_WORD
         from .capabilities import numbered

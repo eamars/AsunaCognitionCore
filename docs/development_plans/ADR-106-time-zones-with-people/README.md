@@ -1,8 +1,9 @@
 # ADR-106: Time zones with people, not with groups
 
 Status: requirements recorded 2026-10-27; designed to final 2026-10-29 with the owner's three decisions below (the
-question tool, his recommended options each time) and one fresh review whose findings are fixed in this page. Not
-built. Built on `claude/eloquent-shannon-fcxodi`; the local Claude Code lands it and brings it to Xiaoman.
+question tool, his recommended options each time) and one fresh review whose findings are fixed in this page. Built
+2026-10-29 on `claude/eloquent-shannon-fcxodi` (`Built`, below); not landed, not yet read by Xiaoman. The local Claude
+Code takes the readings, brings it to her and lands it.
 
 The ask, in one line: **she lives on one clock in every conversation, and no zone is hard-coded per group**. Anything
 wider is not in this ADR (`Not in this ADR` lists what was found and left out).
@@ -270,11 +271,14 @@ and a test that wants one sets it itself.
    `plan_brief` keeps `clock_note`; the due-plan block has no raw `rule`. Guards instances 2, 3 and 4.
 5. **The decisions in pure functions** (`tests/test_schedule_rules.py`, stdlib only so her offline checks still run it):
    `pin_at` gives a moment that does not move when the setting changes; `has_wall_zone` by kind; `plan_zone`; the update
-   decision (a restated timing on another zone moves, on hers is a no-op; a wording alone keeps zone and rule).
-   There is no test of `ScheduleService.create` and `update` end to end: no harness exists (`test_p3_schedule.py`, named
-   in that file's docstring, does not exist), and building one for this ADR is wider than the ask. The decisions are in
-   the pure functions; the service only applies them, and the landing's check by content reads a plan made on the real
-   system.
+   decision (`moved_from`: a restated timing on another zone moves, on hers is a no-op; a wording alone keeps zone and
+   rule).
+5b. **The service applies them** (`tests/test_plan_zone_service.py`, `ScheduleService` over the in-memory store with a
+   recording stand-in for DSH's scheduler; `test_p3_schedule.py`, named in the rules file's old docstring, never
+   existed): create stores a zone only for a daily plan and pins an appointment; a retried create is the same plan; a
+   restated time moves an old plan and DSH with it, and saying it again changes nothing and does not report the move
+   twice; new wording keeps the plan's zone, rule and its `next_fire_at` on its own clock; re-arm uses the plan's
+   clock.
 6. **The removal** (`tests/test_her_clock.py`, the `store` fixture): `clear_timezones` clears only that field, returns
    the count, is idempotent, and leaves other scene fields as they were. It is a path that removes records, which
    AGENTS.md ranks first; it is the weakest of the seven and the only one that dies with the detour.
@@ -292,6 +296,27 @@ Not tested, on purpose: the wording of `clock_note` beyond its sign and span; th
 
 The static checks and repository guards run unchanged: `test_store_boundary` (the owner module is the only code that
 touches `scenes`), `test_one_clock`, `test_project_map`, `test_no_undefined_names`, `test_line_endings`.
+
+## Built (2026-10-29)
+
+On the branch, in the checkout the build ran in. Python suites: 738 passed, 2 failed, 9 skipped; the two failures are
+`tests/test_integration.py::test_stderr_timeout_and_a_snapshot_the_run_cannot_change` and
+`tests/test_sandbox_backend.py::test_a_command_writes_only_its_task_folder_and_names_it_task`, which fail the same on
+`cc8c00627132` untouched (no Host sandbox runner in the cloud). Node tests: 257 pass, 4 fail, 4 cancelled, the same
+set as on `cc8c00627132` (turn-end compaction and ADR-098 roots, same cause). Integration tests were not run (no server).
+The new tests were checked by mutation: 22 reintroduced defects, 21 killed by the new tests (three first survived and
+showed missing assertions, now added); the 22nd changed nothing the code did, because `plan_zone` already gives a rule
+with no wall zone her clock, and the redundant condition was removed. What the build settled that the design left
+open, and where it differs in detail:
+
+- `records/scenes.py:clear_timezones` reads the scene rows and unsets the field on each that has it: the store refuses a
+  condition on a field the catalog does not declare, and the field is no longer declared anywhere.
+- `places.local_date(config, moment)` lost its model and policy arguments; `Coordinator._zone()` and `carried._zone(store)`
+  stay as one-line calls of `her_zone`; `restarts._zone` only turns a zone name into the `{'tz': ...}` shape.
+- `has_wall_zone` is not repeated where `plan_zone` already returns her clock (the `clock_note` gap is zero by then).
+- The tool-budget test lists 30 tools and 21,455 characters (tiered, 21,751): `place_timezone` was 460.
+- Not run here, so for the landing's check by content: a real worker start (the pinned `clock.zone` record), the Host's
+  `ASUNA_HOST_TIMEZONE`, the action brain's `web_search` stamps, and DSH's daily rule with a moved plan.
 
 ## Landing and restart
 
@@ -347,7 +372,7 @@ on the code before it was taken; the numbers are its own.
 | 2 | instances missed: the due-plan block, the `your_plans_there` whitelist, a zone name in `dbread` receipts, the six `is_iana ... 'UTC'` sites | §3 one brief; §2; §1; instances 3, 4 |
 | 2 | UTC-sliced clock text in the digest, the week readout, the switch list, the self-review day | not this ADR (below) |
 | 3 | tests read `TZ`; the suite assumes UTC | the autouse fixture |
-| 4 | the service has no test harness; the class is `ScheduleService`; `test_p3_schedule.py` does not exist | decisions in pure functions, test 5; the name corrected |
+| 4 | the service has no test harness; the class is `ScheduleService`; `test_p3_schedule.py` does not exist | decisions in pure functions, test 5; and a recording stand-in for the scheduler over the in-memory store, test 5b; the name corrected |
 | 5 | the start record would be pruned; a typo fails open | §9: pinned, and `setting_unreadable`; the residual (no owner card) is stated |
 | 6 | the note and the update line must depend on the rule kind; only wall-zone rules store a zone | §3 |
 | 7 | missing guards: a sentinel sweep, a static guard; test 1 as first worded compared nothing | tests 1, 3, 4 |

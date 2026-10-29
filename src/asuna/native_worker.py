@@ -500,8 +500,14 @@ class BusinessWorker:
         if releases:
             config['_native_integration_release'] = releases[0]
         evidence = Evidence(DATA / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]), keep=KEPT_HOST_RECORDS,
-                            pinned=('runtime.ready',))   # the supervisor's proof that this start came up
+                            pinned=('runtime.ready', 'clock.zone'))   # ready: the supervisor's proof that this start came up
         prune_host_reports()
+        # ADR-106: which source her one clock comes from, once per start and never with the zone's name (a zone is
+        # personal data). A setting that is set but does not load is read as not set, so this record is where it shows.
+        from .schedule_rules import her_zone
+        her = her_zone(config)
+        evidence.record('clock.zone', {'source': her['source'], 'setting_set': bool(config.get('timezone')),
+                                       'setting_unreadable': her['setting_unreadable']})
         def configure(host):
             self.app, self.controller = host.app, host.controller
             if lease.left_behind:                  # the last Host did not stop by itself (host_stops)
@@ -1230,7 +1236,7 @@ class BusinessWorker:
             # The conversation's clock, for the times a Host tool shows its model (web_search's publication dates).
             from . import local_time
             from .schedule_rules import offset_minutes
-            zone = local_time.zone_of(self.app.store, record['scene_id'])
+            zone = local_time.her_zone(self.app.store)
             return {**record, 'timezone': None if zone.get('zone_unavailable') else zone['name'],
                     'utc_offset_minutes': offset_minutes(zone['tz'], clock.now())}
         if method == 'ui.titles':
@@ -1291,7 +1297,7 @@ class BusinessWorker:
             # The action brain reads tool results on the local clock; receipts keep UTC (local_time.py).
             from . import local_time
             return local_time.for_model(self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args']),
-                                        local_time.zone_of(self.app.store, task['scene_id']))
+                                        local_time.her_zone(self.app.store))
         if method == 'tool_specs':
             # One list: the broker's, which is also what every call is checked against.
             return self.app.broker.specs

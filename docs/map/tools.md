@@ -312,6 +312,7 @@ ADR-103: what the faces, stickers and face clicks people send her look like in t
 - def `top`
 - class `Tally` — The counts of one run.
   - `add` — Count one stored inbound line.
+  - `shape` — The item's shape (napcat-qq 0.17.0 on), and a dice or rock-paper-scissors throw in order.
   - `report`
 - def `read` — (the tally, the scenes read by kind, the first moment, whether the cap cut the read).
 - def `main`

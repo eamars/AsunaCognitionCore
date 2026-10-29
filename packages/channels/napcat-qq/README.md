@@ -128,11 +128,11 @@ with Core (`registerChannel`).
   counts by kind and outcome (`posted`, `home`, `own_state`, `not_shown`, `not_projected`, `unknown`, a gate that dropped it),
   kept by UTC day for 14 days in `notices/counts.json` in the adapter's data folder. Typing, connection events, her
   messages sent elsewhere and online-file transfers are counted, never projected.
-- The shape of every non-text segment of an accepted message is counted, with no content: `health.json`
-  `media_shapes` shows the last 7 days' most seen shapes, kept by UTC day for 7 days in `media/shapes.json` in the
-  adapter's data folder (`qqadapter/shapes.py`). A shape is the segment's type, the sorted keys of its `data` (and of
-  `data.raw`), and the value of `result`, `resultId`, `chainCount` and `faceType` when it is one to four digits; at
-  most 200 shapes a day. `text`, `at` and `reply` segments and messages the gates refuse are not counted.
+- A face, and a segment of a type the adapter has no word for (a dice, a rock-paper-scissors, a store face under
+  another name), carries `shape` in its media item: which fields the platform sent, never their words. It is the sorted key
+  names of the segment's `data` and of `data.raw`, and the value of `result`, `resultId`, `chainCount` and `faceType`
+  when it is one to four digits (`qqadapter/inbound.py` `shape_of`), at most 200 characters. Core stores the item with
+  its line, so the shape has the line's time and order.
 - Her own mute in each admitted group goes to Core's `own_mute` endpoint. A `group_ban` notice (`ban` / `lift_ban`)
   about her account, or about the whole group (`user_id` 0), is posted at once as state (until = notice time +
   duration, the operator's account); every other notice is dropped. A send NapCat refuses with retcode 1200 and QQ

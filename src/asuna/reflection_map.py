@@ -207,7 +207,7 @@ def block(store, persona, moment=None, *, tag=None):
     pictures = artifact_records.count_tool(store, 'generate_image', 'DONE')
     from . import stickers
     shelf = stickers.shelf(store, persona)
-    index.append('你做的东西：画的图 %d 张；表情架 %d 个（sticker 的 shelf 列全）' % (pictures, len(shelf)))
+    index.append('你做的东西：画的图 %d 张；表情包架 %d 个（sticker 的 shelf 列全）' % (pictures, len(shelf)))
     found = self_review.cared(store, persona, tag, whole=True)
     index.append('self_review.tag「%s」在 self、core 里找到 %d 节' % (tag, len(found or [])) if tag else '人格模型里没有 self_review.tag')
 

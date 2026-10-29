@@ -27,7 +27,6 @@ qqadapter/hostapi.py           宿主 HTTP（stdlib urllib），结果分类 ok/
 qqadapter/outbound.py          领取 → 按 target 选 action 发送 → 读回核实（只观测）→ 回执；回执可重报，unknown 不重发；
                                宿主排队的群管理动作（禁言/解禁/踢人/撤回）→ set_group_ban / set_group_kick / delete_msg，平台 retcode 即回执
 qqadapter/selfrole.py          自己在每个群的身份（群主/管理员/成员）：get_group_member_info 查本号，缓存十分钟，随群事件放进 raw.asuna_self
-qqadapter/shapes.py            已放行消息里每个非文本段的形状计数（类型、data 与 data.raw 的键名、几个小数字键的值），不带任何内容；health.json 的 media_shapes
 qqadapter/service.py           线程装配、身份校验、STATUS/health、入站前注入对方身份
 qqadapter/peers.py             对方身份目录：昵称/群名片/群身份 + 改名换名片仍是同一人（ADR-005 一阶段）
 qqadapter/selftest.py          离线 + 在线自检（行为断言全跑内置占位夹具，发送用替身；给了 --config 才交叉核对现网配置）
@@ -162,7 +161,7 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 - 0.14.0（2026-10-24）：277 号小黄脸的显示名 汪汪→狗头（主人 10-15 拍的板）。`faces.json` 那一行改名、`汪汪` 留进那条的 `aliases`，所以 NapCat 还写 `/汪汪` 时入站显示 `狗头`，她话里写 `[表情:汪汪]` 仍发 277；上游快照的字面没动（QFace 里 277 仍叫 `/汪汪`，`/doge` 是 179）。入站、出站、闸门、回执一概没改。自检多两条 `face_277_renamed_*`。
 - 0.15.0（2026-10-24）：QQ `markdown` 元素不再写成 `[markdown消息（未解析）]`。真形状（本机 get_msg 22/22）是 `{"type":"markdown","data":{"content":"<整串>"}}`，同一条里通常还有 3–6 个 `text` 段，那是 QQ 对同一份话的有损渲染（斜体规则吃下划线：`group_log_7d_1024.jsonl` 变 `grouplog7d_1024.jsonl`）。新增 `qqadapter/mdflat.py`：取 `data.content` 拍平成 plain（`[@X](mqqapi://…)`→`@X`；别的链接→`文字 (链接)`；去 `**`、`__`（裸标识符如 `__init__` 不动）、反引号、`#` 标题符；列表符、换行保留；`\[` 类转义还原；下划线原样），`parse_message` 先拍平再逐个 `text` 段按归一（只比字母数字与 CJK）判断是否已被 markdown 包含：包含就丢，不包含照旧留（接在 markdown 后另起一行）。`content` 缺失／空／非字符串＝今天的占位符与 `asuna_media` 项，一字不变；解析成功的不再进 `asuna_media`。唤醒不变：真 `at` 段仍只靠 `mentioned_account_ids`，拍平后的正文里仍带着 mention 的显示名文字（自检夹具写作 `@示例角色`），宿主照旧走 `name_called`；markdown 里的 `at_tinyid` 不升格成提及。其它占位符家族、核心 `kept_raw()` 白名单一概没动。自检多 29 条 `md_*`（真样本形状）。
 - 0.16.0（2026-10-24，ADR-095 第 5 步）：看门狗和看得见的状态。每件在手的活（入站一次尝试、一次聊天发送、一个文件、一轮回执）都有预算＝它自己各步超时之和加余量，只有 bug 才会超；超了记一次 stuck（`STUCK` 行、一条 fault、`journal/stuck.jsonl` 一行），把它在池里的位子让出来，文件就另起一条 bulk 车道；那件本身不重发、不搁置，它那个会话等它回来（回来时 `STUCK_ENDED` 和第二行）。`STATUS` 行末尾加 `lanes:` 一段，键名固定、新键只往后加：`in_slots`、`queued`、`oldest_wait`（会话、在哪：slot/retry/阶段）、`longest_running`、`chat_slots`、`longest_send`、`bulk`、`receipts`、`oldest_receipt`、`stuck`、`last_stuck`，时间带单位。占满且有排队＝位子不够；没占满而某会话在等＝它自己慢。`inbound_sent.jsonl` 和 `sends.jsonl` 每行多 `stages`。自检多 12 条 `watchdog_*`；一条消息的合并转发最多抓 6 次（嵌套的也算），超了留占位符。
-- 0.17.0（2026-10-29，ADR-103）：非文本段的形状计数。新增 `qqadapter/shapes.py`、`health.json` 的 `media_shapes` 和 `<data>/media/shapes.json`（按 UTC 天、留 7 天、一天最多 200 种）：对每条放行的消息，除 `text`/`at`/`reply` 外的每一段，记它的类型、`data` 和 `data.raw` 的键名，以及 `result`/`resultId`/`chainCount`/`faceType` 在一到四位数字时的值；别的值一概不读进计数。入站、出站、回执、闸门一概没改。自检多 `shapes_*` 七条。
+- 0.17.0（2026-10-29，ADR-103）：脸和认不出类型的段（dice、rps、商城表情换了名字之类）的媒体项多带 `shape`：平台送来了哪些字段，不带字段里的话——`data` 和 `data.raw` 的键名（排序），以及 `result`/`resultId`/`chainCount`/`faceType` 在一到四位数字时的值，最多 200 字。宿主连这一行一起存，所以 shape 有这一行的时间和先后。占位符、闸门、出站、回执一概没改。自检多 `shape_*` 五条。
 - 0.15.1（2026-10-24，ADR-095 第 4 步）：等宿主回一段语音的上限从 30 秒放到 200 秒。宿主现在把语音交给单独的子进程转写，一段超过 90 秒就换一个新的子进程再试一次；一段语音在宿主那边总共最多 180 秒（排在别的语音后面的时间也算在内），所以宿主那边重试不会被读成「宿主不在」。入站、出站、回执一概没改。
 
 ## 试用记录

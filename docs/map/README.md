@@ -474,7 +474,6 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 - [`napcat-qq/integration/qqadapter/selfrole.py`](../../packages/channels/napcat-qq/integration/qqadapter/selfrole.py) — Her own role in each group (owner / admin / member), so the host knows what she may do there.
 - [`napcat-qq/integration/qqadapter/selftest.py`](../../packages/channels/napcat-qq/integration/qqadapter/selftest.py) — Offline + live self checks.
 - [`napcat-qq/integration/qqadapter/service.py`](../../packages/channels/napcat-qq/integration/qqadapter/service.py) — Wiring: WS reader -> durable spool -> one lane per conversation -> host, host outbox -> send.
-- [`napcat-qq/integration/qqadapter/shapes.py`](../../packages/channels/napcat-qq/integration/qqadapter/shapes.py) — What the segments of an accepted message look like, counted by shape and never by content (ADR-103).
 - [`napcat-qq/integration/qqadapter/voice.py`](../../packages/channels/napcat-qq/integration/qqadapter/voice.py) — Voice messages, settled before their line goes to the host (ADR-093): NapCat clears its voice cache, so a voice not fetched soon is lost, and a line that reaches her should already carry its words.
 - [`napcat-qq/integration/qqadapter/watch.py`](../../packages/channels/napcat-qq/integration/qqadapter/watch.py) — Who is doing what, and the watchdog (ADR-095 §5.5, §5.7).
 - [`napcat-qq/python/napcat_qq/__init__.py`](../../packages/channels/napcat-qq/python/napcat_qq/__init__.py) — QQ through NapCat, as a channel kind of the Asuna core (asuna/channel_kinds.py).

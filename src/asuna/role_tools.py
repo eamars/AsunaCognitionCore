@@ -234,7 +234,7 @@ TOOLS = {
                           'artifact_id': _s('；'.join(ARTIFACT_FROM.values())),
                           'who': _s('poke：戳谁，照抄标签；私聊里不写就是对方'),
                           'line': _s(REACT_LINE),
-                          'face': _s('react：表情名'),
+                          'face': _s('react：小黄脸名'),
                           'why': _s(RECALL_WHY)}}},
             'quote': _s(QUOTE_LINE),
             'wait': _s('群里：no 不等回话，question 在问这里的人（回答进 questions_from_program）；不写由程序定（@ 了谁或在回谁就等他三分钟）',
@@ -2042,7 +2042,7 @@ class RoleTools:
             face = str(part.get('face') or '').strip()
             faces = channel_kinds.faces_of(scene['_id'])
             if face not in faces:
-                raise Refused('「%s」不是这里的表情名' % face if face else '要写 face（表情名）')
+                raise Refused('「%s」不是这里的小黄脸名' % face if face else '要写 face（小黄脸名）')
             line, why = people.line_of(scene, ep['_id'], part.get('line') or '这条')
             if why:
                 raise Refused('line：' + why)

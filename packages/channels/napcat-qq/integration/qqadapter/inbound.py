@@ -49,6 +49,10 @@ MEDIA_MODES = ("full", "annotate", "off")
 MAX_MEDIA_ITEMS = 8
 MAX_URL = 420
 MAX_LABEL = 60
+MAX_SHAPE = 200
+SHAPE_KEY = re.compile(r"^[A-Za-z0-9_]{1,24}$")
+SHAPE_VALUE_KEYS = ("chainCount", "faceType", "result", "resultId")      # a small number the platform picks
+SHAPE_VALUE = re.compile(r"^[0-9]{1,4}$")
 
 PRIVATE_ENVELOPE_KEYS = {"route_id", "account_id", "sender_id", "event_id", "text", "occurred_at", "raw", "reply_to"}
 GROUP_ENVELOPE_KEYS = PRIVATE_ENVELOPE_KEYS | {"group_id", "mentioned_account_ids"}
@@ -142,6 +146,33 @@ def _card_hint(data):
     return None
 
 
+def shape_of(data):
+    """Which fields a segment carried, never their words (ADR-103): the sorted key names of `data` and of `data.raw`,
+    and the value of the few keys that are a small number the platform picks (a dice result, a chain count) when it
+    is one to four digits. `data:id,raw|raw:faceText,faceType|values:raw.faceType=2`, at most MAX_SHAPE characters."""
+    def keys(node):
+        return sorted(key for key in node if isinstance(key, str) and SHAPE_KEY.fullmatch(key))[:24] \
+            if isinstance(node, dict) else []
+
+    def values(node, prefix):
+        found = []
+        for key in SHAPE_VALUE_KEYS:
+            value = node.get(key) if isinstance(node, dict) else None
+            text = str(value) if isinstance(value, int) and not isinstance(value, bool) else value
+            if isinstance(text, str) and SHAPE_VALUE.fullmatch(text):
+                found.append("%s%s=%s" % (prefix, key, text))
+        return found
+
+    raw = data.get("raw") if isinstance(data.get("raw"), dict) else None
+    parts = ["data:" + ",".join(keys(data))]
+    if raw is not None:
+        parts.append("raw:" + ",".join(keys(raw)))
+    found = values(data, "") + values(raw, "raw.")
+    if found:
+        parts.append("values:" + ",".join(found))
+    return "|".join(parts)[:MAX_SHAPE]
+
+
 def _media_item(stype, data):
     """One non-text segment -> {type, placeholder, bounded metadata}.
 
@@ -197,6 +228,9 @@ def _media_item(stype, data):
         val = _clean(data.get("sub_type"), 12)
         if val:
             item["sub_type"] = val
+    if stype == "face" or known is None:
+        # what the platform sent for a face, or for a type nobody here has a word for: its fields, not its words
+        item["shape"] = shape_of(data)
     if sticker:
         item["sticker"] = sticker
         if sticker == "market":

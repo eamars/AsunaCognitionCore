@@ -8,8 +8,9 @@ platform's table) and segment type tags, never a line's text, a conversation or 
 line was read (nothing was checked).
 
 What it can see is what Core stored of a line: its text with the adapter's placeholders and the media items
-(`type`, `placeholder`, `face_id`, ...). NapCat's own segment is not stored; the adapter's shape counter
-(`health.json` `media_shapes`) sees that.
+(`type`, `placeholder`, `face_id`, `shape`, ...). NapCat's own segment is not stored; from napcat-qq 0.17.0 on a face's
+and an unrecognized segment's item carries `shape` (which fields the platform sent, never their words), so the
+report's `shapes` and `throws` fill only from lines that arrived after that version was installed.
 
 This tool is the measuring step of ADR-103 (decision D4); it is removed once the numbers are written into that page.
 """
@@ -32,8 +33,10 @@ FACE = re.compile(r'\[表情(?::([^\[\]\s:]{1,12}))?\]')            # a face as 
 STICKER = re.compile(r'\[表情包(?::([^\[\]\n]{1,24}))?\]')        # a sticker likewise
 UNREAD = re.compile(r'\[([a-z0-9_-]{1,16})消息（未解析）\]')       # a segment type the adapter has no word for
 UNNAMED_CLICK = ('一个表情', '一个认不出名字的小黄脸')                # a click whose emoji the adapter could not name
-FIELDS = ['text', 'event.raw.asuna_media', 'event.raw.asuna_notice']
+FIELDS = ['text', 'received_at', 'event.raw.asuna_media', 'event.raw.asuna_notice']
 TOP = 20
+THROWS = 20
+DICE_FACES = ('358', '359')        # 骰子 and 包剪锤 in the faces table: thrown dice may arrive as faces
 
 
 def top(counter, size=TOP):
@@ -53,6 +56,8 @@ class Tally:
         self.unread = Counter()
         self.clicks = Counter()
         self.typed = Counter()
+        self.shapes = Counter()
+        self.throws = []
 
     def add(self, row):
         """Count one stored inbound line."""
@@ -72,6 +77,7 @@ class Tally:
         faces = stickers = 0
         for item in items:
             self.media_types[str(item.get('type'))[:16]] += 1
+            self.shape(item, str(row.get('received_at') or '')[:16])
             if item.get('type') == 'face':
                 faces += 1
                 found = FACE.fullmatch(str(item.get('placeholder') or ''))
@@ -96,6 +102,17 @@ class Tally:
         self.typed['face_shape'] += max(0, len(FACE.findall(text)) - faces)
         self.typed['sticker_shape'] += max(0, len(STICKER.findall(text)) - stickers)
 
+    def shape(self, item, when):
+        """The item's shape (napcat-qq 0.17.0 on), and a dice or rock-paper-scissors throw in order."""
+        shape = item.get('shape')
+        if not isinstance(shape, str):
+            return
+        kind = str(item.get('type'))[:16]
+        label = 'face:%s' % str(item.get('face_id'))[:8] if kind == 'face' else kind
+        self.shapes['%s %s' % (kind, shape[:200])] += 1
+        if kind in ('dice', 'rps') or (kind == 'face' and str(item.get('face_id')) in DICE_FACES):
+            self.throws.append([when, label, shape.partition('values:')[2][:60]])
+
     def report(self):
         names = self.face_names
         return {
@@ -107,6 +124,8 @@ class Tally:
             'unread_types': top(self.unread),
             'clicks': {key: self.clicks[key] for key in ('lines', 'removed', 'unnamed_emoji')},
             'typed_lookalikes': {key: self.typed[key] for key in ('face_shape', 'sticker_shape')},
+            'shapes': top(self.shapes, 30),
+            'throws': sorted(self.throws)[-THROWS:],
         }
 
 

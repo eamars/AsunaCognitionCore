@@ -158,12 +158,17 @@ class Catchup:
             if self.every:
                 names |= {route_id for route_id, _conversation in self.admission.routes()}
             answers = self.admission.ask_routes(sorted(names))
-        except (AdmissionAway, AdmissionUnsupported, AdmissionRejected) as exc:
+        except (AdmissionAway, AdmissionUnsupported) as exc:
             # The core says who is admitted; without its answer nothing is fetched, and the run asks for itself again.
             self.counters.inc("catchup_waiting_admission")
             self.log("CATCHUP_WAITING_ADMISSION reason=%s type=%s" % (reason, type(exc).__name__))
             self.sleep(ADMISSION_WAIT_SECONDS)
             self.request(reason)
+            return None
+        except AdmissionRejected:
+            # Asking again would be refused again: this run is given up, the next trigger (a reconnect) tries anew.
+            self.counters.inc("catchup_admission_rejected")
+            self.log("CATCHUP_ADMISSION_REJECTED reason=%s" % reason)
             return None
         for route_id in sorted(names):
             answer = answers.get(route_id)

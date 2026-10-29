@@ -22,7 +22,9 @@ import time
 from . import hostapi as hostapi_mod
 from . import inbound as inbound_mod
 from . import fixtures
+from . import admission as admission_mod
 from .admission import Admission, AdmissionAway, conversation_of, lane_key
+from .members import GroupsUnavailable
 from . import faces as faces_mod
 from . import mutes as mutes_mod
 from . import notices as notices_mod
@@ -1718,8 +1720,47 @@ def _check_admission(rep, root):
     rep.check("admission_member_round_covers_only_admitted_groups",
               adapter.members.groups() == sorted(fixtures.GROUPS), json.dumps(adapter.members.groups()))
     adapter.fake_core.down = "away"
-    rep.check("admission_member_round_skips_when_the_core_is_away", adapter.members.groups() == [], "")
+    try:
+        adapter.members.groups()
+        listed = True
+    except GroupsUnavailable:
+        listed = False
+    totals = adapter.members.run()
+    rep.check("admission_member_round_skips_and_asks_again_soon_when_the_core_is_away",
+              not listed and totals["groups"] == 0 and adapter.members.retry_soon, "")
+    mutes_mod.RETRY_GROUPS_SECONDS = 0.05
+    adapter.mutes.sweep_now("startup")
+    rep.check("admission_mute_sweep_asks_for_itself_again_when_the_groups_cannot_be_listed",
+              _until(lambda: not adapter.mutes.jobs.empty()) and adapter.mutes.jobs.get_nowait()[0] == "sweep", "")
     adapter.fake_core.down = None
+    adapter.admission.clear()
+    rep.check("admission_a_member_round_after_the_core_is_back_lists_the_groups",
+              adapter.members.groups() == sorted(fixtures.GROUPS), "")
+    pages = admission_mod.ROUTES_PAGE
+    admission_mod.ROUTES_PAGE = 2
+    served = adapter.admission.routes()
+    admission_mod.ROUTES_PAGE = pages
+    rep.check("admission_routes_are_read_a_page_at_a_time",
+              len(served) == 1 + len(fixtures.GROUPS) and len({route for route, _c in served}) == len(served),
+              json.dumps(served)[:120])
+    adapter.admission.ask(("group", grp), member)
+    adapter.admission.observe(Result("empty", 200, {"items": [], "epoch": "start-1"}))
+    kept = adapter.admission.cached(("group", grp), member) is not None
+    adapter.admission.observe(Result("retry", None, None, "timeout"))
+    rep.check("admission_the_outbox_poll_tells_of_a_new_start_or_a_core_going_away",
+              kept and adapter.admission.cached(("group", grp), member) is None, "")
+
+    # the lane uses what it has: a burst from an unlisted group is asked about once
+    adapter = _adapter(explicit, os.path.join(root, "adm_burst"), peer_mode="off")
+    adapter.log = lambda line: None
+    for index, sender in enumerate(sorted(fixtures.MEMBERS[grp]) + [OUTSIDER]):
+        adapter.on_event(_group_event(explicit, UNKNOWN_GROUP, sender, 6070 + index))
+    paths = adapter.journal.spool_list("inbound")
+    for path in paths:
+        adapter._submit_one(path)
+    rep.check("admission_a_burst_from_an_unlisted_group_costs_one_ask",
+              len(paths) >= 2 and adapter.journal.spool_list("inbound") == [] and len(adapter.fake_core.asked) == 1,
+              "lines=%d asks=%d" % (len(paths), len(adapter.fake_core.asked)))
 
     mute = {"post_type": "notice", "notice_type": "group_ban", "sub_type": "ban", "self_id": int(explicit.napcat["account_id"]),
             "group_id": int(UNKNOWN_GROUP), "user_id": int(explicit.napcat["account_id"]), "operator_id": 900000010,
@@ -1728,6 +1769,23 @@ def _check_admission(rep, root):
     rep.check("admission_mute_of_an_unasked_group_is_reported", mutes_mod.notice_body(mute, explicit, unasked) is not None, "")
     adapter.admission.ask(("group", UNKNOWN_GROUP))
     rep.check("admission_mute_of_a_refused_group_is_not", mutes_mod.notice_body(mute, explicit, adapter.admission) is None, "")
+
+    held_core = fixtures.FakeCore()
+    held_core.down = "away"
+    sent = []
+    waiting = notices_mod.HomePoster(explicit, StubOneBot(), type("H", (), {"post_notice": lambda self, body: sent.append(body)})(),
+                                     Counters(), Admission(held_core, explicit.napcat["account_id"], Counters()), None,
+                                     log=lambda line: None, sleep=lambda _s: None)
+    rep.check("admission_home_notice_about_a_group_waits_while_the_core_does_not_answer",
+              waiting.post({"kind": "kicked_you", "words": "x", "group_id": UNKNOWN_GROUP, "actor": "900000010"}, None) == "failed"
+              and sent == [], "")
+    named = StubOneBot(response={"retcode": 0, "data": {"nickname": "n", "group_name": "g"}})
+    knowing = notices_mod.HomePoster(explicit, named, type("H", (), {"post_notice": lambda self, body: sent.append(body) or Result(
+        "accepted", 200, {"status": "held"})})(), Counters(), admission_of(explicit), None, log=lambda line: None,
+        sleep=lambda _s: None)
+    knowing.post({"kind": "kicked_you", "words": "x", "group_id": grp, "actor": "900000010"}, None)
+    rep.check("admission_home_notice_leaves_the_group_s_name_to_the_core_when_it_has_a_route",
+              [c["action"] for c in named.calls] == ["get_stranger_info"] and "group_name" not in sent[-1], "")
 
     posted = []
     home = notices_mod.HomePoster(explicit, StubOneBot(), type("H", (), {"post_notice": lambda self, body: posted.append(body) or Result(
@@ -1761,6 +1819,12 @@ def _check_admission(rep, root):
     rep.check("admission_departure_body", row["conversation"] == {"type": "group", "id": grp} and row["sender_id"] == member
               and row["account_id"] == own and row["event_id"].startswith("departure-") and "occurred_at" in row
               and adapter.counters.snapshot().get("departure_posted") == 1, json.dumps(row, sort_keys=True))
+
+    refusals = [Result("reject", 403, {"error": "CHANNEL_AUTH_REQUIRED"}), Result("accepted", 200, {"status": "ended"})]
+    retrying = type("H", (), {"post_departure": lambda self, body: refusals.pop(0)})()
+    again = notices_mod.Departures(explicit, retrying, Counters(), adapter.admission, log=lambda line: None, sleep=lambda _s: None)
+    rep.check("admission_departure_is_tried_again_while_the_core_is_not_taking_requests",
+              again.post(grp, member, base["time"]) == "posted" and refusals == [], "")
 
     # ---- the journals are bounded -------------------------------------------
     bounded = Journal(os.path.join(root, "adm_journal"))

@@ -441,7 +441,8 @@ class Adapter:
         envelope = blob["envelope"]
         self.watch.stage("admission")
         try:
-            answer = self.admission.ask(conversation, envelope.get("sender_id"))
+            sender = envelope.get("sender_id")
+            answer = self.admission.cached(conversation, sender) or self.admission.ask(conversation, sender)
         except AdmissionAway as exc:
             self._attempts[path] = self._attempts.get(path, 0) + 1
             self.log("INBOUND_WAIT event_id=%s the core did not answer who may speak (%s)" % (
@@ -456,6 +457,7 @@ class Adapter:
                          "core that does is installed")
             return False
         except AdmissionRejected as exc:
+            self._attempts[path] = self._attempts.get(path, 0) + 1
             res = exc.res or Result("reject", None, {})
             return self._count(path, envelope, res, "admission_rejected")
         if not answer.admitted:
@@ -855,6 +857,7 @@ class Adapter:
                 self._send_done.clear()
                 continue
             res = self.host.claim_outbox(self.claim_wait, supports=self.capabilities, lane="chat")
+            self.admission.observe(res)
             if res.kind == "items":
                 item = (res.obj.get("items") or [])[0]
                 send = threading.Thread(target=self._send, args=(item,), name="send", daemon=True)
@@ -907,6 +910,7 @@ class Adapter:
         ends when that file comes back."""
         while not self.stop.is_set() and generation == self._bulk_generation:
             res = self.host.claim_outbox(self.claim_wait, supports=self.capabilities, lane="bulk")
+            self.admission.observe(res)
             if res.kind in ("items", "empty") and (res.obj or {}).get("lane") != "bulk":
                 # a host from before ADR-095 does not know lanes: what it handed out is any item, so this lane
                 # sends it and stops, and the chat lane goes back to one send at a time

@@ -110,7 +110,8 @@ The core's answer to "may this sender speak in this conversation?" (ADR-107).
   - `ask` — The core's answer for one sender in one conversation (or for the conversation alone).
   - `ask_many` — The answers for conversations alone, in order (the groups a member-list round may fetch).
   - `ask_routes` — {route id: its answer} for route ids the core named (catch-up's cursors and the settings' names).
-  - `routes` — [(route id, conversation)] the core serves and no block list stops (catch-up's `all`).
+  - `routes` — [(route id, conversation)] the core serves and no block list stops (catch-up's `all`), read a page at a time.
+  - `observe` — Any answer of the core's outbox poll: it carries the core's start, and a poll that gets no answer means the core is going away, so what was kept is dropped before a refusal given by the last start can outlive it.
 
 ## `napcat-qq/integration/qqadapter/catchup.py`
 
@@ -204,7 +205,7 @@ HTTP client for the runtime host channel API (stdlib only).
 - class `HostApi`
   - `post_event`
   - `post_admission` — What the core would do with these senders and conversations (admission.py); `accepted` with its answers.
-  - `get_routes` — The routes the core serves, admitted or listed (admission.py); `accepted` with the list.
+  - `get_routes` — One page of the routes the core serves (admission.py), after the route id `after`; `accepted` with the page.
   - `post_departure` — A person left a group (notices.py Departures); `accepted` once the core answered.
   - `post_members` — One group's member list (members.py); `accepted` once the host stored it.
   - `post_faults` — This adapter's lane faults by signature and hour (faults.py, ADR-095); `accepted` once the host counted them.
@@ -287,6 +288,7 @@ The current picture-link signatures for the host (ADR-035).
 
 Group member lists for the host (0.7.1): who is in each admitted group, not only who spoke.
 
+- class `GroupsUnavailable` — The groups to work on could not be listed now (the platform or the core did not answer).
 - class `Members`
   - `loop`
   - `groups`
@@ -333,7 +335,7 @@ NapCat notices and requests as one-off lines (ADR-064 phase 1): every kind proje
 - class `HomePoster` — Posts the lines about her own account to the host from its own thread, with the names they need (read-only `get_stranger_info` for who did it, `get_group_info` for a group she has no conversation in).
   - `put`
   - `loop`
-  - `wanted` — Whether the core admits the group a notice is about (an invitation to a group she is not in is about no conversation of hers and always goes).
+  - `wanted` — The core's verdict on the group a notice is about: the answer, None for a notice that needs none (an invitation to a group she is not in is about no conversation of hers, and a notice about a person has no group), or 'away' / 'fault' when t
   - `body`
   - `post`
 

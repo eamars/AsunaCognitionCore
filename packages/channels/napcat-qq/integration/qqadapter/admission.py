@@ -14,6 +14,8 @@ import time
 
 CAPACITY = 4096          # answers kept; the oldest is dropped first
 BATCH = 200              # asks in one request (the core takes this many)
+ROUTES_PAGE = 500        # routes in one page of the core's list
+PAGES = 400              # pages read at most (200,000 routes)
 
 
 class AdmissionAway(Exception):
@@ -156,16 +158,28 @@ class Admission:
         return found
 
     def routes(self):
-        """[(route id, conversation)] the core serves and no block list stops (catch-up's `all`)."""
-        res = self.host.get_routes()
-        self._settle(res)
-        self._epoch_of(res)
-        out = []
-        for row in res.obj["routes"]:
-            conversation = row.get("conversation") if isinstance(row, dict) else None
-            if isinstance(conversation, dict) and isinstance(row.get("route_id"), str):
-                out.append((row["route_id"], (str(conversation.get("type")), str(conversation.get("id")))))
+        """[(route id, conversation)] the core serves and no block list stops (catch-up's `all`), read a page at a time."""
+        out, after = [], ""
+        for _page in range(PAGES):
+            res = self.host.get_routes(after, ROUTES_PAGE)
+            self._settle(res)
+            self._epoch_of(res)
+            for row in res.obj["routes"]:
+                conversation = row.get("conversation") if isinstance(row, dict) else None
+                if isinstance(conversation, dict) and isinstance(row.get("route_id"), str):
+                    out.append((row["route_id"], (str(conversation.get("type")), str(conversation.get("id")))))
+            after = res.obj.get("next")
+            if not after:
+                return out
         return out
+
+    def observe(self, res):
+        """Any answer of the core's outbox poll: it carries the core's start, and a poll that gets no answer means the
+        core is going away, so what was kept is dropped before a refusal given by the last start can outlive it."""
+        if res.kind == "retry":
+            self.clear()
+        elif isinstance(res.obj, dict):
+            self._epoch_of(res)
 
     def _ask(self, pairs):
         answers = self._post([_ask_body(conversation, sender) for conversation, sender in pairs])

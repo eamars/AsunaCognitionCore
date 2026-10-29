@@ -19,9 +19,12 @@ import queue
 import threading
 import time
 
+from .members import GroupsUnavailable
+
 CHECK_EVERY_SECONDS = 6 * 3600    # a group looked at this recently is not asked again at start or reconnect
 GROUP_PAUSE = 1.0                 # seconds between two groups' looks
 CALL_TIMEOUT = 10.0
+RETRY_GROUPS_SECONDS = 60.0        # a sweep that could not list the groups is asked for again this soon
 POST_TRIES = 5
 RETRY_WAIT = 5.0
 
@@ -178,7 +181,17 @@ class Mutes:
         started, now = self.clock(), self.clock()
         totals = {"groups": 0, "looked": 0, "skipped": 0, "muted": 0, "failed": 0}
         first = True
-        for group in self.groups():
+        try:
+            groups = self.groups()
+        except GroupsUnavailable:
+            # Nothing was looked at: the sweep is asked for again in a minute, from a timer, so the thread keeps
+            # taking the mute notices meanwhile.
+            self.counters.inc("mutes_sweep_waiting")
+            timer = threading.Timer(RETRY_GROUPS_SECONDS, lambda: self.jobs.put(("sweep", reason, 0)))
+            timer.daemon = True
+            timer.start()
+            return totals
+        for group in groups:
             totals["groups"] += 1
             if now - self.checked.get(group, 0.0) < CHECK_EVERY_SECONDS:
                 totals["skipped"] += 1

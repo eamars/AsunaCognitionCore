@@ -48,3 +48,15 @@ def test_the_adapter_posts_admitted_groups_only_when_they_changed(tmp_path, monk
     assert posted[0]['group_id'] == '111111' and posted[0]['members'] == [{'user_id': 30001, 'nickname': 'a', 'role': 'member'}]
     again = Members(cfg, str(tmp_path), platform, host, Counters(), core, log=lambda _m: None)
     assert again.run()['same'] == 1 and len(posted) == 1                          # unchanged: not posted again
+
+
+def test_a_round_that_cannot_list_the_groups_is_tried_again_soon_and_posts_nothing(tmp_path):
+    from qqadapter.admission import AdmissionAway
+
+    class Away:
+        def ask_many(self, groups):
+            raise AdmissionAway()
+    posted = []
+    host = SimpleNamespace(post_members=lambda body: posted.append(body))
+    job = Members(SimpleNamespace(), str(tmp_path), Platform(['111111'], []), host, Counters(), Away(), log=lambda _m: None)
+    assert job.run() == {'groups': 0, 'posted': 0, 'same': 0, 'failed': 0} and job.retry_soon and posted == []

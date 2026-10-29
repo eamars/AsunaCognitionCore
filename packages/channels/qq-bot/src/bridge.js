@@ -24,6 +24,8 @@ const OPENID = /^[0-9A-Za-z_-]{24,64}$/;
 const BACKOFF_MS = [2000, 5000, 10000, 30000, 60000];
 const BLOCKED_RETRY_MS = 10 * 60000;            // 4914 / 4915: the platform refuses this bot; try again much later
 const SESSION_CLOSES = new Set([4006, 4007, 4009]);   // the session cannot be resumed: identify again
+const ADMISSIONS_KEPT = 4096;                   // the core's answers kept (expired ones go first)
+const ADMISSION_TRIES = 5;                      // a line whose question the core keeps refusing is set aside after this many
 const GROUP_NAME_MS = 24 * 3600000;             // a group's name is read again after a day (its admins may rename it)
 
 /** One of the platform's attachment kinds as the media block the core reads (RUNTIME_API.md, raw.asuna_media). */
@@ -309,12 +311,16 @@ export class QQBotBridge {
     const answer = json?.answers?.[0];
     if (res.status !== 200 || !['admitted', 'refused', 'blocked'].includes(answer?.verdict)) {
       this.log('admission: the core refused the question (' + res.status + ' ' + (json?.error ?? '') + ')');
-      return 'away';
+      return 'rejected';
     }
     if (json.epoch !== undefined && json.epoch !== this.epoch) { this.admissions.clear(); this.epoch = json.epoch; }
     const ttl = Number(answer.ttl_seconds);
     const kept = { admitted: answer.verdict === 'admitted', route_id: answer.route_id ?? null };
     if (ttl > 0 && ttl <= 3600) {
+      if (this.admissions.size >= ADMISSIONS_KEPT) {
+        for (const [name, held] of this.admissions) if (held.until <= now) this.admissions.delete(name);
+        if (this.admissions.size >= ADMISSIONS_KEPT) this.admissions.clear();
+      }
       this.admissions.set(!kept.admitted && answer.scope === 'conversation' || ask.type === 'dm' ? conversation : key,
         { answer: kept, until: this.now() + ttl * 1000 });
     }
@@ -390,11 +396,18 @@ export class QQBotBridge {
       const host = await this.endpoint();
       if (!host?.token) return;
       while (this.state.pending.length) {
-        const { _ask, ...item } = this.state.pending[0];
+        const { _ask, _tries, ...item } = this.state.pending[0];
         if (!item.route_id) {
           // Not yet judged: the core names the route, or says the sender is not admitted (the line is dropped).
           const answer = await this.admission(host, _ask, item.sender_id);
           if (answer === 'away' || answer === 'unsupported') return;       // the line waits, nothing is dropped
+          if (answer === 'rejected') {                                      // a fault of ours: tried a few times, then set aside
+            const waiting = this.state.pending[0];
+            waiting._tries = (waiting._tries ?? 0) + 1;
+            if (waiting._tries < ADMISSION_TRIES) { await this.save(); return; }
+            this.log('inbound: a line was set aside, the core refused its admission question ' + ADMISSION_TRIES + ' times');
+            this.state.pending.shift(); await this.save(); continue;
+          }
           if (!answer.admitted) { this.state.pending.shift(); await this.save(); continue; }
           item.route_id = answer.route_id;
         }

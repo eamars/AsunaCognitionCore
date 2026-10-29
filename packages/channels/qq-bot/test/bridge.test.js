@@ -36,6 +36,7 @@ function world({ refuseReply = false, refuseMarkdown = false, refuseInfo = false
     if (u.pathname.endsWith('/admission')) {
       if (core.mode === 'old') return json(404, { error: 'UNKNOWN_CHANNEL_ENDPOINT' });
       if (core.mode === 'down') return json(503, { error: 'HOST_RECONFIGURING' });
+      if (core.mode === 'broken') return json(400, { error: 'INVALID_ADMISSION_ASK' });
       const [ask] = body.asks, { type, id } = ask.conversation;
       if (refused.includes(ask.sender_id ?? id)) return json(200, { answers: [{ verdict: 'refused', code: 'CHANNEL_IDENTITY_DENIED',
         scope: 'sender', ttl_seconds: 60 }], epoch: 'e1' });
@@ -291,4 +292,26 @@ test('a sender the core does not admit is dropped; a core that does not answer, 
   await b.flush();
   assert.deepEqual(posted(), ['o1']);
   assert.equal(b.state.pending.length, 0);
+});
+
+test('a line the core keeps refusing the question for is set aside after a few tries and does not block the ones behind it', async () => {
+  const w = world(), b = await bridge(w);
+  w.core.mode = 'broken';
+  await b.dispatch('GROUP_MESSAGE_CREATE', { id: 'x1', content: 'a', group_openid: GROUP, author: { member_openid: MEMBER } });
+  await b.dispatch('GROUP_MESSAGE_CREATE', { id: 'x2', content: 'b', group_openid: GROUP, author: { member_openid: MEMBER } });
+  for (let tries = 0; tries < 6; tries += 1) await b.flush();
+  assert.deepEqual(b.state.pending.map(item => item.event_id), ['x2'], 'the first was set aside, the second is next');
+  w.core.mode = 'up';
+  await b.flush();
+  assert.equal(b.state.pending.length, 0);
+  assert.deepEqual(w.calls.filter(call => call.url.endsWith('/events')).map(call => call.body.event_id), ['x2']);
+  assert.ok(w.calls.filter(call => call.url.endsWith('/events')).every(call => call.body._tries === undefined));
+});
+
+test('the answers kept are bounded', async () => {
+  const w = world(), b = await bridge(w);
+  for (let n = 0; n < 4200; n += 1) {
+    await b.admission(await b.endpoint(), { type: 'group', id: GROUP }, 'S' + String(n).padStart(30, '0'));
+  }
+  assert.ok(b.admissions.size <= 4096);
 });

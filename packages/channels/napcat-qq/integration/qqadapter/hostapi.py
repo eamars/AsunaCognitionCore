@@ -128,9 +128,12 @@ class HostApi:
             res = Result("accepted", res.code, res.obj)
         return res
 
-    def get_routes(self):
-        """The routes the core serves, admitted or listed (admission.py); `accepted` with the list."""
-        res = self._request("GET", "/v1/channels/%s/routes" % self.channel_id, None, timeout=ADMISSION_TIMEOUT * 2)
+    def get_routes(self, after="", limit=500):
+        """One page of the routes the core serves (admission.py), after the route id `after`; `accepted` with the page."""
+        path = "/v1/channels/%s/routes?limit=%d" % (self.channel_id, int(limit))
+        if after:
+            path += "&after=" + urllib.parse.quote(str(after), safe="")
+        res = self._request("GET", path, None, timeout=ADMISSION_TIMEOUT * 2)
         if res.kind == "ok" and isinstance(res.obj, dict) and isinstance(res.obj.get("routes"), list):
             res = Result("accepted", res.code, res.obj)
         return res

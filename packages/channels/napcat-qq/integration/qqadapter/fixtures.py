@@ -144,12 +144,14 @@ class FakeCore:
         return self._failed() or self._result("accepted", 200, {"answers": [self.policy.judge(ask) for ask in body["asks"]],
                                                                 "epoch": self.epoch})
 
-    def get_routes(self):
-        return self._failed() or self._result("accepted", 200, {"routes": [
-            {"route_id": name, "conversation": {"type": kind, "id": target}}
-            for name, (kind, target) in self.policy.listed().items()
-            if target not in (self.policy.blocked_groups if kind == "group" else self.policy.blocked_senders)],
-            "epoch": self.epoch})
+    def get_routes(self, after="", limit=500):
+        rows = sorted(({"route_id": name, "conversation": {"type": kind, "id": target}}
+                       for name, (kind, target) in self.policy.listed().items()
+                       if target not in (self.policy.blocked_groups if kind == "group" else self.policy.blocked_senders)
+                       and name > after), key=lambda row: row["route_id"])
+        page = rows[:limit]
+        return self._failed() or self._result("accepted", 200, {
+            "routes": page, "next": page[-1]["route_id"] if len(rows) > limit else None, "epoch": self.epoch})
 
     def post_departure(self, body):
         self.departures.append(body)

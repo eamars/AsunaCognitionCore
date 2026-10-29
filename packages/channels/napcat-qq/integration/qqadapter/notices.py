@@ -406,7 +406,9 @@ class Departures:
                 self.counters.inc('departure_posted')
                 self.log('DEPARTURE status=%s' % (res.obj or {}).get('status'))
                 return 'posted'
-            if res.kind != 'retry':
+            away = res.kind == 'retry' or (res.kind == 'reject' and res.code == 403
+                                           and (res.obj or {}).get('error') == 'CHANNEL_AUTH_REQUIRED')
+            if not away:
                 break
         self.counters.inc('departure_failed')
         self.log('DEPARTURE_FAILED http=%s error=%s' % (res.code, str((res.obj or {}).get('error', '') if isinstance(res.obj, dict) else res.error)[:160]))
@@ -448,26 +450,27 @@ class HomePoster:
         return _text(data.get(field), NAME_CHARS) if isinstance(data, dict) else ''
 
     def wanted(self, proj):
-        """Whether the core admits the group a notice is about (an invitation to a group she is not in is about no
-        conversation of hers and always goes). A core that does not answer now is asked again by the post itself."""
+        """The core's verdict on the group a notice is about: the answer, None for a notice that needs none (an
+        invitation to a group she is not in is about no conversation of hers, and a notice about a person has no
+        group), or 'away' / 'fault' when the core cannot say now."""
         if not proj.get('group_id') or proj['kind'] == 'request_invite':
-            return True
+            return None
         conversation = ('group', proj['group_id'])
         try:
-            answer = self.admission.cached(conversation) or self.admission.ask(conversation)
+            return self.admission.cached(conversation) or self.admission.ask(conversation)
         except AdmissionAway:
-            return True                     # the post below tries again as often as any notice does
+            return 'away'
         except (AdmissionUnsupported, AdmissionRejected):
-            return False                    # a core that cannot say is not asked to take a group's notice
-        return answer.admitted
+            return 'fault'
 
-    def body(self, proj, at):
+    def body(self, proj, at, known=False):
         body = {'kind': proj['kind'], 'words': proj['words']}
         if proj.get('actor'):
             body['actor_name'] = self._name('get_stranger_info', {'user_id': int(proj['actor'])}, 'nickname')
         if proj.get('group_id'):
             body['group_id'] = proj['group_id']
-            body['group_name'] = self._name('get_group_info', {'group_id': int(proj['group_id'])}, 'group_name')
+            if not known:           # a group the core holds a route for is named by the core
+                body['group_name'] = self._name('get_group_info', {'group_id': int(proj['group_id'])}, 'group_name')
         if proj.get('request'):
             body['request'] = proj['request']
         if type(at) is int and at > 0:
@@ -475,12 +478,21 @@ class HomePoster:
         return {key: value for key, value in body.items() if value != ''}
 
     def post(self, proj, at):
-        if not self.wanted(proj):
+        for tries in range(self.TRIES):
+            verdict = self.wanted(proj)
+            if verdict != 'away':
+                break
+            self.sleep(self.WAIT)              # the core does not answer: a notice about a group waits, it is not let through
+        if verdict == 'away' or verdict == 'fault':
+            self.counters.inc('notice_home_admission_unavailable')
+            self.log('NOTICE_HOME_HELD kind=%s admission=%s' % (proj['kind'], verdict))
+            return 'failed'
+        if verdict is not None and not verdict.admitted:
             self.counters.inc('notice_home_not_admitted')
             if self.notice_counts is not None:
                 self.notice_counts.add(proj['kind'], 'group_not_allowed')
             return 'not_admitted'
-        body = self.body(proj, at)
+        body = self.body(proj, at, known=bool(verdict is not None and verdict.known))
         for tries in range(self.TRIES):
             if tries:
                 self.sleep(self.WAIT)

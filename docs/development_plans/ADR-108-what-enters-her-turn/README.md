@@ -27,7 +27,7 @@ The six findings, each with the invariant it breaks:
 | 1 | A line delivered while a request is in flight is appended at once (`navigation.js:84`). In 93% of turns with a mid-turn line (614 of 660: QQ 515 of 550, agent lines 99 of 110) a line was appended while a request was in flight; from that order, inferred and not traced through DSH's surface projection, the response to that request did not carry it. Incident A: after such a line, a later step recorded a sourceless claim attributed to its sender; the order fits more than one reading, and the survey read structure only. | Her conversation's order is the order in which she saw things. |
 | 2 | `write_document`'s `from` (别人说的, 主人定的) records a claim as someone's with no check that such a line exists (`memory_tiers.py:56-61`, `727-732`). The identifier in one false claim appears in 17 `compaction/summary` records of her session files (and 17 checkpoint messages; at 2026-10-29 02:39 UTC, a count at one moment that is still growing); this counts records holding the identifier, not summaries holding the claim's sentence. | A record that says someone said something points at what they said; a summary's claim keeps where it came from. |
 | 3 | DSH's adapter sends every user-role message as text only and drops `source` (`dsh-llm-pi-ai/lib/index.js:1362-1370`). A live line, a program notice, a checkpoint and the runtime context differ only by text format. | Every message she reads says whose it is. |
-| 4 | Limits state a soft number and never the hard one (think: 120 stated, 360 refused); between them "这次照收了". Checks stop at their first failure across two layers; 156 failures were a second refusal of another class for the same tool in the same turn (5.7% of 2,747 failures counted from session files, which include the 206 refused before the worker). In the length refusals (`TEXT_TOO_LONG`, 308), at the median 18% of a refusal's characters are covered by at most four program literals, each counted at its first place; the rest is her text and the program text this measure leaves uncovered (repeated or short literals). The guard's 102 schema refusals (10-18 to 10-29) are interface shape, by shape in design.md §4. | A number she reads is the rule the program applies; a refusal says everything the program knows is wrong; the schema asks only for what the program cannot work out. |
+| 4 | Limits state a soft number and never the hard one (think: 120 stated, 360 refused); between them "这次照收了". Checks stop at their first failure across two layers; 156 failures were a second refusal of another class for the same tool in the same turn (5.7% of 2,747 failures counted from session files, which include the 206 refused before the worker). In the length refusals (`TEXT_TOO_LONG`, 308), at the median 18% of a refusal's characters are covered by at most four program literals, each counted at its first place; the rest is her text and the program text this measure leaves uncovered (repeated or short literals). The guard's 101 schema refusals (UTC days 10-18 to 10-28, home and archive sessions, one per call id; the system survey counted 102 for the same span, and the 1 was not traced) are interface shape, by shape in design.md §4. | A number she reads is the rule the program applies; a refusal says everything the program knows is wrong; the schema asks only for what the program cannot work out. |
 | 5 | Program-woken turns have about 3x the multi-failure rate of person-woken ones (structural survey Q7: 2 or more failures in 11.6% of program-woken turns, against 3.7% for person lines delivered normally); incident A's turn was program-woken (a task result). Every turn's context head carries `speaker`, set from the event's person (`context.py:1340`, `people.relabel`), and on a program wake that person only authorized the turn. | `speaker` names someone who is speaking. |
 | 6 | No stored record shows a model step's request; Host report folders keep 5 starts (about 3 hours). | (none: a question of proof) |
 
@@ -193,8 +193,9 @@ wraps that `execute` in its own validation against the declared schema, and the 
 - **The declared schema** (what DSH registers, validates and shows the model) is permissive: `required` only for what
   the program cannot infer, and types widened to the shapes she writes that the program repairs (`parts` declared
   `json`, which DSH's subset already has, as set_policy's `value`; `doc`, `do`, delegate `title` and a part's `kind`
-  optional); types and enums stay. The guard's check of it, and DSH's own behind it, then pass every shape the
-  program repairs and still refuse what the declared schema keeps.
+  optional); no field declares an enum, and each enum field's description lists its values. The guard's check of
+  it, and DSH's own behind it, then pass every shape the program repairs and every enum value, and still refuse
+  what the declared schema keeps: a value of the wrong type, or a missing field the program cannot infer.
 - **The strict schema** stays inside the program, beside the repair table. Our `execute` repairs a copy of the
   arguments, validates the copy fully against it (DSH's `validateArgs`, or our own), and hands the repaired arguments
   and every violation to the worker, which adds the other layers' problems and builds the one refusal.
@@ -208,8 +209,8 @@ declared-schema change is a spec change and rides on B4's one cold request, with
 
 The risk this leaves: the model reads the declared schema, so a permissive declared schema must still say what the
 program wants. Each widened field's description carries the strict form (「parts：一个列表，每条一个对象」;
-「doc：文档名；不写时按 section 找」), and the guard's schema refusals by the shapes of design.md §4 in B4's reading
-show whether the descriptions carry it.
+「doc：文档名；不写时按 section 找」), each enum field's description lists its values, and the guard's schema
+refusals by the shapes of design.md §4 in B4's reading show whether the descriptions carry it.
 
 The worker's general checks (layers 2-3) apply to every tool from B3; a handler's own checks collect
 only once that handler is split into a check part and an effect part (the tools with most failures first:
@@ -245,9 +246,11 @@ The shapes, their counts and their repairs are listed once, in design.md §4; th
 - write_document without `do`: inferred from the fields, as task, ideas and ask already are (`infer_op`): `heading`
   without `section` is `append_section`; `section` with `content` is `replace_section`; `section` with only tag fields
   is `set_tags`. The result says the inferred `do`, as today for the others.
-- `from` outside its four values: largely gone with D2's `line`. The declared schema keeps its enum (it keeps types,
-  enums and the `required` the program cannot infer), so a value outside it is a layer-0 refusal, which names every
-  declared-schema violation of the call at once but stops before the other layers.
+- `from` outside its four values: largely gone with D2's `line`. The declared schema declares no enum, so a value
+  outside it reaches the strict schema and is a layer-3 problem combined with the rest. What still stops alone at
+  layer 0 is what the declared schema keeps (a wrong type, a missing field the program cannot infer); it hides the
+  later layers' problems behind it, and in UTC days 10-18 to 10-28, 4 of the 20 schema refusals followed by a
+  refusal of another class were of that kind (design.md §8, the floor of B4's gate).
 - `speak` `parts` written as a JSON list in a string: parsed. A part with no `kind` and exactly one kind's field:
   that kind. A part key that is one of speak's own fields (`quote`, `wait`): lifted. Anything else: a problem.
 - delegate without `title`: the brief's first sentence, cut to the aim (64), named in the result.
@@ -332,7 +335,7 @@ verdict is pass or fail; a fail is looked at before the next batch builds on it.
 | B1 | D1: hold over an open step (`navigation.js`, `pairing.js`); release on a failed step; no absorbing into a turn without `speak` there | none | in her session files after install: channel lines between a step's `asuna/stage` mark and its assistant message, 0 (today in 93% of turns with a mid-turn line); every held receipt acknowledged; hold time at most its step plus a second; the test that joins a stop while held to the next start (design.md §0) |
 | B2 | D3 marks and the checkpoint head line; D5 `woken_by_program`; every line numbered, and the compaction instruction's line numbers (D2, summary part) | none | notices, repairs and checkpoints written after install all start with their mark; no program-woken notice carries `speaker`; share of new checkpoint items that carry a 〔n〕 (counted by the program, numbers only) |
 | B3 | D4b layers and D4c texts: the check in her tools' execute, the worker's collected layers, the split of the nine handlers, `INSTEAD`, one predicate for listed values | none (tool results only) | same-tool second refusals of another class in the same turn below 2% of failures (5.7% today, same base); no refusal holds 20 or more consecutive characters of the call's prose (program check, numbers only); every refusal past layer 0 has an audit row with codes; layer-0 refusals counted from session files by wording, and DSH's English refusal still 0 on her character brain |
-| B4 | Every spec change in one install: D4a wording, the permissive declared schemas with D4d's repairs (and the guard checking them), D2 `line`, the turn instruction's clause for `woken_by_program` | one cold request per open conversation | the guard's schema refusals by the shapes of design.md §4 near 0 (102 from 10-18 to 10-29); D4a's condition: length refusals per field no higher than the week before; cache readout shows one cold first step per conversation, then the usual share; every 别人说的 / 主人定的 written after install resolves to a line, and the unanchored ones are recorded as hers with the result line |
+| B4 | Every spec change in one install: D4a wording, the permissive declared schemas with D4d's repairs (and the guard checking them), D2 `line`, the turn instruction's clause for `woken_by_program` | one cold request per open conversation | the guard's schema refusals by the shapes of design.md §4, per 1,000 calls, from 7.4 (101 in UTC days 10-18 to 10-28) to at most 1.5, against a floor of 1.0 (the 14 that B4 leaves refused: missing fields the program cannot infer); schema refusals followed in the same turn by a refusal of another class on the same tool, per 1,000 calls, from 1.5 (20 in 13,588 calls) to at most 0.4, with the count beside it (at most 5 in 11 days) and its floor (4: what B4 leaves stopping alone), window and counting rule in design.md §8; D4a's condition: length refusals per field no higher than the week before; cache readout shows one cold first step per conversation, then the usual share; every 别人说的 / 主人定的 written after install resolves to a line, and the unanchored ones are recorded as hers with the result line |
 | B5 | Only if B2's count warrants it: the program checks each 〔n〕 in a new checkpoint against the stored line's speaker and notes mismatches under the checkpoint | none | built or dropped on the measured mismatch rate |
 
 B1 and B2 can install together on one restart; B3 needs nothing from DSH. Through B3 the guard checks the strict
@@ -363,6 +366,7 @@ cost and carries every spec change at once.
 `.runtime/private/tool-failures/` (local, never committed): `survey-out-1029.txt` (structural survey, Q1-Q5),
 `survey-q67-1029.txt` (its Q6-Q7: incident turns and wake classes), `survey-days-1029.txt` (per UTC day),
 `survey-q3stats-1029.txt` (refusal families and literal shares), `survey-q8-1029.txt` and `survey-q9-1029.txt` (the
-identifier count and the refusals by who wrote them), `system-survey-1029.md` (system survey), the briefs, and
+identifier count and the refusals by who wrote them), `survey-q10-1029.txt` (what follows a schema refusal: B4's
+baseline), `system-survey-1029.md` (system survey), the briefs, and
 `scripts/` (the survey scripts that compute every number here, about 110 KB; their formulas are in design.md §9). No
 text of hers or anyone's is quoted here; numbers are the surveys', texts are the program's own from source.

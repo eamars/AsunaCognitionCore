@@ -504,8 +504,8 @@ finds or changes nothing. On her database on 2026-10-29 (a count at one moment, 
 `intent_revision` (`tasks`, 1,360), while 68 `artifacts` rows with a `task_id` lack it themselves (the replaced read,
 given the task's number, never matched them either; a caller taking the number from the artifact would change that);
 no `group_action` row lacks `channel_id` (`artifacts`, kind `group_action`, 9 rows); 188 `artifacts` rows lack
-`scope_key`, and of those 0 are stored or expired (`storage` is `gridfs` on 1,258 rows and missing on 33,476; no row
-is `removed`), so an erasure given None reached none of them. The stored names `storage: 'gridfs'` and `gridfs_id` are `records.artifacts.STORED` and
+`scope_key`, and of those 0 are stored or expired (across all `artifacts`, `storage` is `gridfs` on 1,258 rows and
+missing on 33,476; no row is `removed`), so an erasure given None reached none of them. The stored names `storage: 'gridfs'` and `gridfs_id` are `records.artifacts.STORED` and
 `BLOB_FIELD`, and no other module writes them. `blobs.py` holds the blob owner's operations: `BlobStore.put_stream`
 (and `put`, `put_once`, `restore`, which read back whole as before) streams into `blobs.write`, reads back through
 `blobs.open` in `STREAM_PIECE` pieces, compares hash and size, deletes on mismatch, then writes the row through

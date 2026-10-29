@@ -1,11 +1,8 @@
-"""A collection whose owner has moved onto the store is reached only through that owner (ADR-104's B13 guard, for the
-collections moved so far): the call-site census finds no direct database call on it anywhere, and no module but the
-owner names it to the store (`put`, `collection`)."""
+"""A collection whose owner has moved onto the store is reached only through that owner (ADR-104's B13 guard): the
+call-site census finds no direct database call on it anywhere, nor on the blob store's bucket. Which module names a
+collection to the store is the static check's (test_store_boundary.py)."""
 import importlib.util
-import re
 from pathlib import Path
-
-from asuna import repo_files
 
 ROOT = Path(__file__).resolve().parents[1]
 CENSUS = ROOT / 'docs' / 'development_plans' / 'ADR-104-database-connector' / 'design' / 'call_site_map.py'
@@ -22,7 +19,6 @@ OWNERS = {'scenes': 'src/asuna/records/scenes.py', 'messages': 'src/asuna/record
 # The blob store: only the adapter reaches it (`blobs.py` through the store's blob interface), so the census finds no
 # call on its bucket or its two collections anywhere.
 BLOBS = ('gridfs:artifact_blobs', 'artifact_blobs.files', 'artifact_blobs.chunks')
-AREAS = ('src/asuna', 'tools')
 # dbread is her MongoDB read tool (ADR-104 decision 9): its place lookup reads scenes over its own client.
 ALLOWED = {'src/asuna/dbread.py'}
 # The census puts every call of the store's vector search on memory_units: in its owner that is the owner's own call,
@@ -54,14 +50,3 @@ def test_no_code_reaches_the_blob_store_but_through_the_blob_interface():
     assert found == [], 'call asuna.blobs (BlobStore, open, delete, exists) instead: %s' % found[:10]
 
 
-def test_only_the_owner_names_its_collection_to_the_store():
-    named = {name: re.compile(r"""\.(put|collection)\(\s*['"]%s['"]""" % name) for name in OWNERS}
-    found = []
-    for path in repo_files.files(ROOT, *AREAS):
-        if not path.endswith('.py'):
-            continue
-        text = (ROOT / path).read_text(encoding='utf-8')
-        for name, pattern in named.items():
-            if path != OWNERS[name] and pattern.search(text):
-                found.append('%s names %s' % (path, name))
-    assert found == []

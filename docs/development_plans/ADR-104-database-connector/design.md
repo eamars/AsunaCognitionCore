@@ -1,6 +1,11 @@
 # ADR-104 step 2 and after: the database interface, designed to the end
 
-Design subagent, 2026-10-28 (NZDT), from the survey in [research.md](research.md), reviewed by Claude (the lead) against
+**Replaced in part (2026-10-29):** sections 6, 7.3 and 7.4, the in-memory adapter's role as the unit tests' double,
+and batches B10 to B15 of 8.2 are replaced by decision 9 of [README.md](README.md): the rest is done in one piece,
+the unit tests that need a database are deleted or moved to `integration/`, and her read tool keeps MongoDB's syntax.
+The rest of this page stands.
+
+Design subagent, 2026-10-28, from the survey in [research.md](research.md), reviewed by Claude (the lead) against
 [review-list.md](review-list.md) and revised once. Read at main `5a62ebd6a171`. The scripts are in [design/](design/);
 what they write and the probe's evidence stay in `<data>/private/adr104-research/` (not tracked):
 

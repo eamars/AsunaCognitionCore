@@ -553,15 +553,17 @@ def record_bytes(record) -> int:
     return len(json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(',', ':'), default=str).encode())
 
 
-def check_record(collection, record, *, now=False, measure=record_bytes):
+def check_record(collection, record, *, now=False, measure=record_bytes, declared=True):
     """A copy of a whole record, validated: a text `_id`, every declared field of its kind, the required ones
-    present, at most 1 MiB by the adapter's `measure`; `now`: `Now` may stand for a time (insert)."""
+    present, at most 1 MiB by the adapter's `measure`; `now`: `Now` may stand for a time (insert). `declared=False`
+    leaves the declared fields unchecked (a stored record that already fails them, `Handle.replace`); the rest holds."""
     if not isinstance(record, Mapping):
         raise RecordInvalid('RECORD_FORM: 记录要是一个 dict（给的是 %s）' % type(record).__name__)
     doc = _written(collection, record, '', now)
     if not isinstance(doc.get('_id'), str) or not doc['_id']:
         raise RecordInvalid('RECORD_ID: 记录的 _id 要是不空的文字（给的是 %s）' % _shown(doc.get('_id')))
-    _declared_values(collection, doc, '')
+    if declared:
+        _declared_values(collection, doc, '')
     if measure(doc) > MAX_RECORD_BYTES:
         raise RecordTooLarge('DOCUMENT_TOO_LARGE_USE_ARTIFACT')
     return doc

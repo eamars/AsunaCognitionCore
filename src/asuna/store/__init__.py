@@ -52,7 +52,17 @@ class Handle:
                                    bool(ordered))
 
     def replace(self, record, expected=None, keep=(), create=False):
-        record = check_record(self.declared, record, measure=self.adapter.measure)
+        """The stored record of this id replaced whole. Checked as MongoDB's moderate validation checks: a record the
+        catalog refuses is written only over a stored record it refuses too (an old record of another kind, so an
+        erasure or a rebase never stops on one); a new record, or one replacing a record that passes, is checked."""
+        try:
+            record = check_record(self.declared, record, measure=self.adapter.measure)
+        except RecordInvalid:
+            loose = check_record(self.declared, record, measure=self.adapter.measure, declared=False)
+            stored = self.adapter.get(self.name, loose['_id'], None)
+            if stored is None or _passes(self.declared, stored):
+                raise
+            record = loose
         if expected is not None and (not is_number(expected)):
             raise QueryInvalid('QUERY_REVISION: expected 要是一个数（给的是 %r）' % (expected,))
         keep = tuple(keep)
@@ -78,6 +88,15 @@ class Handle:
 
     def size(self):
         return self.adapter.size(self.name)
+
+
+def _passes(declared, record):
+    """Whether a stored record holds to its collection's declaration."""
+    try:
+        check_record(declared, record, measure=lambda doc: 0)
+    except RecordInvalid:
+        return False
+    return True
 
 
 class Blobs:

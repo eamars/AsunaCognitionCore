@@ -140,8 +140,9 @@ re-check `service.valid` after the body, `tasks.py:820-832`).
   anyway, so it is named here and not moved.
 
 **D3. Every tool call of both brains is timed, and one that runs long is recorded and alerted.**
-- *Registry.* The worker keeps the calls in flight: call id, brain, tool, task or episode, thread, start. Every call
-  leaves it in a `finally`, which appends one audit event `tool.time` (stream: the task id or the episode id; call id,
+- *Registry.* The worker keeps the calls in flight: call id, brain, tool, task or episode, thread, start. It sits at
+  the dispatch boundary in `native_worker.py`, around the action call (`:1293`) and the role body's handler call
+  (`:352`), not inside `role_tools.call`, whose checks ADR-108 rewrites. Every call leaves it in a `finally`, which appends one audit event `tool.time` (stream: the task id or the episode id; call id,
   tool, `duration_s`, outcome `done` / `failed` / `raised`). One mechanism for both brains, and calls that raise are
   counted too. There is no audit kind registry; `payload.outcome` is declared text (`catalog.py:350`). Volume: about
   2,100 action calls a day plus her role calls, against ~72,000 commits a day.

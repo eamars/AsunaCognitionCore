@@ -347,6 +347,8 @@ class Coordinator:
         """Platform lines that came into her view for the first time during this turn are hers now: she answered
         them here, or chose not to. Each still waiting for its own turn is marked, and the queue completes it
         without one (chat.py) — the same line is never answered twice."""
+        if 'speak' not in (ep.get('turn_tools') or ()):
+            return                      # a turn that cannot answer in the conversation does not take its lines (ADR-108 D1)
         own='in-'+ep['_id']
         for input_id in dict.fromkeys(seen):
             row=message_records.get(self.store,input_id,scene=ep['scene_id'],direction='inbound')

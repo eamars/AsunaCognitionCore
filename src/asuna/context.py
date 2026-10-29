@@ -100,8 +100,18 @@ BLOCKS = {
     'notes': ('note_from_program', 'notes_from_program', 'notes_sent_from_program', 'note_places_from_program'),
     'sender_identity': ('sender_identity',),
 }
-CONTEXT_HEAD = ('scene', 'speaker', 'session_class')
+CONTEXT_HEAD = ('scene', 'speaker', 'woken_by_program', 'session_class')
 SEGMENT_WORDS = {'face': '小黄脸', 'reply': '引用', 'at': '@', 'image': '图', 'record': '语音', 'mface': '表情包'}
+
+
+def local_line(source, event):
+    """The number of the line that called her when that line has no label line to carry it, else None (ADR-108 D2, A3). A
+    line from the local chat is DSH's own message, so the notice that follows it carries the number, in the form of a
+    label line's. A channel line carries its own; a turn the program opened has no calling line."""
+    if (source and source.get('scene_seq') and (event.get('episode_kind') or 'external')=='external'
+            and not (source.get('event') or {}).get('channel')):
+        return '〔%d〕'%source['scene_seq']
+    return None
 
 
 def landing_lost(verification):
@@ -681,6 +691,9 @@ class ContextBuilder:
                  # session that already holds it is not sent it again (context-delivery.js).
                  'clock_from_program':schedule_rules.local_clock(schedule_zone,moment),
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
+        line=local_line(source,event)
+        if line:
+            context['event']['line']=line
         if coverage_block:
             context['coverage_from_program']=coverage_block
         if held_back:
@@ -1277,10 +1290,10 @@ class ContextBuilder:
                 speak['one_self']=ONE_SELF          # ADR-018 §5.7: words only, nothing from elsewhere
             if replying and source and source.get('direction')=='inbound' and source.get('scene_seq') is not None:
                 # ADR-079 §9.5: only in a turn where others spoke after the line that called her, their numbers to copy.
-                from .capabilities import numbered
+                from .capabilities import can_quote
                 later=[row['scene_seq'] for row in message_records.inbound(self.store,scene['_id'],
                        after=source['scene_seq'],no_notice=True).rows(fields=['scene_seq'])] \
-                    if numbered(self.store,scene) else []
+                    if can_quote(self.store,scene) else []
                 if later:
                     shown='、'.join('〔%d〕'%n for n in later[:AMBIGUOUS_MAX])+('等' if len(later)>AMBIGUOUS_MAX else '')
                     speak['quote']=AMBIGUOUS%(len(later),shown)
@@ -1338,7 +1351,12 @@ class ContextBuilder:
         # The ceiling applies to what a turn sends, not to what is prepared (coordinator._deliver, context_budget.py).
         from .context_budget import size as _size
         manifest['context_chars']=_size(context)
-        people.relabel(context,scene,event['person_id'])
+        # ADR-108 D5: a turn the program opened says what woke her; the person on its event only authorized it.
+        from .wake_words import woken_by
+        woken=woken_by(self.store,persona,event)
+        people.relabel(context,scene,event['person_id'],speaking=woken is None)
+        if woken:
+            context['woken_by_program']=woken
         context=order_context(context,effective(model,'recall_protocol.order',policy))
         manifest['context_sha256']=sha(canonical(context))
         manifest['system_ref']=system_ref

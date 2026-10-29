@@ -1302,11 +1302,11 @@ def chat_lines(text):
 QUESTION_RECEIPT = '这是在问这里的人：问题 %s，等%s（%d 分钟）；有人回会叫你看一眼，回答进 questions_from_program。'
 
 
-def reply_receipt(queued, numbered=False):
-    """What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2); where
-    the conversation shows line numbers, each sent line's own (ADR-079)."""
+def reply_receipt(queued):
+    """What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2); and
+    each sent line's own number in the conversation (ADR-079, ADR-108 D2)."""
     done = [row for row in queued if row['state'] not in ('FAILED', 'UNKNOWN', 'CANCELLED_AFTER_FAILURE')]
-    listed = '；'.join('%d %s%s' % (row['number'], row['shown'], ' 〔%d〕' % row['seq'] if numbered and row.get('seq') else '')
+    listed = '；'.join('%d %s%s' % (row['number'], row['shown'], ' 〔%d〕' % row['seq'] if row.get('seq') else '')
                       for row in done)
     if len(done) == len(queued):
         return '发出 %d 条，%s排上了：%s。送没送到看下一回合的历史。' % (len(queued), '都' if len(queued) > 1 else '', listed)
@@ -1958,8 +1958,7 @@ class RoleTools:
                                            '\n'.join(row['text'] for row in planned if row['kind'] == 'text'), patience)
         self.coordinator._update(self._fresh(ep), reply={'parts': int(before.get('parts') or 0) + len(queued),
                                                           'calls': int(before.get('calls') or 0) + 1})
-        from .capabilities import numbered as shows_numbers
-        out = {'note': reply_receipt(queued, shows_numbers(self.store, scene)) if queued else '这次没发新的。'}
+        out = {'note': reply_receipt(queued) if queued else '这次没发新的。'}
         if any(part['kind'] == 'text' for part in planned):
             # Her budget reminder (ADR-084): the turn's lines so far, in numbers.
             out['lines'] = '这回合已说 %d 行（你平时 %d 行以内，硬线 %d）' % (lines, most, SPEAK_HARD_LINES)

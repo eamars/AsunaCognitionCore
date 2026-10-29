@@ -507,15 +507,14 @@ class People:
 
     def pointed(self, scene, row):
         """A line another line points at (a quote, a reaction, a recall), in the one form every pointer has
-        (ADR-079 §9.3), the same as its own label line: its number where the conversation shows numbers, its speaker
-        (hers as 你), when it was said on her clock, its first words. Number, speaker and time say which line; the
-        words say what it was (her choice: one length, POINTED_CHARS)."""
-        from .capabilities import numbered
+        (ADR-079 §9.3), the same as its own label line: its number, its speaker (hers as 你), when it was said on her
+        clock, its first words. Number, speaker and time say which line; the words say what it was (her choice: one
+        length, POINTED_CHARS). Every line has its number in every conversation (ADR-108 D2)."""
         from .caught_up import CATCHUP_KEY, said_at
         from .schedule_rules import line_stamp, scene_timezone
         said = self.mentions if row.get('direction') == 'outbound' else self.heard
         words = ' '.join(said(scene, row.get('text')).split())
-        number = '〔%d〕 ' % row['scene_seq'] if row.get('scene_seq') and numbered(self.store, scene) else ''
+        number = '〔%d〕 ' % row['scene_seq'] if row.get('scene_seq') else ''
         if not (row.get('received_at') or row.get('receipt_at')) and row.get('_id'):
             row = {**row, **(message_records.get(self.store, row['_id'], fields=[
                 'received_at', 'receipt_at', 'occurred_at', 'event.occurred_at', 'event.raw.' + CATCHUP_KEY]) or {})}
@@ -576,10 +575,9 @@ class People:
         stamp = line_stamp(scene_timezone(self.config, scene), said_at(row))
         if stamp and is_caught_up(row):
             stamp += '（%s）' % CAUGHT_UP_WORD
-        from .capabilities import numbered
         from .channels import REPLY_ONLY_KEY
         from .notices import KEY as NOTICE_KEY, MARK as NOTICE_MARK
-        number = ' 〔%d〕' % row['scene_seq'] if row.get('scene_seq') and numbered(self.store, scene) else ''
+        number = ' 〔%d〕' % row['scene_seq'] if row.get('scene_seq') else ''
         lines = [self.head(scene['_id'], doc, str(row.get('received_at') or now())) + (' ' + stamp if stamp else '')
                  + number + (NOTICE_MARK if (event.get('raw') or {}).get(NOTICE_KEY) else '')]   # the program's line
         quoted = group if group.get('reply_to') or group.get('reply_message_id') else (event.get('reply') or {})
@@ -715,7 +713,7 @@ class People:
             row['text'] = said(scene, row['text'])
         return row
 
-    def relabel(self, context, scene, author):
+    def relabel(self, context, scene, author, speaking=True):
         """Turn the author ids in her context blocks into the labels her conversation uses.
 
         Rows keep their ids (the program needs them); who wrote a row reads as `speaker`. A recalled
@@ -725,7 +723,8 @@ class People:
         for key in ('person_id', 'scene_id', 'scope_key', 'policy_epoch'):
             context.pop(key, None)
         context['scene'] = self.scene_title(scene)
-        context['speaker'] = self._author(scene, author)
+        if speaking:
+            context['speaker'] = self._author(scene, author)   # a turn the program opened has no speaker (wake_words.py)
         linked = context.get('linked_scenes_from_program')
         if isinstance(linked, dict):
             linked['readable'] = [self.scene_title(self._scene(s)) for s in linked.get('readable') or []]

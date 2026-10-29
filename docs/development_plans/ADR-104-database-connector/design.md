@@ -1246,9 +1246,9 @@ now declared, `row_1_at_1`), `crossing_words`, `memory_fires`, `carried_counts`,
 survey, `<data>/private/adr104-evidence/finish/catalog-survey.txt`), so `ensure` makes and drops nothing there.
 `payload.context` is not declared: some records hold it as an object and some as text (the survey; `native_worker`
 writes text). The one read that asked by it (the memory page's newest prepared context of a turn with this person at
-this epoch) is `audit.prepared_for`: it reads `context.prepared` records of the scope newest first, in pages of 200
-ordered by `(occurred_at, _id)`, and compares person and epoch in Python, at most 24 found, as the replaced read's
-limit. `sink_receipts` declares `scope_key` (erasure's fence); `artifacts` declares its two touches as counters.
+this epoch) is `audit.prepared_for`: it reads `context.prepared` records of the scope newest first by
+`(occurred_at, _id)`, in pages of 200, each page after the last record the page before it read (a cursor, not a skip),
+and compares person and epoch in Python, at most 24 found, as the replaced read's limit. `sink_receipts` declares `scope_key` (erasure's fence); `artifacts` declares its two touches as counters.
 
 **The owners.** Each collection is reached only through its owner (the catalog's `owner`): `developer_inbox`,
 `group_members`, `own_mute`, `switches`, `watches`, `host_stops` (with `missed_looks`), `notes`, `questions`,
@@ -1279,6 +1279,13 @@ is its one use. The host lease opens its collection through the registry with it
 `dbread` keeps its own client, its form and `Reader.db`; `development_database_read` reads through it
 (`dbread.development_rows`, the same refusal texts). Outside `store/mongodb.py` and `dbread.py` nothing in
 `src/asuna` imports `pymongo`, `bson` or `gridfs`.
+
+**Writes are checked as MongoDB's moderate validation checks** (second pass, after the code review): in
+`Handle.replace` (`src/asuna/store/__init__.py`), the one place a whole record overwrites a stored one (a put at a
+revision, an owner's replace, `view.redact`, the audit rebase, the maintenance restore), a record the catalog refuses
+is written only over a stored record it refuses too, an old record of another kind; a record that passes cannot be made
+to fail, and a new record is always checked. Its form, id and size are checked either way; partial updates keep their
+checks of the fields they set.
 
 **Words.** `fields` given a dict is refused (`QUERY_FIELDS_FORM`). One word was added: `HoldsNone(values)`, a list
 holding none of the values (missing included), the complement of `HoldsAny` (MongoDB's `$ne`/`$nin` on an array),
@@ -1316,22 +1323,24 @@ keeps); no `reset_counters` (or a `**` splat) passed for artifacts, and the owne
 it finds nothing: 113 collection calls resolve to their owner, the rest are `affect`'s parameters and the View's.
 `tests/test_record_owners.py` keeps its census of direct calls and of the blob store.
 
-**Tests.** No unit test needs a database. The registry and `dbread` refuse to open one in a unit run
-(`DATABASE_IN_UNIT_RUN`, `ASUNA_UNIT_RUN=1`, inherited by every process the run starts); `tests/conftest.py` keeps
-its `.invalid` address and nothing else of the database. Of the 1,444 unit test functions at the base (counted by
-name), 859 are deleted, 397 stay in `tests/` (6 new), and 194 run on MongoDB in `integration/` (the store's contract
-cases among them): those whose break would lose her data, leak private data or let two Hosts run, or that guard a
-rule Xiaoman signed (the table, with each test's rule or harm, is
-`<data>/private/adr104-evidence/finish/kept-tests.md`): the audit chain, erasure, forgetting, the host lease, message
-order, recall, the None rule, the BUMPS table and the touches, the required unique fields, the lane fault counts
-(already there), and in `integration/world/` 61 guards of her turns on the fixture world (owner-private material,
-fences, credentials, the machine's details, crashes and restarts). `integration/conftest.py` gives a throwaway
-database through the registry (`store`, and `world` with the fixture world and a turn's settings; in a module marked
-`world`, `store` is the world; every such store has `raw`, the same database through the driver).
-`integration/store_contract.py` runs on MongoDB only; the comparison with the in-memory adapter, the unit contract
-run, the stand-in, its skip list, the timing gate test, mongomock and hypothesis are gone, and so are
-`tools/adr104_equivalence.py` and `tools/probe_qq_admission.py`. The in-memory adapter stays only as the fake under
-the five offline checks (`tests/fake_collections.py`); the p2 cases are a real `Store` over it. The p1c check keeps
+**Tests** (second pass, the owner's three layers; the table is [kept-tests.md](kept-tests.md)). *Static checks* run
+nothing (`tests/test_store_boundary.py`, the record-owner census, the repository guards). *Unit tests* run the core
+against the interface on the in-memory adapter, the registry's `memory` kind, chosen only by name: `tests/conftest.py`
+gives `store` and `world` on it, and a unit run refuses every adapter that reaches a server (`DATABASE_IN_UNIT_RUN`,
+`ASUNA_UNIT_RUN=1`, inherited by every process the run starts). The paths that overwrite or remove records run there:
+the store's contract (the shared classes, as on MongoDB), the counters and touches, erasure, the audit chain,
+forgetting, the fault counts' sweep, the None rule, the required unique fields through each owner's `save`, the
+moderate checks and the cursor paging. *Integration tests* check only the MongoDB adapter's promises on a server: the
+contract with its races and the differential against the in-memory adapter (class D back, 200 records and 100
+generated conditions, `derandomize=True`), what `ensure` makes and the vector index, the unique keys, and the host
+lease's claim under two clients, each module on one throwaway database whose collections are dropped before each case.
+The first pass had moved 194 tests to `integration/`, 61 of them functional guards of her turns in `integration/world/`
+(the lead's first rule, which was wrong); they are deleted, with `test_message_order.py`, `test_recall_fences.py`,
+the lease's renewal and left-behind cases and the fault counts' other cases, their assertions not rewritten
+elsewhere. Of the 1,444 unit test functions at the base (counted by name), 927 are gone. Gone as well: mongomock, the
+stand-in, its skip list, the timing gate test, `tools/adr104_equivalence.py` and `tools/probe_qq_admission.py`;
+`hypothesis` stays for class D. The in-memory adapter is also the fake under the five offline checks
+(`tests/fake_collections.py`); the p2 cases are a real `Store` over it (`Store.over`). The p1c check keeps
 `asuna.people` out of its run on purpose: its cases read the digest by names (`history_query`'s fallback without
 People), which People had left only by accident (the cases put `src/asuna` on the path, whose `queue.py` shadowed the
 standard library's that pymongo imported through `state.py`).

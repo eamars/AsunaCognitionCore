@@ -100,24 +100,33 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
 - The tests keep only invariants whose breakage would be visible or harmful: privacy and visibility boundaries,
   authorization and epoch fencing, exactly-once ingest and publication, crash recovery, audit integrity, sandbox
   isolation and the visible native behavior.
-- Unit tests never need a database, and a unit run opens none: `tests/conftest.py` sets `ASUNA_UNIT_RUN=1`, so the
-  store's registry and `dbread` refuse to open one (`DATABASE_IN_UNIT_RUN`) in the test process and in every process
-  it starts, and every configuration the run loads names an address that cannot resolve; `tests/test_no_server.py`
-  checks both. `tests/test_store_boundary.py` reads `src/asuna` and `tools` and fails, with file, line and rule, on a
-  driver import outside the adapter, the registry and `dbread`, a store's raw handle, or a collection named to the
-  store outside its owner.
+- Tests have three layers. **Static checks** run nothing: `tests/test_store_boundary.py` reads `src/asuna` and
+  `tools` and fails, with file, line and rule, on a driver import outside the adapter, the registry and `dbread`, a
+  store's raw handle, or a collection named to the store outside its owner; `tests/test_record_owners.py` and the
+  repository guards below. **Unit tests** run the core against the database adapter interface on the in-memory
+  adapter (`asuna.store.memory`, the registry's `memory` kind, chosen only by name): `tests/conftest.py`'s `store` is a
+  `Store` on a fresh in-memory database, `world` the same holding the synthetic world (`tests/fixtures/world.json`)
+  and a turn's settings. They test above all the paths that overwrite or remove records (the counters, erasure, the
+  audit chain, forgetting, the None rule); a feature's own logic is tested here only where it needs no store. A unit
+  run reaches no server: `ASUNA_UNIT_RUN=1` makes the registry and `dbread` refuse every adapter that reaches one
+  (`DATABASE_IN_UNIT_RUN`), in the test process and in every process it starts, and every configuration the run loads
+  names an address that cannot resolve; `tests/test_no_server.py` checks both. **Integration tests** (`integration/`,
+  outside the default run, run at every landing:
+  `.\.venv\Scripts\python.exe -m pytest -q integration`, in a process of its own) check only that the MongoDB adapter
+  keeps the interface's promises on the server named in `config/local.json`: the store's contract
+  (`integration/store_contract.py`, the same cases the unit run gives the in-memory adapter in
+  `tests/test_store_contract.py`, with the races between processes and a differential of generated conditions against
+  the in-memory adapter), what `ensure` makes, the vector index, unique keys and the host lease's claim under two
+  clients. Each module runs on one throwaway `asuna_v2_test_*` database, its collections dropped before each case, a
+  few synthetic records a case, dropped at the end and on failure; everything skips when the server is not reachable.
 - `src/asuna/store/` is the store's interface: the condition and change words, the catalog of declared collections,
-  the adapter registry and the MongoDB adapter, through which `Store` writes, audits and searches vectors. The
-  in-memory adapter (`memory.py`) is the fake under the offline checks only.
+  the adapter registry, the MongoDB adapter and the in-memory adapter, through which `Store` writes, audits and
+  searches vectors. A whole record that the catalog refuses is written only over a stored record it refuses too
+  (MongoDB's moderate validation); a new record is always checked. The in-memory adapter returns records tied on every
+  sort key in an order shuffled by a seed, so nothing can depend on an order the interface leaves open; the
+  contract's unit run prints its seed with a failure, and `ASUNA_STORE_SEED=<seed>` repeats it.
 - Native node tests and the native worker tests use synthetic inference and create no database.
-- `integration/` holds the tests that need a database, outside the default run and run at every landing
-  (`.\.venv\Scripts\python.exe -m pytest -q integration`, in a process of its own: a unit run's `ASUNA_UNIT_RUN`
-  would refuse it). Each test reaches the server named in `config/local.json` only on a throwaway `asuna_v2_test_*`
-  database of synthetic records, dropped at the end and on failure, and skips when the server is not reachable.
-  `integration/store_contract.py` holds the cases the MongoDB adapter passes (`integration/test_store_contract.py`,
-  with the races between processes); `integration/world/` holds the guards of her turns whose break would leak private
-  data or lose her data, on the fixture world.
-- The Python suites need the `dev` dependency group (`uv sync` installs it): pytest and pyflakes.
+- The Python suites need the `dev` dependency group (`uv sync` installs it): pytest, pyflakes and hypothesis.
   `tests/test_no_undefined_names.py` fails on any name a Python file uses but never defines, in `src/asuna`,
   `tools`, `packages/channels` and `tests` (not the vendored websocket client or the persona packages).
 - pytest imports `asuna` from the checkout's own `src/` (`pythonpath` in `pyproject.toml`), never an installed copy.

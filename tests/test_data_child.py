@@ -22,7 +22,9 @@ from asuna.discussion_digest import DIGEST_TOOL_NAME
 from asuna.history_query import HISTORY_TOOL_NAME
 from asuna.media_children import Child
 from asuna.records import artifacts as artifact_records
+from asuna.records import messages as message_records
 from asuna.records import people as people_records
+from asuna.records import scenes as scene_records
 from asuna.records import tasks as task_records
 from asuna.state import Conflict, Denied
 
@@ -53,15 +55,14 @@ def no_host():
 
 def seeded(store):
     """A group, one line of a peer in it, and a task of that group."""
-    store.put('scenes', {'_id': SCENE, 'scene_id': SCENE, 'kind': 'group', 'scope_key': 'scene:' + SCENE,
-                         'policy_epoch': EPOCH, 'sequence': 1})
-    store.put('messages', {'_id': 'line-1', 'scene_id': SCENE, 'scope_key': 'scene:' + SCENE, 'policy_epoch': EPOCH,
-                           'scene_seq': 1, 'text': '雾灯坏了，明天去修', 'author': PEER, 'direction': 'inbound',
-                           'delivery_state': 'RECEIVED', 'occurred_at': '2026-09-22T12:00:00Z',
-                           'received_at': '2026-09-22T12:00:00Z', 'adapter_id': 'fixture',
-                           'platform_event_id': 'pe-1',
-                           'event': {'channel': {'id': 'qq', 'sender_id': ACCOUNT,
-                                                 'target': {'type': 'group', 'id': GROUP}}}})
+    scene_records.save(store, {'_id': SCENE, 'scene_id': SCENE, 'kind': 'group', 'scope_key': 'scene:' + SCENE,
+                               'policy_epoch': EPOCH, 'sequence': 1})
+    message_records.save(store, {
+        '_id': 'line-1', 'scene_id': SCENE, 'scope_key': 'scene:' + SCENE, 'policy_epoch': EPOCH, 'scene_seq': 1,
+        'text': '雾灯坏了，明天去修', 'author': PEER, 'direction': 'inbound', 'delivery_state': 'RECEIVED',
+        'occurred_at': '2026-09-22T12:00:00Z', 'received_at': '2026-09-22T12:00:00Z', 'adapter_id': 'fixture',
+        'platform_event_id': 'pe-1',
+        'event': {'channel': {'id': 'qq', 'sender_id': ACCOUNT, 'target': {'type': 'group', 'id': GROUP}}}})
     return task_records.save(store, {
         '_id': 'task-data', 'request_key': 'task-data', 'state': 'RUNNING', 'scene_id': SCENE,
         'scope_key': 'scene:' + SCENE, 'policy_epoch': EPOCH, 'requester_id': PEER, 'intent_revision': 1,

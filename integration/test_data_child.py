@@ -7,7 +7,9 @@ from asuna import channel_kinds, data_children
 from asuna import config as settings_of
 from asuna.config import DATA, ROOT
 from asuna.history_query import HISTORY_TOOL_NAME
+from asuna.records import messages as message_records
 from asuna.records import people as people_records
+from asuna.records import scenes as scene_records
 from asuna.records import tasks as task_records
 
 BOT, GROUP = '100357', '300941'
@@ -28,15 +30,14 @@ def test_the_data_child_reads_and_writes_on_the_server(store):
     channel_kinds.load([{'python': ROOT / 'packages' / 'channels' / 'napcat-qq' / 'python', 'module': 'napcat_qq'}])
     config = {**settings_of.load(ROOT / 'config' / 'local.example.json', dsh_home=DATA / 'asuna-dsh'),
               'mongo_uri': store.config['mongo_uri'], 'database': store.name, 'allowed_databases': []}
-    store.put('scenes', {'_id': SCENE, 'scene_id': SCENE, 'kind': 'group', 'scope_key': 'scene:' + SCENE,
-                         'policy_epoch': EPOCH, 'sequence': 1})
-    store.put('messages', {'_id': 'line-1', 'scene_id': SCENE, 'scope_key': 'scene:' + SCENE, 'policy_epoch': EPOCH,
-                           'scene_seq': 1, 'text': '雾灯坏了，明天去修', 'author': PEER, 'direction': 'inbound',
-                           'delivery_state': 'RECEIVED', 'occurred_at': '2026-09-22T12:00:00Z',
-                           'received_at': '2026-09-22T12:00:00Z', 'adapter_id': 'fixture',
-                           'platform_event_id': 'pe-1',
-                           'event': {'channel': {'id': 'qq', 'sender_id': ACCOUNT,
-                                                 'target': {'type': 'group', 'id': GROUP}}}})
+    scene_records.save(store, {'_id': SCENE, 'scene_id': SCENE, 'kind': 'group', 'scope_key': 'scene:' + SCENE,
+                               'policy_epoch': EPOCH, 'sequence': 1})
+    message_records.save(store, {
+        '_id': 'line-1', 'scene_id': SCENE, 'scope_key': 'scene:' + SCENE, 'policy_epoch': EPOCH, 'scene_seq': 1,
+        'text': '雾灯坏了，明天去修', 'author': PEER, 'direction': 'inbound', 'delivery_state': 'RECEIVED',
+        'occurred_at': '2026-09-22T12:00:00Z', 'received_at': '2026-09-22T12:00:00Z', 'adapter_id': 'fixture',
+        'platform_event_id': 'pe-1',
+        'event': {'channel': {'id': 'qq', 'sender_id': ACCOUNT, 'target': {'type': 'group', 'id': GROUP}}}})
     task = task_records.save(store, {
         '_id': 'task-data', 'request_key': 'task-data', 'state': 'RUNNING', 'scene_id': SCENE,
         'scope_key': 'scene:' + SCENE, 'policy_epoch': EPOCH, 'requester_id': PEER, 'intent_revision': 1,

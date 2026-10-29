@@ -17,7 +17,7 @@ from . import clock
 from .evidence import canonical,sha
 from .records.view import ANY, View, fenced, is_text
 from .state import Store,Denied,content_digest,without_derived
-from .store.words import AnyOf, Exists, Max, NoneOf, Not, Or, Range
+from .store.words import And, AnyOf, Exists, Max, NoneOf, Not, Or, Range
 
 
 # ── the owner of `audit_events` ──
@@ -80,24 +80,28 @@ def commit_of(store, collection, document_id, fields=None):
 def prepared_for(store, scope, person, epoch, *, stream=ANY, limit=24, page=200):
     """The newest `context.prepared` records (stream and time only) of turns in this scope with this person at this
     policy epoch, at most `limit`, newest first (ties by id). Who a turn was with is in each record's payload, which
-    some kinds of records write as text: it is read with the record and compared here, page by page in that order."""
+    some kinds of records write as text: it is read with the record and compared here, page by page in that order,
+    each page after the last record the one before it read."""
     if not (is_text(person) and isinstance(epoch, (int, float)) and not isinstance(epoch, bool)):
         return []
-    view = View(store, COLLECTION, fenced({'type': 'context.prepared'}, {'scope_key': (scope, is_text),
-                                                                        'stream_id': (stream, is_text)}),
-                (('occurred_at', 1), ('_id', 1)))
-    found, skip = [], 0
+    where = fenced({'type': 'context.prepared'}, {'scope_key': (scope, is_text), 'stream_id': (stream, is_text)})
+    if where is None:
+        return []
+    found, after = [], None
     while len(found) < limit:
-        rows = view.rows(newest_first=True, limit=page, skip=skip,
-                         fields=['stream_id', 'occurred_at', 'payload.context.person_id',
-                                 'payload.context.policy_epoch'])
+        page_where = where if after is None else And(where, Or({'occurred_at': Range(lt=after['occurred_at'])},
+                                                              {'occurred_at': after['occurred_at'],
+                                                               '_id': Range(lt=after['_id'])}))
+        rows = View(store, COLLECTION, page_where, (('occurred_at', 1), ('_id', 1))).rows(
+            newest_first=True, limit=page, fields=['stream_id', 'occurred_at', 'payload.context.person_id',
+                                                   'payload.context.policy_epoch'])
         for row in rows:
             context = (row.get('payload') or {}).get('context')
             if isinstance(context, dict) and context.get('person_id') == person and context.get('policy_epoch') == epoch:
                 found.append({key: row[key] for key in ('_id', 'stream_id', 'occurred_at') if key in row})
         if len(rows) < page:
             break
-        skip += page
+        after = rows[-1]
     return found[:limit]
 
 

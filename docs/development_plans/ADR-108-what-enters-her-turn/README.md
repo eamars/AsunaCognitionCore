@@ -559,13 +559,13 @@ without her, then the lead integrates the build and talks to Xiaoman (a cloud se
 | D1 | `pairing.js` (`stepOpen`, `mustHold`, `releaseAtBoundary`), `navigation.js`; `coordinator._absorb` | `pairing.test.js`, `navigation.test.js` on a real DSH session with a step open; `test_woken_by_program.py`'s absorb cases |
 | D2 | `role_tools.py` (`line`, `_anchored`, `_resolve`), `memory_tiers.py` (the anchor and its lifecycle), `people.py` (`source_of`), `carried.py`, `group_admin.py`; the compaction rules in `compaction.js` | `test_line_anchor.py` |
 | D3 | `marks.js`, `index.js` (`message`, `restored`), `compaction.js` (`withCheckpointHead`) | `marks.test.js` |
-| D4a to D4d | `tool_schema.py`, `role_tools.py` (the layered `call`, the nine splits, `INSTEAD`), `config.py` (`too_long`), `documents.py` (`problems`), `affect.py` (`record_problems`), `native_worker.py` (`role_tool_specs`) | `test_tool_schema.py`, `test_layered_refusal.py`, `test_length_refusal.py`, `test_tool_budget.py`, `tool-args.test.js` |
+| D4a to D4d | `tool_schema.py`, `role_tools.py` (the layered `call`, the nine splits, `INSTEAD`), `config.py` (`too_long`), `documents.py` (`problems`), `affect.py` (`record_problems`), `native_worker.py` (`role_tool_specs`) | `test_tool_schema.py`, `test_layered_refusal.py`, `test_length_refusal.py`, `test_tool_budget.py`, `test_declared_specs_dsh.py` (the specs the worker ships, registered and called through DSH's own `defineTool` and `validateArgs`), `tool-args.test.js` |
 | D5 | `wake_words.py`, `context.py` (`CONTEXT_HEAD`, `local_line`), `context-delivery.js`, `turn.md`, `turn_thinking.md` | `test_woken_by_program.py`, `context-delivery.test.js` |
 | D6 | nothing is added | |
 | A2, A3 | `capabilities.can_quote`; every line shows its number; `event.line` | `test_adr079_pointers.py`, `test_woken_by_program.py` |
 | A11 | `contexts.js`, `index.js` | `marks.test.js`, `native-loop.test.js` (through DSH's own `agentPresets.mount`) |
 
-Checks run in the build container (Linux, the in-memory adapter): `pytest tests` 773 passed, 9 skipped (the skips are
+Checks run in the build container (Linux, the in-memory adapter): `pytest tests` 786 passed, 9 skipped (the skips are
 the personal-words list, the private-words scene tests and the voice model, none present there); `npm run test:native`
 276 passed and 8 failed, the same 8 that fail on `160968c`: four turn-end compaction tests that need the fork's
 engine, three ADR-098 root tests with Windows path fixtures, and the working-copy test. A reviewer who had not seen

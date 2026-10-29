@@ -382,7 +382,9 @@ passes the declared schema and `execute` receives it unchanged (an absent `doc`,
 `parts` as a string, as an array, as an array with a key the strict schema does not declare; a `from` outside any list),
 and what the declared schema keeps is refused, by DSH and by `argsRefusal` (a required field missing, `"3"` for an
 integer). Guards: a repair the guard would refuse before `execute` ran, which is what made the note synonyms
-unreachable (A8).
+unreachable (A8). The same shapes also run, from Python, against the specs the worker really ships
+(`tests/test_declared_specs_dsh.py`, through `tests/declared_specs.mjs`; skipped, and said to be unchecked, where node or
+the DSH package is absent).
 
 R2 (A11), JS, with the real `SystemPrompt` and a context registered the way the working-directory service registers its
 own (`required: true`): a character-lane request carries no `Current working directory`; an executor-lane request does.

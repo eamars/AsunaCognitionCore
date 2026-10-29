@@ -1,7 +1,32 @@
 # ADR-108 design: the detail each decision needs to be built
 
 The page is [README.md](README.md); this file holds the layers, the tables and the proofs. Every model-facing text
-below is a draft (Chinese, 你, one language) for Xiaoman's reading; code names are as they stand at `5a196e66`.
+below is a draft (Chinese, 你, one language) for Xiaoman's reading. Code names and line numbers were read at
+`5a196e66` (some at `fea9e355`); they move, and each is checked again when B0 lands, before a batch builds on it.
+
+## 0. Held lines (D1)
+
+`core.held` (`pairing.js`) is a Map in the Host's memory: conversation → the lines held there, each kept once by its
+receipt.
+- Created: a line that arrives while a step is open (D1; today while a tool call is open) or while a compaction runs.
+- Used: written into the conversation, in arrival order, at the next `agent/pre-step` or `agent/turn-stopping`, or
+  at `compaction/end` (`release`). B1 adds the release on a step whose request failed, if B0 shows the turn's end
+  does not already release it.
+- Discarded: `release` deletes the entry. Its size is what arrives during one step in one conversation; it needs no
+  cap of its own as long as every step ends in a release, which B1's tests hold.
+- Across a restart: it is memory only, and nothing is lost with it. A held line's receipt is acknowledged only after
+  the line is written and the conversation flushed (`index.js` `written`), so a stop while it is held leaves the
+  receipt unacknowledged, and the worker projects it again at the next start.
+
+Tested today in two halves: `tests/test_native_product.py::test_receipt_is_visible_before_processing_and_replayed_until_native_ack`
+(an unacknowledged receipt is projected again at `navigation.ready`, an acknowledged one is not) and, in
+`packages/cognition-core/test/navigation.test.js`, the test 'native continuation preserves history and task children
+retain their actual execution directory' (a line is held while a compaction runs, a receipt projected again while
+held is held once, and it is acknowledged only once written). No test joins the halves; B1 adds one: a stop while a
+line is held, then a start, and the line is in the conversation once.
+
+Absorbing (README D1): `_absorb` (`coordinator.py:346-356`) marks a line seen during a turn as handled there. From B1
+it does so only when the turn has `speak` in that conversation; otherwise the line keeps its own turn.
 
 ## 1. The check pipeline (D4b)
 
@@ -15,22 +40,22 @@ asks the worker `session`, `index.js:1232-1245`), then the guards (synchronous: 
 | Today | After |
 |---|---|
 | guard: not in this conversation → refused | unchanged (layer 0; it is synchronous and cannot ask the worker) |
-| guard: schema (`argsRefusal`, `tool-args.js`) → refused alone, no audit row | removed from the guard at B4 (kept through B3) |
-| `defineTool` wrapper: DSH's own validation against the declared schema (never reached after the guard) | unchanged; it validates the permissive declared schema (§4), so it passes every shape the program repairs and refuses what the program never accepts |
+| guard: schema (`argsRefusal`, `tool-args.js`, against the strict declared schema) → refused alone, every violation named, Chinese with DSH's words in brackets, no audit row | kept in layer 0; through B3 against the strict schema, from B4 against the permissive declared one |
+| `defineTool` wrapper: DSH's own validation against the declared schema, English (`invalid arguments: …`); not reached after the guard (0 on her character brain since 2026-10-18 UTC, §9) | unchanged; the guard checks the same declared schema first, so it stays unreached |
 | `execute` → worker `role_tool` | `execute`: repair a copy (§4), `validateArgs` on the copy against the strict schema the program keeps, then worker `role_tool` with `args` (repaired), `given` (as she wrote it, for the record) and `violations` |
+| worker `RoleTools.call`: first failure raises | worker: layers 1-5 below; one `Refused` whose record keeps every code |
 
 Two schemas per tool: the strict one (today's specs, kept in the program beside the repair table and shipped with
 `role_tool_specs` for `execute`) and the declared one derived from it by the repair table (fields the table can fill
-lose `required`; fields the table parses are declared `json`). One source, so the two cannot drift; a test holds
-that every field the declared schema relaxes has a repair entry and a description stating the strict form. R3 (a
-supported normalize hook in DSH) would let them be one schema; nothing waits on it.
-| worker `RoleTools.call`: first failure raises | worker: layers 0-5 below; one `Refused` whose record keeps every code |
+lose `required`; fields the table parses are declared `json`; types and enums stay). One source, so the two cannot
+drift; a test holds that every field the declared schema relaxes has a repair entry and a description stating the
+strict form. R3 (a supported normalize hook in DSH) would let them be one schema; nothing waits on it.
 
 ### 1.2 The layers
 
 | Layer | Checks (today's site) | Collected? | Why it stands where it does |
 |---|---|---|---|
-| 0 | tool in this conversation (guard); args an object; call id not reused; tool exists; retired old name (`role_tools.py:1367-1383`) | stops alone | nothing else is defined without a tool and an object |
+| 0 | tool in this conversation (guard); the declared schema (guard, every violation in one text); args an object; call id not reused; tool exists; retired old name (`role_tools.py:1367-1383`) | stops alone; the guard's two have no audit row and are counted from session files by wording | nothing else is defined without a tool and an object that its declared schema accepts |
 | 1 | shape repair (§4), `param_names.inbound`, `infer_op`, ADR-098 `written` | n/a (no refusal) | every later check reads the repaired call |
 | 2 | usable in this turn (`not_now`), home authority (`OUTSIDE_NEEDS_HOME`), place rules that decide the tool, not its arguments (`DOC_WRITE_REQUIRES_OWNER_PRIVATE`, `GROUP_NOTES_ONLY_IN_ITS_GROUP`) | stops alone, with `INSTEAD` (§2.3) | the fix is another tool or another turn; argument problems beside it lead to a corrected call refused again |
 | 3 | schema violations after repair (from `execute`); THINK_FIRST (`role_tools.py:1393-1395`); call cap (`1396-1400`); each text field (`_text`); enums by hand (`_given`); empty fields; field pairs (feel `who` for kind, `pin` outside group notes, `op` validity) | all collected | none depends on another passing; a field that fails here is skipped in layer 4 |
@@ -79,6 +104,13 @@ Form (the codes stay in the record, `WORDS[code]` and the detail reach her, DEVE
 With one problem the numbering goes and the sentence stands alone. The record: `refused` (the text), `codes` (every
 code, in order), `layer` (where it stopped), `repairs` (§4 entries applied).
 
+Length: no problem is ever dropped; each field or part gives at most one problem per layer, so the list is bounded
+by the tool's fields and speak's parts. When the text passes `REFUSAL_LONG = 1500` characters, each candidate list
+(§2.2) keeps its first three and ends 「还有 N 个」; if it is still longer, it stays as it is.
+
+Best effort, as a mechanism: the problems are those of the layers that ran, up to the one that stopped; a field that
+failed in layer 3 is not checked in layer 4, so its layer-4 problem, if any, comes with the next call.
+
 ## 2. Refusal texts (D4c)
 
 ### 2.1 Lengths
@@ -88,11 +120,12 @@ code, in order), `layer` (where it stopped), `repairs` (§4 entries applied).
 | description, her prose | 「（N 字以内，过了 M 字不收）」 (`LIMIT_WORDS`) |
 | description, exact | 「（最多 N 字）」 (`EXACT_WORDS`, unchanged) |
 | kept between N and M | 「<字段> L 字，要求 N 字以内，多了 K 字；过了 M 字不收」 (`config.over`) |
-| refused past M, prose | 「<字段> 太长了：L 字，过了 M 字的线 J 字（要求 N 字以内）。<为什么有这条线>。精简到 N 字以内再调用；M 字落在第 s 句里（共 t 句）。」 |
-| refused past M, a list (plan intent, idea, errand request, note) | the same, ending 「删哪段你自己定；M 字落在第 s 行（共 t 行）」 |
+| refused past M, prose | 「<字段> 太长了：L 字，过了 M 字的线 J 字（要求 N 字以内）。<为什么有这条线>。精简到 N 字以内再调用；M 字之后起是超出部分。」 |
+| refused past M, a list (plan intent, idea, errand request, note) | the same, ending 「删哪段你自己定；M 字之后起是超出部分，落在第 s 行（共 t 行）」 |
 | refused past a safety cap | 「<字段> 太长了：L 字，最多 M 字。」 and what to do (a brief split into a follow-up `task` message) |
 
-The sentence index counts the same sentence ends `config._head` uses (`SENTENCE_ENDS`). Nothing of her text is shown.
+The place is given in characters; no sentence is counted. A line (s of t) counts the field's lines as split on
+`\n`, after the trailing blank lines are removed. Nothing of her text is shown.
 
 `<为什么有这条线>` comes from one table per field (`LIMIT_WHY`, versioned). Its phrases are written at build from the
 code that carries each text, and each is checked against that code. The one the code states today: think, 心里话会存档：
@@ -138,8 +171,10 @@ group → `write_document` with `group_notes`. A test holds that every entry nam
 
 ## 4. Shape repairs (D4d)
 
-Applied to a copy in `execute` (layer 1) and recorded in the call's `repairs`; the worker applies the same table, so
-both layers read one call. The table is data in `role_tools.py`, shipped with `role_tool_specs`.
+This table is the one list of the shapes; the page's finding 4 and D4d point here. Applied to a copy in `execute`
+(layer 1) and recorded in the call's `repairs`; the worker applies the same table, so both layers read one call. The
+table is data in `role_tools.py`, shipped with `role_tool_specs`. The counts are per shape, from the refused calls;
+they do not add up to the guard's 102 schema refusals, and the difference was not traced.
 
 | Shape she writes (refusals, 10-18 to 10-29) | Repair | Said in the result |
 |---|---|---|
@@ -169,6 +204,11 @@ change: it rides on B4's one cold request.
 | repair notice (unsent text, speech problems, missing thought: `coordinator.py` REPAIR) | 〔程序〕 |
 | checkpoint body (prepended by `RoleCompactionEngine.summarize`, after the section check) | 〔摘要〕下面是压缩器把这个对话较早的一段整理成的检查点：条目末尾的〔编号〕是它出自的那一行，没有编号的是压缩器的转述。 |
 | a person's line | its label line (`People.transcript`), unchanged |
+| a platform notice inside a line (someone recalled a message, and the like) | its label line, then `notices.MARK` 「（平台通知）」, unchanged: a line the platform relayed, not a message Asuna wrote |
+
+Each mark is the message's own first line, followed by a line break; a stage notice's JSON body (`index.js:812`)
+starts on the second line. B0 runs a real stage notice, mark included, through every reader of a notice's text and
+records which of them reads past the first line.
 
 ### 5.2 `woken_by_program`, `WAKE_VERSION = 1`
 
@@ -219,8 +259,23 @@ All counts are structure only: event types, seqs, times, codes, lengths. No text
 | Batch | Count | Source |
 |---|---|---|
 | B0 | yes/no per fact, on the demo profile's session file and its synthetic provider's received requests | demo profile, deleted after export |
-| B1 | per step: `user/message` with `source.channel` whose seq lies between the step's last `asuna/stage` and its `assistant/message` (pass: 0); per held receipt: time from receive to write (pass: within its step and 1 s); receipts projected again at a start (pass: no rise) | her session files, home and archive |
+| B1 | per step: `user/message` with `source.channel` whose seq lies between the step's last `asuna/stage` and its `assistant/message` (pass: 0); per held receipt: time from receive to write (pass: within its step and 1 s); receipts projected again at a start (pass: no rise); lines absorbed into a turn without `speak` there (pass: 0) | her session files, home and archive; `input.absorbed` audit rows |
 | B2 | notices and checkpoints after install that start with their mark (pass: all); program-woken notices with `speaker` (pass: 0); 〔n〕 per checkpoint item (reported) | session files |
-| B3 | same-tool different-class second refusals within a turn, as a share of failures (pass: below 2%, from 5.7%); refusals holding 20+ consecutive characters of the call's prose fields (pass: 0, computed by the program); refusals past layer 0 without an audit row (pass: 0) | session files, `role_tool` audit rows |
-| B4 | schema refusals of the five shapes (pass: near 0, from 102 in 11 days); cold first steps per conversation after install (pass: one each); 别人说的 / 主人定的 items after install without an anchor (pass: 0) | session files, cache readout (`asuna-cache-readout`), document items |
+| B3 | same-tool different-class second refusals within a turn, as a share of failures counted from session files with the pre-worker layer included, as the 5.7% was (pass: below 2%); refusals holding 20+ consecutive characters of the call's prose fields (pass: 0, computed by the program); refusals past layer 0 without an audit row (pass: 0); layer-0 refusals by wording (reported), DSH's English refusal on her character brain (pass: 0) | session files, `role_tool` audit rows |
+| B4 | the guard's schema refusals, by the shapes of §4 (pass: near 0, from 102 between 10-18 and 10-29); length refusals per field against the week before (pass: no higher; D4a's condition); cold first steps per conversation after install (pass: one each); 别人说的 / 主人定的 items after install without an anchor (pass: 0) | session files, cache readout (`asuna-cache-readout`), document items |
 | B5 | 〔n〕 in new checkpoints whose stored line's speaker differs from the label written beside it | program count over checkpoints and `messages`, numbers only |
+
+## 9. How the page's numbers are computed
+
+The scripts are in `.runtime/private/tool-failures/scripts/` (README section 7), so each number can be computed
+again; they read her session files and print counts only. Session files are those of the home and archive session
+folders; a call is counted once by its call id (seeded sessions repeat records).
+
+| Number | Formula | Script, output |
+|---|---|---|
+| 10.3% (2,702 of 26,218) | character-lane calls (session kind `asuna-role`) whose `tool/result` has `isError`, over all such calls, 10-05 to the read at 2026-10-29 00:21 UTC | `parse.py` then `analysis.py`; `survey-out-1029.txt` |
+| 14.6% (211 of 1,443) | the same, for calls whose time falls on 2026-10-28 as a UTC day (`iso(time)[:10]`, `timezone.utc`); recomputed from the same 00:21 UTC read | `analysis.py`; `survey-days-1029.txt` |
+| 18% (median, length refusals) | per refusal text of the `TEXT_TOO_LONG` family (the `Error: ` prefix removed, cut to 3,000 characters): the characters covered when up to four program literals are chosen greedily, each marking only its first place in the text and chosen only while it adds at least 5 characters, over the text's length; the median over the family's 308 | `errclass.py` (`cover`), `q3stats.py`; `survey-q3stats-1029.txt` |
+| 17 `compaction/summary` records | records in her session files whose line holds the one identifier of the false claim, counted by record type; not a count of summaries holding the claim's sentence | `q8.py`; `survey-q8-1029.txt` (rerun 2026-10-29 02:39 UTC: still 17) |
+| 0 English schema refusals | failed `tool/result`s of her character preset whose text (the `Error: ` prefix removed) starts with `invalid arguments`, per UTC day, against those holding the guard's 「原话：invalid arguments」; 0 from 2026-10-18, when the guard's first appears | `q9_dsh_layer.py`; `survey-q9-1029.txt` |
+| 156 (5.7% of 2,747), 1,062 unclassed, 44-156 | the system survey's serial counts: for each failed call, the next call of the same tool in the same turn, classed by the program wording of both refusals; the base includes the 206 refused before the worker | computed by the system survey's agent; its script was not kept, so these stand as the survey states them (`system-survey-1029.md`, "Serial counts") |

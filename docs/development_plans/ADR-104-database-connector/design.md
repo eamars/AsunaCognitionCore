@@ -1,9 +1,9 @@
 # ADR-104 step 2 and after: the database interface, designed to the end
 
-**Replaced in part (2026-10-29):** sections 6, 7.3 and 7.4, the in-memory adapter's role as the unit tests' double,
-and batches B10 to B15 of 8.2 are replaced by decision 9 of [README.md](README.md): the rest is done in one piece,
-the unit tests that need a database are deleted or moved to `integration/`, and her read tool keeps MongoDB's syntax.
-The rest of this page stands.
+**Replaced in part (2026-10-29):** sections 6, 7.3 and 7.4, the stand-in run of 7.1, and batches B10 to B15 of 8.2
+(their rows included) are replaced by decision 9 of [README.md](README.md): the rest is done in one piece, the tests
+are in three layers (static checks; unit tests of the core on the in-memory adapter; integration of the MongoDB
+adapter on a real server, light), and her read tool keeps MongoDB's syntax. The rest of this page stands.
 
 Design subagent, 2026-10-28, from the survey in [research.md](research.md), reviewed by Claude (the lead) against
 [review-list.md](review-list.md) and revised once. Read at main `5a62ebd6a171`. The scripts are in [design/](design/);
@@ -928,6 +928,8 @@ there only through `tests/harness_skips.txt` by the case's `[stand-in]` id. Two 
 | `R` races (integration only) | 4 | counter (4 processes x 50), claim (6 x 60), lease expiry (two holders), stale revision (two writers) |
 | `D` differential (integration only) | 1 | Hypothesis, `derandomize=True`, at most 200 records and 100 generated where trees per run (missing, null, empty lists, equal sort keys); `find` and `count` on MongoDB equal the double's, order included |
 
+*Replaced by decision 9 where it names the stand-in: the `[stand-in]` run and its skip lines are gone; the shared
+cases run on the in-memory adapter in the unit run and on MongoDB in the integration run.*
 Size, per run (counted at B1b; times as measured, with where). `tests/test_store_contract.py` collects 226 cases: the
 112 shared (W 31, O 6, G 5, C 12, X 15, T 5, V 8, N 18, B 6, S 6) less `S05` as 111 `[memory]` and 111 `[stand-in]`,
 and 4 without the adapter parameter (`S05`, `O05`, the skip-line guard test, the injected-clock case):
@@ -1091,13 +1093,13 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | B7 | `records.memories` (retrieval's lexical reads; vector parts as built, 1b's pairs as an `Or` of dicts, an empty pair list answered without a call) | 67 (as built: 62 in 17 files, the map at `f18f1778f243`) | yes | 8.3; retrieval's whole search old against new on 40 queries (as 1a did): the same six and 24; `state.py:218-227`'s `if not combinations: return []` (the empty pair list) is production code with no test until `records.memories`' `test_an_empty_pair_list_answers_nothing_without_a_call` lands here |
 | B8 | `records.artifacts`, `blobs` (the blob interface), `media_life`, `outbound_files` | 126 (as built: 124 in 20 files, the map at `5a196e66c85e`) | yes | 8.3; blob probe on a throwaway database; her stored files open and hash-check (20 sampled ids, read only) |
 | B9 | `records.heads`, `documents`, `records.people`, `records.ideas` | 151 (as built: 151 in 29 files, 149 moved and B7's 2 old-side reads kept, the map at `5a196e66c85e`) | yes | 8.3; `audit.verify_documents` after the restart |
-| B10 | `audit` reads, prune and redaction; `privacy` over the owners' `redact_scope`, `tombstone`, `invalidate` | 47 (+ the 146 appends, which stay `store.audit`) | yes | 8.3; prune in dry-run counts equal old against new; the erasure path on a throwaway database (no erasure on hers) |
-| B11a | `stickers`, `notes`, `watches`, `questions`, `switches`, `own_mute`, `group_members`, `developer_inbox`, `host_stops` | 120 | yes | 8.3 |
-| B11b | `memory_tiers` (with `carried`'s room rows), `carried`, `memory_pilot`, `crossing`, `affect` | 125 | yes | 8.3 |
-| B12 | her read facade: `dbread`, `development_database_read` (section 6); she gets the list first | 8 | yes | the facade's answers for the reads her scripts make today, written in the new form by the builder in a scratch file outside her package: same counts and rows as the old form; for `usage_readout`'s comparison of two fields (section 6's list, her `$expr` at `usage_readout.py:732`), also the rows read before the comparison in Python |
-| B13 | `store.db` and pymongo leave the core outside the adapter module; repository guards: no `store.db`, no `pymongo`/`bson`/`gridfs` import and no `$`-key literal in `src/asuna` outside the adapter, `store.collection(name)` and `store.put(name, ...)` only in the owner of `name`, no collection `pending` (3.1); unit runs on the in-memory adapter, mongomock goes; the first core callers of `ping` (`native_worker.py:1042`) and `close` (the core's `client.close()` calls) | guards | yes | the guards; the unit run on the double (its time measured, 7.4); the integration contract run |
-| B14 | the package split (5.15): `packages/databases/mongodb/`, `registerDatabase`, the registry, the settings keys, the Python locks, `pack_plugins`, `release.py`, the profile's package list; the contract suite in the adapter packages' kit (5.15: the shared classes, the `open_store` fixture's contract, how to run them against one's own adapter), and the registry that always raises for a missing database, unlike the channel registry, on purpose | install path | yes | after the restart her `ensure` creates nothing and changes nothing (same MongoDB, same database, same records); `audit.verify_documents` passes; the start fails with `DATABASE_ADAPTER_NOT_INSTALLED` in a demo profile without the package |
-| B15 | the suite reset (7.4) | tests only | no | before and after: test count and run time on the double, the landing run's (7.4) |
+| B10 (replaced by decision 9) | `audit` reads, prune and redaction; `privacy` over the owners' `redact_scope`, `tombstone`, `invalidate` | 47 (+ the 146 appends, which stay `store.audit`) | yes | 8.3; prune in dry-run counts equal old against new; the erasure path on a throwaway database (no erasure on hers) |
+| B11a (replaced by decision 9) | `stickers`, `notes`, `watches`, `questions`, `switches`, `own_mute`, `group_members`, `developer_inbox`, `host_stops` | 120 | yes | 8.3 |
+| B11b (replaced by decision 9) | `memory_tiers` (with `carried`'s room rows), `carried`, `memory_pilot`, `crossing`, `affect` | 125 | yes | 8.3 |
+| B12 (replaced by decision 9) | her read facade: `dbread`, `development_database_read` (section 6); she gets the list first | 8 | yes | the facade's answers for the reads her scripts make today, written in the new form by the builder in a scratch file outside her package: same counts and rows as the old form; for `usage_readout`'s comparison of two fields (section 6's list, her `$expr` at `usage_readout.py:732`), also the rows read before the comparison in Python |
+| B13 (replaced by decision 9) | `store.db` and pymongo leave the core outside the adapter module; repository guards: no `store.db`, no `pymongo`/`bson`/`gridfs` import and no `$`-key literal in `src/asuna` outside the adapter, `store.collection(name)` and `store.put(name, ...)` only in the owner of `name`, no collection `pending` (3.1); unit runs on the in-memory adapter, mongomock goes; the first core callers of `ping` (`native_worker.py:1042`) and `close` (the core's `client.close()` calls) | guards | yes | the guards; the unit run on the double (its time measured, 7.4); the integration contract run |
+| B14 (replaced by decision 9) | the package split (5.15): `packages/databases/mongodb/`, `registerDatabase`, the registry, the settings keys, the Python locks, `pack_plugins`, `release.py`, the profile's package list; the contract suite in the adapter packages' kit (5.15: the shared classes, the `open_store` fixture's contract, how to run them against one's own adapter), and the registry that always raises for a missing database, unlike the channel registry, on purpose | install path | yes | after the restart her `ensure` creates nothing and changes nothing (same MongoDB, same database, same records); `audit.verify_documents` passes; the start fails with `DATABASE_ADAPTER_NOT_INSTALLED` in a demo profile without the package |
+| B15 (replaced by decision 9) | the suite reset (7.4) | tests only | no | before and after: test count and run time on the double, the landing run's (7.4) |
 
 **The stand-in is checked against the meaning table, not trusted.** From B1b the unit run also runs the shared
 contract classes on the MongoDB adapter over the stand-in's client, beside the in-memory adapter: one `open_store`

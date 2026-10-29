@@ -553,6 +553,59 @@ guards them. Tests that called the moved Store methods call the owner (13 files:
 `tests/test_role_error_words.py`: the owner reads their empty heads); a fixture that wrote a revision without its
 mutation id carries one (`tests/test_context_budget.py`).
 
+**B10, as designed before building (2026-10-29).** It builds the `audit` row and `redact_scope` in the five owners
+that lack it; nothing else in this section changes. Code names and lines are as of `0d785a2891e7`.
+- *The audit owner.* `audit.py` stays the module that owns `audit_events`, with its row's operations. The reads
+  outside it go through them, each with the same filter, fields, order and limit: `tools_week.py:238`, `:242`, `:272`,
+  `:273`, `dice.py:171`, `:175`, `memory_pilot.py:344`. Verify, trace and replay read other collections through the
+  maintenance surface (`record`, `records`, `restore`); replay's upsert (`audit.py:171`) is `restore`. `prune` reads
+  the kept heads as 5.7 says and the collection's size through `Store.size`.
+- *Erasure.* `privacy._erase`'s loop over five collections (`privacy.py:98-107`) becomes each owner's
+  `redact_scope(store, scope, deletion, epoch)`: `records.episodes`, `records.tasks`, `records.messages`,
+  `records.artifacts` (a row whose bytes were erased, `storage: 'erased'`, keeps its marks, ADR-105) and
+  `records.receipts` for `sink_receipts`. Each one replaces every record of the scope with the fields kept today
+  (one list, defined once in the shared records layer and used by all five), plus `deletion_id`,
+  `state: 'INVALIDATED'`, `delivery_state: 'REDACTED'`, `text: '[deleted]'` and the new epoch. The write is a
+  whole-record replace with no revision and no commit, as today: an erasure is a declared rebase, not a revision. The
+  audit chain's rebase (`privacy.py:123-132`) becomes the audit owner's `streams` and `redact_streams`: the same
+  streams, in `seq` order, the same rule for which payloads are redacted (the scope, the scope's episode and task
+  streams, the scope's session ids in a payload), the same new hashes. Proof (8.2): on a throwaway database, the
+  erasure path before and after keeps the same records field for field and ends on the same chain roots. It is never
+  run on her database.
+- *The touch fields* (decided with Xiaoman, 2026-10-29). She checks these names and lines on 2026-10-30, so B10 is
+  built after her check.
+  1. `state.COUNTER_FIELDS` (`state.py:58-60`) gains `'artifacts': ('last_sent_at', 'last_read_at')`. They are not
+     `DERIVED_FIELDS` (`state.py:65`), which are computed from a document's own content. Counter fields are left out
+     of `content_digest` (`state.py:74-76`), so `audit.verify_documents` does not flag a touch. The value stays in
+     the inline commit's payload (`state.py:89-90`, up to 16 KiB): kept, not checked. `put` keeps counter fields
+     (`state.py:187-189`), so a later put of an earlier read no longer rolls a touch back. The catalog declares both
+     fields.
+  2. Why these two: `mark_read` and `mark_sent` (`records/artifacts.py:194`, `:200`) write them outside a revision.
+     The six documents `audit.verify_documents` reported on 2026-10-29 (24 hours) differed only in them.
+     `last_sent_at` drives expiry (`media_life.py:91`, falling back to `created_at`); `last_read_at` orders the
+     quota refusal (`received_files.py:125`, `:152-158`).
+  3. `mark_read` and `mark_sent` stay an update: a `put` that keeps a field cannot write that field's first value
+     (`store/mongodb.py:483-484`, `store/memory.py:489-490`). A contract case pins it.
+  4. `records.artifacts.save` refuses `reset_counters`. This is a new pattern: the other six owners' saves accept
+     it, and `watches.py:110` is its only caller. The reason: for a stored file, starting the counters over would
+     erase its last send or read and so move its expiry and its place in the quota order, and no write of an
+     artifact means that. Two checks, and neither stands in for the other: the refusal at run time, and a static
+     guard in the record-owner family (`tests/test_record_owners.py`, `AREAS` at line 25: `src/asuna` and `tools`)
+     that fails on any `reset_counters` passed for `artifacts`, with a new assertion that the owner forwards its
+     keyword arguments, so a pass-through cannot hide one. `store.put('artifacts', ...)` in `tests/` is outside the
+     guard by design.
+  5. `records.artifacts.replace` (a whole-row replace; `capabilities.py:96`, `:101`, `:111`) keeps the counter
+     fields as `put` does. A contract case pins it.
+  6. The contract cases go in `tests/test_store_counters.py`, whose test holds `set(BUMPS) == set(COUNTER_FIELDS)`
+     (lines 22-23); `BUMPS` gains `artifacts`.
+  7. `audit.verify_documents`' docstring (`audit.py:103-107`) says inline commits are compared by value; the code
+     compares `content_digest`. The docstring is corrected.
+- *With it* (her asks of 2026-10-29): the 15 read cases where both sides returned no rows (B8 14, B9 1) get
+  synthetic records on a throwaway database, so old and new compare rows; the equivalence report lists "both sides
+  0 rows" as not covered.
+- *After the restart* (8.3): `audit.verify_documents` over the commits since the restart: none differ. Over the 24
+  hours before: the six artifacts that differed only in a touch field now compare equal.
+
 **The shared layer's own surface** (no collection's owner; 21 map rows): `Store.put` and `Store.audit` (stay; owners
 call `put` through `save`, every module calls `audit`), `Store.ensure` (replaces `migrate`), `Store.recover_commits`,
 `Store.seed` (tests), the **maintenance surface** (`store.maintenance.record(collection, id)`,

@@ -88,7 +88,7 @@ account is not measured here.
 - **A folder per person is too much.** Open, every stranger who speaks once in a large group would get a folder made
   at start. The working folder is made when a task of hers first needs it, not at admission.
 - **Admission gets an end.** A member who left the group, and a DM nobody wrote in for a long time, stop being
-  admitted; their history stays hers. A member has left when the platform says so (QQ's `group_decrease` notice,
+  admitted; their history stays hers (the rule to test is item 3 under `Before building`; this line is kept for history). A member has left when the platform says so (QQ's `group_decrease` notice,
   which the adapter already passes on, `qqadapter/notices.py`); never because a member list or a lookup lacks them
   (the incident below).
 - **Cost is the owner's:** every admitted line can wake her relevance gate (a model call). The block lists are the

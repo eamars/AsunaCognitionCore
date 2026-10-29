@@ -1162,3 +1162,111 @@ operations (section 4).
 Could not be designed here: nothing of the interface. Two numbers are measured only when built (the contract suite's
 run times and the unit run's time on the double), and the per-batch facts of her data (8.3 step 5) are read only
 when each batch runs; the rules that turn them into decisions are on this page.
+
+---
+
+## 12. The rest in one piece, as built (decision 9, 2026-10-29)
+
+Built on branch `claude/adr104-finish` from main `0d785a2891e7`, in the order of the build brief
+(`<data>/private/adr104-research/brief-finish.md`). Counted with `git grep` at `0d785a2891e7` and at the branch's tip.
+
+**The catalog.** Every collection the core uses is declared and `pending` is gone. The fifteen that were pending
+carry the fields the code writes or names in a condition, sort or projection: `audit_events` (its `payload` an
+object, and as paths only the payload fields a condition, sort or projection names), the three `affect_*` ledgers
+(insert only, versioned), `stickers`, `sticker_pool`, `sticker_memory` (the fields of their plain unique indexes
+required), `watches`, `notes`, `developer_inbox`, `group_members`, `host_stops`, `switches`, `own_mutes`,
+`questions`. The eight undeclared ones are plain collections, not versioned and without a validator, as their records
+carry no `schema_version` (the survey): `memory_tiers`, `memory_shadow` (whose index `memory_pilot` made itself is
+now declared, `row_1_at_1`), `crossing_words`, `memory_fires`, `carried_counts`, `carried_days`, `carried_sections`,
+`missed_looks`. For all 23 the declared index names, keys and uniqueness equal those on her database (the lead's
+survey, `<data>/private/adr104-evidence/finish/catalog-survey.txt`), so `ensure` makes and drops nothing there.
+`payload.context` is not declared: some records hold it as an object and some as text (the survey; `native_worker`
+writes text). The one read that asked by it (the memory page's newest prepared context of a turn with this person at
+this epoch) is `audit.prepared_for`: it reads `context.prepared` records of the scope newest first, in pages of 200
+ordered by `(occurred_at, _id)`, and compares person and epoch in Python, at most 24 found, as the replaced read's
+limit. `sink_receipts` declares `scope_key` (erasure's fence); `artifacts` declares its two touches as counters.
+
+**The owners.** Each collection is reached only through its owner (the catalog's `owner`): `developer_inbox`,
+`group_members`, `own_mute`, `switches`, `watches`, `host_stops` (with `missed_looks`), `notes`, `questions`,
+`stickers` (shelf, pool and the stickers she knows), `affect` (its three ledgers), `audit` (`audit_events`: every read
+outside `Store.audit` and `recover_commits`; `prune` reads the kept heads as 5.7 says and the size through the
+handle), `memory_tiers`, `memory_pilot`, `crossing` and `carried`. Functions that took a database handle take the
+store (`visibility`, `scene_links`, `understanding`, `familiarity`, `peer_context`, `skills`, `outbound_media`,
+`people`, `history_query`). Erasure is each owner's `redact_scope` (episodes, tasks, messages, artifacts, receipts),
+with the audit's streams rebased by `audit.redact_streams`. Verify, trace and replay read other collections through
+the store's maintenance surface (`record`, `records`, `restore`), used only by `audit.py`; `restore` writes a replayed
+record as the shared layer checks every record. `Store.get`, `identity` and `public_messages` are gone, and
+`records.on` with them. `reflection_map` no longer lists the database's collections (every declared one is made by
+`ensure`). At the base, `store.db` stood on 230 lines in 42 files of `src/asuna` (stickers 32, affect 19, questions
+14, notes 13, native_api 12, crossing 12, audit 11, reflection_map 10, tools_week 9, watches 8, carried 8, role_tools
+7, the rest 6 or fewer each), a `db` handle on 118 lines of the fifteen modules that passed one, `getattr(store,
+'db')` twice, `self.db` 7 times in `state.py` and `people.py`, a store's `.client` 5 times, 7 database commands,
+`MongoAdapter` named 6 times outside the store, a driver imported in 7 modules, `records.on` 7 times, and in `tools`
+`store.db` or `records.on` 12 times; at the tip each is 0.
+
+**The registry and `Store`.** `asuna.store.adapters` opens the kind the settings name, `mongodb` when they name none,
+importing `asuna.store.mongodb` when it is first asked for (the one place naming it). `Store(config, database)`
+opens its adapter through the registry (the same client timeouts and write concern as before) and has no `db` or
+`client`; `close` closes the adapter; `ping` answers through it. `Store.over(checked, config, name)` builds a store
+over a shared layer already built and opens nothing: the offline checks' fake store (`tests/p2_summary_loop_cases.py`)
+is its one use. The host lease opens its collection through the registry with its own 10 s operation limit
+(`database_timeout_ms`). A driver error reaches the core only as the store's errors (`affect`, `channels`,
+`native_worker`'s settings check, whose ping now says the store's `DATABASE_UNAVAILABLE` text). Her read tool
+`dbread` keeps its own client, its form and `Reader.db`; `development_database_read` reads through it
+(`dbread.development_rows`, the same refusal texts). Outside `store/mongodb.py` and `dbread.py` nothing in
+`src/asuna` imports `pymongo`, `bson` or `gridfs`.
+
+**Words.** `fields` given a dict is refused (`QUERY_FIELDS_FORM`). One word was added: `HoldsNone(values)`, a list
+holding none of the values (missing included), the complement of `HoldsAny` (MongoDB's `$ne`/`$nin` on an array),
+for the questions' `told_in` check, which had no word.
+
+**The None rule** (section 4) holds in every owner: a parameter not given is `ANY`; a fence or a bound given None
+finds nothing without a read; a value condition given None finds the field null or missing; exclusions (`besides`,
+`not_*`) and options (a search, names, files, asides, the history search's window and cursor parts) keep their
+meaning. The places whose answer changes: `records.scenes.by_scope` with epoch None finds no conversation (it found
+any of the scope; the summary lane then says `SUMMARY_SCENE_STALE`); a message position or time bound given None finds
+nothing (it set no bound; callers pass a default, `crossing`'s corrections and `places`' visit answer among them); a
+required bound given None finds nothing instead of the empty-range refusal (`woken`, `mentions`, `quoted`,
+`channel_inbound`, `in_flight_scenes`, tasks' `created`, `finished_since` and `lease_expired`, plans' `due`); a list
+fence given None finds nothing (it set no condition; no caller passes one; `memories.readable` and `web_page` with
+pairs None found every alive memory of the character); a value condition given None is null or missing (it set
+none); `receipts.sink_window` with a bound None finds nothing; `tasks.paused(since=None)` finds none (the restarts
+block of a stop record without `down_at` listed every host-restart pause); `switches.changed`, `notes.count_day`,
+`affect.events_of` and `memory_pilot.rows` given None find nothing; `own_mute.get` of a scene None finds nothing (it
+raised a TypeError); `switches.on` with a scene or person None finds nothing (it was "any"). Call sites that passed
+None to mean "not given" omit the parameter (`context`, `lines`, `questions`, `waiting`, `channels`). No condition was
+added that a replaced read did not write.
+
+**The touches** (B10 items 1 to 7): `state.COUNTER_FIELDS` and the catalog's counters hold artifacts' `last_sent_at`
+and `last_read_at`; a put and `records.artifacts.replace` keep them; `records.artifacts.save` refuses
+`reset_counters` (`ARTIFACT_COUNTERS_KEPT`); `mark_read` and `mark_sent` stay updates.
+
+**The static check** (`tests/test_store_boundary.py`, by AST over `src/asuna` and `tools`, imports resolved, relative
+ones included): the driver only in the adapter, the registry and `dbread` (and two tools with their own client, each
+with why: `cleanup_test_databases.py`, and `memory_pilot_report.py`'s `--drop`); `Store` defines no `db` or `client`;
+no `db` or `client` read on a store, by attribute or `getattr`/`hasattr`; `adapter` and `checked` only in `store/`
+and `state.py`; `maintenance` only in `audit.py`; a collection named to a store's `collection` or `put` only in its
+owner, an unresolved name passing only as a parameter or the module's own constant in the four modules that choose
+among their own collections (5.12) or in the shared layer (a View's collection is the parameter its constructor
+keeps); no `reset_counters` (or a `**` splat) passed for artifacts, and the owner forwarding its keywords. At the tip
+it finds nothing: 113 collection calls resolve to their owner, the rest are `affect`'s parameters and the View's.
+`tests/test_record_owners.py` keeps its census of direct calls and of the blob store.
+
+**Tests.** No unit test needs a database. The registry and `dbread` refuse to open one in a unit run
+(`DATABASE_IN_UNIT_RUN`, `ASUNA_UNIT_RUN=1`, inherited by every process the run starts); `tests/conftest.py` keeps
+its `.invalid` address and nothing else of the database. About 920 unit test functions that needed one are deleted;
+those whose break would lose her data, leak private data or let two Hosts run, or that guard a rule Xiaoman signed,
+run on MongoDB in `integration/` (the table, with each test's rule or harm, is
+`<data>/private/adr104-evidence/finish/kept-tests.md`): the audit chain, erasure, forgetting, the host lease, message
+order, recall, the None rule, the BUMPS table and the touches, the required unique fields, the lane fault counts
+(already there), and in `integration/world/` 61 guards of her turns on the fixture world (owner-private material,
+fences, credentials, the machine's details, crashes and restarts). `integration/conftest.py` gives a throwaway
+database through the registry (`store`, and `world` with the fixture world and a turn's settings; in a module marked
+`world`, `store` is the world; every such store has `raw`, the same database through the driver).
+`integration/store_contract.py` runs on MongoDB only; the comparison with the in-memory adapter, the unit contract
+run, the stand-in, its skip list, the timing gate test, mongomock and hypothesis are gone, and so are
+`tools/adr104_equivalence.py` and `tools/probe_qq_admission.py`. The in-memory adapter stays only as the fake under
+the five offline checks (`tests/fake_collections.py`); the p2 cases are a real `Store` over it. The p1c check keeps
+`asuna.people` out of its run on purpose: its cases read the digest by names (`history_query`'s fallback without
+People), which People had left only by accident (the cases put `src/asuna` on the path, whose `queue.py` shadowed the
+standard library's that pymongo imported through `state.py`).

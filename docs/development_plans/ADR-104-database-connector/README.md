@@ -36,7 +36,7 @@ and design.md's sections 6, 7.3, 7.4 and batches B10 to B15.
 
 1. The database connector is its own package, beside the core, as the QQ Bot and NapCat adapters are.
 2. Another user can connect a different database.
-3. The connector interface accommodates future expansion.
+3. The connector interface accommodates future expansion. (Decision 9: on a best-effort basis; the modular design is the goal, not a second database proved against it.)
 4. "Similar to the code cleanup".
 5. **Unit tests stop at the adapter** (the owner, 2026-10-27, on hearing that the suite runs about 1,500 tests
    against the MongoDB server her live data is on): "I object the idea of using the real DB test from its root.

@@ -568,7 +568,7 @@ that lack it; nothing else in this section changes. Code names and lines are as 
   and lists them. Seven carry no operation in the census (`tools_week.py:238`, `:242`, `:272`, `:273`, `dice.py:171`,
   `:175`, `memory_pilot.py:344`): the builder gives each the row's operation that fits, or stops and reports. A static
   guard in the record-owner family then holds it: no read of `audit_events` in `src/asuna` or `tools` outside
-  `audit.py` (appends through `Store.audit` are the shared layer's); an exemption names its reason. Verify, trace and replay read other collections through the
+  `audit.py`; the shared layer's own reads are not owner reads: `Store.audit` (the previous record of a stream) and `Store.recover_commits`, as `SHARED_FUNCTIONS` in `tests/test_store_boundary.py` names them; any other exemption names its reason. Verify, trace and replay read other collections through the
   maintenance surface (`record`, `records`, `restore`); replay's upsert (`audit.py:171`) is `restore`. `prune` reads
   the kept heads as 5.7 says and the collection's size through `Store.size`.
 - *Erasure.* `privacy._erase`'s loop over five collections (`privacy.py:98-107`) becomes each owner's

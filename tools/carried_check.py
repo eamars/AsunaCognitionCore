@@ -22,8 +22,9 @@ from asuna.state import Store                 # noqa: E402
 
 
 class ReadOnly:
-    """What carried() needs of a store, with no way to write: the owners' collections of a store on her database
-    (her heads through records.heads, her tiers through memory_tiers)."""
+    """What carried() needs of a store: the collections of a store on her database, for the owners' reads (her
+    heads through records.heads, her tiers through memory_tiers), and no `put` or `audit`. It does not stop writes:
+    `collection` is the store's own, whose handles can write; the checks only read through the owners."""
 
     def __init__(self, store, config):
         self.store, self.config = store, config

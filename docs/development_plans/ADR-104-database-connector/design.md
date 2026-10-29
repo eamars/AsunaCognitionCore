@@ -500,7 +500,12 @@ which the map named so. None follows the rule above: its fences are the task and
 scope or scopes and the channel; its value conditions a kind, a state, a storage and a tool. The replaced reads that
 met a fence of None as "missing": a task's tool records when the task has no `intent_revision` (`tasks.observations_of`
 passes `task.get(...)`), a channel's group actions for a channel of None, and an erasure of a scope of None; each now
-finds or changes nothing. The stored names `storage: 'gridfs'` and `gridfs_id` are `records.artifacts.STORED` and
+finds or changes nothing. On her database on 2026-10-29 (a count at one moment, not an invariant): no task lacks
+`intent_revision` (`tasks`, 1,360), while 68 `artifacts` rows with a `task_id` lack it themselves (the replaced read,
+given the task's number, never matched them either; a caller taking the number from the artifact would change that);
+no `group_action` row lacks `channel_id` (`artifacts`, kind `group_action`, 9 rows); 188 `artifacts` rows lack
+`scope_key`, and of those 0 are stored or expired (`storage` is `gridfs` on 1,258 rows and missing on 33,476; no row
+is `removed`), so an erasure given None reached none of them. The stored names `storage: 'gridfs'` and `gridfs_id` are `records.artifacts.STORED` and
 `BLOB_FIELD`, and no other module writes them. `blobs.py` holds the blob owner's operations: `BlobStore.put_stream`
 (and `put`, `put_once`, `restore`, which read back whole as before) streams into `blobs.write`, reads back through
 `blobs.open` in `STREAM_PIECE` pieces, compares hash and size, deletes on mismatch, then writes the row through
@@ -528,7 +533,9 @@ and reads through `by_account`. None follows the rule above: its fences are a he
 key, a scope, a persona, a running record (`slug`), a person, an account and its platform, a conversation; its value
 conditions an idea's state, the mutation that last wrote an entry, a section (`sid`) and a body's hash (a journal
 revision holds no `body_sha256`, so a hash of None finds the section's revisions, as the replaced equality did). A
-required mutation id given None finds nothing (the replaced `{mutation_id: None}` matched revisions without one). A
+required mutation id given None finds nothing (the replaced `{mutation_id: None}` matched revisions without one); on
+her database on 2026-10-29 (a count at one moment, not an invariant) no revision lacks one (`state_revisions` 1,541,
+`journal_revisions` 765). A
 prefix read (`with_prefix`) is `StartsWith`: where the replaced read wrote one regular expression with alternatives
 (`^relationship:(a|b)\|`, familiarity and `understanding._elsewhere`), the owner sends one anchored prefix per person
 (`$in` of prefixes, with `$type: 'string'`, StartsWith's own form); the same heads, the same `IXSCAN` on `_id`. Two

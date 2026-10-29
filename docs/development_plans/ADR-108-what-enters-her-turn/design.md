@@ -15,9 +15,15 @@ asks the worker `session`, `index.js:1232-1245`), then the guards (synchronous: 
 | Today | After |
 |---|---|
 | guard: not in this conversation → refused | unchanged (layer 0; it is synchronous and cannot ask the worker) |
-| guard: schema (`argsRefusal`, `tool-args.js`) → refused alone, no audit row | removed from the guard |
-| `defineTool` wrapper: DSH's own validation (never reached after the guard) | replaced on her tools (B0 checks it is honoured; R3 makes it supported) |
-| `execute` → worker `role_tool` | `execute`: repair a copy (§4), `validateArgs` on the copy, then worker `role_tool` with `args` (repaired), `given` (as she wrote it, for the record) and `violations` |
+| guard: schema (`argsRefusal`, `tool-args.js`) → refused alone, no audit row | removed from the guard at B4 (kept through B3) |
+| `defineTool` wrapper: DSH's own validation against the declared schema (never reached after the guard) | unchanged; it validates the permissive declared schema (§4), so it passes every shape the program repairs and refuses what the program never accepts |
+| `execute` → worker `role_tool` | `execute`: repair a copy (§4), `validateArgs` on the copy against the strict schema the program keeps, then worker `role_tool` with `args` (repaired), `given` (as she wrote it, for the record) and `violations` |
+
+Two schemas per tool: the strict one (today's specs, kept in the program beside the repair table and shipped with
+`role_tool_specs` for `execute`) and the declared one derived from it by the repair table (fields the table can fill
+lose `required`; fields the table parses are declared `json`). One source, so the two cannot drift; a test holds
+that every field the declared schema relaxes has a repair entry and a description stating the strict form. R3 (a
+supported normalize hook in DSH) would let them be one schema; nothing waits on it.
 | worker `RoleTools.call`: first failure raises | worker: layers 0-5 below; one `Refused` whose record keeps every code |
 
 ### 1.2 The layers
@@ -146,8 +152,12 @@ both layers read one call. The table is data in `role_tools.py`, shipped with `r
 | delegate without `title` (9) | the brief's first sentence cut to 64 at a sentence end | 「没写 title：用了 brief 的第一句：<title>」 (program-made title, not her prose echoed in a refusal) |
 | note `note` for `text` (4), `place` for `to` (3) | renamed | nothing |
 
-`required` is dropped for `doc`, `do`, delegate `title` and a part's `kind`; their descriptions say what the program
-uses when they are missing.
+In the declared schema (what DSH validates and the model reads) `required` is dropped for `doc`, `do`, delegate
+`title` and a part's `kind`, and `parts` is declared `json` so a list written as a string passes DSH's validation and
+reaches `execute`. The strict schema inside the program keeps them required and `parts` a list of objects, and
+`execute` validates the repaired copy against it. Each relaxed field's description states the strict form and what
+the program uses when the field is missing, because the model reads only the declared schema. This change is a spec
+change: it rides on B4's one cold request.
 
 ## 5. Marks and wake words (D3, D5)
 

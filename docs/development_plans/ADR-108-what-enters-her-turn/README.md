@@ -24,7 +24,7 @@ The six findings, each with the invariant it breaks:
 | 2 | `write_document`'s `from` (别人说的, 主人定的) records a claim as someone's with no check that such a line exists (`memory_tiers.py:56-61`, `727-732`). A false claim came back in 15 compaction summaries. | A record that says someone said something points at what they said; a summary's claim keeps where it came from. |
 | 3 | DSH's adapter sends every user-role message as text only and drops `source` (`dsh-llm-pi-ai/lib/index.js:1362-1370`). A live line, a program notice, a checkpoint and the runtime context differ only by text format. | Every message she reads says whose it is. |
 | 4 | Limits state a soft number and never the hard one (think: 120 stated, 360 refused); between them "这次照收了". Checks stop at their first failure across two layers; 156 failures (5.7%) were a second refusal of another class for the same tool in the same turn. One refusal kind is 82% her own words (`config.cut_offer`). The 102 schema refusals are interface shape (missing `doc`, the `from` enum, missing `do`, `parts` as a string, missing `title`). | A number she reads is the rule the program applies; a refusal says everything the program knows is wrong; the schema asks only for what the program cannot work out. |
-| 5 | Program-woken turns have 3x the multi-failure rate of person-woken turns (the lead's figure); incident A (a task result) and the 19:45 group turn (a visit, 23 calls, 5 failed) are program-woken. Every turn's context head carries `speaker`, set from the event's person (`context.py:1340`, `people.relabel`), and on a program wake that person only authorized the turn. | `speaker` names someone who is speaking. |
+| 5 | Program-woken turns have about 3x the multi-failure rate of person-woken ones (structural survey Q7: 2 or more failures in 11.6% of program-woken turns, against 3.7% for person lines delivered normally); incident A (a task result) and the 19:45 group turn (a visit, 23 calls, 5 failed) are program-woken. Every turn's context head carries `speaker`, set from the event's person (`context.py:1340`, `people.relabel`), and on a program wake that person only authorized the turn. | `speaker` names someone who is speaking. |
 | 6 | No stored record shows a model step's request; Host report folders keep 5 starts (about 3 hours). | (none: a question of proof) |
 
 Her steps read 92.2% of their input from cache. A change to tool specs or the system prompt costs one cold request
@@ -160,12 +160,25 @@ left valid (design.md §1):
 5. The effect. A failure here (a race, a store fault) is one refusal, as today.
 
 The schema check moves out of the guard, which is synchronous and runs after `tools/pre-execute` (dsh-tools
-`prepareExecution`), into her tools' own `execute`, which is async and ours (`index.js:1414-1445`): it repairs a copy
-of the arguments, validates it with DSH's `validateArgs`, and hands both the repaired arguments and any violations to
-the worker, which builds the one refusal. DSH's `defineTool` wraps `execute` in its own validation; until DSH offers
-a supported way around it (R3), the plugin replaces that wrapper on the tool objects it registers (B0 checks the
-pinned DSH honours it). The guard keeps only layer 0's "not in this conversation". Every refusal past layer 0 then
-has a `role_tool` audit row with its codes (today 206 have none).
+`prepareExecution`), into her tools' own `execute`, which is async and ours (`index.js:1414-1445`). DSH's `defineTool`
+wraps that `execute` in its own validation against the declared schema, and the pinned DSH is built on as it is
+(AGENTS.md), so the work is split between two schemas:
+- **The declared schema** (what DSH registers, validates and shows the model) is permissive: `required` only for what
+  the program cannot infer, and types widened to the shapes she writes that the program repairs (`parts` declared
+  `json`, which DSH's subset already has, as set_policy's `value`; `doc`, `do`, delegate `title` and a part's `kind`
+  optional). DSH's own validation then passes every shape we accept and still refuses what we never accept.
+- **The strict schema** stays inside the program, beside the repair table. Our `execute` repairs a copy of the
+  arguments, validates the copy fully against it (DSH's `validateArgs`, or our own), and hands the repaired arguments
+  and every violation to the worker, which adds the other layers' problems and builds the one refusal.
+
+The guard keeps only layer 0's "not in this conversation". Every refusal past layer 0 then has a `role_tool` audit
+row with its codes (today 206 have none). Cost: the declared-schema change is a spec change and rides on B4's one
+cold request, with the other spec changes.
+
+The risk this leaves: the model reads the declared schema, so a permissive declared schema must still say what the
+program wants. Each widened field's description carries the strict form (「parts：一个列表，每条一个对象」;
+「doc：文档名；不写时按 section 找」), and the schema refusals of the five shapes in B4's reading show whether the
+descriptions carry it.
 
 The worker's general checks (layers 2-3) apply to every tool from the first batch; a handler's own checks collect
 only once that handler is split into a check part and an effect part (the tools with most failures first:
@@ -204,7 +217,8 @@ only.
 - Field synonyms seen in refused calls (`note` for `text`, `place` for `to` on note): accepted, from one declared
   table shipped with the specs.
 
-`required` leaves `doc`, `do`, `title` and a part's `kind`. Cost: B4's one cold request.
+In the declared schema `required` leaves `doc`, `do`, `title` and a part's `kind`, and `parts` is declared `json`
+(D4b); the strict schema inside the program keeps them as they are. Cost: B4's one cold request.
 
 ### D5. A program-woken turn says what woke her and whose words its event holds
 
@@ -246,7 +260,8 @@ exported; it would get its own ADR.
 - Program-woken turns say who wrote their event.
 - Cache: one cold request per open conversation at B4's install (tool specs); nothing else touches the prefix.
 - Reversed: ADR-054 "What she reads names only the ask" (owner) and the offered cut (her ask); ADR-079 §9.2 numbers
-  only where quotes are carried. Changed: the guard's schema refusal (tool-args.js) moves into her tools' execute.
+  only where quotes are carried. Changed: the guard's schema refusal (tool-args.js) moves into her tools' execute, against a strict schema
+the program keeps; the declared schemas become permissive.
 
 ## 4. Requests to the owner for DSH
 
@@ -256,7 +271,7 @@ DSH is the owner's (pinned, `tools/dsh-inline/source.json`); none of these block
 |---|---|---|---|
 | R1 | The checkpoint preamble can be the engine's own | `frameSummary` reads the preamble from the engine (`this.constructor.CHECKPOINT_PREAMBLE`, a static field of `BasicCompactionEngine`), so `RoleCompactionEngine` sets it | Today every checkpoint opens in English with "treat as established background", which presents the compactor's account as confirmed, the opposite of D3's line, and is outside the one-language rule |
 | R2 | Runtime-context snapshots are not added to a lane that suppresses the runtime context | `suppressRuntimeContext()` also stops the snapshot messages (`working-directory`, `approval`/`sandbox` policy) | 959 such messages in her workspaces' session folders (action-brain sessions included), 276 right after her own TURN notices; deployment details do not belong in her context (AGENTS.md). Conditional on B0 showing they reach her requests |
-| R3 | A tool can normalize its arguments before DSH validates them | a `defineTool` option `normalizeArgs(args)` run before `validate`, or `validate: false` | D4b/D4d replace `defineTool`'s execute wrapper on her tools today; this makes it supported |
+| R3 (optional) | A tool can normalize its arguments before DSH validates them | a `defineTool` option `normalizeArgs(args)` run before `validate` | Not needed by any batch: D4b works with a permissive declared schema and a strict one kept inside the program. With this hook the two schemas could be one, declared and strict |
 
 Not requested: `source` reaching the model as data (D3 writes it into the text), the role mapping, the `Error: `
 prefix on tool errors, what `request/header` records (D6), the surface order of appended messages (D1 holds instead).
@@ -268,14 +283,17 @@ verdict is pass or fail; a fail is looked at before the next batch builds on it.
 
 | Batch | What | Prefix cost | Proves, and how |
 |---|---|---|---|
-| B0 | Facts, on an isolated demo profile with synthetic inference: `step/start` precedes `agent/request`; a line held over an open step lands after the step's result; replacing `defineTool`'s execute wrapper is honoured and DSH's validation does not run; whether runtime-context snapshots reach a character request; whether `source` is on the messages at `llm/stream` | none (no live change) | each a yes or no, recorded in this ADR; R2 and R3 are sent or dropped on them |
+| B0 | Facts, on an isolated demo profile with synthetic inference: `step/start` precedes `agent/request`; a line held over an open step lands after the step's result; DSH's validation passes a call in each widened shape against the permissive declared schema, still refuses one outside it, and our `execute` receives the passed call as she wrote it; whether runtime-context snapshots reach a character request; whether `source` is on the messages at `llm/stream` | none (no live change) | each a yes or no, recorded in this ADR; R2 is sent or dropped on it |
 | B1 | D1: hold over an open step (`navigation.js`, `pairing.js`) | none | in her session files after install: channel lines between a step's `asuna/stage` mark and its assistant message, 0 (today in 94% of turns with a mid-turn line); every held receipt acknowledged; hold time at most its step plus a second |
 | B2 | D3 marks and the checkpoint head line; D5 `woken_by_program`; the compaction instruction's line numbers (D2, summary part) | none | notices, repairs and checkpoints written after install all start with their mark; no program-woken notice carries `speaker`; share of new checkpoint items that carry a 〔n〕 (counted by the program, numbers only) |
 | B3 | D4b layers and D4c texts: the check in her tools' execute, the worker's collected layers, the split of the nine handlers, `INSTEAD`, one predicate for listed values | none (tool results only) | same-tool second refusals of another class in the same turn below 2% of failures (5.7% today); no refusal holds 20 or more consecutive characters of the call's prose (program check, numbers only); every refusal past layer 0 has an audit row with codes |
-| B4 | Every spec change in one install: D4a wording, D4d `required` and repairs, D2 `line`; every line numbered | one cold request per open conversation | the five schema shapes refused near 0 (102 refusals in 11 days today); length refusals and soft acceptances per field against the week before; cache readout shows one cold first step per conversation, then the usual share; every 别人说的 / 主人定的 written after install resolves to a line, and the unanchored ones are recorded as hers with the result line |
+| B4 | Every spec change in one install: D4a wording, the permissive declared schemas with D4d's repairs (and the guard's schema refusal removed), D2 `line`; every line numbered | one cold request per open conversation | the five schema shapes refused near 0 (102 refusals in 11 days today); length refusals and soft acceptances per field against the week before; cache readout shows one cold first step per conversation, then the usual share; every 别人说的 / 主人定的 written after install resolves to a line, and the unanchored ones are recorded as hers with the result line |
 | B5 | Only if B2's count warrants it: the program checks each 〔n〕 in a new checkpoint against the stored line's speaker and notes mismatches under the checkpoint | none | built or dropped on the measured mismatch rate |
 
-B1 and B2 can install together on one restart; B3 needs B0's answer on the execute wrapper; B4 is the only batch
+B1 and B2 can install together on one restart; B3 needs nothing from DSH. B3 keeps the guard's schema refusal: while
+the declared schemas are strict, a call that fails them would otherwise meet DSH's own English refusal before our
+`execute`. B4 widens the declared schemas and removes the guard's schema refusal in the same install, so schema
+problems join the one refusal from B4 on. B4 is the only batch
 with a prefix cost and carries every spec change at once.
 
 ## 6. Open questions
@@ -289,7 +307,7 @@ with a prefix cost and carries every spec change at once.
 4. Whether `understand_person`'s "他说的 / 你推的" split should take the same anchor; not in this ADR.
 5. The wording of every table in design.md is a draft for Xiaoman's reading; the reasons per field (§2) are written
    at build from the code that carries each text and checked against it.
-6. The 3x multi-failure rate of program-woken turns is the lead's figure; D5 addresses who is speaking, not the rest
+6. The about 3x multi-failure rate of program-woken turns (structural survey Q7: 11.6% against 3.7%); D5 addresses who is speaking, not the rest
    of that rate (turn rules, D4c's alternatives may cover some).
 7. B3's 2% threshold is an engineering guess from the survey's split (44 pure-argument chains of 156); it may move
    once B3's codes give a clean count.

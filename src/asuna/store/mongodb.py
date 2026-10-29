@@ -303,20 +303,11 @@ class MongoAdapter:
     """The adapter over one database of a client; `owns_client`: closing the adapter closes the client."""
     capabilities = frozenset({'vectors'})
 
-    def __init__(self, client, database, *, owns_client=False, handle=None):
+    def __init__(self, client, database, *, owns_client=False):
         self.client, self.owns_client, self.name = client, owns_client, database
-        self.db = handle if handle is not None else client.get_database(
-            database, codec_options=CodecOptions(tz_aware=True), write_concern=WriteConcern(w='majority', j=True))
+        self.db = client.get_database(database, codec_options=CodecOptions(tz_aware=True),
+                                      write_concern=WriteConcern(w='majority', j=True))
         self._blobs = None
-
-    @classmethod
-    def over(cls, db):
-        """The adapter on a database handle already held: through its client (times read aware) when it has one,
-        else the handle as it is."""
-        client = getattr(db, 'client', None)
-        if hasattr(client, 'get_database'):
-            return cls(client, db.name)
-        return cls(None, getattr(db, 'name', None), handle=db)
 
     @property
     def blobs(self):

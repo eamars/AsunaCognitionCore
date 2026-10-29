@@ -1,10 +1,10 @@
 """ADR-005 P2 离线用例：摘要能不能写进关系、能不能读进下一轮，用假集合真算一遍。
 
 本机 python3 tools/p2_offline_check.py 直接跑，不需要 Mongo、不需要 pytest。
-假掉的只有 import 期的第三方（bson/pymongo/httpx/jsonschema/msvcrt）；
+假掉的只有 import 期的第三方（bson/pymongo/httpx/jsonschema/msvcrt）和存储本身：Store 建在假库之上
+（Store.over，fake_collections 的内存适配器读写假库自己的行）；
 Store.put／audit／head／mutate、MemoryService.commit_understanding、ContextBuilder.prepare
 都是仓库里那份真代码在跑——过滤、排序、CAS、来源根遍历都是算出来的，不是断言出来的。
-真实 Mongo 下的同一批结论由 tests/test_p2_summary_loop.py 在隔离宿主复测，两者不互相代替。
 """
 import importlib
 import json
@@ -75,6 +75,7 @@ from asuna.context import ContextBuilder                       # noqa: E402
 from asuna.ingress import episode_id                           # noqa: E402
 from asuna.memory import MemoryService                         # noqa: E402
 from asuna.state import COLLECTIONS, Denied, Store             # noqa: E402
+import fake_collections                                        # noqa: E402
 
 PERSON = 'qq:A'
 SCENE = 'dm-a'
@@ -89,7 +90,7 @@ PERSONA_BODY = ('示例角色，24 岁。说话清淡直接，有一点不刻薄
                 '不算浪费。会被经历影响，允许自己改看法，不拿工作量证明自己值得被喜欢。')
 
 
-# ── 假集合：真算过滤／投影／排序，只按 pymongo 在本路径用到的那一小块 ──────
+# ── 假集合：用例自己回读时真算过滤／投影／排序（store.fake）──────
 def _lookup(doc, key):
     value = doc
     for part in key.split('.'):
@@ -191,17 +192,6 @@ class FakeCollection:
         cursor.rows = cursor.rows[skip:skip + limit] if limit else cursor.rows[skip:]
         return cursor
 
-    def count_documents(self, flt, limit=None):
-        found = sum(1 for doc in self.rows.values() if _match(doc, flt or {}))
-        return min(found, limit) if limit else found
-
-    def insert_many(self, docs, ordered=True):
-        for doc in docs:
-            self.insert_one(doc)
-
-    def distinct(self, key, flt=None):
-        return sorted({doc[key] for doc in self.rows.values() if key in doc and _match(doc, flt or {})})
-
     def find_one(self, flt=None, projection=None, sort=None):
         cursor = self.find(flt, projection)
         if sort:
@@ -210,60 +200,13 @@ class FakeCollection:
             return row
         return None
 
-    def aggregate(self, pipeline):
-        """Enough of a pipeline for the context's task-state query: $match, $limit, $project."""
-        rows = [dict(row) for row in self.rows.values()]
-        for stage in pipeline:
-            if '$match' in stage:
-                rows = [row for row in rows if _match(row, stage['$match'])]
-            elif '$limit' in stage:
-                rows = rows[:stage['$limit']]
-            elif '$project' in stage:
-                keep = [k for k, v in stage['$project'].items() if v]
-                rows = [{k: row[k] for k in keep if k in row} for row in rows]
-        return iter(rows)
-
-    def delete_many(self, flt):
-        gone = [key for key, doc in self.rows.items() if _match(doc, flt or {})]
-        for key in gone:
-            del self.rows[key]
-        return SimpleNamespace(deleted_count=len(gone))
-
-    def insert_one(self, doc):
-        if doc['_id'] in self.rows:
-            raise sys.modules['pymongo.errors'].DuplicateKeyError(str(doc['_id']))
-        self.rows[doc['_id']] = dict(doc)
-        return SimpleNamespace(inserted_id=doc['_id'])
-
-    def replace_one(self, flt, doc, upsert=False):
-        current = self.rows.get(flt.get('_id'))
-        if current is None or ('revision' in flt and current.get('revision') != flt['revision']):
-            return SimpleNamespace(matched_count=0, modified_count=0, upserted_id=None)
-        self.rows[flt['_id']] = dict(doc)
-        return SimpleNamespace(matched_count=1, modified_count=1, upserted_id=None)
-
-    def update_one(self, flt, pipeline, upsert=False):
-        """Enough for Store.put's revisioned write with counters: one $project of literals and kept fields."""
-        current = self.rows.get(flt.get('_id'))
-        if current is None or ('revision' in flt and current.get('revision') != flt['revision']):
-            return SimpleNamespace(matched_count=0, modified_count=0, upserted_id=None)
-        (stage,) = pipeline
-        doc = {'_id': current['_id']}
-        for key, value in stage['$project'].items():
-            if isinstance(value, dict) and '$literal' in value:
-                doc[key] = value['$literal']
-            elif key in current:
-                doc[key] = current[key]
-        self.rows[flt['_id']] = doc
-        return SimpleNamespace(matched_count=1, modified_count=1, upserted_id=None)
-
 
 class FakeDB:
     def __init__(self, rows_by_collection):
         for name in COLLECTIONS:
             setattr(self, name, FakeCollection(rows_by_collection.get(name, [])))
 
-    def __getitem__(self, name):          # Store.mutate 会走 db[collection]
+    def __getitem__(self, name):          # fake_collections 按名字取集合
         return getattr(self, name)
 
     def __getattr__(self, name):          # 没登记的集合（程序的小计数表）：像 Mongo 一样，用到才有，起初是空的
@@ -275,18 +218,17 @@ class FakeDB:
 
 
 def bind_store(rows_by_collection=None, workspace=True):
-    '''真 Store 方法绑到假库：put／audit／head／mutate／authorize 全走仓库实现。'''
+    '''真 Store 建在假库之上（Store.over，内存适配器读写假库自己的行）：put／audit／head／mutate／authorize 全走仓库实现。'''
     from asuna import memory_tiers
     memory_tiers.ENABLED = False      # the fake DB has no tier rows; tiered memory is checked on Mongo (test_memory_tiers*)
-    store = Store.__new__(Store)
-    store.config = {'character_id': 'demo', 'mongo_uri': 'mongodb://stub', 'database': 'fake', 'legacy_database': 'legacy',
-                    'allowed_databases': ['fake']}
+    config = {'character_id': 'demo', 'mongo_uri': 'mongodb://stub', 'database': 'fake', 'legacy_database': 'legacy',
+              'allowed_databases': ['fake']}
     if workspace:
-        store.config['task_mode'] = 'workspace'
-        store.config['chat'] = {'scene_id': SCENE, 'person_id': PERSON, 'workspace': '/task'}
-    store.name = 'fake'
-    store.fail_audit = False
-    store.db = FakeDB(rows_by_collection or {})
+        config['task_mode'] = 'workspace'
+        config['chat'] = {'scene_id': SCENE, 'person_id': PERSON, 'workspace': '/task'}
+    fake = FakeDB(rows_by_collection or {})
+    store = Store.over(fake_collections.checked(fake), config, 'fake')
+    store.fake = fake                 # the fake's own rows: what the store wrote, as the cases read it back
     return store
 
 
@@ -334,24 +276,12 @@ def head_pair(store):
 
 
 def audit_of(store, kind):
-    events = store.db.audit_events
-    # Real Mongo: attribute access would name a sub-collection, so tell it by its class's module
-    # (the offline sandbox has no pymongo package to import Collection from).
-    if type(events).__module__.startswith('pymongo'):
-        return list(events.find({'type': kind}).sort([('occurred_at', 1), ('seq', 1)]))
-    return [row for row in events.rows.values() if row['type'] == kind]
+    return [row for row in store.fake.audit_events.rows.values() if row['type'] == kind]
 
 
 def add_row(store, collection, row):
     '''走真 put：假库和真 Mongo（集合校验要 schema_version）都能收。'''
     store.put(collection, row, stream='p2')
-
-
-def seed_real(store, data=None):
-    '''把同一批夹具灌进真库（操作员那侧的定向检查用）。'''
-    for name, docs in (data or rows()).items():
-        for doc in docs:
-            store.put(name, doc, stream='p2')
 
 
 # ── 写入腿 ──────────────────────────────────────────────────────────
@@ -384,7 +314,7 @@ def w3_shown_but_unusable_is_not_cited():
                          ('换了纪元', {'policy_epoch': EPOCH + 1}),
                          ('不在 kind 白名单', {'kind': 'chat_chunk'})):
         store = bind_store(rows())
-        store.db.memory_units.rows[SUMMARY].update(patch)
+        store.fake.memory_units.rows[SUMMARY].update(patch)
         result = MemoryService(store).commit_understanding(episode(), '口径先不动。')
         assert result['state'] == 'COMMITTED', (label, result)
         assert result['auto_source_ids'] == [], (label, result)
@@ -395,7 +325,7 @@ def w3_shown_but_unusable_is_not_cited():
 
 def w4_foreign_monologue_still_denied():
     store = bind_store(rows())
-    store.db.memory_units.rows[MONO]['episode_id'] = 'ep-other'
+    store.fake.memory_units.rows[MONO]['episode_id'] = 'ep-other'
     try:
         MemoryService(store).commit_understanding(episode(), '随便写点什么。')
     except Denied as exc:
@@ -467,8 +397,8 @@ def w8_sources_bottom_out_at_real_messages():
     for source in sorted(ids):
         # 来源根可以是消息 _id，也可以是消息的 platform_event_id（Store.mutate 就是这么落根的）；
         # 两种都必须回读得到真实原文行，不接受凭空的编号。
-        assert (store.db.messages.find_one({'_id': source})
-                or store.db.messages.find_one({'platform_event_id': source})), \
+        assert (store.fake.messages.find_one({'_id': source})
+                or store.fake.messages.find_one({'platform_event_id': source})), \
             '来源根回读不到真实原文行：%s' % source
     assert {INBOUND, OUTBOUND} <= ids, '摘要盖的两条原文必须都在里面' % ()
     return '关系版本的每个来源根都能回读成真实 messages 行（不编造来源）'
@@ -531,13 +461,11 @@ def r4_relationship_read_path_untouched():
     return '读取腿没动关系口径：下一轮仍按 head 版本读'
 
 
-
-
 # ── P2 第二片：自适应触发、群内归属与更正 ────────────────────────────────
 import threading
 from datetime import datetime, timezone
 
-from asuna import summary_attribution, summary_trigger                  # noqa: E402
+from asuna import summary_trigger  # noqa: E402
 from asuna.dialogue_summary import DialogueSummarizer                   # noqa: E402
 from asuna.memory_indexer import MemoryIndexer                          # noqa: E402
 
@@ -694,12 +622,12 @@ def summarizer(store, evidence, lane, scenes=(GROUP,), moment=None):
 
 
 def pending_rows(store, scene_id):
-    return list(store.db.messages.find({'scene_id': scene_id, 'summary_batch_id': {'$exists': False}})
+    return list(store.fake.messages.find({'scene_id': scene_id, 'summary_batch_id': {'$exists': False}})
                 .sort('scene_seq', 1))
 
 
 def decide_for(store, scene_id, pending, moment, pooled=None, window_rows=8):
-    scene = store.db.scenes.find_one({'_id': scene_id})
+    scene = store.fake.scenes.find_one({'_id': scene_id})
     profile = summary_trigger.observe(store, scene, now_ts=moment)
     return profile, summary_trigger.decide(profile, pending, pooled_prior=pooled, now_ts=moment,
                                            window_rows=window_rows)
@@ -826,7 +754,7 @@ def t5_group_tick_saves_attribution_and_marks_sources():
     assert fix['target_resolution'] == 'reply_link' and fix['actor'] == PERSON, fix
     assert saved['trigger']['signals'], saved
     for row in data['messages']:
-        marked = store.db.messages.find_one({'_id': row['_id']})['summary_batch_id']
+        marked = store.fake.messages.find_one({'_id': row['_id']})['summary_batch_id']
         assert marked == saved['_id'], row['_id']
     assert 'summary.saved' in evidence.kinds(), evidence.kinds()
     assert '老陈' in lane.calls[0]['text'] and '小舟' in lane.calls[0]['text'], lane.calls[0]['text']
@@ -915,7 +843,7 @@ def a2_correction_marks_the_earlier_summary_as_stale():
     store = bind_store(stale_summary_rows())
     saved, evidence, _lane = _saved_group_summary(store)
     assert saved and saved['source_window'] == [12, 14], saved
-    old = store.db.memory_units.find_one({'_id': 'summary-old'})
+    old = store.fake.memory_units.find_one({'_id': 'summary-old'})
     assert old['corrected_by'] == ['in-%s-14' % GROUP], old
     assert old['body_markdown'] == '老陈说他周三去修雾灯。', '只追加标注，不改写旧转述'
     assert 'summary.corrected' in evidence.kinds(), evidence.kinds()
@@ -962,8 +890,8 @@ def e1_the_loop_actually_closes_in_a_group():
     roots = set(revision['processed_source_ids'])
     assert {row['_id'] for row in data['messages']} <= roots, roots
     for root in sorted(roots):
-        assert (store.db.messages.find_one({'_id': root})
-                or store.db.messages.find_one({'platform_event_id': root})), root
+        assert (store.fake.messages.find_one({'_id': root})
+                or store.fake.messages.find_one({'platform_event_id': root})), root
     assert audit_of(store, 'understanding.result')[-1]['payload']['auto_source_ids'] == [saved['_id']]
     return '群场景闭环跑通：触发→整理→保存→下一轮使用→登记成来源，每个来源根都回读得到原文'
 

@@ -2,9 +2,7 @@
 
 这里不依赖 Mongo 也不依赖 pytest：假集合真实现 $in/$gte/$lte/$lt/$ne/$regex/$and/$or、
 点号键、projection、多键排序与 count_documents，所以过滤、分页、整理结果都是算出来的，
-不是断言出来的。操作员在隔离宿主跑 pytest 时，这些用例也会跟着跑（见
- test_discussion_digest.py::test_offline_cases_all_pass）；本机用
- python3 tools/p1c_offline_check.py 直接跑同一套。
+不是断言出来的。python3 tools/p1c_offline_check.py 直接跑这一套（tests/test_offline_checks.py 也在 pytest 里跑它）。
 """
 import os
 import re
@@ -17,6 +15,10 @@ for _path in (os.path.dirname(SRC), SRC, HERE):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
+# The cases check the digest by names, without people.py's labels (history_query's fallback when People cannot be
+# loaded). People is kept out on purpose; it used to fail to load in this layout only by accident (src/asuna's
+# queue.py shadows the standard library's, which pymongo imported through state.py).
+sys.modules["asuna.people"] = None
 from asuna import discussion_digest as dd           # noqa: E402
 from asuna import history_query as hq                # noqa: E402
 from asuna import channel_kinds                      # noqa: E402

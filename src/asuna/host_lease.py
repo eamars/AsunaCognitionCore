@@ -57,7 +57,6 @@ def _utc(moment):
 class DatabaseLease:
     def __init__(self, config, *, persona=None, root=None, renew_seconds=RENEW_SECONDS):
         self.adapter, self.leases = _leases(config)
-        self.client = self.adapter.client
         self.me = host_id(root)
         self.holder = {'instance': self.me, 'host': socket.gethostname(), 'persona': persona, 'pid': os.getpid()}
         self.renew_seconds = renew_seconds

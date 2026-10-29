@@ -12,7 +12,7 @@ import sys
 import threading
 from datetime import datetime, timedelta, timezone
 from queue import Queue
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -57,7 +57,7 @@ def data_for(messages, scene_id=GROUP, kind='group'):
 
 
 def scene_of(store):
-    return store.db.scenes.find_one({'_id': GROUP})
+    return store.fake.scenes.find_one({'_id': GROUP})
 
 
 @contextlib.contextmanager
@@ -69,13 +69,6 @@ def frozen(moment):
         yield
     finally:
         proactive.now_ts = real
-
-
-def seed_real(store, data=None):
-    '''把同一批夹具灌进真库（操作员那侧的定向检查用）。'''
-    for name, docs in (data or data_for(calm_rows())).items():
-        for doc in docs:
-            store.put(name, doc, stream='p5')
 
 
 def event_of(row):
@@ -127,7 +120,7 @@ def run(store, row, moment=T0 + 60, config=None, can_run=True, block=ENABLED):
 # ── Q7①：有参与机会，而不是只有@才能跑 ────────────────────
 def q1_unprompted_message_can_get_a_chance():
     store = base.bind_store(data_for(calm_rows()))
-    trigger = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    trigger = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     decision, updated, evidence = run(store, trigger)
     assert decision['fire'], decision
     assert 'unprompted_group_message' in decision['signals'], decision
@@ -176,7 +169,7 @@ def q1_topic_line_reaches_the_role_context():
 # ── Q7②：钟点不拦（owner 2026-10-20）：群在深夜也聊，那边几点由她自己判断 ───────────────────
 def q2_the_clock_holds_nothing():
     store = base.bind_store(data_for(calm_rows()))
-    trigger = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    trigger = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     decision, _updated, _e = run(store, trigger, moment=NIGHT + 60)
     assert decision['fire'] and 'quiet_hours' not in decision['holds'], decision
     assert 'local_minutes' not in decision and 'urgent_cue' not in decision, decision
@@ -186,17 +179,17 @@ def q2_the_clock_holds_nothing():
 def q2_cooldown_does_not_touch_direct_questions():
     """冷却只作用在旁听行上：被@的那条走原唤醒路径，主动代码一行都不碰。"""
     store = base.bind_store(data_for(calm_rows()))
-    row = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    row = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     stub = stub_for(store, config_for(ENABLED))
     Chat._proactive_consider(stub, event_of(row), 'grp-1-13', {'state': 'COMMITTED'})
     assert not stub.pending.put_rows, '直接提问那轮不该被主动逻辑插手'
-    assert store.db.messages.find_one({'_id': row['_id']})['revision'] == row['revision']
+    assert store.fake.messages.find_one({'_id': row['_id']})['revision'] == row['revision']
     return '已唤醒的那轮（直接提问、已参与的接话）不经过分寸判断，行上一个字没改'
 
 
 def q2_foreground_task_and_queued_inputs_win():
     store = base.bind_store(data_for(calm_rows()))
-    trigger = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    trigger = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     decision, _updated, _e = run(store, trigger, can_run=False)
     assert 'foreground_busy' in decision['holds'] and not decision['fire'], decision
     stub = stub_for(store, config_for(ENABLED), queues={GROUP: ['queued-input']})
@@ -212,14 +205,14 @@ def rhythm_gate_blocks_fast_exchanges():
     fast = [g_in(GROUP, 21 + index, PERSON if index % 2 == 0 else PERSON_B,
                  '第 %d 条：标签就这么打' % index, T0 + index * 5) for index in range(6)]
     store = base.bind_store(data_for(fast))
-    trigger = store.db.messages.find_one({'scene_id': GROUP}, sort=[('scene_seq', -1)])
+    trigger = store.fake.messages.find_one({'scene_id': GROUP}, sort=[('scene_seq', -1)])
     decision, _updated, _e = run(store, trigger, moment=T0 + 30)
     assert 'dense_exchange' in decision['holds'], decision
     assert decision['dense_median'] < decision['quiet_after'], decision
     slow = [g_in(GROUP, 21 + index, PERSON if index % 2 == 0 else PERSON_B,
                  '第 %d 条：标签就这么打' % index, T0 + index * 120) for index in range(6)]
     store = base.bind_store(data_for(slow))
-    trigger = store.db.messages.find_one({'scene_id': GROUP}, sort=[('scene_seq', -1)])
+    trigger = store.fake.messages.find_one({'scene_id': GROUP}, sort=[('scene_seq', -1)])
     decision, _updated, _e = run(store, trigger, moment=T0 + 700)
     assert decision['fire'] and not decision['dense'], decision
     return '5 秒一条时闸门关掉机会，两分钟一条时放行——用的是 P2 那条场景自己的停顿线'
@@ -231,7 +224,7 @@ def no_timer_reopens_nothing():
     for forbidden in ('Thread(', 'Timer', 'time.sleep', 'sched'):
         assert forbidden not in source, '主动评估里不该出现定时器／线程：%s' % forbidden
     store = base.bind_store(data_for(calm_rows()))
-    trigger = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    trigger = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     assert run(store, trigger)[0]['fire']
     scene = scene_of(store)
     profile = proactive.observe(store, scene, now_ts=T0 + 86400, trigger=trigger,
@@ -245,7 +238,7 @@ def one_unanswered_attempt_per_topic():
     block = dict(ENABLED, min_interval_seconds=60, probe_interval_seconds=30)
     messages = calm_rows() + my_speech(GROUP, 20, '标签我可以自己写', T0 - 600, topic='topic-1')
     store = base.bind_store(data_for(messages))
-    trigger = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    trigger = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     decision, _updated, _e = run(store, trigger, moment=T0 + 60, block=block)
     assert 'topic_attempt_unanswered' in decision['holds'], decision
     assert decision['topic_attempts'] == 1 and decision['topic_responded'] is False, decision
@@ -262,7 +255,7 @@ def scene_cooldown_and_hourly_cap():
         + my_speech(GROUP, 30, '这个我熟', T0 - 1800, topic='topic-8') \
         + my_speech(GROUP, 40, '我来贴', T0 - 3500, topic='topic-7')
     store = base.bind_store(data_for(messages))
-    trigger = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    trigger = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     decision, _updated, _e = run(store, trigger)
     assert {'scene_cooldown', 'hourly_cap'} <= set(decision['holds']), decision
     assert decision['utterances_last_hour'] == 3, decision
@@ -291,15 +284,15 @@ def one_message_does_not_clear_another_request():
     messages = calm_rows(topic='topic-1') + my_speech(GROUP, 20, '标签我可以自己写', T0 - 600,
                                                      topic='topic-1')
     store = base.bind_store(data_for(messages))
-    before = dict(store.db.messages.find_one({'_id': '%s:speak:20' % GROUP}).get('event', {}))
+    before = dict(store.fake.messages.find_one({'_id': '%s:speak:20' % GROUP}).get('event', {}))
     other = g_in(GROUP, 21, PERSON_B, '相机那事还没定镜头', T0 + 10, topic='topic-2')
     base.add_row(store, 'messages', other)
     decision, _updated, _e = run(store, other, moment=T0 + 60, block=block)
     assert decision['fire'] and decision['topic_attempts'] == 0, decision
-    again = store.db.messages.find_one({'_id': '%s:speak:20' % GROUP})
+    again = store.fake.messages.find_one({'_id': '%s:speak:20' % GROUP})
     assert again.get('event', {}) == before and again.get('proactive') is None, \
         'B 那句不该动 A 那条话题上的记录'
-    trigger = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    trigger = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     decision, _updated, _e = run(store, trigger, moment=T0 + 61, block=block)
     assert 'topic_attempt_unanswered' in decision['holds'], decision
     return '状态按话题分开：别人的一句新话不会抹掉另一条话题上“已经试过没被接”'
@@ -308,11 +301,11 @@ def one_message_does_not_clear_another_request():
 # ── 挂钩本身：写什么、什么时候不写 ───────────────────────
 def unenrolled_scene_is_left_alone():
     store = base.bind_store(data_for(calm_rows()))
-    trigger = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    trigger = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     decision, updated, evidence = run(store, trigger, block=None)
     assert not decision['fire'] and decision['holds'] == ['not_enrolled'], decision
     assert updated is None
-    row = store.db.messages.find_one({'_id': trigger['_id']})
+    row = store.fake.messages.find_one({'_id': trigger['_id']})
     assert 'proactive' not in row and row.get('processing_outcome') is None, row
     assert not evidence.rows
     return '没开主动模式的场景一切照旧：旁听行不被改写，也不产生任何证据'
@@ -323,7 +316,7 @@ def row_without_time_is_not_guessed():
     messages[2].pop('occurred_at')
     messages[2].pop('received_at')
     store = base.bind_store(data_for(messages))
-    trigger = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    trigger = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     decision, _updated, _e = run(store, trigger)
     assert 'trigger_without_time' in decision['holds'], decision
     return '触发行读不到时间就照实拦下，不拿写入时间或序号冒充发生时间'
@@ -331,7 +324,7 @@ def row_without_time_is_not_guessed():
 
 def hook_enqueues_only_after_overheard_row():
     store = base.bind_store(data_for(calm_rows()))
-    row = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    row = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     stub = stub_for(store, config_for(ENABLED))
     with frozen(T0 + 60):
         Chat._proactive_consider(stub, event_of(row), 'grp-1-13', {'state': 'RECEIVED_NO_WAKE'})
@@ -339,7 +332,7 @@ def hook_enqueues_only_after_overheard_row():
     queued_event, episode = stub.pending.put_rows[0]
     assert episode == 'grp-1-13' and 'grp-1-13' in stub.enqueued
     assert queued_event['group_context']['wake_reason'] == proactive.WAKE_REASON
-    stored = store.db.messages.find_one({'_id': row['_id']})
+    stored = store.fake.messages.find_one({'_id': row['_id']})
     assert stored['processing_outcome'] == proactive.OUTCOME_WAKE, stored['processing_outcome']
     assert stored['proactive']['wake'] is True and stored['proactive']['holds'] == []
     return '旁听行落库后才评估，放行就把同一条事件按主动回合重新入队（不新增一行原文）'
@@ -353,17 +346,17 @@ def recheck_holds_when_the_gate_closed():
     speech = lines[-1]
     speech['delivery_state'] = 'PENDING'          # 入队那一刻：宿主还不知道自己已经说过这句
     store = base.bind_store(data_for(lines))
-    row = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    row = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     stub = stub_for(store, config_for(block))
     event = event_of(row)
     event['group_context'] = {**event['group_context'], 'wake_reason': proactive.WAKE_REASON}
     with frozen(T0 + 60):
         assert Chat._proactive_stale(stub, event, 'grp-1-13') is False, '那句还没送达，不该拦'
-        current = store.db.messages.find_one({'_id': speech['_id']})
+        current = store.fake.messages.find_one({'_id': speech['_id']})
         store.put('messages', {**current, 'delivery_state': 'DELIVERED'},
                   expected=current['revision'], stream='p5')   # 送达回执到了
         assert Chat._proactive_stale(stub, event, 'grp-1-13') is True
-    stored = store.db.messages.find_one({'_id': row['_id']})
+    stored = store.fake.messages.find_one({'_id': row['_id']})
     assert stored['processing_outcome'] == proactive.OUTCOME_HOLD, stored['processing_outcome']
     assert stored['proactive']['wake'] is False, stored['proactive']
     assert 'topic_attempt_unanswered' in stored['proactive']['recheck_hold'], stored['proactive']
@@ -389,7 +382,7 @@ def topic_is_derived_for_every_group_row():
         'scenes': [{'_id': GROUP, 'kind': 'group', 'policy_epoch': EPOCH, 'members': [PERSON]}],
         'messages': [parent_overheard, parent_woken]})
     # No persona policy written (the fake holds no heads): People reads the defaults.
-    store = SimpleNamespace(config={'character_id': 'demo'}, db=db, collection=fake_collections.collections(db))
+    store = SimpleNamespace(config={'character_id': 'demo'}, fake=db, collection=fake_collections.collections(db))
     route = {'scene_id': GROUP}
     over = group_context(store, route, {'account_id': BOT, 'mentioned_account_ids': [],
                                         'reply_to': 'evt-parent'}, 'evt-new')
@@ -410,7 +403,7 @@ def topic_is_derived_for_every_group_row():
 def proactive_errors_do_not_break_the_round():
     """分寸判断是可选腿：它自己读不动只记证据，不许把一轮改成失败、也不许对用户报错。"""
     store = base.bind_store(data_for(calm_rows()))
-    row = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    row = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     stub = stub_for(store, config_for(ENABLED))
     event = event_of(row)
     woken = {**event, 'group_context': {**event['group_context'],
@@ -426,7 +419,7 @@ def proactive_errors_do_not_break_the_round():
     assert not stub.pending.put_rows, '炸了就不该把事件塞回队列'
     kinds = [item['type'] for item in stub.app.evidence.rows]
     assert 'proactive.consider_error' in kinds and 'proactive.recheck_error' in kinds, kinds
-    assert store.db.messages.find_one({'_id': row['_id']})['revision'] == row['revision'], \
+    assert store.fake.messages.find_one({'_id': row['_id']})['revision'] == row['revision'], \
         '旁听行不该被半写的判断改到一半'
     return '主动这条腿炸了也只留证据：不重排队列、不改那一行、不把一轮变成用户看得见的报错'
 
@@ -434,14 +427,14 @@ def proactive_errors_do_not_break_the_round():
 def recheck_never_touches_a_woken_reply():
     """再核只针对她自己插的那句：被@的那条就算深夜、就算没开主动模式，也不许被它拦掉。"""
     store = base.bind_store(data_for(calm_rows()))
-    row = store.db.messages.find_one({'_id': 'in-%s-13' % GROUP})
+    row = store.fake.messages.find_one({'_id': 'in-%s-13' % GROUP})
     mentioned = {**event_of(row), 'group_context': {**row['event']['group_context'],
                                                     'wake_reason': 'mentioned_account'}}
     for block in (ENABLED, None):
         stub = stub_for(store, config_for(block))
         with frozen(NIGHT + 60):               # 凌晨＋安静时段，闸门全都会拦
             assert Chat._proactive_stale(stub, mentioned, 'grp-1-13') is False, block
-        assert store.db.messages.find_one({'_id': row['_id']})['revision'] == row['revision']
+        assert store.fake.messages.find_one({'_id': row['_id']})['revision'] == row['revision']
     return '再核认得清这是接话还是插话：接话照跑，一个字段都不多写'
 
 
@@ -492,7 +485,7 @@ def fragments_within_ten_seconds_are_one_candidate():
              g_in(GROUP, 13, PERSON, '还有那台设备', T0 - 4),
              g_in(GROUP, 14, PERSON_B, '标签我来写', T0)]
     store = base.bind_store(data_for(lines))
-    trigger = store.db.messages.find_one({'_id': 'in-%s-14' % GROUP})
+    trigger = store.fake.messages.find_one({'_id': 'in-%s-14' % GROUP})
     decision, _updated, _e = run(store, trigger, moment=T0 + 1)   # 评估就发生在最后一条刚到那一下
     assert 'candidate_merge_window' in decision['holds'], decision
     assert not decision['dense'], decision          # 不是靠密度闸拦的，是合并窗口本身

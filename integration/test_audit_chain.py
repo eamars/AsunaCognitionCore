@@ -7,15 +7,16 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from asuna import audit, state
+from asuna.records import memories as memory_records
 from asuna.store.words import Set
 
 
 def test_a_memorys_embedding_is_left_out_of_its_commit_and_the_document_check_still_holds(store):
     unit = {'_id': 'mu-x', 'kind': 'chat_chunk', 'scope_key': 'scene:dm-a', 'policy_epoch': 1, 'status': 'active',
             'body_markdown': '周末去爬山', 'character_id': 'c'}
-    first = store.put('memory_units', unit, stream='mu-x')
-    store.put('memory_units', {**first, 'embedding': [0.1] * 768, 'embedding_status': 'READY'},
-              expected=first['revision'], stream='mu-x')
+    first = memory_records.save(store, unit, stream='mu-x')
+    memory_records.save(store, {**first, 'embedding': [0.1] * 768, 'embedding_status': 'READY'},
+                        expected=first['revision'], stream='mu-x')
     commits = audit.events(store, 'state.commit', stream='mu-x', by='seq').rows()
     assert [c['payload'].get('derived_left_out') for c in commits] == [None, ['embedding']]
     assert 'embedding' not in commits[1]['payload']['document']

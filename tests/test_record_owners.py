@@ -23,7 +23,6 @@ OWNERS = {'scenes': 'src/asuna/records/scenes.py', 'messages': 'src/asuna/record
 # call on its bucket or its two collections anywhere.
 BLOBS = ('gridfs:artifact_blobs', 'artifact_blobs.files', 'artifact_blobs.chunks')
 AREAS = ('src/asuna', 'tools')
-# The per-batch check makes the old calls on purpose: they are the old side it compares the owner with.
 # dbread is her MongoDB read tool (ADR-104 decision 9): its place lookup reads scenes over its own client.
 ALLOWED = {'src/asuna/dbread.py'}
 # The census puts every call of the store's vector search on memory_units: in its owner that is the owner's own call,

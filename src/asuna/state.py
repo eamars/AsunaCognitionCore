@@ -1,21 +1,19 @@
 """The worker's store: every write goes through `Store.put` with an expected revision and is recorded in a
 hash-chained audit stream.
 
-`put`, `audit`, `recover_commits`, `ensure` (`migrate`), `nearest` and `ensure_vectors` go through the store's
-MongoDB adapter and the shared layer's checks (asuna.store); `collection(name)` is a declared collection's handle,
-`blobs` its blob store, and `db` the database itself for the code that still reads it directly. `get` refuses reads
-outside the caller's scope. Her revisioned state (heads, `mutate`) is `records.heads`'.
+`put`, `audit`, `recover_commits`, `ensure` (`migrate`), `nearest` and `ensure_vectors` go through the shared
+layer's checks (asuna.store) over the adapter the registry opens (`asuna.store.adapters`); `collection(name)` is a
+declared collection's handle, `blobs` its blob store. Her revisioned state (heads, `mutate`) is `records.heads`'.
 """
 from __future__ import annotations
 import copy
 import json
 import uuid
 from pathlib import Path
-from pymongo import MongoClient, WriteConcern
 from . import clock
 from .config import validate_database, character_id
 from .evidence import canonical, sha
-from .store import Checked, Maintenance
+from .store import Checked, Maintenance, adapters
 from .store.catalog import CATALOG, Space
 from .store.errors import DuplicateKey
 from .store.words import Exists
@@ -115,18 +113,15 @@ class Store:
     def __init__(self, config: dict, database: str | None = None):
         self.config = config
         self.name = validate_database(config, database or config['database'])
-        self.client = MongoClient(config['mongo_uri'], serverSelectionTimeoutMS=5000,
-                                  connectTimeoutMS=5000, timeoutMS=20000)
-        self.db = self.client.get_database(self.name, write_concern=WriteConcern(w='majority', j=True))
+        self.checked = Checked(adapters.open(config, self.name), CATALOG)
         self.fail_audit = False
 
-    @property
-    def checked(self):
-        """The shared layer over the MongoDB adapter on this store's database, derived from `db` as it is now."""
-        if getattr(self, '_checked_db', None) is not self.db:
-            from .store import adapters
-            self._checked, self._checked_db = Checked(adapters.over(self.db), CATALOG), self.db
-        return self._checked
+    @classmethod
+    def over(cls, checked, config: dict, name: str):
+        """A store over a shared layer already built, opening nothing (the offline checks' fake store)."""
+        store = cls.__new__(cls)
+        store.config, store.name, store.checked, store.fail_audit = config, name, checked, False
+        return store
 
     @property
     def adapter(self):
@@ -157,7 +152,7 @@ class Store:
 
     def close(self):
         """Close the store's connection to its database."""
-        self.client.close()
+        self.checked.close()
 
     def migrate(self):
         self.ensure()

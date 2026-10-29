@@ -84,11 +84,6 @@ def open(settings, database):
     return module(settings).open(settings, database)
 
 
-def over(db):
-    """The built-in MongoDB adapter over a database handle already held (a store's own, while it holds one)."""
-    return module({}).MongoAdapter.over(db)
-
-
 def drop(settings, database):
     """Drop a test database; any name outside `asuna_v2_test_*` is refused, and so is any in a unit run."""
     refuse_in_unit_run('删数据库 %s' % database)

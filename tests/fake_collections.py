@@ -28,8 +28,13 @@ class _Records(dict):
     setdefault = get
 
 
-def collections(db):
-    """A store's `collection(name)` over the fake database `db`."""
+def checked(db):
+    """The shared layer over the in-memory adapter reading and writing the fake database `db`'s rows."""
     data = Database()
     data.records = _Records(db)
-    return Checked(MemoryAdapter(data, seed=0), CATALOG).collection
+    return Checked(MemoryAdapter(data, seed=0), CATALOG)
+
+
+def collections(db):
+    """A store's `collection(name)` over the fake database `db`."""
+    return checked(db).collection

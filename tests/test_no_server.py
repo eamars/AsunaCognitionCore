@@ -7,6 +7,7 @@ import sys
 import pytest
 
 from asuna import dbread
+from asuna.state import Store
 from asuna.store import adapters
 from asuna.store.errors import InUnitRun
 from asuna.testing import suite_config
@@ -16,6 +17,8 @@ SETTINGS = {'mongo_uri': 'mongodb://192.0.2.1:27017/'}      # TEST-NET-1: never 
 
 
 def test_opening_or_dropping_a_database_is_refused_in_the_test_process():
+    with pytest.raises(InUnitRun, match='DATABASE_IN_UNIT_RUN'):
+        Store({**SETTINGS, 'allowed_databases': []}, adapters.TEST_PREFIX + 'x')
     with pytest.raises(InUnitRun, match='DATABASE_IN_UNIT_RUN'):
         adapters.open(SETTINGS, adapters.TEST_PREFIX + 'x')
     with pytest.raises(InUnitRun, match='DATABASE_IN_UNIT_RUN'):
@@ -28,9 +31,9 @@ def test_opening_or_dropping_a_database_is_refused_in_the_test_process():
 
 def test_a_child_process_of_the_run_is_refused_too():
     code = ('import json\n'
-            'from asuna.store import adapters\n'
+            'from asuna.state import Store\n'
             'try:\n'
-            '    adapters.open({"mongo_uri": "mongodb://192.0.2.1:27017/"}, "asuna_v2_test_x")\n'
+            '    Store({"mongo_uri": "mongodb://192.0.2.1:27017/", "allowed_databases": []}, "asuna_v2_test_x")\n'
             '    print(json.dumps("opened"))\n'
             'except RuntimeError as error:\n'
             '    print(json.dumps(str(error).split(":")[0]))\n')

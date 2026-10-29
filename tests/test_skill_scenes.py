@@ -49,14 +49,14 @@ def test_home_gets_every_root_and_elsewhere_only_the_skills_that_list_that_kind(
     config = store.config
     config['_skill_directories'] = [str(root)]
     local = config['chat']
-    assert skills.skill_directories(config, local['scene_id'], local['person_id'], store.db) == [root.resolve()]
+    assert skills.skill_directories(config, local['scene_id'], local['person_id'], store) == [root.resolve()]
     store.db.scenes.insert_one({'_id': 'g-skills', 'schema_version': 1, 'scene_id': 'g-skills', 'kind': 'group',
                                 'scope_key': 'scene:g-skills', 'policy_epoch': 1, 'sequence': 0})
     store.db.scenes.insert_one({'_id': 'dm-skills', 'schema_version': 1, 'scene_id': 'dm-skills', 'kind': 'dm',
                                 'scope_key': 'scene:dm-skills', 'policy_epoch': 1, 'sequence': 0})
-    assert skills.skill_directories(config, 'g-skills', 'someone', store.db) == [groups.resolve()]
-    assert skills.skill_directories(config, 'dm-skills', 'someone', store.db) == [chats.resolve()]
-    assert home_only.resolve() not in skills.skill_directories(config, 'g-skills', 'someone', store.db)
+    assert skills.skill_directories(config, 'g-skills', 'someone', store) == [groups.resolve()]
+    assert skills.skill_directories(config, 'dm-skills', 'someone', store) == [chats.resolve()]
+    assert home_only.resolve() not in skills.skill_directories(config, 'g-skills', 'someone', store)
     # The publication probe names the broken one and what to fix.
     run = subprocess.run([sys.executable, '-m', 'asuna.skills', str(root)], capture_output=True, text=True,
                          encoding='utf-8', env={**os.environ, 'PYTHONPATH': str(ROOT / 'src'), 'PYTHONUTF8': '1'})

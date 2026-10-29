@@ -317,7 +317,7 @@ class ScheduleService:
         if not scene:
             raise Denied(label + '_TARGET_UNKNOWN')
         person = self.app.config['chat']['person_id'] if scene_id == self.app.config['chat']['scene_id'] else scene['members'][0]
-        if visibility.session_class(self.app.config, self.store.db, scene, person) != visibility.OWNER_PRIVATE:
+        if visibility.session_class(self.app.config, self.store, scene, person) != visibility.OWNER_PRIVATE:
             raise Denied(label + '_TARGET_NOT_OWNER_PRIVATE')
         return scene, person
 

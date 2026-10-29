@@ -211,6 +211,11 @@ def items(store, persona, /, *, by=None, **where):
                 ((by, 1),) if by else ())
 
 
+def personas(store):
+    """The personas with tier items, ascending."""
+    return store.collection(COLLECTION).group({'row': 'item'}, ['persona'], None)
+
+
 def moves(store, persona):
     """View: a persona's moves (rows `move`)."""
     return View(store, COLLECTION, fenced({'row': 'move'}, {'persona': (persona, is_text)}))

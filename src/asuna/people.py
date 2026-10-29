@@ -122,7 +122,7 @@ class People:
     """Labels for the people of this store's scenes. Cheap to build; one instance per use."""
 
     def __init__(self, store, persona=None):
-        self.store, self.db, self.config = store, store.db, store.config
+        self.store, self.config = store, store.config
         chat = self.config.get('chat') or {}
         self.owner = chat.get('person_id')
         self.self_id = self.config.get('character_id') or chat.get('persona')
@@ -143,7 +143,7 @@ class People:
         if not person_id or person_id == self.self_id:
             return person_id or ''
         from .scene_links import canonical_person_id
-        return canonical_person_id(self.config, self.db, person_id) or person_id
+        return canonical_person_id(self.config, self.store, person_id) or person_id
 
     def own_account(self, scene_id):
         """The platform account she speaks with in this conversation: its channel's, kept on the scene by the host."""

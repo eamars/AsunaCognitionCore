@@ -178,4 +178,4 @@ def home_task(store, task):
     """Whether this task came from home (credentials are for home tasks only)."""
     from . import visibility
     scene = scene_records.get(store, task['scene_id']) or {'_id': task['scene_id']}
-    return visibility.session_class(store.config, store.db, scene, task['requester_id']) == visibility.OWNER_PRIVATE
+    return visibility.session_class(store.config, store, scene, task['requester_id']) == visibility.OWNER_PRIVATE

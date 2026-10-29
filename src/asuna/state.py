@@ -122,8 +122,8 @@ class Store:
     def checked(self):
         """The shared layer over the MongoDB adapter on this store's database, derived from `db` as it is now."""
         if getattr(self, '_checked_db', None) is not self.db:
-            from .store.mongodb import MongoAdapter       # only where a store is used: a module may stub pymongo
-            self._checked, self._checked_db = Checked(MongoAdapter.over(self.db), CATALOG), self.db
+            from .store import adapters
+            self._checked, self._checked_db = Checked(adapters.over(self.db), CATALOG), self.db
         return self._checked
 
     @property
@@ -148,6 +148,14 @@ class Store:
         """Create every declared collection with its validator and indexes, and drop the retired indexes;
         {collection: Ensured}. An index of a declared name that differs stops it (SchemaConflict)."""
         return self.checked.ensure()
+
+    def ping(self):
+        """Whether the database answers: None, or the store's `Unavailable`."""
+        return self.checked.ping()
+
+    def close(self):
+        """Close the store's connection to its database."""
+        self.client.close()
 
     def migrate(self):
         self.ensure()
@@ -226,25 +234,6 @@ class Store:
         the database's."""
         return self.checked.nearest(space, vector, k, where)
 
-    def get(self, collection: str, key: str, scope: str, *, operator: bool=False):
-        if collection not in COLLECTIONS:
-            raise Denied('UNKNOWN_OBJECT')
-        doc = self.db[collection].find_one({'_id':key})
-        if doc is None:
-            return None
-        if not operator and (collection in ('audit_events','artifacts','episodes','sessions','state_revisions','lane_receipts','tasks','plans') or doc.get('scope_key') not in ('global-safe',scope) or doc.get('status')=='tombstone'):
-            raise Denied('OBJECT_SCOPE_DENIED')
-        if not operator and collection == 'memory_units' and doc.get('kind')=='monologue':
-            raise Denied('OPERATOR_ONLY_MONOLOGUE')
-        return doc
-
-    def identity(self, platform: str, account_id: str):
-        from .records import people as people_records
-        doc = people_records.by_account(self, account_id, platform=platform)
-        if not doc:
-            raise Denied('UNKNOWN_ACCOUNT')
-        return doc['person_id']
-
     def seed(self, fixture):
         """Test-only synthetic world; persona paths are relative to the fixture file."""
         fixture = Path(fixture)
@@ -253,7 +242,7 @@ class Store:
             for row in rows:
                 row=copy.deepcopy(row)
                 row['_id']=row[key]
-                if self.db[name].find_one({'_id':row['_id']}):
+                if self.collection(name).get(row['_id']):
                     continue
                 row.setdefault('policy_epoch',1)
                 if name=='memory_units':
@@ -267,10 +256,3 @@ class Store:
         from .records import heads as head_records
         for rel in world['relationships']:
             head_records.init(self,'relationship:'+rel['subject_id'],rel['scope_key'],rel,rel['source_ids'])
-
-    def public_messages(self, scene: str, person: str):
-        from .records import scenes as scene_records          # the owner imports this module
-        from .records import messages as message_records
-        scene_records.authorize(self, scene, person)
-        return [{k:row[k] for k in ('_id','scene_id','text','author','reply_to','delivery_state') if k in row}
-                for row in message_records.spoken(self,scene).rows()]

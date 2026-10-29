@@ -94,7 +94,7 @@ def main():
         if ev:ev.record('command.error',failure)
         print(json.dumps(failure,ensure_ascii=False),file=sys.stderr);return 1
     finally:
-        if store:store.client.close()
+        if store:store.close()
 
 
 if __name__=='__main__':raise SystemExit(main())

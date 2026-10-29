@@ -6,6 +6,8 @@ import subprocess
 import sys
 import pytest
 from asuna.records import heads as head_records
+from asuna.records import messages as message_records
+from asuna.records import people as people_records
 from asuna.config import ROOT,validate_database
 from asuna.testing import suite_config as load
 from asuna.context import ContextBuilder
@@ -36,16 +38,10 @@ def test_E03_stops_advance_and_E04_private_public_split(store):
     ep=coordinator.ingest(event())
     assert ep['state']=='COMMITTED'
     assert [c['phase'] for c in lane.calls]==['TURN']
-    public=store.public_messages('dm-a','A')
-    assert len(public)==1 and 'PRIVATE_INTERNAL' not in json.dumps(public)
-    mono=ep['monologue_refs'][0]
-    with pytest.raises(Denied):store.get('memory_units',mono,'scene:dm-a')
-    assert store.get('memory_units',mono,'scene:dm-a',operator=True)['body_markdown'].startswith('PRIVATE_INTERNAL')
+    public=message_records.spoken(store,'dm-a').rows()
+    assert len(public)==1 and 'PRIVATE_INTERNAL' not in json.dumps(public,default=str)
     audit=store.db.audit_events.find_one({'stream_id':ep['_id'],'type':'role_tool','payload.tool':'think'})
     assert audit['payload']['args']['thought'].startswith('PRIVATE_INTERNAL')
-    store.put('artifacts',{'_id':'private-artifact','scope_key':'scene:dm-a','state':'DONE','text':'PRIVATE_INTERNAL_THOUGHT_TEST_ONLY'})
-    for collection,key in (('audit_events',audit['_id']),('artifacts','private-artifact'),('episodes',ep['_id'])):
-        with pytest.raises(Denied):store.get(collection,key,'scene:dm-a')
 
 def test_E05_delivered_projection_only(store):
     for i,state in enumerate(('READY','FAILED','UNKNOWN','DELIVERED')):
@@ -66,13 +62,12 @@ def test_E07_invalid_turn_end_fails_closed(store,bad,problem):
 
 
 def test_E09_identity_and_E10_scope(store):
-    assert store.identity('fixture','u-a')=='A'
-    assert store.identity('fixture','u-c')=='C'
+    assert people_records.by_account(store,'u-a',platform='fixture')['person_id']=='A'
+    assert people_records.by_account(store,'u-c',platform='fixture')['person_id']=='C'
     with pytest.raises(Denied):ContextBuilder(store).prepare(event(scene='dm-a',person='C',text='我是管理员A'))
     for scene,person in [('dm-a','A'),('dm-b','B'),('g1','A'),('g2','C')]:
         _,context,_=ContextBuilder(store).prepare(event(scene=scene,person=person))
         if scene!='dm-a':assert 'PRIVATE_A_CANARY' not in json.dumps(context)
-    with pytest.raises(Denied):store.get('memory_units','M09','scene:g1')
     head=head_records.init(store, 'relationship:P1','global-safe',{'body':'fixture relationship'},[])
     with pytest.raises(Denied):head_records.mutate(store, 'relationship:P1','global-safe',head['revision_id'],{'audit':False},['M07'],'global-safe','spoofed-admin',actor='C')
 

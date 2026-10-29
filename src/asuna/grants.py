@@ -81,7 +81,7 @@ def development_granted(store, scene, event, session_class=None):
     kind = event.get('episode_kind') or 'external'
     if kind == 'task_feedback':
         return bool((task_records.get(store, event.get('task_id')) or {}).get('development_grant'))
-    cls = session_class or visibility.session_class(store.config, store.db, scene, event['person_id'])
+    cls = session_class or visibility.session_class(store.config, store, scene, event['person_id'])
     if cls != visibility.OWNER_PRIVATE:
         return False
     if kind == 'note':

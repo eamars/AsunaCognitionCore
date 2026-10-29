@@ -538,7 +538,7 @@ class TaskService:
         original=episode_records.get(self.store, task['episode_id'])
         # Outside home what she reads of the result holds nothing of the machine (ADR-050, machine_words); home and
         # the stored result keep it as it is.
-        outside=visibility.session_class(self.store.config,self.store.db,scene,task['requester_id'])!=visibility.OWNER_PRIVATE
+        outside=visibility.session_class(self.store.config,self.store,scene,task['requester_id'])!=visibility.OWNER_PRIVATE
         shown=machine_words.clean if outside else (lambda value:value)
         ep=None
         if not short and current.get('feedback_episode'):
@@ -837,7 +837,7 @@ class ToolBroker:
                 # /task/ 指向这个任务自己的工作区。
                 if not getattr(self, 'vision', None):raise Denied('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
                 scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
-                result=self.vision.read_image(task,args,session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']),task_dir=sandbox.task_dir)
+                result=self.vision.read_image(task,args,session_class=visibility.session_class(self.service.store.config,self.service.store,scene_row,task['requester_id']),task_dir=sandbox.task_dir)
                 with self.service.lock:self.service.valid(task)
             elif tool==RECEIVED_FILE_TOOL_NAME:
                 # A file someone sent (ADR-102): the scene is the task's binding, as for read_image; the fetch waits
@@ -846,7 +846,7 @@ class ToolBroker:
                 scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
                 result=received_files.run(self.service.store,task,self.service.store.config,args,
                                           persona=self.service.store.config['chat']['persona'],
-                                          session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']),
+                                          session_class=visibility.session_class(self.service.store.config,self.service.store,scene_row,task['requester_id']),
                                           task_dir=sandbox.task_dir)
                 with self.service.lock:self.service.valid(task)
             elif tool=='generate_image':
@@ -859,7 +859,7 @@ class ToolBroker:
                     if not getattr(self,'vision',None):raise ValueError('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
                     scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
                     picture=self.vision.picture_to_edit(task,ref,task_dir=sandbox.task_dir,
-                        session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']))
+                        session_class=visibility.session_class(self.service.store.config,self.service.store,scene_row,task['requester_id']))
                     # Her own drawing edited stays hers; anyone else's goes back where it came from.
                     return {'data':picture['data'],'register':None if picture['own'] else
                             outbound_media.edit_register(self.store,task,picture['back_to'])}
@@ -1035,7 +1035,7 @@ class Executor:
         store=self.service.store
         # Who she is, at the class of the conversation the task came from (render.action_persona).
         scene=scene_records.get(store, task['scene_id']) or {'_id':task['scene_id']}
-        cls=visibility.session_class(store.config,store.db,scene,task['requester_id'])
+        cls=visibility.session_class(store.config,store,scene,task['requester_id'])
         system=(prompt_path(store.config,'executor.md').read_text(encoding='utf-8')
                 +action_values(store,cls=cls,place=visibility.place_of(store.config,scene,cls)))
         # ADR-011 §4: her brief is the first message (a continuation: her new words in the same session);

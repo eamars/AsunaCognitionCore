@@ -1,10 +1,12 @@
 """The registry of database adapters, and the results adapters return.
 
-An adapter module (a database package's, or the in-memory one) has `KIND`, `SECRETS` (its setting keys that hold
-credentials), `open(settings, database)`, `where(settings)` (the server's identity without credentials),
-`databases(settings)` and `drop(settings, database)`. `load(entry)` imports a package's module as the Host registered
-it; `open(settings, database)` opens the kind the settings name (`database_adapter`; without the key, the one kind
-loaded) and raises `AdapterNotInstalled` when it is not loaded. There is never a default adapter.
+An adapter module (the built-in MongoDB one, a database package's, or the in-memory one) has `KIND`, `SECRETS` (its
+setting keys that hold credentials), `open(settings, database)`, `where(settings)` (the server's identity without
+credentials), `databases(settings)` and `drop(settings, database)`. `open(settings, database)` opens the kind the
+settings name (`database_adapter`), `mongodb` when they name none; the built-in `mongodb` kind is imported here, when it
+is first asked for, and this is the one place that names its module. `load(entry)` imports a package's module as the
+Host registered it, `register(module)` makes a module's kind known; a kind asked for and not known raises
+`AdapterNotInstalled`.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -14,6 +16,9 @@ import sys
 from .errors import AdapterNotInstalled
 
 SETTING = 'database_adapter'
+TIMEOUT = 'database_timeout_ms'       # an operation's time limit, for a caller that needs its own (the host lease)
+DEFAULT = 'mongodb'
+BUILT_IN = {'mongodb': 'asuna.store.mongodb'}
 TEST_PREFIX = 'asuna_v2_test_'
 _LOADED = {}
 
@@ -64,15 +69,10 @@ def loaded() -> list[str]:
 
 
 def module(settings):
-    """The adapter module the settings select."""
-    kind = settings.get(SETTING)
-    if kind is None and len(_LOADED) == 1:
-        kind, = _LOADED
-    if kind is None and not _LOADED:
-        raise AdapterNotInstalled('DATABASE_ADAPTER_NOT_INSTALLED: （设置里没有 %s，也没有装任何数据库适配器）' % SETTING)
-    if kind is None:
-        raise AdapterNotInstalled('DATABASE_ADAPTER_NOT_CHOSEN: 装了 %s，设置里没有 %s 选哪一个'
-                                  % ('、'.join(_LOADED), SETTING))
+    """The adapter module the settings select (`mongodb` when they name none)."""
+    kind = settings.get(SETTING) or DEFAULT
+    if kind not in _LOADED and kind in BUILT_IN:
+        register(importlib.import_module(BUILT_IN[kind]))
     if kind not in _LOADED:
         raise AdapterNotInstalled('DATABASE_ADAPTER_NOT_INSTALLED: %s' % kind)
     return _LOADED[kind]
@@ -81,6 +81,11 @@ def module(settings):
 def open(settings, database):
     """An open adapter of the selected kind on `database`."""
     return module(settings).open(settings, database)
+
+
+def over(db):
+    """The built-in MongoDB adapter over a database handle already held (a store's own, while it holds one)."""
+    return module({}).MongoAdapter.over(db)
 
 
 def drop(settings, database):

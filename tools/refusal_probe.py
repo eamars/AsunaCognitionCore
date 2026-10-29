@@ -34,6 +34,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
 from asuna import channel_kinds, role_tools                          # noqa: E402
+from asuna import audit as audit_trail                                # noqa: E402
 from asuna.coordinator import Coordinator                            # noqa: E402
 from asuna.ingress import persist_input                              # noqa: E402
 from asuna.lanes import LaneResult                                   # noqa: E402
@@ -528,9 +529,9 @@ def probe(args, provider=None):
                     print('.', end='', flush=True, file=sys.stderr)
         # ADR-099: in thinking mode, how many turns recorded a thought and why the others did not (counts only; the
         # recorded summaries go to the --keep-text folder when asked for).
-        recorded = {'taken': store.db.audit_events.count_documents({'type': 'thought.taken'}),
+        recorded = {'taken': audit_trail.count(store, 'thought.taken'),
                     'none': dict(collections.Counter(row['payload'].get('why') for row in
-                                                     store.db.audit_events.find({'type': 'thought.none'})))}
+                                                     audit_trail.events(store, 'thought.none', by=None).each()))}
         if keep_text and thoughts == 'thinking':
             with open(keep_text.replace('.jsonl', '-thoughts.jsonl'), 'w', encoding='utf-8') as out:
                 for unit in memory_records.of_kind(store, 'monologue', source='thinking').each(fields=['body_markdown']):

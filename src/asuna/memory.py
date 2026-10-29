@@ -55,7 +55,7 @@ class MemoryService:
             entity='relationship:'+person_id
             target_scope,linked=scope,[]
             if scene_links:
-                target=scene_links.relationship_target(self.store.config,self.store.db,scene,person_id)
+                target=scene_links.relationship_target(self.store.config,self.store,scene,person_id)
                 entity,target_scope,linked=target['entity'],target['scope'],list(target['linked_scopes'])
             # 本轮上下文里给她看的那一份优先（manifest 记的是她实际读到的 head）；但它只能是本场景
             # 那一份，或配置认定同一个人时的那一份——别的都算越权，不给「看起来连着」的错写。
@@ -115,7 +115,7 @@ class MemoryService:
         """The person layer: written from this conversation into the person's one record, with where and when."""
         from .understanding import PERSON_SCOPE,person_entity
         person_id=person_id or episode['person_id']
-        entity=person_entity(self.store.config,self.store.db,person_id)
+        entity=person_entity(self.store.config,self.store,person_id)
         key=entity+'|'+PERSON_SCOPE if base is not None else episode['manifest'].get('person_entity_key')
         if key!=entity+'|'+PERSON_SCOPE:
             raise Denied('UNDERSTANDING_PERSON_NOT_IN_CONTEXT: 这回合没给你看他的人那层（不是你的错）；重试也一样，下回合再写')

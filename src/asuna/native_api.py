@@ -194,8 +194,9 @@ class NativeMemory:
 
     def item_rows(self, slug, content, kind, tag, search=''):
         """One row per section of a document, with the place it is in (carried every turn, at hand, put away)."""
-        times = {row['sid']: row.get('memorable_at') or row.get('added') for row in self.store.db.memory_tiers.find(
-            {'row': 'item', 'persona': self.persona, 'doc': slug}, {'sid': 1, 'memorable_at': 1, 'added': 1})}
+        from . import memory_tiers
+        times = {row['sid']: row.get('memorable_at') or row.get('added') for row in memory_tiers.items(
+            self.store, self.persona, doc=slug).each(fields=['sid', 'memorable_at', 'added'])}
         return [{'id': f"item:{slug}#{section['sid']}", 'kind': kind,
                  'title': section['heading'] or plain(section['body'])[:48] or label('title.blank'),
                  'excerpt': [*([tag, ' · '] if tag else []), label('inject.' + section['inject'])],
@@ -228,7 +229,7 @@ class NativeMemory:
             return kept
         seen = people_records.label_of_person(self.store, person, ['card', 'nickname'])
         return (safe_name((seen or {}).get('card')) or safe_name((seen or {}).get('nickname'))
-                or speaker_name(self.store.config, person, None, self.store.db))
+                or speaker_name(self.store.config, person, None, self.store))
 
     def relation_records(self, person=None):
         """{person: [(scope, short and body, time)]}: what holds of them anywhere (scope `person`) and how they are in each
@@ -273,7 +274,7 @@ class NativeMemory:
                 break
         rows = []
         for author, at in latest.items():
-            target = scene_links.relationship_target(self.store.config, self.store.db, self.scene, author)
+            target = scene_links.relationship_target(self.store.config, self.store, self.scene, author)
             person = target['entity'].removeprefix('relationship:')
             records = {scope: body for scope, body, _ in self.relation_records(person).get(person, [])}
             name = self.person_name(author)
@@ -401,7 +402,7 @@ class NativeMemory:
 
     def owner_view(self):
         from . import visibility
-        return visibility.session_class(self.store.config, self.store.db, self.scene,
+        return visibility.session_class(self.store.config, self.store, self.scene,
                                         self.binding['person_id']) == visibility.OWNER_PRIVATE
 
     def idea_rows(self):
@@ -472,7 +473,7 @@ class NativeMemory:
                 source = row.get('scene_id') or row.get('scope_key', '').removeprefix('scene:')
                 rows.append({'id': ('source:' if messages else 'unit:') + row['_id'],
                     'kind': 'source' if messages else row.get('epistemic_type', row.get('kind')),
-                    'title': label('title.said', speaker=speaker_name(self.store.config, row.get('author'), row, self.store.db)) if messages else
+                    'title': label('title.said', speaker=speaker_name(self.store.config, row.get('author'), row, self.store)) if messages else
                         plain(row['excerpt'])[:48] or label('title.blank'),
                     # A memory's title is already the start of its text; only original messages show both.
                     'excerpt': row['excerpt'] if messages else '', 'scene_id': source,
@@ -653,10 +654,10 @@ class NativeMemory:
         for source in result['sources']:
             source['text'] = source.get('text', '')[:8192]
             source['scene_title'] = self.scene_title(source.get('scene_id'))
-            source['author'] = speaker_name(self.store.config, source.get('author'), source, self.store.db) if source.get('author') else None
+            source['author'] = speaker_name(self.store.config, source.get('author'), source, self.store) if source.get('author') else None
             source.pop('event', None)
         for field in ('author', 'speaker'):
             if result.get(field):
-                result[field] = speaker_name(self.store.config, result[field], row, self.store.db)
+                result[field] = speaker_name(self.store.config, result[field], row, self.store)
         result.pop('event', None)
         return result

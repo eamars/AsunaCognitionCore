@@ -716,7 +716,7 @@ def conversation_class(store, scene, person_id=None):
     if person_id is None:
         person_id = (chat.get('person_id') if scene['_id'] == chat.get('scene_id')
                      else next(iter(scene.get('members') or ()), None))
-    return visibility.session_class(store.config, store.db, scene, person_id)
+    return visibility.session_class(store.config, store, scene, person_id)
 
 
 # ADR-087 §4.3: an option is left out of a conversation's specs only when no turn that conversation can host can use it.
@@ -1680,7 +1680,7 @@ class RoleTools:
             'sections_missing': missing or [], 'memories': [m.get('_id') for m in recalled.get('memories') or []],
             'own_thoughts_elsewhere': [m['_id'] for m in elsewhere],
             'elsewhere': [m['ref'] for m in crossed], 'before': [m.get('now') for m in before],
-            'turn_kind': turn_kind(ep), 'place': place(self.store.config, self.store.db, scene, ep['person_id'])},
+            'turn_kind': turn_kind(ep), 'place': place(self.store.config, self.store, scene, ep['person_id'])},
             ep['scope_key'])
         result = {'query': query, 'memories': recalled.get('memories') or []}
         if recalled.get('coverage_from_program'):
@@ -3370,7 +3370,7 @@ def _from_home(store, persona, source_ids, episodes):
         cls = (row.get('manifest') or {}).get('session_class')
         if cls is None:
             scene = scene_records.get(store, row.get('scene_id')) or {'_id': row.get('scene_id')}
-            cls = visibility.session_class(store.config, store.db, scene, row.get('person_id'))
+            cls = visibility.session_class(store.config, store, scene, row.get('person_id'))
         if cls == visibility.OWNER_PRIVATE:
             return True
     return False

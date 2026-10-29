@@ -756,7 +756,7 @@ def received_from(store, task, sha256):
     if not task.get('scene_id'):
         return None
     scene = scene_records.get(store, task['scene_id']) or {'_id': task['scene_id']}
-    cls = visibility.session_class(store.config, store.db, scene, task.get('requester_id'))
+    cls = visibility.session_class(store.config, store, scene, task.get('requester_id'))
     try:
         scopes = reach(store, task, store.config, cls)
     except Denied:                       # the task's fence does not hold: no origin is claimed; registering goes on

@@ -45,7 +45,8 @@ _NEVER = {'_never': {'$type': 'minKey'}}
 
 
 def _client(settings):
-    return MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000, timeoutMS=20000)
+    timeout = settings.get('database_timeout_ms') or 20000
+    return MongoClient(settings['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000, timeoutMS=timeout)
 
 
 def open(settings, database):

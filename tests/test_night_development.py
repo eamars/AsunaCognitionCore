@@ -115,8 +115,9 @@ def test_rhythm_task_names_follow_the_words_the_host_gives_and_only_they_are_ren
         events = [{'seq': 1, 'data': {'operation': 'create', 'schedule': {'id': 'n1', 'title': 'Heartbeat'}}},
                   {'seq': 2, 'data': {'operation': 'create', 'schedule': {'id': 'n2', 'title': 'Old wording'}}}]
         service = ScheduleService.__new__(ScheduleService)
-        from asuna import records
-        service.store = SimpleNamespace(db=db, collection=records.on(db).collection,   # the owners' way to its rows
+        from asuna.store import Checked, adapters
+        from asuna.store.catalog import CATALOG
+        service.store = SimpleNamespace(db=db, collection=Checked(adapters.over(db), CATALOG).collection,
                                         audit=lambda *a: None)
         service.lane = SimpleNamespace(schedule=lambda path, payload=None: events if path == '/schedule/events'
                                        else calls.append((path, payload)) or {})

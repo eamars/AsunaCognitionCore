@@ -2,6 +2,7 @@ import json,time
 from pathlib import Path
 import pytest
 from asuna.coordinator import Coordinator
+from asuna.records import messages as message_records
 from asuna.lanes import FakeLane,FakeTurn
 from asuna.sandbox import Sandbox
 from asuna.privacy import PrivacyService
@@ -58,8 +59,8 @@ def test_E06_duplicate_result_one_character_feedback(store):
         c=Coordinator(store,lane)
         assert service.feedback(done,c)['state']=='COMMITTED'
         for _ in range(3):assert service.feedback(done,c) is None
-        assert len(lane.calls)==1 and len(store.public_messages('dm-a','A'))==1
-        assert '文件已查阅'!=store.public_messages('dm-a','A')[0]['text']
+        assert len(lane.calls)==1 and message_records.spoken(store,'dm-a').count()==1
+        assert '文件已查阅'!=message_records.spoken(store,'dm-a').rows()[0]['text']
     finally:broker.close()
 
 

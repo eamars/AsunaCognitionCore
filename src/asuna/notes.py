@@ -439,7 +439,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
 def owner_line(store, ep):
     """The owner's own words that woke this turn outside (his platform account, mapped to him by configuration), or
     None. A note home from such a turn carries them; its home turn may then send an errand (ADR-066)."""
-    if (ep.get('episode_kind') or 'external') != 'external'             or scene_links.canonical_person_id(store.config, store.db, ep.get('person_id')) != visibility.owner_id(store.config):
+    if (ep.get('episode_kind') or 'external') != 'external'             or scene_links.canonical_person_id(store.config, store, ep.get('person_id')) != visibility.owner_id(store.config):
         return None
     source = message_records.get(store, 'in-' + ep['_id'], fields=['text', 'event.channel']) or {}
     if not (source.get('event') or {}).get('channel'):

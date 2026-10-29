@@ -1091,15 +1091,14 @@ def _link_fields(store, scene_doc, person=""):
     """把配置派生的联动范围装进 scene_doc：scene_links 不在就照实不联动。"""
     if scene_links is None:
         return {}
-    db = getattr(store, "db", None)
     fields = {"readable_scenes": scene_links.readable_scenes(getattr(store, "config", None),
                                                              scene_doc["scene_id"])}
     try:
-        fields["person_classes"] = scene_links.person_classes(getattr(store, "config", None), db)
+        fields["person_classes"] = scene_links.person_classes(getattr(store, "config", None), store)
         fields["person_aliases"] = scene_links.extra_person_values(getattr(store, "config", None),
-                                                                   db, person)
+                                                                   store, person)
         fields["person_canonical"] = dict(
-            (member, scene_links.canonical_person_id(getattr(store, "config", None), db, member))
+            (member, scene_links.canonical_person_id(getattr(store, "config", None), store, member))
             for member in fields["person_classes"])
     except Exception:
         fields["person_classes"] = fields["person_aliases"] = fields["person_canonical"] = {}

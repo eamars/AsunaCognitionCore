@@ -11,7 +11,6 @@ import re
 import sys
 from pathlib import Path
 from .records import scenes as scene_records
-from . import records
 
 SCENE_KINDS = ('home', 'group', 'dm')
 FIELD = 'scene_kinds'
@@ -88,15 +87,15 @@ def _roots(config):
     return roots
 
 
-def skill_directories(config, scene_id, person_id, db=None):
+def skill_directories(config, scene_id, person_id, store=None):
     """Skill roots for a session: every root in the owner's private conversations; elsewhere one root per skill that
     lists this kind of scene (ADR-078)."""
     from . import visibility
     chat = config.get('chat', {})
     if (scene_id, person_id) == (chat.get('scene_id'), chat.get('person_id')):
         return _roots(config)
-    scene = (scene_records.get(records.on(db), scene_id) if db is not None else None) or {'_id': scene_id}
-    if db is not None and visibility.session_class(config, db, scene, person_id) == visibility.OWNER_PRIVATE:
+    scene = (scene_records.get(store, scene_id) if store is not None else None) or {'_id': scene_id}
+    if store is not None and visibility.session_class(config, store, scene, person_id) == visibility.OWNER_PRIVATE:
         return _roots(config)
     kind = 'group' if scene.get('kind') == 'group' else 'dm'
     allowed = []

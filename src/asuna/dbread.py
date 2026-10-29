@@ -14,8 +14,6 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timedelta, timezone
-from .records import scenes as scene_records
-from . import records
 from . import clock
 
 LIMIT = 50
@@ -200,7 +198,7 @@ class Reader:
         """Which conversation a place code (g + six hex, as her notes and plans name places) stands for."""
         from .evidence import sha
         code = str(code).strip()
-        found = [scene for scene in scene_records.all(records.on(self.db), fields=['_id', 'kind'])
+        found = [scene for scene in self.db['scenes'].find({}, {'_id': 1, 'kind': 1})
                  if 'g' + sha(str(scene['_id']).encode())[:6] == code]
         return self._answer('scenes', {'place': code}, [{'place': code, 'scene_id': scene['_id'], 'kind': scene.get('kind')}
                                                          for scene in found])
@@ -260,6 +258,31 @@ def collections():
 def show(answer):
     """Print an answer whole, query first, as JSON."""
     print(json.dumps(answer, ensure_ascii=False, indent=1, default=str))
+
+
+def development_rows(config, database, collection, query, projection=None, sort=None, skip=0, limit=20):
+    """The rows of her action brain's `development_database_read`: her MongoDB filter, projection and sort, as she
+    wrote them, on the store's database over a client of this module's own. A query MongoDB refuses, or one that cannot
+    be written as a MongoDB document, raises QueryInvalid with its short reason (never the server's full reply)."""
+    from bson.errors import BSONError
+    from pymongo import MongoClient
+    from pymongo.errors import OperationFailure
+    from .store.errors import QueryInvalid
+    client = MongoClient(config['mongo_uri'], serverSelectionTimeoutMS=5000, connectTimeoutMS=5000, timeoutMS=20000)
+    try:
+        cursor = client[database][collection].find(query, projection)
+        if sort:
+            cursor = cursor.sort(list(sort.items()))
+        return list(cursor.skip(skip).limit(limit))
+    except OperationFailure as exc:
+        said = (exc.details or {}).get('errmsg') or str(exc).split(', full error:')[0]
+        raise QueryInvalid('DEVELOPMENT_QUERY_INVALID: Mongo 拒绝了这个查询：%s；改 filter/projection/sort 再查'
+                           % ' '.join(str(said).split())[:300]) from None
+    except BSONError as exc:
+        raise QueryInvalid('DEVELOPMENT_QUERY_INVALID: 查询写不成 Mongo 文档（%s）；改 filter/projection/sort 再查'
+                           % ' '.join(str(exc).split())[:200]) from None
+    finally:
+        client.close()
 
 
 def environment(config, zone):

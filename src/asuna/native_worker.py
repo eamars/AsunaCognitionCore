@@ -248,7 +248,7 @@ class NativeLane:
                 **({'capability_refusals': self.worker.refusals_for(task)} if self.lane == 'executor' else {}),
                 'system_sha256': sha(system.encode()),
                 'skill_directories': [str(path) for path in skill_directories(self.store.config, ep['scene_id'], ep['person_id'],
-                                                                              self.store.db)],
+                                                                              self.store)],
             })
             carried = record.get('carry') if self.lane == 'character' and 'context' in kwargs else None
             if carried and not carried.get('delivered'):
@@ -1073,12 +1073,12 @@ class BusinessWorker:
             from .host import prepare_channels
             observer = Store(config)
             try:
-                observer.client.admin.command('ping')
+                observer.ping()
                 from .channel_admission import restore_admissions
                 restore_admissions(observer)
                 prepare_channels(observer, dry_run=True)
             finally:
-                observer.client.close()
+                observer.close()
             return {'valid': True}
         if method == 'host_result':
             with self.pending_lock:
@@ -1465,13 +1465,12 @@ class NativeDevelopmentBridge:
         from . import visibility
         scene = scene_records.get(self.store, task['scene_id']) or {'_id': task['scene_id']}
         if not task.get('development_grant') or visibility.session_class(
-                self.config, self.store.db, scene, task['requester_id']) != visibility.OWNER_PRIVATE:
+                self.config, self.store, scene, task['requester_id']) != visibility.OWNER_PRIVATE:
             from .tasks import capability_refusal
             raise Denied(capability_refusal(self.store, task, tool))
         if tool == 'development_database_read':
             from .state import COLLECTIONS
-            from bson.errors import BSONError
-            from pymongo.errors import OperationFailure
+            from . import dbread
             collection=args.get('collection')
             query=args.get('filter',{}); projection=args.get('projection')
             skip=args.get('skip',0);limit=args.get('limit',20);sort=args.get('sort')
@@ -1489,18 +1488,10 @@ class NativeDevelopmentBridge:
             if sort is not None and (not isinstance(sort,dict) or any(v not in (1,-1) for v in sort.values())):
                 raise ValueError('DEVELOPMENT_SORT_INVALID: sort 要写成 {字段: 1 或 -1}，例如 {"created_at": -1}；给的是 %s'
                                  % json.dumps(sort, ensure_ascii=False, default=str)[:120])
-            try:
-                cursor=self.store.db[collection].find(query,projection)
-                if sort:cursor=cursor.sort(list(sort.items()))
-                rows=list(cursor.skip(skip).limit(limit))
-            except OperationFailure as exc:
-                # Her own filter/projection/sort, refused by Mongo: its short reason, never the server's full reply.
-                said=(exc.details or {}).get('errmsg') or str(exc).split(', full error:')[0]
-                raise ValueError('DEVELOPMENT_QUERY_INVALID: Mongo 拒绝了这个查询：%s；改 filter/projection/sort 再查'
-                                 % ' '.join(str(said).split())[:300]) from None
-            except BSONError as exc:
-                raise ValueError('DEVELOPMENT_QUERY_INVALID: 查询写不成 Mongo 文档（%s）；改 filter/projection/sort 再查'
-                                 % ' '.join(str(exc).split())[:200]) from None
+            # Her own filter/projection/sort, in MongoDB's syntax, read by her MongoDB read tool (dbread); one MongoDB
+            # refuses comes back as its short reason (QueryInvalid, a ValueError), never the server's full reply.
+            rows=dbread.development_rows(self.store.config,self.store.name,collection,query,projection,sort,skip,
+                                         limit)
             size=len(json.dumps(rows,ensure_ascii=False,default=str).encode())
             if size>self.PAGE_BYTES:
                 raise ValueError('DEVELOPMENT_PAGE_TOO_LARGE: 这一页 %d 行有 %.1f KiB，上限 %d KiB；limit 改小（比如 %d），'

@@ -25,13 +25,19 @@ def main():
     store = Store(config)
     try:
         if args.drop:
-            store.db[memory_pilot.COLLECTION].drop()
+            # The store has no verb that drops a collection: this tool's own client does it.
+            from pymongo import MongoClient
+            client = MongoClient(config['mongo_uri'], serverSelectionTimeoutMS=5000)
+            try:
+                client[store.name][memory_pilot.COLLECTION].drop()
+            finally:
+                client.close()
             print(json.dumps({'dropped': memory_pilot.COLLECTION}))
             return
         print(json.dumps(memory_pilot.report(store, config.get('timezone') or 'UTC', args.since),
                          ensure_ascii=False, indent=1))
     finally:
-        store.client.close()
+        store.close()
 
 
 if __name__ == '__main__':

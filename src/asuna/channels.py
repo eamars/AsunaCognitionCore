@@ -807,9 +807,8 @@ def whole_host_state(exc):
     reach), or None when it is this request's own failure."""
     if isinstance(exc, RuntimeError) and str(exc) in WHOLE_HOST_STATES:
         return str(exc)
-    from pymongo.errors import AutoReconnect, ServerSelectionTimeoutError
-    from .store.errors import Unavailable           # the same, met through the store's adapter
-    if isinstance(exc, (AutoReconnect, ServerSelectionTimeoutError, Unavailable)):
+    from .store.errors import Unavailable           # the adapter's word for a database out of reach
+    if isinstance(exc, Unavailable):
         return 'HOST_DATABASE_UNAVAILABLE'
     return None
 

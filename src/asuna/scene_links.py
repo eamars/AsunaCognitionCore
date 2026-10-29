@@ -23,7 +23,6 @@ from __future__ import annotations
 from . import channel_kinds
 from .records import scenes as scene_records
 from .records import receipts as receipt_records
-from . import records
 
 MAX_LINKS = 8          # 一条边最多带几个场景：写宽了直接推高 token 成本，超了照实截断
 MAX_PERSONS = 32       # 一组「同一个人」最多几个人格入口
@@ -47,22 +46,12 @@ def _id_list(value, limit=MAX_LINKS):
     return out[:limit]
 
 
-def _scenes(db):
-    """Every conversation of this database, or none when it cannot be read."""
-    if db is None:
+def _scenes(store):
+    """Every conversation of this store, or none when it cannot be read."""
+    if store is None:
         return []
     try:
-        return [row for row in scene_records.all(records.on(db)) if isinstance(row, dict)]
-    except Exception:
-        return []
-
-
-def _rows(db, collection, spec=None):
-    column = getattr(getattr(db, collection, None), "find", None)
-    if not callable(column):
-        return []
-    try:
-        return [row for row in (column(spec or {}) or []) if isinstance(row, dict)]
+        return [row for row in scene_records.all(store) if isinstance(row, dict)]
     except Exception:
         return []
 
@@ -125,7 +114,7 @@ def sync_scene_docs(store, config, scene_ids=None):
     """把派生出来的 readable_scenes 写进 scenes 文档（只为可观察；读路径现算自配置）。"""
     links = context_links(config)
     wanted = {scene: links.get(scene, []) for scene in (scene_ids or sorted(links))}
-    if getattr(store, "db", None) is None:
+    if getattr(store, "collection", None) is None:
         return {"updated": [], "readable": wanted, "why": "no_scenes_collection"}
     updated = []
     for scene, targets in wanted.items():
@@ -156,15 +145,15 @@ def canonical_map(config):
     return out
 
 
-def canonical_person_id(config, db, person_id):
-    """别名 → canonical，只看配置；没配映射就是本人 id。db 参数保留给调用方签名，不读。"""
+def canonical_person_id(config, store, person_id):
+    """别名 → canonical，只看配置；没配映射就是本人 id。store 参数保留给调用方签名，不读。"""
     person_id = _clean(person_id, 60)
     if not person_id:
         return ""
     return canonical_map(config).get(person_id, person_id)
 
 
-def person_classes(config, db):
+def person_classes(config, store):
     """{person_id: [同一个人的全部 person_id]}：只包含真的不止一个人的那几组，含本人。"""
     classes = {}
     for alias, canonical in canonical_map(config).items():
@@ -177,14 +166,14 @@ def person_classes(config, db):
     return out
 
 
-def extra_person_values(config, db, person):
+def extra_person_values(config, store, person):
     """按人过滤时要一起算进来的其他 person_id（同一个人的其他入口）；没有就空。"""
     text = _clean(person, 60).lower()
     if not text:
         return []
     wanted = {text, *channel_kinds.person_ids(text)}
     out = []
-    for members in person_classes(config, db).values():
+    for members in person_classes(config, store).values():
         if wanted & {member.lower() for member in members}:
             for member in members:
                 if member.lower() not in wanted and member not in out:
@@ -192,7 +181,7 @@ def extra_person_values(config, db, person):
     return out
 
 
-def relationship_target(config, db, scene, person_id):
+def relationship_target(config, store, scene, person_id):
     """这个人在这一轮的关系／偏好状态该落在哪一份 head。
 
     没配 canonical 映射时返回的就是原来那一份（entity=relationship:<本人>，scope=本场景）——一个字段都不变。
@@ -203,11 +192,11 @@ def relationship_target(config, db, scene, person_id):
     own = _clean((scene or {}).get("scene_id") or (scene or {}).get("_id"))
     own_scope = _clean((scene or {}).get("scope_key")) or ("scene:" + own)
     person_id = _clean(person_id, 60)
-    canonical = canonical_person_id(config, db, person_id)
+    canonical = canonical_person_id(config, store, person_id)
     if not canonical or canonical == person_id:
         return {"entity": "relationship:" + person_id, "scope": own_scope,
                 "canonical": person_id, "shared": False, "linked_scopes": []}
-    home = _canonical_home_scene(config, db, canonical, own)
+    home = _canonical_home_scene(config, store, canonical, own)
     if not home:
         return {"entity": "relationship:" + canonical, "scope": own_scope,
                 "canonical": canonical, "shared": False, "linked_scopes": []}
@@ -216,14 +205,14 @@ def relationship_target(config, db, scene, person_id):
             "shared": scope != own_scope, "linked_scopes": [own_scope] if scope != own_scope else []}
 
 
-def _canonical_home_scene(config, db, canonical, own_scene):
+def _canonical_home_scene(config, store, canonical, own_scene):
     """canonical 那份关系记录该挂在哪个场景：宿主自己的聊天场景优先，其次任何「成员含 canonical
     且与本场景有联动边」的场景；多个候选按场景名排序取第一个，保证同一份配置每次算出同一个结果。"""
     links = context_links(config)
     chat = _clean((config or {}).get("chat", {}).get("scene_id")) \
         if isinstance((config or {}).get("chat"), dict) else ""
     candidates = []
-    for row in _scenes(db):
+    for row in _scenes(store):
         scene = _clean(row.get("scene_id") or row.get("_id"))
         if not scene or scene == own_scene or canonical not in (row.get("members") or []):
             continue

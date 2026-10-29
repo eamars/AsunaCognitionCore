@@ -262,7 +262,7 @@ def row_own_only(store, row):
     try:
         scene = scene_records.get(store, row.get('scene_id')) or {'_id': row.get('scene_id')}
         person = _route_person(store.config, scene, row.get('channel_id'))
-        return visibility is None or not person or             visibility.session_class(store.config, store.db, scene, person) != OWNER_PRIVATE
+        return visibility is None or not person or             visibility.session_class(store.config, store, scene, person) != OWNER_PRIVATE
     except Exception:
         return True
 
@@ -341,11 +341,11 @@ def _linked_scene_ids(config, scene_id):
     return [item for item in dict.fromkeys(out) if item and item != scene_id][:scene_links.MAX_LINKS]
 
 
-def _canonical(config, db, person_id):
+def _canonical(config, store, person_id):
     if scene_links is None or not person_id:
         return person_id
     try:
-        return scene_links.canonical_person_id(config, db, person_id)
+        return scene_links.canonical_person_id(config, store, person_id)
     except Exception:
         return person_id
 
@@ -365,14 +365,14 @@ def image_scopes(store, config, scene, session_cls=None, person_id=None):
         return out
     if session_cls is None:
         try:
-            session_cls = visibility.session_class(config, store.db, scene, person_id or '')
+            session_cls = visibility.session_class(config, store, scene, person_id or '')
         except Exception:
             return out
     if session_cls != OWNER_PRIVATE:
         return out
     if person_id is None:
         person_id = _route_person(config, scene)
-    mine = _canonical(config, store.db, person_id)
+    mine = _canonical(config, store, person_id)
     if not mine:
         return out
     for peer_id in _linked_scene_ids(config, scene_id):
@@ -386,11 +386,11 @@ def image_scopes(store, config, scene, session_cls=None, person_id=None):
         if not peer_person:
             continue
         try:
-            if visibility.session_class(config, store.db, peer, peer_person) != OWNER_PRIVATE:
+            if visibility.session_class(config, store, peer, peer_person) != OWNER_PRIVATE:
                 continue
         except Exception:
             continue
-        if _canonical(config, store.db, peer_person) != mine:
+        if _canonical(config, store, peer_person) != mine:
             continue
         if peer['scope_key'] not in out:
             out.append(peer['scope_key'])

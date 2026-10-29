@@ -25,7 +25,7 @@ class Application:
         self.store=Store(config,database);self.stack=ExitStack()
     def __enter__(self):
         try:
-            self.store.migrate();self.stack.callback(self.store.client.close)
+            self.store.migrate();self.stack.callback(self.store.close)
             self.retrieval=Retrieval(self.store,self.evidence);self.stack.callback(self.retrieval.close)
             self.service=TaskService(self.store)
             self.broker=ToolBroker(self.service);self.stack.callback(self.broker.close)

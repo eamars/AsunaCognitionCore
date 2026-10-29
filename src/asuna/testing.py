@@ -2,7 +2,6 @@
 import re
 import shutil
 
-from pymongo import MongoClient
 from .config import DATA, load, validate_database
 from .queue import effects_lock_path
 from .tasks import workspace_lock_path
@@ -36,11 +35,9 @@ def dispose_test_store(store):
     if name in protected or not re.fullmatch(r'asuna_v2_test_[A-Za-z0-9_]+', name):
         raise ValueError('TEST_CLEANUP_TARGET_NOT_AUTHORIZED')
     validate_database(config, name)
-    cleanup = MongoClient(config['mongo_uri'], serverSelectionTimeoutMS=5000,
-                          connectTimeoutMS=5000, timeoutMS=10000)
+    from .store import adapters
     try:
-        cleanup.drop_database(name)
+        adapters.drop(config, name)
     finally:
-        cleanup.close()
-        store.client.close()
+        store.close()
     remove_lock_files(effects_lock_path(name))

@@ -17,20 +17,18 @@ import threading
 import uuid
 from datetime import timedelta, timezone
 
-from pymongo import MongoClient
-
 from .config import DATA
 from .state import Denied
-from .store import Checked
+from .store import Checked, adapters
 from .store.catalog import CATALOG
 from .store.errors import DuplicateKey
-from .store.mongodb import MongoAdapter
 from .store.words import And, Now, Or, Range, Set, Unset
 
 LEASE_SECONDS = 90
 RENEW_SECONDS = 30
 COLLECTION = 'host_leases'
 PLANNED_SECONDS = 600                     # a planned-restart mark counts for a stop within this long
+TIMEOUT_MS = 10000                        # each lease operation, shorter than the store's own
 
 
 def host_id(root=None):
@@ -45,10 +43,10 @@ def host_id(root=None):
         return value
 
 
-def _leases(config, **timeouts):
-    """(client, the lease collection's handle) on the configured database."""
-    client = MongoClient(config['mongo_uri'], serverSelectionTimeoutMS=5000, timeoutMS=10000, **timeouts)
-    return client, Checked(MongoAdapter(client, config['database']), CATALOG).collection(COLLECTION)
+def _leases(config):
+    """(the adapter, the lease collection's handle) on the configured database, its operations within TIMEOUT_MS."""
+    adapter = adapters.open({**config, adapters.TIMEOUT: TIMEOUT_MS}, config['database'])
+    return adapter, Checked(adapter, CATALOG).collection(COLLECTION)
 
 
 def _utc(moment):
@@ -58,7 +56,8 @@ def _utc(moment):
 
 class DatabaseLease:
     def __init__(self, config, *, persona=None, root=None, renew_seconds=RENEW_SECONDS):
-        self.client, self.leases = _leases(config, connectTimeoutMS=5000)
+        self.adapter, self.leases = _leases(config)
+        self.client = self.adapter.client
         self.me = host_id(root)
         self.holder = {'instance': self.me, 'host': socket.gethostname(), 'persona': persona, 'pid': os.getpid()}
         self.renew_seconds = renew_seconds
@@ -111,14 +110,14 @@ class DatabaseLease:
         try:
             self.leases.delete({'_id': 'host', 'instance': self.me})
         finally:
-            self.client.close()
+            self.adapter.close()
 
 
 def mark_planned(config, by):
     """Before stopping a running Host on purpose where a clean stop is not possible (a killed process tree): the
     next start then records a planned restart, not an external termination. False when no Host holds the lease."""
-    client, leases = _leases(config)
+    adapter, leases = _leases(config)
     try:
         return bool(leases.update({'_id': 'host'}, Set({'planned_stop': {'at': Now(), 'by': str(by)[:40]}})).matched)
     finally:
-        client.close()
+        adapter.close()

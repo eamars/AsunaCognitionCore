@@ -1,5 +1,6 @@
 import pytest
 from asuna.records import heads as head_records
+from asuna.records import messages as message_records
 from asuna.state import Denied
 from asuna.publish import PublishService
 from test_engineering_m1 import event
@@ -18,7 +19,7 @@ def test_E12_E13_executor_cannot_publish_or_reach_host(store,monkeypatch):
         with pytest.raises(Denied):PublishService(store).publish('qwen-bypass')
         assert store.db.sink_receipts.count_documents({})==0
         c,_=normal(store);assert c.ingest(event('legitimate'))['state']=='COMMITTED'
-        assert len(store.public_messages('dm-a','A'))==1 and (work/'allowed.txt').exists()
+        assert message_records.spoken(store,'dm-a').count()==1 and (work/'allowed.txt').exists()
     finally:broker.close()
 
 

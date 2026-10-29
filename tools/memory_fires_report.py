@@ -52,7 +52,7 @@ def main():
         joined = None if args.no_sessions else compactions(args.data, args.profile, since.timestamp() * 1000)
         print(json.dumps(crossing.report(store, since.isoformat(), joined), ensure_ascii=False, indent=1))
     finally:
-        store.client.close()
+        store.close()
 
 
 if __name__ == '__main__':

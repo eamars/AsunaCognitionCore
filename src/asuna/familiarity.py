@@ -27,19 +27,18 @@ CORE_WORDS = {
 def level(store, person_id):
     """One of LEVELS for this author, from the owner's account, her understanding and real exchanges."""
     from .scene_links import canonical_person_id, extra_person_values
-    config, db = store.config, store.db
-    person = canonical_person_id(config, db, person_id) or person_id
+    config = store.config
+    person = canonical_person_id(config, store, person_id) or person_id
     if person and person == (config.get('chat') or {}).get('person_id'):
         return 'owner'
-    ids = sorted({person_id, person, *extra_person_values(config, db, person)} - {None, ''})
+    ids = sorted({person_id, person, *extra_person_values(config, store, person)} - {None, ''})
     if head_records.with_prefix(store, *('relationship:%s|' % i for i in ids)).first(fields=['_id']):
         return 'known'
     replies = episode_records.answered(store, ids, limit=KNOWN_REPLIES)
     if replies >= KNOWN_REPLIES:
         return 'known'
-    from . import records
     from .records import messages as message_records
-    lines = message_records.inbound(records.on(db), authors=ids).count(limit=REGULAR_LINES)
+    lines = message_records.inbound(store, authors=ids).count(limit=REGULAR_LINES)
     if replies >= REGULAR_REPLIES or lines >= REGULAR_LINES:
         return 'regular'
     if replies >= MET_REPLIES or lines >= MET_LINES:

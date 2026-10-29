@@ -35,20 +35,20 @@ ASK = ('写之前当场问自己三句：① 这条换个群还成立吗？成�
        '③ 这条是他说的、你看到的，还是你推的？推的标明是推的。人那层不是他的全部。')
 
 
-def person_entity(config, db, person_id):
+def person_entity(config, store, person_id):
     from .scene_links import canonical_person_id
-    return 'relationship:' + (canonical_person_id(config, db, person_id) or person_id)
+    return 'relationship:' + (canonical_person_id(config, store, person_id) or person_id)
 
 
-def person_ids(config, db, person_id):
+def person_ids(config, store, person_id):
     """Every id this person goes by: the account, its canonical person, and configured aliases."""
     from .scene_links import canonical_person_id, extra_person_values
-    canonical = canonical_person_id(config, db, person_id) or person_id
-    return sorted({person_id, canonical, *extra_person_values(config, db, canonical)} - {None, ''})
+    canonical = canonical_person_id(config, store, person_id) or person_id
+    return sorted({person_id, canonical, *extra_person_values(config, store, canonical)} - {None, ''})
 
 
 def _elsewhere(store, person_id, here_scope):
-    prefixes = ['relationship:%s|scene:' % i for i in person_ids(store.config, store.db, person_id)]
+    prefixes = ['relationship:%s|scene:' % i for i in person_ids(store.config, store, person_id)]
     return sum(1 for head in head_records.with_prefix(store, *prefixes).rows(fields=['scope_key'])
                if head.get('scope_key') != here_scope)
 
@@ -93,9 +93,9 @@ LIST_HOME_ONLY = '「名单」只在家里列：那张表会把你别的对话�
 def layers(store, scene, person_id):
     """(person head, here head) of this person as this conversation reads them; each (head, revision) or None."""
     from .scene_links import relationship_target
-    target = relationship_target(store.config, store.db, scene, person_id)
+    target = relationship_target(store.config, store, scene, person_id)
     here = head_records.current(store, target['entity'], target['scope'])
-    person = head_records.current(store, person_entity(store.config, store.db, person_id), PERSON_SCOPE)
+    person = head_records.current(store, person_entity(store.config, store, person_id), PERSON_SCOPE)
     return person, here
 
 
@@ -189,7 +189,7 @@ def _name(store, people, person):
     from .records import people as people_records
     seen = people_records.label_of_person(store, person, ['card', 'nickname'])
     return (safe_name((seen or {}).get('card')) or safe_name((seen or {}).get('nickname'))
-            or speaker_name(store.config, person, None, store.db))
+            or speaker_name(store.config, person, None, store))
 
 
 # 「名单」 grows with everyone she writes: the newest that fit, then how many earlier ones there are (B15: a listing

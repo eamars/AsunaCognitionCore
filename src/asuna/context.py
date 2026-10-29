@@ -371,8 +371,8 @@ class ContextBuilder:
                         step_back_below=float(_tier_effective(_tm,'memory.forgetting.step_back_below',_tp) or 0.1))
         scope=scene['scope_key']
         moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
-        session_class=visibility.session_class(self.store.config,self.store.db,scene,event['person_id'])
-        place=visibility.place(self.store.config,self.store.db,scene,event['person_id'])
+        session_class=visibility.session_class(self.store.config,self.store,scene,event['person_id'])
+        place=visibility.place(self.store.config,self.store,scene,event['person_id'])
         from . import channel_kinds as _kinds
         system,system_ref=render_system(self.store,persona,session_class,place,
                                         bool(scene.get('channel_id')) and bool(_kinds.reply_parts(scene['_id'])))
@@ -385,14 +385,14 @@ class ContextBuilder:
         read=(scene_links.read_scope(self.store.config,scene) if scene_links else
               {'scene_id':scene['_id'],'scene_ids':[scene['_id']],'linked_scenes':[],
                'scope_keys':[scope],'linked_scope_keys':[]})
-        target=(scene_links.relationship_target(self.store.config,self.store.db,scene,event['person_id'])
+        target=(scene_links.relationship_target(self.store.config,self.store,scene,event['person_id'])
                 if scene_links else {'entity':'relationship:'+event['person_id'],'scope':scope,
                                      'canonical':event['person_id'],'shared':False,'linked_scopes':[]})
         # 没配 canonical 映射时 target 就是原来那一份（relationship:<本人>｜本场景 scope）。
         relation=head_records.current(self.store,target['entity'],target['scope'])
         # The person layer (understanding.py): one record for this person, read wherever she meets them.
         from . import understanding as _understanding
-        person_entity=_understanding.person_entity(self.store.config,self.store.db,event['person_id'])
+        person_entity=_understanding.person_entity(self.store.config,self.store,event['person_id'])
         person_head=head_records.current(self.store,person_entity,_understanding.PERSON_SCOPE)
         from .self_state import SelfState
         self_state=SelfState(self.store).read(persona,scope)

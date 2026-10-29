@@ -5,30 +5,42 @@ Usage: python tools/carried_check.py [--config config/local.json] [--model <pers
 Checks (carried.install_checks): the latest turn's system_ref section list equals carried() for its pair; each pair's
 refusal gives carried()'s number for the pair it names (the write is only measured, never made); a write gets its
 room line; every section whose inject and tier differ is said. Prints one line per check, PASS or FAIL, with the
-numbers it saw; no section text, no headings. A home task's command gets the database from the Host
-(dbread.Reader.from_host); otherwise the checkout's config names it.
+numbers it saw; no section text, no headings. A home task's command gets the database from the Host (the
+variables dbread reads); otherwise the checkout's config names it.
 """
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
-from asuna import carried, records            # noqa: E402
-from asuna.dbread import Reader               # noqa: E402
+from asuna import carried, memory_tiers       # noqa: E402
+from asuna.dbread import ENV                  # noqa: E402
+from asuna.state import Store                 # noqa: E402
 
 
 class ReadOnly:
-    """What carried() needs of a store, with no way to write: the database for the reads that have not moved, and
-    the owners' collections over it (her heads through records.heads)."""
+    """What carried() needs of a store, with no way to write: the owners' collections of a store on her database
+    (her heads through records.heads, her tiers through memory_tiers)."""
 
-    def __init__(self, db, config):
-        self.db, self.config = db, config
-        self.collection = records.on(db).collection
+    def __init__(self, store, config):
+        self.store, self.config = store, config
+        self.collection = store.collection
 
     def audit(self, *args, **kwargs):
         raise RuntimeError('carried_check reads only')
+
+
+def her_store(config):
+    """A store on the database the Host named for this command, else the one the checkout's config names."""
+    uri, name = os.environ.get(ENV['uri']), os.environ.get(ENV['database'])
+    if not (uri and name):
+        from asuna.config import load
+        local = load(ROOT / 'config' / 'local.json')
+        uri, name = local['mongo_uri'], local['database']
+    return Store({**config, 'mongo_uri': uri, 'database': name, 'allowed_databases': [name]}, name)
 
 
 def main():
@@ -44,9 +56,15 @@ def main():
     config = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
     if args.model:
         config['persona_model'] = json.loads(Path(args.model).read_text(encoding='utf-8'))
-    reader = Reader.from_host()
-    store = ReadOnly(reader.db, config)
-    personas = reader.db.memory_tiers.distinct('persona', {'row': 'item'})
+    held = her_store(config)
+    try:
+        return _checks(ReadOnly(held, config), path)
+    finally:
+        held.close()
+
+
+def _checks(store, path):
+    personas = memory_tiers.personas(store)
     if len(personas) != 1:
         print('FAIL persona: %d personas have tier rows, expected one' % len(personas))
         return 1

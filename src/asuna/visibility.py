@@ -40,9 +40,9 @@ def place_of(config, scene: dict, cls: str) -> str:
     return 'group' if scene.get('kind') == 'group' else 'dm'
 
 
-def place(config, db, scene: dict, person_id: str) -> str:
+def place(config, store, scene: dict, person_id: str) -> str:
     """The place of a turn in a scene, decided by the program like its session class."""
-    return place_of(config, scene, session_class(config, db, scene, person_id))
+    return place_of(config, scene, session_class(config, store, scene, person_id))
 
 
 def section_places(section) -> list:
@@ -62,7 +62,7 @@ def owner_id(config) -> str | None:
     return (config.get('chat') or {}).get('person_id')
 
 
-def session_class(config, db, scene: dict, person_id: str) -> str:
+def session_class(config, store, scene: dict, person_id: str) -> str:
     """owner_private ⇔ the owner's local scene, a DM whose canonical person is the owner, a trusted home line, or a
     group the owner configured as home."""
     local = config.get('chat') or {}
@@ -72,7 +72,7 @@ def session_class(config, db, scene: dict, person_id: str) -> str:
     scene_id = scene.get('_id') or scene.get('scene_id')
     if scene_id == local.get('scene_id') and person_id == owner:
         return OWNER_PRIVATE
-    if scene.get('kind') == 'dm' and scene_links.canonical_person_id(config, db, person_id) == owner:
+    if scene.get('kind') == 'dm' and scene_links.canonical_person_id(config, store, person_id) == owner:
         return OWNER_PRIVATE
     if channel_kinds.home(scene_id):
         return OWNER_PRIVATE          # ADR-017: a trusted home channel (the owner's own agents), not a platform

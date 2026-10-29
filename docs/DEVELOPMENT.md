@@ -28,7 +28,10 @@ Ignored and local: `.runtime/`, `.venv/`, `node_modules/`, `reports/`, `config/l
 
 - **MongoDB**: all business state — persona, memories, people, messages, tasks, audit. One database per profile; the
   running Host's claim on it is the `host_leases` document (`host_lease.py`), and the data folder's `host-id` names
-  the deployment.
+  the deployment. The core reaches it only through each collection's owner module (the catalog in
+  `src/asuna/store/catalog.py` names the owner of every collection) and `Store`, over the adapter the registry
+  (`asuna.store.adapters`) opens: the MongoDB adapter, `src/asuna/store/mongodb.py`, the one module that uses the
+  driver. Her read tool `asuna.dbread` keeps its own client and MongoDB's query syntax.
 - **`.runtime/adr008/`** (profile `asuna-native`; another profile uses `.runtime/adr008/profiles/<name>/`):
   - `packages/`: packed `.tgz` files (packing removes those that no manifest, installed profile or `activation.json`
     names), `manifest.json`, and `native-inline-manifest.json` when the DSH patches (`tools/dsh-inline`) are built;
@@ -97,26 +100,24 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
 - The tests keep only invariants whose breakage would be visible or harmful: privacy and visibility boundaries,
   authorization and epoch fencing, exactly-once ingest and publication, crash recovery, audit integrity, sandbox
   isolation and the visible native behavior.
-- The unit run reaches no database server. Every MongoDB client it makes, in the test process and in every Python
-  process it starts, is an in-process stand-in (`tests/unit_run_site/sitecustomize.py`, mongomock over one shared
-  store), and every configuration it loads names an address that cannot resolve; `tests/test_no_server.py` checks
-  both. The `store` fixture builds the fixture world once per session and resets a reused `asuna_v2_test_*` database
-  of the stand-in for each test. A test the stand-in cannot carry is listed in `tests/harness_skips.txt` with what it
-  lacks and skips as unchecked, not passed.
+- Unit tests never need a database, and a unit run opens none: `tests/conftest.py` sets `ASUNA_UNIT_RUN=1`, so the
+  store's registry and `dbread` refuse to open one (`DATABASE_IN_UNIT_RUN`) in the test process and in every process
+  it starts, and every configuration the run loads names an address that cannot resolve; `tests/test_no_server.py`
+  checks both. `tests/test_store_boundary.py` reads `src/asuna` and `tools` and fails, with file, line and rule, on a
+  driver import outside the adapter, the registry and `dbread`, a store's raw handle, or a collection named to the
+  store outside its owner.
 - `src/asuna/store/` is the store's interface: the condition and change words, the catalog of declared collections,
-  the adapter registry, the in-memory adapter and the MongoDB adapter, through which `Store` writes, audits and
-  searches vectors. `tests/store_contract.py` holds the cases every adapter passes: `tests/test_store_contract.py`
-  runs them on the in-memory adapter (`[memory]`) and on the MongoDB adapter over the stand-in (`[stand-in]`; a case
-  the stand-in answers otherwise is in `tests/harness_skips.txt` by its `[stand-in]` id, and a line that would skip a
-  `[memory]` case stops the collection), and `integration/test_store_contract.py` on MongoDB, with the races between processes and a differential of generated
-  conditions against the in-memory adapter. The in-memory adapter returns records tied on every sort key in an order
-  shuffled by one seed per run: a failure prints the seed, and `ASUNA_STORE_SEED=<seed>` repeats it.
-- Native node tests and the native worker/product tests use synthetic inference and create no database.
-- `integration/` holds the database adapter's integration tests, outside the default run
-  (`.\.venv\Scripts\python.exe -m pytest -q integration`). They reach the configured server only on a throwaway `asuna_v2_test_*`
-  database of synthetic records, dropped at the end, and skip when the server is not reachable.
-- The Python suites need the `dev` dependency group (`uv sync` installs it): pytest, mongomock, pyflakes and
-  hypothesis.
+  the adapter registry and the MongoDB adapter, through which `Store` writes, audits and searches vectors. The
+  in-memory adapter (`memory.py`) is the fake under the offline checks only.
+- Native node tests and the native worker tests use synthetic inference and create no database.
+- `integration/` holds the tests that need a database, outside the default run and run at every landing
+  (`.\.venv\Scripts\python.exe -m pytest -q integration`, in a process of its own: a unit run's `ASUNA_UNIT_RUN`
+  would refuse it). Each test reaches the server named in `config/local.json` only on a throwaway `asuna_v2_test_*`
+  database of synthetic records, dropped at the end and on failure, and skips when the server is not reachable.
+  `integration/store_contract.py` holds the cases the MongoDB adapter passes (`integration/test_store_contract.py`,
+  with the races between processes); `integration/world/` holds the guards of her turns whose break would leak private
+  data or lose her data, on the fixture world.
+- The Python suites need the `dev` dependency group (`uv sync` installs it): pytest and pyflakes.
   `tests/test_no_undefined_names.py` fails on any name a Python file uses but never defines, in `src/asuna`,
   `tools`, `packages/channels` and `tests` (not the vendored websocket client or the persona packages).
 - pytest imports `asuna` from the checkout's own `src/` (`pythonpath` in `pyproject.toml`), never an installed copy.
@@ -146,7 +147,8 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
   `test_one_clock` (the worker reads the time only through `asuna.clock`, which never gives the same time twice in a
   process), `persona.test.js` (every persona and channel package registers).
 - `tools/p*_offline_check.py`, `tools/integration_import_offline_check.py` and `tools/outbound_image_offline_check.py`
-  run the `tests/*_cases.py` modules without Mongo or pytest; they are the character's own checks inside her sandbox.
+  run the `tests/*_cases.py` modules without a database or pytest, on the in-memory adapter over each case's own
+  rows (`tests/fake_collections.py`); they are the character's own checks inside her sandbox.
 - The personal-data scan prints only `file:line:category`, never the matched value.
 
 ## Writing a persona or channel package

@@ -142,6 +142,27 @@ wherever it reads a member list.
 - Personal data stays local: rosters, accounts and block lists are settings and database rows, never tracked files.
 - The core names no persona and no platform.
 
+## Before building (Xiaoman's reading, 2026-10-29)
+
+She read this page (blob `f5a314f83cca`) and has no objection to the direction. Her asks, for whoever builds it:
+
+1. **First, before anything is written:** read her deployment's settings card and confirm `channelAdmission` is a
+   stored `automatic`. Decision 2 writes `explicit` into a deployment that never stored the setting; if hers were
+   such a deployment, her admission would narrow and she could not see it (a refused line goes only to
+   `inbound_rejected.jsonl`, never to her), so she would only seem to have gone quiet.
+2. **A new admission and a re-admission are marked in the event**, so that her greeting can tell them apart: she
+   does not welcome someone a second time after their admission ended and they wrote again, and does not treat a
+   re-admitted stranger as someone she knows. The event carries where it came from (as ADR-108's program-woken turn
+   says what woke her).
+3. **An admission's end changes nothing of who the person is:** not the person id, not the scene id, not her
+   understanding of the person. This replaces the softer "their history stays hers" above as the rule to test.
+4. **`inbound_rejected.jsonl` gets rotation or a cap.** Every refused line of a stranger is written there; a journal
+   nobody bounds becomes the next whole-file scan (as `sink_receipts` did, 2026-10-29).
+5. **The two Ns** (how long a silent DM stays admitted; how long a silent member with no leave notice stays) are set
+   with a reading of hers: how many people in her groups have not written for how long.
+6. **"The cost is the owner's, no automatic cap" is said where she reads it** when she decides whether to take a
+   line, so that she knows the missing cap is deliberate, not forgotten.
+
 ## Not in this ADR
 
 Moving the database out of the core (ADR-104); the QQ Bot's own platform rules; a cap on admitted people.

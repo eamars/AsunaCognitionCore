@@ -78,6 +78,32 @@ profile for new UI or behavior ([Demo environment](../RUN_ASUNA.md#demo-environm
   and the same precision). Within one second, `.` sorts before `Z`, so `...:55.896576Z` comes before `...:55Z`. Rows
   whose time field is null or missing drop out of any time window.
 
+## Work in the worker process
+
+The worker is one Python process: inbound admission, the channel server, the outbox and every tool body of both
+brains are its threads, under one interpreter lock. One thread busy in Python makes every other thread wait for the
+lock after each blocking call, and a Python thread cannot be stopped.
+
+- **Data-sized work runs in a child.** Work whose cost grows with stored data or with a call's arguments runs in a
+  child process with a deadline, killed past it: the data child (history search and the discussion digest,
+  `data_children.py`, `data_worker.py`) and the media children (voices and videos, `media_children.py`). A worker
+  thread does only work with a stated bound.
+- **The effects lock.** No tool body holds the effects lock (`queue.database_effects_lock`) across a wait outside the
+  process or a walk without a count bound (`ToolBroker.call`; `list_files` stops at `LIST_FILES_MOST` entries).
+- **Timed.** Every tool call of both brains leaves a `tool.time` audit row, and a call past its limit is recorded
+  (`tool_watch.py`). A `tool.time` that grows with the data is what moves work below into a child.
+
+Data-sized work that stays in the worker, each with its bound:
+
+| Work | Bound | Timed as |
+|---|---|---|
+| `memory_pilot.rank` (recall's surfacing, context building, the pilot thread) | Python dot products over her readable items, linear in their count (50 ms at 1,243 items of 768 dimensions) | `recall` |
+| pictures in `read_image` | a still picture is only base64-encoded; an animated one's frames are walked in Pillow (`animated.py`) within the 8 MiB cap | `read_image` |
+| the `task` page and a task's feedback observations (`tasks.py` `observations_of`, `records_pages`) | every artifact result of the task; `records_pages` is quadratic in the record count | `task` |
+| credential scrubbing of results (`credentials.scrub`) | the result's size | every action call |
+| the persona job data API (`persona_jobs.py`) | the job's `timeout_s` | `persona_job_run` |
+| the failure path's file walk and hashing (`tasks.files_left`) | at most 20,000 files walked and 20 hashed | (the executor, not a tool call) |
+
 ## The project map
 
 [docs/map](map/README.md) answers how the main things are done (home and public kept apart, QQ to DSH and back, a

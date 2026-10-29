@@ -24,6 +24,7 @@ Where each part of Asuna runs. For anyone changing the code or writing a package
 | Core plugin `asuna-cognition-core` | the DSH Web Host (Node) | native agents and sessions, presets, the settings card, the memory tab, the Python worker's life | `packages/cognition-core/src/index.js` |
 | Publication floor (`asunaFloor`) | the DSH Web Host | the profile's data folder, published candidates and their activation | `packages/cognition-core/src/floor.js` |
 | Business worker | a child process: `python -u -m asuna.native_worker` | `RuntimeHost`: the database, input and task queues, memory indexing and summaries, the [Channel API](#channel-api) server, the managed integration | `packages/cognition-core/src/worker.js`, `src/asuna/native_worker.py`, `src/asuna/host.py` |
+| Data child | a child process of the worker: `python -X utf8 -P -m asuna.data_worker <worker pid>` | the action brain's history search and discussion digest, on its own database connection, 30 seconds a call | `src/asuna/data_children.py`, `src/asuna/data_worker.py` |
 | Persona packages | registered with the core plugin | a character's seeds, model, skills and preset | `packages/personas/<name>/`; contract in [Persona packages](#persona-packages) |
 | Channel packages | registered with the core plugin; the adapter runs in the integration sandbox or in the Host | one platform's kind module and adapter | `packages/channels/<name>/`; contract in [Channel packages](#channel-packages) |
 
@@ -33,6 +34,8 @@ Where each part of Asuna runs. For anyone changing the code or writing a package
 - The plugin and the worker can run different versions: a core publication restarts only the worker, onto the selected core's `python/` (`floor.workerPath`), while the plugin stays the installed package. The worker's `initialize` takes no unknown key (no `**kwargs`), so a new `initialize` argument makes an older worker refuse every start (`TypeError: … unexpected keyword argument`). Anything new between the two goes where an older side passes it by: a file in the data folder, an extra key of an answer, or a new method whose `UNKNOWN_BUSINESS_METHOD` the caller survives.
 - `host_from_program` (home turns) lists the outages of the last day and those no committed turn has shown yet, newest first, at most 3, with `count` and, when it lists fewer, `not_listed`; a listed outage whose record cannot be read is counted in `unreadable` instead of said, and the others are still said. An outage stays until a turn that showed it commits (`shown_at`, which says only that it was in that turn's context) and in any case for a day. It can say an outage only afterwards: while the worker is down, none of her turns runs. While it lasts, the settings card shows the worker's state and error. A planned stop keeps who marked it (`by`), and the restart block of the launcher start that followed names it (`host_stops`, `restarts.block`).
 - Every inbound input is stored before any retrieval or model call (`src/asuna/ingress.py` `persist_input`).
+- Every tool call of both brains is timed where the worker dispatches it (`src/asuna/tool_watch.py`). When it ends it leaves one audit row `tool.time` on its task's stream (the action brain) or its episode's (the character brain), in their scope: `call_id`, `tool`, `duration_s` (3 decimals) and `outcome`, `done`, `failed` (the tool's own failure: an action call closed `FAILED`, a refusal of hers) or `raised` (any other error).
+- A tool call still running after 600 seconds, or after its own `timeout` plus 120 seconds for `sandbox_run` and `development_run`, is recorded once and goes on: the evidence record `host.tool_overrun` (`call_id`, `brain`, `tool`, `stream`, `seconds`, `limit_s`, and `stack`, the call thread's 60 innermost frames as `file:line function`), a lane fault (channel `host`, lane `tools`, stage the tool, error `overrun`) and one `ASUNA_TOOL_OVERRUN` line in the Host log. Nothing stops or restarts it.
 - The DSH services, hooks, events and file formats the core plugin relies on are listed in `packages/cognition-core/DSH_API.md`.
 
 ## Configuration
@@ -475,6 +478,8 @@ Keys live only in the worker's memory: never in the database, the audit or a log
 
 `lane`, `stage` and `error` are names: 1–80 characters of `A–Z a–z 0–9 _ . : -`. At most 200 rows a post, counted all together or not at all. The answer is `{"status": "recorded", "rows": n}`; the counts are added to what the hour already has (`src/asuna/lane_faults.py`), and an hour's counts are kept 30 days. Counts are at least once: a post re-sent after its answer was lost counts again in the same hour.
 
+The worker counts its own faults in the same records under channel `host`: lanes `transcriber` and `video` (the media children), `data` (the [data child](#process-layout)) and `tools` (a tool call past its limit).
+
 ### Post her own mute in a group
 
 `POST /v1/channels/{channel_id}/own_mute` — whether her account is muted in one admitted group.
@@ -715,6 +720,15 @@ A task's tools are fixed when she hands it over (`src/asuna/coordinator.py` `Coo
 | development and persona-job tools | `development.py` `DEVELOPMENT_TOOLS`, `PERSONA_JOB_TOOLS` | with the development grant ([Self-development](#self-development)) |
 
 - `ask_character` asks her for a judgment and waits for her answer; `report_progress` leaves her a note without waiting. Neither creates a public reply, a task or a grant.
+- `list_files` walks the task folder up to 2,000 entries (files and folders) and lists the files it found, sorted by path; when the folder has more, its answer also has `limited`, in words (`tasks.py` `LIST_FILES_MOST`).
+- History search and the discussion digest run in the data child ([Process layout](#process-layout)): 30 seconds a call, a call at a time, at most 30 seconds behind another call or the child's start. A call that did not run to its end is `FAILED` with one of these (`src/asuna/data_children.py`):
+
+| Case | Words |
+|---|---|
+| past 30 seconds (the child is killed; the next call starts a fresh one) | `QUERY_TIMEOUT: 这次查询超过 30 秒被停下了，没有结果；把范围收窄（时间窗、人、话题、limit）再试` |
+| behind another call or the child's start for 30 seconds | `QUERY_BUSY: 做查询的后台程序这会儿腾不出来，这次没有结果；过一会儿再试` |
+| the child will not start, has stopped with the worker, or died in the call | `QUERY_UNAVAILABLE: 做这次查询的后台程序这会儿没起来，这次没有结果；过一会儿再试` |
+
 - A task keeps the grants of the turn that handed it over; her later words never add one.
 - A tool call that did not happen is an error, and its tool record is `FAILED` with the same words (`tasks.py`
   `failure_words`): a workspace file operation (`TASK_OPERATION_FAILED: …`), and `generate_image`, `render_svg` or

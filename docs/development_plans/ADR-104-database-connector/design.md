@@ -518,6 +518,34 @@ blob store. Tests that faked the store's insides changed: three delete a blob th
 check also knows `STORED` and the owner's `get(storage=...)`, and the offline outbound-image cases' fake store has the
 blob interface instead of a fake GridFS bucket.
 
+As built, `records.heads`, `documents`, `records.people` and `records.ideas` (B9): every operation of their rows,
+under those names; call sites import them as `head_records`, `people_records`, `idea_records`, and `documents`' own
+operations are module functions of `documents.py` beside `DocumentStore` (`revision` takes an id or a `mutation`;
+`revisions` a section or `sectioned` for any). Their views are `records/view.py`'s, in the replaced read's order: an
+idea list without a sort (the reflection map's states) passes `by=None`. `Store.head`, `init_head` and `mutate` are
+gone into `current`, `init` and `mutate`; `Store.seed` calls `init`; `Store.identity` stays (its one caller is a test)
+and reads through `by_account`. None follows the rule above: its fences are a head's or revision's id, an entity's
+key, a scope, a persona, a running record (`slug`), a person, an account and its platform, a conversation; its value
+conditions an idea's state, the mutation that last wrote an entry, a section (`sid`) and a body's hash (a journal
+revision holds no `body_sha256`, so a hash of None finds the section's revisions, as the replaced equality did). A
+required mutation id given None finds nothing (the replaced `{mutation_id: None}` matched revisions without one). A
+prefix read (`with_prefix`) is `StartsWith`: where the replaced read wrote one regular expression with alternatives
+(`^relationship:(a|b)\|`, familiarity and `understanding._elsewhere`), the owner sends one anchored prefix per person
+(`$in` of prefixes, with `$type: 'string'`, StartsWith's own form); the same heads, the same `IXSCAN` on `_id`. Two
+runtime loops became owners' calls (5.12): `crossing.versions` (the newest revision of a document and of a running
+record) and `host`'s writer (`save_identity`). `tools/carried_check.py` reaches the owners through `records.on(db)` (the
+read-only `Store` of section 6 is B12's). 151 map rows in 29 files (the map at `5a196e66c85e`: state_heads 49,
+state_revisions 40, journal_entries 13, journal_revisions 8, identities 15, scene_people 16, ideas 10): 149 moved, and
+the 2 of `tools/adr104_equivalence.py` are B7's old side, kept; `privacy._erase`'s heads and revisions are the owner's
+`heads`, `point_to`, `drop_head`, `stale_revisions` and `tombstone_revision`. The seven collections are declared and no
+longer `pending` (every field nullable but the fields of their plain unique indexes, required, 3.5:
+`identities.platform` and `account_id`, `scene_people.scene_id` and `handle`, `journal_entries.persona`, `slug`, `sid`
+and `seq`, `state_revisions.mutation_id`, `journal_revisions.mutation_id`; times ISO text). `tests/test_record_owners.py`
+guards them. Tests that called the moved Store methods call the owner (13 files: `head_records.current`, `init`,
+`mutate`); stand-ins that imitated `Store.head` lost it (`tests/outbound_image_cases.py`, `tests/p5_proactive_cases.py`,
+`tests/test_role_error_words.py`: the owner reads their empty heads); a fixture that wrote a revision without its
+mutation id carries one (`tests/test_context_budget.py`).
+
 **The shared layer's own surface** (no collection's owner; 21 map rows): `Store.put` and `Store.audit` (stay; owners
 call `put` through `save`, every module calls `audit`), `Store.ensure` (replaces `migrate`), `Store.recover_commits`,
 `Store.seed` (tests), the **maintenance surface** (`store.maintenance.record(collection, id)`,
@@ -988,7 +1016,7 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | B6 | `records.tasks`, `records.plans` (the `$lookup` as reads) | 168 (as built: 166 in 23 files, the map at `dbb88ee2f64f`) | yes | 8.3, its 42 read cases, and `recent_with_inputs` against the aggregate on 20 conversations: same 16 tasks, same order, their fields in order, time p50/p95 |
 | B7 | `records.memories` (retrieval's lexical reads; vector parts as built, 1b's pairs as an `Or` of dicts, an empty pair list answered without a call) | 67 (as built: 62 in 17 files, the map at `f18f1778f243`) | yes | 8.3; retrieval's whole search old against new on 40 queries (as 1a did): the same six and 24; `state.py:218-227`'s `if not combinations: return []` (the empty pair list) is production code with no test until `records.memories`' `test_an_empty_pair_list_answers_nothing_without_a_call` lands here |
 | B8 | `records.artifacts`, `blobs` (the blob interface), `media_life`, `outbound_files` | 126 (as built: 124 in 20 files, the map at `5a196e66c85e`) | yes | 8.3; blob probe on a throwaway database; her stored files open and hash-check (20 sampled ids, read only) |
-| B9 | `records.heads`, `documents`, `records.people`, `records.ideas` | 151 | yes | 8.3; `audit.verify_documents` after the restart |
+| B9 | `records.heads`, `documents`, `records.people`, `records.ideas` | 151 (as built: 151 in 29 files, 149 moved and B7's 2 old-side reads kept, the map at `5a196e66c85e`) | yes | 8.3; `audit.verify_documents` after the restart |
 | B10 | `audit` reads, prune and redaction; `privacy` over the owners' `redact_scope`, `tombstone`, `invalidate` | 47 (+ the 146 appends, which stay `store.audit`) | yes | 8.3; prune in dry-run counts equal old against new; the erasure path on a throwaway database (no erasure on hers) |
 | B11a | `stickers`, `notes`, `watches`, `questions`, `switches`, `own_mute`, `group_members`, `developer_inbox`, `host_stops` | 120 | yes | 8.3 |
 | B11b | `memory_tiers` (with `carried`'s room rows), `carried`, `memory_pilot`, `crossing`, `affect` | 125 | yes | 8.3 |

@@ -268,6 +268,9 @@ class Channels:
     def __init__(self, controller):
         self.controller = controller
         self.store = controller.app.store
+        # This start of the worker: what it answered about admission holds until it ends. A package that sees it change
+        # drops the answers it kept (settings are applied by a new start).
+        self.epoch = uuid.uuid4().hex[:12]
 
     def authenticate(self, channel_id, authorization):
         """(channel, route id) for the bearer: the channel's own token opens all of it (route None); a route key
@@ -349,6 +352,57 @@ class Channels:
         with database_effects_lock(self.store.name):
             return own_mute.receive(self.store, channel_id, body)
 
+    ADMISSION_ASKS = 200
+
+    def admission(self, channel_id, body):
+        """POST …/admission: what the core would do with these senders and conversations, and for how long a package
+        may reuse the answer (channel_admission.judge). Pure: it changes nothing."""
+        from .channel_admission import judge
+        if set(body) - {'account_id', 'asks'}:
+            raise PermissionError('CHANNEL_ENVELOPE_FIELD_DENIED')
+        if body.get('account_id') != self.store.config['channels'][channel_id]['account_id']:
+            raise PermissionError('CHANNEL_IDENTITY_DENIED')
+        asks = body.get('asks')
+        if not isinstance(asks, list) or not 1 <= len(asks) <= self.ADMISSION_ASKS:
+            raise ValueError('INVALID_ADMISSION_ASK: asks 要是 1..%d 个提问的列表' % self.ADMISSION_ASKS)
+        for index, ask in enumerate(asks):
+            conversation = ask.get('conversation') if isinstance(ask, dict) else None
+            if not isinstance(ask, dict) or ('route_id' in ask) == ('conversation' in ask) \
+                    or set(ask) - {'conversation', 'route_id', 'sender_id'} or ('route_id' in ask and 'sender_id' in ask) \
+                    or ('route_id' in ask and not isinstance(ask['route_id'], str)) \
+                    or ('conversation' in ask and not (isinstance(conversation, dict) and set(conversation) == {'type', 'id'}
+                                                       and conversation['type'] in ('dm', 'group')
+                                                       and isinstance(conversation['id'], str))) \
+                    or ('sender_id' in ask and not isinstance(ask['sender_id'], str)):
+                raise ValueError('INVALID_ADMISSION_ASK: 第 %d 个提问要有 conversation（{"type": "dm" 或 "group", "id"}，'
+                                 '可带 sender_id）或 route_id，二选一' % index)
+        if self.controller.reconfiguring or self.controller.stopping.is_set():
+            raise RuntimeError('HOST_RECONFIGURING')
+        return {'answers': [judge(self.store, channel_id, ask, body['account_id']) for ask in asks], 'epoch': self.epoch}
+
+    def routes(self, channel_id):
+        """GET …/routes: the routes the core serves on this channel (listed or admitted) that no block list stops, each
+        with its conversation: how a package learns which conversations to work on (catch-up)."""
+        if self.controller.reconfiguring or self.controller.stopping.is_set():
+            raise RuntimeError('HOST_RECONFIGURING')
+        channel = self.store.config['channels'][channel_id]
+        blocked = {'group': set(channel.get('blocked_groups', [])), 'dm': set(channel.get('blocked_senders', []))}
+        return {'routes': [{'route_id': route_id, 'conversation': dict(route['target'])}
+                           for route_id, route in list(channel.get('routes', {}).items())
+                           if route['target']['id'] not in blocked[route['target']['type']]], 'epoch': self.epoch}
+
+    def departures(self, channel_id, body):
+        """POST …/departures: a person is no longer in a group; their admission ends (channel_admission.depart)."""
+        from .channel_admission import depart
+        if set(body) - {'account_id', 'conversation', 'sender_id', 'event_id', 'occurred_at'}:
+            raise PermissionError('CHANNEL_ENVELOPE_FIELD_DENIED')
+        if any(key in body and not isinstance(body[key], str) for key in ('event_id', 'occurred_at')):
+            raise ValueError('INVALID_DEPARTURE: event_id 和 occurred_at 要是文字')
+        with self.controller.ingress_lock:
+            if self.controller.reconfiguring or self.controller.stopping.is_set():
+                raise RuntimeError('HOST_RECONFIGURING')
+            return depart(self.controller, channel_id, body)
+
     def receive(self, channel_id, body):
         # Admission and input persistence share the controller's existing fence.
         from .chat import INGRESS_TIMING as timing
@@ -411,9 +465,10 @@ class Channels:
         if reply is not None and (not isinstance(reply, str) or not 1 <= len(reply) <= 200):
             raise ValueError('INVALID_REPLY_ID')
         channel = self.store.config['channels'][channel_id]
-        if channel.get('admission') == 'automatic' or channel.get('blocked_senders') or channel.get('blocked_groups'):
-            from .channel_admission import admit
-            admit(self.controller, channel_id, body)
+        admitted = None
+        from .channel_admission import admit, mode
+        if mode(channel_id, channel) == 'automatic' or channel.get('blocked_senders') or channel.get('blocked_groups'):
+            admitted = admit(self.controller, channel_id, body)[1]
         route = channel['routes'].get(body.get('route_id'))
         member = route_members(route).get(body.get('sender_id')) if route else None
         if not member or body.get('account_id') != channel['account_id']:
@@ -437,6 +492,8 @@ class Channels:
                  'adapter_id': channel_id, 'text': body['text'],
                  'channel': {'id': channel_id, 'account_id': channel['account_id'],
                              'platform_event_id': body['event_id'], 'target': route['target'], 'sender_id': body['sender_id']}}
+        if admitted:
+            event['admitted'] = admitted                 # how this person came in: `new` or `returned` (ADR-107)
         event['raw'] = kept_raw(event, body.get('raw'), body.get('mentioned_account_ids'))
         from . import voice
         voices = voice.entries_for(self.store, channel_id, body, event['raw'])
@@ -888,6 +945,12 @@ class ChannelServer:
                         channels.scope_check(channel_id, scoped, self.command, parts[3:], body)
                     if self.command == 'POST' and parts[3:] == ['events']:
                         value = channels.receive(channel_id, body)
+                    elif self.command == 'POST' and parts[3:] == ['admission']:
+                        value = channels.admission(channel_id, body)
+                    elif self.command == 'POST' and parts[3:] == ['departures']:
+                        value = channels.departures(channel_id, body)
+                    elif self.command == 'GET' and parts[3:] == ['routes']:
+                        value = channels.routes(channel_id)
                     elif self.command == 'POST' and parts[3:] == ['members']:
                         value = channels.members(channel_id, body)
                     elif self.command == 'POST' and parts[3:] == ['media_keys']:

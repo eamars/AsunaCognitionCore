@@ -56,6 +56,10 @@ def typed(text):
     return TYPED_HANDLE.sub('@＃', text)
 
 
+# How a person came in, said once on the line that brought them (event['admitted'], channel_admission.admit): a new
+# admission and one after their admission ended read differently, so a greeting can tell them apart (ADR-107).
+ADMITTED_VERSION = 1
+ADMITTED_WORDS = {'new': '第一次在这里说话', 'returned': '退群后又回来了'}
 UNKNOWN_NAME = '还不知道名字'
 # The program is never a person (ADR-089): its lines read by this word, and it takes no label or number. A stored record
 # of it keeps its number taken (a new number is the highest + 1) and stays out of every roster.
@@ -580,7 +584,9 @@ class People:
         from .channels import REPLY_ONLY_KEY
         from .notices import KEY as NOTICE_KEY, MARK as NOTICE_MARK
         number = ' 〔%d〕' % row['scene_seq'] if row.get('scene_seq') and numbered(self.store, scene) else ''
+        came = ADMITTED_WORDS.get(event.get('admitted'))
         lines = [self.head(scene['_id'], doc, str(row.get('received_at') or now())) + (' ' + stamp if stamp else '')
+                 + ('（%s）' % came if came else '')
                  + number + (NOTICE_MARK if (event.get('raw') or {}).get(NOTICE_KEY) else '')]   # the program's line
         quoted = group if group.get('reply_to') or group.get('reply_message_id') else (event.get('reply') or {})
         # (a private chat's quote is `event.reply`, ADR-079)

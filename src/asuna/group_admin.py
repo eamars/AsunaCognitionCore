@@ -191,6 +191,17 @@ def notes_block(docs, scene):
 
 
 # ---- outbox (channels.py) ------------------------------------------------
+def _still_served(store, channel_id, row):
+    """Whether the conversation an action is for is still one the core serves and no block list stops. The adapter
+    sends what it is handed and asks nobody (ADR-107), so the check is made here, when the action goes out."""
+    target = row.get('target') or {}
+    if target.get('type') == 'request':
+        return True                     # a request is answered by its flag; it has no route
+    channel = store.config['channels'][channel_id]
+    served = any(route['target'] == target for route in list(channel.get('routes', {}).values()))
+    return served and target.get('id') not in channel.get('blocked_groups', [])
+
+
 def claim(store, channel_id):
     """One queued action for this channel's adapter, or None; it is marked SENDING with a fresh attempt."""
     import uuid
@@ -200,9 +211,18 @@ def claim(store, channel_id):
     if artifact_records.admission(store, 'group_action', channel_id, 'SENDING', claimed_since=lease).first(
             fields=['_id']):
         return None                     # ADR-095: one out at a time, so they happen in the order she chose them
-    row = artifact_records.admission(store, 'group_action', channel_id, 'QUEUED', by='created_at').first()
-    if not row:
-        return None
+    while True:
+        row = artifact_records.admission(store, 'group_action', channel_id, 'QUEUED', by='created_at').first()
+        if not row:
+            return None
+        if _still_served(store, channel_id, row):
+            break
+        # The group was blocked (or its route went) after she chose the action: it does not go out.
+        artifact_records.save(store, {**row, 'state': 'FAILED', 'receipt_at': now(),
+                                      'platform_receipt': {'status': 'failed', 'reason': 'target_not_authorized'}},
+                              expected=row['revision'], stream=row['_id'])
+        store.audit(row['episode_id'], 'group_action.not_sent', {'action': row['_id'], 'why': 'target_not_authorized'},
+                    row['scope_key'])
     attempt = uuid.uuid4().hex
     artifact_records.save(store, {**row, 'state': 'SENDING', 'attempt_id': attempt, 'claimed_at': now()},
               expected=row['revision'], stream=row['_id'])

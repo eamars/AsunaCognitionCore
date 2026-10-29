@@ -33,6 +33,9 @@ Authenticated transport-neutral adapter seam. Platform protocol belongs to the a
   - `notices`
   - `voice` — One voice of a line about to be posted, transcribed now; its outcome waits for the line (voice.py).
   - `own_mute`
+  - `admission` — POST …/admission: what the core would do with these senders and conversations, and for how long a package may reuse the answer (channel_admission.judge).
+  - `routes` — GET …/routes: the routes the core serves on this channel (listed or admitted) that no block list stops, each with its conversation: how a package learns which conversations to work on (catch-up).
+  - `departures` — POST …/departures: a person is no longer in a group; their admission ends (channel_admission.depart).
   - `receive`
   - `claim`
   - `attachment` — 字节端点：GET /v1/channels/<id>/outbox/<pub>/attachment?attempt_id=…&artifact_id=…
@@ -59,6 +62,7 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 - def `home` — A scene or person of a kind whose conversations are trusted home ones (ADR-017).
 - def `marks_answers` — Who on this line marks the lines that answer her questions (agent_line.py send --answers), so an unmarked line of theirs answers none: their person id, or None where nobody marks.
 - def `owner_joins` — A scene of a kind the owner joins from the Web (ADR-051): a home line only.
+- def `open_admission` — Whether the deployment's open admission may apply to this channel: its kind declares OPEN_ADMISSION.
 - def `answers_requests` — Whether a configured channel's kind brings requests her home answers (notices.py).
 - def `sends_images`
 - def `sends_stickers`
@@ -92,10 +96,15 @@ What a channel's running adapter says it carries (ADR-079 §9.7).
 
 [src/asuna/channel_admission.py](../../src/asuna/channel_admission.py)
 
-Owner-configured channel admission. Platform events never grant owner access.
+Channel admission: who may speak to her. The core decides, once (ADR-107); a channel package asks and acts on the answer. Platform events never grant owner access.
 
+- def `admitted` — Whether a grant was made by an admission, not listed by the owner: its folder is named `auto-<hash>`.
+- def `mode` — `automatic` (open) only where the deployment says so and the channel's kind may be open (OPEN_ADMISSION); every other channel is `explicit` (closed), a home line included.
+- def `closed_by_kind` — Channels the deployment opens (`automatic`) whose kind does not declare OPEN_ADMISSION, so they stay closed: a platform kind from before the declaration, or one installed beside a newer core.
 - def `restore_admissions`
 - def `admit` — Called only behind channel authentication; validate before changing state.
+- def `judge` — What the core would do with one ask of a channel package (POST …/admission), and for how long the answer may be reused.
+- def `depart` — A person is no longer in a group (POST …/departures).
 
 ## `notices`
 

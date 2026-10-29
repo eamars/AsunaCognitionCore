@@ -345,7 +345,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures and files
 - [`channels`](../../src/asuna/channels.py) — Authenticated transport-neutral adapter seam.
 - [`channel_kinds`](../../src/asuna/channel_kinds.py) — Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq).
 - [`capabilities`](../../src/asuna/capabilities.py) — What a channel's running adapter says it carries (ADR-079 §9.7).
-- [`channel_admission`](../../src/asuna/channel_admission.py) — Owner-configured channel admission.
+- [`channel_admission`](../../src/asuna/channel_admission.py) — Channel admission: who may speak to her.
 - [`notices`](../../src/asuna/notices.py) — Platform notices as one-off lines (ADR-064 phase 1): the adapter projects a notice into words, the host passes them on as the program's line, never as the words of the person who did it.
 - [`faults`](../../src/asuna/faults.py) — When one of her turns fails in the program (FAILED_RUNTIME), nobody may be left not knowing (ADR-076 R4).
 - [`caught_up`](../../src/asuna/caught_up.py) — Lines caught up after a gap: a channel adapter fetched them from the platform's history once it was back.

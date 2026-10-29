@@ -25,6 +25,7 @@ FACES = {row['name']: row['id'] for row in _FACE_ROWS}
 for _row in _FACE_ROWS:                # a renamed face keeps its old names (`aliases`) so they still pass the core's check
     for _alias in _row.get('aliases') or ():
         FACES.setdefault(_alias, _row['id'])
+OPEN_ADMISSION = True             # its senders are strangers the deployment may admit (channelAdmission automatic)
 REQUESTS = True                   # friend and group requests reach her home, which answers them (qqadapter/notices.py)
 STICKERS = True                   # the adapter can send a sticker: a picture marked as one, or a store sticker
 # What her reply is made of here (ADR-064 phase 2): she speaks only through `speak`, in these parts.

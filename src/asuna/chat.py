@@ -135,9 +135,8 @@ class Chat:
                 task = task_records.get(self.app.store, task_id)
                 if task['state'] != 'READY' or task['intent_revision'] != revision:
                     continue
-                from .grants import workspace_grant
-                grant = workspace_grant(self.app.config, task['scene_id'], task['requester_id'])
-                task = self.app.executor.run(task_id, Path(grant['workspace']))
+                from .grants import workspace_folder
+                task = self.app.executor.run(task_id, workspace_folder(self.app.config, task['scene_id'], task['requester_id']))
                 if not self.stopping.is_set():
                     self.hand_back(task)
                     self.app.evidence.record('chat.task_result_queued', {'task_id': task_id, 'state': task['state']})

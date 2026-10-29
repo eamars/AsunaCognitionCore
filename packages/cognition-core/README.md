@@ -13,7 +13,7 @@ bytecode or Node dependencies are distributed.
 - **Python:** the worker needs `uv` or Python **3.12+**. With the `python` setting empty, Core builds its environment
   on first start in the data folder from the included `python/requirements.lock` (uv when on PATH, otherwise
   `python -m venv` and pip) and reuses it until the lock changes. Set `python` to use an interpreter of your own.
-- **`asuna-cognition-core`:** `persona`, `deployment`, `channelAdmission` (`explicit` or `automatic`) and
+- **`asuna-cognition-core`:** `persona`, `deployment`, `channelAdmission` (`explicit`, closed, or `automatic`, open) and
   independent native provider/model routes: `routes.character`, `routes.action`, and the optional `routes.actionHigh`
   and `routes.appraiser`. Core uses the Host's Schedule service for her plans; on a Host without one,
   `mountSchedule: false` (default `true`) turns plans off, and otherwise Core waits up to 60 s for the service.

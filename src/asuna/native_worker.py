@@ -224,8 +224,12 @@ class NativeLane:
             else:
                 grant = workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
             platform = channel_kinds.of(ep['scene_id'])
-            cwd = (self.worker.channel_workspace(platform) if self.lane in ('character', 'attend') and platform
-                   else str(Path(grant['workspace']).resolve()))
+            if self.lane in ('character', 'attend') and platform:
+                cwd = self.worker.channel_workspace(platform)
+            else:
+                # Made now: no folder exists before a task of theirs needs it (ADR-107).
+                cwd = str(Path(grant['workspace']).resolve())
+                Path(cwd).mkdir(parents=True, exist_ok=True)
             mode = None
             if self.lane == 'character':
                 from .role_tools import thinking_mode

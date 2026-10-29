@@ -66,9 +66,10 @@ profile for new UI or behavior ([Demo environment](../RUN_ASUNA.md#demo-environm
 - **Ingress.** Every inbound line is admitted under one fence, the controller's `ingress_lock` (`Channels.receive`,
   `Chat.receive`), so whatever waits under it holds up every line behind it. Admission there does no network I/O,
   starts no subprocess and waits on no Host reply. Work of those kinds stays outside the fence: picture downloads,
-  voice transcription, and walks over every member of every channel (a path resolve or a `mkdir` per grant). A
+  voice transcription, and walks over every member of every channel (a path resolve per grant). A
   download happens after the line is in, or when she opens it; a voice is transcribed before its line is posted; a new
-  member's grant is checked and prepared alone (`host.prepare_admission`). A task's stage takes the effects lock
+  member's grant is checked and prepared alone (`host.prepare_admission`). Neither a start nor an admission makes a
+  working folder: `grants.workspace_folder` makes it when a task of that person first needs it. A task's stage takes the effects lock
   (`queue.database_effects_lock`) first and the fence only for its brief check, never the fence while it waits for
   the effects lock.
 - **The one clock.** `asuna.clock` gives the time in one process in the order it was read (it takes a lock): a reading
@@ -195,6 +196,11 @@ resolved) or `packages/channels/napcat-qq` (managed adapter in the sandbox, whic
 4. The README says what a deployment configures (see the QQ package's "Setting up QQ").
 5. `npm install`, `npm run test:native`, then add it to a profile
    ([Add or remove an optional package](../RUN_ASUNA.md#add-or-remove-an-optional-package)).
+
+Who may speak to her is the core's, never a package's: a package forwards events and asks the core's `admission`
+endpoint before it spends work on a sender ([Admission](../RUNTIME_API.md#admission)); it holds no roster, block list or
+mode. A kind whose senders are strangers declares `OPEN_ADMISSION = True`, and `tests/test_channel_admission.py` (a
+stand-in kind, no platform) is the contract any package is built against.
 
 What she reads and the tools she uses do not depend on the adapter: the line handle and every rendering are
 Core's, from Core's records; an adapter supplies facts (this line quotes that platform id), never words, and declares

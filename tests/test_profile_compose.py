@@ -35,3 +35,36 @@ def test_a_first_install_takes_its_deployment_from_the_local_files():
     core = next(row for row in setup_native_profile.compose(defaults({'qq': {}}), saved_without)
                 if row['id'] == 'asuna-cognition-core')['config']
     assert core['deployment'] == {'channels': {'qq': {}}, 'timezone': 'Etc/UTC'}, 'a profile with no deployment yet is seeded'
+
+
+# ── channelAdmission (ADR-107): a new profile is open, a running one keeps what it reads ──
+def installed(saved, asked=None):
+    """The core's saved config after an install over `saved` (the rows DSH keeps), as the installer writes it."""
+    first = defaults({'qq': {}})
+    default = setup_native_profile.admission_default(saved, asked)
+    if default:
+        first[1]['config']['channelAdmission'] = default
+    return next(row for row in setup_native_profile.compose(first, saved) if row['id'] == 'asuna-cognition-core')['config']
+
+
+def test_a_new_profile_is_open_and_a_running_one_that_stores_nothing_is_pinned_closed():
+    bare = [{'id': 'asuna-cognition-core', 'name': '@asuna/cognition-core'}]      # what `dsh plugin add` leaves
+    assert installed([])['channelAdmission'] == 'automatic' and installed(bare)['channelAdmission'] == 'automatic'
+    running = [{'id': 'asuna-cognition-core', 'config': {'python': 'p', 'deployment': {'channels': {'qq': {}}}}}]
+    assert installed(running)['channelAdmission'] == 'explicit', \
+        'a running profile reads explicit because it stores nothing; the install writes that down'
+    # whatever it saved wins, and the next install over a new or a pinned profile changes nothing
+    for kept in ('automatic', 'explicit'):
+        saved = [{'id': 'asuna-cognition-core', 'config': {'deployment': {}, 'channelAdmission': kept}}]
+        assert installed(saved)['channelAdmission'] == kept
+    once = [{'id': 'asuna-cognition-core', 'config': installed(bare)}]
+    assert installed(once)['channelAdmission'] == 'automatic'
+    assert installed(running, asked='automatic')['channelAdmission'] == 'automatic', 'the flag still chooses'
+
+
+def test_what_a_profile_saved_for_admission_is_printed_and_changes_nothing():
+    saved = lambda **config: [{'id': 'asuna-cognition-core', 'config': config}]
+    assert setup_native_profile.stored_admission([]) == 'absent'
+    assert setup_native_profile.stored_admission(saved(deployment={})) == 'absent'
+    assert setup_native_profile.stored_admission(saved(channelAdmission='automatic')) == 'stored automatic'
+    assert setup_native_profile.stored_admission(saved(channelAdmission='explicit')) == 'stored explicit'

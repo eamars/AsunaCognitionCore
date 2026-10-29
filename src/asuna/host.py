@@ -144,7 +144,8 @@ def _route_scene(store, local, channel_id, channel, scene_id, kind, people, save
             revoked = set(scene['members']) - set(people)
             # The owner joining his own home line opens it to nobody else: the conversation goes on.
             joined = set(people) - set(scene['members']) - ({local['person_id']} if joins else set())
-            bump = bool(revoked) or (channel.get('admission') != 'automatic' and bool(joined))
+            from .channel_admission import mode
+            bump = bool(revoked) or (mode(channel_id, channel) != 'automatic' and bool(joined))
             save_scene({**scene, 'members': people,
                 'policy_epoch': scene['policy_epoch'] + int(bump)},
                 expected=scene['revision'], stream='channel-membership:' + scene_id)
@@ -191,8 +192,6 @@ def prepare_channels(store, *, dry_run=False):
                 workspace = _checked_workspace(grant, workspaces)
                 workspaces.add(workspace)
                 _bind_identity(put, identities_by_id, channel_id, route, kind, sender, person)
-                if not dry_run:
-                    workspace.mkdir(parents=True, exist_ok=True)
             _route_scene(store, local, channel_id, channel, scene_id, kind, people, save_scene)
     if scene_links and not dry_run:
         # 派生投影：联动边写进 scenes，只为可观察；读路径每次现算自配置。
@@ -232,8 +231,6 @@ def prepare_admission(store, channel_id, route_id, route, sender, *, dry_run=Fal
     workspace = _checked_workspace(grant, workspaces)
     identity = people_records.identity(store, person)
     _bind_identity(put, {person: identity} if identity else {}, channel_id, route, kind, sender, person)
-    if not dry_run:
-        workspace.mkdir(parents=True, exist_ok=True)
     people = [other['person_id'] for other_sender, other in members.items() if _speaks(channel, route, kind, other_sender)]
     _route_scene(store, local, channel_id, channel, scene_id, kind, people, save_scene)
     if not dry_run:
@@ -309,8 +306,10 @@ class RuntimeHost:
             persona_sources(self.config, self.settings['persona'])
             prepare_local_scene(self.app.store, self.settings)
             local_ready = time.perf_counter()
-            from .channel_admission import restore_admissions
+            from .channel_admission import closed_by_kind, restore_admissions
             restore_admissions(self.app.store)
+            for channel_id in closed_by_kind(self.app.config):
+                self.evidence.record('channel.admission_closed_by_kind', {'channel_id': channel_id})
             try:
                 from .stickers import remember_shelf
                 remember_shelf(self.app.store, self.settings['persona'])     # her shelf is always known

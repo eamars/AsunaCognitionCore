@@ -28,7 +28,7 @@ import { readSpill } from './spill.js';
 import { normalizePersona, resolvePersona } from './persona.js';
 import { normalizeChannel } from './channel.js';
 import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput, retitleSession } from './navigation.js';
-import { release, releaseAfterCompaction, repair } from './pairing.js';
+import { release, releaseAtBoundary, repair } from './pairing.js';
 import { NativeChildren } from './children.js';
 import { applySearch, registerWebSearch } from './search.js';
 import { applyFetch } from './fetch.js';
@@ -1325,7 +1325,7 @@ export class CognitionCore {
     });
     scope.on('agent/pre-step', async ({ agent }, next) => {
       const state = this.state(agent.session.id);
-      release(this, agent.session);                 // lines held while her tool call ran: after its result
+      release(this, agent.session);                 // lines held while her last step ran: after its result
       const decision = await next();
       if (decision.kind !== 'enter') return decision;
       const stage = state.admitted; state.admitted = null;
@@ -1548,7 +1548,7 @@ export function apply(ctx, config = {}) {
   // once more, instead of ending her turn and every later one there (image-refusal.js).
   ctx.on('agent/request-error', imageRefusalListener(text => ctx.logger.warn('Asuna: ' + text)));
   // Platform lines held while a compaction ran on their conversation join it as the compaction ends (pairing.js).
-  releaseAfterCompaction(core);
+  releaseAtBoundary(core);
   // Her lanes' requests carry no local root of this computer: rewritten with the worker's table (roots.js, ADR-098).
   rootsAtTheModel(core);
   // A compaction summary is sent as its conversation's next request would be (compaction.js, ADR-094 §10.2).

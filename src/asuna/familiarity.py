@@ -6,7 +6,8 @@ raise it: only the owner's account, her own written understanding, and how often
 with them count. A persona gives each level its stance (persona-model `people.familiarity`); the core only
 names the levels.
 """
-import re
+from .records import episodes as episode_records
+from .records import heads as head_records
 
 TABLE_VERSION = 1
 LEVELS = ('owner', 'known', 'regular', 'met', 'new')
@@ -31,14 +32,14 @@ def level(store, person_id):
     if person and person == (config.get('chat') or {}).get('person_id'):
         return 'owner'
     ids = sorted({person_id, person, *extra_person_values(config, db, person)} - {None, ''})
-    if db.state_heads.find_one({'_id': {'$regex': r'^relationship:(%s)\|' % '|'.join(re.escape(i) for i in ids)}}, {'_id': 1}):
+    if head_records.with_prefix(store, *('relationship:%s|' % i for i in ids)).first(fields=['_id']):
         return 'known'
-    replies = db.episodes.count_documents({'person_id': {'$in': ids}, 'state': {'$in': ['COMMITTED', 'WAITING_TASK']},
-                                           'speech': {'$exists': True}},
-                                           limit=KNOWN_REPLIES)
+    replies = episode_records.answered(store, ids, limit=KNOWN_REPLIES)
     if replies >= KNOWN_REPLIES:
         return 'known'
-    lines = db.messages.count_documents({'author': {'$in': ids}, 'direction': 'inbound'}, limit=REGULAR_LINES)
+    from . import records
+    from .records import messages as message_records
+    lines = message_records.inbound(records.on(db), authors=ids).count(limit=REGULAR_LINES)
     if replies >= REGULAR_REPLIES or lines >= REGULAR_LINES:
         return 'regular'
     if replies >= MET_REPLIES or lines >= MET_LINES:

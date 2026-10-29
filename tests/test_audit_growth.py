@@ -16,7 +16,7 @@ def test_a_memorys_embedding_is_left_out_of_its_commit_and_the_document_check_st
     unit = {'_id': 'mu-x', 'kind': 'chat_chunk', 'scope_key': 'scene:dm-a', 'policy_epoch': 1, 'status': 'active',
             'body_markdown': '周末去爬山', 'character_id': 'c'}
     first = store.put('memory_units', unit, stream='mu-x')
-    store.put('memory_units', {**first, 'embedding': [0.1] * 1024, 'embedding_status': 'READY'},
+    store.put('memory_units', {**first, 'embedding': [0.1] * 768, 'embedding_status': 'READY'},
               expected=first['revision'], stream='mu-x')
     commits = list(store.db.audit_events.find({'type': 'state.commit', 'stream_id': 'mu-x'}).sort('seq', 1))
     assert [c['payload'].get('derived_left_out') for c in commits] == [None, ['embedding']]

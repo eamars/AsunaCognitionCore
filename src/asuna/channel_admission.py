@@ -6,6 +6,7 @@ from . import channel_kinds
 from .config import DATA
 from .evidence import canonical, sha
 from .state import Denied
+from .records import artifacts as artifact_records
 
 
 def _in_this_data_folder(route):
@@ -20,7 +21,7 @@ def _in_this_data_folder(route):
 
 
 def restore_admissions(store):
-    for row in store.db.artifacts.find({'kind': 'channel_admission'}):
+    for row in artifact_records.of_kind(store, 'channel_admission').rows():
         channel = store.config.get('channels', {}).get(row['channel_id'])
         if not channel or channel.get('admission') != 'automatic' or channel['account_id'] != row['account_id']:
             continue
@@ -69,7 +70,8 @@ def admit(controller, channel_id, body):
         'target': {'type': kind, 'id': target}}           # its name comes from the platform's messages
     if route['target'] != {'type': kind, 'id': target}:
         raise Denied('CHANNEL_GROUP_DENIED')
-    identity = store.db.identities.find_one({'platform': channel_id, 'account_id': sender})
+    from .records import people as people_records
+    identity = people_records.by_account(store, sender, platform=channel_id)
     # One id form for every person on a platform, configured or admitted (qq:<account>).
     person = identity['person_id'] if identity else platform.person_id(sender)
     grant = {'person_id': person, 'workspace': str(DATA / 'channels' /
@@ -80,22 +82,17 @@ def admit(controller, channel_id, body):
     else:
         route.update(sender_id=sender, **grant)
     key = 'channel-admission-' + sha(canonical([channel_id, channel['account_id'], body['route_id']]))
-    prior = store.db.artifacts.find_one({'_id': key})
-    from .host import prepare_channels
-    # Validate all grants before making the admission fact durable. On a
-    # storage failure after that point, startup can finish the same admission.
-    channel.setdefault('routes', {})[body['route_id']] = route
-    try:
-        prepare_channels(store, dry_run=True)
-    except Exception:
-        if existing is None:
-            channel['routes'].pop(body['route_id'], None)
-        else:
-            channel['routes'][body['route_id']] = existing
-        raise
+    prior = artifact_records.get(store, key)
+    from .host import prepare_admission
+    # Only the new grant is checked and prepared (host.prepare_admission), never every member of every channel:
+    # this runs inside the ingress fence. It is validated before the admission fact is durable; the route joins the
+    # configuration only once it is prepared, so a failure in between is retried by the sender's next line, and
+    # startup finishes the same admission from the stored fact.
+    prepare_admission(store, channel_id, body['route_id'], route, sender, dry_run=True)
     # Admission facts are durable business state, not a second settings store.
-    store.put('artifacts', {'_id': key, 'kind': 'channel_admission', 'channel_id': channel_id,
+    artifact_records.save(store, {'_id': key, 'kind': 'channel_admission', 'channel_id': channel_id,
         'account_id': channel['account_id'], 'route_id': body['route_id'], 'route': route,
         'scope_key': 'operator'}, expected=prior['revision'] if prior else None, stream=key)
-    prepare_channels(store)
+    prepare_admission(store, channel_id, body['route_id'], route, sender)
+    channel.setdefault('routes', {})[body['route_id']] = route
     return route

@@ -23,6 +23,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `wait` — The stage's result; her tool calls in the meantime run here, one at a time, in call order.
   - `close`
 - class `BusinessWorker`
+  - `register_stage` — Admit a stage: the Host is not reconfiguring, its task (if any) is still valid, and the operation runs once.
   - `host_call` — A request the Host answers; `timeout` is how long to wait for it, which must cover any time the request itself is allowed to take there.
   - `emit`
   - `initialize`
@@ -77,7 +78,12 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
 
 Long-lived owner of Application, queues and adapter listeners; Web is a client.
 
+- class `ChannelWorkspaces` — The resolved workspaces of the local chat and of every channel grant: a new grant's must overlap none of them.
+  - `overlaps`
+  - `add`
+- def `channel_workspaces` — The store's ChannelWorkspaces.
 - def `prepare_channels` — Explicit DM/group identities and disjoint per-member resource grants.
+- def `prepare_admission` — One admitted member: `sender` on `route`, which becomes `route_id` of `channel_id` once this succeeds.
 - def `write_route_keys` — Each route of a ROUTE_KEYS channel gets its key in <data>/private/route-keys/<channel>-<route>.json, ignored by git, for the agent on that line to read (ADR-033 D4).
 - class `RuntimeHost`
 
@@ -170,28 +176,39 @@ Process-wide and cross-process endpoint serialization, without cloud routes.
 
 [src/asuna/state.py](../../src/asuna/state.py)
 
-The worker's MongoDB store: every write goes through `Store.put` with an expected revision and is recorded in a hash-chained audit stream.
+The worker's store: every write goes through `Store.put` with an expected revision and is recorded in a hash-chained audit stream.
 
 - def `without_derived` — (the document without its derived fields, the names left out).
 - def `content_digest`
 - def `commit_payload` — state.commit body: the document itself up to 16 KB, otherwise a reference (ADR-009 D-4).
 - def `content_ref` — {content_sha256, bytes} for model output kept elsewhere (receipt or native transcript).
-- def `now`
 - class `Conflict`
 - class `Denied`
 - class `Store`
+  - `checked` — The shared layer over the MongoDB adapter on this store's database, derived from `db` as it is now.
+  - `adapter`
+  - `collection` — The handle of a declared collection: the store's words, checked against the catalog.
+  - `blobs` — The blob store (write, open, delete, of_scope), each blob's metadata checked; used only by `blobs.py`.
+  - `ensure` — Create every declared collection with its validator and indexes, and drop the retired indexes; {collection: Ensured}.
   - `migrate`
   - `audit`
   - `put`
   - `recover_commits`
+  - `ensure_vectors` — Create the space's index, or bring an existing one's filter fields up to the space's (the old one keeps serving meanwhile); True once it can be queried, False if it cannot yet after `timeout` seconds.
+  - `nearest` — The k records nearest to `vector` among those matching `where` (the store's words: equality, `AnyOf`, `And`, `Or` on the space's filter fields), best first, as (id, cosine similarity in [-1, 1]); exact, never approximate.
   - `get`
-  - `authorize`
   - `identity`
   - `seed` — Test-only synthetic world; persona paths are relative to the fixture file.
-  - `init_head`
-  - `head`
-  - `mutate`
   - `public_messages`
+
+## `clock`
+
+[src/asuna/clock.py](../../src/asuna/clock.py)
+
+The core's one clock: the time now, in UTC, never the same twice in this process.
+
+- def `now` — An aware UTC datetime later than every one this process was given before.
+- def `stamp` — now() as the ISO text records keep, always with its microseconds, so that text order is time order.
 
 ## `audit`
 
@@ -301,3 +318,526 @@ Times a model reads are on the local clock (owner 2026-10-08): stored records ke
 - def `stamp` — One time on the local clock face (`face`); the value as it was when it is no time.
 - def `for_model` — A copy of a context block or tool result with every timestamp field on the local clock.
 - def `zone_of` — The time zone a conversation's times are read in (schedule_rules.scene_timezone).
+
+## `store/__init__`
+
+[src/asuna/store/__init__.py](../../src/asuna/store/__init__.py)
+
+The store: the core's way to its database, with no database named.
+
+- class `Handle` — One declared collection over the adapter; every argument is checked before the adapter is called.
+  - `get`
+  - `find`
+  - `count`
+  - `group`
+  - `insert`
+  - `replace`
+  - `update`
+  - `claim`
+  - `delete`
+  - `size`
+- class `Blobs` — The adapter's blob store, with each blob's metadata checked: `scope_key` and `kind` (text), `source_ids`.
+  - `write`
+  - `open`
+  - `delete`
+  - `of_scope`
+- class `Checked` — The shared layer over one adapter and the catalog its records are declared in.
+  - `collection`
+  - `ensure` — Create each declared collection and its indexes (all of them when `names` is None), and drop the retired ones; {name: Ensured}.
+  - `ensure_vectors`
+  - `nearest` — The k records nearest to `vector` among those matching `where`, best first, as (id, cosine); exact.
+  - `ping`
+  - `close`
+
+## `store/words`
+
+[src/asuna/store/words.py](../../src/asuna/store/words.py)
+
+The words the core describes records with: conditions, changes, sorts and totals, their JSON form for her read tool, and their validation against a collection's declaration before any adapter sees them.
+
+- class `Word` — A word of the vocabulary; two are equal when their kind and arguments are.
+- class `AnyOf` — Equal to one of the values; `AnyOf([])` matches nothing.
+- class `NoneOf` — Missing, null, or equal to none of the values; `NoneOf([])` matches every record.
+- class `Not` — The complement of equality: missing and null match.
+- class `Range` — Present, of the field's kind and within every bound given.
+  - `bounds`
+- class `Exists` — Present with any value, null included (`Exists(False)`: absent).
+- class `IsNull` — Present and null.
+- class `StartsWith` — Text that starts with any of the prefixes, literally, case kept.
+- class `Contains` — Text that contains `text` literally; `case=False` folds each character that folds to one character.
+- class `Holds` — A list with an element equal to the value.
+- class `HoldsAny` — A list with an element equal to one of the values.
+- class `NonEmpty` — A list with at least one element.
+- class `Each` — A list of objects with one element that meets every entry of `where` (paths relative to the element).
+- class `And`
+- class `Or`
+- class `Now` — The database's clock at the moment of the write, plus `seconds`: a `Range` bound in `update` and `claim`, and a value of a `time` field in `Set`, `OnCreate` and `insert`.
+- class `Set` — Sets each path, creating missing parent objects.
+- class `Unset` — Each path is absent afterwards.
+- class `Increase` — Adds `by` to a number; a missing field starts at 0.
+- class `Larger` — Keeps the larger of the stored value and `value`; a missing field takes the value.
+- class `Smaller` — Keeps the smaller of the stored value and `value`; a missing field takes the value.
+- class `AddToSet` — Adds each value the list does not hold yet; a missing field becomes the list.
+- class `Push` — Appends the values, then keeps the last `keep_last` elements.
+- class `OnCreate` — Sets each path only when the write creates the record.
+- class `Without` — Every field of a record but these paths (`_id` always comes back): a read's `fields` that leaves out a large one no caller of that read uses.
+- class `Count`
+- class `Max`
+- def `to_utc_ms` — An aware time in UTC, truncated to the millisecond (what every adapter stores).
+- def `check_where` — `where` validated against the declared collection; `now`: `Now` may bound a range (update and claim).
+- def `check_vector_where` — A vector search's filter: equality, `AnyOf`, `And` and `Or` on the space's filter fields.
+- def `check_sort` — [(field, 1 | -1)] on declared fields that are not lists, objects or vectors.
+- def `check_fields` — The paths to return (`_id` always comes back), or `Without(paths)` to return all but those; None returns whole records.
+- def `check_page`
+- def `check_group` — (the `by` fields, the total): `by` names declared value fields; the total is `Count()`, `Max(field)` or None.
+- def `record_bytes` — A record's size as canonical JSON (UTF-8).
+- def `check_record` — A copy of a whole record, validated: a text `_id`, every declared field of its kind, the required ones present, at most 1 MiB by the adapter's `measure`; `now`: `Now` may stand for a time (insert).
+- def `holds_now`
+- def `check_change` — A change validated: a list of change words, each value copied with times in UTC ms; two words never write one path or a path inside another.
+- def `check_create` — The change of a write that may create its record, with the created record's `_id` as `OnCreate` when the condition does not give it.
+- def `from_json` — The words of a condition given in her JSON form: a plain value is equality, a dict value is one word (`{"any_of": [...]}`, `{"range": {"gte": ...}}`, `{"contains": "...", "case": false}`, ...), and logic is the keys `"or"` and `"and"`.
+- def `to_json` — A condition in her JSON form (what her read tool shows as the filter asked).
+
+## `store/catalog`
+
+[src/asuna/store/catalog.py](../../src/asuna/store/catalog.py)
+
+The catalog: every collection the core keeps, declared once, and the vector spaces searched in them.
+
+- def `is_number`
+- def `kind_of` — The kind a value is: null, bool, number, text, time, list, object, bytes or other.
+- class `Field` — A declared field: `of` is a list's element kind, `dimensions` a vector's length.
+  - `holds` — Whether a value other than null is of this field's kind.
+  - `holds_element`
+- class `Index` — An index: `keys` are (path, 1 | -1); a unique index's fields are required, except in a partial one: a record missing a field listed in `only_where_present` (or holding null) is outside the index, and inside it the other fields may be missin
+- class `Space` — Vectors searched by cosine similarity: each record of `collection` holds its vector in `path`, and a search may filter on `fields`.
+- class `Collection` — A declared collection.
+  - `field`
+  - `paths`
+  - `unique`
+- class `Catalog` — The declared collections and vector spaces, by name.
+  - `collection`
+  - `collections`
+  - `names`
+  - `spaces`
+  - `check_space` — Refuse a space whose collection, vector path or filter fields are not declared.
+- def `index` — An index named as MongoDB names one by default (`scene_id_1_scene_seq_1`).
+
+## `store/errors`
+
+[src/asuna/store/errors.py](../../src/asuna/store/errors.py)
+
+The store's errors: what the shared layer and an adapter raise, each a message that starts with its code.
+
+- class `StoreError` — Every error of the store; `code` is the first word of its message.
+  - `code`
+- class `QueryInvalid` — A condition, sort, group, field list or change the meaning table refuses.
+- class `RecordInvalid` — A record, or a value written into one, that its collection's declared fields cannot hold.
+- class `RecordTooLarge` — A record over the store's limit by its adapter's measure.
+- class `DuplicateKey` — A write repeated a unique key: `index` names the index, `at` the position in an insert of several.
+- class `StaleRevision` — A revisioned write found the record at another revision than the one it was read at.
+- class `NotSupported` — The adapter lacks a capability the call needs; raised before the database is reached.
+- class `SchemaConflict` — The database holds an index of a declared name with other keys or options.
+- class `Unavailable` — The database cannot be reached.
+- class `BlobMissing` — No stored blob has that id.
+- class `AdapterNotInstalled` — No adapter of the configured kind is installed; there is never a default.
+
+## `store/adapters`
+
+[src/asuna/store/adapters.py](../../src/asuna/store/adapters.py)
+
+The registry of database adapters, and the results adapters return.
+
+- class `Ensured` — What `ensure` did: whether it created the collection, the index names it made and those it dropped.
+- class `Updated` — What `update` did: records matched, records changed, whether it created one.
+- class `Size` — A collection's records and the bytes they take.
+- def `register` — Make an adapter module's kind available to `open`.
+- def `load` — Import a database package's adapter module: {'kind': ..., 'python': <directory>, 'module': <name>}.
+- def `loaded`
+- def `module` — The adapter module the settings select.
+- def `open` — An open adapter of the selected kind on `database`.
+- def `drop` — Drop a test database; any name outside `asuna_v2_test_*` is refused.
+
+## `store/memory`
+
+[src/asuna/store/memory.py](../../src/asuna/store/memory.py)
+
+The in-memory adapter: the meaning table of the store's words written as code, its reference, and the unit tests' database.
+
+- class `Database` — One in-memory database: records by collection and id (in write order), the indexes `ensure` made, blobs.
+- def `open` — The adapter on the named in-memory database; `settings` may give `seed`.
+- def `where`
+- def `databases`
+- def `drop`
+- def `same` — Equality as the meaning table defines it: numbers by value, a bool never a number, objects field by field in order, lists element by element.
+- def `matches` — Whether a record meets a validated condition; `now` is the moment a `Now` bound reads.
+- def `apply` — The record after a validated change (`doc` is changed in place).
+- def `created` — The record a create writes: the condition's equalities, then `OnCreate`, then the change.
+- def `project`
+- class `Blobs` — Blobs of one in-memory database: bytes with their metadata (scope_key, kind, source_ids).
+  - `write`
+  - `open`
+  - `delete`
+  - `of_scope`
+- class `MemoryAdapter` — The adapter over one in-memory database (a new private one when none is given).
+  - `ensure`
+  - `ensure_vectors`
+  - `measure` — A record's size against the store's limit: its canonical JSON.
+  - `get`
+  - `find`
+  - `count`
+  - `group`
+  - `insert`
+  - `replace`
+  - `update`
+  - `claim`
+  - `delete`
+  - `nearest`
+  - `size`
+  - `ping`
+  - `close`
+
+## `store/mongodb`
+
+[src/asuna/store/mongodb.py](../../src/asuna/store/mongodb.py)
+
+The MongoDB adapter: the store's words as MongoDB queries, the catalog's collections, validators and indexes, blobs in the GridFS bucket `artifact_blobs`, and exact vector search.
+
+- def `open` — The adapter on `database`, with a client of its own.
+- def `where` — The server's identity, without credentials: its first host and port.
+- def `databases`
+- def `drop`
+- def `projection` — A read's checked `fields` as a MongoDB projection: the paths to return, or those to leave out (`Without`).
+- def `query` — A validated condition as a MongoDB filter.
+- def `update_of` — A validated change as MongoDB update operators, or as an update pipeline when it holds `Now` (then it holds only `Set` and `Unset`, which the shared layer checks).
+- class `Blobs` — Blobs in the GridFS bucket `artifact_blobs`, their metadata (scope_key, kind, source_ids) as GridFS metadata; an optional `name` in the metadata is the file's name.
+  - `write`
+  - `open`
+  - `delete`
+  - `of_scope`
+- class `MongoAdapter` — The adapter over one database of a client; `owns_client`: closing the adapter closes the client.
+  - `over` — The adapter on a database handle already held: through its client (times read aware) when it has one, else the handle as it is.
+  - `blobs`
+  - `measure` — A record's size against the store's limit: its BSON bytes (a `Now` counted as the time it becomes).
+  - `plan` — What `ensure` would do, read only: {'create': bool, 'make': [index names], 'drop': [index names], 'conflicts': [(index name, why)]}.
+  - `validator` — Whether the stored collection has the validator `ensure` creates: 'same', 'other', 'none', 'absent' (no collection) or 'not declared' (the collection is not versioned).
+  - `ensure`
+  - `ensure_vectors`
+  - `get`
+  - `find`
+  - `count`
+  - `group`
+  - `insert`
+  - `replace`
+  - `update`
+  - `claim`
+  - `delete`
+  - `nearest`
+  - `size`
+  - `ping`
+  - `close`
+
+## `records/__init__`
+
+[src/asuna/records/__init__.py](../../src/asuna/records/__init__.py)
+
+The owners of the collections read across many domains: one module per collection, the only code that names its fields and builds its conditions (ADR-104). Each takes a store (anything with `collection(name)`) as its first argument; a call site calls the owner's named operations and never sees a condition.
+
+- def `on` — The store's checked collections over a database handle a caller holds instead of a store.
+
+## `records/scenes`
+
+[src/asuna/records/scenes.py](../../src/asuna/records/scenes.py)
+
+The owner of `scenes`: a conversation's record (its kind, members, scope and epoch, its position counter, and the marks the program keeps on it), read and written only through these operations.
+
+- def `get` — The conversation with this id, or None.
+- def `by_scope` — A conversation of this scope (of this kind, at this epoch), or None.
+- def `of_kind` — Every conversation of this kind (`dm`, `group`, ...), but `besides`.
+- def `many` — The conversations with these ids (of this kind).
+- def `in_scopes` — The conversations of these scopes.
+- def `all` — Every conversation.
+- def `condense_wanted` — The groups she marked to have their conversation condensed.
+- def `channel_scenes` — One conversation of this kind on a channel (its id only), or None.
+- def `authorize` — The conversation, when this person is one of its members; else SCENE_MEMBERSHIP_DENIED.
+- def `next_seq` — The conversation's next position, taken in one step.
+- def `save` — The revisioned write of a whole record (`Store.put`: `expected`, `stream`, `reset_counters`).
+- def `want_condense`
+- def `clear_condense`
+- def `set_condense_floor`
+- def `apply_condense` — A condense is done: its marks go; `condensed` (when it compacted) is what it records.
+- def `told_condensed` — The turn that tells her of this condense (only while it is still the latest).
+- def `note_size`
+- def `note_tokens`
+- def `set_character_context`
+- def `set_timezone` — The conversation's time zone; None takes it away.
+- def `note_fault`
+- def `clear_fault` — The fault mark goes, if it is still the one shown (`fault.at`).
+- def `hold_unsent`
+- def `clear_unsent` — The unsent mark goes, if it is still that turn's.
+- def `asides_shown` — The asides shown so far reach this position (it never moves back).
+
+## `records/messages`
+
+[src/asuna/records/messages.py](../../src/asuna/records/messages.py)
+
+The owner of `messages`: the lines of every conversation (what people wrote, her lines and where they are on their way, the program's own lines), read and written only through these operations.
+
+- class `View` — A named read: its condition and its order (`by`, ascending; None leaves it to the database).
+  - `rows`
+  - `each` — The rows, read as they come (for a read too large to hold at once).
+  - `first`
+  - `count`
+  - `values` — The distinct values of `field` among the view's lines (lines without it left out), ascending.
+- def `get` — The line with this id (within the fences given: a conversation, epoch, scope, direction, channel, or a line that came from a channel), or None.
+- def `many` — View: the lines with these ids (within a conversation or several and an epoch, or received since a time).
+- def `at` — The line at this position of a conversation (by this author, in this direction), or None.
+- def `said` — View: a conversation as people saw it in an epoch: the lines people wrote and her delivered lines.
+- def `said_across` — View: what people wrote in some conversations and her delivered lines in others.
+- def `said_in_sources` — View: the lines of these sources (conversations and the epochs read there, {scene_id, policy_epoch}) that people wrote or she delivered, people only (the Web memory page's source lines); one by id, several by ids, or those whose text contai
+- def `pointable` — View: the lines one may point at in a conversation: people's lines that are not notices, her delivered lines; one by id or by position.
+- def `lines` — View: a conversation's lines (`live`: only those in and out, not the program's internal ones nor archived ones), after or between positions; `group_name`: those that carry the group's name.
+- def `inbound` — View: lines people wrote, in one conversation or several (`scenes`; `besides` all but one); by author (one, several, all but one, people only), in a window of positions or of the times they came (`since` >=, `since_after` >, `until` <=), wo
+- def `woken` — The first line of a conversation after a position that woke her for this reason (its id only), or None.
+- def `mentions` — View: a conversation's lines that @-mention accounts, received since a time.
+- def `authors` — Values: who wrote in one conversation or several (in a direction; archived lines not deleted; among these authors or under this historical name).
+- def `spoken` — View: her lines (delivered, or every one of her speech when `delivered` is False and `speech`), in one conversation or all of them but `not_in`, by this author, with a receipt (since a time).
+- def `outgoing` — View: her lines in a conversation in these delivery states.
+- def `turn_parts` — View: the lines one turn produced: its speech (`speech`), outbound only, delivered or in a delivery state (`state`, one of `states`, none of `not_states`), its reply parts, the parts after or before a segment.
+- def `unsettled` — Count: her lines still queued for a channel or being sent.
+- def `of_event` — The line of a conversation and epoch whose event has this id, or None.
+- def `by_platform_id` — View: a conversation's lines (in an epoch) that the platform knows by this id: people's by its event id, hers (delivered, by this author) by its message id.
+- def `quoted` — The line a platform notice is about, newest first: hers by its message id however old (`mine`), else anyone's within a time (people's by received time, hers by receipt time); None when there is none.
+- def `referenced` — The line of a conversation and epoch a reference names: by its own id, its platform event id or its platform message id; None when none does.
+- def `of_platform_event` — The lines stored for this platform event id.
+- def `queued` — View: a channel's lines queued for it (`files` True: only files, False: no files), for one route's target.
+- def `in_flight_scenes` — Values: the conversations with a chat line (not a file) out on this channel, claimed since a time.
+- def `sending` — View: the lines left being sent on a channel (what the Host's start settles).
+- def `claim_unshown` — The oldest line of this author in a conversation not yet shown on its line, marked shown at `at`; or None.
+- def `ingress` — View: the inputs the Host manages in these ingress states, by when they came.
+- def `channel_inbound` — View: the inputs the Host manages that came from a channel since a time, by when they came.
+- def `visits` — View: her visit lines of this intent (received since a time), by when they came.
+- def `errand_results` — View: a conversation's completed errand visits not yet told there, by when they came.
+- def `artifact_refs` — Values: the artifact ids lines name as their picture (`attachment`) or file (`file`), in these delivery states.
+- def `search` — History search: one stream's lines of these conversations in an epoch, newest first by the stream's time, then position and conversation.
+- def `thread` — The lines of these conversations in an epoch that reply to these lines (people's by their quoted line, hers by the line she answered), and the lines with these ids (a digest's thread).
+- def `excluded` — Counts of her lines a digest leaves out in these conversations and epoch: speech not delivered (`undelivered_outbound`) and lines that are not speech (`non_speak_outbound`).
+- def `save` — The revisioned write of a whole line (`Store.put`: `expected`, `stream`).
+- def `mark_recalled` — Her line was taken back on the platform at `at`.
+- def `note_failure` — A file line whose bytes were gone: whether its original is still there, and the words that say so.
+- def `mark_errands_told` — These errand visits were told in their conversation at `at`.
+
+## `records/episodes`
+
+[src/asuna/records/episodes.py](../../src/asuna/records/episodes.py)
+
+The owner of `episodes`: her turns (what woke her, what she was given, what she thought, said and called, and the state the turn reached), read and written only through these operations.
+
+- def `get` — The turn with this id (of this persona, conversation, scope, person, epoch or native session; `carried`: one whose system reference names the sections it carried), or None.
+- def `many` — View: the turns with these ids (in these states).
+- def `of_source` — The turn a source event opened (of this kind, in this conversation), or None.
+- def `of_kind` — View: the turns of a kind (in these conversations).
+- def `open` — View: the turns in these states (of a kind, or of any kind but one).
+- def `answered` — How many turns she answered these people with words (at most `limit`).
+- def `of_scope` — The turns of a scope.
+- def `save` — The revisioned write of a whole turn (`Store.put`: `expected`, `stream`, `reset_counters`).
+
+## `records/sessions`
+
+[src/asuna/records/sessions.py](../../src/asuna/records/sessions.py)
+
+The owner of `sessions`: the bindings of her native sessions (which conversation, lane, persona, epoch and working folder a session belongs to, the sessions it continues and is continued by, its title and carry), read and written only through these operations.
+
+- def `get` — The session with this id (`native`: only one the native Host binds), or None.
+- def `native` — View: the sessions the native Host binds (these ids; of a lane; not of a conversation).
+- def `successors` — View: the sessions that continue these.
+- def `main` — The main conversation session the native Host binds for a conversation (of a lane; of a persona, epoch and character context: an epoch or a context of None, a session with none), or None.
+- def `titled` — The main session of a conversation that has a native title, or None.
+- def `of_task` — The newest action session of an execution binding (`broker`: its broker session), continuing one of `parents`, of this conversation, scope, epoch, person and persona (and of this task), or None.
+- def `of_scope` — The sessions of a scope.
+- def `invalidate` — An erasure invalidated this session.
+- def `save` — The revisioned write of a whole session (`Store.put`: `expected`, `stream`, `reset_counters`).
+
+## `records/receipts`
+
+[src/asuna/records/receipts.py](../../src/asuna/records/receipts.py)
+
+The owner of `lane_receipts` and `sink_receipts`: what a model lane answered for an operation (its result, kept so a replay answers the same), and what a sink received (a publication's delivery, her self-development publications and their states, the native inputs projected), read and written only through these operations.
+
+- def `lane_get` — The lane's receipt of this operation, or None.
+- def `lane_of_sessions` — The lane receipts of these sessions.
+- def `lane_invalidate` — An erasure replaced this lane receipt by its invalidated form (its result and request gone).
+- def `save_lane` — The revisioned write of a lane receipt (`Store.put`).
+- def `sink_get` — The sink's receipt with this id, or None.
+- def `sinks` — View: the sink receipts with these ids (None: every one).
+- def `sink_of_kind` — View: the sink receipts of a kind (in a state or one of several; of a project, None: of none; but one), ordered by `by` (None: the database's order).
+- def `sink_window` — View: the sink receipts received within these bounds (text times as the core writes them), ordered by when they were received, then by id.
+- def `save_sink` — The revisioned write of a sink receipt (`Store.put`).
+
+## `records/view`
+
+[src/asuna/records/view.py](../../src/asuna/records/view.py)
+
+What the owners of `episodes`, `sessions` and the receipts share: a named read (`View`) and the checks of a fence.
+
+- def `is_text`
+- def `is_number`
+- def `texts`
+- def `fenced` — `where` with each fence given ({field: (value, kind check)}), or None when one holds nothing (a value missing or not of its kind).
+- def `pinned` — The condition `where` with each value condition given ({field: (value, kind check)}), where a value of None stands for "has none": the field null or missing, as the replaced read's equality on null matched.
+- class `View` — A named read on one collection: its condition and its order ((field, 1 | -1), ...).
+  - `each` — The rows, read as they come.
+  - `rows`
+  - `first`
+  - `count`
+
+## `records/tasks`
+
+[src/asuna/records/tasks.py](../../src/asuna/records/tasks.py)
+
+The owner of `tasks` and `task_messages`: the work she hands to the action brain (its request, lease, state, result and hand-back) and the messages between her and the action session about it, read and written only through these operations.
+
+- def `get` — The task with this id (in this state; of this conversation, scope, epoch, requester), or None.
+- def `thread_message` — The task message with this id (from this side: `character` or `action`), or None.
+- def `many` — View: the tasks with these ids (in these states).
+- def `in_states` — View: the tasks in these states (but one); a single state (None: none) as an equality.
+- def `by_prefix` — View: a requester's tasks in a conversation and epoch whose id starts with `prefix`.
+- def `continuations` — View: the tasks that continue these, in the order they were created.
+- def `awaiting_feedback` — The tasks in these finished states whose feedback has a state, and not one of `taken` (the states of a result that reached her).
+- def `lease_expired` — View: the running tasks whose lease expired before `moment` (seconds since the epoch).
+- def `paused` — View: the paused tasks paused for `reason` (that were in these states; paused since a time).
+- def `of_conversations` — View: the tasks of these conversations (ordered by `by`).
+- def `created` — View: the tasks created since a time (before `until`; of these conversations, an empty list being those of none; not of `besides`).
+- def `of_episode` — View: the tasks a turn made.
+- def `finished_since` — A task that finished after a time, or None.
+- def `of_scope` — The tasks of a scope.
+- def `thread` — View: a task's messages (from one side; delivered or not), in the order they were written.
+- def `recent_with_inputs` — A conversation's RECENT most relevant tasks in an epoch: the running and queued first, then by the newest time one of their input lines was received (those without one last), then by id; each with the SHOWN fields it has, `_active` (1 runni
+- def `save` — The revisioned write of a whole task (`Store.put`: `expected`, `stream`, `reset_counters`).
+- def `save_message` — The revisioned write of a task message (`Store.put`).
+
+## `records/plans`
+
+[src/asuna/records/plans.py](../../src/asuna/records/plans.py)
+
+The owner of `plans`: what she and the program scheduled (her plans in a conversation, the rhythms of the heartbeat, settlement, self-development and condensing, their next fire and last outcome), read and written only through these operations.
+
+- def `get` — The plan with this id (of this conversation, scope, person, epoch), or None.
+- def `in_status` — View: the plans in a status (None: none) or one of several (of these kinds).
+- def `due` — View: the active plans due by `until` (ISO text), not of these kinds.
+- def `of_conversation` — View: a conversation's plans (of a scope, person and epoch; in these statuses; not of these kinds), in the order they were created.
+- def `with_outcome` — View: the plans of these kinds in a conversation whose last outcome was `outcome`.
+- def `count_status` — How many plans are in a status.
+- def `save` — The revisioned write of a whole plan (`Store.put`: `expected`, `stream`, `reset_counters`).
+
+## `records/memories`
+
+[src/asuna/records/memories.py](../../src/asuna/records/memories.py)
+
+The owner of `memory_units`: her recall (the chat chunks of her conversations, their summaries, her thoughts, imported entries) and its vector space, read and written only through these operations.
+
+- def `get` — The memory with this id (in these (scope, epoch) pairs; of this scope, epoch, turn, character; of this kind or one of these; in this status; `erased=False`: not a tombstone), or None.
+- def `summary_of` — The alive summary of a conversation's epoch that covers this line, or None.
+- def `many` — View: the memories with these ids (in these (scope, epoch) pairs; of this scope and character; of this kind; in this status).
+- def `readable` — View: the alive memories in these (scope, epoch) pairs (of this character; of this kind), ordered by `by`.
+- def `of_kind` — View: the memories of a kind (in a scope or one of these; of this character; from this source, as where a thought came from; in this status), ordered by `by`.
+- def `pending_index` — View: the alive memories waiting for their vector (neither READY nor REFUSED), or embedded by another revision than `revision` (of this scope and epoch).
+- def `dependents` — View: the memories of a scope that depend on these sources or cite them.
+- def `of_scope` — View: every memory of a scope.
+- def `alive` — View: every alive memory.
+- def `web_page` — The Web memory page's memories: the alive ones in these (scope, epoch) pairs of this character (of this epistemic type; whose text contains `search`, case-blind), newest first by their own time (OWN_TIME: the first of them a memory holds; t
+- def `save` — The revisioned write of a whole memory (`Store.put`: `expected`, `stream`, `reset_counters`).
+- def `tombstone` — An erasure's tombstone in place of the memory: its id, scope and next revision, no text, no sources, the erasure's id and the conversation's new epoch.
+- def `set_epoch` — Move a memory to an epoch (an erasure keeps what it did not erase readable in the new one).
+- def `touch_salience` — A real turn used the memory: one more reference, and when and at which position of its conversation.
+- def `ensure_vectors` — The space's search index, made or brought up to the space's filter fields; True once it can be queried.
+- def `nearest` — The k memories nearest to `vector` in these (scope, epoch) pairs, of this character, status and embedding revision (of this kind), best first as (id, cosine); exact.
+
+## `records/artifacts`
+
+[src/asuna/records/artifacts.py](../../src/asuna/records/artifacts.py)
+
+The owner of `artifacts`: the rows of what she and the program keep apart from the conversation (stored files and pictures with their bytes' manifest, the action brain's tool records, held notices and passed lines, requests and group actions, a channel's admissions and declared functions, a peer line's state), read and written only through these operations.
+
+- def `get` — The row with this id (of this kind, in this state and storage; of this task and its revision; in one of these scopes), or None.
+- def `by_content` — The first row holding these bytes (their sha256) of a kind (in this scope or one of these; in this state and storage; listing this source), by `by` (`newest_first` turns it); None when there is none.
+- def `answer` — The row of a kind that this answer settles (a request her group action answered), or None.
+- def `by_ids` — View: the rows with these ids (in this storage).
+- def `of_task` — View: the rows of a task's revision (its tool records) in this state or one of these.
+- def `of_tasks` — View: the rows of these tasks.
+- def `of_kind` — View: the rows of a kind (in this state and storage; in this scope or one of these; listing this source), ordered by `by`.
+- def `of_scene` — View: the rows of a kind held for a conversation (notices, passed lines), by when they came.
+- def `admission` — View: a channel's rows of a kind in a state (claimed at or after `claimed_since`, an ISO time), ordered by `by`: the outbox's group actions, the one in flight and the next queued.
+- def `kept` — View: the kept rows of a kind (`stored`: whose bytes are in the blob store; in this state; of this ref; in one of these scopes).
+- def `with_copies` — View: the rows of a kind with copies in task folders, whose storage is not `besides_storage`.
+- def `stored` — View: every row whose bytes are in the blob store.
+- def `count_tool` — How many rows of a tool are in a state.
+- def `save` — The revisioned write of a whole row (`Store.put`: `expected`, `stream`).
+- def `insert` — A new row written as it is, without a revision (a held notice, a passed line, a channel's declared functions).
+- def `replace` — The row of this id replaced by `row`, as it is; False when there is none.
+- def `delete` — Delete one row.
+- def `delete_many` — Delete the rows with these ids (of this kind); how many went.
+- def `mark_read` — A page of a stored file of a kind was read (only inside these scopes, in state DONE): `last_read_at`.
+- def `mark_sent` — A row of a kind was sent: `last_sent_at`.
+- def `restore_bytes` — Bytes fetched again are back on a row whose bytes expired, if it is still `REMOVED`; whether it was.
+- def `bytes_removed` — A row's bytes went (expired): `storage` `REMOVED` with when, its blob no longer named.
+- def `erase_scope` — Every row of a scope whose bytes are stored or expired, marked `ERASED` by this erasure (ADR-105).
+- def `set_days_from` — A stored file's days start again from `moment` (and it lists `source` too).
+- def `set_fields` — Set these fields of a row (a kept file's `kept_at` and `kept_why`).
+- def `keep_why`
+- def `unkeep` — A kept file is kept no more (an erased one leaves the list).
+- def `let_go` — A kept file let go: its days start from `moment`.
+- def `set_received_from` — Where a file a task registered came from (a received file with its bytes).
+- def `add_copy` — A copy of a stored file in a task folder.
+- def `set_copies`
+
+## `records/heads`
+
+[src/asuna/records/heads.py](../../src/asuna/records/heads.py)
+
+The owner of `state_heads` and `state_revisions`: her revisioned state (documents, relationships and the person layer, scene affect, policy, self descriptions), a head per entity and scope naming its current revision, read and written only through these operations.
+
+- def `head` — The head with this id (`<entity>|<scope>`), or None.
+- def `current` — (head, its revision) of an entity in a scope, or None when it has no head.
+- def `revision` — The revision with this id (of this entity's key), or None.
+- def `by_mutation` — The revision a mutation id wrote, or None.
+- def `with_prefix` — View: the heads whose id starts with any of these prefixes.
+- def `heads` — View: the heads with these ids, or of this scope or one of these, ordered by `by`.
+- def `revisions` — View: the revisions with these ids.
+- def `history` — View: an entity's revisions (written at or after `since`, or before `before`, ISO times), by `by`.
+- def `stale_revisions` — View: a scope's revisions but these (the ones no head points at, when `besides` are its heads' revisions).
+- def `save_head` — The revisioned write of a head (`Store.put`: `expected`, `stream`).
+- def `save_revision` — The write of a revision (`Store.put`).
+- def `point_to` — An erasure moves a head to an older revision (its own revision number given).
+- def `drop_head` — Delete a head (only while it still names `revision_id`); how many went.
+- def `tombstone_revision` — An erasure empties a revision: no content, no sources, a tombstone of this erasure.
+- def `init` — The head of an entity in a scope, created with its first revision when it has none; the head.
+- def `mutate` — Her relationship or scene-affect revision, from sources she may read in this scope (or the linked ones), on the head at `base_revision_id`; the revision.
+
+## `records/people`
+
+[src/asuna/records/people.py](../../src/asuna/records/people.py)
+
+The owner of `identities` and `scene_people`: who a person is on this machine (their identity: platform, account, the name the operator gave them) and how each conversation labels them (its label rows: number, card, nickname, role, when last seen), read and written only through these operations.
+
+- def `identity` — The identity of a person (its id is the person's), or None.
+- def `by_account` — The identity of an account (on this platform), or None.
+- def `of_person` — The identity whose `person_id` is this, or None.
+- def `all_identities` — View: every identity.
+- def `save_identity` — The revisioned write of an identity (`Store.put`: `expected`, `stream`).
+- def `label` — A conversation's label row by its id (`<conversation>|<person>`), or None.
+- def `labels` — View: a conversation's label rows (not this person's).
+- def `label_of_person` — A person's label row seen last, in any conversation, or None.
+- def `first_label` — A conversation's first label row by `by` (`newest_first` turns it: the highest number), or None.
+- def `save_label` — The revisioned write of a label row (`Store.put`: `expected`, `stream`).
+
+## `records/ideas`
+
+[src/asuna/records/ideas.py](../../src/asuna/records/ideas.py)
+
+The owner of `ideas`: her improvement-idea notebook (each idea, why, its state and what she decided), read and written only through these operations.
+
+- def `get` — The idea with this id (of this persona), or None.
+- def `of_persona` — View: a persona's ideas (in this state; whose idea or reason contains `search`, case kept), ordered by `by` (none: the database's order).
+- def `count` — How many of a persona's ideas are in these states.
+- def `save` — The revisioned write of an idea (`Store.put`: `expected`, `stream`).

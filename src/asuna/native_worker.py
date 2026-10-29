@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import Future, ThreadPoolExecutor
-from datetime import datetime, timezone
 from contextlib import ExitStack, nullcontext
 import json
 from pathlib import Path
@@ -20,6 +19,7 @@ import threading
 import time
 import uuid
 
+from . import clock
 from . import sandbox_backend, channel_kinds, errands
 from .application import Application
 from .host import RuntimeHost
@@ -31,10 +31,20 @@ from .people import People
 from .skills import skill_directories
 from .state import Denied, now, Conflict
 from .queue import RuntimeLease
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import episodes as episode_records
+from .records import receipts as receipt_records
+from .records import sessions as session_records
+from .records import plans as plan_records
+from .records import artifacts as artifact_records
+from .records import people as people_records
+from .records import tasks as task_records
 
 
 KEPT_HOST_REPORTS = 5     # this start's evidence and the starts just before it
 KEPT_HOST_RECORDS = 3000  # within one start, the newest records only: a busy hour writes about a thousand
+EFFECTS_WAIT_SECONDS = 1.0  # a task stage's wait for the effects lock this long or longer is recorded
 
 
 def prune_host_reports():
@@ -107,7 +117,7 @@ class NativeLane:
         if self.lane == 'executor' and task:
             return ' '.join(str(task.get('title') or task.get('goal') or task['_id']).split())[:48]
         if self.lane in ('summary', 'attend'):
-            role = self.store.db.sessions.find_one({'_id': role_id}, {'native_title': 1}) or {}
+            role = session_records.get(self.store, role_id, fields=['native_title']) or {}
             return role.get('native_title') or ep['scene_id']
         return None
 
@@ -135,7 +145,7 @@ class NativeLane:
 
     def _generate(self, binding, operation, phase, text, system, tools, handler, mode_kept=False, **kwargs):
         with self.lock:
-            prior = self.store.db.lane_receipts.find_one({'_id': operation})
+            prior = receipt_records.lane_get(self.store, operation)
             if prior and prior.get('native_host'):
                 # A completed stage is final: its receipt answers a repeat without reopening the stage.
                 return LaneResult(**{k: v for k, v in prior['result'].items() if k in LaneResult.__dataclass_fields__})
@@ -145,12 +155,11 @@ class NativeLane:
             # A repair (answers.py) is the same stage asked again in the same session: parse its base operation.
             base = re.sub(r':fix-\d+$', '', operation)
             if self.lane == 'summary':
-                scene = self.store.db.scenes.find_one({'scope_key': kwargs['scope_key'],
-                                                       'policy_epoch': kwargs['policy_epoch']})
+                scene = scene_records.by_scope(self.store, kwargs['scope_key'], epoch=kwargs['policy_epoch'])
                 if not scene:
                     raise Denied('SUMMARY_SCENE_STALE')
                 person = scene['members'][0]
-                self.store.authorize(scene['_id'], person)
+                scene_records.authorize(self.store, scene['_id'], person)
                 ep = {'_id': base, 'scene_id': scene['_id'], 'person_id': person,
                       'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
                       'character_context': scene.get('character_context'),
@@ -158,30 +167,30 @@ class NativeLane:
                 ep['native_session_id'] = self.worker.resolve_role_session(ep)
             elif self.lane == 'executor' or phase == 'CONSULT':
                 task_id = base.split(':execute:', 1)[0].split(':consult:', 1)[0]
-                task = self.store.db.tasks.find_one({'_id': task_id})
+                task = task_records.get(self.store, task_id)
                 if not task:
                     raise Denied('STALE_TASK_FENCE')
                 if self.lane == 'executor':
                     if base.split(':execute:', 1)[1].split(':', 1)[0] != str(task['intent_revision']):
                         raise Denied('STALE_TASK_FENCE')
                 else:
-                    artifact = self.store.db.artifacts.find_one({'_id':base.split(':consult:',1)[1],
-                        'task_id':task_id,'intent_revision':task['intent_revision']})
+                    artifact = artifact_records.get(self.store, base.split(':consult:',1)[1], task=task_id,
+                                                    revision=task['intent_revision'])
                     if not artifact:
                         raise Denied('STALE_TASK_FENCE')
                 # The turn the task works for: on an errand, the home turn that sent it (errands.home_turn).
                 from . import errands
-                ep = errands.home_turn(self.store, self.store.db.episodes.find_one({'_id': task['episode_id']}))
+                ep = errands.home_turn(self.store, episode_records.get(self.store, task['episode_id']))
                 if ep and self.lane == 'executor' and task.get('native_session_id'):
                     # The action brain works for its task: the task's place, requester and conversation, which for
                     # one begun on an errand are home's, not the errand turn's (coordinator.delegate).
-                    home = self.store.db.sessions.find_one({'_id': task['native_session_id']}, {'character_context': 1})
+                    home = session_records.get(self.store, task['native_session_id'], fields=['character_context'])
                     ep = {**ep, 'scene_id': task['scene_id'], 'person_id': task['requester_id'],
                           'scope_key': task['scope_key'], 'policy_epoch': task['policy_epoch'],
                           'native_session_id': task['native_session_id'],
                           'character_context': (home or {}).get('character_context', ep.get('character_context'))}
             else:
-                ep = self.store.db.episodes.find_one({'_id': base.split(':', 1)[0]})
+                ep = episode_records.get(self.store, base.split(':', 1)[0])
             if not ep:
                 raise ValueError('NATIVE_EPISODE_BINDING_REQUIRED')
             role_id = ep.get('native_session_id')
@@ -191,12 +200,12 @@ class NativeLane:
             context = ep.get('character_context')
             if role_id != ep['native_session_id']:
                 # A conversation that continued in another session (ADR-028) keeps that session's own context.
-                context = (self.store.db.sessions.find_one({'_id': role_id}) or {}).get('character_context', context)
+                context = (session_records.get(self.store, role_id) or {}).get('character_context', context)
             parent_id = role_id
             if self.lane == 'executor':
                 native_id = self.worker.action_session_id(binding, role_id, ep, task)
                 # A task begun before its conversation continued elsewhere keeps the parent it was started under.
-                parent_id = (self.store.db.sessions.find_one({'_id': native_id}) or {}).get('parent_session_id') or role_id
+                parent_id = (session_records.get(self.store, native_id) or {}).get('parent_session_id') or role_id
             elif self.lane == 'summary':
                 native_id = 'asuna-summary-' + sha((binding + ':' + base).encode())[:32]
             elif self.lane == 'appraiser':
@@ -209,7 +218,7 @@ class NativeLane:
                 # One tool-free appraiser session per persona, owned by the local operator scene;
                 # each request carries only that episode's own visible material.
                 local = self.store.config['chat']
-                owner = self.store.authorize(local['scene_id'], local['person_id'])
+                owner = scene_records.authorize(self.store, local['scene_id'], local['person_id'])
                 grant, ep = local, {**ep, 'scene_id': owner['_id'], 'person_id': local['person_id'],
                                     'scope_key': owner['scope_key'], 'policy_epoch': owner['policy_epoch']}
             else:
@@ -221,7 +230,7 @@ class NativeLane:
             if self.lane == 'character':
                 from .role_tools import thinking_mode
                 mode = 'thinking' if thinking_mode(self.store.config) else 'tool'
-                opened = self.store.db.sessions.find_one({'_id': native_id}, {'thoughts': 1})
+                opened = session_records.get(self.store, native_id, fields=['thoughts'])
                 # A session from before ADR-099 was opened in tool mode.
                 if opened and (opened.get('thoughts') or 'tool') != mode and not mode_kept:
                     raise ModeChanged(native_id)
@@ -250,7 +259,7 @@ class NativeLane:
                                                 **kwargs['context']}}
             else:
                 carried = None
-            scene_kind = (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
+            scene_kind = (scene_records.get(self.store, ep['scene_id'], fields=['kind']) or {}).get('kind')
             request = {'kind': 'stage', 'token': operation, 'session_id': native_id, 'scene_kind': scene_kind,
                        'lane': self.lane, 'phase': phase, 'text': text, 'system': system,
                        'episode_id': ep['_id'], 'binding': record, 'title': self.child_title(task, role_id, ep),
@@ -266,7 +275,7 @@ class NativeLane:
                                    # the route this job runs on (ADR-075): 高's only while it has not fallen
                                    'tier': 'high' if (task.get('tier') or {}).get('ran') == '高' else 'low'}
             if self.lane == 'character':
-                source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']})
+                source = message_records.get(self.store, 'in-' + ep['_id'])
                 if source and source.get('event', {}).get('channel'):
                     request['channel_input'] = self.worker.channel_input(source)
             future = Future()
@@ -278,13 +287,7 @@ class NativeLane:
             future.asuna_session_id = native_id
             future.asuna_binding = record
             future.asuna_broker_session = record['broker_session'] + ':' + sha(operation.encode())[:16]
-            with self.worker.controller.ingress_lock, (self.worker.app.service.lock if task else nullcontext()), self.worker.pending_lock:
-                if self.worker.controller.reconfiguring:
-                    raise RuntimeError('HOST_RECONFIGURING')
-                if task:self.worker.app.service.valid(task)
-                if operation in self.worker.pending:
-                    raise RuntimeError('NATIVE_OPERATION_ALREADY_RUNNING')
-                self.worker.pending[operation] = future
+            self.worker.register_stage(operation, future, task)
             try:
                 self.worker.emit(request)
                 try:
@@ -298,12 +301,12 @@ class NativeLane:
                 result = LaneResult(**value)
                 # The receipt keeps the full result (the stage's single durable copy on the worker side);
                 # the audit records only its hash (state.commit over 16 KB, phase.output).
-                self.store.put('lane_receipts', {
+                receipt_records.save_lane(self.store, {
                     '_id': operation, 'native_host': True, 'native_session_id': native_id,
                     'scope_key': ep['scope_key'], 'result': vars(result)}, stream=operation)
                 if carried:
-                    row = self.store.db.sessions.find_one({'_id': native_id})
-                    self.store.put('sessions', {**row, 'carry': {**row['carry'], 'delivered': operation}},
+                    row = session_records.get(self.store, native_id)
+                    session_records.save(self.store, {**row, 'carry': {**row['carry'], 'delivered': operation}},
                                    expected=row['revision'], stream='native-binding:' + native_id)
                 return result
             finally:
@@ -322,8 +325,8 @@ class NativeLane:
             self.worker.emit({'kind': 'turn_done', 'session_id': session_id, 'episode_id': ep['_id'],
                               **({'retire': True} if done else {})})
             if done:
-                row = self.store.db.sessions.find_one({'_id': session_id})
-                self.store.put('sessions', {**row, 'retired': True}, expected=row['revision'],
+                row = session_records.get(self.store, session_id)
+                session_records.save(self.store, {**row, 'retired': True}, expected=row['revision'],
                                stream='native-binding:' + session_id)
 
     @staticmethod
@@ -374,6 +377,7 @@ class BusinessWorker:
         self.pending = {}
         self.pending_lock = threading.Lock()
         self.output_lock = threading.Lock()
+        self.emit_timing = threading.local()      # this thread's last emit: the output lock's wait, the write (seconds)
         self.navigation_ready = threading.Event()
         self.app = None
         self.controller = None
@@ -382,6 +386,35 @@ class BusinessWorker:
         self.folded_stop = False        # a lease left behind was folded into the plugin's open span (ADR-101)
         self.stopping = threading.Event()
         self.carry_lock = threading.Lock()
+
+    def register_stage(self, operation, future, task):
+        """Admit a stage: the Host is not reconfiguring, its task (if any) is still valid, and the operation runs
+        once. A task's stage waits for the effects lock first and takes the ingress fence only for the check, so
+        no inbound line waits behind a tool call that holds the effects lock. A wait of EFFECTS_WAIT_SECONDS or
+        more is recorded (`host.effects_lock_wait`) once the stage is past it; a failure to record is not the
+        stage's."""
+        effects = self.app.service.lock if task else nullcontext()
+        holder = getattr(effects, 'holder', None)
+        asked, waited = time.monotonic(), None
+        try:
+            with effects:
+                waited = time.monotonic() - asked
+                with self.controller.ingress_lock, self.pending_lock:
+                    if self.controller.reconfiguring:
+                        raise RuntimeError('HOST_RECONFIGURING')
+                    if task:
+                        self.app.service.valid(task)
+                    if operation in self.pending:
+                        raise RuntimeError('NATIVE_OPERATION_ALREADY_RUNNING')
+                    self.pending[operation] = future
+        finally:
+            if task and waited is not None and waited >= EFFECTS_WAIT_SECONDS:
+                try:
+                    self.app.evidence.record('host.effects_lock_wait', {
+                        'seconds': round(waited, 3), 'lane': getattr(future, 'asuna_lane', None),
+                        **({'holder': holder} if holder else {})})
+                except Exception:
+                    pass
 
     def host_call(self, method, args, timeout=120):
         """A request the Host answers; `timeout` is how long to wait for it, which must cover any time the request
@@ -398,9 +431,13 @@ class BusinessWorker:
                 self.host_pending.pop(request_id, None)
 
     def emit(self, value):
+        line = json.dumps(value, ensure_ascii=False, default=str) + '\n'
+        mark = time.monotonic()
         with self.output_lock:
-            sys.stdout.write(json.dumps(value, ensure_ascii=False, default=str) + '\n')
+            waited, mark = time.monotonic() - mark, time.monotonic()
+            sys.stdout.write(line)
             sys.stdout.flush()
+            self.emit_timing.output_lock_wait, self.emit_timing.output_write = waited, time.monotonic() - mark
 
     def initialize(self, persona, skill_directories=None, routes=None, models=None, integration_project=None, native_sessions=None,
                    deployment=None, secrets=None, admission='explicit', apply_integrations=False,
@@ -472,9 +509,9 @@ class BusinessWorker:
                 # ADR-101: the plugin's open span, read from the data folder (the worker never writes it).
                 self.folded_stop = host_stops.left_behind(self.app.store, lease, host_stops.open_span())
             self.navigation = self.prepare_navigation(native_sessions or [])
-            self.projection_start = self.app.store.db.artifacts.find_one({'_id': 'native-channel-projection'})
+            self.projection_start = artifact_records.get(self.app.store, 'native-channel-projection')
             if not self.projection_start:
-                self.projection_start = self.app.store.put('artifacts', {'_id': 'native-channel-projection',
+                self.projection_start = artifact_records.save(self.app.store, {'_id': 'native-channel-projection',
                     'kind': 'native-channel-projection', 'since': now(), 'scope_key': 'operator'}, stream='native-channel-projection')
             self.controller.on_input_received = self.project_input
             self.controller.on_episode_finished = self.episode_finished
@@ -514,11 +551,11 @@ class BusinessWorker:
                 if not members or not platform:
                     continue
                 scenes.append((route['scene_id'], members[0]['person_id'], platform.TITLE, self.channel_title(route)))
-        bindings = list(store.db.sessions.find({'native_host': True}))
+        bindings = session_records.native(store).rows()
         first = not any(row.get('navigation_version') == 1 for row in bindings)
         entries, retire = [], set()
         for scene_id, person, workspace, title in scenes:
-            scene = store.authorize(scene_id, person)
+            scene = scene_records.authorize(store, scene_id, person)
             scene_bindings = [row for row in bindings if row.get('lane') == 'character' and not row.get('errand')
                               and row['scene_id'] == scene_id and row['persona'] == local['persona']]
             candidates = [row for row in scene_bindings
@@ -530,7 +567,7 @@ class BusinessWorker:
             session_id = (source['_id'] if workspace == 'Local' and source else self.role_session_id({
                 'scene_id': scene_id, 'persona': local['persona'], 'policy_epoch': scene['policy_epoch'],
                 'character_context': scene.get('character_context')}))
-            prior = store.db.sessions.find_one({'_id': session_id})
+            prior = session_records.get(store, session_id)
             cwd = (str(Path(local['workspace']).resolve()) if workspace == 'Local'
                    else self.channel_workspace(channel_kinds.of(scene_id)))
             actor = source['person_id'] if source and source['person_id'] in scene['members'] else person
@@ -559,12 +596,12 @@ class BusinessWorker:
                     # An authorization/context change must not redirect old
                     # tasks or import their native transcript into a new scope.
                     updated.pop('successor_id', None)
-                store.put('sessions', updated, expected=old['revision'], stream='native-binding:' + old['_id'])
+                session_records.save(store, updated, expected=old['revision'], stream='native-binding:' + old['_id'])
         primary = {entry['session_id'] for entry in entries}
         for old in bindings:
             if old.get('main_conversation') and old['_id'] not in primary and old['_id'] not in retire:
                 retire.add(old['_id'])
-                store.put('sessions', {**old, 'main_conversation': False, 'retired': True},
+                session_records.save(store, {**old, 'main_conversation': False, 'retired': True},
                           expected=old['revision'], stream='native-binding:' + old['_id'])
         # The initial operator-requested cleanup archives old native logs; it
         # never deletes messages or alters immutable session headers.
@@ -592,7 +629,7 @@ class BusinessWorker:
         """The session a conversation continues in now: its successors followed to the last one."""
         seen = {session_id}
         while True:
-            successor = (self.app.store.db.sessions.find_one({'_id': session_id}, {'successor_id': 1}) or {}).get('successor_id')
+            successor = (session_records.get(self.app.store, session_id, fields=['successor_id']) or {}).get('successor_id')
             if not successor or successor in seen:
                 return session_id
             seen.add(successor)
@@ -602,7 +639,7 @@ class BusinessWorker:
         """This session and every session it continued from (their successors lead to it)."""
         chain, frontier = [session_id], [session_id]
         while frontier:
-            rows = self.app.store.db.sessions.find({'successor_id': {'$in': frontier}}, {'_id': 1})
+            rows = session_records.successors(self.app.store, frontier).rows(fields=['_id'])
             frontier = [row['_id'] for row in rows if row['_id'] not in chain]
             chain += frontier
         return chain
@@ -616,17 +653,17 @@ class BusinessWorker:
         from .role_tools import thinking_mode
         store = self.app.store
         with self.carry_lock:
-            old = store.db.sessions.find_one({'_id': session_id, 'native_host': True})
+            old = session_records.get(store, session_id, native=True)
             if not old or old.get('lane') != 'character':
                 return None
             if old.get('successor_id'):
                 return self.continued_session(session_id)
             if not old.get('main_conversation') or (old.get('carry') and not old['carry'].get('delivered')):
                 return None
-            scene = store.authorize(old['scene_id'], old['person_id'])
+            scene = scene_records.authorize(store, old['scene_id'], old['person_id'])
             context = 'carried-' + uuid.uuid4().hex[:16]
             # $set, not a whole-document write: ingress increments the scene's sequence concurrently.
-            store.db.scenes.update_one({'_id': scene['_id']}, {'$set': {'character_context': context}})
+            scene_records.set_character_context(store, scene['_id'], context)
             successor = self.role_session_id({'scene_id': scene['_id'], 'persona': old['persona'],
                                               'policy_epoch': scene['policy_epoch'], 'character_context': context})
             summary = str((carry or {}).get('summary') or '').strip()
@@ -639,7 +676,7 @@ class BusinessWorker:
                 'carry': {'from_session_id': session_id, 'summary': summary, 'delivered': None,
                           **({'why': carry['why']} if (carry or {}).get('why') else {})}})
             # The old binding keeps an explicit context: a row without one would match any context at navigation.
-            store.put('sessions', {**old, 'character_context': old.get('character_context'), 'main_conversation': False,
+            session_records.save(store, {**old, 'character_context': old.get('character_context'), 'main_conversation': False,
                                    'retired': True, 'successor_id': successor},
                       expected=old['revision'], stream='native-binding:' + session_id)
             store.audit(session_id, 'native.context.carried', {
@@ -655,24 +692,18 @@ class BusinessWorker:
 
     def action_session_id(self, binding, role_id, ep, task):
         """One native context per authorized execution binding, including old logs."""
-        query = {
-            'native_host': True, 'lane': 'executor',
-            'broker_session': 's-' + sha(binding.encode())[:40],
-            'parent_session_id': {'$in': self.earlier_sessions(role_id)}, 'scene_id': ep['scene_id'],
-            'scope_key': ep['scope_key'], 'policy_epoch': ep['policy_epoch'],
-            'person_id': ep['person_id'], 'persona': ep['persona'],
-        }
+        binds = {'broker': 's-' + sha(binding.encode())[:40], 'parents': self.earlier_sessions(role_id),
+                 'scene': ep['scene_id'], 'scope': ep['scope_key'], 'epoch': ep['policy_epoch'],
+                 'person': ep['person_id'], 'persona': ep['persona']}
         # Prefer the immediately preceding task's source when importing an old
         # operation-scoped binding. Do not import another actor or policy epoch.
         prior = None
         for task_id in (task['_id'], task.get('continues_task_id')):
             if task_id:
-                prior = self.app.store.db.sessions.find_one({**query, 'task_id': task_id},
-                    sort=[('binding_updated_at', -1), ('_id', -1)])
+                prior = session_records.of_task(self.app.store, **binds, task=task_id)
                 if prior: break
         if not prior:
-            prior = self.app.store.db.sessions.find_one(query,
-                sort=[('binding_updated_at', -1), ('_id', -1)])
+            prior = session_records.of_task(self.app.store, **binds)
         if prior:
             return prior['_id']
         identity = json.dumps([binding, role_id, ep['scene_id'], ep['scope_key'],
@@ -723,26 +754,25 @@ class BusinessWorker:
             raise RuntimeError('NATIVE_NAVIGATION_NOT_READY')
         store = self.app.store
         if ep.get('task_id'):
-            task = store.db.tasks.find_one({'_id': ep['task_id']})
-            original = store.db.episodes.find_one({'_id': task['episode_id']}) if task else None
+            task = task_records.get(store, ep['task_id'])
+            original = episode_records.get(store, task['episode_id']) if task else None
             if original and self.carried(original.get('native_session_id'), ep):
                 return self.continued_session(original['native_session_id'])
-        source = store.db.messages.find_one({'_id': 'in-' + ep['_id']}) or {}
+        source = message_records.get(store, 'in-' + ep['_id']) or {}
         plan_id = source.get('event', {}).get('scheduled_plan_id')
-        plan = store.db.plans.find_one({'_id': plan_id}) if plan_id else None
-        original = store.db.episodes.find_one({'_id': plan.get('source_episode_id')}) if plan else None
+        plan = plan_records.get(store, plan_id) if plan_id else None
+        original = episode_records.get(store, plan.get('source_episode_id')) if plan else None
         # A plan or a task begun on an errand or in a reflection comes back to the conversation itself, never to the
         # side session.
         if original and self.carried(original.get('native_session_id'), ep):
             return self.continued_session(original['native_session_id'])
-        primary = store.db.sessions.find_one({'native_host': True, 'main_conversation': True,
-            'scene_id': ep['scene_id'], 'persona': ep['persona'], 'policy_epoch': ep['policy_epoch'],
-            'character_context': ep.get('character_context')})
+        primary = session_records.main(store, ep['scene_id'], persona=ep['persona'], epoch=ep['policy_epoch'],
+                                       context=ep.get('character_context'))
         session_id = primary['_id'] if primary else self.role_session_id(ep)
         if errands.is_errand_visit(source.get('event')):
             return self.errand_session(ep, session_id)
         from . import self_review
-        prepared = ep.get('context') if 'context' in ep else (store.db.episodes.find_one({'_id': ep['_id']}, {'context': 1})
+        prepared = ep.get('context') if 'context' in ep else (episode_records.get(store, ep['_id'], fields=['context'])
                                                                or {}).get('context')
         if self_review.reflecting(prepared):
             return self.reflection_session(ep, session_id)
@@ -757,13 +787,13 @@ class BusinessWorker:
         the other line's session would be refused (NATIVE_BINDING_IDENTITY_CHANGED)."""
         if not session_id or self.side_session(session_id):
             return False
-        row = self.app.store.db.sessions.find_one({'_id': session_id}, {'scene_id': 1}) or {}
+        row = session_records.get(self.app.store, session_id, fields=['scene_id']) or {}
         return row.get('scene_id') in (None, ep['scene_id'])
 
     def side_session(self, session_id):
         """Whether this session is an errand's copy of a conversation (ADR-066) or a reflection's own (ADR-072): a
         one-turn session, retired once that turn ends, that later turns never take for the conversation."""
-        row = self.app.store.db.sessions.find_one({'_id': session_id}, {'errand': 1, 'reflection': 1}) or {}
+        row = session_records.get(self.app.store, session_id, fields=['errand', 'reflection']) or {}
         return bool(row.get('errand') or row.get('reflection'))
 
     def reflection_session(self, ep, home_id):
@@ -773,10 +803,10 @@ class BusinessWorker:
         from . import self_review
         store = self.app.store
         session_id = self_review.reflection_session_id(ep['_id'])
-        if store.db.sessions.find_one({'_id': session_id}):
+        if session_records.get(store, session_id):
             return session_id
-        scene = store.authorize(ep['scene_id'], ep['person_id'])
-        home = store.db.sessions.find_one({'_id': home_id}) or {}
+        scene = scene_records.authorize(store, ep['scene_id'], ep['person_id'])
+        home = session_records.get(store, home_id) or {}
         cwd = home.get('cwd') or str(Path(workspace_grant(self.app.config, scene['_id'], ep['person_id'])['workspace']).resolve())
         self.bind_session(session_id, {
             'lane': 'character', 'scene_id': scene['_id'], 'person_id': ep['person_id'],
@@ -795,10 +825,10 @@ class BusinessWorker:
         recent lines, none of them shown there yet."""
         store = self.app.store
         session_id = errands.session_id(ep['_id'])
-        if store.db.sessions.find_one({'_id': session_id}):
+        if session_records.get(store, session_id):
             return session_id
-        scene = store.authorize(ep['scene_id'], ep['person_id'])
-        source = store.db.sessions.find_one({'_id': source_id}) or {}
+        scene = scene_records.authorize(store, ep['scene_id'], ep['person_id'])
+        source = session_records.get(store, source_id) or {}
         platform = channel_kinds.of(scene['_id'])
         cwd = source.get('cwd') or (self.channel_workspace(platform) if platform
                                     else str(Path(workspace_grant(self.app.config, scene['_id'], ep['person_id'])['workspace']).resolve()))
@@ -851,7 +881,7 @@ class BusinessWorker:
         if not session or session.get('lane') != 'character' or session.get('successor_id') or session.get('retired') \
                 or not session.get('cwd') or not channel_kinds.owner_joins(session.get('scene_id')):
             return None
-        scene = self.app.store.db.scenes.find_one({'_id': session['scene_id']}, {'members': 1}) or {}
+        scene = scene_records.get(self.app.store, session['scene_id'], fields=['members']) or {}
         return session['scene_id'] if self.app.config['chat']['person_id'] in scene.get('members', ()) else None
 
     @staticmethod
@@ -859,28 +889,28 @@ class BusinessWorker:
         return {'key': 'read_only', **({'platform': platform.TITLE} if platform else {})}
 
     def bind_session(self, session_id, values):
-        prior = self.app.store.db.sessions.find_one({'_id': session_id})
+        prior = session_records.get(self.app.store, session_id)
         identity = ('lane', 'scene_id', 'persona', 'cwd')
         if values['lane'] not in ('character', 'attend'):       # a group's sessions serve everyone in it
             identity += ('person_id',)
         if prior and any(prior.get(k) != values.get(k) for k in identity):
             raise Denied('NATIVE_BINDING_IDENTITY_CHANGED')
-        scene = self.app.store.authorize(values['scene_id'], values['person_id'])
+        scene = scene_records.authorize(self.app.store, values['scene_id'], values['person_id'])
         if scene['policy_epoch'] != values['policy_epoch']:
             raise Denied('NATIVE_SESSION_EPOCH_CHANGED')
         # Bindings keep a hash of the stage system prompt, never its full text.
         kept = {k: v for k, v in (prior or {}).items() if k != 'system'}
-        return self.app.store.put('sessions', {
+        return session_records.save(self.app.store, {
             **kept, **values, '_id': session_id, 'native_host': True,
             'binding_key': 'native-host:' + session_id,
             'binding_updated_at': now(),
         }, expected=prior['revision'] if prior else None, stream='native-binding:' + session_id)
 
     def session(self, session_id):
-        record = self.app.store.db.sessions.find_one({'_id': session_id, 'native_host': True})
+        record = session_records.get(self.app.store, session_id, native=True)
         if not record:
             raise Denied('NATIVE_SESSION_NOT_BOUND')
-        scene = self.app.store.authorize(record['scene_id'], record['person_id'])
+        scene = scene_records.authorize(self.app.store, record['scene_id'], record['person_id'])
         if scene['policy_epoch'] != record['policy_epoch']:
             raise Denied('NATIVE_SESSION_EPOCH_CHANGED')
         return record
@@ -900,7 +930,7 @@ class BusinessWorker:
         """Her role session the task belongs to: where its collaboration thread is drawn."""
         if task.get('native_session_id'):
             return self.continued_session(task['native_session_id'])
-        original = self.app.store.db.episodes.find_one({'_id': task['episode_id']}, {'native_session_id': 1}) or {}
+        original = episode_records.get(self.app.store, task['episode_id'], fields=['native_session_id']) or {}
         return self.continued_session(original['native_session_id']) if original.get('native_session_id') else None
 
     def collab(self, task, entry):
@@ -909,7 +939,7 @@ class BusinessWorker:
         if session_id:
             # The tier a job was given and the one that ran it (ADR-075), for the owner's view of the thread; read
             # fresh, since a fall is recorded while the job runs. Never shown to her from here.
-            tier = (self.app.store.db.tasks.find_one({'_id': task['_id']}, {'tier': 1}) or task).get('tier')
+            tier = (task_records.get(self.app.store, task['_id'], fields=['tier']) or task).get('tier')
             view = {k: v for k, v in (tier or {}).items() if k in ('chosen', 'ran')}
             if (tier or {}).get('fell'):
                 view.update(reason=tier['fell'].get('reason'), mid_run=bool(tier['fell'].get('mid_run')))
@@ -925,7 +955,7 @@ class BusinessWorker:
     def episode_finished(self, event, result, error):
         if event.get('channel'):
             from .ingress import episode_id
-            row = self.app.store.db.messages.find_one({'_id': 'in-' + episode_id(event)})
+            row = message_records.get(self.app.store, 'in-' + episode_id(event))
             if row:
                 self.project_input(row)
         session_id = (result or {}).get('native_session_id') or event.get('native_session_id')
@@ -943,8 +973,14 @@ class BusinessWorker:
             # only after initialize returns, deadlocks a start whose activations queue input while the adapter
             # delivers its spool. The row is durable; navigation.ready projects it.
             return
-        if not self.app.store.db.sink_receipts.find_one({'_id': 'native-input:' + row['_id']}):
-            self.emit({'kind': 'channel_input', **self.channel_input(row)})
+        if not receipt_records.sink_get(self.app.store, 'native-input:' + row['_id']):
+            from .chat import INGRESS_TIMING as timing
+            mark = time.monotonic()
+            value = {'kind': 'channel_input', **self.channel_input(row)}
+            timing.channel_input = time.monotonic() - mark
+            self.emit_timing.__dict__.clear()
+            self.emit(value)
+            timing.__dict__.update(vars(self.emit_timing))
 
     def channel_title(self, route):
         """Conversation title a person can read (content only): the configured name, else the group name or
@@ -957,10 +993,9 @@ class BusinessWorker:
         name = route.get('display_name') if route.get('display_name') != route['target']['id'] else None
         if not name:
             # The newest message that carries the name: a notice (a join, a recall) carries none.
-            field = 'event.raw.group_name' if group else 'event.raw.asuna_peer.display'
-            last = self.app.store.db.messages.find_one(
-                {'scene_id': route['scene_id'], 'direction': 'inbound', field: {'$exists': True}},
-                {'event.raw.group_name': 1, 'event.raw.asuna_peer': 1}, sort=[('received_at', -1)])
+            last = message_records.inbound(self.app.store, route['scene_id'], group_name=group, peer_display=not group,
+                                           by='received_at').first(
+                newest_first=True, fields=['event.raw.group_name', 'event.raw.asuna_peer'])
             raw = (last or {}).get('event', {}).get('raw', {})
             name = raw.get('group_name') if group else (raw.get('asuna_peer') or {}).get('display')
         if not name and not group:
@@ -972,13 +1007,13 @@ class BusinessWorker:
             if person and person == people.owner:
                 name = people.owner_label
             else:
-                saved = self.app.store.db.identities.find_one({'_id': person}, {'display_name': 1}) if person else None
+                saved = people_records.identity(self.app.store, person, ['display_name']) if person else None
                 name = (saved or {}).get('display_name')
         target = str(route['target']['id'])
         unnamed = target if len(target) <= 20 else ('群聊 ' if group else '私聊 ') + target[:6]
         name = ' '.join(str(name or '').split())[:40] or unnamed
         from . import focus
-        scene = self.app.store.db.scenes.find_one({'_id': route['scene_id']}) if group else None
+        scene = scene_records.get(self.app.store, route['scene_id']) if group else None
         return focus.RESTING_MARK + name if scene and not focus.active(self.app.store, scene) else name
 
     def retitle_scene(self, scene_id):
@@ -987,8 +1022,7 @@ class BusinessWorker:
         config = self.app.config
         route = next((route for channel in config.get('channels', {}).values()
                       for route in channel.get('routes', {}).values() if route['scene_id'] == scene_id), None)
-        binding = self.app.store.db.sessions.find_one({'scene_id': scene_id, 'lane': 'character', 'native_host': True,
-                                                       'main_conversation': True})
+        binding = session_records.main(self.app.store, scene_id, lane='character')
         if not route or not binding or not route_members(route):
             return
         title = self.channel_title(route)
@@ -1003,7 +1037,7 @@ class BusinessWorker:
         """A real processed platform receipt, including quiet/error outcomes; never a model turn."""
         from .channels import route_for_scene
         store, config = self.app.store, self.app.config
-        scene = store.authorize(row['scene_id'], row['author'])
+        scene = scene_records.authorize(store, row['scene_id'], row['author'])
         if row['policy_epoch'] != scene['policy_epoch']:
             raise Denied('NATIVE_SESSION_EPOCH_CHANGED')
         route = route_for_scene(config, row['event']['channel']['id'], row['scene_id'])
@@ -1011,7 +1045,7 @@ class BusinessWorker:
               'scene_id': scene['_id'], 'person_id': row['author'], 'persona': config['chat']['persona'],
               'policy_epoch': scene['policy_epoch'], 'character_context': scene.get('character_context')}
         session_id = self.resolve_role_session(ep)
-        binding = store.db.sessions.find_one({'_id': session_id})
+        binding = session_records.get(store, session_id)
         if not binding or not binding.get('main_conversation'):
             binding = self.bind_session(session_id, {**(binding or {}), **ep, 'lane': 'character', 'scope_key': scene['scope_key'],
                 'cwd': self.channel_workspace(channel_kinds.of(scene['_id'])), 'role_session_id': session_id,
@@ -1096,40 +1130,38 @@ class BusinessWorker:
             return {'stop_id': host_stops.worker_down(self.app.store, args)['_id']}
         if method == 'navigation.ready':
             for entry in self.navigation['entries']:
-                record = self.app.store.db.sessions.find_one({'_id': entry['session_id']})
+                record = session_records.get(self.app.store, entry['session_id'])
                 if record.get('navigation_version') != 1:
-                    self.app.store.put('sessions', {**record, 'navigation_version': 1},
+                    session_records.save(self.app.store, {**record, 'navigation_version': 1},
                         expected=record['revision'], stream='native-binding:' + record['_id'])
             self.navigation_ready.set()
             # Recover only native projection work, never model/tool execution.
             # Historical business rows predating this feature remain in Memory.
-            for row in self.app.store.db.messages.find({'host_managed': True,
-                    'received_at': {'$gte': self.projection_start['since']},
-                    'event.channel': {'$exists': True}}).sort('received_at', 1):
+            for row in message_records.channel_inbound(self.app.store, self.projection_start['since']).each():
                 try:
                     self.project_input(row)
                 except Denied:
                     pass  # Revoked scenes must not project into a new epoch.
             return {'ready': True}
         if method == 'channel_input.ack':
-            row = self.app.store.db.messages.find_one({'_id': args['input_id'], 'event.channel': {'$exists': True}})
+            row = message_records.get(self.app.store, args['input_id'], from_channel=True)
             if not row:
                 raise ValueError('NATIVE_INPUT_NOT_FOUND')
             receipt_id = 'native-input:' + row['_id']
-            if not self.app.store.db.sink_receipts.find_one({'_id': receipt_id}):
+            if not receipt_records.sink_get(self.app.store, receipt_id):
                 try:
-                    self.app.store.put('sink_receipts', {'_id': receipt_id, 'kind': 'native_input_projection',
+                    receipt_records.save_sink(self.app.store, {'_id': receipt_id, 'kind': 'native_input_projection',
                         'input_id': row['_id'], 'native_session_id': args['session_id'],
                         'scope_key': row['scope_key'], 'policy_epoch': row['policy_epoch']}, stream=receipt_id)
                 except Conflict:
-                    if not self.app.store.db.sink_receipts.find_one({'_id': receipt_id}):
+                    if not receipt_records.sink_get(self.app.store, receipt_id):
                         raise
             return {'recorded': True}
         if method == 'input_policies':
             local = self.app.config['chat']
             ids = [row['id'] for row in args['sessions']]
             # Keys of the client's input words (ADR-011 §2.8): a platform's read-only view, or an internal session.
-            rows = list(self.app.store.db.sessions.find({'_id': {'$in': ids}, 'native_host': True}))
+            rows = session_records.native(self.app.store, ids).rows()
             policies = {row['_id']: (self.read_only_note(channel_kinds.of(row['scene_id'])) if row['scene_id'] != local['scene_id']
                 else {'key': 'internal'})
                 for row in rows
@@ -1150,14 +1182,14 @@ class BusinessWorker:
         if method == 'session_kinds':
             # Her conversations on a platform among these sessions: a group or a DM (the sidebar mark).
             local = self.app.config['chat']['scene_id']
-            rows = list(self.app.store.db.sessions.find({'_id': {'$in': list(args['session_ids'])[:500]},
-                'native_host': True, 'lane': 'character', 'scene_id': {'$ne': local}}, {'scene_id': 1}))
-            kinds = {scene['_id']: scene.get('kind') for scene in self.app.store.db.scenes.find(
-                {'_id': {'$in': [row['scene_id'] for row in rows]}}, {'kind': 1})}
+            rows = session_records.native(self.app.store, list(args['session_ids'])[:500], lane='character',
+                                          besides_scene=local).rows(fields=['scene_id'])
+            kinds = {scene['_id']: scene.get('kind') for scene in scene_records.many(
+                self.app.store, [row['scene_id'] for row in rows], fields=['kind'])}
             return {row['_id']: kinds[row['scene_id']] for row in rows if kinds.get(row['scene_id']) in ('group', 'dm')}
         if method == 'input':
             session_id = args['session_id']
-            existing = self.app.store.db.sessions.find_one({'_id': session_id})
+            existing = session_records.get(self.app.store, session_id)
             local = self.app.config['chat']
             if existing and existing.get('successor_id'):
                 raise Denied('NATIVE_CONVERSATION_CONTINUED: ' + existing['successor_id'])
@@ -1176,7 +1208,7 @@ class BusinessWorker:
             if args.get('images'):
                 # Pictures the owner attached: DSH shows them to her; the program keeps its own record.
                 from .vision import local_uploads
-                scene = self.app.store.db.scenes.find_one({'_id': scene_id}, {'scope_key': 1})
+                scene = scene_records.get(self.app.store, scene_id, fields=['scope_key'])
                 media = local_uploads(self.app.store, scene['scope_key'], args['images'], args['message_ids'][0])
             return self.controller.submit(args['text'], event_id=args['message_ids'][0], scene_id=scene_id,
                 native_session_id=session_id, native_message_ids=args['message_ids'], media=media)
@@ -1200,7 +1232,7 @@ class BusinessWorker:
             from .schedule_rules import offset_minutes
             zone = local_time.zone_of(self.app.store, record['scene_id'])
             return {**record, 'timezone': None if zone.get('zone_unavailable') else zone['name'],
-                    'utc_offset_minutes': offset_minutes(zone['tz'], datetime.now(timezone.utc))}
+                    'utc_offset_minutes': offset_minutes(zone['tz'], clock.now())}
         if method == 'ui.titles':
             # A browser in another language opened the Web UI (ui-language.js): her rhythm tasks follow it.
             from .schedule import set_titles
@@ -1213,11 +1245,11 @@ class BusinessWorker:
             # ADR-075: a 高 job fell to 低 (the plugin saw a hard failure, or 高 resting when the job began).
             from . import action_tiers
             store = self.app.store
-            task = store.db.tasks.find_one({'_id': args['task_id']})
+            task = task_records.get(store, args['task_id'])
             if task and (task.get('tier') or {}).get('ran') == '高':
                 fell = {'reason': args['reason'], 'mid_run': bool(args.get('mid_run')), 'at': now(),
                         **({'code': args['code']} if args.get('code') else {})}
-                store.put('tasks', {**task, 'tier': {**task['tier'], 'ran': action_tiers.LOW, 'fell': fell}},
+                task_records.save(store, {**task, 'tier': {**task['tier'], 'ran': action_tiers.LOW, 'fell': fell}},
                           expected=task['revision'], stream=task['_id'])
                 store.audit(task['_id'], 'tier.fell', {'task_id': task['_id'], **fell})
             return {'recorded': bool(task)}
@@ -1265,16 +1297,16 @@ class BusinessWorker:
             return self.app.broker.specs
         if method == 'action_message.delivered':
             # The action session read her message at a step (index.js): no extra round needed for it.
-            row = self.app.store.db.task_messages.find_one({'_id': args['message_id'], 'from': 'character'})
+            row = task_records.thread_message(self.app.store, args['message_id'], sender='character')
             if row and not row.get('delivered'):
-                self.app.store.put('task_messages', {**row, 'delivered': True, 'delivered_at': now()},
+                task_records.save_message(self.app.store, {**row, 'delivered': True, 'delivered_at': now()},
                                    expected=row['revision'], stream=row['task_id'])
             return {'recorded': True}
         if method == 'role_tool_specs':
             # A role session gets her tools as its conversation shows them (ADR-079 §9.7), fixed for the session.
             from .evidence import canonical
             from .role_tools import all_specs, session_specs
-            record = (self.app.store.db.sessions.find_one({'_id': args['session_id'], 'native_host': True})
+            record = (session_records.get(self.app.store, args['session_id'], native=True)
                       if args.get('session_id') else None)
             if not record:
                 return all_specs()
@@ -1372,14 +1404,14 @@ class BusinessWorker:
         if method == 'publication.activated':
             for publication in args['publications']:
                 receipt_id = publication['receipt_id']
-                prior = self.app.store.db.sink_receipts.find_one({'_id': receipt_id})
+                prior = receipt_records.sink_get(self.app.store, receipt_id)
                 if prior:
-                    self.app.store.put('sink_receipts', {**prior, 'state': 'ACTIVE',
+                    receipt_records.save_sink(self.app.store, {**prior, 'state': 'ACTIVE',
                         'activated_at': publication['activated_at']}, expected=prior['revision'], stream=prior.get('task_id', receipt_id))
                 else:
                     # Recovery has a real native source, but is not a fabricated
                     # role task. Its activation stays in its own receipt stream.
-                    self.app.store.put('sink_receipts', {**publication, '_id': receipt_id,
+                    receipt_records.save_sink(self.app.store, {**publication, '_id': receipt_id,
                         'kind': 'native_recovery_publish'}, stream=receipt_id)
             self.host._complete_activations()
             self.host.activation_settled.set()
@@ -1430,7 +1462,7 @@ class NativeDevelopmentBridge:
 
     def call(self, task, tool, args):
         from . import visibility
-        scene = self.store.db.scenes.find_one({'_id': task['scene_id']}) or {'_id': task['scene_id']}
+        scene = scene_records.get(self.store, task['scene_id']) or {'_id': task['scene_id']}
         if not task.get('development_grant') or visibility.session_class(
                 self.config, self.store.db, scene, task['requester_id']) != visibility.OWNER_PRIVATE:
             from .tasks import capability_refusal
@@ -1476,7 +1508,7 @@ class NativeDevelopmentBridge:
             return {'database':self.store.name,'collection':collection,'skip':skip,'limit':limit,'rows':rows}
         try:
             from . import errands
-            episode = errands.home_turn(self.store, self.store.db.episodes.find_one({'_id': task.get('episode_id')})) or {}
+            episode = errands.home_turn(self.store, episode_records.get(self.store, task.get('episode_id'))) or {}
             result = self.worker.host_call('development', {'tool':tool,'args':args, 'origin': {
                 'task_id': task['_id'], 'scope_key': task['scope_key'], 'intent_revision': task['intent_revision'],
                 # A self-improvement turn runs with nobody present (ADR-021 D4: it never publishes onto a waiting change).
@@ -1490,17 +1522,17 @@ class NativeDevelopmentBridge:
                                  % str(args.get('path'))[:200]) from None
             raise
         if tool == 'development_publish' and result.get('receipt_id'):
-            self.store.put('sink_receipts', {
+            receipt_records.save_sink(self.store, {
                 **result, '_id':result['receipt_id'], 'kind':'self_development_publish',
                 'scope_key':task['scope_key'], 'task_id':task['_id'],
                 'intent_revision':task['intent_revision']}, stream=task['_id'])
             # The Host selects only a project's newest publication: an earlier one still waiting to start
             # never will. Left APPLIED, it would keep asking for a worker restart that never activates it.
-            for older in self.store.db.sink_receipts.find({'kind':'self_development_publish',
-                    'project':result.get('project'), 'state':{'$in':['APPLIED','HOST_RESTART_REQUIRED']},
-                    '_id':{'$ne':result['receipt_id']}}):
-                self.store.put('sink_receipts', {**older, 'state':'SUPERSEDED', 'superseded_by':result['receipt_id'],
-                    'superseded_at':datetime.now(timezone.utc).isoformat()},
+            for older in receipt_records.sink_of_kind(self.store, 'self_development_publish',
+                    project=result.get('project'), states=['APPLIED','HOST_RESTART_REQUIRED'],
+                    besides=result['receipt_id']).each():
+                receipt_records.save_sink(self.store, {**older, 'state':'SUPERSEDED', 'superseded_by':result['receipt_id'],
+                    'superseded_at':clock.now().isoformat()},
                     expected=older['revision'], stream=older.get('task_id', older['_id']))
             if result['state'] == 'ACTIVE':
                 self.worker.host._complete_activations()

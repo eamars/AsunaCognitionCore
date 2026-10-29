@@ -9,6 +9,7 @@ A kind module knows one platform's id formats and adapter conventions:
   outbound_mention(account)                    how her @ reaches the adapter
   adapter_config(adapter, channel), strip_derived(adapter)
   FACES, STICKERS (optional)                   the platform's own faces by name -> id; whether it sends stickers
+  FILE_HOSTS (optional)                        hosts its received files are fetched from; without it they are not readable
   HOME (optional)                              its conversations are trusted home ones (owner_private); default public
   TEXT_ONLY (optional)                         it carries text only, no pictures; default False
   OWNER_JOINS (optional)                       the owner is a member of each of its conversations and writes there
@@ -139,6 +140,11 @@ def sticker_md5(item):
 def image_hosts():
     """The media hosts the installed platforms deliver images from (vision's default allowlist)."""
     return [host for kind in _KINDS.values() for host in getattr(kind, 'IMAGE_HOSTS', ())]
+
+
+def file_hosts(identifier):
+    """The hosts a scene's platform delivers received files from (`FILE_HOSTS`); empty where it declares none."""
+    return tuple(getattr(of(identifier), 'FILE_HOSTS', None) or ())
 
 
 def _signer(url):

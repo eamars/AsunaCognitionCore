@@ -15,19 +15,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
-from asuna import carried                     # noqa: E402
+from asuna import carried, records            # noqa: E402
 from asuna.dbread import Reader               # noqa: E402
 
 
 class ReadOnly:
-    """What carried() needs of a store, with no way to write."""
+    """What carried() needs of a store, with no way to write: the database for the reads that have not moved, and
+    the owners' collections over it (her heads through records.heads)."""
 
     def __init__(self, db, config):
         self.db, self.config = db, config
-
-    def head(self, entity, scope):
-        head = self.db.state_heads.find_one({'_id': entity + '|' + scope})
-        return (head, self.db.state_revisions.find_one({'_id': head['revision_id']})) if head else None
+        self.collection = records.on(db).collection
 
     def audit(self, *args, **kwargs):
         raise RuntimeError('carried_check reads only')

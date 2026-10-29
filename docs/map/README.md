@@ -221,7 +221,8 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`native_settings`](../../src/asuna/native_settings.py) — Native DSH settings migration and model-free runtime validation.
 - [`lanes`](../../src/asuna/lanes.py) — The model-lane contract: `LaneResult` is what one turn returns (its text, tool calls and everything she said), and `FakeLane` is the scripted stand-in tests use instead of a model.
 - [`queue`](../../src/asuna/queue.py) — Process-wide and cross-process endpoint serialization, without cloud routes.
-- [`state`](../../src/asuna/state.py) — The worker's MongoDB store: every write goes through `Store.put` with an expected revision and is recorded in a hash-chained audit stream.
+- [`state`](../../src/asuna/state.py) — The worker's store: every write goes through `Store.put` with an expected revision and is recorded in a hash-chained audit stream.
+- [`clock`](../../src/asuna/clock.py) — The core's one clock: the time now, in UTC, never the same twice in this process.
 - [`audit`](../../src/asuna/audit.py) — Checks and replays the store's audit trail: `verify` walks each stream's hash chain, `verify_documents` compares stored documents with their last audited commit, and `replay` rebuilds the state in an empty test database.
 - [`evidence`](../../src/asuna/evidence.py) — File evidence for runs and probes: `Evidence` writes each event as a hash-chained JSON file in a new folder; `canonical` and `sha` are the stable JSON bytes and digests the store's audit chain also uses.
 - [`testing`](../../src/asuna/testing.py) — Explicit teardown for databases owned by isolated tests and probes.
@@ -229,6 +230,27 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`host_stops`](../../src/asuna/host_stops.py) — When the Host was taken away from outside, she should not have to infer from a gap in the logs whether she was away.
 - [`host_lease`](../../src/asuna/host_lease.py) — One running Host per database, across machines (ADR-020 M1).
 - [`local_time`](../../src/asuna/local_time.py) — Times a model reads are on the local clock (owner 2026-10-08): stored records keep UTC for the program, and everything handed to a model passes `for_model` first.
+- [`store/__init__`](../../src/asuna/store/__init__.py) — The store: the core's way to its database, with no database named.
+- [`store/words`](../../src/asuna/store/words.py) — The words the core describes records with: conditions, changes, sorts and totals, their JSON form for her read tool, and their validation against a collection's declaration before any adapter sees them.
+- [`store/catalog`](../../src/asuna/store/catalog.py) — The catalog: every collection the core keeps, declared once, and the vector spaces searched in them.
+- [`store/errors`](../../src/asuna/store/errors.py) — The store's errors: what the shared layer and an adapter raise, each a message that starts with its code.
+- [`store/adapters`](../../src/asuna/store/adapters.py) — The registry of database adapters, and the results adapters return.
+- [`store/memory`](../../src/asuna/store/memory.py) — The in-memory adapter: the meaning table of the store's words written as code, its reference, and the unit tests' database.
+- [`store/mongodb`](../../src/asuna/store/mongodb.py) — The MongoDB adapter: the store's words as MongoDB queries, the catalog's collections, validators and indexes, blobs in the GridFS bucket `artifact_blobs`, and exact vector search.
+- [`records/__init__`](../../src/asuna/records/__init__.py) — The owners of the collections read across many domains: one module per collection, the only code that names its fields and builds its conditions (ADR-104).
+- [`records/scenes`](../../src/asuna/records/scenes.py) — The owner of `scenes`: a conversation's record (its kind, members, scope and epoch, its position counter, and the marks the program keeps on it), read and written only through these operations.
+- [`records/messages`](../../src/asuna/records/messages.py) — The owner of `messages`: the lines of every conversation (what people wrote, her lines and where they are on their way, the program's own lines), read and written only through these operations.
+- [`records/episodes`](../../src/asuna/records/episodes.py) — The owner of `episodes`: her turns (what woke her, what she was given, what she thought, said and called, and the state the turn reached), read and written only through these operations.
+- [`records/sessions`](../../src/asuna/records/sessions.py) — The owner of `sessions`: the bindings of her native sessions (which conversation, lane, persona, epoch and working folder a session belongs to, the sessions it continues and is continued by, its title and carry), read and written only throu
+- [`records/receipts`](../../src/asuna/records/receipts.py) — The owner of `lane_receipts` and `sink_receipts`: what a model lane answered for an operation (its result, kept so a replay answers the same), and what a sink received (a publication's delivery, her self-development publications and their s
+- [`records/view`](../../src/asuna/records/view.py) — What the owners of `episodes`, `sessions` and the receipts share: a named read (`View`) and the checks of a fence.
+- [`records/tasks`](../../src/asuna/records/tasks.py) — The owner of `tasks` and `task_messages`: the work she hands to the action brain (its request, lease, state, result and hand-back) and the messages between her and the action session about it, read and written only through these operations.
+- [`records/plans`](../../src/asuna/records/plans.py) — The owner of `plans`: what she and the program scheduled (her plans in a conversation, the rhythms of the heartbeat, settlement, self-development and condensing, their next fire and last outcome), read and written only through these operati
+- [`records/memories`](../../src/asuna/records/memories.py) — The owner of `memory_units`: her recall (the chat chunks of her conversations, their summaries, her thoughts, imported entries) and its vector space, read and written only through these operations.
+- [`records/artifacts`](../../src/asuna/records/artifacts.py) — The owner of `artifacts`: the rows of what she and the program keep apart from the conversation (stored files and pictures with their bytes' manifest, the action brain's tool records, held notices and passed lines, requests and group action
+- [`records/heads`](../../src/asuna/records/heads.py) — The owner of `state_heads` and `state_revisions`: her revisioned state (documents, relationships and the person layer, scene affect, policy, self descriptions), a head per entity and scope naming its current revision, read and written only 
+- [`records/people`](../../src/asuna/records/people.py) — The owner of `identities` and `scene_people`: who a person is on this machine (their identity: platform, account, the name the operator gave them) and how each conversation labels them (its label rows: number, card, nickname, role, when las
+- [`records/ideas`](../../src/asuna/records/ideas.py) — The owner of `ideas`: her improvement-idea notebook (each idea, why, its state and what she decided), read and written only through these operations.
 
 ### [A turn](turn.md)
 
@@ -303,7 +325,7 @@ What she remembers, how it is recalled, her documents, mood and blobs.
 - [`self_state`](../../src/asuna/self_state.py) — Role-owned self descriptions, stored in the existing revision ledger.
 - [`night`](../../src/asuna/night.py) — What her night turns changed, for her first heartbeat after them.
 - [`affect`](../../src/asuna/affect.py) — Affect ledger and projection (ADR-009 ARCHITECTURE §6).
-- [`blobs`](../../src/asuna/blobs.py) — Scoped, hash-verified GridFS storage for bounded-document overflow.
+- [`blobs`](../../src/asuna/blobs.py) — Scoped, hash-verified storage of bytes past the record size limit: the `blobs` owner, the only user of the store's blob interface (write, open, delete, of_scope).
 - [`privacy`](../../src/asuna/privacy.py) — Explicit operator erasure, with scope invalidation and auditable redaction roots.
 
 ### [Persona](persona.md)
@@ -334,6 +356,7 @@ The channel API, platform kinds, stickers, seeing and sending pictures and files
 - [`media_life`](../../src/asuna/media_life.py) — How long stored media bytes live: every kind of stored picture has an owner or an expiry.
 - [`outbound_media`](../../src/asuna/outbound_media.py) — 出站图片附件：她的 attach_image 工具 → SPEAK 行上的元数据 → 通道字节端点 → 已送达历史。
 - [`outbound_files`](../../src/asuna/outbound_files.py) — Files she sends to a group through the outbox (ADR-092): registered from a task's folder, offered to her turn, sent as speak's `file` part, read by the adapter in pieces, their bytes kept 7 days after they were last sent.
+- [`received_files`](../../src/asuna/received_files.py) — Files people send her (ADR-102): offered by ref, read when she asks, stored, kept or let go.
 - [`animated`](../../src/asuna/animated.py) — Animated pictures as something a still-image model can see: one labelled contact sheet plus words.
 - [`voice`](../../src/asuna/voice.py) — Voice messages arrive as text (ADR-093): a channel adapter fetches each voice of a message before it submits the line and posts the audio to `POST /v1/channels/<id>/voice`; the program turns it into text on this machine within that request 
 - [`lane_faults`](../../src/asuna/lane_faults.py) — Faults of the channel lanes, counted by signature and hour (ADR-095 §5.6, step 1).
@@ -464,12 +487,14 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 
 Commands for setup, packing, launching, probes and maintenance.
 
+- [`adr104_equivalence.py`](../../tools/adr104_equivalence.py) — The read-only check of one ADR-104 batch against a deployment's database, before the batch merges: numbers only, never a record id or a value.
 - [`agent_line.py`](../../tools/agent_line.py) — A coding agent's line to her (ADR-033): post a message, poll her answers.
 - [`asuna-launch.mjs`](../../tools/asuna-launch.mjs) — Stable entry: native Web and repair tools boot without importing Python code.
 - [`asuna-supervisor.mjs`](../../tools/asuna-supervisor.mjs) — The Host supervisor (ADR-034): the launcher stays as DSH's parent, restarts it when she asks or when it exits on its own, and brings it back down a fallback ladder when a start fails.
 - [`build_dsh_inline.mjs`](../../tools/build_dsh_inline.mjs) — Build the reviewed DSH patches from the pinned commit of the Asuna branch on the DSH fork: the native rendering extension (two client packages) and the compaction engine (`dsh-compaction-basic`, whose `compactNow` takes a keep-from point, A
 - [`carried_check.py`](../../tools/carried_check.py) — ADR-096's install checks, read only: what the turns carry is what carried() says, in numbers only.
 - [`check_dsh_release.py`](../../tools/check_dsh_release.py) — Read the public release tag without changing the project or global runtime.
+- [`check_prepared_start.py`](../../tools/check_prepared_start.py) — Run the launcher's start preparation (rung 0) for one commit in a scratch folder and check what it installed.
 - [`check_staged_secrets.py`](../../tools/check_staged_secrets.py) — Report paths only; never print configured secret values or matching bytes.
 - [`cleanup_test_databases.py`](../../tools/cleanup_test_databases.py) — Inventory or remove only explicitly inventoried Asuna test databases.
 - [`import_native_credentials.mjs`](../../tools/import_native_credentials.mjs) — One-time private migration through DSH's credential provider; never logs values.
@@ -482,7 +507,7 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`p2_offline_check.py`](../../tools/p2_offline_check.py) — ADR-005 P2 离线自检：不需要 Mongo、不需要 pytest，直接跑摘要闭环那批用例。
 - [`p5_offline_check.py`](../../tools/p5_offline_check.py) — ADR-005 P5 离线自检：不需要 Mongo、不需要 pytest，直接跑话题追踪＋主动参与那批用例。
 - [`pack_plugins.py`](../../tools/pack_plugins.py) — Build the core plugin and the persona and channel packages passed with --persona / --channel; no local state or secrets.
-- [`probe_blob.py`](../../tools/probe_blob.py) — Probe of large-file storage on a real MongoDB: a synthetic blob over 1 MB goes into GridFS, wrong-scope and non-operator reads are refused, and deleting its memory removes it.
+- [`probe_blob.py`](../../tools/probe_blob.py) — Probe of large-file storage on a real MongoDB: a synthetic blob over 1 MB goes into the blob store (GridFS), wrong-scope and non-operator reads are refused, and deleting its memory removes it (its blob is no longer stored).
 - [`probe_fresh_profile.mjs`](../../tools/probe_fresh_profile.mjs) — Sets up a brand-new DSH profile in an empty home that installs the packed or released tarballs with `dsh plugin add` and takes nothing else from this checkout.
 - [`probe_host_seam.py`](../../tools/probe_host_seam.py) — --debug only: isolated host replay, fake cognition, real Mongo and loopback HTTP.
 - [`probe_native_atomicity.mjs`](../../tools/probe_native_atomicity.mjs) — Probe of DSH's installed compaction: a cut through a tool call and its result, or a summary that fails, leaves the session's history and its saved log unchanged.

@@ -205,7 +205,8 @@ def system_for(store, ref: dict, *, stream: str | None = None, scope: str = 'ope
         return cached
     revisions = {}
     for slug, field in (('persona', 'persona_doc_revision'), ('voice', 'voice_doc_revision')):
-        revision = store.db.state_revisions.find_one({'_id': ref[field]}) if ref.get(field) else None
+        from .records import heads as head_records
+        revision = head_records.revision(store, ref[field]) if ref.get(field) else None
         if ref.get(field) and not revision:
             raise ValueError('SYSTEM_REF_REVISION_MISSING')
         revisions[slug] = revision['content'] if revision else None

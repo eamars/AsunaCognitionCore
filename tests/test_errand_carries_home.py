@@ -156,6 +156,7 @@ def test_the_action_brain_of_a_task_begun_on_an_errand_works_in_homes_folder(sto
         navigation_ready = threading.Event()
         navigation_ready.set()
         controller = types.SimpleNamespace(ingress_lock=threading.Lock(), reconfiguring=False)
+        register_stage = BusinessWorker.register_stage      # the worker admits a stage (its locks, in order)
         app = types.SimpleNamespace(service=TaskService(store), broker=types.SimpleNamespace(bindings={}))
 
         def continued_session(self, session_id):
@@ -263,7 +264,7 @@ def test_the_errand_runs_in_its_own_copy_and_later_turns_never_do(store):
     worker.host_call = lambda method, args: hosted.append((method, args)) or {'forked': True}
     main = {'_id': 'asuna-role-main', 'native_host': True, 'main_conversation': True, 'lane': 'character',
             'scene_id': 'g1', 'persona': 'P1', 'policy_epoch': 1, 'character_context': None, 'cwd': 'work/qq',
-            'person_id': 'A'}
+            'person_id': 'A', 'binding_key': 'native-host:asuna-role-main'}
     store.put('sessions', main, stream='native-binding:asuna-role-main')
     _, ep, _, _ = sent_on_errand(store, service)
     proto = {'_id': ep['_id'], 'scene_id': 'g1', 'person_id': ep['person_id'], 'persona': 'P1', 'policy_epoch': 1,
@@ -295,7 +296,8 @@ def test_an_errand_that_cannot_copy_reads_the_recent_lines(store):
     worker.host_call = lambda method, args: {'forked': False, 'reason': 'near_compaction'}
     store.put('sessions', {'_id': 'asuna-role-main', 'native_host': True, 'main_conversation': True, 'lane': 'character',
                            'scene_id': 'g1', 'persona': 'P1', 'policy_epoch': 1, 'character_context': None,
-                           'cwd': 'work/qq', 'person_id': 'A'}, stream='native-binding:asuna-role-main')
+                           'cwd': 'work/qq', 'person_id': 'A', 'binding_key': 'native-host:asuna-role-main'},
+              stream='native-binding:asuna-role-main')
     original = Coordinator.ingest
 
     def ingest(self, event, **kw):

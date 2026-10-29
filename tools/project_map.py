@@ -21,11 +21,16 @@ ROOT = Path(__file__).resolve().parents[1]
 MAP = ROOT / 'docs' / 'map'
 BEGIN, END = '<!-- map:modules -->', '<!-- /map:modules -->'
 
-# Python modules of the core by area (src/asuna). A module missing here fails the test: give it an area.
+# Python modules of the core by area (src/asuna, its store package src/asuna/store and its record owners
+# src/asuna/records). A module missing here fails the test: give it an area.
 AREAS = {
     'hosting': ('Entry and hosting', 'The worker the Host plugin starts, its store, configuration and audit.', [
-        'native_worker', 'host', 'application', 'cli', 'config', 'repo_files', 'native_settings', 'lanes', 'queue', 'state',
-        'audit', 'evidence', 'testing', 'restarts', 'host_stops', 'host_lease', 'local_time']),
+        'native_worker', 'host', 'application', 'cli', 'config', 'repo_files', 'native_settings', 'lanes', 'queue', 'state', 'clock',
+        'audit', 'evidence', 'testing', 'restarts', 'host_stops', 'host_lease', 'local_time',
+        'store/__init__', 'store/words', 'store/catalog', 'store/errors', 'store/adapters', 'store/memory',
+        'store/mongodb', 'records/__init__', 'records/scenes', 'records/messages', 'records/episodes',
+        'records/sessions', 'records/receipts', 'records/view', 'records/tasks', 'records/plans',
+        'records/memories', 'records/artifacts', 'records/heads', 'records/people', 'records/ideas']),
     'turn': ('A turn', 'From an input to her words: queueing, context, her tools, the checks, publishing.', [
         'ingress', 'router', 'coordinator', 'context', 'context_budget', 'block_guide', 'render', 'carried', 'role_tools', 'param_names', 'tool_args',
         'answers', 'publish', 'lines', 'chat', 'handover', 'reasons']),
@@ -38,7 +43,7 @@ AREAS = {
     'persona': ('Persona', 'The persona package, its model and policies, her skills and ideas.', [
         'persona_model', 'persona_data', 'persona_jobs', 'policy', 'skills']),
     'channels': ('Channels and pictures', 'The channel API, platform kinds, stickers, seeing and sending pictures and files, voices as text.', [
-        'channels', 'channel_kinds', 'capabilities', 'channel_admission', 'notices', 'faults', 'caught_up', 'forwards', 'stickers', 'vision', 'media_keys', 'media_life', 'outbound_media', 'outbound_files', 'animated', 'voice', 'lane_faults', 'media_children', 'media_worker']),
+        'channels', 'channel_kinds', 'capabilities', 'channel_admission', 'notices', 'faults', 'caught_up', 'forwards', 'stickers', 'vision', 'media_keys', 'media_life', 'outbound_media', 'outbound_files', 'received_files', 'animated', 'voice', 'lane_faults', 'media_children', 'media_worker']),
     'work': ('Work and tools', 'The action brain\'s tasks, grants, schedules, sandbox, development and integrations.', [
         'tasks', 'action_tiers', 'machine_words', 'local_roots', 'grants', 'schedule', 'schedule_rules', 'sandbox', 'sandbox_backend', 'development', 'credentials', 'dbread',
         'image_generation', 'svg_render', 'integration', 'integration_fetch', 'integration_image',

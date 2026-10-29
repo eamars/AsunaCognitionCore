@@ -16,10 +16,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from . import visibility
 from .config import excerpt
 from .evidence import sha
 from .state import Denied, now
+from .records import scenes as scene_records
 
 WATCH_MAX = 5
 WATCH_MAX_HOURS = 72
@@ -66,7 +68,7 @@ def _why(row, cls, store=None):
         return None
     if store is not None and cls == visibility.OWNER_PRIVATE and row.get('set_class') == visibility.PUBLIC:
         from .people import People
-        return '%s（在%s写的）' % (row['why'], People(store).scene_title(store.db.scenes.find_one({'_id': row.get('set_in')})))
+        return '%s（在%s写的）' % (row['why'], People(store).scene_title(scene_records.get(store, row.get('set_in'))))
     return row['why']
 
 
@@ -85,7 +87,7 @@ def add(store, ep, persona, cls, args):
     if mode not in MODES:
         raise Denied('WATCH_MODE_INVALID: how_often 给的是「%s」' % mode)
     why = excerpt(' '.join(str(args.get('why') or '').split()), 100) or None
-    scene = store.db.scenes.find_one({'_id': ep['scene_id']})
+    scene = scene_records.get(store, ep['scene_id'])
     people = People(store)
     found = people.resolve(scene, args.get('person'))
     if len(found) != 1:
@@ -95,7 +97,7 @@ def add(store, ep, persona, cls, args):
     person = found[0]['person']
     _id = 'watch-' + sha((persona + '|' + person).encode())[:12]
     current = store.db.watches.find_one({'_id': _id})
-    moment = datetime.now(timezone.utc)
+    moment = clock.now()
     active = store.db.watches.count_documents({'persona': persona, 'state': 'on', 'until': {'$gt': moment.isoformat()},
                                                '_id': {'$ne': _id}})
     if active >= WATCH_MAX:
@@ -124,7 +126,7 @@ def seen(store, person_id, moment=None):
     persona = _persona(store)
     if not persona or not person_id:
         return None
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     row = store.db.watches.find_one({'persona': persona, 'person': _person(store, person_id), 'state': 'on',
                                      'until': {'$gt': moment.isoformat()}})
     if not row:

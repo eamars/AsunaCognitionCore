@@ -29,6 +29,9 @@ from . import channel_kinds
 from .context_budget import ROUGH_AGO, STICKER_REVIEW, STICKER_SHELF, _tier
 from .evidence import sha
 from .state import Denied, now
+from .records import artifacts as artifact_records
+from .records import scenes as scene_records
+from .records import messages as message_records
 
 TOKEN = re.compile(r'\[表情包:([^\[\]\n]{1,12})\]')
 FACE_TOKEN = re.compile(r'\[表情:([^\[\]\s:]{1,12})\]')
@@ -75,7 +78,7 @@ def erased_pictures(store, rows):
     ids = [row['artifact_id'] for row in rows if row and row.get('artifact_id')]
     if not ids:
         return {}
-    return {item['_id']: item for item in store.db.artifacts.find({'_id': {'$in': ids}, 'storage': 'erased'})}
+    return {item['_id']: item for item in artifact_records.by_ids(store, ids, storage=artifact_records.ERASED).rows()}
 
 
 def refuse_erased(store, persona, name, scene_id):
@@ -139,11 +142,11 @@ def keep(store, blobs, ep, persona, args, config):
            'sent': 0, 'last_sent_at': None}
     if ARTIFACT_REF.fullmatch(ref):
         from .blobs import refuse_erased
-        row = store.db.artifacts.find_one({'_id': ref, 'kind': 'image', 'state': 'DONE'})
+        row = artifact_records.get(store, ref, kind='image', state='DONE')
         if not row or not produced(row):
             raise Denied('STICKER_NOT_YOURS: 「%s」不是你自己画好的图' % ref)
         refuse_erased(store, row, ep['scene_id'])           # hers, erased with the conversation it was made in
-        if row.get('storage') != 'gridfs':
+        if row.get('storage') != artifact_records.STORED:
             raise Denied('STICKER_NOT_YOURS: 「%s」不是你自己画好的图' % ref)
         doc.update(origin='own', kind='custom', artifact_id=ref, sha256=row['sha256'], size=row['size'],
                    media_type=row.get('media_type'), identity='sha:' + row['sha256'],
@@ -267,8 +270,7 @@ def faces_block(store, scene):
     if not names:
         return None
     counts = {}
-    for row in store.db.messages.find({'scene_id': scene['_id'], 'direction': 'inbound'}, {'text': 1}) \
-            .sort('scene_seq', -1).limit(FACE_SCAN):
+    for row in message_records.inbound(store, scene['_id']).rows(newest_first=True, limit=FACE_SCAN, fields=['text']):
         for found in FACE_TOKEN.findall(row.get('text') or ''):
             if found in names:
                 counts[found] = counts.get(found, 0) + 1
@@ -282,7 +284,7 @@ def speech_problem(store, ep, speech):
     faces = FACE_TOKEN.findall(speech or '')
     if not stickers and not faces:
         return None
-    scene = store.db.scenes.find_one({'_id': ep['scene_id']}, {'_id': 1, 'channel_id': 1})
+    scene = scene_records.get(store, ep['scene_id'], fields=['_id', 'channel_id'])
     if not sends(scene):
         return '这里发不出表情包或小黄脸：把「[表情包:…]」「[表情:…]」去掉，用话说。'
     for name in stickers:
@@ -302,7 +304,7 @@ def leaving(store, row):
     sha, and serve refuses it and says why."""
     from .blobs import BlobStore
     from .outbound_media import sha256_of, without_text
-    item = store.db.artifacts.find_one({'_id': row['artifact_id']}, {'scope_key': 1}) or {}
+    item = artifact_records.get(store, row['artifact_id'], ['scope_key']) or {}
     try:
         data = without_text(BlobStore(store).get(row['artifact_id'], item.get('scope_key'), operator=True))
     except (Denied, ValueError):
@@ -394,10 +396,10 @@ def pool_seen(store, blobs, config, message_id):
     """A group message's stickers join the pool (bytes saved now); returns how many new candidates."""
     from .state import Conflict
     from .vision import attachments_of, media_source, pull_bytes
-    row = store.db.messages.find_one({'_id': message_id})
+    row = message_records.get(store, message_id)
     if not row or row.get('direction') != 'inbound':
         return 0
-    scene = store.db.scenes.find_one({'_id': row['scene_id']})
+    scene = scene_records.get(store, row['scene_id'])
     if not scene or scene.get('kind') != 'group':
         return 0
     task = {'scene_id': scene['_id'], 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch']}
@@ -468,7 +470,7 @@ def candidates_block(store, moment, scene_id=None):
     people = People(store)
     items = []
     for row in rows:
-        where = '、'.join(people.scene_title(store.db.scenes.find_one({'_id': s}) or {'_id': s}) for s in row['scenes'][-2:])
+        where = '、'.join(people.scene_title(scene_records.get(store, s) or {'_id': s}) for s in row['scenes'][-2:])
         hours = _hours(moment, row['last_seen'])
         items.append({'candidate': row['artifact_id'], 'seen': '%s见过%s' % (where, _tier(SEEN_WORDS, row['seen'])),
                       **({'last': _tier(ROUGH_AGO, hours)} if hours is not None else {})})
@@ -526,12 +528,12 @@ def keep_candidate(store, ep, persona, args):
 # A sticker she looked at and named stays known for good, by a fingerprint: the md5 of a picture's bytes (a
 # platform may name the file by it, channel_kinds.sticker_md5) or a store sticker's ids, and by its picture
 # (picture_key). When it is posted again, the line under it says what she called it, so she need not look
-# again: the file md5 needs no download; a copy whose md5 is unknown is downloaded once by the program and
-# matched by its picture, and that md5 is then known too (aliases). The words are only hers: a sticker on her
-# shelf is known by its name and note (and stays known after she drops it); one she looked at and does not want
-# to send she may remember with a name and a line of her own.
+# again: the file md5 needs no download. A copy whose md5 is unknown is matched by its picture when she opens it
+# (read_image, or her group turn's pictures: the bytes are there already), and that md5 is then known too
+# (aliases); a line is never held for a download. The words are only hers: a sticker on her shelf is known by its
+# name and note (and stays known after she drops it); one she looked at and does not want to send she may
+# remember with a name and a line of her own.
 MEMORY_WORDS = {'kept': '在你架子上', 'dropped': '你收过又放下了', 'looked': '你看过没收'}
-PICTURE_FETCH_SECONDS = 5
 _JPEG_METADATA = set(range(0xE0, 0xF0)) | {0xFE}          # APP0-APP15 (JFIF, EXIF, XMP, ICC...) and comments
 _PNG_METADATA = {b'tEXt', b'zTXt', b'iTXt', b'tIME', b'eXIf', b'pHYs'}
 _WEBP_METADATA = {b'EXIF', b'XMP ', b'VP8X'}
@@ -584,7 +586,7 @@ def picture_key(data):
 
 def _blob(store, artifact_id):
     from .blobs import BlobStore
-    row = store.db.artifacts.find_one({'_id': artifact_id}, {'scope_key': 1})
+    row = artifact_records.get(store, artifact_id, ['scope_key'])
     return BlobStore(store).get(artifact_id, row['scope_key'], operator=True) if row else None
 
 
@@ -673,39 +675,29 @@ def known(store, persona, key):
     return store.db.sticker_memory.find_one({'persona': persona, **_by_key(key)}) if key else None
 
 
-_pictures = {}                  # ref -> picture of a posted sticker, downloaded once (None: it could not be)
-
-
-def _known_by_picture(store, persona, entry, key, fetch):
-    """A posted custom sticker whose md5 she does not know: downloaded once and matched by its picture; a match
-    makes that md5 known too, so the next copy needs no download."""
-    ref = entry['ref']
-    if ref not in _pictures:
-        try:
-            _pictures[ref] = picture_key(fetch(entry))
-        except Exception:                                  # unreachable or gone: it stays unknown, as before
-            _pictures[ref] = None
-        while len(_pictures) > 512:
-            _pictures.pop(next(iter(_pictures)))
-    picture = _pictures[ref]
-    row = store.db.sticker_memory.find_one({'persona': persona, 'picture': picture}) if picture else None
-    if row and key and key != row['key'] and key not in (row.get('aliases') or ()):
+def opened(store, persona, entry, data):
+    """She opened a posted custom sticker (its bytes `data`): one she knows by its picture though not by this md5
+    makes that md5 known too, so the next copy is known on sight. Returns the memory, or None."""
+    if entry.get('sticker') != 'custom' or not data:
+        return None
+    key = memory_key(entry)
+    if not key or known(store, persona, key):
+        return None
+    row = store.db.sticker_memory.find_one({'persona': persona, 'picture': picture_key(data)})
+    if row and key != row['key'] and key not in (row.get('aliases') or ()):
         store.put('sticker_memory', {**row, 'aliases': [*(row.get('aliases') or ()), key][-20:]},
                   expected=row['revision'], stream='sticker-memory:' + persona)
     return row
 
 
-def recognized(store, persona, entries, fetch=None):
-    """{ref: words} for the posted stickers she knows: what she called it, and whether it is on her shelf.
-    ``fetch(entry) -> bytes`` lets a custom sticker whose md5 is unknown be matched by its picture."""
+def recognized(store, persona, entries):
+    """{ref: words} for the posted stickers she knows: what she called it, and whether it is on her shelf. Known by
+    the md5 or a store sticker's ids only: nothing is downloaded."""
     out = {}
     for entry in entries:
         if not entry.get('sticker'):
             continue
-        key = memory_key(entry)
-        row = known(store, persona, key)
-        if not row and fetch and entry['sticker'] == 'custom' and entry.get('pullable'):
-            row = _known_by_picture(store, persona, entry, key, fetch)
+        row = known(store, persona, memory_key(entry))
         if not row:
             continue
         how = row['how']

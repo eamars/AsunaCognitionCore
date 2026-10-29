@@ -2,7 +2,7 @@
 as speak's `file` part, read by the adapter in pieces, their bytes kept 7 days after they were last sent.
 
 - **Registration** (`register`, the action brain's `offer_file`): a file inside the task folder becomes a `file`
-  artifact in the task's own scope. The bytes stream into GridFS (`BlobStore.put_stream`); the program computes the
+  artifact in the task's own scope. The bytes stream into the blob store (`BlobStore.put_stream`); the program computes the
   sha256, the size and the type (`sniff`, from the first bytes: an unknown type is recorded as unknown and still
   goes). Her name for it passes her private words list: a hit warns, by category and entry line, and does not block.
 - **What a conversation may send** (`offer`, `file_artifacts_from_program`): a file any of her tasks registered may be
@@ -25,6 +25,8 @@ import traceback
 from pathlib import Path
 
 from .state import Denied, now
+from .records import artifacts as artifact_records
+from .records import messages as message_records
 
 KIND = 'file'                      # the artifacts row's kind, and the claim's and the row's field
 CAPABILITY = 'file'                # what an adapter declares on its claim, with its platform's limit: file:<bytes>
@@ -34,7 +36,7 @@ PIECE_MAX = 8 * 1024 * 1024        # the largest piece the byte endpoint serves 
 MAX_OFFERED = 8
 HEAD_BYTES = 64 * 1024             # what the type is read from
 NAME_BYTES = 255                   # a file name, in UTF-8 bytes, as file systems take it
-REMOVED = 'removed'                # the artifacts row's storage once its bytes are gone
+REMOVED = artifact_records.REMOVED  # the artifacts row's storage once its bytes are gone
 UNKNOWN_TYPE = '类型没认出来'
 FAILED_CODES = ('CHANNEL_DOES_NOT_DECLARE_FILE', 'FILE_OVER_CHANNEL_LIMIT', 'FILE_BYTES_EXPIRED', 'FILE_ERASED',
                 'FILE_DESCRIPTOR_INVALID')
@@ -53,6 +55,8 @@ TYPE_WORDS = {
     'image/svg+xml': 'SVG 图',
     'audio/mpeg': 'MP3 音频', 'audio/mp4': 'M4A 音频', 'audio/ogg': 'Ogg 音频', 'audio/wav': 'WAV 音频',
     'video/mp4': 'MP4 视频',
+    'application/x-msdownload': 'Windows 程序', 'application/x-executable': 'Linux 程序',
+    'application/x-mach-binary': 'macOS 程序',
     'text/plain': '文本', 'text/html': 'HTML 网页', 'application/json': 'JSON',
 }
 OOXML = ((b'word/', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
@@ -76,6 +80,12 @@ SOURCE_GONE = '，任务文件夹里的原文件也不在了（或已改动）�
 def sniff(head, whole=False):
     """The media type of a file from its first bytes (`whole`: they are the whole file); None when not recognized."""
     data = bytes(head or b'')
+    if data.startswith(b'MZ') and b'\x00' in data[:64]:      # a DOS header has NULs; a text that starts "MZ" does not
+        return 'application/x-msdownload'
+    if data.startswith(b'\x7fELF'):
+        return 'application/x-executable'
+    if data[:4] in (b'\xfe\xed\xfa\xce', b'\xfe\xed\xfa\xcf', b'\xce\xfa\xed\xfe', b'\xcf\xfa\xed\xfe'):
+        return 'application/x-mach-binary'
     if data.startswith(b'%PDF-'):
         return 'application/pdf'
     if data.startswith(b'PK\x03\x04') or data.startswith(b'PK\x05\x06'):
@@ -117,7 +127,8 @@ def _mpeg_frame(data):
 
 
 def _text_type(data, whole):
-    """UTF-8 text, decoded from the sample (a character cut at its end is not an error): svg, html, json or plain."""
+    """UTF-8 or GB18030 text, decoded from the sample (a character cut at its end is not an error): svg, html, json
+    or plain."""
     if data.startswith(b'\xef\xbb\xbf'):
         data = data[3:]
     if not data or b'\x00' in data:
@@ -125,11 +136,15 @@ def _text_type(data, whole):
     try:
         text = data.decode('utf-8')
     except UnicodeDecodeError as exc:
-        if whole or exc.reason != 'unexpected end of data' or exc.start < len(data) - 3:
-            return None
-        try:
-            text = data[:exc.start].decode('utf-8')
-        except UnicodeDecodeError:
+        text = None
+        if not whole and exc.reason == 'unexpected end of data' and exc.start >= len(data) - 3:
+            try:
+                text = data[:exc.start].decode('utf-8')
+            except UnicodeDecodeError:
+                pass
+        if text is None:
+            text = gb18030_text(data, whole)
+        if text is None:
             return None
     lead = text.lstrip().lower()
     if lead.startswith('<') and '<svg' in lead[:4096]:
@@ -145,6 +160,24 @@ def _text_type(data, whole):
         except ValueError:
             return 'text/plain'
     return 'text/plain'
+
+
+# GB18030 decodes nearly any bytes, so a decoding is taken as text only when it is nearly free of control characters.
+CONTROL_PER_THOUSAND = 1
+
+
+def gb18030_text(data, whole=True):
+    """The text of GB18030 bytes, or None: strict, and at most CONTROL_PER_THOUSAND control characters (Unicode Cc
+    other than tab, \\n and \\r) per 1,000 characters. A sample's last character may be cut (`whole` False)."""
+    import unicodedata
+    for cut in ((0,) if whole else (0, 1, 2, 3)):
+        try:
+            text = data[:len(data) - cut].decode('gb18030')
+        except UnicodeDecodeError:
+            continue
+        controls = sum(1 for c in text if c not in '\t\n\r' and unicodedata.category(c) == 'Cc')
+        return text if text and controls * 1000 <= CONTROL_PER_THOUSAND * len(text) else None
+    return None
 
 
 def size_words(size):
@@ -231,6 +264,10 @@ def register(store, task, root, args):
                                                  # refusal after the bytes went says what is left there
                                                  fields={'name': name, 'task_id': task.get('_id'), 'source': {
                                                      'task_id': task.get('_id'), 'folder': str(root), 'path': relative}})
+            from .received_files import received_from
+            origin = received_from(store, task, stored['sha256'])       # a file someone sent (ADR-102 section 8)
+            if origin:
+                artifact_records.set_received_from(store, stored['artifact_id'], origin)
     except Exception as exc:
         return {'error': 'TASK_OPERATION_FAILED: ' + workspace_reason(exc, 'offer_file', given),
                 'execution': {'exit_code': 1, 'stderr': traceback.format_exc(limit=1)}}
@@ -275,15 +312,18 @@ def offer(store, scene, *, limit=MAX_OFFERED):
     first; None when there are none or files do not go out here."""
     if not sends_here(store, scene):
         return None
-    cursor = store.db.artifacts.find({'kind': KIND, 'state': 'DONE', 'storage': 'gridfs'},
-                                     {'name': 1, 'size': 1, 'media_type': 1, 'created_at': 1,
-                                      'source_ids': 1}).sort('created_at', -1).limit(200)
+    cursor = artifact_records.of_kind(store, KIND, state='DONE', storage=artifact_records.STORED,
+                                      by='created_at').rows(newest_first=True, limit=200, fields=[
+                                          'name', 'size', 'media_type', 'created_at', 'source_ids', 'received_from'])
     items = []
     for row in cursor:
         if not produced(row):
             continue
         items.append({'artifact_id': row['_id'], 'name': row.get('name'), 'size': size_words(row.get('size')),
                       'type': type_words(row.get('media_type')), 'registered_at': row.get('created_at')})
+        if row.get('received_from'):
+            from .received_files import FORWARDED
+            items[-1]['from'] = FORWARDED % row['received_from'].get('sender')
         if len(items) >= limit:
             break
     return {'items': items, 'note': OFFER_NOTE} if items else None
@@ -338,7 +378,7 @@ def check(store, ep, scene, artifact_id):
     """(descriptor, None) for a file her speak part may send here, else (None, why in words)."""
     from . import capabilities, local_time
     from .blobs import erased, erased_words
-    item = store.db.artifacts.find_one({'_id': artifact_id, 'kind': KIND}) if artifact_id else None
+    item = artifact_records.get(store, artifact_id, kind=KIND) if artifact_id else None
     if item and erased(item):
         return None, erased_words(store, item, (scene or {}).get('_id'))
     if item and removed(item):
@@ -346,10 +386,10 @@ def check(store, ep, scene, artifact_id):
     offered = ((ep.get('context') or {}).get('file_artifacts_from_program') or {}).get('items') or ()
     if artifact_id not in {row.get('artifact_id') for row in offered if isinstance(row, dict)}:
         return None, '不在 file_artifacts_from_program 里：artifact_id 照抄那里列出的'
-    if not item or item.get('state') != 'DONE' or item.get('storage') != 'gridfs':
+    if not item or item.get('state') != 'DONE' or item.get('storage') != artifact_records.STORED:
         return None, '这个文件已经不在了；换 file_artifacts_from_program 里别的'
-    from bson import ObjectId
-    if not store.db['artifact_blobs.files'].find_one({'_id': ObjectId(item['gridfs_id'])}, {'_id': 1}):
+    from . import blobs
+    if not blobs.exists(store, item[artifact_records.BLOB_FIELD]):
         return None, '这个文件的字节不在存储里了（不是你的错）；要再发就让任务从文件夹里重新登记'
     most = capabilities.limit(store, (scene or {}).get('channel_id'), CAPABILITY)
     if most is not None and item['size'] > most:
@@ -375,10 +415,10 @@ def claim_failure(store, row, limits):
     if not meta:
         return {'failure': 'FILE_DESCRIPTOR_INVALID', 'failure_detail': '这条消息记的文件信息不完整（不是你的错），发不了'}
     from .blobs import erased, erased_words
-    item = store.db.artifacts.find_one({'_id': meta['artifact_id']})
+    item = artifact_records.get(store, meta['artifact_id'])
     if erased(item):                    # erased while it was on its way: the same sentence (ADR-105)
         return {'failure': 'FILE_ERASED', 'failure_detail': erased_words(store, item, row.get('scene_id'))}
-    if not item or removed(item) or item.get('storage') != 'gridfs':
+    if not item or removed(item) or item.get('storage') != artifact_records.STORED:
         return {'failure': 'FILE_BYTES_EXPIRED', 'failure_detail': '这个文件的字节已经不在存储里了'}
     most = (limits or {}).get(CAPABILITY)
     if most is not None and meta['size'] > most:
@@ -392,16 +432,16 @@ def expired_source(store, row_id):
     """After a claim failed a row with FILE_BYTES_EXPIRED, outside the effects lock: whether the task folder still
     holds the original (it is hashed), kept on the row as source_present with the words that say so."""
     from . import local_time
-    row = store.db.messages.find_one({'_id': row_id}) or {}
+    row = message_records.get(store, row_id) or {}
     meta = descriptor(row.get(KIND))
-    item = store.db.artifacts.find_one({'_id': meta['artifact_id']}) if meta else None
+    item = artifact_records.get(store, meta['artifact_id']) if meta else None
     present = bool(item) and source_present(item)
     if item and removed(item):
         words = expired_words(item, local_time.zone_of(store, row.get('scene_id')), present)
     else:
         words = '这个文件的字节不在存储里了' + (SOURCE_KEPT % (item.get('source') or {}).get('path') if present
                                              else SOURCE_GONE)
-    store.db.messages.update_one({'_id': row_id}, {'$set': {'source_present': present, 'failure_detail': words}})
+    message_records.note_failure(store, row_id, present, words)
     return present
 
 
@@ -427,12 +467,12 @@ def serve_piece(store, row, query):
         raise ValueError('FILE_PIECE_INVALID: length 要在 1..%d 之间，给的是 %d' % (PIECE_MAX, length))
     if offset >= meta['size']:
         raise ValueError('FILE_PIECE_INVALID: offset %d 不在文件里（文件 %d 字节）' % (offset, meta['size']))
-    item = store.db.artifacts.find_one({'_id': meta['artifact_id']})
+    item = artifact_records.get(store, meta['artifact_id'])
     if not item or item.get('kind') != KIND:
         raise Denied('FILE_ARTIFACT_UNAVAILABLE')
     from .blobs import refuse_erased
     refuse_erased(store, item, (row or {}).get('scene_id'))
-    if removed(item) or item.get('state') != 'DONE' or item.get('storage') != 'gridfs':
+    if removed(item) or item.get('state') != 'DONE' or item.get('storage') != artifact_records.STORED:
         raise Denied('FILE_BYTES_EXPIRED')
     if item.get('sha256') != meta['sha256'] or item.get('size') != meta['size']:
         raise Denied('FILE_SHA_MISMATCH')
@@ -445,7 +485,7 @@ def sent(store, row):
     """A delivered file row: its bytes are kept KEEP_DAYS from now."""
     meta = descriptor((row or {}).get(KIND))
     if meta:
-        store.db.artifacts.update_one({'_id': meta['artifact_id'], 'kind': KIND}, {'$set': {'last_sent_at': now()}})
+        artifact_records.mark_sent(store, meta['artifact_id'], KIND, now())
 
 
 # The adapter's reasons for a file it did not send, in her words (a code never reaches her).

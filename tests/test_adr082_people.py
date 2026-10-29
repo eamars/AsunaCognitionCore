@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from asuna.records import heads as head_records
 from asuna import attend, familiarity, role_tools, switches
 from asuna import understanding as people_mod
 from asuna.context import PEOPLE_NOTE, UNDERSTANDING_NOTE, ContextBuilder
@@ -103,7 +104,7 @@ def test_one_to_one_turns_keep_the_relationship_block_and_get_no_entry(store, ho
         owner(store)
     _, context, manifest = ContextBuilder(store).prepare(DM)
     relation = context['relationship']
-    assert relation['here'] == store.head('relationship:A', 'scene:dm-a')[1]['content']['body']
+    assert relation['here'] == head_records.current(store, 'relationship:A', 'scene:dm-a')[1]['content']['body']
     assert relation['person']['text'] == NO_PERSON and relation['familiarity']
     assert context['understanding_update_from_program']['available'] is True
     assert context['understanding_update_from_program']['note'] == UNDERSTANDING_NOTE
@@ -129,14 +130,14 @@ def test_every_entry_has_familiarity_and_stance_and_nothing_unwritten(store):
 
 
 def test_a_layer_written_before_shorts_shows_its_body_named_as_a_body(store):
-    store.init_head('relationship:A', 'person', {'body': '旧的人那层，没有 short。'}, [])
-    store.init_head('relationship:A', 'scene:g1', {'body': '旧的这里那层。'}, [])
+    head_records.init(store, 'relationship:A', 'person', {'body': '旧的人那层，没有 short。'}, [])
+    head_records.init(store, 'relationship:A', 'scene:g1', {'body': '旧的这里那层。'}, [])
     ep, _ = turn(store, event('t-old'))
     [item] = ep['context']['people_from_program']['items']
     assert item['short_body'] == '旧的人那层，没有 short。' and item['here_body'] == '旧的这里那层。'
     assert 'short' not in item and 'here' not in item
-    assert item['written_at'] == store.head('relationship:A', 'scene:g1')[1]['created_at']
-    person, here = store.head('relationship:A', 'person')[0], store.head('relationship:A', 'scene:g1')[0]
+    assert item['written_at'] == head_records.current(store, 'relationship:A', 'scene:g1')[1]['created_at']
+    person, here = head_records.current(store, 'relationship:A', 'person')[0], head_records.current(store, 'relationship:A', 'scene:g1')[0]
     assert ep['manifest']['people_shown'] == {'A': {'person': person['revision_id'], 'here': here['revision_id']}}
 
 
@@ -144,7 +145,7 @@ def test_a_layer_written_before_shorts_shows_its_body_named_as_a_body(store):
 
 def test_recall_person_reads_both_layers_pins_them_and_never_searches(store, monkeypatch):
     write_dm(store)
-    store.init_head('relationship:A', 'scene:g1', {'body': '在群里爱开玩笑。', 'short': '群里爱开玩笑'}, [])
+    head_records.init(store, 'relationship:A', 'scene:g1', {'body': '在群里爱开玩笑。', 'short': '群里爱开玩笑'}, [])
     original = ContextBuilder.prepare
 
     def no_search(self, ev, persona='P1', recall=False, turn_kind=None):
@@ -159,7 +160,7 @@ def test_recall_person_reads_both_layers_pins_them_and_never_searches(store, mon
     assert read['person']['text'] == 'A 说话直接，先给结论。' and read['person']['short'] == '直接，先给结论'
     assert read['here'] == {'text': '在群里爱开玩笑。', 'short': '群里爱开玩笑'}
     assert 'query' in read['not_used'], 'a query beside person is said to be unused'
-    person, here = store.head('relationship:A', 'person')[0], store.head('relationship:A', 'scene:g1')[0]
+    person, here = head_records.current(store, 'relationship:A', 'person')[0], head_records.current(store, 'relationship:A', 'scene:g1')[0]
     saved = store.db.episodes.find_one({'_id': ep['_id']})
     assert saved['understanding_seen'] == {'A': {'person': person['revision_id'], 'here': here['revision_id']}}
     assert saved['recall_count'] == 1, 'a refused label spends no recall'
@@ -179,7 +180,7 @@ def test_people_list_at_home_and_refused_outside(store, monkeypatch):
     assert set(rows) == {'林', '明'} and 'person' not in json.dumps(list(listed['people'][0]), ensure_ascii=False)
     person_layer = next(layer for layer in rows['林'] if layer['layer'] == '人那层')
     assert person_layer['chars'] == len('A 说话直接，先给结论。') and person_layer['written_in'] and person_layer['written_at']
-    assert person_layer['short'] == (store.head('relationship:A', 'person')[1]['content'].get('short') or '没有')
+    assert person_layer['short'] == (head_records.current(store, 'relationship:A', 'person')[1]['content'].get('short') or '没有')
     [b_here] = rows['明']
     assert b_here['layer'].startswith('这里那层') and b_here['chars'] > 0 and b_here['short'] == '没有'
     # At home a read names anyone on the list; his here layer is the one of the conversation it is read in.
@@ -205,33 +206,33 @@ def test_people_list_at_home_and_refused_outside(store, monkeypatch):
 
 def test_a_group_write_against_an_unread_layer_is_refused_with_its_text_then_accepted(store):
     write_dm(store)
-    old = store.head('relationship:A', 'person')[1]
+    old = head_records.current(store, 'relationship:A', 'person')[1]
     call = ('understand_person', {'layer': 'person', 'content': 'A 直接，也肯听人说完。', 'short': '直接但肯听'})
     ep, lane = turn(store, event('t-write'), call, call)
     (refused, first_ok), (accepted, ok) = results(lane, 'understand_person')
     assert not first_ok and '还没读过' in refused and old['content']['body'] in refused
     assert ok and accepted == {'state': 'COMMITTED'}
-    new = store.head('relationship:A', 'person')[1]
+    new = head_records.current(store, 'relationship:A', 'person')[1]
     assert new['content'] == {'body': 'A 直接，也肯听人说完。', 'short': '直接但肯听'}
     assert new['parent_revision_id'] == old['_id'] and new['origin']['scene_id'] == 'g1'
 
 
 def test_keep_body_changes_only_the_short_byte_for_byte(store):
     write_dm(store, body='  A 说话直接，先给结论。\n第二行留着。', short='旧的一句')
-    old = store.head('relationship:A', 'person')[1]
+    old = head_records.current(store, 'relationship:A', 'person')[1]
     _, lane = turn(store, event('t-keep'), ('recall', {'person': label(store, 'A')}),
                    ('understand_person', {'layer': 'person', 'content': '不更新', 'short': '新的一句'}))
     assert results(lane, 'understand_person') == [({'state': 'COMMITTED'}, True)]
-    new = store.head('relationship:A', 'person')[1]
+    new = head_records.current(store, 'relationship:A', 'person')[1]
     assert new['content']['body'] == old['content']['body'] and new['content']['short'] == '新的一句'
     _, lane = turn(store, event('t-same'), ('recall', {'person': label(store, 'A')}),
                    ('understand_person', {'layer': 'person', 'content': '不更新', 'short': '新的一句'}),
                    ('understand_person', {'layer': 'here', 'content': '不更新', 'short': '没有正文'}))
     (same, ok), (nothing, kept_ok) = results(lane, 'understand_person')
     assert ok and same == {'state': 'NO_CHANGE'}
-    assert store.head('relationship:A', 'person')[1]['_id'] == new['_id']
+    assert head_records.current(store, 'relationship:A', 'person')[1]['_id'] == new['_id']
     assert not kept_ok and '没有正文可以留着' in str(nothing)          # UNDERSTANDING_NOTHING_TO_KEEP
-    assert store.head('relationship:A', 'scene:g1') is None
+    assert head_records.current(store, 'relationship:A', 'scene:g1') is None
 
 
 def test_once_per_person_and_layer_a_turn_and_a_second_person_too(store):
@@ -248,8 +249,8 @@ def test_once_per_person_and_layer_a_turn_and_a_second_person_too(store):
     (a, a_ok), (again, again_ok), (b, b_ok) = results(lane, 'understand_person')
     assert a_ok and b_ok and a == b == {'state': 'COMMITTED'}
     assert not again_ok and '每人每层一回合只写一次' in again
-    assert store.head('relationship:A', 'person')[1]['content']['body'] == 'A 在纠正我。'
-    b_rev = store.head('relationship:B', 'person')[1]
+    assert head_records.current(store, 'relationship:A', 'person')[1]['content']['body'] == 'A 在纠正我。'
+    b_rev = head_records.current(store, 'relationship:B', 'person')[1]
     assert b_rev['content'] == {'body': 'B 第一次来。', 'short': '新来的 B'}
     assert b_rev['mutation_id'] == ep['_id'] + ':understanding:person:B'
     saved = store.db.episodes.find_one({'_id': ep['_id']})
@@ -282,7 +283,7 @@ def test_a_write_about_someone_present_takes_the_summaries_that_cover_that_perso
     assert result['auto_source_ids'] == ['sum-b']
     assert result['auto_source_skipped'] == [{'id': 'sum-a', 'reason': 'person_not_in_participants'}]
     assert result['source_ids'] == ep['monologue_refs'] + ['sum-b']
-    assert store.head('relationship:B', 'scene:g1')[1]['content'] == {'body': 'B 说他周日有空。', 'short': '周日有空'}
+    assert head_records.current(store, 'relationship:B', 'scene:g1')[1]['content'] == {'body': 'B 说他周日有空。', 'short': '周日有空'}
 
 
 def test_she_may_recall_and_write_about_a_bystander_whose_lines_are_in_the_turn(store):
@@ -307,7 +308,7 @@ def test_a_long_short_is_kept_and_the_result_says_by_how_much(store):
                    ('understand_person', {'layer': 'person', 'content': 'A 说话直接。', 'short': short}))
     [(result, ok)] = results(lane, 'understand_person')
     assert ok and result['state'] == 'COMMITTED' and '超了 13 字' in result['short']
-    assert store.head('relationship:A', 'person')[1]['content']['short'] == short
+    assert head_records.current(store, 'relationship:A', 'person')[1]['content']['short'] == short
 
 
 def test_understand_person_is_closed_in_a_group_plan_turn_and_says_so(store):
@@ -333,7 +334,7 @@ def test_understand_person_is_closed_in_a_group_plan_turn_and_says_so(store):
 def test_the_relevance_gate_shows_the_two_shorts(store):
     scene = store.db.scenes.find_one({'_id': 'g1'})
     assert attend.speaker_understanding(store, scene, 'A') is None
-    store.init_head('relationship:A', 'person', {'body': '人那层很长的正文。' * 30}, [])
+    head_records.init(store, 'relationship:A', 'person', {'body': '人那层很长的正文。' * 30}, [])
     assert attend.speaker_understanding(store, scene, 'A') == attend._cut('人那层很长的正文。' * 30,
                                                                          attend.UNDERSTANDING_CHARS)
     write_dm(store, body='A 说话直接。', short='直接的人')
@@ -345,17 +346,17 @@ def test_the_relevance_gate_shows_the_two_shorts(store):
 
 def test_the_memory_page_shows_the_short_first(view):
     store, worker, binding = view
-    store.init_head('relationship:qq:11', 'person', {'body': '哪儿都成立的那层', 'short': '给自己的一句'}, [])
+    head_records.init(store, 'relationship:qq:11', 'person', {'body': '哪儿都成立的那层', 'short': '给自己的一句'}, [])
     texts = {scope: text for scope, text, _ in NativeMemory(worker, 'role').relation_records('qq:11')['qq:11']}
     assert texts == {'person': '给自己的一句\n\n哪儿都成立的那层', 'scene:one': '这个人偏好简洁表达'}
 
 
 def test_what_an_entry_or_a_recall_showed_of_someone_is_marked_used(view):
     store, worker, binding = view
-    store.init_head('relationship:qq:22', 'person', {'body': '另一个人的人那层', 'short': '另一个人'}, [])
-    store.init_head('relationship:qq:22', 'scene:one', {'body': '另一个人在这里'}, [])
-    person = store.head('relationship:qq:22', 'person')[0]['revision_id']
-    here = store.head('relationship:qq:22', 'scene:one')[0]['revision_id']
+    head_records.init(store, 'relationship:qq:22', 'person', {'body': '另一个人的人那层', 'short': '另一个人'}, [])
+    head_records.init(store, 'relationship:qq:22', 'scene:one', {'body': '另一个人在这里'}, [])
+    person = head_records.current(store, 'relationship:qq:22', 'person')[0]['revision_id']
+    here = head_records.current(store, 'relationship:qq:22', 'scene:one')[0]['revision_id']
     snapshot(store, binding, understanding_seen={'qq:22': {'person': person, 'here': None}})
     usage = NativeMemory(worker, 'role').cognition.usage
     assert usage('head:relationship:qq:22|person', revision=person) == 'used'          # a recall pinned it
@@ -370,7 +371,7 @@ def test_erase_takes_the_short_back_with_its_revision(store):
     ep, _ = turn(store, event('t-before-erase'))
     assert ep['context']['people_from_program']['items'][0]['short'] == '守时的人'
     PrivacyService(store).delete_memory('M09', operator=True)
-    assert store.head('relationship:A', 'person') is None
+    assert head_records.current(store, 'relationship:A', 'person') is None
     ep, _ = turn(store, event('t-after-erase'))
     [item] = ep['context']['people_from_program']['items']
     assert 'short' not in item and '守时' not in json.dumps(item, ensure_ascii=False)

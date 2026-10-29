@@ -9,6 +9,7 @@ from . import visibility
 from .config import redact_text
 from .memory import MemoryService
 from .retrieval import Retrieval
+from .records import scenes as scene_records
 
 
 class _Waiting(Exception):
@@ -48,7 +49,7 @@ class MemoryIndexer:
                 try:
                     scene_id = self.scene_ids[cursor % len(self.scene_ids)]
                     cursor += 1
-                    scene = self.store.db.scenes.find_one({'_id': scene_id})
+                    scene = scene_records.get(self.store, scene_id)
                     if time.monotonic() < retry_at:
                         raise _Waiting()
                     chunks = MemoryService(self.store).chunk(scene_id)

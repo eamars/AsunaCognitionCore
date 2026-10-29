@@ -38,8 +38,7 @@ def test_an_erasure_marks_each_row_of_its_scope_and_no_other(store):
     kept_name = picture(store, here['scope_key'], 'in-ep-a')
     store.db.artifacts.update_one({'_id': kept_name}, {'$set': {'name': 'notes.md'}})
     expired = picture(store, here['scope_key'], 'in-ep-b')
-    from bson import ObjectId
-    blobs.bucket.delete(ObjectId(store.db.artifacts.find_one({'_id': expired})['gridfs_id']))   # as the sweep does
+    blobs_mod.delete(store, store.db.artifacts.find_one({'_id': expired})['gridfs_id'])   # as the sweep does
     store.db.artifacts.update_one({'_id': expired}, {'$set': {'storage': 'removed'}, '$unset': {'gridfs_id': ''}})
     other = picture(store, there['scope_key'], 'in-ep-c')
     store.db.artifacts.insert_one({'_id': 'not-a-blob', 'schema_version': 1, 'kind': 'channel_admission',
@@ -60,11 +59,10 @@ def test_an_erasure_marks_each_row_of_its_scope_and_no_other(store):
 
 def test_an_erasure_stopped_after_the_bytes_is_finished_by_running_it_again(store):
     """Bytes gone, rows not yet marked: a reader says the bytes are missing in words; the second run marks the rows."""
-    from bson import ObjectId
     here, _ = scopes(store)
     blobs = BlobStore(store)
     row_id = picture(store, here['scope_key'])
-    blobs.bucket.delete(ObjectId(store.db.artifacts.find_one({'_id': row_id})['gridfs_id']))
+    blobs_mod.delete(store, store.db.artifacts.find_one({'_id': row_id})['gridfs_id'])
     with pytest.raises(ValueError, match='ARTIFACT_BYTES_MISSING') as missing:
         blobs.get(row_id, here['scope_key'], operator=True)
     assert '不是没有内容' in str(missing.value)
@@ -285,11 +283,21 @@ def test_keeping_her_own_erased_drawing_as_a_sticker_says_it_was_erased(store):
 
 
 # ── every lookup by id ──────────────────────────────────────────────
+def _stored_mark(side):
+    """'gridfs', or the owner's name for it (records.artifacts.STORED)."""
+    return (isinstance(side, ast.Constant) and side.value == 'gridfs') or (
+        isinstance(side, ast.Attribute) and side.attr == 'STORED')
+
+
 def _judges_storage(fn):
-    """Whether a function compares a value with 'gridfs', or looks an artifacts row up by `_id` filtered on storage."""
+    """Whether a function compares a value with 'gridfs' (or the owner's STORED), or looks an artifacts row up by
+    `_id` filtered on storage (the owner's `get` with a storage, or a direct read)."""
     for node in ast.walk(fn):
-        if isinstance(node, ast.Compare) and any(isinstance(side, ast.Constant) and side.value == 'gridfs'
-                                                 for side in (node.left, *node.comparators)):
+        if isinstance(node, ast.Compare) and any(_stored_mark(side) for side in (node.left, *node.comparators)):
+            return True
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'get'
+                and isinstance(node.func.value, ast.Name) and node.func.value.id == 'artifact_records'
+                and any(keyword.arg == 'storage' for keyword in node.keywords)):
             return True
         if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'find_one'
                 and isinstance(node.func.value, ast.Attribute) and node.func.value.attr == 'artifacts'
@@ -324,19 +332,23 @@ def test_every_lookup_by_id_that_judges_storage_handles_the_erased_mark():
               "    if row.get('storage') != 'gridfs':\n"
               "        raise ValueError('gone')\n")
     filtered = "def look(store, key):\n    return store.db.artifacts.find_one({'_id': key, 'storage': 'gridfs'})\n"
-    assert lookups_without_the_mark([('a.py', forgot), ('b.py', filtered)]) == [('a.py', 'look'), ('b.py', 'look')], \
-        'the test itself bites'
+    owned = ("def look(store, key):\n"
+             "    row = artifact_records.get(store, key)\n"
+             "    if row.get('storage') != artifact_records.STORED:\n"
+             "        raise ValueError('gone')\n")
+    asked = "def look(store, key):\n    return artifact_records.get(store, key, storage=artifact_records.STORED)\n"
+    assert lookups_without_the_mark([('a.py', forgot), ('b.py', filtered), ('c.py', owned), ('d.py', asked)]) == [
+        ('a.py', 'look'), ('b.py', 'look'), ('c.py', 'look'), ('d.py', 'look')], 'the test itself bites'
 
 
 # ── two sentences, by a fact on the row ─────────────────────────────
 def test_the_two_shapes_of_one_kind_read_differently_and_say_whose_cause_is_whose(store):
     """Bytes the erasure deleted, and bytes that had expired before it, get two different sentences: merged into one,
     the expired row would be told the erasure took its bytes (Xiaoman's review of 94bb3ea3a92d)."""
-    from bson import ObjectId
     here, _ = scopes(store)
     blobs = BlobStore(store)
     deleted, expired = picture(store, here['scope_key'], 'in-ep-d'), picture(store, here['scope_key'], 'in-ep-x')
-    blobs.bucket.delete(ObjectId(store.db.artifacts.find_one({'_id': expired})['gridfs_id']))
+    blobs_mod.delete(store, store.db.artifacts.find_one({'_id': expired})['gridfs_id'])
     store.db.artifacts.update_one({'_id': expired}, {'$set': {'storage': 'removed',
                                                               'bytes_removed_at': '2026-10-20T01:00:00+00:00'},
                                                      '$unset': {'gridfs_id': ''}})

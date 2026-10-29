@@ -20,9 +20,12 @@ import unicodedata
 
 from . import channel_kinds
 from .config import excerpt
-from .ingress import NOT_CORE_NOTICE, PROGRAM_AUTHOR
+from .records.messages import PROGRAM_AUTHOR
+from .records import messages as message_records
 from .peer_context import channel_of, peer_from_message, verify_peer
 from .state import Conflict, now
+from .records import scenes as scene_records
+from .records import people as people_records
 
 NAME_LIMIT = 20
 # Applied after NFKC, which already folds ［］＃＜＞ into their ASCII forms.
@@ -146,7 +149,7 @@ class People:
         """The platform account she speaks with in this conversation: its channel's, kept on the scene by the host."""
         cache = self.__dict__.setdefault('_own_accounts', {})
         if scene_id not in cache:
-            doc = self.db.scenes.find_one({'_id': scene_id}, {'channel_account_id': 1}) if scene_id else None
+            doc = scene_records.get(self.store, scene_id, fields=['channel_account_id']) if scene_id else None
             cache[scene_id] = str((doc or {}).get('channel_account_id') or '') or None
         return cache[scene_id]
 
@@ -156,7 +159,7 @@ class People:
         if scene_id and str(number) == self.own_account(scene_id):
             return self.self_id
         platform = platform or channel_kinds.of(scene_id)
-        row = self.db.identities.find_one({'account_id': str(number)}, {'person_id': 1})
+        row = people_records.by_account(self.store, str(number), fields=['person_id'])
         return (row or {}).get('person_id') or (platform.person_id(number) if platform else str(number))
 
     def is_owner(self, doc):
@@ -165,7 +168,7 @@ class People:
     # ---- her own place in a group ----------------------------------------
     def self_role(self, scene):
         """Her role in this group as the adapter last reported it (owner/admin/member), else None."""
-        doc = self.db.scene_people.find_one({'_id': scene['_id'] + '|' + str(self.self_id)}, {'role': 1})
+        doc = people_records.label(self.store, scene['_id'] + '|' + str(self.self_id), ['role'])
         return (doc or {}).get('role') if (doc or {}).get('role') in ROLES else None
 
     def note_self(self, scene, row):
@@ -175,23 +178,23 @@ class People:
         if role not in ROLES or not self.self_id:
             return
         key = scene['_id'] + '|' + str(self.self_id)
-        doc = self.db.scene_people.find_one({'_id': key})
+        doc = people_records.label(self.store, key)
         if doc and (doc.get('role') == role or str(doc.get('seen_at') or '') > moment):
             return
         values = {'_id': key, 'scene_id': scene['_id'], 'scope_key': scene['scope_key'], 'person': self.self_id,
                   'author': self.self_id, 'handle': 0, 'card': '', 'nickname': '', 'role': role, 'previous': [],
                   'seen_at': moment, 'created_at': (doc or {}).get('created_at') or now()}
         try:
-            self.store.put('scene_people', {**(doc or {}), **values}, expected=doc['revision'] if doc else None,
-                           stream='people:' + scene['_id'])
+            people_records.save_label(self.store, {**(doc or {}), **values}, expected=doc['revision'] if doc else None,
+                                      stream='people:' + scene['_id'])
         except Conflict:
             pass                                             # a newer report won; the next message says again
 
     # ---- records ----------------------------------------------------------
     def roster(self, scene_id):
         if scene_id not in self._rosters:
-            self._rosters[scene_id] = {doc['_id']: doc for doc in self.db.scene_people.find(
-                {'scene_id': scene_id, 'person': {'$ne': PROGRAM_AUTHOR}})}
+            self._rosters[scene_id] = {doc['_id']: doc for doc in people_records.labels(
+                self.store, scene_id, besides=PROGRAM_AUTHOR).rows()}
         return self._rosters[scene_id]
 
     def entry(self, scene, person_id, row=None, profile=None, looked_up=False):
@@ -206,7 +209,7 @@ class People:
         person = self.person(person_id)
         key = scene['_id'] + '|' + person
         roster = self.roster(scene['_id'])
-        doc = roster.get(key) or self.db.scene_people.find_one({'_id': key})
+        doc = roster.get(key) or people_records.label(self.store, key)
         if person == self.self_id:
             # Hers is number 0, kept from what the adapter reports of her (note_self); never a new number or names.
             return doc or {'_id': key, 'scene_id': scene['_id'], 'person': person, 'author': person, 'handle': 0,
@@ -214,24 +217,25 @@ class People:
         for _ in range(8):
             if doc:
                 break
-            last = self.db.scene_people.find_one({'scene_id': scene['_id']}, {'handle': 1}, sort=[('handle', -1)])
+            last = people_records.first_label(self.store, scene['_id'], by='handle', newest_first=True,
+                                              fields=['handle'])
             try:
-                doc = self.store.put('scene_people', {
+                doc = people_records.save_label(self.store, {
                     '_id': key, 'scene_id': scene['_id'], 'scope_key': scene['scope_key'], 'person': person,
                     'author': person_id,
                     'handle': (last or {}).get('handle', 0) + 1, 'card': '', 'nickname': '', 'role': '',
                     'previous': [], 'seen_at': '', 'created_at': now(), **({'looked_up': True} if looked_up else {})},
                     stream='people:' + scene['_id'])
             except Conflict:
-                doc = self.db.scene_people.find_one({'_id': key})      # someone else placed it, or took the number
+                doc = people_records.label(self.store, key)      # someone else placed it, or took the number
         if not doc:
             raise Conflict('SCENE_PERSON_UNAVAILABLE')
         if row is None and profile is None and not doc.get('seen_at') and person != self.self_id \
                 and key not in self._looked_up:
             # Someone first labelled from older history: take the names from their latest saved message.
             self._looked_up.add(key)
-            row = self.db.messages.find_one({'scene_id': scene['_id'], 'author': person_id, 'direction': 'inbound',
-                                             'event.raw.asuna_peer': {'$exists': True}}, sort=[('received_at', -1)])
+            row = message_records.inbound(self.store, scene['_id'], author=person_id, peer=True,
+                                          by='received_at').first(newest_first=True)
         fresh = profile if profile is not None else (
             self._profile(row) if row is not None and person != self.self_id else None)
         moment = str((row or {}).get('received_at') or '')
@@ -244,17 +248,18 @@ class People:
                 if old and new and new != old:
                     previous = (previous + [{'name': old, 'until': moment}])[-PREVIOUS_NAMES:]
                 try:
-                    doc = self.store.put('scene_people', {**doc, **fresh, 'previous': previous, 'seen_at': moment},
-                                         expected=doc['revision'], stream='people:' + scene['_id'])
+                    doc = people_records.save_label(self.store, {**doc, **fresh, 'previous': previous,
+                                                                 'seen_at': moment},
+                                                    expected=doc['revision'], stream='people:' + scene['_id'])
                 except Conflict:
-                    doc = self.db.scene_people.find_one({'_id': key}) or doc
+                    doc = people_records.label(self.store, key) or doc
         if row is not None and doc.get('looked_up'):
             # A message by or about them here: they have now appeared, not only been looked up.
             try:
-                doc = self.store.put('scene_people', {**doc, 'looked_up': False}, expected=doc['revision'],
-                                     stream='people:' + scene['_id'])
+                doc = people_records.save_label(self.store, {**doc, 'looked_up': False}, expected=doc['revision'],
+                                                stream='people:' + scene['_id'])
             except Conflict:
-                doc = self.db.scene_people.find_one({'_id': key}) or doc
+                doc = people_records.label(self.store, key) or doc
         roster[key] = doc
         return doc
 
@@ -297,7 +302,7 @@ class People:
         """A name the operator gave this person on this machine (identities), which outranks any self-chosen name."""
         cache = self.__dict__.setdefault('_named', {})
         if person not in cache:
-            row = self.db.identities.find_one({'_id': person}, {'display_name': 1}) if person else None
+            row = people_records.identity(self.store, person, ['display_name']) if person else None
             cache[person] = safe_name((row or {}).get('display_name'))
         return cache[person]
 
@@ -382,7 +387,7 @@ class People:
     def ensure_roster(self, scene):
         """Label everyone who has written in this scene, so a lookup can name them all."""
         roster = self.roster(scene['_id'])
-        for author in self.db.messages.distinct('author', {'scene_id': scene['_id'], 'direction': 'inbound'}):
+        for author in message_records.authors(self.store, scene['_id'], direction='inbound'):
             if author and author != self.self_id and scene['_id'] + '|' + self.person(author) not in roster:
                 self.entry(scene, author)
         return roster
@@ -412,9 +417,8 @@ class People:
         persons = {d.get('person') for d in docs
                    if name in {self.shown(d), self.named(d.get('person')), safe_name(d.get('card'), 60),
                                safe_name(d.get('nickname'), 60), *(safe_name(p.get('name'), 60) for p in d.get('previous') or [])}}
-        for row in self.db.messages.find({'scene_id': scene['_id'], 'direction': 'inbound', '$or': [
-                {'event.raw.asuna_peer.' + field: text} for field in ('card', 'nickname', 'display', 'aliases')]},
-                {'author': 1, 'scene_id': 1, 'event': 1, 'received_at': 1}).limit(200):
+        for row in message_records.inbound(self.store, scene['_id'], peer_named=text, by=None).rows(
+                limit=200, fields=['author', 'scene_id', 'event', 'received_at']):
             if self._profile(row) is not None:
                 persons.add(self.person(row['author']))
         found = [d for d in docs if d.get('person') in persons]
@@ -433,7 +437,7 @@ class People:
                 continue
             if platform.account_of(author):
                 return platform.account_of(author)
-            row = self.db.identities.find_one({'person_id': author}, {'account_id': 1})
+            row = people_records.of_person(self.store, author, ['account_id'])
             if row and platform.ACCOUNT.fullmatch(str(row.get('account_id') or '')):
                 return str(row['account_id'])
         return None
@@ -482,7 +486,7 @@ class People:
 
     def authors_of(self, person, scene_ids):
         """Every stored author id in these scenes that is this person (aliases by configuration)."""
-        return sorted(a for a in self.db.messages.distinct('author', {'scene_id': {'$in': list(scene_ids)}})
+        return sorted(a for a in message_records.authors(self.store, scenes=list(scene_ids))
                       if a and self.person(a) == person)
 
     def row_head(self, row):
@@ -513,9 +517,8 @@ class People:
         words = ' '.join(said(scene, row.get('text')).split())
         number = '〔%d〕 ' % row['scene_seq'] if row.get('scene_seq') and numbered(self.store, scene) else ''
         if not (row.get('received_at') or row.get('receipt_at')) and row.get('_id'):
-            row = {**row, **(self.db.messages.find_one({'_id': row['_id']}, {
-                'received_at': 1, 'receipt_at': 1, 'occurred_at': 1, 'event.occurred_at': 1,
-                'event.raw.' + CATCHUP_KEY: 1}) or {})}
+            row = {**row, **(message_records.get(self.store, row['_id'], fields=[
+                'received_at', 'receipt_at', 'occurred_at', 'event.occurred_at', 'event.raw.' + CATCHUP_KEY]) or {})}
         stamp = line_stamp(scene_timezone(self.config, scene), said_at(row))
         return '%s%s%s：%s' % (number, self.speaker(scene, row.get('author'), me='你'), ' ' + stamp if stamp else '',
                               words if len(words) <= POINTED_CHARS else words[:POINTED_CHARS] + '…')
@@ -536,9 +539,8 @@ class People:
         then = for_message(self.store, row['_id'])
         return THOUGHT_THEN % anchor(' '.join(then.split())) if then else None
 
-    # A line she can point at: anyone's in this conversation, hers once delivered; a program notice is not one.
-    POINTABLE = {'$or': [{'direction': 'inbound', 'event.raw.asuna_notice': {'$exists': False}, **NOT_CORE_NOTICE},
-                         {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}
+    # A line she can point at (records.messages.pointable): anyone's in this conversation, hers once delivered; a
+    # program notice is not one.
     RECENT_LINES = 6
 
     def line_of(self, scene, episode_id, value):
@@ -546,15 +548,14 @@ class People:
         called her): (row, None), or (None, why, in words she can act on) (ADR-079 §9.4)."""
         text = str(value or '').strip().strip('〔〕[]「」 ')
         if text == '这条':
-            row = self.db.messages.find_one({'_id': 'in-' + episode_id, 'scene_id': scene['_id'], **self.POINTABLE})
+            row = message_records.pointable(self.store, scene['_id'], line='in-' + episode_id, by=None).first()
             return (row, None) if row else (None, '这一回合没有叫你的那条，要引就写编号')
-        row = self.db.messages.find_one({'scene_id': scene['_id'], 'scene_seq': int(text), **self.POINTABLE}) \
+        row = message_records.pointable(self.store, scene['_id'], seq=int(text), by=None).first() \
             if text.isdigit() else None
         if row:
             return row, None
-        recent = list(self.db.messages.find({'scene_id': scene['_id'], **self.POINTABLE},
-                                            {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1})
-                      .sort('scene_seq', -1).limit(self.RECENT_LINES))
+        recent = message_records.pointable(self.store, scene['_id']).rows(
+            newest_first=True, limit=self.RECENT_LINES, fields=['text', 'author', 'direction', 'scene_seq'])
         listed = '；'.join(self.pointed(scene, row) for row in reversed(recent)) or '还没有'
         lead = '〔%s〕 不是这里的一行' % text if text.isdigit() else '写编号（只写数字，在每行末尾的〔〕里）或「这条」'
         return None, '%s；这里最近几行：%s' % (lead, listed)
@@ -584,8 +585,8 @@ class People:
         quoted = group if group.get('reply_to') or group.get('reply_message_id') else (event.get('reply') or {})
         # (a private chat's quote is `event.reply`, ADR-079)
         parent_id = quoted.get('reply_message_id')
-        parent = self.db.messages.find_one({'_id': parent_id, 'scene_id': scene['_id']},
-                                           {'author': 1, 'text': 1, 'direction': 1, 'scene_seq': 1}) if parent_id else None
+        parent = message_records.get(self.store, parent_id, scene=scene['_id'],
+                                     fields=['author', 'text', 'direction', 'scene_seq']) if parent_id else None
         if parent:
             lines.append('  > 回复 ' + self.pointed(scene, parent))
             then = self.thought_then(parent, scene['_id'] if once else None)
@@ -604,14 +605,13 @@ class People:
         lines += ['  ' + said_line(line) for line in body.splitlines() or ['']]
         if notice_then:
             lines.append('  > ' + notice_then)      # a notice about her line: the same anchor a quote of it has
-        from .stickers import PICTURE_FETCH_SECONDS, recognized
-        from .vision import line_refs, media_source, pull_bytes
-        task = {'scene_id': scene['_id'], 'scope_key': scene.get('scope_key'), 'policy_epoch': scene.get('policy_epoch')}
-
-        def fetch(entry):               # a sticker whose md5 she does not know: the program matches its picture
-            source = media_source(self.store, task, self.config, entry)
-            return pull_bytes({**entry, **source}, self.config, timeout=PICTURE_FETCH_SECONDS)[0]
-        refs = line_refs(row, self.config, lambda entries: recognized(self.store, self.persona, entries, fetch))
+        from .stickers import recognized
+        from .vision import line_refs
+        # Known stickers by their md5 only: a line is written without a download (one opened is matched by its
+        # picture then, stickers.opened).
+        refs = line_refs(row, self.config, lambda entries: recognized(self.store, self.persona, entries))
+        from .received_files import line_note
+        refs += line_note(row, self.config)              # files: ref and size, or why it is not read (ADR-102)
         if refs:
             lines.append('  ' + refs)
         return '\n'.join(lines)
@@ -648,7 +648,7 @@ class People:
         cache = self.__dict__.setdefault('_scenes', {})
         key = scene_id or 'scope:' + str(scope_key)
         if key not in cache:
-            cache[key] = self.db.scenes.find_one({'_id': scene_id} if scene_id else {'scope_key': scope_key})
+            cache[key] = (scene_records.get(self.store, scene_id) if scene_id else scene_records.by_scope(self.store, scope_key))
         return cache[key]
 
     def scene_title(self, scene):
@@ -661,8 +661,8 @@ class People:
             if scene['_id'] == chat.get('scene_id'):
                 title = '家里·私聊'
             elif scene.get('kind') == 'group':
-                row = self.db.messages.find_one({'scene_id': scene['_id'], 'event.raw.group_name': {'$exists': True}},
-                                                {'event.raw.group_name': 1}, sort=[('received_at', -1)])
+                row = message_records.lines(self.store, scene['_id'], group_name=True, by='received_at').first(
+                    newest_first=True, fields=['event.raw.group_name'])
                 name = safe_name(((row or {}).get('event') or {}).get('raw', {}).get('group_name'), 30)
                 title = '群聊「%s」' % name if name else '一个群聊'
             else:

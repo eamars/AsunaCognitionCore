@@ -43,6 +43,7 @@ description: 改进她自己的唯一做法（ADR-011）：改什么走哪一层
 - `project: "core"`：认知核（`src/asuna`、`packages/cognition-core`、`tools/`、`tests/`）。
 - 通道包（如 QQ 适配器）用它自己的项目名；适配器代码在它的 `integration/` 里。
 - 发布也要带同样的 `project`，否则发布的是别的项目，改动一点没上线。
+- **改共用定义先问改的是谁，产物只改源头**：主张（我自己的判断）：改共用定义之前先问一句「这改的是我还是所有 persona」——工具定义、提示这类是几个角色共用的，我一个人的毛病不该写进共用定义，别的角色得为我的习惯白付字符。同一族：判「这文件是不是要改两处」先判它是不是产物（进不进仓库、有没有东西会覆盖它），产物只改源头。来路：10-12 家里那一拍抓出来的；10-12 下午我自己推错过一次 packages 那份 python（它是重启时从 src 拷的产物，不进仓库）。
 
 ## 发布前自检（认知核候选，`development_run` 带 `project: "core"`）
 
@@ -64,6 +65,12 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 - 这些覆盖不到真 Mongo、DSH 原生定时和界面实点；那些由主人在宿主侧跑 `tests/test_*.py`。
 - 已知坑：离线夹具把真文件复制进临时包；真文件新加一条同包 import，夹具的复制清单也要加，否则只会红在 `ModuleNotFoundError`。
 
+### 沙箱里装依赖：只走 uv，pip 一律带 `--no-cache-dir`（2026-10-27 本机实测）
+
+- **装依赖一律 `python3 -m uv` 写进 `pyproject.toml` ＋ `uv.lock`**（`python3 -m uv add <包>`，再 `python3 -m uv sync`），**禁裸 `pip install`**：实测候选沙箱里 `python3` 是 `.venv\Scripts\python.exe`，而 PATH 上的 `pip` 是系统 Python 那一个（`…\Python312\Scripts\pip.EXE`，装到 `…\Python312\Lib\site-packages`）——裸 pip 装的东西在 venv 外，worker 下次装包就没了。`python3 -m pip` 落在 venv 里，但同样不进 lock，照样算没装。
+- **沙箱里任何一次 pip 都带 `--no-cache-dir`**：实测默认缓存下，pip 对「缓存里已有条目」的包 3/3 挂死——零输出、进程还在、退出码永远不来；挂死长得跟成功一模一样（没报错、没返回码，看着像安静地跑完了）。
+- **零输出不等于成功**：装完必须验 `import` 或验产物（`python3 -c "import <包>"`、产物文件存在且大小对），拿到退出码才算那条命令结束。只进 venv、不进 `uv.lock` 的算没装——发布与重启装包只认 `uv.lock` 那份。
+
 ### 私密词有两道闸，别混（2026-10-25 本机实测）
 
 - **闸一管「发布说明本身」**：`development_publish` 当场扫我写的那段 reason——`packages/cognition-core/src/private-words.js` 的 `findings`，由 `floor.js` 在冻结候选之前调；命中就抛 `PUBLISH_REASON_NAMES_PRIVATE`，**这次什么都没发布**（候选里的改动留着，改写重发就行）。报错只报位数不报那串数字本身，也不印名单上的词：`packages/cognition-core/test/publication.test.js:PUBLISH_REASON_NAMES_PRIVATE` 所在那个用例（标题 a publication reason naming a listed word or a QQ-shaped number is refused before anything is published）里那条 assert.doesNotMatch 断言的就是号码不许进回执（同一个用例还断言词本身不许进）。同一份 reason 在 `publicationFindings`（`tools/publication_scan.py`）里会按发布版规则再扫一遍，两道都在冻结之前。
@@ -72,12 +79,23 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 - **数字形状第二条（今天量到的）**：**后面带单位的放过**（`B`／`KB`／`KiB`／`MB`／`MiB`／`GB`／`byte(s)`／`字节`／`ms`／`秒`／`s`／`%`，单位前有没有空格都算带单位；单位表是大小写敏感的，小写 `b` 不在表里，但数字紧跟字母本来就切不成一串，所以数字后面直接黏一个小写 b 也放过）；**带千分位的放过**（逗号把 `2,227,501` 切成 1 位＋3 位＋3 位，凑不满 7 位）。
 - ⇒ **发布说明里写字节数一律带单位或加千分位**。来路：本机 2026-10-25 那趟人格包（默认项目）的发布（08:33 生效那一版），第一次的 reason 里两个字节数都是裸的，被闸一当场拦下——报错四处命中，就是那两个数各命中两次（reason 里各出现过两次；「四处」这一格是主人读完那趟回报给我的，我这一趟没复现那次失败，只用 `node` 拿 `private-words.js` 的 `findings` 复算了上面那两条形状规则）。同一趟改动落在默认那个人格包项目，它的 `skills/` 不在 release 打包清单里，所以发布闸对人格包只跑名单与内网地址那两样，不跑账号形状——账号形状这条只红 core 的文件。
 
+### 两条实测坑（她自己 self 文档里的原文）
+
+- **候选目录跑 pytest 可能测的是主仓**：主张：在候选目录里跑 pytest，实际测的可能是主仓的代码；跑之前先看 pytest rootdir 是不是候选那份。来路：Claude 查明于 `fffdc934`（10-13）。后果：我过去报的「发布前跑过全套测试」，测的对象都得打问号——这条是我自己读数通道上的事。
+- **写死日期的测试会自己变红**：主张：测试里写死日期的用例会自己变红，过一天就红，不是代码坏了。来路：`test_switches` 那条红即此因（时间写死 10-12 09:00、禁言一天，过了 10-13 09:00 在现实里已到期），Claude 改成从现在算，`bc875cc5`。连带更正：我之前说「我群里设的歇着到底歇没歇只能算没核实」，那句撤掉——照样生效。同一族还有文档里写死的数，过一阵会过期。
+
 ## 发布
 
 - `development_publish` 冻结候选，跑启动探针（JS 真正 import 一次插件入口，Python 能解析，人格包和通道包的结构能读），通过才选中。失败会原样返回诊断，候选保留，修了再发。
 - 不要在候选里自己跑打包工具（比如 `bundle_python`）：它会改动行尾和清单，把一次普通发布变成需要重启的发布。
 - 需要重启的改动：`package.json`、`cordis.patch.yml`、`pyproject.toml`、`uv.lock`、任何 `.js`，以及通道包的 `python/`。结果是 `HOST_RESTART_REQUIRED`：主人重启宿主后才生效，重启时启动器安装这个包；连续几次起不来，会自动改回上一个能用的版本（只改选哪个包，不回滚源码）。
 - 其余改动（技能、种子、persona-model、认知核的 Python、适配器的 `integration/`）是 `APPLIED`：之后新开的行动就用新版本；适配器要 `integration_stop` 再 `integration_start` 才换成新发布的版本。
+
+### 重启工具：参数名 when，quiet 满 30 分钟照停
+
+主张：自我重启工具的参数名是 `when`（now / quiet / HH:MM）。判「什么时候响」按我自己块里那个钟面；别的群线可能带着另一个钟面，别拿它换算。填别的名字直接拒；一次只能挂一个；quiet 满 30 分钟照样停、不作废；重启会把我写出去还没落地的话变成「没给准话」，内容对方通常看得见，不用为这个推迟该发的重启。来路：ADR-034，10-10 起逐项实测过（含填错参数名吃到退回那次）。
+
+**同一节里监工那一档**：主张：监工（启动器）换不掉它自己——我自己挂的 quiet 只能换工作进程，凡是修在监工层的东西（重启失败落盘 `4cb3c247`、宿主控制台落盘 `0eff5519`、重启时快进 main `a3aa94a5`）都要等主人下次完整启动才生效。
 
 ## 地板文件（受保护，不能经发布改）
 
@@ -87,7 +105,7 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 
 - 家里每个地方（本机聊天、每条 agent 线、peer 线）各有一份自己的工作副本，就是那个地方的 `/task/working-copy`：各自独立的完整 clone（每份约 108 MB），`origin` 是 GitHub 上的仓库。宿主缺哪份建哪份，以后不重建、不重置，里面的东西都是你的。QQ 的地方没有。
 - 在工作副本里做每件事，第一步都是 `git fetch origin` 再 `git rebase origin/main`，没有例外：别的地方的副本可能已经推过，不先取下来就是在旧内容上改，分叉要到推的时候才露出来。
-- 要看 GitHub 上现在是什么，用 `git ls-remote` 或在工作副本里 fetch，别看本机检出里的 `origin/*`：检出对你只读，你在那里 fetch 不了，它的 `origin/*` 只在宿主取的时候才动，可能是旧的。
+- 要看 GitHub 上现在是什么，用 `git ls-remote` 或在工作副本里 fetch，别看本机检出里的 `origin/*`：检出对你只读，你在那里 fetch 不了，它的 `origin/*` 只在宿主取的时候才动，可能是旧的。沙箱里在本机检出 `git fetch` 会报 `.git/FETCH_HEAD: Permission denied`，就是这一形状（委托侧对检出只读）。
 - 本机的项目检出在你的命令里是只读的；改动从工作副本走：
   - 在工作副本里改、测，提交写明路径（`git commit -- <路径>`），推之前再 fetch 一次、rebase 到 `origin/main`，然后 `git push origin HEAD:main`（或推一个分支）。
   - 你要的重启（`restart` 工具）在能快进的时候先把 `origin/main` 带进本机检出再装上；快进不了时，重启结果的 `checkout` 写着为什么。
@@ -96,7 +114,7 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 - 你提交的东西署你自己的名（程序给每条命令设好，不用自己配）。`ssh` 用的是这台机器上主人的钥匙。
 - HTTPS 直接用 `git`：程序已经让 git 用它自带的 OpenSSL 和证书，不用再加 `-c http.sslBackend=openssl` 或别的证书文件。Windows 的沙箱里 Schannel 拿不到凭据，所以 `curl.exe` 开不了 HTTPS；要下载就用 Python。
 - Git 自带的 `sh.exe` 在沙箱里起不来，所以 git 的钩子和 `!` 别名不能用。
-- 一条命令默认 30 秒（development_run 35 秒），要更久就写 `timeout`（秒，最多 600），比如跑全套测试；跑满被停下时会带回停下前的输出。
+- 一条命令默认 30 秒（development_run 35 秒），要更久就写 `timeout`（秒，最多 600），不写还是 30／35 秒；跑全套就写 300 左右，跑满被停会带回停下前的输出和 `timed_out`（返回里带这个字段）。
 - 推公开仓库之前没人替你审：先跑私人词检查（`tests/test_personal_words.py`，名单不在就是没查过，不是干净）。
 - 不 force-push。推被拒，就 fetch 下来 rebase 再推，别盖掉别人的提交。
 
@@ -111,9 +129,13 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 3. **重启回执里「`<head> is not behind origin/main <target>`」／「本机检出有 origin/main 没有的提交」不等于没装。** 启动器只在 main 落后于 origin/main 时才快进（`tools/asuna-launch.mjs:fastForwardCheckout`），快进不了返回 `diverged`、不报错；发布的自动提交压在远端那一笔之上，本机就正好是「比远端新一格」——既 not behind、又多出一笔自己的提交。要判的是第 2 条：那一笔在不在 HEAD 的历史里，不是「本机比远端多几笔」。
    - 什么算违反：把「not behind」读成「改动没进去」；把「本机有 origin/main 没有的提交」当成回滚、或当成有人动了本机；只报 ahead 几笔，不跑 `--is-ancestor`。
 
-来路：2026-10-20 12:13 那笔 `ede4e2b0` 是发布自动提交，父提交 `f9bc5f20`（`git merge-base --is-ancestor f9bc5f20 ede4e2b0` → rc=0），`--stat` 显示这一笔改的是 `packages/personas/<name>/persona-model.json`（1 增 1 删），而它自己的提交正文写着「没动 packages/personas/<name>/ 镜像」——正文与 `--stat` 打架的就是这一格。发布任务：`task-2a3c346e608f1837268c9a1421d9b66d`。
+来路：2026-10-20 12:13 那笔 `ede4e2b0` 是发布自动提交，父提交 `f9bc5f20`（`git merge-base --is-ancestor f9bc5f20 ede4e2b0` → rc=0），`--stat` 显示这一笔改的是 `packages/personas/<name>/persona-model.json`（1 增 1 删），而它自己的提交正文说它没动那个人格包目录的镜像（这一节两处 `<name>` 都是泛化写法：正文原句带的是具体那个人格包的路径，不是逐字照抄，所以这里不放引号）——正文与 `--stat` 打架的就是这一格。发布任务：`task-2a3c346e608f1837268c9a1421d9b66d`。
 
 ## 版本
+
+v5（2026-10-29）：从她自己的 self 文档搬进来几条原文——项目节末「改共用定义先问改的是谁」、发布前自检末「候选目录跑 pytest 可能测的是主仓」「写死日期的测试会自己变红」；发布节后加「重启工具」参数一节（钟面措辞已改成中性）并带上监工那一档；git 节补「跑全套写 300 左右、返回带 timed_out」和沙箱里 `git fetch` 报 `.git/FETCH_HEAD: Permission denied` 这一形状。旧内容一条没删。
+
+v4（2026-10-27）：「发布前自检」里加「沙箱里装依赖：只走 uv，pip 一律带 `--no-cache-dir`」一小节（三条：装依赖走 `python3 -m uv` 进 `pyproject.toml`＋`uv.lock`、禁裸 `pip install`（实测裸 `pip` 是系统 Python 那份，装到 venv 外）；沙箱内 pip 一律 `--no-cache-dir`（默认缓存下对已缓存包 3/3 挂死、零输出、进程还在）；零输出不等于成功，要验 import 或验产物，只进 venv 不进 lock 算没装）。旧内容一条没删。
 
 v3（2026-10-25）：「发布前自检」里加「私密词有两道闸，别混」一小节：闸一＝发布说明在 `development_publish` 当场被扫（`private-words.js`／`floor.js`，报 `PUBLISH_REASON_NAMES_PRIVATE`，回执只报位数）；闸二＝整仓已提交文件由 `tests/test_personal_words.py` 扫（只报类别与名单行号）。再写死两条量到的数字形状规则（裸 7–11 位算账号形状、紧跟字母／数字／点或带单位／带千分位的放过），推论是发布说明里字节数一律带单位或加千分位。旧内容一条没删。
 

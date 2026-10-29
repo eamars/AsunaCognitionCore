@@ -16,6 +16,7 @@ import traceback
 import uuid
 from contextlib import contextmanager,nullcontext
 import jsonschema
+from . import clock
 from .config import DATA,prompt_path,redact_text,excerpt
 from .render import action_values
 from . import answers, handover, machine_words, sandbox_backend, visibility
@@ -33,6 +34,9 @@ from .discussion_digest import DIGEST_TOOL, DIGEST_TOOL_NAME
 from .development import DEVELOPMENT_TOOLS, DEVELOPMENT_NAMES, PERSONA_JOB_TOOLS
 from .vision import (READ_IMAGE_TOOL, READ_IMAGE_TOOL_NAME, inline_summary as read_image_receipt,
                      route_filtered_tool_names, task_attachment_context)
+from .records import episodes as episode_records
+from .records import tasks as task_records
+from .records import artifacts as artifact_records
 
 # How many extra rounds one run takes for her words its turn ended before reading.
 MESSAGE_ROUNDS = 3
@@ -171,8 +175,8 @@ def observations_of(store, task, shown=lambda value: value):
     return [{'source': item['_id'], 'tool': item['tool'],
              'result_excerpt': excerpt(item['error'] if item['state'] == 'FAILED' else
                                        json.dumps(shown(item['result']), ensure_ascii=False), OBSERVATION_CHARS)}
-            for item in store.db.artifacts.find({'task_id': task['_id'], 'intent_revision': task.get('intent_revision'),
-                                                 'state': {'$in': ['DONE', 'FAILED']}})]
+            for item in artifact_records.of_task(store, task['_id'], task.get('intent_revision'),
+                                                 states=['DONE', 'FAILED']).rows()]
 
 
 def task_pages(store, task, shown=lambda value: value):
@@ -214,10 +218,10 @@ def require_current_feedback(store, episode):
         return
     # episode.task_id changes when feedback delegates another action. The
     # durable input remains the identity of the result being considered.
-    source = store.db.messages.find_one({'_id': 'in-' + episode['_id']})
+    source = message_records.get(store, 'in-' + episode['_id'])
     event = (source or {}).get('event', {})
-    task = store.db.tasks.find_one({'_id': event.get('task_id')})
-    scene = store.db.scenes.find_one({'_id': episode['scene_id']})
+    task = task_records.get(store, event.get('task_id'))
+    scene = scene_records.get(store, episode['scene_id'])
     if (not task or not scene or task['state'] in ('CANCELLED', 'STALE', 'PAUSED')
             or task['intent_revision'] != event.get('intent_revision')
             or (task['scene_id'], task['requester_id'], task['scope_key'], task['policy_epoch']) !=
@@ -368,7 +372,7 @@ def opening_text(store, task):
     text=('你接着交代：\n' if task.get('continues_task_id') else '')+brief
     fresh=task.get('fresh_context')
     if task.get('continues_task_id') and fresh:
-        prev=store.db.tasks.find_one({'_id':fresh['report_of']},{'result.text':1}) or {}
+        prev=task_records.get(store, fresh['report_of'], fields=['result.text']) or {}
         report=((prev.get('result') or {}).get('text') or '').strip()
         shown=report[:FRESH_REPORT_CHARS]
         text=('这是一份新开的上下文：这件事上一趟已经闲了约 %d 分钟，之前的工具输出都不在这里了。下面是上一趟交回的报告'
@@ -384,16 +388,16 @@ def place_words(store, scene_id):
         return '家里'
     if channel_kinds.home(scene_id):
         return '家里的另一条线'
-    scene = store.db.scenes.find_one({'_id': scene_id}, {'kind': 1}) or {}
+    scene = scene_records.get(store, scene_id, fields=['kind']) or {}
     return '一个群' if scene.get('kind') == 'group' else '一个私聊'
 
 
 def queue_words(store, task_id):
     """What is ahead of this task for the one action worker (ADR-053), always said, an empty queue too."""
-    from datetime import datetime, timezone
-    mine = store.db.tasks.find_one({'_id': task_id}, {'created_at': 1}) or {}
-    ahead = [row for row in store.db.tasks.find({'state': {'$in': ['RUNNING', 'READY']}, '_id': {'$ne': task_id}},
-                                                {'state': 1, 'scene_id': 1, 'started_at': 1, 'created_at': 1})
+    from datetime import datetime
+    mine = task_records.get(store, task_id, fields=['created_at']) or {}
+    ahead = [row for row in task_records.in_states(store, ['RUNNING', 'READY'], besides=task_id).rows(
+                 fields=['state', 'scene_id', 'started_at', 'created_at'])
              if row['state'] == 'RUNNING' or (row.get('created_at') or '') < (mine.get('created_at') or '~')]
     if not ahead:
         return '前面没有排着的，马上开始。'
@@ -401,7 +405,7 @@ def queue_words(store, task_id):
     for row in ahead:
         if row['state'] == 'RUNNING':
             started = row.get('started_at') or row.get('created_at')
-            minutes = int((datetime.now(timezone.utc) - datetime.fromisoformat(started)).total_seconds() // 60) if started else 0
+            minutes = int((clock.now() - datetime.fromisoformat(started)).total_seconds() // 60) if started else 0
             parts.append('正在跑的一件来自%s，已经跑了约 %d 分钟' % (place_words(store, row['scene_id']), minutes))
     waiting = [row for row in ahead if row['state'] == 'READY']
     if waiting:
@@ -418,6 +422,10 @@ WORKSPACE_TOOLS.append(NOTE_IDEA_TOOL)
 # 看图（Pull 模式）：定义与实现同处注册；是否进入某个任务的能力清单，取决于那条行动路由
 # 是否声明了图片输入（见 route_filtered_tool_names），不按模型名字猜。
 WORKSPACE_TOOLS.append(READ_IMAGE_TOOL)
+from .received_files import RECEIVED_FILE_TASK_TOOL, TOOL_NAME as RECEIVED_FILE_TOOL_NAME
+from .records import scenes as scene_records
+from .records import messages as message_records
+WORKSPACE_TOOLS.append(RECEIVED_FILE_TASK_TOOL)
 
 
 def stale_reason(task,current,scene):
@@ -453,15 +461,15 @@ class TaskService:
 
     def claim(self,task_id):
         with self.lock:
-            task=self.store.db.tasks.find_one({'_id':task_id})
+            task=task_records.get(self.store, task_id)
             if task['state']!='READY':raise Conflict('TASK_NOT_READY')
-            task=self.store.put('tasks',{**task,'state':'RUNNING','lease_owner':str(uuid.uuid4()),'fencing_token':task['fencing_token']+1,'lease_expires_at':__import__('time').time()+600,
+            task=task_records.save(self.store, {**task,'state':'RUNNING','lease_owner':str(uuid.uuid4()),'fencing_token':task['fencing_token']+1,'lease_expires_at':__import__('time').time()+600,
                 'started_at':now()},expected=task['revision'],stream=task_id)
             return task
 
     def valid(self,task,*,state='RUNNING'):
-        current=self.store.db.tasks.find_one({'_id':task['_id']})
-        scene=self.store.db.scenes.find_one({'_id':task['scene_id']})
+        current=task_records.get(self.store, task['_id'])
+        scene=scene_records.get(self.store, task['scene_id'])
         if not current or current['state']!=state or current['intent_revision']!=task['intent_revision'] or current['fencing_token']!=task['fencing_token'] or scene['policy_epoch']!=task['policy_epoch']:
             raise Denied('STALE_TASK_FENCE: '+stale_reason(task,current,scene)+'，这次调用不算数，也没有执行；不是你出错，重试也一样：'
                          '停下，不再调工具，在报告里写做到了哪里')
@@ -472,21 +480,21 @@ class TaskService:
 
     def cancel(self,task_id,reason='user_cancelled',*,person_id=None,operator=False):
         with self.lock:
-            task=self.store.db.tasks.find_one({'_id':task_id})
+            task=task_records.get(self.store, task_id)
             if not task or not(operator or person_id==task['requester_id']):raise Denied('TASK_CANCEL_NOT_AUTHORIZED')
             if not task.get('execution_binding'):
                 task={**task,'execution_binding':f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"}
-            cancelled=self.store.put('tasks',{**task,'state':'CANCELLED','intent_revision':task['intent_revision']+1,'fencing_token':task['fencing_token']+1,'cancel_reason':reason,'feedback_state':'SUPPRESSED'},expected=task['revision'],stream=task_id)
+            cancelled=task_records.save(self.store, {**task,'state':'CANCELLED','intent_revision':task['intent_revision']+1,'fencing_token':task['fencing_token']+1,'cancel_reason':reason,'feedback_state':'SUPPRESSED'},expected=task['revision'],stream=task_id)
         self.collab(cancelled,'status',{'state':'stopped','reason':reason},'status:'+task_id+':cancelled')
         return self._notify_fenced(cancelled, 'task_cancelled')
 
     def pause_for_restart(self, task_id):
         """Preserve old work and receipts; only a new local request can resume."""
         with self.lock:
-            task = self.store.db.tasks.find_one({'_id': task_id})
+            task = task_records.get(self.store, task_id)
             if not task or task['state'] in ('CANCELLED', 'STALE', 'PAUSED'):
                 return task
-            paused = self.store.put('tasks', {**task, 'state': 'PAUSED', 'pause_reason': 'host_restart',
+            paused = task_records.save(self.store, {**task, 'state': 'PAUSED', 'pause_reason': 'host_restart',
                 'paused_at': now(), 'paused_state': task['state'], 'paused_feedback_state': task.get('feedback_state'),
                 'feedback_state': 'PAUSED', 'fencing_token': task['fencing_token'] + 1,
                 'execution_binding': task.get('execution_binding') or
@@ -505,7 +513,7 @@ class TaskService:
                 try:
                     with self.lock:
                         current=self.valid(task)
-                        self.store.put('tasks',{**current,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
+                        task_records.save(self.store, {**current,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
                 except Exception as exc:errors.append(exc);return
         worker=threading.Thread(target=renew,daemon=True);worker.start()
         def check():
@@ -516,28 +524,28 @@ class TaskService:
     def feedback(self,task,coordinator,short=False,again=False):
         """Hand a finished task's result back to her in a turn of her own. `again`: the watchdog hands back a result
         whose earlier hand-back was lost; `short`: only her brief, the report's words and when it finished (ADR-030)."""
-        current=self.store.db.tasks.find_one({'_id':task['_id']})
-        scene=self.store.db.scenes.find_one({'_id':task['scene_id']})
+        current=task_records.get(self.store, task['_id'])
+        scene=scene_records.get(self.store, task['scene_id'])
         handed=current.get('feedback_state')
         if current['state'] not in TERMINAL or handed in (*handover.TAKEN,None) or handed!='READY' and not again:return None
         if current['state'] in ('CANCELLED','STALE') or current['intent_revision']!=task['intent_revision'] or scene['policy_epoch']!=task['policy_epoch']:
             if current['state'] in handover.FINISHED:
                 # Its scene changed under it: this result can never be handed back, so nothing waits for it.
                 with self.lock:
-                    latest=self.store.db.tasks.find_one({'_id':task['_id']})
-                    self.store.put('tasks',{**latest,'feedback_state':'SUPPRESSED'},expected=latest['revision'],stream=latest['_id'])
+                    latest=task_records.get(self.store, task['_id'])
+                    task_records.save(self.store, {**latest,'feedback_state':'SUPPRESSED'},expected=latest['revision'],stream=latest['_id'])
             return None
-        original=self.store.db.episodes.find_one({'_id':task['episode_id']})
+        original=episode_records.get(self.store, task['episode_id'])
         # Outside home what she reads of the result holds nothing of the machine (ADR-050, machine_words); home and
         # the stored result keep it as it is.
         outside=visibility.session_class(self.store.config,self.store.db,scene,task['requester_id'])!=visibility.OWNER_PRIVATE
         shown=machine_words.clean if outside else (lambda value:value)
         ep=None
         if not short and current.get('feedback_episode'):
-            ep=self.store.db.episodes.find_one({'_id':current['feedback_episode']})
+            ep=episode_records.get(self.store, current['feedback_episode'])
         if not ep:
-            ep=self.store.db.episodes.find_one({'scene_id':task['scene_id'],
-                'source_event_id':handover.result_event_id(task,short),'episode_kind':'task_feedback'})
+            ep=episode_records.of_source(self.store,handover.result_event_id(task,short),kind='task_feedback',
+                                         scene=task['scene_id'])
         continuing=bool(ep)
         if ep:
             if (ep.get('episode_kind')!='task_feedback' or ep.get('task_id')!=task['_id']
@@ -548,7 +556,7 @@ class TaskService:
             depth=original.get('delegation_depth',0)+1
             observations=[] if short else observations_of(self.store,task,shown)
             event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 task 的 message。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],**_why_then(self.store,task),'value':shown(bounded_result(task.get('result'),records_pages(observations))) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
-            source=self.store.db.messages.find_one({'_id':task['raw_input_refs'][0], 'scope_key':task['scope_key'], 'policy_epoch':task['policy_epoch']})
+            source=message_records.get(self.store,task['raw_input_refs'][0],scope=task['scope_key'],epoch=task['policy_epoch'])
             # The session the task belongs to (home's own for one begun on an errand or in a reflection).
             if task.get('native_session_id') or original.get('native_session_id'):
                 event['native_session_id']=task.get('native_session_id') or original['native_session_id']
@@ -573,15 +581,15 @@ class TaskService:
         if ep['state'] in (('FAILED_PROTOCOL',) if continuing else ()) or ep['state'] in ('PREPARED','TURN','SPEAK_ACCEPTED','INTERRUPTED'):
             ep=coordinator.advance(ep['_id'])
         with self.lock:
-            latest = self.store.db.tasks.find_one({'_id': task['_id']})
+            latest = task_records.get(self.store, task['_id'])
             if (latest['state'] in ('CANCELLED', 'STALE', 'PAUSED')
                     or latest['intent_revision'] != task['intent_revision']):
                 return ep  # Never overwrite a cancellation/revision while inference was in flight.
-            self.store.put('tasks',{**latest,'feedback_state':'READY' if ep['state']=='FAILED_PROTOCOL' else 'DELIVERED' if ep['state']=='COMMITTED' else ep['state'],'feedback_episode':ep['_id']},expected=latest['revision'],stream=latest['_id'])
+            task_records.save(self.store, {**latest,'feedback_state':'READY' if ep['state']=='FAILED_PROTOCOL' else 'DELIVERED' if ep['state']=='COMMITTED' else ep['state'],'feedback_episode':ep['_id']},expected=latest['revision'],stream=latest['_id'])
         if ep['state']=='COMMITTED':
             self.handback(task,'taken',short=short)
         if ep['state']=='COMMITTED' and original['state']=='WAITING_TASK':
-            self.store.put('episodes',{**original,'state':'COMMITTED','feedback_episode':ep['_id']},expected=original['revision'],stream=original['_id'])
+            episode_records.save(self.store, {**original,'state':'COMMITTED','feedback_episode':ep['_id']},expected=original['revision'],stream=original['_id'])
         return ep
 
     def _short_event(self,task,current,shown=lambda value:value,source=None):
@@ -608,7 +616,7 @@ class TaskService:
     def handback(self,task,state,cause=None,error=None,short=False,final=False):
         """Where the task's result stands on its way back to her character brain, for the thread's view: handing,
         taken (her turn on it finished) or missed (cause: report, turn or restart; final once the watchdog stops)."""
-        current=self.store.db.tasks.find_one({'_id':task['_id']},{'handback':1,'state':1}) or {}
+        current=task_records.get(self.store, task['_id'], fields=['handback', 'state']) or {}
         record=current.get('handback') or {}
         # The run's outcome travels with it: her conversation may have moved to a new session since the run's status.
         outcome='failed' if current.get('state') in ('BLOCKED','UNKNOWN') else 'done'
@@ -620,20 +628,20 @@ class TaskService:
     def record_handback_failure(self,task_id,short):
         """A hand-back failed before her turn (ADR-030 D4): counted, so the watchdog knows what to try next."""
         with self.lock:
-            current=self.store.db.tasks.find_one({'_id':task_id})
+            current=task_records.get(self.store, task_id)
             record=dict(current.get('handback') or {})
             if short:record['short_failed']=True
             else:record['failures']=record.get('failures',0)+1
-            return self.store.put('tasks',{**current,'handback':record},expected=current['revision'],stream=task_id)
+            return task_records.save(self.store, {**current,'handback':record},expected=current['revision'],stream=task_id)
 
     def give_up_handback(self,task):
         """Nothing more is tried: the result stays stored, she sees it could not be handed over, the developer is told."""
         from . import developer_inbox
         with self.lock:
-            current=self.store.db.tasks.find_one({'_id':task['_id']})
+            current=task_records.get(self.store, task['_id'])
             if current.get('feedback_state') in handover.TAKEN:
                 return current
-            given=self.store.put('tasks',{**current,'feedback_state':'UNDELIVERABLE'},expected=current['revision'],stream=task['_id'])
+            given=task_records.save(self.store, {**current,'feedback_state':'UNDELIVERABLE'},expected=current['revision'],stream=task['_id'])
         cause=handover.cause(self.store,given)
         try:
             developer_inbox.leave(self.store,self.store.config['chat']['persona'],developer_inbox.NOTE,
@@ -648,14 +656,14 @@ class TaskService:
     def close_orphan(self,task):
         """A run whose lease expired while no one runs it (ADR-030 D2): closed as not finished, handed back as such."""
         with self.lock:
-            current=self.store.db.tasks.find_one({'_id':task['_id']})
+            current=task_records.get(self.store, task['_id'])
             if not current or current['state']!='RUNNING' or current['fencing_token']!=task['fencing_token']:
                 return None
-            refs=[row['_id'] for row in self.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':current['intent_revision'],'state':'DONE'},{'_id':1})]
+            refs=[row['_id'] for row in artifact_records.of_task(self.store,task['_id'],current['intent_revision'],state='DONE').rows(fields=['_id'])]
             result={'task_id':task['_id'],'intent_revision':current['intent_revision'],'artifact_refs':refs,
                     'text':'行动脑这次执行中断了：它的进程不在了，没有交回报告。工具记录是它中断前做到的。',
                     'facts':[],'uncertainties':['中断前已发起而没有回执的操作须先核实，不可盲目重做。']}
-            closed=self.store.put('tasks',{**current,'state':'BLOCKED','failure_type':'ORPHANED','result':result,
+            closed=task_records.save(self.store, {**current,'state':'BLOCKED','failure_type':'ORPHANED','result':result,
                 'finished_at':now(),'feedback_state':'READY','fencing_token':current['fencing_token']+1},
                 expected=current['revision'],stream=task['_id'])
         self.collab(closed,'status',{'state':'failed'},'status:'+task['_id']+':orphaned')
@@ -754,7 +762,7 @@ class ToolBroker:
                     raise Denied('INTEGRATION_RUNNER_UNAVAILABLE: 集成运行器这会儿没启动（宿主没有沙箱或没装配它）；'+UNAVAILABLE)
             key='tool-'+sha(canonical([task['_id'],task['intent_revision'],call_id]))
             input_hash=sha(canonical([tool,args]))
-            old=self.store.db.artifacts.find_one({'_id':key})
+            old=artifact_records.get(self.store,key)
             if old:
                 if old['input_hash']!=input_hash:
                     raise Denied('CALL_ID_REUSED: 这个调用编号已经用在另一组参数的 %s 调用上；不是参数写错，'
@@ -765,15 +773,15 @@ class ToolBroker:
                     raise Denied('TOOL_DELIVERY_UNKNOWN: 同一个调用之前开始过但还没有回执（可能还在进行，或中途断过），不知道做没做成；'
                                  '不要盲目重做：先查看它该留下的结果（list_files、读文件等）再决定')
                 return old['result']
-            self.store.put('tasks',{**current,'tool_steps':current['tool_steps']+1,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
-            artifact=self.store.put('artifacts',{'_id':key,'scope_key':task['scope_key'],'task_id':task['_id'],'intent_revision':task['intent_revision'],'tool':tool,'args':args,'input_hash':input_hash,'state':'INTENT'},stream=task['_id'])
+            task_records.save(self.store, {**current,'tool_steps':current['tool_steps']+1,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
+            artifact=artifact_records.save(self.store,{'_id':key,'scope_key':task['scope_key'],'task_id':task['_id'],'intent_revision':task['intent_revision'],'tool':tool,'args':args,'input_hash':input_hash,'state':'INTENT'},stream=task['_id'])
             self.service.crash('before_tool')
         # Integration callbacks, role consultations and commands can wait on things outside this process.
         # Never hold the effects lock across such a wait: every outbox claim (her words to QQ, the agent lines)
         # and every cancellation needs it. A later cancellation still fences new calls; recording this accepted
         # call cannot revive the task.
         with (nullcontext() if integration_gated(tool) or tool in DEVELOPMENT_NAMES or tool=='ask_character'
-                  or tool in ('generate_image','render_svg','private_words','sandbox_run','offer_file') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME else self.service.lock):
+                  or tool in ('generate_image','render_svg','private_words','sandbox_run','offer_file') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME or tool==RECEIVED_FILE_TOOL_NAME else self.service.lock):
             if not integration_gated(tool):self.service.valid(task)
             if tool=='persona_job_run':
                 if not task.get('development_grant'):raise Denied(capability_refusal(self.store,task,tool))
@@ -803,8 +811,8 @@ class ToolBroker:
                 note=args.get('note')
                 if not isinstance(note,str) or not note.strip() or len(note)>4000:
                     raise ValueError('PROGRESS_NOTE_REQUIRED: note 要写一段 1..4000 字的文字，%s；改好再留' % given_text(note))
-                if not self.store.db.task_messages.find_one({'_id':'progress-'+key}):
-                    self.store.put('task_messages',{'_id':'progress-'+key,'task_id':task['_id'],
+                if not task_records.thread_message(self.store, 'progress-'+key):
+                    task_records.save_message(self.store, {'_id':'progress-'+key,'task_id':task['_id'],
                         'thread':task.get('thread') or task['_id'],'from':'action','text':note.strip(),
                         'scope_key':task['scope_key'],'created_at':now()},stream=task['_id'])
                 self.service.collab(task,'progress',{'from':'action','text':note.strip()},'progress:'+key)
@@ -828,8 +836,18 @@ class ToolBroker:
                 # 按路径读盘上的图只在家里：会话类别按任务绑定现算（同 credentials.home_task 那条算法），
                 # /task/ 指向这个任务自己的工作区。
                 if not getattr(self, 'vision', None):raise Denied('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
-                scene_row=self.service.store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']}
+                scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
                 result=self.vision.read_image(task,args,session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']),task_dir=sandbox.task_dir)
+                with self.service.lock:self.service.valid(task)
+            elif tool==RECEIVED_FILE_TOOL_NAME:
+                # A file someone sent (ADR-102): the scene is the task's binding, as for read_image; the fetch waits
+                # without the effects lock.
+                from . import received_files
+                scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
+                result=received_files.run(self.service.store,task,self.service.store.config,args,
+                                          persona=self.service.store.config['chat']['persona'],
+                                          session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']),
+                                          task_dir=sandbox.task_dir)
                 with self.service.lock:self.service.valid(task)
             elif tool=='generate_image':
                 # 本机生图：任何任务都可以画，但只走 image 端点的固定流程；等待期间不持副作用锁。
@@ -839,7 +857,7 @@ class ToolBroker:
                 def source(ref):
                     # The picture to edit: only one this task may look at (read_image's fence, this task's class).
                     if not getattr(self,'vision',None):raise ValueError('VISION_SERVICE_UNAVAILABLE: 看图服务这会儿没接上；'+UNAVAILABLE)
-                    scene_row=self.service.store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']}
+                    scene_row=scene_records.get(self.service.store, task['scene_id']) or {'_id':task['scene_id']}
                     picture=self.vision.picture_to_edit(task,ref,task_dir=sandbox.task_dir,
                         session_class=visibility.session_class(self.service.store.config,self.service.store.db,scene_row,task['requester_id']))
                     # Her own drawing edited stays hers; anyone else's goes back where it came from.
@@ -900,7 +918,7 @@ class ToolBroker:
             failed=failure_words({**result,**({'adjusted':adjusted} if adjusted else {})})
             if failed:
                 failed=redact_text(failed,self.store.config)
-                self.store.put('artifacts',{**artifact,'state':'FAILED','error':failed,'result':result},expected=artifact['revision'],stream=task['_id'])
+                artifact_records.save(self.store,{**artifact,'state':'FAILED','error':failed,'result':result},expected=artifact['revision'],stream=task['_id'])
                 raise ToolFailed(failed)
             result['evidence_ref']=key
             result['artifact_ref']=key
@@ -908,7 +926,7 @@ class ToolBroker:
             # read_image 的 base64 只交给调用方，不进回执：一张图就能顶破普通 BSON 行的 1 MiB 上限，
             # 字节本身已经在 GridFS 里，回执留 blob 引用与内联摘要。
             stored_result=read_image_receipt(result) if tool==READ_IMAGE_TOOL_NAME else result
-            self.store.put('artifacts',{**artifact,'state':'DONE','result':stored_result},expected=artifact['revision'],stream=task['_id'])
+            artifact_records.save(self.store,{**artifact,'state':'DONE','result':stored_result},expected=artifact['revision'],stream=task['_id'])
             return result
 
     def close(self):
@@ -919,6 +937,7 @@ class ToolBroker:
 # as "not done", and only her memory of its file name saved a rerun).
 LEFT_SHOWN, LEFT_SCAN, LEFT_HASH_BYTES = 20, 20000, 64 * 1024 * 1024
 LEFT_SKIP = frozenset(('.git', 'node_modules', '__pycache__', '.venv'))
+FILE_CLOCK_SLACK_SECONDS = 1.0
 STAGE_TIMEOUT = 'NATIVE_STAGE_TIMEOUT'
 STOPPED_AT_LIMIT = ('行动这一段跑到了时间上限（%d 分钟），还没交报告就停了；原目标有没有做完没有确认。'
                     '它在 /task 里留下的文件列在 files，先看这些再决定要不要重做。')
@@ -930,7 +949,9 @@ def files_left(workspace, since):
     the first 16 hex digits of the sha256. At most LEFT_SHOWN, the rest counted; the walk stops after LEFT_SCAN files."""
     from datetime import datetime
     try:
-        start = datetime.fromisoformat(str(since).replace('Z', '+00:00')).timestamp()
+        # A file's time comes from the file system's coarser clock (on Windows it moves in steps of up to 15.6 ms), so
+        # a file written just after the start can carry a time a little before it: a second's slack counts it in.
+        start = datetime.fromisoformat(str(since).replace('Z', '+00:00')).timestamp() - FILE_CLOCK_SLACK_SECONDS
     except ValueError:
         return []
     found, seen = [], 0
@@ -990,7 +1011,7 @@ class Executor:
         except Exception as exc:
             left=files_left(workspace,task.get('started_at')) if task.get('started_at') else []   # walked before the lock
             with self.service.lock:
-                current=self.service.store.db.tasks.find_one({'_id':task_id})
+                current=task_records.get(self.service.store, task_id)
                 if current and current['state']=='RUNNING' and current['intent_revision']==task['intent_revision'] and current['fencing_token']==task['fencing_token']:
                     error=redact_text(traceback.format_exc(),self.service.store.config)
                     if isinstance(exc,TimeoutError) and STAGE_TIMEOUT in str(exc):
@@ -999,13 +1020,13 @@ class Executor:
                         text='行动运行失败，原目标仍未完成。'+(LEFT_NOTE if left else '')
                     result={'status':'blocked','text':text,'error':error,'uncertainties':['已发起而没有回执的操作须先核实，不可盲目重做。'],
                             **({'files':left} if left else {})}
-                    return self.service.store.put('tasks',{**current,'state':'BLOCKED','failure_type':type(exc).__name__,'result':result,'feedback_state':'READY'},expected=current['revision'],stream=task_id)
+                    return task_records.save(self.service.store, {**current,'state':'BLOCKED','failure_type':type(exc).__name__,'result':result,'feedback_state':'READY'},expected=current['revision'],stream=task_id)
             raise
 
     def _run_claimed(self,task,workspace,healthy):
         binding=task.get('execution_binding') or f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"
         self.broker.bind('s-'+sha(binding.encode())[:40],task,workspace)
-        source=self.service.store.db.messages.find_one({'_id':task['raw_input_refs'][0]})
+        source=message_records.get(self.service.store, task['raw_input_refs'][0])
         return self._run_workspace(task,binding,source,healthy)
 
     def _run_workspace(self,task,binding,source,healthy):
@@ -1013,7 +1034,7 @@ class Executor:
         grant=workspace_grant(self.service.store.config,task['scene_id'],task['requester_id'])
         store=self.service.store
         # Who she is, at the class of the conversation the task came from (render.action_persona).
-        scene=store.db.scenes.find_one({'_id':task['scene_id']}) or {'_id':task['scene_id']}
+        scene=scene_records.get(store, task['scene_id']) or {'_id':task['scene_id']}
         cls=visibility.session_class(store.config,store.db,scene,task['requester_id'])
         system=(prompt_path(store.config,'executor.md').read_text(encoding='utf-8')
                 +action_values(store,cls=cls,place=visibility.place_of(store.config,scene,cls)))
@@ -1074,7 +1095,7 @@ class Executor:
                 break
             text='你在对话里又补充了（做事这边可能还没看到）：\n'+'\n'.join(row['text'] for row in late)
             self.delivered(late)
-        artifacts=list(self.service.store.db.artifacts.find({'task_id':task['_id'],'intent_revision':task['intent_revision'],'state':'DONE'}))
+        artifacts=artifact_records.of_task(self.service.store,task['_id'],task['intent_revision'],state='DONE').rows()
         observations=artifacts
         # The model reports in natural language; identities and actual receipts
         # are attached by the program, never recopied or invented by the model.
@@ -1089,17 +1110,17 @@ class Executor:
         returned=value.finish_reason=='stop' and not unusable
         with self.service.lock:
             current=self.service.valid(task)
-            finished=self.service.store.put('tasks',{**current,'state':'RETURNED' if returned else 'BLOCKED',
+            finished=task_records.save(self.service.store, {**current,'state':'RETURNED' if returned else 'BLOCKED',
                 'result':result,'finished_at':now(),'feedback_state':'READY'},expected=current['revision'],stream=task['_id'])
         self.service.collab(finished,'status',{'state':'done' if returned else 'failed'},'status:'+task['_id']+':finished')
         return finished
 
     def pending_messages(self,task):
-        return list(self.service.store.db.task_messages.find({'task_id':task['_id'],'from':'character','delivered':False}).sort('created_at',1))
+        return task_records.thread(self.service.store,task['_id'],sender='character',delivered=False).rows()
 
     def delivered(self,rows):
         store=self.service.store
         for row in rows:
-            current=store.db.task_messages.find_one({'_id':row['_id']})
+            current=task_records.thread_message(store, row['_id'])
             if current and not current.get('delivered'):
-                store.put('task_messages',{**current,'delivered':True,'delivered_at':now()},expected=current['revision'],stream=current['task_id'])
+                task_records.save_message(store, {**current,'delivered':True,'delivered_at':now()},expected=current['revision'],stream=current['task_id'])

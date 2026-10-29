@@ -20,6 +20,8 @@ from asuna.lanes import FakeLane, LaneResult
 from asuna.router import Router
 from asuna.state import Store
 from asuna.testing import dispose_test_store
+from asuna.records import messages as message_records
+from asuna.records import receipts as receipt_records
 
 
 def probe():
@@ -52,7 +54,7 @@ def probe():
         response = client.post('/v1/channels/replay/events', json=event)
         assert response.status_code == 200, response.text
         key = response.json()['episode_id']
-        assert store.db.messages.find_one({'_id': 'in-' + key})['ingress_state'] == 'ACCEPTED'
+        assert message_records.get(store, 'in-' + key)['ingress_state'] == 'ACCEPTED'
         assert not lane.calls
         assert client.get('/v1/channels/replay/outbox', headers={'Authorization': 'Bearer invalid'}).status_code == 403
         assert client.post('/v1/channels/replay/events', json=event).json()['status'] == 'duplicate'
@@ -62,14 +64,14 @@ def probe():
         recovered.recover_inputs()
         recovered.worker.start()
         recovered.pending.join()
-        assert store.db.messages.find_one({'_id': 'in-' + key})['result_state'] == 'COMMITTED'
+        assert message_records.get(store, 'in-' + key)['result_state'] == 'COMMITTED'
         response = client.get('/v1/channels/replay/outbox').json()
         item = response['items'][0]
         assert item['text'] == 'REPLAY_PUBLIC' and item['reply_to'] == 'replay-event'
         assert set(item) == {'publication_id', 'attempt_id', 'target', 'text', 'reply_to'}
-        message = store.db.messages.find_one({'_id': item['publication_id']})
+        message = message_records.get(store, item['publication_id'])
         assert message['delivery_state'] == 'SENDING'
-        assert store.db.sink_receipts.count_documents({}) == 0
+        assert receipt_records.sinks(store).count() == 0
         channel.recover_sending()
         assert not client.get('/v1/channels/replay/outbox').json()['items']
         receipt = {'attempt_id': item['attempt_id'], 'status': 'platform_accepted',

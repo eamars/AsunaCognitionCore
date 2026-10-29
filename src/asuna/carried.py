@@ -21,8 +21,11 @@ import json
 import math
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from . import visibility
 from .evidence import canonical, sha
+from .records import scenes as scene_records
+from .records import episodes as episode_records
 
 IDENTITY = ('persona', 'voice', 'self', 'core')
 SELF_BLOCKS = (('current_self', 'self'), ('character_core', 'core'))    # the context names of the self and core blocks
@@ -324,7 +327,7 @@ def room_block(store, persona, cls, scene_id):
         return None
     store.db[COLLECTION].update_one({'_id': key}, {'$set': {'row': 'room_told', 'persona': persona, 'scene_id': scene_id,
                                                             'words': words, 'version': ROOM_VERSION,
-                                                            'at': datetime.now(timezone.utc).isoformat()}}, upsert=True)
+                                                            'at': clock.now().isoformat()}}, upsert=True)
     return words
 
 
@@ -415,9 +418,8 @@ def _turns(store, persona, start, end):
         if row['stream_id'] in seen:
             continue
         seen.add(row['stream_id'])
-        ep = store.db.episodes.find_one({'_id': row['stream_id']}, {'persona': 1, 'scene_id': 1,
-                                                                   'manifest.session_class': 1, 'manifest.carried': 1,
-                                                                   'context.memories': 1})
+        ep = episode_records.get(store, row['stream_id'], fields=['persona', 'scene_id', 'manifest.session_class',
+                                                                  'manifest.carried', 'context.memories'])
         if not ep or ep.get('persona') != persona:
             continue
         mark = (ep.get('manifest') or {}).get('carried')
@@ -425,7 +427,7 @@ def _turns(store, persona, start, end):
             out.append((mark['at'], (mark['place'], mark['class']), [*mark['refs'], *(mark.get('notes') or [])],
                         [*(mark.get('brought_up') or []), *(mark.get('would_surface') or [])], False))
             continue
-        scene = store.db.scenes.find_one({'_id': ep.get('scene_id')}, {'kind': 1}) or {}
+        scene = scene_records.get(store, ep.get('scene_id'), fields=['kind']) or {}
         cls = (ep.get('manifest') or {}).get('session_class') or visibility.PUBLIC
         place = visibility.place_of(store.config, {**scene, '_id': ep.get('scene_id')}, cls)
         past = past or _Past(store, persona)
@@ -442,7 +444,7 @@ def _recalls(store, persona, start, end):
     for row in store.db.audit_events.find({'type': 'recall.read', 'occurred_at': {'$gte': start, '$lt': end}},
                                           {'stream_id': 1, 'payload': 1}):
         payload = row.get('payload') or {}
-        ep = store.db.episodes.find_one({'_id': row.get('stream_id')}, {'persona': 1, 'manifest.session_class': 1})
+        ep = episode_records.get(store, row.get('stream_id'), fields=['persona', 'manifest.session_class'])
         if not ep or ep.get('persona') != persona:
             continue
         cls = (ep.get('manifest') or {}).get('session_class') or visibility.PUBLIC
@@ -498,7 +500,7 @@ def count_days(store, persona, moment=None):
     when the tiers went on and at most COUNT_DAYS; day rows older than COUNT_DAYS go, carried_sections (each
     section's first and last time carried) stays. Returns {'days', 'rows', 'deleted'}."""
     from . import memory_tiers
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     zone = _zone(store, persona)
     today = moment.astimezone(zone).date()
     oldest = today - timedelta(days=COUNT_DAYS)
@@ -555,8 +557,7 @@ def install_checks(store, persona):
     from .documents import DocumentError
     out, ep = [], None
     for row in store.db.audit_events.find({'type': 'turn.output'}, {'stream_id': 1}).sort('occurred_at', -1).limit(50):
-        ep = store.db.episodes.find_one({'_id': row['stream_id'], 'persona': persona,
-                                         'system_ref.carried': {'$exists': True}}, {'system_ref': 1})
+        ep = episode_records.get(store, row['stream_id'], fields=['system_ref'], persona=persona, carried=True)
         if ep:
             break
     if ep:

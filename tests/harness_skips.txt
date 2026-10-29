@@ -1,0 +1,53 @@
+# Tests the unit run's in-process stand-in (unit_run_site/sitecustomize.py) cannot carry, each skipped as unchecked,
+# not passed: `test id | what the stand-in lacks`, the id exactly as collected (with its [parameters]). Every line is
+# reviewed. A failure that is not a gap of the stand-in is fixed; only one that a tests-only change cannot fix is listed,
+# apart at the end, named as a defect with where it is fixed. The file goes with the stand-in, when the unit run moves
+# to the store's in-memory adapter (ADR-104).
+tests/test_host_lease.py::test_a_lease_left_by_a_crash_expires | an update pipeline on the server's clock ($$NOW, a $unset stage): the host lease, ADR-020
+tests/test_host_lease.py::test_another_deployment_is_refused_and_the_same_one_takes_over | an update pipeline on the server's clock ($$NOW, a $unset stage): the host lease, ADR-020
+tests/test_host_lease.py::test_the_lease_is_renewed_while_the_host_runs | an update pipeline on the server's clock ($$NOW, a $unset stage): the host lease, ADR-020
+tests/test_host_stops.py::test_a_lease_left_behind_is_found_and_a_clean_stop_leaves_none | an update pipeline on the server's clock ($$NOW, a $unset stage): the host lease, ADR-020
+tests/test_audit_growth.py::test_past_retention_every_record_goes_but_her_tool_calls_and_the_latest_showing_and_the_chain_verifies | the collStats command (a collection's stored size)
+tests/test_audit_growth.py::test_the_latest_run_record_stays_past_retention_so_the_chain_gaps_stay_explained | the collStats command (a collection's stored size)
+tests/test_audit_growth.py::test_over_its_cap_the_oldest_go_first_whatever_their_kind_and_the_latest_showing_stays | the collStats command (a collection's stored size)
+tests/test_engineering_m1.py::test_E14_real_process_crash_after_receive | one store shared by separate processes (a real process is killed and another reads what it left)
+tests/test_engineering_m7.py::test_E14_five_actual_process_crash_points[after_task_persist] | one store shared by separate processes (a real process is killed and another reads what it left)
+tests/test_engineering_m7.py::test_E14_five_actual_process_crash_points[after_lane_delivery] | one store shared by separate processes (a real process is killed and another reads what it left)
+tests/test_engineering_m7.py::test_E14_five_actual_process_crash_points[after_tool_commit] | one store shared by separate processes (a real process is killed and another reads what it left)
+tests/test_engineering_m7.py::test_E14_five_actual_process_crash_points[after_send_before_receipt] | one store shared by separate processes (a real process is killed and another reads what it left)
+tests/test_engineering_m7.py::test_E14_five_actual_process_crash_points[before_commit_audit] | one store shared by separate processes (a real process is killed and another reads what it left)
+tests/test_adr011_ideas.py::test_a_database_read_mongo_refuses_comes_back_coded_without_the_server_reply | MongoDB's own refusal of a query (the test checks the server's error comes back coded, without its text)
+
+# The store's contract on the MongoDB adapter over the stand-in, each by its exact [stand-in] id (a line that would
+# skip the in-memory reference is refused at collection): the cases the stand-in answers otherwise than the meaning
+# table; the integration run on MongoDB decides them.
+tests/test_store_contract.py::TestW::test_W23_sharp_s_and_dotted_capital_i_are_not_folded[stand-in] | MongoDB's case-blind folding (it folds a dotted capital I to i)
+tests/test_store_contract.py::TestC::test_C02_set_through_a_non_object_or_of_another_kind_is_refused[stand-in] | MongoDB's refusal of a write through a value that is not an object (code 28)
+tests/test_store_contract.py::TestC::test_C05_increase_refuses_what_is_not_a_number[stand-in] | MongoDB's refusal of $inc on a value that is not a number (code 14)
+tests/test_store_contract.py::TestC::test_C06_larger_and_smaller[stand-in] | $max and $min across kinds in MongoDB's order of kinds
+tests/test_store_contract.py::TestC::test_C07_add_to_set[stand-in] | $addToSet with $each: it adds a value repeated within one call twice
+tests/test_store_contract.py::TestC::test_C08_push_keeps_the_last[stand-in] | MongoDB's refusal of $push on a value that is not a list (code 2)
+tests/test_store_contract.py::TestC::test_C12_a_create_that_repeats_a_unique_key[stand-in] | the index's name in a duplicate-key error
+tests/test_store_contract.py::TestX::test_X06_a_unique_index_of_required_fields[stand-in] | the index's name in a duplicate-key error
+tests/test_store_contract.py::TestX::test_X07_a_unique_index_only_where_present[stand-in] | the index's name in a duplicate-key error
+tests/test_store_contract.py::TestX::test_X15_size_counts_records_and_their_bytes[stand-in] | the collStats command (a collection's stored size)
+tests/test_store_contract.py::TestT::test_T04_now_bounds_a_range_in_update_and_claim[stand-in] | $$NOW, the server's clock, in $expr
+tests/test_store_contract.py::TestT::test_T05_now_in_set_and_in_an_insert[stand-in] | $$NOW, the server's clock, in an update pipeline
+tests/test_store_contract.py::TestN::test_N01_the_index_is_brought_up_to_the_space[stand-in] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-1-no filter] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-1-value] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-1-list] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-1-pairs] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-1-pairs and kind] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-12-no filter] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-12-value] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-12-list] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-12-pairs] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-12-pairs and kind] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-24-no filter] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-24-value] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-24-list] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-24-pairs] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N02_nearest_is_exact_cosine[stand-in-24-pairs and kind] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N17_ties_come_in_id_order[stand-in] | vector search ($vectorSearch and search indexes)
+tests/test_store_contract.py::TestN::test_N18_empty_any_of_matches_nothing_and_bad_queries_are_refused[stand-in] | vector search ($vectorSearch and search indexes)

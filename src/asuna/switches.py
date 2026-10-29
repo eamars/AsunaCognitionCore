@@ -13,8 +13,9 @@ tools off and an early end with `set_policy`.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
+from . import clock
 from .evidence import sha
 from .state import Denied, now
 
@@ -28,7 +29,7 @@ NOTE = ('你自己开着的开关（静音、关工具、屏蔽），until_at �
 
 
 def _moment(moment=None):
-    return moment or datetime.now(timezone.utc)
+    return moment or clock.now()
 
 
 def hours_of(value):

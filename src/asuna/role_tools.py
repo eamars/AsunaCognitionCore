@@ -23,14 +23,21 @@ import re
 import json
 from pathlib import Path
 
+from . import clock
 from .documents import DocumentError, DocumentStore, WRITE_STAGE_OPS
 from .evidence import canonical, sha
 from .state import Conflict, Denied
+from .records import messages as message_records
 from . import visibility
 from .errands import MARK as ERRAND_MARK
 from .vision import inline_summary as picture_receipt
 from .config import cut, cut_offer, over, refs_usable, soft
 from .context_budget import SINGLE_BODY_CHARS
+from .records import episodes as episode_records
+from .records import plans as plan_records
+from .records import tasks as task_records
+from .records import memories as memory_records
+from .records import ideas as idea_records
 
 THOUGHT_CHARS = 120                  # what she is asked for: her first reaction, short (ADR-087 §4.1)
 THOUGHT_HARD_CHARS = 360             # refused past this; the room up to it is the model's, said in the result
@@ -491,6 +498,9 @@ MESSAGE_DEVELOPER = {'name': 'message_developer', 'description': '已并入 ask�
 # read_image, with the same fences and storage; here it is bound to her turn's scene instead of a task.
 from .vision import READ_IMAGE_TOOL as _READ_IMAGE
 TOOLS[_READ_IMAGE['name']] = {k: v for k, v in _READ_IMAGE.items() if k != 'name'}
+# Reading a file someone sent is one tool for both halves too (ADR-102), bound to her turn's scene here.
+from .received_files import RECEIVED_FILE_TOOL as _RECEIVED_FILE
+TOOLS[_RECEIVED_FILE['name']] = {k: v for k, v in _RECEIVED_FILE.items() if k != 'name'}
 # Her list of words that point at real people and places, shared with the action brain (private_words.py).
 from .private_words import PRIVATE_WORDS_TOOL as _PRIVATE_WORDS
 TOOLS[_PRIVATE_WORDS['name']] = {k: v for k, v in _PRIVATE_WORDS.items() if k != 'name'}
@@ -500,6 +510,7 @@ UPDATE_SELF = {'description': '已并入 write_document（doc=self 或 core）�
                               'content': _s('完整的新正文'), 'why': _s('为什么改')}}
 # ADR-060: what she is shown is each parameter's new name; handlers read the old ones (param_names.inbound).
 from . import param_names as _names
+from .records import scenes as scene_records
 TOOLS = {name: {**spec, 'parameters': _names.shown(name, spec['parameters'])} for name, spec in TOOLS.items()}
 TOOL_NAMES = tuple(TOOLS)
 
@@ -683,7 +694,7 @@ def session_specs(store, scene_id, person_id=None):
     all_specs. Given when the session starts, so a session's tools never change. `person_id`: who the conversation is
     with (the session's), which decides a private chat's class."""
     from . import capabilities
-    scene = store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}
+    scene = scene_records.get(store, scene_id) or {'_id': scene_id}
     cls = conversation_class(store, scene, person_id)
     listed = abilities(store, {'scene_id': scene_id, 'manifest': {'session_class': cls}})
     out = [placed_spec(spec, cls, scene.get('kind'), listed) for spec in all_specs()]
@@ -800,6 +811,7 @@ def _turn_rules(store, ep):
         return names + ['task.answer']
     if her_pictures(store, ep):
         names.append('read_image')
+    names.append('received_file')       # listed where files can be read; a ref nothing offers is answered as not found
     names += ['stay_silent', 'ideas.note']
     note_tool = ['note'] if context.get('note_places_from_program') else []
     from . import notes
@@ -831,14 +843,14 @@ def _turn_rules(store, ep):
         if tasks:
             names.append('task.message')
     # A paused task is open work in her context, so she can close it as well (ADR-011 §7.1).
-    if tasks and not outside and store.db.tasks.find_one({'_id': {'$in': [task['_id'] for task in tasks]},
-                                                          'state': {'$in': ['READY', 'RUNNING', 'PAUSED']}}, {'_id': 1}):
+    if tasks and not outside and task_records.many(store, [task['_id'] for task in tasks],
+                                                   states=['READY', 'RUNNING', 'PAUSED']).first(fields=['_id']):
         names.append('task.stop')
     if context.get('image_artifacts_from_program'):
         names.append('attach_image')
     if context.get('stickers_from_program') or context.get('stickers_review_from_program')             or context.get('sticker_candidates_from_program'):
         names.append('sticker')
-    scene_kind = (store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind')
+    scene_kind = (scene_records.get(store, ep['scene_id'], fields=['kind']) or {}).get('kind')
     if (cls == visibility.OWNER_PRIVATE or scene_kind == 'group') and not outside:
         names.append('write_document')
     if kind in ('external', 'task_feedback'):
@@ -919,7 +931,7 @@ def abilities(store, ep):
     from .render import model_and_policy
     from .vision import vision_capability
     config = store.config
-    scene = store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+    scene = scene_records.get(store, ep['scene_id']) or {'_id': ep['scene_id']}
     # Its place (visibility.place) from the class the program gave the conversation: one class per conversation.
     cls = (ep.get('manifest') or {}).get('session_class', visibility.PUBLIC)
     where = visibility.place_of(config, scene, cls)
@@ -946,6 +958,8 @@ def abilities(store, ep):
     sees = vision_capability(config, 'character')['supported']
     if sees and (channel_kinds.sends_images(ep['scene_id']) or cls == visibility.OWNER_PRIVATE):
         names.append('read_image')
+    if channel_kinds.file_hosts(ep['scene_id']) or cls == visibility.OWNER_PRIVATE:
+        names.append('received_file')           # files people send (ADR-102); at home, from any of her conversations
     if outbound_media.target_allowed(config, scene, cls)[0]:
         names.append('attach_image')
     if stickers.sends(scene) or local:
@@ -1085,19 +1099,18 @@ def turn_pictures(store, ep):
     pulled is left out (read_image still reaches it)."""
     from .blobs import BlobStore
     from .vision import attachments_of, read_image_for_task, vision_capability
-    scene = store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1})
+    scene = scene_records.get(store, ep['scene_id'], fields=['kind'])
     if (scene or {}).get('kind') != 'group' or not vision_capability(store.config, 'character')['supported']:
         return [], None
-    source = store.db.messages.find_one({'_id': 'in-' + ep['_id'], 'scene_id': ep['scene_id']})
+    source = message_records.get(store, 'in-' + ep['_id'], scene=ep['scene_id'])
     if not source:
         return [], None
     chosen = [(entry, '触发这一回合的那条') for entry in attachments_of(source, config=store.config)][:TURN_PICTURES]
     if len(chosen) < TURN_PICTURES:
-        earlier = store.db.messages.find({'scene_id': ep['scene_id'], 'direction': 'inbound',
-                                          'policy_epoch': ep['policy_epoch'],
-                                          'scene_seq': {'$lt': source.get('scene_seq', 0),
-                                                        '$gte': source.get('scene_seq', 0) - TURN_PICTURE_LINES},
-                                          'event.raw.asuna_media': {'$exists': True}}).sort('scene_seq', -1)
+        earlier = message_records.inbound(store, ep['scene_id'], ep['policy_epoch'],
+                                          before=source.get('scene_seq', 0),
+                                          from_seq=source.get('scene_seq', 0) - TURN_PICTURE_LINES,
+                                          media=True).rows(newest_first=True)
         for row in earlier:
             for entry in attachments_of(row, config=store.config):
                 if len(chosen) < TURN_PICTURES and not entry.get('sticker'):
@@ -1265,9 +1278,8 @@ NEVER_LEFT = ('FAILED', 'CANCELLED_AFTER_FAILURE', CANCELLED_BY_HER)
 def spoken(store, ep):
     """(lines, texts) of this turn's text parts that left or may still leave, read from its outbox each time: a failure
     the platform reports after the call gives its lines back too."""
-    rows = store.db.messages.find({'episode_id': ep['_id'], 'phase': 'SPEAK', 'reply_part': True,
-                                   'delivery_state': {'$nin': list(NEVER_LEFT)}},
-                                  {'text': 1, 'sticker': 1, 'attachment': 1, 'action': 1, 'file': 1})
+    rows = message_records.turn_parts(store, ep['_id'], reply_parts=True, not_states=NEVER_LEFT, by=None).rows(
+        fields=['text', 'sticker', 'attachment', 'action', 'file'])
     words = [row.get('text') or '' for row in rows if not ({'sticker', 'attachment', 'action', 'file'} & set(row))]
     return sum(chat_lines(text) for text in words), [' '.join(text.split()) for text in words]
 
@@ -1338,7 +1350,7 @@ class RoleTools:
         """(result, concludes_turn). Raises Refused for a call she can correct herself. `thinking`: the model's own
         thinking in the response that made her first call of a stage (ADR-099), recorded before the call runs."""
         c = self.coordinator
-        ep = self.store.db.episodes.find_one({'_id': ep_id})
+        ep = episode_records.get(self.store, ep_id)
         if thinking is not None:
             ep = self.take_thought(ep, call_id, thinking)
         called_as, replaced = None, False
@@ -1440,7 +1452,7 @@ class RoleTools:
     def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False, called_as=None, code=None,
                 olds=None):
         c = self.coordinator
-        ep = self.store.db.episodes.find_one({'_id': ep_id})
+        ep = episode_records.get(self.store, ep_id)
         calls = dict(ep.get('tool_calls') or {})
         # A call with consequences keeps the thought it came from: her newest in the turn (reasons.py, ADR-043).
         from . import reasons
@@ -1463,7 +1475,7 @@ class RoleTools:
                          ep['scope_key'])
 
     def _fresh(self, ep):
-        return self.store.db.episodes.find_one({'_id': ep['_id']})
+        return episode_records.get(self.store, ep['_id'])
 
     def _cls(self, ep):
         """The authority this turn acts with: its conversation's class, home's on an errand (ADR-066), or, at home in a
@@ -1490,8 +1502,8 @@ class RoleTools:
         first = self._outside(ep)
         if first is None:
             return ep
-        origin = first and self.store.db.episodes.find_one(
-            {'_id': first.get('from_episode')}, {'scene_id': 1, 'person_id': 1, 'scope_key': 1, 'policy_epoch': 1})
+        origin = first and episode_records.get(self.store, first.get('from_episode'),
+                                               fields=['scene_id', 'person_id', 'scope_key', 'policy_epoch'])
         if not origin:
             raise Refused(OUTSIDE_GONE)
         return {**ep, **{k: origin[k] for k in ('scene_id', 'person_id', 'scope_key', 'policy_epoch')}}
@@ -1560,8 +1572,8 @@ class RoleTools:
             text = written('think', {'thought': excerpt(text, THINKING_STORED_CHARS)})['thought']
             memory_id = 'mono-' + ep['_id'] + ':' + anchor
             home = ep.get('errand') or ep               # an errand's thoughts are kept at home (ADR-066)
-            if not self.store.db.memory_units.find_one({'_id': memory_id}):
-                self.store.put('memory_units', {'_id': memory_id, 'character_id': character_id(self.store.config),
+            if not memory_records.get(self.store, memory_id):
+                memory_records.save(self.store, {'_id': memory_id, 'character_id': character_id(self.store.config),
                     'kind': 'monologue', 'source': 'thinking', 'scope_key': home['scope_key'],
                     'policy_epoch': home['policy_epoch'], 'body_markdown': text,
                     'epistemic_type': 'character_interpretation', 'source_event_ids': [ep['source_event_id']],
@@ -1595,8 +1607,8 @@ class RoleTools:
         from .config import character_id
         memory_id = 'mono-' + ep['_id'] + ':' + call_id
         home = ep.get('errand') or ep               # an errand's thoughts are kept at home (ADR-066)
-        if not self.store.db.memory_units.find_one({'_id': memory_id}):
-            self.store.put('memory_units', {'_id': memory_id, 'character_id': character_id(self.store.config),
+        if not memory_records.get(self.store, memory_id):
+            memory_records.save(self.store, {'_id': memory_id, 'character_id': character_id(self.store.config),
                 'kind': 'monologue', 'scope_key': home['scope_key'], 'policy_epoch': home['policy_epoch'],
                 'body_markdown': thought, 'epistemic_type': 'character_interpretation',
                 'source_event_ids': [ep['source_event_id']], 'depends_on': [ep['source_event_id']],
@@ -1643,13 +1655,13 @@ class RoleTools:
         # At home her recall also reaches what she herself thought in her groups (her own words, never theirs).
         elsewhere = []
         if self._cls(ep) == visibility.OWNER_PRIVATE and query:
-            scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+            scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
             elsewhere = c.context.own_thoughts_elsewhere(scene, query)
         # ADR-097 D3: lines of her other groups that may leave them, and past versions of her notes, by the word.
         crossed, before = [], []
         if query:
             from . import crossing, schedule_rules
-            here = self.store.db.scenes.find_one({'_id': where['scene_id']}) or {'_id': where['scene_id']}
+            here = scene_records.get(self.store, where['scene_id']) or {'_id': where['scene_id']}
             zone = schedule_rules.scene_timezone(self.store.config, here)
             crossed = crossing.elsewhere(self.store, ep['persona'], here, query, zone)
             before = crossing.before(self.store, ep['persona'], here, self._cls(ep), query, zone)                 if memory_tiers.ENABLED else []
@@ -1660,7 +1672,7 @@ class RoleTools:
         # Every recall is kept (ADR-032): what she asked, what came back, in which kind of turn and place, so a later
         # review counts her real reads and misses from records, not from memory.
         from .visibility import place
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         self.store.audit(ep['_id'], 'recall.read', {
             'query': query, 'sections_asked': sections,
             'sections_read': [{'doc': d.get('doc'), 'sid': d.get('sid')} for d in documents or []],
@@ -1744,7 +1756,7 @@ class RoleTools:
         at home 「名单」 lists everyone she has written. Never touches the embedding route. A turn a note from outside
         opened reads as the place it acts for (_as_place)."""
         where = self._as_place(ep)
-        scene = self.store.db.scenes.find_one({'_id': where['scene_id']}) or {'_id': where['scene_id']}
+        scene = scene_records.get(self.store, where['scene_id']) or {'_id': where['scene_id']}
         home = self._cls(ep) == visibility.OWNER_PRIVATE and self._place(ep) == visibility.OWNER_PRIVATE
         text = ' '.join(str(value).split())
         c = self.coordinator
@@ -1776,7 +1788,7 @@ class RoleTools:
         if op == 'block':
             return self._block(ep, args.get('hours') if args.get('hours') is not None else 24, args.get('person')), False
         if op == 'on':
-            if (self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1}) or {}).get('kind') not in ('group', 'dm'):
+            if (scene_records.get(self.store, ep['scene_id'], fields=['kind']) or {}).get('kind') not in ('group', 'dm'):
                 raise Refused('这里不是群或私聊，盯不了人：到看得到他的群或私聊里再用 on。')
             return watches.add(self.store, ep, ep['persona'], self._place(ep), args), False
         if op == 'off':
@@ -1802,7 +1814,7 @@ class RoleTools:
         from .render import model_and_policy
         ep = self._fresh(ep)
         replaced = 0
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         kinds = speak_kinds(self.store, scene)
         parts = args.get('parts')
         if not isinstance(parts, list) or not parts:
@@ -1976,8 +1988,8 @@ class RoleTools:
         text = str(part.get('line') or '').strip().strip('〔〕[]「」 ')
         if not text.isdigit():
             raise Refused('line 写你那句的编号（只写数字）')
-        row = self.store.db.messages.find_one({'scene_id': scene['_id'], 'scene_seq': int(text), 'direction': 'outbound',
-                                               'author': character_id(self.store.config)})
+        row = message_records.at(self.store, scene['_id'], int(text), direction='outbound',
+                                 author=character_id(self.store.config))
         if not row:
             line, why_not = People(self.store, ep['persona']).line_of(scene, ep['_id'], text)
             raise Refused(RECALL_NOT_YOURS if line else why_not)
@@ -1989,9 +2001,9 @@ class RoleTools:
         limit = getattr(channel_kinds.of(scene['_id']), 'OWN_RECALL_SECONDS', None)
         if limit and not (scene.get('kind') == 'group' and People(self.store, ep['persona']).self_role(scene) in ('owner', 'admin')):
             sent = row.get('receipt_at')
-            from datetime import datetime, timezone
+            from datetime import datetime
             try:
-                age = (datetime.now(timezone.utc) - datetime.fromisoformat(str(sent).replace('Z', '+00:00'))).total_seconds()
+                age = (clock.now() - datetime.fromisoformat(str(sent).replace('Z', '+00:00'))).total_seconds()
             except ValueError:
                 age = None
             if age is None or age > limit:
@@ -2006,11 +2018,11 @@ class RoleTools:
     def _cancel_own(self, ep, item):
         """A line of hers still in the outbox is taken out before it leaves; the row keeps why."""
         from .state import Conflict
-        row = self.store.db.messages.find_one({'_id': item['row']})
+        row = message_records.get(self.store, item['row'])
         if not row or row.get('delivery_state') not in ('READY', 'QUEUED_EXTERNAL'):
             return '〔%d〕 %s' % (item['seq'], RECALL_SENDING)
         try:
-            self.store.put('messages', {**row, 'delivery_state': CANCELLED_BY_HER,
+            message_records.save(self.store, {**row, 'delivery_state': CANCELLED_BY_HER,
                                         'cancelled': {'why': item['why'], 'episode_id': ep['_id']}},
                            expected=row['revision'], stream=row['episode_id'])
         except Conflict:
@@ -2124,21 +2136,21 @@ class RoleTools:
     def _own_task(self, ep, task_id):
         if not isinstance(task_id, str) or not task_id:
             raise Refused('task 要照抄 task_state_from_program 里的 _id。' + refs_usable(self._listed_tasks(ep)))
-        task = self.store.db.tasks.find_one({'_id': task_id, 'scene_id': ep['scene_id'],
-                                             'requester_id': ep['person_id'], 'policy_epoch': ep['policy_epoch']})
+        task = task_records.get(self.store, task_id, scene=ep['scene_id'], requester=ep['person_id'],
+                                epoch=ep['policy_epoch'])
         if not task:
             # A task of this conversation that someone else asked for: say whose it is and when it can be steered or
             # stopped, rather than that it is not here (it is listed in task_state_from_program).
-            theirs = self.store.db.tasks.find_one({'_id': task_id, 'scene_id': ep['scene_id'],
-                                                   'policy_epoch': ep['policy_epoch']}, {'requester_id': 1})
+            theirs = task_records.get(self.store, task_id, ['requester_id'], scene=ep['scene_id'],
+                                      epoch=ep['policy_epoch'])
             if theirs:
                 from .people import People
-                scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+                scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
                 who = People(self.store, ep.get('persona')).speaker(scene, theirs['requester_id'])
                 raise Refused(OTHERS_TASK % (task_id, who))
-            close = [row['_id'] for row in self.store.db.tasks.find(
-                {'scene_id': ep['scene_id'], 'requester_id': ep['person_id'], 'policy_epoch': ep['policy_epoch'],
-                 '_id': {'$regex': '^' + __import__('re').escape(task_id[:12])}}, {'_id': 1}).limit(3)]
+            close = [row['_id'] for row in task_records.by_prefix(
+                self.store, task_id[:12], scene=ep['scene_id'], requester=ep['person_id'],
+                epoch=ep['policy_epoch']).rows(limit=3, fields=['_id'])]
             raise Refused('「%s」不是这个对话里的任务。照 task_state_from_program 原样抄 _id。%s'
                           % (task_id, refs_usable([*close, *self._listed_tasks(ep)])))
         return task
@@ -2180,14 +2192,19 @@ class RoleTools:
             result['sticker_note'] = STICKER_LOOKED_NOTE
         return result, False
 
+    def tool_received_file(self, ep, call_id, args):
+        from . import received_files
+        scene = {k: ep[k] for k in ('scene_id', 'scope_key', 'policy_epoch')}
+        return received_files.run(self.store, scene, self.store.config, args, persona=ep['persona'],
+                                  session_class=self._cls(ep)), False
+
     def tool_attach_image(self, ep, call_id, args):
         from . import outbound_media
         from .blobs import BlobStore
         artifact = self._text(args, 'artifact_id', 200)
         self._text(args, 'why', 500)
         cls = self._place(ep)
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']},
-                                              {'_id': 1, 'channel_id': 1, 'kind': 1, 'scope_key': 1, 'members': 1})
+        scene = scene_records.get(self.store, ep['scene_id'], fields=['_id', 'channel_id', 'kind', 'scope_key', 'members'])
         allowed, reason = outbound_media.target_allowed(self.store.config, scene, cls)
         if not allowed:
             raise Denied('ATTACH_TARGET_NOT_ALLOWED: %s；重试也一样，这回合只说话不带图'
@@ -2221,8 +2238,7 @@ class RoleTools:
         if op == 'remember':
             return stickers.remember(self.store, self._fresh(ep), ep['persona'], args, self.store.config), False
         if op == 'pool':
-            from datetime import datetime, timezone
-            listing = stickers.pool_listing(self.store, datetime.now(timezone.utc))
+            listing = stickers.pool_listing(self.store, clock.now())
             fresh = self._fresh(ep)
             self.coordinator._update(fresh, pool_listed=[*dict.fromkeys([*(fresh.get('pool_listed') or []),
                                                                          *(item['candidate'] for item in listing['items'])])])
@@ -2230,7 +2246,7 @@ class RoleTools:
         if op == 'shelf':
             # At home the shelf is listed only in the turns that tidy it; any other turn asks for it here.
             listed = stickers.block(self.store, ep['persona'],
-                                    self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']},
+                                    scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']},
                                     at_home=self._place(ep) == visibility.OWNER_PRIVATE)
             if not listed:
                 return {'items': [], 'note': '架子是空的。'}, False
@@ -2250,7 +2266,7 @@ class RoleTools:
         cls = self._cls(ep)
         if item['doc'] == 'group_notes':
             from .group_admin import notes_slug
-            scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}, {'kind': 1})
+            scene = scene_records.get(self.store, ep['scene_id'], fields=['kind'])
             if (scene or {}).get('kind') != 'group' or item.get('op') not in group_note_ops():
                 raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: ' + ('这里不是群' if (scene or {}).get('kind') != 'group'
                                                                   else 'do「%s」不行' % item.get('op')))
@@ -2439,7 +2455,7 @@ class RoleTools:
         if layer not in ('person', 'here'):
             raise Refused('UNDERSTANDING_LAYER_REQUIRED: layer 要写 person（人那层，哪儿都看得到）或 here（这里那层，只在这个对话里）；'
                           '给的是 %r。拿不准就问自己：这条换个群还成立吗，成立是 person，不成立是 here' % (layer,))
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         group = scene.get('kind') == 'group'
         if group and turn_kind(ep) == 'visit' and not args.get('person'):
             raise Refused('串门时要写 person：照抄你要写的那个人的标签。')
@@ -2476,7 +2492,8 @@ class RoleTools:
                 raise Denied('UNDERSTANDING_UPDATE_NOT_AVAILABLE')
             base = None
         mutation = ep['_id'] + (':understanding' if layer == 'here' else ':understanding:person') + ('' if own else ':' + person_id)
-        saved = self.store.db.state_revisions.find_one({'mutation_id': mutation}, {'_id': 1})
+        from .records import heads as head_records
+        saved = head_records.by_mutation(self.store, mutation, ['_id'])
         if saved:
             # Saved before this turn was interrupted: once per episode, person and layer, never a second revision.
             update = {'state': 'COMMITTED', 'accepted_revision': saved['_id']}
@@ -2539,7 +2556,7 @@ class RoleTools:
         from .people import People
         if self._place(ep) == visibility.OWNER_PRIVATE:
             raise Refused('家里的人屏蔽不了：watch 的 block 只在家外的对话里用。')
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         people = People(self.store, ep.get('persona'))
         if person:
             found = people.resolve(scene, person)
@@ -2576,7 +2593,7 @@ class RoleTools:
         unknown = [t for t in tools if t not in TOOLS or t in switches.KEEP]
         if unknown:
             raise Refused('这些关不了：%s（不是工具，或是一回合离不了的 think、recall、stay_silent）。' % '、'.join(unknown))
-        scene = self.store.db.scenes.find_one({'_id': found[0]}) or {'_id': found[0]}
+        scene = scene_records.get(self.store, found[0]) or {'_id': found[0]}
         from .people import People
         label = People(self.store, ep.get('persona')).scene_title(scene)
         current = switches.on(self.store, kind='tools_off', scene_id=found[0])
@@ -2669,7 +2686,7 @@ class RoleTools:
         the global mood (a guess would put false state on a real person). Returns (fields, where it landed)."""
         from .affect import kind_key, kind_label, person_kinds
         kind = kind_key(ledger.model, fields.get('kind'))
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+        scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         if kind not in person_kinds(ledger.model):
             if fields.get('who'):
                 raise Refused('「%s」不是对人的心情，不用写 who；去掉 who 再记。' % kind_label(ledger.model, kind))
@@ -2736,11 +2753,11 @@ class RoleTools:
                 if outside is not None and plan_id not in made:
                     raise Refused(PLAN_OUTSIDE_ONLY_MADE % plan_id)
                 # Hers when listed or made this turn; the list shows a plan in words, so its state is read from the plan.
-                row = (plan_id in made or plan_id in planned and outside is None) and self.store.db.plans.find_one(
-                    {'_id': plan_id})
+                row = (plan_id in made or plan_id in planned and outside is None) and plan_records.get(
+                    self.store, plan_id)
                 if not row:
                     # Her list shows a few plans; one of this conversation's that it leaves out is still hers (ADR-054).
-                    kept = self.store.db.plans.find_one({'_id': plan_id, 'scene_id': ep['scene_id']})
+                    kept = plan_records.get(self.store, plan_id, scene=ep['scene_id'])
                     if kept and (kept.get('status') in ('CREATING', 'ACTIVE') or self._fired_here(ep, kept, op, timing)):
                         row = kept
                     elif kept:
@@ -2781,11 +2798,11 @@ class RoleTools:
         except ValueError as exc:
             # 换算/校验类失败（时间已过、钟点不存在、形状不对）回给她自己改，带上现在的钟面。
             clock = schedule_rules.local_clock(schedule_rules.scene_timezone(
-                self.store.config, self.store.db.scenes.find_one({'_id': ep['scene_id']})), schedule_rules.now_utc())
+                self.store.config, scene_records.get(self.store, ep['scene_id'])), schedule_rules.now_utc())
             # The code stays in the record (words()); she reads the cause and the fix.
             raise Refused('没安排成：%s。现在是 %s（%s，%s）。' % (words(exc).rstrip('。'), clock['now_local'],
                                                             clock['weekday'], clock['timezone'])) from None
-        there = outside and self.store.db.scenes.find_one({'_id': plan.get('scene_id')})
+        there = outside and scene_records.get(self.store, plan.get('scene_id'))
         if there:
             from .people import People
             there = PLAN_THERE % People(self.store, ep['persona']).scene_title(there)
@@ -2799,7 +2816,7 @@ class RoleTools:
         """Whether this call moves a one-shot plan in the very turn it fired (ADR-087 §4.4)."""
         if op != 'update' or not timing or (plan or {}).get('status') != 'FIRED':
             return False
-        source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']}, {'event.scheduled_plan_id': 1}) or {}
+        source = message_records.get(self.store, 'in-' + ep['_id'], fields=['event.scheduled_plan_id']) or {}
         return (source.get('event') or {}).get('scheduled_plan_id') == plan['_id']
 
     def tool_group_action(self, ep, call_id, args):
@@ -2903,7 +2920,7 @@ class RoleTools:
             raise Refused('do 是 preview、request、drill 或 cancel%s。' % _given(args, 'op'))
         why = self._text(args, 'why', 200)
         from .people import People
-        where = People(self.store, ep['persona']).scene_title(self.store.db.scenes.find_one({'_id': ep['scene_id']}))
+        where = People(self.store, ep['persona']).scene_title(scene_records.get(self.store, ep['scene_id']))
         try:
             pending = desk.request(why, args.get('when') or 'quiet', drill=op == 'drill', where=where)
         except PermissionError as exc:
@@ -2972,12 +2989,12 @@ class RoleTools:
             return {'groups': focus.listing(self.store, ep['persona']), 'usual': '平常常驻 %d 个以内' %
                     focus.soft_limit(self.store.config)}, False
         place = self._text(args, 'place', 40, required=False)
-        here = self.store.db.scenes.find_one({'_id': ep['scene_id']})
+        here = scene_records.get(self.store, ep['scene_id'])
         if place:
             found = places.find(self.store.config, place)
             if not found:
                 raise Refused('没有「%s」这个群；place 照抄 group_focus 的 list 或 places_from_program 里的 place。' % place)
-            scene = self.store.db.scenes.find_one({'_id': found[0]})
+            scene = scene_records.get(self.store, found[0])
         elif (here or {}).get('kind') == 'group':
             scene = here
         else:
@@ -3003,9 +3020,8 @@ class RoleTools:
             raise Refused(str(exc)) from None
 
     def tool_place_timezone(self, ep, call_id, args):
-        from datetime import datetime, timezone
         from . import places
-        moment = datetime.now(timezone.utc)
+        moment = clock.now()
         op = args.get('op')
         if op == 'list':
             return {'groups': places.zones(self.store, ep['persona'], moment)}, False
@@ -3023,7 +3039,7 @@ class RoleTools:
 
     def tool_find_member(self, ep, call_id, args):
         from . import group_members
-        scene = self.store.db.scenes.find_one({'_id': ep['scene_id']})
+        scene = scene_records.get(self.store, ep['scene_id'])
         return group_members.find(self.store, scene, ep['persona'], self._text(args, 'name', 20)), False
 
     # ── her questions (ADR-061) ─────────────────────────────────────
@@ -3034,7 +3050,7 @@ class RoleTools:
         people = People(self.store, ep['persona'])
         wanted = ' '.join(str(wanted or '').split())
         if wanted in questions.HERE or wanted == places.place_id(ep['scene_id']):
-            scene = self.store.db.scenes.find_one({'_id': ep['scene_id']})
+            scene = scene_records.get(self.store, ep['scene_id'])
             return {'to': places.place_id(ep['scene_id']), 'scene_id': ep['scene_id'], 'kind': 'here',
                     'name': people.scene_title(scene)}
         if wanted == questions.ACTION:
@@ -3043,9 +3059,9 @@ class RoleTools:
         place = notes._resolve(self.store, ep['persona'], found, wanted, visibility.OWNER_PRIVATE)
         homes = {p: sid for p, (sid, kind) in found.items() if kind == 'home'}
         if place and (place in homes or not homes_only):
-            scene = self.store.db.scenes.find_one({'_id': found[place][0]})
+            scene = scene_records.get(self.store, found[place][0])
             return {'to': place, 'scene_id': found[place][0], 'kind': 'home', 'name': people.scene_title(scene)}
-        names = '、'.join('%s（%s）' % (people.scene_title(self.store.db.scenes.find_one({'_id': sid})), p)
+        names = '、'.join('%s（%s）' % (people.scene_title(scene_records.get(self.store, sid)), p)
                          for p, sid in homes.items())
         if place:
             raise Refused('ASK_PLACE_NOT_HOME: 「%s」不是家里的对话：ask 问的是家里的几处（%s）、这里和行动脑；'
@@ -3172,9 +3188,9 @@ class RoleTools:
         # At home every task of hers; anywhere else only the tasks this conversation sent (as reading a file by path).
         home = self._cls(ep) == visibility.OWNER_PRIVATE
         place = self._as_place(ep)          # a turn a note from outside opened reads the tasks of where it came from
-        where = {'_id': task_id} if home else {'_id': task_id, 'scene_id': place['scene_id'],
-                                                'scope_key': place['scope_key'], 'policy_epoch': place['policy_epoch']}
-        task = self.store.db.tasks.find_one(where, {'result.text': 1, 'title': 1, 'goal': 1, 'intent_revision': 1})
+        fence = {} if home else {'scene': place['scene_id'], 'scope': place['scope_key'],
+                                 'epoch': place['policy_epoch']}
+        task = task_records.get(self.store, task_id, ['result.text', 'title', 'goal', 'intent_revision'], **fence)
         if not task:
             raise Refused('「%s」不是%s的任务；task 照抄交回来的结果里的 task，或 task_state_from_program 里的 id。%s'
                           % (task_id, '你' if home else '这个对话里', refs_usable([ep.get('task_id'), *self._listed_tasks(ep)])))
@@ -3198,13 +3214,13 @@ class RoleTools:
         why = self._text(args, 'why', IDEA_CHARS)
         if decision not in ('adopt', 'defer', 'drop'):
             raise Refused('decision 是 adopt、defer 或 drop%s。' % _given(args, 'decision'))
-        row = self.store.db.ideas.find_one({'_id': idea_id, 'persona': ep['persona']})
+        row = idea_records.get(self.store, idea_id, persona=ep['persona'])
         if not row or row.get('state') not in ('open', 'deferred'):
             raise Refused('「%s」不是想法本里还没处理完的一条；照 ideas_from_program 或 ideas 的 read 里的原样抄 _id。%s'
                           % (idea_id, refs_usable(row['_id'] for row in idea_rows(self.store, ep['persona'], None))))
         state = {'adopt': 'adopted', 'defer': 'deferred', 'drop': 'dropped'}[decision]
         from .state import now
-        self.store.put('ideas', {**row, 'state': state, 'decisions': [*(row.get('decisions') or []),
+        idea_records.save(self.store, {**row, 'state': state, 'decisions': [*(row.get('decisions') or []),
             {'decision': decision, 'why': why, 'episode_id': ep['_id'], 'at': now()}]},
             expected=row['revision'], stream=idea_id)
         note = {'adopt': '采纳了：用 delegate 把要做的事交代给行动脑。', 'defer': '暂缓了，下次自我改进时还会看到它。',
@@ -3229,9 +3245,9 @@ def note_idea(store, persona, idea, why, *, key, source):
     """One entry in her improvement-idea notebook, from either brain; read only in her self-improvement turns."""
     from .state import now
     idea_id = 'idea-' + sha(canonical(key))[:32]
-    row = store.db.ideas.find_one({'_id': idea_id})
+    row = idea_records.get(store, idea_id)
     if not row:
-        row = store.put('ideas', {'_id': idea_id, 'persona': persona, 'idea': idea, 'why': why, 'state': 'open',
+        row = idea_records.save(store, {'_id': idea_id, 'persona': persona, 'idea': idea, 'why': why, 'state': 'open',
                                   'source': source, 'decisions': [], 'created_at': now(),
                                   'scope_key': visibility.owner_private_scope(persona)}, stream=idea_id)
     return row
@@ -3240,12 +3256,8 @@ def note_idea(store, persona, idea, why, *, key, source):
 def idea_rows(store, persona, search=None):
     """Her undecided ideas in reading order: open ones first (oldest first), then deferred ones, so ideas she put
     off never crowd out new ones. search keeps those whose idea or reason contains it."""
-    import re
-    query = {'persona': persona}
-    if search:
-        query['$or'] = [{'idea': {'$regex': re.escape(search)}}, {'why': {'$regex': re.escape(search)}}]
     return [row for state in ('open', 'deferred')
-            for row in store.db.ideas.find({**query, 'state': state}).sort('created_at', 1)]
+            for row in idea_records.of_persona(store, persona, state=state, search=search).rows()]
 
 
 def ideas_block(store, persona, moment, limit=None, page=1, search=None):
@@ -3287,7 +3299,7 @@ def idea_place(store, people, source):
     if not first and source.get('turn') == 'note':
         return IDEA_PLACE_UNKNOWN
     scene_id = (first or {}).get('from_scene') or source.get('scene_id')
-    scene = store.db.scenes.find_one({'_id': scene_id}) if scene_id else None
+    scene = scene_records.get(store, scene_id) if scene_id else None
     if not scene:
         return None
     title = people.scene_title(scene)
@@ -3296,7 +3308,7 @@ def idea_place(store, people, source):
 
 def ideas_left(store, persona, shown):
     """Words for the open or deferred ideas a listing of ``shown`` items leaves out, or None."""
-    waiting = store.db.ideas.count_documents({'persona': persona, 'state': {'$in': ['open', 'deferred']}})
+    waiting = idea_records.count(store, persona, ['open', 'deferred'])
     return ('还有 %d 条没列出：ideas 的 read 翻页（page）或按字找（search），处理掉几条也会轮到它们。' % (waiting - shown)
             if waiting > shown else None)
 
@@ -3318,7 +3330,7 @@ def read_sections(store, ep, items, cls):
                 section, why = forwards.read(store, ep['scene_id'], item['sid'])
             else:
                 from . import schedule_rules
-                here = store.db.scenes.find_one({'_id': ep['scene_id']}) or {'_id': ep['scene_id']}
+                here = scene_records.get(store, ep['scene_id']) or {'_id': ep['scene_id']}
                 section, why = crossing.fetch(store, here, item['sid'], schedule_rules.scene_timezone(store.config, here))
             out.append(section) if section else missing.append(why)
             continue
@@ -3349,13 +3361,13 @@ def _from_home(store, persona, source_ids, episodes):
     """Whether any source of a promotion was said in an owner-private conversation: a source turn's class, or a
     memory unit kept in her home scope."""
     home_scope = visibility.owner_private_scope(persona)
-    if store.db.memory_units.find_one({'_id': {'$in': list(source_ids)}, 'scope_key': home_scope}, {'_id': 1}):
+    if memory_records.many(store, list(source_ids), scope=home_scope).first(fields=['_id']):
         return True
-    for row in store.db.episodes.find({'_id': {'$in': list(episodes)}}, {'manifest.session_class': 1, 'scene_id': 1,
-                                                                          'person_id': 1}):
+    for row in episode_records.many(store, list(episodes)).rows(fields=['manifest.session_class', 'scene_id',
+                                                                         'person_id']):
         cls = (row.get('manifest') or {}).get('session_class')
         if cls is None:
-            scene = store.db.scenes.find_one({'_id': row.get('scene_id')}) or {'_id': row.get('scene_id')}
+            scene = scene_records.get(store, row.get('scene_id')) or {'_id': row.get('scene_id')}
             cls = visibility.session_class(store.config, store.db, scene, row.get('person_id'))
         if cls == visibility.OWNER_PRIVATE:
             return True
@@ -3383,10 +3395,10 @@ def promote(store, ep, item, *, key):
     picked = memory_tiers.recalled(store, window) if memory_tiers.ENABLED else selections(store, window)
     episodes = set()
     for source in item['source_ids']:
-        unit = store.db.memory_units.find_one({'_id': source}, {'episode_id': 1})
-        if store.db.episodes.find_one({'_id': source}, {'_id': 1}):
+        unit = memory_records.get(store, source, ['episode_id'])
+        if episode_records.get(store, source, fields=['_id']):
             episodes.add(source)
-        elif source.startswith('in-') and store.db.episodes.find_one({'_id': source[3:]}, {'_id': 1}):
+        elif source.startswith('in-') and episode_records.get(store, source[3:], fields=['_id']):
             episodes.add(source[3:])
         elif unit:
             episodes.update([unit['episode_id']] if unit.get('episode_id') else picked.get(source, []))
@@ -3418,8 +3430,8 @@ def promote(store, ep, item, *, key):
            'epistemic_type': 'character_interpretation', 'source_ids': item['source_ids'],
            'source_event_ids': item['source_ids'], 'depends_on': item['source_ids'], 'episode_id': ep['_id'],
            'status': 'active', 'embedding_status': 'PENDING', 'origin': 'asuna', 'why': item['why']}
-    if not store.db.memory_units.find_one({'_id': doc['_id']}):
-        store.put('memory_units', doc, stream=ep['_id'])
+    if not memory_records.get(store, doc['_id']):
+        memory_records.save(store, doc, stream=ep['_id'])
         # ADR-017: what she brought home from other conversations, and why, in her own audited record.
         store.audit(ep['_id'], 'memory.promoted', {'memory_id': doc['_id'], 'scope_key': scope, 'why': item['why'],
                                                    'source_ids': item['source_ids']}, scope)

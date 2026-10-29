@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
+from .records import scenes as scene_records
+from .records import episodes as episode_records
+from .records import heads as head_records
 
 BUDGET_VERSION = 1
 
@@ -266,8 +269,7 @@ def carried_block(summary, why=None):
 def _last_tidied(store, docs, slug, tidy_episodes):
     """(when she last wrote this note in a settlement turn or else when it began, whether it changed since then,
     whether she has tidied it at all)."""
-    rows = list(store.db.state_revisions.find({'entity_key': docs.key(slug)}, {'mutation_id': 1, 'created_at': 1})
-                .sort('created_at', 1))
+    rows = head_records.history(store, docs.key(slug)).rows(fields=['mutation_id', 'created_at'])
     if not rows:
         return None, False, False
     mark, tidied = rows[0], False
@@ -286,9 +288,9 @@ def review_block(store, persona, moment):
     from .people import People
     docs = DocumentStore(store, persona)
     people = People(store, persona)
-    tidy = {row['_id'] for row in store.db.episodes.find({'episode_kind': 'settlement'}, {'_id': 1})}
+    tidy = {row['_id'] for row in episode_records.of_kind(store, 'settlement').rows(fields=['_id'])}
     names = {notes_slug(scene['_id']): people.scene_title(scene) + '的笔记'
-             for scene in store.db.scenes.find({'kind': 'group'}, {'_id': 1, 'kind': 1})}
+             for scene in scene_records.of_kind(store, 'group', fields=['_id', 'kind'])}
     from .carried import placed
     due = []
     for slug in docs.slugs():

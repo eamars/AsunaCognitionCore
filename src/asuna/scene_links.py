@@ -21,6 +21,9 @@
 from __future__ import annotations
 
 from . import channel_kinds
+from .records import scenes as scene_records
+from .records import receipts as receipt_records
+from . import records
 
 MAX_LINKS = 8          # 一条边最多带几个场景：写宽了直接推高 token 成本，超了照实截断
 MAX_PERSONS = 32       # 一组「同一个人」最多几个人格入口
@@ -42,6 +45,16 @@ def _id_list(value, limit=MAX_LINKS):
             continue
         out.append(text)
     return out[:limit]
+
+
+def _scenes(db):
+    """Every conversation of this database, or none when it cannot be read."""
+    if db is None:
+        return []
+    try:
+        return [row for row in scene_records.all(records.on(db)) if isinstance(row, dict)]
+    except Exception:
+        return []
 
 
 def _rows(db, collection, spec=None):
@@ -112,19 +125,18 @@ def sync_scene_docs(store, config, scene_ids=None):
     """把派生出来的 readable_scenes 写进 scenes 文档（只为可观察；读路径现算自配置）。"""
     links = context_links(config)
     wanted = {scene: links.get(scene, []) for scene in (scene_ids or sorted(links))}
-    column = getattr(getattr(store, "db", None), "scenes", None)
-    if column is None:
+    if getattr(store, "db", None) is None:
         return {"updated": [], "readable": wanted, "why": "no_scenes_collection"}
     updated = []
     for scene, targets in wanted.items():
         if not targets:
             continue                      # 没这条边就不往文档里塞空键：保持原形状
-        doc = column.find_one({"_id": scene})
+        doc = scene_records.get(store, scene)
         if not isinstance(doc, dict) or doc.get("readable_scenes") == targets:
             continue
         try:
-            store.put("scenes", {**doc, "readable_scenes": list(targets)},
-                      expected=doc.get("revision"), stream="scene-links")
+            scene_records.save(store, {**doc, "readable_scenes": list(targets)},
+                              expected=doc.get("revision"), stream="scene-links")
             updated.append(scene)
         except Exception:
             continue                      # 同一轮里别人推了 revision：下次启动再补，不影响本轮读
@@ -211,7 +223,7 @@ def _canonical_home_scene(config, db, canonical, own_scene):
     chat = _clean((config or {}).get("chat", {}).get("scene_id")) \
         if isinstance((config or {}).get("chat"), dict) else ""
     candidates = []
-    for row in _rows(db, "scenes"):
+    for row in _scenes(db):
         scene = _clean(row.get("scene_id") or row.get("_id"))
         if not scene or scene == own_scene or canonical not in (row.get("members") or []):
             continue
@@ -251,10 +263,9 @@ def message_times(store, rows):
             if isinstance(ref, str) and _clean(ref):
                 refs.add(ref)
     sinks = {}
-    column = getattr(getattr(store, "db", None), "sink_receipts", None)
-    if refs and column is not None:
+    if refs:
         try:
-            for row in (column.find({"_id": {"$in": sorted(refs)}}) or []):
+            for row in receipt_records.sinks(store, sorted(refs)).each():
                 if isinstance(row, dict) and _stamp(row.get("received_at")):
                     sinks[_clean(row.get("_id"), 60)] = _stamp(row.get("received_at"))
         except Exception:

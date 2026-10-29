@@ -7,10 +7,13 @@ prefix (same system prompt, same tool list). The tools that conversation lists a
 the copy, which is retired when the errand ends. The destination's next turn hears once that home sent her and what
 she said there (`told_block`); the request itself never goes there.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
+from . import clock
 from .evidence import sha
 from .state import now
+from .records import messages as message_records
+from .records import episodes as episode_records
 
 SESSION_PREFIX = 'asuna-errand-'
 # Waiting behind that conversation's own turns: past this the talk there has moved on (her review, 2026-10-15).
@@ -44,8 +47,7 @@ def carried(store, event):
     visit = event.get('visit') or {}
     if event.get('episode_kind') != 'visit' or visit.get('intent') != 'errand':
         return None
-    home = store.db.episodes.find_one({'_id': visit.get('from')},
-                                      {'scene_id': 1, 'scope_key': 1, 'policy_epoch': 1, 'person_id': 1})
+    home = episode_records.get(store, visit.get('from'), fields=['scene_id', 'scope_key', 'policy_epoch', 'person_id'])
     if not home:
         return None
     return {'from': home['_id'], 'scene_id': home['scene_id'], 'scope_key': home['scope_key'],
@@ -59,7 +61,7 @@ def home_turn(store, ep):
     is said) reads this turn, never the errand's; the errand turn stays the record of what she did and thought there."""
     if not (ep or {}).get('errand'):
         return ep
-    return store.db.episodes.find_one({'_id': ep['errand']['from']}) or ep
+    return episode_records.get(store, ep['errand']['from']) or ep
 
 
 def session_id(episode_id):
@@ -79,7 +81,7 @@ def late(row, moment=None):
         queued = datetime.fromisoformat(str(row.get('received_at')).replace('Z', '+00:00'))
     except ValueError:
         return False
-    return (moment or datetime.now(timezone.utc)) - queued > timedelta(minutes=PATIENCE_MINUTES)
+    return (moment or clock.now()) - queued > timedelta(minutes=PATIENCE_MINUTES)
 
 
 def skipped(event, source, previous, moment=None):
@@ -95,8 +97,8 @@ def skipped(event, source, previous, moment=None):
 
 def sent_lines(store, episode_id):
     """What she said on the errand, as sent: delivered lines and whether a picture went with one."""
-    rows = store.db.messages.find({'episode_id': episode_id, 'direction': 'outbound', 'phase': 'SPEAK'},
-                                  {'text': 1, 'delivery_state': 1, 'attachment': 1, 'scene_seq': 1, 'receipt_at': 1}).sort('scene_seq', 1)
+    rows = message_records.turn_parts(store, episode_id, outbound=True).rows(
+        fields=['text', 'delivery_state', 'attachment', 'scene_seq', 'receipt_at'])
     return [row for row in rows if row.get('delivery_state') == 'DELIVERED']
 
 
@@ -114,10 +116,7 @@ def told_block(store, scene_id, *, mark=True):
     from .local_time import stamp, zone_of
     zone = zone_of(store, scene_id)
     # Every turn of every platform conversation asks: by the inputs' platform index, only this conversation's errands.
-    rows = list(store.db.messages.find({'adapter_id': 'visit', 'scene_id': scene_id,
-                                        'platform_event_id': {'$type': 'string', '$regex': '^visit:errand:'},
-                                        'ingress_state': 'COMPLETE', 'errand_told': {'$exists': False}},
-                                       {'episode_id': 1, 'received_at': 1, 'event.visit.by': 1}).sort('received_at', 1))
+    rows = message_records.errand_results(store, scene_id).rows(fields=['episode_id', 'received_at', 'event.visit.by'])
     if not rows:
         return None
     items = []
@@ -129,5 +128,5 @@ def told_block(store, scene_id, *, mark=True):
                           'you_said': [str(line.get('text') or '') + ('（带了一张图）' if line.get('attachment') else '')
                                        for line in sent]})
     if mark:
-        store.db.messages.update_many({'_id': {'$in': [row['_id'] for row in rows]}}, {'$set': {'errand_told': now()}})
+        message_records.mark_errands_told(store, [row['_id'] for row in rows], now())
     return {'items': items[-TOLD_SHOWN:], 'note': TOLD_NOTE} if items else None

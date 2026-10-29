@@ -23,10 +23,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from .config import ago, character_id, excerpt, over, soft
 from .evidence import canonical, sha
 from .state import now
 from . import scene_links, visibility
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import episodes as episode_records
 
 TABLES_VERSION = 1
 NOTE_CHARS = 300                 # a note that crosses between home and outside
@@ -131,7 +135,7 @@ def targets(store, scene_id, cls):
         for sid, _, _ in places.groups(config):
             found[places.place_id(sid)] = (sid, 'group')
     return {place: value for place, value in found.items()
-            if value[0] != scene_id and store.db.scenes.find_one({'_id': value[0]}, {'_id': 1})}
+            if value[0] != scene_id and scene_records.get(store, value[0], fields=['_id'])}
 
 
 def owner_chats(config):
@@ -149,7 +153,7 @@ def opening_for(store, event):
 
 def opening(store, ep):
     """The note that opened this turn, or None."""
-    row = store.db.messages.find_one({'_id': 'in-' + ep['_id']}, {'event.note': 1, 'event.visit': 1})
+    row = message_records.get(store, 'in-' + ep['_id'], fields=['event.note', 'event.visit'])
     return opening_for(store, (row or {}).get('event') or {})
 
 
@@ -197,7 +201,7 @@ def places_view(store, persona, scene_id, cls, first):
     people = People(store, persona)
     items, kinds = [], []
     for place, (sid, kind) in found.items():
-        items.append({'place': place, 'name': people.scene_title(store.db.scenes.find_one({'_id': sid}))})
+        items.append({'place': place, 'name': people.scene_title(scene_records.get(store, sid))})
         if kind not in kinds:
             kinds.append(kind)
     # How a note arrives, said once per kind of place rather than on every row (the list can be long); a note from a
@@ -224,8 +228,8 @@ def borrowed(store, scene_id, text, moment):
         return None
     since = (moment - timedelta(hours=OWN_WORDS_HOURS)).isoformat()
     me = character_id(store.config)
-    for row in store.db.messages.find({'scene_id': scene_id, 'direction': 'inbound', 'author': {'$ne': me},
-                                       'received_at': {'$gte': since}}, {'text': 1, 'author': 1, 'received_at': 1}):
+    for row in message_records.inbound(store, scene_id, not_author=me, since=since, by=None).rows(
+            fields=['text', 'author', 'received_at']):
         line = ''.join(str(row.get('text') or '').split())
         hits = [i for i in range(len(flat) - OWN_WORDS_RUN + 1) if flat[i:i + OWN_WORDS_RUN] in line]
         if len(line) >= OWN_WORDS_RUN and hits:
@@ -239,7 +243,7 @@ def copied_words(store, persona, scene_id, match):
     the line itself; naming the source does not make it pass."""
     from . import local_time
     from .people import People
-    scene = store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}
+    scene = scene_records.get(store, scene_id) or {'_id': scene_id}
     who = People(store, persona).speaker(scene, match['author'])
     when = local_time.stamp(match['at'], local_time.zone_of(store, scene_id)) if match.get('at') else '刚才'
     return NOT_OWN_WORDS % (match['first'], match['last'], who, when)
@@ -256,7 +260,7 @@ def _resolve(store, persona, found, wanted, cls):
             return homes[0]
     people = People(store, persona)
     named = [place for place, (sid, _) in found.items()
-             if wanted and wanted in people.scene_title(store.db.scenes.find_one({'_id': sid}))]
+             if wanted and wanted in people.scene_title(scene_records.get(store, sid))]
     return named[0] if len(named) == 1 else None
 
 
@@ -265,7 +269,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
     carries one of her questions (`question`, questions.py) is never a reply and does not count against the turn's
     notes."""
     from .people import People
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     note_id = 'note-' + sha(canonical([ep['_id'], call_id]))[:20]
     existing = store.db.notes.find_one({'_id': note_id})
     if existing:
@@ -281,7 +285,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
     place = _resolve(store, persona, found, args.get('to'), cls)
     if not place:
         people = People(store, persona)
-        names = '、'.join('%s（%s）' % (people.scene_title(store.db.scenes.find_one({'_id': sid})), p)
+        names = '、'.join('%s（%s）' % (people.scene_title(scene_records.get(store, sid)), p)
                          for p, (sid, _) in found.items())
         raise NoteRefused('NOTE_TARGET_UNKNOWN', ('送不到「%s」。能送到的：%s。照抄 place。' % (args.get('to'), names))
                           if names else '这一回合没有能送便条的地方。')
@@ -353,7 +357,7 @@ def owner_line(store, ep):
     None. A note home from such a turn carries them; its home turn may then send an errand (ADR-066)."""
     if (ep.get('episode_kind') or 'external') != 'external'             or scene_links.canonical_person_id(store.config, store.db, ep.get('person_id')) != visibility.owner_id(store.config):
         return None
-    source = store.db.messages.find_one({'_id': 'in-' + ep['_id']}, {'text': 1, 'event.channel': 1}) or {}
+    source = message_records.get(store, 'in-' + ep['_id'], fields=['text', 'event.channel']) or {}
     if not (source.get('event') or {}).get('channel'):
         return None
     return excerpt(source.get('text'), OWNER_LINE_CHARS) or None
@@ -363,7 +367,7 @@ def record(store, draft, event_id=None):
     row = store.put('notes', {**draft, **({'event_id': event_id} if event_id else {})}, stream='notes:' + draft['persona'])
     store.audit(draft['from_episode'], 'note.sent', {'note': draft['_id'], 'to_scene': draft['to_scene'],
         'trust': draft['trust'], 'mode': draft['mode'], 'hop': draft['hop'], 'chars': len(draft['text'])},
-        (store.db.scenes.find_one({'_id': draft['from_scene']}, {'scope_key': 1}) or {}).get('scope_key') or 'operator')
+        (scene_records.get(store, draft['from_scene'], fields=['scope_key']) or {}).get('scope_key') or 'operator')
     return row
 
 
@@ -375,7 +379,7 @@ def text_limit(trust, kind):
 def result(store, row):
     """What the sending turn reads back."""
     from .people import People
-    scene = store.db.scenes.find_one({'_id': row['to_scene']})
+    scene = scene_records.get(store, row['to_scene'])
     longer = over(len(row.get('text') or ''), text_limit(row['trust'], row['kind']))
     return {'note': row['_id'], 'to': People(store, row['persona']).scene_title(scene), 'arrives': MODE_WORDS[row['mode']],
             **({'length': 'text ' + longer} if longer else {}),
@@ -388,7 +392,7 @@ def state(store, row, moment):
     if store.db.notes.find_one({'reply_to': row['_id']}, {'_id': 1}):
         return 'replied'
     seen = row.get('seen_in') or []
-    if seen and store.db.episodes.find_one({'_id': {'$in': seen}, 'state': {'$in': list(FINISHED)}}, {'_id': 1}):
+    if seen and episode_records.many(store, seen, states=FINISHED).first(fields=['_id']):
         return 'read'
     created = _at(row.get('created_at'))
     if created and moment - created > timedelta(hours=KEEP_HOURS):
@@ -403,7 +407,7 @@ def read_elsewhere(store, event, episode):
     note_id = (event.get('note') or {}).get('id') or (event.get('visit') or {}).get('note')
     row = store.db.notes.find_one({'_id': note_id}, {'seen_in': 1}) if note_id else None
     seen = [other for other in (row or {}).get('seen_in') or [] if other != episode]
-    return bool(seen) and store.db.episodes.count_documents({'_id': {'$in': seen}, 'state': {'$in': list(FINISHED)}}) > 0
+    return bool(seen) and episode_records.many(store, seen, states=FINISHED).count() > 0
 
 
 def waited(row, moment):
@@ -423,7 +427,7 @@ def _seen(store, row, episode):
 def opening_block(store, persona, row, cls, episode, moment):
     """note_from_program: the note that opened this turn, its source named, never a line of this conversation."""
     from .people import People
-    where = People(store, persona).scene_title(store.db.scenes.find_one({'_id': row['from_scene']}))
+    where = People(store, persona).scene_title(scene_records.get(store, row['from_scene']))
     to_him = row['trust'] == UNTRUSTED and row['to_scene'] in owner_chats(store.config)
     if row['trust'] == TRUSTED:
         note = TRUSTED_NOTE % where
@@ -460,7 +464,7 @@ def answers_tail(store, persona, row):
         return None
     from . import questions
     from .schedule_rules import scene_timezone
-    scene = store.db.scenes.find_one({'_id': row['from_scene']}) or {'_id': row['from_scene']}
+    scene = scene_records.get(store, row['from_scene']) or {'_id': row['from_scene']}
     return questions.answer_tail(store, persona, row['answers'], scene_timezone(store.config, scene))
 
 
@@ -479,7 +483,7 @@ def received_block(store, persona, scene_id, cls, kind, episode, moment, skip=No
     items = []
     for row in rows:
         words = state(store, row, moment)
-        where = people.scene_title(store.db.scenes.find_one({'_id': row['from_scene']}))
+        where = people.scene_title(scene_records.get(store, row['from_scene']))
         outside = row['trust'] == UNTRUSTED and cls == visibility.OWNER_PRIVATE
         if outside and words == 'waiting':
             items.append({'from': where, 'at': row['created_at'], 'state': WAITING_OWN_TURN + waited(row, moment)})
@@ -510,7 +514,7 @@ def sent_block(store, persona, scene_id, moment):
     if not rows:
         return None
     people = People(store, persona)
-    return {'items': [{'to': people.scene_title(store.db.scenes.find_one({'_id': row['to_scene']})),
+    return {'items': [{'to': people.scene_title(scene_records.get(store, row['to_scene'])),
                        'at': row['created_at'], 'wrote': excerpt(row['text'], EXCERPT),
                        'state': _sent_state(store, row, moment)} for row in rows],
             'note': SENT_NOTE}

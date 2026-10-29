@@ -3,6 +3,7 @@ wherever she meets them and always opens with the line that it is only part of t
 conversation."""
 import pytest
 
+from asuna.records import heads as head_records
 from asuna.context import ContextBuilder
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane, FakeTurn
@@ -62,12 +63,12 @@ def test_both_layers_in_one_turn_each_once_and_the_layer_is_required(store):
     results = [r for r in lane.tool_results if r[2] == 'understand_person']
     assert [r[-1] for r in results] == [True, True, False, False]
     assert '人那层' in str(results[2][-2]) and 'UNDERSTANDING_LAYER_REQUIRED' in str(results[3][-2])
-    assert store.head('relationship:A', 'scene:dm-a')[1]['content']['body'] == '在私聊里他放松很多。'
-    assert store.head('relationship:A', 'person')[1]['content']['body'] == '他重视守时。'
+    assert head_records.current(store, 'relationship:A', 'scene:dm-a')[1]['content']['body'] == '在私聊里他放松很多。'
+    assert head_records.current(store, 'relationship:A', 'person')[1]['content']['body'] == '他重视守时。'
 
 
 def test_erasing_the_conversation_it_came_from_takes_it_back(store):
     write(store, ('understand_person', {'layer': 'person', 'content': '他重视守时。', 'short': '守时'}))
-    assert store.head('relationship:A', 'person')[1]['content'] == {'body': '他重视守时。', 'short': '守时'}
+    assert head_records.current(store, 'relationship:A', 'person')[1]['content'] == {'body': '他重视守时。', 'short': '守时'}
     PrivacyService(store).delete_memory('M09', operator=True)
-    assert store.head('relationship:A', 'person') is None
+    assert head_records.current(store, 'relationship:A', 'person') is None

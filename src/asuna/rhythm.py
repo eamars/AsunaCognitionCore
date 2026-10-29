@@ -8,12 +8,14 @@ is set, because local time and habits reveal the owner's time zone and routine.
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime
 import re
 
+from . import clock
 from .persona_model import effective, timezone as persona_timezone
 from . import visibility
 from .local_time import face
+from .records import memories as memory_records
 
 try:
     from zoneinfo import ZoneInfo
@@ -35,7 +37,7 @@ def in_window(local: datetime, window: str | None) -> bool:
 
 
 def rhythm_block(store, model, policy, cls, *, moment=None, owner_last_at=None):
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     zone, source = persona_timezone(model, policy, store.config)
     local = moment.astimezone(ZoneInfo(zone)) if ZoneInfo else moment
     if cls != visibility.OWNER_PRIVATE:
@@ -75,7 +77,7 @@ def episode_dates(store, episode_ids, zone):
 def selections(store, window_days, *, moment=None):
     """{memory id: [episode ids]} for memories actually selected into turns within the window."""
     from datetime import timedelta
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     since = (moment - timedelta(days=float(window_days or 7))).isoformat()
     out = {}
     for row in store.db.audit_events.find({'type': 'context.prepared', 'occurred_at': {'$gte': since}},
@@ -91,8 +93,8 @@ def promotion_candidates(store, model, policy, *, limit=20):
     """Deterministic: units or monologues referenced by ≥ 2 different turns within memory.promotion.window_days."""
     window = effective(model, 'memory.promotion.window_days', policy) or 7
     picked = [(memory_id, episodes) for memory_id, episodes in selections(store, window).items() if len(episodes) >= 2]
-    rows = {row['_id']: row for row in store.db.memory_units.find({'_id': {'$in': [m for m, _ in picked]}, 'status': 'active'},
-                                                                 {'body_markdown': 1, 'kind': 1, 'scope_key': 1})}
+    rows = {row['_id']: row for row in memory_records.many(store, [m for m, _ in picked], status='active').each(
+        fields=['body_markdown', 'kind', 'scope_key'])}
     return [{'memory_id': m, 'kind': rows[m].get('kind'), 'excerpt': rows[m].get('body_markdown', '')[:300], 'episodes': e}
             for m, e in sorted(picked, key=lambda item: (-len(item[1]), item[0])) if m in rows][:limit]
 

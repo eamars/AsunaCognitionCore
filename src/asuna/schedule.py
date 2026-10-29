@@ -8,12 +8,19 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 import threading
 
+from . import clock
 from .channels import route_for_scene, route_members
 from .integration import event_profile
 from .state import Conflict, Denied, now
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import episodes as episode_records
+from .records import receipts as receipt_records
+from .records import plans as plan_records
+from .records import tasks as task_records
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -47,23 +54,22 @@ def night_stage_busy(store):
     or one of her publications still being activated. One waiting for a Host restart does not hold the night: only
     that project takes no new publication until then (floor.js publish, waiting_restart)."""
     # A turn still at work (one waiting on its task is judged by the task below).
-    if store.db.episodes.find_one({'episode_kind': 'self_development',
-                                   'state': {'$in': ['ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED']}}, {'_id': 1}):
+    if episode_records.open(store, ['ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED'],
+                            kind='self_development').first(fields=['_id']):
         return 'STAGE_BUSY'
-    for task in store.db.tasks.find({'state': {'$in': ['READY', 'RUNNING', 'PAUSED']}}, {'episode_id': 1}):
-        if (store.db.episodes.find_one({'_id': task.get('episode_id')}, {'episode_kind': 1}) or {}).get(
+    for task in task_records.in_states(store, ['READY', 'RUNNING', 'PAUSED']).each(fields=['episode_id']):
+        if (episode_records.get(store, task.get('episode_id'), fields=['episode_kind']) or {}).get(
                 'episode_kind') == 'self_development':
             return 'STAGE_BUSY'
-    if store.db.sink_receipts.find_one({'kind': 'self_development_publish',
-                                        'state': 'APPLIED'}, {'_id': 1}):
+    if receipt_records.sink_of_kind(store, 'self_development_publish', state='APPLIED').first(fields=['_id']):
         return 'PUBLISH_NOT_RUNNING'
     return None
 
 
 def waiting_restart(store):
     """Her publications that run only once the Host restarts: [(project, published_at)], oldest first."""
-    rows = store.db.sink_receipts.find({'kind': 'self_development_publish', 'state': 'HOST_RESTART_REQUIRED'},
-                                       {'project': 1, 'published_at': 1}).sort('published_at', 1)
+    rows = receipt_records.sink_of_kind(store, 'self_development_publish', state='HOST_RESTART_REQUIRED',
+                                        by='published_at').rows(fields=['project', 'published_at'])
     return [(row.get('project'), row.get('published_at')) for row in rows]
 PRESENCE_PLAN = 'plan-asuna-presence'
 HEARTBEAT_BEATS_PER_DAY = 24          # beats that reach the model, per local day
@@ -142,7 +148,7 @@ class ScheduleService:
         """One explicit cutover; retain old IDs and never replay old deliveries."""
         events = self._native_events()
         creates, _, _ = self._grouped(events)
-        for plan in self.store.db.plans.find({'status': {'$in': ['ACTIVE', 'CREATING']}}):
+        for plan in plan_records.in_status(self.store, statuses=['ACTIVE', 'CREATING']).each():
             if plan.get('native_scheduler_session') == self.lane.scheduler_session:
                 continue
             native = creates.get(plan.get('schedule_id'))
@@ -151,8 +157,8 @@ class ScheduleService:
                 native = live[-1] if live else None
             if not native:
                 rule = plan['rule']
-                scene = self.store.authorize(plan['scene_id'], plan['person_id'])
-                moment = datetime.now(timezone.utc)
+                scene = scene_records.authorize(self.store, plan['scene_id'], plan['person_id'])
+                moment = clock.now()
                 if 'every_seconds' in rule:
                     timing = {'every_seconds': rule['every_seconds']}
                 elif 'clock' in rule:
@@ -161,7 +167,7 @@ class ScheduleService:
                 else:
                     due = datetime.fromisoformat(plan['scheduled_at'].replace('Z', '+00:00'))
                     if due <= moment:
-                        self.store.put('plans', {**plan, 'status': 'SUSPENDED',
+                        plan_records.save(self.store, {**plan, 'status': 'SUSPENDED',
                             'migration_note': 'Legacy one-shot is overdue; no delivery replay. Replan explicitly.'},
                             expected=plan['revision'], stream=plan['_id'])
                         continue
@@ -169,7 +175,7 @@ class ScheduleService:
                 native = self._create_native(plan['_id'], timing)
             legacy = {k: plan[k] for k in ('schedule_id', 'scheduled_at', 'last_dispatch_seq',
                                            'native_scheduler_session') if k in plan}
-            self.store.put('plans', {**plan, 'legacy_schedule_binding': legacy,
+            plan_records.save(self.store, {**plan, 'legacy_schedule_binding': legacy,
                 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session, 'scheduled_at': native['scheduledAt'],
                 'native_scheduler_session': self.lane.scheduler_session, 'last_dispatch_seq': -1,
                 'migration_note': 'Native Host owns future occurrences; legacy history remains read-only.'},
@@ -205,7 +211,7 @@ class ScheduleService:
         return matches[0] if matches else None
 
     def _create_native(self, plan_id, timing):
-        plan = self.store.db.plans.find_one({'_id': plan_id}) or {'_id': plan_id}
+        plan = plan_records.get(self.store, plan_id) or {'_id': plan_id}
         return self.lane.schedule('/schedule/create', {'plan_id': plan_id, 'title': plan_title(plan), **timing})
 
     def zone_of(self, scene, plan=None):
@@ -236,13 +242,13 @@ class ScheduleService:
 
     def _ensure_development_plan(self, plan_id, interval, intent, **fields):
         scene_id, person_id = self.controller.settings['scene_id'], self.controller.settings['person_id']
-        scene = self.store.authorize(scene_id, person_id)
-        plan = self.store.db.plans.find_one({'_id': plan_id})
+        scene = scene_records.authorize(self.store, scene_id, person_id)
+        plan = plan_records.get(self.store, plan_id)
         if plan and (plan.get('kind') != 'self_development' or plan['scene_id'] != scene_id
                      or plan['person_id'] != person_id or plan['policy_epoch'] != scene['policy_epoch']):
             raise Denied('SELF_DEVELOPMENT_PLAN_BINDING_CHANGED')
         if not plan:
-            plan = self.store.put('plans', {'_id': plan_id, 'kind': 'self_development',
+            plan = plan_records.save(self.store, {'_id': plan_id, 'kind': 'self_development',
                 'scene_id': scene_id, 'person_id': person_id, 'scope_key': scene['scope_key'],
                 'policy_epoch': scene['policy_epoch'], 'status': 'CREATING', 'intent': intent,
                 'rule': {'every_seconds': interval}, 'plan_version': 1, **fields,
@@ -255,8 +261,8 @@ class ScheduleService:
             plan_id, {'every_seconds': plan['rule']['every_seconds']})
         if not isinstance(native, dict) or not native.get('id'):
             raise ValueError('NATIVE_SELF_DEVELOPMENT_CREATE_INCOMPLETE')
-        current = self.store.db.plans.find_one({'_id': plan_id})
-        self.store.put('plans', {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
+        current = plan_records.get(self.store, plan_id)
+        plan_records.save(self.store, {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
             'scheduled_at': native['scheduledAt'], 'status': 'ACTIVE'},
             expected=current['revision'], stream=plan_id)
 
@@ -295,8 +301,8 @@ class ScheduleService:
             stage['waiting_restart'] = waiting
         self.controller.offer_self_development('self-development:night:' + occurrence, text=NIGHT_STAGE_TEXT,
                                                stage=stage)
-        current = self.store.db.plans.find_one({'_id': plan['_id']})
-        self.store.put('plans', {**current, 'last_stage_at': now()}, expected=current['revision'], stream=plan['_id'])
+        current = plan_records.get(self.store, plan['_id'])
+        plan_records.save(self.store, {**current, 'last_stage_at': now()}, expected=current['revision'], stream=plan['_id'])
         return 'ENQUEUED'
 
     # ── ADR-009 §10: heartbeat (presence) and nightly settlement ─────
@@ -307,7 +313,7 @@ class ScheduleService:
 
     def _owner_private_target(self, scene_id, label):
         from . import visibility
-        scene = self.store.db.scenes.find_one({'_id': scene_id})
+        scene = scene_records.get(self.store, scene_id)
         if not scene:
             raise Denied(label + '_TARGET_UNKNOWN')
         person = self.app.config['chat']['person_id'] if scene_id == self.app.config['chat']['scene_id'] else scene['members'][0]
@@ -317,16 +323,16 @@ class ScheduleService:
 
     def _rhythm_plan(self, plan_id, kind, scene, person, rule, timing, extra=None):
         """Create the plan and its native rule, or retime it in place with schedule_update."""
-        plan = self.store.db.plans.find_one({'_id': plan_id})
+        plan = plan_records.get(self.store, plan_id)
         if plan and (plan['scene_id'] != scene['_id'] or plan.get('kind') != kind):
             self.cancel(plan_id, plan['scene_id'], plan['person_id'], plan['policy_epoch'])
             plan = None
         if plan and plan['status'] == 'CANCELLED':
-            self.store.put('plans', {**plan, 'status': 'CREATING', 'schedule_id': None, 'rule': rule, **(extra or {})},
+            plan_records.save(self.store, {**plan, 'status': 'CREATING', 'schedule_id': None, 'rule': rule, **(extra or {})},
                            expected=plan['revision'], stream=plan_id)
-            plan = self.store.db.plans.find_one({'_id': plan_id})
+            plan = plan_records.get(self.store, plan_id)
         if not plan:
-            plan = self.store.put('plans', {'_id': plan_id, 'kind': kind, 'scene_id': scene['_id'], 'person_id': person,
+            plan = plan_records.save(self.store, {'_id': plan_id, 'kind': kind, 'scene_id': scene['_id'], 'person_id': person,
                 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'], 'status': 'CREATING',
                 'intent': {'presence': '在场机会（心跳）', 'settlement': '夜间沉淀', 'condense': '安静了的群压一压对话'}[kind],
                 'rule': rule,
@@ -343,8 +349,8 @@ class ScheduleService:
                 else:                         # a refused rename is said, not taken for done
                     self.store.audit(plan_id, 'rhythm.rename_refused', {'result': named}, plan['scope_key'])
             if native.get('scheduledAt') and native['scheduledAt'] != plan.get('next_fire_at'):
-                current = self.store.db.plans.find_one({'_id': plan_id})
-                plan = self.store.put('plans', {**current, 'next_fire_at': native['scheduledAt']},
+                current = plan_records.get(self.store, plan_id)
+                plan = plan_records.save(self.store, {**current, 'next_fire_at': native['scheduledAt']},
                                       expected=current['revision'], stream=plan_id)
             return plan
         if live:
@@ -360,14 +366,14 @@ class ScheduleService:
             native = self._create_native(plan_id, timing)
             if not isinstance(native, dict) or not native.get('id'):
                 raise ValueError('NATIVE_SCHEDULE_CREATE_INCOMPLETE')
-        current = self.store.db.plans.find_one({'_id': plan_id})
-        return self.store.put('plans', {**current, 'rule': rule, 'schedule_id': native['id'], 'status': 'ACTIVE',
+        current = plan_records.get(self.store, plan_id)
+        return plan_records.save(self.store, {**current, 'rule': rule, 'schedule_id': native['id'], 'status': 'ACTIVE',
             'native_scheduler_session': self.lane.scheduler_session, 'scheduled_at': native.get('scheduledAt'),
             'next_fire_at': native.get('scheduledAt'), 'native_recurring': True, **(extra or {})},
             expected=current['revision'], stream=plan_id)
 
     def _retire(self, plan_id, reason):
-        plan = self.store.db.plans.find_one({'_id': plan_id})
+        plan = plan_records.get(self.store, plan_id)
         if plan and plan['status'] not in ('CANCELLED',):
             self.cancel(plan_id, plan['scene_id'], plan['person_id'], plan['policy_epoch'])
             self.store.audit(plan_id, 'rhythm.disabled', {'reason': reason}, plan['scope_key'])
@@ -390,11 +396,11 @@ class ScheduleService:
 
     def pause_presence(self, minutes):
         """Her heartbeat.pause_min: beats keep ticking but skip until then, and resume by themselves."""
-        plan = self.store.db.plans.find_one({'_id': PRESENCE_PLAN})
+        plan = plan_records.get(self.store, PRESENCE_PLAN)
         if not plan or plan['status'] != 'ACTIVE':
             return None
         until = schedule_rules.minutes_later(minutes, now()) if minutes else None
-        self.store.put('plans', {**plan, 'paused_until': until}, expected=plan['revision'], stream=plan['_id'])
+        plan_records.save(self.store, {**plan, 'paused_until': until}, expected=plan['revision'], stream=plan['_id'])
         self.store.audit(plan['_id'], 'rhythm.paused' if until else 'rhythm.resumed', {'until': until}, plan['scope_key'])
         return until
 
@@ -413,7 +419,7 @@ class ScheduleService:
             return None
 
     def _watch_presence(self):
-        plan = self.store.db.plans.find_one({'_id': PRESENCE_PLAN})
+        plan = plan_records.get(self.store, PRESENCE_PLAN)
         if not plan or plan.get('status') != 'ACTIVE' or not plan.get('schedule_id'):
             return None
         every = int((plan.get('rule') or {}).get('every_seconds') or 0)
@@ -433,8 +439,8 @@ class ScheduleService:
         except Exception:
             pass
         rebuilt = self.ensure_presence()
-        current = self.store.db.plans.find_one({'_id': PRESENCE_PLAN})
-        self.store.put('plans', {**current, 'missed_at': now(), 'reconnected_at': now()},
+        current = plan_records.get(self.store, PRESENCE_PLAN)
+        plan_records.save(self.store, {**current, 'missed_at': now(), 'reconnected_at': now()},
                        expected=current['revision'], stream=PRESENCE_PLAN)
         self.store.audit(PRESENCE_PLAN, 'rhythm.heartbeat_rebuilt',
                          {'native_schedule_id': (rebuilt or {}).get('schedule_id')}, plan['scope_key'])
@@ -518,7 +524,7 @@ class ScheduleService:
 
     def next_beat(self):
         """When DSH will next deliver her heartbeat (its own record), or None."""
-        plan = self.store.db.plans.find_one({'_id': PRESENCE_PLAN})
+        plan = plan_records.get(self.store, PRESENCE_PLAN)
         if not plan or plan.get('status') != 'ACTIVE':
             return None
         creates, _, deleted = self._grouped(self._native_events())
@@ -526,7 +532,7 @@ class ScheduleService:
 
     def beat_now(self):
         """The owner's /heartbeat (ADR-012 §8): one beat now through the same path, without the gates."""
-        plan = self.store.db.plans.find_one({'_id': PRESENCE_PLAN})
+        plan = plan_records.get(self.store, PRESENCE_PLAN)
         if not plan or plan.get('status') != 'ACTIVE':
             return {'state': 'OFF'}
         occurrence = 'owner-' + schedule_rules._aware(now()).strftime('%Y%m%dT%H%M%S%f')
@@ -543,7 +549,7 @@ class ScheduleService:
         if not effective(model, 'heartbeat.visits', policy):
             raise ValueError('VISIT_OFF: heartbeat.visits 关着；想出门先用 set_policy 把它设成 true，不然这回就不去')
         found = places.find(self.app.config, place)
-        scene = found and self.store.db.scenes.find_one({'_id': found[0]})
+        scene = found and scene_records.get(self.store, found[0])
         if not scene:
             raise ValueError('VISIT_PLACE_UNKNOWN: 「%s」不在 places_from_program 里；照抄那里的 place' % place)
         _, route, channel = found
@@ -551,7 +557,7 @@ class ScheduleService:
             raise ValueError('VISIT_PLACE_UNKNOWN: 「%s」没接到平台，去不了（不是你的错）；挑 places_from_program 里别的' % place)
         moment = schedule_rules._aware(now())
         date = places.local_date(self.app.config, model, policy, moment)
-        plan = self.store.db.plans.find_one({'_id': PRESENCE_PLAN}) or {}
+        plan = plan_records.get(self.store, PRESENCE_PLAN) or {}
         can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date)
         if not can:
             raise ValueError('VISIT_NOT_NOW: %s；哪儿现在能去看 places_from_program 里的 can_visit，想晚点再去就用 plan 定个时间' % why)
@@ -570,8 +576,8 @@ class ScheduleService:
                            'reply_message_id': None, 'mentioned_account_ids': []},
             visit={'intent': intent, 'topic': topic, 'artifact_id': artifact_id, 'from': ep['_id']})
         if plan:
-            current = self.store.db.plans.find_one({'_id': PRESENCE_PLAN})
-            self.store.put('plans', {**current, **places.record(current, scene['_id'], event_id, intent, moment, date)},
+            current = plan_records.get(self.store, PRESENCE_PLAN)
+            plan_records.save(self.store, {**current, **places.record(current, scene['_id'], event_id, intent, moment, date)},
                            expected=current['revision'], stream=PRESENCE_PLAN)
         self.store.audit(PRESENCE_PLAN, 'visit.offered', {'scene_id': scene['_id'], 'event_id': event_id,
                                                           'intent': intent, 'from': ep['_id']}, scene['scope_key'])
@@ -585,11 +591,11 @@ class ScheduleService:
         home is the program's status only."""
         from . import errands, places
         found = places.find_errand(self.app.config, place)
-        scene = found and self.store.db.scenes.find_one({'_id': found[0]})
+        scene = found and scene_records.get(self.store, found[0])
         if not scene or not scene.get('channel_id'):
             raise ValueError('ERRAND_PLACE_UNKNOWN: 「%s」不在 errand_places_from_program 里；照抄那里的 place' % place)
         _, route, channel = found
-        done = places.errands_lately(self.store, datetime.now(timezone.utc))
+        done = places.errands_lately(self.store, clock.now())
         if done >= places.ERRANDS_PER_DAY:
             raise ValueError('ERRAND_LIMIT: 最近一天已经跑了 %d 趟，上限 %d 趟；跟托你的人说明天再办'
                              % (done, places.ERRANDS_PER_DAY))
@@ -631,11 +637,11 @@ class ScheduleService:
         draft, existing = notes.prepare(self.store, ep, cls, args, call_id, moment, question=question)
         if existing:
             return notes.result(self.store, existing)
-        scene = self.store.db.scenes.find_one({'_id': draft['to_scene']})
+        scene = scene_records.get(self.store, draft['to_scene'])
         counted = deferred = None
         if draft['mode'] == notes.WAKE and draft['kind'] == 'group' and draft['trust'] == notes.TRUSTED:
             persona, model, policy = self._persona()
-            plan = self.store.db.plans.find_one({'_id': PRESENCE_PLAN}) or {}
+            plan = plan_records.get(self.store, PRESENCE_PLAN) or {}
             date = places.local_date(self.app.config, model, policy, moment)
             can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date)
             if not can and args.get('mode'):
@@ -666,8 +672,8 @@ class ScheduleService:
                                'reply_message_id': None, 'mentioned_account_ids': []},
                 visit={'intent': 'note', 'topic': None, 'artifact_id': None, 'note': draft['_id'], 'from': ep['_id']})
             if counted and counted[0]:
-                current = self.store.db.plans.find_one({'_id': PRESENCE_PLAN})
-                self.store.put('plans', {**current, **places.record(current, draft['to_scene'], event_id, 'note',
+                current = plan_records.get(self.store, PRESENCE_PLAN)
+                plan_records.save(self.store, {**current, **places.record(current, draft['to_scene'], event_id, 'note',
                                                                     moment, counted[1])},
                                expected=current['revision'], stream=PRESENCE_PLAN)
         return notes.result(self.store, row)
@@ -675,9 +681,9 @@ class ScheduleService:
     def _last_home_beat(self, plan):
         """Her last internal turn at home: a heartbeat, or a settlement or self-improvement turn."""
         times = [plan.get('last_presence_at')]
-        times += [row.get('last_occurrence_at') for row in self.store.db.plans.find(
-            {'kind': {'$in': ['settlement', 'self_development']}, 'scene_id': plan['scene_id'], 'last_outcome': 'ENQUEUED'},
-            {'last_occurrence_at': 1})]
+        times += [row.get('last_occurrence_at') for row in plan_records.with_outcome(
+            self.store, plan['scene_id'], ['settlement', 'self_development'], 'ENQUEUED').rows(
+            fields=['last_occurrence_at'])]
         times = [moment for moment in times if moment]
         return max(times, key=schedule_rules._aware) if times else None
 
@@ -687,9 +693,9 @@ class ScheduleService:
         scenes = {home}
         for channel in self.app.config.get('channels', {}).values():
             scenes.update(route['scene_id'] for route in channel.get('routes', {}).values())
-        reached = self.store.db.messages.find_one({'scene_id': {'$in': sorted(scenes)}, 'direction': 'inbound',
-            'received_at': {'$gt': since}, 'processing_outcome': {'$ne': 'RECORDED_NO_WAKE'}}, {'_id': 1})
-        return bool(reached or self.store.db.tasks.find_one({'finished_at': {'$gt': since}}, {'_id': 1}))
+        reached = message_records.inbound(self.store, scenes=sorted(scenes), since_after=since,
+                                          not_outcome='RECORDED_NO_WAKE', by=None).first(fields=['_id'])
+        return bool(reached or task_records.finished_since(self.store, since, fields=['_id']))
 
     def _presence(self, plan, occurrence, forced=False):
         """Deterministic pre-gates; a skip calls no model and leaves one counting audit. forced (the owner's
@@ -759,8 +765,8 @@ class ScheduleService:
         else:
             self.controller.offer_internal('presence', 'presence:' + occurrence, plan['scene_id'], plan['person_id'],
                                            text, **({'dice': outcome} if outcome in ('self_evaluation', 'review_dice') else {}))
-        current = self.store.db.plans.find_one({'_id': plan['_id']})
-        self.store.put('plans', {**current, 'last_presence_at': now(), 'beats': {**beats, 'count': beats['count'] + 1},
+        current = plan_records.get(self.store, plan['_id'])
+        plan_records.save(self.store, {**current, 'last_presence_at': now(), 'beats': {**beats, 'count': beats['count'] + 1},
                                  **({'reconnect_told_at': reconnected} if reconnected else {})},
                        expected=current['revision'], stream=plan['_id'])
         return 'ENQUEUED'
@@ -773,8 +779,8 @@ class ScheduleService:
         self.controller.offer_internal('settlement', 'settlement:' + local_date, plan['scene_id'], plan['person_id'],
             '这是今天的夜间沉淀机会，不是有人跟你说话。看看挂着的情绪、待决的提案、活账和晋升候选，'
             '决定哪些了结（close）、哪些作废（void，要写理由）、哪些值得晋升成长期记忆（promote），也可以什么都不做。')
-        current = self.store.db.plans.find_one({'_id': plan['_id']})
-        self.store.put('plans', {**current, 'last_settled_date': local_date}, expected=current['revision'], stream=plan['_id'])
+        current = plan_records.get(self.store, plan['_id'])
+        plan_records.save(self.store, {**current, 'last_settled_date': local_date}, expected=current['revision'], stream=plan['_id'])
         return 'ENQUEUED'
 
     def create(self, ep, spec, plan_id=None, where=None):
@@ -784,23 +790,23 @@ class ScheduleService:
         if not isinstance(intent, str) or not 1 <= len(intent.strip()) <= 1000:
             raise ValueError('PLAN_INTENT_INVALID: ' + intent_problem(intent))
         rule = schedule_rules.normalize_rule(spec)          # 形状/间隔/钟点先判完，不碰库
-        scene = self.store.authorize(ep['scene_id'], ep['person_id'])
+        scene = scene_records.authorize(self.store, ep['scene_id'], ep['person_id'])
         if scene['policy_epoch'] != ep['policy_epoch']:
             raise Denied(SOURCE_STALE)
         target = {'scene_id': ep['scene_id'], 'person_id': ep['person_id'], 'scope_key': ep['scope_key'],
                   'policy_epoch': ep['policy_epoch']}
         if where:
-            scene = self.store.authorize(where['scene_id'], where['person_id'])
+            scene = scene_records.authorize(self.store, where['scene_id'], where['person_id'])
             target = {'scene_id': scene['_id'], 'person_id': where['person_id'], 'scope_key': scene['scope_key'],
                       'policy_epoch': scene['policy_epoch']}
         zone = self.zone_of(scene)
         fire_at = schedule_rules.next_fire(rule, zone['tz'], now())   # 已过/本地不存在都明确抛回
         # One turn may make several plans: each of her plan calls names its own (role_tools).
         plan_id = plan_id or 'plan-' + ep['_id'][3:]
-        plan = self.store.db.plans.find_one({'_id': plan_id})
+        plan = plan_records.get(self.store, plan_id)
         if not plan:
-            source = self.store.db.messages.find_one({'_id': 'in-' + ep['_id']})
-            plan = self.store.put('plans', {'_id': plan_id, **target,
+            source = message_records.get(self.store, 'in-' + ep['_id'])
+            plan = plan_records.save(self.store, {'_id': plan_id, **target,
                 **({'from_scene_id': ep['scene_id']} if where else {}), 'source_episode_id': ep['_id'],
                 'intent': intent.strip(), 'rule': rule,
                 'timezone': zone['name'], 'tz_source': zone['source'],
@@ -820,8 +826,8 @@ class ScheduleService:
             recurring or schedule_rules.native_payload(rule, fire_at, now()))
         if not isinstance(native, dict) or not native.get('id'):
             raise ValueError(NATIVE_INCOMPLETE)
-        current = self.store.db.plans.find_one({'_id': plan_id})
-        return self.store.put('plans', {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
+        current = plan_records.get(self.store, plan_id)
+        return plan_records.save(self.store, {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
             'scheduled_at': native['scheduledAt'], 'native_recurring': native.get('kind') in ('daily', 'weekly'),
             'status': current['status'] if current['status'] in ('FIRED','CANCELLED') else 'ACTIVE'},
             expected=current['revision'], stream=plan_id)
@@ -834,13 +840,13 @@ class ScheduleService:
         """
         if not isinstance(spec, dict) or set(spec) - {'plan_id', 'intent', 'schedule'}:
             raise ValueError('INVALID_SCHEDULE_UPDATE')
-        plan = self.store.db.plans.find_one({'_id': plan_id, 'scene_id': ep['scene_id'],
-            'person_id': ep['person_id'], 'policy_epoch': ep['policy_epoch']})
+        plan = plan_records.get(self.store, plan_id, scene=ep['scene_id'], person=ep['person_id'],
+                                epoch=ep['policy_epoch'])
         if not plan:
             raise Denied(NOT_IN_SCOPE % plan_id)
         if plan['status'] not in ('CREATING', 'ACTIVE'):
             raise Denied('SCHEDULE_PLAN_NOT_ACTIVE: 「%s」已经是 %s，改不了；要再安排就新建一条' % (plan_id, plan['status']))
-        scene = self.store.authorize(ep['scene_id'], ep['person_id'])
+        scene = scene_records.authorize(self.store, ep['scene_id'], ep['person_id'])
         if scene['policy_epoch'] != ep['policy_epoch']:
             raise Denied(SOURCE_STALE)
         zone = self.zone_of(scene, plan)
@@ -853,7 +859,7 @@ class ScheduleService:
             raise ValueError('PLAN_INTENT_INVALID: ' + intent_problem(intent))
         intent = intent.strip()
         fire_at = schedule_rules.next_fire(rule, zone['tz'], now())
-        current = self.store.db.plans.find_one({'_id': plan_id})
+        current = plan_records.get(self.store, plan_id)
         if current['rule'] == rule and current['intent'] == intent:
             return current                                  # 什么都没变就别动原生记录
         recurring = schedule_rules.native_recurring(rule, zone['name'])
@@ -881,7 +887,7 @@ class ScheduleService:
                 self.lane.schedule('/schedule/delete', {'id': stale})
             except BaseException as exc:                     # 旧的那条没删掉也不会重复行动
                 note = 'STALE_NATIVE_DELETE_FAILED: ' + str(exc)
-        updated = self.store.put('plans', {**current, 'rule': rule, 'intent': intent,
+        updated = plan_records.save(self.store, {**current, 'rule': rule, 'intent': intent,
             'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session, 'scheduled_at': native['scheduledAt'],
             'next_fire_at': fire_at.isoformat(timespec='seconds'), 'timezone': zone['name'],
             'native_recurring': native.get('kind') in ('daily', 'weekly'),
@@ -896,16 +902,15 @@ class ScheduleService:
         return updated
 
     def cancel(self, plan_id, scene_id, person_id, policy_epoch):
-        plan = self.store.db.plans.find_one({'_id': plan_id, 'scene_id': scene_id,
-            'person_id': person_id, 'policy_epoch': policy_epoch})
+        plan = plan_records.get(self.store, plan_id, scene=scene_id, person=person_id, epoch=policy_epoch)
         if not plan:
             raise Denied(NOT_IN_SCOPE % plan_id)
         if plan['status'] == 'CANCELLED':
             return plan
         if plan.get('schedule_id'):
             self.lane.schedule('/schedule/delete', {'id': plan['schedule_id']})
-        current = self.store.db.plans.find_one({'_id': plan_id})
-        cancelled = self.store.put('plans', {**current, 'status': 'CANCELLED', 'cancelled_at': now(),
+        current = plan_records.get(self.store, plan_id)
+        cancelled = plan_records.save(self.store, {**current, 'status': 'CANCELLED', 'cancelled_at': now(),
             'next_fire_at': None}, expected=current['revision'], stream=plan_id)
         self.store.audit(plan_id, 'schedule.cancelled', {'native_schedule_id': plan.get('schedule_id'),
             'was_status': plan['status']}, plan['scope_key'])
@@ -917,17 +922,17 @@ class ScheduleService:
         floor 是刚到期那一次的钟点：回调比宿主时钟早到几秒时，不拿它当"还没到"原地重挂，
         否则同一天会连响两次。
         """
-        plan = self.store.db.plans.find_one({'_id': plan_id})
+        plan = plan_records.get(self.store, plan_id)
         if not plan or plan['status'] in ('CANCELLED', 'FIRED', 'SUSPENDED'):
             return
-        zone = self.zone_of(self.store.db.scenes.find_one({'_id': plan['scene_id']}), plan)
+        zone = self.zone_of(scene_records.get(self.store, plan['scene_id']), plan)
         moment = schedule_rules._aware(now()) if not floor else \
             max(schedule_rules._aware(now()), schedule_rules._aware(floor))   # 比时刻，不比字符串
         try:
             fire_at = schedule_rules.next_fire(plan['rule'], zone['tz'], moment)
         except ValueError as exc:
-            current = self.store.db.plans.find_one({'_id': plan_id})
-            self.store.put('plans', {**current, 'status': 'SUSPENDED', 'last_outcome': str(exc),
+            current = plan_records.get(self.store, plan_id)
+            plan_records.save(self.store, {**current, 'status': 'SUSPENDED', 'last_outcome': str(exc),
                 'schedule_id': None, 'next_fire_at': None}, expected=current['revision'], stream=plan_id)
             self.store.audit(plan_id, 'schedule.suspended', {'reason': str(exc)}, plan['scope_key'])
             return
@@ -939,7 +944,7 @@ class ScheduleService:
         if not isinstance(native, dict) or not native.get('id'):
             raise ValueError('NATIVE_SCHEDULE_CREATE_INCOMPLETE')
         for _ in range(2):
-            current = self.store.db.plans.find_one({'_id': plan_id})
+            current = plan_records.get(self.store, plan_id)
             if current['status'] in ('CANCELLED', 'FIRED'):
                 # 到期与取消撞在一起：刚挂的这条不属于任何有效版本，删掉，不留给后台复活。
                 if not live:
@@ -949,7 +954,7 @@ class ScheduleService:
                         pass
                 return
             try:
-                self.store.put('plans', {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
+                plan_records.save(self.store, {**current, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
                     'scheduled_at': native['scheduledAt'],
                     'next_fire_at': fire_at.isoformat(timespec='seconds'),
                     'fire_count': current.get('fire_count', 0) + 1, 'status': 'ACTIVE'},
@@ -976,7 +981,7 @@ class ScheduleService:
             if not prompt.startswith('ASUNA_PLAN:'):
                 continue
             plan_id = prompt.removeprefix('ASUNA_PLAN:')
-            plan = self.store.db.plans.find_one({'_id': plan_id})
+            plan = plan_records.get(self.store, plan_id)
             if not plan or plan['status'] in ('CANCELLED', 'SUSPENDED'):
                 continue
             if plan['status'] == 'FIRED' and native['id'] in dispatched and native['id'] not in deleted:
@@ -991,7 +996,7 @@ class ScheduleService:
                 except Exception as exc:
                     self.store.audit(plan_id, 'schedule.rename_refused', {'error': str(exc)[:300]}, plan['scope_key'])
             if not plan.get('schedule_id'):
-                self.store.put('plans', {**plan, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
+                plan_records.save(self.store, {**plan, 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session,
                     'scheduled_at': native['scheduledAt'], 'status': plan['status']
                         if plan['status'] in ('FIRED','CANCELLED') else 'ACTIVE'},
                     expected=plan['revision'], stream=plan_id)
@@ -1003,7 +1008,7 @@ class ScheduleService:
                 live = self._live(plan_id, creates, dispatched, deleted, exclude=plan['schedule_id'])
                 if live:
                     newest = live[-1]
-                    self.store.put('plans', {**plan, 'schedule_id': newest['id'], 'native_scheduler_session': self.lane.scheduler_session,
+                    plan_records.save(self.store, {**plan, 'schedule_id': newest['id'], 'native_scheduler_session': self.lane.scheduler_session,
                         'scheduled_at': newest['scheduledAt']}, expected=plan['revision'], stream=plan_id)
                 elif schedule_rules.rearms_after_fire(plan['rule']) and not plan.get('native_recurring'):
                     self._rearm(plan_id)
@@ -1011,7 +1016,7 @@ class ScheduleService:
     def retitle(self):
         """Her rhythm tasks renamed after the Host gave new words (set_titles); her own plans keep their wording."""
         creates, _, deleted = self._grouped(self._native_events())
-        for plan in self.store.db.plans.find({'status': 'ACTIVE', 'kind': {'$in': list(RHYTHM_KINDS)}}):
+        for plan in plan_records.in_status(self.store, status='ACTIVE', kinds=RHYTHM_KINDS).each():
             native = creates.get(plan.get('schedule_id'))
             if not native or native['id'] in deleted or (native.get('title') or '') == plan_title(plan):
                 continue
@@ -1055,7 +1060,7 @@ class ScheduleService:
         try:
             self.lane.schedule('/schedule/delete', {'id': schedule_id})
         except Exception as exc:
-            plan = self.store.db.plans.find_one({'_id': plan_id}, {'scope_key': 1}) or {}
+            plan = plan_records.get(self.store, plan_id, fields=['scope_key']) or {}
             self.store.audit(plan_id, 'schedule.remove_refused', {'native_schedule_id': schedule_id,
                 'error': str(exc)[:300]}, plan.get('scope_key'))
 
@@ -1064,7 +1069,7 @@ class ScheduleService:
         if not native or not native.get('prompt', '').startswith('ASUNA_PLAN:'):
             raise Denied('SCHEDULE_PLAN_LINK_MISSING')
         plan_id = native['prompt'].removeprefix('ASUNA_PLAN:')
-        plan = self.store.db.plans.find_one({'_id': plan_id})
+        plan = plan_records.get(self.store, plan_id)
         if not plan:
             raise Denied('SCHEDULE_PLAN_MISSING')
         occurrence = f'{self.lane.scheduler_session}:{seq}'
@@ -1072,15 +1077,15 @@ class ScheduleService:
             return None
         if plan.get('schedule_id') and plan['schedule_id'] != schedule_id:
             # 改期换掉了底层提醒：旧版本那一次不再产生行动，只把序号记下来。
-            current = self.store.db.plans.find_one({'_id': plan_id})
-            self.store.put('plans', {**current, 'last_dispatch_seq': max(seq, current.get('last_dispatch_seq', -1)),
+            current = plan_records.get(self.store, plan_id)
+            plan_records.save(self.store, {**current, 'last_dispatch_seq': max(seq, current.get('last_dispatch_seq', -1)),
                 'last_outcome': 'STALE_PLAN_VERSION'}, expected=current['revision'], stream=plan_id)
             self.store.audit(plan_id, 'schedule.stale_dispatch', {'occurrence': occurrence,
                 'native_schedule_id': schedule_id, 'current_schedule_id': plan['schedule_id']},
                 plan['scope_key'])
             return None
         try:
-            scene = self.store.authorize(plan['scene_id'], plan['person_id'])
+            scene = scene_records.authorize(self.store, plan['scene_id'], plan['person_id'])
             if scene['policy_epoch'] != plan['policy_epoch']:
                 raise Denied('SCHEDULE_POLICY_STALE')
             if plan.get('kind') == 'self_development' and plan.get('night'):
@@ -1122,7 +1127,7 @@ class ScheduleService:
         except Exception as exc:
             # 一次到期没排进去，只记在这一条计划上：下一次登记、这个场景的聊天都不跟着消失。
             outcome = str(exc) or type(exc).__name__
-        current = self.store.db.plans.find_one({'_id': plan_id})
+        current = plan_records.get(self.store, plan_id)
         repeating = schedule_rules.rearms_after_fire(current['rule']) and not current.get('native_recurring')
         status = current['status']
         if status != 'CANCELLED':
@@ -1131,14 +1136,14 @@ class ScheduleService:
         extra = {}
         if current.get('native_recurring') and status == 'ACTIVE':
             # The native rule repeats by itself; only the displayed next occurrence moves on.
-            zone = self.zone_of(self.store.db.scenes.find_one({'_id': current['scene_id']}), current)
+            zone = self.zone_of(scene_records.get(self.store, current['scene_id']), current)
             moment = max(schedule_rules._aware(now()), schedule_rules._aware(native.get('scheduledAt') or now()))
             # DSH's own next target when it has already moved on; otherwise computed from the rule.
             next_fire_at = native['scheduledAt'] if native.get('scheduledAt') and \
                 schedule_rules._aware(native['scheduledAt']) > schedule_rules._aware(now()) else \
                 schedule_rules.next_fire(current['rule'], zone['tz'], moment).isoformat(timespec='seconds')
             extra = {'fire_count': current.get('fire_count', 0) + 1}
-        self.store.put('plans', {**current, 'last_occurrence_id': occurrence,
+        plan_records.save(self.store, {**current, 'last_occurrence_id': occurrence,
             'last_dispatch_seq': seq, 'last_occurrence_at': now(), 'last_outcome': outcome,
             'next_fire_at': next_fire_at, 'status': status, **extra}, expected=current['revision'], stream=plan_id)
         self.store.audit(plan_id, 'schedule.dispatched', {'occurrence': occurrence,

@@ -7,6 +7,7 @@ and long text is cut to the per-turn budget with a marker.
 from __future__ import annotations
 import json
 import traceback
+from . import clock
 from .config import character_id, excerpt, redact_text
 from . import errands as _errands, visibility
 from . import handover as _handover
@@ -18,6 +19,14 @@ from .state import Store, Denied
 from .people import People
 from .familiarity import words as familiarity_words
 from . import attend, caught_up, notices, own_mute
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import episodes as episode_records
+from .records import receipts as receipt_records
+from .records import plans as plan_records
+from .records import tasks as task_records
+from .records import memories as memory_records
+from .records import heads as head_records
 
 try:                                  # 宿主按包加载
     from . import schedule_rules
@@ -62,6 +71,9 @@ EXPERIENCE_TASK_CHARS = 200
 EXPERIENCE_MESSAGES = 20
 EXPERIENCE_TASKS = 8
 EXPERIENCE_PUBLICATIONS = 5
+# What of a line her group continuity shows (the line it answers, its topic thread).
+RELATED_FIELDS = ['text', 'author', 'direction', 'scene_seq', 'delivery_state', 'platform_reply_to', 'event.group_context',
+                  'episode_id', 'occurred_at', 'receipt_at', 'received_at']
 FINISHED_TASKS_SHOWN = 3              # task state: every open task, and only the last few finished
 RECENT_THOUGHTS = 3          # ADR-011 §3.2: her last few thoughts in this scene carry into the next turn
 
@@ -154,17 +166,16 @@ def catch_up(store, scene, rows, now_ts=None):
     """A group's history for her turn (newest first): the last 12 lines, plus every line since she last spoke
     there, reaching back at least 10 and at most 60 minutes (attend.py's window), at most 40 lines. A group she
     lets rest gives its lines of the last day instead."""
-    from datetime import datetime, timezone
     from .config import character_id
     from . import focus
-    now_ts = now_ts or datetime.now(timezone.utc).timestamp()
+    now_ts = now_ts or clock.now().timestamp()
     if not focus.active(store, scene):
         # ADR-039: she has not been following a resting group; what was said there in the last day (at most the
         # MAX_LINES the query read) tells her what an @ is about.
         day = now_ts - focus.DAY.total_seconds()
         return [row for row in rows if (attend._seconds(caught_up.said_at(row)) or day) >= day]
-    mine = next(iter(store.db.messages.find({'scene_id': scene['_id'], 'direction': 'outbound', 'author': character_id(store.config),
-                                             'delivery_state': 'DELIVERED'}, {'scene_seq': 1}).sort('scene_seq', -1).limit(1)), None)
+    mine = message_records.spoken(store, scene['_id'], author=character_id(store.config)).first(
+        newest_first=True, fields=['scene_seq'])
     since = (mine or {}).get('scene_seq') or 0
     floor, always = now_ts - attend.WINDOW_MAX_MINUTES * 60, now_ts - attend.WINDOW_MIN_MINUTES * 60
     kept = []
@@ -250,7 +261,7 @@ class ContextBuilder:
             row['reply_to'] = reply
             from .channels import reply_parent
             from .people import People
-            source = self.store.db.scenes.find_one({'_id': row.get('scene_id', scene['_id'])})
+            source = scene_records.get(self.store, row.get('scene_id', scene['_id']))
             parent = reply_parent(self.store, source or scene, reply,
                                   row.get('occurred_at') or row.get('receipt_at') or row.get('received_at'))
             # The quoted line in the one form every pointer has (ADR-079 §9.3); unknown to the program, said so.
@@ -266,10 +277,8 @@ class ContextBuilder:
         """
         rows = []
         for scene_id in read['linked_scenes']:
-            rows.extend(self.store.db.messages.find(
-                {'scene_id': scene_id, 'policy_epoch': scene['policy_epoch'],
-                 '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]},
-                projection).sort('scene_seq', -1).limit(12))
+            rows.extend(message_records.said(self.store, scene_id, scene['policy_epoch']).rows(
+                newest_first=True, limit=12, fields=list(projection)))
         if not rows:
             return own
         merged = list(own) + rows
@@ -285,8 +294,8 @@ class ContextBuilder:
         """Her last thoughts here, each with when she had it on her clock face: a stamp, not "how long ago", which would
         change the block every turn with nothing new in it."""
         from . import reasons
-        rows=list(self.store.db.memory_units.find({'kind':'monologue','scope_key':scope,'status':'active'},
-            {'body_markdown':1,'formed_at':1,'episode_id':1,'source':1}).sort('formed_at',-1).limit(RECENT_THOUGHTS))
+        rows=memory_records.of_kind(self.store,'monologue',scope=scope,status='active',by='formed_at').rows(
+            newest_first=True,limit=RECENT_THOUGHTS,fields=['body_markdown','formed_at','episode_id','source'])
         out=[]
         for row in reversed(rows):
             when=schedule_rules.line_stamp(zone,row.get('formed_at'))
@@ -301,13 +310,12 @@ class ContextBuilder:
         each with the group's name and the time she thought it."""
         if not self.retrieval:
             return []
-        from datetime import datetime, timezone
         from . import reasons
-        groups={s['scope_key']:s for s in self.store.db.scenes.find({'kind':'group'},{'scope_key':1,'policy_epoch':1,'kind':1,'channel_id':1})}
+        groups={s['scope_key']:s for s in scene_records.of_kind(self.store, 'group', fields=['scope_key','policy_epoch','kind','channel_id'])}
         units=self.retrieval.own_thoughts([(key,s.get('policy_epoch',1)) for key,s in groups.items()],query)
         people=People(self.store)
         zone=schedule_rules.scene_timezone(self.store.config,scene)
-        moment=datetime.now(timezone.utc)
+        moment=clock.now()
         out=[]
         for unit in units:
             item={'_id':unit['_id'],'where':people.scene_title(groups.get(unit['scope_key'])),
@@ -328,8 +336,8 @@ class ContextBuilder:
             seq=(unit.get('source_window') or [None])[-1]
         scope=unit.get('scope_key') or ''
         if seq is not None and scope.startswith('scene:'):
-            row=self.store.db.messages.find_one({'scene_id':scope[len('scene:'):],'scene_seq':seq},
-                                                {'received_at':1,'receipt_at':1,'occurred_at':1,'event.raw':1,'event.occurred_at':1})
+            row=message_records.at(self.store,scope[len('scene:'):],seq,
+                                   fields=['received_at','receipt_at','occurred_at','event.raw','event.occurred_at'])
             said=row and caught_up.said_at(row)
             if said:
                 return said
@@ -349,7 +357,7 @@ class ContextBuilder:
             anchors_shown(event['scene_id'])        # her thought under a line of hers: once a turn
 
     def _prepare(self, event, persona, recall, turn_kind):
-        scene=self.store.authorize(event['scene_id'],event['person_id'])
+        scene=scene_records.authorize(self.store, event['scene_id'], event['person_id'])
         shown_stops=[]                  # the outages this turn shows (host_from_program, home turns only)
         from . import memory_tiers
         if memory_tiers.ENABLED and not recall:
@@ -381,11 +389,11 @@ class ContextBuilder:
                 if scene_links else {'entity':'relationship:'+event['person_id'],'scope':scope,
                                      'canonical':event['person_id'],'shared':False,'linked_scopes':[]})
         # 没配 canonical 映射时 target 就是原来那一份（relationship:<本人>｜本场景 scope）。
-        relation=self.store.head(target['entity'],target['scope'])
+        relation=head_records.current(self.store,target['entity'],target['scope'])
         # The person layer (understanding.py): one record for this person, read wherever she meets them.
         from . import understanding as _understanding
         person_entity=_understanding.person_entity(self.store.config,self.store.db,event['person_id'])
-        person_head=self.store.head(person_entity,_understanding.PERSON_SCOPE)
+        person_head=head_records.current(self.store,person_entity,_understanding.PERSON_SCOPE)
         from .self_state import SelfState
         self_state=SelfState(self.store).read(persona,scope)
         # ADR-096: what this turn carries of her identity, for its (place, class) pair: one function for every reader.
@@ -401,12 +409,10 @@ class ContextBuilder:
                 if (identity.get(slug) or {}).get('sections'):
                     self_state[name]=_carried.self_block(slug,carried_here[slug])
         from .ingress import episode_id
-        source = self.store.db.messages.find_one({'_id': 'in-' + episode_id(event)})
-        history_query = {'scene_id':scene['_id'],'policy_epoch':scene['policy_epoch'],
-                         '$or':[{'direction':'inbound'},{'delivery_state':'DELIVERED'}]}
-        if source:
-            # Newly accepted/future queued inputs must not enter an earlier turn.
-            history_query['$or'][0]['scene_seq'] = {'$lt': source['scene_seq']}
+        source = message_records.get(self.store, 'in-' + episode_id(event))
+        # Newly accepted/future queued inputs must not enter an earlier turn.
+        history_said = message_records.said(self.store, scene['_id'], scene['policy_epoch'],
+                                             heard_before=source['scene_seq'] if source else None)
         history_projection={'text':1,'author':1,'direction':1,'delivery_state':1,'platform_event_id':1,
             'platform_reply_to':1,'event.group_context':1,'scene_seq':1,'episode_id':1,'received_at':1,'receipt_at':1,
             'attachment':1,'attachment_skipped':1,   # 附件位：只多带这两个小字段，字节仍在 BlobStore
@@ -418,8 +424,8 @@ class ContextBuilder:
             # 只在真联动时多带这几个字段：归并要有可比的时间，行上也要能看出是哪个入口说的。
             history_projection=dict(history_projection,scene_id=1,occurred_at=1,receipt_at=1,
                                     receipt=1,received_at=1)
-        history=list(self.store.db.messages.find(history_query,history_projection).sort('scene_seq',-1)
-                     .limit(attend.MAX_LINES if scene['kind']=='group' else 12))
+        history=history_said.rows(newest_first=True,limit=attend.MAX_LINES if scene['kind']=='group' else 12,
+                                   fields=list(history_projection))
         if scene['kind']=='group':
             history=catch_up(self.store,scene,history)
         if read['linked_scenes']:
@@ -443,8 +449,10 @@ class ContextBuilder:
             # The platform took the line but stored less of it (a face, a quote): she reads which part did not land.
             lost=landing_lost((row.pop('platform_receipt',None) or {}).get('response',{}).get('verification'))
             if lost:row['not_landed']=lost
-        undelivered=list(self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound','delivery_state':{'$in':['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']}},{'text':1,'delivery_state':1,'author':1,'platform_receipt.response.reason':1,'platform_receipt.response.retcode':1,'action.kind':1,
-            'file.name':1,'failure':1,'failure_detail':1,'platform_receipt.response.platform':1}).sort('scene_seq',-1).limit(4))
+        undelivered=message_records.outgoing(self.store,scene['_id'],['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']).rows(
+            newest_first=True,limit=4,fields=['text','delivery_state','author','platform_receipt.response.reason',
+            'platform_receipt.response.retcode','action.kind','file.name','failure','failure_detail',
+            'platform_receipt.response.platform'])
         for row in undelivered:
             row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
             response=((row.get('platform_receipt') or {}).get('response') or {})
@@ -467,12 +475,12 @@ class ContextBuilder:
                                    else UNDELIVERED_WORDS.get(row.get('delivery_state'),row.get('delivery_state')))
         tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}
         # Her last few thoughts here reach every turn (recent_thoughts, or still on screen): in view like these lines.
-        tail_sources.update(m['_id'] for m in self.store.db.memory_units.find(
-            {'kind':'monologue','scope_key':scope,'status':'active'},{'_id':1}).sort('formed_at',-1).limit(RECENT_THOUGHTS))
+        tail_sources.update(m['_id'] for m in memory_records.of_kind(
+            self.store,'monologue',scope=scope,status='active',by='formed_at').rows(
+            newest_first=True,limit=RECENT_THOUGHTS,fields=['_id']))
         if source:
-            for queued in self.store.db.messages.find({'scene_id':scene['_id'], 'direction':'inbound',
-                                                       'scene_seq':{'$gte':source['scene_seq']}},
-                                                      {'platform_event_id':1}):
+            for queued in message_records.inbound(self.store, scene['_id'], from_seq=source['scene_seq'],
+                                                  by=None).rows(fields=['platform_event_id']):
                 tail_sources.update((queued['_id'], queued.get('platform_event_id')))
         # The lines this turn delivers, for the presence cue (ADR-097 D2), before their numbers are dropped.
         history_lines=[(row.get('scene_seq'),row.get('text') or '',row.get('direction')) for row in history]
@@ -551,10 +559,10 @@ class ContextBuilder:
                         own=[*own,_cue]
                         memories=memories[:memory_tiers.SLOTS-len(own)]
         else:
-            readable=[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':scene['policy_epoch']}]
+            readable=[('global-safe',1),(scope,scene['policy_epoch'])]
             if session_class==visibility.OWNER_PRIVATE:
-                readable.append({'scope_key':visibility.owner_private_scope(persona),'policy_epoch':1})
-            memories=list(self.store.db.memory_units.find({'$or':readable,'status':'active'},{'embedding':0}).sort('_id',1).limit(6))
+                readable.append((visibility.owner_private_scope(persona),1))
+            memories=memory_records.readable(self.store,readable,by='_id').rows(limit=6,fields=memory_records.UNVECTORED)
             retrieval_manifest={'path':'scoped_recent_development_fallback','vector_verified':False}
         # scope_key 一起给出：联动场景召回的记忆要说得清是从哪个场景来的，不然「他说过」会没头没尾。
         facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','kind','source_event_ids','source_window','generated_at','status','historical_sources','speaker','scene_seq','occurred_at','scope_key','segment_index','segment_count','participants','source_by_speaker','attribution','corrected_by','entry_type','invented') if k in m} for m in memories]
@@ -595,17 +603,7 @@ class ContextBuilder:
         # A storage revision counts writes/tool calls, not conversational time.
         # Use each task's durable input timestamp, including legacy tasks, so
         # recently returned work is not hidden behind old high-write tasks.
-        task_states=list(self.store.db.tasks.aggregate([
-            {'$match':{'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch']}},
-            {'$lookup':{'from':'messages','localField':'raw_input_refs','foreignField':'_id',
-                'pipeline':[{'$project':{'received_at':1,'_id':0}}],'as':'_inputs'}},
-            {'$addFields':{'_active':{'$cond':[{'$in':['$state',['READY','RUNNING']]},1,0]},
-                '_input_time':{'$max':'$_inputs.received_at'}}},
-            {'$sort':{'_active':-1,'_input_time':-1,'_id':1}}, {'$limit':16},
-            {'$project':{'_id':1,'state':1,'goal':1,'title':1,'feedback_state':1,'finished_at':1,
-                'cancel_reason':1,'pause_reason':1,'paused_at':1,'_active':1,'tier':1,
-                '_report_chars':{'$strLenCP':{'$ifNull':['$result.text','']}}}},
-        ]))
+        task_states=task_records.recent_with_inputs(self.store,scene['_id'],scope,scene['policy_epoch'])
         # Every open task (and every finished one whose result has not reached her), and only the last few others
         # (their results came back as their own turns).
         open_tasks=[task for task in task_states if task['_active'] or task['state']=='PAUSED'
@@ -618,7 +616,7 @@ class ContextBuilder:
             task.pop('_active',None)
             # A report longer than its first page reached her as that page; the rest she reads with task op page.
             if task.pop('_report_chars',0)>FIRST_PAGE_CHARS:
-                row=self.store.db.tasks.find_one({'_id':task['_id']},{'result.text':1,'intent_revision':1}) or {'_id':task['_id']}
+                row=task_records.get(self.store, task['_id'], fields=['result.text', 'intent_revision']) or {'_id':task['_id']}
                 text=((row.get('result') or {}).get('text')) or ''
                 pages=task_pages(self.store,row)
                 if len(pages)>1:
@@ -641,18 +639,16 @@ class ContextBuilder:
             if not running:
                 continue
             # What the action brain reported on its own while working (report_progress), newest last.
-            notes=list(self.store.db.task_messages.find({'task_id':task['_id'],'from':'action'},
-                {'text':1}).sort('created_at',-1).limit(2))
+            notes=task_records.thread(self.store,task['_id'],sender='action').rows(newest_first=True,limit=2,
+                fields=['text'])
             if notes:
                 task['progress_from_action']=[excerpt(row['text'],HISTORY_ROW_CHARS) for row in reversed(notes)]
-        plan_rows=list(self.store.db.plans.find({'scene_id':scene['_id'],'scope_key':scope,
-            'person_id':event['person_id'],'policy_epoch':scene['policy_epoch'],
+        plan_rows=plan_records.of_conversation(self.store,scene['_id'],scope=scope,person=event['person_id'],
+            epoch=scene['policy_epoch'],statuses=['CREATING','ACTIVE','SUSPENDED'],
             # Her rhythms belong to the program (ADR-012 §4.3); she tunes them with set_policy, never cancels them.
-            'kind':{'$nin':['self_development','presence','settlement','condense']},
-            'status':{'$in':['CREATING','ACTIVE','SUSPENDED']}},
-            {'_id':1,'intent':1,'rule':1,'scheduled_at':1,'status':1,'plan_version':1,
-             'timezone':1,'tz_source':1,'next_fire_at':1,'created_at':1,'updated_at':1,
-             'last_outcome':1}).sort('created_at',-1).limit(8))
+            not_kinds=['self_development','presence','settlement','condense']).rows(newest_first=True,limit=8,
+            fields=['_id','intent','rule','scheduled_at','status','plan_version','timezone','tz_source',
+                    'next_fire_at','created_at','updated_at','last_outcome'])
         # P3：计划行按这个场景的时区翻成人话再给她看——不让她自己拿 UTC 心算「明天九点」。
         # 已暂停（SUSPENDED）也列出来：不列就等于她不知道自己有一条挂着的安排没生效。
         schedule_zone=schedule_rules.scene_timezone(self.store.config,scene)
@@ -663,8 +659,8 @@ class ContextBuilder:
         in_view=(retrieval_manifest.get('in_view') or []) if recall else []
         held_back=None
         if in_view:
-            said=sorted(filter(None,(self.said_at(u) for u in self.store.db.memory_units.find(
-                {'_id':{'$in':in_view}},{'kind':1,'scene_seq':1,'source_window':1,'scope_key':1,'occurred_at':1,'formed_at':1,'generated_at':1}))))
+            said=sorted(filter(None,(self.said_at(u) for u in memory_records.many(self.store,in_view).each(
+                fields=['kind','scene_seq','source_window','scope_key','occurred_at','formed_at','generated_at']))))
             earliest=schedule_rules.line_stamp(memory_zone,said[0]) if said else ''
             held_back='另有 %d 条相关的没重复给：都在你眼前这段对话里%s。'%(len(in_view),'（最早是 %s 那条）'%earliest if earliest else '')
         coverage_block=None
@@ -733,17 +729,15 @@ class ContextBuilder:
             # (ideas notebook, nightly settlement), never live. Here: everything from her private conversations,
             # and from the others only her own delivered lines; how the groups are going is in places_from_program.
             private = (visibility.owner_private_scenes(self.store.config) | {scene['_id']}) & allowed
-            recent = list(self.store.db.messages.find({
-                '$or': [{'scene_id': {'$in': list(private)}, 'direction': 'inbound'},
-                        {'scene_id': {'$in': list(allowed)}, 'delivery_state': 'DELIVERED'}]},
-                {'scene_id':1,'author':1,'direction':1,'text':1,'received_at':1,
-                 'delivery_state':1}).sort('received_at',-1).limit(EXPERIENCE_MESSAGES))
+            recent = message_records.said_across(self.store, private, allowed).rows(
+                newest_first=True, limit=EXPERIENCE_MESSAGES,
+                fields=['scene_id','author','direction','text','received_at','delivery_state'])
             for row in recent:
                 row['text']=excerpt(row.get('text'),EXPERIENCE_MESSAGE_CHARS)
             # Headlines (owner, 2026-10-05): titles, states and the start of each report; recall reads more.
-            tasks = list(self.store.db.tasks.find({'scene_id': {'$in': list(allowed)}},
-                {'scene_id':1,'state':1,'title':1,'goal':1,'failure_type':1,'result':1,
-                 'feedback_state':1,'finished_at':1}).sort('finished_at',-1).limit(EXPERIENCE_TASKS))
+            tasks = task_records.of_conversations(self.store, list(allowed), by='finished_at').rows(
+                newest_first=True, limit=EXPERIENCE_TASKS, fields=['scene_id','state','title','goal','failure_type',
+                                                                    'result','feedback_state','finished_at'])
             for item in tasks:
                 if item.get('title'):
                     item.pop('goal',None)
@@ -753,9 +747,9 @@ class ContextBuilder:
                 # A report of work from a public conversation may quote people there: home sees its headline only.
                 if isinstance(result,dict) and result.get('text') and item.get('scene_id') in private:
                     item['report_start']=excerpt(result['text'],EXPERIENCE_TASK_CHARS)
-            lineage=list(self.store.db.sink_receipts.find({'kind':'self_development_publish'},
-                {'project':1,'state':1,'changed_files':1,'deleted_files':1,'published_at':1,
-                 'activated_at':1,'task_id':1}).sort('published_at',-1).limit(EXPERIENCE_PUBLICATIONS))
+            lineage=receipt_records.sink_of_kind(self.store,'self_development_publish',by='published_at').rows(
+                newest_first=True,limit=EXPERIENCE_PUBLICATIONS,fields=['project','state','changed_files',
+                'deleted_files','published_at','activated_at','task_id'])
             for row in lineage:
                 # How much each publication changed, not every path (the receipt keeps the list).
                 row['changed_files']=len(row.get('changed_files') or [])
@@ -769,7 +763,7 @@ class ContextBuilder:
             # comes due at home may send her out too (2026-10-06): the same places, the same limits.
             from . import places
             from .render import model_and_policy as _places_model
-            plan=self.store.db.plans.find_one({'_id':'plan-asuna-presence'}) or {}
+            plan=plan_records.get(self.store, 'plan-asuna-presence') or {}
             _pm,_pp=_places_model(self.store,persona)
             date=places.local_date(self.store.config,_pm,_pp,moment)
             places_view=places.places_block(self.store,persona,_pm,_pp,plan,moment,date)
@@ -808,10 +802,10 @@ class ContextBuilder:
             for _item,_line in zip(context['lines_from_program']['items'],peer_lines):
                 if _line['scene_id']==event['scene_id']:
                     continue
-                _rows=list(self.store.db.plans.find({'scene_id':_line['scene_id'],'status':{'$in':['CREATING','ACTIVE']},
-                    'kind':{'$nin':['self_development','presence','settlement','condense']}}).sort('created_at',-1).limit(3))
+                _rows=plan_records.of_conversation(self.store,_line['scene_id'],statuses=['CREATING','ACTIVE'],
+                    not_kinds=['self_development','presence','settlement','condense']).rows(newest_first=True,limit=3)
                 if _rows:
-                    _scene=self.store.db.scenes.find_one({'_id':_line['scene_id']}) or {'_id':_line['scene_id']}
+                    _scene=scene_records.get(self.store, _line['scene_id']) or {'_id':_line['scene_id']}
                     _item['your_plans_there']=[{k:v for k,v in schedule_rules.project(r,schedule_rules.scene_timezone(
                         self.store.config,_scene,r),moment).items() if k in ('intent','description','next_fire_at')} for r in _rows]
         people=People(self.store,persona)
@@ -971,10 +965,9 @@ class ContextBuilder:
             note_places=_notes.places_view(self.store,persona,scene['_id'],session_class,first_note)
             if note_places:context['note_places_from_program']=note_places
         if event.get('episode_kind')=='scheduled':
-            plan=self.store.db.plans.find_one({'_id':event.get('scheduled_plan_id'),
-                'scene_id':scene['_id'],'scope_key':scope,'person_id':event['person_id'],
-                'policy_epoch':scene['policy_epoch']},
-                {'_id':1,'intent':1,'rule':1,'last_occurrence_id':1,'last_outcome':1,'source_episode_id':1})
+            plan=plan_records.get(self.store, event.get('scheduled_plan_id'),
+                ['_id','intent','rule','last_occurrence_id','last_outcome','source_episode_id'],
+                scene=scene['_id'],scope=scope,person=event['person_id'],epoch=scene['policy_epoch'])
             if not plan:raise Denied('SCHEDULE_PLAN_CONTEXT_MISSING')
             # Why she set it: her thought when she made the plan, as she wrote it (reasons.py, ADR-043).
             from . import reasons as _reasons
@@ -993,34 +986,26 @@ class ContextBuilder:
             group = event['group_context']
             refs = [group.get('reply_message_id')]
             if group.get('topic_id'):
-                anchor = self.store.db.messages.find_one({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
-                                                         'event.event_id': group['topic_id']}, {'_id':1})
+                anchor = message_records.of_event(self.store, scene['_id'], scene['policy_epoch'], group['topic_id'],
+                                                  fields=['_id'])
                 if anchor: refs.append(anchor['_id'])
-            related = list(self.store.db.messages.find({'_id': {'$in': [r for r in refs if r]},
-                'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch']},
-                {'text':1, 'author':1, 'direction':1, 'scene_seq':1, 'delivery_state':1,
-                 'platform_reply_to':1, 'event.group_context':1, 'episode_id':1,
-                 'occurred_at':1, 'receipt_at':1, 'received_at':1}))
+            related = message_records.many(self.store, [r for r in refs if r], scene=scene['_id'],
+                                           epoch=scene['policy_epoch']).rows(fields=RELATED_FIELDS)
             # P5：整条话题线（含没@她的旁听行）一并给出——接不上话题就谈不上要不要接话。
             seen = {row['_id'] for row in related}
             if group.get('topic_id'):
-                for row in self.store.db.messages.find({'scene_id': scene['_id'],
-                        'policy_epoch': scene['policy_epoch'],
-                        'event.group_context.topic_id': group['topic_id'],
-                        '$or': [{'direction':'inbound'}, {'delivery_state':'DELIVERED'}]},
-                        {'text':1, 'author':1, 'direction':1, 'scene_seq':1, 'delivery_state':1,
-                         'platform_reply_to':1, 'event.group_context':1, 'episode_id':1,
-                         'occurred_at':1, 'receipt_at':1, 'received_at':1}
-                        ).sort('scene_seq', -1).limit(12):
+                for row in message_records.said(self.store, scene['_id'], scene['policy_epoch'],
+                                                topic=group['topic_id']).rows(newest_first=True, limit=12,
+                                                                              fields=RELATED_FIELDS):
                     if row['_id'] not in seen:
                         seen.add(row['_id'])
                         related.append(row)
                 related.sort(key=lambda row: row.get('scene_seq') or 0)
             self._reply_context(related, scene)
-            speaker_tail = list(self.store.db.messages.find({'scene_id':scene['_id'], 'policy_epoch':scene['policy_epoch'],
-                'author':event['person_id'], 'direction':'inbound', 'scene_seq':{'$lt':source['scene_seq']}},
-                {'text':1,'author':1,'scene_seq':1,'event.group_context':1,
-                 'occurred_at':1,'received_at':1}).sort('scene_seq',-1).limit(3)) \
+            speaker_tail = message_records.inbound(self.store, scene['_id'], scene['policy_epoch'],
+                author=event['person_id'], before=source['scene_seq']).rows(
+                newest_first=True, limit=3,
+                fields=['text','author','scene_seq','event.group_context','occurred_at','received_at']) \
                 if source and event.get('episode_kind')!='visit' else []
             self._reply_context(speaker_tail, scene)
             for row in [*related, *speaker_tail]:
@@ -1046,9 +1031,9 @@ class ContextBuilder:
                     '它是什么时候说的看行上的时间。答之前先看群里后来怎么样了，现在还用不用答。')
             elif group.get('wake_reason') == 'awaited_answer':
                 # Her own await_answer on her last line here: what she said she was waiting for, in her words.
-                mine = self.store.db.messages.find_one({'scene_id':scene['_id'],'direction':'outbound',
-                    'delivery_state':'DELIVERED','author':character_id(self.store.config)},{'episode_id':1},sort=[('scene_seq',-1)])
-                waiting = ((self.store.db.episodes.find_one({'_id':(mine or {}).get('episode_id')},{'await_answer':1}) or {})
+                mine = message_records.spoken(self.store, scene['_id'], author=character_id(self.store.config)).first(
+                    newest_first=True, fields=['episode_id'])
+                waiting = ((episode_records.get(self.store,(mine or {}).get('episode_id'),fields=['await_answer']) or {})
                            .get('await_answer') or {}).get('why')
                 continuity['awaited_from_program'] = {'you_were_waiting_for': excerpt(waiting, 200) if waiting else '',
                     'note': '你上一句 @ 了他或是在回他（或你说了在等回话）；这句没 @ 你也没引用你，是不是在回你由你判断。'}
@@ -1229,7 +1214,7 @@ class ContextBuilder:
                         'source_scope':{'$nin':[visibility.owner_private_scope(persona),'global-safe']}},{'source_scope':1}):
                     scope_key=row.get('source_scope')
                     if scope_key not in titles:
-                        titles[scope_key]=people.scene_title(self.store.db.scenes.find_one({'scope_key':scope_key}))
+                        titles[scope_key]=people.scene_title(scene_records.by_scope(self.store, scope_key))
                     where[row['_id']]='在%s记的'%titles[scope_key]
             read=interpret(m,mood,session_class,where,scope=scope)
             if read:                                    # ADR-086 D4: nothing at a quiet band outside home
@@ -1252,15 +1237,16 @@ class ContextBuilder:
             context['called_from_program']=CALLED_NOTE
         from .rhythm import rhythm_block, recent_phrasing
         owner=(self.store.config.get('chat') or {}).get('person_id')
-        last=next(iter(self.store.db.messages.find({'direction':'inbound','author':owner},{'received_at':1}).sort('received_at',-1).limit(1)),None) if owner else None
+        last=message_records.inbound(self.store,author=owner,by='received_at').first(
+            newest_first=True,fields=['received_at']) if owner else None
         rhythm=rhythm_block(self.store,model,policy,session_class,moment=moment,owner_last_at=(last or {}).get('received_at'))
         if rhythm and rhythm.get('local_time')==(context.get('clock_from_program') or {}).get('now_local'):
             # The same moment on the same clock is already in clock_from_program.
             rhythm={key:value for key,value in rhythm.items() if key!='local_time'}
         if rhythm:
             context['rhythm_from_program']=rhythm
-        own=[row.get('text','') for row in self.store.db.messages.find({'scene_id':scene['_id'],'direction':'outbound',
-             'delivery_state':'DELIVERED'},{'text':1}).sort('scene_seq',-1).limit(int(effective(model,'phrasing.window',policy) or 20))]
+        own=[row.get('text','') for row in message_records.spoken(self.store,scene['_id']).rows(
+             newest_first=True,limit=int(effective(model,'phrasing.window',policy) or 20),fields=['text'])]
         phrasing=recent_phrasing(own)
         if phrasing:
             context['recent_phrasing_from_program']={'repeated_4grams':phrasing,
@@ -1292,9 +1278,8 @@ class ContextBuilder:
             if replying and source and source.get('direction')=='inbound' and source.get('scene_seq') is not None:
                 # ADR-079 §9.5: only in a turn where others spoke after the line that called her, their numbers to copy.
                 from .capabilities import numbered
-                later=[row['scene_seq'] for row in self.store.db.messages.find({'scene_id':scene['_id'],
-                       'direction':'inbound','event.raw.asuna_notice':{'$exists':False},
-                       'scene_seq':{'$gt':source['scene_seq']}},{'scene_seq':1}).sort('scene_seq',1)] \
+                later=[row['scene_seq'] for row in message_records.inbound(self.store,scene['_id'],
+                       after=source['scene_seq'],no_notice=True).rows(fields=['scene_seq'])] \
                     if numbered(self.store,scene) else []
                 if later:
                     shown='、'.join('〔%d〕'%n for n in later[:AMBIGUOUS_MAX])+('等' if len(later)>AMBIGUOUS_MAX else '')

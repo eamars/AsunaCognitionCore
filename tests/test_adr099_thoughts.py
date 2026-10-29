@@ -8,6 +8,7 @@ import sys
 
 import pytest
 
+from asuna.records import heads as head_records
 from asuna import block_guide, native_settings, role_tools
 from asuna.config import ROOT
 from asuna.coordinator import THINK_FIRST
@@ -175,7 +176,8 @@ def test_a_summary_led_to_the_call_it_came_with_and_every_call_after_it_has_it_a
     for seq, (cid, tool, args) in enumerate([('c1', 'plan', plan), ('c2', 'stay_silent', {'reason': '先不说'})]):
         db.audit_events.insert_one({'stream_id': 'ep-1', 'type': 'role_tool', 'seq': seq,
                                     'payload': {'call_id': cid, 'tool': tool, 'args': args}})
-    store = SimpleNamespace(db=db)
+    from asuna import records
+    store = SimpleNamespace(db=db, collection=records.on(db).collection)   # the owners' way to the same rows
     lines = reasons.then(store, {'_id': 'mono-ep-1:c1', 'episode_id': 'ep-1', 'source': 'thinking'})
     assert lines[0].startswith('所以我定了个计划') and lines[1] == '所以我没说话：先不说'
     mine = reasons.then(store, {'_id': 'mono-ep-1:c1', 'episode_id': 'ep-1'})
@@ -195,7 +197,7 @@ def test_a_view_of_a_person_in_a_turn_without_a_thought_takes_the_line_she_answe
     event = {'event_id': 'no-thought', 'scene_id': 'dm-a', 'person_id': 'A', 'text': '结论先说。'}
     done = Coordinator(store, lane).ingest(event)
     assert done['state'] == 'COMMITTED'
-    _, revision = store.head('relationship:A', 'scene:dm-a')
+    _, revision = head_records.current(store, 'relationship:A', 'scene:dm-a')
     sources = revision['source_ids']
     assert sources and all(source.startswith('chunk-') for source in sources), 'the line she answered, made on demand'
     _, after, _ = ContextBuilder(store).prepare({**event, 'event_id': 'later'})

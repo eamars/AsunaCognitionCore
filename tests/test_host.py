@@ -14,6 +14,7 @@ from asuna.evidence import Evidence
 from asuna.ingress import persist_input, input_state, episode_id
 from asuna.host import RuntimeHost, _workspace_overlaps
 from asuna.lanes import FakeLane, FakeTurn, LaneResult
+from asuna.records import receipts as receipt_records
 from asuna.grants import workspace_grant
 from asuna.router import Router
 from asuna.state import Conflict, Denied
@@ -36,12 +37,18 @@ def test_workspace_overlap_check_preserves_ancestor_and_sibling_rules(tmp_path):
         assert not _workspace_overlaps(candidate, ordered, known)
 
 
-def test_restart_waits_for_active_action_but_not_durable_queue():
+def applied(monkeypatch, receipt):
+    """Her core publication still APPLIED (a receipt), or none (None), as the receipts' owner answers."""
+    monkeypatch.setattr(receipt_records, 'sink_of_kind', lambda store, kind, **where: SimpleNamespace(
+        first=lambda **kw: receipt))
+
+
+def test_restart_waits_for_active_action_but_not_durable_queue(monkeypatch):
     recorded = []
     evidence = SimpleNamespace(record=lambda kind, payload: recorded.append(kind))
     host = RuntimeHost({}, evidence)
-    host.app = SimpleNamespace(store=SimpleNamespace(db=SimpleNamespace(
-        sink_receipts=SimpleNamespace(find_one=lambda query: {'_id': 'publish-receipt'}))))
+    applied(monkeypatch, {'_id': 'publish-receipt'})
+    host.app = SimpleNamespace(store=SimpleNamespace())
     queue = Queue()
     queue.put(('queued-task', 1))
     host.controller = SimpleNamespace(active=None, active_task='running-task', pending=Queue(),
@@ -57,14 +64,14 @@ def test_restart_waits_for_active_action_but_not_durable_queue():
 
 
 
-def test_a_restarted_native_worker_does_not_restart_again_for_the_publication_it_is_loading():
+def test_a_restarted_native_worker_does_not_restart_again_for_the_publication_it_is_loading(monkeypatch):
     """Regression: a worker restarted for a publication saw that publication still APPLIED during its own
     startup (the Host reports what it loaded only after initialization), asked for another restart, stopped
     taking work, and the Host, still restarting, never honored it: every later input waited forever."""
     recorded = []
     host = RuntimeHost({}, SimpleNamespace(record=lambda kind, payload: recorded.append(kind)), awaits_activation=True)
-    host.app = SimpleNamespace(store=SimpleNamespace(db=SimpleNamespace(
-        sink_receipts=SimpleNamespace(find_one=lambda query: {'_id': 'publish-receipt'}))))
+    applied(monkeypatch, {'_id': 'publish-receipt'})
+    host.app = SimpleNamespace(store=SimpleNamespace())
     host.controller = SimpleNamespace(active=None, active_task=None, pending=Queue(), task_queue=Queue(),
                                       state_lock=threading.Lock(), restart_pending=host.restart_pending)
     host._maybe_restart_after_publish()
@@ -73,10 +80,10 @@ def test_a_restarted_native_worker_does_not_restart_again_for_the_publication_it
     host._maybe_restart_after_publish()
     assert host.restart_requested.is_set() and recorded == ['restart.pending', 'restart.requested']
 
-def test_after_every_turn_the_host_also_checks_her_heartbeat():
+def test_after_every_turn_the_host_also_checks_her_heartbeat(monkeypatch):
     host = RuntimeHost({}, SimpleNamespace(record=lambda kind, payload: None))
-    host.app = SimpleNamespace(store=SimpleNamespace(db=SimpleNamespace(
-        sink_receipts=SimpleNamespace(find_one=lambda query: None))))
+    applied(monkeypatch, None)
+    host.app = SimpleNamespace(store=SimpleNamespace())
     watched = []
     host.schedule = SimpleNamespace(watch_rhythm=lambda: watched.append('checked'))
     host._after_turn()
@@ -451,7 +458,8 @@ def test_restart_reconciles_delivered_feedback_without_pausing_completed_work(st
     original = coordinator.ingest(incoming)
     assert original['state'] == 'WAITING_TASK'
     task = store.db.tasks.find_one({'_id': original['task_ids'][0]})
-    store.put('episodes', {'_id': 'finished-feedback', 'state': 'COMMITTED'})
+    store.put('episodes', {'_id': 'finished-feedback', 'scene_id': 'local', 'source_event_id': 'finished-feedback',
+                           'episode_kind': 'task_feedback', 'state': 'COMMITTED'})
     task = store.put('tasks', {**task, 'state': 'RETURNED', 'feedback_state': 'DELIVERED',
         'feedback_episode': 'finished-feedback'}, expected=task['revision'])
     chat = controller(store, tmp_path, coordinator)
@@ -472,7 +480,8 @@ def chained_restart(store, tmp_path, name, feedback_state):
     persist_input(store, incoming, managed=True)
     original = coordinator.ingest(incoming)
     task = store.db.tasks.find_one({'_id': original['task_ids'][0]})
-    store.put('episodes', {'_id': name + '-feedback', 'state': feedback_state})
+    store.put('episodes', {'_id': name + '-feedback', 'scene_id': 'local', 'source_event_id': name + '-feedback',
+                           'episode_kind': 'task_feedback', 'state': feedback_state})
     task = store.put('tasks', {**task, 'state': 'RETURNED', 'feedback_state': 'WAITING_TASK',
         'feedback_episode': name + '-feedback'}, expected=task['revision'])
     chat = controller(store, tmp_path, coordinator)

@@ -378,17 +378,19 @@ def jpeg(exif, scan=b'the picture'):
             + b'\xff\xdb\x00\x04\x00\x01' + b'\xff\xda\x00\x02' + scan + b'\xff\xd9')
 
 
-def test_a_known_sticker_resent_with_rewritten_metadata_is_still_known(store, monkeypatch):
+def test_a_known_sticker_resent_with_rewritten_metadata_is_known_once_she_opens_it(store, monkeypatch):
     """Owner 2026-10-08: a saved and re-sent sticker comes back with its metadata rewritten, so the file md5 the
-    platform names it by is new; the program downloads it once, matches its picture, and she need not look."""
+    platform names it by is new. Writing the line downloads nothing (owner 2026-10-29: a download there held every
+    line behind it); the copy she opens is matched by its picture, and from then on that md5 is known on sight."""
     import hashlib
     from asuna.people import People
     assert stickers.picture_key(jpeg(b'first')) == stickers.picture_key(jpeg(b'rewritten on the way'))
     assert stickers.picture_key(jpeg(b'first')) != stickers.picture_key(jpeg(b'first', b'another picture'))
     refs = group_world(store, monkeypatch)
+    monkeypatch.setitem(store.config.setdefault('chat', {}), 'persona', 'P1')
     pictures = {STICKER_URL: jpeg(b'first'), STICKER_URL + '-copy': jpeg(b'rewritten on the way')}
     fetched = []
-    monkeypatch.setattr(vision, 'pull_bytes', lambda entry, config, max_bytes=None, timeout=None:
+    monkeypatch.setattr(vision, 'pull_bytes', lambda entry, config, max_bytes=None, timeout=None, **_:
                         fetched.append(entry['url']) or (pictures.get(entry['url'], PNG + entry['url'].encode()),
                                                          'image/jpeg', 'url', {}))
     scene = store.db.scenes.find_one({'_id': SCENE})
@@ -403,10 +405,14 @@ def test_a_known_sticker_resent_with_rewritten_metadata_is_still_known(store, mo
     known = lambda entries: stickers.recognized(store, 'P1', entries)
     assert '你认得' not in vision.line_refs(row, store.config, known)          # by the file md5 alone: unknown
     fetched.clear()
+    assert '你认得' not in People(store, 'P1').transcript(scene, row)
+    assert fetched == []                                                     # the line downloads nothing
+    vision.read_image_for_task(store, BlobStore(store), ep, store.config, {'ref': copy}, route='character')
+    assert fetched == [STICKER_URL + '-copy']                                # she opened it: its picture matched
+    # That md5 is known now: the next copy is known on sight, still without a download.
+    fetched.clear()
     assert '你认得：「白吃」，骂人白吃时；在你架子上' in People(store, 'P1').transcript(scene, row)
-    assert fetched == [STICKER_URL + '-copy']
-    # That md5 is known now: the next copy needs no download.
-    assert '你认得：「白吃」' in vision.line_refs(row, store.config, known)
+    assert '你认得：「白吃」' in vision.line_refs(row, store.config, known) and fetched == []
     # The same picture cannot go on her shelf twice.
     with pytest.raises(Exception, match='STICKER_ALREADY_KEPT: 在架子上叫「白吃」'):
         stickers.keep(store, BlobStore(store), ep, 'P1', {'ref': copy, 'name': '又白吃', 'when': '同一张'}, store.config)

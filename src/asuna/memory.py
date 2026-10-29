@@ -10,8 +10,11 @@ from .config import character_id
 from .evidence import canonical,sha
 from .state import Store,Denied,Conflict,now
 from .queue import database_effects_lock
-from .ingress import NOT_CORE_NOTICE
+from .records import messages as message_records
 from . import summary_attribution
+from .records import scenes as scene_records
+from .records import memories as memory_records
+from .records import heads as head_records
 
 try:                                  # 跨场景只读联动（A2）：关系记录落在哪一份由配置决定
     from . import scene_links
@@ -41,7 +44,7 @@ class MemoryService:
         person_id=person_id or episode['person_id']
         own=person_id==episode['person_id']
         scope=episode['scope_key'];operation=episode['_id']+(':understanding' if layer=='here' else ':understanding:person')+('' if own else ':'+person_id)
-        scene=self.store.authorize(episode['scene_id'],episode['person_id'])
+        scene=scene_records.authorize(self.store, episode['scene_id'], episode['person_id'])
         if (scene['scope_key'],scene['policy_epoch'])!=(scope,episode['policy_epoch']):
             raise Denied('UNDERSTANDING_SCOPE_OR_EPOCH_CHANGED: 这个对话的授权刚变过（不是你的错），这次理解存不了；重试也一样，下回合再更新')
         if body.strip()=='不更新' and short is None:
@@ -64,7 +67,7 @@ class MemoryService:
                                         or not entity.startswith('relationship:')):
                 raise Denied(NOT_THIS_SCENE)
             base_id=(base or {}).get('here') if base is not None else episode['manifest']['relationship_revision']
-            found=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':key}) if base_id else None
+            found=head_records.revision(self.store,base_id,entity=key) if base_id else None
             # No record yet (everyone starts with none): her first understanding creates it.
             if base_id and not found:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这回合看到的那份理解已经找不到了（不是你的错）；重试也一样，下回合再更新')
             content=self._content(found,body,short)
@@ -73,7 +76,7 @@ class MemoryService:
             else:
                 sources,auto,skipped,stale=self._understanding_sources(episode,scope,person_id)
                 try:
-                    revision=self.store.mutate(entity,target_scope,base_id,content,sources,scope,operation,
+                    revision=head_records.mutate(self.store,entity,target_scope,base_id,content,sources,scope,operation,
                         linked_scopes=linked,
                         reason='角色基于本轮真实输入、独白与本轮展示给角色的程序摘要形成的理解；来源由程序关联。',
                         change_class='interpretation')
@@ -117,7 +120,7 @@ class MemoryService:
         if key!=entity+'|'+PERSON_SCOPE:
             raise Denied('UNDERSTANDING_PERSON_NOT_IN_CONTEXT: 这回合没给你看他的人那层（不是你的错）；重试也一样，下回合再写')
         base_id=(base or {}).get('person') if base is not None else episode['manifest'].get('person_revision')
-        found=self.store.db.state_revisions.find_one({'_id':base_id,'entity_key':key}) if base_id else None
+        found=head_records.revision(self.store,base_id,entity=key) if base_id else None
         if base_id and not found:raise Denied('UNDERSTANDING_BASE_NOT_IN_CONTEXT: 这回合看到的那份理解已经找不到了（不是你的错）；重试也一样，下回合再更新')
         content=self._content(found,body,short)
         if content is None:
@@ -126,7 +129,7 @@ class MemoryService:
         common={'entity':entity,'target_scope':PERSON_SCOPE,'base_revision':base_id,'body':content['body'],'source_ids':sources,
                 'auto_source_ids':auto,'auto_source_skipped':skipped,'auto_stale_source_ids':stale}
         try:
-            revision=self.store.mutate(entity,PERSON_SCOPE,base_id,content,sources,scope,operation,
+            revision=head_records.mutate(self.store,entity,PERSON_SCOPE,base_id,content,sources,scope,operation,
                 linked_scopes=[scope],change_class='interpretation',
                 reason='角色在一个对话里写下的、她认为这个人在哪儿都成立的理解；来源由程序关联。',
                 origin={'scene_id':episode['scene_id'],'at':now()})
@@ -148,26 +151,25 @@ class MemoryService:
         """
         monologue=list(episode['monologue_refs'])
         for key in monologue:
-            if not self.store.db.memory_units.find_one({'_id':key,'episode_id':episode['_id'],
-                    'scope_key':scope,'policy_epoch':episode['policy_epoch'],'status':'active'}):
+            if not memory_records.get(self.store,key,episode=episode['_id'],scope=scope,
+                    epoch=episode['policy_epoch'],status='active'):
                 raise Denied('UNDERSTANDING_SOURCE_NOT_CURRENT: 这回合的心里话没对上这个对话（不是你的错）；重试也一样，下回合再更新')
         auto,skipped,stale=[],[],[]
         for key in episode.get('manifest',{}).get('selected',[]):
             if key in monologue:continue
-            unit=self.store.db.memory_units.find_one({'_id':key,'scope_key':scope,
-                    'policy_epoch':episode['policy_epoch'],'status':'active',
-                    'kind':{'$in':list(self.UNDERSTANDING_AUTO_SOURCES)}})
+            unit=memory_records.get(self.store,key,scope=scope,epoch=episode['policy_epoch'],status='active',
+                    kinds=self.UNDERSTANDING_AUTO_SOURCES)
             if not unit:continue
             covers,why=summary_attribution.covers_person(self.store,unit,person_id or episode['person_id'])
             if not covers:
                 skipped.append({'id':key,'reason':why});continue
             auto.append(key)
             if unit.get('corrected_by'):stale.append(key)
-        if not monologue and not auto and self.store.db.messages.find_one({'_id':'in-'+episode['_id']},{'_id':1}):
+        if not monologue and not auto and message_records.get(self.store, 'in-'+episode['_id'], fields=['_id']):
             # ADR-099: a turn with no thought (the model did not think) takes the line she answers, made on demand.
             self.chunk(episode['scene_id'])
             key='chunk-'+sha(canonical(['in-'+episode['_id'],2,0]))
-            if self.store.db.memory_units.find_one({'_id':key,'scope_key':scope,'status':'active'},{'_id':1}):
+            if memory_records.get(self.store,key,['_id'],scope=scope,status='active'):
                 auto.append(key)
         if not monologue and not auto:
             raise Denied('UNDERSTANDING_NO_SOURCE: 这回合没有能挂上的来源（没有想法的记录，也没有这里的人说的话）；下回合再更新')
@@ -178,15 +180,15 @@ class MemoryService:
         if not operator:raise Denied('OPERATOR_ROLLBACK_REQUIRED')
         if not entity.startswith(('relationship:','scene_affect:')):raise Denied('POLICY_ENTITY_DENIED')
         with database_effects_lock(self.store.name):
-            pair=self.store.head(entity,scope)
+            pair=head_records.current(self.store,entity,scope)
             if not pair:raise Denied('UNKNOWN_STATE_ENTITY')
             head,current=pair;ancestors={};node=current
             for _ in range(512):
                 if not node:break
                 if node['_id'] in ancestors:raise Denied('REVISION_CYCLE')
                 ancestors[node['_id']]=node
-                node=self.store.db.state_revisions.find_one({'_id':node['parent_revision_id']}) if node.get('parent_revision_id') else None
-            prior=self.store.db.state_revisions.find_one({'mutation_id':operation})
+                node=head_records.revision(self.store,node['parent_revision_id']) if node.get('parent_revision_id') else None
+            prior=head_records.by_mutation(self.store,operation)
             if prior:
                 if prior.get('rollback_target')==target_id and prior.get('parent_revision_id')==base_id and prior['_id'] in ancestors:return prior
                 raise Conflict('ROLLBACK_OPERATION_REUSED_OR_UNCOMMITTED')
@@ -195,18 +197,18 @@ class MemoryService:
             if not target or target.get('status')=='tombstone' or target.get('deletion_id') or target['scope_key']!=scope:
                 raise Denied('ROLLBACK_TARGET_NOT_ACTIVE_ANCESTOR')
             for source in target.get('source_ids',[]):
-                memory=self.store.db.memory_units.find_one({'_id':source})
+                memory=memory_records.get(self.store,source)
                 if not memory or memory.get('status')=='tombstone' or memory['scope_key'] not in ('global-safe',scope):raise Denied('ROLLBACK_SOURCE_INVALIDATED')
             value={'_id':sha(canonical([operation,entity,scope])),'mutation_id':operation,'entity_key':head['_id'],'scope_key':scope,
                 'content':copy.deepcopy(target['content']),'source_ids':target.get('source_ids',[]),'processed_source_ids':current.get('processed_source_ids',[]),
                 'parent_revision_id':base_id,'rollback_target':target_id,'change_class':'operator_rollback'}
-            revision=self.store.put('state_revisions',value,stream='rollback:'+operation)
-            self.store.put('state_heads',{**head,'revision_id':revision['_id']},expected=head['revision'],stream='rollback:'+operation)
+            revision=head_records.save_revision(self.store,value,stream='rollback:'+operation)
+            head_records.save_head(self.store,{**head,'revision_id':revision['_id']},expected=head['revision'],stream='rollback:'+operation)
             return revision
 
     def chunk(self,scene_id):
-        scene=self.store.db.scenes.find_one({'_id':scene_id})
-        rows=list(self.store.db.messages.find({'scene_id':scene_id,**NOT_CORE_NOTICE,'$or':[{'direction':'inbound'},{'delivery_state':'DELIVERED'}]}).sort('scene_seq',1))
+        scene=scene_records.get(self.store, scene_id)
+        rows=message_records.said(self.store,scene_id,people_only=True).rows()
         made=[]
         for row in rows:
             if row.get('policy_epoch',1)!=scene['policy_epoch']:continue
@@ -221,13 +223,13 @@ class MemoryService:
             if part:parts.append(part)
             for index,body in enumerate(parts):
                 key='chunk-'+sha(canonical([row['_id'],2,index]))
-                if self.store.db.memory_units.find_one({'_id':key}):continue
-                made.append(self.store.put('memory_units',{'_id':key,'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],
+                if memory_records.get(self.store,key):continue
+                made.append(memory_records.save(self.store,{'_id':key,'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],
                     'character_id':character_id(self.store.config),'kind':'chat_chunk','body_markdown':body,
                     'epistemic_type':'reported_speech' if row['direction']=='inbound' else 'public_statement',
                     'speaker':row['author'],'scene_seq':row['scene_seq'],'occurred_at':row.get('occurred_at',row.get('received_at')),
                     'segment_index':index,'segment_count':len(parts),'source_event_ids':[row['_id']],
                     'depends_on':[row['_id']],'status':'active','embedding_status':'PENDING',
                     'chunk_budget_method':'UTF8_bytes_conservative_bound','overlap_tokens':0},stream='chunk:'+scene_id))
-            self.store.put('messages',{**row,'memory_chunk_version':2},expected=row['revision'],stream='chunk:'+scene_id)
+            message_records.save(self.store, {**row,'memory_chunk_version':2},expected=row['revision'],stream='chunk:'+scene_id)
         return made

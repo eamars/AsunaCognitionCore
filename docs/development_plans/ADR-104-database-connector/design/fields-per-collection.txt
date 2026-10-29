@@ -1,0 +1,43 @@
+affect_amendments: where {_id, op, persona, target}; sort {at}
+affect_events: where {_id, created_at, open, persona, source_scope}; sort {ts}
+affect_proposals: where {_id, episode_id, kind_row, persona}; sort {created_at}
+artifact_blobs.files: where {_id, metadata.scope_key}; sort {}
+artifacts: where {_id, answer, channel_id, claimed_at, copies.0, intent_revision, kept_at, kind, ref, scene_id, scope_key, sha256, source_ids, state, storage, task_id, tool}; sort {_id, created_at, number, received_at}
+audit_events: where {_id, occurred_at, payload.collection, payload.document._id, payload.id, payload.operation, payload.outcome, payload.persona, payload.reaches, payload.refused, stream_id, type}; sort {_id, occurred_at, seq, stream_id}
+carried_counts: where {_id, day, persona}; sort {}
+carried_days: where {_id, day, persona}; sort {}
+carried_sections: where {_id}; sort {}
+crossing_words: where {_id, generation, row}; sort {}
+developer_inbox: where {_id, persona, source.by}; sort {created_at}
+episodes: where {_id, episode_kind, person_id, persona, scene_id, scope_key, source_event_id, speech, state, system_ref.carried}; sort {}
+group_members: where {_id}; sort {}
+host_leases: where {_id, instance}; sort {}
+host_stops: where {_id, back_at, how, shown_at}; sort {back_at}
+ideas: where {_id, persona, state}; sort {created_at}
+identities: where {_id, account_id, person_id, platform}; sort {}
+journal_entries: where {_id, last_mutation, persona, slug}; sort {seq}
+journal_revisions: where {_id, body_sha256, mutation_id, persona, sid, slug}; sort {_id, created_at}
+lane_receipts: where {_id, session_id}; sort {}
+memory_fires: where {_id, at, kind, persona, scene_id, word}; sort {}
+memory_shadow: where {_id, at, row, score, status}; sort {}
+memory_tiers: where {_id, at, doc, from, item, persona, reason, row, scene_id, to, told_in, what}; sort {added, at}
+memory_units: where {_id, character_id, depends_on, episode_id, kind, policy_epoch, scope_key, source, source_event_ids, status}; sort {_id, formed_at, occurred_at}
+messages: where {_id, adapter_id, attachment.artifact_id, author, channel_id, claimed_at, deletion_id, delivery_state, direction, episode_id, errand_told, event.channel, event.channel.platform_event_id, event.event_id, event.group_context.mentioned_account_ids.0, event.group_context.topic_id, event.group_context.wake_reason, event.raw.asuna_media, event.raw.asuna_notice, event.raw.asuna_peer, event.raw.group_name, event.visit.intent, file.artifact_id, historical_display_name, host_managed, ingress_state, phase, platform_event_id, platform_message_id, policy_epoch, processing_outcome, receipt_at, received_at, reply_part, scene_id, scene_seq, scope_key, segment_index, shown_on_line}; sort {_id, occurred_at, receipt_at, received_at, scene_id, scene_seq, segment_index}
+missed_looks: where {_id, at}; sort {}
+notes: where {_id, created_at, from_episode, from_scene, persona, question, reply_to, seen_in, to_scene}; sort {created_at}
+own_mutes: where {_id}; sort {}
+plans: where {_id, kind, last_outcome, next_fire_at, person_id, policy_epoch, scene_id, scope_key, status}; sort {created_at}
+questions: where {_id, asked_at, closed.by, migrated_from, persona, sources, sources.scene_id, state, told_in}; sort {asked_at}
+scene_people: where {_id, person, scene_id}; sort {handle, seen_at}
+scenes: where {_id, channel_id, condense_wanted, condensed_at, fault.at, kind, policy_epoch, scope_key, unsent.episode_id}; sort {}
+sessions: where {_id, character_context, lane, main_conversation, native_host, native_title, persona, policy_epoch, scene_id, scope_key, successor_id, task_id}; sort {_id, binding_updated_at}
+sink_receipts: where {_id, kind, project, state}; sort {published_at}
+state_heads: where {_id, revision_id, scope_key}; sort {_id}
+state_revisions: where {_id, created_at, entity_key, mutation_id, scope_key}; sort {created_at}
+sticker_memory: where {_id, key, persona, picture}; sort {}
+sticker_pool: where {_id, artifact_id, identity, md5, revision}; sort {last_seen, seen}
+stickers: where {_id, artifact_id, identity, name, persona, revision}; sort {name}
+switches: where {_id, cleared_at, persona, state, until}; sort {until}
+task_messages: where {_id, delivered, from, task_id}; sort {created_at}
+tasks: where {_id, continues_task_id, created_at, episode_id, feedback_state, finished_at, lease_expires_at, pause_reason, paused_at, paused_state, policy_epoch, requester_id, scene_id, scope_key, state}; sort {created_at, finished_at}
+watches: where {_id, last_seen_at, person, persona, state, until}; sort {until}

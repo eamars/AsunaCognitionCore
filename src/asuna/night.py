@@ -10,6 +10,9 @@ starts after the earlier one, so the block appears once, and not at all after a 
 from __future__ import annotations
 
 from datetime import timedelta
+from .records import scenes as scene_records
+from .records import episodes as episode_records
+from .records import plans as plan_records
 
 NIGHT_KINDS = ('self_development', 'settlement')
 LOOKBACK = timedelta(hours=48)
@@ -31,7 +34,7 @@ def _what(store, persona, tool, args):
     op = args.get('op')
     if tool == 'group_focus':
         found = places.find(store.config, args.get('place'))
-        scene = store.db.scenes.find_one({'_id': found[0]}) if found else None
+        scene = scene_records.get(store, found[0]) if found else None
         title = People(store, persona).scene_title(scene) if scene else args.get('place')
         return '让%s%s' % (title, '常驻' if op == 'active' else '歇着')
     if tool == 'set_policy':
@@ -42,13 +45,14 @@ def _what(store, persona, tool, args):
         return {'request': '挂了重启', 'drill': '挂了重启演练', 'cancel': '撤了重启'}[op] + (
             '（%s）' % args['when'] if args.get('when') else '')
     if tool == 'plan':
-        intent = args.get('intent') or (store.db.plans.find_one({'_id': args.get('plan_id')}, {'intent': 1}) or {}).get('intent')
+        intent = args.get('intent') or (plan_records.get(store, args.get('plan_id'), fields=['intent']) or {}).get('intent')
         return {'create': '定了计划', 'update': '改了计划', 'cancel': '撤了计划'}[op or 'create'] + '：' + _short(intent, 30)
     if tool == 'peer_line':
         return '旧居那条线：' + ('开了' if op == 'open' else '关了')
     from .role_tools import ability
     if ability(tool, args) == 'ideas.review':          # its id was `idea` under the old name
-        idea = (store.db.ideas.find_one({'_id': args.get('id', args.get('idea'))}, {'idea': 1}) or {}).get('idea')
+        from .records import ideas as idea_records
+        idea = (idea_records.get(store, args.get('id', args.get('idea')), ['idea']) or {}).get('idea')
         return '想法%s：%s' % (DECISIONS.get(args.get('decision'), args.get('decision')), _short(idea, 30))
     if tool == 'watch':
         return '%s盯 %s' % ('开始' if op == 'on' else '不再', _short(args.get('person'), 20))
@@ -56,7 +60,7 @@ def _what(store, persona, tool, args):
         doc = str(args.get('doc') or '')
         if doc.startswith('group:'):
             found = places.find(store.config, 'g' + doc[6:12])         # a group's notes: slug and place share the hash
-            scene = store.db.scenes.find_one({'_id': found[0]}) if found else None
+            scene = scene_records.get(store, found[0]) if found else None
             doc = '%s的群笔记' % (People(store, persona).scene_title(scene) if scene else '一个群')
         return '%s 的「%s」：%s' % (doc, _short(args.get('heading') or args.get('sid'), 30), args.get('op'))
     from .reasons import _action
@@ -64,8 +68,8 @@ def _what(store, persona, tool, args):
 
 
 def _kinds(store, ids):
-    return {row['_id']: row.get('episode_kind') for row in store.db.episodes.find({'_id': {'$in': list(ids)}},
-                                                                                 {'episode_kind': 1})}
+    return {row['_id']: row.get('episode_kind') for row in episode_records.many(store, list(ids)).rows(
+        fields=['episode_kind'])}
 
 
 def _last_heartbeat(store, current, since):
@@ -104,7 +108,7 @@ def block(store, persona, zone, moment, current):
             item['why'] = _short(why, 80)
         else:
             ref = payload.get('reason_ref') or reasons.reason_of(
-                store.db.episodes.find_one({'_id': row['stream_id']}, {'tool_calls': 1}), payload.get('call_id'))
+                episode_records.get(store, row['stream_id'], fields=['tool_calls']), payload.get('call_id'))
             then = reasons.thought(store, ref)
             if then:
                 item['your_thought_then'] = then

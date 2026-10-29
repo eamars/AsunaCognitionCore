@@ -11,8 +11,8 @@ from __future__ import annotations
 import hashlib
 import re
 import secrets
-from datetime import datetime, timezone
 
+from . import clock
 from .integration_image import SOURCE_PREFIX
 from .integration_import import resolve_target, validate_target_path
 
@@ -235,7 +235,7 @@ def generate(args, *, runner, workspace, protected=(), register=None, now=None, 
         return _error('IMAGE_NOT_A_PICTURE', content_type=report.get('content_type'), bytes=len(body),
                       note='服务返回的不是 png/jpeg/gif/webp 图片，没有存；换个 workflow 再画，还不行写进报告。')
     if relative is None:
-        stamp = (now or datetime.now(timezone.utc)).strftime('%Y%m%d-%H%M%S')
+        stamp = (now or clock.now()).strftime('%Y%m%d-%H%M%S')
         relative = 'images/%s-%s.%s' % (stamp, hashlib.sha256(body).hexdigest()[:8], kind)
         target, failure = resolve_target(workspace, relative, protected)
         if failure:

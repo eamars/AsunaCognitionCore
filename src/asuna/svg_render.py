@@ -9,10 +9,10 @@ picture (source integration:svg:<path>), like a drawn one: read_image takes its 
 from __future__ import annotations
 
 import base64
-from datetime import datetime, timezone
 import hashlib
 from pathlib import Path
 import xml.etree.ElementTree as ET
+from . import clock
 
 RENDER_SVG_TOOL_NAME = 'render_svg'
 MAX_SVG_BYTES = 2 * 1024 * 1024
@@ -117,7 +117,7 @@ def render(args, *, workspace, register=None, now=None):
     except Exception as exc:
         return _error('SVG_RENDER_FAILED', '渲染没成功：' + str(exc)[:200] + '；' + AGAIN + '。')
     body = base64.b64decode(reply['png'])
-    stamp = (now or datetime.now(timezone.utc)).strftime('%Y%m%d-%H%M%S')
+    stamp = (now or clock.now()).strftime('%Y%m%d-%H%M%S')
     target_relative = 'images/%s-%s-%s.png' % (Path(relative).stem[:40], stamp, hashlib.sha256(body).hexdigest()[:8])
     target = Path(workspace).resolve() / target_relative
     try:

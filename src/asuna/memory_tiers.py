@@ -25,7 +25,13 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from .evidence import canonical, sha
+from .memory_pilot import FLOOR, OWN_SLOTS, SLOTS   # her own items: two of a turn's six slots, above the pilot's floor
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import episodes as episode_records
+from .records import memories as memory_records
 
 TIERS_VERSION = 1
 ENABLED = True                     # the switch (ADR-062 phase 2): hers and the owner's to turn on
@@ -84,7 +90,6 @@ def moved_by(move):
     return move.get('by') or BY.get(move.get('reason'), 'program')
 HER_OPS = ('replace_section', 'append_section', 'correction', 'set_tags')     # her writes (placement_after)
 MOVED_SHOWN = 5
-FLOOR, OWN_SLOTS, SLOTS = 0.83, 2, 6     # her own items: two of a turn's six memory slots, above an absolute floor
 HEADINGS_SHOWN = 8
 # The night list (settlement): at most a few items, chosen by rule, told why; no keep or drop choice among them.
 NIGHT_ITEMS = 5
@@ -145,9 +150,6 @@ NIGHT_NOTE = '夜里的清单：每条写着为什么在这、可以怎么做，
 SELF_OFFER = ('current_self 现在是一整段。想好了就把它拆成一条一条，用 write_document 写进 doc=self（append_section）：'
               '一条是一个说法连同它的依据（样本、来源、证据），不按行拆；原来那段留作历史，程序不替你拆。')
 
-
-def _now():
-    return datetime.now(timezone.utc)
 
 
 def _iso(moment):
@@ -227,7 +229,7 @@ class Tiers:
         on_demand 手边, never 收着) with a fresh stay: nothing lapses on the day the switch goes on. On that day (no
         rows yet), each first stay is spread per item from its usual length to twice that, within the cap."""
         from .documents import DocumentStore
-        moment = moment or _now()
+        moment = moment or clock.now()
         docs = DocumentStore(self.store, self.persona)
         known = {(row['doc'], row['sid']) for row in self.rows.find({'row': 'item', 'persona': self.persona},
                                                                      {'doc': 1, 'sid': 1})}
@@ -265,7 +267,7 @@ class Tiers:
     # ── moves ──────────────────────────────────────────────────────
     def move(self, row, to, reason, moment=None, *, scene_id=None):
         """One item to another place: the row, a `move` row told once per conversation, one audit line."""
-        moment = moment or _now()
+        moment = moment or clock.now()
         if row['place'] == to:
             return None
         fields = {'place': to, 'moved_at': _iso(moment)}
@@ -289,7 +291,7 @@ class Tiers:
 
     def tick(self, moment=None, *, half_life_days=30.0, step_back_below=0.1):
         """Lapses whose stay ran out and memories cooled by disuse; facts never cool. Returns the moves."""
-        moment = moment or _now()
+        moment = moment or clock.now()
         moves = []
         for row in self.items(place={'$in': [CARRIED, AT_HAND]}):
             if row['place'] == CARRIED:
@@ -308,7 +310,7 @@ class Tiers:
     def memorable(self, row, why, moment=None, *, scene_id=None):
         """A memorable moment: the stay starts again from now and, once per stay, the next one doubles. It never moves
         the item: only a changed rewrite brings one back up (ADR-062 §11)."""
-        moment = moment or _now()
+        moment = moment or clock.now()
         fields = {'memorable_at': _iso(moment), 'last_use_at': _iso(moment), 'last_moment': why}
         if not row.get('doubled'):
             fields.update(stay_days=min(STAY_CAP_DAYS, float(row.get('stay_days') or STAY_DAYS) * 2), doubled=True)
@@ -318,6 +320,17 @@ class Tiers:
 
     def _carried(self, doc, kind):
         return self.items(doc=doc, place=CARRIED) if kind in self.PER_DOC else self.items(store=kind, place=CARRIED)
+
+    def _lapse_order(self, rows):
+        """The order carried items lapse in over a cap: least recently memorable first, felt ones last. Items one
+        moment stamped together (a sync) go by their place in the document, the oldest section first."""
+        from .documents import DocumentStore
+        docs, place = DocumentStore(self.store, self.persona), {}
+        for slug in sorted({row['doc'] for row in rows}):
+            for n, section in enumerate((docs.read(slug)[1] or {}).get('sections') or []):
+                place[slug, section['sid']] = n
+        return sorted(rows, key=lambda row: (bool(row.get('felt')), row.get('memorable_at') or '', row['doc'],
+                                             place.get((row['doc'], row['sid']), len(place))))
 
     def _overflow(self, doc, kind, keep, moment):
         """A store over its cap: her choice first (her ask, 2026-10-18). The first time it is over, nothing moves; her
@@ -330,8 +343,7 @@ class Tiers:
             self.rows.delete_one({'_id': key})
             return []
         pending = self.rows.find_one({'_id': key})
-        order = sorted((row for row in carried if row['_id'] not in (keep, (pending or {}).get('keep'))),
-                       key=lambda row: (bool(row.get('felt')), row.get('memorable_at') or '', row['_id']))
+        order = self._lapse_order([row for row in carried if row['_id'] not in (keep, (pending or {}).get('keep'))])
         if not pending or not pending.get('shown_in'):
             # Waiting for her: one item over at most; more than that lapses by the rule now (her choice is the last).
             self.rows.update_one({'_id': key}, {'$setOnInsert': {'row': 'over', 'persona': self.persona, 'doc': doc,
@@ -362,8 +374,7 @@ class Tiers:
                 last = max(filter(None, (_at(row.get('memorable_at')), _at(row.get('last_use_at')))), default=moment)
                 return max(0, int((moment - last).total_seconds() // 86400))
             listed = sorted(carried, key=lambda row: (-unused(row), row.get('heading') or ''))
-            oldest = sorted((row for row in carried if row['_id'] != pending.get('keep')),
-                            key=lambda row: (bool(row.get('felt')), row.get('memorable_at') or '', row['_id']))[0]
+            oldest = self._lapse_order([row for row in carried if row['_id'] != pending.get('keep')])[0]
             lines.append(OVER_LINE % (STORE_WORDS.get(pending['store'], pending['store']), len(carried), cap,
                                       '；'.join('「%s」%d 天没用到' % (row.get('heading') or row['sid'], unused(row))
                                                for row in listed),
@@ -427,7 +438,7 @@ class Tiers:
         running record's at hand), a rewrite that changed an item starts its stay again from carried, a correction
         supersedes the item it corrects. A group's notes refold. Returns the moves a reader should be told of (an
         overflow names what it lapsed)."""
-        moment = moment or _now()
+        moment = moment or clock.now()
         kind = store_of(slug, (after or {}).get('kind'))
         if not kind:
             return []
@@ -507,7 +518,7 @@ class Tiers:
         not re-sent for it)."""
         order = self.fold_order(slug, content)
         self.rows.update_one({'_id': 'fold:%s:%s' % (self.persona, slug)}, {'$set': {
-            'row': 'fold', 'persona': self.persona, 'doc': slug, 'order': order, 'at': _iso(moment or _now())}},
+            'row': 'fold', 'persona': self.persona, 'doc': slug, 'order': order, 'at': _iso(moment or clock.now())}},
             upsert=True)
         return order
 
@@ -521,9 +532,9 @@ class Tiers:
         """The place's recent lines that decide what is rare there: its newest inbound lines of the last
         crossing.number('window_days') days, at most key_words.WINDOW_LINES."""
         from . import crossing, key_words
-        since = _iso((moment or _now()) - timedelta(days=crossing.number('window_days')))
-        rows = self.store.db.messages.find({'scene_id': scene_id, 'direction': 'inbound', 'received_at': {'$gte': since}},
-                                           {'text': 1}).sort('scene_seq', -1).limit(key_words.WINDOW_LINES)
+        since = _iso((moment or clock.now()) - timedelta(days=crossing.number('window_days')))
+        rows = message_records.inbound(self.store, scene_id, since=since).each(
+            newest_first=True, limit=key_words.WINDOW_LINES, fields=['text'])
         return [row['text'] for row in rows if isinstance(row.get('text'), str)]
 
     def rerate(self, scene_id, moment=None):
@@ -535,7 +546,7 @@ class Tiers:
         row = {'row': 'rarity', 'persona': self.persona, 'scene_id': scene_id, 'lines': len(lines),
                'limit': key_words.limit(len(lines)), 'common': key_words.common(lines),
                'said': key_words.said(lines, platform.INBOUND_MENTION if platform else None, crossing.number('said_here')),
-               'openings': key_words.openings(lines), 'at': _iso(moment or _now())}
+               'openings': key_words.openings(lines), 'at': _iso(moment or clock.now())}
         self.rows.update_one({'_id': 'rarity:%s:%s' % (self.persona, scene_id)}, {'$set': row}, upsert=True)
         return row
 
@@ -558,10 +569,9 @@ class Tiers:
     def rerate_all(self, moment=None):
         """At settlement: every place with lines in the window counted again; a place with none keeps no row."""
         from . import crossing
-        moment = moment or _now()
+        moment = moment or clock.now()
         since = _iso(moment - timedelta(days=crossing.number('window_days')))
-        places = sorted(set(self.store.db.messages.distinct('scene_id', {'direction': 'inbound',
-                                                                        'received_at': {'$gte': since}})))
+        places = sorted(set(message_records.inbound(self.store, since=since).values('scene_id')))
         for scene_id in places:
             self.rerate(scene_id, moment)
         self.rows.delete_many({'row': 'rarity', 'persona': self.persona, 'scene_id': {'$nin': places}})
@@ -582,7 +592,7 @@ class Tiers:
             if row:
                 if why == 'recalled':
                     self.rows.update_one({'_id': row['_id']}, {'$addToSet': {'recalled_in': scene_id},
-                                                               '$set': {'recalled_at': _iso(moment or _now())}})
+                                                               '$set': {'recalled_at': _iso(moment or clock.now())}})
                 self.memorable(row, why, moment, scene_id=scene_id)
 
     def surfaced(self, refs, scene_id, moment=None):
@@ -593,7 +603,7 @@ class Tiers:
                 continue
             seen = set(row.get('surfaced_in') or [])
             self.rows.update_one({'_id': row['_id']}, {'$addToSet': {'surfaced_in': scene_id},
-                                                       '$set': {'last_use_at': _iso(moment or _now())}})
+                                                       '$set': {'last_use_at': _iso(moment or clock.now())}})
             if scene_id not in seen and seen:
                 self.memorable(row, 'surfaced_again', moment, scene_id=scene_id)
 
@@ -604,7 +614,7 @@ class Tiers:
         exists."""
         from . import visibility
         from .schedule_rules import line_stamp
-        moment = moment or _now()
+        moment = moment or clock.now()
 
         def here(row):
             if not visibility.readable(row.get('visibility') or 'public', cls):
@@ -737,7 +747,7 @@ def night_list(store, persona, moment=None, *, excerpt_chars=600):
     put away as it is. Returns None when nothing is due."""
     from .config import excerpt
     from .documents import DocumentStore
-    moment = moment or _now()
+    moment = moment or clock.now()
     tiers = Tiers(store, persona)
     docs = DocumentStore(store, persona)
     night = moment.date().isoformat()
@@ -840,7 +850,7 @@ ABOUT = ('self', 'person', 'place', 'world')
 def recalled(store, window_days, moment=None):
     """{memory id: [episode ids]} for memories she recalled herself (`recall.read`) in at least two different
     conversations within the window: promotion's candidates come from her acts, not from what she was shown."""
-    moment = moment or _now()
+    moment = moment or clock.now()
     since = (moment - timedelta(days=float(window_days or 7))).isoformat()
     seen = {}
     for row in store.db.audit_events.find({'type': 'recall.read', 'occurred_at': {'$gte': since}},
@@ -856,8 +866,8 @@ def recalled(store, window_days, moment=None):
 def candidates(store, window_days, limit=20):
     """promotion_candidates with tiered memory on: what she recalled in different conversations."""
     picked = recalled(store, window_days)
-    rows = {row['_id']: row for row in store.db.memory_units.find({'_id': {'$in': list(picked)}, 'status': 'active'},
-                                                                 {'body_markdown': 1, 'kind': 1})}
+    rows = {row['_id']: row for row in memory_records.many(store, list(picked), status='active').each(
+        fields=['body_markdown', 'kind'])}
     return [{'memory_id': key, 'kind': rows[key].get('kind'), 'excerpt': rows[key].get('body_markdown', '')[:300],
              'episodes': episodes} for key, episodes in sorted(picked.items(), key=lambda kv: (-len(kv[1]), kv[0]))
             if key in rows][:limit]
@@ -878,8 +888,8 @@ def land(store, ep, item, episodes):
     elif about == 'world':
         slug, intent = WORLD_LEDGER, {**intent, 'kind': 'ledger', 'visibility': item.get('visibility') or 'owner_private'}
     elif about == 'place':
-        scenes = {row.get('scene_id') for row in store.db.episodes.find({'_id': {'$in': list(episodes)}}, {'scene_id': 1})}
-        groups = [scene for scene in store.db.scenes.find({'_id': {'$in': list(scenes)}}, {'kind': 1})
+        scenes = {row.get('scene_id') for row in episode_records.many(store, list(episodes)).rows(fields=['scene_id'])}
+        groups = [scene for scene in scene_records.many(store, list(scenes), fields=['kind'])
                   if scene.get('kind') == 'group']
         if len(scenes) == 1 and len(groups) == 1 and item.get('visibility') == 'public':
             slug, intent = notes_slug(groups[0]['_id']), {**intent, 'visibility': 'public'}
@@ -913,7 +923,7 @@ def week(store, persona, zone, moment=None):
     from .config import excerpt
     from .documents import DocumentStore
     from .schedule_rules import line_stamp
-    moment = moment or _now()
+    moment = moment or clock.now()
     tiers = Tiers(store, persona)
     since = (moment - timedelta(days=LOOK_BACK_DAYS)).isoformat()
     if tiers.rows.find_one({'row': 'offer', 'persona': persona, 'what': 'week', 'at': {'$gte': since}}):
@@ -921,7 +931,7 @@ def week(store, persona, zone, moment=None):
     left = []
     for move in tiers.rows.find({'row': 'move', 'persona': persona, 'from': CARRIED, 'at': {'$gte': since}}).sort('at', 1):
         row = tiers.rows.find_one({'_id': move['item']}) or {}
-        again = (row.get('recalled_at') or '') >= move['at']      # same instant counts: a coarse clock ties them
+        again = (row.get('recalled_at') or '') > move['at']
         left.append('%s「%s」放到了%s（%s）；之后你%s' % (line_stamp(zone, move['at']), move.get('heading') or move['sid'],
                                                     move['to'], REASONS.get(move['reason'], move['reason']),
                                                     'recall 过它' if again else '没再 recall 它'))
@@ -947,16 +957,17 @@ def detail(store, persona, row):
     behind = (row or {}).get('detail_of') or {}
     if not behind:
         return None                     # not a gist (or no item at all, as for a working document): nothing behind
-    revision = store.db.state_revisions.find_one({'_id': behind.get('revision_id')}) if behind.get('revision_id') else None
+    from . import documents
+    from .records import heads as head_records
+    revision = head_records.revision(store, behind.get('revision_id')) if behind.get('revision_id') else None
     for section in ((revision or {}).get('content') or {}).get('sections') or []:
         if section.get('sid') == row['sid']:
             return section.get('body')
-    old = store.db.journal_revisions.find_one({'persona': persona, 'slug': row['doc'], 'sid': row['sid'],
-                                               'body_sha256': behind.get('body_sha256')}) if behind else None
+    old = documents.revision_of_body(store, persona, row['doc'], row['sid'], behind.get('body_sha256')) if behind \
+        else None
     if old:
         return old.get('body')
-    for change in store.db.journal_revisions.find({'persona': persona, 'slug': row['doc'], 'sid': row['sid']}).sort(
-            'created_at', -1):
+    for change in documents.revisions(store, persona, row['doc'], sid=row['sid']).rows(newest_first=True):
         if sha((change.get('body') or '').encode()) == behind.get('body_sha256'):
             return change.get('body')
     return None
@@ -1005,7 +1016,7 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
         vector = retrieval.query_vector(query) or retrieval.embed([query], 'query')[0]
     except Exception:
         vector = None                    # the embedding route is down: the exact word still brings an item back
-    moment = moment or _now()
+    moment = moment or clock.now()
 
     def admit(candidates):
         if vector is None:

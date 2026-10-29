@@ -21,15 +21,18 @@ import time
 import uuid
 from collections import Counter
 
+from . import clock
 from .evidence import canonical, sha
 from .retrieval import EMBED_OPENING_CHARS, refused, terms
 from .state import now
+from .records import scenes as scene_records
 
 TIERS_VERSION = 1
 SHADOW_PILOT = False              # the pilot's turn rows (ADR-062 phase 1, closed); the index runs without it
 TURN_ROWS_DAYS = 30               # turn rows older than this go (prune)
 COLLECTION = 'memory_shadow'
-FLOOR = 0.83                      # absolute floor on the vector score, from ADR-062 §1.1
+# Every score below is on the (1 + cosine) / 2 scale (`_score`); tiered memory reads FLOOR and the slots from here.
+FLOOR = 0.83                      # absolute floor on the vector score, from ADR-062 §1.1 (cosine 0.66)
 OWN_SLOTS, SLOTS = 2, 6           # her own items may take at most two of a turn's six memory slots
 RECORD_ABOVE = 0.75               # candidates written per turn (the best SLOTS above this), so a report can try floors
 DUPLICATE_ABOVE = 0.93            # pairs within a store written from this score up
@@ -65,13 +68,15 @@ def own_items(store, persona):
         for section in (docs.read(slug)[1] or {}).get('sections') or []:
             add(slug, slug, section, scope_of(section))
     # current_self as it is split today: its list lines of some length (ADR-062 §1.1).
-    head = store.head('current_self:' + persona, 'global-safe')
+    from .records import heads as head_records
+    head = head_records.current(store, 'current_self:' + persona, 'global-safe')
     for line in ((head[1]['content'].get('body') or '') if head else '').splitlines():
         if SELF_ITEM.match(line) and len(line.strip()) >= SELF_ITEM_CHARS:
             add('self', 'current_self', {'sid': sha(line.strip().encode())[:16], 'body': line.strip(),
                                          'visibility': 'public'}, 'global-safe')
-    for slug in store.db.journal_entries.distinct('slug', {'persona': persona}):
-        for row in store.db.journal_entries.find({'persona': persona, 'slug': slug}).sort('seq', 1):
+    from . import documents
+    for slug in documents.slugs(store, persona):
+        for row in documents.entries(store, persona, slug).rows():
             add('journal', slug, row, scope_of(row))
     # Her ledgers and her self described as items (`self`, `core`), when she has them.
     for slug in docs.slugs():
@@ -79,7 +84,7 @@ def own_items(store, persona):
         kind = 'ledger' if content.get('kind') == 'ledger' else slug if slug in ('self', 'core') else None
         for section in content.get('sections') or [] if kind else []:
             add(kind, slug, section, scope_of(section))
-    for scene in store.db.scenes.find({'kind': 'group'}, {'scope_key': 1}):
+    for scene in scene_records.of_kind(store, 'group', fields=['scope_key']):
         content = docs.read(notes_slug(scene['_id']))[1]
         for section in (content or {}).get('sections') or []:
             add('group_notes', notes_slug(scene['_id']), section, scene['scope_key'])
@@ -89,8 +94,8 @@ def own_items(store, persona):
 def prune(store, moment=None, days=TURN_ROWS_DAYS):
     """Delete the pilot's turn rows (and recall and failure rows) older than `days`; items and pairs stay. Their `at` is
     an ISO string, so a TTL index cannot do it. Returns how many went."""
-    from datetime import datetime, timedelta, timezone
-    cutoff = ((moment or datetime.now(timezone.utc)) - timedelta(days=days)).isoformat()
+    from datetime import timedelta
+    cutoff = ((moment or clock.now()) - timedelta(days=days)).isoformat()
     return store.db[COLLECTION].delete_many({'row': {'$in': ['turn', 'recall', 'failure']},
                                              'at': {'$lt': cutoff}}).deleted_count
 

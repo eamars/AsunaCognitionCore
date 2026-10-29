@@ -5,6 +5,13 @@ import uuid
 from .config import DATA, ROOT
 from .evidence import canonical,sha,write_json
 from .state import Denied,now
+from .records import scenes as scene_records
+from .records import episodes as episode_records
+from .records import sessions as session_records
+from .records import receipts as receipt_records
+from .records import tasks as task_records
+from .records import memories as memory_records
+from .records import heads as head_records
 
 
 class PrivacyService:
@@ -12,7 +19,7 @@ class PrivacyService:
 
     def delete_memory(self,key,*,operator=False,active_lanes=()):
         if not operator:raise Denied('OPERATOR_ERASURE_REQUIRED')
-        db=self.store.db;memory=db.memory_units.find_one({'_id':key})
+        memory=memory_records.get(self.store,key)
         if not memory:raise ValueError('MEMORY_NOT_FOUND')
         scope=memory['scope_key']
         if scope=='global-safe':raise Denied('GLOBAL_ERASURE_REQUIRES_ALL_SCENE_MIGRATION')
@@ -26,45 +33,45 @@ class PrivacyService:
         source from the erased conversation goes, and the record falls back to the newest revision before it that
         cites none (or is deleted when there is none)."""
         from .understanding import PERSON_SCOPE
-        db=self.store.db
+        store=self.store
         def tainted(rev):
-            return any((db.memory_units.find_one({'_id':source},{'scope_key':1}) or {}).get('scope_key')==scope
+            return any((memory_records.get(self.store,source,['scope_key']) or {}).get('scope_key')==scope
                        for source in rev.get('source_ids',[]))
-        for head in db.state_heads.find({'scope_key':PERSON_SCOPE}):
-            chain=[];rev=db.state_revisions.find_one({'_id':head['revision_id']})
+        for head in head_records.heads(store,scope=PERSON_SCOPE).rows():
+            chain=[];rev=head_records.revision(store,head['revision_id'])
             while rev:
                 chain.append(rev)
-                rev=db.state_revisions.find_one({'_id':rev['parent_revision_id']}) if rev.get('parent_revision_id') else None
+                rev=head_records.revision(store,rev['parent_revision_id']) if rev.get('parent_revision_id') else None
             bad=[i for i,rev in enumerate(chain) if tainted(rev)]
             if not bad:continue
             keep=chain[bad[-1]+1] if bad[-1]+1<len(chain) else None
-            if keep:db.state_heads.update_one({'_id':head['_id']},{'$set':{'revision_id':keep['_id'],'revision':head['revision']+1}})
-            else:db.state_heads.delete_one({'_id':head['_id']})
+            if keep:head_records.point_to(store,head['_id'],keep['_id'],head['revision']+1)
+            else:head_records.drop_head(store,head['_id'])
             for rev in chain[:bad[-1]+1]:
-                db.state_revisions.update_one({'_id':rev['_id']},{'$set':{'content':{},'source_ids':[],'status':'tombstone','deletion_id':deletion}})
+                head_records.tombstone_revision(store,rev['_id'],deletion)
 
     def _erase(self,key,memory):
         db=self.store.db;scope=memory['scope_key']
         deletion='erase-'+uuid.uuid4().hex
         self.store.audit(deletion,'privacy.intent',{'memory_id':key,'scope':scope},scope)
-        scene=db.scenes.find_one({'scope_key':scope})
-        self.store.put('scenes',{**scene,'policy_epoch':scene['policy_epoch']+1},expected=scene['revision'],stream=deletion)
+        scene=scene_records.by_scope(self.store, scope)
+        scene_records.save(self.store, {**scene,'policy_epoch':scene['policy_epoch']+1},expected=scene['revision'],stream=deletion)
         # Immediate fencing precedes potentially slow file cleanup.
         from .blobs import BlobStore
         erased_blobs=BlobStore(self.store).erase_scope(scope,deletion)
         sources=set(memory.get('source_event_ids',[]))|{key}
         affected={key}
         for _ in range(32):
-            rows=list(db.memory_units.find({'scope_key':scope,'$or':[{'depends_on':{'$in':list(sources)}},{'source_event_ids':{'$in':list(sources)}}]}))
+            rows=memory_records.dependents(self.store,scope,list(sources)).rows()
             new={m['_id'] for m in rows}-affected
             if not new:break
             affected|=new;sources|=new
         roots=set();session_ids=set();native_sessions=set()
-        for session in db.sessions.find({'scope_key':scope}):
+        for session in session_records.of_scope(self.store,scope):
             roots.update(session.get('evidence_roots',[]));roots.add(session.get('evidence_root',''));session_ids.add(session['_id'])
             if not session.get('dsh_home'):
                 # Native Host session: its transcript lives in the profile's DSH home; it is invalidated here.
-                db.sessions.update_one({'_id':session['_id']},{'$set':{'state':'INVALIDATED','deletion_id':deletion}})
+                session_records.invalidate(self.store,session['_id'],deletion)
                 native_sessions.add(session['_id'])
                 continue
             home=Path(session['dsh_home']).resolve()
@@ -80,14 +87,14 @@ class PrivacyService:
                 import json
                 data=json.loads(path.read_text(encoding='utf-8'))
                 if data.get('session')==session['_id'] or path.name=='boundary-'+session['_id']+'.json':path.unlink()
-            db.sessions.update_one({'_id':session['_id']},{'$set':{'state':'INVALIDATED','deletion_id':deletion}})
-        ep_ids={e['_id'] for e in db.episodes.find({'scope_key':scope},{'_id':1})}
-        task_ids={t['_id'] for t in db.tasks.find({'scope_key':scope},{'_id':1})}
-        for mem in db.memory_units.find({'scope_key':scope}):
+            session_records.invalidate(self.store,session['_id'],deletion)
+        ep_ids={e['_id'] for e in episode_records.of_scope(self.store,scope,fields=['_id'])}
+        task_ids={t['_id'] for t in task_records.of_scope(self.store,scope,fields=['_id'])}
+        for mem in memory_records.of_scope(self.store,scope).each():
             derived=mem.get('kind') in ('monologue','chat_chunk') and mem.get('episode_id') in ep_ids
             if mem['_id'] in affected or derived or mem.get('kind')=='chat_chunk':
-                db.memory_units.replace_one({'_id':mem['_id']},{'_id':mem['_id'],'schema_version':1,'revision':mem['revision']+1,'scope_key':scope,'status':'tombstone','deletion_id':deletion,'body_markdown':'','source_event_ids':[],'policy_epoch':scene['policy_epoch']+1})
-            else:db.memory_units.update_one({'_id':mem['_id']},{'$set':{'policy_epoch':scene['policy_epoch']+1}})
+                memory_records.tombstone(self.store,mem,deletion,scene['policy_epoch']+1)
+            else:memory_records.set_epoch(self.store,mem['_id'],scene['policy_epoch']+1)
         for collection in ('episodes','tasks','messages','artifacts','sink_receipts'):
             for doc in db[collection].find({'scope_key':scope}):
                 # A stored file or picture whose bytes erase_scope deleted keeps its row as marked (ADR-105: its name,
@@ -98,18 +105,18 @@ class PrivacyService:
                 retained={k:doc[k] for k in ('_id','schema_version','revision','scope_key','scene_id','source_event_id','episode_kind','publication_key','request_key','binding_key','content_hash','scene_seq','direction','author','adapter_id','platform_event_id') if k in doc}
                 retained.update(deletion_id=deletion,state='INVALIDATED',delivery_state='REDACTED',text='[deleted]',policy_epoch=scene['policy_epoch']+1)
                 db[collection].replace_one({'_id':doc['_id']},retained)
-        for receipt in db.lane_receipts.find({'session_id':{'$in':list(session_ids)}}):
-            db.lane_receipts.replace_one({'_id':receipt['_id']},{'_id':receipt['_id'],'schema_version':1,'scope_key':'operator','state':'INVALIDATED','deletion_id':deletion})
-        for head in db.state_heads.find({'scope_key':scope}):
-            rev=db.state_revisions.find_one({'_id':head['revision_id']})
-            while rev and rev.get('parent_revision_id'):rev=db.state_revisions.find_one({'_id':rev['parent_revision_id']})
+        for receipt in receipt_records.lane_of_sessions(self.store,list(session_ids)):
+            receipt_records.lane_invalidate(self.store,receipt['_id'],deletion)
+        for head in head_records.heads(self.store,scope=scope).rows():
+            rev=head_records.revision(self.store,head['revision_id'])
+            while rev and rev.get('parent_revision_id'):rev=head_records.revision(self.store,rev['parent_revision_id'])
             if rev and not(set(rev.get('source_ids',[]))&sources):
-                db.state_heads.update_one({'_id':head['_id']},{'$set':{'revision_id':rev['_id'],'revision':head['revision']+1}})
-            else:db.state_heads.delete_one({'_id':head['_id']})
+                head_records.point_to(self.store,head['_id'],rev['_id'],head['revision']+1)
+            else:head_records.drop_head(self.store,head['_id'])
         self._erase_person_layer(scope,deletion)
-        active_revisions={h['revision_id'] for h in db.state_heads.find({'scope_key':scope})}
-        for rev in db.state_revisions.find({'scope_key':scope,'_id':{'$nin':list(active_revisions)}}):
-            db.state_revisions.update_one({'_id':rev['_id']},{'$set':{'content':{},'source_ids':[],'status':'tombstone','deletion_id':deletion}})
+        active_revisions={h['revision_id'] for h in head_records.heads(self.store,scope=scope).rows()}
+        for rev in head_records.stale_revisions(self.store,scope,list(active_revisions)).rows():
+            head_records.tombstone_revision(self.store,rev['_id'],deletion)
         # Intentional erasure is a declared chain rebase, not a claim that the
         # original chain still verifies. Preserve old terminal hashes only.
         previous_roots={};new_roots={}

@@ -22,10 +22,13 @@ prefix stays as it was.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
+from . import clock
 from .caught_up import said_at
 from .config import ago, character_id, excerpt, prompt_path
+from .records import artifacts as artifact_records
+from .records import messages as message_records
 
 # Why she is being asked, in words; any other wake reason runs the full turn as before.
 GATED = {
@@ -58,25 +61,24 @@ PASSED_NOTE = '上回合以后，你在这个群看过、当时没接的话：�
 def hold_passed(store, scene_id, message_id, received_at):
     """A line she let pass, kept until her next turn there lists it (ADR-086 §16, her condition)."""
     import uuid
-    store.db.artifacts.insert_one({'_id': 'passed-' + uuid.uuid4().hex, 'kind': PASSED_KIND, 'scene_id': scene_id,
-                                   'message_id': message_id, 'received_at': received_at, 'schema_version': 1})
-    extra = list(store.db.artifacts.find({'kind': PASSED_KIND, 'scene_id': scene_id}, {'_id': 1})
-                 .sort('received_at', -1).skip(PASSED_KEPT))
+    artifact_records.insert(store, {'_id': 'passed-' + uuid.uuid4().hex, 'kind': PASSED_KIND, 'scene_id': scene_id,
+                                    'message_id': message_id, 'received_at': received_at, 'schema_version': 1})
+    extra = artifact_records.of_scene(store, PASSED_KIND, scene_id).rows(newest_first=True, skip=PASSED_KEPT,
+                                                                        fields=['_id'])
     if extra:
-        store.db.artifacts.delete_many({'_id': {'$in': [doc['_id'] for doc in extra]}})
+        artifact_records.delete_many(store, [doc['_id'] for doc in extra])
 
 
 def take_passed(store, scene, persona=None):
     """The lines she let pass here since her last turn, oldest first, once: {'items': [...], 'more': ...} or None."""
-    held = list(store.db.artifacts.find({'kind': PASSED_KIND, 'scene_id': scene['_id']}).sort('received_at', 1))
+    held = artifact_records.of_scene(store, PASSED_KIND, scene['_id']).rows()
     if not held:
         return None
-    store.db.artifacts.delete_many({'_id': {'$in': [doc['_id'] for doc in held]}})
+    artifact_records.delete_many(store, [doc['_id'] for doc in held])
     from .people import People
     from .schedule_rules import line_stamp, scene_timezone
-    rows = {row['_id']: row for row in store.db.messages.find(
-        {'_id': {'$in': [doc['message_id'] for doc in held]}},
-        {'author': 1, 'attend': 1, 'occurred_at': 1, 'received_at': 1, 'event': 1})}
+    rows = {row['_id']: row for row in message_records.many(store, [doc['message_id'] for doc in held]).rows(
+        fields=['author', 'attend', 'occurred_at', 'received_at', 'event'])}
     people, zone, items = People(store, persona), scene_timezone(store.config, scene), []
     for doc in held:
         row = rows.get(doc['message_id'])
@@ -120,16 +122,14 @@ def _amount(count):
 def recent(store, scene, until_seq, now_ts=None):
     """(lines as she reads them, words for how long since she spoke here and how much came since)."""
     from .people import People
-    now_ts = now_ts or datetime.now(timezone.utc).timestamp()
+    now_ts = now_ts or clock.now().timestamp()
     me = character_id(store.config)
-    mine = store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'outbound', 'author': me,
-                                       'delivery_state': 'DELIVERED'}, {'scene_seq': 1, 'receipt_at': 1},
-                                      sort=[('scene_seq', -1)])
-    rows = list(store.db.messages.find(
-        {'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'], 'scene_seq': {'$lte': until_seq},
-         '$or': [{'direction': 'inbound'}, {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]},
-        {'_id': 1, 'author': 1, 'text': 1, 'direction': 1, 'scene_seq': 1, 'received_at': 1, 'receipt_at': 1,
-         'occurred_at': 1, 'scene_id': 1, 'event': 1, 'errand': 1}).sort('scene_seq', -1).limit(MAX_LINES))
+    mine = message_records.spoken(store, scene['_id'], author=me).first(newest_first=True,
+                                                                          fields=['scene_seq', 'receipt_at'])
+    rows = message_records.said(store, scene['_id'], scene['policy_epoch'], upto=until_seq).rows(
+        newest_first=True, limit=MAX_LINES,
+        fields=['_id', 'author', 'text', 'direction', 'scene_seq', 'received_at', 'receipt_at', 'occurred_at',
+                'scene_id', 'event', 'errand'])
     floor = now_ts - WINDOW_MAX_MINUTES * 60
     always = now_ts - WINDOW_MIN_MINUTES * 60
     since = (mine or {}).get('scene_seq') or 0
@@ -147,8 +147,7 @@ def recent(store, scene, until_seq, now_ts=None):
             break
         kept.append(text)
     kept.reverse()
-    newer = store.db.messages.count_documents({'scene_id': scene['_id'], 'direction': 'inbound',
-                                               'scene_seq': {'$gt': since, '$lte': until_seq}}, limit=50)
+    newer = message_records.inbound(store, scene['_id'], after=since, upto=until_seq).count(limit=50)
     spoke = _seconds((mine or {}).get('receipt_at'))
     if spoke is None:
         timing = '你还没在这里说过话'

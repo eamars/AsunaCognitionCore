@@ -10,12 +10,21 @@ memories, people's messages, names, her persona's own words for feelings) is sen
 from datetime import datetime
 import re
 
+from . import clock
 from .config import ago, character_id
 from .state import Denied
 from . import carried, channel_kinds, scene_links
-from .ingress import NOT_CORE_NOTICE
+from .records import messages as message_records
 from .native_cognition import CognitionView
 from .peer_context import speaker_name
+from .records import scenes as scene_records
+from .records import episodes as episode_records
+from .records import sessions as session_records
+from .records import memories as memory_records
+from .records import artifacts as artifact_records
+from .records import heads as head_records
+from .records import ideas as idea_records
+from .records import people as people_records
 
 DOCUMENT_KINDS = ('persona', 'voice', 'ledger', 'working')
 # The two scopes of the tab: what is the same in every conversation, and what this conversation reads.
@@ -129,9 +138,9 @@ class NativeMemory:
     def __init__(self, worker, session_id):
         self.store = worker.app.store
         self.binding = worker.session(session_id)
-        self.scene = self.store.authorize(self.binding['scene_id'], self.binding['person_id'])
+        self.scene = scene_records.authorize(self.store, self.binding['scene_id'], self.binding['person_id'])
         self.read = scene_links.read_scope(self.store.config, self.scene)
-        scenes = list(self.store.db.scenes.find({'_id': {'$in': self.read['scene_ids']}}))
+        scenes = scene_records.many(self.store, self.read['scene_ids'])
         # Current epochs are resolved independently for each explicit A2 source.
         self.scopes = [{'scope_key': row['scope_key'], 'policy_epoch': row['policy_epoch']} for row in scenes]
         self.sources = [{'scene_id': row['_id'], 'policy_epoch': row['policy_epoch']} for row in scenes]
@@ -141,11 +150,9 @@ class NativeMemory:
         self.heads = {f'{kind}:{persona}|global-safe': ('self', label('title.' + kind)) for kind in (
             'character_core', 'current_self')}
         # Operator view: owner-private imported entries are listed too, each with its scope label.
-        self.unit_query = {'status': 'active', 'character_id': character_id(self.store.config),
-                           '$or': self.scopes + [{'scope_key': 'global-safe', 'policy_epoch': 1},
-                                                 {'scope_key': 'owner-private:' + persona, 'policy_epoch': 1}]}
-        self.message_query = {'$and': [{'$or': self.sources}, NOT_CORE_NOTICE, {'$or': [
-            {'direction': 'inbound'}, {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}]}
+        self.character = character_id(self.store.config)
+        self.unit_pairs = [(row['scope_key'], row['policy_epoch']) for row in self.scopes] + [
+            ('global-safe', 1), ('owner-private:' + persona, 1)]
         self.cognition = CognitionView(self)
 
     def scene_title(self, scene_id):
@@ -154,8 +161,7 @@ class NativeMemory:
         if scene_id == self.scene['_id'] and self.binding.get('native_title'):
             return self.binding['native_title']
         # The same title the conversation list shows for that scene.
-        main = self.store.db.sessions.find_one({'scene_id': scene_id, 'main_conversation': True,
-                                                'native_title': {'$exists': True}}, {'native_title': 1})
+        main = session_records.titled(self.store, scene_id, fields=['native_title'])
         if main:
             return main['native_title']
         platform = channel_kinds.of(scene_id)
@@ -216,21 +222,20 @@ class NativeMemory:
     def person_name(self, person):
         """A person as the owner reads them: the name this machine keeps, else the card or nickname they last had."""
         from .people import safe_name
-        row = self.store.db.identities.find_one({'_id': person}, {'display_name': 1})
+        row = people_records.identity(self.store, person, ['display_name'])
         kept = safe_name((row or {}).get('display_name'))
         if kept:
             return kept
-        seen = self.store.db.scene_people.find_one({'person': person}, {'card': 1, 'nickname': 1}, sort=[('seen_at', -1)])
+        seen = people_records.label_of_person(self.store, person, ['card', 'nickname'])
         return (safe_name((seen or {}).get('card')) or safe_name((seen or {}).get('nickname'))
                 or speaker_name(self.store.config, person, None, self.store.db))
 
     def relation_records(self, person=None):
         """{person: [(scope, short and body, time)]}: what holds of them anywhere (scope `person`) and how they are in each
         conversation (scope `scene:...`)."""
-        pattern = '^relationship:' + (re.escape(person) + '[|]' if person else '')
-        heads = list(self.store.db.state_heads.find({'_id': {'$regex': pattern}}))
-        revisions = {row['_id']: row for row in self.store.db.state_revisions.find(
-            {'_id': {'$in': [head['revision_id'] for head in heads]}}, {'content': 1, 'created_at': 1, 'generated_at': 1})}
+        heads = head_records.with_prefix(self.store, 'relationship:' + (person + '|' if person else '')).rows()
+        revisions = {row['_id']: row for row in head_records.revisions(
+            self.store, [head['revision_id'] for head in heads]).rows(fields=['content', 'created_at', 'generated_at'])}
         found = {}
         for head in heads:
             entity, scope = head['_id'].rsplit('|', 1)
@@ -260,8 +265,8 @@ class NativeMemory:
         """The last ten people who spoke in this conversation, each with how she sees them here (or nothing yet)."""
         from . import understanding
         latest = {}
-        for message in self.store.db.messages.find({'scene_id': self.scene['_id'], 'direction': 'inbound', **NOT_CORE_NOTICE},
-                                                   {'author': 1, 'occurred_at': 1}).sort('occurred_at', -1).limit(2000):
+        for message in message_records.inbound(self.store, self.scene['_id'], people_only=True, by='occurred_at').rows(
+                newest_first=True, limit=2000, fields=['author', 'occurred_at']):
             if message.get('author') and message['author'] not in latest:
                 latest[message['author']] = message.get('occurred_at')
             if len(latest) == 10:
@@ -295,10 +300,10 @@ class NativeMemory:
     def head_rows(self, kind, search=''):
         replaced = {f'{name}:{self.persona}|global-safe' for name in self.self_documents()}
         keys = [key for key, (category, _) in self.heads.items() if kind == category and key not in replaced]
-        heads = list(self.store.db.state_heads.find({'_id': {'$in': keys}}))
-        revisions = {row['_id']: row for row in self.store.db.state_revisions.find(
-            {'_id': {'$in': [head['revision_id'] for head in heads]}},
-            {'content': 1, 'updated_at': 1, 'generated_at': 1, 'created_at': 1})}
+        heads = head_records.heads(self.store, keys).rows()
+        revisions = {row['_id']: row for row in head_records.revisions(
+            self.store, [head['revision_id'] for head in heads]).rows(
+                fields=['content', 'updated_at', 'generated_at', 'created_at'])}
         by_key = {head['_id']: head for head in heads}
         rows = []
         for key in keys:
@@ -336,7 +341,7 @@ class NativeMemory:
         if any(pair and pair[1] is None for pair in map(docs.head, docs.slugs())):
             raise Denied('MEMORY_REVISION_UNAVAILABLE')      # a broken head is never shown as an empty document
         status = render_status(self.store, self.persona) if docs.head('persona') else None
-        groups = {notes_slug(row['_id']): row['_id'] for row in self.store.db.scenes.find({'kind': 'group'}, {'_id': 1})}
+        groups = {notes_slug(row['_id']): row['_id'] for row in scene_records.of_kind(self.store, 'group', fields=['_id'])}
         rows = []
         for slug in docs.slugs():
             if slug in groups:
@@ -380,12 +385,12 @@ class NativeMemory:
         view = ledger.description('owner_private')
         # "Now" sorts first: the mood is computed for this moment.
         rows = [{'id': 'affect:state', 'kind': 'affect', 'title': label('title.mood'), 'excerpt': mood_line(view),
-                 'updated_at': datetime.now().astimezone().isoformat()}]
+                 'updated_at': clock.now().astimezone().isoformat()}]
         events = list(self.store.db.affect_events.find({'persona': self.persona}).sort('ts', -1).limit(20))
         closed = {row['target'] for row in self.store.db.affect_amendments.find(
             {'target': {'$in': [event['_id'] for event in events]}, 'op': {'$in': ['close', 'void']}}, {'target': 1})}
-        scenes = {row['_id']: row['scene_id'] for row in self.store.db.episodes.find(
-            {'_id': {'$in': [event.get('episode_id') for event in events]}}, {'scene_id': 1})}
+        scenes = {row['_id']: row['scene_id'] for row in episode_records.many(
+            self.store, [event.get('episode_id') for event in events]).rows(fields=['scene_id'])}
         for event in events:
             rows.append({'id': 'affect:' + event['_id'], 'kind': 'affect_event',
                          'title': label('title.moved', feeling=kind_label(ledger.model, event.get('kind'))),
@@ -403,7 +408,7 @@ class NativeMemory:
         if not self.owner_view():
             return []
         rows = []
-        for row in self.store.db.ideas.find({'persona': self.persona}).sort('created_at', -1).limit(50):
+        for row in idea_records.of_persona(self.store, self.persona).rows(newest_first=True, limit=50):
             decided = (row.get('decisions') or [{}])[-1]
             rows.append({'id': 'idea:' + row['_id'], 'kind': 'idea', 'title': row['idea'],
                          'excerpt': [label('idea.state.' + row.get('state', 'open')), ' · ', decided.get('why') or row['why']],
@@ -412,8 +417,8 @@ class NativeMemory:
 
     def job_rows(self):
         rows = []
-        for item in self.store.db.artifacts.find({'kind': 'persona_job_report', 'scope_key': 'owner-private:' + self.persona},
-                                                 {'_id': 1, 'size': 1}).sort('_id', -1).limit(20):
+        for item in artifact_records.of_kind(self.store, 'persona_job_report', scope='owner-private:' + self.persona,
+                                             by='_id').rows(newest_first=True, limit=20, fields=['_id', 'size']):
             rows.append({'id': 'report:' + item['_id'], 'kind': 'persona_job_report', 'title': label('title.job'),
                          'excerpt': item['_id'], 'scope_key': 'owner-private:' + self.persona})
         return rows
@@ -439,28 +444,29 @@ class NativeMemory:
         skipped = 0
         if kind in ('summary', 'source', 'interpretation'):
             messages = kind == 'source'
-            query = self.message_query if messages else dict(self.unit_query)
-            if kind == 'summary':
-                query['epistemic_type'] = 'derived_summary'
-            elif kind == 'interpretation':
-                query['epistemic_type'] = 'character_interpretation'
-            if search:
-                query = {'$and': [query, {'text' if messages else 'body_markdown': {
-                    '$regex': re.escape(search), '$options': 'i'}}]}
-            projection = {'scope_key': 1, 'scene_id': 1, 'author': 1, 'speaker': 1, 'kind': 1, 'event.raw.asuna_peer': 1,
-                'epistemic_type': 1, 'generated_at': 1, 'occurred_at': 1, '_memory_time': 1,
-                'excerpt': {'$substrCP': [{'$ifNull': ['$text' if messages else '$body_markdown', '']}, 0, 200]}}
-            collection = self.store.db.messages if messages else self.store.db.memory_units
             # State and coverage rows are bounded. Merge into a time-ordered
             # window instead of loading every preceding page or pinning them first.
             skipped = max(0, offset - len(heads))
-            # Every memory carries its own time: a summary when it was made, a line when it was said, a thought
-            # when she formed it.
-            timing = [] if messages else [
-                {'$addFields': {'_memory_time': {'$ifNull': ['$generated_at', '$occurred_at', '$formed_at']}}}]
-            result = collection.aggregate([{'$match': query}, *timing, {'$sort': {
-                'occurred_at' if messages else '_memory_time': -1, '_id': -1}},
-                {'$skip': skipped}, {'$limit': self.PAGE + 1 + len(heads)}, {'$project': projection}])
+            if messages:
+                # A line's time is when it was said; its excerpt is the start of its text.
+                result = message_records.said_in_sources(self.store, self.sources, search=search or None).rows(
+                    newest_first=True, skip=skipped, limit=self.PAGE + 1 + len(heads),
+                    fields=['scope_key', 'scene_id', 'author', 'speaker', 'kind', 'event.raw.asuna_peer',
+                            'epistemic_type', 'generated_at', 'occurred_at', 'text'])
+                for row in result:
+                    text = row.pop('text', None)
+                    row['excerpt'] = (text if isinstance(text, str) else '')[:200]
+            else:
+                # Every memory carries its own time: a summary when it was made, a thought when she formed it.
+                result = memory_records.web_page(
+                    self.store, self.unit_pairs, self.character,
+                    epistemic='derived_summary' if kind == 'summary' else 'character_interpretation',
+                    search=search or None, skip=skipped, limit=self.PAGE + 1 + len(heads),
+                    fields=['scope_key', 'scene_id', 'author', 'speaker', 'kind', 'event.raw.asuna_peer',
+                            'epistemic_type', 'body_markdown'])
+                for row in result:
+                    body = row.pop('body_markdown', None)
+                    row['excerpt'] = (body if isinstance(body, str) else '')[:200]
             for row in result:
                 source = row.get('scene_id') or row.get('scope_key', '').removeprefix('scene:')
                 rows.append({'id': ('source:' if messages else 'unit:') + row['_id'],
@@ -494,7 +500,7 @@ class NativeMemory:
         if kind == 'report':
             from .blobs import BlobStore
             import json as _json
-            row = self.store.db.artifacts.find_one({'_id': key, 'kind': 'persona_job_report'})
+            row = artifact_records.get(self.store, key, kind='persona_job_report')
             if row:
                 report = _json.loads(BlobStore(self.store).get(key, row['scope_key'], operator=True))
                 lines = paragraphs(label('report.status', status=report['status'], job=report['job'], run=report['run_id']),
@@ -503,7 +509,7 @@ class NativeMemory:
                 result = {'id': identifier, 'body': lines, 'interpretation': False, 'source_ids': [],
                           'category': 'persona_job_report', 'scope_key': row['scope_key']}
         elif kind == 'idea':
-            row = self.store.db.ideas.find_one({'_id': key, 'persona': self.persona}) if self.owner_view() else None
+            row = idea_records.get(self.store, key, persona=self.persona) if self.owner_view() else None
             source = (row or {}).get('source') or {}
             result = row and {'id': identifier, 'category': 'idea', 'interpretation': True, 'source_ids': [],
                               'status': 'idea.' + row.get('state', 'open'),
@@ -566,7 +572,7 @@ class NativeMemory:
                 result = self.person_detail(key)
         elif kind == 'head' and key in self.heads:
             entity, scope = key.rsplit('|', 1)
-            pair = self.store.head(entity, scope)
+            pair = head_records.current(self.store, entity, scope)
             row = pair[1] if pair else None
             if pair and not row:
                 raise Denied('MEMORY_REVISION_UNAVAILABLE')
@@ -583,7 +589,8 @@ class NativeMemory:
                 result = {'id': identifier, 'body': label('hint.' + self.heads[key][0]),
                           'category': self.heads[key][0], 'status': 'empty', 'source_ids': []}
         elif kind == 'unit':
-            row = self.store.db.memory_units.find_one({**self.unit_query, '_id': key}, {'embedding': 0})
+            row = memory_records.get(self.store, key, memory_records.UNVECTORED, pairs=self.unit_pairs,
+                                     character=self.character, status='active')
             if row:
                 result = {'id': identifier, 'body': row.get('body_markdown', ''),
                           'category': row.get('epistemic_type') or 'other',
@@ -594,8 +601,8 @@ class NativeMemory:
                 window = row.get('source_window') if isinstance(row.get('source_window'), dict) else None
                 if window and window.get('file_sha256'):
                     # Read back the exact lines from the snapshot taken at import (MEMORY §6.3).
-                    snapshot = self.store.db.artifacts.find_one({'sha256': window['file_sha256'], 'kind': 'source_snapshot',
-                                                                 'scope_key': row['scope_key']})
+                    snapshot = artifact_records.by_content(self.store, window['file_sha256'], 'source_snapshot',
+                                                           scope=row['scope_key'])
                     if snapshot:
                         from .blobs import BlobStore
                         lines = BlobStore(self.store).get(snapshot['_id'], row['scope_key'], operator=True).decode('utf-8').splitlines()
@@ -607,8 +614,8 @@ class NativeMemory:
                     from . import reasons
                     result['then'] = reasons.then(self.store, row)       # what she did after this thought
         elif kind == 'source':
-            row = self.store.db.messages.find_one({**self.message_query, '_id': key},
-                {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1, 'direction': 1, 'event.raw.asuna_peer': 1})
+            row = message_records.said_in_sources(self.store, self.sources, line=key, by=None).first(
+                fields=['text', 'author', 'scene_id', 'occurred_at', 'direction', 'event.raw.asuna_peer'])
             if row:
                 result = {'id': identifier, 'body': row.pop('text', ''), 'interpretation': False,
                           'category': 'source', 'usage': self.cognition.usage(identifier), **row}
@@ -627,13 +634,13 @@ class NativeMemory:
         ids = result.pop('source_ids', [])
         result['sources_truncated'] = len(ids) > 12
         ids = ids[:12]
-        result['sources'] = list(self.store.db.messages.find({**self.message_query, '_id': {'$in': ids}},
-            {'text': 1, 'author': 1, 'scene_id': 1, 'occurred_at': 1, 'event.raw.asuna_peer': 1}).sort([('occurred_at', 1), ('_id', 1)]).limit(12))
+        result['sources'] = message_records.said_in_sources(self.store, self.sources, lines=ids).rows(
+            limit=12, fields=['text', 'author', 'scene_id', 'occurred_at', 'event.raw.asuna_peer'])
         # Self/relationship revisions can cite interpretation or summary units,
         # not only original messages. Keep the source type and the same scope.
-        for source in self.store.db.memory_units.find({**self.unit_query, '_id': {'$in': ids}},
-                {'body_markdown': 1, 'speaker': 1, 'scope_key': 1, 'generated_at': 1,
-                 'occurred_at': 1, 'epistemic_type': 1}).limit(12):
+        for source in memory_records.many(self.store, ids, pairs=self.unit_pairs, character=self.character,
+                                          status='active').rows(limit=12, fields=[
+                'body_markdown', 'speaker', 'scope_key', 'generated_at', 'occurred_at', 'epistemic_type']):
             result['sources'].append({'_id': source['_id'], 'text': source.get('body_markdown', ''),
                 'author': source.get('speaker'), 'scene_id': source.get('scope_key', '').removeprefix('scene:'),
                 'occurred_at': source.get('generated_at') or source.get('occurred_at'),

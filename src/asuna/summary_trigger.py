@@ -24,16 +24,19 @@ from __future__ import annotations
 
 import statistics
 from datetime import datetime, timezone
+from . import clock
 
 try:                                  # 宿主按包加载
     from .discussion_digest import (CONFIRM_CUES, CORRECTION_CUES, QUESTION_CUES, QUESTION_MARKS,
                                     _first_cue)
-    from .history_query import (DELIVERED, DELIVERY_FIELD, OUTBOUND, _outbound_time, _receipt_ref,
+    from .history_query import (OUTBOUND, _outbound_time, _receipt_ref,
                                _sink_times, _stamp)
+    from .records import messages as message_records
 except Exception:                     # 同目录平铺加载（离线自检）也认
+    from asuna.records import messages as message_records
     from discussion_digest import (CONFIRM_CUES, CORRECTION_CUES, QUESTION_CUES, QUESTION_MARKS,
                                    _first_cue)
-    from history_query import (DELIVERED, DELIVERY_FIELD, OUTBOUND, _outbound_time, _receipt_ref,
+    from history_query import (OUTBOUND, _outbound_time, _receipt_ref,
                                _sink_times, _stamp)
 
 # 形状参数与安全上下界：它们决定「怎么算」和「别算飞了」，不决定「第几条／第几秒触发」。
@@ -96,11 +99,9 @@ def _bursts(timed, split_after):
 
 def observe(store, scene, *, now_ts=None, rows_limit=OBSERVE_ROWS):
     """从这个场景已经存在的行里归纳它自己的节奏。只读；不写库、不调模型、不猜。"""
-    rows = list(store.db.messages.find(
-        {'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
-         '$or': [{'direction': 'inbound'}, {'direction': OUTBOUND, DELIVERY_FIELD: DELIVERED}]},
-        {'scene_seq': 1, 'direction': 1, 'author': 1, 'text': 1, 'occurred_at': 1,
-         'received_at': 1, 'receipt_at': 1, 'receipt': 1}).sort('scene_seq', -1).limit(rows_limit))
+    rows = message_records.said(store, scene['_id'], scene['policy_epoch']).rows(
+        newest_first=True, limit=rows_limit or None,
+        fields=['scene_seq', 'direction', 'author', 'text', 'occurred_at', 'received_at', 'receipt_at', 'receipt'])
     rows.sort(key=lambda row: row.get('scene_seq') or 0)
     refs = {ref for row in rows if row.get('direction') == OUTBOUND
             for ref in [_receipt_ref(row)] if ref}
@@ -174,7 +175,7 @@ def closure_cue(rows):
 
 def decide(profile, pending, *, pooled_prior=None, now_ts=None, window_rows, row_char_cap=4000):
     """该不该现在整理这一批。返回带全部中间量的决定，调用方原样进证据／条目。"""
-    now_ts = now_ts if now_ts is not None else datetime.now(timezone.utc).timestamp()
+    now_ts = now_ts if now_ts is not None else clock.now().timestamp()
     profile = profile or {}
     pooled_prior = pooled_prior or {}
     quiet = profile.get('quiet_after') or pooled_prior.get('quiet_after') or SEED_QUIET_SECONDS

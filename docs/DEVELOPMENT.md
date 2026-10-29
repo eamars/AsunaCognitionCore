@@ -8,11 +8,12 @@ in [NATIVE_PLUGIN.md](../NATIVE_PLUGIN.md), and the contracts in [RUNTIME_API.md
 
 | Path | What it holds |
 |---|---|
-| `src/asuna/` | The Python business worker (queues, cognition, memory, channels, integration supervision). `resources/prompts` and `resources/schemas` are the neutral core prompts and JSON schemas. |
+| `src/asuna/` | The Python business worker (queues, cognition, memory, channels, integration supervision). `resources/prompts` and `resources/schemas` are the neutral core prompts and JSON schemas; `store/` is the store's interface and adapters, `records/` the owners of the collections read across the core (each the only code that reads or writes its collection). |
 | `packages/cognition-core/` | The Host plugin: `src/` (JS), `test/` (node tests), `skills/` (core skills), `locale/`, `meta/` (the preset, floor and persistence plugins' locales), `cordis.patch.yml` (its presets). `runtime-manifest.json` is written by the packer; `python/` is the packer's ignored copy of `src/asuna`. |
 | `packages/channels/<name>/` | A channel package: `src/index.js` (`registerChannel`), `python/<module>/` (the kind module), `cordis.patch.yml`, `locale/`, and where it has them `integration/` (a managed adapter), `skills/`, `test/`. |
 | `packages/personas/<name>/` | A persona package: `src/index.js` (`registerPersona`), `persona-model.json`, `seeds/`, `skills/`, `cordis.patch.yml` (its role preset), `locale/`, `icon.*`. |
 | `tests/` | pytest suites (`test_*.py`); case modules shared with the offline checks (`*_cases.py`); fixtures (`fixtures/world.json`, the synthetic persona `fixtures/personas/demo`); `dsh_sandbox.mjs`, which wraps test commands in DSH's sandbox. |
+| `integration/` | the database adapter's integration tests against a real server (not in the default run) |
 | `.agents/skills/` | Skills for coding agents, never published to a character: `asuna-cache-readout` (numbers-only readout of model traffic and cache hits from the DSH sessions). |
 | `tools/` | Install, launch, pack and build scripts, repository checks and diagnostics: see [tools/README.md](../tools/README.md). |
 | `config/` | Tracked templates (`*.example.*`). Real configuration (`local.json`, `*.local.json`) is ignored. |
@@ -57,6 +58,23 @@ change and installs again ([RUN_ASUNA.md](../RUN_ASUNA.md#start-review-stop)). T
 idle, and never run two instances on the same channel routes. Check the result on the Web page, in an isolated demo
 profile for new UI or behavior ([Demo environment](../RUN_ASUNA.md#demo-environment)).
 
+## Inbound lines, the clock and stored times
+
+- **Ingress.** Every inbound line is admitted under one fence, the controller's `ingress_lock` (`Channels.receive`,
+  `Chat.receive`), so whatever waits under it holds up every line behind it. Admission there does no network I/O,
+  starts no subprocess and waits on no Host reply. Work of those kinds stays outside the fence: picture downloads,
+  voice transcription, and walks over every member of every channel (a path resolve or a `mkdir` per grant). A
+  download happens after the line is in, or when she opens it; a voice is transcribed before its line is posted; a new
+  member's grant is checked and prepared alone (`host.prepare_admission`). A task's stage takes the effects lock
+  (`queue.database_effects_lock`) first and the fence only for its brief check, never the fence while it waits for
+  the effects lock.
+- **The one clock.** `asuna.clock` gives the time in one process in the order it was read (it takes a lock): a reading
+  that would not be later than the last one is the last one plus 1 µs. Such a 1 µs gap is spacing the clock made, not
+  a measured interval. Across processes (the worker and the Host, two starts) there is no such order.
+- **Times as text.** Comparing stored times as text is reliable only within one column and one form (the same offset
+  and the same precision). Within one second, `.` sorts before `Z`, so `...:55.896576Z` comes before `...:55Z`. Rows
+  whose time field is null or missing drop out of any time window.
+
 ## The project map
 
 [docs/map](map/README.md) answers how the main things are done (home and public kept apart, QQ to DSH and back, a
@@ -79,11 +97,26 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
 - The tests keep only invariants whose breakage would be visible or harmful: privacy and visibility boundaries,
   authorization and epoch fencing, exactly-once ingest and publication, crash recovery, audit integrity, sandbox
   isolation and the visible native behavior.
-- Python suites read `config/local.json` for the MongoDB address. The `store` fixture builds the fixture world once
-  per session and resets a reused `asuna_v2_test_*` database for each test; every test database is dropped at
-  session end, failures included. Mongo tests skip when the service is unavailable.
+- The unit run reaches no database server. Every MongoDB client it makes, in the test process and in every Python
+  process it starts, is an in-process stand-in (`tests/unit_run_site/sitecustomize.py`, mongomock over one shared
+  store), and every configuration it loads names an address that cannot resolve; `tests/test_no_server.py` checks
+  both. The `store` fixture builds the fixture world once per session and resets a reused `asuna_v2_test_*` database
+  of the stand-in for each test. A test the stand-in cannot carry is listed in `tests/harness_skips.txt` with what it
+  lacks and skips as unchecked, not passed.
+- `src/asuna/store/` is the store's interface: the condition and change words, the catalog of declared collections,
+  the adapter registry, the in-memory adapter and the MongoDB adapter, through which `Store` writes, audits and
+  searches vectors. `tests/store_contract.py` holds the cases every adapter passes: `tests/test_store_contract.py`
+  runs them on the in-memory adapter (`[memory]`) and on the MongoDB adapter over the stand-in (`[stand-in]`; a case
+  the stand-in answers otherwise is in `tests/harness_skips.txt` by its `[stand-in]` id, and a line that would skip a
+  `[memory]` case stops the collection), and `integration/test_store_contract.py` on MongoDB, with the races between processes and a differential of generated
+  conditions against the in-memory adapter. The in-memory adapter returns records tied on every sort key in an order
+  shuffled by one seed per run: a failure prints the seed, and `ASUNA_STORE_SEED=<seed>` repeats it.
 - Native node tests and the native worker/product tests use synthetic inference and create no database.
-- The Python suites need the `dev` dependency group (`uv sync` installs it): pytest, mongomock and pyflakes.
+- `integration/` holds the database adapter's integration tests, outside the default run
+  (`.\.venv\Scripts\python.exe -m pytest -q integration`). They reach the configured server only on a throwaway `asuna_v2_test_*`
+  database of synthetic records, dropped at the end, and skip when the server is not reachable.
+- The Python suites need the `dev` dependency group (`uv sync` installs it): pytest, mongomock, pyflakes and
+  hypothesis.
   `tests/test_no_undefined_names.py` fails on any name a Python file uses but never defines, in `src/asuna`,
   `tools`, `packages/channels` and `tests` (not the vendored websocket client or the persona packages).
 - pytest imports `asuna` from the checkout's own `src/` (`pythonpath` in `pyproject.toml`), never an installed copy.
@@ -110,7 +143,8 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
 - **Repository guards** fail the suite when the tree drifts: `test_line_endings` (LF everywhere),
   `test_lock_files` (both locks match `package.json` / `pyproject.toml`), `test_no_docker_in_core` (no Docker in
   `src/` or `packages/`), `test_platform_branches` (OS branches only in the files it lists),
-  `persona.test.js` (every persona and channel package registers).
+  `test_one_clock` (the worker reads the time only through `asuna.clock`, which never gives the same time twice in a
+  process), `persona.test.js` (every persona and channel package registers).
 - `tools/p*_offline_check.py`, `tools/integration_import_offline_check.py` and `tools/outbound_image_offline_check.py`
   run the `tests/*_cases.py` modules without Mongo or pytest; they are the character's own checks inside her sandbox.
 - The personal-data scan prints only `file:line:category`, never the matched value.

@@ -70,6 +70,7 @@ def _install_stubs():
 
 STUBBED = _install_stubs()
 
+from asuna.records import heads as head_records  # noqa: E402
 from asuna.context import ContextBuilder                       # noqa: E402
 from asuna.ingress import episode_id                           # noqa: E402
 from asuna.memory import MemoryService                         # noqa: E402
@@ -183,9 +184,20 @@ class FakeCollection:
     def __init__(self, rows=None):
         self.rows = {row['_id']: dict(row) for row in (rows or [])}
 
-    def find(self, flt=None, projection=None):
-        return FakeCursor([_project(doc, projection) for doc in self.rows.values()
-                           if _match(doc, flt or {})])
+    def find(self, flt=None, projection=None, sort=None, skip=0, limit=0):
+        cursor = FakeCursor([_project(doc, projection) for doc in self.rows.values() if _match(doc, flt or {})])
+        if sort:
+            cursor.sort(sort)
+        cursor.rows = cursor.rows[skip:skip + limit] if limit else cursor.rows[skip:]
+        return cursor
+
+    def count_documents(self, flt, limit=None):
+        found = sum(1 for doc in self.rows.values() if _match(doc, flt or {}))
+        return min(found, limit) if limit else found
+
+    def insert_many(self, docs, ordered=True):
+        for doc in docs:
+            self.insert_one(doc)
 
     def distinct(self, key, flt=None):
         return sorted({doc[key] for doc in self.rows.values() if key in doc and _match(doc, flt or {})})
@@ -223,18 +235,18 @@ class FakeCollection:
         self.rows[doc['_id']] = dict(doc)
         return SimpleNamespace(inserted_id=doc['_id'])
 
-    def replace_one(self, flt, doc):
+    def replace_one(self, flt, doc, upsert=False):
         current = self.rows.get(flt.get('_id'))
         if current is None or ('revision' in flt and current.get('revision') != flt['revision']):
-            return SimpleNamespace(modified_count=0)
+            return SimpleNamespace(matched_count=0, modified_count=0, upserted_id=None)
         self.rows[flt['_id']] = dict(doc)
-        return SimpleNamespace(modified_count=1)
+        return SimpleNamespace(matched_count=1, modified_count=1, upserted_id=None)
 
-    def update_one(self, flt, pipeline):
+    def update_one(self, flt, pipeline, upsert=False):
         """Enough for Store.put's revisioned write with counters: one $project of literals and kept fields."""
         current = self.rows.get(flt.get('_id'))
         if current is None or ('revision' in flt and current.get('revision') != flt['revision']):
-            return SimpleNamespace(modified_count=0)
+            return SimpleNamespace(matched_count=0, modified_count=0, upserted_id=None)
         (stage,) = pipeline
         doc = {'_id': current['_id']}
         for key, value in stage['$project'].items():
@@ -243,7 +255,7 @@ class FakeCollection:
             elif key in current:
                 doc[key] = current[key]
         self.rows[flt['_id']] = doc
-        return SimpleNamespace(modified_count=1)
+        return SimpleNamespace(matched_count=1, modified_count=1, upserted_id=None)
 
 
 class FakeDB:
@@ -318,7 +330,7 @@ def episode(selected=(SUMMARY,), monologue=(MONO,), base='rev-rel-0', ep_id='ep1
 
 
 def head_pair(store):
-    return store.head('relationship:' + PERSON, SCOPE)
+    return head_records.current(store, 'relationship:' + PERSON, SCOPE)
 
 
 def audit_of(store, kind):
@@ -849,7 +861,7 @@ def a1_summary_about_someone_else_is_not_my_source():
                            [PERSON_B, 'demo'], [12, 12])
     add_row(store, 'memory_units', only_b)
     add_row(store, 'memory_units', monologue_unit(PERSON, 'ep-g2', body='小舟热心，但这事老陈没定。'))
-    moved = store.head('relationship:' + PERSON, GROUP_SCOPE)[0]['revision_id']
+    moved = head_records.current(store, 'relationship:' + PERSON, GROUP_SCOPE)[0]['revision_id']
     result = MemoryService(store).commit_understanding(
         group_episode(PERSON, selected=['summary-b-only'], ep_id='ep-g2', base=moved),
         '小舟愿意去。')
@@ -858,7 +870,7 @@ def a1_summary_about_someone_else_is_not_my_source():
     assert result['auto_source_ids'] == [], result
     assert result['auto_source_skipped'] == [{'id': 'summary-b-only',
                                               'reason': 'person_not_in_participants'}], result
-    assert store.head('relationship:' + PERSON, GROUP_SCOPE)[0]['revision_id'] == moved, \
+    assert head_records.current(store, 'relationship:' + PERSON, GROUP_SCOPE)[0]['revision_id'] == moved, \
         '没登记成来源就不该动 A 这条关系的头版本'
     add_row(store, 'memory_units', monologue_unit(PERSON_B, 'ep-g3', body='我去，工具我带。'))
     covered = MemoryService(store).commit_understanding(
@@ -945,7 +957,7 @@ def e1_the_loop_actually_closes_in_a_group():
         group_episode(PERSON, selected=manifest['selected']), '他自己把日子改成周五了。')
     assert result['state'] == 'COMMITTED', result
     assert result['auto_source_ids'] == [saved['_id']], result
-    revision = store.head('relationship:' + PERSON, GROUP_SCOPE)[1]
+    revision = head_records.current(store, 'relationship:' + PERSON, GROUP_SCOPE)[1]
     assert revision['source_ids'] == ['mono-ep-g1:0', saved['_id']], revision
     roots = set(revision['processed_source_ids'])
     assert {row['_id'] for row in data['messages']} <= roots, roots

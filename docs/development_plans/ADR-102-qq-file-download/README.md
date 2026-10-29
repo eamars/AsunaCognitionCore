@@ -1,8 +1,9 @@
 # ADR-102: Files people send her
 
-Status: designed 2026-10-27; not built. The changes asked in review of commit `bafd7b8d` are made in the commit
-after it, with the owner's rulings on erasure (ADR-105). The build starts after ADR-101 is closed (its tail merged).
-First in the owner's order (102, 103, 104).
+Status: designed 2026-10-27; being built in three parts (storage, the `received_file` tool, the action brain's
+copy). Part 1 is built: ADR-105's places, and the storage and lifecycle of section 5 (see Built). The changes asked in
+review of commit `bafd7b8d` are made in the commit after it, with the owner's rulings on erasure (ADR-105). First in
+the owner's order (102, 103, 104).
 
 ## Why
 
@@ -131,17 +132,18 @@ a fixed line:
 - **Only the item's own link,** `https` only, only on the hosts the channel kind declares in a new `FILE_HOSTS`
   (`napcat_qq`: `.ftn.qq.com`); a redirect must stay inside the list (vision's `_KeepInsideAllowList`). A link written
   in someone's message text is never fetched.
-- **1 MiB counted on the bytes read** (a declared size can lie); the read stops at the first byte over. **20 s** for the
-  whole fetch. With that cap the bytes stay in memory until they are checked and stored: no partial file on any disk.
+- **1 MiB counted on the bytes read** (a declared size can lie); the read stops at the first byte over. **20 s:** a
+  wait of 20 s without data ends the fetch, and after 20 s it ends at the next piece, so a host that drips can hold
+  it about 40 s (her reading of 5f4a8f3ac50f). With that cap the bytes stay in memory until they are checked and stored: no partial file on any disk.
 - **Off the channel's path.** The worker fetches from QQ's file host itself; the adapter and NapCat take no part, so a
-  download cannot hold an inbound or outbound lane. What a fetch can hold is her own tool call, for at most 20 s, as
-  `read_image` does today with a cap eight times larger.
+  download cannot hold an inbound or outbound lane. What a fetch can hold is her own tool call, for the time limit above (20 s
+  without data, about 40 s at most for a host that drips), as `read_image` does today with a cap eight times larger.
 - **No link, or a dead one** (the 5 of 153; a link QQ no longer serves): she is told plainly, in words, with the
-  platform's status. Asking the adapter for a fresh link (`get_group_file_url`, on the bulk lane, a new adapter
-  capability that an older adapter does not declare) is left until a real file shows links dying inside her 7 days.
-- **How long QQ's links live is measured in the build, not assumed:** one real text file from a group, fetched once
-  with the owner's word and again at intervals, and the life found is written back into this page. Until then it is
-  not known.
+  platform's status. Asking the adapter for a fresh link (`get_group_file_url`, a new adapter capability) is not
+  built.
+- **QQ is not the storage** (the owner, 2026-10-27: "if the file is gone then gone"): a fetch is a best attempt.
+  What she has read is kept by this page's own lifecycle (section 5); a link QQ no longer serves is said once, in
+  words, and nothing waits on how long QQ keeps its links, which is not measured.
 
 ### 4. Types and marks, from the bytes
 
@@ -172,27 +174,38 @@ types one way.
 - **A new cycle in `media_life`, not one more line of its table.** Today nothing in `media_life` is kept by a
   switch on its own row: what stays is either a record by its source or named by another row (her shelf, the pool,
   a message), and `cutoff` knows three lives. `received-file:` gets a cycle of its own, `RECEIVED`: bytes removed
-  **3 days** after the fetch (or after `let_go`), and a row with `kept_at` is not removed. A row whose time cannot be
-  read (`created_at` missing or not a time) is kept and counted, never read as expired (the ADR-101 tail makes this
+  **3 days** after the fetch (or after `let_go`), and a row with `kept_at` is not removed. The 3 days count from the
+  row's `days_from`, which every fetch and every `let_go` sets; a read does not (a fetch is a download from the
+  platform). The same file posted again and fetched again, stored once, has its 3 days from that fetch: each fetch
+  starts them again, so 3 days is the time after the last fetch, not a longest life. A row whose time cannot be read (`days_from` and `created_at` missing, or not a time) is kept and counted, never read as expired (the ADR-101 tail makes this
   the rule for every cycle: 65 real rows lack `created_at` today, all records). A prefix missing from `POLICY` reads
   as a record and would be kept for good without a word, so a test pins that a received file is gone after 3 days.
 - **After the bytes, before the ref ends** (days 4 to 7): the row stays (`storage` `removed`) and a `read` fetches
   again from the item's link. Fetched: the page, with `前一份字节在%s到期删了，这次是重新拉的`. Not fetched, one
-  sentence: `这个文件%s拉过，字节在%s到期删了；现在链接失效了（平台答%s），拿不回来了。文件不是没内容，是拿不回来。`
-- **What finds a file.** A ref is found by scanning the conversation's messages, so it lives as long as that scan: 7
+  sentence: `这个文件%s拉过，字节在%s到期删了；现在链接失效了（平台答%s），拿不回来了。这一份存在过、有内容。`
+- **What finds a file.** A ref is found among the newest 8 files and pictures of the last 50 messages others sent in
+  the conversation (each linked conversation its own 50), or among all of those of its last 7 days: there the listing's
+  8 and 50 do not apply, the cap of 8 items in one message still does (the picture function;
+  her reading of 5f4a8f3ac50f, and her point at fae57e0a01f0 that "lines" was not exact), so it lives as long as that scan: 7
   days (`REF_DAYS`); after that the words are the ones a picture's old ref gets. A kept file is found by its own row,
   so its ref never ends and `kept` lists refs that keep working. Every line that tells her a file can still be got back
   says which of the two finds it. (Pictures have a smaller mismatch of the same kind, not changed here: a ref's 7 days
   count from the message, the bytes' 7 days from `created_at`.)
 - **Privacy:** the bytes stay in the deployment's own database and go with their lifecycle; logs and the audit name
   a file by its ref, never by its name or content. **Erasure** follows ADR-105, the one place the rule is written:
-  an operator erasure deletes the conversation's bytes, kept files included, and marks each row erased; `read`,
-  `kept` and `copy` then answer with the ADR-105 sentence. The row keeps its name (the owner).
+  an operator erasure deletes the conversation's bytes, kept files included, and marks each row erased; every
+  operation then answers with the ADR-105 sentence: her four (`read` refuses with it and says the link is closed
+  too, `keep` refuses with it, `let_go` takes the row off with it, `kept` lists the row with it) and the action
+  brain's `copy`, which refuses with it. The row keeps its name (the owner).
 - **Keep:** `keep` marks the row kept (`kept_at`, her `why`); the origin and marks do not change. The quota is
   **20 MiB or 50 files**, whichever comes first (the owner took Claude's and Xiaoman's proposal, 2026-10-27). With
   files of at most 1 MiB, the 20 MiB comes first (at 21 full-size files). Over the quota the keep is refused with the
   total kept and the three kept files she has read least recently, never the whole list, so she can let one go and the
-  answer stays short. Keeping does not move a file out of its conversation's fence.
+  answer stays short. The three are among the files she can let go from where she asks (inside that call's fence);
+  files kept in other conversations are counted in one line and never named, as `kept` does, so a refusal in a group
+  names nothing from home or from another group. The quota and the "elsewhere" count both count only kept files whose bytes
+  are still stored; an erased or expired one appears in neither, only in the list carrying ADR-105's sentence (her
+  review of 7ab4f702ad23). Keeping does not move a file out of its conversation's fence.
 
 ### 6. The fence
 
@@ -207,7 +220,7 @@ a ref from home is not found from outside. The task binds the scope; no argument
 | A ref is recognized for | 7 days (`REF_DAYS`) | 7 days, the same constant |
 | Fetched bytes kept | 7 days (`PULLED_DAYS`) | 3 days, unless she keeps it |
 | Over the cap | a fetch stops at the cap (`IMAGE_TOO_LARGE`); a video declared over 32 MiB is not fetched | not fetched when declared over; a fetch stops at the first byte over |
-| A fetch may take | 15 s (`vision.DEFAULT_TIMEOUT_SECONDS`) | 20 s |
+| A fetch may take | 15 s (`vision.DEFAULT_TIMEOUT_SECONDS`) | 20 s without data; about 40 s at most for a host that drips |
 
 ### 7. The action brain's copy
 
@@ -216,7 +229,8 @@ marks. The name is made safe: no path separators, no `..`, no Windows device nam
 or space, at most 255 UTF-8 bytes; a clash gets ` (2)`.
 
 - **No execute:** on Windows the program puts one inherited deny-execute entry for the worker's account on
-  `/task/received` when it makes the folder (`icacls … /deny *<SID>:(OI)(X)`); on POSIX the file is created `0600`.
+  `/task/received` when it makes the folder (`icacls … /deny *<SID>:(OI)(IO)(X)`: inherited by the files only, so
+  the folder can still be listed); on POSIX the file is created `0600`.
   This stops the file being started as a program; an interpreter (`python file.py`) reads it, so a script runs only
   when she runs it herself, with the marks in front of her (the owner: "I don't want to limit what she can do").
 - Where the entry cannot be set (a drive or share without ACLs, a refused `icacls`), the copy is still made and the
@@ -247,7 +261,7 @@ The research changed four of them; the owner had agreed to them, so they are nam
 1. **Bytes in the blob store, not on disk with a description file beside them.** Files she sends, pictures and stickers
    already live there with a swept lifecycle; a second store would be a second lifecycle. The argument for the disk
    (cleanup while MongoDB is down) does not hold: without MongoDB the worker is not running at all.
-2. **A bounded fetch in her tool call, not a queue of its own.** With 1 MiB and 20 s, the fetch is what `read_image`
+2. **A bounded fetch in her tool call, not a queue of its own.** With 1 MiB and that time limit, the fetch is what `read_image`
    does today; a queue would add states (asked, fetching, ready) and a second turn to come back for the file. The
    lanes are protected because the fetch never passes through the adapter.
 3. **The link already on the item, not the adapter's file API.** The adapter is needed only to refresh a dead link,
@@ -261,7 +275,7 @@ The research changed four of them; the owner had agreed to them, so they are nam
 |---|---|
 | No link on the item | Offered as `拿不到`; no fetch. |
 | The link is dead or refused (HTTP 403/404/410) | `链接失效了（平台答 %s）`; asking the sender again is hers to decide. |
-| QQ's host is slow or drops halfway | The 20 s limit ends it; nothing stored; `下载没成功：%s，可以过一会再试`. |
+| QQ's host is slow or drops halfway | The time limit ends it (20 s without data, about 40 s at most); nothing stored; `下载没成功：%s，可以过一会再试`. |
 | The declared size lies | The cap counts bytes read; the read stops at 1 MiB + 1. |
 | A redirect leaves the host list | Refused, as for pictures. |
 | A `.txt` that is a program | Not stored, not shown; the disagreement named. |
@@ -321,5 +335,24 @@ pictures sent as files (`read_image` handles pictures).
 - The copy: safe names, the deny-execute entry on Windows (and its refusal path), `0600` on POSIX.
 - Forwarding by content after a rename.
 - Each test mutation-checked so it is not green by construction. Mongo tests drop their own databases.
-- Once in the build, with the owner's word: one real text file from a group, fetched and read end to end, and how long
-  its link lives, written back into this page (a must, not an extra).
+- Once in the build, with the owner's word: one real text file from a group, fetched and read end to end.
+
+## Built
+
+- Part 1, with ADR-105 (merged at `88206ed9`): every place ADR-105 names, the received-file rows included once they
+  exist.
+- Part 1b: `src/asuna/received_files.py` (`stash`, `mark_read`, `keep`, `let_go`, `kept`; the kind `received_file`,
+  the source `received-file:<message id>:<index>`, `KEEP_DAYS` 3, the quota 20 MiB or 50 files);
+  `src/asuna/media_life.py` (the `RECEIVED` cycle, counted as `received`); `BlobStore.put` and `put_once` take the
+  row's own fields. Tests: `tests/test_received_files.py`.
+- Part 2: the `received_file` tool for both halves (`received_files.run`: `read`, `keep`, `let_go`, `kept`), the
+  note under a line (`line_note`, in `people.py`), fetching through `vision.download` (shared with pictures: one
+  redirect fence, one cap on bytes read, and a time limit: 20 s without data, about 40 s at most for a host that
+  drips), judging (`judge`; `outbound_files.sniff`
+  learned programs and GB18030), pages and `find`, bytes fetched again onto their own row (`BlobStore.restore`),
+  `FILE_HOSTS` (`channel_kinds.file_hosts`; NapCat `.ftn.qq.com`). Its cost: one tool more in each half (her 30 -> 31,
+  the action brain's 26 -> 27), descriptions +499 characters for her and +291 for the action brain
+  (`tests/test_tool_budget.py`). Tests: `tests/test_received_files_read.py`, five, for the guards whose failure would
+  be silent (the fence, the cap and the hosts, https, a program never stored, an erased file never fetched again);
+  paging and wording are checked by reading a real file.
+- Part 3: `copy` for the action brain (`received_files.copy`, `safe_name`; the deny-execute entry is `(OI)(IO)(X)`, on the files and not the folder, so the folder can still be listed: tried on this machine, a program copied in is refused with "Access is denied" and is still readable), copies removed with the bytes (`drop_copies`, from the sweep and from `BlobStore.erase_scope`; the sweep reports `copies`), forwarding (`received_from` on `offer_file`, `FORWARDED` in the offer). The action brain's tool +58 characters. Tests: `tests/test_received_files_copy.py`, four.

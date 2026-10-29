@@ -1,20 +1,24 @@
-"""The worker's MongoDB store: every write goes through `Store.put` with an expected revision and is recorded in a
+"""The worker's store: every write goes through `Store.put` with an expected revision and is recorded in a
 hash-chained audit stream.
 
-`migrate` creates the collections and indexes, `get` refuses reads outside the caller's scope, and `mutate` writes
-her relationship and scene-affect revisions only from sources she may read.
+`put`, `audit`, `recover_commits`, `ensure` (`migrate`), `nearest` and `ensure_vectors` go through the store's
+MongoDB adapter and the shared layer's checks (asuna.store); `collection(name)` is a declared collection's handle,
+`blobs` its blob store, and `db` the database itself for the code that still reads it directly. `get` refuses reads
+outside the caller's scope. Her revisioned state (heads, `mutate`) is `records.heads`'.
 """
 from __future__ import annotations
-from datetime import datetime, timezone
 import copy
 import json
 import uuid
 from pathlib import Path
-from bson import BSON
-from pymongo import ASCENDING, MongoClient, ReturnDocument, WriteConcern
-from pymongo.errors import DuplicateKeyError
+from pymongo import MongoClient, WriteConcern
+from . import clock
 from .config import validate_database, character_id
 from .evidence import canonical, sha
+from .store import Checked
+from .store.catalog import CATALOG, Space
+from .store.errors import DuplicateKey
+from .store.words import Exists
 
 COLLECTIONS = ('identities','scenes','messages','episodes','tasks','plans','memory_units','state_heads',
                'state_revisions','sessions','audit_events','artifacts','sink_receipts','lane_receipts',
@@ -94,8 +98,7 @@ def content_ref(text):
     return {'content_sha256': sha(raw), 'bytes': len(raw)}
 
 
-def now():
-    return datetime.now(timezone.utc).isoformat()
+now = clock.stamp               # the core's one clock, as the ISO text records keep
 
 
 class Conflict(RuntimeError):
@@ -115,87 +118,52 @@ class Store:
         self.db = self.client.get_database(self.name, write_concern=WriteConcern(w='majority', j=True))
         self.fail_audit = False
 
+    @property
+    def checked(self):
+        """The shared layer over the MongoDB adapter on this store's database, derived from `db` as it is now."""
+        if getattr(self, '_checked_db', None) is not self.db:
+            from .store.mongodb import MongoAdapter       # only where a store is used: a module may stub pymongo
+            self._checked, self._checked_db = Checked(MongoAdapter.over(self.db), CATALOG), self.db
+        return self._checked
+
+    @property
+    def adapter(self):
+        return self.checked.adapter
+
+    def collection(self, name):
+        """The handle of a declared collection: the store's words, checked against the catalog."""
+        return self.checked.collection(name)
+
+    @property
+    def blobs(self):
+        """The blob store (write, open, delete, of_scope), each blob's metadata checked; used only by `blobs.py`."""
+        return self.checked.blobs
+
+    def ensure(self) -> dict:
+        """Create every declared collection with its validator and indexes, and drop the retired indexes;
+        {collection: Ensured}. An index of a declared name that differs stops it (SchemaConflict)."""
+        return self.checked.ensure()
+
     def migrate(self):
-        existing = set(self.db.list_collection_names())     # one round trip, not one per collection
-        for name in COLLECTIONS:
-            if name not in existing:
-                self.db.create_collection(name, validator={'$jsonSchema':{'bsonType':'object','required':['_id','schema_version'],'properties':{'schema_version':{'enum':[1]}}}})
-        from . import lane_faults
-        specs = {
-            'identities': [([('platform',1),('account_id',1)], {'unique':True})],
-            'messages': [([('adapter_id',1),('scene_id',1),('platform_event_id',1)], {'unique':True,'partialFilterExpression':{'platform_event_id':{'$type':'string'}}}),
-                         ([('publication_key',1)],{'unique':True,'partialFilterExpression':{'publication_key':{'$type':'string'}}}),
-                         ([('scene_id',1),('scene_seq',1)],{}),
-                         ([('host_managed',1),('ingress_state',1),('received_at',1)],{}),
-                         ([('channel_id',1),('delivery_state',1),('scene_seq',1)],{}),
-                         ([('author',1),('direction',1)],{}),
-                         # A turn's own lines (speaking, reply parts, visit outcomes, recovery): without it each
-                         # lookup scans every message.
-                         ([('episode_id',1)],{}),
-                         # Her errands (the daily cap, what came of them at home): only visit rows carry it.
-                         ([('event.visit.intent',1),('received_at',1)],{'partialFilterExpression':{'event.visit.intent':{'$exists':True}}})],
-            'episodes': [([('scene_id',1),('source_event_id',1),('episode_kind',1)], {'unique':True}),
-                         ([('person_id',1),('state',1)],{})],             # familiarity: turns she answered someone
-            'tasks': [([('request_key',1)], {'unique':True})],
-            'plans': [([('scene_id',1),('person_id',1),('status',1)],{})],
-            'memory_units': [([('scope_key',1),('status',1),('policy_epoch',1)],{}),
-                             ([('scope_key',1),('origin',1),('source_identity',1)],{'unique':True,'partialFilterExpression':{'source_identity':{'$type':'string'}}})],
-            'state_revisions': [([('mutation_id',1)], {'unique':True})],
-            'sessions': [([('binding_key',1)], {'unique':True})],
-            'audit_events': [([('stream_id',1),('seq',1)], {'unique':True}), ([('type',1),('occurred_at',1)], {}), ([('occurred_at',1)], {})],
-            'affect_events': [([('persona',1),('ts',1)],{}),
-                              ([('persona',1),('origin',1),('source_identity',1)],{'unique':True,'partialFilterExpression':{'source_identity':{'$type':'string'}}})],
-            'affect_amendments': [([('target',1)],{}),
-                                  ([('persona',1),('origin',1),('source_identity',1)],{'unique':True,'partialFilterExpression':{'source_identity':{'$type':'string'}}})],
-            'affect_proposals': [([('persona',1),('kind_row',1),('created_at',1)],{})],
-            # One fixed label per person per scene (people.py).
-            'scene_people': [([('scene_id',1),('handle',1)],{'unique':True})],
-            'task_messages': [([('task_id',1),('created_at',1)],{}), ([('thread',1),('created_at',1)],{})],
-            'ideas': [([('persona',1),('state',1),('created_at',1)],{})],
-            'stickers': [([('persona',1),('name',1)],{'unique':True}), ([('persona',1),('identity',1)],{'unique':True})],
-            'sticker_pool': [([('last_seen',1)],{}), ([('artifact_id',1)],{})],
-            'sticker_memory': [([('persona',1),('key',1)],{'unique':True})],
-            'watches': [([('persona',1),('person',1),('state',1)],{})],
-            'notes': [([('to_scene',1),('created_at',-1)],{}), ([('from_scene',1),('created_at',-1)],{}),
-                      ([('persona',1),('created_at',-1)],{}), ([('reply_to',1)],{})],
-            'developer_inbox': [([('persona',1),('created_at',-1)],{}), ([('state',1),('created_at',1)],{})],
-            'host_stops': [([('how',1),('back_at',-1)],{})],
-            'switches': [([('state',1),('kind',1),('until',1)],{}), ([('persona',1),('state',1)],{})],
-            'own_mutes': [([('muted',1)],{})],
-            # a fault count leaves after lane_faults.KEEP_DAYS days of its hour (ADR-095)
-            'lane_faults': [([('channel_id',1),('hour',1)],{}), ([('lane',1),('stage',1),('error',1),('hour',1)],{}),
-                            ([('hour_at',1)],{'expireAfterSeconds': lane_faults.KEEP_DAYS * 86400})],
-            'journal_entries': [([('persona',1),('slug',1),('seq',1)],{'unique':True}),
-                                ([('persona',1),('slug',1),('sid',1)],{'unique':True}), ([('last_mutation',1)],{})],
-            'journal_revisions': [([('mutation_id',1)],{'unique':True}), ([('persona',1),('slug',1),('created_at',-1)],{}),
-                                  ([('entry_id',1),('created_at',1)],{})],
-        }
-        for name, indexes in specs.items():
-            for keys, options in indexes:
-                self.db[name].create_index(keys, **options)
-        return {'database': self.name, 'collections':list(COLLECTIONS),'migration':3}
+        self.ensure()
+        return {'database': self.name, 'collections': list(COLLECTIONS), 'migration': 3}
 
     def audit(self, stream: str, kind: str, payload: dict, scope: str='operator') -> dict:
         if self.fail_audit:
             raise OSError('AUDIT_UNAVAILABLE')
+        events = self.collection('audit_events')
         for _ in range(50):
-            previous = self.db.audit_events.find_one({'stream_id':stream}, sort=[('seq',-1)])
+            previous = next(events.find({'stream_id': stream}, sort=[('seq', -1)], limit=1), None)
             event = {'_id':str(uuid.uuid4()),'schema_version':1,'stream_id':stream,'seq':previous['seq']+1 if previous else 1,
                      'type':kind,'scope_key':scope,'occurred_at':now(),'payload':copy.deepcopy(payload),
                      'prev_hash':previous['event_hash'] if previous else '0'*64}
             event['event_hash'] = sha(canonical(event))
-            self._size(event)
             try:
-                self.db.audit_events.insert_one(event)
+                events.insert(event)
                 return event
-            except DuplicateKeyError:
-                continue
+            except DuplicateKey:
+                continue                     # a racing append took this seq: read the stream's newest again
         raise Conflict('AUDIT_STREAM_BUSY')
-
-    @staticmethod
-    def _size(document):
-        if len(BSON.encode(document)) > 1024*1024:
-            raise ValueError('DOCUMENT_TOO_LARGE_USE_ARTIFACT')
 
     def put(self, collection: str, document: dict, *, expected: int | None = None, stream: str='state',
             reset_counters: bool=False) -> dict:
@@ -208,26 +176,21 @@ class Store:
             doc.setdefault('created_at' if collection == 'state_revisions' else 'formed_at', now())
         operation = str(uuid.uuid4())
         doc['_last_op'] = operation
-        self._size(doc)
+        records = self.collection(collection)
         # No intent record before the write (ADR-067): a single-document write is atomic, and a commit that never got
-        # its record is found by the document's own _last_op (recover_commits).
+        # its record is found by the document's own _last_op (recover_commits). The record is checked (its size, its
+        # declared fields) before anything is written.
         try:
             if expected is None:
-                self.db[collection].insert_one(doc)
+                records.insert(doc)
             else:
                 # The document comes from an earlier read: its counters (COUNTER_FIELDS) keep the values they reached
                 # since, in the same write. Only a put that starts the record over (reset_counters) writes them.
                 kept = () if reset_counters else COUNTER_FIELDS.get(collection, ())
-                match = {'_id':doc['_id'],'revision':expected}
-                if kept:
-                    fields = {k:{'$literal':v} for k,v in doc.items() if k not in kept and k != '_id'}
-                    result = self.db[collection].update_one(match,[{'$project':{**fields,**{k:1 for k in kept}}}])
-                else:
-                    result = self.db[collection].replace_one(match,doc)
-                if result.modified_count != 1:
+                if not records.replace(doc, expected=expected, keep=kept):
                     self.audit(stream,'state.conflict',{'operation':operation,'collection':collection,'id':doc['_id'],'expected':expected,'reason':'STALE_REVISION'},doc.get('scope_key','operator'))
                     raise Conflict('STALE_REVISION: 这条记录刚被别处改过，这次没有写进去；不是参数的问题：读一次最新的再做')
-        except DuplicateKeyError as exc:
+        except DuplicateKey as exc:
             self.audit(stream,'state.conflict',{'operation':operation,'collection':collection,'id':doc['_id'],'expected':expected,'reason':'DUPLICATE_ID'},doc.get('scope_key','operator'))
             raise Conflict('DUPLICATE_ID') from exc
         self.audit(stream,'state.commit',commit_payload(operation,collection,doc),doc.get('scope_key','operator'))
@@ -235,15 +198,28 @@ class Store:
 
     def recover_commits(self):
         repaired = 0
+        commits = self.collection('audit_events')
         for name in COLLECTIONS:
             if name in INSERT_ONLY:
                 continue
-            for doc in self.db[name].find({'_last_op':{'$exists':True}}):
+            for doc in self.collection(name).find({'_last_op': Exists(True)}):
                 op = doc['_last_op']
-                if not self.db.audit_events.find_one({'type':'state.commit','payload.operation':op}):
+                if not commits.count({'type': 'state.commit', 'payload.operation': op}, limit=1):
                     self.audit('recovery','state.commit',commit_payload(op,name,doc,reconciled=True),doc.get('scope_key','operator'))
                     repaired += 1
         return repaired
+
+    def ensure_vectors(self, space: Space, timeout: float = 45) -> bool:
+        """Create the space's index, or bring an existing one's filter fields up to the space's (the old one keeps
+        serving meanwhile); True once it can be queried, False if it cannot yet after `timeout` seconds."""
+        return self.checked.ensure_vectors(space, timeout)
+
+    def nearest(self, space: Space, vector, k: int, where) -> list[tuple[str, float]]:
+        """The k records nearest to `vector` among those matching `where` (the store's words: equality, `AnyOf`, `And`,
+        `Or` on the space's filter fields), best first, as (id, cosine similarity in [-1, 1]); exact, never
+        approximate. Equal scores come in id order; which of several records tied at the k-th score are returned is
+        the database's."""
+        return self.checked.nearest(space, vector, k, where)
 
     def get(self, collection: str, key: str, scope: str, *, operator: bool=False):
         if collection not in COLLECTIONS:
@@ -257,14 +233,9 @@ class Store:
             raise Denied('OPERATOR_ONLY_MONOLOGUE')
         return doc
 
-    def authorize(self, scene_id: str, person_id: str) -> dict:
-        scene = self.db.scenes.find_one({'_id':scene_id})
-        if not scene or person_id not in scene['members']:
-            raise Denied('SCENE_MEMBERSHIP_DENIED: 这个人不在这个对话的成员里（或对话已经不在），这一步不能代他做；重试也一样')
-        return scene
-
     def identity(self, platform: str, account_id: str):
-        doc = self.db.identities.find_one({'platform':platform,'account_id':account_id})
+        from .records import people as people_records
+        doc = people_records.by_account(self, account_id, platform=platform)
         if not doc:
             raise Denied('UNKNOWN_ACCOUNT')
         return doc['person_id']
@@ -288,104 +259,13 @@ class Store:
             docs=DocumentStore(self,persona)
             if not docs.head('persona'):
                 docs.seed('persona','persona',(fixture.parent/path).read_text(encoding='utf-8'),path=Path(path).name)
+        from .records import heads as head_records
         for rel in world['relationships']:
-            self.init_head('relationship:'+rel['subject_id'],rel['scope_key'],rel,rel['source_ids'])
-
-    def init_head(self, entity: str, scope: str, content: dict, sources: list[str]):
-        key=entity+'|'+scope
-        head=self.db.state_heads.find_one({'_id':key})
-        if head:
-            return head
-        rev_id=str(uuid.uuid4())
-        self.put('state_revisions',{'_id':rev_id,'entity_key':key,'mutation_id':'seed:'+key,'scope_key':scope,'content':content,'source_ids':sources,'parent_revision_id':None},stream='seed')
-        return self.put('state_heads',{'_id':key,'scope_key':scope,'revision_id':rev_id},stream='seed')
-
-    def head(self, entity: str, scope: str):
-        head=self.db.state_heads.find_one({'_id':entity+'|'+scope})
-        if not head:
-            return None
-        revision=self.db.state_revisions.find_one({'_id':head['revision_id']})
-        return head,revision
-
-    def mutate(self, entity: str, scope: str, base_revision_id: str, content: dict,
-               sources: list[str], request_scope: str, mutation_id: str, actor='character',*,reason=None,change_class=None,linked_scopes=(),origin=None):
-        # A relationship is her understanding in prose; no level fields (nothing ever wrote them).
-        allowed = {'body', 'short'}           # her prose, and her one line for herself (ADR-082)
-        # 跨场景只读联动（A2）里唯一被放宽的是「关系/偏好状态落在哪一份」：配置认定同一个人时，
-        # 别名场景这一轮写的是 canonical 那一份。linked_scopes 就是本轮授权的那个场景 scope——
-        # 来源证据仍只许落在 global-safe、目标 scope 或它里面；不传就等于原来的行为。
-        linked = {item for item in (linked_scopes or ()) if isinstance(item, str) and item}
-        readable_scopes = {'global-safe', scope} | linked
-        # The persona is a document (ADR-009 §5); state heads hold only relationships and scene affect.
-        if actor!='character' or not entity.startswith(('relationship:','scene_affect:')) or not set(content).issubset(allowed):
-            raise Denied('POLICY_PATH_OR_ACTOR_DENIED')
-        if scope != request_scope and not (request_scope in linked
-                                           and entity.startswith(('relationship:',
-                                                                  'scene_affect:'))):
-            raise Denied('SCOPE_PROMOTION_DENIED')
-        if not sources:
-            raise Denied('MUTATION_REQUIRES_SOURCES')
-        if reason is not None and (not isinstance(reason,str) or not 1<=len(reason)<=2000):raise Denied('INVALID_MUTATION_REASON')
-        if change_class not in (None,'persona','relationship','interpretation','scene_affect'):raise Denied('INVALID_CHANGE_CLASS')
-        for source in sources:
-            row=self.db.memory_units.find_one({'_id':source,'status':{'$ne':'tombstone'}})
-            if not row or row['scope_key'] not in readable_scopes:
-                raise Denied('MUTATION_SOURCE_DENIED')
-        head,base=self.head(entity,scope) or (None,None)
-        existing=self.db.state_revisions.find_one({'mutation_id':mutation_id})
-        if existing:
-            if existing.get('content')!=content or existing.get('source_ids')!=sources or existing.get('parent_revision_id')!=base_revision_id or existing.get('entity_key')!=entity+'|'+scope or existing.get('reason')!=reason or existing.get('change_class')!=change_class:
-                raise Conflict('MUTATION_ID_CONTENT_CHANGED')
-            ancestor=base
-            for _ in range(512):
-                if not ancestor:break
-                if ancestor['_id']==existing['_id']:return existing
-                parent=ancestor.get('parent_revision_id')
-                ancestor=self.db.state_revisions.find_one({'_id':parent}) if parent else None
-            raise Conflict('MUTATION_ALREADY_ATTEMPTED')
-        # A relationship has no record until she first writes one: that write starts from no base.
-        first=head is None and base_revision_id is None and entity.startswith('relationship:')
-        if not first and (not head or head['revision_id']!=base_revision_id):
-            self.audit('mutation:'+mutation_id,'state.conflict',{'entity':entity,'base_revision_id':base_revision_id,'reason':'BASE_REVISION_STALE'},scope)
-            raise Conflict('BASE_REVISION_STALE')
-        evidence_ids=set();visited=set()
-        def roots(key,path):
-            if key in path:raise Denied('SOURCE_CYCLE')
-            if len(visited)>512:raise Denied('SOURCE_GRAPH_LIMIT')
-            if key in visited:return
-            visited.add(key)
-            row=self.db.memory_units.find_one({'_id':key})
-            if row:
-                if row.get('status')=='tombstone' or row['scope_key'] not in readable_scopes:raise Denied('DERIVED_SOURCE_SCOPE_DENIED')
-                descendants=row.get('source_event_ids',[])
-                if descendants:
-                    for child in descendants:roots(child,path|{key})
-                else:evidence_ids.add(key)
-            else:
-                # Derived memory may cite a message/artifact rather than
-                # another memory. Known internal sources retain their scope.
-                known=[]
-                for collection in ('messages','artifacts','episodes'):
-                    source=self.db[collection].find_one({'_id':key},{'scope_key':1,'deletion_id':1})
-                    if source:known.append(source)
-                known+=list(self.db.messages.find({'platform_event_id':key},{'scope_key':1,'deletion_id':1}))
-                if any(item.get('deletion_id') or item.get('scope_key') not in readable_scopes for item in known):raise Denied('DERIVED_SOURCE_SCOPE_DENIED')
-                evidence_ids.add(key)
-        for source in sources:roots(source,set())
-        processed=set((base or {}).get('processed_source_ids',[]))
-        if evidence_ids and evidence_ids.issubset(processed):
-            raise Conflict('NO_NEW_SOURCE_EVENTS')
-        new_id=sha(canonical({'mutation_id':mutation_id,'entity':entity,'scope':scope}))
-        # origin: where and when a revision was written, for a record read in other conversations (understanding.py).
-        metadata={k:v for k,v in {'reason':reason,'change_class':change_class,'origin':origin}.items() if v is not None}
-        revision=self.put('state_revisions',{'_id':new_id,'mutation_id':mutation_id,'entity_key':entity+'|'+scope,'scope_key':scope,'content':content,'source_ids':sources,'processed_source_ids':sorted(processed|evidence_ids),'parent_revision_id':base_revision_id,**metadata},stream='mutation:'+mutation_id)
-        if first:
-            self.put('state_heads',{'_id':entity+'|'+scope,'scope_key':scope,'revision_id':new_id},stream='mutation:'+mutation_id)
-        else:
-            self.put('state_heads',{**head,'revision_id':new_id},expected=head['revision'],stream='mutation:'+mutation_id)
-        return revision
+            head_records.init(self,'relationship:'+rel['subject_id'],rel['scope_key'],rel,rel['source_ids'])
 
     def public_messages(self, scene: str, person: str):
-        self.authorize(scene,person)
+        from .records import scenes as scene_records          # the owner imports this module
+        from .records import messages as message_records
+        scene_records.authorize(self, scene, person)
         return [{k:row[k] for k in ('_id','scene_id','text','author','reply_to','delivery_state') if k in row}
-                for row in self.db.messages.find({'scene_id':scene,'direction':'outbound','delivery_state':'DELIVERED'}).sort('scene_seq',1)]
+                for row in message_records.spoken(self,scene).rows()]

@@ -18,8 +18,11 @@ One-to-one conversations keep the `relationship` block as before.
 """
 from __future__ import annotations
 
-import re
-from datetime import datetime, timezone
+from datetime import datetime
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import heads as head_records
+from . import clock
 
 PERSON_SCOPE = 'person'
 LAYERS = ('person', 'here')
@@ -45,16 +48,16 @@ def person_ids(config, db, person_id):
 
 
 def _elsewhere(store, person_id, here_scope):
-    ids = '|'.join(re.escape(i) for i in person_ids(store.config, store.db, person_id))
-    return sum(1 for head in store.db.state_heads.find({'_id': {'$regex': r'^relationship:(%s)\|scene:' % ids}},
-                                                       {'scope_key': 1}) if head.get('scope_key') != here_scope)
+    prefixes = ['relationship:%s|scene:' % i for i in person_ids(store.config, store.db, person_id)]
+    return sum(1 for head in head_records.with_prefix(store, *prefixes).rows(fields=['scope_key'])
+               if head.get('scope_key') != here_scope)
 
 
 def _written(store, revision, moment):
     """(where it was last written, when) or None; the time is a field, shown on the local clock."""
     from .people import People
     origin = revision.get('origin') or {}
-    scene = store.db.scenes.find_one({'_id': origin.get('scene_id')}) if origin.get('scene_id') else None
+    scene = scene_records.get(store, origin.get('scene_id')) if origin.get('scene_id') else None
     try:
         datetime.fromisoformat(origin['at'])
     except (KeyError, TypeError, ValueError):
@@ -64,7 +67,7 @@ def _written(store, revision, moment):
 
 def person_view(store, person_id, here_scope, head, moment=None):
     """The person layer as she reads it: the fixed line first, then her text and where it was last written."""
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     others = _elsewhere(store, person_id, here_scope)
     view = {'first': PART + (PART_ELSEWHERE % others if others else '') + '。'}
     if not head:
@@ -91,8 +94,8 @@ def layers(store, scene, person_id):
     """(person head, here head) of this person as this conversation reads them; each (head, revision) or None."""
     from .scene_links import relationship_target
     target = relationship_target(store.config, store.db, scene, person_id)
-    here = store.head(target['entity'], target['scope'])
-    person = store.head(person_entity(store.config, store.db, person_id), PERSON_SCOPE)
+    here = head_records.current(store, target['entity'], target['scope'])
+    person = head_records.current(store, person_entity(store.config, store.db, person_id), PERSON_SCOPE)
     return person, here
 
 
@@ -147,11 +150,9 @@ def group_people(store, scene, event, persona, source):
     people = People(store, persona)
     ids = [event['person_id']]
     if source:
-        from .ingress import NOT_CORE_NOTICE                        # the program's lines are nobody waiting
-        for row in store.db.messages.find({'scene_id': scene['_id'], 'direction': 'inbound', **NOT_CORE_NOTICE,
-                                           'scene_seq': {'$gt': source['scene_seq']},
-                                           'event.group_context.wake_reason': {'$in': list(EXPLICIT)}},
-                                          {'author': 1}).sort('scene_seq', 1).limit(ENTRY_MAX * 4):
+        # the program's lines are nobody waiting
+        for row in message_records.inbound(store, scene['_id'], people_only=True, after=source['scene_seq'],
+                                           wakes=EXPLICIT).rows(limit=ENTRY_MAX * 4, fields=['author']):
             if row.get('author') and row['author'] not in ids:
                 ids.append(row['author'])
     from .affect import AffectLedger
@@ -185,7 +186,8 @@ def _name(store, people, person):
     from .peer_context import speaker_name
     if people.named(person):
         return people.named(person)
-    seen = store.db.scene_people.find_one({'person': person}, {'card': 1, 'nickname': 1}, sort=[('seen_at', -1)])
+    from .records import people as people_records
+    seen = people_records.label_of_person(store, person, ['card', 'nickname'])
     return (safe_name((seen or {}).get('card')) or safe_name((seen or {}).get('nickname'))
             or speaker_name(store.config, person, None, store.db))
 
@@ -217,9 +219,9 @@ def _everyone(store, persona):
     """Everyone she has written, newest first."""
     from .people import People
     people = People(store, persona)
-    heads = list(store.db.state_heads.find({'_id': {'$regex': '^relationship:'}}))
-    revisions = {row['_id']: row for row in store.db.state_revisions.find(
-        {'_id': {'$in': [h['revision_id'] for h in heads]}}, {'content': 1, 'created_at': 1, 'origin': 1})}
+    heads = head_records.with_prefix(store, 'relationship:').rows()
+    revisions = {row['_id']: row for row in head_records.revisions(store, [h['revision_id'] for h in heads]).rows(
+        fields=['content', 'created_at', 'origin'])}
     found = {}
     for head in heads:
         entity, scope = head['_id'].rsplit('|', 1)
@@ -228,12 +230,12 @@ def _everyone(store, persona):
         body = (revision.get('content') or {}).get('body') or ''
         if scope == PERSON_SCOPE:
             origin = revision.get('origin') or {}
-            where = store.db.scenes.find_one({'_id': origin.get('scene_id')}) if origin.get('scene_id') else None
+            where = scene_records.get(store, origin.get('scene_id')) if origin.get('scene_id') else None
             layer = {'layer': '人那层', 'chars': len(body),
                      'written_in': people.scene_title(where) if where else '一个现在已经没有的对话',
                      'written_at': origin.get('at') or revision.get('created_at')}
         else:
-            where = store.db.scenes.find_one({'scope_key': scope})
+            where = scene_records.by_scope(store, scope)
             layer = {'layer': '这里那层：%s' % (people.scene_title(where) if where else '一个现在已经没有的对话'),
                      'chars': len(body), 'written_at': revision.get('created_at')}
         layer['short'] = (revision.get('content') or {}).get('short') or '没有'      # every row says which it is

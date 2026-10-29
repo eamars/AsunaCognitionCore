@@ -21,10 +21,14 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
+from . import clock
 from . import animated, channel_kinds, media_children, visibility
 from .evidence import canonical, sha
 from .scene_links import message_times, read_scope
 from .state import Denied
+from .records import artifacts as artifact_records
+from .records import scenes as scene_records
+from .records import messages as message_records
 
 MEDIA_KEY = 'asuna_media'
 READ_IMAGE_TOOL_NAME = 'read_image'
@@ -39,7 +43,10 @@ VIDEO_MAX_MB = 32
 VIDEO_MAX_BYTES = VIDEO_MAX_MB * 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 15
 MAX_ITEMS_PER_MESSAGE = 8
+LISTING_ITEMS = 8               # the newest attachments a conversation's listing offers (not per message)
 SCENE_SCAN_MESSAGES = 50
+# What of a line a scan for its pictures reads.
+SCANNED_FIELDS = ['_id', 'scene_id', 'scene_seq', 'direction', 'text', 'event.raw', 'occurred_at', 'received_at']
 # A ref she copied stays readable this long: the listing a turn shows is the newest few, a ref is looked up wider.
 REF_DAYS = 7
 # QQ 的下载 URL 带长 fileid 与 rkey，截断就是静默把链接改坏（拉回来必然是错的或 404）。
@@ -206,8 +213,8 @@ def local_uploads(store, scope_key, images, event_id):
                                                                             else 'IMAGE_TYPE_UNSUPPORTED')})
             continue
         digest = sha(data)
-        stored = store.db.artifacts.find_one({'scope_key': scope_key, 'kind': 'image', 'sha256': digest,
-                                              'source_ids': source, 'state': 'DONE', 'storage': 'gridfs'})
+        stored = artifact_records.by_content(store, digest, 'image', scope=scope_key, source=source, state='DONE',
+                                             storage=artifact_records.STORED)
         artifact = stored['_id'] if stored else BlobStore(store).put(
             data, scope_key, 'image', media_type=media_type, source_ids=[source])['artifact_id']
         item = {'type': 'image', 'placeholder': f'[图片：{name}]', 'file': name, 'size': str(len(data)),
@@ -337,31 +344,31 @@ def readable_image_scenes(store, task, config):
     也不能把别人的场景说成自己的。本场景与任务记录不同步仍然拒（不猜）；联动场景在库里
     查不到、或纪元与本任务不同步，就照实不扫它——那条边本来只是「额外能读」，缺了不算围栏不对。
     """
-    scene = store.db.scenes.find_one({'_id': task['scene_id']})
+    scene = scene_records.get(store, task['scene_id'])
     if (not isinstance(scene, dict) or scene.get('scope_key') != task['scope_key']
             or scene.get('policy_epoch') != task['policy_epoch']):
         raise Denied('VISION_SCENE_FENCE_MISMATCH: 这个对话和任务记录对不上了（换了纪元或范围）；不是参数的问题，'
                      '重试也一样：停下这一步，把没看成写进结果')
     out = [{'scene_id': scene.get('_id'), 'linked': False}]
     for scene_id in read_scope(config, scene)['linked_scenes']:
-        doc = store.db.scenes.find_one({'_id': scene_id})
+        doc = scene_records.get(store, scene_id)
         if not isinstance(doc, dict) or doc.get('policy_epoch') != task['policy_epoch']:
             continue
         out.append({'scene_id': scene_id, 'linked': True})
     return out
 
 
-def scene_attachments(store, task, config, *, limit=MAX_ITEMS_PER_MESSAGE, scan=SCENE_SCAN_MESSAGES):
-    """本场景（外加按配置只读联动的场景）最近的入站图片。范围由任务绑定，参数换不了它。"""
+def scene_attachments(store, task, config, *, limit=LISTING_ITEMS, scan=SCENE_SCAN_MESSAGES,
+                      entries=None):
+    """本场景（外加按配置只读联动的场景）最近的入站图片。范围由任务绑定，参数换不了它。
+    ``entries`` (message, config) -> items: what a message offers; pictures by default, received files with theirs
+    (received_files.files_of), so both are found through this one fence."""
+    entries = entries or attachments_of
     scenes = readable_image_scenes(store, task, config)
     rows, scanned = [], []
     for scope in scenes:
-        found = list(store.db.messages.find({'scene_id': scope['scene_id'],
-                                             'policy_epoch': task['policy_epoch'],
-                                             'direction': 'inbound'},
-                                            {'_id': 1, 'scene_id': 1, 'scene_seq': 1, 'direction': 1,
-                                             'text': 1, 'event.raw': 1, 'occurred_at': 1, 'received_at': 1})
-                     .sort('scene_seq', -1).limit(scan))
+        found = message_records.inbound(store, scope['scene_id'], task['policy_epoch']).rows(
+            newest_first=True, limit=scan or None, fields=SCANNED_FIELDS)
         scanned.append({'scene_id': scope['scene_id'], 'linked': scope['linked'], 'messages': len(found)})
         for row in found:
             row['_linked_scene'] = bool(scope['linked'])
@@ -372,7 +379,7 @@ def scene_attachments(store, task, config, *, limit=MAX_ITEMS_PER_MESSAGE, scan=
     items = []
     for row in rows:
         linked = bool(row.pop('_linked_scene', False))
-        for entry in attachments_of(row, config=config):
+        for entry in entries(row, config=config):
             entry['scene_seq'] = row.get('scene_seq')
             entry['scene_id'] = row.get('scene_id')
             entry['linked_scene'] = linked
@@ -384,31 +391,29 @@ def scene_attachments(store, task, config, *, limit=MAX_ITEMS_PER_MESSAGE, scan=
             'vision': vision_capability(config)}
 
 
-def attachment_by_ref(store, task, config, ref, session_class=visibility.PUBLIC):
+def attachment_by_ref(store, task, config, ref, session_class=visibility.PUBLIC, entries=None):
     """(entry, listing): the attachment a ref names among the pictures of the last REF_DAYS days in this conversation
     and its linked scenes (the same fence as scene_attachments), or (None, listing). The newest few come first.
 
     At home (owner_private, owner 2026-10-11) the fence does not hold her back: a ref from any of her conversations
     is found, marked `home_reach`. Elsewhere it holds, so nothing at home is read from outside."""
-    listing = scene_attachments(store, task, config)
+    entries = entries or attachments_of
+    listing = scene_attachments(store, task, config, entries=entries)
     entry = next((item for item in listing['attachments'] if item['ref'] == ref), None)
     if entry:
         return entry, listing
-    from datetime import datetime, timedelta, timezone
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=REF_DAYS)).isoformat()
+    from datetime import timedelta
+    cutoff = (clock.now() - timedelta(days=REF_DAYS)).isoformat()
     scopes = [{**scope, 'policy_epoch': task['policy_epoch']} for scope in readable_image_scenes(store, task, config)]
     if session_class == visibility.OWNER_PRIVATE:
         fenced = {scope['scene_id'] for scope in scopes}
         scopes += [{'scene_id': doc['_id'], 'linked': True, 'home_reach': True, 'policy_epoch': doc.get('policy_epoch')}
-                   for doc in store.db.scenes.find({}, {'_id': 1, 'policy_epoch': 1}) if doc['_id'] not in fenced]
+                   for doc in scene_records.all(store, fields=['_id', 'policy_epoch']) if doc['_id'] not in fenced]
     for scope in scopes:
-        rows = store.db.messages.find({'scene_id': scope['scene_id'], 'policy_epoch': scope['policy_epoch'],
-                                       'direction': 'inbound', 'received_at': {'$gte': cutoff},
-                                       'event.raw.' + MEDIA_KEY: {'$exists': True}},
-                                      {'_id': 1, 'scene_id': 1, 'scene_seq': 1, 'direction': 1, 'text': 1,
-                                       'event.raw': 1, 'occurred_at': 1, 'received_at': 1}).sort('scene_seq', -1)
+        rows = message_records.inbound(store, scope['scene_id'], scope['policy_epoch'], since=cutoff,
+                                       media=True).rows(newest_first=True, fields=SCANNED_FIELDS)
         for row in rows:
-            for found in attachments_of(row, config=config):
+            for found in entries(row, config=config):
                 if found['ref'] == ref:
                     found.update(scene_seq=row.get('scene_seq'), scene_id=row.get('scene_id'),
                                  linked_scene=bool(scope['linked']), **({'home_reach': True} if scope.get('home_reach') else {}))
@@ -420,7 +425,7 @@ def scene_id_of(task):
     return _clean((task or {}).get('scene_id'), 90)
 
 
-class _RedirectDenied(Exception):
+class RedirectDenied(Exception):
     """重定向跳出白名单：允许列表里的站点不能把我们带进内网任意端口。"""
 
 
@@ -432,8 +437,57 @@ class _KeepInsideAllowList(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         host = (urlsplit(newurl).hostname or '').lower()
         if not host_allowed(host, self.allow_hosts):
-            raise _RedirectDenied(host or '未知主机')
+            raise RedirectDenied(host or '未知主机')
         return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+class OverCap(Exception):
+    """A download passed its cap: it stopped at the first byte over."""
+
+
+class Refused(Exception):
+    """The host answered a status other than 200 without an error."""
+
+    def __init__(self, status):
+        super().__init__(status)
+        self.status = status
+
+
+# Tests only: the TLS context a local HTTPS stub is trusted with. None is the default verification.
+TEST_TLS_CONTEXT = None
+
+
+def download(url, allow_hosts, cap, timeout, agent=USER_AGENT, deadline=None):
+    """GET a link that stays on the allowed hosts, redirects included, reading at most `cap` bytes into memory.
+    `timeout` bounds each wait on the socket; `deadline` (time.monotonic) the whole download, checked between pieces.
+    Returns (data, final host, content type). Raises RedirectDenied (a host off the list, after a redirect or at
+    the end), OverCap, Refused (a status other than 200), urllib.error.HTTPError, and the transport's own errors
+    (URLError, OSError, TimeoutError) for the caller to put in words."""
+    import time
+    request = urllib.request.Request(url, headers={'User-Agent': agent})
+    handlers = [_KeepInsideAllowList(allow_hosts)]
+    if TEST_TLS_CONTEXT is not None:
+        handlers.append(urllib.request.HTTPSHandler(context=TEST_TLS_CONTEXT))
+    with urllib.request.build_opener(*handlers).open(request, timeout=timeout) as response:
+        status = getattr(response, 'status', None) or 200
+        if status != 200:
+            raise Refused(status)
+        final_host = (urlsplit(response.geturl()).hostname or '').lower()
+        content_type = response.headers.get('content-type', '') or ''
+        chunks, total = [], 0
+        while True:
+            part = response.read(65536)
+            if not part:
+                break
+            total += len(part)
+            if total > cap:
+                raise OverCap(cap)
+            chunks.append(part)
+            if deadline is not None and time.monotonic() > deadline:
+                raise TimeoutError('the whole download took longer than its limit')
+    if not host_allowed(final_host, allow_hosts):
+        raise RedirectDenied(final_host or '未知主机')
+    return b''.join(chunks), final_host, content_type
 
 
 def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=visibility.PUBLIC, task_dir=None,
@@ -456,27 +510,14 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=vis
         parsed = urlsplit(url)
         if parsed.scheme != 'https' and not config.get('vision', {}).get('allow_insecure_http'):
             raise ValueError('IMAGE_INSECURE_URL_DENIED: 这张图的链接是 %s，程序只拉 https；%s' % (parsed.scheme or '空', GIVE_UP))
-        request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-        opener = urllib.request.build_opener(_KeepInsideAllowList(vision['image_hosts']))
         try:
-            with opener.open(request, timeout=timeout or vision['timeout_seconds']) as response:
-                status = getattr(response, 'status', None) or 200
-                if status != 200:
-                    raise _fetch_failed(status, '', url, entry.get('signature'))
-                final_host = (urlsplit(response.geturl()).hostname or '').lower()
-                content_type = response.headers.get('content-type', '') or ''
-                chunks = []
-                total = 0
-                while True:
-                    part = response.read(65536)
-                    if not part:
-                        break
-                    total += len(part)
-                    if total > cap:
-                        raise ValueError(_video_too_large()) if video else _too_large(cap)
-                    chunks.append(part)
-                data = b''.join(chunks)
-        except _RedirectDenied as exc:
+            data, final_host, content_type = download(url, vision['image_hosts'], cap,
+                                                      timeout or vision['timeout_seconds'])
+        except Refused as exc:
+            raise _fetch_failed(exc.status, '', url, entry.get('signature')) from exc
+        except OverCap as exc:
+            raise (ValueError(_video_too_large()) if video else _too_large(cap)) from exc
+        except RedirectDenied as exc:
             raise ValueError(f'IMAGE_REDIRECT_HOST_DENIED: 图片链接跳到了 {exc}，不在 vision.image_hosts 白名单里；{GIVE_UP}') from exc
         except urllib.error.HTTPError as exc:
             try:
@@ -487,9 +528,6 @@ def pull_bytes(entry, config, *, max_bytes=None, timeout=None, session_class=vis
         except (urllib.error.URLError, OSError, TimeoutError) as exc:
             raise ValueError(f'IMAGE_FETCH_FAILED: 连不上图片主机（{type(exc).__name__}，限时 '
                              f'{timeout or vision["timeout_seconds"]:g} 秒）；{TRY_LATER}') from exc
-        if not host_allowed(final_host, vision['image_hosts']):
-            raise ValueError(f'IMAGE_REDIRECT_HOST_DENIED: 图片链接跳到了 {final_host or '未知主机'}，'
-                             f'不在 vision.image_hosts 白名单里；{GIVE_UP}')
     elif entry.get('pull_via') == 'local_file':
         given = entry.get('file')
         form = path_form(given) if session_class == visibility.OWNER_PRIVATE else None
@@ -622,6 +660,12 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
         full = {**entry, **media_source(store, task, config, entry)}
         data, media_type, via, source = pull_bytes(full, config, max_bytes=max_bytes, video=entry['type'] == 'video')
         blob = None
+        if entry.get('sticker') == 'custom':
+            from . import stickers
+            try:                    # she opened it: a sticker she knows by its picture is known by this md5 too
+                stickers.opened(store, (config.get('chat') or {}).get('persona'), entry, data)
+            except Exception:       # noqa: BLE001 learning a sticker never fails her reading it
+                pass
     video = None
     if entry['type'] == 'video':
         # The video becomes its contact sheet now and its bytes are dropped: only the sheet is stored (media_life).
@@ -686,12 +730,12 @@ def stored_image(store, blobs, task, config, artifact_id, max_bytes=None, offere
     exactly like an unknown id, so the tool cannot be used to probe other people's pictures."""
     from .blobs import refuse_erased
     from .outbound_media import produced
-    row = store.db.artifacts.find_one({'_id': artifact_id, 'kind': 'image', 'state': 'DONE'})
+    row = artifact_records.get(store, artifact_id, kind='image', state='DONE')
     if (not blobs or not row or not (row.get('scope_key') == task.get('scope_key') or produced(row)
                                      or artifact_id in (offered or ()))):
         raise ValueError(NOT_READABLE % artifact_id)
     refuse_erased(store, row, task.get('scene_id'))          # in her fence: an erased picture says so (ADR-105)
-    if row.get('storage') != 'gridfs':
+    if row.get('storage') != artifact_records.STORED:
         raise ValueError(NOT_READABLE % artifact_id)
     data = blobs.get(artifact_id, row['scope_key'], operator=True)
     cap = min(int(max_bytes or vision_capability(config)['max_bytes']), HARD_MAX_BYTES)
@@ -724,19 +768,18 @@ def local_upload_bytes(store, blobs, task, config, entry, max_bytes=None):
     scene_id = _clean(entry.get('scene_id'), 90) or task['scene_id']
     if scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
         raise ValueError(LOCAL_NOT_IN_SCENE)
-    row = store.db.messages.find_one({'_id': entry['source_message_id'], 'scene_id': scene_id,
-                                      'policy_epoch': task['policy_epoch']})
+    row = message_records.get(store, entry['source_message_id'], scene=scene_id, epoch=task['policy_epoch'])
     items = (media_block(row) or {}).get('items') or [] if row else []
     item = next((item for index, item in enumerate(items) if ref_of(row['_id'], index) == entry['ref']), None)
     if not local_upload_item(row, item):
         raise ValueError(LOCAL_NOT_IN_SCENE)
-    artifact = store.db.artifacts.find_one({'_id': item['artifact_id'], 'kind': 'image', 'state': 'DONE'})
+    artifact = artifact_records.get(store, item['artifact_id'], kind='image', state='DONE')
     if (not blobs or not artifact or artifact.get('scope_key') != row.get('scope_key')
             or LOCAL_UPLOAD + str(row['event'].get('event_id')) not in (artifact.get('source_ids') or [])):
         raise ValueError(SOURCE_UNAVAILABLE)
     from .blobs import refuse_erased
     refuse_erased(store, artifact, scene_id)                 # the owner's own picture, erased: said so (ADR-105)
-    if artifact.get('storage') != 'gridfs':
+    if artifact.get('storage') != artifact_records.STORED:
         raise ValueError(SOURCE_UNAVAILABLE)
     data = blobs.get(artifact['_id'], artifact['scope_key'], operator=True)
     cap = min(int(max_bytes or vision_capability(config)['max_bytes']), HARD_MAX_BYTES)
@@ -765,11 +808,10 @@ def media_source_url(store, task, config, entry):
     epoch = task['policy_epoch']
     if entry.get('home_reach'):
         # Found from home by attachment_by_ref (owner_private only): read back in its own scene and epoch.
-        epoch = (store.db.scenes.find_one({'_id': scene_id}, {'policy_epoch': 1}) or {}).get('policy_epoch')
+        epoch = (scene_records.get(store, scene_id, fields=['policy_epoch']) or {}).get('policy_epoch')
     elif scene_id not in {scope['scene_id'] for scope in readable_image_scenes(store, task, config)}:
         return ''
-    row = store.db.messages.find_one({'_id': entry['source_message_id'], 'scene_id': scene_id,
-                                      'policy_epoch': epoch})
+    row = message_records.get(store, entry['source_message_id'], scene=scene_id, epoch=epoch)
     block = media_block(row)
     if not block:
         return ''
@@ -867,7 +909,7 @@ def picture_to_edit(store, blobs, task, config, ref, *, session_class=visibility
     seen = read_image_for_task(store, blobs, task, config, {'ref': ref}, session_class=session_class,
                                task_dir=task_dir, look=False)
     artifact_id = seen.get('artifact_id') or seen.get('blob_artifact')
-    row = store.db.artifacts.find_one({'_id': artifact_id}) if artifact_id else None
+    row = artifact_records.get(store, artifact_id) if artifact_id else None
     if not row:
         raise ValueError('SOURCE_IMAGE_NOT_STORED: 这张图读到了但没存下来，改不了；%s' % GIVE_UP)
     data = blobs.get(artifact_id, row['scope_key'], operator=True)
@@ -877,7 +919,7 @@ def picture_to_edit(store, blobs, task, config, ref, *, session_class=visibility
     elif seen.get('path'):
         own, back = False, task['scope_key']         # a file from this machine: it stays where the task is
     else:
-        scene = store.db.scenes.find_one({'_id': seen.get('image_scene_id') or task['scene_id']}, {'scope_key': 1})
+        scene = scene_records.get(store, seen.get('image_scene_id') or task['scene_id'], fields=['scope_key'])
         own, back = False, (scene or {}).get('scope_key') or task['scope_key']
     return {'data': data, 'own': own, 'back_to': back}
 

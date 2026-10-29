@@ -18,7 +18,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from . import clock
 from .state import Conflict, now
+from .records import scenes as scene_records
 
 SOURCES = ('notice', 'lookup')                     # what the adapter may post; receipts add send_failed and sent
 REASON = 'muted'                                   # a failed receipt's response.reason for a send refused by a mute
@@ -31,7 +33,7 @@ MAX_SECONDS = 400 * 86400                          # an end further away than th
 
 
 def _moment(moment=None):
-    return moment or datetime.now(timezone.utc)
+    return moment or clock.now()
 
 
 def _iso(epoch):
@@ -94,7 +96,7 @@ def apply(store, scene, *, muted, source, whole_group=False, until=None, by=None
 def _scene_of_group(store, channel_id, group):
     from .group_members import routed_group
     route = routed_group(store, channel_id, group, 'OWN_MUTE')
-    scene = store.db.scenes.find_one({'_id': route['scene_id']})
+    scene = scene_records.get(store, route['scene_id'])
     if not scene:
         raise PermissionError('OWN_MUTE_SCENE_UNKNOWN: 这个群还没有对话记录；有人说过话以后再送')
     return scene
@@ -113,7 +115,7 @@ def receive(store, channel_id, body):
     for key in ('until', 'at'):
         value = body.get(key)
         if value is not None and (isinstance(value, bool) or not isinstance(value, int)
-                                  or not 0 < value < datetime.now(timezone.utc).timestamp() + MAX_SECONDS):
+                                  or not 0 < value < clock.now().timestamp() + MAX_SECONDS):
             raise ValueError('OWN_MUTE_INVALID: %s 要是平台给的秒数时间（给的是 %r）' % (key, value))
         epochs[key] = _iso(value) if value else None
     operator = body.get('operator_id')
@@ -133,7 +135,7 @@ def receive(store, channel_id, body):
 
 def after_receipt(store, row, state, body):
     """A send's receipt: refused for a mute sets the slot; one the platform accepted clears it."""
-    scene = store.db.scenes.find_one({'_id': row.get('scene_id')}) if row.get('scene_id') else None
+    scene = scene_records.get(store, row.get('scene_id')) if row.get('scene_id') else None
     if not scene or scene.get('kind') != 'group':
         return None
     if state == 'FAILED' and (body.get('response') or {}).get('reason') == REASON:

@@ -30,7 +30,7 @@ agentPreset／createdAt（判拷贝用）；不印整行，不取 message／cont
 跑法（读会话记录按硬规矩 2 用 development_run project=core；sandbox_run 里 asuna 也在，两处都能跑）：
     python3 usage_readout.py                     # 默认窗口＝最近 24 小时
     python3 usage_readout.py --days 7
-    python3 usage_readout.py --since "2026-10-20 14:00" --until "2026-10-21 14:00"   # 本地钟点（+13）
+    python3 usage_readout.py --since "2026-10-20 14:00" --until "2026-10-21 14:00"   # 本地钟点（+5）
     python3 usage_readout.py --no-archive        # 对账表也只扫 home（覆盖面会写明少了归档根）
     python3 usage_readout.py --selfcheck         # 不读盘不连库，只验纯逻辑（给 check_skill.py 跑通用）
 退出码 0＝对账表断言全过、六格都出了读数，且盘上那一格有分母（没有解不开的文件、窗口内不是 0 行）；
@@ -43,7 +43,7 @@ import json
 import os
 import sys
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 
 # 宿主普通 Windows 控制台默认码页是 cp1252：中文一 print 就 UnicodeEncodeError 整段崩。
 # 输出字节固定成 UTF-8：那种控制台顶多显示成乱码，不再崩（同 asuna-running-version 的探针）。
@@ -481,6 +481,24 @@ def rate_of(hit, prompt):
     return "无分母" if not prompt else "%.2f%%" % (100.0 * hit / prompt)
 
 
+def offset_label(delta):
+    """把一个 utcoffset() 写成 UTC+5 那样的偏移量：符号、小时、非整小时的 :MM 都照它算——不写死。"""
+    minutes = delta.days * 1440 + delta.seconds // 60
+    hours, extra = divmod(abs(minutes), 60)
+    return "UTC%s%d" % ("-" if minutes < 0 else "+", hours) + ((":%02d" % extra) if extra else "")
+
+
+def window_line(local_bounds, utc_bounds, zone_name, tz):
+    """对账表表头那一行「窗口」。偏移量照窗口两端那一刻在 tz 里的真偏移现算——写死一个数，
+    换夏令时那一天就会印错；两端相同只印一个，跨切换的那两天各印一个。"""
+    labels = [offset_label(datetime.strptime(text, "%Y-%m-%dT%H:%M:%S")
+                           .replace(tzinfo=timezone.utc).astimezone(tz).utcoffset())
+              for text in utc_bounds]
+    offset_text = labels[0] if labels[0] == labels[1] else "%s／%s" % (labels[0], labels[1])
+    return "窗口：本地 %s → %s（%s，该日 %s）＝UTC %s → %s" % (
+        local_bounds[0], local_bounds[1], zone_name, offset_text, utc_bounds[0], utc_bounds[1])
+
+
 def render_recon_table(occurrences, winner, lo_ms, hi_ms, local_bounds, utc_bounds, zone_name,
                        roots, unreadable, read_at_local, read_at_utc, db_available, counters):
     """对账表整段：表头元信息（一行一条）→ 表 → 口径与子计数。断言不过只回报错行。"""
@@ -517,8 +535,7 @@ def render_recon_table(occurrences, winner, lo_ms, hi_ms, local_bounds, utc_boun
              "命中率不适用的三类在表里只有「门」是单独一行、可摘出；摘要并进「压缩」行、"
              "网页界面会话按 preset 进「角色脑」行——那两类的摘出只在六格②⑤（按目录名前缀认的那把尺）生效。",
              "命中率＝命中／读入提示；分母含写缓存（cacheWrite 算未命中、留在分母里，六格⑤）。",
-             "窗口：本地 %s → %s（%s，该日 UTC+13）＝UTC %s → %s"
-             % (local_bounds[0], local_bounds[1], zone_name, utc_bounds[0], utc_bounds[1]),
+             window_line(local_bounds, utc_bounds, zone_name, zone_of(zone_name)),
              "一次请求：一条 type==\"assistant/message\" 记一次，按 data.message.id 去重；"
              "压缩行的请求数含 compaction/summary 行（无 id，按原始行 sha256＋usage 组合去重）。",
              "数据源根目录：%s" % "＋".join("%s（%s 个会话文件）" % (r, fmt_int(c)) for r, c in roots),
@@ -918,8 +935,8 @@ def selfcheck():
     """纯逻辑自检：认法、命中率式子、跨类去重、拷贝判定、窗口切法、对账表三把键与断言。给 check_skill.py 跑通用。"""
     checks = []
 
-    def check(name, ok):
-        checks.append((name, bool(ok)))
+    def check(name, ok, detail=""):
+        checks.append((name, bool(ok), detail))
 
     tier_map = {"asuna-action-aaa": "高", "asuna-action-bbb": "低"}
     check("classify_role", classify("asuna-role-x", tier_map) == "我的对话")
@@ -1068,10 +1085,41 @@ def selfcheck():
           any("门（前缀 asuna-attend-）" in line and "命中率 不适用" in line for line in kind_lines)
           and any("我的对话（前缀 asuna-role-）" in line and "命中率 60.00%" in line for line in kind_lines))
 
+    # 钉住「那一行印出来的偏移是那一刻现算的、不是写死的」。时区用夹具（不写这台机器的城市名：
+    # personal-scan 的 timezone 类会把那个字面记成一处命中）：一个假时区，按月份切两个固定偏移，
+    # 切法是编出来的。样本日期由测试自己给，不取当前时刻、不连库、不联网。
+    class FixtureTz(tzinfo):
+        """夹具时区（假）：按月份切两个固定偏移——当地月份 4～9 月 +6、10～3 月 +5（切法编造）。"""
 
-    failed = [name for name, ok in checks if not ok]
-    for name in failed:
-        print("FAIL selfcheck %s" % name)
+        def utcoffset(self, moment):
+            return timedelta(hours=5) if (moment.month >= 10 or moment.month <= 3) else timedelta(hours=6)
+
+        def dst(self, moment):
+            return timedelta(0) if (moment.month >= 10 or moment.month <= 3) else timedelta(hours=1)
+
+        def tzname(self, moment):
+            return "fixture-zone"
+
+    fixture = FixtureTz()
+    # 一个样本在 +6 那一侧（UTC 2026-07-15T00:00 → 当地当日 06:00），一个在 +5 那一侧
+    # （UTC 2026-10-28T23:00 → 当地次日 04:00）：写死任何一个数都会被其中一条抓到。
+    for day, utc_noon, expect in (("2026-07-15", "2026-07-15T00:00:00", "UTC+6"),
+                                  ("2026-10-29", "2026-10-28T23:00:00", "UTC+5")):
+        printed = window_line((day + " 12:00:00", day + " 12:00:00"),
+                              (utc_noon, utc_noon), "fixture-zone", fixture)
+        check("window_offset_true_on_" + day, ("（fixture-zone，该日 %s）＝UTC" % expect) in printed,
+              "期望印 %s／实得那一行：%s" % (expect, printed))
+    # 窗口跨夹具的月份切换（一端 +6、一端 +5）：那一格必须两个标签都印，不许只留一个
+    straddle = window_line(("2026-07-15 12:00:00", "2026-10-29 12:00:00"),
+                           ("2026-07-15T00:00:00", "2026-10-28T23:00:00"), "fixture-zone", fixture)
+    check("window_offset_two_labels_across_switch",
+          "（fixture-zone，该日 UTC+6／UTC+5）＝UTC" in straddle,
+          "期望两个标签 UTC+6／UTC+5／实得那一行：%s" % straddle)
+
+
+    failed = [(name, detail) for name, ok, detail in checks if not ok]
+    for name, detail in failed:
+        print("FAIL selfcheck %s%s" % (name, ("  <- " + detail) if detail else ""))
     print("SELFCHK %d/%d 通过（纯逻辑：种类认法、命中率分母含写缓存、跨类按 id 去重归首次、拷贝判定、"
           "窗口按行切；对账表：preset 行归属、行动脑 ran→chosen 退回与未归档、三把键去重（原始行 sha256／"
           "message.id／usage 组合）、拷贝行、四条硬断言、千分位写法；没读盘、没连库）"

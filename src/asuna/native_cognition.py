@@ -1,6 +1,9 @@
 """Read-only cognitive state coverage for the existing native Memory view."""
 import json
 
+from .records import episodes as episode_records
+from .records import tasks as task_records
+
 
 class CognitionView:
     def __init__(self, memory):
@@ -17,26 +20,23 @@ class CognitionView:
                  'payload.context.person_id': self.binding['person_id'],
                  'payload.context.policy_epoch': self.binding['policy_epoch']}
         role = self.binding.get('role_session_id') or self.binding['_id']
-        episode_query = {'native_session_id': role, 'scope_key': scope,
-                         'scene_id': self.binding['scene_id'],
-                         'person_id': self.binding['person_id'],
-                         'policy_epoch': self.binding['policy_epoch'],
-                         'persona': self.binding['persona']}
+        fence = {'session': role, 'scope': scope, 'scene': self.binding['scene_id'],
+                 'person': self.binding['person_id'], 'epoch': self.binding['policy_epoch'],
+                 'persona': self.binding['persona']}
         if self.binding.get('task_id'):
-            task = self.store.db.tasks.find_one({'_id': self.binding['task_id'],
-                'scene_id': self.binding['scene_id'], 'requester_id': self.binding['person_id'],
-                'policy_epoch': self.binding['policy_epoch']})
+            task = task_records.get(self.store, self.binding['task_id'], scene=self.binding['scene_id'],
+                                    requester=self.binding['person_id'], epoch=self.binding['policy_epoch'])
             if not task:
                 return None
             # The turn the task works for: on an errand, the home turn that sent it (errands.home_turn).
             from .errands import home_turn
-            begun = home_turn(self.store, self.store.db.episodes.find_one({'_id': task['episode_id']}, {'errand': 1})
+            begun = home_turn(self.store, episode_records.get(self.store, task['episode_id'], fields=['errand'])
                               or {'_id': task['episode_id']})
-            episode_query['_id'] = query['stream_id'] = begun['_id']
+            query['stream_id'] = begun['_id']
         for audit in self.store.db.audit_events.find(query, {
                 'stream_id': 1, 'occurred_at': 1}).sort([('occurred_at', -1), ('_id', -1)]).limit(24):
-            episode = self.store.db.episodes.find_one({**episode_query, '_id': audit['stream_id']},
-                {'context': 1, 'manifest': 1, 'monologue_refs': 1, 'understanding_seen': 1})
+            episode = episode_records.get(self.store, audit['stream_id'],
+                                          ['context', 'manifest', 'monologue_refs', 'understanding_seen'], **fence)
             if episode:
                 return {**episode, 'at': audit['occurred_at']}
         return None

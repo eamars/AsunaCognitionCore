@@ -24,6 +24,7 @@ import re
 import threading
 
 from .state import now
+from .records import artifacts as artifact_records
 
 KIND = 'channel_capabilities'
 LIMITED = re.compile(r'^([^:]+):(\d{1,20})$')
@@ -76,7 +77,7 @@ def declared(store, channel_id, supports):
         _warned.add(channel_id)
     row = {'_id': _row_id(channel_id), 'kind': KIND, 'channel_id': channel_id, 'supports': list(names),
            **({'limits': limits} if limits else {}), 'declared_at': now(), 'schema_version': 1}
-    prior = store.db.artifacts.find_one({'_id': row['_id']}, {'supports': 1})
+    prior = artifact_records.get(store, row['_id'], ['supports'])
     _write(store, row)
     if prior is not None:
         lost = [name for name in WORDS if name in prior.get('supports', ()) and name not in names]
@@ -91,23 +92,23 @@ def declared(store, channel_id, supports):
 
 
 def _write(store, row):
-    if store.db.artifacts.find_one({'_id': row['_id']}, {'_id': 1}):
-        store.db.artifacts.replace_one({'_id': row['_id']}, row)
+    if artifact_records.get(store, row['_id'], ['_id']):
+        artifact_records.replace(store, row)
         return
     try:
-        store.db.artifacts.insert_one(row)
+        artifact_records.insert(store, row)
     except Exception:                                        # noqa: BLE001 another claim wrote it first
-        store.db.artifacts.replace_one({'_id': row['_id']}, row)
+        artifact_records.replace(store, row)
 
 
 def change_line(store, scene):
     """The one line a conversation gets after its channel lost or regained a function she uses, at its next turn;
     None when there is none or it was shown here already."""
     channel_id = (scene or {}).get('channel_id')
-    row = store.db.artifacts.find_one({'_id': CHANGE + ':' + channel_id}) if channel_id else None
+    row = artifact_records.get(store, CHANGE + ':' + channel_id) if channel_id else None
     if not row or scene['_id'] in (row.get('shown') or ()):
         return None
-    store.db.artifacts.replace_one({'_id': row['_id']}, {**row, 'shown': [*(row.get('shown') or ()), scene['_id']]})
+    artifact_records.replace(store, {**row, 'shown': [*(row.get('shown') or ()), scene['_id']]})
     said = []
     if row.get('lost'):
         said.append(CANNOT % '、'.join(WORDS[name] for name in row['lost']))
@@ -123,7 +124,7 @@ def supports(store, channel_id):
     with _lock:
         if channel_id in _known:
             return _known[channel_id]
-    row = store.db.artifacts.find_one({'_id': _row_id(channel_id)}, {'supports': 1, 'limits': 1}) or {}
+    row = artifact_records.get(store, _row_id(channel_id), ['supports', 'limits']) or {}
     names = tuple(row.get('supports') or ())
     with _lock:
         _known.setdefault(channel_id, names)

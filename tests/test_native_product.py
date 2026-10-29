@@ -108,7 +108,9 @@ def test_blocking_revokes_grants_and_queued_publications(product):
     p = product
     result = p.channel.receive('qq', envelope())
     message = p.store.db.messages.find_one({'_id': 'in-' + result['episode_id']})
-    p.store.put('episodes', {'_id': result['episode_id'], 'person_id': message['author'], 'state': 'SPEAK_ACCEPTED'})
+    p.store.put('episodes', {'_id': result['episode_id'], 'scene_id': message['scene_id'],
+                             'source_event_id': result['episode_id'], 'episode_kind': 'external',
+                             'person_id': message['author'], 'state': 'SPEAK_ACCEPTED'})
     publication = {'channel_id': 'qq', 'scene_id': message['scene_id'], 'episode_id': result['episode_id']}
     p.config['channels']['qq']['blocked_senders'] = ['11110000']
     with pytest.raises(Denied, match='PUBLICATION_MEMBER_REVOKED'):

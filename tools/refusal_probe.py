@@ -39,6 +39,9 @@ from asuna.ingress import persist_input                              # noqa: E40
 from asuna.lanes import LaneResult                                   # noqa: E402
 from asuna.state import Store                                        # noqa: E402
 from asuna.testing import dispose_test_store, suite_config            # noqa: E402
+from asuna.records import scenes as scene_records  # noqa: E402
+from asuna.records import messages as message_records                 # noqa: E402
+from asuna.records import memories as memory_records                 # noqa: E402
 
 FIXTURES = ROOT / 'tools' / 'fixtures' / 'refusal_probe'
 WORLD = ROOT / 'tests' / 'fixtures' / 'world.json'
@@ -325,9 +328,9 @@ def probe_config(name, thoughts='tool'):
 def home_scene(store):
     """Her local chat, the home scene a `home` sequence runs in (the owner writing in the Web composer)."""
     chat = store.config['chat']
-    if not store.db.scenes.find_one({'_id': chat['scene_id']}, {'_id': 1}):
-        store.put('scenes', {'_id': chat['scene_id'], 'kind': 'dm', 'scope_key': 'scene:' + chat['scene_id'],
-                             'policy_epoch': 1, 'sequence': 0, 'members': [chat['person_id']]})
+    if not scene_records.get(store, chat['scene_id'], fields=['_id']):
+        scene_records.save(store, {'_id': chat['scene_id'], 'kind': 'dm', 'scope_key': 'scene:' + chat['scene_id'],
+                                  'policy_epoch': 1, 'sequence': 0, 'members': [chat['person_id']]})
     return chat['scene_id']
 
 
@@ -348,16 +351,16 @@ def run_sequence(store, lane, seq, index, name):
         store.config['channels']['qq']['routes']['g%d' % index] = {
             'scene_id': scene_id, 'target': {'type': 'group', 'id': group},
             'members': {n: {'person_id': 'qq:' + n} for n in number.values()}}
-        store.put('scenes', {'_id': scene_id, 'kind': 'group', 'scope_key': 'scene:' + scene_id,
-                             'channel_account_id': BOT, 'channel_id': 'qq', 'policy_epoch': 1, 'sequence': 0,
-                             'members': ['qq:' + n for n in number.values()]})
+        scene_records.save(store, {'_id': scene_id, 'kind': 'group', 'scope_key': 'scene:' + scene_id,
+                                  'channel_account_id': BOT, 'channel_id': 'qq', 'policy_epoch': 1, 'sequence': 0,
+                                  'members': ['qq:' + n for n in number.values()]})
         line_event = lambda line, key, aside=False: event(scene_id, group, number, line, key, name, aside=aside)
     lane.schemas = dsh_schemas(store, scene_id)
     for text in seq.get('memories', []):
-        store.put('memory_units', {'_id': 'mem-%d-%s' % (index, uuid.uuid4().hex[:8]), 'scope_key': 'scene:' + scene_id,
-                                   'epistemic_type': 'observed_fact', 'subjects': [], 'body_markdown': text,
-                                   'source_event_ids': [], 'status': 'active', 'supersedes': [], 'kind': 'episodic',
-                                   'character_id': 'demo', 'occurred_at': now(), 'revision': 1})
+        memory_records.save(store, {'_id': 'mem-%d-%s' % (index, uuid.uuid4().hex[:8]), 'scope_key': 'scene:' + scene_id,
+                                    'epistemic_type': 'observed_fact', 'subjects': [], 'body_markdown': text,
+                                    'source_event_ids': [], 'status': 'active', 'supersedes': [], 'kind': 'episodic',
+                                    'character_id': 'demo', 'occurred_at': now(), 'revision': 1})
     history = seq.get('history', [])
     lines = [history[i % len(history)] for i in range(seq['filler'])] + history if seq.get('filler') else history
     coordinator = Coordinator(store, lane)
@@ -407,8 +410,8 @@ def event(scene_id, group, number, line, key, name, aside=False):
 def mine(store, scene_id, text, i, index=0):
     """A line she said before the conversation starts: delivered, with a platform id (her recall can name it). `index`
     is the run of the conversation: the home conversation runs in her one local chat on every repeat."""
-    seq = store.db.scenes.find_one_and_update({'_id': scene_id}, {'$inc': {'sequence': 1}}, return_document=True)['sequence']
-    store.put('messages', {'_id': 'mine-%s-%d-%d' % (scene_id[-5:], index, i), 'scene_id': scene_id, 'scope_key': 'scene:' + scene_id,
+    seq = scene_records.next_seq(store, scene_id)
+    message_records.save(store, {'_id': 'mine-%s-%d-%d' % (scene_id[-5:], index, i), 'scene_id': scene_id, 'scope_key': 'scene:' + scene_id,
                            'policy_epoch': 1, 'direction': 'outbound', 'author': 'demo', 'phase': 'SPEAK', 'text': text,
                            'scene_seq': seq, 'delivery_state': 'DELIVERED', 'episode_id': 'ep-before',
                            'receipt_at': now(), 'platform_message_id': 'pm-%d-%d' % (index, i)})
@@ -530,7 +533,7 @@ def probe(args, provider=None):
                                                      store.db.audit_events.find({'type': 'thought.none'})))}
         if keep_text and thoughts == 'thinking':
             with open(keep_text.replace('.jsonl', '-thoughts.jsonl'), 'w', encoding='utf-8') as out:
-                for unit in store.db.memory_units.find({'kind': 'monologue', 'source': 'thinking'}, {'body_markdown': 1}):
+                for unit in memory_records.of_kind(store, 'monologue', source='thinking').each(fields=['body_markdown']):
                     out.write(json.dumps({'_id': unit['_id'], 'text': unit['body_markdown']}, ensure_ascii=False) + '\n')
     finally:
         dispose_test_store(store)

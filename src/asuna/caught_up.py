@@ -7,7 +7,8 @@ longer wakes her by itself: it asks her through the relevance gate (`catchup_men
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
+from . import clock
 
 CATCHUP_KEY = 'asuna_catchup'
 STALE_SECONDS = 300
@@ -43,5 +44,5 @@ def stale(raw, occurred_at, now=None):
         moment = datetime.fromisoformat(occurred_at.replace('Z', '+00:00'))
     except ValueError:
         return False
-    now = now or datetime.now(timezone.utc)
+    now = now or clock.now()
     return (now - moment).total_seconds() > STALE_SECONDS

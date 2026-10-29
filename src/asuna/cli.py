@@ -6,8 +6,8 @@ settings file names. It runs from a development checkout and is not shipped with
 """
 from __future__ import annotations
 import argparse,json,sys,uuid
-from datetime import datetime,timezone
 from pathlib import Path
+from . import clock
 ROOT=Path(__file__).resolve().parents[2]   # the development checkout (this CLI is not shipped)
 
 
@@ -45,7 +45,7 @@ def main():
         from .audit import render_html,replay
         config=load(args.config)
         if args.command=='index':
-            run=args.command+'-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-')+uuid.uuid4().hex[:6]
+            run=args.command+'-'+clock.now().strftime('%Y%m%dT%H%M%SZ-')+uuid.uuid4().hex[:6]
             ev=Evidence(Path(args.out) if args.out else ROOT/'reports'/run)
         store=Store(config,args.database)
         if args.command=='db-init':value=store.migrate()

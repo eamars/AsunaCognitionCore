@@ -12,10 +12,13 @@ from datetime import datetime, timedelta, timezone
 
 from pymongo.errors import DuplicateKeyError
 
+from . import clock
 from .evidence import canonical, sha
 from .state import Denied, now
 from . import visibility
 from .context_budget import AFFECT_REASONS, rough_ago
+from .records import episodes as episode_records
+from .records import memories as memory_records
 
 SHORT_ID = 12                 # event ids as she reads and quotes them; a unique prefix resolves to the event
 
@@ -411,7 +414,7 @@ class AffectLedger:
         return list(self.store.db.affect_amendments.find({'persona': self.persona}))
 
     def projection(self, at=None, who=None):
-        return project(self.model, self.events(), self.amendments(), at or datetime.now(timezone.utc), who=who)
+        return project(self.model, self.events(), self.amendments(), at or clock.now(), who=who)
 
     def person_feelings(self, person_id, cls, at=None):
         """ADR-086 D1: her live feelings toward this person, in words; [] when the ledger is off or none is left."""
@@ -698,7 +701,7 @@ class Appraiser:
         import json
         from .config import prompt_path
         from .render import model_and_policy
-        ep = self.store.db.episodes.find_one({'_id': episode_id})
+        ep = episode_records.get(self.store, episode_id)
         if not ep or ep.get('state') not in ('COMMITTED', 'WAITING_TASK'):
             return []
         model, policy = model_and_policy(self.store, ep['persona'])
@@ -706,8 +709,8 @@ class Appraiser:
         if not ledger.enabled or self.store.db.affect_proposals.find_one({'episode_id': episode_id}):
             return []
         from .reasons import shown
-        monologues = [shown(row, len(row.get('body_markdown') or '') or 1) or '' for row in self.store.db.memory_units.find(
-            {'_id': {'$in': ep.get('monologue_refs', [])}}, {'body_markdown': 1, 'source': 1})]   # ADR-099: a summary short
+        monologues = [shown(row, len(row.get('body_markdown') or '') or 1) or '' for row in memory_records.many(
+            self.store, ep.get('monologue_refs', [])).each(fields=['body_markdown', 'source'])]   # ADR-099: a summary short
         payload = {'input': ep['context'].get('event', {}).get('text'), 'monologue': monologues,
                    'speech': ep.get('speech'), 'ref_index': _refs(ep),
                    'how_to_record': recording_guide(ledger.model)}

@@ -1,5 +1,6 @@
 from pathlib import Path
 import pytest
+from asuna.records import heads as head_records
 from asuna.coordinator import Coordinator
 from asuna.lanes import FakeLane,FakeTurn
 from asuna.router import Router
@@ -63,10 +64,10 @@ def test_E16_busy_workspace_is_not_claimed(store,runtime_work):
 
 
 def test_E19_rollback_rejects_other_scope_and_preserves_source_accounting(store):
-    old=store.head('relationship:A','scene:dm-a')[1]
-    new=store.mutate('relationship:A','scene:dm-a',old['_id'],{'body':'new'},['M02'],'scene:dm-a','new-relation')
+    old=head_records.current(store, 'relationship:A','scene:dm-a')[1]
+    new=head_records.mutate(store, 'relationship:A','scene:dm-a',old['_id'],{'body':'new'},['M02'],'scene:dm-a','new-relation')
     service=MemoryService(store)
-    foreign=store.head('relationship:B','scene:dm-b')[1]
+    foreign=head_records.current(store, 'relationship:B','scene:dm-b')[1]
     with pytest.raises(Denied):service.rollback('relationship:A','scene:dm-a',foreign['_id'],new['_id'],'bad',operator=True)
     back=service.rollback('relationship:A','scene:dm-a',old['_id'],new['_id'],'back',operator=True)
     assert back['content']==old['content'] and back['processed_source_ids']==new['processed_source_ids']

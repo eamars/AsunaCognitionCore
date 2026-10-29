@@ -17,8 +17,12 @@ import json
 import re
 from datetime import datetime, time, timedelta, timezone
 
+from . import clock
 from .config import excerpt
 from .evidence import sha
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import tasks as task_records
 
 EXAMPLE_CHARS = 80
 TASK_STATES = {'READY': '排着', 'RUNNING': '在做', 'PAUSED': '停着', 'RETURNED': '交回来了', 'FAILED': '没做成',
@@ -70,29 +74,28 @@ def _midnight(zone_name, moment):
 
 def block(store, persona, zone_name, moment=None):
     from .people import People
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     since = _midnight(zone_name, moment).isoformat()
     people = People(store, persona)
     title = {}
 
     def where(scene_id):
         if scene_id not in title:
-            scene = store.db.scenes.find_one({'_id': scene_id})
+            scene = scene_records.get(store, scene_id)
             title[scene_id] = people.scene_title(scene) if scene else '一个现在已经没有的对话'
         return title[scene_id]
 
     said = collections.OrderedDict()
-    for row in store.db.messages.find({'direction': 'outbound', 'phase': 'SPEAK', 'receipt_at': {'$gte': since}},
-                                      {'scene_id': 1, 'receipt_at': 1}).sort('receipt_at', 1):
+    for row in message_records.spoken(store, delivered=False, speech=True, receipt_since=since,
+                                      by='receipt_at').rows(fields=['scene_id', 'receipt_at']):
         item = said.setdefault(row['scene_id'], {'where': where(row['scene_id']), 'lines': 0})
         item['lines'] += 1
         item['last_at'] = row['receipt_at']
     tasks = [{'title': row.get('title') or row.get('goal'), 'where': where(row['scene_id']),
               'state': TASK_STATES.get(row.get('state'), row.get('state')), 'at': row['created_at'],
               **({'failure': row['failure_type']} if row.get('failure_type') else {})}
-             for row in store.db.tasks.find({'created_at': {'$gte': since}},
-                                            {'title': 1, 'goal': 1, 'scene_id': 1, 'state': 1, 'created_at': 1,
-                                             'failure_type': 1}).sort('created_at', 1)]
+             for row in task_records.created(store, since, by='created_at').each(
+                 fields=['title', 'goal', 'scene_id', 'state', 'created_at', 'failure_type'])]
     refused = collections.OrderedDict()
     for row in store.db.audit_events.find({'type': 'role_tool', 'occurred_at': {'$gte': since},
                                            'payload.refused': {'$exists': True}},
@@ -103,8 +106,8 @@ def block(store, persona, zone_name, moment=None):
         item['times'] += 1
     open_tasks = [{'title': row.get('title') or row.get('goal'), 'where': where(row['scene_id']),
                    'state': TASK_STATES.get(row['state'], row['state'])}
-                  for row in store.db.tasks.find({'state': {'$in': ['READY', 'RUNNING', 'PAUSED']}},
-                                                 {'title': 1, 'goal': 1, 'scene_id': 1, 'state': 1})]
+                  for row in task_records.in_states(store, ['READY', 'RUNNING', 'PAUSED']).each(
+                      fields=['title', 'goal', 'scene_id', 'state'])]
     return {'said': list(said.values()), 'tasks': tasks, 'refused': list(refused.values()), 'open': open_tasks,
             'since_at': since, 'note': NOTE}
 
@@ -137,14 +140,14 @@ def exchanges(store, persona, zone_name, moment=None):
     from .ingress import PROGRAM_AUTHOR
     from .people import People
     from .schedule_rules import line_stamp
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     last = store.db.audit_events.find_one({'type': SHOWN, 'payload.persona': persona}, sort=[('occurred_at', -1)])
     floor = moment - timedelta(days=WINDOW_DAYS)
     since = max(_at(last['occurred_at']), floor) if last else floor
     store.audit('review:' + persona, SHOWN, {'persona': persona})
-    mine = list(store.db.messages.find({'direction': 'outbound', 'phase': 'SPEAK', 'receipt_at': {'$gte': since.isoformat()}},
-                                       {'scene_id': 1, 'scene_seq': 1, 'text': 1, 'platform_message_id': 1,
-                                        'receipt_at': 1}).sort('receipt_at', 1))
+    mine = message_records.spoken(store, delivered=False, speech=True, receipt_since=since.isoformat(),
+                                  by='receipt_at').rows(
+        fields=['scene_id', 'scene_seq', 'text', 'platform_message_id', 'receipt_at'])
     if not mine:
         return {'items': [NOTHING_SAID], 'note': exchanges_note(store, persona)}
     people, home = People(store, persona), visibility.owner_private_scenes(store.config)
@@ -153,13 +156,11 @@ def exchanges(store, persona, zone_name, moment=None):
         by_scene[row['scene_id']].append(row)
     found = {}
     for scene_id, lines in by_scene.items():
-        scene = store.db.scenes.find_one({'_id': scene_id}) or {'_id': scene_id}
+        scene = scene_records.get(store, scene_id) or {'_id': scene_id}
         seqs = [row.get('scene_seq') or 0 for row in lines]
-        rows = list(store.db.messages.find({'scene_id': scene_id, 'scene_seq': {'$gte': min(seqs),
-                                                                                '$lte': max(seqs) + LOOK_AHEAD}})
-                    .sort('scene_seq', 1))
-        before = list(store.db.messages.find({'scene_id': scene_id, 'direction': 'inbound',
-                                              'scene_seq': {'$lt': min(seqs), '$gte': min(seqs) - LOOK_AHEAD}}))
+        rows = message_records.lines(store, scene_id, from_seq=min(seqs), upto=max(seqs) + LOOK_AHEAD).rows()
+        before = message_records.inbound(store, scene_id, before=min(seqs), from_seq=min(seqs) - LOOK_AHEAD,
+                                         by=None).rows()
         ours = {row['_id'] for row in lines}
         for index, line in enumerate(lines):
             seq = line.get('scene_seq') or 0

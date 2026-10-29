@@ -113,7 +113,8 @@ def test_every_tool_schema_stays_inside_what_dsh_registers():
 
 def test_a_credential_value_never_reaches_the_audit(store, vault):
     # Her keep call carries the values once; the audit keeps the names and the note, never a value.
-    ep = store.put('episodes', {'_id': 'ep-cred', 'scene_id': store.config['chat']['scene_id'], 'scope_key': 'scene:local',
+    ep = store.put('episodes', {'_id': 'ep-cred', 'source_event_id': 'ep-cred', 'episode_kind': 'external',
+                                'scene_id': store.config['chat']['scene_id'], 'scope_key': 'scene:local',
                                 'tool_calls': {}}, stream='ep-cred')
     class Coordinator:              # what RoleTools._record uses: the store and a revision-checked write back
         def __init__(self, store):

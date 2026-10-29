@@ -17,6 +17,8 @@ import re
 import unicodedata
 
 from .evidence import canonical, sha
+from .records import heads as head_records
+from .records.view import ANY, View, fenced, is_text, pinned
 from .state import Conflict, Denied, now
 
 SCOPE = 'global-safe'
@@ -35,6 +37,87 @@ JOURNALS = ('work_log',)
 # a journal is a running record like work_log (rows), a working document is read by recall.
 NEW_KINDS = ('ledger', 'journal', 'working')
 SECTION_KEYS = ('sid', 'heading', 'body', 'body_sha256', 'visibility', 'inject', 'tags', 'entry_date', 'corrects', 'pin')
+
+
+# ── the owner of the running records' rows (journal_entries, journal_revisions) ──
+# Read and written only through these: an entry or a revision as stored (`fields` names what to return; `_id` always
+# comes back). None follows the store's rule (ADR-104 section 4): an id or a fence (the persona, the record) given
+# None, or a value not of its kind, finds nothing without a read; a value condition (the mutation that last wrote an
+# entry, a section, a body's hash) given None finds the rows whose field is null or missing. Views are `View`s, in the
+# replaced read's order.
+ENTRIES, REVISIONS = 'journal_entries', 'journal_revisions'
+
+
+def _rows(store, collection, where, by=()):
+    by = (by,) if isinstance(by, str) else tuple(by)
+    return View(store, collection, where, tuple((path, 1) for path in by))
+
+
+def _of(persona, slug, pins=None):
+    where = fenced({}, {'persona': (persona, is_text), 'slug': (slug, is_text)})
+    return pinned(where, {path: (value, is_text) for path, value in (pins or {}).items()})
+
+
+def entry(store, entry_id, fields=None):
+    """A running record's entry by id, or None."""
+    return store.collection(ENTRIES).get(entry_id, fields) if is_text(entry_id) else None
+
+
+def slugs(store, persona):
+    """The names of a persona's running records (the values of their entries' `slug`), ascending."""
+    where = fenced({}, {'persona': (persona, is_text)})
+    return [] if where is None else store.collection(ENTRIES).group(where, ['slug'], None)
+
+
+def entries(store, persona, slug):
+    """View: a running record's entries, in their order (`seq`)."""
+    return _rows(store, ENTRIES, _of(persona, slug), 'seq')
+
+
+def entry_of(store, persona, slug, *, mutation=ANY, fields=None):
+    """An entry of a running record (the one this mutation last wrote), or None."""
+    return _rows(store, ENTRIES, _of(persona, slug, {'last_mutation': mutation})).first(fields=fields)
+
+
+def last_entry(store, persona, slug, fields=None):
+    """A running record's last entry (the highest `seq`), or None."""
+    return _rows(store, ENTRIES, _of(persona, slug), 'seq').first(newest_first=True, fields=fields)
+
+
+def revision(store, revision_id=None, *, mutation=ANY, fields=None):
+    """A running record's revision by id, or the one a mutation id wrote; None when there is none."""
+    if mutation is not ANY:
+        return _rows(store, REVISIONS, {'mutation_id': mutation} if is_text(mutation) else None).first(fields=fields)
+    return store.collection(REVISIONS).get(revision_id, fields) if is_text(revision_id) else None
+
+
+def revisions(store, persona, slug, *, sid=ANY, sectioned=False):
+    """View: a running record's revisions (of this section; `sectioned`: of any section), by `created_at`."""
+    from .store.words import Exists
+    where = _of(persona, slug, {'sid': sid})
+    if sectioned and where is not None:
+        where['sid'] = Exists(True)
+    return _rows(store, REVISIONS, where, 'created_at')
+
+
+def revision_of_body(store, persona, slug, sid, body_sha256):
+    """The revision of a section whose body had this hash, or None."""
+    return _rows(store, REVISIONS, _of(persona, slug, {'sid': sid, 'body_sha256': body_sha256})).first()
+
+
+def last_revision(store, persona, slug, fields=None):
+    """A running record's newest revision (by `created_at`, then `_id`), or None."""
+    return _rows(store, REVISIONS, _of(persona, slug), ('created_at', '_id')).first(newest_first=True, fields=fields)
+
+
+def save_entry(store, row, **kwargs):
+    """The revisioned write of an entry (`Store.put`: `expected`, `stream`)."""
+    return store.put(ENTRIES, row, **kwargs)
+
+
+def save_revision(store, row, **kwargs):
+    """The write of a running record's revision (`Store.put`)."""
+    return store.put(REVISIONS, row, **kwargs)
 
 
 class DocumentError(ValueError):
@@ -169,14 +252,13 @@ class DocumentStore:
 
     def is_journal(self, slug):
         """A running record: work_log, or a document she made with kind journal (it has rows, never a head)."""
-        return slug in JOURNALS or bool(self.store.db.journal_entries.find_one({'persona': self.persona, 'slug': slug},
-                                                                               {'_id': 1}))
+        return slug in JOURNALS or bool(entry_of(self.store, self.persona, slug, fields=['_id']))
 
     def head(self, slug):
         if self.is_journal(slug):
             revision_id, content = self._journal_read(slug)
             return ({'_id': self.key(slug), 'revision_id': revision_id}, {'content': content}) if content else None
-        return self.store.head(self.entity(slug), SCOPE)
+        return head_records.current(self.store, self.entity(slug), SCOPE)
 
     def read(self, slug):
         """(revision id, content) or (None, None)."""
@@ -186,40 +268,39 @@ class DocumentStore:
         return (pair[0]['revision_id'], pair[1]['content']) if pair else (None, None)
 
     def revision(self, revision_id):
-        return self.store.db.state_revisions.find_one({'_id': revision_id})
+        return head_records.revision(self.store, revision_id)
 
     def slugs(self, prefix=''):
-        rows = self.store.db.state_heads.find({'_id': {'$regex': '^' + re.escape(f'doc:{self.persona}:' + prefix)}}, {'_id': 1})
+        rows = head_records.with_prefix(self.store, f'doc:{self.persona}:' + prefix).rows(fields=['_id'])
         found = {row['_id'][len(f'doc:{self.persona}:'):-len('|' + SCOPE)] for row in rows}
-        found |= {slug for slug in self.store.db.journal_entries.distinct('slug', {'persona': self.persona})
-                  if slug.startswith(prefix)}
+        found |= {slug for slug in slugs(self.store, self.persona) if slug.startswith(prefix)}
         return sorted(found)
 
     # ── running records (JOURNALS): one row per entry ───────────────
     def _journal_import(self, slug):
         """A record kept as one document before it became rows moves into rows once; its old revisions stay."""
-        head = self.store.db.state_heads.find_one({'_id': self.key(slug)})
+        head = head_records.head(self.store, self.key(slug))
         if not head:
             return
-        revision = self.store.db.state_revisions.find_one({'_id': head['revision_id']}) or {}
-        at = revision.get('created_at') or now()
+        last = head_records.revision(self.store, head['revision_id']) or {}
+        at = last.get('created_at') or now()
         times = self._section_times(slug)
-        for seq, section in enumerate((revision.get('content') or {}).get('sections') or [], 1):
+        for seq, section in enumerate((last.get('content') or {}).get('sections') or [], 1):
             entry_id = self._journal_entry_id(slug, section['sid'])
             created, updated = times.get(section['sid'], (at, at))
-            if not self.store.db.journal_entries.find_one({'_id': entry_id}, {'_id': 1}):
-                self.store.put('journal_entries', {
+            if not entry(self.store, entry_id, ['_id']):
+                save_entry(self.store, {
                     '_id': entry_id, 'persona': self.persona, 'slug': slug, 'seq': seq, 'scope_key': SCOPE,
                     **{k: section[k] for k in SECTION_KEYS if k in section}, 'created_at': created,
                     'updated_at': updated, 'last_mutation': 'import:' + head['revision_id']},
                     stream='doc:import:' + slug)
-        if not self.store.db.journal_revisions.find_one({'_id': head['revision_id']}):
-            self.store.put('journal_revisions', {
+        if not revision(self.store, head['revision_id']):
+            save_revision(self.store, {
                 '_id': head['revision_id'], 'mutation_id': 'import:' + head['revision_id'], 'persona': self.persona,
                 'slug': slug, 'op': 'import', 'reason': 'one document became one row per entry', 'author': 'program',
                 'scope_key': SCOPE, 'created_at': now()}, stream='doc:import:' + slug)
         # The document's head goes; its revisions stay as they were (the record before rows).
-        self.store.db.state_heads.delete_one({'_id': head['_id'], 'revision_id': head['revision_id']})
+        head_records.drop_head(self.store, head['_id'], revision_id=head['revision_id'])
         self.store.audit('doc:import:' + slug, 'journal.imported', {'entity': self.entity(slug),
                          'from_revision': head['revision_id']}, SCOPE)
 
@@ -227,13 +308,12 @@ class DocumentStore:
         """When each section of a record kept as one document first appeared and when its text last changed, from the
         document's revisions: {sid: (created_at, updated_at)}."""
         times = {}
-        for revision in self.store.db.state_revisions.find(
-                {'entity_key': self.key(slug)}, {'created_at': 1, 'content.sections.sid': 1,
-                                                 'content.sections.body_sha256': 1}).sort('created_at', 1):
-            for section in (revision.get('content') or {}).get('sections') or []:
-                created, updated, text = times.get(section['sid'], (revision['created_at'],) * 2 + (None,))
+        for written in head_records.history(self.store, self.key(slug)).rows(
+                fields=['created_at', 'content.sections.sid', 'content.sections.body_sha256']):
+            for section in (written.get('content') or {}).get('sections') or []:
+                created, updated, text = times.get(section['sid'], (written['created_at'],) * 2 + (None,))
                 if section.get('body_sha256') != text:
-                    updated, text = revision['created_at'], section.get('body_sha256')
+                    updated, text = written['created_at'], section.get('body_sha256')
                 times[section['sid']] = (created, updated, text)
         return {sid: (created, updated) for sid, (created, updated, _) in times.items()}
 
@@ -242,25 +322,23 @@ class DocumentStore:
 
     def _journal_read(self, slug):
         self._journal_import(slug)
-        rows = list(self.store.db.journal_entries.find({'persona': self.persona, 'slug': slug}).sort('seq', 1))
+        rows = entries(self.store, self.persona, slug).rows()
         if not rows:
             return None, None
-        last = self.store.db.journal_revisions.find_one({'persona': self.persona, 'slug': slug}, {'_id': 1},
-                                                        sort=[('created_at', -1), ('_id', -1)])
+        last = last_revision(self.store, self.persona, slug, ['_id'])
         return (last or {}).get('_id'), {'kind': 'journal', 'title': slug, 'source': {'origin': 'asuna'},
                                          'sections': [{k: row[k] for k in SECTION_KEYS if k in row} for row in rows]}
 
     def _journal_apply(self, slug, intent, body, *, base_revision_id, author, mutation_id):
         """One write intent on a running record: only the entry it names is written."""
         op = intent.get('op')
-        done = self.store.db.journal_revisions.find_one({'mutation_id': mutation_id})
+        done = revision(self.store, mutation=mutation_id)
         if done:
             return done                                    # the same intent already committed (crash recovery)
         revision_id, content = self._journal_read(slug)
         sections = (content or {}).get('sections') or []
         by_sid = {s['sid']: s for s in sections}
-        written = self.store.db.journal_entries.find_one({'persona': self.persona, 'slug': slug,
-                                                          'last_mutation': mutation_id})
+        written = entry_of(self.store, self.persona, slug, mutation=mutation_id)
         if not written:
             if revision_id != base_revision_id:
                 raise Conflict(stale(slug))
@@ -284,9 +362,8 @@ class DocumentStore:
                 section = _section(unique_sid(slugify(heading), by_sid), heading, body, visibility=visibility,
                                    inject=inject, tags=_checked_tags(intent.get('tags') or []),
                                    entry_date=intent.get('entry_date'))
-                last = self.store.db.journal_entries.find_one({'persona': self.persona, 'slug': slug}, {'seq': 1},
-                                                              sort=[('seq', -1)])
-                written = self.store.put('journal_entries', {
+                last = last_entry(self.store, self.persona, slug, ['seq'])
+                written = save_entry(self.store, {
                     '_id': self._journal_entry_id(slug, section['sid']), 'persona': self.persona, 'slug': slug,
                     'seq': (last or {}).get('seq', 0) + 1, 'scope_key': SCOPE,
                     **{k: section[k] for k in SECTION_KEYS if k in section},
@@ -297,7 +374,7 @@ class DocumentStore:
                     raise DocumentError('DOC_SECTION_NOT_FOUND', missing_section(slug, intent.get('sid'), sections))
                 if op == 'replace_section' and intent.get('body_sha256') and intent['body_sha256'] != target['body_sha256']:
                     raise Conflict(stale(slug))
-                row = self.store.db.journal_entries.find_one({'_id': self._journal_entry_id(slug, target['sid'])})
+                row = entry(self.store, self._journal_entry_id(slug, target['sid']))
                 changed = dict(row)
                 if op == 'replace_section':
                     changed.update(body=body, body_sha256=sha(body.encode()))
@@ -309,8 +386,8 @@ class DocumentStore:
                 if intent.get('tags') is not None:
                     changed['tags'] = _checked_tags(intent['tags'])
                 changed.update(updated_at=now(), last_mutation=mutation_id)
-                written = self.store.put('journal_entries', changed, expected=row['revision'], stream='doc:' + mutation_id)
-        return self.store.put('journal_revisions', {
+                written = save_entry(self.store, changed, expected=row['revision'], stream='doc:' + mutation_id)
+        return save_revision(self.store, {
             '_id': sha(canonical({'mutation_id': mutation_id, 'entity': self.entity(slug)})), 'mutation_id': mutation_id,
             'persona': self.persona, 'slug': slug, 'entry_id': written['_id'], 'sid': written['sid'], 'op': op,
             'body': written.get('body'), 'reason': intent.get('reason'), 'author': author, 'parent_revision_id': revision_id,
@@ -327,34 +404,34 @@ class DocumentStore:
         if size > MAX_REVISION_BYTES:
             raise DocumentError('DOC_REVISION_TOO_LARGE', '「%s」写完有 %d 字节，上限 %d 字节；精简，或把一部分写进另一份文档'
                                 % (slug, size, MAX_REVISION_BYTES))
-        existing = self.store.db.state_revisions.find_one({'mutation_id': mutation_id})
+        existing = head_records.by_mutation(self.store, mutation_id)
         if existing:
             if existing.get('entity_key') != self.key(slug) or existing['content'] != content:
                 raise Conflict('MUTATION_ID_CONTENT_CHANGED')
             return existing
-        head = self.store.db.state_heads.find_one({'_id': self.key(slug)})
+        head = head_records.head(self.store, self.key(slug))
         current = head['revision_id'] if head else None
         if current != base_revision_id:
             self.store.audit('doc:' + mutation_id, 'state.conflict', {'entity': self.entity(slug),
                              'base_revision_id': base_revision_id, 'reason': 'BASE_REVISION_STALE'}, SCOPE)
             raise Conflict(stale(slug))
         revision_id = sha(canonical({'mutation_id': mutation_id, 'entity': self.entity(slug)}))
-        revision = self.store.put('state_revisions', {
+        written = head_records.save_revision(self.store, {
             '_id': revision_id, 'mutation_id': mutation_id, 'entity_key': self.key(slug), 'scope_key': SCOPE,
             'content': content, 'source_ids': list(sources), 'parent_revision_id': current, 'reason': reason,
             'author': author, 'created_at': now(), **(extra or {})}, stream='doc:' + mutation_id)
         try:
             if head:
-                self.store.put('state_heads', {**head, 'revision_id': revision_id}, expected=head['revision'],
-                               stream='doc:' + mutation_id)
+                head_records.save_head(self.store, {**head, 'revision_id': revision_id}, expected=head['revision'],
+                                       stream='doc:' + mutation_id)
             else:
-                self.store.put('state_heads', {'_id': self.key(slug), 'scope_key': SCOPE, 'revision_id': revision_id},
-                               stream='doc:' + mutation_id)
+                head_records.save_head(self.store, {'_id': self.key(slug), 'scope_key': SCOPE,
+                                                    'revision_id': revision_id}, stream='doc:' + mutation_id)
         except Conflict:
             self.store.audit('doc:' + mutation_id, 'state.conflict', {'entity': self.entity(slug),
                              'base_revision_id': base_revision_id, 'reason': 'BASE_REVISION_STALE'}, SCOPE)
             raise Conflict(stale(slug)) from None
-        return revision
+        return written
 
     def seed(self, slug, kind, text, *, path=None, title=None, subject=None):
         """Import a package seed only when the head is missing (package upgrades never overwrite)."""
@@ -388,7 +465,7 @@ class DocumentStore:
                 raise DocumentError('DOC_KIND_FIXED', '「%s」已经是 journal；kind 只在新建文档时选，建好就不改' % slug)
             return self._journal_apply(slug, intent, body, base_revision_id=base_revision_id, author=author,
                                        mutation_id=mutation_id)
-        replay = self.store.db.state_revisions.find_one({'mutation_id': mutation_id})
+        replay = head_records.by_mutation(self.store, mutation_id)
         if replay and replay.get('entity_key') == self.key(slug):
             return replay                      # the same intent already committed (crash recovery)
         revision_id, content = self.read(slug)
@@ -485,7 +562,7 @@ class DocumentStore:
             return {'state': 'seeded', 'revision': self.seed(slug, kind, text)}
         if revision_id != base_revision_id:
             raise Conflict(stale(slug))
-        seed_rev = self.store.db.state_revisions.find_one({'mutation_id': f'seed:{self.persona}:{slug}'})
+        seed_rev = head_records.by_mutation(self.store, f'seed:{self.persona}:{slug}')
         seeded = {s['sid']: s for s in (seed_rev['content']['sections'] if seed_rev else [])}
         _, incoming, _ = parse_markdown(text, kind)
         content = copy.deepcopy(content)

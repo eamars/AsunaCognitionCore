@@ -9,6 +9,12 @@ from .state import Store, Denied, Conflict, now
 from .evidence import sha
 from .queue import database_effects_lock
 from .config import character_id
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import episodes as episode_records
+from .records import receipts as receipt_records
+from .records import tasks as task_records
+from .records import plans as plan_records
 
 
 class PublishService:
@@ -21,10 +27,9 @@ class PublishService:
         if index is None:
             return 0
         cancelled = 0
-        for row in self.store.db.messages.find({'episode_id': failed['episode_id'], 'phase': 'SPEAK',
-                                                'segment_index': {'$gt': index},
-                                                'delivery_state': {'$in': ['READY', 'QUEUED_EXTERNAL']}}):
-            self.store.put('messages', {**row, 'delivery_state': 'CANCELLED_AFTER_FAILURE'},
+        for row in message_records.turn_parts(self.store, failed['episode_id'], after_segment=index,
+                                              states=['READY', 'QUEUED_EXTERNAL'], by=None).rows():
+            message_records.save(self.store, {**row, 'delivery_state': 'CANCELLED_AFTER_FAILURE'},
                            expected=row['revision'], stream=row['episode_id'])
             cancelled += 1
         return cancelled
@@ -36,9 +41,9 @@ class PublishService:
         """The platform id of the line her line quotes, as she chose it in `speak` (ADR-079 §9.4: the program never
         chooses a visible quote for her); None when she chose none, or the line has no platform id."""
         line = msg.get('quote_line')
-        row = self.store.db.messages.find_one({'_id': line, 'scene_id': scene['_id']},
-                                              {'direction': 1, 'event.channel.platform_event_id': 1,
-                                               'platform_message_id': 1}) if line else None
+        row = message_records.get(self.store, line, scene=scene['_id'],
+                                  fields=['direction', 'event.channel.platform_event_id', 'platform_message_id']) \
+            if line else None
         if not row:
             return None
         if row['direction'] == 'inbound':
@@ -46,14 +51,13 @@ class PublishService:
         return row.get('platform_message_id')
 
     def _publish(self, message_id: str):
-        db=self.store.db
-        msg=db.messages.find_one({'_id':message_id})
+        msg=message_records.get(self.store, message_id)
         if not msg or msg.get('author')!=character_id(self.store.config) or msg.get('phase')!='SPEAK':
             raise Denied('ONLY_CHARACTER_SPEAK_CAN_PUBLISH')
         if msg['delivery_state'] in ('DELIVERED','UNKNOWN','FAILED','CANCELLED_AFTER_FAILURE'):
             return msg
-        ep=db.episodes.find_one({'_id':msg['episode_id']})
-        scene=db.scenes.find_one({'_id':msg['scene_id']})
+        ep=episode_records.get(self.store,msg['episode_id'])
+        scene=scene_records.get(self.store, msg['scene_id'])
         # A part of her reply leaves while her turn still runs (ADR-064 phase 2); words leave once the turn accepted them.
         speaking=('SPEAK_ACCEPTED','COMMITTED')+(('TURN',) if msg.get('reply_part') else ())
         if not ep or ep['state'] not in speaking or ep['policy_epoch']!=scene['policy_epoch'] or msg['scope_key']!=scene['scope_key']:
@@ -63,7 +67,7 @@ class PublishService:
         # A self-development activation event may carry its prior task ID only
         # as context. It is not itself a delegated task intent.
         if ep.get('task_id') and ep.get('intent_revision') is not None:
-            task=db.tasks.find_one({'_id':ep['task_id']})
+            task=task_records.get(self.store,ep['task_id'])
             if not task or task['intent_revision']!=ep['intent_revision'] or task['state'] in ('CANCELLED','STALE'):
                 raise Denied('PUBLICATION_INTENT_STALE')
         if scene.get('channel_id'):
@@ -79,12 +83,12 @@ class PublishService:
                 if source_ep['_id'] in seen:
                     raise Denied('PUBLICATION_SOURCE_CYCLE')
                 seen.add(source_ep['_id'])
-                feedback_source = db.messages.find_one({'_id':'in-'+source_ep['_id']})
-                task = db.tasks.find_one({'_id': feedback_source['event']['task_id']})
+                feedback_source = message_records.get(self.store, 'in-'+source_ep['_id'])
+                task = task_records.get(self.store, feedback_source['event']['task_id'])
                 # A task begun on an errand answers where home sent it from (errands.home_turn).
                 from . import errands
-                source_ep = errands.home_turn(self.store, db.episodes.find_one({'_id': task['episode_id']}))
-            source = db.messages.find_one({'_id': 'in-' + source_ep['_id']})
+                source_ep = errands.home_turn(self.store, episode_records.get(self.store, task['episode_id']))
+            source = message_records.get(self.store, 'in-' + source_ep['_id'])
             channel = (source or {}).get('event', {}).get('channel', {})
             origin = (source or {}).get('event', {})
             core_notice = (
@@ -92,7 +96,7 @@ class PublishService:
                 ((source or {}).get('direction') == 'internal' and origin.get('episode_kind') in ('visit', 'note'))
                 # One of her plans that came due here: the scheduler's notice for a plan of this conversation.
                 or (origin.get('episode_kind') == 'scheduled' and origin.get('adapter_id') == 'scheduler'
-                    and db.plans.find_one({'_id': origin.get('scheduled_plan_id'), 'scene_id': scene['_id']}, {'_id': 1}))
+                    and plan_records.get(self.store, origin.get('scheduled_plan_id'), ['_id'], scene=scene['_id']))
                 # The owner's words on a home line he joins from the Web (ADR-051): her answer goes to the line.
                 or ((source or {}).get('direction') == 'inbound' and owner_line(self.store.config, scene['_id'], origin.get('person_id'))))
             if not channel and core_notice:
@@ -102,7 +106,7 @@ class PublishService:
             if (channel.get('id') != scene['channel_id'] or channel.get('target') != route['target']
                     or channel.get('account_id') != self.store.config['channels'][scene['channel_id']]['account_id']):
                 raise Denied('PUBLICATION_SOURCE_TARGET_MISMATCH')
-            return self.store.put('messages', {**msg, 'delivery_state': 'QUEUED_EXTERNAL', 'queued_at': now(),
+            return message_records.save(self.store, {**msg, 'delivery_state': 'QUEUED_EXTERNAL', 'queued_at': now(),
                                   'channel_id': scene['channel_id'], 'target': route['target'],
                                   'channel_account_id': channel['account_id'],
                                   # ADR-079 §9.6: what her line quotes (visible, hers to choose) and what it answers
@@ -111,19 +115,19 @@ class PublishService:
                                   'platform_answers': channel.get('platform_event_id')},
                                   expected=msg['revision'], stream=ep['_id'])
         if msg['delivery_state']=='SENDING' and not self.idempotent:
-            return self.store.put('messages',{**msg,'delivery_state':'UNKNOWN'},expected=msg['revision'],stream=ep['_id'])
-        receipt=db.sink_receipts.find_one({'_id':msg['publication_key']}) if self.idempotent else None
+            return message_records.save(self.store, {**msg,'delivery_state':'UNKNOWN'},expected=msg['revision'],stream=ep['_id'])
+        receipt=receipt_records.sink_get(self.store,msg['publication_key']) if self.idempotent else None
         if receipt is None:
             self.store.audit(ep['_id'],'publication.attempt',{'message_id':message_id,'key':msg['publication_key']},msg['scope_key'])
-            msg=self.store.put('messages',{**msg,'delivery_state':'SENDING'},expected=msg['revision'],stream=ep['_id'])
+            msg=message_records.save(self.store, {**msg,'delivery_state':'SENDING'},expected=msg['revision'],stream=ep['_id'])
             self.crash('before_send')
             receipt={'_id':msg['publication_key'] if self.idempotent else str(uuid.uuid4()),'publication_key':msg['publication_key'],'scope_key':msg['scope_key'],'text':msg['text'],'content_hash':sha(msg['text'].encode()),'received_at':now()}
             try:
-                receipt=self.store.put('sink_receipts',receipt,stream=ep['_id'])
+                receipt=receipt_records.save_sink(self.store,receipt,stream=ep['_id'])
             except Conflict:
-                receipt=db.sink_receipts.find_one({'_id':receipt['_id']})
+                receipt=receipt_records.sink_get(self.store,receipt['_id'])
                 if receipt['content_hash'] != sha(msg['text'].encode()):
                     raise Denied('IDEMPOTENCY_CONTENT_MISMATCH')
             self.crash('after_send_before_receipt')
         self.store.audit(ep['_id'],'publication.receipt',{'message_id':message_id,'receipt_id':receipt['_id']},msg['scope_key'])
-        return self.store.put('messages',{**msg,'delivery_state':'DELIVERED','delivery_basis':'local_sink','receipt':receipt['_id']},expected=msg['revision'],stream=ep['_id'])
+        return message_records.save(self.store, {**msg,'delivery_state':'DELIVERED','delivery_basis':'local_sink','receipt':receipt['_id']},expected=msg['revision'],stream=ep['_id'])

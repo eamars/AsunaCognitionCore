@@ -26,7 +26,10 @@ from __future__ import annotations
 import collections
 import hashlib
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
+from . import clock
+
+from .records import episodes as episode_records
 
 OUTCOMES = ('nothing', 'interesting', 'self_development', 'self_evaluation', 'review_dice', 'reach_out', 'idle')
 NAMES = {'nothing': '歇着', 'interesting': '有趣', 'self_development': '自我开发', 'self_evaluation': '自我评估',
@@ -99,7 +102,7 @@ def table(model, policy, config, moment=None):
     from zoneinfo import ZoneInfo
     from .persona_model import effective, timezone as persona_timezone
     from .rhythm import in_window
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     zone, _ = persona_timezone(model, policy, config)
     try:
         local = moment.astimezone(ZoneInfo(zone))
@@ -162,7 +165,7 @@ def review(store, persona, occurrence, moment=None):
     """dice_review_from_program: every roll since her last review (not this one), with what each beat did."""
     from .config import excerpt
     from .render import model_and_policy
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     floor = (moment - timedelta(days=REVIEW_DAYS)).isoformat()
     rolled = {'type': 'presence.rolled', 'occurred_at': {'$gte': floor}, 'payload.occurrence': {'$ne': occurrence}}
     last = store.db.audit_events.find_one({**rolled, 'payload.outcome': 'review_dice', 'payload.reaches': True},
@@ -191,15 +194,15 @@ def review(store, persona, occurrence, moment=None):
                                    + ([LOST_WORDS['asides_full']] if lost.get('asides_full') else []))
         if p.get('reaches'):
             source = ('self-development:dice:' if p.get('outcome') == 'self_development' else 'presence:') + p['occurrence']
-            ep = store.db.episodes.find_one({'source_event_id': source}, {'silent_reason': 1})
+            ep = episode_records.of_source(store, source, fields=['silent_reason'])
             if not ep:
                 item['reached'] = '叫了你，那拍还没跑或没留下记录'
             else:
                 tools = collections.Counter(a['payload'].get('tool') for a in store.db.audit_events.find(
                     {'type': 'role_tool', 'stream_id': ep['_id']}, {'payload.tool': 1}))
                 item['tools'] = dict(tools)
-                item['said'] = store.db.messages.count_documents({'episode_id': ep['_id'], 'direction': 'outbound',
-                                                                  'phase': 'SPEAK'})
+                from .records import messages as message_records
+                item['said'] = message_records.turn_parts(store, ep['_id'], outbound=True).count()
                 if ep.get('silent_reason'):
                     item['quiet'] = excerpt(' '.join(str(ep['silent_reason']).split()), QUIET_CHARS)
         out.append(item)

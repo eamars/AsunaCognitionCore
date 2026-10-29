@@ -25,10 +25,15 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from .config import excerpt
 from .evidence import canonical, sha
 from .state import Conflict, now
 from . import visibility
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import episodes as episode_records
+from .records import tasks as task_records
 
 TABLES_VERSION = 1
 # Patience words -> minutes (None: until it is answered, for a report).
@@ -69,9 +74,6 @@ RETAKEN = '这个问题早就结束了；took 换成了你这次写的（原来�
 KEEP_HINT = ('要记下学到的：别人告诉你的，写的时候 from 写 别人说的；你自己的判断被回答证实了，用 replace_section '
              '改写它，from 写 查过的，依据写问过谁、几点、问题 id。')
 
-
-def _now():
-    return datetime.now(timezone.utc)
 
 
 def _at(value):
@@ -154,7 +156,7 @@ def _open_here(store, scene_id):
 def wants_look(store, scene, person_id, moment=None):
     """Whether this person's unaddressed line gets her a look: a question of hers here waits, within LOOK_MINUTES of
     being asked, and this person has not had a look for it yet."""
-    moment = moment or _now()
+    moment = moment or clock.now()
     for row in _open_here(store, scene['_id']):
         asked = _at(row['asked_at'])
         if not asked or moment > asked + timedelta(minutes=LOOK_MINUTES):
@@ -163,9 +165,8 @@ def wants_look(store, scene, person_id, moment=None):
         line = _question_line(store, source)
         if not line:
             continue
-        if not store.db.messages.find_one({'scene_id': scene['_id'], 'direction': 'inbound', 'author': person_id,
-                                           'scene_seq': {'$gt': line.get('scene_seq') or 0},
-                                           'event.group_context.wake_reason': 'question_wait'}, {'_id': 1}):
+        if not message_records.inbound(store, scene['_id'], author=person_id, after=line.get('scene_seq') or 0,
+                                       wake='question_wait', by=None).first(fields=['_id']):
             return True
     return False
 
@@ -173,19 +174,13 @@ def wants_look(store, scene, person_id, moment=None):
 def _group_answers(store, source, line):
     """Answers in a group: a reply to one of her question's lines, a line that got her a look while it waited, or
     a reaction to her question line. Each kept by reference, never its text."""
-    mine = list(store.db.messages.find({'scene_id': source['scene_id'], 'episode_id': source.get('episode'),
-                                        'direction': 'outbound', 'phase': 'SPEAK'}, {'_id': 1, 'platform_message_id': 1}))
+    mine = message_records.turn_parts(store, source.get('episode'), scene=source['scene_id'], outbound=True,
+                                      by=None).rows(fields=['_id', 'platform_message_id'])
     ids = [row['_id'] for row in mine]
     platform = [row['platform_message_id'] for row in mine if row.get('platform_message_id')]
-    from .ingress import NOT_CORE_NOTICE                            # the program's lines answer nothing
-    query = {'scene_id': source['scene_id'], 'direction': 'inbound', **NOT_CORE_NOTICE,
-             'scene_seq': {'$gt': line.get('scene_seq') or 0},
-             '$or': [{'event.group_context.reply_message_id': {'$in': ids}},
-                     {'event.group_context.wake_reason': 'question_wait'},
-                     {'event.raw.asuna_notice.kind': 'reaction', 'event.raw.asuna_notice.line.message_id': {'$in': platform}}]}
-    if source.get('until'):
-        query['received_at'] = {'$lte': source['until']}
-    return list(store.db.messages.find(query).sort('scene_seq', 1))
+    # the program's lines answer nothing
+    return message_records.inbound(store, source['scene_id'], people_only=True, after=line.get('scene_seq') or 0,
+                                   until=source.get('until') or None, answers_to=(ids, platform)).rows()
 
 
 def told_many(told):
@@ -200,7 +195,7 @@ def group_block(store, persona, scene, moment=None):
     """questions_from_program in a group: her questions here, by id, when asked, how long she waits, who answered;
     and once each one the program closed here, with how it ended."""
     from .schedule_rules import line_stamp, scene_timezone
-    moment = moment or _now()
+    moment = moment or clock.now()
     rows = [refresh(store, row, moment) for row in _open_here(store, scene['_id'])]
     rows = sorted((row for row in rows if row.get('state') == 'open'), key=lambda row: row['asked_at'], reverse=True)
     more = len(rows) - SHOWN                  # the newest only: a long list buries that something is still open (her ask)
@@ -246,8 +241,7 @@ def answer_tail(store, persona, qid, zone):
 # ── what came back ─────────────────────────────────────────────────
 def _question_line(store, source):
     """Her first line in the turn that asks there, or None."""
-    return store.db.messages.find_one({'scene_id': source['scene_id'], 'episode_id': source.get('episode'),
-                                       'direction': 'outbound', 'phase': 'SPEAK'}, sort=[('scene_seq', 1)])
+    return message_records.turn_parts(store, source.get('episode'), scene=source['scene_id'], outbound=True).first()
 
 
 def _answer(row, people, scene):
@@ -257,18 +251,16 @@ def _answer(row, people, scene):
 
 def _lines_after(store, qid, source, line):
     """The answers in a home place: lines naming this question, else the first line after hers there."""
-    from .ingress import NOT_CORE_NOTICE
-    base = {'scene_id': source['scene_id'], 'direction': 'inbound', **NOT_CORE_NOTICE,
-            'event.raw.asuna_aside': {'$ne': True}}
-    named = list(store.db.messages.find({**base, 'event.raw.%s.question' % ANSWER_KEY: qid}).sort('scene_seq', 1))
+    named = message_records.inbound(store, source['scene_id'], people_only=True, asides=False,
+                                    answers_question=qid).rows()
     if named:
         return named
-    after = {**base, 'scene_seq': {'$gt': line.get('scene_seq') or 0}, 'event.raw.%s' % ANSWER_KEY: {'$exists': False}}
     from . import channel_kinds
     marks = channel_kinds.marks_answers(source['scene_id'])
-    if marks:
-        after['author'] = {'$ne': marks}        # who can mark an answer answers only by marking it; others by their line
-    first = store.db.messages.find_one(after, sort=[('scene_seq', 1)])
+    # who can mark an answer answers only by marking it; others by their line
+    first = message_records.inbound(store, source['scene_id'], people_only=True, asides=False,
+                                    after=line.get('scene_seq') or 0, no_answer_mark=True,
+                                    not_author=marks or None).first()
     return [first] if first else []
 
 
@@ -279,7 +271,7 @@ def _source_now(store, qid, source, persona, moment):
         return source['state'], source.get('answers') or []
     if source['kind'] == 'action':
         from .tasks import TERMINAL
-        task = store.db.tasks.find_one({'_id': source.get('task')}, {'state': 1, 'finished_at': 1, 'result.text': 1})
+        task = task_records.get(store, source.get('task'), fields=['state', 'finished_at', 'result.text'])
         if not task:
             return 'not_done', []
         if task['state'] not in TERMINAL:
@@ -290,11 +282,11 @@ def _source_now(store, qid, source, persona, moment):
         return 'not_done', []
     line = _question_line(store, source)
     if not line:
-        episode = store.db.episodes.find_one({'_id': source.get('episode')}, {'state': 1}) if source.get('episode') else None
+        episode = episode_records.get(store, source.get('episode'), fields=['state']) if source.get('episode') else None
         return ('not_asked' if episode and episode.get('state') in ENDED else 'pending'), []
     if line.get('delivery_state') == 'FAILED':
         return 'not_sent', []
-    scene = store.db.scenes.find_one({'_id': source['scene_id']}) or {'_id': source['scene_id']}
+    scene = scene_records.get(store, source['scene_id']) or {'_id': source['scene_id']}
     people = People(store, persona)
     lines = _group_answers(store, source, line) if source.get('kind') == 'group' else _lines_after(store, qid, source, line)
     found = [_answer(row, people, scene) for row in lines]
@@ -312,7 +304,7 @@ def _source_now(store, qid, source, persona, moment):
 
 def refresh(store, row, moment=None):
     """Bring one question up to date with what came back; closes it when it has run past its end. Returns the row."""
-    moment = moment or _now()
+    moment = moment or clock.now()
     if row.get('state') != 'open':
         return row
     sources, changed, events = [], False, []
@@ -418,7 +410,7 @@ def migrate(store, persona):
 def block(store, persona, scene_id, moment=None, opening=None):
     """questions_from_program at home: her open questions, and once in this conversation each one the program closed;
     None when there are none. `opening`: the question whose note opened this turn (its text is in that note)."""
-    moment = moment or _now()
+    moment = moment or clock.now()
     from .config import excerpt
     # Every open one is brought up to date, shown or not: one past its end closes now, not when it reaches the top.
     rows = [refresh(store, row, moment) for row in store.db.questions.find({'persona': persona, 'state': 'open'})]
@@ -461,14 +453,14 @@ def read(store, persona, qid, moment=None, outside=False):
         answers = []
         for answer in source.get('answers') or []:
             if answer.get('task'):
-                task = store.db.tasks.find_one({'_id': answer['task']}, {'result.text': 1})
+                task = task_records.get(store, answer['task'], fields=['result.text'])
                 pages = report_pages(((task or {}).get('result') or {}).get('text') or '')
                 first = pages[0] if pages else ''
                 answers.append({'by': ACTION, 'at': answer.get('at'), 'task': answer['task'],
                                 'text': machine_words.text(first) if outside else first,
                                 **({'more': '共 %d 页：task 的 page 接着读' % len(pages)} if len(pages) > 1 else {})})
             elif answer.get('line'):
-                line = store.db.messages.find_one({'_id': answer['line']}, {'text': 1})
+                line = message_records.get(store, answer['line'], fields=['text'])
                 text = str((line or {}).get('text') or '')
                 said = {'by': answer.get('by'), 'at': answer.get('at'), 'line': answer['line'],
                         'event_id': answer.get('event_id'),
@@ -493,7 +485,7 @@ def read(store, persona, qid, moment=None, outside=False):
 
 def history(store, persona, scene_id, name, moment=None):
     """Her last asks to one place (or the action brain) in READ_DAYS: when, answered or not, how long, her took."""
-    moment = moment or _now()
+    moment = moment or clock.now()
     since = (moment - timedelta(days=READ_DAYS)).isoformat()
     def here(source):
         return source['kind'] == 'action' if scene_id is None else source.get('scene_id') == scene_id
@@ -531,12 +523,12 @@ def close(store, persona, qid, took, moment=None):
         before = (row.get('closed') or {}).get('took', '')
         if not took or took == before:
             return row, '这个问题已经结束了（%s）。' % before
-        row = store.put('questions', {**row, 'closed': {**row['closed'], 'took': took, 'retaken_at': (moment or _now()).isoformat()}},
+        row = store.put('questions', {**row, 'closed': {**row['closed'], 'took': took, 'retaken_at': (moment or clock.now()).isoformat()}},
                         expected=row['revision'], stream=row['_id'])
         store.audit(row['_id'], 'question.retaken', {'question': row['_id'], 'chars': len(took)}, row['scope_key'])
         return row, RETAKEN % before
     row = store.put('questions', {**row, 'state': 'closed',
-                                  'closed': {'at': (moment or _now()).isoformat(), 'by': 'her', 'took': took}},
+                                  'closed': {'at': (moment or clock.now()).isoformat(), 'by': 'her', 'took': took}},
                     expected=row['revision'], stream=row['_id'])
     store.audit(row['_id'], 'question.closed', {'question': row['_id'], 'by': 'her', 'chars': len(took)}, row['scope_key'])
     who = [answer.get('by') for source in row['sources'] for answer in source.get('answers') or [] if answer.get('by')]

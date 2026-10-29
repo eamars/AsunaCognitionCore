@@ -42,8 +42,14 @@ import json
 from collections import Counter
 from datetime import datetime, timezone
 
+from . import clock
 from . import key_words
 from .config import DATA, character_id, excerpt
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import episodes as episode_records
+from .records import memories as memory_records
+from .records import heads as head_records
 
 RULES = ('all', 'own_lines', 'never')
 DEFAULT = 'own_lines'
@@ -82,23 +88,24 @@ MISSING = {'gone': '%s#%s：没有这一句', 'here': '%s#%s：这一句就在�
            'never': '%s#%s：那个地方的话不外带'}
 OWN_JUDGMENT = '我自己的判断'
 
-_cache = {'mtime': None, 'value': None}
+_cache = {'key': None, 'value': None}
 
 
 def settings(path=None):
     """The deployment's rules: {default, places, kinds, history_excluded}, defaults filled; a malformed entry is
-    dropped (an unknown rule reads as the default)."""
+    dropped (an unknown rule reads as the default). Kept while the file's text is the same (a small read each call:
+    a file's modification time moves in the system clock's steps, so two writes in one step would look alike)."""
     path = path or PATH
     try:
-        mtime = path.stat().st_mtime
+        text = path.read_bytes()
     except OSError:
-        mtime = None
-    if _cache['mtime'] != (path, mtime):
+        text = None
+    if _cache['key'] != (path, text):
         raw = {}
-        if mtime is not None:
+        if text is not None:
             try:
-                raw = json.loads(path.read_text(encoding='utf-8'))
-            except (OSError, ValueError):
+                raw = json.loads(text.decode('utf-8'))
+            except (UnicodeDecodeError, ValueError):
                 raw = {}
         raw = raw if isinstance(raw, dict) else {}
         default = raw.get('default') if raw.get('default') in RULES else DEFAULT
@@ -109,7 +116,7 @@ def settings(path=None):
         numbers = {name: raw[name] if type(raw.get(name)) is int and low <= raw[name] <= high else default_value
                    for name, (default_value, low, high) in NUMBERS.items()}
         lines = raw.get('cue_lines') if raw.get('cue_lines') in CUE_LINES else CUE_LINES[0]
-        _cache.update(mtime=(path, mtime), value={'default': default, 'places': places, 'kinds': kinds,
+        _cache.update(key=(path, text), value={'default': default, 'places': places, 'kinds': kinds,
                                                   'history_excluded': excluded, 'cue_lines': lines, **numbers})
     return _cache['value']
 
@@ -143,7 +150,7 @@ def _day(value, zone):
     except ValueError:
         return ''
     local = moment.astimezone(zone['tz'] if zone else timezone.utc)
-    current = datetime.now(timezone.utc).astimezone(local.tzinfo)
+    current = clock.now().astimezone(local.tzinfo)
     return ('%d/' % local.year if local.year != current.year else '') + '%d/%d' % (local.month, local.day)
 
 
@@ -159,8 +166,7 @@ def _sources(store, here_id):
     """The groups whose lines may leave, other than this conversation: {scope_key: (scene, rule)}."""
     from .visibility import is_owner_private_scope
     out = {}
-    for scene in store.db.scenes.find({'kind': 'group', '_id': {'$ne': here_id}},
-                                      {'scope_key': 1, 'policy_epoch': 1, 'kind': 1}):
+    for scene in scene_records.of_kind(store, 'group', besides=here_id, fields=['scope_key', 'policy_epoch', 'kind']):
         if is_owner_private_scope(scene.get('scope_key') or '') or rule(scene['_id']) == 'never':
             continue
         out[scene['scope_key']] = (scene, rule(scene['_id']))
@@ -170,13 +176,11 @@ def _sources(store, here_id):
 def _correction(store, scene, unit):
     """The correction a later line made of this one (a resolved reply), as (who, text), or None."""
     from .summary_attribution import corrections
-    line = store.db.messages.find_one({'_id': (unit.get('source_event_ids') or [None])[0]})
+    line = message_records.get(store, (unit.get('source_event_ids') or [None])[0])
     if not line:
         return None
-    later = list(store.db.messages.find({'scene_id': scene['_id'], 'policy_epoch': scene.get('policy_epoch', 1),
-                                         'scene_seq': {'$gt': line.get('scene_seq', 0)},
-                                         '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]})
-                 .sort('scene_seq', 1).limit(LATER))
+    later = message_records.said(store, scene['_id'], scene.get('policy_epoch', 1),
+                                 after=line.get('scene_seq', 0)).rows(limit=LATER)
     me = character_id(store.config)
     for found in corrections(store, scene, [line, *later]):
         if found.get('corrects') == line['_id']:
@@ -197,11 +201,10 @@ def elsewhere(store, persona, here, query, zone):
     me = character_id(store.config)
     wanted = [unit for unit, scope, hers in lines_for(store, words)
               if scope in sources and (hers or sources[scope][1] == 'all')]
-    epochs = [{'scope_key': key, 'policy_epoch': scene.get('policy_epoch', 1)} for key, (scene, _) in sources.items()]
-    rows = list(store.db.memory_units.find({'_id': {'$in': wanted}, 'kind': 'chat_chunk', 'status': 'active',
-                                            'character_id': me, '$or': epochs},
-                                           {'body_markdown': 1, 'scope_key': 1, 'policy_epoch': 1, 'epistemic_type': 1,
-                                            'occurred_at': 1, 'source_event_ids': 1})) if wanted else []
+    epochs = [(key, scene.get('policy_epoch', 1)) for key, (scene, _) in sources.items()]
+    rows = memory_records.many(store, wanted, pairs=epochs, character=me, kind='chat_chunk', status='active').rows(
+        fields=['body_markdown', 'scope_key', 'policy_epoch', 'epistemic_type', 'occurred_at', 'source_event_ids']
+    ) if wanted else []
     rows = [unit for unit in rows if any(key_words.found(word, unit.get('body_markdown') or '') for word in words)]
     said = _said_at(store, rows)
     picked, seen = [], set()
@@ -230,7 +233,7 @@ def elsewhere(store, persona, here, query, zone):
 # ── the word index ───────────────────────────────────────────────
 def _groups(store):
     from .visibility import is_owner_private_scope
-    return {s['_id']: s for s in store.db.scenes.find({'kind': 'group'}, {'scope_key': 1, 'policy_epoch': 1})
+    return {s['_id']: s for s in scene_records.of_kind(store, 'group', fields=['scope_key', 'policy_epoch'])
             if not is_owner_private_scope(s.get('scope_key') or '')}
 
 
@@ -262,7 +265,7 @@ def _postings(units, groups, times, since):
 
 def _since(moment=None):
     from datetime import timedelta
-    return ((moment or datetime.now(timezone.utc)) - timedelta(days=number('window_days'))).isoformat()
+    return ((moment or clock.now()) - timedelta(days=number('window_days'))).isoformat()
 
 
 def vocabulary(store, ensure=False):
@@ -288,11 +291,9 @@ def build(store, moment=None):
     from .state import now
     vocabulary(store)
     groups = _groups(store)
-    rows = list(store.db.memory_units.find({'kind': 'chat_chunk', 'status': 'active',
-                                            'character_id': character_id(store.config),
-                                            'scope_key': {'$in': [s['scope_key'] for s in groups.values()]}},
-                                           {'body_markdown': 1, 'scope_key': 1, 'epistemic_type': 1, 'occurred_at': 1,
-                                            'source_event_ids': 1}))
+    rows = memory_records.of_kind(store, 'chat_chunk', scopes=[s['scope_key'] for s in groups.values()],
+                                  character=character_id(store.config), status='active').rows(
+        fields=['body_markdown', 'scope_key', 'epistemic_type', 'occurred_at', 'source_event_ids'])
     times = _said_at(store, [unit for unit in rows if not unit.get('occurred_at')])
     scenes = {scene['scope_key']: scene_id for scene_id, scene in groups.items()}
     counts = Counter(word for unit in rows for word in key_words.cross_words(
@@ -303,7 +304,7 @@ def build(store, moment=None):
     column = store.db[WORDS]
     mark = column.find_one({'_id': 'mark'}) or {}
     generation = int(mark.get('generation') or 0) + 1
-    seqs = {scene_id: (store.db.messages.find_one({'scene_id': scene_id}, {'scene_seq': 1}, sort=[('scene_seq', -1)])
+    seqs = {scene_id: (message_records.lines(store, scene_id).first(newest_first=True, fields=['scene_seq'])
                        or {}).get('scene_seq', 0) for scene_id in groups}
     batch = [{'_id': '%d:%s' % (generation, word), 'row': 'word', 'generation': generation, 'word': word,
               'hers': entry['hers'],
@@ -339,9 +340,8 @@ def top_up(store):
     reached, units = {}, []
     for scene_id, scene in groups.items():
         upto = seqs.get(scene_id, 0)
-        rows = list(store.db.messages.find({'scene_id': scene_id, 'scene_seq': {'$gt': upto}},
-                                           {'text': 1, 'direction': 1, 'delivery_state': 1, 'author': 1, 'policy_epoch': 1,
-                                            'memory_chunk_version': 1, 'scene_seq': 1}).sort('scene_seq', 1))
+        rows = message_records.lines(store, scene_id, after=upto).rows(
+            fields=['text', 'direction', 'delivery_state', 'author', 'policy_epoch', 'memory_chunk_version', 'scene_seq'])
         ids = []
         for row in rows:
             chunked = row.get('memory_chunk_version') == 2
@@ -356,10 +356,8 @@ def top_up(store):
         if upto != seqs.get(scene_id, 0):
             reached[scene_id] = upto
         if ids:
-            units += list(store.db.memory_units.find({'_id': {'$in': ids}, 'kind': 'chat_chunk', 'status': 'active',
-                                                      'character_id': me},
-                                                     {'body_markdown': 1, 'scope_key': 1, 'epistemic_type': 1,
-                                                      'occurred_at': 1, 'source_event_ids': 1}))
+            units += memory_records.many(store, ids, character=me, kind='chat_chunk', status='active').rows(
+                fields=['body_markdown', 'scope_key', 'epistemic_type', 'occurred_at', 'source_event_ids'])
     generation = mark['generation']
     since = _since()
     added = _postings(units, groups, _said_at(store, [u for u in units if not u.get('occurred_at')]), since)
@@ -403,8 +401,8 @@ def _said_at(store, units):
     (scene_links.message_times, the order every cross-place merge uses)."""
     from .scene_links import message_times
     sources = {(unit.get('source_event_ids') or [None])[0]: unit['_id'] for unit in units}
-    rows = list(store.db.messages.find({'_id': {'$in': [key for key in sources if key]}},
-                                       {'direction': 1, 'receipt': 1, 'receipt_at': 1, 'occurred_at': 1, 'received_at': 1}))
+    rows = message_records.many(store, [key for key in sources if key]).rows(
+        fields=['direction', 'receipt', 'receipt_at', 'occurred_at', 'received_at'])
     times = message_times(store, rows)
     out = {unit['_id']: unit.get('occurred_at') for unit in units}
     out.update({sources[key]: at for key, (at, _) in times.items() if key in sources and at})
@@ -422,10 +420,10 @@ def fetch(store, here, ref, zone):
     """recall sections {doc: elsewhere, section: ref}: the lines around one line of another group, the place rule
     checked again now, speakers as 你 or 别人. (section, None), or (None, why in words)."""
     from .visibility import is_owner_private_scope
-    unit = store.db.memory_units.find_one({'_id': ref, 'kind': 'chat_chunk', 'status': 'active'},
-                                          {'scope_key': 1, 'policy_epoch': 1, 'source_event_ids': 1, 'occurred_at': 1})
-    scene = store.db.scenes.find_one({'scope_key': unit['scope_key'], 'kind': 'group'},
-                                     {'scope_key': 1, 'policy_epoch': 1}) if unit else None
+    unit = memory_records.get(store, ref, ['scope_key', 'policy_epoch', 'source_event_ids', 'occurred_at'],
+                              kind='chat_chunk', status='active')
+    scene = scene_records.by_scope(store, unit['scope_key'], kind='group',
+                                  fields=['scope_key', 'policy_epoch']) if unit else None
     if not scene or is_owner_private_scope(scene.get('scope_key') or '') \
             or unit.get('policy_epoch', 1) != scene.get('policy_epoch', 1):
         return None, MISSING['gone'] % (DOC, ref)
@@ -434,14 +432,12 @@ def fetch(store, here, ref, zone):
     leaving = rule(scene['_id'])
     if leaving == 'never':
         return None, MISSING['never'] % (DOC, ref)
-    line = store.db.messages.find_one({'_id': (unit.get('source_event_ids') or [None])[0]}, {'scene_seq': 1})
+    line = message_records.get(store, (unit.get('source_event_ids') or [None])[0], fields=['scene_seq'])
     if not line:
         return None, MISSING['gone'] % (DOC, ref)
     me = character_id(store.config)
-    rows = store.db.messages.find({'scene_id': scene['_id'], 'policy_epoch': scene.get('policy_epoch', 1),
-                                   'scene_seq': {'$gte': line['scene_seq'] - AROUND, '$lte': line['scene_seq'] + AROUND},
-                                   '$or': [{'direction': 'inbound'}, {'delivery_state': 'DELIVERED'}]},
-                                  {'text': 1, 'author': 1, 'direction': 1, 'scene_seq': 1}).sort('scene_seq', 1)
+    rows = message_records.said(store, scene['_id'], scene.get('policy_epoch', 1), from_seq=line['scene_seq'] - AROUND,
+                                upto=line['scene_seq'] + AROUND).rows(fields=['text', 'author', 'direction', 'scene_seq'])
     lines, left_out = [], 0
     for row in rows:
         mine = row.get('direction') == 'outbound' and row.get('author') == me
@@ -477,11 +473,10 @@ _versions = {}
 
 def versions(store, persona, slug):
     """`history` of one document, kept while its ledger has no newer revision (one small read to check)."""
-    from .documents import DocumentStore
-    newest = [next(iter(store.db[name].find(query, {'created_at': 1, '_id': 1}).sort([('created_at', -1), ('_id', -1)])
-                        .limit(1)), None)
-              for name, query in (('state_revisions', {'entity_key': DocumentStore(store, persona).key(slug)}),
-                                  ('journal_revisions', {'persona': persona, 'slug': slug}))]
+    from . import documents
+    newest = [head_records.history(store, documents.DocumentStore(store, persona).key(slug), by=('created_at', '_id'))
+              .first(newest_first=True, fields=['created_at']),
+              documents.last_revision(store, persona, slug, ['created_at'])]
     mark = (store.name, persona, slug)
     seal = [(row or {}).get('_id') for row in newest]
     kept = _versions.get(mark)
@@ -499,15 +494,16 @@ def history(store, persona, slug):
     from .documents import DocumentStore
     docs = DocumentStore(store, persona)
     texts = {}                       # sid -> [(body, at, reason)] each time the text changed (or the section went)
-    for revision in store.db.state_revisions.find({'entity_key': docs.key(slug)},
-                                                  {'content.sections': 1, 'created_at': 1, 'reason': 1}).sort('created_at', 1):
+    for revision in head_records.history(store, docs.key(slug)).rows(fields=['content.sections', 'created_at',
+                                                                              'reason']):
         sections = {s['sid']: s.get('body') or '' for s in (revision.get('content') or {}).get('sections') or []}
         for sid in set(texts) | set(sections):
             body = sections.get(sid)
             if not texts.get(sid) or texts[sid][-1][0] != body:
                 texts.setdefault(sid, []).append((body, revision.get('created_at'), revision.get('reason')))
-    for row in store.db.journal_revisions.find({'persona': persona, 'slug': slug, 'sid': {'$exists': True}},
-                                               {'sid': 1, 'body': 1, 'created_at': 1, 'reason': 1}).sort('created_at', 1):
+    from . import documents
+    for row in documents.revisions(store, persona, slug, sectioned=True).rows(fields=['sid', 'body', 'created_at',
+                                                                                    'reason']):
         if not texts.get(row['sid']) or texts[row['sid']][-1][0] != row.get('body'):
             texts.setdefault(row['sid'], []).append((row.get('body'), row.get('created_at'), row.get('reason')))
     out = {}
@@ -531,7 +527,8 @@ def before(store, persona, here, cls, query, zone):
     from .documents import JOURNALS
     docs = DocumentStore(store, persona)
     slugs = [notes_slug(here['_id'])] if here.get('kind') == 'group' else []
-    slugs += sorted({*JOURNALS, *store.db.journal_entries.distinct('slug', {'persona': persona})})
+    from .documents import slugs as journals
+    slugs += sorted({*JOURNALS, *journals(store, persona)})
     judged = {(row['doc'], row['sid']) for row in Tiers(store, persona).items(**{'from': OWN_JUDGMENT})}
     ranges = settings()['history_excluded']
     found = []
@@ -586,8 +583,8 @@ def cue(store, persona, scene, event, history, own, zone, moment=None, *, free=T
     new.append((seq, text))
     if every and isinstance(seq, int):
         # Lines that came after the one the turn is for, claimed into it before its context was built.
-        new += [(row['scene_seq'], row.get('text') or '') for row in store.db.messages.find(
-            {'scene_id': scene['_id'], 'direction': 'inbound', 'scene_seq': {'$gt': seq}}, {'scene_seq': 1, 'text': 1})]
+        new += [(row['scene_seq'], row.get('text') or '') for row in message_records.inbound(
+            store, scene['_id'], after=seq, by=None).rows(fields=['scene_seq', 'text'])]
     earlier = [t for s, t, _ in history if not every or not isinstance(s, int) or s <= upto]
     tiers = Tiers(store, persona)
     vocabulary(store)
@@ -602,7 +599,7 @@ def cue(store, persona, scene, event, history, own, zone, moment=None, *, free=T
                 first[word] = (line_seq, key_words.found(word, line) or word)
     if not first:
         return None
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     recent = (moment - timedelta(minutes=number('repeat_minutes'))).isoformat()
     words = [word for word in first if not store.db[FIRES].find_one(
         {'kind': 'cue', 'scene_id': scene['_id'], 'word': word, 'at': {'$gte': recent}}, {'_id': 1})]
@@ -629,7 +626,7 @@ def cue(store, persona, scene, event, history, own, zone, moment=None, *, free=T
 
 def _line_seq(store, event):
     """The scene_seq of the line a turn is for, or None (a turn from no line)."""
-    return (store.db.messages.find_one({'_id': 'in-' + _episode(event)}, {'scene_seq': 1}) or {}).get('scene_seq')
+    return (message_records.get(store, 'in-' + _episode(event), fields=['scene_seq']) or {}).get('scene_seq')
 
 
 def fired(store, persona, what, scene, event, moment=None, *, episode=None, **fields):
@@ -637,10 +634,10 @@ def fired(store, persona, what, scene, event, moment=None, *, episode=None, **fi
     which line (the turn's line's scene_seq) and when."""
     import uuid
     episode = episode or _episode(event)
-    line = store.db.messages.find_one({'_id': 'in-' + episode}, {'scene_seq': 1}) or {}
+    line = message_records.get(store, 'in-' + episode, fields=['scene_seq']) or {}
     store.db[FIRES].insert_one({'_id': 'fire:' + uuid.uuid4().hex, 'kind': what, 'persona': persona,
                                 'scene_id': scene['_id'], 'event_id': event.get('event_id'), 'episode_id': episode,
-                                'scene_seq': line.get('scene_seq'), 'at': (moment or datetime.now(timezone.utc)).isoformat(),
+                                'scene_seq': line.get('scene_seq'), 'at': (moment or clock.now()).isoformat(),
                                 **fields})
 
 
@@ -678,7 +675,7 @@ def _month_day(value, zone):
 def prune(store, moment=None):
     """At settlement: fire rows older than FIRES_DAYS go. Returns how many."""
     from datetime import timedelta
-    cutoff = ((moment or datetime.now(timezone.utc)) - timedelta(days=FIRES_DAYS)).isoformat()
+    cutoff = ((moment or clock.now()) - timedelta(days=FIRES_DAYS)).isoformat()
     return store.db[FIRES].delete_many({'kind': {'$in': list(FIRE_KINDS)}, 'at': {'$lt': cutoff}}).deleted_count
 
 
@@ -692,13 +689,12 @@ def report(store, since, compactions=None):
     db = store.db
     fires = list(db[FIRES].find({'kind': {'$in': list(FIRE_KINDS)}, 'at': {'$gte': since}}))
     groups = set(_groups(store))
-    episodes = {ep['_id']: ep for ep in db.episodes.find({'episode_kind': 'external', 'scene_id': {'$in': sorted(groups)}},
-                                                          {'scene_id': 1, 'native_session_id': 1})}
+    episodes = {ep['_id']: ep for ep in episode_records.of_kind(store, 'external', scenes=sorted(groups)).rows(
+        fields=['scene_id', 'native_session_id'])}
     lines = {}
     ids = ['in-' + key for key in episodes]
     for start in range(0, len(ids), 1000):
-        for row in db.messages.find({'_id': {'$in': ids[start:start + 1000]}, 'received_at': {'$gte': since}},
-                                    {'scene_seq': 1}):
+        for row in message_records.many(store, ids[start:start + 1000], since=since).rows(fields=['scene_seq']):
             lines[row['_id'][len('in-'):]] = row.get('scene_seq') or 0
     turns = {}
     for key, seq in lines.items():
@@ -742,7 +738,7 @@ def report(store, since, compactions=None):
                 target['recalls_with_the_cue_word'] += any(key_words.found(fire.get('word') or '', q) for q in asked)
         if kind_ in ('cue', 'note') and compactions is not None:
             session = (episodes.get(fire.get('episode_id')) or {}).get('native_session_id') or (
-                db.episodes.find_one({'_id': fire.get('episode_id')}, {'native_session_id': 1}) or {}).get('native_session_id')
+                episode_records.get(store, fire.get('episode_id'), fields=['native_session_id']) or {}).get('native_session_id')
             at = datetime.fromisoformat(fire['at'].replace('Z', '+00:00')).timestamp() * 1000
             ends = [end for end in compactions.get(session, []) if end <= at]
             minutes = (at - max(ends)) / 60000 if ends else None

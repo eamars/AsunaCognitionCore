@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from queue import Queue, Empty
 import threading
+import time
 import traceback
 import uuid
 
@@ -12,6 +13,13 @@ from . import handover
 from .config import redact_text as redact
 from .ingress import episode_id, persist_input, input_state
 from .router import FairQueue
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import episodes as episode_records
+from .records import tasks as task_records
+
+# Where the current thread's input admission spent its time (channels.receive reports a slow one).
+INGRESS_TIMING = threading.local()
 
 
 class SceneQueue(Queue):
@@ -58,13 +66,14 @@ def prepare_local_scene(store, settings):
     """Initialize only missing local state; never reseed memories or revisions."""
     person, scene = settings['person_id'], settings['scene_id']
     scope = 'scene:' + scene
-    if not store.db.identities.find_one({'_id': person}):
-        store.put('identities', {'_id': person, 'person_id': person, 'platform': 'local',
+    from .records import people as people_records
+    if not people_records.identity(store, person):
+        people_records.save_identity(store, {'_id': person, 'person_id': person, 'platform': 'local',
                   'account_id': person, 'display_name': '本机用户'}, stream='local-setup')
-    if not store.db.scenes.find_one({'_id': scene}):
-        store.put('scenes', {'_id': scene, 'scene_id': scene, 'kind': 'dm', 'members': [person],
-                  'scope_key': scope, 'policy_epoch': 1, 'sequence': 0}, stream='local-setup')
-    authorized = store.authorize(scene, person)
+    if not scene_records.get(store, scene):
+        scene_records.save(store, {'_id': scene, 'scene_id': scene, 'kind': 'dm', 'members': [person],
+                           'scope_key': scope, 'policy_epoch': 1, 'sequence': 0}, stream='local-setup')
+    authorized = scene_records.authorize(store, scene, person)
     if authorized['kind'] != 'dm' or authorized['scope_key'] != scope:
         raise PermissionError('LOCAL_CHAT_SCENE_CONFIG_MISMATCH')
     seed_documents(store, settings)
@@ -98,7 +107,7 @@ class Chat:
         self.watchdog = threading.Thread(target=self._watch, name='asuna-handover-watchdog', daemon=True)
 
     def _schedule(self, task_id):
-        task = self.app.store.db.tasks.find_one({'_id': task_id})
+        task = task_records.get(self.app.store, task_id)
         self.latest_task = task['_id']
         key = (task['_id'], task['intent_revision'])
         if key not in self.scheduled_tasks:
@@ -123,7 +132,7 @@ class Chat:
                         self.task_queue.put((task_id, revision))
                         continue
                     self.active_task = task_id
-                task = self.app.store.db.tasks.find_one({'_id': task_id})
+                task = task_records.get(self.app.store, task_id)
                 if task['state'] != 'READY' or task['intent_revision'] != revision:
                     continue
                 from .grants import workspace_grant
@@ -137,7 +146,7 @@ class Chat:
                 self.app.evidence.record('chat.task_error', {'task_id': task_id, 'traceback': error})
                 try:
                     self.app.store.audit(task_id, 'execution.failed', {'traceback': error}, task['scope_key'])
-                    current = self.app.store.db.tasks.find_one({'_id': task_id})
+                    current = task_records.get(self.app.store, task_id)
                     cancelled = current and current['state'] == 'CANCELLED'
                 except Exception:
                     cancelled = False
@@ -213,7 +222,7 @@ class Chat:
                              '自行决定是否值得反思、继续旧工作、委托改进，或者什么都不做。无需公开回复。'),
             'trusted_context_events': trusted_context_events or [],
         }
-        previous = self.app.store.db.messages.find_one({'_id': 'in-' + episode_id(event)})
+        previous = message_records.get(self.app.store, 'in-' + episode_id(event))
         if previous:
             prior_profile = (previous.get('event') or {}).get('integration_profile')
             if prior_profile is not None:
@@ -240,7 +249,9 @@ class Chat:
                 if granted:
                     # The same decision the router makes, so the stored input and the handled one agree.
                     event = {**event, 'integration_profile': granted}
+            timing, mark = INGRESS_TIMING, time.monotonic()
             row, created = persist_input(self.app.store, event, managed=True)
+            timing.persist, mark = time.monotonic() - mark, time.monotonic()
             if self.on_input_received:
                 try:
                     self.on_input_received(row)
@@ -249,6 +260,7 @@ class Chat:
                     # retried without asking the adapter to invent a new input.
                     self.app.evidence.record('host.input_projection_error', {
                         'input_id': row['_id'], 'traceback': redact(traceback.format_exc(), self.app.config)})
+            timing.project = time.monotonic() - mark
             episode = row['episode_id']
             if row.get('ingress_state') == 'ACCEPTED' and episode not in self.enqueued:
                 self.enqueued.add(episode)
@@ -270,8 +282,8 @@ class Chat:
         woken = (event.get('group_context') or {}).get('wake_reason') == proactive.WAKE_REASON
         if not woken and not (event.get('channel') and 'group_context' in event):
             return None, None, None          # 不是通道群消息：没有旁听行可判断
-        row = self.app.store.db.messages.find_one({'_id': 'in-' + episode})
-        scene = self.app.store.db.scenes.find_one({'_id': event['scene_id']})
+        row = message_records.get(self.app.store, 'in-' + episode)
+        scene = scene_records.get(self.app.store, event['scene_id'])
         if not scene or scene.get('kind') != 'group' or not row:
             return None, None, None
         from . import focus
@@ -347,16 +359,15 @@ class Chat:
                                     can_run=self._proactive_open(scene['_id']))
         if decision['fire']:
             return False
-        current = self.app.store.db.messages.find_one({'_id': row['_id']})
+        current = message_records.get(self.app.store, row['_id'])
         if not current:
             return True
         record = {**(current.get('proactive') or {}), 'wake': False,
                   'recheck_hold': decision['holds'],
                   'recheck_at': datetime.fromtimestamp(moment, timezone.utc).isoformat()}
         try:
-            self.app.store.put('messages', {**current, 'processing_outcome': proactive.OUTCOME_HOLD,
-                                           'proactive': record}, expected=current['revision'],
-                               stream=episode)
+            message_records.save(self.app.store, {**current, 'processing_outcome': proactive.OUTCOME_HOLD,
+                                 'proactive': record}, expected=current['revision'], stream=episode)
         except Exception:
             pass
         self.app.evidence.record('proactive.hold', {'scene_id': scene['_id'], 'message_id': row['_id'],
@@ -366,13 +377,12 @@ class Chat:
     def recover_inputs(self):
         """Called once by the owning host before it exposes any clients."""
         with self.ingress_lock:
-            for row in self.app.store.db.messages.find({'host_managed': True,
-                    'ingress_state': {'$in': ['ACCEPTED', 'PROCESSING', 'FAILED']}}).sort('received_at', 1):
+            for row in message_records.ingress(self.app.store, ['ACCEPTED', 'PROCESSING', 'FAILED']).rows():
                 episode = row['episode_id']
                 # A failure before episode creation made no model/tool calls.
                 # Keep its original identity and diagnostic when resuming.
                 if row['ingress_state']=='FAILED':
-                    if self.app.store.db.episodes.find_one({'_id':episode}) or 'retrieval' not in row.get('failure','').lower():
+                    if episode_records.get(self.app.store, episode) or 'retrieval' not in row.get('failure','').lower():
                         continue  # Only migrate the known pre-RAG failure; no blanket replay.
                 if episode not in self.enqueued:
                     self.enqueued.add(episode)
@@ -400,7 +410,7 @@ class Chat:
                         continue
                     self.active = episode or event['event_id']
                 if event.get('_feedback_task'):
-                    task = self.app.store.db.tasks.find_one({'_id': event['_feedback_task']})
+                    task = task_records.get(self.app.store, event['_feedback_task'])
                     result = self.app.service.feedback(task, self.app.coordinator, short=event.get('_short', False),
                                                        again=event.get('_again', False))
                     if result is None:
@@ -413,8 +423,8 @@ class Chat:
                         # normal queue turn; do not ingest or rerun the action.
                         self.pending.put((event, task['episode_id']))
                 else:
-                    scene = self.app.store.authorize(event['scene_id'], event['person_id'])
-                    source = self.app.store.db.messages.find_one({'_id': 'in-' + episode})
+                    scene = scene_records.authorize(self.app.store, event['scene_id'], event['person_id'])
+                    source = message_records.get(self.app.store, 'in-' + episode)
                     if source['policy_epoch'] != scene['policy_epoch']:
                         raise PermissionError('INPUT_POLICY_STALE')
                     if source.get('absorbed_by'):
@@ -438,7 +448,7 @@ class Chat:
                         # P5：入队时闸门还开着，真要开口时已经不该插这句——不建 episode、不调模型。
                         input_state(self.app.store, episode, 'COMPLETE', result_state='PROACTIVE_HELD')
                         continue
-                    previous = self.app.store.db.episodes.find_one({'_id': episode})
+                    previous = episode_records.get(self.app.store, episode)
                     from . import errands
                     why = errands.skipped(event, source, previous)
                     if why:
@@ -455,15 +465,13 @@ class Chat:
                     input_state(self.app.store, episode, 'COMPLETE', result_state=result['state'])
                     self._proactive_consider(event, episode, result)
                     self._sticker_pool(event, episode)
-                self.app.store.authorize(event['scene_id'], event['person_id'])
-                messages = list(self.app.store.db.messages.find({
-                    'episode_id': episode, 'scene_id': event['scene_id'],
-                    'direction': 'outbound', 'phase': 'SPEAK', 'delivery_state': 'DELIVERED'
-                }).sort('scene_seq', 1))
+                scene_records.authorize(self.app.store, event['scene_id'], event['person_id'])
+                messages = message_records.turn_parts(self.app.store, episode, scene=event['scene_id'],
+                                                      outbound=True, delivered=True).rows()
                 for message in messages:
                     self.emit(f"{self.settings['display_name']}：{message['text']}")
                 ready = [task_id for task_id in result.get('task_ids') or ()
-                         if self.app.store.db.tasks.find_one({'_id': task_id, 'state': 'READY'})]
+                         if task_records.get(self.app.store, task_id, state='READY')]
                 for task_id in ready:
                     self._schedule(task_id)
                 if not ready and result.get('silent_reason'):
@@ -480,13 +488,13 @@ class Chat:
                     # never reached a turn.
                     try:
                         from .handover import result_event_id
-                        task = self.app.store.db.tasks.find_one({'_id': event['_feedback_task']})
+                        task = task_records.get(self.app.store, event['_feedback_task'])
                         short = event.get('_short', False)
-                        turn = self.app.store.db.episodes.find_one({'source_event_id': result_event_id(task, short),
-                                                                    'episode_kind': 'task_feedback'})
+                        turn = episode_records.of_source(self.app.store, result_event_id(task, short),
+                                                         kind='task_feedback')
                         if turn and turn['state'] not in ('COMMITTED', 'WAITING_TASK'):
-                            self.app.store.put('episodes', {**turn, 'state': 'INTERRUPTED' if self.stopping.is_set()
-                                               else 'FAILED_RUNTIME', 'failure': error}, expected=turn['revision'], stream=turn['_id'])
+                            episode_records.save(self.app.store, {**turn, 'state': 'INTERRUPTED' if self.stopping.is_set()
+                                                 else 'FAILED_RUNTIME', 'failure': error}, expected=turn['revision'], stream=turn['_id'])
                             if not self.stopping.is_set():
                                 self._report_fault(turn, error)
                         elif not turn:
@@ -501,10 +509,10 @@ class Chat:
                 try:
                     input_state(self.app.store, episode, 'FAILED', failure=error)
                     self.app.store.audit(episode, 'chat.error', {'traceback': error}, 'scene:' + event['scene_id'])
-                    ep = self.app.store.db.episodes.find_one({'_id': episode})
+                    ep = episode_records.get(self.app.store, episode)
                     if ep and ep['state'] not in ('COMMITTED', 'WAITING_TASK'):
-                        self.app.store.put('episodes', {**ep, 'state': 'INTERRUPTED' if self.stopping.is_set() else 'FAILED_RUNTIME',
-                                           'failure': error}, expected=ep['revision'], stream=episode)
+                        episode_records.save(self.app.store, {**ep, 'state': 'INTERRUPTED' if self.stopping.is_set() else 'FAILED_RUNTIME',
+                                             'failure': error}, expected=ep['revision'], stream=episode)
                         if not self.stopping.is_set():
                             self._report_fault(ep, error)
                 except Exception:
@@ -576,7 +584,7 @@ class Chat:
         # Fence this application's work before shutting down its action lane.
         if not self.restart_pending.is_set():
             for task_id, revision in self.scheduled_tasks.copy():
-                task = self.app.store.db.tasks.find_one({'_id': task_id})
+                task = task_records.get(self.app.store, task_id)
                 if task and task['intent_revision'] == revision and task['state'] in ('READY', 'RUNNING'):
                     self.app.service.cancel(task_id, reason='host_stop', person_id=task['requester_id'])
         if active_task:

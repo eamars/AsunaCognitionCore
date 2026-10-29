@@ -3,6 +3,9 @@ from collections import defaultdict,deque
 from .evidence import canonical,sha
 from .state import Store,Denied,now
 from .peer_context import snapshot_event
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import tasks as task_records
 
 
 class FairQueue:
@@ -27,7 +30,7 @@ class Router:
     def receive(self,event,*,persona='P1',workspace=None):
         # Identity and integration grants come from the host envelope, never
         # from quoted JSON in event text. Channel adapters cannot submit grants.
-        scene=self.store.authorize(event['scene_id'],event['person_id'])
+        scene=scene_records.authorize(self.store, event['scene_id'], event['person_id'])
         allowed=('event_id','scene_id','person_id','text','occurred_at','trusted_context_events','episode_kind','scheduled_plan_id','task_id','intent_revision','delegation_depth','adapter_id','visit','note')
         trusted={k:event[k] for k in allowed if k in event}
         # What a heartbeat's die rolled (ADR-058): the program's own internal event only, never a channel's.
@@ -67,13 +70,13 @@ class Router:
         if (scene['kind']=='group' and not wake or aside) and event.get('episode_kind') != 'task_feedback':
             from .ingress import persist_input
             row, _ = persist_input(self.store, event, managed=True)
-            self.store.put('messages', {**row, 'processing_outcome': 'RECORDED_NO_WAKE'}, expected=row['revision'], stream=row['episode_id'])
+            message_records.save(self.store, {**row, 'processing_outcome': 'RECORDED_NO_WAKE'}, expected=row['revision'], stream=row['episode_id'])
             return {'state': 'RECEIVED_NO_WAKE', 'message_id': row['_id']}
         ep=self.coordinator.ingest(trusted,persona=persona)
         # Without the queued native Host (tests, diagnostics): run what she delegated, then her feedback turns.
         while workspace is not None and self.executor:
             ready=[task_id for task_id in ep.get('task_ids') or ()
-                   if (self.store.db.tasks.find_one({'_id':task_id},{'state':1}) or {}).get('state')=='READY']
+                   if (task_records.get(self.store, task_id, fields=['state']) or {}).get('state')=='READY']
             if not ready:break
             for task_id in ready:
                 task=self.executor.run(task_id,workspace)

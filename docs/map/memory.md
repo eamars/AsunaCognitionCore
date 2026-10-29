@@ -181,13 +181,10 @@ Local embeddings and server-side, prefiltered Mongo vector retrieval.
 查宿主保存的授权消息（P1-b）：字面检索覆盖完整 messages，原文整条回读。
 
 - def `identity_status` — 身份解析接上了没有、缺哪些名字——降级要看得见，不能静默少信息。
-- def `person_filter` — By-person condition: the authors the person resolved to (people.py), never a name match.
+- def `person_terms` — By-person: (the authors the person resolved to (people.py), None) when resolved, never a name match; else (None, the values a person may be known by, person_values) for standalone use; (None, None) for no person.
 - def `bind_people` — Resolve a person argument to one person's author ids and label hits by people.py.
-- def `scene_id_clause` — 场景过滤条件：没联动时保持原来的单值形状（条件一行都不多写），联动了才换成 $in。
-- def `sink_time_filter` — 送达回执那一侧的范围：时间窗下沉 + 游标下推（决胜位不下推，见下）。
-- def `person_clause` — 按人过滤要下沉到查询里（不能等分页后再筛，否则首页会被无关行占满）。
-- def `message_filters` — 两支行内时间的查询：入站用 occurred_at 夹时间，已送达 SPEAK 出站用 receipt_at 夹时间。
-- def `outbound_fallback_filter` — 第三支的过滤：已送达 SPEAK 出站、行内没有 receipt_at、但带着指向 sink_receipts 的 receipt。
+- def `sink_bounds` — 送达回执那一侧的范围（receipt_records.sink_window 的边界）：时间窗下沉 + 游标下推（决胜位不下推，见下）。
+- def `person_values` — 一个人在行上可能被记成的那些值（排好序），没有人就是 None。
 - def `search_messages` — 行内时间两支各查一次（各自 keyset），关联那一支在内存里比，再按时间归并。
 - def `query_history` — 字面为主、语义为辅；两者都不碰 QQ 平台。场景不完整就拒查，不退化成无范围扫描。
 - def `render` — 行首时间，然后场景#序号、谁说的（我说／对方说）、身份、原文片段。
@@ -248,6 +245,17 @@ ADR-005 P2：摘要条目上的说话人归属与更正——由程序从真实�
 
 Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).
 
+- def `entry` — A running record's entry by id, or None.
+- def `slugs` — The names of a persona's running records (the values of their entries' `slug`), ascending.
+- def `entries` — View: a running record's entries, in their order (`seq`).
+- def `entry_of` — An entry of a running record (the one this mutation last wrote), or None.
+- def `last_entry` — A running record's last entry (the highest `seq`), or None.
+- def `revision` — A running record's revision by id, or the one a mutation id wrote; None when there is none.
+- def `revisions` — View: a running record's revisions (of this section; `sectioned`: of any section), by `created_at`.
+- def `revision_of_body` — The revision of a section whose body had this hash, or None.
+- def `last_revision` — A running record's newest revision (by `created_at`, then `_id`), or None.
+- def `save_entry` — The revisioned write of an entry (`Store.put`: `expected`, `stream`).
+- def `save_revision` — The write of a running record's revision (`Store.put`).
 - class `DocumentError` — A refused document operation; ``code`` is the stable reason.
 - def `stale` — A Conflict message for a document someone else wrote between her read and her write.
 - def `missing_section`
@@ -334,18 +342,22 @@ Affect ledger and projection (ADR-009 ARCHITECTURE §6).
 
 [src/asuna/blobs.py](../../src/asuna/blobs.py)
 
-Scoped, hash-verified GridFS storage for bounded-document overflow.
+Scoped, hash-verified storage of bytes past the record size limit: the `blobs` owner, the only user of the store's blob interface (write, open, delete, of_scope).
 
 - def `erased` — Whether a privacy erasure deleted this row's bytes.
 - def `erased_words` — ADR-105's sentence for an erased row: bytes the erasure deleted, or bytes that had expired before it.
 - def `refuse_erased` — Raise the sentence for an erased row; the caller has already checked the row is in its fence, so the words say nothing about a row the caller may not see.
+- def `open` — The stored bytes of a blob, readable and seekable; `BlobMissing` when it is not stored.
+- def `delete` — Delete a blob: True when it was stored, False when it was already gone.
+- def `exists` — Whether a blob is stored.
 - class `BlobStore`
   - `put_stream` — Store what an open binary handle holds, hashing while it copies; the stored bytes are read back in pieces and checked against that hash before the manifest is written.
   - `put`
-  - `put_once` — Content-addressed: the same bytes in the same scope are stored once.
+  - `put_once` — Content-addressed: the same bytes in the same scope are stored once; `fields` go on a new row only.
+  - `restore` — Put bytes fetched again back on the row whose bytes expired (`storage` `removed`), when they are the same bytes (its sha256).
   - `get`
   - `get_range` — `length` bytes from `offset` of a stored blob (fewer at its end), read with a seek: a piece of a large file without reading the rest.
-  - `erase_scope` — Delete every stored byte of `scope`, then mark each of its rows whose bytes are gone (`gridfs`, and `removed`: an expired file must not be fetched again either) `erased`, by the row's own scope, so a row whose bytes were already missing is 
+  - `erase_scope` — Delete every stored byte of `scope` (the blob store's blobs of the scope), then mark each of its rows whose bytes are gone (`gridfs`, and `removed`: an expired file must not be fetched again either) `erased`, by the row's own scope, so a ro
 
 ## `privacy`
 

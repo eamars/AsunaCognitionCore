@@ -1,10 +1,13 @@
 """Local adapter invariants. These tests do not create any Mongo database."""
+import threading
 from types import SimpleNamespace
 
 import pytest
 from asuna.native_worker import BusinessWorker, prune_host_reports, KEPT_HOST_REPORTS
 from asuna.state import Denied
 from asuna.router import Router
+from asuna.records import scenes as scene_records
+from asuna.records import sessions as session_records
 from asuna.config import DATA, ROOT
 from concurrent.futures import Future
 
@@ -24,7 +27,8 @@ def test_task_fence_ends_old_pending_stage_without_ending_its_successor():
     assert len(events)==1
 
 
-def test_tool_operation_cannot_inherit_mutable_session_successor_grant(tmp_path):
+def test_tool_operation_cannot_inherit_mutable_session_successor_grant(tmp_path, monkeypatch):
+    monkeypatch.setattr(scene_records, 'get', lambda *a, **k: None)
     worker=BusinessWorker(); calls=[]
     worker.session=lambda _: {'lane':'executor','task_id':'successor'}
     def valid(task):
@@ -32,7 +36,7 @@ def test_tool_operation_cannot_inherit_mutable_session_successor_grant(tmp_path)
     worker.app=SimpleNamespace(service=SimpleNamespace(valid=valid),broker=SimpleNamespace(
         bind=lambda session,task,cwd:calls.append((session,task['_id'],cwd)),
         call=lambda *args:{'accepted':True}),
-        store=SimpleNamespace(config={},db=SimpleNamespace(scenes=SimpleNamespace(find_one=lambda *a,**k:None))))
+        store=SimpleNamespace(config={}))
     for token,task in (('old-stage','old'),('new-stage','successor')):
         future=Future();future.asuna_lane='executor';future.asuna_session_id='source'
         future.asuna_task={'_id':task,'scene_id':'s'};future.asuna_binding={'cwd':str(tmp_path)}
@@ -58,7 +62,7 @@ def test_group_role_is_continuous_across_speakers_but_not_scenes_or_authorizatio
         assert BusinessWorker.role_session_id({**ep, **changed}) != session_id
 
 
-def test_group_actor_changes_reauthorize_while_action_task_actor_is_immutable():
+def test_group_actor_changes_reauthorize_while_action_task_actor_is_immutable(monkeypatch):
     worker = BusinessWorker()
     prior = {'_id': 'group', 'revision': 1, 'lane': 'character', 'scene_id': 'group',
              'person_id': 'alice', 'persona': 'xiaoman', 'cwd': 'authorized', 'policy_epoch': 1}
@@ -68,9 +72,9 @@ def test_group_actor_changes_reauthorize_while_action_task_actor_is_immutable():
         if person not in ('alice', 'bob'):
             raise Denied('NOT_A_MEMBER')
         return {'policy_epoch': 1}
-    worker.app = SimpleNamespace(store=SimpleNamespace(
-        db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda _: prior)),
-        authorize=authorize, put=lambda _, values, **kw: values))
+    monkeypatch.setattr(scene_records, 'authorize', lambda store, scene, person: authorize(scene, person))
+    monkeypatch.setattr(session_records, 'get', lambda store, session_id, fields=None, native=False: prior)
+    worker.app = SimpleNamespace(store=SimpleNamespace(put=lambda _, values, **kw: values))
     assert worker.bind_session('group', {**prior, 'person_id': 'bob'})['person_id'] == 'bob'
     assert calls[-1] == ('group', 'bob')
     with pytest.raises(Denied, match='NOT_A_MEMBER'):
@@ -80,23 +84,23 @@ def test_group_actor_changes_reauthorize_while_action_task_actor_is_immutable():
         worker.bind_session('action', {**prior, 'person_id': 'bob'})
 
 
-def test_bound_session_checks_current_authorization_epoch():
+def test_bound_session_checks_current_authorization_epoch(monkeypatch):
     worker = BusinessWorker()
     record = {'scene_id': 'scene', 'person_id': 'person', 'policy_epoch': 1}
-    worker.app = SimpleNamespace(store=SimpleNamespace(
-        db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda query: record)),
-        authorize=lambda scene, person: {'policy_epoch': 2}))
+    monkeypatch.setattr(scene_records, 'authorize', lambda store, scene, person: {'policy_epoch': 2})
+    monkeypatch.setattr(session_records, 'get', lambda store, session_id, fields=None, native=False: record)
+    worker.app = SimpleNamespace(store=SimpleNamespace())
     with pytest.raises(Denied, match='NATIVE_SESSION_EPOCH_CHANGED'):
         worker.session('native-session')
 
 
-def test_qq_is_view_only_including_unbound_native_sessions():
+def test_qq_is_view_only_including_unbound_native_sessions(monkeypatch):
     worker = BusinessWorker()
     rows = [{'native_host': True, '_id': 'qq', 'scene_id': 'qq:bot:dm:one', 'lane': 'character'},
             {'native_host': True, '_id': 'local', 'scene_id': 'local', 'lane': 'character'},
             {'native_host': True, '_id': 'old-local', 'scene_id': 'local', 'lane': 'character', 'successor_id': 'local'}]
-    worker.app = SimpleNamespace(config={'chat': {'scene_id': 'local'}}, store=SimpleNamespace(
-        db=SimpleNamespace(sessions=SimpleNamespace(find=lambda _: rows))))
+    monkeypatch.setattr(session_records, 'native', lambda store, *a, **k: SimpleNamespace(rows=lambda **kw: rows))
+    worker.app = SimpleNamespace(config={'chat': {'scene_id': 'local'}}, store=SimpleNamespace())
     policies = worker.dispatch('input_policies', {'sessions': [
         {'id': row['_id']} for row in rows] + [{'id': 'unbound-qq', 'cwd': str(DATA / 'work/qq')}]})
     assert 'local' not in policies
@@ -105,11 +109,11 @@ def test_qq_is_view_only_including_unbound_native_sessions():
 
 
 @pytest.mark.parametrize('workspace', ['qq', 'local'])
-def test_web_input_requires_the_real_local_workspace(workspace, tmp_path):
+def test_web_input_requires_the_real_local_workspace(workspace, tmp_path, monkeypatch):
     worker = BusinessWorker()
     local = {'scene_id': 'local', 'person_id': 'owner', 'workspace': str(tmp_path / 'local')}
-    worker.app = SimpleNamespace(config={'chat': local}, store=SimpleNamespace(
-        db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda _: None))))
+    monkeypatch.setattr(session_records, 'get', lambda store, session_id, fields=None, native=False: None)
+    worker.app = SimpleNamespace(config={'chat': local}, store=SimpleNamespace())
     accepted = []
     worker.controller = SimpleNamespace(submit=lambda text, **kw: accepted.append(text))
     args = {'session_id': 'new', 'cwd': str(tmp_path / workspace), 'text': 'draft', 'message_ids': ['message']}
@@ -123,10 +127,10 @@ def test_web_input_requires_the_real_local_workspace(workspace, tmp_path):
 
 
 @pytest.mark.parametrize('channel', [None, {'id': 'qq'}])
-def test_only_private_host_input_preserves_native_binding(channel):
+def test_only_private_host_input_preserves_native_binding(channel, monkeypatch):
     captured = []
-    store = SimpleNamespace(config={}, authorize=lambda *_: {'_id': 'scene', 'scope_key': 'scope', 'kind': 'dm'},
-                            audit=lambda *_: None)
+    monkeypatch.setattr(scene_records, 'authorize', lambda *_: {'_id': 'scene', 'scope_key': 'scope', 'kind': 'dm'})
+    store = SimpleNamespace(config={}, audit=lambda *_: None)
     coordinator = SimpleNamespace(ingest=lambda event, **_: captured.append(event) or {'state': 'COMMITTED'})
     event = {'event_id': 'id', 'scene_id': 'scene', 'person_id': 'person', 'text': 'hello',
              'native_session_id': 'native-session', 'native_message_ids': ['native-message']}
@@ -212,16 +216,16 @@ def test_a_tool_error_is_its_own_words_and_a_fault_says_it_is_not_hers():
     assert error_text('status', KeyError('x')) == "KeyError: 'x'"            # only tool calls are told how to act
 
 
-def test_the_session_binding_names_its_conversations_clock():
+def test_the_session_binding_names_its_conversations_clock(monkeypatch):
     """web_search (a Host tool) puts publication times on this clock, as every time a model reads is."""
     worker = BusinessWorker()
     record = {'_id': 'native-session', 'scene_id': 'scene', 'person_id': 'person', 'policy_epoch': 1}
-    worker.app = SimpleNamespace(store=SimpleNamespace(config={'timezone': 'Pacific/Auckland'},
-        db=SimpleNamespace(sessions=SimpleNamespace(find_one=lambda query: record),
-                           scenes=SimpleNamespace(find_one=lambda query: None)),
-        authorize=lambda scene, person: {'policy_epoch': 1}))
+    monkeypatch.setattr(scene_records, 'get', lambda *a, **k: None)
+    monkeypatch.setattr(scene_records, 'authorize', lambda store, scene, person: {'policy_epoch': 1})
+    monkeypatch.setattr(session_records, 'get', lambda store, session_id, fields=None, native=False: record)
+    worker.app = SimpleNamespace(store=SimpleNamespace(config={'timezone': 'Etc/GMT-9'}))
     binding = worker.dispatch('session', {'session_id': 'native-session'})
-    assert binding['timezone'] == 'Pacific/Auckland' and binding['utc_offset_minutes'] in (720, 780)
+    assert binding['timezone'] == 'Etc/GMT-9' and binding['utc_offset_minutes'] == 540
     assert binding['scene_id'] == 'scene'
 
 
@@ -258,7 +262,7 @@ def test_one_long_run_keeps_its_newest_records_and_their_chain(tmp_path):
 
 
 @pytest.mark.parametrize('member', [True, False])
-def test_the_owner_writes_on_an_agent_line_he_joins(member, tmp_path):
+def test_the_owner_writes_on_an_agent_line_he_joins(member, tmp_path, monkeypatch):
     """ADR-051: the composer is open on an agent line whose members include the owner; his words go to that line."""
     from asuna import channel_kinds
     channel_kinds.load([{'python': ROOT / 'packages' / 'channels' / 'agent-line' / 'python', 'module': 'agent_line'}])
@@ -268,10 +272,12 @@ def test_the_owner_writes_on_an_agent_line_he_joins(member, tmp_path):
     rows = {'line': line, 'qq': qq}
     members = ['agent:claude-code'] + (['owner'] if member else [])
     worker = BusinessWorker()
+    monkeypatch.setattr(scene_records, 'get', lambda *a, **k: {'members': members})
     worker.app = SimpleNamespace(config={'chat': {'scene_id': 'local', 'person_id': 'owner', 'workspace': str(tmp_path / 'local')}},
-        store=SimpleNamespace(db=SimpleNamespace(
-            sessions=SimpleNamespace(find=lambda _: list(rows.values()), find_one=lambda query: rows.get(query['_id'])),
-            scenes=SimpleNamespace(find_one=lambda *_: {'members': members}))))
+        store=SimpleNamespace())
+    monkeypatch.setattr(session_records, 'native',
+                        lambda store, *a, **k: SimpleNamespace(rows=lambda **kw: list(rows.values())))
+    monkeypatch.setattr(session_records, 'get', lambda store, session_id, fields=None, native=False: rows.get(session_id))
     accepted = []
     worker.controller = SimpleNamespace(submit=lambda text, **kw: accepted.append((text, kw['scene_id'])))
     policies = worker.dispatch('input_policies', {'sessions': [{'id': 'line', 'cwd': line['cwd']}, {'id': 'qq'}]})
@@ -285,3 +291,106 @@ def test_the_owner_writes_on_an_agent_line_he_joins(member, tmp_path):
             worker.dispatch('input', args)
     with pytest.raises(Denied, match='NATIVE_INPUT_WORKSPACE_MISMATCH'):
         worker.dispatch('input', {**args, 'session_id': 'qq', 'cwd': qq['cwd']})
+
+
+class Asked:
+    """A lock that says when a thread starts to wait for it."""
+    def __init__(self, inner):
+        self.inner, self.asked = inner, threading.Event()
+
+    def __enter__(self):
+        self.asked.set()
+        return self.inner.__enter__()
+
+    def __exit__(self, *args):
+        return self.inner.__exit__(*args)
+
+    @property
+    def holder(self):
+        return getattr(self.inner, 'holder', None)
+
+
+class Evidence:
+    def __init__(self, fail=False):
+        self.rows, self.fail = [], fail
+
+    def record(self, kind, payload):
+        if self.fail:
+            raise OSError('EVIDENCE_UNAVAILABLE')
+        self.rows.append((kind, payload))
+
+
+def stage_worker(effects, evidence=None):
+    worker = BusinessWorker()
+    worker.controller = SimpleNamespace(ingress_lock=threading.RLock(), reconfiguring=False)
+    worker.app = SimpleNamespace(service=SimpleNamespace(lock=effects, valid=lambda task: task),
+                                 evidence=evidence or Evidence())
+    return worker
+
+
+def executor_future():
+    future = Future()
+    future.asuna_lane = 'executor'
+    return future
+
+
+def hold(lock, seconds=None, name='tool-call'):
+    """A thread that holds `lock` until released (or for `seconds`); returns (thread, release)."""
+    release, taken = threading.Event(), threading.Event()
+
+    def run():
+        with lock:
+            taken.set()
+            release.wait(seconds if seconds is not None else 10)
+    thread = threading.Thread(target=run, name=name, daemon=True)
+    thread.start()
+    assert taken.wait(5)
+    return thread, release
+
+
+def test_a_stage_waiting_for_the_effects_lock_does_not_hold_the_ingress_fence():
+    """A tool call that holds the effects lock delays only the stages that need it: an inbound line takes the
+    ingress fence at once while a task's stage waits."""
+    effects = Asked(threading.RLock())
+    worker = stage_worker(effects)
+    holder, release = hold(effects.inner)
+    stage = threading.Thread(target=worker.register_stage, args=('op', executor_future(), {'_id': 'task'}),
+                             daemon=True)
+    try:
+        stage.start()
+        assert effects.asked.wait(5)
+        assert worker.controller.ingress_lock.acquire(timeout=1), 'an admission waited behind the effects lock'
+        worker.controller.ingress_lock.release()
+        assert 'op' not in worker.pending
+    finally:
+        release.set()
+        stage.join(5)
+        holder.join(5)
+    assert 'op' in worker.pending
+
+
+def test_a_long_wait_for_the_effects_lock_is_recorded_once_and_a_short_one_not_at_all(monkeypatch):
+    from asuna import native_worker
+    from asuna.queue import _DatabaseEffectsLock, effects_lock_path
+    from asuna.testing import remove_lock_files
+    monkeypatch.setattr(native_worker, 'EFFECTS_WAIT_SECONDS', 0.2)
+    name = 'asuna_v2_test_effects_wait'
+    effects = _DatabaseEffectsLock(name)
+    try:
+        evidence = Evidence()
+        worker = stage_worker(effects, evidence)
+        holder, _ = hold(effects, seconds=0.5)
+        worker.register_stage('long', executor_future(), {'_id': 'task'})
+        holder.join(5)
+        worker.register_stage('short', executor_future(), {'_id': 'task'})
+        [(kind, payload)] = evidence.rows
+        assert kind == 'host.effects_lock_wait'
+        assert payload['lane'] == 'executor' and payload['holder'] == 'tool-call' and payload['seconds'] >= 0.2
+        assert set(worker.pending) == {'long', 'short'}
+        failing = stage_worker(effects, Evidence(fail=True))
+        holder, _ = hold(effects, seconds=0.5)
+        failing.register_stage('unrecorded', executor_future(), {'_id': 'task'})
+        holder.join(5)
+        assert 'unrecorded' in failing.pending, 'a failure to record is not the stage\'s'
+    finally:
+        remove_lock_files(effects_lock_path(name))

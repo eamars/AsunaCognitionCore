@@ -6,7 +6,7 @@ import sys
 from asuna import forwards, role_tools
 from asuna.channels import kept_raw
 from asuna.config import ROOT
-from asuna.history_query import message_filters
+from asuna.records import messages as message_records
 
 ADAPTER = ROOT / 'packages' / 'channels' / 'napcat-qq' / 'integration'
 sys.path[:0] = [str(ADAPTER), str(ADAPTER / 'vendor')]          # as adapter.py sets it up
@@ -70,7 +70,8 @@ def test_a_forward_that_cannot_be_read_keeps_its_placeholder():
 
 
 def stored(store, scene, ref, nodes, seq=1):
-    store.db.messages.insert_one({'_id': 'm-%s-%d' % (scene[-1], seq), 'schema_version': 1, 'scene_id': scene, 'direction': 'inbound',
+    store.db.messages.insert_one({'_id': 'm-%s-%d' % (scene[-1], seq), 'schema_version': 1, 'scene_id': scene,
+                                  'policy_epoch': 1, 'direction': 'inbound',
                                   'received_at': '2026-10-11T01:00:0%dZ' % seq, 'text': '[合并转发｜%d 条｜%s]' % (len(nodes), ref),
                                   'event': {'raw': {forwards.KEY: [{'ref': ref, 'count': len(nodes), 'nodes': nodes}]}}})
 
@@ -96,7 +97,5 @@ def test_the_host_keeps_checked_blocks_and_she_reads_one_in_full_only_where_it_a
 def test_the_history_query_finds_a_line_by_what_its_forward_carried(store):
     stored(store, SCENE, 'f0123abcd', [{'name': '甲', 'user_id': '1', 'time': None, 'text': '周末去爬山'}])
     stored(store, SCENE, 'f99999999', [{'name': '乙', 'user_id': '1', 'time': None, 'text': '别的事'}], seq=2)
-    parts = {'scene_ids': [SCENE], 'epoch': 1}
-    [(_, _, inbound_filter), _] = message_filters(parts, '爬山')
-    inbound_filter.pop('policy_epoch')
-    assert [row['_id'] for row in store.db.messages.find(inbound_filter)] == ['m-1-1']
+    found = message_records.search(store, [SCENE], 1, 'inbound', text='爬山')
+    assert [row['_id'] for row in found] == ['m-1-1']

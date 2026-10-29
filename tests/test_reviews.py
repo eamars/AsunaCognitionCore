@@ -143,7 +143,8 @@ def test_a_reflection_runs_in_its_own_session_and_nothing_of_it_stays_at_home(st
     worker.host_call = lambda method, args: (_ for _ in ()).throw(AssertionError('a reflection copies nothing'))
     store.put('sessions', {'_id': 'asuna-role-home', 'native_host': True, 'main_conversation': True, 'lane': 'character',
                            'scene_id': 'dm-a', 'persona': 'P1', 'policy_epoch': 1, 'character_context': None,
-                           'cwd': 'work/home', 'person_id': 'A'}, stream='native-binding:asuna-role-home')
+                           'cwd': 'work/home', 'person_id': 'A', 'binding_key': 'native-host:asuna-role-home'},
+              stream='native-binding:asuna-role-home')
     turn = {'_id': 'ep-reflect', 'scene_id': 'dm-a', 'person_id': 'A', 'persona': 'P1', 'policy_epoch': 1,
             'scope_key': 'scene:dm-a', 'context': {'self_review_from_program': {}, 'tools_week_from_program': {}}}
     own = worker.resolve_role_session(turn)

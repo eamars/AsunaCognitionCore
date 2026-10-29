@@ -117,7 +117,6 @@ SIDE_OUTBOUND = "我说"        # 出站：我自己说过的（不是对方原�
 INBOUND_TIME_FIELD = "occurred_at"    # ingress.py
 OUTBOUND_TIME_FIELD = "receipt_at"    # channels.py 回执（QQ 平台 ack），出站时间的第一优先
 RECEIPT_REF_FIELD = "receipt"         # 出站行上指向 sink_receipts 那一行的引用
-SINK_COLLECTION = "sink_receipts"     # 宿主已有的送达回执表（本机 Web 出站写在这里）
 SINK_TIME_FIELD = "received_at"       # 那条回执的送达时间
 OUTBOUND_VIA_RECEIPT = "outbound_via_receipt"     # 第三支的游标键
 PHASE_FIELD = "phase"
@@ -241,14 +240,12 @@ def _scene_parts(scene):
             "labeler": scene.get("labeler") if callable(scene.get("labeler")) else None}
 
 
-def person_filter(parts, person):
-    """By-person condition: the authors the person resolved to (people.py), never a name match.
-
-    Without a resolution (standalone use) it falls back to person_clause.
-    """
+def person_terms(parts, person):
+    """By-person: (the authors the person resolved to (people.py), None) when resolved, never a name match; else
+    (None, the values a person may be known by, person_values) for standalone use; (None, None) for no person."""
     if parts.get("person_authors") is not None:
-        return {"author": {"$in": list(parts["person_authors"])}}
-    return person_clause(person, parts.get("person_aliases") or ())
+        return list(parts["person_authors"]), None
+    return None, person_values(person, parts.get("person_aliases") or ())
 
 
 def bind_people(store, scene, scene_doc, person):
@@ -265,7 +262,7 @@ def bind_people(store, scene, scene_doc, person):
     scene_doc["labeler"] = people.row_head
     def archive_label(row):
         live_scene = row['scene_id'].removeprefix('archive:')
-        record = store.db.scene_people.find_one({'_id': live_scene + '|' + people.person(row['author'])})
+        record = people_records.label(store, live_scene + '|' + people.person(row['author']))
         if record:
             return people.label(record)
         from .people import safe_name
@@ -289,10 +286,9 @@ def bind_people(store, scene, scene_doc, person):
                    or safe_name(person) in {people.shown(doc), people.label(doc),
                        *(safe_name(p.get('name')) for p in doc.get('previous') or [])}]
         ids.update(doc['person'] for doc in matches)
-        candidates = store.db.messages.distinct('author', {
-            'scene_id': {'$in': ['archive:' + sid for sid in scope]}, 'direction': ARCHIVED,
-            'policy_epoch': scene_doc['policy_epoch'], 'deletion_id': {'$exists': False},
-            '$or': [{'author': {'$in': list(ids)}}, {'historical_display_name': person}]})
+        candidates = message_records.authors(store, scenes=['archive:' + sid for sid in scope],
+                                             epoch=scene_doc['policy_epoch'], direction=ARCHIVED, live_only=True,
+                                             among=list(ids), named=person)
         persons = {people.person(author) for author in candidates} | {doc['person'] for doc in matches}
         if candidates:
             if len(persons) != 1:
@@ -312,15 +308,6 @@ def bind_people(store, scene, scene_doc, person):
         person, len(found), "、".join(people.label(doc) for doc in found[:8]))
 
 
-def scene_id_clause(parts):
-    """场景过滤条件：没联动时保持原来的单值形状（条件一行都不多写），联动了才换成 $in。"""
-    ids = list(dict.fromkeys([scene for scene in (parts.get("scene_ids") or [parts["scene_id"]])
-                              if scene]))
-    if not ids:
-        return {}
-    return {"scene_id": ids[0]} if len(ids) == 1 else {"scene_id": {"$in": ids}}
-
-
 def _receipt_ref(doc):
     """出站行上那条 receipt 引用（sink_receipts 的 _id）。只认标量；字典就取它自带的 id 键。
 
@@ -337,16 +324,12 @@ def _receipt_ref(doc):
 def _sink_times(store, refs):
     """一次批量把 sink_receipts 的 received_at 取回来：{引用: 时间}。取不到就照实说，不猜。
 
-    只发一条 $in 查询，不按行轮询；表不在（更旧的宿主没这张表）就说 no_sink_receipts，
-    那一支整体不试，两支主查询照跑。
+    只发一条 $in 查询，不按行轮询。
     """
-    column = getattr(getattr(store, "db", None), SINK_COLLECTION, None)
-    if column is None:
-        return {}, "no_%s" % SINK_COLLECTION
     if not refs:
         return {}, ""
     try:
-        rows = list(column.find({"_id": {"$in": sorted(refs)}}) or [])
+        rows = receipt_records.sinks(store, sorted(refs)).rows()
     except Exception as exc:
         return {}, "sink_lookup_failed:%s" % type(exc).__name__
     out = {}
@@ -430,20 +413,6 @@ def _cursor_of(doc, time_field):
     return [doc.get(time_field), doc.get(SORT_FIELD), doc.get("scene_id")]
 
 
-def _after_clause(pair, time_field):
-    """游标之后才要（降序）：时间更早；同一时刻看 scene_seq；scene_seq 也相同再看 scene_id。
-
-    只带两位的游标（改动之前发的、以及没联动时的本页）不加第三位条件，翻页序列照旧。
-    """
-    if not pair:
-        return None
-    at, seq = pair[0], pair[1]
-    clauses = [{time_field: {"$lt": at}}, {time_field: at, SORT_FIELD: {"$lt": seq}}]
-    if len(pair) > 2:
-        clauses.append({time_field: at, SORT_FIELD: seq, "scene_id": {"$lt": pair[2]}})
-    return {"$or": clauses}
-
-
 def _after_sink_pair(pair, stamp, ref):
     """游标之后的回执才要（降序）：时间更早，或同一秒里回执 id 排在游标那条后面。
 
@@ -460,8 +429,8 @@ def _after_sink_pair(pair, stamp, ref):
     return _text(ref, 60) < _text(marker, 60)
 
 
-def sink_time_filter(window=None, pair=None):
-    """送达回执那一侧的范围：时间窗下沉 + 游标下推（决胜位不下推，见下）。
+def sink_bounds(window=None, pair=None):
+    """送达回执那一侧的范围（receipt_records.sink_window 的边界）：时间窗下沉 + 游标下推（决胜位不下推，见下）。
 
     游标第二位是回执 _id，宿主那边可能是 ObjectId，走 JSON 游标比不回来，所以下推只到时间：
     `$lte` 会把游标那一秒整组重新捞一遍，由 _after_sink_pair 逐条跳过已消费的。第二位是 None
@@ -470,12 +439,12 @@ def sink_time_filter(window=None, pair=None):
     bounds = {}
     if window:
         if window[0]:
-            bounds["$gte"] = window[0]
+            bounds["gte"] = window[0]
         if window[1]:
-            bounds["$lte"] = window[1]
+            bounds["lte"] = window[1]
     if pair:
-        bounds["$lte" if pair[1] is not None else "$lt"] = pair[0]
-    return {SINK_TIME_FIELD: bounds} if bounds else {}
+        bounds["lte" if pair[1] is not None else "lt"] = pair[0]
+    return bounds
 
 
 def _group_safe_cut(merged, cut):
@@ -500,16 +469,10 @@ def _encode_cursors(pairs):
     return base64.urlsafe_b64encode(json.dumps(pairs).encode("utf-8")).decode("ascii")
 
 
-PEER_DOC_PREFIX = "event.raw.asuna_peer"      # 身份块在消息文档里的位置
-PERSON_KEYS = ("author", PEER_DOC_PREFIX + ".person_id", PEER_DOC_PREFIX + ".card",
-               PEER_DOC_PREFIX + ".nickname", PEER_DOC_PREFIX + ".display",
-               PEER_DOC_PREFIX + ".aliases")
+def person_values(person, aliases=()):
+    """一个人在行上可能被记成的那些值（排好序），没有人就是 None。
 
-
-def person_clause(person, aliases=()):
-    """按人过滤要下沉到查询里（不能等分页后再筛，否则首页会被无关行占满）。
-
-    认已认证 author（就是 person_id），也认身份块里的名片/昵称/显示名/曾用名；
+    按人过滤要下沉到查询里（不能等分页后再筛，否则首页会被无关行占满）。认已认证 author（就是 person_id），也认身份块里的名片/昵称/显示名/曾用名（records.messages.PERSON_KEYS）；
     两者都匹不到就不算这个人说的。aliases 是配置里认定「同一个人」的其他 person_id
     （canonical person）：带上之后，在 local-dm 里按 local-user 过滤也能捞到他从平台那个
     入口说的话——历史行上的 author 一个都不改写，只是过滤条件多认几个等价 id。
@@ -523,87 +486,16 @@ def person_clause(person, aliases=()):
         if not alias:
             continue
         values |= {alias, alias.lower(), *channel_kinds.person_ids(alias)}
-    ors = []
-    for key in PERSON_KEYS:
-        for value in sorted(values):
-            ors.append({key: value})
-    return {"$or": ors}
+    return sorted(values)
 
 
-def _text_pattern(query, case_sensitive):
-    if not query:
-        return None
-    pattern = {"$regex": re.escape(query)}
-    if not case_sensitive:
-        pattern["$options"] = "i"
-    return pattern
-
-
-def message_filters(parts, query="", *, author=None, window=None, case_sensitive=True,
-                    text_field=TEXT_FIELD, person=None):
-    """两支行内时间的查询：入站用 occurred_at 夹时间，已送达 SPEAK 出站用 receipt_at 夹时间。
-
-    没给窗口就**不加时间键**：`{field: {}}` 在 Mongo 里是空字典等值，什么都匹不到。
-    缺 receipt_at 的出站不在这里夹时间（它的时间不在本行），走 outbound_fallback_filter。
-    """
-    base = dict(scene_id_clause(parts))
-    base[EPOCH_FIELD] = parts["epoch"]
-    if author:
-        base["author"] = author
-    bounds = {}
-    if window:
-        if window[0]:
-            bounds["$gte"] = window[0]
-        if window[1]:
-            bounds["$lte"] = window[1]
-    pattern = _text_pattern(query, case_sensitive)
-    inbound = dict(base, **{DIRECTION_FIELD: INBOUND})
-    outbound = dict(base, **{DIRECTION_FIELD: OUTBOUND, PHASE_FIELD: PHASE_SPEAK,
-                             DELIVERY_FIELD: DELIVERED})
-    if bounds:
-        inbound[INBOUND_TIME_FIELD] = dict(bounds)
-        outbound[OUTBOUND_TIME_FIELD] = dict(bounds)
-    if pattern is not None:
-        # a received line matches by its text or by the messages of a merged forward it carried (forwards.py)
-        inbound["$or"] = [{text_field: dict(pattern)}, {FORWARD_TEXT_FIELD: dict(pattern)}]
-        outbound[text_field] = dict(pattern)
-    clause = person_filter(parts, person)
-    if clause:
-        inbound["$and"] = [dict(clause)]
-        outbound["$and"] = [dict(clause)]
-    streams = [(INBOUND, INBOUND_TIME_FIELD, inbound), (OUTBOUND, OUTBOUND_TIME_FIELD, outbound)]
+def _streams(parts):
+    """两支行内时间的查询：入站用 occurred_at 夹时间，已送达 SPEAK 出站用 receipt_at 夹时间（records.messages.search）；
+    带归档时再加归档那一支。缺 receipt_at 的出站不在这里夹时间（它的时间不在本行），走第三支。"""
+    streams = [(INBOUND, INBOUND_TIME_FIELD), (OUTBOUND, OUTBOUND_TIME_FIELD)]
     if parts.get('include_archived'):
-        archive = {**inbound, 'scene_id': {'$in': ['archive:' + sid for sid in parts['scene_ids']]},
-                   DIRECTION_FIELD: ARCHIVED, 'deletion_id': {'$exists': False}}
-        if bounds:
-            archive[INBOUND_TIME_FIELD] = {op: _archive_stamp(value) for op, value in bounds.items()}
-        streams.append((ARCHIVED, INBOUND_TIME_FIELD, archive))
+        streams.append((ARCHIVED, INBOUND_TIME_FIELD))
     return streams
-
-
-def outbound_fallback_filter(parts, query="", *, author=None, case_sensitive=True,
-                             text_field=TEXT_FIELD, person=None, refs=None):
-    """第三支的过滤：已送达 SPEAK 出站、行内没有 receipt_at、但带着指向 sink_receipts 的 receipt。
-
-    有效时间不在本行，时间条件下沉不了（窗口在内存里夹）；但回执 id 能下沉：给了 refs 就按
-    `$in` 只圈这一批（分页时就是这么联行的），没给就只要求「有引用」。`$exists` 只是让 Mongo
-    少捞行；优先级由 _outbound_time 在内存里再钉一遍，不靠它。
-    """
-    flt = dict(scene_id_clause(parts))
-    flt.update({EPOCH_FIELD: parts["epoch"], DIRECTION_FIELD: OUTBOUND,
-           PHASE_FIELD: PHASE_SPEAK, DELIVERY_FIELD: DELIVERED,
-           RECEIPT_REF_FIELD: ({"$in": sorted(refs)} if refs is not None
-                              else {"$exists": True, "$ne": None}),
-           OUTBOUND_TIME_FIELD: {"$exists": False}})
-    if author:
-        flt["author"] = author
-    pattern = _text_pattern(query, case_sensitive)
-    if pattern is not None:
-        flt[text_field] = dict(pattern)
-    clause = person_filter(parts, person)
-    if clause:
-        flt["$and"] = [dict(clause)]
-    return flt
 
 
 def _forward_text(doc):
@@ -700,14 +592,9 @@ def _receipt_fallback_items(store, parts, query, author, window, case_sensitive,
     每轮：按 (received_at, 回执 _id) 倒序捞一批回执 → 拿这批 id 回 messages 联本场景的行 →
     夹窗口、比游标 → 攒够一页就收手，剩下的留给下一页。时间窗在回执那一侧下沉，所以旧回执
     根本不用捞；单页预算只拦工作量，翻没到底写在 exhausted 里，由调用方换成 more。
-    回执表不存在就整支不试：两支主查询照跑，attempted/why 说清为什么这些行仍没时间。
+    捞不动（查询失败）就照实写在 why 里：两支主查询照跑，说清为什么这些行仍没时间。
     """
     fb = _fallback_state()
-    column = getattr(getattr(store, "db", None), SINK_COLLECTION, None)
-    if column is None:
-        fb["why"] = "no_%s" % SINK_COLLECTION
-        fb["exhausted"] = True          # 整支不试，没有「还没扫完」的悬念
-        return fb, []
     fb["attempted"] = True
     fb["batch"] = max(int(page) * 2, FALLBACK_BATCH_MIN)
     pos = pairs.get(OUTBOUND_VIA_RECEIPT)
@@ -715,9 +602,8 @@ def _receipt_fallback_items(store, parts, query, author, window, case_sensitive,
     while fb["rounds"] < FALLBACK_ROUNDS_MAX:
         fb["rounds"] += 1
         try:
-            rows = list(column.find(sink_time_filter(window, pos),
-                                    sort=[(SINK_TIME_FIELD, -1), (ID_FIELD, -1)],
-                                    limit=fb["batch"]) or [])
+            rows = receipt_records.sink_window(store, **sink_bounds(window, pos)).rows(newest_first=True,
+                                                                                    limit=fb["batch"])
         except Exception as exc:
             fb["why"] = "sink_scan_failed:%s" % type(exc).__name__
             fb["capped"] = True
@@ -747,10 +633,10 @@ def _receipt_fallback_items(store, parts, query, author, window, case_sensitive,
             pos = [pos[0], None]
             continue
         try:
-            found = list(store.db.messages.find(
-                outbound_fallback_filter(parts, query, author=author, case_sensitive=case_sensitive,
-                                         text_field=text_field, person=person, refs=set(receipts)),
-                sort=[(SORT_FIELD, -1), ("scene_id", -1)]) or [])
+            authors, values = person_terms(parts, person)
+            found = message_records.search(store, parts["scene_ids"], parts["epoch"], "receipt", text=query or None,
+                                           case=case_sensitive, author=author or None, authors=authors,
+                                           person=values, receipts=set(receipts))
         except Exception as exc:
             fb["why"] = "fallback_search_failed:%s" % type(exc).__name__
             fb["capped"] = True
@@ -802,17 +688,20 @@ def search_messages(store, scene, query="", *, author=None, window=None, limit=D
     page = max(1, min(int(limit or DEFAULT_LIMIT), MAX_LIMIT))
     pairs = _cursors(cursor)
     streams, items = [], []
-    for key, field, flt in message_filters(parts, query, author=author, window=window,
-                                          case_sensitive=case_sensitive, text_field=text_field,
-                                          person=person):
-        after = _after_clause(pairs.get(key), field)
-        if after:
-            flt.setdefault("$and", []).append(after)   # 不盖掉按人过滤那一支
+    authors, values = person_terms(parts, person)
+    for key, field in _streams(parts):
+        # 没给窗口就不加时间键；归档那一支的时间统一成归档的写法
+        bounds = window and tuple(_archive_stamp(value) if value and key == ARCHIVED else value
+                                  for value in window)
+        # Known defect, kept in B4 (ADR-104 design 8.2, B4's row): with a person filter, the archived stream also
+        # comes after the people's stream's cursor, as when one condition list was shared between the two streams;
+        # tools/adr104_equivalence.py b4's case "search, archived lines by person after both cursors" shows it.
+        cut_too = pairs.get(INBOUND) if key == ARCHIVED and (authors is not None or values) else None
         try:
-            found = list(store.db.messages.find(flt, {'legacy': 0} if key == ARCHIVED else None,
-                                               sort=[(field, -1), (SORT_FIELD, -1),
-                                                           ("scene_id", -1)],
-                                               limit=page + 1) or [])
+            found = message_records.search(store, parts["scene_ids"], parts["epoch"], key, text=query or None,
+                                           case=case_sensitive, author=author or None, authors=authors,
+                                           person=values, window=bounds, after=pairs.get(key), after_too=cut_too,
+                                           limit=page + 1)
         except Exception as exc:
             return {"hits": [], "degraded": True,
                     "why": "messages_search_failed:%s" % type(exc).__name__,
@@ -892,7 +781,7 @@ def query_history(retrieval, store, scene, query="", *, person=None, author=None
                 "more": False, "semantic": {"ok": False, "why": "not_attempted", "candidates": 0,
                                             "manifest": None}, "dropped": {},
                 "fallback": _fallback_state()}
-    ref = _parse(now) or datetime.utcnow()
+    ref = _parse(now) or clock.now().replace(tzinfo=None)
     low = since or _iso(ref - timedelta(days=max(int(window_days), 1)))
     window = (low, until or "9999-12-31T23:59:59Z")
     page = max(1, min(int(limit or DEFAULT_LIMIT), MAX_LIMIT))
@@ -924,7 +813,7 @@ def query_history(retrieval, store, scene, query="", *, person=None, author=None
                     continue
                 seen.add(mid)
                 try:
-                    doc = store.db.messages.find_one({"_id": mid})
+                    doc = message_records.get(store, mid)
                 except Exception:
                     doc = None
                 pending.append((mid, doc))
@@ -1009,7 +898,7 @@ def render(result, header="查到的授权历史", snippet=RENDER_SNIPPET, zone=
                      "联动场景里的行不是这个场景的新输入；跨场景命中 %d 条" % (
                          len(linked), "、".join(linked), others))
     fb = result.get("fallback") or {}
-    if fb.get("why"):        # 表不在（更旧的宿主）也要说清：不是没送达，是没有可比对的回执时间
+    if fb.get("why"):        # 回执那一支接不上也要说清：不是没送达，是没有可比对的回执时间
         notes.append("本机出站的送达时间没关联上（%s）：缺 receipt_at 的已送达出站仍按没时间戳处理"
                      % fb["why"])
     if fb.get("attempted") and not fb.get("exhausted"):
@@ -1054,6 +943,11 @@ def render(result, header="查到的授权历史", snippet=RENDER_SNIPPET, zone=
 import hashlib
 import json as _json
 import re as _re
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import receipts as receipt_records
+from .records import people as people_records
+from . import clock
 
 
 try:                                  # 宿主内：复用已有的 Denied 语义（409 失败回执走原路径）
@@ -1229,7 +1123,7 @@ class HistoryQueryService:
         if unknown:
             raise ValueError("HISTORY_ARGUMENT_DENIED: 不认识的参数 %s；只收 %s"
                              % ("、".join(sorted(unknown)), "、".join(HISTORY_TOOL["parameters"])))
-        scene = self.store.db.scenes.find_one({"_id": task["scene_id"]})
+        scene = scene_records.get(self.store, task["scene_id"])
         if (not isinstance(scene, dict) or scene.get("scope_key") != task["scope_key"]
                 or scene.get("policy_epoch") != task["policy_epoch"]):
             # 场景与任务不同步就拒查，不猜

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 from .state import Store, Conflict
 from .evidence import sha, canonical
+from .records import receipts as receipt_records
 
 
 @dataclass
@@ -48,7 +49,7 @@ class FakeLane:
 
     def generate(self, session, operation, phase, text, system, *, scope_key=None,policy_epoch=None,
                  tools=None, handler=None, **_delivery):
-        existing=self.store.db.lane_receipts.find_one({'_id':operation})
+        existing=receipt_records.lane_get(self.store, operation)
         if existing:
             return LaneResult(**existing['result'])
         history=self.histories.setdefault(session,[])
@@ -60,7 +61,7 @@ class FakeLane:
         if isinstance(value,FakeTurn):
             value=self._run_turn(operation,value,tools,handler)
         value.receipt=operation
-        self.store.put('lane_receipts',{'_id':operation,'result':vars(value),'request':request,'scope_key':'operator'},stream=operation)
+        receipt_records.save_lane(self.store, {'_id':operation,'result':vars(value),'request':request,'scope_key':'operator'},stream=operation)
         history.extend([{'role':'user','content':text},{'role':'assistant','content':value.content}])
         return value
 

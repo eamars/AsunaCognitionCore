@@ -13,7 +13,13 @@ import re
 import statistics
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from .config import excerpt
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import sessions as session_records
+from .records import tasks as task_records
+from .records import artifacts as artifact_records
 
 TABLES_VERSION = 1
 WEEK_DAYS = 7
@@ -44,9 +50,6 @@ def _iso(moment):
     return moment.astimezone(timezone.utc).isoformat()
 
 
-def _now():
-    return datetime.now(timezone.utc)
-
 
 def last_shown(store, persona):
     """The audit record of the last showing, or None."""
@@ -56,7 +59,7 @@ def last_shown(store, persona):
 def due(store, persona, moment=None):
     """'week' when a week has passed since the last showing (or there was none), 'floor' when nine days have: the next
     home heartbeat carries it then whatever it rolled; None when it was shown within the week."""
-    moment = moment or _now()
+    moment = moment or clock.now()
     last = last_shown(store, persona) or store.db.audit_events.find_one(
         {'type': STARTED, 'payload.persona': persona}, sort=[('occurred_at', -1)])
     if not last:                        # never shown: the floor counts from the first time it was asked about
@@ -161,12 +164,11 @@ def _turn_shape(calls):
 
 
 def _action_brain(store, since, until):
-    tasks = list(store.db.tasks.find({'created_at': {'$gte': since, '$lt': until}},
-                                     {'_id': 1, 'state': 1, 'tier': 1, 'tool_steps': 1}))
+    tasks = task_records.created(store, since, until=until).rows(fields=['_id', 'state', 'tier', 'tool_steps'])
     ids = [task['_id'] for task in tasks]
     used = collections.defaultdict(set)
     tools = collections.Counter()
-    for row in store.db.artifacts.find({'task_id': {'$in': ids}}, {'task_id': 1, 'tool': 1}):
+    for row in artifact_records.of_tasks(store, ids).rows(fields=['task_id', 'tool']):
         used[row['task_id']].add(row.get('tool'))
         tools[row.get('tool')] += 1
     rejected = list(store.db.audit_events.find({'type': 'execution.rejected', 'occurred_at': {'$gte': since, '$lt': until}},
@@ -188,7 +190,7 @@ def _lists(store):
     local = (store.config.get('chat') or {}).get('scene_id')
     picks = {'home': (local, visibility.OWNER_PRIVATE)}
     for kind in ('group', 'dm'):
-        scene = store.db.scenes.find_one({'kind': kind, 'channel_id': {'$exists': True}}, {'_id': 1})
+        scene = scene_records.channel_scenes(store, kind)
         if scene:
             picks[kind] = (scene['_id'], visibility.PUBLIC)
     for kind, (scene_id, cls) in picks.items():
@@ -244,8 +246,8 @@ def _local_roots(store, persona, since, until):
             if lane in LANE_WORDS:
                 where = LANE_WORDS[lane]
             else:
-                binding = store.db.sessions.find_one({'_id': item.get('session_id')}, {'scene_id': 1}) or {}
-                scene = store.db.scenes.find_one({'_id': binding.get('scene_id')}) if binding.get('scene_id') else None
+                binding = session_records.get(store, item.get('session_id'), fields=['scene_id']) or {}
+                scene = scene_records.get(store, binding.get('scene_id')) if binding.get('scene_id') else None
                 where = people.scene_title(scene)
             seen = places.setdefault(where, [0, 0])
             seen[0] += int(item.get('rewritten') or 0)
@@ -289,7 +291,7 @@ def _last_time(store, persona, since):
         source = next(s for s in row['sources'] if s.get('scene_id') == scene_id)
         answers = []
         for answer in source.get('answers') or []:
-            line = store.db.messages.find_one({'_id': answer.get('line')}, {'text': 1}) if answer.get('line') else None
+            line = message_records.get(store, answer.get('line'), fields=['text']) if answer.get('line') else None
             if line and line.get('text'):
                 answers.append(excerpt(line['text'], ANSWER_CHARS))
         out.append({'asked': excerpt(row.get('text'), EXAMPLE_CHARS), 'asked_at': row.get('asked_at'),
@@ -300,7 +302,7 @@ def _last_time(store, persona, since):
 
 def block(store, persona, moment=None):
     """The readings, or None when shown within the week. Records the showing with the list it saw."""
-    moment = moment or _now()
+    moment = moment or clock.now()
     last = last_shown(store, persona)
     if last and due(store, persona, moment) is None:
         return None

@@ -8,8 +8,13 @@ program maps it to a time and shows her the state in words. The owner may also c
 """
 from datetime import datetime, timedelta, timezone
 
+from . import clock
 from . import channel_kinds
 from .state import now
+from .records import artifacts as artifact_records
+from .records import people as people_records
+from .records import scenes as scene_records
+from .records import messages as message_records
 
 CLOSE_FOR = ('an_hour', 'until_morning', 'until_reopened')
 MORNING_HOUR = 8
@@ -25,7 +30,7 @@ def peer_lines(store):
         for route in channel.get('routes', {}).values():
             if route['target']['type'] != 'dm':
                 continue
-            identity = store.db.identities.find_one({'_id': route['person_id']}, {'display_name': 1}) or {}
+            identity = people_records.identity(store, route['person_id'], ['display_name']) or {}
             out.append({'scene_id': route['scene_id'], 'person_id': route['person_id'],
                         'label': identity.get('display_name') or route['person_id']})
     return out
@@ -47,13 +52,12 @@ def asides(store, zone):
     from .schedule_rules import line_stamp
     out = []
     for line in peer_lines(store):
-        query = _unseen(store, line['scene_id'])
-        count = store.db.messages.count_documents(query)
+        unseen = _unseen(store, line['scene_id'])
+        count = unseen.count()
         if not count:
             continue
-        rows = list(store.db.messages.find(query, {'text': 1, 'received_at': 1, 'scene_seq': 1})
-                    .sort('scene_seq', -1).limit(ASIDES_SHOWN))
-        store.db.scenes.update_one({'_id': line['scene_id']}, {'$max': {'asides_shown_seq': rows[0]['scene_seq']}})
+        rows = unseen.rows(newest_first=True, limit=ASIDES_SHOWN, fields=['text', 'received_at', 'scene_seq'])
+        scene_records.asides_shown(store, line['scene_id'], rows[0]['scene_seq'])
         out.append({'place': line['label'], 'items': [{'at': line_stamp(zone, row.get('received_at')),
                                                      'text': excerpt(' '.join((row.get('text') or '').split()), ASIDE_EXCERPT)}
                                                     for row in reversed(rows)],
@@ -61,29 +65,28 @@ def asides(store, zone):
     return {'lines': out, 'note': ASIDES_NOTE} if out else None
 
 
-def _unseen(store, scene_id):
-    """The asides on this line since she last spoke there."""
-    mine = store.db.messages.find_one({'scene_id': scene_id, 'direction': 'outbound', 'phase': 'SPEAK'},
-                                      {'scene_seq': 1}, sort=[('scene_seq', -1)])
-    return {'scene_id': scene_id, 'direction': 'inbound', 'event.raw.asuna_aside': True,
-            **({'scene_seq': {'$gt': mine['scene_seq']}} if mine else {})}
+def _unseen(store, scene_id, shown=None):
+    """The asides on this line since she last spoke there (and after the one last shown, `shown`)."""
+    mine = message_records.spoken(store, scene_id, delivered=False, speech=True).first(newest_first=True,
+                                                                                     fields=['scene_seq'])
+    after = mine['scene_seq'] if mine else None
+    if shown is not None:
+        after = max(shown, shown if after is None else after)
+    return message_records.inbound(store, scene_id, asides=True, after=after)
 
 
 def asides_full(store):
     """Whether the asides she has not been shown on a line fill the list: one more would push one she never saw out
     of her view. Once shown, waiting for her answer loses nothing (her rule: lost wakes her, late does not)."""
     for line in peer_lines(store):
-        query = _unseen(store, line['scene_id'])
-        shown = (store.db.scenes.find_one({'_id': line['scene_id']}, {'asides_shown_seq': 1}) or {}).get('asides_shown_seq')
-        if shown is not None:
-            query['scene_seq'] = {'$gt': max(shown, query.get('scene_seq', {}).get('$gt', shown))}
-        if store.db.messages.count_documents(query) >= ASIDES_SHOWN:
+        shown = (scene_records.get(store, line['scene_id'], fields=['asides_shown_seq']) or {}).get('asides_shown_seq')
+        if _unseen(store, line['scene_id'], shown).count() >= ASIDES_SHOWN:
             return True
     return False
 
 
 def _row(store, scene_id):
-    return store.db.artifacts.find_one({'_id': 'peer-line:' + scene_id})
+    return artifact_records.get(store, 'peer-line:' + scene_id)
 
 
 def closed_until(store, scene_id, moment=None):
@@ -94,7 +97,7 @@ def closed_until(store, scene_id, moment=None):
     if row.get('until_reopened'):
         return 'reopen'
     until = datetime.fromisoformat(row['closed_until'])
-    return until if until > (moment or datetime.now(timezone.utc)) else None
+    return until if until > (moment or clock.now()) else None
 
 
 def is_closed(store, scene_id, moment=None):
@@ -109,7 +112,7 @@ def _morning(moment, zone):
 
 
 def set_line(store, scene_id, *, closed, choice=None, zone='UTC', moment=None, by='character'):
-    moment = moment or datetime.now(timezone.utc)
+    moment = moment or clock.now()
     row = _row(store, scene_id) or {'_id': 'peer-line:' + scene_id, 'kind': 'peer-line', 'scene_id': scene_id,
                                      'scope_key': 'scene:' + scene_id}
     value = {**row, 'closed': closed, 'changed_at': now(), 'changed_by': by, 'until_reopened': False, 'closed_until': None}
@@ -121,7 +124,7 @@ def set_line(store, scene_id, *, closed, choice=None, zone='UTC', moment=None, b
         else:
             until = moment + timedelta(hours=1) if choice == 'an_hour' else _morning(moment, zone)
             value['closed_until'] = until.isoformat()
-    return store.put('artifacts', value, expected=row.get('revision'), stream='peer-line:' + scene_id)
+    return artifact_records.save(store, value, expected=row.get('revision'), stream='peer-line:' + scene_id)
 
 
 def describe(until, zone):

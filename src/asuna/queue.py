@@ -60,22 +60,26 @@ class _DatabaseEffectsLock:
     A reentrant thread lock and an OS file lock share one local database
     domain. The OS releases the byte lock on process exit. Model inference is
     deliberately outside this lock, so a running model cannot block cancel.
+    `holder` is the name of the thread in this process that holds it, None while none does.
     """
     def __init__(self,name):
-        self.thread=threading.RLock();self.depth=0
+        self.thread=threading.RLock();self.depth=0;self.holder=None
         self.path=effects_lock_path(name)
     def __enter__(self):
         self.thread.acquire()
         try:
             if not self.depth:
                 self.lease=RuntimeLease(self.path,timeout=120);self.lease.__enter__()
+                self.holder=threading.current_thread().name
             self.depth+=1
             return self
         except BaseException:self.thread.release();raise
     def __exit__(self,*args):
         try:
             self.depth-=1
-            if not self.depth:self.lease.__exit__(*args)
+            if not self.depth:
+                self.holder=None
+                self.lease.__exit__(*args)
         finally:self.thread.release()
 
 

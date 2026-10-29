@@ -17,6 +17,7 @@ import os
 
 import pytest
 
+from asuna.records import heads as head_records
 from asuna.testing import suite_config as load
 from asuna.dialogue_summary import DialogueSummarizer
 from asuna.memory import MemoryService
@@ -94,7 +95,7 @@ def test_group_summary_loop_on_real_store(store):
     result = MemoryService(store).commit_understanding(
         cases.group_episode(cases.PERSON, selected=manifest['selected']), '他自己把日子改成周五了。')
     assert result['state'] == 'COMMITTED' and result['auto_source_ids'] == [saved['_id']], result
-    head, revision = store.head('relationship:' + cases.PERSON, cases.GROUP_SCOPE)
+    head, revision = head_records.current(store, 'relationship:' + cases.PERSON, cases.GROUP_SCOPE)
     assert head['revision_id'] == result['accepted_revision']
     for root in revision['processed_source_ids']:
         assert store.db.messages.find_one({'_id': root}), root

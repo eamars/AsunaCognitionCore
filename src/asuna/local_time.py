@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta, timezone
+from .records import scenes as scene_records
+from . import clock
 
 FULL = re.compile(r'^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}')
 KEYS = ('at', 'until', 'since')
@@ -40,11 +42,11 @@ def face(moment, tz, now=None, year=False):
     """An aware moment on the clock face she reads: `10/14 14:28`, or `2025/9/27 14:00` when `year` is asked, when it
     is another year, or when it is more than 90 days from now."""
     local = moment.astimezone(tz)
-    current = (now or datetime.now(timezone.utc)).astimezone(tz)
-    clock = '%d/%d %02d:%02d' % (local.month, local.day, local.hour, local.minute)
+    current = (now or clock.now()).astimezone(tz)
+    shown = '%d/%d %02d:%02d' % (local.month, local.day, local.hour, local.minute)
     if year or local.year != current.year or abs(local - current) > NEAR:
-        return '%d/%s' % (local.year, clock)
-    return clock
+        return '%d/%s' % (local.year, shown)
+    return shown
 
 
 def stamp(value, zone, now=None):
@@ -70,5 +72,5 @@ def for_model(node, zone, now=None):
 def zone_of(store, scene_id):
     """The time zone a conversation's times are read in (schedule_rules.scene_timezone)."""
     from .schedule_rules import scene_timezone
-    scene = store.db.scenes.find_one({'_id': scene_id}) if scene_id else None
+    scene = scene_records.get(store, scene_id) if scene_id else None
     return scene_timezone(store.config, scene or {'_id': scene_id})

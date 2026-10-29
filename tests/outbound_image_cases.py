@@ -5,8 +5,8 @@
 ``channels`` 的 claim / attachment / HTTP 层（真在 127.0.0.1 上起服务、真发请求）、
 她的 ``attach_image`` 工具（``role_tools``，逐次判定、退回给她的话）、整回合（真 ``Coordinator``
 跑 think → attach_image → 正文或 stay_silent → SPEAK 行）、``history_query`` 的命中投影与渲染、
-``BlobStore`` 的 sha 复核与 GridFS 读。假掉的只有存储（内存集合 + 内存 GridFS，**无论环境装没装
-pymongo／gridfs 都用替身**：真 GridFSBucket 不接受假 DB）与模型（``FakeLane`` 按剧本给工具调用，
+``BlobStore`` 的 sha 复核与字节读。假掉的只有存储（内存集合 + 内存字节存储，**无论环境装没装
+pymongo 都用替身**：这套用例假的就是存储本身）与模型（``FakeLane`` 按剧本给工具调用，
 不调真模型）。这套是独立跑的离线套件，不要在用真 Mongo 的 pytest 会话里 import 它——它会把自己的
 存储替身装进 sys.modules。
 
@@ -55,7 +55,7 @@ def _stub(name, **attrs):
 # 存储这一层无论环境装没装都用替身：这套用例假的就是存储本身，而真 GridFSBucket 拿到假 DB
 # 会直接 TypeError: database must be an instance of Database。装了 pymongo 的完整环境里必须
 # 和这里一样绿，否则同一套用例在两种环境下测的不是同一件事。
-FORCED_STUBS = ('bson', 'pymongo', 'gridfs')
+FORCED_STUBS = ('bson', 'pymongo')
 
 
 def _stub_when_missing(name, factory):
@@ -82,18 +82,26 @@ class ObjectId:                       # 只需要「能当键、能比」这一�
         return self.value
 
 
-class FakeBucket:                     # 内存版 GridFS：只按 id 存字节
-    def __init__(self, db, bucket_name=None):
+class FakeBlobs:                      # 存储的字节那一层（write／open／delete／of_scope），按 id 存在假 DB 里
+    def __init__(self, db):
         self.db = db
 
-    def upload_from_stream(self, name, data, metadata=None):
-        return self.db.put_blob(bytes(data), metadata or {})
+    def write(self, stream, meta):
+        data = bytes(stream.read())
+        return str(self.db.put_blob(data, dict(meta))), len(data)
 
-    def open_download_stream(self, blob_id):
-        return io.BytesIO(self.db.take_blob(blob_id))
+    def open(self, blob_id):
+        from asuna.store.errors import BlobMissing
+        try:
+            return io.BytesIO(self.db.take_blob(blob_id))
+        except FileNotFoundError:
+            raise BlobMissing(blob_id) from None
 
     def delete(self, blob_id):
-        self.db.drop_blob(blob_id)
+        return self.db.drop_blob(blob_id)
+
+    def of_scope(self, scope):
+        return [key for key, (_, meta) in self.db._blobs.items() if meta.get('scope_key') == scope]
 
 
 def _install_stubs():
@@ -119,12 +127,9 @@ def _install_stubs():
               LK_NBLCK=1, LK_UNLCK=2)
         _stub('_winapi', __getattr__=lambda name: 0)
 
-    def gridfs():
-        _stub('gridfs', GridFSBucket=FakeBucket, NoFile=type('NoFile', (Exception,), {}))
-
     installed = []
     for name, factory in (('bson', bson), ('pymongo', pymongo), ('httpx', httpx),
-                          ('jsonschema', jsonschema_stub), ('msvcrt', msvcrt), ('gridfs', gridfs)):
+                          ('jsonschema', jsonschema_stub), ('msvcrt', msvcrt)):
         if name in FORCED_STUBS:            # 存储：无条件换成替身，装了真的也换
             factory()
             installed.append(name)
@@ -142,6 +147,8 @@ from asuna.channels import ChannelServer, Channels                    # noqa: E4
 from asuna.coordinator import Coordinator                             # noqa: E402
 from asuna.lanes import FakeLane, FakeTurn                            # noqa: E402
 from asuna.state import Conflict, Denied                              # noqa: E402
+import fake_collections                                               # noqa: E402
+from asuna.store import Blobs                                        # noqa: E402
 
 # ── 假世界 ────────────────────────────────────────────────────────────────────
 # 规则：代码／测试／文档里不写真实 QQ 号、群号、地址，全用这里的假占位值。
@@ -350,7 +357,7 @@ class DB:
         return found[0]
 
     def drop_blob(self, blob_id):
-        self._blobs.pop(str(blob_id), None)
+        return self._blobs.pop(str(blob_id), None) is not None
 
     def tamper(self, blob_id, data):
         '''把存进去的字节换掉：BlobStore 读时应按行内 sha 发现不一致。'''
@@ -364,6 +371,8 @@ class FakeStore:
     def __init__(self, config=None):
         self.config = config if config is not None else CONFIG
         self.db = DB()
+        self.collection = fake_collections.collections(self.db)     # the record owners' way to the same rows
+        self.blobs = Blobs(types.SimpleNamespace(blobs=FakeBlobs(self.db)))   # the blob store, its metadata checked
         self.audited = []
 
     def audit(self, stream, kind, payload, scope='operator'):
@@ -390,9 +399,6 @@ class FakeStore:
         if not scene or person_id not in scene['members']:
             raise Denied('SCENE_MEMBERSHIP_DENIED')
         return scene
-
-    def head(self, entity, scope):
-        return None
 
     def next_scene_seq(self, scene_id):
         return len(list(self.db.messages.find({'scene_id': scene_id}))) + 1

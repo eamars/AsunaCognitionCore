@@ -1,15 +1,23 @@
 """Local embeddings and server-side, prefiltered Mongo vector retrieval."""
 from __future__ import annotations
+from . import clock
 from .visibility import is_owner_private_scope
 from .config import character_id
 import math
-from datetime import datetime, timezone
+from datetime import datetime
 import re
 import time
 from collections import Counter,OrderedDict
-from pymongo.operations import SearchIndexModel
 from .evidence import Evidence, LocalHttp, canonical, sha
 from .state import Store, now
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import memories as memory_records
+from .records import heads as head_records
+from .records import people as people_records
+
+MEMORY = memory_records.SPACE
+UNVECTORED = memory_records.UNVECTORED
 
 
 def terms(text):
@@ -30,7 +38,6 @@ def refused(exc):
 
 
 class Retrieval:
-    index_name='asuna_memory_v1'
     REST_SECONDS=120
 
     def __init__(self, store: Store, evidence: Evidence):
@@ -40,7 +47,7 @@ class Retrieval:
         # A routing fingerprint is explicitly not a verified weight revision.
         self.revision='route-'+sha(canonical({k:self.cfg.get(k) for k in ('base_url','model','dimensions','query_prefix','document_prefix','weight_sha256','manifest_sha256')}))
         self.weight_verified=False
-        self.dim=768
+        self.dim=MEMORY.dimensions
         self.cache=OrderedDict()
         self.vectors=OrderedDict()     # the last queries' vectors by query sha, for the shadow pilot (memory_pilot.py)
         self.resting_until=0.0         # monotonic: query embeddings skipped until then, after a failure
@@ -74,9 +81,8 @@ class Retrieval:
         return vectors
 
     def index_pending(self, batch_size=16, *, scope=None, epoch=None, stopping=None):
-        query={'status':'active','$or':[{'embedding_status':{'$nin':['READY','REFUSED']}},{'embedding_revision':{'$ne':self.revision}}]}
-        if scope is not None:query.update(scope_key=scope,policy_epoch=epoch)
-        pending=list(self.store.db.memory_units.find(query))
+        pending=(memory_records.pending_index(self.store,self.revision,scope=scope,epoch=epoch) if scope is not None
+                 else memory_records.pending_index(self.store,self.revision)).rows()
         indexed=0
         for start in range(0,len(pending),batch_size):
             if stopping is not None and stopping.is_set():break
@@ -94,7 +100,7 @@ class Retrieval:
         return indexed
 
     def _ready(self, mem, vector, opening=None):
-        self.store.put('memory_units',{**mem,'embedding':vector,'embedding_revision':self.revision,'embedding_model':self.cfg['model'],
+        memory_records.save(self.store,{**mem,'embedding':vector,'embedding_revision':self.revision,'embedding_model':self.cfg['model'],
             'embedding_dim':self.dim,'embedding_status':'READY','content_sha256':sha(mem['body_markdown'].encode()),
             **({'embedding_opening_chars':opening} if opening else {})},expected=mem['revision'],stream='index')
 
@@ -108,35 +114,20 @@ class Retrieval:
                 continue
             self._ready(mem,vector,opening)
             return 1
-        self.store.put('memory_units',{**mem,'embedding_status':'REFUSED','embedding_revision':self.revision,
+        memory_records.save(self.store,{**mem,'embedding_status':'REFUSED','embedding_revision':self.revision,
             'embedding_model':self.cfg['model']},expected=mem['revision'],stream='index')
         self.store.audit('retrieval','embedding.refused',{'memory_unit':mem['_id'],'chars':len(body)})
         return 0
 
     def ensure_index(self, timeout=45):
-        # kind: her own thoughts in other conversations are searched apart from their talk (own_thoughts).
-        definition={'fields':[{'type':'vector','path':'embedding','numDimensions':self.dim,'similarity':'cosine'},
-                              *[{'type':'filter','path':key} for key in ('scope_key','character_id','status','policy_epoch','embedding_revision','kind')]]}
-        current=list(self.store.db.memory_units.list_search_indexes(self.index_name))
-        if not current:
-            self.store.db.memory_units.create_search_index(SearchIndexModel(name=self.index_name,type='vectorSearch',definition=definition))
-        elif ({f.get('path') for f in (current[0].get('latestDefinition') or {}).get('fields') or [] if f.get('type')=='filter'}
-              !={f['path'] for f in definition['fields'] if f['type']=='filter'}):
-            # An index made with an older definition is brought up to this one; the old keeps serving meanwhile.
-            self.store.db.memory_units.update_search_index(self.index_name,definition)
-        until=time.monotonic()+timeout
-        while True:
-            rows=list(self.store.db.memory_units.list_search_indexes(self.index_name))
-            if rows and rows[0].get('status')=='READY' and rows[0].get('queryable'):break
-            if time.monotonic()>until:break
-            time.sleep(.5)
-        self.evidence.record('vector.index',{'database':self.store.name,'definition':definition,'status':rows})
-        return bool(rows and rows[0].get('status')=='READY' and rows[0].get('queryable'))
+        ready=memory_records.ensure_vectors(self.store,timeout)
+        self.evidence.record('vector.index',{'database':self.store.name,'space':MEMORY.name,'fields':list(MEMORY.fields),'ready':ready})
+        return ready
 
     def _scene_sequences(self, scopes):
         """Current message count of each scene scope (conversation volume)."""
-        return {row['scope_key']: row.get('sequence', 0) for row in self.store.db.scenes.find(
-            {'scope_key': {'$in': list(scopes)}}, {'scope_key': 1, 'sequence': 1})}
+        return {row['scope_key']: row.get('sequence', 0)
+                for row in scene_records.in_scopes(self.store, list(scopes), fields=['scope_key', 'sequence'])}
 
     def _forget(self, ranks, forgetting, sequences, automatic):
         """Multiply each candidate's score by its freshness (persona model memory.forgetting).
@@ -150,13 +141,13 @@ class Retrieval:
         half_messages = float(forgetting.get('half_life_messages') or 0)
         if not ranks or not (half_days or half_messages):
             return set()
-        rows = {row['_id']: row for row in self.store.db.memory_units.find({'_id': {'$in': list(ranks)}}, {
-            'pinned': 1, 'salience': 1, 'occurred_at': 1, 'generated_at': 1, 'formed_at': 1, 'scene_seq': 1,
-            'source_window': 1, 'source_event_ids': 1, 'scope_key': 1, 'kind': 1})}
-        sources = {row['_id']: row for row in self.store.db.messages.find(
-            {'_id': {'$in': [ids[-1] for row in rows.values() for ids in [row.get('source_event_ids') or []] if ids]}},
-            {'scene_seq': 1, 'summary_batch_id': 1})}
-        moment = datetime.now(timezone.utc)
+        rows = {row['_id']: row for row in memory_records.many(self.store, list(ranks)).each(fields=[
+            'pinned', 'salience', 'occurred_at', 'generated_at', 'formed_at', 'scene_seq', 'source_window',
+            'source_event_ids', 'scope_key', 'kind'])}
+        sources = {row['_id']: row for row in message_records.many(
+            self.store, [ids[-1] for row in rows.values() for ids in [row.get('source_event_ids') or []] if ids]).rows(
+            fields=['scene_seq', 'summary_batch_id'])}
+        moment = clock.now()
         floor, stepped = float(forgetting.get('step_back_below') or 0), set()
         for key, row in rows.items():
             if row.get('pinned') or (row.get('salience') or {}).get('pinned'):
@@ -186,26 +177,26 @@ class Retrieval:
         the talk around them; callers decide where she may read them (at home)."""
         if not scopes:
             return []
-        auth={'$or':[{'scope_key':scope,'policy_epoch':epoch} for scope,epoch in scopes],'kind':'monologue',
-              'character_id':character_id(self.store.config),'status':'active'}
+        me=character_id(self.store.config)
         try:
             v=self.embed([query],'query')[0]
-            vector=list(self.store.db.memory_units.aggregate([
-                {'$vectorSearch':{'index':self.index_name,'path':'embedding','queryVector':v,'numCandidates':96,'limit':12,
-                                  'filter':{**auth,'embedding_revision':self.revision}}},{'$project':{'_id':1}}]))
+            vector=memory_records.nearest(self.store,v,12,list(scopes),character=me,revision=self.revision,
+                                          kind='monologue')
         except Exception:
             vector=[]
-        rows=list(self.store.db.memory_units.find(auth,{'embedding':0}).sort([('formed_at',-1),('_id',-1)]).limit(2048))
+        rows=memory_records.readable(self.store,scopes,character=me,kind='monologue',by=('formed_at','_id')).rows(
+            newest_first=True,limit=2048,fields=UNVECTORED)
         qterms=terms(query)
         scored=sorted(((len(qterms & terms(m.get('body_markdown') or '')),m['_id']) for m in rows),reverse=True)
         lexical=[key for hits,key in scored if hits][:12]
         ranks={}
-        for candidates in ([row['_id'] for row in vector],lexical):
+        for candidates in ([key for key,_ in vector],lexical):
             for rank,key in enumerate(candidates,1):
                 ranks[key]=ranks.get(key,0)+1/(60+rank)
         out=[]
         for key in sorted(ranks,key=lambda k:(-ranks[k],k)):
-            current=self.store.db.memory_units.find_one({'_id':key,**auth},{'embedding':0})
+            current=memory_records.get(self.store,key,UNVECTORED,pairs=scopes,character=me,kind='monologue',
+                                       status='active')
             if current:
                 out.append(current)
             if len(out)==limit:
@@ -221,24 +212,23 @@ class Retrieval:
         if is_owner_private_scope(scope) or (private_scope is not None and not is_owner_private_scope(private_scope)):
             raise ValueError('INVALID_RETRIEVAL_SCOPE')
         readable={scope} | set(linked)
-        private=[{'scope_key':private_scope,'policy_epoch':1}] if private_scope else []
-        auth={'$or':[{'scope_key':'global-safe','policy_epoch':1},{'scope_key':scope,'policy_epoch':epoch}]
-                  +[{'scope_key':item,'policy_epoch':epoch} for item in linked]+private,'character_id':character_id(self.store.config),'status':'active'}
-        vector_filter={**auth,'embedding_revision':self.revision}
+        pairs=[('global-safe',1),(scope,epoch)]+[(item,epoch) for item in linked]+([(private_scope,1)] if private_scope else [])
+        me=character_id(self.store.config)
+        vector_filter={'scope_key, policy_epoch':[list(p) for p in pairs],'character_id':me,'status':'active','embedding_revision':self.revision}
         # Cache contains IDs/scores only, never bodies, vectors or raw queries.
         # Every hit still passes the authoritative read below. State revision
         # and scope epoch are part of the key even for an identical query.
         # Recent lexical fallback is bounded; vector search still covers the
         # entire authorized history. A growing scene must not abort a turn.
-        rows=list(self.store.db.memory_units.find(auth,{'embedding':0}).sort([('occurred_at',-1),('_id',-1)]).limit(4096))
+        rows=memory_records.readable(self.store,pairs,character=me,by=('occurred_at','_id')).rows(
+            newest_first=True,limit=4096,fields=UNVECTORED)
         cacheable=len(rows)<4096  # A sample cannot fingerprint the full scope.
-        heads=list(self.store.db.state_heads.find({'scope_key':{'$in':['global-safe',scope]+linked+([private_scope] if private_scope else [])}},{'_id':1,'revision_id':1}).sort('_id',1))
+        heads=head_records.heads(self.store,scopes=['global-safe',scope]+linked+([private_scope] if private_scope else []),by='_id').rows(fields=['_id','revision_id'])
         # 联动集合进缓存键：同一句话在「联动着读」和「只读本场景」下不是同一个结果，不能互相顶。
-        key_fields={'scope':scope,'private_scope':private_scope,'policy_epoch':epoch,'character_id':character_id(self.store.config),'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'linked_scopes':sorted(linked),'state_revision':sha(canonical([heads,[(m['_id'],m.get('revision'),m['status']) for m in rows]]))}
+        key_fields={'scope':scope,'private_scope':private_scope,'policy_epoch':epoch,'character_id':me,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'linked_scopes':sorted(linked),'state_revision':sha(canonical([heads,[(m['_id'],m.get('revision'),m['status']) for m in rows]]))}
         cache_key=sha(canonical(key_fields));cached=self.cache.get(cache_key)
         cache_hit=bool(cacheable and cached and cached['expires']>time.monotonic())
         vector=[]; failure=None
-        pipeline=None
         try:
             if cache_hit:
                 vector=[dict(row) for row in cached['vector']];self.cache.move_to_end(cache_key)
@@ -246,9 +236,8 @@ class Retrieval:
                 v=self.embed([query],'query')[0]
                 self.vectors[sha(query.encode())]=v
                 while len(self.vectors)>16:self.vectors.popitem(last=False)
-                pipeline=[{'$vectorSearch':{'index':self.index_name,'path':'embedding','queryVector':v,'numCandidates':192,'limit':24,'filter':vector_filter}},
-                          {'$project':{'_id':1,'score':{'$meta':'vectorSearchScore'}}}]
-                vector=list(self.store.db.memory_units.aggregate(pipeline))
+                vector=[{'_id':key,'score':score} for key,score in memory_records.nearest(
+                    self.store,v,24,pairs,character=me,revision=self.revision)]
                 if cacheable:self.cache[cache_key]={'expires':time.monotonic()+300,'vector':[dict(row) for row in vector]}
                 while len(self.cache)>128:self.cache.popitem(last=False)
         except Exception as exc:
@@ -261,7 +250,7 @@ class Retrieval:
         # A corpus-wide boilerplate word (e.g. "record number") is not evidence
         # of exact relevance. Entity aliases come from identities, never gold.
         qterms={t for t in qterms if frequencies[t] <= max(2,len(rows)*.5)}
-        aliases={p['person_id'] for p in self.store.db.identities.find({})
+        aliases={p['person_id'] for p in people_records.all_identities(self.store).rows()
                  if p.get('display_name') and p['display_name'] in query}
         def lexical_score(m):
             return sum(math.log(1+len(rows)/(1+frequencies[t])) for t in qterms & document_terms[m['_id']])+4*len(aliases & set(m.get('subjects',[])))
@@ -281,7 +270,7 @@ class Retrieval:
         ordered=sorted(ranks,key=lambda key:(-ranks[key]['score'],key))
         candidates=[];excluded=[]
         for key in ordered:
-            current=self.store.db.memory_units.find_one({'_id':key,**auth},{'embedding':0})
+            current=memory_records.get(self.store,key,UNVECTORED,pairs=pairs,character=me,status='active')
             if not current or current.get('expires_at', '9999')<=now():
                 excluded.append({'id':key,'reason':'authoritative_recheck'});continue
             # In view: a record from a line she still sees, or one of her last thoughts (by its own id).
@@ -308,11 +297,12 @@ class Retrieval:
         for m in selected:
             m['historical_sources']=[]
             for old_id in m.get('supersedes',[])[:8]:
-                old=self.store.db.memory_units.find_one({'_id':old_id,'$or':auth['$or'],'status':'superseded'},{'embedding':0})
+                old=memory_records.get(self.store,old_id,UNVECTORED,pairs=pairs,status='superseded')
                 if old:m['historical_sources'].append({k:old[k] for k in ('_id','body_markdown','status','epistemic_type')})
         # Evidence sufficiency (ADR-009 MEMORY §5.2): RRF ranks only; it never decides "enough".
         if failure is None and vector:
-            scores={row['_id']:row.get('score',0.0) for row in vector}
+            # Her coverage floor reads 0..1 (memory.coverage_floor): a cosine c counts as (1 + c) / 2.
+            scores={row['_id']:(1+row.get('score',-1.0))/2 for row in vector}
             coverage_score=max((scores.get(m['_id'],0.0) for m in selected),default=0.0);coverage_basis='vector_cosine'
         else:
             raw=terms(query)
@@ -322,10 +312,9 @@ class Retrieval:
         moment=now()
         for m in selected if record_use else ():
             # Rehearsal: a memory a real turn used is fresh again, in time and in conversation volume.
-            self.store.db.memory_units.update_one({'_id':m['_id']},{'$inc':{'salience.ref_count':1},'$set':{
-                'salience.last_ref_at':moment,'salience.last_ref_seq':sequences.get(m['scope_key'])}})
+            memory_records.touch_salience(self.store,m['_id'],moment,sequences.get(m['scope_key']))
         manifest={'path':'server_vector_rrf' if failure is None else 'scoped_lexical_recent_fallback',
-                  'coverage':coverage,'coverage_score':coverage_score,'coverage_basis':coverage_basis,'vector_verified':failure is None,'failure':failure,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'embedding_weight_revision_verified':self.weight_verified,'filter':vector_filter,'numCandidates':192,'vector_ranks':vector,'lexical_ids':[m['_id'] for m in lexical],'ranks':ranks,'selected':[m['_id'] for m in selected],'excluded':excluded,'in_view':in_view,'pending_backread':[m['_id'] for m in pending]}
+                  'coverage':coverage,'coverage_score':coverage_score,'coverage_basis':coverage_basis,'vector_verified':failure is None,'failure':failure,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'embedding_weight_revision_verified':self.weight_verified,'filter':vector_filter,'exact':True,'vector_ranks':vector,'lexical_ids':[m['_id'] for m in lexical],'ranks':ranks,'selected':[m['_id'] for m in selected],'excluded':excluded,'in_view':in_view,'pending_backread':[m['_id'] for m in pending]}
         manifest.update(cache_key=key_fields,cache_key_sha256=cache_key,cache_hit=cache_hit,cache_contains='ids_and_scores_only',
                         recent_source_ids=[m['_id'] for m in recent_sources], lexical_candidate_count=len(rows), lexical_candidate_limit=4096,
                         cache_disabled_for_bounded_sample=not cacheable)

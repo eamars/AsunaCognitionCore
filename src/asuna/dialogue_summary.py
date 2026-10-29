@@ -13,12 +13,16 @@ import json
 import threading
 import time
 
+from . import clock as core_clock   # `clock` is the injectable one below
 from . import summary_attribution, summary_trigger
-from .ingress import NOT_CORE_NOTICE
 from .people import People
 from .evidence import canonical, sha
 from .state import Conflict, now
 from .config import character_id
+from .records import scenes as scene_records
+from .records import messages as message_records
+from .records import receipts as receipt_records
+from .records import memories as memory_records
 
 
 
@@ -43,7 +47,7 @@ class DialogueSummarizer:
         self.scene_id = self.scene_ids[0] if self.scene_ids else None   # 兼容旧接线
         self.can_run = can_run
         # 判断“现在安静了多久”用的钟：默认墙上时钟，检查里可注入固定时刻。
-        self.clock = clock or (lambda: time.time())
+        self.clock = clock or (lambda: core_clock.now().timestamp())
         self.paused = threading.Event()
         self.next_attempt = {}      # 每场景的失败退避截止点（monotonic）
         self.failures = {}          # 每场景连续失败次数
@@ -53,36 +57,28 @@ class DialogueSummarizer:
     def initialize(self):
         """Do not bulk-summarize pre-feature history on host startup."""
         for scene_id in self.scene_ids:
-            scene = self.store.db.scenes.find_one({'_id': scene_id})
+            scene = scene_records.get(self.store, scene_id)
             if not scene or scene.get('kind') not in self.SCENE_KINDS:
                 continue
             if 'summary_start_seq' not in scene:
-                self.store.put('scenes', {**scene, 'summary_start_seq': scene.get('sequence', 0)},
-                               expected=scene['revision'], stream='summary:init:' + scene_id)
+                scene_records.save(self.store, {**scene, 'summary_start_seq': scene.get('sequence', 0)},
+                                   expected=scene['revision'], stream='summary:init:' + scene_id)
 
     def _pending(self, scene):
-        query = {'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
-                 'scene_seq': {'$gt': scene['summary_start_seq']},
-                 'summary_batch_id': {'$exists': False},
-                 **NOT_CORE_NOTICE,
-                 '$or': [{'direction': 'inbound'},
-                         {'direction': 'outbound', 'delivery_state': 'DELIVERED'}]}
-        rows = list(self.store.db.messages.find(query).sort('scene_seq', 1).limit(self.WINDOW_ROWS))
+        pending = message_records.said(self.store, scene['_id'], scene['policy_epoch'], people_only=True,
+                                       after=scene['summary_start_seq'], unsummarised=True)
+        rows = pending.rows(limit=self.WINDOW_ROWS)
         # A saved summary may precede a crash during source marking. Complete
         # those markings before selecting a new batch, so no source is retold.
         for row in rows:
-            prior = self.store.db.memory_units.find_one({
-                'kind': 'dialogue_summary', 'scope_key': scene['scope_key'],
-                'policy_epoch': scene['policy_epoch'], 'status': 'active',
-                'source_event_ids': row['_id']}, {'_id': 1})
+            prior = memory_records.summary_of(self.store, row['_id'], scope=scene['scope_key'],
+                                              epoch=scene['policy_epoch'], fields=['_id'])
             if prior:
-                self.store.put('messages', {**row, 'summary_batch_id': prior['_id']},
-                               expected=row['revision'], stream='summary:recover:' + scene['_id'])
-        if any(self.store.db.memory_units.find_one({
-                'kind': 'dialogue_summary', 'scope_key': scene['scope_key'],
-                'policy_epoch': scene['policy_epoch'], 'status': 'active',
-                'source_event_ids': row['_id']}, {'_id': 1}) for row in rows):
-            rows = list(self.store.db.messages.find(query).sort('scene_seq', 1).limit(self.WINDOW_ROWS))
+                message_records.save(self.store, {**row, 'summary_batch_id': prior['_id']},
+                                     expected=row['revision'], stream='summary:recover:' + scene['_id'])
+        if any(memory_records.summary_of(self.store, row['_id'], scope=scene['scope_key'],
+                                         epoch=scene['policy_epoch'], fields=['_id']) for row in rows):
+            rows = pending.rows(limit=self.WINDOW_ROWS)
         return rows
 
     def _labels(self, people, scene, rows):
@@ -112,7 +108,7 @@ class DialogueSummarizer:
         if self.paused.is_set() or time.monotonic() < self.next_attempt.get(scene_id, 0.0) \
                 or not self.can_run():
             return None
-        scene = self.store.db.scenes.find_one({'_id': scene_id})
+        scene = scene_records.get(self.store, scene_id)
         if not scene or scene.get('kind') not in self.SCENE_KINDS or 'summary_start_seq' not in scene:
             return None
         from . import focus
@@ -160,7 +156,7 @@ class DialogueSummarizer:
                   for index, row in enumerate(rows)]
         source_ids = [row['_id'] for row in rows]
         key = 'summary-' + sha(canonical([scene_id, scene['policy_epoch'], source_ids]))
-        saved = self.store.db.memory_units.find_one({'_id': key})
+        saved = memory_records.get(self.store, key)
         attribution = summary_attribution.attribute(self.store, scene, rows)
         if not saved:
             prompt = ('请总结这一小段已确认交流；窗口与来源由程序保存，不需复制 ID。'
@@ -172,7 +168,7 @@ class DialogueSummarizer:
                           'corrections': people.corrections(scene, attribution['corrections'])}},
                           ensure_ascii=False))
             operation = key
-            receipt = self.store.db.lane_receipts.find_one({'_id': operation})
+            receipt = receipt_records.lane_get(self.store, operation)
             attempt = 0
             # A durably completed but interrupted/incomplete native turn is
             # known not to contain a usable summary. DSH replays DONE operations,
@@ -185,7 +181,7 @@ class DialogueSummarizer:
             while receipt and not usable(receipt.get('result', {})):
                 attempt += 1
                 operation = key + ':retry-' + str(attempt)
-                receipt = self.store.db.lane_receipts.find_one({'_id': operation})
+                receipt = receipt_records.lane_get(self.store, operation)
             from . import answers
 
             def generate(attempt, note):
@@ -203,7 +199,7 @@ class DialogueSummarizer:
                 raise RuntimeError('DIALOGUE_SUMMARY_INCOMPLETE: ' + exc.problem) from None
             if result.finish_reason != 'stop' or not result.content.strip():
                 raise RuntimeError('DIALOGUE_SUMMARY_INCOMPLETE: ' + result.finish_reason)
-            saved = self.store.put('memory_units', {
+            saved = memory_records.save(self.store, {
                 '_id': key, 'scope_key': scene['scope_key'], 'policy_epoch': scene['policy_epoch'],
                 'character_id': character_id(self.store.config), 'kind': 'dialogue_summary',
                 'epistemic_type': 'derived_summary', 'body_markdown': result.content.strip(),
@@ -223,13 +219,13 @@ class DialogueSummarizer:
                 'source_ids': source_ids, 'trigger': decision, 'participants': attribution['participants'],
                 'corrections': len(attribution['corrections']), 'request_refs': result.request_refs})
         for row in rows:
-            current = self.store.db.messages.find_one({'_id': row['_id']})
+            current = message_records.get(self.store, row['_id'])
             if current.get('summary_batch_id') == key:
                 continue
             if current.get('summary_batch_id'):
                 raise Conflict('SUMMARY_SOURCE_ALREADY_PROCESSED')
-            self.store.put('messages', {**current, 'summary_batch_id': key},
-                           expected=current['revision'], stream=key)
+            message_records.save(self.store, {**current, 'summary_batch_id': key},
+                                 expected=current['revision'], stream=key)
         corrected = summary_attribution.annotate_corrected(self.store, scene,
                                                            attribution['corrections'], key)
         if corrected:

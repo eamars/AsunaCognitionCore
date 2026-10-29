@@ -20,6 +20,9 @@ from __future__ import annotations
 
 import hashlib
 import re
+from .records import artifacts as artifact_records
+from .records import scenes as scene_records
+from .records import messages as message_records
 
 try:                                  # 宿主内：与 channels / history_query 同一套围栏
     from .state import Denied
@@ -191,7 +194,7 @@ def _row_scope(store, row):
     row = row or {}
     if row.get('scope_key'):
         return row['scope_key']
-    scene = store.db.scenes.find_one({'_id': row.get('scene_id')}, {'scope_key': 1}) if row.get('scene_id') else None
+    scene = scene_records.get(store, row.get('scene_id'), fields=['scope_key']) if row.get('scene_id') else None
     return (scene or {}).get('scope_key')
 
 
@@ -217,12 +220,8 @@ def edits_back_to(store, scope_key, *, limit=MAX_ITEMS_OFFERED):
     """Edits of other people's pictures that go back to this conversation, newest first (as produced_images)."""
     count = max(1, int(limit or 1))
     try:
-        cursor = store.db.artifacts.find({'kind': ATTACHMENT_KIND, 'state': 'DONE', 'storage': 'gridfs'})
-        if hasattr(cursor, 'sort'):
-            cursor = cursor.sort('created_at', -1)
-        if hasattr(cursor, 'limit'):
-            cursor = cursor.limit(200)
-        rows = [row for row in cursor if scope_key and returns_to(row) == scope_key]
+        rows = [row for row in _images(store).rows(newest_first=True, limit=200)
+                if scope_key and returns_to(row) == scope_key]
     except Exception:
         return []
     wanted = {row['_id'] for row in rows}
@@ -261,24 +260,25 @@ def row_own_only(store, row):
         return True
     row = row or {}
     try:
-        scene = store.db.scenes.find_one({'_id': row.get('scene_id')}) or {'_id': row.get('scene_id')}
+        scene = scene_records.get(store, row.get('scene_id')) or {'_id': row.get('scene_id')}
         person = _route_person(store.config, scene, row.get('channel_id'))
         return visibility is None or not person or             visibility.session_class(store.config, store.db, scene, person) != OWNER_PRIVATE
     except Exception:
         return True
 
 
+def _images(store, **scopes):
+    """View: her stored pictures (kind image, DONE, bytes stored), by when they were stored."""
+    return artifact_records.of_kind(store, ATTACHMENT_KIND, state='DONE', storage=artifact_records.STORED,
+                                    by='created_at', **scopes)
+
+
 def produced_images(store, *, limit=MAX_ITEMS_OFFERED):
     """她做出来的图（不分场景），新的在前；群聊回合里只列这些。"""
     count = max(1, int(limit or 1))
     try:
-        # Bounded: the newest images only, and her own among them (the offline store has no $regex).
-        cursor = store.db.artifacts.find({'kind': ATTACHMENT_KIND, 'state': 'DONE', 'storage': 'gridfs'})
-        if hasattr(cursor, 'sort'):
-            cursor = cursor.sort('created_at', -1)
-        if hasattr(cursor, 'limit'):
-            cursor = cursor.limit(200)
-        rows = [row for row in cursor if produced(row)]
+        # Bounded: the newest images only, and her own among them.
+        rows = [row for row in _images(store).rows(newest_first=True, limit=200) if produced(row)]
     except Exception:
         return []
     mine = {row['_id'] for row in rows}
@@ -377,7 +377,7 @@ def image_scopes(store, config, scene, session_cls=None, person_id=None):
         return out
     for peer_id in _linked_scene_ids(config, scene_id):
         try:
-            peer = store.db.scenes.find_one({'_id': peer_id})
+            peer = scene_records.get(store, peer_id)
         except Exception:
             continue
         if not isinstance(peer, dict) or peer.get('kind') != 'dm' or not peer.get('scope_key'):
@@ -401,7 +401,7 @@ def row_is_group(store, row):
     """这条消息是不是发往一个群：按行自己的场景与路由现算。"""
     row = row or {}
     try:
-        scene = store.db.scenes.find_one({'_id': row.get('scene_id')}) or {}
+        scene = scene_records.get(store, row.get('scene_id')) or {}
     except Exception:
         return False
     if not scene.get('channel_id') and row.get('channel_id'):
@@ -413,7 +413,7 @@ def row_image_scopes(store, row):
     """这条消息那一轮能引用哪些 scope：全部从行自己算（场景、路由上的人、session_class）。"""
     row = row or {}
     try:
-        scene = store.db.scenes.find_one({'_id': row.get('scene_id')}) or {}
+        scene = scene_records.get(store, row.get('scene_id')) or {}
     except Exception:
         scene = {}
     if not scene.get('scope_key'):
@@ -433,17 +433,11 @@ def image_artifacts(store, scope_keys, *, limit=MAX_ITEMS_OFFERED, own_scope=Non
     scopes = [scope_keys] if isinstance(scope_keys, str) else [item for item in (scope_keys or ()) if item]
     if not scopes:
         return []
-    wanted = scopes[0] if len(scopes) == 1 else {'$in': scopes}
+    wanted = {'scope': scopes[0]} if len(scopes) == 1 else {'scopes': scopes}
     own_scope = own_scope or (scopes[0] if len(scopes) == 1 else None)
     try:
-        cursor = store.db.artifacts.find({'scope_key': wanted, 'kind': ATTACHMENT_KIND,
-                                         'state': 'DONE', 'storage': 'gridfs'})
         # 每轮都要问一次，所以读是有界的：新的在前、只取够用的几份元数据行，字节一个都不读。
-        if hasattr(cursor, 'sort'):
-            cursor = cursor.sort('created_at', -1)
-        if hasattr(cursor, 'limit'):
-            cursor = cursor.limit(max(1, int(limit or 1)) * 10)
-        rows = list(cursor)
+        rows = _images(store, **wanted).rows(newest_first=True, limit=max(1, int(limit or 1)) * 10)
     except Exception:
         return []
     rows.sort(key=lambda row: str(row.get('created_at') or ''), reverse=True)
@@ -530,7 +524,7 @@ def refuse_erased_named(store, artifact_id, scope_keys, *, produced_only=False, 
     """A picture she names that this turn did not offer: if an erasure deleted it and it is one she could otherwise
     send here, ADR-105's sentence, in the call that names it; anything else is left to the caller's own refusal."""
     from .blobs import erased, refuse_erased
-    item = store.db.artifacts.find_one({'_id': artifact_id}) if artifact_id else None
+    item = artifact_records.get(store, artifact_id) if artifact_id else None
     if not erased(item):
         return
     try:
@@ -548,12 +542,12 @@ def accept_artifact(store, blobs, artifact_id, scope_keys, *, produced_only=Fals
     任何一条不成立都抛 Denied（调用方逐条记进 rejections）。
     """
     from .blobs import refuse_erased
-    item = store.db.artifacts.find_one({'_id': artifact_id})
+    item = artifact_records.get(store, artifact_id)
     if not item or item.get('state') != 'DONE':
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
     _fence(item, _scopes(scope_keys), produced_only, here)
     refuse_erased(store, item, scene_id)                    # one she may send, erased: said in this call (ADR-105)
-    if item.get('storage') != 'gridfs':
+    if item.get('storage') != artifact_records.STORED:
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
     size = item.get('size')
     if not isinstance(size, int) or isinstance(size, bool) or not 0 < size <= MAX_ATTACHMENT_BYTES:
@@ -596,7 +590,7 @@ def serve(store, blobs, row, declared):
     if (row or {}).get(SKIPPED_KEY):
         raise Denied('ATTACHMENT_NOT_DECLARED')       # 图没跟着这条出去，字节也不给
     from .blobs import refuse_erased
-    item = store.db.artifacts.find_one({'_id': declared['artifact_id']})
+    item = artifact_records.get(store, declared['artifact_id'])
     if not item or item.get('state') != 'DONE':
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
     if kept_sticker(store, row, item):
@@ -609,7 +603,7 @@ def serve(store, blobs, row, declared):
     elif item.get('scope_key') not in row_image_scopes(store, row) and not produced(item):
         raise Denied('ATTACHMENT_SCOPE_DENIED')
     refuse_erased(store, item, (row or {}).get('scene_id'))       # erased after it was claimed (ADR-105)
-    if item.get('storage') != 'gridfs':
+    if item.get('storage') != artifact_records.STORED:
         raise Denied('ATTACHMENT_ARTIFACT_UNAVAILABLE')
     try:
         data = blobs.get(declared['artifact_id'], item['scope_key'], operator=True)   # checks the stored sha itself
@@ -703,7 +697,7 @@ def receipt_evidence(row, store=None):
     """平台回执里那份附件证据（适配器真的取到并发了图才会写）。行里没带就按 _id 窄取一次。"""
     raw = (row or {}).get('platform_receipt')
     if not isinstance(raw, dict) and store is not None and row.get('_id'):
-        full = store.db.messages.find_one({'_id': row['_id']}, {'platform_receipt': 1}) or {}
+        full = message_records.get(store, row['_id'], fields=['platform_receipt']) or {}
         raw = full.get('platform_receipt')
     if not isinstance(raw, dict):
         return None

@@ -19,9 +19,13 @@ from __future__ import annotations
 try:                                  # 宿主按包加载
     from .discussion_digest import CORRECTION_CUES, SELF_REFERENCE_CUES, _first_cue
     from .state import Conflict, now
+    from .records import messages as message_records
+    from .records import memories as memory_records
 except Exception:                     # 同目录平铺加载（离线自检）也认
     from discussion_digest import CORRECTION_CUES, SELF_REFERENCE_CUES, _first_cue
     from state import Conflict, now
+    from asuna.records import messages as message_records
+    from asuna.records import memories as memory_records
 
 SNIPPET = 120            # 条目里只带显示片段，全文仍按 source_event_ids 回读
 MAX_CORRECTIONS = 8      # 一条摘要上最多带几条更正标注
@@ -50,11 +54,8 @@ def _resolve(store, scene, reference):
     """reply 引用落到本场景本纪元的真实行；落不到就返回 None（不猜对象）。"""
     if not reference:
         return None
-    return store.db.messages.find_one({'scene_id': scene['_id'], 'policy_epoch': scene['policy_epoch'],
-                                       '$or': [{'_id': reference},
-                                               {'event.channel.platform_event_id': reference},
-                                               {'platform_message_id': reference}]},
-                                      {'author': 1, 'scene_seq': 1, 'direction': 1, 'summary_batch_id': 1})
+    return message_records.referenced(store, scene['_id'], scene['policy_epoch'], reference,
+                                      fields=['author', 'scene_seq', 'direction', 'summary_batch_id'])
 
 
 def _same_author_previous(rows, position):
@@ -124,11 +125,11 @@ def annotate_corrected(store, scene, items, current_key):
         target = item.get('corrects')
         if not target or item.get('in_batch'):
             continue            # 同一批里的更正由这条摘要自己写清，不需要回标旧条目
-        row = store.db.messages.find_one({'_id': target}, {'summary_batch_id': 1})
+        row = message_records.get(store, target, fields=['summary_batch_id'])
         prior = (row or {}).get('summary_batch_id')
         if not prior or prior == current_key:
             continue
-        unit = store.db.memory_units.find_one({'_id': prior})
+        unit = memory_records.get(store, prior)
         if not unit or unit.get('kind') not in CORRECTABLE_KINDS or unit.get('status') != 'active':
             continue
         before = list(unit.get('corrected_by') or [])
@@ -136,8 +137,8 @@ def annotate_corrected(store, scene, items, current_key):
         if marks == before:
             continue
         try:
-            store.put('memory_units', {**unit, 'corrected_by': marks, 'corrected_at': now()},
-                      expected=unit['revision'], stream=prior)
+            memory_records.save(store, {**unit, 'corrected_by': marks, 'corrected_at': now()},
+                                expected=unit['revision'], stream=prior)
         except Conflict:
             continue            # 有人同时在动这条：下一轮还会看见这条更正，不硬来
         applied.append({'unit': prior, 'by': item.get('message_id'), 'actor': item.get('actor'),
@@ -157,7 +158,7 @@ def covers_person(store, unit, person_id):
     sources = [key for key in (unit.get('source_event_ids') or []) if isinstance(key, str)]
     if not sources:
         return False, 'no_source_events'
-    rows = list(store.db.messages.find({'_id': {'$in': sources}}, {'author': 1}))
+    rows = message_records.many(store, sources).rows(fields=['author'])
     if any(row.get('author') == person_id for row in rows):
         return True, 'legacy_source_authors'
     if len(rows) < len(sources):

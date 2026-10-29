@@ -1,35 +1,50 @@
-"""The committed runtime manifest lists what the packer bundles: her core publications copy files by it."""
+"""What the packer ships of src/asuna: every tracked file of the tree, which imports from the packed copy, and the
+committed runtime manifest that her core publications copy files by."""
 import importlib.util
 import json
+import sys
 from pathlib import Path
+
+from asuna import repo_files
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_the_committed_runtime_manifest_matches_the_sources():
+def packer():
     spec = importlib.util.spec_from_file_location('pack_plugins', ROOT / 'tools/pack_plugins.py')
     pack = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(pack)
+    return pack
+
+
+def test_every_tracked_worker_file_ships_and_the_packed_copy_imports_from_itself(tmp_path):
+    """Regression: a new package (src/asuna/records/) was not shipped, the packed worker did not import, and a start
+    fell back to the version before (2026-10-28). No list names the packages: each one the tree has ships."""
+    pack = packer()
+    staged = tmp_path / 'python'
+    mappings = pack.stage_worker(staged / 'asuna')
+    tracked = [name for name in repo_files.files(ROOT, 'src/asuna') if name not in pack.NOT_IN_WORKER]
+    expected = {'asuna/' + name.removeprefix('src/asuna/'): ROOT / name for name in tracked}
+    expected['asuna/resources/RUNTIME_API.md'] = ROOT / 'RUNTIME_API.md'
+    shipped = {path.relative_to(staged).as_posix(): path for path in staged.rglob('*') if path.is_file()}
+    assert sorted(shipped) == sorted(expected), 'the packed copy is not the tracked tree'
+    differing = [name for name, source in expected.items() if shipped[name].read_bytes() != source.read_bytes()]
+    assert not differing, differing
+    # The check her starts rely on: each package and module imports from the packed copy, none from elsewhere.
+    code, output = pack.check_worker_imports(sys.executable, staged, tmp_path / 'data')
+    assert code == 0, output
+    imported = {line.split(' ', 1)[0] for line in output.splitlines()}
+    packages = {path.parent.relative_to(ROOT / 'src').as_posix().replace('/', '.')
+                for path in (ROOT / 'src/asuna').rglob('__init__.py')}
+    assert packages <= imported and {'asuna', 'asuna.store', 'asuna.records'} <= packages, sorted(packages - imported)
+    # A stale list (a deleted file still named, a new one missing) breaks her next core publication.
     from asuna.development import DEVELOPMENT_TOOLS
-    resources = ROOT / 'src/asuna/resources'
-    files = [[f'src/asuna/{name}.py', f'python/asuna/{name}.py'] for name in pack.runtime_modules()]
-    for path in sorted(p for p in resources.rglob('*') if p.is_file() and '__pycache__' not in p.parts):
-        relative = path.relative_to(resources).as_posix()
-        files.append([f'src/asuna/resources/{relative}', f'python/asuna/resources/{relative}'])
-    files.append(['RUNTIME_API.md', 'python/asuna/resources/RUNTIME_API.md'])
-    # What her confined commands load (sandbox_backend.SITE) ships too; without it they ran without it (2026-10-13).
-    files += [[f'src/asuna/sandbox_site/{p.name}', f'python/asuna/sandbox_site/{p.name}']
-              for p in sorted((ROOT / 'src/asuna/sandbox_site').iterdir()) if p.is_file()]
     manifest = json.loads((ROOT / 'packages/cognition-core/runtime-manifest.json').read_text(encoding='utf-8'))
-    # A stale list (a deleted module still named, a new one missing) breaks her next core publication.
-    assert manifest == {'files': files, 'developmentTools': DEVELOPMENT_TOOLS}, \
-        'run tools/pack_plugins.py and commit packages/cognition-core/runtime-manifest.json'
+    assert manifest == {'files': mappings, 'developmentTools': DEVELOPMENT_TOOLS},         'run tools/pack_plugins.py and commit packages/cognition-core/runtime-manifest.json'
 
 
 def test_packing_removes_artifacts_nothing_names_any_more(tmp_path, monkeypatch):
-    spec = importlib.util.spec_from_file_location('pack_plugins', ROOT / 'tools/pack_plugins.py')
-    pack = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(pack)
+    pack = packer()
     adr008 = tmp_path / 'adr008'
     monkeypatch.setattr(pack, 'DESTINATION', adr008 / 'packages')
     pack.DESTINATION.mkdir(parents=True)

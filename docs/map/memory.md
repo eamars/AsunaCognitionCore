@@ -233,7 +233,8 @@ The action brain's history search and discussion digest, run in the data child (
 - class `DataFault` — The data child's own code failed on a job (not the job's content).
 - def `start` — The Host's data child, started in the background (warm for the first job).
 - def `stop` — The data child stops with the Host: a job asked for afterwards is UNAVAILABLE, never run in this process.
-- def `run` — The tool's result for one call: in the data child while the Host runs, else in this process.
+- def `reachable` — Whether the data child can open this database itself: a built-in adapter that reaches a server.
+- def `run` — The tool's result for one call: in the data child while the Host runs and the child can reach the database, else in this process.
 
 ## `data_worker`
 

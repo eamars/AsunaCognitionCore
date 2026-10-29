@@ -1,6 +1,7 @@
-"""The in-memory adapter: the meaning table of the store's words written as code. It is the fake under the offline
-checks (tests/fake_collections.py, read by tools/p1c_offline_check.py, p2, p5 and outbound_image's cases), which run
-without pytest and without a database; no unit test and no deployment opens it.
+"""The in-memory adapter: the meaning table of the store's words written as code. It is the unit run's store (the
+registry's `memory` kind, chosen only by name; tests/conftest.py), where the store's contract runs as on MongoDB, and
+the fake under the offline checks (tests/fake_collections.py, read by the p1c, p2, p5 and outbound_image cases), which
+run without pytest and without a database. No deployment opens it.
 
 It is given words the shared layer has validated (words.py) and answers them as every adapter must. Databases live in
 this process by name, so `open` twice reaches the same records. Records equal on every sort key (and every record of

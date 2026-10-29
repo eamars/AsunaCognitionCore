@@ -345,7 +345,7 @@ The store: the core's way to its database, with no database named.
   - `count`
   - `group`
   - `insert`
-  - `replace`
+  - `replace` — The stored record of this id replaced whole.
   - `update`
   - `claim`
   - `delete`
@@ -476,14 +476,14 @@ The registry of database adapters, and the results adapters return.
 - def `load` — Import a database package's adapter module: {'kind': ..., 'python': <directory>, 'module': <name>}.
 - def `loaded`
 - def `module` — The adapter module the settings select (`mongodb` when they name none).
-- def `open` — An open adapter of the selected kind on `database`; refused in a unit run (DATABASE_IN_UNIT_RUN).
-- def `drop` — Drop a test database; any name outside `asuna_v2_test_*` is refused, and so is any in a unit run.
+- def `open` — An open adapter of the selected kind on `database`; a kind that reaches a server is refused in a unit run (DATABASE_IN_UNIT_RUN).
+- def `drop` — Drop a test database; any name outside `asuna_v2_test_*` is refused, and so is a server's in a unit run.
 
 ## `store/memory`
 
 [src/asuna/store/memory.py](../../src/asuna/store/memory.py)
 
-The in-memory adapter: the meaning table of the store's words written as code. It is the fake under the offline checks (tests/fake_collections.py, read by tools/p1c_offline_check.py, p2, p5 and outbound_image's cases), which run without pytest and without a database; no unit test and no deployment opens it.
+The in-memory adapter: the meaning table of the store's words written as code. It is the unit run's store (the registry's `memory` kind, chosen only by name; tests/conftest.py), where the store's contract runs as on MongoDB, and the fake under the offline checks (tests/fake_collections.py, read by the p1c, p2, p5 and outbound_image cases), which run without pytest and without a database. No deployment opens it.
 
 - class `Database` — One in-memory database: records by collection and id (in write order), the indexes `ensure` made, blobs.
 - def `open` — The adapter on the named in-memory database; `settings` may give `seed`.

@@ -1,8 +1,8 @@
-import uuid,os,shutil,subprocess,sys
+import contextlib,uuid,os,shutil,subprocess,sys
 from pathlib import Path
 
-# A unit run reaches no database server: its tests never need one (a test that needs one is in integration/). Two
-# locks, each enough alone: ASUNA_UNIT_RUN=1 makes the store's registry and dbread refuse to open a database
+# A unit run reaches no database server: its store is the in-memory adapter (`store`, `world` below). Two locks, each
+# enough alone: ASUNA_UNIT_RUN=1 makes the store's registry and dbread refuse to open a database on a server
 # (DATABASE_IN_UNIT_RUN, here and in every process the run starts with its environment), and every configuration the
 # run loads names an address that cannot resolve (RFC 6761 .invalid), so a process that does not inherit the
 # environment, such as a confined command, has no server to reach either.
@@ -136,3 +136,56 @@ def runtime_work():
         path=WORK/(prefix+'-'+uuid.uuid4().hex);made.append(path);return path
     yield make
     for path in made:remove_workspace(path)
+
+
+# The unit run's store: a `Store` on a database of the in-memory adapter (asuna.store.memory, chosen by name), every
+# declared collection made, dropped when the test ends. `world`: the same holding the synthetic world
+# (tests/fixtures/world.json) and a turn's settings (the tracked example settings, fixture models for both brains, a
+# Host sandbox, the fixture route's workspace), for a test that runs her turns.
+WORLD=FIXTURES/'world.json'
+EXAMPLE=ROOT/'config'/'local.example.json'
+
+
+@contextlib.contextmanager
+def memory_store(config=None,name=None):
+    from asuna.state import Store
+    from asuna.store import adapters
+    name=name or adapters.TEST_PREFIX+'unit_'+uuid.uuid4().hex[:12]
+    config={**(config or {}),'database_adapter':'memory','mongo_uri':NO_SERVER,'database':name,'allowed_databases':[]}
+    opened=Store(config,name)
+    try:
+        opened.ensure()
+        yield opened
+    finally:
+        opened.close();adapters.drop(config,name)
+
+
+@pytest.fixture
+def store():
+    with memory_store() as opened:
+        yield opened
+
+
+def turn_settings(name):
+    from fixture_grant import fixture_grant
+    config=_config.load(EXAMPLE,dsh_home=DATA/'asuna-dsh');config['character_id']='demo'
+    for lane,modalities in (('character',['text']),('executor',['text','image'])):
+        config[lane]={'model':'fixture-'+lane,'provider':'fixture','max_tokens':4096,'context_window':65536,
+                      'input_modalities':modalities,'token_counter':'native-host'}
+    config['_host_sandbox']={'available':True,'reason':None}
+    return config,fixture_grant(config,name)
+
+
+@pytest.fixture
+def world():
+    from asuna import capabilities
+    from asuna.store import adapters
+    name=adapters.TEST_PREFIX+'unit_world_'+uuid.uuid4().hex[:12]
+    config,work=turn_settings(name)
+    capabilities.forget()
+    try:
+        with memory_store(config,name) as opened:
+            opened.seed(WORLD)
+            yield opened
+    finally:
+        remove_workspace(work)

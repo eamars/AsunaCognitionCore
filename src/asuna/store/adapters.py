@@ -3,10 +3,11 @@
 An adapter module (the built-in MongoDB one, a database package's, or the in-memory one) has `KIND`, `SECRETS` (its
 setting keys that hold credentials), `open(settings, database)`, `where(settings)` (the server's identity without
 credentials), `databases(settings)` and `drop(settings, database)`. `open(settings, database)` opens the kind the
-settings name (`database_adapter`), `mongodb` when they name none; the built-in `mongodb` kind is imported here, when it
-is first asked for, and this is the one place that names its module. `load(entry)` imports a package's module as the
-Host registered it, `register(module)` makes a module's kind known; a kind asked for and not known raises
-`AdapterNotInstalled`. In a unit run (`ASUNA_UNIT_RUN=1`) `open` and `drop` refuse (`DATABASE_IN_UNIT_RUN`).
+settings name (`database_adapter`), `mongodb` when they name none; the built-in kinds are imported here when first
+asked for (`mongodb`, and `memory`, chosen only by name), and this is the one place that names their modules.
+`load(entry)` imports a package's module as the Host registered it, `register(module)` makes a module's kind known; a
+kind asked for and not known raises `AdapterNotInstalled`. In a unit run (`ASUNA_UNIT_RUN=1`) `open` and `drop`
+refuse every kind that reaches a server (`DATABASE_IN_UNIT_RUN`): the unit run's store is the in-memory adapter.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -18,7 +19,8 @@ from .errors import AdapterNotInstalled, refuse_in_unit_run
 SETTING = 'database_adapter'
 TIMEOUT = 'database_timeout_ms'       # an operation's time limit, for a caller that needs its own (the host lease)
 DEFAULT = 'mongodb'
-BUILT_IN = {'mongodb': 'asuna.store.mongodb'}
+BUILT_IN = {'mongodb': 'asuna.store.mongodb', 'memory': 'asuna.store.memory'}
+IN_PROCESS = ('memory',)               # kinds that reach no server: the only ones a unit run opens
 TEST_PREFIX = 'asuna_v2_test_'
 _LOADED = {}
 
@@ -79,14 +81,19 @@ def module(settings):
 
 
 def open(settings, database):
-    """An open adapter of the selected kind on `database`; refused in a unit run (DATABASE_IN_UNIT_RUN)."""
-    refuse_in_unit_run('打开数据库 %s' % database)
-    return module(settings).open(settings, database)
+    """An open adapter of the selected kind on `database`; a kind that reaches a server is refused in a unit run
+    (DATABASE_IN_UNIT_RUN)."""
+    chosen = module(settings)
+    if chosen.KIND not in IN_PROCESS:
+        refuse_in_unit_run('打开数据库 %s' % database)
+    return chosen.open(settings, database)
 
 
 def drop(settings, database):
-    """Drop a test database; any name outside `asuna_v2_test_*` is refused, and so is any in a unit run."""
-    refuse_in_unit_run('删数据库 %s' % database)
+    """Drop a test database; any name outside `asuna_v2_test_*` is refused, and so is a server's in a unit run."""
+    chosen = module(settings)
+    if chosen.KIND not in IN_PROCESS:
+        refuse_in_unit_run('删数据库 %s' % database)
     if not str(database).startswith(TEST_PREFIX):
         raise ValueError('DATABASE_NOT_A_TEST: 只删 %s* 的测试库（给的是 %s）' % (TEST_PREFIX, database))
-    module(settings).drop(settings, database)
+    chosen.drop(settings, database)

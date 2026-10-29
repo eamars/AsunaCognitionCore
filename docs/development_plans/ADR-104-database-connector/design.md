@@ -493,6 +493,31 @@ index being partial on `source_identity`; its times ISO text; `embedding` the sp
 and in the adapter's integration tests. Tests that read the store's insides changed: `integration/test_required_fields.py`
 (B7's first commit) counts through the store's handle instead of `adapter.db['episodes']`, which the guard refuses.
 
+As built, `records.artifacts` and `blobs` (B8): every operation of the artifacts row but `redact_scope`, under those
+names; call sites import it as `artifact_records`; its views are `records/view.py`'s. `admission` is the outbox's read
+of a channel's group actions in a state (the one in flight claimed since the lease, the next queued by `created_at`),
+which the map named so. None follows the rule above: its fences are the task and its revision, the conversation, the
+scope or scopes and the channel; its value conditions a kind, a state, a storage and a tool. The replaced reads that
+met a fence of None as "missing": a task's tool records when the task has no `intent_revision` (`tasks.observations_of`
+passes `task.get(...)`), a channel's group actions for a channel of None, and an erasure of a scope of None; each now
+finds or changes nothing. The stored names `storage: 'gridfs'` and `gridfs_id` are `records.artifacts.STORED` and
+`BLOB_FIELD`, and no other module writes them. `blobs.py` holds the blob owner's operations: `BlobStore.put_stream`
+(and `put`, `put_once`, `restore`, which read back whole as before) streams into `blobs.write`, reads back through
+`blobs.open` in `STREAM_PIECE` pieces, compares hash and size, deletes on mismatch, then writes the row through
+`records.artifacts.save`; the module's `open`, `delete` and `exists` serve the sweep (`media_life`) and the send check
+(`outbound_files`); `BlobStore.erase_scope` deletes each blob of `of_scope`; `Store.blobs` is the interface. `stats` is
+not built: the interface has no count, and its one caller, `tools/probe_blob.py`, now shows the deletion by the blob no
+longer being stored. The GridFS file name stays the artifact key: tests read it (`test_media_life`,
+`test_received_files`), and her image skill reads stored bytes with pymongo and GridFSBucket in scripts this repository
+does not hold. The metadata keep their fields as before (`put` and `restore` also `sha256`). 124 map rows in 20 files
+moved (the map at `5a196e66c85e`: artifacts 106, the bucket 13, `artifact_blobs.files` 4, `.chunks` 1), none left;
+`privacy._erase`'s loop keeps redacting `artifacts` until B10. `artifacts` is declared (21 fields: every field
+nullable, none required; its times ISO text) and no longer `pending`. `tests/test_record_owners.py` guards it and the
+blob store. Tests that faked the store's insides changed: three delete a blob through `blobs.delete` instead of
+`BlobStore.bucket` (`test_erasure_marks`, `test_files_outbox`, `test_received_files_read`), the erasure guard's source
+check also knows `STORED` and the owner's `get(storage=...)`, and the offline outbound-image cases' fake store has the
+blob interface instead of a fake GridFS bucket.
+
 **The shared layer's own surface** (no collection's owner; 21 map rows): `Store.put` and `Store.audit` (stay; owners
 call `put` through `save`, every module calls `audit`), `Store.ensure` (replaces `migrate`), `Store.recover_commits`,
 `Store.seed` (tests), the **maintenance surface** (`store.maintenance.record(collection, id)`,
@@ -634,7 +659,7 @@ the metadata copy (map: one write, no read). Erasure by scope lists `blobs.of_sc
 the rows (ADR-105, unchanged). Two stored names stay in her data because renaming them is a data migration this ADR does
 not do: `storage: 'gridfs'` and the field `gridfs_id`; they live only in `records/artifacts.py` as constants (`STORED`,
 `BLOB_FIELD`), documented as stored names. The GridFS file name (today the artifact key) is an optional `name` in the
-blob's metadata; B8 decides whether it stays. Records stay at most 1 MiB (3.1); larger content goes to blobs as today.
+blob's metadata; B8 keeps it (section 4, B8's as-built note). Records stay at most 1 MiB (3.1); larger content goes to blobs as today.
 
 **5.12 A collection chosen at run time** (46 in the code-facts table; the map's 127 hand rows include them). Three
 kinds, each in `hand.py`: an owner choosing among its own collections (`affect._insert`, `memory_tiers`,
@@ -962,7 +987,7 @@ owner module has no other caller). B1b reverts alone only before B2 lands.
 | B5 | `records.episodes`, `records.sessions`, `records.receipts` | 166 (as built: 161 in 35 files, the map at `fa46c24132f6`) | yes | 8.3, its 44 read cases and the four collections' field kinds and sizes |
 | B6 | `records.tasks`, `records.plans` (the `$lookup` as reads) | 168 (as built: 166 in 23 files, the map at `dbb88ee2f64f`) | yes | 8.3, its 42 read cases, and `recent_with_inputs` against the aggregate on 20 conversations: same 16 tasks, same order, their fields in order, time p50/p95 |
 | B7 | `records.memories` (retrieval's lexical reads; vector parts as built, 1b's pairs as an `Or` of dicts, an empty pair list answered without a call) | 67 (as built: 62 in 17 files, the map at `f18f1778f243`) | yes | 8.3; retrieval's whole search old against new on 40 queries (as 1a did): the same six and 24; `state.py:218-227`'s `if not combinations: return []` (the empty pair list) is production code with no test until `records.memories`' `test_an_empty_pair_list_answers_nothing_without_a_call` lands here |
-| B8 | `records.artifacts`, `blobs` (the blob interface), `media_life`, `outbound_files` | 126 | yes | 8.3; blob probe on a throwaway database; her stored files open and hash-check (20 sampled ids, read only) |
+| B8 | `records.artifacts`, `blobs` (the blob interface), `media_life`, `outbound_files` | 126 (as built: 124 in 20 files, the map at `5a196e66c85e`) | yes | 8.3; blob probe on a throwaway database; her stored files open and hash-check (20 sampled ids, read only) |
 | B9 | `records.heads`, `documents`, `records.people`, `records.ideas` | 151 | yes | 8.3; `audit.verify_documents` after the restart |
 | B10 | `audit` reads, prune and redaction; `privacy` over the owners' `redact_scope`, `tombstone`, `invalidate` | 47 (+ the 146 appends, which stay `store.audit`) | yes | 8.3; prune in dry-run counts equal old against new; the erasure path on a throwaway database (no erasure on hers) |
 | B11a | `stickers`, `notes`, `watches`, `questions`, `switches`, `own_mute`, `group_members`, `developer_inbox`, `host_stops` | 120 | yes | 8.3 |

@@ -115,17 +115,27 @@ and design.md's sections 6, 7.3, 7.4 and batches B10 to B15.
    remove the in-memory adapter too". On her read tool (decision 6): "SO either you build the too for her, or ditch
    the idea, as she will NEVER move away from Mongo." And: "I refuse to finish at half done state."
    So, replacing decision 8, design.md sections 6, 7.3 and 7.4, and batches B10 to B15 of its 8.2:
-   - **Done when** (the closure condition): (1) the core reaches its records only through their owner modules:
-     `store.db` and imports of `pymongo`, `bson` or `gridfs` appear 0 times in `src/asuna`, and a collection is
-     named to the store only in its owner (the static check design 2.1 describes, which needs no database); (2) the
-     MongoDB adapter is its own package, `packages/databases/mongodb/` (design 5.15),
-     loaded by configuration as the channel packages are, and the core names no database; (3) no unit test needs a
-     database: each one that did is deleted, or moved to `integration/` (a throwaway `asuna_v2_test_*` database,
-     dropped) when a break it guards would lose her data, leak private data or let two Hosts run, or when it guards a
-     rule Xiaoman signed in this ADR (a table names each kept test and the rule or harm it guards); a guard that needs
-     no database stays a unit test; mongomock, the in-memory adapter, the unit run's stand-in and its skip list are
-     gone; (4) the unit run's test count and time before and after are stated here. With the unit tests gone, the
+   - **Done when** (the closure condition): (1) the core reaches its records only through their owner modules: in
+     `src/asuna`, `Store` has no `db` or `client`, no module imports `pymongo`, `bson` or `gridfs`, and a collection
+     is named to the store only in its owner (a static check that needs no database); (2) the MongoDB adapter is its
+     own Python package, `packages/databases/mongodb/python/asuna_db_mongodb/`, which the core finds by its name
+     (`asuna_db_<kind>`) and the setting `database_adapter` selects, and `mongo_uri` is the package's setting, named
+     0 times in `src/asuna`; (3) no unit test needs a database: each one that did is deleted, or moved to
+     `integration/` (a throwaway `asuna_v2_test_*` database, dropped) when a break it guards would lose her data,
+     leak private data or let two Hosts run, or when it guards a rule Xiaoman signed in this ADR (a table names each
+     kept test and the rule or harm it guards); a guard that needs no database stays a unit test; mongomock, the unit
+     run's stand-in and its skip list are gone; (4) the unit run's test count and time before and after are stated
+     here (before, at `0d785a2891e7`: 1,782 passed and 45 skipped in 205 s). With the unit tests gone, the
      integration run is the one check that reaches a database, so every landing runs it, not only this one.
+   - **The in-memory adapter stays, only as the fake under her offline self-checks** (the owner, 2026-10-29, in the
+     question tool, Claude's recommendation, after Claude found that three of them run on it: the discussion digest,
+     proactive turns, outbound images). It is no longer the unit tests' double or the reference of the meaning
+     table; its contract run and its comparison with MongoDB go. Not chosen: deleting it with those three checks.
+   - **The package ships inside the core's artifact** (Claude's decision): the packer copies it beside `asuna` in the
+     worker's folder, and the checkout's environment installs it as it installs `asuna`, so the worker, her
+     commands, the tools and the integration run find it the same way. A separately installed DSH plugin
+     (design 5.15's `registerDatabase`) is not built: no second database is the goal. The Host's settings page keeps
+     its MongoDB connection field.
    - **In it as well, the defects in what this ADR built:** `fields` given a dict is read as the list of its keys
      (`store/words.py`), so it is refused (`QUERY_FIELDS_FORM`); the None rule of design section 4 holds in every owner
      (a range bound given None, and `records.scenes`' scope read given epoch None, do not follow it as built); B10's
@@ -136,9 +146,16 @@ and design.md's sections 6, 7.3, 7.4 and batches B10 to B15.
      **Not in it:** improvements found along the way (the slow reads, landing tools, the timing gate); they are on
      their own.
    - **Her read tool keeps MongoDB's query syntax** (decision 6 withdrawn): `asuna.dbread` and
-     `development_database_read` keep their form, so her scripts and skills run unchanged; the implementation moves
-     into the MongoDB package, and `asuna.dbread` stays the path her scripts import.
-   - Counted at main `0d785a2891e7` before this: `store.db.` 160 times in 29 files of `src/asuna`; `pymongo`, `bson`
+     `development_database_read` keep their form and the variables her commands get; the implementation moves into
+     the MongoDB package, and `asuna.dbread` stays the path her scripts import. One of her scripts
+     (`budget_per_place.py`) hands a raw database to `memory_tiers`; once that module reads through its owner, the
+     script needs `dbread.store()` (a read-only store) in place of its own shell: one line, hers to change.
+   - **The ADR-104 equivalence tool and the mongomock QQ simulator go** (`tools/adr104_equivalence.py`,
+     `tools/probe_qq_admission.py`). The proof of this piece is the integration run and, after the restart, her
+     running system read without writing (numbers only).
+   - Counted at main `0d785a2891e7` before this: `store.db.` 160 times in 29 files of `src/asuna`, and `store.db` in
+     any form on 230 lines in 42 files (`git grep -n -E 'store\.db\b'`), besides handles passed as a `db` parameter
+     or attribute, `.client`, and database commands; `pymongo`, `bson`
      or `gridfs` imported in 7 modules outside `src/asuna/store/`; 1,164 of 1,344 unit test functions in the 159 of
      206 test files that use a database (826 take the `store` fixture directly).
    - One branch, one landing, one restart. Xiaoman reads the finished diff once.

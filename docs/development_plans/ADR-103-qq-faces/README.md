@@ -318,16 +318,24 @@ byte for byte what it was before, so its prompt cache holds. `block_guide.strip`
 block goes on arriving without its explanation. `tests/test_faces_note_place.py` holds this shape, and the exact cost
 of the line — the first test that holds the note at all, which her notes above named as a gap.
 
-**Face 424's alias is 不对劲; the former alias 续标识 is not kept.** `faces.json` (napcat-qq 0.18.0) now reads
-`{"id": "424", "name": "不对头", "aliases": ["不对劲"]}`. Measured on the adapter's own modules: `[表情:不对劲]` and
-`[表情:不对头]` both send 424; `[表情:续标识]` no longer resolves — `outbound.encode_faces` leaves it as text, and the
-core's writable-name table (`channel_kinds.faces_of`, read from the same file) has no 续标识, so if she writes it the
-core refuses it. One consequence the alias was carrying: NapCat still writes `/续标识` for 424, and `faces.name_of`
-only replaces a literal it finds in the alias table, so an inbound 424 now reads `[表情:续标识]` (the platform's own
-word) instead of 不对头, and `faces_block` does not count it into `seen_here`. 277 keeps its 汪汪 alias and still
-reads 狗头. Whether inbound 424 should read 不对劲 — which would need the table's name to win over NapCat's literal,
-what the dropped alias did — is the owner's call and is left open; the selftest states today's shape
-(`face_424_inbound_passes_napcat_word_while_277_still_maps_its_old_one`).
+**Face 424 is named 不对劲 now; 不对头 is its alias, and the earlier alias 续标识 is not kept** (the owner,
+2026-10-30; the follow-up in the same minute: 「替代」means the word leaves her turns, inbound included).
+`faces.json` (napcat-qq 0.18.0) reads `{"id": "424", "name": "不对劲", "aliases": ["不对头"]}`, so
+`faces.name_of` changed shape as well: a face segment is named by **this table's current name for its id**
+first, and NapCat's own `faceText` is used only where the table has no name for that id (an id newer than
+the table, or no id at all). It used to read the literal first and map forward only a word listed in
+`aliases` -- which is what an alias was quietly doing for a renamed face: with 续标识 dropped and that order
+kept, an inbound 424 would have read `[表情:续标识]`, the platform's stale word, and 424 would have stopped
+being counted into `seen_here`. Measured on the adapter's own modules: `[表情:不对劲]` and `[表情:不对头]`
+both send face 424; `[表情:续标识]` no longer resolves -- `outbound.encode_faces` leaves it as text, and the
+core's writable-name table (`channel_kinds.faces_of`, read from this same file) has no 续标识, so her
+writing it is refused -- while an inbound 424 reads `[表情:不对劲]` and does reach `seen_here`. An id the
+table lacks still shows NapCat's word, and 277's `汪汪 → 狗头` path is untouched (its alias stays listed).
+Four checks in the adapter's self test hold this (`face_424_name_and_alias_are_the_table`,
+`face_424_both_names_send_the_face`, `face_424_dropped_alias_stays_text`,
+`face_inbound_reads_the_table_name_and_keeps_napcat_words_for_ids_it_lacks`); as a check on the checks,
+undoing that one row turned the offline run from 426 pass / 0 fail into 424 pass / 2 fail.
+
 
 ## Open
 

@@ -181,7 +181,10 @@ def notes_block(docs, scene):
     its per-turn limit (context_budget.py): how full it is in words, and the sections it does not show by heading."""
     revision, content = docs.read(notes_slug(scene['_id']))
     kept, about = notes_view(docs.store, docs.persona, notes_slug(scene['_id']), content)
-    sections = [{k: s[k] for k in ('sid', 'heading', 'body') if k in s} for s in kept]
+    from . import memory_tiers
+    sources = memory_tiers.sources(docs.store, docs.persona, notes_slug(scene['_id']), scene)     # ADR-108 D2
+    sections = [{**{k: s[k] for k in ('sid', 'heading', 'body') if k in s},
+                 **({'source': sources[s['sid']]} if sources.get(s['sid']) else {})} for s in kept]
     note = ('你自己写的这个群的笔记：谁是谁、群里的规矩、你在这里的做法。要记新东西或改一节，用 write_document，'
             'doc 写 group_notes（do 用 append_section 或 replace_section；不常用的节用 set_tags 把 when_shown 改成 '
             'on_demand 收起来；pin=yes 置顶一节，笔记超长时它不折成标题）。这是你的笔记，不是群规的权威来源。')
@@ -191,6 +194,17 @@ def notes_block(docs, scene):
 
 
 # ---- outbox (channels.py) ------------------------------------------------
+def _still_served(store, channel_id, row):
+    """Whether the conversation an action is for is still one the core serves and no block list stops. The adapter
+    sends what it is handed and asks nobody (ADR-107), so the check is made here, when the action goes out."""
+    target = row.get('target') or {}
+    if target.get('type') == 'request':
+        return True                     # a request is answered by its flag; it has no route
+    channel = store.config['channels'][channel_id]
+    served = any(route['target'] == target for route in list(channel.get('routes', {}).values()))
+    return served and target.get('id') not in channel.get('blocked_groups', [])
+
+
 def claim(store, channel_id):
     """One queued action for this channel's adapter, or None; it is marked SENDING with a fresh attempt."""
     import uuid
@@ -200,9 +214,18 @@ def claim(store, channel_id):
     if artifact_records.admission(store, 'group_action', channel_id, 'SENDING', claimed_since=lease).first(
             fields=['_id']):
         return None                     # ADR-095: one out at a time, so they happen in the order she chose them
-    row = artifact_records.admission(store, 'group_action', channel_id, 'QUEUED', by='created_at').first()
-    if not row:
-        return None
+    while True:
+        row = artifact_records.admission(store, 'group_action', channel_id, 'QUEUED', by='created_at').first()
+        if not row:
+            return None
+        if _still_served(store, channel_id, row):
+            break
+        # The group was blocked (or its route went) after she chose the action: it does not go out.
+        artifact_records.save(store, {**row, 'state': 'FAILED', 'receipt_at': now(),
+                                      'platform_receipt': {'status': 'failed', 'reason': 'target_not_authorized'}},
+                              expected=row['revision'], stream=row['_id'])
+        store.audit(row['episode_id'], 'group_action.not_sent', {'action': row['_id'], 'why': 'target_not_authorized'},
+                    row['scope_key'])
     attempt = uuid.uuid4().hex
     artifact_records.save(store, {**row, 'state': 'SENDING', 'attempt_id': attempt, 'claimed_at': now()},
               expected=row['revision'], stream=row['_id'])

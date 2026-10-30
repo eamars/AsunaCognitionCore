@@ -113,8 +113,8 @@ def interrupted_words(store, episode_id):
 
 def told_block(store, scene_id, *, mark=True):
     """errand_from_program, once, in the destination's next turn of its own: that home sent her, and what she said."""
-    from .local_time import stamp, zone_of
-    zone = zone_of(store, scene_id)
+    from .local_time import stamp, her_zone
+    zone = her_zone(store)
     # Every turn of every platform conversation asks: by the inputs' platform index, only this conversation's errands.
     rows = message_records.errand_results(store, scene_id).rows(fields=['episode_id', 'received_at', 'event.visit.by'])
     if not rows:

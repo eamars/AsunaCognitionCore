@@ -37,6 +37,22 @@ def _unlock(fd):
         msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
 
 
+# A journal file past this size is set aside as <name>.1 (the previous one removed) and a new one begins, so no journal
+# grows without bound; the one before it is all that is kept.
+JOURNAL_MAX_BYTES = 8 * 1024 * 1024
+
+
+def rotate(path, max_bytes=JOURNAL_MAX_BYTES):
+    """Set `path` aside as `path`.1 when it has reached `max_bytes`; True when it did."""
+    try:
+        if os.path.getsize(path) < max_bytes:
+            return False
+        os.replace(path, path + ".1")
+        return True
+    except OSError:
+        return False
+
+
 class Counters:
     def __init__(self):
         self._lock = threading.Lock()
@@ -66,6 +82,7 @@ class Journal:
         self._lock = threading.Lock()
         self._seq = 0
         self.started = time.time()
+        self.max_bytes = JOURNAL_MAX_BYTES
 
     @staticmethod
     def write_json(path, obj):
@@ -87,6 +104,7 @@ class Journal:
         path = os.path.join(self.jdir, name)
         line = json.dumps(obj, ensure_ascii=False, sort_keys=True, default=str)
         with self._lock:
+            rotate(path, self.max_bytes)
             with open(path, "a", encoding="utf-8") as handle:
                 handle.write(line + "\n")
                 handle.flush()

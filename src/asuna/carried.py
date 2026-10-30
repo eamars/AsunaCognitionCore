@@ -163,9 +163,11 @@ def system_text(common, found, docs=None):
     return out + ('\n' + voice if voice else '')
 
 
-def self_block(slug, found):
-    """The self or core block as a turn sends it."""
-    return {'items': [{'heading': s['heading'], 'body': s['body'], 'ref': 'doc:%s#%s' % (slug, s['sid'])} for s in found]}
+def self_block(slug, found, sources=None):
+    """The self or core block as a turn sends it. An item that says someone said something shows the line it rests on
+    (`sources`: section id -> where, memory_tiers.sources; ADR-108 D2)."""
+    return {'items': [{'heading': s['heading'], 'body': s['body'], 'ref': 'doc:%s#%s' % (slug, s['sid']),
+                       **({'source': sources[s['sid']]} if (sources or {}).get(s['sid']) else {})} for s in found]}
 
 
 def tokens(common, found, docs):
@@ -289,7 +291,7 @@ def _local(store, persona, moment):
         when = datetime.fromisoformat(str(moment).replace('Z', '+00:00'))
     except ValueError:
         return str(moment)
-    return when.astimezone(_zone(store, persona)).strftime('%Y-%m-%d %H:%M')
+    return when.astimezone(_zone(store)).strftime('%Y-%m-%d %H:%M')
 
 
 def tier_line(store, persona, slug, section):
@@ -378,15 +380,9 @@ def manifest(found, place, cls, moment, notes=(), brought_up=(), would_surface=(
             'notes': list(notes), 'brought_up': list(brought_up), 'would_surface': list(would_surface)}
 
 
-def _zone(store, persona):
-    from zoneinfo import ZoneInfo
-    from .persona_model import timezone as persona_timezone
-    from .render import model_and_policy
-    model, policy = model_and_policy(store, persona)
-    try:
-        return ZoneInfo(persona_timezone(model, policy, store.config)[0])
-    except Exception:
-        return timezone.utc
+def _zone(store):
+    from .schedule_rules import her_zone
+    return her_zone(store.config)['tz']
 
 
 def _bounds(day, zone):
@@ -502,7 +498,7 @@ def day_counts(store, persona, day, zone=None):
     day, her recalls of it there, and in how many turns the program's retrieval scored it above the floor
     (program_score: brought up, or would have been had it not been carried). Also returns, per section, the first and
     last time it was carried that day (for carried_sections)."""
-    zone = zone or _zone(store, persona)
+    zone = zone or _zone(store)
     start, end = _bounds(day, zone)
     pair_turns, rows = {}, {}
     for at, pair, refs, scored, rebuilt in _turns(store, persona, start, end):
@@ -539,7 +535,7 @@ def count_days(store, persona, moment=None):
     section's first and last time carried) stays. Returns {'days', 'rows', 'deleted'}."""
     from . import memory_tiers
     moment = moment or clock.now()
-    zone = _zone(store, persona)
+    zone = _zone(store)
     today = moment.astimezone(zone).date()
     oldest = today - timedelta(days=COUNT_DAYS)
     deleted = forget_days(store, persona, oldest.isoformat())

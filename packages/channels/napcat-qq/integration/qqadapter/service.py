@@ -15,12 +15,13 @@ import time
 
 from . import forward as forward_mod
 from . import inbound as inbound_mod
+from .admission import Admission, AdmissionAway, AdmissionRejected, AdmissionUnsupported, conversation_of, lane_key
 from . import mutes as mutes_mod
 from . import notices as notices_mod
 from .catchup import Catchup
 from .media_keys import MediaKeys
 from .members import Members
-from .hostapi import CAPABILITIES, HostApi, file_capability
+from .hostapi import CAPABILITIES, HostApi, Result, file_capability
 from .journal import Counters, Journal
 from .onebot import OneBot
 from .outbound import Outbound
@@ -95,13 +96,17 @@ def _target(item):
 
 class Adapter:
     def __init__(self, cfg, data_dir, claim_wait=20, ack_timeout=15.0, verify=True, verify_delay=0.8,
-                 peer_mode="full"):
+                 peer_mode="full", core=None):
         self.cfg = cfg
         self.data_dir = data_dir
         self.journal = Journal(data_dir)
         self.counters = Counters()
         self.seen = inbound_mod.SeenLRU(512)
         self.host = HostApi(cfg.host)
+        # who may speak is the core's to say: this asks it and keeps its answers for the time it names (admission.py).
+        # `core` stands in for the host in the self-test only.
+        self.admission = Admission(core or self.host, cfg.napcat["account_id"], self.counters)
+        self._admission_said = 0.0
         self.onebot = OneBot(cfg.napcat, self.counters, self.on_event, log=self.log)
         self.out = Outbound(cfg, self.host, self.onebot, self.journal, self.counters, log=self.log,
                             ack_timeout=ack_timeout, verify=verify, verify_delay=verify_delay)
@@ -115,9 +120,9 @@ class Adapter:
         # her own role in each group (owner/admin/member), carried to the host as raw.asuna_self
         self.self_roles = SelfRoles(cfg.napcat["account_id"], counters=self.counters)
         # the messages missed while this adapter or its event socket was down (catchup.py)
-        self.catchup = Catchup(cfg, data_dir, self.onebot, self.on_event, self.counters, log=self.log)
+        self.catchup = Catchup(cfg, data_dir, self.onebot, self.on_event, self.counters, self.admission, log=self.log)
         # who is in each admitted group, posted to the host when it changed (members.py)
-        self.members = Members(cfg, data_dir, self.onebot, self.host, self.counters, log=self.log)
+        self.members = Members(cfg, data_dir, self.onebot, self.host, self.counters, self.admission, log=self.log)
         # the current picture-link keys, posted to the host every few minutes (media_keys.py)
         self.media_keys = MediaKeys(self.onebot, self.host, self.counters, log=self.log)
         # the lane faults, by signature and hour, posted to the host every few minutes (faults.py, ADR-095)
@@ -132,17 +137,20 @@ class Adapter:
         self.out.on_muted = self.mutes.look_now
         # notices and requests: every kind projected and counted, the shown ones posted (notices.py)
         self.notice_counts = notices_mod.Counts(data_dir)
-        self.home_notices = notices_mod.HomePoster(cfg, self.onebot, self.host, self.counters, log=self.log)
+        self.home_notices = notices_mod.HomePoster(cfg, self.onebot, self.host, self.counters, self.admission,
+                                                   self.notice_counts, log=self.log)
+        # a person who left a group is told to the core, which ends their admission there (notices.py)
+        self.departures = notices_mod.Departures(cfg, self.host, self.counters, self.admission, log=self.log)
         self.onebot.on_up = self._on_up
         self.stop = threading.Event()
         self.wake = threading.Event()
         self.claim_wait = claim_wait
         self._tries = {}              # spool path -> times the host answered it with an error
         self._attempts = {}           # spool path -> times it did not go in (its backoff)
-        self._lanes = {}              # route id -> the lane posting that conversation's lines
-        self._spooled = {}            # spool path -> its route id, each file read once (submit_pending)
+        self._lanes = {}              # conversation key -> the lane posting that conversation's lines
+        self._spooled = {}            # spool path -> its conversation key, each file read once (submit_pending)
         self._tried_at = {}           # spool path -> when its last try was posted
-        self._lane_started = {}       # route id -> when a lane for it last started (submit_pending's order)
+        self._lane_started = {}       # conversation key -> when a lane for it last started (submit_pending's order)
         self._last_in = 0.0           # when a line last went in, any conversation
         self._lanes_lock = threading.Lock()
         self.retry_waits = RETRY_WAITS
@@ -176,14 +184,15 @@ class Adapter:
     def on_event(self, event):
         if isinstance(event, dict) and event.get("post_type") not in (None, "message"):
             return self.on_notice(event)
-        result, reason = inbound_mod.classify(event, self.cfg, self.seen)
+        result, reason = inbound_mod.classify(event, self.cfg, self.seen, self.admission)
         if reason == "accepted":
             envelope, meta = result
-            self.catchup.note(meta["route_id"], event)
-            # the spool key carries the route: one platform message_id seen in a
+            if meta["route_id"]:
+                self.catchup.note(meta["route_id"], event)
+            # the spool key carries the conversation: one platform message_id seen in a
             # group and in the private chat are two different items
             self.journal.spool_add("inbound", {"envelope": envelope, "meta": meta},
-                                   key="%s-%s" % (envelope["route_id"], envelope["event_id"]))
+                                   key="%s-%s" % (meta["conversation"], envelope["event_id"]))
             self.counters.inc("inbound_spooled")
             if meta.get("media_only"):
                 # an inbound turn that carried no text at all: a picture, a
@@ -192,7 +201,7 @@ class Adapter:
             self.counters.set("last_event_at", round(time.time(), 3))
             self.log("INBOUND_SPOOLED event_id=%s route=%s scene=%s group=%s chars=%d non_text_segments=%d"
                      " mentions=%d at_all=%d reply=%s over_host_limit=%s media=%d media_types=%s media_only=%s"
-                     % (envelope["event_id"], meta["route_id"], meta.get("scene"), meta.get("group_id", "-"),
+                     % (envelope["event_id"], meta["route_id"] or "-", meta.get("scene"), meta.get("group_id", "-"),
                         meta["chars"], meta["non_text_segments"], meta.get("mentions", 0),
                         meta.get("at_all_segments", 0), 1 if meta.get("has_reply") else 0, meta["over_host_limit"],
                         meta.get("media_segments", 0), meta.get("media_types", "-"),
@@ -209,7 +218,7 @@ class Adapter:
                      % (event.get("group_id"), event.get("message_id"), types, ats))
             return
         if reason in ("unauthorized_sender", "unauthorized_group_member", "group_not_allowed",
-                      "group_route_missing", "no_text", "wrong_self", "duplicate_local", "bad_shape"):
+                      "no_text", "wrong_self", "duplicate_local", "bad_shape"):
             self.log("INBOUND_IGNORED reason=%s post_type=%s message_type=%s group_id=%s user_id=%s message_id=%s"
                      % (reason, event.get("post_type"), event.get("message_type"), event.get("group_id"),
                         event.get("user_id"), event.get("message_id")))
@@ -217,7 +226,10 @@ class Adapter:
     def on_notice(self, event):
         """A notice, request or meta event: counted by kind; her own mute to its state; a shown kind posted."""
         kind, known = notices_mod.kind_of(event)
-        muted = mutes_mod.notice_body(event, self.cfg)
+        left = notices_mod.departure(event, self.cfg.napcat["account_id"])
+        if left is not None:
+            self.departures.put(left[0], left[1], event.get("time"))
+        muted = mutes_mod.notice_body(event, self.cfg, self.admission)
         if muted is not None:
             # a state report, not a chat line: posted from the mutes thread, never spooled as a turn
             self.notice_counts.add(kind, "own_state")
@@ -232,23 +244,27 @@ class Adapter:
             return
         kind = proj["kind"]
         if proj["where"] == "home":
-            if proj.get("group_id") and kind != "request_invite" and self.cfg.route_for_group(proj["group_id"]) is None:
+            refused = (self.admission.cached(("group", proj["group_id"]))
+                       if proj.get("group_id") and kind != "request_invite" else None)
+            if refused is not None and not refused.admitted:
                 self.notice_counts.add(kind, "group_not_allowed")
                 return
             self.notice_counts.add(kind, "home")
             self.home_notices.put(proj, event)
             return
-        envelope, why = notices_mod.envelope(proj, event, self.cfg, self.seen)
+        envelope, why = notices_mod.envelope(proj, event, self.cfg, self.seen, self.admission)
         if envelope is None:
             self.notice_counts.add(kind, why)
             self.counters.inc("inbound_" + why)
             return
         self.notice_counts.add(kind, "posted")
-        self.journal.spool_add("inbound", {"envelope": envelope, "meta": {"route_id": envelope["route_id"],
+        conversation = lane_key(conversation_of(envelope))
+        self.journal.spool_add("inbound", {"envelope": envelope, "meta": {"route_id": envelope.get("route_id"),
+                                                                         "conversation": conversation,
                                                                          "notice": kind}},
-                               key="%s-%s" % (envelope["route_id"], envelope["event_id"]))
+                               key="%s-%s" % (conversation, envelope["event_id"]))
         self.counters.inc("inbound_notice_spooled")
-        self.log("NOTICE_SPOOLED kind=%s route=%s event_id=%s" % (kind, envelope["route_id"], envelope["event_id"]))
+        self.log("NOTICE_SPOOLED kind=%s route=%s event_id=%s" % (kind, envelope.get("route_id") or "-", envelope["event_id"]))
         self.wake.set()
 
     # ---- inbound lanes (ADR-095) -------------------------------------------
@@ -256,7 +272,8 @@ class Adapter:
         """Hand each conversation with lines in the spool to a lane of its own, at most INBOUND_LANES at once, the
         conversation with the oldest line first. A lane posts its conversation's lines one at a time, in their order;
         a line that is slow or does not go in holds only its own conversation. Each spool file is read once here (its
-        route is remembered), so a lane can remove it without a reader in the way. Returns how many lanes started."""
+        conversation is remembered), so a lane can remove it without a reader in the way. Returns how many lanes
+        started."""
         listed = self.journal.spool_list("inbound")
         current = set(listed)
         for path in [path for path in self._spooled if path not in current]:
@@ -277,7 +294,7 @@ class Adapter:
                     self.journal.spool_move(path, "inbound_unreadable.jsonl", {"reason": "unreadable"})
                     self.faults.add("inbound", "spool", "unreadable")
                     continue
-                route = self._spooled[path] = str(blob["envelope"].get("route_id") or "")
+                route = self._spooled[path] = lane_key(conversation_of(blob["envelope"]))
             routes.setdefault(route, []).append(path)
         started = []
         with self._lanes_lock:
@@ -359,8 +376,13 @@ class Adapter:
             return True
         envelope = blob["envelope"]
         voices = 0 if blob.get("prepared") else len(voice_mod.segments(envelope))
-        self.watch.begin("inbound", envelope.get("route_id"), envelope.get("event_id"),
+        conversation = conversation_of(envelope)
+        self.watch.begin("inbound", lane_key(conversation), envelope.get("event_id"),
                          watch_mod.inbound_budget(envelope, voices))
+        if not envelope.get("route_id"):
+            settled = self._admit_spooled(path, blob, conversation)
+            if settled is not None:
+                return settled
         if not blob.get("prepared"):
             self._prepare(envelope)
             # A retry posts what was prepared: the platform is not asked again (a voice it has cleared is not
@@ -372,6 +394,8 @@ class Adapter:
         self.watch.stage("host_in")
         res = self._post(envelope)
         where = "event_id=%s route=%s" % (envelope.get("event_id"), envelope.get("route_id"))
+        if res.kind == "reject" and not self._host_away(res):
+            self.admission.forget(conversation, envelope.get("sender_id"))      # the core did not take what it was told it would
         if res.kind in ("accepted", "duplicate", "ok"):
             obj = res.obj if isinstance(res.obj, dict) else {}
             result = res.kind if res.kind != "ok" else str(obj.get("status") or "ok")
@@ -408,6 +432,44 @@ class Adapter:
         self.log("INBOUND_REJECTED %s http=%s body=%s"
                  % (where, res.code, json.dumps(res.obj, ensure_ascii=False)[:300]))
         return True
+
+    def _admit_spooled(self, path, blob, conversation):
+        """The core's verdict on a line that was spooled before anyone had judged it (no route id yet). None: it is
+        admitted, its route id is in the envelope (and in the spool file, so a restart does not ask again) and the
+        lane goes on to prepare and post it. True: it is not admitted and has been removed. False: it waits, as a line
+        does while the host is away; nothing is dropped, and nothing is prepared or posted without a verdict."""
+        envelope = blob["envelope"]
+        self.watch.stage("admission")
+        try:
+            sender = envelope.get("sender_id")
+            answer = self.admission.cached(conversation, sender) or self.admission.ask(conversation, sender)
+        except AdmissionAway as exc:
+            self._attempts[path] = self._attempts.get(path, 0) + 1
+            self.log("INBOUND_WAIT event_id=%s the core did not answer who may speak (%s)" % (
+                envelope.get("event_id"), exc))
+            return False
+        except AdmissionUnsupported:
+            self._attempts[path] = self._attempts.get(path, 0) + 1
+            self.faults.add("inbound", "admission", "unsupported")
+            if time.monotonic() - self._admission_said >= 60:
+                self._admission_said = time.monotonic()
+                self.log("ADMISSION_UNSUPPORTED the core does not know the admission endpoint: lines wait until a "
+                         "core that does is installed")
+            return False
+        except AdmissionRejected as exc:
+            self._attempts[path] = self._attempts.get(path, 0) + 1
+            res = exc.res or Result("reject", None, {})
+            return self._count(path, envelope, res, "admission_rejected")
+        if not answer.admitted:
+            self.journal.spool_remove(path)
+            self.counters.inc("inbound_not_admitted")
+            self._settled(path)
+            return True
+        envelope["route_id"] = answer.route_id
+        blob["envelope"] = envelope
+        self.journal.write_json(path, blob)
+        self.catchup.note(answer.route_id, envelope.get("raw") or {})
+        return None
 
     def _count(self, path, envelope, res, reason):
         """One counted try of a line that fails on its own; the last one sets it aside."""
@@ -565,7 +627,6 @@ class Adapter:
             "spool_inbound": len(self.journal.spool_list("inbound")),
             "spool_receipts": len(self.journal.spool_list("receipts")),
             "pending_echo": self.onebot.pending_count(),
-            "group_routes": sum(1 for r in self.cfg.routes.values() if r.message_type == "group"),
             "identity": self.identity,
             "peers": self.peers.summary() if self.peers is not None else None,
             "notices": self.notice_counts.summary(),
@@ -666,12 +727,12 @@ class Adapter:
             return
         self._last_status = now
         snap = self.health_snapshot()
-        self.log("STATUS ws_event=%s ws_api=%s spool_inbound=%d spool_receipts=%d pending_echo=%d group_routes=%d counters=%s"
+        self.log("STATUS ws_event=%s ws_api=%s spool_inbound=%d spool_receipts=%d pending_echo=%d counters=%s"
                  % ("up" if snap["ws_event_up"] else "down",
                     "up" if snap["ws_api_up"] else "down",
-                    snap["spool_inbound"], snap["spool_receipts"], snap["pending_echo"], snap["group_routes"],
+                    snap["spool_inbound"], snap["spool_receipts"], snap["pending_echo"],
                     json.dumps({k: v for k, v in sorted(snap.items())
-                                if k.startswith(("inbound_", "outbox", "send_", "receipt", "frames", "resp", "ws_", "api_", "late_", "peer_", "media_", "attachment_", "catchup_", "members_", "mutes_", "voice_"))},
+                                if k.startswith(("inbound_", "outbox", "send_", "receipt", "frames", "resp", "ws_", "api_", "late_", "peer_", "media_", "attachment_", "catchup_", "members_", "mutes_", "voice_", "admission_", "departure_"))},
                                sort_keys=True)) + " lanes: " + self._lanes_status_safe(snap))
 
     # ---- identity -------------------------------------------------------
@@ -738,6 +799,7 @@ class Adapter:
         threading.Thread(target=self.faults.loop, args=(self.stop,), name="faults", daemon=True).start()
         threading.Thread(target=self.mutes.loop, args=(self.stop,), name="mutes", daemon=True).start()
         threading.Thread(target=self.home_notices.loop, args=(self.stop,), name="home_notices", daemon=True).start()
+        threading.Thread(target=self.departures.loop, args=(self.stop,), name="departures", daemon=True).start()
         self.catchup.request("startup")
         self.mutes.sweep("startup")
         self.log("READY pid=%d identity=%s ws_event=%s ws_api=%s spool_inbound=%d spool_receipts=%d"
@@ -795,6 +857,7 @@ class Adapter:
                 self._send_done.clear()
                 continue
             res = self.host.claim_outbox(self.claim_wait, supports=self.capabilities, lane="chat")
+            self.admission.observe(res)
             if res.kind == "items":
                 item = (res.obj.get("items") or [])[0]
                 send = threading.Thread(target=self._send, args=(item,), name="send", daemon=True)
@@ -847,6 +910,7 @@ class Adapter:
         ends when that file comes back."""
         while not self.stop.is_set() and generation == self._bulk_generation:
             res = self.host.claim_outbox(self.claim_wait, supports=self.capabilities, lane="bulk")
+            self.admission.observe(res)
             if res.kind in ("items", "empty") and (res.obj or {}).get("lane") != "bulk":
                 # a host from before ADR-095 does not know lanes: what it handed out is any item, so this lane
                 # sends it and stops, and the chat lane goes back to one send at a time

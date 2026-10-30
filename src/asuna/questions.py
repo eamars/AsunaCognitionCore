@@ -274,7 +274,7 @@ def told_many(told):
 def group_block(store, persona, scene, moment=None):
     """questions_from_program in a group: her questions here, by id, when asked, how long she waits, who answered;
     and once each one the program closed here, with how it ended."""
-    from .schedule_rules import line_stamp, scene_timezone
+    from .schedule_rules import line_stamp, her_zone
     moment = moment or clock.now()
     rows = [refresh(store, row, moment) for row in _open_here(store, scene['_id'])]
     rows = sorted((row for row in rows if row.get('state') == 'open'), key=lambda row: row['asked_at'], reverse=True)
@@ -283,7 +283,7 @@ def group_block(store, persona, scene, moment=None):
     told = closed_untold(store, scene['_id'], group=scene['_id']).rows()
     if not rows and not told:
         return None
-    zone = scene_timezone(store.config, scene)
+    zone = her_zone(store.config)
     if len(told) > SHOWN:                     # many closed at once: one line with the counts, not a list (her ask)
         items = [told_many(told)]
     else:

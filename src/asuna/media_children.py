@@ -1,20 +1,24 @@
 """Voice and video decoding in child processes (ADR-095 §5.3.1): one long-lived child per kind, each on its own, so a
 hang or a crash in native decoding holds only its own kind of work and never the Host.
 
-- `Child` is the supervisor both kinds share. It starts `python -m asuna.media_worker <kind> <host pid> ...` on the
-  base interpreter (on Windows the venv's python.exe is a redirector whose kill misses the real interpreter), waits
-  for its ready frame, and runs one job at a time. Each call has a budget counted from when it was asked: the wait
-  behind the kind's other jobs, a start, and each try come out of it, and a try ends at its deadline or the budget,
-  whichever is first. Past it, or when the child exits or answers garbage, the child is killed and reaped, a fresh one
-  is started, and the job is tried once more if the budget allows. A child that will not start is tried again at
-  most once every RESTART_WAIT seconds.
+- `Child` is the supervisor every child kind shares (the media kinds here, the data child in data_children.py). It
+  starts `python -m asuna.media_worker <kind> <host pid> ...`, or its own `module` (`python -m <module> <host pid>
+  ...`), on the base interpreter (on Windows the venv's python.exe is a redirector whose kill misses the real
+  interpreter), waits for its ready frame, and runs one job at a time. Each call has a budget counted from when it
+  was asked: the wait behind the kind's other jobs, a start, and each try come out of it, and a try ends at its
+  deadline or the budget, whichever is first. Past it, or when the child exits or answers garbage, the child is killed
+  and reaped; with `tries` 2 (the media kinds) a fresh one is started and the job tried once more if the budget
+  allows, with `tries` 1 the call ends there and the next job starts a fresh child. A kind with a `lock_wait` waits at
+  most that long behind its other jobs (`Busy` past it); without one that wait is the budget's (`Timeout` past it). A
+  child that will not start is tried again at most once every RESTART_WAIT seconds.
 - No child outlives the Host: on Windows each sits in a job object that kills it when the Host's handle closes; on
   every system the worker exits when its stdin closes or its Host's pid is gone (media_worker.py).
 - Frames on the child's stdin and stdout: a 4-byte length and a JSON header, then an 8-byte length and the payload.
 - A setting that is off, or a missing package or model found when the Host starts, is the machine's state, not a
   job's failure: the caller says so in its own words and starts no child (`voice.py`, `video_snapshot`).
 - Each kill, death, failed start or program error in a child is one lane fault (`lane_faults.record`, lanes
-  `transcriber` and `video`); a program error's traceback tail comes back in its answer for the evidence.
+  `transcriber`, `video` and `data`, FAULT_LANES); a program error's traceback tail comes back in its answer for the
+  evidence.
 - `video_snapshot` is the video side: the contact sheet of `animated.video_snapshot`, cut in the video child.
 """
 from __future__ import annotations
@@ -36,7 +40,8 @@ VOICE_DEADLINE = 90          # one try of one voice, decoded and transcribed (a 
 VOICE_BUDGET = 180           # one voice in all: waiting behind other voices, a start, two tries
 VIDEO_DEADLINE = 120         # one try of one video's contact sheet (36 seeks, at most 32 MB)
 VIDEO_BUDGET = 240
-FAULT_LANES = {'voice': 'transcriber', 'video': 'video'}
+FAULT_LANES = {'voice': 'transcriber', 'video': 'video', 'data': 'data'}
+MEDIA_WORKER = 'asuna.media_worker'         # the media kinds' program, told its kind before the Host's pid
 VIDEO_PACKAGES = ('av', 'PIL')
 
 VIDEO_OFF = 'VIDEO_NOT_SPLIT: 视频解码关着，这段视频看不了'
@@ -56,6 +61,10 @@ class Closed(StartFailed):
 
 class Timeout(Exception):
     """The job's try ran past its deadline, or the call's budget ran out."""
+
+
+class Busy(Exception):
+    """The job waited out its kind's lock-wait limit behind the kind's other jobs or a start; it never ran."""
 
 
 class Died(Exception):
@@ -157,11 +166,12 @@ class Child:
     """One kind's child process: started warm, one job at a time, killed and replaced past a deadline."""
 
     def __init__(self, kind, args=(), *, fault=None, start_seconds=START_SECONDS, restart_wait=RESTART_WAIT,
-                 command=None):
+                 command=None, module=MEDIA_WORKER, tries=2, lock_wait=None):
         self.kind, self.args = kind, list(args)
         self._fault = fault
         self.start_seconds, self.restart_wait = start_seconds, restart_wait
         self.command = command                   # tests: another program speaking the same frames
+        self.module, self.tries, self.lock_wait = module, tries, lock_wait
         self.lock = threading.Lock()
         self.proc = self.job = self.replies = None
         self.failed_start_at = None
@@ -180,8 +190,9 @@ class Child:
         # -P: no current or script folder on its path. Its path is this package's root and the installed packages
         # only, never the Host's whole sys.path: a folder such as the package itself would put asuna/queue.py in front
         # of the standard library's queue.
-        command = self.command or [_python(), '-X', 'utf8', '-P', '-m', 'asuna.media_worker', self.kind,
-                                   str(os.getpid()), *self.args]
+        named = [self.kind] if self.module == MEDIA_WORKER else []
+        command = self.command or [_python(), '-X', 'utf8', '-P', '-m', self.module, *named, str(os.getpid()),
+                                   *self.args]
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         env = {**os.environ, 'PYTHONPATH': os.pathsep.join(dict.fromkeys([here, *_installed()]))}
         windows = os.name == 'nt'
@@ -329,12 +340,16 @@ class Child:
 
     def call(self, header, payload=b'', deadline=60, budget=None):
         """One job: (answer header, payload). `budget` (seconds from now; default two deadlines) bounds the wait behind
-        other jobs, a start and the tries. A timeout or a death is tried once more in a fresh child while the budget
-        lasts; then Timeout or Died. StartFailed when the child will not start, Closed when the kind closed (the Host
-        stops), JobError when the job could not be done. The answer carries `times`: waited_s, started_s, tries."""
+        other jobs, a start and the tries. With `tries` 2 a timeout or a death is tried once more in a fresh child
+        while the budget lasts; then Timeout or Died. Busy when the job waited out the kind's `lock_wait`, StartFailed
+        when the child will not start, Closed when the kind closed (the Host stops), JobError when the job could not be
+        done. The answer carries `times`: waited_s, started_s, tries."""
         asked = time.monotonic()
         ends = asked + (budget if budget is not None else 2 * deadline)
-        if not self.lock.acquire(timeout=max(0.0, ends - asked)):
+        wait = ends - asked if self.lock_wait is None else min(self.lock_wait, ends - asked)
+        if not self.lock.acquire(timeout=max(0.0, wait)):
+            if self.lock_wait is not None:
+                raise Busy()                             # behind other jobs of this kind for its whole lock wait
             raise Timeout()                              # behind other jobs of this kind for the whole budget
         try:
             times = {'waited_s': round(time.monotonic() - asked, 3), 'started_s': 0.0, 'tries': 1}
@@ -344,8 +359,8 @@ class Child:
             except (Timeout, Died):
                 if self.closed:
                     raise Closed()
-                if ends - time.monotonic() <= 0:
-                    raise
+                if self.tries < 2 or ends - time.monotonic() <= 0:
+                    raise                                # one try: the next job starts its own fresh child
             times['tries'] = 2
             try:
                 answer, data = self._once(header, payload, deadline, ends, times)

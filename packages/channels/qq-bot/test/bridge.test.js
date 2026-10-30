@@ -12,8 +12,9 @@ const USER = 'A'.repeat(32), GROUP = 'B'.repeat(32), MEMBER = 'C'.repeat(32), OT
 const HOST = 'http://127.0.0.1:8766';
 
 /** A fake platform and channel API: records every request, answers by route. */
-function world({ refuseReply = false, refuseMarkdown = false, refuseInfo = false, names = [] } = {}) {
+function world({ refuseReply = false, refuseMarkdown = false, refuseInfo = false, names = [], refused = [] } = {}) {
   const calls = [];
+  const core = { mode: 'up' };                          // 'up', 'old' (predates the endpoint) or 'down'
   let now = Date.parse('2026-10-11T10:00:00Z');
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const fetch = async (url, init = {}) => {
@@ -32,14 +33,24 @@ function world({ refuseReply = false, refuseMarkdown = false, refuseInfo = false
       if (refuseInfo) return json(403, { code: 11253, message: 'no access' });
       return json(200, { group_openid: GROUP, group_name: names.shift() ?? '读书会', group_member_num: 3 });
     }
+    if (u.pathname.endsWith('/admission')) {
+      if (core.mode === 'old') return json(404, { error: 'UNKNOWN_CHANNEL_ENDPOINT' });
+      if (core.mode === 'down') return json(503, { error: 'HOST_RECONFIGURING' });
+      if (core.mode === 'broken') return json(400, { error: 'INVALID_ADMISSION_ASK' });
+      const [ask] = body.asks, { type, id } = ask.conversation;
+      if (refused.includes(ask.sender_id ?? id)) return json(200, { answers: [{ verdict: 'refused', code: 'CHANNEL_IDENTITY_DENIED',
+        scope: 'sender', ttl_seconds: 60 }], epoch: 'e1' });
+      return json(200, { answers: [{ verdict: 'admitted', conversation: ask.conversation, known: type === 'dm' && id === USER,
+        route_id: type === 'dm' && id === USER ? 'owner-dm' : 'auto-' + type + '-' + id, ttl_seconds: 60 }], epoch: 'e1' });
+    }
     if (u.pathname.endsWith('/events')) return json(200, { status: 'accepted' });
     if (u.pathname.endsWith('/receipt')) return json(200, { status: 'recorded' });
     if (u.pathname.endsWith('/attachment')) return new Response(Buffer.from('PNGBYTES'), { status: 200 });
     return json(404, { error: 'unknown ' + u.pathname });
   };
   const endpoint = async () => ({ url: HOST, channelId: 'qqbot', accountId: APP, token: 'x'.repeat(24),
-    settings: { account_id: APP, app_secret: 'secret', routes: { 'owner-dm': { target: { type: 'dm', id: USER } } } } });
-  return { calls, fetch, endpoint, clock: { now: () => now, advance: ms => { now += ms; } } };
+    settings: { account_id: APP, app_secret: 'secret' } });
+  return { calls, fetch, endpoint, core, clock: { now: () => now, advance: ms => { now += ms; } } };
 }
 
 class FakeSocket {
@@ -83,7 +94,7 @@ test('the gateway: hello is answered by identify with the group and private-chat
   b.stop();
 });
 
-test('a private message reaches the channel API on its configured route, with the sender profile and pictures', async () => {
+test('a private message reaches the channel API on the route the core names, with the sender profile and pictures', async () => {
   const w = world(), b = await bridge(w);
   await b.dispatch('C2C_MESSAGE_CREATE', { id: 'm1', content: ' 你好 ', timestamp: '2026-10-11T18:00:00+08:00',
     author: { user_openid: USER, username: '主人' },
@@ -246,4 +257,61 @@ test('a bot that may not send markdown sends her words as plain text, without th
   assert.equal(sends[0].msg_type, 2);
   assert.deepEqual(sends[1], { msg_type: 0, content: '好呀 来了', msg_id: 'g1', msg_seq: 2 });
   assert.equal(w.calls.find(call => call.url.endsWith('/receipt')).body.status, 'platform_accepted');
+});
+
+
+test('the route comes from the core: asked once for the time it names, never built here', async () => {
+  const w = world(), b = await bridge(w);
+  const ask = () => w.calls.filter(call => call.url.endsWith('/admission'));
+  await b.dispatch('GROUP_MESSAGE_CREATE', { id: 'g1', content: 'a', group_openid: GROUP, author: { member_openid: MEMBER } });
+  await b.dispatch('GROUP_MESSAGE_CREATE', { id: 'g2', content: 'b', group_openid: GROUP, author: { member_openid: MEMBER } });
+  assert.equal(ask().length, 1, 'the second line used the answer kept');
+  assert.deepEqual(ask()[0].body, { account_id: APP, asks: [{ conversation: { type: 'group', id: GROUP }, sender_id: MEMBER }] });
+  w.clock.advance(61000);
+  await b.dispatch('GROUP_MESSAGE_CREATE', { id: 'g3', content: 'c', group_openid: GROUP, author: { member_openid: MEMBER } });
+  assert.equal(ask().length, 2, 'after its time the core is asked again');
+  const sent = w.calls.filter(call => call.url.endsWith('/events')).map(call => call.body);
+  assert.equal(sent.length, 3);
+  assert.ok(sent.every(body => body.route_id === 'auto-group-' + GROUP && body._ask === undefined), 'no note of ours goes on the wire');
+});
+
+test('a sender the core does not admit is dropped; a core that does not answer, or predates the endpoint, holds the line', async () => {
+  const w = world({ refused: [OTHER] }), b = await bridge(w);
+  const posted = () => w.calls.filter(call => call.url.endsWith('/events')).map(call => call.body.event_id);
+  await b.dispatch('GROUP_MESSAGE_CREATE', { id: 'r1', content: 'x', group_openid: GROUP, author: { member_openid: OTHER } });
+  assert.deepEqual(posted(), []);
+  assert.equal(b.state.pending.length, 0, 'refused: nothing waits');
+  w.core.mode = 'old';
+  await b.dispatch('GROUP_MESSAGE_CREATE', { id: 'o1', content: 'x', group_openid: GROUP, author: { member_openid: MEMBER } });
+  assert.deepEqual(posted(), []);
+  assert.equal(b.state.pending.length, 1, 'an old core: the line waits and is not posted wider');
+  w.core.mode = 'down';
+  await b.flush();
+  assert.equal(b.state.pending.length, 1, 'a core that does not answer: still waiting');
+  w.core.mode = 'up';
+  await b.flush();
+  assert.deepEqual(posted(), ['o1']);
+  assert.equal(b.state.pending.length, 0);
+});
+
+test('a line the core keeps refusing the question for is set aside after a few tries and does not block the ones behind it', async () => {
+  const w = world(), b = await bridge(w);
+  w.core.mode = 'broken';
+  await b.dispatch('GROUP_MESSAGE_CREATE', { id: 'x1', content: 'a', group_openid: GROUP, author: { member_openid: MEMBER } });
+  await b.dispatch('GROUP_MESSAGE_CREATE', { id: 'x2', content: 'b', group_openid: GROUP, author: { member_openid: MEMBER } });
+  for (let tries = 0; tries < 6; tries += 1) await b.flush();
+  assert.deepEqual(b.state.pending.map(item => item.event_id), ['x2'], 'the first was set aside, the second is next');
+  w.core.mode = 'up';
+  await b.flush();
+  assert.equal(b.state.pending.length, 0);
+  assert.deepEqual(w.calls.filter(call => call.url.endsWith('/events')).map(call => call.body.event_id), ['x2']);
+  assert.ok(w.calls.filter(call => call.url.endsWith('/events')).every(call => call.body._tries === undefined));
+});
+
+test('the answers kept are bounded', async () => {
+  const w = world(), b = await bridge(w);
+  for (let n = 0; n < 4200; n += 1) {
+    await b.admission(await b.endpoint(), { type: 'group', id: GROUP }, 'S' + String(n).padStart(30, '0'));
+  }
+  assert.ok(b.admissions.size <= 4096);
 });

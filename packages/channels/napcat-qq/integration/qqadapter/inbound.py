@@ -30,7 +30,7 @@ CHANNEL_ENVELOPE_FIELD_DENIED) and the host does not parse OneBot raw.
   off       exactly the 0.3.0 behaviour: media counted, never rendered, every
             text-less message dropped as `no_text`
 
-Dedup is scoped by route: the same platform message_id seen in two different
+Dedup is scoped by conversation: the same platform message_id seen in two different
 scenes (private vs a group, or two groups) is two different events.
 
 Only metadata ever leaves this module for the logs; message text stays in the
@@ -42,6 +42,7 @@ import threading
 from datetime import datetime, timezone
 
 from . import faces, mdflat
+from .admission import lane_key
 
 MAX_TEXT = 16000
 MEDIA_KEY = "asuna_media"
@@ -472,15 +473,18 @@ def _iso(ts):
         return None
 
 
-def _base_envelope(event, user_id, event_id, text, route):
+def _base_envelope(event, user_id, event_id, text, route_id):
+    """The line as the core takes it. `route_id` is the one the core named; a line nobody has judged yet has none, and
+    its lane puts it in before the line is prepared and posted."""
     envelope = {
-        "route_id": route.route_id,
         "account_id": str(event.get("self_id")),
         "sender_id": user_id,
         "event_id": event_id,
         "text": text,
         "raw": event,
     }
+    if route_id:
+        envelope["route_id"] = route_id
     occurred = _iso(event.get("time"))
     if occurred:
         envelope["occurred_at"] = occurred
@@ -504,10 +508,12 @@ def _media_meta(parsed):
     }
 
 
-def classify(event, cfg, seen):
+def classify(event, cfg, seen, admission):
     """Return ((envelope, meta) or None, reason).
 
-    `reason` is a short machine tag; it is what shows up in logs and counters.
+    `reason` is a short machine tag; it is what shows up in logs and counters. Who may speak is the core's to say
+    (admission.py): an answer already held is used here, a refused sender is dropped, and a line nobody has judged
+    yet is returned without a route id; its lane asks before it prepares the line.
     """
     if not isinstance(event, dict):
         return None, "bad_shape"
@@ -515,13 +521,13 @@ def classify(event, cfg, seen):
         return None, "nonmessage"
     message_type = event.get("message_type")
     if message_type == "group":
-        return _classify_group(event, cfg, seen)
+        return _classify_group(event, cfg, seen, admission)
     if message_type == "private":
-        return _classify_private(event, cfg, seen)
+        return _classify_private(event, cfg, seen, admission)
     return None, "unsupported_message_type"
 
 
-def _classify_private(event, cfg, seen):
+def _classify_private(event, cfg, seen, admission):
     self_id = str(event.get("self_id")) if event.get("self_id") is not None else ""
     if self_id != cfg.napcat["account_id"]:
         return None, "wrong_self"
@@ -531,9 +537,11 @@ def _classify_private(event, cfg, seen):
     if user_id == cfg.napcat["account_id"]:
         # our own outgoing message echoed back: never treat it as an inbound turn
         return None, "self_echo"
-    route = cfg.route_for_sender(user_id)
-    if route is None:
+    conversation = ("dm", user_id)
+    answer = admission.cached(conversation, user_id)
+    if answer is not None and not answer.admitted:
         return None, "unauthorized_sender"
+    route_id = answer.route_id if answer is not None else None
     message_id = event.get("message_id")
     if message_id is None:
         return None, "bad_shape"
@@ -545,14 +553,15 @@ def _classify_private(event, cfg, seen):
         # nothing a text-only host can be told about; the caller journals the
         # reason, never the content
         return None, "no_text"
-    if not seen.add_if_new((route.route_id, event_id, _iso(event.get('time')))):
+    if not seen.add_if_new((lane_key(conversation), event_id, _iso(event.get('time')))):
         return None, "duplicate_local"
     text, shrunk = fit_host_limit(parsed, text, False)
-    envelope = _base_envelope(event, user_id, event_id, text, route)
+    envelope = _base_envelope(event, user_id, event_id, text, route_id)
     _mark_reply(envelope, parsed, text)
     _attach_media(envelope, parsed, mode)
     meta = {
-        "route_id": route.route_id,
+        "route_id": route_id,
+        "conversation": lane_key(conversation),
         "scene": "private",
         "chars": len(text),
         "non_text_segments": parsed["other_segments"],
@@ -564,27 +573,25 @@ def _classify_private(event, cfg, seen):
     return (envelope, meta), "accepted"
 
 
-def _classify_group(event, cfg, seen):
+def _classify_group(event, cfg, seen, admission):
     self_id = str(event.get("self_id")) if event.get("self_id") is not None else ""
     if self_id != cfg.napcat["account_id"]:
         return None, "wrong_self"
     group_id = str(event.get("group_id")).strip() if event.get("group_id") is not None else ""
     if not group_id or not group_id.isdigit():
         return None, "bad_shape"
-    route = cfg.route_for_group(group_id)
-    if route is None:
-        return None, ("group_not_allowed" if group_id not in cfg.allowed_groups else "group_route_missing")
     user_id = str(event.get("user_id")) if event.get("user_id") is not None else ""
     if not user_id:
         return None, "bad_shape"
     if user_id == cfg.napcat["account_id"]:
         return None, "self_echo"
-    if (user_id in cfg.blocked_senders or not user_id.isascii() or not user_id.isdigit()
-            or not 4 <= len(user_id) <= 20
-            or cfg.admission != 'automatic' and not route.accepts_sender(user_id)):
-        # not in this group's authorized member snapshot (being a member of
-        # another authorized group does not count)
+    conversation = ("group", group_id)
+    answer = admission.cached(conversation, user_id)
+    if answer is not None and not answer.admitted:
+        return None, "group_not_allowed" if answer.scope == "conversation" else "unauthorized_group_member"
+    if not user_id.isascii() or not user_id.isdigit() or not 4 <= len(user_id) <= 20:
         return None, "unauthorized_group_member"
+    route_id = answer.route_id if answer is not None else None
     message_id = event.get("message_id")
     if message_id is None:
         return None, "bad_shape"
@@ -596,16 +603,17 @@ def _classify_group(event, cfg, seen):
         # the gate is still here, in the same place, after every authorization
         # check: an unauthorized sender never gets their content looked at
         return None, "no_text"
-    if not seen.add_if_new((route.route_id, event_id, _iso(event.get('time')))):
+    if not seen.add_if_new((lane_key(conversation), event_id, _iso(event.get('time')))):
         return None, "duplicate_local"
     text, shrunk = fit_host_limit(parsed, text, True)
-    envelope = _base_envelope(event, user_id, event_id, text, route)
+    envelope = _base_envelope(event, user_id, event_id, text, route_id)
     envelope["group_id"] = group_id
     envelope["mentioned_account_ids"] = list(parsed["at_ids"])
     _mark_reply(envelope, parsed, text)
     _attach_media(envelope, parsed, mode)
     meta = {
-        "route_id": route.route_id,
+        "route_id": route_id,
+        "conversation": lane_key(conversation),
         "scene": "group",
         "group_id": group_id,
         "chars": len(text),

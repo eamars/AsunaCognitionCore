@@ -173,66 +173,6 @@ def visitor(route, channel):
     return members[0] if members else None
 
 
-def group_zone(scene):
-    """The time zone she set for this group (place_timezone), as a tzinfo; None when unset or no longer valid."""
-    from . import schedule_rules
-    name = (scene or {}).get('timezone')
-    zone = schedule_rules._zone(name) if isinstance(name, str) and name else None
-    return zone['tz'] if zone and zone['zone_unavailable'] is None else None
-
-
-def their_time(scene, moment):
-    """'HH:MM' on the group's own clock, or None when she has not set one."""
-    tz = group_zone(scene)
-    return moment.astimezone(tz).strftime('%H:%M') if tz else None
-
-
-def clock_gap(scene, moment, home):
-    """How the group's clock stands to hers (home: her tzinfo), in words that change only with a time zone or a
-    daylight-saving switch, never with the minute; None when she has not set the group's time zone."""
-    from . import schedule_rules
-    tz = group_zone(scene)
-    if not tz:
-        return None
-    gap = schedule_rules.offset_minutes(tz, moment) - schedule_rules.offset_minutes(home, moment)
-    if not gap:
-        return '那边和你这边同一个钟点'
-    hours, minutes = divmod(abs(gap), 60)
-    span = ' '.join(part for part in ('%d 小时' % hours if hours else '', '%d 分钟' % minutes if minutes else '') if part)
-    return '那边的钟比你这边%s %s' % ('快' if gap > 0 else '慢', span)
-
-
-def set_zone(store, place, name):
-    """Set or (name None) clear a group's time zone. Returns the group's row as zones() shows it."""
-    from . import schedule_rules
-    found = find(store.config, place)
-    if not found:
-        raise ValueError('没有这个群（place 照抄 places_from_program 或 do=list 里的 place）')
-    if name is not None:
-        zone = schedule_rules._zone(name)
-        if zone['zone_unavailable'] is not None:
-            raise ValueError('「%s」不是一个时区名：写 IANA 名，比如 Asia/Shanghai、America/Los_Angeles' % name)
-        scene_records.set_timezone(store, found[0], name)
-    else:
-        scene_records.set_timezone(store, found[0], None)
-    return found[0]
-
-
-def zones(store, persona, moment):
-    """Every group she is in: whether its time zone is set, and the time there now."""
-    from .people import People
-    people, rows = People(store, persona), []
-    for scene_id, _, _ in groups(store.config):
-        scene = scene_records.get(store, scene_id)
-        if not scene:
-            continue
-        time = their_time(scene, moment)
-        rows.append({'place': place_id(scene_id), 'group': people.scene_title(scene),
-                     'timezone': scene.get('timezone') if time else '没设（按宿主的钟算）',
-                     **({'their_time': '那边现在 ' + time} if time else {})})
-    return rows
-
-
 def room(store, scene, moment):
     """The room as it is now, from stored rows only."""
     since = (moment - HOUR).isoformat()
@@ -325,12 +265,10 @@ def outcome(store, visit):
     return 'notes' if 'write_document' in used else 'silent'
 
 
-def local_date(config, model, policy, moment):
-    """Her local date (her rhythm's time zone), for the daily counts."""
+def local_date(config, moment):
+    """Her local date, for the daily counts."""
     from . import schedule_rules
-    from .persona_model import timezone as persona_timezone
-    zone, _ = persona_timezone(model, policy, config)
-    return schedule_rules.local_moment(zone if schedule_rules.is_iana(zone) else 'UTC', moment).date().isoformat()
+    return schedule_rules.local_moment(schedule_rules.her_zone(config)['tz'], moment).date().isoformat()
 
 
 def today(store, plan, date):
@@ -371,9 +309,7 @@ def places_block(store, persona, model, policy, plan, moment, date):
         return None
     people, docs, rule, items = People(store, persona), DocumentStore(store, persona), settings(model, policy), []
     from . import schedule_rules
-    from .persona_model import timezone as persona_timezone
-    zone, _ = persona_timezone(model, policy, store.config)
-    home = schedule_rules._zone(zone if schedule_rules.is_iana(zone) else 'UTC')['tz']
+    home = schedule_rules.her_zone(store.config)['tz']
     for scene_id, route, channel in groups(store.config):
         scene = scene_records.get(store, scene_id)
         if not scene:
@@ -398,9 +334,6 @@ def places_block(store, persona, model, policy, plan, moment, date):
                **({'you_spoke_at': _stamp(here['mine_at'])} if here['mine_at'] else {'you': '你还没在这里说过话'}),
                'your_notes': notes or '你还没写过这个群的笔记',
                'can_visit': why}
-        gap = clock_gap(scene, moment, home)
-        if gap:
-            row['their_clock'] = gap
         if visit:
             done = outcome(store, visit)
             # A visit whose turn has not run is not a look she took (her question, 2026-10-20).

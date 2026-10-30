@@ -76,10 +76,10 @@ def take_passed(store, scene, persona=None):
         return None
     artifact_records.delete_many(store, [doc['_id'] for doc in held])
     from .people import People
-    from .schedule_rules import line_stamp, scene_timezone
+    from .schedule_rules import line_stamp, her_zone
     rows = {row['_id']: row for row in message_records.many(store, [doc['message_id'] for doc in held]).rows(
         fields=['author', 'attend', 'occurred_at', 'received_at', 'event'])}
-    people, zone, items = People(store, persona), scene_timezone(store.config, scene), []
+    people, zone, items = People(store, persona), her_zone(store.config), []
     for doc in held:
         row = rows.get(doc['message_id'])
         if not row or (row.get('attend') or {}).get('choice') != 'quiet':

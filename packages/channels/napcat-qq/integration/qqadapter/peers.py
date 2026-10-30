@@ -33,6 +33,8 @@ import threading
 import time
 from datetime import datetime, timezone
 
+from . import journal as journal_mod
+
 PEER_KEY = "asuna_peer"
 # The people a group message @-mentions, looked up like its sender (a list of profiles).
 MENTIONED_KEY = "asuna_mentioned"
@@ -459,7 +461,9 @@ class PeerDirectory:
         self._bump("peer_changes")
         try:
             line = json.dumps(dict(entry, person_id=rec["person_id"]), ensure_ascii=False, sort_keys=True)
-            with open(os.path.join(self.journal_dir, "peer_changes.jsonl"), "a", encoding="utf-8") as handle:
+            path = os.path.join(self.journal_dir, "peer_changes.jsonl")
+            journal_mod.rotate(path)
+            with open(path, "a", encoding="utf-8") as handle:
                 handle.write(line + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())

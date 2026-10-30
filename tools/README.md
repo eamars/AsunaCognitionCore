@@ -9,7 +9,7 @@ Windows, `.venv/bin/python` elsewhere).
 |---|---|
 | `asuna-launch.mjs` | The entry behind `start-asuna.cmd` / `start-asuna.sh`: installs the checkout when it changed, then starts the DSH Web profile. Options `--profile`, `--config`, `--port` (else the profile's recorded port, else 8780), `--no-sync`, `--dry-run`; `--list` prints the installed profiles. |
 | `pack_plugins.py` | Packs the core and the `--persona` / `--channel` packages into content-addressed `.tgz` files under `.runtime/adr008/packages/`, and removes earlier ones that no installed profile or `activation.json` names. The core carries every tracked file of `src/asuna` except `cli.py` and `native_ui.py`; packing fails, with the import error, when that copy does not import from itself. |
-| `setup_native_profile.py` | Installs the packed core, `--persona-package` and `--channel-package` packages into a profile, migrates the config into its settings and records the package list (and `--port`) and the checkout's commit in `launch.json`. |
+| `setup_native_profile.py` | Installs the packed core, `--persona-package` and `--channel-package` packages into a profile, migrates the config into its settings and records the package list (and `--port`) and the checkout's commit in `launch.json`. `--print-admission` and `--require-admission <value>` read a profile's saved `channelAdmission` and change nothing ([Run Asuna](../RUN_ASUNA.md)). |
 | `check_prepared_start.py` | Runs a start's preparation (rung 0) for `--commit` in a scratch worktree with a synthetic profile and config (the worktree borrows `.venv` and `node_modules` from this checkout, else from the main checkout, and the script runs with that `.venv`), then checks the install: every file the core ships from `src/asuna` byte-identical to the commit, the packed core identical to the installed one, and every worker package and module importing from the installed copy with the `requirements.lock` environment and with the profile's worker interpreter. Exit 0 only when all of it holds; the scratch folder is removed (`--keep` leaves it). |
 | `import_native_credentials.mjs` | Writes secrets into DSH's credential store; called by the installer. |
 | `build_dsh_inline.mjs` | Builds the optional patched DSH packages: the inline rendering extension and the compaction engine ([dsh-inline/README.md](dsh-inline/README.md)). |
@@ -28,6 +28,12 @@ Windows, `.venv/bin/python` elsewhere).
 | `memory_pilot_report.py` | The shadow pilot's reading in counts (`memory_pilot.py`): would-be surfacings of her own items per day by turn kind, the floor that keeps them at or under one a turn and none in heartbeats, near-duplicate pairs, recall hits, the cost. `--since` limits it; `--drop` removes the pilot's collection, which is also tiered memory's item index (her items stop coming up until it is rebuilt). |
 | `qq_face_census.py` | What the faces, stickers and face clicks people sent look like in the stored inbound rows of one channel kind (`--kind`, default `qq`) over `--days` (default 30), read-only through the `messages` and `scenes` owners, in counts only: faces named and nameless (with the nameless ids), the names used, stickers by kind, the segment types the adapter has no word for, click lines, and typed look-alikes of a placeholder. Never a line's text or a conversation. Exit 2 when no line was read. |
 | `carried_check.py` | Her install checks, read only (`carried.install_checks`): the latest turn's `system_ref` sections are what `carried()` gives, each place's refusal says `carried()`'s number, a write gets its room line, every tier/`inject` difference is said. One PASS or FAIL line per check, numbers only. `--model` names the persona package's `persona-model.json`. |
+
+## One-offs
+
+| Script | Does |
+|---|---|
+| `clear_scene_zones.py` | Counts the conversations that still carry a time zone; with `--apply`, clears it. Prints counts only, never a zone. |
 
 ## Offline self-checks
 

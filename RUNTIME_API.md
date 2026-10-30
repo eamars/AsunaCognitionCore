@@ -6,7 +6,7 @@ The interfaces of the Asuna runtime: what a channel adapter, a persona or channe
 
 - [Process layout](#process-layout)
 - [Configuration](#configuration): [plugin settings](#plugin-settings), [model routes](#model-routes), [secrets](#secrets), [deployment settings](#deployment-settings)
-- [Channel API](#channel-api): [server and endpoints](#server-and-endpoints), [channels and routes](#channels-and-routes), [admission](#admission), [route keys](#route-keys), [receive an event](#receive-an-event), [platform notices](#platform-notices), [post a notice for her home](#post-a-notice-for-her-home), [claim public output](#claim-public-output), [fetch attachment bytes](#fetch-attachment-bytes), [record a platform receipt](#record-a-platform-receipt), [post a group's member list](#post-a-groups-member-list), [post the current media-link keys](#post-the-current-media-link-keys), [post her own mute in a group](#post-her-own-mute-in-a-group), [post a voice](#post-a-voice), [HTTP outcomes](#http-outcomes)
+- [Channel API](#channel-api): [server and endpoints](#server-and-endpoints), [channels and routes](#channels-and-routes), [admission](#admission), [ask what the core admits](#ask-what-the-core-admits), [the routes the core serves](#the-routes-the-core-serves), [post a departure](#post-a-departure), [route keys](#route-keys), [receive an event](#receive-an-event), [platform notices](#platform-notices), [post a notice for her home](#post-a-notice-for-her-home), [claim public output](#claim-public-output), [fetch attachment bytes](#fetch-attachment-bytes), [record a platform receipt](#record-a-platform-receipt), [post a group's member list](#post-a-groups-member-list), [post the current media-link keys](#post-the-current-media-link-keys), [post her own mute in a group](#post-her-own-mute-in-a-group), [post a voice](#post-a-voice), [HTTP outcomes](#http-outcomes)
 - [Persona packages](#persona-packages): [persona model](#persona-model), [what she carries](#what-she-carries)
 - [Channel packages](#channel-packages): [kind module](#kind-module)
 - [Her tools](#her-tools)
@@ -24,6 +24,7 @@ Where each part of Asuna runs. For anyone changing the code or writing a package
 | Core plugin `asuna-cognition-core` | the DSH Web Host (Node) | native agents and sessions, presets, the settings card, the memory tab, the Python worker's life | `packages/cognition-core/src/index.js` |
 | Publication floor (`asunaFloor`) | the DSH Web Host | the profile's data folder, published candidates and their activation | `packages/cognition-core/src/floor.js` |
 | Business worker | a child process: `python -u -m asuna.native_worker` | `RuntimeHost`: the database, input and task queues, memory indexing and summaries, the [Channel API](#channel-api) server, the managed integration | `packages/cognition-core/src/worker.js`, `src/asuna/native_worker.py`, `src/asuna/host.py` |
+| Data child | a child process of the worker: `python -X utf8 -P -m asuna.data_worker <worker pid>` | the action brain's history search and discussion digest, on its own database connection, 30 seconds a call | `src/asuna/data_children.py`, `src/asuna/data_worker.py` |
 | Persona packages | registered with the core plugin | a character's seeds, model, skills and preset | `packages/personas/<name>/`; contract in [Persona packages](#persona-packages) |
 | Channel packages | registered with the core plugin; the adapter runs in the integration sandbox or in the Host | one platform's kind module and adapter | `packages/channels/<name>/`; contract in [Channel packages](#channel-packages) |
 
@@ -33,6 +34,8 @@ Where each part of Asuna runs. For anyone changing the code or writing a package
 - The plugin and the worker can run different versions: a core publication restarts only the worker, onto the selected core's `python/` (`floor.workerPath`), while the plugin stays the installed package. The worker's `initialize` takes no unknown key (no `**kwargs`), so a new `initialize` argument makes an older worker refuse every start (`TypeError: … unexpected keyword argument`). Anything new between the two goes where an older side passes it by: a file in the data folder, an extra key of an answer, or a new method whose `UNKNOWN_BUSINESS_METHOD` the caller survives.
 - `host_from_program` (home turns) lists the outages of the last day and those no committed turn has shown yet, newest first, at most 3, with `count` and, when it lists fewer, `not_listed`; a listed outage whose record cannot be read is counted in `unreadable` instead of said, and the others are still said. An outage stays until a turn that showed it commits (`shown_at`, which says only that it was in that turn's context) and in any case for a day. It can say an outage only afterwards: while the worker is down, none of her turns runs. While it lasts, the settings card shows the worker's state and error. A planned stop keeps who marked it (`by`), and the restart block of the launcher start that followed names it (`host_stops`, `restarts.block`).
 - Every inbound input is stored before any retrieval or model call (`src/asuna/ingress.py` `persist_input`).
+- Every tool call of both brains is timed where the worker dispatches it (`src/asuna/tool_watch.py`). When it ends it leaves one audit row `tool.time` on its task's stream (the action brain) or its episode's (the character brain), in their scope: `call_id`, `tool`, `duration_s` (3 decimals) and `outcome`, `done`, `failed` (the tool's own failure: an action call closed `FAILED`, a refusal of hers) or `raised` (any other error).
+- A tool call still running after 600 seconds, or after its own `timeout` plus 120 seconds for `sandbox_run` and `development_run`, is recorded once and goes on: the evidence record `host.tool_overrun` (`call_id`, `brain`, `tool`, `stream`, `seconds`, `limit_s`, and `stack`, the call thread's 60 innermost frames as `file:line function`), a lane fault (channel `host`, lane `tools`, stage the tool, error `overrun`) and one `ASUNA_TOOL_OVERRUN` line in the Host log. Nothing stops or restarts it.
 - The DSH services, hooks, events and file formats the core plugin relies on are listed in `packages/cognition-core/DSH_API.md`.
 
 ## Configuration
@@ -50,7 +53,7 @@ The core plugin's settings in the DSH profile (`packages/cognition-core/src/inde
 | `mountSchedule` | `true` | `false`: without DSH's Schedule service her plans and rhythms are off; otherwise the worker waits for that service ([Schedules](#schedules)) |
 | `voiceToText` | `true` | `false`: nothing is loaded and every voice reads `没转出文字：语音转写关着` ([Voice messages](#voice-messages)) |
 | `videoDecoding` | `true` | `false`: nothing is loaded and `read_image` of a video says decoding is off ([Reading images](#reading-images)) |
-| `channelAdmission` | `explicit` | `explicit` or `automatic` ([Admission](#admission)) |
+| `channelAdmission` | `explicit` | `explicit` (closed) or `automatic` (open) ([Admission](#admission)); a profile made by `tools/setup_native_profile.py` stores `automatic` unless told otherwise |
 | `deployment` | — | the worker's settings ([Deployment settings](#deployment-settings)) |
 | `routes` | — | each brain's model ([Model routes](#model-routes)) |
 
@@ -111,7 +114,7 @@ Checked when the worker starts or a proposal is validated (`src/asuna/native_set
 | `workflow_timeout_seconds` | `1800` | how long one native stage may run before it is fenced, 1–86,400 (`INVALID_TIMEOUT`) |
 | `sandbox.backend` | `auto` | `auto` or `none` ([Sandbox](#sandbox)) |
 | `home_groups` | none | group scene ids that read as home (owner-private) and are still groups (`visibility.home_group`) |
-| `timezone` | UTC | IANA time zone of her rhythms when her policy names none |
+| `timezone` | the machine's zone, else UTC | the IANA time zone of her one clock: every time she reads, her plans and her rhythms ([Her clock](#her-clock)) |
 | `context_links`, route `read_scenes` | none | read-only links between scenes (`src/asuna/scene_links.py`) |
 | `canonical_persons` | none | person id → canonical person (`src/asuna/scene_links.py`) |
 | `persona_runtime.<persona>.heartbeat_target` | none (no heartbeat) | the owner-private scene her heartbeat runs in |
@@ -136,6 +139,9 @@ When any channel is configured, the worker serves the channel API on `127.0.0.1`
 | Method and path | Purpose | Body limit |
 |---|---|---|
 | `POST /v1/channels/{channel_id}/events` | [Receive an event](#receive-an-event) | 256 KiB |
+| `POST /v1/channels/{channel_id}/admission` | [Ask what the core admits](#ask-what-the-core-admits) | 256 KiB |
+| `GET /v1/channels/{channel_id}/routes` | [The routes the core serves](#the-routes-the-core-serves) | — |
+| `POST /v1/channels/{channel_id}/departures` | [Post a departure](#post-a-departure) | 256 KiB |
 | `POST /v1/channels/{channel_id}/notices` | [Post a notice for her home](#post-a-notice-for-her-home) | 256 KiB |
 | `GET /v1/channels/{channel_id}/outbox` | [Claim public output](#claim-public-output) | — |
 | `GET /v1/channels/{channel_id}/outbox/{publication_id}/attachment` | [Fetch attachment bytes](#fetch-attachment-bytes) | — |
@@ -147,7 +153,7 @@ When any channel is configured, the worker serves the channel API on `127.0.0.1`
 | `POST /v1/channels/{channel_id}/voice` | [Post a voice](#post-a-voice) | 64 MiB of audio bytes |
 
 - Every request carries `Authorization: Bearer <token>`: the channel's token, or a [route key](#route-keys).
-- A POST body is one JSON object, except a voice's audio bytes on `voice`. Unknown fields are refused on `events`, `notices`, `own_mute`, `voice`, `faults` and `receipt`; `members` and `media_keys` ignore them.
+- A POST body is one JSON object, except a voice's audio bytes on `voice`. Unknown fields are refused on `events`, `admission`, `departures`, `notices`, `own_mute`, `voice`, `faults` and `receipt`; `members` and `media_keys` ignore them.
 - A refusal is `{"error": "<CODE>"}`, often followed by `: ` and words for the reader; the status is in [HTTP outcomes](#http-outcomes).
 
 ### Channels and routes
@@ -173,16 +179,75 @@ A channel is `deployment.channels.<kind>`: its id is the platform kind of an ins
 | `proactive` | the group's rules for speaking unprompted (`src/asuna/proactive.py`) |
 | `developer` | `true` marks the home line her questions to the developer go to |
 
-A workspace must be an absolute path under `<data>/channels`; overlapping workspaces and conflicting bindings are refused at start (`src/asuna/host.py` `prepare_channels`).
+A workspace must be an absolute path under `<data>/channels`; overlapping workspaces and conflicting bindings are refused at start (`src/asuna/host.py` `prepare_channels`). A start and an admission make no folder: it is made when a task of that person first needs it (`src/asuna/grants.py` `workspace_folder`).
 
 ### Admission
 
+The core decides who may speak to her, once. A channel package forwards what its platform sends and asks the core (below); it holds no roster, no block list and does not know whether the deployment is open.
+
 | `channelAdmission` | Unknown DM, group or member |
 |---|---|
-| `explicit` (default) | refused (`CHANNEL_IDENTITY_DENIED`) |
-| `automatic` | admitted on its first valid event; the adapter sends the route id `auto-dm-<sender>` or `auto-group-<group>` |
+| `explicit` (closed; what a profile that stores nothing reads) | refused (`CHANNEL_IDENTITY_DENIED`) |
+| `automatic` (open) | admitted on its first valid event under the route id `auto-dm-<sender>` or `auto-group-<group>`, which the core names |
 
-An admission is kept in `artifacts` (kind `channel_admission`) and restored at start. It checks and prepares only the new member's grant, by the same rules as the start (`src/asuna/host.py` `prepare_admission`), against the workspaces the start collected and the admissions since have added. An admitted member gets a workspace under `<data>/channels` and no owner grants; admitting a group member does not change the group's policy epoch. A target that already has a route keeps it (`CHANNEL_TARGET_ALREADY_BOUND` for a second). Admission refusals: `CHANNEL_SENDER_INVALID`, `CHANNEL_BLOCKED`, `CHANNEL_GROUP_DENIED`, `CHANNEL_ROUTE_NOT_AUTHORIZED` (`src/asuna/channel_admission.py`).
+- The setting applies to a channel whose kind declares `OPEN_ADMISSION` ([Kind module](#kind-module)). A channel whose kind does not (an agent's or a peer's direct line) is closed whatever the setting says; a start records `channel.admission_closed_by_kind` for a platform kind that is opened but cannot be.
+- Block lists (`blocked_senders`, `blocked_groups`) win in both. The owner is named in the settings, not admitted: an admitted person has a person of their own and no owner grants.
+- An admission is kept in `artifacts` (kind `channel_admission`) and restored at start while the channel is open; closing the deployment drops the restored routes at the next start, and opening it again brings them back. It checks and prepares only the new member's grant, by the same rules as the start (`src/asuna/host.py` `prepare_admission`), against the workspaces the start collected and the admissions since have added. A target that already has a route keeps it (`CHANNEL_TARGET_ALREADY_BOUND` for a second). Refusals: `CHANNEL_SENDER_INVALID`, `CHANNEL_BLOCKED`, `CHANNEL_GROUP_DENIED`, `CHANNEL_ROUTE_NOT_AUTHORIZED` (`src/asuna/channel_admission.py`).
+- **How a person came in.** The line that admits a person into a conversation carries `event.admitted`: `new` the first time, `returned` after their admission ended. Her conversation says it once after the time of that line (`src/asuna/people.py` `ADMITTED_WORDS`). A notice that is held or dropped uses the mark up.
+- **The end.** A group member's admission ends when the platform says they left ([Post a departure](#post-a-departure)), and only then: never because a member list or a lookup lacks them. An end marks the grant `ended_at`; it changes nothing of who they are (person, scene, roster, lines, folder). Their next line is admitted again as `returned`, unless the platform dated it before they left. A direct chat's admission does not end; a member the owner listed does not end.
+- Every admitted line can wake her relevance gate (a model call). Nothing caps that; the block lists are the off switch.
+
+### Ask what the core admits
+
+`POST /v1/channels/{channel_id}/admission` — what the core would do with a sender or a conversation, and for how long the answer may be reused. It writes nothing: no route, folder, identity or scene.
+
+```json
+{"account_id": "configured-account",
+ "asks": [{"conversation": {"type": "group", "id": "platform-group-id"}, "sender_id": "platform-account"},
+          {"conversation": {"type": "dm", "id": "platform-account"}},
+          {"route_id": "a-route-id-the-core-named"}]}
+```
+
+| Field | Rule |
+|---|---|
+| `account_id` | the channel's `account_id` (`CHANNEL_IDENTITY_DENIED`) |
+| `asks` | 1 to 200 asks (`INVALID_ADMISSION_ASK`); each has exactly one of `conversation` (`{type: dm or group, id}`) or `route_id`; `sender_id` only with a `conversation`, and it is a group ask's sender (a direct chat's sender is its `id`) |
+
+The answer is `{"answers": [...], "epoch": "<id of this start>"}`, one answer per ask in order:
+
+| Answer | Meaning |
+|---|---|
+| `{"verdict": "admitted", "route_id", "conversation", "known": true, "ttl_seconds": 300}` | the conversation has a route and, when a sender was asked, they are a member |
+| `{"verdict": "admitted", "route_id", "conversation", "known": false, "ttl_seconds": 60}` | an open deployment will admit it on its first event, under that route id (the id of the route that already holds the target, if there is one) |
+| `{"verdict": "refused", "code", "scope": "sender" or "conversation", "ttl_seconds": 60}` | not listed (`CHANNEL_IDENTITY_DENIED`), a malformed id (`CHANNEL_SENDER_INVALID`, `CHANNEL_GROUP_DENIED`) or a route the core does not serve (`CHANNEL_ROUTE_NOT_AUTHORIZED`) |
+| `{"verdict": "blocked", "code": "CHANNEL_BLOCKED", "scope", "ttl_seconds": 60}` | a block list names the sender or the group |
+
+- `scope: "conversation"` holds for every sender there; `scope: "sender"` for that sender alone.
+- A package keeps an answer for at most `ttl_seconds`, drops all it kept when `epoch` changes (it is also on the routes list and on every outbox claim, so a package that polls sees a new start within one poll) or the core does not answer, and drops the answer for a sender when the core refuses a line it had judged admitted. The core decides again at every event, so a kept answer costs at most one refused post.
+- Admission is the policy: an event can still be refused for a binding the start would also refuse (`CHANNEL_SCENE_MUST_BE_DISTINCT`, `CHANNEL_WORKSPACE_OVERLAP`, …).
+- `HOST_RECONFIGURING` and `HOST_STOPPING` (503) while settings are being applied or the worker stops: wait and ask again. An older core answers `404 UNKNOWN_CHANNEL_ENDPOINT`: a package then holds its lines and posts none.
+- A route key reaches none of this (`ROUTE_KEY_ENDPOINT_DENIED`).
+
+### The routes the core serves
+
+`GET /v1/channels/{channel_id}/routes?after=<route id>&limit=<1..1000, default 500>` — `{"routes": [{"route_id", "conversation": {type, id}}], "next", "epoch"}`: the routes of the channel, listed or admitted, that no block list stops, in order of route id and a page at a time; `next` is the `after` of the following page, `null` after the last (`INVALID_ROUTES_QUERY`, 400). A package that works on every conversation (catch-up after a gap) reads the pages, then asks about the ones it has kept state for.
+
+### Post a departure
+
+`POST /v1/channels/{channel_id}/departures` — the platform says a person is no longer in a group.
+
+```json
+{"account_id": "configured-account", "conversation": {"type": "group", "id": "platform-group-id"},
+ "sender_id": "platform-account", "event_id": "platform-notice-id", "occurred_at": "2026-01-01T00:00:00Z"}
+```
+
+| Answer or code | Meaning |
+|---|---|
+| `{"status": "ended"}` | an admitted member was marked `ended_at` (the platform's `occurred_at`, else the core's time) and an audit row `channel.departed` names the notice |
+| `{"status": "unchanged"}` | no such route, a member the owner listed, an unknown sender, or an end already marked; nothing is created |
+| `INVALID_DEPARTURE` (400) | the conversation is not `{"type": "group", "id"}`, or an id is not an account |
+
+A package posts it for a member's leave and a member's removal, not for its own account's removal or a disbanded group.
 
 ### Route keys
 
@@ -209,7 +274,7 @@ A channel kind that declares `ROUTE_KEYS` (the `agent` kind) also accepts a key 
 
 | Field | Type | Required | Limit | Meaning |
 |---|---|---|---|---|
-| `route_id` | string | yes | — | the route (or `auto-…` id) |
+| `route_id` | string | yes | — | the route the core named in an [admission answer](#ask-what-the-core-admits), or a listed route's id |
 | `account_id` | string | yes | — | must be the channel's `account_id` |
 | `sender_id` | string | yes | — | the speaker's platform account; must be a member of the route |
 | `event_id` | string | yes | 1–200 | the platform's message id |
@@ -247,7 +312,7 @@ A channel kind that declares `ROUTE_KEYS` (the `agent` kind) also accepts a key 
 | `CHANNEL_ENVELOPE_FIELD_DENIED` | 403 | a field outside the table |
 | `INVALID_PLATFORM_EVENT_ID`, `INVALID_MESSAGE_TEXT`, `INVALID_OCCURRED_AT`, `INVALID_MENTIONS`, `INVALID_REPLY_ID` | 400 | a field outside its type or limit |
 | `DM_GROUP_FIELDS_DENIED` | 403 | `group_id` or `mentioned_account_ids` on a `dm` route |
-| `CHANNEL_IDENTITY_DENIED` | 403 | unknown route or member, or the wrong `account_id` |
+| `CHANNEL_IDENTITY_DENIED` | 403 | not admitted (see [Admission](#admission)), unknown route or member, or the wrong `account_id` |
 | `CHANNEL_GROUP_DENIED` | 403 | `group_id` is not the route's group |
 | `INPUT_IDENTITY_OR_CONTENT_CONFLICT` | 403 | an event id reused with other content |
 | `HOST_RECONFIGURING`, `HOST_STOPPING`, `HOST_DATABASE_UNAVAILABLE` | 503 | the whole Host: settings are being applied, the worker is stopping, or its database is out of reach; ask again later, it is no fault of the request |
@@ -323,7 +388,7 @@ A recall, a poke, a reaction and the like come as an event from the person who d
 | `quote_in`, `react_in` | passes on what others quote, and reactions |
 | `voice_in` | settles each voice of a line before posting the line ([post a voice](#post-a-voice)) |
 
-The answer is `{"items": [], "lane": …}` or `{"items": [item], "lane": …}`. Each claim marks the item `SENDING` under a fresh `attempt_id`; claiming is not delivery. An adapter may claim again before the last item settles: on the `chat` lane a conversation with a chat item `SENDING` is held (claimed within the last 300 s, `CHAT_LEASE_SECONDS`; one out longer stays `SENDING` for its receipt but holds nothing), so two chat items of one conversation are never out at once. A file holds nothing while it is on its way: the parts of a reply after it are handed out without waiting for its upload; it waits for the parts before it; one that failed cancels the parts after it that have not gone, as any failed part does. Group admin actions go one at a time per channel, in the order they were chosen.
+The answer is `{"items": [], "lane": …, "epoch": …}` or `{"items": [item], "lane": …, "epoch": …}` (`epoch`: this start of the worker, as in [Ask what the core admits](#ask-what-the-core-admits)). Each claim marks the item `SENDING` under a fresh `attempt_id`; claiming is not delivery. An adapter may claim again before the last item settles: on the `chat` lane a conversation with a chat item `SENDING` is held (claimed within the last 300 s, `CHAT_LEASE_SECONDS`; one out longer stays `SENDING` for its receipt but holds nothing), so two chat items of one conversation are never out at once. A file holds nothing while it is on its way: the parts of a reply after it are handed out without waiting for its upload; it waits for the parts before it; one that failed cancels the parts after it that have not gone, as any failed part does. Group admin actions go one at a time per channel, in the order they were chosen.
 
 | Item field | Meaning |
 |---|---|
@@ -475,6 +540,8 @@ Keys live only in the worker's memory: never in the database, the audit or a log
 
 `lane`, `stage` and `error` are names: 1–80 characters of `A–Z a–z 0–9 _ . : -`. At most 200 rows a post, counted all together or not at all. The answer is `{"status": "recorded", "rows": n}`; the counts are added to what the hour already has (`src/asuna/lane_faults.py`), and an hour's counts are kept 30 days. Counts are at least once: a post re-sent after its answer was lost counts again in the same hour.
 
+The worker counts its own faults in the same records under channel `host`: lanes `transcriber` and `video` (the media children), `data` (the [data child](#process-layout)) and `tools` (a tool call past its limit).
+
 ### Post her own mute in a group
 
 `POST /v1/channels/{channel_id}/own_mute` — whether her account is muted in one admitted group.
@@ -572,7 +639,7 @@ The model is the package's defaults for the core's parameters, checked against `
 
 | Key group | Rule |
 |---|---|
-| `PRIVATE_KEYS` (`rhythm.timezone`, `rhythm.sleep_window`, `rhythm.public_clock`) | set only on the machine; a package may not default them |
+| `PRIVATE_KEYS` (`rhythm.sleep_window`, `rhythm.public_clock`) | set only on the machine; a package may not default them |
 | `CORE_WRITABLE_KEYS` (`heartbeat.*` pace and visits, `heartbeat.dice_*`, `self_development.night_*`) | a package may default them; she sets them with `set_policy` within their ranges |
 | `OWNER_KEYS` (`heartbeat.enabled`, `render.identity_tokens`) | a package may default them; only the owner changes them |
 | `policy_keys` | keys the package declares for her; may not redeclare core keys |
@@ -655,6 +722,7 @@ The kind module tells the core one platform's id formats and adapter conventions
 | `FILE_HOSTS` | no | hosts a received file may be fetched from (an entry starting with `.` allows its subdomains); without it its files are offered as not readable |
 | `FACES`, `STICKERS` | no | the platform's faces by name → id; whether it sends stickers |
 | `HOME` | no | its conversations are home ones (owner-private) |
+| `OPEN_ADMISSION` | no | its senders are strangers the deployment may admit (`channelAdmission` `automatic`); without it the channel is always closed |
 | `TEXT_ONLY` | no | it carries no pictures |
 | `OWNER_JOINS` | no | the owner is a member of each line and writes there from the Web |
 | `PEER_LINE` | no | she opens and closes each direct line herself |
@@ -681,6 +749,10 @@ Her tools: `src/asuna/role_tools.py` (`TOOLS`; where each is offered: `EVERYWHER
 |---|---|
 | parameter names she is shown, and old names still taken | `src/asuna/param_names.py` (`RENAMED`, `STILL_TAKEN`) |
 | a conversation's tool list and the options it shows (an option no turn there can use is left out, one spec per place and class), fixed when its session starts | `src/asuna/role_tools.py` (`session_specs`, `placed_spec`) |
+| the schema the model reads and the plugin's guard checks (permissive: a field the program fills in is not required, `speak`'s `parts` is one JSON value, no field declares an enum), the strict schema the worker checks a call against, and the shapes it repairs first | `src/asuna/tool_schema.py` (`declared`, `violations`, `repair`) |
+| a call's layers (permission stops alone; everything else is collected into one numbered refusal, her own first thought first, every code in the audit row), the handlers that collect (`SPLIT`) and what a length refusal says | `src/asuna/role_tools.py` (`RoleTools.call`, `combined`, `checkpoint`, `_text`), `src/asuna/config.py` (`too_long`, `over`) |
+| what woke a turn when no one spoke, in the head where `speaker` is for a person's line | `src/asuna/wake_words.py` |
+| the mark at the head of what the program writes into her conversation, and the head of a checkpoint | `packages/cognition-core/src/marks.js` |
 | the context blocks a turn carries, their limits, and their words; what of her identity each place carries | `src/asuna/context.py` (`ContextBuilder`), `src/asuna/context_budget.py`, `src/asuna/block_guide.py`, `src/asuna/carried.py` |
 | the checks on a turn's end, the gate's answer, an appraisal | `src/asuna/answers.py` |
 | the relevance gate and group focus | `src/asuna/attend.py`, `src/asuna/focus.py` |
@@ -717,6 +789,15 @@ A task's tools are fixed when she hands it over (`src/asuna/coordinator.py` `Coo
 | development and persona-job tools | `development.py` `DEVELOPMENT_TOOLS`, `PERSONA_JOB_TOOLS` | with the development grant ([Self-development](#self-development)) |
 
 - `ask_character` asks her for a judgment and waits for her answer; `report_progress` leaves her a note without waiting. Neither creates a public reply, a task or a grant.
+- `list_files` walks the task folder up to 2,000 entries (files and folders) and lists the files it found, sorted by path; when the folder has more, its answer also has `limited`, in words (`tasks.py` `LIST_FILES_MOST`).
+- History search and the discussion digest run in the data child ([Process layout](#process-layout)): 30 seconds a call, a call at a time, at most 30 seconds behind another call or the child's start. On a database the child cannot open itself (an in-process one, or an adapter loaded from a database package) they run in the worker, without these limits. A call that did not run to its end is `FAILED` with one of these (`src/asuna/data_children.py`):
+
+| Case | Words |
+|---|---|
+| past 30 seconds (the child is killed; the next call starts a fresh one) | `QUERY_TIMEOUT: 这次查询超过 30 秒被停下了，没有结果；把范围收窄（时间窗、人、话题、limit）再试` |
+| behind another call or the child's start for 30 seconds | `QUERY_BUSY: 做查询的后台程序这会儿腾不出来，这次没有结果；过一会儿再试` |
+| the child will not start, has stopped with the worker, or died in the call | `QUERY_UNAVAILABLE: 做这次查询的后台程序这会儿没起来，这次没有结果；过一会儿再试` |
+
 - A task keeps the grants of the turn that handed it over; her later words never add one.
 - A tool call that did not happen is an error, and its tool record is `FAILED` with the same words (`tasks.py`
   `failure_words`): a workspace file operation (`TASK_OPERATION_FAILED: …`), and `generate_image`, `render_svg` or
@@ -781,7 +862,8 @@ No local root of this computer reaches the character brain; the action brain wor
 - **Toward her.** Every request of her lanes (her persona preset, the relevance gate, the appraiser, the background
   summaries, by the session's preset as it stands now) is rewritten at DSH's `llm/stream`: text, reasoning, the system
   text and earlier tool calls' arguments. The action brain and the recovery session are not rewritten.
-  DSH's working-folder line is a required runtime context and is rewritten with the rest. The DSH session, stored
+  DSH's working-folder line is a required runtime context that its suppression keeps; her lanes shadow it with an empty
+  one of the same name, so none of her requests carries it (the action brain's does). The DSH session, stored
   messages and the Web page keep the real text. Without a table her lanes' requests fail with
   `ASUNA_ROOT_TABLE_MISSING` (a program fault: her next turn there says a turn did not run, the developer inbox gets a
   note, the audit one `roots.refused`) and the settings card says so; the action lane runs. Otherwise the settings card
@@ -940,6 +1022,25 @@ Her plans and the program's rhythms, on DSH's Schedule service. For operators an
 - A due plan wakes its conversation as a program notice, not a platform input; the plan's person must still be a member of the route, or the owner on a line he joins (`SCHEDULE_ROUTE_REVOKED`). What she says goes out on that conversation's route.
 - DSH's `schedule_*` tools are visible to every root agent in the Host; Asuna's presets restrict their own tools.
 
+### Her clock
+
+She has one clock, the same at home, in a group, in a DM and in the action brain (`schedule_rules.her_zone`). Its zone is
+the deployment setting `timezone`; when that is not set, the machine's own zone as the Host reports it (the worker's
+`ASUNA_HOST_TIMEZONE`, else `TZ`); when neither is known, UTC. A setting that does not load is read as not set. No room,
+route or group carries a zone of its own. The worker's start evidence (`reports/native-host-*`, record `clock.zone`) says
+which of the three is in force and whether a setting was given and failed to load, never the zone itself.
+
+- Stored records keep UTC; every time a model reads is on her clock (`10/14 14:28`, with the year when it is far or in
+  another year). `clock_from_program` carries `now_local` and `weekday`; no block, tool result or error names the zone.
+- A plan she writes is on her clock. A one-time plan (`at`) written without an offset is stored as the moment it names;
+  `after_seconds` and `every_seconds` carry no zone; a daily or weekly plan (`clock`) stores the zone it was made in, and
+  DSH's own scheduler holds the same zone. A plan whose stored zone is not hers reads on its own clock and carries
+  `clock_note` (how far its clock is from hers); giving a plan a timing moves it onto her clock, and the plan tool's
+  result says so in `clock_note`.
+- What she knows about where a person is stays in her notes; the program never reads it.
+- `asuna.dbread` converts her face to UTC bounds with her zone (`ASUNA_TIMEZONE`); a window's receipt holds the face she
+  wrote and the bounds.
+
 ### Rhythms
 
 The program's own plans (`schedule.RHYTHM_KINDS`): they never appear in her plan list, and her plan tool cannot cancel or retime them.
@@ -947,7 +1048,7 @@ The program's own plans (`schedule.RHYTHM_KINDS`): they never appear in her plan
 | Rhythm | Plan id | Runs when |
 |---|---|---|
 | heartbeat (`presence`) | `plan-asuna-presence` | `heartbeat.enabled` and `persona_runtime.<persona>.heartbeat_target` are set; every `heartbeat.every_min` (15–240) |
-| nightly settlement | `plan-asuna-settlement` | her model or policy sets `rhythm.settle_at` and an IANA time zone is known |
+| nightly settlement | `plan-asuna-settlement` | her model or policy sets `rhythm.settle_at`, and her clock's zone is known and is an `Area/Location` name (DSH's daily rule) |
 | daily self-improvement | `plan-asuna-self-development` | `self_development.enabled` |
 | night self-improvement check | `plan-asuna-self-development-night` | `self_development.enabled` and not `self_development.night: false`; a tick that only decides whether a night stage is due (`self_development.night_*`) |
 | condensing quiet groups (`condense`) | `plan-asuna-condense` | while she is in any group |

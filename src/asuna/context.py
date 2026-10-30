@@ -100,8 +100,18 @@ BLOCKS = {
     'notes': ('note_from_program', 'notes_from_program', 'notes_sent_from_program', 'note_places_from_program'),
     'sender_identity': ('sender_identity',),
 }
-CONTEXT_HEAD = ('scene', 'speaker', 'session_class')
+CONTEXT_HEAD = ('scene', 'speaker', 'woken_by_program', 'session_class')
 SEGMENT_WORDS = {'face': '小黄脸', 'reply': '引用', 'at': '@', 'image': '图', 'record': '语音', 'mface': '表情包'}
+
+
+def local_line(source, event):
+    """The number of the line that called her when that line has no label line to carry it, else None (ADR-108 D2, A3). A
+    line from the local chat is DSH's own message, so the notice that follows it carries the number, in the form of a
+    label line's. A channel line carries its own; a turn the program opened has no calling line."""
+    if (source and source.get('scene_seq') and (event.get('episode_kind') or 'external')=='external'
+            and not (source.get('event') or {}).get('channel')):
+        return '〔%d〕'%source['scene_seq']
+    return None
 
 
 def landing_lost(verification):
@@ -204,10 +214,12 @@ def _section_view(section):
             for k in ('sid', 'heading', 'body', 'visibility', 'entry_date', 'tags') if k in section}
 
 
-def ledger_block(docs, cls):
-    """Every ledger she can read here, each within its per-turn limit (context_budget.note_view)."""
+def ledger_block(docs, cls, scene=None):
+    """Every ledger she can read here, each within its per-turn limit (context_budget.note_view). A section that says
+    someone said something shows the line it rests on (ADR-108 D2), as `scene` reads it."""
     from .carried import placed, sections as carried_sections
     from .context_budget import NOTE_CHARS, note_view
+    from . import memory_tiers
     out = []
     for slug in docs.slugs():
         revision, content = docs.read(slug)
@@ -216,8 +228,10 @@ def ledger_block(docs, cls):
         sections = carried_sections(placed(docs.store, docs.persona, slug, content), cls)
         if sections:
             kept, about = note_view(sections, NOTE_CHARS['ledger'])
+            sources = memory_tiers.sources(docs.store, docs.persona, slug, scene)
             out.append({'doc': slug, 'revision': revision, 'title': content.get('title'),
-                        'sections': [_section_view(s) for s in kept], **about})
+                        'sections': [{**_section_view(s), **({'source': sources[s['sid']]} if sources.get(s['sid']) else {})}
+                                     for s in kept], **about})
     return out
 
 
@@ -314,7 +328,7 @@ class ContextBuilder:
         groups={s['scope_key']:s for s in scene_records.of_kind(self.store, 'group', fields=['scope_key','policy_epoch','kind','channel_id'])}
         units=self.retrieval.own_thoughts([(key,s.get('policy_epoch',1)) for key,s in groups.items()],query)
         people=People(self.store)
-        zone=schedule_rules.scene_timezone(self.store.config,scene)
+        zone=schedule_rules.her_zone(self.store.config)
         moment=clock.now()
         out=[]
         for unit in units:
@@ -407,7 +421,7 @@ class ContextBuilder:
             # ADR-062: once she has written herself as items, the carried ones are what she reads of herself.
             for name,slug in _carried.SELF_BLOCKS:
                 if (identity.get(slug) or {}).get('sections'):
-                    self_state[name]=_carried.self_block(slug,carried_here[slug])
+                    self_state[name]=_carried.self_block(slug,carried_here[slug],memory_tiers.sources(self.store,persona,slug,scene))
         from .ingress import episode_id
         source = message_records.get(self.store, 'in-' + episode_id(event))
         # Newly accepted/future queued inputs must not enter an earlier turn.
@@ -431,7 +445,7 @@ class ContextBuilder:
         if read['linked_scenes']:
             history=self._merge_linked_history(history,scene,read,history_projection)
         self._reply_context(history, scene, keep_event=True)
-        zone=schedule_rules.scene_timezone(self.store.config,scene)
+        zone=schedule_rules.her_zone(self.store.config)
         for row in history:                      # no raw times: when it was said, on her clock face
             said=caught_up.said_at(row); late=caught_up.is_caught_up(row)
             got=row.get('receipt_at') or row.get('received_at')
@@ -551,7 +565,7 @@ class ContextBuilder:
                             _crossing.fired(self.store,persona,'note',scene,event,ref=item['_id'],word=word,
                                             by='word' if word else 'meaning')
                         _cue=_crossing.cue(self.store,persona,scene,event,history_lines,own,
-                                           schedule_rules.scene_timezone(self.store.config,scene),
+                                           schedule_rules.her_zone(self.store.config),
                                            free=len(own)<memory_tiers.OWN_SLOTS)
                     except Exception:
                         _cue=None
@@ -567,7 +581,7 @@ class ContextBuilder:
         # scope_key 一起给出：联动场景召回的记忆要说得清是从哪个场景来的，不然「他说过」会没头没尾。
         facts=[{k:m[k] for k in ('_id','body_markdown','epistemic_type','kind','source_event_ids','source_window','generated_at','status','historical_sources','speaker','scene_seq','occurred_at','scope_key','segment_index','segment_count','participants','source_by_speaker','attribution','corrected_by','entry_type','invented') if k in m} for m in memories]
         units={m['_id']:m for m in memories}
-        memory_zone=schedule_rules.scene_timezone(self.store.config,scene)
+        memory_zone=schedule_rules.her_zone(self.store.config)
         for fact in facts:
             # The whole unit stays readable through recall/read; the turn carries a bounded excerpt.
             fact['body_markdown']=excerpt(fact.get('body_markdown'),MEMORY_CHARS)
@@ -647,13 +661,12 @@ class ContextBuilder:
             epoch=scene['policy_epoch'],statuses=['CREATING','ACTIVE','SUSPENDED'],
             # Her rhythms belong to the program (ADR-012 §4.3); she tunes them with set_policy, never cancels them.
             not_kinds=['self_development','presence','settlement','condense']).rows(newest_first=True,limit=8,
-            fields=['_id','intent','rule','scheduled_at','status','plan_version','timezone','tz_source',
+            fields=['_id','intent','rule','scheduled_at','status','plan_version','timezone',
                     'next_fire_at','created_at','updated_at','last_outcome'])
-        # P3：计划行按这个场景的时区翻成人话再给她看——不让她自己拿 UTC 心算「明天九点」。
+        # P3：计划行按她的钟面翻成人话再给她看——不让她自己拿 UTC 心算「明天九点」。
         # 已暂停（SUSPENDED）也列出来：不列就等于她不知道自己有一条挂着的安排没生效。
-        schedule_zone=schedule_rules.scene_timezone(self.store.config,scene)
-        plans=[schedule_rules.project(row,schedule_rules.scene_timezone(self.store.config,scene,row),
-                                      moment) for row in plan_rows]
+        schedule_zone=schedule_rules.her_zone(self.store.config)
+        plans=[schedule_rules.project(row,schedule_zone,moment) for row in plan_rows]
         # Recall is said in words only when it falls short (AGENTS.md: interpreted state); the score stays in the manifest.
         # A recall she asked for says what it held back because she still sees it, and where that is.
         in_view=(retrieval_manifest.get('in_view') or []) if recall else []
@@ -681,11 +694,14 @@ class ContextBuilder:
                  # session that already holds it is not sent it again (context-delivery.js).
                  'clock_from_program':schedule_rules.local_clock(schedule_zone,moment),
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
+        line=local_line(source,event)
+        if line:
+            context['event']['line']=line
         if coverage_block:
             context['coverage_from_program']=coverage_block
         if held_back:
             context['held_back_from_program']=held_back
-        thoughts=self.recent_thoughts(scope,schedule_rules.scene_timezone(self.store.config,scene))
+        thoughts=self.recent_thoughts(scope,schedule_rules.her_zone(self.store.config))
         if thoughts:
             context['recent_thoughts_from_program']={'items':thoughts,
                 'note':THOUGHTS_NOTE}
@@ -765,7 +781,7 @@ class ContextBuilder:
             from .render import model_and_policy as _places_model
             plan=plan_records.get(self.store, 'plan-asuna-presence') or {}
             _pm,_pp=_places_model(self.store,persona)
-            date=places.local_date(self.store.config,_pm,_pp,moment)
+            date=places.local_date(self.store.config,moment)
             places_view=places.places_block(self.store,persona,_pm,_pp,plan,moment,date)
             if places_view:
                 context['places_from_program']=places_view
@@ -794,10 +810,7 @@ class ContextBuilder:
         peer_lines=_lines.peer_lines(self.store)
         if peer_lines and (session_class==visibility.OWNER_PRIVATE
                            or event['scene_id'] in {line['scene_id'] for line in peer_lines}):
-            from .persona_model import timezone as _line_zone
-            from .render import model_and_policy as _line_model
-            _lm,_lp=_line_model(self.store,persona)
-            context['lines_from_program']=_lines.view(self.store,peer_lines,_line_zone(_lm,_lp,self.store.config)[0],moment)
+            context['lines_from_program']=_lines.view(self.store,peer_lines,schedule_zone['name'],moment)
             # What she has planned to do in each line from home (plan with line=…): her own words and the timing.
             for _item,_line in zip(context['lines_from_program']['items'],peer_lines):
                 if _line['scene_id']==event['scene_id']:
@@ -805,9 +818,7 @@ class ContextBuilder:
                 _rows=plan_records.of_conversation(self.store,_line['scene_id'],statuses=['CREATING','ACTIVE'],
                     not_kinds=['self_development','presence','settlement','condense']).rows(newest_first=True,limit=3)
                 if _rows:
-                    _scene=scene_records.get(self.store, _line['scene_id']) or {'_id':_line['scene_id']}
-                    _item['your_plans_there']=[{k:v for k,v in schedule_rules.project(r,schedule_rules.scene_timezone(
-                        self.store.config,_scene,r),moment).items() if k in ('intent','description','next_fire_at')} for r in _rows]
+                    _item['your_plans_there']=[schedule_rules.plan_brief(r,schedule_zone,moment) for r in _rows]
         people=People(self.store,persona)
         if source and (source.get('event') or {}).get('channel'):
             # Who is speaking, by account (people.py): label, notes, names in quotes; never a QQ number.
@@ -886,10 +897,10 @@ class ContextBuilder:
                    and (event.get('dice')=='self_evaluation' or _tools_week.due(self.store,persona,moment)=='floor'))
         if reviewing:
             from . import self_review
-            from .persona_model import effective as _review_effective, timezone as _review_zone
+            from .persona_model import effective as _review_effective
             from .render import model_and_policy as _review_model
             _model,_policy=_review_model(self.store,persona)
-            _zone=_review_zone(_model,_policy,self.store.config)[0]
+            _zone=schedule_zone['name']
             _tag=_review_effective(_model,'self_review.tag',_policy)
             review=self_review.block(self.store,persona,_zone,moment)
             review['exchanges']=self_review.exchanges(self.store,persona,_zone,moment)
@@ -910,7 +921,7 @@ class ContextBuilder:
             context['map_from_program']=_map.block(self.store,persona,moment,tag=_tag)
             if memory_tiers.ENABLED:
                 # ADR-062 (her answer): once a week, her memory in three readings, no scores and no counts.
-                weekly=memory_tiers.week(self.store,persona,schedule_rules.scene_timezone(self.store.config,scene),moment)
+                weekly=memory_tiers.week(self.store,persona,schedule_rules.her_zone(self.store.config),moment)
                 if weekly:
                     context['memory_week_from_program']=weekly
         # ADR-058: a heartbeat that rolled review brings every roll since her last review (home only).
@@ -966,14 +977,20 @@ class ContextBuilder:
             if note_places:context['note_places_from_program']=note_places
         if event.get('episode_kind')=='scheduled':
             plan=plan_records.get(self.store, event.get('scheduled_plan_id'),
-                ['_id','intent','rule','last_occurrence_id','last_outcome','source_episode_id'],
+                ['_id','intent','rule','timezone','status','scheduled_at','next_fire_at','last_occurrence_id',
+                 'last_outcome','source_episode_id'],
                 scene=scene['_id'],scope=scope,person=event['person_id'],epoch=scene['policy_epoch'])
             if not plan:raise Denied('SCHEDULE_PLAN_CONTEXT_MISSING')
             # Why she set it: her thought when she made the plan, as she wrote it (reasons.py, ADR-043).
             from . import reasons as _reasons
             then=_reasons.for_call(self.store,plan.pop('source_episode_id',None),'plan_id',plan['_id'])
+            # The plan in words on her clock, as in her plans block; its stored rule stays the program's (a wall time
+            # in it is not hers to convert).
+            brief={key:value for key,value in schedule_rules.plan_brief(plan,schedule_zone,moment).items()
+                   if key!='next_fire_at'}
+            plan={key:plan[key] for key in ('_id','last_occurrence_id','last_outcome') if key in plan}
             if then:plan['your_thought_then']=then
-            context['scheduled_plan_from_program']=plan
+            context['scheduled_plan_from_program']={**plan,**brief}
         target_note=('只更新对当前说话人的理解：layer=person 写人那层（你在哪儿遇到他都看得到），layer=here 写这里那层'
                      + ('（只在这个对话里看得到）' if not target['shared'] else
                         '（配置认定他与另一个入口是同一个人，这里那层共用 %s 那一份）' % target['scope'])
@@ -1040,12 +1057,12 @@ class ContextBuilder:
             context['group_continuity_from_program'] = continuity
         model,policy=model_and_policy(self.store,persona)
         documents={'persona':system_ref['persona_doc_revision'],'voice':system_ref['voice_doc_revision']}
-        ledgers=ledger_block(docs,session_class)
+        ledgers=ledger_block(docs,session_class,scene)
         if memory_tiers.ENABLED and not recall:
             # ADR-062: where her things are, in words, and what the program moved since this conversation was told.
             from .group_admin import notes_slug as _notes_slug
             context['things_from_program']=memory_tiers.Tiers(self.store,persona).things(
-                session_class,scene,schedule_rules.scene_timezone(self.store.config,scene),moment,
+                session_class,scene,schedule_rules.her_zone(self.store.config),moment,
                 home=session_class==visibility.OWNER_PRIVATE,
                 readable_docs={_notes_slug(scene['_id'])} if scene['kind']=='group' else set())
         if ledgers:
@@ -1253,7 +1270,7 @@ class ContextBuilder:
                 'note':'你最近常用这些说法；只是提示，不禁止，换不换由你。'}
         # A turn of hers here failed in the program since her last turn here (ADR-076 R4): said once.
         from . import faults
-        fault=faults.her_line(self.store,scene,schedule_rules.scene_timezone(self.store.config,scene))
+        fault=faults.her_line(self.store,scene,schedule_rules.her_zone(self.store.config))
         if fault:
             context['fault_from_program']=fault
             manifest.setdefault('told',{})['fault']=scene['fault'].get('at')
@@ -1277,10 +1294,10 @@ class ContextBuilder:
                 speak['one_self']=ONE_SELF          # ADR-018 §5.7: words only, nothing from elsewhere
             if replying and source and source.get('direction')=='inbound' and source.get('scene_seq') is not None:
                 # ADR-079 §9.5: only in a turn where others spoke after the line that called her, their numbers to copy.
-                from .capabilities import numbered
+                from .capabilities import can_quote
                 later=[row['scene_seq'] for row in message_records.inbound(self.store,scene['_id'],
                        after=source['scene_seq'],no_notice=True).rows(fields=['scene_seq'])] \
-                    if numbered(self.store,scene) else []
+                    if can_quote(self.store,scene) else []
                 if later:
                     shown='、'.join('〔%d〕'%n for n in later[:AMBIGUOUS_MAX])+('等' if len(later)>AMBIGUOUS_MAX else '')
                     speak['quote']=AMBIGUOUS%(len(later),shown)
@@ -1338,7 +1355,12 @@ class ContextBuilder:
         # The ceiling applies to what a turn sends, not to what is prepared (coordinator._deliver, context_budget.py).
         from .context_budget import size as _size
         manifest['context_chars']=_size(context)
-        people.relabel(context,scene,event['person_id'])
+        # ADR-108 D5: a turn the program opened says what woke her; the person on its event only authorized it.
+        from .wake_words import woken_by
+        woken=woken_by(self.store,persona,event)
+        people.relabel(context,scene,event['person_id'],speaking=woken is None)
+        if woken:
+            context['woken_by_program']=woken
         context=order_context(context,effective(model,'recall_protocol.order',policy))
         manifest['context_sha256']=sha(canonical(context))
         manifest['system_ref']=system_ref

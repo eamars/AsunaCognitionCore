@@ -45,7 +45,7 @@ dbread.show(dbread.find('messages', {'scene_id': 'local-dm', 'received_at': when
 - `messages`：`scene_id`、`scene_seq`（整数）、`direction`（inbound/outbound/archived/internal）、`author`、`text`、`occurred_at`、`received_at`、`episode_id`。她的行 `author` 是她的角色 id。群的旧历史：`scene_id` 是 `archive:<scene_id>`，`direction` 是 archived，名字在 `historical_display_name`。
 - 程序写进去的行（任务结果回执「你交给行动脑的「…」有了结果…」、到期计划、便条、内部时刻）`author` 是 `asuna:internal`，**不是发起人**：发起人的 person id 在事件的 `person_id` 上，不在 `author`（判据：`src/asuna/ingress.py:author_of`，程序行 = `CORE_NOTICE_KINDS` 的 task_feedback／scheduled／note 加 `INTERNAL_KINDS`）。这些行 `direction` 照旧是 `inbound`，所以**按 `author` 数「谁说了多少」之前先剔掉 `asuna:internal`**（或按正文那句固定前缀剔），否则把程序的话算成人说的；`reply_to` 也可能指向这些行，照回复链归人时同理（10-19 那趟量到：20 条最长回复里 3 条的 `reply_to` 指向注入行）。今天（10-27）实读 `messages`：正文以「你交给行动脑的」开头的行最近 20 条 `author` 全是 `asuna:internal`，整库里 `author` 不是它的 0 行——10-19 那条旧记录写的是「author 挂发起人」，与今天读数对不上（按今天的写，改动落在哪一天我没查）。
 
-- `scenes`：`_id` 就是 scene_id（`qq:<号>:group:<群号>`、`qq:<号>:dm:<号>`、`local-dm`、`agent:home:dm:<线>`…），`kind`、`timezone`、`sequence`。没有名字字段。
+- `scenes`：`_id` 就是 scene_id（`qq:<号>:group:<群号>`、`qq:<号>:dm:<号>`、`local-dm`、`agent:home:dm:<线>`…），`kind`、`sequence`。没有名字字段。
 - `scene_people`：一个群里一人一条：`scene_id`、`person`、`author`、`handle`（她看到的 #编号）、`card`、`nickname`、`role`、`previous`。群成员名单（`group_members`）不是说过话的记录。
 - `identities`：`_id` 是 person id，`display_name`。
 - `episodes`：`_id` 是回合 id，`episode_kind`（external/presence/visit/note/self_development/task_feedback/scheduled/settlement/consult）、`scene_id`、`source_event_id`、`silent_reason`。

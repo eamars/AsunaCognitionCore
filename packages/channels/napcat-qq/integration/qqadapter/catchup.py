@@ -7,9 +7,9 @@ identity lookups, host), marked `asuna_catchup` so the host knows it is an old l
 is the original one.
 
 - When: once the adapter is READY, and whenever the event socket comes back after a drop.
-- Where: only the routes `adapter.catchup.routes` names (route ids, `auto-group-<id>` / `auto-dm-<id>` under
-  automatic admission), or "all": the configured routes and every admitted route with a cursor; none by
-  default.
+- Where: only the routes `adapter.catchup.routes` names (route ids the core gave: a listed route's, or
+  `auto-group-<id>` / `auto-dm-<id>`), or "all": every route the core serves and every route with a cursor; none by
+  default. The core says which of them it admits (`Admission.ask_routes`); the adapter holds no list of its own.
 - From: a cursor per route, the time (and platform seq) of the newest message seen there, push or caught
   up, kept in `<data>/catchup/cursors.json`.  The cursor is a time, not a message number: message ids are
   not monotonic.  The cursor comes first, however old; only a route without one looks back
@@ -24,11 +24,14 @@ is the original one.
 
 The log carries counts and ids only, never text.
 """
+from collections import namedtuple
 import json
 import os
 import threading
 import time
 from datetime import datetime, timezone
+
+from .admission import AdmissionAway, AdmissionRejected, AdmissionUnsupported
 
 CATCHUP_KEY = "asuna_catchup"
 PAGE = 100
@@ -37,6 +40,10 @@ MAX_LOOKBACK_HOURS = 24
 FLUSH_SECONDS = 30
 ROUTE_PAUSE = 0.5
 API_WAIT_SECONDS = 60
+ADMISSION_WAIT_SECONDS = 5
+
+# One conversation to fetch history for: its route id (the cursor's key) and where it is on the platform.
+Target = namedtuple("Target", "route_id message_type target_id")
 
 
 def utc_iso(ts=None):
@@ -51,9 +58,11 @@ def _int(value):
 
 
 class Catchup:
-    def __init__(self, cfg, data_dir, onebot, on_event, counters, log=print, clock=time.time):
+    def __init__(self, cfg, data_dir, onebot, on_event, counters, admission, log=print, clock=time.time,
+                 sleep=time.sleep):
         self.cfg, self.onebot, self.on_event, self.counters, self.log, self.clock = \
             cfg, onebot, on_event, counters, log, clock
+        self.admission, self.sleep = admission, sleep
         self.routes = cfg.catchup_routes                     # the route ids catch-up runs for (empty: off)
         self.every = getattr(cfg, "catchup_every", False)    # "all": also every route with a cursor
         self.lookback = min(cfg.catchup_lookback_hours, MAX_LOOKBACK_HOURS) * 3600
@@ -143,19 +152,37 @@ class Catchup:
             return None
         started = self.clock()
         totals = {"routes": 0, "rows": 0, "fed": 0}
-        with self._lock:
-            seen = set(self._cursors) if self.every else set()
-        for route_id in sorted(set(self.routes) | seen):
-            route = self.cfg.route_by_id(route_id)
-            if route is None:
+        try:
+            with self._lock:
+                names = set(self.routes) | (set(self._cursors) if self.every else set())
+            if self.every:
+                names |= {route_id for route_id, _conversation in self.admission.routes()}
+            answers = self.admission.ask_routes(sorted(names))
+        except (AdmissionAway, AdmissionUnsupported) as exc:
+            # The core says who is admitted; without its answer nothing is fetched, and the run asks for itself again.
+            self.counters.inc("catchup_waiting_admission")
+            self.log("CATCHUP_WAITING_ADMISSION reason=%s type=%s" % (reason, type(exc).__name__))
+            self.sleep(ADMISSION_WAIT_SECONDS)
+            self.request(reason)
+            return None
+        except AdmissionRejected:
+            # Asking again would be refused again: this run is given up, the next trigger (a reconnect) tries anew.
+            self.counters.inc("catchup_admission_rejected")
+            self.log("CATCHUP_ADMISSION_REJECTED reason=%s" % reason)
+            return None
+        for route_id in sorted(names):
+            answer = answers.get(route_id)
+            if answer is None or not answer.admitted:
                 self.log("CATCHUP_ROUTE_SKIPPED route=%s (blocked, or no longer admitted)" % route_id)
                 continue
+            route = Target(route_id, "group" if answer.conversation[0] == "group" else "private", answer.conversation[1])
             totals["routes"] += 1
             rows, truncated = self._missed(route, started)
             for row in rows:
                 row[CATCHUP_KEY] = {"reason": reason, "fetched_at": utc_iso(started),
                                     "age_seconds": max(0, int(started) - _int(row.get("time")))}
                 self.on_event(row)
+                self.note(route.route_id, row)          # seen on this route: the next run starts after it
             totals["rows"] += len(rows)
             self.counters.inc("catchup_rows", len(rows))
             if truncated:
@@ -163,7 +190,7 @@ class Catchup:
             cursor = self.cursor(route.route_id)
             self.log("CATCHUP route=%s reason=%s rows=%d truncated=%s cursor=%s"
                      % (route.route_id, reason, len(rows), truncated, cursor.get("at", "-")))
-            time.sleep(ROUTE_PAUSE)
+            self.sleep(ROUTE_PAUSE)
         self.counters.inc("catchup_runs")
         self.counters.set("catchup_last_run_at", round(started, 3))
         self.log("CATCHUP_DONE reason=%s routes=%d rows=%d seconds=%.1f"

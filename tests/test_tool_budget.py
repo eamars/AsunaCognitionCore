@@ -4,7 +4,7 @@ below is raised. A change that removes one lowers the
 count here too, so the budget never drifts above what exists."""
 import json
 
-from asuna import role_tools
+from asuna import role_tools, tool_schema
 from asuna.config import soft
 from asuna.development import DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
 from asuna.image_generation import GENERATE_IMAGE_TOOL
@@ -13,7 +13,11 @@ from asuna.svg_render import RENDER_SVG_TOOL
 from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TOOLS
 
 # (tools defined, description characters at most)
-CHARACTER = (31, 21917)       # ADR-103: react's line text says 表情包 for the sticker, not 贴纸 +1, and its face is 小黄脸名 +1; ADR-102: received_file, 30 -> 31 tools, +499; ADR-097: recall says the bare word is enough +19, and reaches other groups and past notes +19; ADR-096: write_document's pin, and what each place carries (visibility no longer restates it) +49; ADR-092 D1: speak's file part (its name and where its artifact_id is copied from) +49; ADR-091 D2: note's deliver names a reply's default +20; soft limits (owner 2026-10-22): a stated length names only what she is asked for -182; watch block takes person (ADR-052 addendum 2026-10-21) +29; ADR-087 §4.1: think asks 120, refused past 360 (both numbers) +10; §4.5: note's matching advice (naming the source does not pass) +32; ADR-086 D1/D5: feel's who field and the recording words, +264;       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
+# ADR-108 D4b: the budget is measured on what the model is sent, her tools DECLARED (tool_schema.declared): each enum
+# dropped for its values in the field's description, speak's parts one description. Declared, the character brain's tools are
+# 20,990 characters (tiered memory on: 21,426), against 21,915 (22,211) measured on the definitions before: the aim and the line
+# stated for her prose (D4a) and the new `line` field (D2) cost, the enum arrays and the nested part schema they replace save more.
+CHARACTER = (30, 20566)       # ADR-103: react's line text says 表情包 for the sticker, not 贴纸 +1, and its face is 小黄脸名 +1; ADR-106: place_timezone removed, 31 -> 30 tools, -426 declared (20,990 -> 20,564); ADR-102: received_file, 30 -> 31 tools, +499; ADR-097: recall says the bare word is enough +19, and reaches other groups and past notes +19; ADR-096: write_document's pin, and what each place carries (visibility no longer restates it) +49; ADR-092 D1: speak's file part (its name and where its artifact_id is copied from) +49; ADR-091 D2: note's deliver names a reply's default +20; soft limits (owner 2026-10-22): a stated length names only what she is asked for -182; watch block takes person (ADR-052 addendum 2026-10-21) +29; ADR-087 §4.1: think asks 120, refused past 360 (both numbers) +10; §4.5: note's matching advice (naming the source does not pass) +32; ADR-086 D1/D5: feel's who field and the recording words, +264;       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
                               # ADR-064 phase 2: reply +1,334 (QQ group lists +451 net, QQ private +1,028), stay_silent -16, leave_note question +88;
                               # reply force (a #number that is someone here is sent back unless force=yes; owner 2026-10-14) +90; stay_silent why optional (said: nothing to explain) -10;
                               # ADR-060 leftovers: recall query optional with sections, feel yes/no and its decisions named, recall section +25
@@ -35,7 +39,7 @@ CHARACTER = (31, 21917)       # ADR-103: react's line text says 表情包 for th
                               # soft text budget (owner 2026-10-20): each stated length gives what she is asked for and
                               # where the program refuses, 「N 字以内，最多 M 字」 (her ask: both numbers) +155
 # With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): let_go, nature, from, about and the recall sentence (+294).
-CHARACTER_TIERED = (31, 22213)                  # ADR-103: 贴纸 -> 表情包 +1, 表情名 -> 小黄脸名 +1; ADR-102: received_file +499; ADR-097: recall's bare word +19, elsewhere and past notes +19; ADR-096: pin and what each place carries +49; ADR-092 D1: speak's file part +49
+CHARACTER_TIERED = (30, 21002)                  # ADR-103: 贴纸 -> 表情包 +1, 表情名 -> 小黄脸名 +1; ADR-106: place_timezone removed, 31 -> 30 tools, -426 declared (21,426 -> 21,000); ADR-102: received_file +499; ADR-097: recall's bare word +19, elsewhere and past notes +19; ADR-096: pin and what each place carries +49; ADR-092 D1: speak's file part +49
 ACTION = (27 + len(ACTION_DSH_CAPABILITIES), 16490)        # the worker's tools, plus DSH's own (skill, todo, web);
                                                            # ADR-102: received_file, 26 -> 27 tools, +291; its copy (part 3) +58;
                                                            # ADR-092 D2: offer_file, 25 -> 26 tools, +441 (15,467 -> 15,908 measured)
@@ -43,6 +47,11 @@ ACTION = (27 + len(ACTION_DSH_CAPABILITIES), 16490)        # the worker's tools,
 
 def size(specs):
     return len(json.dumps(specs, ensure_ascii=False))
+
+
+def sent(tools):
+    """Her tools as the model is sent them (ADR-108 D4b)."""
+    return [{**spec, 'parameters': tool_schema.declared(name, spec['parameters'])} for name, spec in tools.items()]
 
 
 def check(name, specs, count, budget, extra=0):
@@ -56,18 +65,18 @@ def check(name, specs, count, budget, extra=0):
 
 
 def test_the_character_brain_stays_within_its_tool_budget():
-    check('character', list(role_tools.TOOLS.values()), *CHARACTER)
+    check('character', sent(role_tools.TOOLS), *CHARACTER)
 
 
 def test_with_tiered_memory_on_the_character_brain_stays_within_its_budget():
-    check('character (tiered memory on)', list(role_tools.TIERED.values()), *CHARACTER_TIERED)
+    check('character (tiered memory on)', sent(role_tools.TIERED), *CHARACTER_TIERED)
 
 
 def test_with_tiered_memory_off_her_tools_are_exactly_as_before(monkeypatch):
     """The switch off changes nothing she is shown: the same tools, byte for byte (her prompt cache holds)."""
     from asuna import memory_tiers
     monkeypatch.setattr(memory_tiers, 'ENABLED', False)
-    assert role_tools.tools() is role_tools.TOOLS and size(list(role_tools.TOOLS.values())) == CHARACTER[1]
+    assert role_tools.tools() is role_tools.TOOLS and size(sent(role_tools.TOOLS)) == CHARACTER[1]
     assert 'let_go' not in str(role_tools.TOOLS['write_document'])
     monkeypatch.setattr(memory_tiers, 'ENABLED', True)
     assert role_tools.tools() is role_tools.TIERED and role_tools.aliases()['update_self'] == 'write_document'
@@ -83,7 +92,7 @@ def test_the_action_brain_stays_within_its_tool_budget():
 # Copied values (ids, names she copies from a list) and the thought, whose description states its own soft limit.
 COPIED = {('think', 'thought'), ('attach_image', 'artifact_id'), ('set_policy', 'key'), ('feel', 'event_id'),
           ('feel', 'proposal_id'), ('feel', 'why'), ('plan', 'line'), ('plan', 'plan_id'), ('visit', 'place'),
-          ('errand', 'place'), ('peer_line', 'line'), ('place_timezone', 'place'), ('place_timezone', 'timezone'),
+          ('errand', 'place'), ('peer_line', 'line'),
           ('task', 'task'), ('ideas', 'id'), ('ask', 'id')}
 SAFETY_CAP = 20000          # limits this large are a guard, never a length she writes toward
 
@@ -114,7 +123,7 @@ def test_every_length_she_can_be_refused_for_is_stated(tmp_path):
                 value = getattr(importlib.import_module('asuna.' + module), limit)
             if field not in params or value >= SAFETY_CAP or (tool, field) in COPIED:
                 continue
-            stated = (role_tools.LIMIT_WORDS % soft(value), role_tools.EXACT_WORDS % value)
+            stated = (role_tools.LIMIT_WORDS % (soft(value), value), role_tools.EXACT_WORDS % value)
             if not any(words in params[field].get('description', '') for words in stated):
                 unstated.append('%s.%s (%d)' % (tool, field, value))
     assert not unstated, 'state these limits with _s(limit=...): ' + ', '.join(unstated)
@@ -122,7 +131,7 @@ def test_every_length_she_can_be_refused_for_is_stated(tmp_path):
 
 # The harness prompt files (src/asuna/resources/prompts), characters at most. Same rule as the tools: growing one
 # raises its number here in the same change, with the cost stated in its ADR; a new file gets a line.
-PROMPTS = {'common.md': 418, 'turn.md': 639, 'turn_consult.md': 187, 'executor.md': 680, 'stage_attend.md': 445,
+PROMPTS = {'common.md': 418, 'turn.md': 639, 'turn_consult.md': 187, 'executor.md': 680, 'stage_attend.md': 485,
            'turn_thinking.md': 639, 'turn_consult_thinking.md': 187,          # ADR-099: their tool-mode twins' budgets
            'stage_appraise.md': 416}
 

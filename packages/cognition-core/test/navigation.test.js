@@ -22,7 +22,7 @@ import { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry';
 import Subagents from '@deepseek-ai/dsh-subagent';
 import Persistence from '../src/persistence.js';
 import { CognitionCore } from '../src/index.js';
-import { isHeld, releaseAfterCompaction } from '../src/pairing.js';
+import { isHeld, releaseAtBoundary } from '../src/pairing.js';
 import { PENDING_LINES, lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput, retitleSession } from '../src/navigation.js';
 
 test('native continuation preserves history and task children retain their actual execution directory', async t => {
@@ -139,7 +139,7 @@ test('native continuation preserves history and task children retain their actua
   assert.equal(first.agent.inbox.nextStep.length, 0);
   // A line that arrives while a compaction runs here waits for its end: a compaction in her turn refuses a summary of
   // a surface that changed under it ("session surface changed during summarization").
-  releaseAfterCompaction(core);
+  releaseAtBoundary(core);
   const compacting = first.agent.session, onSurface = receipt => compacting.surface.nodes
     .some(seq => compacting.eventAt(seq).data?.source?.receipt === receipt);
   compacting.append('compaction/start', { compactionId: 'c1', turn: null });
@@ -157,6 +157,22 @@ test('native continuation preserves history and task children retain their actua
   await new Promise(resolve => setTimeout(resolve, 50));
   assert.deepEqual(acked, ['before-' + (PENDING_LINES + 3)],
     'acknowledged only once written: a stop while held leaves it for the next start to project again');
+  // A line that arrives while a step runs waits for the step's end, a failed or aborted one included: DSH appends
+  // `step/end` in a finally and does not dispatch agent/turn-stopping after a step that threw.
+  const turn = compacting.snapshotEvents().filter(event => event.type === 'turn/start').at(-1).data.turn + 1;
+  compacting.append('turn/start', { turn });
+  compacting.append('step/start', { turn, step: 1 });
+  const stepLine = PENDING_LINES + 4;
+  assert.equal(await recordChannelInput(core, line(stepLine)), 'held');
+  assert.ok(isHeld(core, fresh._id, 'before-' + stepLine) && !onSurface('before-' + stepLine), 'held while the step runs');
+  compacting.append('step/end', { turn, step: 1 });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(onSurface('before-' + stepLine), 'joins the conversation when its step ends');
+  compacting.append('turn/end', { turn, reason: { kind: 'error', error: { message: 'the request failed', code: 'UNKNOWN' } } });
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.deepEqual(acked, ['before-' + (PENDING_LINES + 3), 'before-' + stepLine], 'acknowledged once written');
+  assert.equal(await recordChannelInput(core, line(PENDING_LINES + 5)), undefined, 'between steps a line is written at once');
+  assert.ok(onSurface('before-' + (PENDING_LINES + 5)));
   delete core.worker;
   await first.dispose();
   const again = await ctx.agents.resume({ resumeSessionId: fresh._id, agentOptions: route });

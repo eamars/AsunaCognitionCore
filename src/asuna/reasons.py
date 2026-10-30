@@ -164,7 +164,7 @@ def consequential(tool, args):
 # ADR-087 §4.2: the calls that write nothing and may run before her first thought in a turn, by tool or option. Every
 # other call, `feel` and `task.answer` included, needs a thought first, so each action keeps its recorded reason.
 READS = frozenset(('recall', 'read_image', 'task.page', 'ideas.read', 'ask.read', 'find_member', 'restart.preview',
-                   'group_focus.list', 'place_timezone.list', 'private_words.summary'))
+                   'group_focus.list', 'private_words.summary'))
 
 
 def before_thought(tool, args):

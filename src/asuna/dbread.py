@@ -69,7 +69,7 @@ def local_window(start, end=None, zone=None):
         finish += timedelta(days=1)                       # an end date includes that day
     utc = [moment.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S') for moment in (begin, finish)]
     window = Window({'$gte': utc[0], '$lt': utc[1]})
-    window.asked = {'local': [str(start), str(end) if end else None], 'zone': getattr(tz, 'key', None) or tz.tzname(None), 'utc': utc}
+    window.asked = {'local': [str(start), str(end) if end else None], 'utc': utc}
     return window
 
 

@@ -20,7 +20,7 @@ import time
 import uuid
 
 from . import clock
-from . import sandbox_backend, channel_kinds, errands
+from . import sandbox_backend, channel_kinds, errands, tool_watch
 from .application import Application
 from .host import RuntimeHost
 from .config import DATA, ROOT, database_lock, redact_text
@@ -224,8 +224,12 @@ class NativeLane:
             else:
                 grant = workspace_grant(self.store.config, ep['scene_id'], ep['person_id'])
             platform = channel_kinds.of(ep['scene_id'])
-            cwd = (self.worker.channel_workspace(platform) if self.lane in ('character', 'attend') and platform
-                   else str(Path(grant['workspace']).resolve()))
+            if self.lane in ('character', 'attend') and platform:
+                cwd = self.worker.channel_workspace(platform)
+            else:
+                # Made now: no folder exists before a task of theirs needs it (ADR-107).
+                cwd = str(Path(grant['workspace']).resolve())
+                Path(cwd).mkdir(parents=True, exist_ok=True)
             mode = None
             if self.lane == 'character':
                 from .role_tools import thinking_mode
@@ -291,7 +295,7 @@ class NativeLane:
             try:
                 self.worker.emit(request)
                 try:
-                    value = self.wait(future, self.store.config['workflow_timeout_seconds'])
+                    value = self.wait(future, self.store.config['workflow_timeout_seconds'], ep)
                 except TimeoutError:
                     # Stop the native run this stage waited for: nothing reads its result any more, its tools
                     # are already refused, and a continuation of the same task would meet it still running.
@@ -329,9 +333,10 @@ class NativeLane:
                 session_records.save(self.store, {**row, 'retired': True}, expected=row['revision'],
                                stream='native-binding:' + session_id)
 
-    @staticmethod
-    def wait(future, timeout):
-        """The stage's result; her tool calls in the meantime run here, one at a time, in call order."""
+    def wait(self, future, timeout, ep):
+        """The stage's result; her tool calls in the meantime run here, one at a time, in call order, each timed for
+        her episode `ep` (tool_watch.py)."""
+        from .role_tools import Refused
         deadline = time.monotonic() + timeout
         while not future.done():
             remaining = deadline - time.monotonic()
@@ -349,7 +354,10 @@ class NativeLane:
                     raise Denied('ROLE_TOOLS_NOT_EXPOSED')
                 # ADR-099: the thinking her first call of a stage came with, recorded as her thought before it runs.
                 extra = {'thinking': call['thinking']} if 'thinking' in call else {}
-                reply.set_result(future.asuna_handler(call['call_id'], call['tool'], call.get('args') or {}, **extra))
+                with self.worker.calls.timed('character', call['call_id'], call['tool'], call.get('args'), ep,
+                                             failed=(Refused,)):
+                    value = future.asuna_handler(call['call_id'], call['tool'], call.get('args') or {}, **extra)
+                reply.set_result(value)
             except BaseException as exc:
                 reply.set_exception(exc)
         while True:                      # calls that arrived as the turn ended get a plain answer
@@ -386,6 +394,7 @@ class BusinessWorker:
         self.folded_stop = False        # a lease left behind was folded into the plugin's open span (ADR-101)
         self.stopping = threading.Event()
         self.carry_lock = threading.Lock()
+        self.calls = tool_watch.Calls()           # every tool call of both brains, timed and watched
 
     def register_stage(self, operation, future, task):
         """Admit a stage: the Host is not reconfiguring, its task (if any) is still valid, and the operation runs
@@ -500,8 +509,14 @@ class BusinessWorker:
         if releases:
             config['_native_integration_release'] = releases[0]
         evidence = Evidence(DATA / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]), keep=KEPT_HOST_RECORDS,
-                            pinned=('runtime.ready',))   # the supervisor's proof that this start came up
+                            pinned=('runtime.ready', 'clock.zone'))   # ready: the supervisor's proof that this start came up
         prune_host_reports()
+        # ADR-106: which source her one clock comes from, once per start and never with the zone's name (a zone is
+        # personal data). A setting that is set but does not load is read as not set, so this record is where it shows.
+        from .schedule_rules import her_zone
+        her = her_zone(config)
+        evidence.record('clock.zone', {'source': her['source'], 'setting_set': bool(config.get('timezone')),
+                                       'setting_unreadable': her['setting_unreadable']})
         def configure(host):
             self.app, self.controller = host.app, host.controller
             if lease.left_behind:                  # the last Host did not stop by itself (host_stops)
@@ -524,6 +539,13 @@ class BusinessWorker:
             config, evidence, lane_factory=lambda *a: NativeLane(self, *a),
             schedule_lane=NativeScheduleLane(self, config) if schedule else False, configure_controller=configure,
             development_factory=lambda c,s: NativeDevelopmentBridge(self,c,s), awaits_activation=True))
+        # Every tool call is timed from here on, and one that runs long is recorded (tool_watch.py); a fault is
+        # counted in a thread of its own, as the media children's are.
+        from . import lane_faults
+        store = self.app.store
+        self.calls.attach(store, evidence, lambda stage, error: threading.Thread(
+            target=lane_faults.record, args=(store, 'host', 'tools', stage, error), daemon=True).start())
+        self.stack.callback(self.calls.close)
         self.watch = threading.Thread(target=self.watch_host, name='native-lifecycle', daemon=True)
         self.watch.start()
         threading.Thread(target=self.audit_retention, name='audit-retention', daemon=True).start()
@@ -1230,7 +1252,7 @@ class BusinessWorker:
             # The conversation's clock, for the times a Host tool shows its model (web_search's publication dates).
             from . import local_time
             from .schedule_rules import offset_minutes
-            zone = local_time.zone_of(self.app.store, record['scene_id'])
+            zone = local_time.her_zone(self.app.store)
             return {**record, 'timezone': None if zone.get('zone_unavailable') else zone['name'],
                     'utc_offset_minutes': offset_minutes(zone['tz'], clock.now())}
         if method == 'ui.titles':
@@ -1290,8 +1312,10 @@ class BusinessWorker:
             self.app.broker.bind(broker_session, task, Path(binding['cwd']))
             # The action brain reads tool results on the local clock; receipts keep UTC (local_time.py).
             from . import local_time
-            return local_time.for_model(self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args']),
-                                        local_time.zone_of(self.app.store, task['scene_id']))
+            from .tasks import ToolFailed
+            with self.calls.timed('action', args['call_id'], args['tool'], args['args'], task, failed=(ToolFailed,)):
+                result = self.app.broker.call(broker_session, args['call_id'], args['tool'], args['args'])
+            return local_time.for_model(result, local_time.her_zone(self.app.store))
         if method == 'tool_specs':
             # One list: the broker's, which is also what every call is checked against.
             return self.app.broker.specs
@@ -1305,13 +1329,14 @@ class BusinessWorker:
         if method == 'role_tool_specs':
             # A role session gets her tools as its conversation shows them (ADR-079 §9.7), fixed for the session.
             from .evidence import canonical
-            from .role_tools import all_specs, session_specs
+            from .role_tools import all_specs, declared_specs, session_specs
             record = (session_records.get(self.app.store, args['session_id'], native=True)
                       if args.get('session_id') else None)
             if not record:
-                return all_specs()
-            specs = session_specs(self.app.store, record['scene_id'], record.get('person_id'))
-            speak = next((spec for spec in specs if spec['name'] == 'speak'), None)
+                return declared_specs(all_specs())
+            strict = session_specs(self.app.store, record['scene_id'], record.get('person_id'))
+            speak = next((spec for spec in strict if spec['name'] == 'speak'), None)
+            specs = declared_specs(strict)          # what DSH registers and the model reads (ADR-108 D4b)
             self.app.store.audit(record['_id'], 'session.tools', {
                 'sha256': sha(canonical(specs)),
                 'speak_parts': speak['parameters']['parts']['items']['properties']['kind'].get('enum') if speak else None,

@@ -154,8 +154,9 @@ def carries(store, scene, *names):
     return any(name in have for name in names)
 
 
-def numbered(store, scene):
-    """Lines there show their number: the channel carries quotes, out or in (ADR-079 §9.2)."""
+def can_quote(store, scene):
+    """She can quote a line by its number there: the channel carries quotes, out or in (ADR-079 §9.2). Whether lines show
+    their number is a different question, and every line does (people.py): a number is how any line is pointed at."""
     return carries(store, scene, 'quote', 'quote_in')
 
 

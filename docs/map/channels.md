@@ -33,6 +33,9 @@ Authenticated transport-neutral adapter seam. Platform protocol belongs to the a
   - `notices`
   - `voice` — One voice of a line about to be posted, transcribed now; its outcome waits for the line (voice.py).
   - `own_mute`
+  - `admission` — POST …/admission: what the core would do with these senders and conversations, and for how long a package may reuse the answer (channel_admission.judge).
+  - `routes` — GET …/routes: the routes the core serves on this channel (listed or admitted) that no block list stops, each with its conversation, in order of route id and a page at a time (`after`, `limit` up to 1000): how a package learns which conversa
+  - `departures` — POST …/departures: a person is no longer in a group; their admission ends (channel_admission.depart).
   - `receive`
   - `claim`
   - `attachment` — 字节端点：GET /v1/channels/<id>/outbox/<pub>/attachment?attempt_id=…&artifact_id=…
@@ -50,6 +53,7 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 
 - def `register`
 - def `load` — Import each plugin's kind module: [{'python': <directory>, 'module': <name>}].
+- def `loaded` — The plugin entries this process loaded, in the order it loaded them (a data child loads the same).
 - def `get`
 - def `of` — The kind of a scene or person id, by its prefix; None for local ids and unknown kinds.
 - def `of_channel`
@@ -59,6 +63,7 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 - def `home` — A scene or person of a kind whose conversations are trusted home ones (ADR-017).
 - def `marks_answers` — Who on this line marks the lines that answer her questions (agent_line.py send --answers), so an unmarked line of theirs answers none: their person id, or None where nobody marks.
 - def `owner_joins` — A scene of a kind the owner joins from the Web (ADR-051): a home line only.
+- def `open_admission` — Whether the deployment's open admission may apply to this channel: its kind declares OPEN_ADMISSION.
 - def `answers_requests` — Whether a configured channel's kind brings requests her home answers (notices.py).
 - def `sends_images`
 - def `sends_stickers`
@@ -85,17 +90,22 @@ What a channel's running adapter says it carries (ADR-079 §9.7).
 - def `supports` — The names a channel's adapter last declared; empty when it never did.
 - def `limit` — The largest size in bytes a channel's adapter declared for one of its functions (`file:<bytes>`); None when it declared none.
 - def `carries` — Whether the scene's channel declares any of these.
-- def `numbered` — Lines there show their number: the channel carries quotes, out or in (ADR-079 §9.2).
+- def `can_quote` — She can quote a line by its number there: the channel carries quotes, out or in (ADR-079 §9.2).
 - def `forget`
 
 ## `channel_admission`
 
 [src/asuna/channel_admission.py](../../src/asuna/channel_admission.py)
 
-Owner-configured channel admission. Platform events never grant owner access.
+Channel admission: who may speak to her. The core decides, once (ADR-107); a channel package asks and acts on the answer. Platform events never grant owner access.
 
+- def `admitted` — Whether a grant was made by an admission, not listed by the owner: its folder is named `auto-<hash>`.
+- def `mode` — `automatic` (open) only where the deployment says so and the channel's kind may be open (OPEN_ADMISSION); every other channel is `explicit` (closed), a home line included.
+- def `closed_by_kind` — Channels the deployment opens (`automatic`) whose kind does not declare OPEN_ADMISSION, so they stay closed: a platform kind from before the declaration, or one installed beside a newer core.
 - def `restore_admissions`
 - def `admit` — Called only behind channel authentication; validate before changing state.
+- def `judge` — What the core would do with one ask of a channel package (POST …/admission), and for how long the answer may be reused.
+- def `depart` — A person is no longer in a group (POST …/departures).
 
 ## `notices`
 
@@ -434,6 +444,7 @@ Voice and video decoding in child processes (ADR-095 §5.3.1): one long-lived ch
 - class `StartFailed` — The child exited, or did not say it was ready, while starting.
 - class `Closed` — The kind is closing (the Host stops): a job it ended is not the job's failure.
 - class `Timeout` — The job's try ran past its deadline, or the call's budget ran out.
+- class `Busy` — The job waited out its kind's lock-wait limit behind the kind's other jobs or a start; it never ran.
 - class `Died` — The child exited, or answered something that is not a frame, during the job.
 - class `JobError` — The job could not be done; `program` when the child's own code failed (not the job's content).
 - def `write_frame`

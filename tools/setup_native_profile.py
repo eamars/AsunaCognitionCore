@@ -166,6 +166,27 @@ def compose(defaults, prior):
     return merged
 
 
+def admission_default(prior, asked=None):
+    """The `channelAdmission` this install offers as a first choice (`compose`: a value the profile saved wins).
+
+    `asked` (--channel-admission) is offered as given. Otherwise a profile that has never been given a deployment is
+    new and gets `automatic` (open: any private chat, group and member is admitted); a profile with a saved
+    deployment that stores no choice reads `explicit` (the plugin's default), so `explicit` is written into it and the
+    new default cannot open a running deployment at its next install."""
+    if asked:
+        return asked
+    saved = next((row.get('config') or {} for row in prior or [] if row.get('id') == 'asuna-cognition-core'), {})
+    if saved.get('deployment') is None:
+        return 'automatic'
+    return None if 'channelAdmission' in saved else 'explicit'
+
+
+def stored_admission(prior):
+    """What a profile's saved settings say about `channelAdmission`: `stored automatic`, `stored explicit` or `absent`."""
+    saved = next((row.get('config') or {} for row in prior or [] if row.get('id') == 'asuna-cognition-core'), {})
+    return 'stored ' + str(saved['channelAdmission']) if 'channelAdmission' in saved else 'absent'
+
+
 def profile_patch(config, config_path, persona, profile='asuna-native', channels=(), channel_admission=None):
     data_root, state_dir = data_folder(profile)
     return [
@@ -191,17 +212,30 @@ def profile_patch(config, config_path, persona, profile='asuna-native', channels
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=ROOT / 'config/local.json')
-    parser.add_argument('--persona-package', type=Path, required=True,
+    parser.add_argument('--persona-package', type=Path,
                         help='persona package directory (its packed artifact must be in the pack manifest)')
     parser.add_argument('--channel-package', type=Path, action='append', default=[],
                         help='channel package directory, e.g. packages/channels/napcat-qq (repeatable; packed like the persona)')
     parser.add_argument('--profile', default='asuna-native', help='DSH profile name (asuna-demo for the demo environment)')
     parser.add_argument('--port', type=int, help='Web port this profile starts on (recorded; default: as before, else 8780)')
     parser.add_argument('--channel-admission', choices=('explicit', 'automatic'),
-                        help='channel admission for a profile that has not saved one (default explicit)')
+                        help='channel admission for a profile that has not saved one (default: automatic for a new '
+                             'profile; a profile with a saved deployment that stores none keeps explicit)')
+    parser.add_argument('--print-admission', action='store_true',
+                        help='print what the profile has saved for channelAdmission (stored automatic, stored '
+                             'explicit or absent) and change nothing')
+    parser.add_argument('--require-admission', choices=('explicit', 'automatic'),
+                        help='as --print-admission, and exit 1 unless the profile has saved exactly this value')
     args = parser.parse_args()
     if not args.profile.replace('-', '').isalnum():
         raise ValueError('INVALID_PROFILE_NAME')
+    if args.print_admission or args.require_admission:
+        editable = profile_base(args.profile) / 'home' / 'profiles' / args.profile / 'cordis.patch.yml'
+        stored = stored_admission(profile_yaml(editable.read_text(encoding='utf-8')) if editable.exists() else [])
+        print(stored)
+        sys.exit(1 if args.require_admission and stored != 'stored ' + args.require_admission else 0)
+    if not args.persona_package:
+        parser.error('--persona-package is required')
     if args.port is not None and not 1024 <= args.port <= 65535:
         raise ValueError('INVALID_WEB_PORT')
     config = load(args.config)
@@ -237,7 +271,8 @@ def main():
     # overlay would silently override native Settings writes on every launch.
     editable = home / 'profiles' / args.profile / 'cordis.patch.yml'
     prior = profile_yaml(editable.read_text(encoding='utf-8')) if editable.exists() else []
-    defaults = profile_patch(config, args.config, persona, args.profile, channels, args.channel_admission)
+    defaults = profile_patch(config, args.config, persona, args.profile, channels,
+                             admission_default(prior, args.channel_admission))
     stored = {}
     merged = compose(defaults, prior)
     # Older installers put an Asuna route's output limit into this native

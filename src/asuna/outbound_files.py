@@ -382,7 +382,7 @@ def check(store, ep, scene, artifact_id):
     if item and erased(item):
         return None, erased_words(store, item, (scene or {}).get('_id'))
     if item and removed(item):
-        return None, expired_words(item, local_time.zone_of(store, (scene or {}).get('_id')))
+        return None, expired_words(item, local_time.her_zone(store))
     offered = ((ep.get('context') or {}).get('file_artifacts_from_program') or {}).get('items') or ()
     if artifact_id not in {row.get('artifact_id') for row in offered if isinstance(row, dict)}:
         return None, '不在 file_artifacts_from_program 里：artifact_id 照抄那里列出的'
@@ -437,7 +437,7 @@ def expired_source(store, row_id):
     item = artifact_records.get(store, meta['artifact_id']) if meta else None
     present = bool(item) and source_present(item)
     if item and removed(item):
-        words = expired_words(item, local_time.zone_of(store, row.get('scene_id')), present)
+        words = expired_words(item, local_time.her_zone(store), present)
     else:
         words = '这个文件的字节不在存储里了' + (SOURCE_KEPT % (item.get('source') or {}).get('path') if present
                                              else SOURCE_GONE)

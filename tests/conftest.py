@@ -108,6 +108,13 @@ def host_sandbox():
     sandbox_backend.attach(None)
 
 @pytest.fixture(autouse=True)
+def no_machine_zone(monkeypatch):
+    # Her clock is the deployment's `timezone` setting, else the machine's zone (schedule_rules.her_zone): a test that
+    # sets neither reads UTC whatever zone the runner is in, and a test that wants the machine's sets it itself.
+    monkeypatch.delenv('TZ',raising=False)
+    monkeypatch.delenv('ASUNA_HOST_TIMEZONE',raising=False)
+
+@pytest.fixture(autouse=True)
 def preserve_temporary_evidence(request):
     root=os.environ.get('ASUNA_TEST_EVIDENCE_ROOT')
     temporary=request.getfixturevalue('tmp_path') if root and 'tmp_path' in request.fixturenames else None

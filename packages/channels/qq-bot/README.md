@@ -71,8 +71,9 @@ sits beside [QQ through NapCat](../napcat-qq/README.md): a profile may have eith
    - `token`: a random string of at least 24 characters for the channel API, as for any channel.
    - `app_secret` lives in DSH's credential store. A first-install file may hold the plain value, which the
      installer moves there.
-   - With **外部渠道接入策略** (Channel admission) `automatic`, every private chat and group the bot is reached in gets its route on its
-     first message, so no route needs configuring.
+   - With **外部渠道接入策略** (Channel admission) Open (`automatic`), every private chat and group the bot is reached in gets its route on its
+     first message, so no route needs configuring. The bridge asks Core which route a sender's line belongs to and
+     whether they are admitted; it holds no roster and builds no route id.
    - Optional fields:
      - `api_base` (default `https://api.sgroup.qq.com`) and `token_url` (default
        `https://bots.qq.com/app/getAppAccessToken`), when the platform moves them;

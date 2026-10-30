@@ -155,9 +155,6 @@ SENTENCE_ENDS = '。！？!?…\n'
 CLOSERS = '”’」』）)"\''
 
 
-TAIL_SHOWN = 300                     # how much of what a cut leaves out a refusal shows
-
-
 def soft(limit):
     """The length she is asked for: four fifths of the limit the program refuses past, which stays where it was. A
     model does not count exactly; the room between the two is for that, and a turn never carries more (owner
@@ -174,12 +171,34 @@ def refs_usable(refs, cap=12):
 
 
 def over(length, limit, ask=None):
-    """Words for a text kept although longer than she was asked for (`ask`, by default soft(limit)), or None. Her
-    words name only what she is asked for: a model does not count exactly, so the program refuses only well past it
-    (owner 2026-10-22)."""
+    """Words for a text kept although longer than she was asked for (`ask`, by default soft(limit)), or None. The aim and
+    the line are both stated, and the fact says no more than it is (ADR-108 D4a): a model does not count exactly, so the
+    program refuses only well past the aim, and the room between is said as room."""
     ask = ask or soft(limit)
-    return ('%d 字，要求 %d 字以内，超了 %d 字，这次照收了' % (length, ask, length - ask)
+    return ('%d 字，要求 %d 字以内，多了 %d 字；过了 %d 字不收' % (length, ask, length - ask, limit)
             if ask < length <= limit else None)
+
+
+def excess_line(text, limit):
+    """(s, t): the line of a text that holds its first character past `limit`, and how many lines it has, as split on
+    line breaks once trailing blank lines are gone. No sentence is counted: her prose often has no sentence end."""
+    lines = len(str(text).rstrip('\n').split('\n'))
+    return min(str(text)[:limit].count('\n') + 1, lines), lines
+
+
+def too_long(field, text, limit, ask, *, why=None, as_list=False):
+    """The refusal for a text past the line (ADR-108 D4c): the line, by how much she went over, the aim, where the line
+    comes from, and where the excess starts, by characters. It repeats none of her words and does not judge which part to
+    drop. `as_list`: a list she writes (a plan's intent, an idea, a note), whose last line often says what counts as
+    done: it also says on which line the excess starts, and the choice of what to drop is hers."""
+    length = len(text)
+    head = '%s 太长了：%d 字，过了 %d 字的线 %d 字（要求 %d 字以内）。' % (field, length, limit, length - limit, ask)
+    if why:
+        head += why.rstrip('。') + '。'
+    if as_list:
+        line, lines = excess_line(text, limit)
+        return head + '删哪段你自己定；%d 字之后起是超出部分，落在第 %d 行（共 %d 行）。' % (limit, line, lines)
+    return head + '精简到 %d 字以内再调用；%d 字之后起是超出部分。' % (ask, limit)
 
 
 def _head(text, limit):
@@ -203,18 +222,6 @@ def cut(text, limit):
         return text
     head = _head(text, limit)
     return head + CUT_MARK % (len(text) - len(head))
-
-
-def cut_offer(text, limit):
-    """The cut version as a refusal offers it, on its own lines ready to copy, and the part that cut leaves out, so
-    what would be lost is seen before it is sent (her ask, 2026-10-20)."""
-    text = str(text or '').strip()
-    offer = '\n' + cut(text, limit)
-    if len(text) <= limit:
-        return offer
-    tail = text[len(_head(text, limit)):].strip()
-    shown = tail if len(tail) <= TAIL_SHOWN else tail[:TAIL_SHOWN] + '……'
-    return offer + '\n这样截，去掉的是这 %d 字：\n%s' % (len(tail), shown)
 
 
 def excerpt(text, limit):

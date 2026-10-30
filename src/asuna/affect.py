@@ -574,6 +574,24 @@ class AffectLedger:
             doc['proposal_id'] = proposal_id
         return self._insert('affect_events', doc, 'affect:' + ep['_id'])[0]
 
+    def record_problems(self, ep, item):
+        """Every gate `record` would refuse this feeling at, found without writing: [AffectError], in the order the gates
+        come. A gate whose input an earlier one spoiled (the numbers, when a word is unknown) is not run on guesses."""
+        found = []
+        try:
+            numeric = from_words(self.model, item)
+        except AffectError as error:
+            found.append(error)
+            numeric = None
+        from .context import refs
+        try:
+            self.check(numeric if numeric is not None else {'ref': item.get('ref'), 'kind': kind_key(self.model, item.get('kind'))},
+                       refs(ep['context']))
+        except AffectError as error:
+            if numeric is not None or error.code == 'AFFECT_REF_NOT_IN_INDEX':
+                found.append(error)
+        return found
+
     def record(self, ep, index, item, cls, *, key=None):
         """A feeling she recorded in words (DECIDE): mapped to numbers here, then the usual gates."""
         if not self.enabled:

@@ -43,7 +43,7 @@ def erased_words(store, row, scene_id=None):
     """ADR-105's sentence for an erased row: bytes the erasure deleted, or bytes that had expired before it."""
     from . import local_time
     row = row or {}
-    zone = local_time.zone_of(store, scene_id)
+    zone = local_time.her_zone(store)
     what = '张图' if row.get('kind') == 'image' else '个文件'
     erased_at = local_time.stamp(row.get('erased_at'), zone)
     if row.get('bytes_removed_at'):

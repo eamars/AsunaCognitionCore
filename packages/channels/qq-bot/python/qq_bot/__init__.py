@@ -8,6 +8,7 @@ import re
 
 KIND = 'qqbot'                    # scene ids qqbot:<appid>:<dm|group>:<openid>; person ids qqbot:<openid>
 TITLE = 'QQ Bot'                  # the sidebar workspace its conversations live in
+OPEN_ADMISSION = True             # its senders are strangers the deployment may admit (channelAdmission automatic)
 # The hosts the platform delivers inbound pictures from (attachments[].url).
 IMAGE_HOSTS = ('multimedia.nt.qq.com.cn', 'gchat.qpic.cn')
 # She speaks here only through `speak`, in these parts (what the bridge sends: text, and a picture with or without

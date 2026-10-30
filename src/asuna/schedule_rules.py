@@ -5,16 +5,17 @@
 怎么用人话说出来。每日／每周把本地钟点存在现有 plans.rule 里，到期后由调用方再挂一次**原生单次**，
 这里不起线程、不轮询、不补发历史。
 
-时区口径：场景配置优先，其次全局配置；都没配就按 UTC 并明说「未设置时区」，核心不带任何人的默认时区；确认时把用的哪个时区一并交出去。
+时区口径：她只有一个钟面（`her_zone`）——部署设置里的 `timezone`；没设就用宿主报来的本机时区；都没有按 UTC。
+核心不带任何人的默认时区，场景、路由、群都不再有自己的钟。一条计划若自己存着另一个钟面（旧的每日／每周安排），
+`plan_zone` 把它按那个钟面算，读它的话里说明比她的钟快或慢多少。
 DST：每日／每周当日遇到不存在的钟点，顺延到该日之后第一个真实存在的本地时刻（就是跳变那一刻）；
 重叠的钟点只取较早的一次；单次安排遇到不存在的本地时间**不猜**，抛错让角色问那一句。
-换算只用标准库 zoneinfo。宿主环境没有 tz 数据库时退回这个场景里已配的固定偏移
-（`utc_offset_minutes`，与 proactive 块同名但各块自己读），
-连偏移都没有就用宿主本地时区——三种来源写在 tz_source 里，不假装自己还带着 DST 规则。
+换算只用标准库 zoneinfo（`tzdata` 是固定依赖，合法的名字一定读得到）。
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import datetime, time as wall_time, timedelta, timezone
 from . import clock
@@ -46,46 +47,75 @@ def _aware(moment):
     return moment.astimezone(timezone.utc)
 
 
-# ── 时区：一个场景用哪个钟面，只从现有场景配置里读一处 ─────────────────
-def _route_of(config, scene):
-    channel = (config or {}).get('channels', {}).get((scene or {}).get('channel_id') or '')
-    for route in (channel or {}).get('routes', {}).values():
-        if route.get('scene_id') == (scene or {}).get('_id'):
-            return route
+# ── 时区：她只有一个钟面 ───────────────────────────────────────────────
+HOST_ZONE_ENV = 'ASUNA_HOST_TIMEZONE'        # the Host gives the worker the machine's IANA zone (worker.js)
+
+
+def _load(name):
+    """The zone database's zone of this name, or None."""
+    if ZoneInfo is None or not isinstance(name, str) or not name:
+        return None
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError, OSError):
+        return None
+
+
+def machine_zone_name():
+    """The machine's own zone as an IANA name: what the Host reported, else `TZ`; None when neither loads."""
+    for name in (os.environ.get(HOST_ZONE_ENV), os.environ.get('TZ')):
+        if _load(name):
+            return name
     return None
 
 
-def _zone(name, offset_minutes=None):
-    """按名字取时区；取不到就退回固定偏移／宿主本地，并把"名字没生效"照实带回去。"""
-    if ZoneInfo is not None and isinstance(name, str) and name:
-        try:
-            return {'tz': ZoneInfo(name), 'zone_unavailable': None}
-        except (ZoneInfoNotFoundError, ValueError, OSError):
-            pass
-    if type(offset_minutes) is int and -840 <= offset_minutes <= 840:
-        return {'tz': timezone(timedelta(minutes=offset_minutes)), 'zone_unavailable': name}
-    return {'tz': clock.now().astimezone().tzinfo, 'zone_unavailable': name}
+def her_zone(config):
+    """The one clock everything she reads is on: the deployment's `timezone` setting; when it is not set (or does not
+    load, `setting_unreadable`) the machine's zone; else UTC. `source` is setting, machine or unset."""
+    given = (config or {}).get('timezone')
+    tz = _load(given)
+    if tz:
+        return {'name': given, 'tz': tz, 'source': 'setting', 'setting_unreadable': False}
+    unreadable = bool(given)
+    name = machine_zone_name()
+    if name:
+        return {'name': name, 'tz': _load(name), 'source': 'machine', 'setting_unreadable': unreadable}
+    return {'name': 'UTC', 'tz': timezone.utc, 'source': 'unset', 'setting_unreadable': unreadable}
 
 
-def scene_timezone(config, scene, plan=None):
-    """这个场景（或这条计划创建时）用哪个时区。计划上已落库的时区优先，改配置不追改旧计划。"""
-    route = _route_of(config, scene)
-    block = (route or {}).get('schedule') if isinstance((route or {}).get('schedule'), dict) else {}
-    offset = block.get('utc_offset_minutes')
-    if type(offset) is not int or not -840 <= offset <= 840:
-        offset = None
-    for name, source in (((plan or {}).get('timezone'), 'plan'),
-                         (block.get('timezone') or (route or {}).get('timezone'), 'route'),
-                         ((scene or {}).get('timezone'), 'scene'),
-                         ((config or {}).get('timezone'), 'config'),
-                         ('UTC', 'unset')):
-        if not (isinstance(name, str) and name):
-            continue
-        zone = _zone(name, offset)
-        source = source if zone['zone_unavailable'] is None else 'fixed_offset' if offset else 'host_local'
-        return {'name': name, 'requested': name, 'source': source, 'offset_minutes': offset,
-                'tz': zone['tz'], 'zone_unavailable': zone['zone_unavailable']}
-    raise ValueError('SCHEDULE_TIMEZONE_UNRESOLVED')
+def has_wall_zone(rule):
+    """Whether a rule's meaning depends on a zone: a daily or weekly clock, or an `at` written without an offset."""
+    return isinstance(rule, dict) and ('clock' in rule or ('at' in rule and not rule.get('at_utc')))
+
+
+def plan_zone(plan, her):
+    """The zone a plan's rule is written in: the one it stored when the rule has a wall zone and it loads, else hers.
+    `unreadable` is true when the plan stored a zone that does not load (it then reads on her clock)."""
+    name = plan.get('timezone')
+    if not has_wall_zone(plan.get('rule')) or not name or name == her['name']:
+        return {**her, 'unreadable': False}
+    tz = _load(name)
+    if tz is None:
+        return {**her, 'unreadable': True}
+    return {'name': name, 'tz': tz, 'source': 'plan', 'setting_unreadable': False, 'unreadable': False}
+
+
+def moved_from(plan, her, timing_given):
+    """The name of the zone a plan is moved off when a call gives it a timing: its rule has a wall zone and was written
+    on a clock that is not hers. None for a call that gives no timing (new wording keeps the plan as it is) and for a
+    plan that is already on her clock."""
+    if not timing_given or not has_wall_zone(plan.get('rule')):
+        return None
+    name = plan_zone(plan, her)['name']
+    return name if name != her['name'] else None
+
+
+def pin_at(rule, fire_at):
+    """An `at` written without an offset becomes the moment it names, so an appointment never depends on a zone;
+    every other rule as it is."""
+    if isinstance(rule, dict) and 'at' in rule and not rule.get('at_utc'):
+        return {'at': _aware(fire_at).isoformat(timespec='minutes'), 'at_utc': True}
+    return rule
 
 
 def offset_minutes(tz, moment):
@@ -270,9 +300,9 @@ def next_fire(rule, tz, moment=None):
     raise ValueError('SCHEDULE_CLOCK_NO_UPCOMING: 这条钟点规则算不出下一次')
 
 
-def local_moment(zone_name, moment=None):
-    """The moment on the wall clock of an IANA zone (rhythm, settlement dates)."""
-    return _aware(moment or now_utc()).astimezone(ZoneInfo(zone_name))
+def local_moment(zone, moment=None):
+    """The moment on the wall clock of a zone, given as an IANA name or as a tzinfo (rhythm, settlement dates)."""
+    return _aware(moment or now_utc()).astimezone(ZoneInfo(zone) if isinstance(zone, str) else zone)
 
 
 def minutes_later(minutes, moment=None):
@@ -330,7 +360,8 @@ def _wall_text(at, tz):
     return _local_text(moment if moment.tzinfo else moment.replace(tzinfo=tz), tz)
 
 
-def describe(rule, tz):
+def describe(rule, tz, her_tz=None):
+    """A rule in words. `tz` is the zone its wall time is written in; a moment (`at_utc`) is worded on `her_tz`."""
     kind = rule_kind(rule)
     if kind == 'after':
         seconds = rule['after_seconds']
@@ -343,24 +374,32 @@ def describe(rule, tz):
             ('每 %d 小时' % (seconds // 3600)) if seconds % 3600 == 0 and seconds >= 3600 else '每 %d 分钟' % (seconds // 60))
         return '%s重复（原生自己重复）' % human
     if kind == 'at':
-        return '一次性：%s' % (_wall_text(rule['at'], timezone.utc if rule.get('at_utc') else tz))
+        return '一次性：%s' % (_wall_text(rule['at'], (her_tz or tz) if rule.get('at_utc') else tz))
     clock = rule['clock']
     days = clock.get('weekdays')
     who = '每天' if not days else '每' + '、'.join(WEEKDAY_NAMES[d] for d in days)
     return '%s %s（本地钟点）' % (who, clock['time'])
 
 
-def project(plan, zone, moment=None):
-    """把一条 plans 行投影成角色上下文里那一行：带人话、带场景时区的下一次，不让她自己换算。"""
+def gap_words(minutes):
+    """How one clock stands to another, in words that change only with a zone or a daylight-saving switch."""
+    hours, rest = divmod(abs(minutes), 60)
+    span = ' '.join(part for part in ('%d 小时' % hours if hours else '', '%d 分钟' % rest if rest else '') if part)
+    return '%s %s' % ('快' if minutes > 0 else '慢', span)
+
+
+def project(plan, her, moment=None):
+    """把一条 plans 行投影成角色上下文里那一行：带人话、带她那个钟面上的下一次，不让她自己换算。"""
     moment = _aware(moment)
-    tz = zone['tz']
+    zone = plan_zone(plan, her)                    # the zone the rule's wall time is written in
+    tz, her_tz = zone['tz'], her['tz']
     # What she reads (her review 2026-10-14): the plan in words and the moment the program will fire it, to check one
     # against the other; the rule's own fields, versions and bookkeeping stay the program's.
     row = {'_id': plan['_id'], 'intent': plan.get('intent')}
-    if zone['zone_unavailable']:
-        row['timezone_note'] = '时区库读不到 %s，按固定偏移算（这一条没有 DST 规则）' % zone['zone_unavailable']
+    if zone['unreadable']:
+        row['timezone_note'] = '这条计划存的时区这台机器读不到，按你的钟读（这一条没有 DST 规则）'
     try:
-        row['description'] = describe(plan['rule'], tz)
+        row['description'] = describe(plan['rule'], tz, her_tz)
     except (ValueError, KeyError):
         row['description'] = '规则认不出来：可能是旧版本留下的记录'
         return row
@@ -380,13 +419,42 @@ def project(plan, zone, moment=None):
         row['why_no_next'] = str(exc)
         return row
     row['next_fire_at'] = fire.isoformat(timespec='seconds')
-    shifted = _shift_note(plan['rule'], fire, tz)
+    shifted = _shift_note(plan['rule'], fire, tz, her_tz)
     if shifted:
         row['dst_note'] = shifted
+    gap = offset_minutes(tz, fire) - offset_minutes(her_tz, fire)       # zero unless the rule has its own wall zone
+    if gap:
+        row['clock_note'] = clock_note(gap)
     return row
 
 
-def _shift_note(rule, fire, tz):
+def clock_note(gap):
+    """A plan whose rule is written on another clock than hers (`gap`: its clock minus hers, in minutes)."""
+    return '这条的钟点写在另一个钟面上，比你的钟%s；到点以 next_fire_at 为准' % gap_words(gap)
+
+
+def moved_note(plan, her):
+    """What an update that has just put a plan written on another clock onto hers tells her (None when it did not)."""
+    name = (plan.get('last_update') or {}).get('from_timezone')
+    if not name:
+        return None
+    tz = _load(name)
+    if tz is None:
+        return '这条原来写在另一个钟面上，现在按你的钟'
+    fire = _aware(plan['next_fire_at'])
+    gap = offset_minutes(tz, fire) - offset_minutes(her['tz'], fire)
+    return '这条原来写在另一个钟面上%s，现在按你的钟' % ('（比你的钟%s）' % gap_words(gap) if gap else '')
+
+
+BRIEF = ('intent', 'description', 'next_fire_at', 'clock_note')
+
+
+def plan_brief(plan, her, moment=None):
+    """`project` cut to what a view of another place's plan, or the plan that has just come due, shows her."""
+    return {key: value for key, value in project(plan, her, moment).items() if key in BRIEF}
+
+
+def _shift_note(rule, fire, tz, her_tz=None):
     """规则里写的钟点与真正会响的本地时刻不一致（只有 DST 空档顺延会这样）→ 写成一句人话。"""
     try:
         kind = rule_kind(rule)
@@ -404,20 +472,16 @@ def _shift_note(rule, fire, tz):
         return None
     if asked == shown:
         return None
-    return '规则里的 %s 那天不存在（拨快跳过），已顺延到 %s' % (asked, _local_text(fire, tz))
+    return '规则里的 %s 那天不存在（拨快跳过），已顺延到 %s' % (asked, _local_text(fire, her_tz or tz))
 
 
 def local_clock(zone, moment=None):
-    """给角色的现场钟面：她换算"明天下午三点"要用，不让她猜自己在哪个时区。"""
+    """给角色的现场钟面：她换算"明天下午三点"要用。只有钟面和星期，不报时区名。"""
     moment = _aware(moment)
     tz = zone['tz']
     local = moment.astimezone(tz)
-    note = {'route': '这个场景配置的时区', 'plan': '这条计划创建时的时区', 'scene': '这个场景的时区',
-            'config': '全局配置的时区', 'unset': '未设置时区，以 UTC 显示',
-            'fixed_offset': '时区库读不到，按场景里配的固定偏移', 'host_local': '时区库和偏移都没有，用宿主本地时区'}
     from .local_time import face
-    return {'now_local': face(local, tz, year=True), 'weekday': WEEKDAY_NAMES[local.weekday()],
-            'timezone': zone['name'], 'tz_note': note.get(zone['source'], zone['source'])}
+    return {'now_local': face(local, tz, year=True), 'weekday': WEEKDAY_NAMES[local.weekday()]}
 
 
 def line_stamp(zone, value):

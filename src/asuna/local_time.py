@@ -1,18 +1,17 @@
-"""Times a model reads are on the local clock (owner 2026-10-08): stored records keep UTC for the program, and
-everything handed to a model passes `for_model` first.
+"""Times a model reads are on her one clock (owner 2026-10-08; one clock in every conversation, ADR-106): stored
+records keep UTC for the program, and everything handed to a model passes `for_model` first.
 
 Only timestamp fields are converted — a key ending in `_at` (or `at`, `until`, `since`) whose value is a full ISO
 date-time, or a datetime — never free text: a sentence the program writes with a time in it formats that time
-itself (`face`). Every time reads the same: `10/14 14:28` in the conversation's time zone, with the year in front
+itself (`face`). Every time reads the same: `10/14 14:28` on her clock, with the year in front
 (`2025/9/27 14:00`) when it is another year or more than 90 days from the moment it is written. A written line stays
 in her conversation for months, so whether the year may be left out is judged when it is written, and only a date
-that is then near reads without one. `clock_from_program` always carries the year, the weekday and the zone.
+that is then near reads without one. `clock_from_program` always carries the year and the weekday, never a zone name.
 """
 from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta, timezone
-from .records import scenes as scene_records
 from . import clock
 
 FULL = re.compile(r'^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}')
@@ -69,8 +68,7 @@ def for_model(node, zone, now=None):
     return node
 
 
-def zone_of(store, scene_id):
-    """The time zone a conversation's times are read in (schedule_rules.scene_timezone)."""
-    from .schedule_rules import scene_timezone
-    scene = scene_records.get(store, scene_id) if scene_id else None
-    return scene_timezone(store.config, scene or {'_id': scene_id})
+def her_zone(store):
+    """Her one clock (schedule_rules.her_zone): the same in every conversation."""
+    from .schedule_rules import her_zone as resolve
+    return resolve(store.config)

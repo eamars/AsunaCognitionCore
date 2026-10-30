@@ -19,15 +19,19 @@ import queue
 import threading
 import time
 
+from .members import GroupsUnavailable
+
 CHECK_EVERY_SECONDS = 6 * 3600    # a group looked at this recently is not asked again at start or reconnect
 GROUP_PAUSE = 1.0                 # seconds between two groups' looks
 CALL_TIMEOUT = 10.0
+RETRY_GROUPS_SECONDS = 60.0        # a sweep that could not list the groups is asked for again this soon
 POST_TRIES = 5
 RETRY_WAIT = 5.0
 
 
-def notice_body(event, cfg):
-    """The state report for a mute notice about her (or the whole group) in an admitted group, else None."""
+def notice_body(event, cfg, admission=None):
+    """The state report for a mute notice about her (or the whole group) in a group the core has not refused, else
+    None. A group nobody has asked about yet is reported: the core takes it only for a group it admitted."""
     if not isinstance(event, dict) or event.get("post_type") != "notice" or event.get("notice_type") != "group_ban":
         return None
     account = str(cfg.napcat["account_id"])
@@ -35,7 +39,10 @@ def notice_body(event, cfg):
         return None
     group = str(event.get("group_id") or "")
     user = str(event.get("user_id") if event.get("user_id") is not None else "")
-    if user not in (account, "0") or cfg.route_for_group(group) is None:
+    if user not in (account, "0") or not group.isdigit():
+        return None
+    refused = admission.cached(("group", group)) if admission is not None else None
+    if refused is not None and not refused.admitted:
         return None
     whole = user == "0"
     body = {"group_id": group, "source": "notice", "muted": event["sub_type"] == "ban", "whole_group": whole}
@@ -174,7 +181,17 @@ class Mutes:
         started, now = self.clock(), self.clock()
         totals = {"groups": 0, "looked": 0, "skipped": 0, "muted": 0, "failed": 0}
         first = True
-        for group in self.groups():
+        try:
+            groups = self.groups()
+        except GroupsUnavailable:
+            # Nothing was looked at: the sweep is asked for again in a minute, from a timer, so the thread keeps
+            # taking the mute notices meanwhile.
+            self.counters.inc("mutes_sweep_waiting")
+            timer = threading.Timer(RETRY_GROUPS_SECONDS, lambda: self.jobs.put(("sweep", reason, 0)))
+            timer.daemon = True
+            timer.start()
+            return totals
+        for group in groups:
             totals["groups"] += 1
             if now - self.checked.get(group, 0.0) < CHECK_EVERY_SECONDS:
                 totals["skipped"] += 1

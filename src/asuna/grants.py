@@ -45,6 +45,14 @@ def workspace_grant(config, scene_id, person_id, *, required=True):
     return {}
 
 
+def workspace_folder(config, scene_id, person_id):
+    """The folder a task of this person works in here, made now. An admission and a start make none (ADR-107): the
+    folder exists once a task of theirs needs it."""
+    folder = Path(workspace_grant(config, scene_id, person_id)['workspace']).resolve()
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
 def conversation_workspace(config, scene_id):
     """Whether anyone may hand work to the action brain in this conversation (it then lists the tools that do it;
     each turn still checks its own speaker with workspace_grant)."""

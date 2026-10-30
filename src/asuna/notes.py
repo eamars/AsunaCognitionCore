@@ -332,7 +332,7 @@ def copied_words(store, persona, scene_id, match):
     from .people import People
     scene = scene_records.get(store, scene_id) or {'_id': scene_id}
     who = People(store, persona).speaker(scene, match['author'])
-    when = local_time.stamp(match['at'], local_time.zone_of(store, scene_id)) if match.get('at') else '刚才'
+    when = local_time.stamp(match['at'], local_time.her_zone(store)) if match.get('at') else '刚才'
     return NOT_OWN_WORDS % (match['first'], match['last'], who, when)
 
 
@@ -385,10 +385,10 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
         ask = soft(limit)                 # refused past `limit`, worded by what she is asked for (owner 2026-10-22)
         # No cut offered: a note's last line often says what counts as done, and a cut of the end loses it (her ask,
         # 2026-10-22); splitting keeps it.
-        raise NoteRefused('NOTE_TOO_LONG', ('送到%s的便条要求 %d 字以内，现在 %d 字，超了 %d 字。两条路：'
-                                            '① 压到 %d 字以内，删哪段你自己定；② 原样拆成两张接着发，开头标 1/2、2/2，'
-                                            '让那边知道是接续（一回合最多 %d 张）。')
-                          % (KIND_WORDS[kind], ask, len(text), len(text) - ask, ask, PER_TURN))
+        from .config import too_long
+        raise NoteRefused('NOTE_TOO_LONG', (too_long('text', text, limit, ask, as_list=True)
+                                            + '送到%s的便条也可以原样拆成两张接着发，开头标 1/2、2/2，'
+                                            '让那边知道是接续（一回合最多 %d 张）。') % (KIND_WORDS[kind], PER_TURN))
     reply = None if question else first if first and first['from_scene'] == to_scene else last_seen_from(
         store, to_scene, ep['scene_id'], ep['_id'])
     if reply and reply.get('hop', 1) >= MAX_HOP:
@@ -547,9 +547,9 @@ def answers_tail(store, persona, row):
     if not row.get('answers'):
         return None
     from . import questions
-    from .schedule_rules import scene_timezone
+    from .schedule_rules import her_zone
     scene = scene_records.get(store, row['from_scene']) or {'_id': row['from_scene']}
-    return questions.answer_tail(store, persona, row['answers'], scene_timezone(store.config, scene))
+    return questions.answer_tail(store, persona, row['answers'], her_zone(store.config))
 
 
 def received_block(store, persona, scene_id, cls, kind, episode, moment, skip=None):

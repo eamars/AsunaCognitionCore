@@ -136,6 +136,14 @@ Inventory or remove only explicitly inventoried Asuna test databases.
 
 - def `main`
 
+## `clear_scene_zones.py`
+
+[tools/clear_scene_zones.py](../../tools/clear_scene_zones.py)
+
+ADR-106's one-off: take the time zone off every conversation that still carries one.
+
+- def `main`
+
 ## `import_native_credentials.mjs`
 
 [tools/import_native_credentials.mjs](../../tools/import_native_credentials.mjs)
@@ -379,5 +387,7 @@ Install the core, one persona package and its channel packages into a local-only
 - def `channel_package` — A channel package's npm name, project id and kind module (its one python/<module> package).
 - def `move_secrets` — Settings written before ADR-010 D6 carried plaintext under `secrets` and path-named references ({"$secret": "embedding/api_key"}).
 - def `compose` — The profile patch an install writes: each of this installer's rows with the saved row merged over it, then the saved rows it does not write.
+- def `admission_default` — The `channelAdmission` this install offers as a first choice (`compose`: a value the profile saved wins).
+- def `stored_admission` — What a profile's saved settings say about `channelAdmission`: `stored automatic`, `stored explicit` or `absent`.
 - def `profile_patch`
 - def `main`

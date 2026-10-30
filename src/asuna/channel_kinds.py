@@ -24,6 +24,9 @@ A kind module knows one platform's id formats and adapter conventions:
   ROUTE_KEYS (optional)                        each route has a key of its own that opens only that line
   MARKS_ANSWERS, answerer(scene) (optional)    who on a line marks the lines that answer her questions
   MEDIA_KEYS (optional)                        the media-link key names its adapter posts (media_keys.py)
+  OPEN_ADMISSION (optional)                    its senders are strangers the deployment may admit (channelAdmission
+                                               `automatic`); without it the channel is always closed, whatever the
+                                               deployment says (channel_admission.mode)
 
 Scene and person ids start with their kind (`<kind>:…`), and a configured channel's id names its kind
 (`channels.qq`).
@@ -33,6 +36,7 @@ from pathlib import Path
 import sys
 
 _KINDS = {}
+_LOADED = []
 
 
 def register(module):
@@ -47,6 +51,14 @@ def load(entries):
         if directory not in sys.path:
             sys.path.insert(0, directory)
         register(importlib.import_module(entry['module']))
+        found = {'python': directory, 'module': entry['module']}
+        if found not in _LOADED:
+            _LOADED.append(found)
+
+
+def loaded():
+    """The plugin entries this process loaded, in the order it loaded them (a data child loads the same)."""
+    return [dict(entry) for entry in _LOADED]
 
 
 def get(kind):
@@ -96,6 +108,12 @@ def marks_answers(identifier):
 def owner_joins(identifier):
     """A scene of a kind the owner joins from the Web (ADR-051): a home line only."""
     return home(identifier) and bool(getattr(of(identifier), 'OWNER_JOINS', False))
+
+
+def open_admission(channel_id):
+    """Whether the deployment's open admission may apply to this channel: its kind declares OPEN_ADMISSION. A home line
+    (an agent's, a peer's) does not, so it is closed whatever the deployment says."""
+    return bool(getattr(_KINDS.get(channel_id), 'OPEN_ADMISSION', False))
 
 
 def answers_requests(config):

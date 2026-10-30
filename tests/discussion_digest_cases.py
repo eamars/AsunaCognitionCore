@@ -208,7 +208,7 @@ class FakeStore:
     def __init__(self, rows, sink=None, scenes=None, boom=False):
         class DB:
             pass
-        self.config = {}                     # read for the conversation's time zone (local_time.zone_of)
+        self.config = {}                     # read for her clock (local_time.her_zone)
         self.db = DB()
         self.db.messages = FakeCollection(rows, boom=boom)
         self.db.scenes = FakeCollection(scenes if scenes is not None else [scene_row()])

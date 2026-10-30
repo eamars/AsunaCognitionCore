@@ -1,8 +1,9 @@
 """Group member lists for the host (0.7.1): who is in each admitted group, not only who spoke.
 
 When the adapter is READY and every EVERY_SECONDS after, it asks the platform which groups this account is in
-(`get_group_list`), keeps those the admission policy admits (`Config.route_for_group`: configured routes, or
-automatic admission, never a blocked group), fetches each one's members (`get_group_member_list`), keeps only
+(`get_group_list`), keeps those the core serves (`Admission.ask_many`: an admitted group that already has its
+route; the adapter holds no policy of its own),
+fetches each one's members (`get_group_member_list`), keeps only
 user_id / nickname / card / role / last_sent_time / join_time, and posts the list to the host
 (`POST /v1/channels/<id>/members`) only when it differs from the last one posted (a hash in
 `<data>/members/posted.json`). One call per group per round, a pause between groups, no retry loop: a failure is
@@ -14,7 +15,10 @@ import os
 import threading
 import time
 
+from .admission import AdmissionAway, AdmissionRejected, AdmissionUnsupported
+
 EVERY_SECONDS = 6 * 3600
+RETRY_SECONDS = 60                # a round that could not even list the groups is tried again this soon
 GROUP_PAUSE = 1.0
 FIELDS = ("user_id", "nickname", "card", "role", "last_sent_time", "join_time")
 MAX_MEMBERS = 5000
@@ -25,9 +29,15 @@ def _project(raw):
     return out if str(out.get("user_id", "")).isdigit() else None
 
 
+class GroupsUnavailable(Exception):
+    """The groups to work on could not be listed now (the platform or the core did not answer)."""
+
+
 class Members:
-    def __init__(self, cfg, data_dir, onebot, host, counters, log=print, clock=time.time):
+    def __init__(self, cfg, data_dir, onebot, host, counters, admission, log=print, clock=time.time):
         self.cfg, self.onebot, self.host, self.counters, self.log, self.clock = cfg, onebot, host, counters, log, clock
+        self.admission = admission
+        self.retry_soon = False
         self.path = os.path.join(data_dir, "members", "posted.json")
         self._lock = threading.Lock()
         try:
@@ -48,29 +58,37 @@ class Members:
 
     def loop(self, stop):
         while not stop.is_set():
+            self.retry_soon = False
             try:
                 self.run()
             except Exception as exc:
                 self.counters.inc("members_error")
                 self.log("MEMBERS_ERROR type=%s" % type(exc).__name__)
-            stop.wait(EVERY_SECONDS)
+            stop.wait(RETRY_SECONDS if self.retry_soon else EVERY_SECONDS)
 
     def groups(self):
         resp = self.onebot.api_call("get_group_list", {}, timeout=20, meta={"members": "groups"})
         data = resp.get("data") if isinstance(resp, dict) else None
         if resp.get("retcode") != 0 or not isinstance(data, list):
             self.log("MEMBERS_GROUPS_REFUSED retcode=%s" % (resp.get("retcode") if isinstance(resp, dict) else "-"))
-            return []
-        found = []
-        for row in data:
-            group = str((row or {}).get("group_id") or "")
-            if group.isdigit() and self.cfg.route_for_group(group) is not None:
-                found.append(group)
-        return sorted(set(found))
+            raise GroupsUnavailable()
+        found = sorted({str((row or {}).get("group_id") or "") for row in data if str((row or {}).get("group_id") or "").isdigit()})
+        try:
+            answers = self.admission.ask_many([("group", group) for group in found])
+        except (AdmissionAway, AdmissionUnsupported, AdmissionRejected) as exc:
+            self.counters.inc("members_admission_unavailable")
+            self.log("MEMBERS_ADMISSION_UNAVAILABLE type=%s" % type(exc).__name__)
+            raise GroupsUnavailable() from exc
+        return [group for group, answer in zip(found, answers) if answer.admitted and answer.known]   # a route the core holds
 
     def run(self):
         totals = {"groups": 0, "posted": 0, "same": 0, "failed": 0}
-        for group in self.groups():
+        try:
+            groups = self.groups()
+        except GroupsUnavailable:
+            self.retry_soon = True
+            return totals
+        for group in groups:
             totals["groups"] += 1
             try:
                 resp = self.onebot.api_call("get_group_member_list", {"group_id": int(group)}, timeout=30,

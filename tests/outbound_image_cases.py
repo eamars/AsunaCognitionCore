@@ -997,8 +997,9 @@ def attach_image_arguments_are_checked_one_call_at_a_time():
     missing = call_tool(store, ep, {'why': '没给 artifact_id'})
     empty = call_tool(store, ep, {'artifact_id': '', 'why': '空的'})
     no_why = call_tool(store, ep, {'artifact_id': stored['artifact_id']})
-    for outcome, said, _after in (missing, empty, no_why):
-        assert outcome == 'refused' and '要写内容' in said, said
+    # A field not written is named by the schema (ADR-108 D4b); one written empty is the handler's, in its own words.
+    for (outcome, said, _after), words in ((missing, '缺 artifact_id'), (empty, '要写内容'), (no_why, '缺 why')):
+        assert outcome == 'refused' and words in said, said
     # 自己加一个文件路径也带不进去：行上只认清单里那张的四项元数据
     pathy = call_tool(store, ep, {'artifact_id': stored['artifact_id'], 'why': '给他看', 'file': '/tmp/a.png'})
     assert pathy[0] == 'ok' and pathy[2]['attachment'] == meta_of(stored), pathy

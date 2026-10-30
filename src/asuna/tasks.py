@@ -242,6 +242,33 @@ PROGRESS_TOOL = {'name':'report_progress',
     'description':'Leave your talking half a short progress note on a long task, without waiting: it reads it on its next turn and decides whether to tell anyone. Use sparingly; the final report is your last message.',
     'parameters':{'note':{'type':'string','required':True}}}
 
+LIST_FILES_MOST = 2000        # the entries (files and folders) one list_files walks at most
+LIST_FILES_LIMITED = '任务文件夹里不止 %d 项（文件和文件夹），只列了先走到的这些文件；没列出的文件还在，不是丢了' % LIST_FILES_MOST
+
+
+def listed_files(root):
+    """list_files' answer: the task folder walked folder by folder, at most LIST_FILES_MOST entries, its files sorted
+    by path; `limited` says so when the walk stopped there. A folder that cannot be read is passed over."""
+    found, seen, folders, limited = [], 0, [root], False
+    while folders and not limited:
+        try:
+            entries = os.scandir(folders.pop())
+        except OSError:
+            continue
+        with entries:
+            for entry in entries:
+                if seen == LIST_FILES_MOST:
+                    limited = True
+                    break
+                seen += 1
+                if entry.is_dir(follow_symlinks=False):
+                    folders.append(entry.path)
+                elif entry.is_file():
+                    found.append((Path(entry.path), entry.stat().st_size))
+    listed = {'files': [{'path': path.relative_to(root).as_posix(), 'size': size} for path, size in sorted(found)]}
+    return {**listed, 'limited': LIST_FILES_LIMITED} if limited else listed
+
+
 def workspace_file(root, protected, op, args):
     """list_files / read_file / write_file inside the task folder; protected sources stay read-only. A refused or
     failed operation is a result she reads (TASK_OPERATION_FAILED with the reason), not an exception."""
@@ -257,8 +284,7 @@ def workspace_file(root, protected, op, args):
         return target
     try:
         if op == 'list_files':
-            return {'files': [{'path': p.relative_to(root).as_posix(), 'size': p.stat().st_size}
-                              for p in sorted(root.rglob('*')) if p.is_file()]}
+            return listed_files(root)
         target = path(args['path'])
         if op == 'read_file':
             if target.stat().st_size > 32768:
@@ -324,14 +350,8 @@ def home_env(store):
     """What a home task's commands are given besides the sandbox's own: her name on commits, and the database and her
     time zone for asuna.dbread."""
     from . import dbread
-    from .persona_model import timezone as persona_timezone
-    from .render import model_and_policy
-    persona=(store.config.get('chat') or {}).get('persona')
-    try:
-        zone=persona_timezone(*model_and_policy(store,persona),store.config)[0] if persona else None
-    except Exception:
-        zone=None
-    return {**sandbox_backend.git_identity(store.config),**dbread.environment(store.config,zone)}
+    from .schedule_rules import her_zone
+    return {**sandbox_backend.git_identity(store.config),**dbread.environment(store.config,her_zone(store.config)['name'])}
 
 
 SANDBOX_TOOL={'name':'sandbox_run','description':'Run argv in the task folder under the Host sandbox: it may write only there. Commands are native to the machine the Host runs on (on Windows there is no sh or Linux tools: write the work as a python3 script; python3 is Python 3.12, with httpx, websockets, paramiko, pymongo, PyYAML and PIL (Pillow) importable; read the database with asuna.dbread, skill asuna-database). An argument /task or /task/… names the task folder. git and ssh work with the keys and logins of the user the Host runs as; what you commit carries your own name. 30 s (timeout: up to 600), 256 KiB output; a stopped command returns its output so far. credentials: names from the program notes\' credentials; their environment variables are set for this one command only (a script reads os.environ). Values are never shown: output containing one comes back hidden. Never write a credential value into a script, file, brief or report.', 'parameters':{'argv':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'required':True},'credentials':{'oneOf':[{'type':'array','items':{'type':'string'}},{'type':'string'}],'description':'credential names for this command (home tasks only)'},'timeout':{'type':'integer','description':'seconds, up to 600'}}}
@@ -702,9 +722,10 @@ def given_text(value):
 
 class ToolBroker:
     """Trusted host process; no DB/publication credentials enter model or child tools."""
-    def __init__(self, service:TaskService):
+    def __init__(self, service:TaskService, evidence):
         # Native Host tools use the private worker connection; there is no HTTP broker.
         self.service,self.store=service,service.store
+        self.evidence=evidence          # the worker's: the data child's records are kept here (data_children.py)
         self.bindings={}
 
     @property
@@ -776,12 +797,12 @@ class ToolBroker:
             task_records.save(self.store, {**current,'tool_steps':current['tool_steps']+1,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
             artifact=artifact_records.save(self.store,{'_id':key,'scope_key':task['scope_key'],'task_id':task['_id'],'intent_revision':task['intent_revision'],'tool':tool,'args':args,'input_hash':input_hash,'state':'INTENT'},stream=task['_id'])
             self.service.crash('before_tool')
-        # Integration callbacks, role consultations and commands can wait on things outside this process.
-        # Never hold the effects lock across such a wait: every outbox claim (her words to QQ, the agent lines)
-        # and every cancellation needs it. A later cancellation still fences new calls; recording this accepted
+        # Integration callbacks, role consultations, commands and persona jobs can wait on things outside this
+        # process. Never hold the effects lock across such a wait: every outbox claim (her words to QQ, the agent
+        # lines) and every cancellation needs it. A later cancellation still fences new calls; recording this accepted
         # call cannot revive the task.
         with (nullcontext() if integration_gated(tool) or tool in DEVELOPMENT_NAMES or tool=='ask_character'
-                  or tool in ('generate_image','render_svg','private_words','sandbox_run','offer_file') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME or tool==RECEIVED_FILE_TOOL_NAME else self.service.lock):
+                  or tool in ('persona_job_run','generate_image','render_svg','private_words','sandbox_run','offer_file') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME or tool==RECEIVED_FILE_TOOL_NAME else self.service.lock):
             if not integration_gated(tool):self.service.valid(task)
             if tool=='persona_job_run':
                 if not task.get('development_grant'):raise Denied(capability_refusal(self.store,task,tool))
@@ -817,18 +838,12 @@ class ToolBroker:
                         'scope_key':task['scope_key'],'created_at':now()},stream=task['_id'])
                 self.service.collab(task,'progress',{'from':'action','text':note.strip()},'progress:'+key)
                 result={'noted':True,'note':'说话的那一半下一回合会看到；要不要转告别人由那一半决定。'}
-            elif tool==HISTORY_TOOL_NAME:
-                # Read-only scoped history: the scene comes from the task binding, never
-                # from arguments. The effects lock stays released during the query so a
-                # cancellation or lease renewal cannot queue behind a Mongo read.
-                if not getattr(self, 'history', None):raise Denied('HISTORY_QUERY_UNAVAILABLE: 历史查询服务这会儿没接上；'+UNAVAILABLE)
-                result=self.history.query_for_task(task,args)
-                with self.service.lock:self.service.valid(task)
-            elif tool==DIGEST_TOOL_NAME:
-                # P1-c read-only discussion digest: same rule as history — scene from the
-                # task binding, no effects lock held across the Mongo reads.
-                if not getattr(self, 'digest', None):raise Denied('DISCUSSION_DIGEST_UNAVAILABLE: 群讨论整理服务这会儿没接上；'+UNAVAILABLE)
-                result=self.digest.digest_for_task(task,args)
+            elif tool in (HISTORY_TOOL_NAME,DIGEST_TOOL_NAME):
+                # Read-only scoped history and the discussion digest: the scene comes from the task binding, never
+                # from arguments. They run in the data child (data_children.py), with a deadline, and the effects
+                # lock stays released meanwhile, so a cancellation or lease renewal cannot queue behind them.
+                from . import data_children
+                result=data_children.run(tool,task,args,self.store.config,self.store.name,self.evidence)
                 with self.service.lock:self.service.valid(task)
             elif tool==READ_IMAGE_TOOL_NAME:
                 # Pull 模式看图：场景仍由任务绑定，参数换不了范围；拉取期间不持副作用锁，
@@ -1051,7 +1066,7 @@ class Executor:
             vault=credentials.listing()
             if vault:facts['credentials']={'items':vault,'how':'sandbox_run 写 credentials（名字照抄），这些环境变量只在那一条命令里有；脚本用 os.environ 读，值不要写进文件、脚本、报告。'}
         from . import local_time                     # the action brain reads times on the local clock
-        facts=local_time.for_model(facts,local_time.zone_of(self.service.store,task['scene_id']))
+        facts=local_time.for_model(facts,local_time.her_zone(self.service.store))
         text+='\n\n—— 程序附注（不是你交代的话）——\n'+json.dumps(facts,ensure_ascii=False)
         if task.get('integration_profile') == 'owner':
             text+='\n本任务继承本机 owner 工作域的集成能力。适配器代码在通道包里，只用 development_* 工具（project 填通道包）修改。integration_test 把候选里的适配器目录冻结成一份（argv 里写 /app）来试跑；integration_start 只启用已发布（development_publish 之后）的适配器版本，宿主重启后也恢复已发布的版本。/data 可写，test 与启用数据分开。/integration/config.json 是端点与 adapter 配置。运行直接连配置里的端点，用的是真实配置：试跑也能真的对平台做动作，试跑只做读，发消息留给出站队列和已发布的适配器。integration_test 最长60秒；integration_start 持续到明确停止并可随宿主恢复；未要求持续运行就不要 start。integration_status/stop 可观察/停止。失败回本会话自行修复；不能把进程 RUNNING 当平台连接或发送成功。import_integration_artifact 只能按配置里已有的端点别名取一个产物（不是任意 URL 下载器），字节由平台写进本次任务工作区的相对路径，默认不覆盖、有大小上限，失败会给出真实原因（端点未知、URL 被拒、路径越界、目标已存在、超限、HTTP 状态）。'

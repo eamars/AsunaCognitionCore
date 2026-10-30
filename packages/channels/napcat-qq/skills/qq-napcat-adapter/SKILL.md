@@ -39,8 +39,8 @@ vendor/websocket/              websocket-client 1.9.2（随通道包 `integratio
 ## 入口
 
 ```bash
-python3 /app/adapter.py --selftest --offline --data-dir /data/selftest   # 只读自检：不发送、不伪造入站、不碰平台
-python3 /app/adapter.py --selftest --data-dir /data/selftest             # 同上，外加会碰真平台与真实 outbox 的 live 段
+python3 /app/adapter.py --selftest --offline                            # 只读自检：不发送、不伪造入站、不碰平台；在自己的临时目录里跑，跑完删掉
+python3 /app/adapter.py --selftest                                      # 同上，外加会碰真平台与真实 outbox 的 live 段
 python3 /app/adapter.py --service                              # 常驻（integration_start 用这条）
 python3 /app/adapter.py --peers --data-dir /data                # 导出对方身份目录（只读，不联网）
 ```

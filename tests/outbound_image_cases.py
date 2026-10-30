@@ -38,8 +38,10 @@ sandbox_temp.inherit()   # temporary folders a run inside DSH's Windows sandbox 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SRC = os.path.join(ROOT, 'src')
-# 锁文件写到临时目录：别让离线用例在候选里留下 .runtime/
-os.environ.setdefault('ASUNA_DATA_ROOT', tempfile.mkdtemp(prefix='outbound-image-'))
+# 这一趟自检自己的临时根：锁文件和每个用例的工作区都建在它下面，run_all 结束时整个删掉（别在候选里留下 .runtime/，
+# 也别在系统临时目录里留下东西）。
+SCRATCH = tempfile.mkdtemp(prefix='outbound-image-')
+os.environ.setdefault('ASUNA_DATA_ROOT', os.path.join(SCRATCH, 'data'))
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
@@ -1242,7 +1244,7 @@ def two_scene_world(links=None, canonical=None, extra=()):
 def import_bytes(store, scope_key, body, *, target='artifacts/pic.png', register='auto',
                  content_type='image/png'):
     """真走 import_integration_artifact 那份判定与写盘，只假「谁给字节」。"""
-    workspace = pathlib.Path(tempfile.mkdtemp(prefix='b7-import-'))
+    workspace = pathlib.Path(tempfile.mkdtemp(prefix='b7-import-', dir=SCRATCH))
 
     def fetch(endpoint, path, limit):
         return {'status': 200, 'declared': len(body), 'body': body,
@@ -1449,14 +1451,19 @@ def the_local_scene_keeps_its_own_images_readable():
 
 def run_all():
     results = []
-    for fn in CASES:
-        try:
-            ok, note = fn()
-        except Exception as exc:
-            import traceback
-            ok, note = False, '%s: %s | %s' % (type(exc).__name__, exc,
-                                               traceback.format_exc().splitlines()[-3])
-        results.append((fn.__name__, ok, note))
+    try:
+        for fn in CASES:
+            try:
+                ok, note = fn()
+            except Exception as exc:
+                import traceback
+                ok, note = False, '%s: %s | %s' % (type(exc).__name__, exc,
+                                                   traceback.format_exc().splitlines()[-3])
+            results.append((fn.__name__, ok, note))
+    finally:
+        shutil.rmtree(SCRATCH, ignore_errors=True)
+        # 删不掉就是失败：留下的东西没人会再来收。
+        results.append(('scratch_removed', not os.path.exists(SCRATCH), SCRATCH if os.path.exists(SCRATCH) else ''))
     return results
 
 

@@ -14,8 +14,10 @@ import base64
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -1838,15 +1840,29 @@ def _check_admission(rep, root):
     rep.check("admission_checks_ran", True, "explicit and automatic measured separately")
 
 
-def run(cfg, data_dir, live=True, live_config=True):
+def run(cfg, live=True, live_config=True):
     """`cfg` is the config actually in hand; `live_config` says whether it came
     from a real file (then it is cross-checked) or from the built-in fixtures
     (then that section is skipped).  `live` is the only switch that lets a
     platform be contacted or the real outbox be claimed.
+
+    Every check works in one scratch folder made for this run and removed when
+    it ends, failed or not; nothing is written under the adapter's data folder.
+    A scratch folder that cannot be removed fails the run.
     """
+    root = tempfile.mkdtemp(prefix="qq-selftest-")
+    try:
+        code = _run(cfg, root, live, live_config)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+    if os.path.exists(root):
+        print("SELFTEST_SCRATCH_LEFT %s" % root, flush=True)
+        return 1
+    return code
+
+
+def _run(cfg, root, live, live_config):
     rep = Report()
-    root = os.path.join(data_dir, "selftest")
-    os.makedirs(root, exist_ok=True)
     gcfg = _fixture_deployment(rep)
     _check_config_policy(rep, gcfg)
     if live_config:

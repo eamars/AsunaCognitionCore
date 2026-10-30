@@ -168,7 +168,8 @@ the guide's entry for `faces_from_program` (`block_guide.notes()`), and the bloc
 fixed notes do. It says what each form is and how it reads (a click on her line, and the folded line for the others
 between people), that names repeat across them, and how she writes; the writing half is stated where it holds, "有
 faces_from_program 的对话里", as `SEND_NOTE` states "能发的地方", so a conversation that cannot carry a face is not told to
-write one. Final wording is in the code (`stickers.py:FACES_NOTE`, 345 characters).
+write one. Final wording is in the code (`stickers.py:FACES_NOTE`, 345 characters). "Decided after the page"
+(D6 below, 2026-10-30) narrows which conversations the guide says it in and does not touch the wording.
 
 Measured 2026-10-29 (`block_guide.guide`, speaking conversations): 6,091 characters at `cc8c006`, 6,458 with the note
 (+367). At `0d31f597` the guide is 6,518 characters for a speaking conversation and 6,509 with the default
@@ -300,10 +301,38 @@ Not from her notes (the owner, through Claude, 17:06): `faces.json` has two face
 424 (不对头, 续标识). The second is the owner's own change; whether a renamed face becomes permanent or aliases are
 supported is open.
 
+## Decided after the page (the owner, 2026-10-30, through Xiaoman)
+
+**D6. The note is said only where the block can arrive.** Of the two shapes her notes above put forward — the guide
+lists only the blocks present, or the writing half moves back into the block — the owner chose the one that wastes
+least context, and the mechanical filter is the cheaper of the two: the block is re-sent whenever `seen_here` changes,
+so carrying the note with it would pay those characters again on each of those turns, where the guide pays them once
+per conversation and only in the conversations that have QQ. `block_guide.notes(faces)` and `guide(config, speaks,
+faces)` take the flag; `render.role_text` and `render.render_system` carry it and record it in `system_ref.faces`, so
+a re-render of a turn is the prompt that turn was given (a ref written before the flag said the note everywhere, and
+re-renders as it was written: no drift is audited for an unfinished turn). `stickers.has_faces(scene)` is the one
+condition — the conversation's kind declares `FACES` and stickers can leave it — which is the same test context.py
+uses to add `faces_from_program` below, so no model is asked to judge anything. What a conversation with no QQ no
+longer pays: 367 characters off its guide (6,509 → 6,142, measured 2026-10-30); a QQ conversation's system prompt is
+byte for byte what it was before, so its prompt cache holds. `block_guide.strip` still asks for the whole list, so the
+block goes on arriving without its explanation. `tests/test_faces_note_place.py` holds this shape, and the exact cost
+of the line — the first test that holds the note at all, which her notes above named as a gap.
+
+**Face 424's alias is 不对劲; the former alias 续标识 is not kept.** `faces.json` (napcat-qq 0.18.0) now reads
+`{"id": "424", "name": "不对头", "aliases": ["不对劲"]}`. Measured on the adapter's own modules: `[表情:不对劲]` and
+`[表情:不对头]` both send 424; `[表情:续标识]` no longer resolves — `outbound.encode_faces` leaves it as text, and the
+core's writable-name table (`channel_kinds.faces_of`, read from the same file) has no 续标识, so if she writes it the
+core refuses it. One consequence the alias was carrying: NapCat still writes `/续标识` for 424, and `faces.name_of`
+only replaces a literal it finds in the alias table, so an inbound 424 now reads `[表情:续标识]` (the platform's own
+word) instead of 不对头, and `faces_block` does not count it into `seen_here`. 277 keeps its 汪汪 alias and still
+reads 狗头. Whether inbound 424 should read 不对劲 — which would need the table's name to win over NapCat's literal,
+what the dropped alias did — is the owner's call and is left open; the selftest states today's shape
+(`face_424_inbound_passes_napcat_word_while_277_still_maps_its_old_one`).
+
 ## Open
 
 - Owner: D1's default (sending as built) and D2's names, until he says otherwise.
-- Owner: where the faces note applies (her notes above), and face aliases (424).
+- Decided 2026-10-30, above under "Decided after the page": where the faces note applies (D6), and 424's alias.
 - Owner, if D5's dice or rps row fires: throw each rps hand once, one at a time, in a test group, and a dice once, and
   say which.
 - Her: the page, once, before it is called final — done 2026-10-30; the two turn ids pending (she is fetching them from the database).

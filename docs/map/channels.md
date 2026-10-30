@@ -194,6 +194,7 @@ Her sticker shelf and the platform's own faces (ADR-016).
 - def `drop`
 - def `rename`
 - def `sends` — Whether what she says in this conversation can carry stickers and faces.
+- def `has_faces` — Whether this conversation could ever show the platform's own faces: its kind declares them and stickers can go out there -- the one condition under which `faces_block` arrives (context.py).
 - def `block` — The shelf in full (names, usage notes, how often sent): in the turns that tidy it at home, and for `sticker` op shelf anywhere.
 - def `send_block` — stickers_from_program where stickers can go out: every name on her shelf, her usage notes left to the shelf (her answer, 2026-10-21: the names are hers and few characters; the notes were most of the list).
 - def `names_block` — stickers_from_program at home outside the turns that tidy the shelf: its names only (her answer, 2026-10-16: what she has stays in mind; the uses are what take the room).

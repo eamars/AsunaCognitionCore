@@ -9,8 +9,13 @@ from __future__ import annotations
 from .config import prompt_path
 
 
-def notes():
-    """block key -> the explanations it may carry (a block worded per place has more than one)."""
+def notes(faces=True):
+    """block key -> the explanations it may carry (a block worded per place has more than one).
+
+    `faces`: this conversation can carry the platform's own faces (stickers.has_faces). The faces block
+    cannot arrive where that does not hold, so its explanation is not said there either (the owner,
+    2026-10-30: 367 characters of QQ-only text left the guide of every conversation that has no QQ).
+    """
     from . import (affect, attend, context, credentials, dice, group_members, host_stops, lines, night, notes as _notes, notices,
                    outbound_files, outbound_media, places, questions, restarts, self_review, stickers, switches, waiting)
     return {
@@ -36,7 +41,7 @@ def notes():
         'lines_from_program': (lines.VIEW_NOTE,),
         'peer_asides_from_program': (lines.ASIDES_NOTE,),
         'stickers_from_program': (stickers.HOME_NOTE, stickers.SEND_NOTE),
-        'faces_from_program': (stickers.FACES_NOTE,),
+        **({'faces_from_program': (stickers.FACES_NOTE,)} if faces else {}),
         'night_from_program': (night.NOTE,),
         'restart_from_program': (restarts.NOTE,),
         'host_from_program': (host_stops.NOTE,),
@@ -72,7 +77,9 @@ DELIVERY = (
 
 
 def strip(context):
-    """The context without the explanations the guide already gives."""
+    """The context without the explanations the guide already gives. The whole list is asked for, whatever
+    the conversation can carry: a block that arrived has its explanation in that conversation's guide.
+    """
     known = notes()
     out = {}
     for key, value in context.items():
@@ -90,9 +97,10 @@ ENDING = {False: '结束：还有话要说，写一段只有要说的话的正�
           True: '结束：要说的话都用 speak 说；说完了或这回合不说话，就不再调用工具：这一回合到此为止，不算漏了什么。'}
 
 
-def guide(config, speaks=False):
+def guide(config, speaks=False, faces=True):
     """The fixed text of her turns: how a turn goes, what each block is, how to read memories. `speaks`: the
-    conversation speaks only through speak."""
+    conversation speaks only through speak. `faces`: it can carry the platform's faces (stickers.has_faces),
+    which is the only place its block's explanation is said."""
     from .context import MEMORY_SOURCE_RULES
     from .role_tools import thinking_mode
     # ADR-099: where her thoughts come from the model's thinking, the steps do not ask for them.
@@ -101,7 +109,7 @@ def guide(config, speaks=False):
     lines = ['# 每回合的资料', '带 _from_program 的块是程序事实；带 _at 的字段是你的钟面上的时刻，和 clock_from_program 同一个钟。'
              '下面是各块的说明，块里不再重复；某块自己带的 note 是这一回合特有的话，以它为准。']
     lines += ['- %s：%s' % pair for pair in DELIVERY]
-    for key, texts in notes().items():
+    for key, texts in notes(faces).items():
         lines.append('- %s：%s' % (key, '／'.join(texts)))
     lines += ['', '# 记忆的来源', MEMORY_SOURCE_RULES]
     from . import memory_tiers

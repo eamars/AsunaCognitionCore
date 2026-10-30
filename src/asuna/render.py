@@ -56,12 +56,14 @@ def compose(common, persona_content, voice_content, cls, place=None) -> str:
     return text + ('\n' + voice if voice else '')
 
 
-def role_text(config, rendered, speaks=False):
+def role_text(config, rendered, speaks=False, faces=True):
     """Her role system prompt: the persona render, then how a turn goes and what its blocks are (block_guide.py,
     ADR-056). The persona budget bounds the render alone: the guide is the core's, the same for every persona.
-    `speaks`: the conversation speaks only through speak (the guide says how her words leave, once)."""
+    `speaks`: the conversation speaks only through speak (the guide says how her words leave, once).
+    `faces`: it can carry the platform's own faces (stickers.has_faces); the guide says what that block is
+    only there, so a conversation with no QQ does not pay for a QQ-only definition."""
     from .block_guide import guide
-    return rendered + '\n\n' + guide(config, speaks)
+    return rendered + '\n\n' + guide(config, speaks, faces)
 
 
 def largest(common, persona_content, voice_content):
@@ -125,10 +127,13 @@ def budget_limit(store, persona):
     return limit(store, persona)
 
 
-def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE, place=None, speaks=False):
+def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE, place=None, speaks=False,
+                  faces=True):
     """Render the current role system prompt for a session class and place, and whether its conversation speaks only
     through speak; returns (text, system_ref). The ref records which sections were carried, so a re-render is the
-    same prompt (system_for)."""
+    same prompt (system_for). `faces` -- the conversation can carry the platform's faces -- is recorded with it,
+    because the guide differs by that too; a ref written before the flag existed said the faces note, so an old
+    ref re-renders as it was written."""
     from .carried import placed, sections, system_text
     docs = DocumentStore(store, persona)
     persona_rev, persona_doc = docs.read('persona')
@@ -138,9 +143,10 @@ def render_system(store, persona: str, cls: str = visibility.OWNER_PRIVATE, plac
     common = common_text(store.config)
     contents = {'persona': persona_doc, 'voice': voice_doc}
     found = {slug: sections(placed(store, persona, slug, content), cls, place) for slug, content in contents.items()}
-    text = role_text(store.config, system_text(common, found, contents), speaks)
+    text = role_text(store.config, system_text(common, found, contents), speaks, faces)
     ref = {'persona_doc_revision': persona_rev, 'voice_doc_revision': voice_rev, 'session_class': cls, 'place': place,
-           'speaks': bool(speaks), 'common_sha256': sha(common.encode()), 'render_sha256': _remember(text),
+           'speaks': bool(speaks), 'faces': bool(faces), 'common_sha256': sha(common.encode()),
+           'render_sha256': _remember(text),
            'carried': {slug: [s['sid'] for s in found[slug]] for slug in found}}
     report_budget(store, persona, persona_doc, voice_doc, common)
     return text, ref
@@ -221,7 +227,8 @@ def system_for(store, ref: dict, *, stream: str | None = None, scope: str = 'ope
         found = {slug: sections(placed(store, persona, slug, content) if persona else content, cls, place)
                  for slug, content in revisions.items()}
     common = common_text(store.config)
-    text = role_text(store.config, system_text(common, found, revisions), ref.get('speaks', False))
+    text = role_text(store.config, system_text(common, found, revisions), ref.get('speaks', False),
+                     ref.get('faces', True))
     digest = _remember(text)
     if digest != ref['render_sha256'] and stream:
         store.audit(stream, 'system.render_drift', {'expected': ref['render_sha256'], 'actual': digest,

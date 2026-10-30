@@ -388,8 +388,12 @@ class ContextBuilder:
         session_class=visibility.session_class(self.store.config,self.store,scene,event['person_id'])
         place=visibility.place(self.store.config,self.store,scene,event['person_id'])
         from . import channel_kinds as _kinds
+        from . import stickers as _stickers
+        # What the guide explains is only what this conversation can get (ADR-103): the faces note is said where
+        # its platform declares its faces and stickers can leave -- the condition that adds faces_from_program.
         system,system_ref=render_system(self.store,persona,session_class,place,
-                                        bool(scene.get('channel_id')) and bool(_kinds.reply_parts(scene['_id'])))
+                                        bool(scene.get('channel_id')) and bool(_kinds.reply_parts(scene['_id'])),
+                                        _stickers.has_faces(scene))
         docs=DocumentStore(self.store,persona)
         persona_doc=docs.read('persona')[1]
         body=render_markdown(readable_sections(persona_doc,visibility.OWNER_PRIVATE))

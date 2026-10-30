@@ -361,6 +361,15 @@ def sends(scene):
     return bool((scene or {}).get('channel_id')) and channel_kinds.sends_stickers(scene['_id'])
 
 
+def has_faces(scene):
+    """Whether this conversation could ever show the platform's own faces: its kind declares them and stickers
+    can go out there -- the one condition under which `faces_block` arrives (context.py). Where it does not
+    hold, the guide does not say what that block is either (the owner, 2026-10-30: a QQ-only definition is not
+    carried into every conversation's system prompt).
+    """
+    return bool(sends(scene)) and bool(channel_kinds.faces_of(scene['_id']))
+
+
 def block(store, persona, scene, *, at_home=False):
     """The shelf in full (names, usage notes, how often sent): in the turns that tidy it at home, and for `sticker` op
     shelf anywhere."""

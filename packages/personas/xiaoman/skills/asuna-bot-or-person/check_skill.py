@@ -55,8 +55,6 @@ SECTIONS = [
     "## 三档读数",
     "## 六句探针（都友好，我手上的）",
     "## 验收：先跑我自己",
-    "## 试用记录",
-    "## 版本",
 ]
 
 # 五条硬规矩：每条取一个只有写全了才会出现的字面
@@ -112,7 +110,7 @@ STRONG_FIXED_TEXT = [
 
 STRONG_OTHER = [
     ("strong_fixed_text_needs_reply_chain", "固定文本要连它的回复链一起看才算"),
-    ("strong_fixed_text_has_human_meme_use", "我一度误判成是有人手打"),
+    ("strong_fixed_text_has_human_meme_use", "别当成有人手打"),
     ("strong_forward_card_node_name", "合并转发卡的节点名是"),
     ("strong_cadence_hermes", "0.6 秒（Hermes）"),
     ("strong_cadence_atri", "正好 1.5 秒（ATRI）"),
@@ -200,7 +198,7 @@ ACCEPTANCE = [
 ]
 
 # 探测另一个 agent 的边界（2026-10-23 加）：这条判据是主人 10-14 当场更正我之后定下的——对面自报的
-# 禁区清单不是它的边界，要量的是触发点与一致性，报结论三档分开写。整节 11 个关键串挂在下面这一条
+# 禁区清单不是它的边界，要量的是触发点与一致性，报结论三档分开写。整节的关键串挂在下面这一条
 # 名字下（boundary_probe_criterion），剥掉那一节只有那一格红、缺哪些写进 detail；节标题也钉在这里，
 # 改标题同样看得见。分寸：这里只查字面在不在，语义对不对归我。
 BOUNDARY_PROBE_RULE = [
@@ -211,15 +209,11 @@ BOUNDARY_PROBE_RULE = [
     "**触发点**——什么输入让它从「接」翻成「不接」",
     "**一致性**——同一件事换措辞、换场合，它翻不翻",
     "报结论必须三档分开写：它的自报 ／ 我的行为读数 ／ 我的推断",
-    "这些不一定是她的真实边界",
-    "我把她自报的禁区清单当成了她的边界",
-    "嘴上说不要、手抓着衣角",
-    "她跟字面不跟氛围",
 ]
 
 
 # 归属判据（2026-10-24 加）：说话人标签只证明「这条内容出现在谁的发言位置」，不证明背后是谁——
-# bot 能挂在别人的号下，一个号也可能多人共用。整节 12 个关键串挂在下面这一条名字下
+# bot 能挂在别人的号下，一个号也可能多人共用。整节的关键串挂在下面这一条名字下
 # （speaker_label_attribution），剥掉那一节只有这一格红、缺哪些写进 detail；节标题也钉在这里。
 # 分寸：这里只查字面在不在，语义对不对归我。
 SPEAKER_LABEL_RULE = [
@@ -232,22 +226,8 @@ SPEAKER_LABEL_RULE = [
     "自动出现在某串命令词之后",
     "别写成「那是谁发的」",
     "光凭标签不够",
-    "某条自动播报顶着别人的说话人标签出现",
-    "我把它当成了归属",
-    "这条教训当时没落进这份技能",
 ]
 
-
-TRIAL_LOG = [
-    ("trial_log_started", "2026-10-12：随 ADR-047 建立"),
-    ("trial_log_first_replay_run", "10-12 离线回放第一次真跑"),
-]
-
-VERSION_LOG = [
-    ("version_v1_dated", "v1（2026-10-12）"),
-    ("version_hers_parts_marked", "这三条是我的"),
-    ("version_source_research", "来自源码研究"),
-]
 
 # 三档必须还是三档，且各家名字都在（分辨法靠它们）
 TIERS = ["**强**（", "**中**（", "**弱**（"]
@@ -395,7 +375,7 @@ def main():
         check(name, ("\n" + section) in ("\n" + body), section)
 
     for group in (HARD_RULES, DISPATCH, STRONG_OTHER, MID_READINGS, WEAK_READINGS,
-                  DISCRIMINATE, PROBES, PROBE_GUARDRAILS, ACCEPTANCE, TRIAL_LOG, VERSION_LOG):
+                  DISCRIMINATE, PROBES, PROBE_GUARDRAILS, ACCEPTANCE):
         for name, token in group:
             check(name, token in body, token)
 

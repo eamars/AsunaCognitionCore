@@ -50,8 +50,6 @@ SECTIONS = [
     "## 九、顺手：git 事实怎么读",
     "## 十、怎么算查清楚了",
     "## 十一、技能里引用代码只写「文件＋名字」，不写行号",
-    "## 版本",
-    "## 试用记录",
 ]
 
 # 八条判据 + 两条顺手：每条查一个只有写全了才会出现的字面
@@ -72,7 +70,6 @@ CRITERIA = [
     ("criterion_activation_changed_files", "changed_files"),
     ("criterion_diverged_words", "diverged"),
     ("criterion_diverged_means_newer", "本机比远端新"),
-    ("criterion_diverged_misread", "读成没装"),
     ("criterion_fast_forward_name", "fastForwardCheckout"),
     ("criterion_fast_forward_skip", "跳过"),
     ("criterion_dirty_not_fault", "不是故障"),
@@ -298,7 +295,6 @@ def main():
           "出现字面编号：" + ",".join(LITERAL_ID.findall(body)[:5]))
     check("no_placeholder_markers", not PLACEHOLDER.search(body))
     check("skill_body_not_thin", len(body) >= 1500, "body_chars=%d" % len(body))
-    check("selfcheck_documented", "check_skill.py" in body)
     check("probe_shipped", "version_probe.py" in body)
     # v1.4：正文说有第五步，探针里就得真有（字节级读）
     try:

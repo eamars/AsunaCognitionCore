@@ -6,7 +6,7 @@ scene_kinds: [home, group]
 
 # asuna-running-version
 
-「现在跑的是哪版」这个问题我问过八回左右。答案不在记忆里，在这几个地方。下面是我核对过的位置和读法。
+答案不在记忆里，在这几个地方。下面是核对过的位置和读法。
 
 ## 一、先看这一回合的 `restart_from_program.loaded`
 
@@ -22,7 +22,7 @@ scene_kinds: [home, group]
 
 这一整块只在「有重启记录、而且起来不到 24 小时」时才出现：那个 24 是 `src/asuna/restarts.py:SHOWN_HOURS`，判断在 `src/asuna/restarts.py:block`（没有记录或太旧就整块不给）。
 
-所以缺这一格只说明「最近没重启，或者那次已经过了 24 小时」。**先问一句，别默认没装就去重排闹钟**——10-15 上午我这么白改过一次期。
+所以缺这一格只说明「最近没重启，或者那次已经过了 24 小时」。**先问一句，别默认没装就去重排闹钟**。
 
 ## 三、比内容，别只比包 sha
 
@@ -30,19 +30,16 @@ scene_kinds: [home, group]
 
 要比就比两样：代码版本（commit）＋文件内容（逐文件 sha256）。
 
-现成的比法（本技能目录的 `version_probe.py` 就是这么算的）：从 `activation.json` 拿那个 project selection 的 `workerPath`／`packageRoot`，跟检出的源码逐文件比 sha256。今天这一版实测：`src/asuna` 与在跑那份可比文件 116 个、内容不同 0 个；`cli.py`、`native_ui.py` 只在检出里有（不进包），`resources/RUNTIME_API.md` 只在跑的那份里有。
+现成的比法（本技能目录的 `version_probe.py` 就是这么算的）：从 `activation.json` 拿那个 project selection 的 `workerPath`／`packageRoot`，跟检出的源码逐文件比 sha256。比的时候，`cli.py`、`native_ui.py` 只在检出里有（不进包），`resources/RUNTIME_API.md` 只在跑的那份里有，这三个不算差异。
 
 ## 四、「主仓合了」不等于「我这边在跑」
 
 跑的是我发布过的快照：`packages/cognition-core/src/floor.js:effective` 按 `activation.json` 里的 selection 取 `packageRoot`（人格、通道包）和 `workerPath`（worker 的 Python）；技能目录也走同一份 selection，见 `packages/cognition-core/src/floor.js:skillPaths`。
 
-**发布不刷新 `node_modules/@asuna/xiaoman`，也不需要刷**（Claude 10-20 02:18 给的，我 10-20 这趟自己
-核过）：人格路径按**选中那一版的 `packageRoot`** 解析——`packages/cognition-core/src/floor.js:resolvePersona`
+**发布不刷新 `node_modules/@asuna/xiaoman`，也不需要刷**：人格路径按**选中那一版的 `packageRoot`** 解析——`packages/cognition-core/src/floor.js:resolvePersona`
 收的那个 root 就是 `effective` 给的 `packageRoot`，只有什么都没选中时才退回 `resource_root`。
 `node_modules/@asuna/xiaoman` 只是安装时那一份，**只有什么都没选中时才用**。所以安装位是旧 sha 是
-正常的，**读到的就是选中版**。10-20 实测对照：选中版 frozen 快照里那份 image-generation 的 SKILL.md
-sha256 前缀 `e9daf9bb`，`node_modules/@asuna/xiaoman` 那一份是 `ad006104`（旧）——两边不同号，
-而这一回合 skill 工具真读到的技能目录也确实落在 frozen 选中版下面。
+正常的，**读到的就是选中版**。
 
 一个发布有三种状态，别混：
 
@@ -58,7 +55,7 @@ sha256 前缀 `e9daf9bb`，`node_modules/@asuna/xiaoman` 那一份是 `ad006104`
 - 每个 project 看：`state`、`candidate`、`published_at`、`changed_files`、`previous`、`boot_probe`。
 - 另有一格 `active`：上一次真跑起来的那份。selection 和 active 不一样，就说明发布了还没跑。
 
-### 按内容判活包（version_probe.py 的第五步，2026-10-21 加）
+### 按内容判活包（version_probe.py 的第五步）
 
 输入一个包名（project），只读，不跑前四段：
 
@@ -75,30 +72,27 @@ python3 skills/asuna-running-version/version_probe.py --package core --file skil
 退出码：0 = 三行都读到（needle 在，或没传）；1 = 该读的没读到；3 = 读到了但某个 needle 不在（读数，不是故障）。
 它给的是「这一刻运行时那份文件里有没有那个字面」，比看 state 是 ACTIVE 更接近「内容在跑」。
 
-判据（读数时别读错。来路：主人 10-20 交代，其余几条是我自己踩过的）：
+判据（读数时别读错）：
 
 - `loaded.packages` 的包名只来自 `launch.json` 的 `installed`，digest 由选择覆盖，所以它报的是**在跑的那一档**；
   在那之前那一版报的是「该装的那档」，不是在跑的那档。
   ⚠ 那半句「选择覆盖 digest」只在测试夹具里证实过，我真文件上两边 sha 本来就相同（＝空转），**不算现场验过**。
-  这一格不许读成「监工块能证明在跑哪版」，10-20 那条判据一个字都不削弱：在不在跑仍然只认两样——
+  这一格不许读成「监工块能证明在跑哪版」，在不在跑仍然只认两样——
   `activation.json` 的 `active.<项目>.sha256` ＋ **运行时那个包里那份文件的 sha／内容**；
   `loaded.packages`、`loaded.commit`、监工回执那句状态话**都不算凭据**。
-  另：`loaded.commit` 是**启动那一刻的 HEAD**，不是修代码那个提交（`d6633bf3` 只是它的祖先）——别拿修它的提交号去对号。
+  另：`loaded.commit` 是**启动那一刻的 HEAD**，不是修代码那个提交——别拿修它的提交号去对号。
 - 被退回的重启不进 `audit_events`，只落 `activation.json`（`reverted_at`、`reverted_from` 都在 `previous` 里）；
   查退回不要去审计里找。
 - `installed_at` 不在 `active.*` 块里，只在 `previous` 里；判「刚装的」用 `activated_at` 加包目录 mtime。
 - 过期选择的形状要自己算：`selections` 是整个抄 `activation.json` 的 `projects`（我真文件里 `dsh-peer`
   还挂着 `ACTIVE`），而 `packages` 里没有那个键 ⇒ **键差集＝「选择说 ACTIVE、包不在」**；代码不算这个差集
-  也不标它，`loaded()` 从不读 `packageRoot`。现场凭据（已核到）：本机 2026-10-25 19:48:45 那次起来，
-  我块里 `loaded.packages` **正好 7 项**、**无 `@asuna/dsh-peer`**、**无 frozen 目录名拼出来的假包**，
-  `selections` 里 `dsh-peer` 仍 `ACTIVE`。凭据 `task-3e7a12804f475d9d17b323e708d0db03`
-  （拿真文件跑 `loaded()`，父版本得 9 项，差集正好那两条）。
+  也不标它，`loaded()` 从不读 `packageRoot`。
 
-试跑过的读法和没验过的：实测见试用记录；`activation.json` 里的时刻原始值是 UTC 的 ISO 串，结构里 `packageRoot` 下的路径按包内相对路径写 --file。
+`activation.json` 里的时刻原始值是 UTC 的 ISO 串，结构里 `packageRoot` 下的路径按包内相对路径写 --file。
 
 ## 六、回执说「本机检出有 origin/main 没有的提交」＝本机比远端新
 
-那是 `checkout.state = diverged`：本机有远端没有的提交，快进不了，这次装的是磁盘上原来的检出。**这不是「没装」**。10-15 我把这句读成没装，判错了一次。
+那是 `checkout.state = diverged`：本机有远端没有的提交，快进不了，这次装的是磁盘上原来的检出。**这不是「没装」**。
 
 全套状态和它们的原话在 `src/asuna/restarts.py:CHECKOUT_WORDS`：`fast_forwarded`、`up_to_date`、`fetch_failed`、`not_main`、`changed_files`、`diverged`、`fast_forward_failed`。
 
@@ -106,7 +100,7 @@ python3 skills/asuna-running-version/version_probe.py --package core --file skil
 
 `tools/asuna-launch.mjs:fastForwardCheckout`：先 fetch，只有「在 main 分支、跟踪文件没有改动、并且确实落后 origin/main」才快进；有没提交的改动就**跳过**（`changed_files`），不覆盖也不报错。它从不 merge、rebase、reset。
 
-所以本机检出可能长期比 origin/main 落后一格。今天实测：HEAD 落后 1 笔，工作区有 2 个未提交文件——下次重启这句还会是 `changed_files`。这不是坏了，是它不敢动我的东西。
+所以本机检出可能长期比 origin/main 落后一格。工作区有没提交的改动时，下次重启这句还会是 `changed_files`。这不是坏了，是它不敢动我的东西。
 
 ## 八、新参数进没进，看这一回合的工具表
 
@@ -117,7 +111,7 @@ python3 skills/asuna-running-version/version_probe.py --package core --file skil
 ## 九、顺手：git 事实怎么读
 
 - 只读命令在检出里能跑：`log`、`log -S <词>`、`grep`、`show`、`branch -a --contains`、`rev-list --count`、`merge-base --is-ancestor`、`ls-remote`、`status --porcelain`。
-- 写不动：`git checkout`、`git pull` 会死在 `.git/index.lock: Permission denied`（今天撞过）。要改东西走工作副本或候选。
+- 写不动：`git checkout`、`git pull` 会死在 `.git/index.lock: Permission denied`。要改东西走工作副本或候选。
 - 差几笔：`git rev-list --count HEAD..refs/remotes/origin/main` 是落后几笔，反过来是超前几笔；远端真值看 `git ls-remote origin refs/heads/main`，本机记的 `origin/*` 可能是旧的。
 
 ## 十、怎么算查清楚了
@@ -130,46 +124,4 @@ python3 skills/asuna-running-version/version_probe.py --package core --file skil
 
 ## 十一、技能里引用代码只写「文件＋名字」，不写行号
 
-行号每次有人改那个文件就漂，名字不会。2026-10-15 我自己就是活样本：交代里写 asuna-launch.mjs 90-105，实际在 91-106。「文件在＋行数够」只能抓文件被删或被砍短，抓不到漂移——行数一直够，指的却已经不是那几行了。所以锚点写成 `src/asuna/restarts.py:SHOWN_HOURS`、`tools/asuna-launch.mjs:fastForwardCheckout` 这样：自检能真去文件里找那个名字，找不到就红；正文里再出现行号锚点也直接红。核不到真名字的，宁可不写锚点，也别留个假行号。
-
-## 版本
-
-v1.5（写就 2026-10-25 23:1x +13，原始 UTC 2026-10-25T10:1x）：改写第五节 `loaded.packages` 那一格——监工 `d6633bf3` 起包名只来自 `installed`、digest 由选择覆盖，报的是在跑的那一档，那一版之前报「该装的那档」；同格补上「在不在跑仍只认 `active.<项目>.sha256` ＋ 运行时那份文件」和「`loaded.commit` 是启动那一刻的 HEAD，不是修代码那笔」，并标出「选择覆盖 digest」只在夹具证实、真文件上为空转。新增「过期选择的形状要自己算」一条（带 10-25 现场凭据）。判据引导语里写死的计数改成不带计数的写法。除此之外旧内容一字没删，`check_skill.py`、`version_probe.py` 未改，不抬版本字段。
-
-v1.4（写就 2026-10-21 07:0x +13，原始 UTC 2026-10-20T18:0x）：第五节加「按内容判活包」——`version_probe.py` 加 --package／--file／--needle 三个参数（只跑第五步），输出三行读数＋读的时刻，退出码 0／1／3；三条判据写进正文。前四段和已有判据一字没动。自检加五条字面判据＋一条「探针里真有这一步」。
-
-v1（2026-10-15）：首次固化。判据全是我这几天撞出来的（10-15 一天撞三回），代码位置和行号是当天在检出里逐条核对过的。附零依赖探针 `version_probe.py`（只读：loaded、activation 状态、逐文件内容比对、检出落后几笔）和自检 `check_skill.py`。
-
-v1.1（2026-10-15）：三格修复。① `version_probe.py` 开头把 stdout／stderr 固定成 UTF-8——宿主普通 Windows 控制台是 cp1252，中文一 print 就 UnicodeEncodeError 整段崩，我的沙箱 env 带 PYTHONUTF8=1／PYTHONIOENCODING=utf-8 所以自检撞不到这一族。② `check_skill.py` 新增 `line_endings_are_lf`：读字节数 CR（文本模式读看不见 CR，那把尺是瞎的），覆盖 SKILL.md 与同目录全部 .py，并且要在冻结快照上跑——候选可能被别人抹平成 LF，只在候选里跑等于白跑。③ 锚点全部从「文件＋行号」改成「文件＋名字」，新增第十一节那条规矩；锚点守卫跟着改成「文件在＋那个名字在文件里找得到（字节级读）」，正文里再出现行号锚点直接判红。判据、读数一条没动。
-
-
-v1.2（2026-10-16）：只改自检 `check_skill.py` 的泄露检查那一格——名单定位加兜底（环境变量都没有时从脚本往上找 `.runtime/private/personal-words.txt`；本机 `asuna` 能 import，第三条 `asuna.config.DATA` 就够，往上走那条是给 `asuna` 不在 `sys.path` 上的环境兜底），名单配不上从「NOTE 一行、绿数照旧」改成记一条红 `leak_scan_ran`（detail 写「没真查——不是跑过了」）。八条判据、两条顺手、探针脚本、代码锚点一条没动。
-
-
-v1.3（2026-10-20）：只在第四节补一条已核实的事实——发布不刷新 `node_modules/@asuna/xiaoman`，
-人格路径按选中那一版的 `packageRoot` 解析，安装位是旧 sha 属正常、读到的就是选中版。锚点按第十一节
-的规矩写「文件＋名字」（那个名字先在文件里 grep 到过才写），不带行号。旧内容一条没删，判据与自检未动。
-
-
-## 试用记录
-
-- 2026-10-15 v1：`version_probe.py` 在候选里实跑——core selection `ACTIVE`、candidate `7480845c4ac1`、`published_at` 10-15 01:28；`src/asuna` 与在跑那份可比文件 116 个、内容不同 0 个；`cli.py`、`native_ui.py` 只在检出里有（不进包），`resources/RUNTIME_API.md` 只在跑的那份里有；检出 HEAD 落后 `origin/main` 1 笔、工作区 2 个未提交文件（所以下次重启的 `checkout` 仍会是 `changed_files`）。`restart/last.json` 那次（10-15 00:30）的 `checkout.state` 就是 `diverged`，正是我读错的那句。
-
-- 2026-10-15 v1.1 实跑（三格都有反证）：
-  - cp1252：改前用 PYTHONIOENCODING=cp1252 跑 `version_probe.py` → rc=1，崩在第一句中文字符，stdout 只出到 173 字符，报错原文 UnicodeEncodeError: 'charmap' codec can't encode characters in position 3-12: character maps to <undefined>（encodings/cp1252.py 的 encode）；改后同一环境 rc=0、stderr 空、3529 字符全出。
-  - 换行：今天 18:02 冻结出来的快照里这份 SKILL.md 是 CRLF（字节级 CR=90），同一份用文本模式读进来再问有没有 CR 答案是「没有」——那就是瞎；新加的 `line_endings_are_lf` 吃这份真样本 → 红，读数 SKILL.md（90 个 CR 字节）。
-  - 锚点：11 条名字锚点（loaded、restart_from_program、block、SHOWN_HOURS、CHECKOUT_WORDS、syncCheckout、changedPackages、profileBase、fastForwardCheckout、effective、skillPaths）在检出 aa0494e2 逐个字节级核过都在。反证三连各红一次：假名字（SHOWN_HOURS 改成 SHOWN_HOURS_NOT_THERE → 里找不到这个名字）、把行号写法塞回去（restarts.py 加冒号 19 → 还写着行号锚点）、锚点指到不存在的文件（文件不在）。
-  - 自检：56/56（改前 53/53；多的三条＝换行检查、第十一节存在、那条规矩的字面守卫）。
-
-- 2026-10-16 v1.2：只动自检那一格（见版本段）。实跑读数与反证两例（名单配不上 → 红 `leak_scan_ran`；名单里放一个正文里真有的词 → 红 `no_listed_words`、词本身不出现在输出里）见行动报告。
-
-- 2026-10-20 v1.3：补的那条自己核过——`packages/cognition-core/src/floor.js` 里 `resolvePersona`／
-  `packageRoot`／`resource_root` 三个名字逐个 grep 到（2／19／2 处），那一处写的是
-  `resolvePersona(persona, root ?? persona.resource_root)`，`root` 取 `effective(...)?.packageRoot`，
-  所以「什么都没选中」才走 `resource_root`。sha256 前缀对照：选中版 frozen 快照那份 image-generation
-  的 SKILL.md `e9daf9bb`，`node_modules/@asuna/xiaoman` 那份 `ad006104`（旧），本回合 skill 工具读到的
-  技能目录 base 也确实指向 frozen 选中版。自检 55/55 复跑绿（改前同 55/55，判据条数未变）。
-
-- 2026-10-21 v1.4（原始 UTC 2026-10-20T18:02:26Z → +13 是 10-21 07:02，+8 是 10-21 02:02）：发布前在候选里实跑了两次第五步（读的是运行时那份，不是候选）：① xiaoman 包、needle 取候选里才有的新字面 → 运行时那份「不在」，退出码 3（新版还没发，符合预期）；② core 包、needle 取候选里还没发布的那节标题 → 运行时那份「不在」、读到的是旧版的 9622 字节。前四段回归跑了一遍，退出码 0、和改前一致。自检 61/61（改前 55/55），反证一次：把探针里的 part_package 改名后重跑 → 60/61、RC 1、红在 probe_has_package_step。发布后要用它再判一次“运行时那份有没有新字面”，这一条等那次再补。
-
-- 2026-10-25 v1.5：改的那格与新增那条里的读数全是我自己拿真文件跑 `loaded()` 读到的（父版本 9 项、新版 7 项，差集正好 `@asuna/dsh-peer` 与 frozen 目录名拼的假包；凭据 `task-3e7a12804f475d9d17b323e708d0db03`）；本机 19:48:45 那次真起来的块与预跑逐格相同（7 项、两条假的都不在、`selections` 里 `dsh-peer` 仍 `ACTIVE`）。「选择覆盖 digest」只有测试夹具那份证实过，我真文件上两边 sha 相同，所以写成空转、不写成实测。自检 61/61（改前 61/61，判据条数未变）。
+行号每次有人改那个文件就漂，名字不会。「文件在＋行数够」只能抓文件被删或被砍短，抓不到漂移——行数一直够，指的却已经不是那几行了。所以锚点写成 `src/asuna/restarts.py:SHOWN_HOURS`、`tools/asuna-launch.mjs:fastForwardCheckout` 这样：自检能真去文件里找那个名字，找不到就红；正文里再出现行号锚点也直接红。核不到真名字的，宁可不写锚点，也别留个假行号。

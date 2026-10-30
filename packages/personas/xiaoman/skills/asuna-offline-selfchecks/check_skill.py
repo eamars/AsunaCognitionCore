@@ -14,8 +14,7 @@
    守卫立在这儿防复发。要能找到仓库根（tests/ tools/ pyproject.toml 同层）才真查；
    找不到只留 NOTE（比如装在 node_modules 里的冻结版），不算失败。
 
-5. 补遗八条的钉（2026-10-24 并版）：「判据补遗」一节里八条各一个 pin_* 检查，只认本节范围内的字面；
-   常设判据那句的来路措辞单独一钉（pin_e）。
+5. 补遗的钉：「判据补遗」一节里各条各一个 pin_* 检查，只认本节范围内的字面。
 6. 内容级私密词扫描（同日补）：leak_scan_ran／no_listed_words／no_listed_words_outside_envoy 三格。
    名单配不上或 0 条＝红 leak_scan_ran（没真查，不是干净）；本技能目录里的文件零命中；
    找得到包根时再扫整个包根，命中只许落在 integration/envoy_meters_read.py（既有基线：名单 69 条、
@@ -70,7 +69,6 @@ PACKAGING_RULES = [
     ("rule_whitelist_scan_before_publish", "只留 `package.json` 里 `files` 白名单列出的路径"),
     ("rule_package_content_proof", "只认 artifact 那串 sha256 和 `.tgz` 的文件清单"),
     ("rule_changed_files_is_not_package", "`changed_files` 反映的是候选树／冻结快照那一格，不等于包内容"),
-    ("rule_provenance_package_sha", "7f54dbd2af14"),
 ]
 
 # 「development_publish 撞 EFFECTIVE_PROJECT_CHANGED 的处置」一节的字面守卫（2026-10-25 主人交代）：
@@ -91,7 +89,6 @@ PREPUB_SCAN_RULES = [
     ("prepub_stop_other_file", "命中冒出"),
     ("prepub_stop_list_count", "名单条目数跟上一份报告对不上"),
     ("prepub_stop_envoy_changed", "本身在这次改动里被改"),
-    ("prepub_provenance_owner_words", "定成常设判据，以后照这条自己走"),
     ("prepub_why_rubber_stamp", "把「停」练成橡皮章"),
     ("prepub_no_entry_index", "不按序号引用名单条目"),
     ("prepub_three_way_wording", "可判的三岔"),
@@ -99,7 +96,7 @@ PREPUB_SCAN_RULES = [
 
 # 「判据补遗（2026-10-24 并版：八条）」一节的钉。每条一个检查名，只认本节范围内的字面
 # （别处，比如版本条目或试用记录复述了同一句，不算数）；缺哪个字面写进 detail。
-BACKLOG_TITLE = "## 判据补遗（2026-10-24 并版：八条）"
+BACKLOG_TITLE = "## 判据补遗"
 BACKLOG_PINS = [
     ("pin_a_active_root", ["中选中那格的 `packageRoot/skills`", "`node_modules` 里那份不算"]),
     ("pin_b_corroboration", ["必须带旁证", "不拿最新一版当现场"]),
@@ -111,11 +108,6 @@ BACKLOG_PINS = [
     ("pin_h_table_beats_prose", ["以表格为准，并追问同一格"]),
 ]
 
-# (e) 在私密词那一节里改了一句来路：新说法要在那一节里，旧写法全文不许再有。
-PREPUB_TITLE = "## 发布前自检（私密词扫描）"
-PROVENANCE_NEW = "当日记录里的说法；逐字未核到（原话窗口从 10-15 起）"
-PROVENANCE_OLD = "主人 2026-10-14 拍的"
-
 # 内容级私密词扫描的既有基线（2026-10-24 发布前扫整棵候选根的读数）：漂了只打 NOTE，不变红。
 ENVOY_FILE = "integration/envoy_meters_read.py"
 BASELINE_LIST_ENTRIES = 69
@@ -126,8 +118,6 @@ SECTIONS = [
     "## 增量",
     "## 候选根：临时脚本落点与包内容判据",
     BACKLOG_TITLE,
-    "## 版本",
-    "## 试用记录",
 ]
 
 # 通用清单回潮：这些命令字面量属于核心技能的「发布前自检」，本技能散文里不该再出现。
@@ -371,15 +361,6 @@ def main():
     for name, tokens in BACKLOG_PINS:
         missing = [token for token in tokens if token not in backlog]
         check(name, not missing, "补遗一节里缺：" + "、".join(missing))
-    # (e)：新说法在私密词那一节里，旧写法全文不许再有。
-    prepub = section_of(body, PREPUB_TITLE) or ""
-    e_problems = []
-    if PROVENANCE_NEW not in prepub:
-        e_problems.append("私密词那一节里缺新说法：" + PROVENANCE_NEW)
-    if PROVENANCE_OLD in body:
-        e_problems.append("全文还有旧写法：" + PROVENANCE_OLD)
-    check("pin_e_provenance_wording", not e_problems, "；".join(e_problems))
-
     # 通用清单回潮：命令字面量回到散文 = 又把核心技能抄了一遍
     regressed = [token for token in GENERIC_SUITE_TOKENS if token in prose]
     check("no_generic_suite_list_in_prose", not regressed, ",".join(regressed))

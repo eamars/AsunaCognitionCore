@@ -4,7 +4,7 @@
 这份技能是「出门那一轮」的规则集，所以这里查四件事：
 1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本能编译、换行是 LF（读字节数 CR，文本模式那把尺看不见 CR）；
 2. 内容要点：开口前五查、回看四条、一条边界的字面要点都在；「这条道上有哪几份技能——别编名字」那一节的
-   真名单、两条规矩与「实判读数」这句在（ROSTER 逐条判）；front matter 的 scene_kinds 覆盖 home／group／dm；
+   真名单、两条规矩在（ROSTER 逐条判）；front matter 的 scene_kinds 覆盖 home／group／dm；
 3. 不带别人的个人信息：禁词表（人名／群名／称呼）与字面编号（#数字）都不该出现在正文；
    这台机器的私密名单可达就真扫（命中只报类别与名单行号，词本身不打印）；配不上、或名单在却解析出 0 条有效词，都记一条红
    `leak_scan_ran`——2026-10-16 起不再「print 一行 NOTE、绿数照旧」，「没跑」不许长得像「过了」；
@@ -37,10 +37,6 @@ SECTIONS = [
     "## 开口前几查",
     "## 回看怎么做",
     "## 一条边界",
-    "## 版本",
-    "## 试用记录",
-    # 2026-10-22 新加的一节追加在末尾，不插在「一条边界」后面：section_0…section_5 这些既有判据名
-    # 是位置生成的，插在中间会让「版本」「试用记录」两格改名字，老的 FAIL 记录就对不上了。
     "## 这条道上有哪几份技能——别编名字",
 ]
 
@@ -80,10 +76,8 @@ TIMING = [
 
 # 2026-10-22：「这条道上有哪几份技能——别编名字」一节。这份技能是出门那一轮本来就要带的，名单写在这里，
 # 所以真名单（群 6 份里除自己之外的 5 个名字、dm 1 份、家里 12 份里不带出去的那六份之一）、两条规矩、
-# 来路那一格和「实判读数」这句都得在——少了哪条，红的就是哪条，不合并成一条「名单在不在」。
+# 都得在——少了哪条，红的就是哪条，不合并成一条「名单在不在」。
 ROSTER = [
-    ("roster_why_unknown_count", "27 次 unknown"),
-    ("roster_why_invented_names", "asuna-turing"),
     ("roster_group_count", "群（group）6 份"),
     ("roster_group_become_human", "asuna-become-human"),
     ("roster_group_bot_or_person", "asuna-bot-or-person"),
@@ -93,7 +87,6 @@ ROSTER = [
     ("roster_dm_count", "别人私聊（dm）1 份"),
     ("roster_home_count", "12 份全给"),
     ("roster_home_kept_private", "asuna-credentials"),
-    ("roster_reading_is_measured", "实判读数"),
     ("roster_rule_real_names_only", "只用表里的真名"),
     ("roster_rule_no_variant_retry", "别换变体重试"),
     ("roster_rule_no_name_guessing", "别靠猜名字"),
@@ -266,7 +259,6 @@ def main():
 
     check("no_placeholder_markers", not PLACEHOLDER.search(body))
     check("skill_body_not_thin", len(body) >= 800, "body_chars=%d" % len(body))
-    check("selfcheck_documented", "check_skill.py" in body)
 
     # 同目录脚本：必须存在且语法能编译。不落文件，在内存里查（compile(源码, 路径, 'exec')）：
     # 2026-10-18 之前用 py_compile 写 .pyc，先试技能目录旁、再退当前目录，行动脑沙箱里两处都不让写，

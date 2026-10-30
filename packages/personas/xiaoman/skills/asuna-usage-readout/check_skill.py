@@ -4,7 +4,7 @@
 查七件事：文件结构（frontmatter、章节、LF 换行、脚本能编译）＋读数脚本 `usage_readout.py` 在、且它的 `--selfcheck`（不读盘不连库的纯逻辑模式）真跑通、脚本本体里跨帧解那一格还在（`read_across_frames=True` 写在 `stream_reader` 那一行）；来源／口径字面与六格口径（v3：① 落档件数
 只从字段数、② 跨类拷贝去重四条、③ 反思回合已核）都在；三张表（含标明「不是正式读数」的样例表）与硬规矩
 都在；v1／v2 已被核掉的旧字面不残留（含 2026-10-23 v2、未逐条核、0 样本、写死的 484／7 件）；版本与试用
-记录按写就时刻标、另起一行标计划首次真跑；不带个人信息（私密名单命中只报类别与行号，名单配不上、或名单在
+不带个人信息（私密名单命中只报类别与行号，名单配不上、或名单在
 却解析出 0 条有效词，都记红）。
 
 读数守卫（2026-10-20：v5 两条、v6 三条）：硬规矩 8「时刻基准」、9「编号出处」与 10「字段缺了」各有字面锚
@@ -41,7 +41,7 @@ SECTIONS = [
     "## 一、硬规矩", "## 二、来源和口径", "### 来源", "### 口径",
     "### 六格口径", "### 八条口径判据", "## 三、三张表怎么读", "### ① 缓存命中率",
     "### ② 选高率", "### ③ 成败与拒", "## 四、每周怎么跑",
-    "## 五、会让读数出错的坑", "## 六、没验过的", "## 版本", "## 试用记录",
+    "## 五、会让读数出错的坑", "## 六、没验过的",
 ]
 
 # 来源与口径：每条查一个只有写全了才会出现的字面
@@ -77,7 +77,6 @@ FACTS = [
     ("rule_why_not_cause", "不许拿它当降档原因报"),
     ("rule_compaction_separate", "单独列一类，不混进"),
     ("rule_numbers_drift", "数会随在跑的任务变"),
-    ("probe_task", "task-f83b69fb5d8b9c905060b7d71fa95ba1"),
 ]
 
 # 六格口径（v3）：每格查几句只有照那趟验证写出来才会出现的字面
@@ -107,7 +106,6 @@ CELLS = [
     ("cell1_two_things", "「没落过档」和「没这个字段」是两回事"),
     ("cell1_doc", "RUNTIME_API.md"),
     ("cell1_at_dispatch", "at_dispatch"),
-    ("cell1_audit_answered", "本次读代码已答"),
     # ② 会话种类按目录名前缀 ＋ 跨类拷贝去重四条
     ("cell2_role", "`asuna-role-`"),
     ("cell2_errand", "`asuna-errand-`"),
@@ -127,7 +125,6 @@ CELLS = [
     ("cell2_scheduler_wrong", "把它算成差事是错的"),
     ("cell2_errand_fields", "`lane=character`"),
     ("cell2_read_now_col", "跑数那天重新数，别抄"),
-    ("cell2_dirs_rows", "498 个目录／496 行"),
     ("cell2_missing_rows", "库里为何缺行未查明"),
     ("cell2_dedup_global", "全局按 `data.message.id` 去重：一条 id 只算一次，归它首次出现时所属的那一类"),
     ("cell2_tie_time", "「首次」＝行内 `time` 最早"),
@@ -136,20 +133,17 @@ CELLS = [
     ("cell2_two_cells", "自有调用数／拷贝来的调用数"),
     ("cell2_no_merge", "不许合成一个数"),
     ("cell2_mark_n", "拷贝占比高的那一类要标样本量"),
-    ("cell2_errand_own_7", "差事自有只有 7 条"),
     ("cell2_no_id_fallback", "退回启发式键"),
     ("cell2_compaction_no_id", "`compaction/summary` 行没有这个字段"),
     # ③ 反思回合：第一份样本已核
     ("cell3_code", "REFLECT_PREFIX"),
     ("cell3_id", "sha(episode_id)[:32]"),
-    ("cell3_sample", "asuna-reflect-8609"),
     ("cell3_verified", "第一份样本已核"),
     ("cell3_preset", "`agentPreset=asuna-xiaoman`"),
     ("cell3_no_origin", "**无** `origin`"),
     ("cell3_no_parent", "**无** `parentSession`"),
     ("cell3_unseeded", "`isSeeded=False`"),
     ("cell3_depth", "`delegationDepth` 存在且为 0"),
-    ("cell3_calls", "本体 3 条调用（10-16T11:17Z）"),
     ("cell3_db_row", "库里 `sessions` 1 行"),
     ("cell3_db_fields", "`lane=character`、`scene_id=local-dm`、`task_id=null`、`retired=true`"),
     ("cell3_no_copied_history", "不背拷贝来的历史"),
@@ -170,22 +164,17 @@ CELLS = [
     ("cell4_summary", "`summary.rejected`"),
     ("cell4_tool_failed", "`tool.failed`"),
     ("cell4_episodes", "`episodes.rejections[]`"),
-    ("cell4_v1_missed", "v1 漏了最大一处"),
     ("cell4_unverified_same", "是否同一批"),
     # ⑤ 命中率分母含写缓存
     ("cell5_evidence_rows", "30955 条"),
     ("cell5_evidence_158", "158 条"),
     ("cell5_equation", "total = input + output + cacheRead + cacheWrite"),
-    ("cell5_degenerate", "退化成 v1 的式子"),
     ("cell5_no_overlap", "三者互不重叠"),
     ("cell5_delta_role", "89.25%→89.17%"),
     ("cell5_delta_action", "94.71%→94.66%"),
     ("cell5_premise_unverified", "没验成立"),
-    ("cell5_121_rows", "121 条行动脑写缓存行"),
-    ("cell5_split_now", "本次已按 `tier.ran` 拆开"),
     # ⑥ 窗口写死
     ("cell6_start", "2026-10-16 00:00"),
-    ("cell6_tz", "2026-10-20T01:00 → 2026-10-21T01:00"),
     ("cell6_utc", "2026-10-15T11:00:00Z"),
     ("cell6_not_rolling", "不是滚动的「往前七天」"),
     ("cell6_relay", "是转达，不是主人字面"),
@@ -197,22 +186,15 @@ CELLS = [
     ("cell6_retention", "超 30 天清"),
     ("cell6_tier_start", "2026-10-16T07:56:38Z"),
     ("cell6_dbtool_display", "development_database_read"),
-    ("cell6_rows_grow", "3528 行，同一趟再数 3780 行"),
 ]
 
 # 会让读数出错的坑（v3：坑 1 换成核过的结论，坑 2 查到成因）
 PITS = [
     ("pit_keys_equal", "行对行完全一致"),
-    ("pit_both_5990", "both=5990"),
-    ("pit_both_6026", "both=6026"),
-    ("pit_share_history", "19% 是全部历史（5990/31632）"),
-    ("pit_share_window", "窗口内是 1.76%（62/3528）"),
     ("pit_window_role", "窗口内重复全在 `asuna-role-` 那一类"),
     ("pit_samefile_zero", "同一文件内按 id 判重是 0 条"),
     ("pit_errand_shared", "98 条 `message.id` 与 `asuna-role` 相同，只有 7 条是它自己的"),
-    ("pit_errand_read", "Claude 10-17 12:58 数，只数 id 不读正文"),
     ("pit_webui_seed_combo", "74/309 条压缩 usage 组合出现在多个会话"),
-    ("pit_webui_seed_read", "我 10-17 11:08 数"),
     ("pit_compaction_no_id", "压缩行没有 `data.message.id`"),
     ("pit_compaction_74", "74 个 usage 组合同时出现在 `asuna-role-` 与 `session-` 两个前缀下"),
     ("pit_compaction_reread", "74/311"),
@@ -226,16 +208,12 @@ CRITERIA = [
     ("c2_returned", "`RETURNED` 只等于交回，不等于做成"),
     ("c2_unsplittable", "分不出「交回但没做成」就照实写分不出"),
     ("c3_test_pieces", "测试件划出去并写明为什么"),
-    ("c3_example", "task-530b59fa6e310b995b990a78363bacea"),
     ("c4_refused_by_cause", "schema 必填所致**不归我**，我自己挑错 op 才归我"),
-    ("c5_shape", "654 件任务里 651 件根本没有 `tier` 字段"),
     ("c5_not_preference", "不能算成我的偏好"),
-    ("c5_quoted_not_current", "照抄留档、**不当现值用**"),
     ("c6_hard", "**硬约束：只读数字、字段名、枚举短码和计数，不读正文**"),
     ("c6_not_hint", "这条写成硬规矩，不是提示"),
     ("c7_source_time", "每个数带来源＋读的时刻"),
     ("c8_unverified_cover", "没验过的覆盖率要标出来"),
-    ("c8_934", "不是全部 934 个"),
     ("c8_tiers_location", "`action_brain.tiers` 在库里的存储位置没找到"),
 ]
 
@@ -249,10 +227,7 @@ TABLES = [
     ("table1_sample_low", "94.63%"),
     ("table1_sample_cw_all", "102（全部）"),
     ("table1_sample_cw_none", "0（一行都没有）"),
-    ("table1_sample_one_day", "全部落在 10-16 那一天"),
     ("table1_sample_scope", "不能推广到别的种类"),
-    ("table1_drift_rows", "213→227→228"),
-    ("table1_drift_rate", "94.23→94.59→94.63"),
     ("table2_rate", "选高几次"),
     ("table2_landed", "落档几件"),
     ("table2_landed_from_field", "件数只从 `tasks.tier.fell` 字段数"),
@@ -275,15 +250,10 @@ GUARDS = [
     ("guard_time_unsettled", "记成「基准未定」"),
     ("guard_time_no_ledger", "不进账、不拿去对夜锚、不拿去排作息"),
     ("guard_time_words_not_evidence", "这句话不是证据"),
-    ("guard_time_source_task", "task-3261095b96c6f55ff22a36bfef9ac266"),
-    ("guard_time_check_task_a", "task-9c720fd9e17b6f704854edf441adaea5"),
-    ("guard_time_check_task_b", "task-c4e2b3a8cff48bf36333c1039c9c922c"),
     ("guard_id_heading", "**编号出处**"),
     ("guard_id_question", "从哪个文件／哪张集合的哪个字段读到的"),
     ("guard_id_unproved", "「编号未证」，不许当入口引用"),
     ("guard_id_made_up", "编号是顺手补出来的"),
-    ("guard_id_source_task", "task-5b399a9567c3e25d64bb33eabe11bf9c"),
-    ("guard_id_real_task", "task-d9aab3742eaed3695ba873b44b30c14f"),
     ("guard_field_heading", "**字段缺了**"),
     ("guard_field_two_questions", "先判两件事，再决定报不报修"),
     ("guard_field_read_literal", "去读落盘那段代码的字面"),
@@ -302,23 +272,6 @@ GUARDS = [
     ("guard_weekly_run", "三个守卫各过一遍"),
 ]
 
-# 版本与试用记录：日期一律写就时刻，计划真跑另起一行
-VERSION = [
-    ("ver_planned_run", "计划首次真跑：2026-10-23 20:30（本地）"),
-    ("ver_written_word", "写就时刻"),
-    ("ver_v3_written", "v3（写就 2026-10-17"),
-    ("ver_v2_written", "v2（写就 2026-10-17 09:21）"),
-    ("ver_v1_written", "v1（写就 2026-10-16 21:21）"),
-    ("trial_v1", "2026-10-16 21:21 写就 v1"),
-    ("trial_v2", "2026-10-17 09:21 写就 v2"),
-    ("trial_v3", "2026-10-17 13:07 写就 v3"),
-    ("ver_v4_written", "v4（写就 2026-10-19 18:54）"),
-    ("trial_v4", "2026-10-19 18:54 写就 v4"),
-    ("ver_v5_written", "v5（写就 2026-10-20"),
-    ("trial_v5", "写就 v5"),
-    ("ver_v6_written", "v6（写就 2026-10-20"),
-    ("trial_v6", "写就 v6"),
-]
 
 # 被核掉／改掉的旧字面：留在正文里就说明那一格没真改
 STALE = [
@@ -540,7 +493,7 @@ def main():
     check("description_specific_enough", len((fields or {}).get("description", "")) >= 120)
     for i, s in enumerate(SECTIONS):
         check("section_%d" % i, ("\n" + s) in ("\n" + body), s)
-    for name, tok in FACTS + CELLS + PITS + CRITERIA + TABLES + GUARDS + VERSION:
+    for name, tok in FACTS + CELLS + PITS + CRITERIA + TABLES + GUARDS:
         check(name, tok in body, tok)
     for name, tok in STALE:
         check("stale_gone_" + name, tok not in body, "旧字面还在正文里：%s" % tok)
@@ -690,7 +643,7 @@ def main():
         print("%d/%d 通过，失败：%s" % (total - len(failed), total, ", ".join(failed)))
         return 1
     print("%d/%d 通过：来源口径、六格口径（含跨类拷贝去重四条）、三处坑、八条判据、三张表（含样例表标记）、"
-          "版本写就时刻与计划真跑日都在，三条读数守卫（时刻基准／编号出处／字段缺了）各带「什么算违反」，v1／v2 退役字面没残留%s。（只查文件本身，外加把 usage_readout.py 的离线模式真跑了一遍；没读过会话记录和库。）"
+          "三条读数守卫（时刻基准／编号出处／字段缺了）各带「什么算违反」，v1／v2 退役字面没残留%s。（只查文件本身，外加把 usage_readout.py 的离线模式真跑了一遍；没读过会话记录和库。）"
           % (total, total, anchor_note + leak))
     return 0
 

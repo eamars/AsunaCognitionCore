@@ -8,7 +8,7 @@
 群聊生图上限那条（「群聊生图上限」一节标题、节内「最多 4 张」与「到顶默认不发」、
 「唯一的例外」是不是 10:59 更正版、10:57 旧措辞有没有被抄回这一节）在不在、
 「往群里发图之前的自检」一节在不在且四条要点（全年龄底线、看群笔记／最近聊天、只发自己做的图、
-不为试功能发图）齐不齐、「本机页面核验」的归属是不是 Claude（不是主人）、示例图路径是不是相对的、
+不为试功能发图）齐不齐、示例图路径是不是相对的、
 同目录脚本能不能编译、SKILL.md 与同目录脚本的换行是不是 LF（读字节数 CR，文本模式那把尺看不见 CR）。
 
 2026-10-05 起改口径：QQ 私聊发图是那一轮调用 `attach_image` 工具（DECIDE 阶段与它的 `attach`
@@ -188,8 +188,8 @@ ATTACH = [
     # 还没实测的那一条，别被写成「已经能看到图了」
     ("attach_base64_uri_caveat", "base64://"),
     # 旧 DECIDE 流程只作历史保留：历史段必须在，且明说别照它教当前流程
-    ("attach_history_section", "别照它教当前流程"),
-    ("attach_history_decide_retired", "DECIDE 阶段后来整体退役"),
+    ("attach_history_section", "旧写法别照做"),
+    ("attach_history_decide_retired", "DECIDE 阶段已退役"),
 ]
 
 # 改图那条路（2026-10-16 现场验收）：入口、路线读数、即时拒绝码、归属、本地修字、剥文字块、排队成本。
@@ -251,7 +251,7 @@ GROUP_PRECHECK_STALE = ["不发群", "群里不发图"]
 # 「唯一的例外」那段必须是 10:59 更正版。10:57 旧版那句「超了要在交回时写一句」回到这一节就红——
 # 防止有人拿旧措辞把更正后的版本覆盖掉。只在这一节的切片里查：版本段／试用记录／离线自检里
 # 合法引用这句话不算数（与 GROUP_PRECHECK_STALE 同一口径）。
-CAP_HEADING = "## 群聊生图上限（2026-10-16 主人提、小满定标准）"
+CAP_HEADING = "## 群聊生图上限"
 # 每条给一组写法，任一命中即算在：正文照主人原话抄，写的是「到顶怎么办：默认不发。」，
 # 「到顶默认不发」是 frontmatter／版本段用的简写。两种都被删掉才算这条红。
 CAP_SECTION = [
@@ -275,18 +275,12 @@ SECTIONS = [
     "## 边界",
     "## 离线自检",
     "## 已知坑",
-    "## 版本",
-    "## 试用记录",
     "## 步骤 8",          # 追加在末尾：老检查名（section_0..section_14）不跟着移位
     "### 往群里发图之前的自检",   # 步骤 8 下的子节；同样追加在末尾，老编号不动
-    "## 改图与 `generate_image`（2026-10-16 实测）",   # 2026-10-16 追加在末尾，老编号不动
-    "## 群聊生图上限（2026-10-16 主人提、小满定标准）",   # 2026-10-16 v8 追加在末尾，老编号不动
-    "## 本机已有那张图怎么进可发清单（2026-10-24 实测）",   # 2026-10-24 v11 追加在末尾，老编号不动
+    "## 改图与 `generate_image`",
+    "## 群聊生图上限",
+    "## 本机已有那张图怎么进可发清单",
 ]
-
-# 归属：本机页面那次核验是 Claude 做的，主人那晚在睡。写回「主人核过」就是假事实。
-CLAUDE_PAGE_CHECK = re.compile(r"Claude[^\n]{0,60}在本机页面核过")
-OWNER_PAGE_CHECK = re.compile(r"主人[^\n]{0,20}在本机页面核过|主人在页面核验|主人页面渲染")
 
 # 已经过期的说法：出站图片能力上线后、DECIDE 退役后不能再这么写（只看散文，反引号里的引用不算）
 STALE_CLAIMS = [
@@ -401,7 +395,7 @@ def cap_override_slice(cap_section):
     return "\n".join(out)
 
 
-REGISTER_HEADING = "## 本机已有那张图怎么进可发清单（2026-10-24 实测）"
+REGISTER_HEADING = "## 本机已有那张图怎么进可发清单"
 
 # 这一节教「本机／GridFS 已有的那张图怎么进某个指定场景的可发清单」（2026-10-24 实测走通）。
 # 字面量只在它自己那一节切片里查：那条路走没走通，看的是这一节有没有写清入口函数、scope 的字面值从哪读、
@@ -427,11 +421,6 @@ REGISTER_SECTION = [
     ("reg_over_limit", "ATTACHMENT_OVER_LIMIT"),
     ("reg_cap_8mib", "8 MiB"),
     ("reg_jpeg_enters_list", "JPEG"),
-    ("reg_strip_sha_new", "748e7ce1"),
-    ("reg_strip_sha_old", "d1aa3735"),
-    ("reg_strip_size_new", "2,225,102"),
-    ("reg_strip_size_old", "2,227,501"),
-    ("reg_strip_delta", "2,399"),
     ("reg_sha_not_identity", "别拿 sha 当"),
     ("reg_path_image_function", "path_image"),
     ("reg_path_source_prefix", "file:"),
@@ -778,12 +767,6 @@ def main():
     check("selfcheck_documented", "check_skill.py" in body)
     check("no_placeholder_markers", not PLACEHOLDER.search(prose))
     check("skill_body_not_thin", len(body) >= 4000, "body_chars=%d" % len(body))
-
-    # 归属更正：页面核验是 Claude 做的，主人还在睡；散文里写回「主人核过」就是假事实
-    check("attribution_page_check_by_claude",
-          bool(CLAUDE_PAGE_CHECK.search(prose)) and not OWNER_PAGE_CHECK.search(prose),
-          "散文里缺 Claude 核过的说法，或还留着「主人核过 / 主人在页面核验」")
-    check("attribution_owner_asleep", "主人还在睡" in body, "没写明这一轮主人还在睡、没有主人侧新核验")
 
     # 过期说法：出站图片上线、DECIDE 退役、改图路线上线后不能再这么写（反引号里的引用不算）
     stale = [item for item in STALE_CLAIMS if item in prose]

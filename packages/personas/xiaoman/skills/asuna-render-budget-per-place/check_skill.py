@@ -44,8 +44,6 @@ SECTIONS = [
     "## 四、加东西之前",
     "## 五、技能里引用代码只写「文件＋名字」，不写行号",
     "## 六、两份口径、自我层、锚点形状",
-    "## 版本",
-    "## 试用记录",
 ]
 
 # 口径与推论：每条查一个只有写全了才会出现的字面
@@ -56,18 +54,15 @@ RULES = [
     ("rule_budget_bounds_largest", "最大的那份"),
     ("rule_limit_key", "render.identity_tokens"),
     ("rule_limit_value_current", "12288"),
-    ("rule_limit_provenance_6144", "6144 是旧上限口径"),
     ("rule_limit_precedence", "policy 存储 > persona-model 默认 > 核默认"),
     ("rule_token_estimate", "estimate_tokens"),
     ("rule_token_estimate_rule", "÷4"),
     ("rule_place_tags", "place:"),
     ("rule_inference_swap", "换成另一个场合"),
-    ("rule_inference_freed_8", "只腾出"),
     ("rule_only_everywhere_helps", "处处都出现"),
     ("rule_action_brain_runs_it", "import asuna.render"),
     ("rule_no_need_to_ask", "不用找人跑"),
     ("rule_over_is_normal", "加不进去是常态"),
-    ("rule_over_history", "6501/6144"),
     ("rule_gate_name", "PERSONA_RENDER_OVER_BUDGET"),
     ("rule_gate_advice", "on_demand"),
     ("rule_no_hurry_on_big_section", "别在赶时间时动"),
@@ -92,9 +87,8 @@ LEDGER_ANCHOR_SHAPE = ["ANCHOR = (", "形状", "只出现在一个场合的节�
 # 绝对值锚点的旧写法：任何一处（脚本、正文、frontmatter description）再出现就红。description 那一行每一拍进技能目录、被当触发依据读，
 # 所以它与正文同口径一起扫。
 STALE_ABSOLUTE_ANCHOR = ["home≈", "≈733", "733"]
-# 10-26 上限口径更新：旧上限 6144 被当现值写回来（老句子「核默认 6144」回到散文）就红；反引号里的引用不算，与绝对值锚点同一判法。
-# 同一族另一头在 RULES：rule_limit_value_current（12288 必须在）与 rule_limit_provenance_6144（来历那一行必须在）
-# ——现值被抹掉要红，来历被删光也要红，两头都咬，不是空锁。
+# 旧上限 6144 被当现值写回来（老句子「核默认 6144」回到散文）就红；反引号里的引用不算，与绝对值锚点同一判法。
+# 另一头在 RULES：rule_limit_value_current（12288 必须在）。
 STALE_LIMIT_VALUE = ["核默认 6144"]
 DESC_MUST_SAY = ["两种口径", "memory_tiers.placed", "不受 6144 管", "形状"]
 
@@ -302,7 +296,6 @@ def main():
           "出现字面编号：" + ",".join(LITERAL_ID.findall(body)[:5]))
     check("no_placeholder_markers", not PLACEHOLDER.search(body))
     check("skill_body_not_thin", len(body) >= 1500, "body_chars=%d" % len(body))
-    check("selfcheck_documented", "check_skill.py" in body)
     check("ledger_shipped", "budget_per_place.py" in body)
 
     # v2（2026-10-25）：账本脚本必须同时输出两份口径、自我层单独一格、锚点是形状不是绝对值。

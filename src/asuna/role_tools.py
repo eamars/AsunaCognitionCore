@@ -91,6 +91,12 @@ PLAN_OUTSIDE_ONLY_MADE = ('「%s」不是这一回合建的：外面的便条叫
 # An errand turn hands new work home but does not steer the tasks listed there: they are that conversation's, which
 # home's authority does not reach (errands.NO_STEER). A reflection turn delegates as any home turn does.
 STEERING = ('task.message', 'task.stop')
+# ADR-111: whose work a task is, when she says it. At home (owner-private conversations) the place of the outside
+# conversation the work is for, which then runs on the home line; in a group, another person in this turn.
+DELEGATE_OUTSIDE = '外面（群、别人的私聊）托的事在家里做：for 写那边的 place，结果回家里。'
+FOR_AT_HOME = '这件是外面哪一处托的（群或私聊）：照抄 note_places_from_program 里那边的 place；不写＝这一回合叫你的那位托的'
+FOR_IN_GROUP = '这件是谁托的：不写＝叫起这一回合的那位；是这回合里另一个人托的，照抄 people_from_program 里 ta 的标签'
+FOR_NOT_HERE = '这里不写 for：这件就是这一回合叫你的那位托的。'
 # Why think comes first, said where it is refused (her count, 2026-10-20: 153 refusals that gave no reason).
 THINK_FIRST = '先用 think 写下这回合的心里话，再做别的：它是你这一回合每一步的理由，存了档，之后回想得起来为什么这么做。'
 
@@ -229,8 +235,10 @@ TOOLS = {
     'delegate': {
         'description': ('把一件要在外面做的事交给行动脑：查资料、查完整原话、跑代码、改文件、画图、改能力。title 是简短标题；'
                          'brief 是完整交代：要什么、为什么、有什么限制。行动脑只看得到 brief 和对方的原话。交出去后照常聊天，'
-                         '结果回来会再叫你；回来之前这件事还没做完。已经交出去的那件要补话、改或接着做，用 task 的 message。'),
-        'parameters': {'title': _s(limit=80, description='简短标题', required=True), 'brief': _s('给行动脑的完整交代', required=True)},
+                         '结果回来会再叫你；回来之前这件事还没做完。已经交出去的那件要补话、改或接着做，用 task 的 message。'
+                         + DELEGATE_OUTSIDE),
+        'parameters': {'title': _s(limit=80, description='简短标题', required=True), 'brief': _s('给行动脑的完整交代', required=True),
+                       'for': _s(FOR_AT_HOME)},
     },
     'task': {
         'description': ('已经交给行动脑的事，do 选一样：message 补话（补信息、改目标，或让做完的再做一趟）；answer 回答它刚问你的问题（只在它问你的那一回合，'
@@ -778,6 +786,12 @@ def placed_spec(spec, cls, scene_kind, listed):
             return spec
         return {**spec, 'description': _without(spec['description'], *([NOTE_DELIVER] if 'deliver' in left else [])),
                 'parameters': {k: v for k, v in spec['parameters'].items() if k not in left}}
+    if spec['name'] == 'delegate' and cls != visibility.OWNER_PRIVATE:
+        # ADR-111: naming the outside place is home's; in a group `for` names a person in the turn; elsewhere none.
+        fields = {k: v for k, v in spec['parameters'].items() if k != 'for'}
+        if scene_kind == 'group':
+            fields['for'] = {**spec['parameters']['for'], 'description': FOR_IN_GROUP}
+        return {**spec, 'description': _without(spec['description'], DELEGATE_OUTSIDE), 'parameters': fields}
     if spec['name'] == 'ideas':
         ops = [op for op in OPS['ideas'] if 'ideas.' + op in listed]
         if len(ops) == len(OPS['ideas']):
@@ -2273,18 +2287,49 @@ class RoleTools:
                 tier = action_tiers.chosen(args)
             except ValueError as exc:
                 self._found(str(exc), 'TIER_INVALID')
+        named = self._delegate_for(ep, args.get('for'))
         self.checkpoint()
         kept = self._kept(ep, title_as_written, brief_as_written)
-        task = self.coordinator.delegate(ep, call_id, title, brief, tier=tier)
+        task = self.coordinator.delegate(ep, call_id, title, brief, tier=tier, whose=named)
         from .errands import HOME_TASK
         from .tasks import queue_words
+        from . import whose as whose_of
+        moved = whose_of.moved(task, ep)
+        said_for = whose_of.words(self.store, ep.get('persona'), task.get('whose'))
+        # Where the result comes back: here, or home for outside work; an errand's task says it in its note (HOME_TASK).
+        back = (whose_of.RESULT_HERE if task['scene_id'] == ep['scene_id'] else
+                whose_of.RESULT_OUTSIDE if moved else None)
         return {'task': task['_id'], 'state': '已交给行动脑',
                 **({'tier': task['tier_words']} if task.get('tier_words') else {}),
-                'action_brain': '新开一份上下文：它只看得到这次的 brief 和对方的原话。',
+                **({'for': said_for + ('；' + back if back else '')} if said_for else {}),
+                'action_brain': whose_of.BRIEF_ONLY if moved else '新开一份上下文：它只看得到这次的 brief 和对方的原话。',
                 'queue': queue_words(self.store, task['_id']),
                 'note': (HOME_TASK if ep.get('errand') else REFLECTION_TASK if _one_shot(ep)
                          else '结果回来会再叫你；在那之前不要说已经做完。'),
                 **({'paths_kept': kept} if kept else {})}, False
+
+    def _delegate_for(self, ep, value):
+        """`delegate`'s `for` as whose work it is (ADR-111), or None for the turn's own: at home an outside place, in a
+        group a person in this turn; refused (collected) when it names neither."""
+        if value is None or value == '':
+            return None
+        from . import whose as whose_of
+        value = str(value).strip()
+        scene = scene_records.get(self.store, ep['scene_id'], fields=['kind']) or {}
+        if self._place(ep) == visibility.OWNER_PRIVATE:
+            found = whose_of.named_outside(self.store, ep, value)
+            if found:
+                return whose_of.record('outside', found, chosen=True)
+            usable = [place for place, (_, kind) in _notes.targets(self.store, ep['scene_id'],
+                                                                   visibility.OWNER_PRIVATE).items()
+                      if kind in ('group', 'dm')]
+            return self._found(whose_of.FOR_UNKNOWN_PLACE % value[:80] + refs_usable(usable), 'FOR_UNKNOWN_PLACE')
+        if scene.get('kind') == 'group':
+            person = whose_of.named_person(self.store, ep, value)
+            if person:
+                return whose_of.record('words', ep['scene_id'], person, chosen=True)
+            return self._found(whose_of.FOR_UNKNOWN_PERSON % value[:80], 'FOR_UNKNOWN_PERSON')
+        return self._found(FOR_NOT_HERE, 'FOR_NOT_HERE')
 
     def _listed_tasks(self, ep):
         """The ids of the tasks this turn lists (task_state_from_program): what a task reference can name."""

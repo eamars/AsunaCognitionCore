@@ -2,7 +2,6 @@
 from pathlib import Path
 
 from .state import Denied
-from .records import tasks as task_records
 
 
 def home_workspaces(config):
@@ -71,28 +70,16 @@ def conversation_workspace(config, scene_id):
     return False
 
 
-def development_granted(store, scene, event, session_class=None):
-    """Who may hand work with the development tools to the action brain (ADR-011 §6.1).
-
-    With self-development enabled, in owner-private conversations: someone's words there (the owner, or an agent on
-    its line), her own self-improvement turns, and her own initiative there: a plan of hers coming due, or a note
-    from another of her trusted home conversations (owner 2026-10-12). Her feedback turns keep the grant of the task
-    they answer. Nobody else's request carries it: in other scenes an improvement can only become an entry in her
-    idea notebook (role_tools.note_idea).
+def development_for(store, whose):
+    """Whether a task for this `whose` gets the development tools (ADR-011 §6.1, ADR-111): with self-development enabled
+    and the sandbox there, only for what the owner asked in one of his conversations, an agent asked on its own line, or
+    her self-development turn handed over (`whose.earns_development`). Nobody else's request carries it: in other
+    scenes an improvement can only become an entry in her idea notebook (role_tools.note_idea).
     """
-    from . import visibility
     if (store.config.get('self_development') or {}).get('enabled') is not True:
         return False
     from . import sandbox_backend
     if not sandbox_backend.available(store.config):
         return False                      # her candidates are tested in the sandbox (ADR-010 D5)
-    kind = event.get('episode_kind') or 'external'
-    if kind == 'task_feedback':
-        return bool((task_records.get(store, event.get('task_id')) or {}).get('development_grant'))
-    cls = session_class or visibility.session_class(store.config, store, scene, event['person_id'])
-    if cls != visibility.OWNER_PRIVATE:
-        return False
-    if kind == 'note':
-        from . import notes
-        return (notes.opening_for(store, event) or {}).get('trust') == notes.TRUSTED
-    return kind in ('self_development', 'external', 'scheduled')
+    from .whose import earns_development
+    return earns_development(store, whose)

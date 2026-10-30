@@ -1,5 +1,5 @@
 """A group the owner trusts as home (config `home_groups`, owner 2026-10-18: the owner, her older sister and her):
-it reads as his own conversations do and keeps the development rights of home, and it is still a group (her two
+it reads as his own conversations do (the development tools only for his own words there, ADR-111), and it is still a group (her two
 conditions): each speaker stays who they are, it is still a place errands go and notes come from, and its group
 sections and tools stay. The scene id is matched whole, never by prefix (her condition)."""
 from asuna import grants, notes, places, visibility

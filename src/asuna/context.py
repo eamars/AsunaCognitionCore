@@ -75,6 +75,8 @@ EXPERIENCE_PUBLICATIONS = 5
 RELATED_FIELDS = ['text', 'author', 'direction', 'scene_seq', 'delivery_state', 'platform_reply_to', 'event.group_context',
                   'episode_id', 'occurred_at', 'receipt_at', 'received_at']
 FINISHED_TASKS_SHOWN = 3              # task state: every open task, and only the last few finished
+DELIVERY = '程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'
+DELIVERY_AT_HOME = '程序自动执行委托，结果作为独立事件返回当前场景（外面托的写 for，结果回家里）；等待时仍可聊天。'
 RECENT_THOUGHTS = 3          # ADR-011 §3.2: her last few thoughts in this scene carry into the next turn
 
 # ADR-009 §8.2: context blocks in the persona's recall order; keys never sorted.
@@ -369,6 +371,20 @@ class ContextBuilder:
         finally:
             from .people import anchors_shown
             anchors_shown(event['scene_id'])        # her thought under a line of hers: once a turn
+
+    def _with_whose(self, items, persona):
+        """The event's items as she reads them: a task result says whose work it was (ADR-111), added here, when the turn
+        is prepared, and never written into the stored event, which a hand-back rebuilds and ingress compares."""
+        shown = []
+        for item in items or []:
+            task = task_records.get(self.store, item.get('task')) if isinstance(item, dict) and \
+                item.get('kind') == 'task_result' else None
+            if task:
+                from . import whose as _whose_of
+                said = _whose_of.result_words(self.store, persona, task)
+                item = {**item, **({'for': said} if said else {})}
+            shown.append(item)
+        return shown
 
     def _prepare(self, event, persona, recall, turn_kind):
         scene=scene_records.authorize(self.store, event['scene_id'], event['person_id'])
@@ -693,7 +709,8 @@ class ContextBuilder:
                  # The clock changes every turn; how to write a plan does not, so it is its own block and a
                  # session that already holds it is not sent it again (context-delivery.js).
                  'clock_from_program':schedule_rules.local_clock(schedule_zone,moment),
-                 'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
+                 'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':self._with_whose(
+                     event.get('trusted_context_events',[]),persona)}}
         line=local_line(source,event)
         if line:
             context['event']['line']=line
@@ -990,7 +1007,11 @@ class ContextBuilder:
                    if key!='next_fire_at'}
             plan={key:plan[key] for key in ('_id','last_occurrence_id','last_outcome') if key in plan}
             if then:plan['your_thought_then']=then
-            context['scheduled_plan_from_program']={**plan,**brief}
+            # ADR-111: whose this plan is, in words, when the turn is prepared (never in the stored event).
+            from . import whose as _whose_of
+            said_for=_whose_of.words(self.store,persona,_whose_of.of_plan(self.store,plan_records.get(
+                self.store,plan['_id'])),_whose_of.PLAN)
+            context['scheduled_plan_from_program']={**plan,**brief,**({'for':said_for} if said_for else {})}
         target_note=('只更新对当前说话人的理解：layer=person 写人那层（你在哪儿遇到他都看得到），layer=here 写这里那层'
                      + ('（只在这个对话里看得到）' if not target['shared'] else
                         '（配置认定他与另一个入口是同一个人，这里那层共用 %s 那一份）' % target['scope'])
@@ -1121,9 +1142,11 @@ class ContextBuilder:
             'available':bool(grant),'route':'用 delegate 把事交给行动脑；补话、接着做或叫停用 task（message、stop）。文件、网页、沙箱、原话检索和看图都是行动脑的事。',
             'cancellation_available':True,
             'network':'行动脑可以按需搜索公共网页并读取页面。',
-            'delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
-        from .grants import development_granted
-        if development_granted(self.store, scene, event, session_class):
+            # ADR-111: at home, work for someone outside goes to the home line.
+            'delivery':(DELIVERY_AT_HOME if session_class==visibility.OWNER_PRIVATE else DELIVERY)}
+        from .grants import development_for
+        from . import whose as _whose_of
+        if development_for(self.store, _whose_of.of_turn(self.store, None, event)):
             context['action_capabilities_from_program']['development'] = {
                 'candidate':'持久的有效项目候选（代码、技能、提示、种子）；可委托行动脑检查、修改和自行发布。',
                 'guide':'先读核心技能 asuna-self-improvement：改什么走哪层、怎么自检、怎么发布、什么会触发重启。'}

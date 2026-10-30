@@ -166,13 +166,19 @@ class Coordinator:
             begun=episode_records.get(self.store, task['episode_id']) or {}
             belongs=begun.get('errand') or begun
             original=errands.home_turn(self.store,begun) if begun else None
+            # ADR-111: outside work she took on in another home conversation runs on the Web chat; it is authorized by
+            # its own fields and answered in its own session.
+            moved=bool(original) and whose_of.moved(task,begun)
             if (not original or scene['scope_key']!=task['scope_key']
-                    or any(belongs.get(field)!=task[key] for field,key in (('scene_id','scene_id'),
+                    or not moved and any(belongs.get(field)!=task[key] for field,key in (('scene_id','scene_id'),
                            ('person_id','requester_id'),('scope_key','scope_key'),('policy_epoch','policy_epoch')))):
                 raise Denied('CONSULT_CONTEXT_UNAVAILABLE')
             source=message_records.get(self.store,task['raw_input_refs'][0],
                 scene=task['scene_id'],scope=task['scope_key'],epoch=task['policy_epoch'])
-            if not source:raise ValueError('CONSULT_SOURCE_MISSING')
+            if not source and not moved:raise ValueError('CONSULT_SOURCE_MISSING')
+            session=task.get('native_session_id') if moved else original.get('native_session_id')
+            context_of=((session_records.get(self.store,session,fields=['character_context']) or {}) if moved and session
+                        else original)
             question=args['question'].strip()
             self.collab(task,'question',{'from':'action','text':question},entry_id='q:'+call_key)
             ep_id='ep-'+sha(canonical([task['scene_id'],call_key,'consult']))[:32]
@@ -181,8 +187,8 @@ class Coordinator:
                 event={'event_id':call_key,'scene_id':task['scene_id'],'person_id':task['requester_id'],
                     'text':question,'episode_kind':'consult','task_id':task['_id'],
                     'trusted_context_events':[{'kind':'action_question','task':task['_id'],'title':task.get('title') or task['goal'],
-                        'brief':task.get('brief') or task['goal'],'original_input':source['text'],
-                        'original_input_id':source['_id'],'question':question,
+                        'brief':task.get('brief') or task['goal'],'original_input':(source or {}).get('text'),
+                        'original_input_id':(source or {}).get('_id'),'question':question,
                         'action_context':args.get('context','')}]}
                 if group:=program_group_context(source):event['group_context']=group
                 _,context,manifest=self.context.prepare(event,original['persona'])
@@ -190,9 +196,9 @@ class Coordinator:
                     'policy_epoch':scene['policy_epoch'],'source_event_id':call_key,'episode_kind':'consult',
                     'state':'PREPARED','persona':original['persona'],'person_id':task['requester_id'],
                     'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'monologue_refs':[],
-                    'task_id':task['_id'],'native_session_id':original.get('native_session_id'),
+                    'task_id':task['_id'],'native_session_id':session,
                     'whose':whose_of.of_task(self.store,task),
-                    **({'character_context':original['character_context']} if original.get('character_context') else {})},
+                    **({'character_context':context_of['character_context']} if context_of.get('character_context') else {})},
                     stream=ep_id)
             if ep['state']!='COMMITTED':
                 ep=self._turn(ep)
@@ -617,26 +623,27 @@ class Coordinator:
                 break
 
     # ── working with the action brain (ADR-011 §4) ──────────────────
-    def _grants(self, ep):
-        """(development, integration profile, capabilities) for a task delegated from this episode: from the turn whose
+    def _grants(self, ep, whose=None):
+        """(development, integration profile, capabilities) for a task delegated from this episode: the development
+        grant from whose work it is (`whose`, ADR-111; the episode's when not given), the rest from the turn whose
         authority it carries (errands.home_turn: on an errand, the home turn that sent it)."""
         from .tasks import WORKSPACE_TOOLS, ACTION_DSH_CAPABILITIES
         from .vision import route_filtered_tool_names
         from .integration import event_profile, integration_tools
-        from .grants import development_granted
-        from . import errands
+        from .grants import development_for
+        from . import errands, whose as whose_of
+        if whose is None:
+            whose=whose_of.of(self.store,ep)
         ep=errands.home_turn(self.store,ep)
         source=message_records.get(self.store, 'in-'+ep['_id']) or {}
         event=source.get('event',{})
-        scene=scene_records.get(self.store, ep['scene_id']) or {'_id':ep['scene_id']}
-        development=ep.get('episode_kind')!='consult' and development_granted(self.store,scene,
-            {**event,'episode_kind':ep.get('episode_kind'),'task_id':ep.get('task_id'),'person_id':ep['person_id']},
-            (ep.get('manifest') or {}).get('session_class'))
+        development=ep.get('episode_kind')!='consult' and development_for(self.store,whose)
         capabilities=list(WORKSPACE_TOOLS)
         if development:
             from .development import DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
             capabilities+=[*DEVELOPMENT_TOOLS,*PERSONA_JOB_TOOLS]
-        integration=event_profile(self.store.config,event,self.store)          # 'owner' | 'agent_home' | None
+        # 'owner' | 'agent_home' | None; work for someone outside carries none (ADR-111).
+        integration=None if (whose or {}).get('by')=='outside' else event_profile(self.store.config,event,self.store)
         if integration:capabilities+=integration_tools(integration)  # 按 profile 的白名单加，不整份 += INTEGRATION_TOOLS
         from .image_generation import available as image_available, GENERATE_IMAGE_TOOL
         if image_available(self.store.config):capabilities.append(GENERATE_IMAGE_TOOL)
@@ -655,8 +662,9 @@ class Coordinator:
         names=[*dict.fromkeys([*route_filtered_tool_names(capabilities,self.store.config),*ACTION_DSH_CAPABILITIES])]
         return development,integration,names
 
-    def delegate(self, ep, call_id, title, brief, tier=None):
-        """A new task: the action brain's first message is her brief (§4). `tier` (ADR-075): (tier, why) she chose."""
+    def delegate(self, ep, call_id, title, brief, tier=None, whose=None):
+        """A new task: the action brain's first message is her brief (§4). `tier` (ADR-075): (tier, why) she chose.
+        `whose` (ADR-111): whose work it is when she named it (`for`), else the turn's."""
         from . import errands, places, whose as whose_of
         from .grants import workspace_grant
         # A task begun on an errand is home's, and one begun in a reflection runs under home's own session: both turns
@@ -664,7 +672,22 @@ class Coordinator:
         # and its input are the home turn's that sent the errand (errands.home_turn).
         home=ep.get('errand') or ep
         authority=errands.home_turn(self.store,ep)
-        session=self._task_session(ep)
+        whose=whose or whose_of.of(self.store,ep)
+        if whose is None:
+            raise role_tools.Refused(role_tools.OUTSIDE_NEEDS_HOME)
+        raw_from=None
+        if whose.get('by')=='outside' and home['scene_id']!=whose_of.home(self.store.config)[0]:
+            # ADR-111: outside work she takes on in one of her home conversations runs on the home line, the Web chat.
+            local,owner=whose_of.home(self.store.config)
+            chat=scene_records.authorize(self.store,local,owner)
+            home={'scene_id':local,'scope_key':chat['scope_key'],'policy_epoch':chat['policy_epoch'],'person_id':owner}
+            session=self._session_of(local,owner,ep.get('persona'))
+        else:
+            if whose.get('chosen') and whose.get('by')=='words':
+                # The person she named in a group: their task, with their own newest line as its input.
+                home={**home,'person_id':whose['person_id']}
+                raw_from=whose_of.newest_line(self.store,home['scene_id'],home['policy_epoch'],whose['person_id'])
+            session=self._task_session(ep)
         workspace_grant(self.store.config,home['scene_id'],home['person_id'])
         task_id='task-'+sha(canonical([ep['_id'],call_id]))[:32]
         task=task_records.get(self.store, task_id)
@@ -673,8 +696,8 @@ class Coordinator:
             from . import action_tiers
             tier,said=action_tiers.at_dispatch(*tier,self._zone())
         if not task:
-            development,integration,names=self._grants(ep)
-            source_ref=('in-'+authority['_id']) if authority.get('episode_kind')!='consult' else None
+            development,integration,names=self._grants(ep,whose)
+            source_ref=raw_from or (('in-'+authority['_id']) if authority.get('episode_kind')!='consult' else None)
             original=task_records.get(self.store, ep.get('task_id')) if ep.get('task_id') else None
             raw=[source_ref] if source_ref and message_records.get(self.store, source_ref, fields=['_id']) else (original or {}).get('raw_input_refs',[])
             with database_effects_lock(self.store.name):
@@ -685,7 +708,7 @@ class Coordinator:
                     'intent_revision':1,'goal':title,'title':title,'brief':brief,'constraints':[],
                     'raw_input_refs':raw,'state':'READY','fencing_token':0,'tool_steps':0,
                     'integration_profile':integration,'development_grant':development,
-                    'allowed_capabilities':names,'native_session_id':session,'whose':whose_of.of(self.store,ep),
+                    'allowed_capabilities':names,'native_session_id':session,'whose':whose,
                     **({'errand_place':places.place_id(ep['scene_id'])} if ep.get('errand') else {}),
                     **({'tier':tier} if tier else {}),'created_at':now()},stream=ep['_id'])
             self._audit_whose(task,ep)
@@ -694,6 +717,17 @@ class Coordinator:
         self._update(fresh,task_ids=[*dict.fromkeys([*(fresh.get('task_ids') or []),task_id])])
         self.collab(task,'message',{'from':'character','text':brief,'title':title},entry_id='brief:'+task_id)
         return {**task,**({'tier_words':said} if said else {})}
+
+    def _session_of(self, scene_id, person_id, persona):
+        """The live session of a conversation's own turn, for a task that runs there and not in the turn that handed it
+        over (ADR-111): from a proto of that scene alone, so nothing of the handing-over turn is read into it."""
+        if not self.native_session_resolver:
+            return None
+        scene=scene_records.get(self.store, scene_id) or {'_id':scene_id}
+        return self.native_session_resolver({'_id':'ep-place-'+sha(canonical([scene_id,person_id]))[:24],
+            'scene_id':scene_id,'scope_key':scene.get('scope_key'),'person_id':person_id,'persona':persona,
+            'policy_epoch':scene.get('policy_epoch'),
+            **({'character_context':scene['character_context']} if scene.get('character_context') else {})})
 
     def _audit_whose(self, task, ep):
         """ADR-111: whose work a new task is, beside where it runs and the turn that handed it over, by structure only."""
@@ -730,9 +764,15 @@ class Coordinator:
     def message_action(self, ep, call_id, task, message):
         """Her words to the action brain about one task: steered into a running one, or continuing a finished one."""
         from . import whose as whose_of
-        development,integration,names=self._grants(ep)
-        if (task.get('integration_profile')!=integration   # 比值，不是 truthy：owner 回合不能给窄授权任务补话，反过来也不行
-                or bool(task.get('development_grant')) and not development):
+        # ADR-111: the turn is measured by what a task from it would get for this work (outside work gets no
+        # integration profile, whatever the turn's line carries); a continuation keeps its task's whose and grants.
+        task_whose=whose_of.of_task(self.store,task)
+        turn_development,turn_integration,_=self._grants(ep)
+        if task_whose.get('by')=='outside':
+            turn_integration=None
+        development,integration,names=self._grants(ep,task_whose)
+        if (task.get('integration_profile')!=turn_integration   # 比值，不是 truthy：owner 回合不能给窄授权任务补话，反过来也不行
+                or bool(task.get('development_grant')) and not turn_development):
             # Work under the owner's grants takes words only from a turn with the same grants (ADR-011 §6.2).
             raise role_tools.Refused('这一回合的授权和原来那件事不一样，不能给它补话或接着做；要做就用 delegate 交一件新的。')
         if task['state'] in ('READY','RUNNING'):
@@ -779,7 +819,7 @@ class Coordinator:
                     'constraints':[],'raw_input_refs':raw,'state':'READY','fencing_token':0,'tool_steps':0,
                     'integration_profile':integration,'development_grant':development,
                     'allowed_capabilities':names,'continues_task_id':task['_id'],'execution_binding':binding,
-                    'whose':whose_of.of_task(self.store,task),
+                    'whose':task_whose,
                     **({'fresh_context':fresh} if fresh else {}),**({'tier':tier} if tier else {}),
                     'native_session_id':task.get('native_session_id') or ep.get('native_session_id'),
                     'created_at':now()},stream=ep['_id'])

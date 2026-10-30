@@ -577,9 +577,12 @@ class TaskService:
             observations=[] if short else observations_of(self.store,task,shown)
             event={'event_id':handover.result_event_id(task),'scene_id':task['scene_id'],'person_id':task['requester_id'],'text':'你交给行动脑的「'+(task.get('title') or task['goal'])+'」有了结果。它的报告是自然语言；工具记录才是执行事实。任务返回不等于目标完成，也不规定你的感受或要说什么；要接着做就用 task 的 message。','episode_kind':'task_feedback','task_id':task['_id'],'intent_revision':task['intent_revision'],'delegation_depth':depth,'trusted_context_events':[{'kind':'task_result','task':task['_id'],'title':task.get('title') or task['goal'],**_why_then(self.store,task),'value':shown(bounded_result(task.get('result'),records_pages(observations))) or {'state':current['state'],'error':current.get('failure_type'),'uncertainties':['上次操作结果未确定；可继续核实，不能盲目重做。']}}]}
             source=message_records.get(self.store,task['raw_input_refs'][0],scope=task['scope_key'],epoch=task['policy_epoch'])
-            # The session the task belongs to (home's own for one begun on an errand or in a reflection).
-            if task.get('native_session_id') or original.get('native_session_id'):
-                event['native_session_id']=task.get('native_session_id') or original['native_session_id']
+            # The session the task belongs to (home's own for one begun on an errand or in a reflection); never the
+            # handing-over turn's for work that runs on the Web chat (ADR-111): a session is bound to one scene.
+            from .whose import moved
+            session=task.get('native_session_id') or (None if moved(task,original) else original.get('native_session_id'))
+            if session:
+                event['native_session_id']=session
             if task.get('errand_place'):
                 event['text']+='这件是差事带出来的，托话的那边是 %s（errand 的 place 照抄它）。'%task['errand_place']
             if group := program_group_context(source):
@@ -695,8 +698,7 @@ class TaskService:
 GIVEN_TO = (
     (lambda tool: tool == 'sandbox_run', '只给家里的对话（家里·私聊、主人私聊、agent 线、peer 线）交的任务'),
     (lambda tool: tool.startswith('development_') or tool.startswith('persona_job'),
-     '只给家里的对话里这几种回合交的任务：有人说话叫起来的、你的自我改进、你自己的计划到点、家里另一条线的便条叫起来的'
-     '（自我开发要开着）'),
+     '只给主人在自己的对话里、agent 在自己的线上交的任务，和自我改进时交的（自我开发要开着）'),
     (lambda tool: tool.startswith('integration') or tool == 'import_integration_artifact',
      '只给主人在家里交的任务（集成要开着）；agent 线交的只有 integration_start 和 integration_status'),
     (lambda tool: tool == 'generate_image', '生图服务开着时，每个任务都有'),
@@ -1041,7 +1043,10 @@ class Executor:
     def _run_claimed(self,task,workspace,healthy):
         binding=task.get('execution_binding') or f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"
         self.broker.bind('s-'+sha(binding.encode())[:40],task,workspace)
-        source=message_records.get(self.service.store, task['raw_input_refs'][0])
+        # Read within the task's own conversation, as its hand-back and its consult read it: a task never shows the
+        # action brain a line of another conversation as its request (ADR-111).
+        source=message_records.get(self.service.store, task['raw_input_refs'][0], scope=task['scope_key'],
+                                   epoch=task['policy_epoch'])
         return self._run_workspace(task,binding,source,healthy)
 
     def _run_workspace(self,task,binding,source,healthy):

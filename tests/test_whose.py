@@ -1,10 +1,18 @@
 """ADR-111: whose work a task is. One record, decided from stored rows when a turn opens and carried along results,
-plans and errands, never across a note from outside. On the unit run's store holding the fixture world (conftest.py)."""
+plans and errands, never across a note from outside; the development grant follows it; work for someone outside that
+she takes on in a home conversation runs on the home line (the Web chat); in a group she may name whose request it is.
+On the unit run's store holding the fixture world (conftest.py)."""
+from types import SimpleNamespace
+
 import pytest
 
-from asuna import channel_kinds, ingress, notes, visibility, whose
+from asuna import channel_kinds, ingress, notes, places, visibility, whose
 from asuna.config import ROOT
+from asuna.coordinator import Coordinator
+from asuna.people import People
+from asuna.records import messages as message_records
 from asuna.records import scenes as scene_records
+from asuna.role_tools import Refused, RoleTools
 
 channel_kinds.load([{'python': ROOT / 'packages' / 'channels' / 'agent-line' / 'python', 'module': 'agent_line'}])
 LINE, AGENT = 'agent:home:dm:claude-code', 'agent:claude-code'
@@ -108,3 +116,61 @@ def test_whose_by_turn_kind(home):
                                        'episode_kind': 'self_development'}) == whose.record('standing', LOCAL, OWNER)
     assert whose.of_turn(store, None, {'scene_id': LOCAL, 'person_id': OWNER,
                                        'episode_kind': 'presence'}) == whose.record('own', LOCAL, OWNER)
+
+
+def test_development_only_where_whose_earns_it(home):
+    store = home
+    earns = lambda *args, **extra: whose.earns_development(store, whose.record(*args, **extra))
+    assert earns('words', LOCAL, OWNER) and earns('words', 'dm-owner', OWNER) and earns('words', LINE, OWNER)
+    assert earns('words', LINE, AGENT) and earns('standing', LOCAL, OWNER)
+    assert not earns('words', 'g2', 'A')                       # a home group's other member
+    assert not earns('words', 'g1', 'A') and not earns('words', 'g1', OWNER)      # a public group, the owner too
+    assert not earns('words', LINE, 'someone-else')            # not that line's agent
+    assert not earns('own', LOCAL, OWNER) and not earns('outside', 'g1')
+    assert not earns('words', LOCAL, OWNER, earns=False)       # an old row that stored no grant
+
+
+def test_outside_work_named_on_a_line_runs_home(home):
+    store = home
+    coordinator = Coordinator(store, None)
+    ep = turn(store, LINE, AGENT, 'e-line', text='帮群里那位客户写一篇长文')
+    own_task = coordinator.delegate(ep, 'c1', '查日志', '看一下这次发布的日志')
+    assert own_task['scene_id'] == LINE and own_task['development_grant'] is True     # the agent's, on its line
+    named = whose.record('outside', 'g1', chosen=True)
+    task = coordinator.delegate(ep, 'c2', '长文', '写一篇长文', whose=named)
+    assert (task['scene_id'], task['requester_id'], task['scope_key']) == (LOCAL, OWNER, 'scene:' + LOCAL)
+    assert task['whose'] == named and task['development_grant'] is False and task['integration_profile'] is None
+    assert whose.moved(task, ep) and not whose.moved(own_task, ep)
+    # Its input is the line's line, which no model-facing read inside the Web chat returns.
+    assert message_records.get(store, task['raw_input_refs'][0], scope=task['scope_key'],
+                               epoch=task['policy_epoch']) is None
+    # Its follow-ups stay home: a plan made in its result turn on the Web chat keeps the outside whose; a plan she
+    # makes at home that fires on a line is her own there.
+    assert whose.for_plan(store, named, LOCAL, OWNER) == named
+    assert whose.for_plan(store, whose.record('words', LOCAL, OWNER), LINE, AGENT) == whose.record('own', LINE, AGENT)
+
+
+def tools(store):
+    rt = RoleTools(SimpleNamespace(store=store))
+    rt.collecting, rt.problems = False, []
+    return rt
+
+
+def test_a_group_task_is_the_person_she_names(home):
+    store = home
+    _, b_line = line(store, 'g1', 'B', 'b-asks', text='能帮我画张图吗')
+    ep = turn(store, 'g1', 'A', 'a-opens', episode={'manifest': {'session_class': visibility.PUBLIC,
+                                                                  'persona_revision': 1,
+                                                                  'people_shown': {'A': [], 'B': []}}})
+    label = People(store, PERSONA).speaker(scene_records.get(store, 'g1'), 'B')
+    named = tools(store)._delegate_for(ep, label)
+    assert named == whose.record('words', 'g1', 'B', chosen=True)
+    with pytest.raises(Refused):
+        tools(store)._delegate_for(ep, '不在这回合的人')
+    task = Coordinator(store, None).delegate(ep, 'c1', '画图', '画一张图', whose=named)
+    assert (task['scene_id'], task['requester_id'], task['raw_input_refs']) == ('g1', 'B', ['in-' + b_line])
+    # At home `for` names an outside place; a home group is not one.
+    home_ep = turn(store, LINE, AGENT, 'e-home')
+    assert tools(store)._delegate_for(home_ep, places.place_id('g1')) == whose.record('outside', 'g1', chosen=True)
+    with pytest.raises(Refused):
+        tools(store)._delegate_for(home_ep, places.place_id('g2'))

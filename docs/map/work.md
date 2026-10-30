@@ -121,7 +121,7 @@ Host-owned resource grants, never inferred from a message or model role.
 - def `workspace_grant`
 - def `workspace_folder` — The folder a task of this person works in here, made now.
 - def `conversation_workspace` — Whether anyone may hand work to the action brain in this conversation (it then lists the tools that do it; each turn still checks its own speaker with workspace_grant).
-- def `development_granted` — Who may hand work with the development tools to the action brain (ADR-011 §6.1).
+- def `development_for` — Whether a task for this `whose` gets the development tools (ADR-011 §6.1, ADR-111): with self-development enabled and the sandbox there, only for what the owner asked in one of his conversations, an agent asked on its own line, or her self-
 
 ## `whose`
 

@@ -117,10 +117,11 @@ Found in the survey and the reviews; each with its evidence in design.md §6. No
 4. A repeating plan whose conversation is gone records a failure at every occurrence.
 5. `TaskService.feedback` fails on a result whose conversation no longer exists (it reads the missing scene's epoch).
 6. A group she has left or that was disbanded has no state (ADR-107 has no rule for it).
+7. A visit can enter a group as a member who has left (`places.visitor` skips only blocked senders).
 
 ## The review
 
 A fresh reviewer read the first draft against the code (14 findings, 2 blockers), re-checked the fixes (8 more) and
 read a later, wider version (8 more). Everything in those reviews that bears on what stays in this ADR is fixed in
-it; the rest reviewed parts that are no longer here. design.md §10 lists them. The same reviewer read this version;
-its findings are design.md §10.4.
+it; the rest reviewed parts that are no longer here. The same reviewer read this version (4 findings, 2 major, all
+fixed, and one more defect listed). design.md §10 lists them all.

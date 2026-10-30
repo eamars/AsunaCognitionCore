@@ -159,7 +159,7 @@ the event (`errands.carried(event)` for an errand, since `ep['errand']` is set o
 | on an errand | the home turn's `whose`, when it names that home conversation; otherwise `own` there (an errand a turn opened by a note from outside sent, on the owner's own line: its task stays home's, as today, and earns nothing) |
 | `external` | `words`: the person whose line opened the turn |
 | `task_feedback`, `consult` | the task's `whose` |
-| `scheduled` | the plan's `whose`; a public conversation never carries one that names another conversation (a plan made on an errand, defect 3): then `own` there |
+| `scheduled` | the plan's `whose` (§3.7: a plan records a `whose` only where it lives, so her `line` plans and a plan made on an errand are `own` where they fire); an old plan's read the same way (§2.6) |
 | `note` or `visit` opened by a note from outside, in an owner-private conversation (`notes.outside_class`) | the writing turn's `whose`, computed without the errand row; never one that names an owner-private conversation, and never for a note that is gone: then none, and the turn hands nothing over and plans nothing (as ADR-088 already refuses) |
 | `note` (trusted), `visit`, `presence`, `settlement` | `own` |
 | `self_development` | `standing` |
@@ -191,7 +191,7 @@ task and a continuation, the capabilities block of her turn).
 |---|---|
 | development tools (`development_*`, `persona_job*`) | `earns_development(whose)`, self-development enabled, the sandbox available |
 | integration profile | as today (the authority turn's input, `integration.event_profile`); none when `whose.by == 'outside'` |
-| everything else (`sandbox_run`, credentials, the folder, workspace tools) | as today, by the conversation the task runs in |
+| everything else (`sandbox_run`, credentials, the folder, workspace tools) | as today (`sandbox_run` and credentials by the authority turn's class, the folder by the conversation the task runs in); the same answer for every task in range |
 
 `earns_development(whose)`: `standing`; `words` where the person is the owner (canonical, `scene_links`) in an
 owner-private conversation; `words` on an agent line (`integration.agent_home_scene`) by that line's own agent. Not her
@@ -199,7 +199,10 @@ sister's line, not a home group's other members, not `own` (her heartbeat plans 
 
 A task's grants are written on it when it is made and never recomputed. A continuation keeps its task's development
 grant (`earns_development` of the task's `whose`), never the turn's; today's check that a turn may add words to a task
-with the development grant only if it has it too stays, reading `earns_development` of the turn's `whose`.
+with the development grant only if it has it too stays, reading `earns_development` of the turn's `whose`. Today's
+integration check compares the task's profile with the one a task from this turn would get: for a task whose `whose.by`
+is `outside` that is none, whatever the turn's event carries (the owner's own lines on the Web chat carry `owner`,
+`Chat.submit`), so the owner can add words to and continue outside work on the Web chat.
 
 ### 2.5 Her choice
 
@@ -207,7 +210,8 @@ with the development grant only if it has it too stays, reading `earns_developme
 
 - **In owner-private conversations:** the place of an outside conversation (a group or a DM) from
   `note_places_from_program`, mapped by the program (`notes.targets`) to `{by: outside, scene_id, chosen}`. Not written:
-  the program's answer. A place that is not an outside one is refused `FOR_UNKNOWN_PLACE`.
+  the program's answer. A place that is not an outside one (a home conversation, or a home group, which
+  `places.errand_targets` lists among the outside places) is refused `FOR_UNKNOWN_PLACE`.
 - **In public groups** (the owner's answer 5): the label of another person whose line is in this turn
   (`people_from_program`), mapped to `{by: words, person_id, chosen}`. Not written: the opener. A label not in the turn
   is refused `FOR_UNKNOWN_PERSON`. Only a turn someone's line opened has `people_from_program`.
@@ -316,9 +320,12 @@ its own paths). For it:
 
 ### 3.7 Plans
 
-`Schedule.create` records the turn's `whose` on the plan; nothing else of plans changes. A plan made while a task for
-someone outside is on the Web chat (its result turn) is made there, as today, and fires there with that `whose`, so
-the work's follow-ups stay home.
+`Schedule.create` stores the plan where it does today and records a `whose` on it: the turn's when the plan lives in
+the conversation that `whose` names, or the `whose` is `outside` (its work lives on the Web chat); otherwise `own` where
+it lives. So her `line` plans (made at home, firing on a peer line) and a plan made on an errand (firing in the
+destination, a home group included) are her own where they fire and earn nothing there, and a plan made in the result
+turn of outside work on the Web chat fires there with the outside `whose`, so the work's follow-ups stay home. Nothing
+else of plans changes.
 
 ## 4. Life cycles
 
@@ -386,6 +393,9 @@ Brains: CB the character brain, AB the action brain, RG the relevance gate (whic
    `scene['policy_epoch']` of a scene `scene_records.get` returned as None.
 6. **A group she has left or that was disbanded has no state** (ADR-107 has no rule for it); results said there fail at
    the adapter.
+7. **A visit can enter a group as a member who has left.** `places.visitor` leaves out only blocked senders;
+   `channels.route_members` still returns a grant whose admission ended (ADR-107 marks `ended_at`,
+   `channel_admission.depart`), and the plan firing's route check (`SCHEDULE_ROUTE_REVOKED`) reads the same list.
 
 ## 7. Tests
 
@@ -457,6 +467,16 @@ Findings about the parts that are no longer here (her own folder on visits, stee
 of moved tasks, plans moved off lines, the plans list, `develop`) left with them; the visit placeholder they found is
 defect 1.
 
-### 10.4 This version
+### 10.4 This version (`155dc3b072f0`), 4 findings and one defect
 
-To be filled with the same reviewer's reading of this version.
+| # | Finding | Severity | Done |
+|---|---|---|---|
+| 1 | The integration check in `message_action` compared an outside task (no profile) with the owner's Web chat line (`owner`), so the owner could not add words to or continue outside work | major | The check compares with the profile a task from this turn would get, none for `outside` (§2.4) |
+| 2 | A plan recorded the turn's `whose` wherever it fired, so her `line` plans and a plan made on an errand into a home group kept the owner's development grant there | major | A plan records a `whose` only where it lives, else `own` (§3.7, §2.2) |
+| 3 | The home form of `for` offered home groups as outside places | minor | Refused (§2.5) |
+| 4 | `sandbox_run` and credentials follow the authority turn's class, not where the task runs | minor | Worded as today (§2.4) |
+| — | A visit can enter as a member who has left | defect | §6 defect 7 |
+
+The reviewer found clean: the agent-line → Web chat case end to end (place, folder, session proto, input fences,
+publication, the feedback fence, the stage binding, no integration), the errand and outside-note rows, the words at
+preparation, the old rows, and the claims about the code.

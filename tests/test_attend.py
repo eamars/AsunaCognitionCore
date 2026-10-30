@@ -28,3 +28,18 @@ def test_each_gate_question_has_its_own_session_and_its_repairs_stay_in_it():
     assert gate_session_id('c:g:1:P1', 'ep-1:ATTEND:0:fix-1') == first
 
 
+def test_the_gate_reads_her_own_words_and_no_program_rules(monkeypatch):
+    """ADR-110: her words for the gate (persona model `attend.guide`) follow her core sentences, introduced as hers;
+    nothing of common.md. Lost silently, she would edit them for nothing."""
+    from asuna import carried
+    from asuna.render import common_text
+    monkeypatch.setattr(carried, 'carried', lambda *args, **kwargs: {'core': []})
+
+    class Store:
+        config = {'chat': {'display_name': '测试'}, 'persona_model': {'attend': {'guide': '我自己定的分寸'}}}
+    text = attend.system(Store(), 'P1')
+    assert text == '你是测试。\n\n' + attend.GUIDE_HEAD + '\n我自己定的分寸'
+    assert common_text({}).splitlines()[0] not in text
+    for model in ({}, {'attend': {'guide': '   '}}):
+        Store.config = {'chat': {'display_name': '测试'}, 'persona_model': model}
+        assert attend.system(Store(), 'P1') == '你是测试。'

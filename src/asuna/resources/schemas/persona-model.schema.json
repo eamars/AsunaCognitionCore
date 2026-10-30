@@ -136,6 +136,18 @@
         }
       }
     },
+    "attend": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "guide": {
+          "description": "The persona's own words for its relevance gate, after its core sentences (ADR-110). A revert keeps this property: a package that carries it must still load.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    },
     "affect": {
       "type": "object",
       "additionalProperties": false,

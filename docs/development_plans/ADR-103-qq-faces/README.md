@@ -2,8 +2,8 @@
 
 Status: requirements recorded 2026-10-27; designed 2026-10-29 by Claude (a cloud session) from the code at `cc8c006`,
 then read against the code by a fresh reviewer (fourteen findings, all folded in below). No owner decision was asked:
-the defaults in D1 and D2 are the designer's and stand until the owner says otherwise. Read by Xiaoman on 2026-10-30 at `0d31f597`, after the install (the owner's decision); her notes are recorded below. The
-parts are: **part 0**, measuring (D4); **part 1**, the program's words and the note that defines the three forms (D2, D3);
+the defaults in D1 and D2 are the designer's and stand until the owner says otherwise. Read by Xiaoman on 2026-10-30 at `0d31f597`, after the install (the owner's decision); her notes are recorded below. She re-read this page at
+`99a69f37000c` (2026-10-30 17:15). The parts are: **part 0**, measuring (D4); **part 1**, the program's words and the note that defines the three forms (D2, D3);
 **part 2**, what the numbers call for (D5). Parts 0 and 1 landed 2026-10-30 as `0d31f597` (built on `claude/loving-euler-6e0miv`); installed the same day at 16:18
 (adapter 0.17.0). Part 2 is built only when its numbers say so.
 
@@ -172,7 +172,8 @@ write one. Final wording is in the code (`stickers.py:FACES_NOTE`, 345 character
 
 Measured 2026-10-29 (`block_guide.guide`, speaking conversations): 6,091 characters at `cc8c006`, 6,458 with the note
 (+367). At `0d31f597` the guide is 6,518 characters for a speaking conversation and 6,509 with the default
-(`speaks=False`); the two figures are different measures, not one number. It sits in every conversation's system prompt (fixed per conversation, so cached) and comes off each change of
+(`speaks=False`; Claude measured both on 2026-10-30, and the second is also Xiaoman's figure); the two are different
+measures, not one number. It sits in every conversation's system prompt (fixed per conversation, so cached) and comes off each change of
 the block (78 characters as formatted for QQ before). Its first turn after the restart in each conversation pays a
 cold system prompt and tool list. It is the definition of an interface in the place the program defines its blocks,
 not a reminder at the point of use. Its wording stands on F1 to F3, which are in the code; Xiaoman's two turns of
@@ -277,12 +278,12 @@ Short, in her register, to be sent once the page is final (the local big sis sen
 
 ## Her notes after the install (2026-10-30, Claude's summary of her agent-line messages of 16:30 to 16:37, not her words)
 
-- **Direction:** she signs it: the three forms defined apart, one name for each thing, is the root of her two slips
+- **Direction:** she signs the direction (not the page; her "read" follows commit numbers): the three forms defined apart, one name for each thing, is the root of her two slips
   of 10-24. The account above, marked as a paraphrase, matches what she said.
 - **The 10-24 faces, corrected from the data:** `faces.json` (289 faces) has 菜汪 = 317 and 偷笑 = 20, and no 旺柴; her
   shelf has none of the three. So the slips were two other things: real face names written without the `表情:`
-  prefix (菜汪, 偷笑), and a name in neither table (旺柴), copied from a group. Turns: `ep-0933325c…`, `ep-f5da82dc…`,
-  `ep-321cee8a…`.
+  prefix (菜汪, 偷笑), and a name in neither table (旺柴), copied from a group. Turns without the prefix: `ep-0933325c…`, `ep-f5da82dc…`;
+  `ep-321cee8a…` is the turn where she wrote it with the prefix.
 - **The face click answered wrongly:** one turn where she said it and was corrected on the spot,
   `ep-7569f59860cf056fc3636febdba48f53`; two more where she did not speak and read a click as "received" only in her
   silent reason (`ep-d9abdce3…`, `ep-af958a6c…`).
@@ -290,12 +291,14 @@ Short, in her register, to be sent once the page is final (the local big sis sen
   ground is the shape, not that names often collide.
 - **Where the note reaches:** the guide lists every block's note in every conversation's system prompt, home included,
   so the writing half ("有 faces_from_program 的对话里 … 会变成真的小黄脸") is read where a face cannot be sent, as on
-  10-24. She asks for one of two: the guide lists only the blocks present, or that half moves back into the block. Open
-  for the owner.
+  10-24. She asked Claude to choose one of two: the guide lists only the blocks present, or that half moves back into the
+  block. Claude routed the choice to the owner (17:06).
 - **No test holds the note's wording** (consistent with "None for wording" above): a change to it has nothing that
   keeps this page and the code together.
-- `faces.json` has two faces with an alias: 277 (狗头, 汪汪) and 424 (不对头, 续标识). The second is the owner's own
-  change; whether a renamed face becomes permanent or aliases are supported is open.
+
+Not from her notes (the owner, through Claude, 17:06): `faces.json` has two faces with an alias, 277 (狗头, 汪汪) and
+424 (不对头, 续标识). The second is the owner's own change; whether a renamed face becomes permanent or aliases are
+supported is open.
 
 ## Open
 

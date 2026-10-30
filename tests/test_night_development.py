@@ -30,3 +30,18 @@ def test_a_plan_title_drops_markdown_bold_and_code_marks_but_keeps_her_words():
     from asuna.schedule import plan_title
     assert plan_title({'intent': '回看 Claude 那两件**我自己看到没有**，看 `scene_people`'}) == '回看 Claude 那两件我自己看到没有，看 scene_people'
     assert plan_title({'intent': '回 罗兹__official 一句'}) == '回 罗兹__official 一句'
+
+
+def test_a_self_development_task_paused_by_a_restart_does_not_hold_the_night(store):
+    """Regression (10-31): a self-development task a restart paused on 10-25 counted as still at work, and every
+    night stage after it was refused STAGE_BUSY for five nights, though the night stage is where she would see it
+    as open work and decide."""
+    from asuna.schedule import night_stage_busy
+    store.put('episodes', {'_id': 'night-turn', 'scene_id': 'local-dm', 'source_event_id': 'night-tick',
+                           'episode_kind': 'self_development', 'state': 'WAITING_TASK'})
+    store.put('tasks', {'_id': 'task-of-the-night', 'request_key': 'night-turn', 'episode_id': 'night-turn',
+                        'state': 'PAUSED', 'pause_reason': 'host_restart'})
+    assert night_stage_busy(store) is None
+    task = store.collection('tasks').get('task-of-the-night')
+    store.put('tasks', {**task, 'state': 'RUNNING'}, expected=task['revision'])
+    assert night_stage_busy(store) == 'STAGE_BUSY'

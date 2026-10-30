@@ -56,7 +56,9 @@ def night_stage_busy(store):
     if episode_records.open(store, ['ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED'],
                             kind='self_development').first(fields=['_id']):
         return 'STAGE_BUSY'
-    for task in task_records.in_states(store, ['READY', 'RUNNING', 'PAUSED']).each(fields=['episode_id']):
+    # A task a restart paused is not at work: it waits for her, and the night stage is where she sees it as open
+    # work and continues or stops it. Counted as busy, it held every later night stage, the one place she would.
+    for task in task_records.in_states(store, ['READY', 'RUNNING']).each(fields=['episode_id']):
         if (episode_records.get(store, task.get('episode_id'), fields=['episode_kind']) or {}).get(
                 'episode_kind') == 'self_development':
             return 'STAGE_BUSY'

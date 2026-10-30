@@ -26,5 +26,5 @@ def test_the_words_a_package_gives_are_never_policy_keys():
         assert node and node['type'] == 'string' and node.get('maxLength'), key
         model = {'model_version': 1, 'persona': {'id': 'p', 'display_name': 'p'},
                  'policy_keys': {key: {'type': 'string', 'what': 'x'}}}
-        with pytest.raises(persona_model.PersonaModelError, match='policy_keys may not declare'):
+        with pytest.raises(persona_model.PersonaModelError, match="may not declare the persona's own words"):
             persona_model.validate(model, 'p')

@@ -144,3 +144,33 @@ def test_a_time_row_that_cannot_be_written_never_changes_the_call(store):
         store.fail_audit = False
         calls.close()
     assert [payload['call_id'] for kind, payload in evidence.records if kind == 'host.tool_time_failed'] == ['c', 'd']
+
+
+def test_a_call_in_flight_holds_every_restart_that_waits_for_quiet():
+    """The checks that stop the worker read the process's calls themselves (Chat.calls_in_flight): no wiring at start
+    can leave one blind to a call that outlived its task."""
+    from asuna.chat import Chat
+    from asuna.restarts import Desk
+    worker = BusinessWorker()
+    worker.app = SimpleNamespace()
+    worker.controller = chat = Chat(SimpleNamespace(), {})
+    release, inside = threading.Event(), threading.Event()
+
+    def call():
+        with worker.calls.timed('action', 'publish', 'development_publish', {}, None):
+            inside.set()
+            release.wait(10)
+    thread = threading.Thread(target=call)
+    thread.start()
+    try:
+        assert inside.wait(5)
+        assert chat.calls_in_flight() == 1 and tool_watch.holding() == 1
+        assert not Desk.quiet(SimpleNamespace(controller=chat))
+        with pytest.raises(RuntimeError, match='ASUNA_BUSY'):
+            worker.dispatch('settings.quiesce', {})
+    finally:
+        release.set()
+        thread.join(5)
+    assert chat.calls_in_flight() == 0 and Desk.quiet(SimpleNamespace(controller=chat))
+    assert worker.dispatch('settings.quiesce', {}) == {'quiesced': True}
+

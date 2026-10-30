@@ -284,7 +284,7 @@ class RuntimeHost:
         self.restart_requested = threading.Event()
         self.restart_pending = threading.Event()
         self._restart_watch_stop = threading.Event()
-        self._restart_blocked_logged = False
+        self._restart_held_by = ()
 
     def __enter__(self):
         try:
@@ -443,29 +443,41 @@ class RuntimeHost:
         # still APPLIED would otherwise ask for a restart after every turn, forever.
         applied=receipt_records.sink_of_kind(self.app.store,'self_development_publish',state='APPLIED',
                                              project='core').first()
-        if applied:
-            with self.controller.state_lock:
-                if not self.restart_pending.is_set():
-                    self.evidence.record('restart.pending', {'receipt_id': applied['_id']})
-                    self.restart_pending.set()
-                # A tool call of a task already closed (a stage cut at its limit) is still in flight: a restart now
-                # would cut it, a publication's answer included, which the worker then never records (ADR-112).
-                calls = self.controller.calls_in_flight()
-                if self.controller.active or self.controller.active_task or calls:
-                    if not self._restart_blocked_logged:
-                        self.evidence.record('restart.blocked', {
-                            'active_task': self.controller.active_task,
-                            'active_role': self.controller.active,
-                            'calls_in_flight': calls,
-                            'pending_queue': self.controller.pending.qsize(),
-                            'task_queue': self.controller.task_queue.qsize()})
-                        self._restart_blocked_logged = True
-                    return
-                if self.restart_requested.is_set():
-                    return
-                self.evidence.record('restart.requested', {'receipt_id': applied['_id']})
-                self.restart_requested.set()
-                self.shutdown_requested.set()
+        if not applied:
+            if self.restart_pending.is_set():
+                with self.controller.state_lock:
+                    # What it waited for was overtaken (a newer publication byte for byte the running one, or one that
+                    # needs the Host restarted): nothing is left for a worker restart to load, so the queues go on.
+                    if not self.restart_requested.is_set():
+                        self.restart_pending.clear()
+                        self._restart_held_by = ()
+                        self.evidence.record('restart.withdrawn', {})
+            return
+        with self.controller.state_lock:
+            if not self.restart_pending.is_set():
+                self.evidence.record('restart.pending', {'receipt_id': applied['_id']})
+                self.restart_pending.set()
+            # A tool call of a task already closed (a stage cut at its limit) is still in flight: a restart now
+            # would cut it, a publication's answer included, which the worker then never records (ADR-112).
+            calls = self.controller.calls_in_flight()
+            held = tuple(name for name, busy in (('turn', self.controller.active),
+                                                 ('task', self.controller.active_task), ('calls', calls)) if busy)
+            if held:
+                if held != self._restart_held_by:          # once for each change of what holds it
+                    self.evidence.record('restart.blocked', {
+                        'held_by': list(held),
+                        'active_task': self.controller.active_task,
+                        'active_role': self.controller.active,
+                        'calls_in_flight': calls,
+                        'pending_queue': self.controller.pending.qsize(),
+                        'task_queue': self.controller.task_queue.qsize()})
+                    self._restart_held_by = held
+                return
+            if self.restart_requested.is_set():
+                return
+            self.evidence.record('restart.requested', {'receipt_id': applied['_id']})
+            self.restart_requested.set()
+            self.shutdown_requested.set()
 
     def _watch_published_restart(self):
         # APPLIED may occur inside a still-running action. Mark the lifecycle

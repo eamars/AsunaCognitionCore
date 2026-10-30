@@ -343,6 +343,7 @@ Times a model reads are on her one clock (owner 2026-10-08; one clock in every c
 Every tool call of both brains, timed where the worker dispatches it (native_worker.py): the calls in flight, one `tool.time` audit row as each ends, and a watchdog that records a call running past its limit, once.
 
 - def `limit_of` — The seconds a call may run before it is recorded as an overrun.
+- def `holding` — The calls in flight within their limit, over every `Calls` of this process.
 - def `stack_of` — A thread's innermost frames as `file:line function`; empty when the thread is gone.
 - class `Calls` — The worker's tool calls in flight, and their watchdog.
   - `attach` — Write from now on, and start the watchdog.

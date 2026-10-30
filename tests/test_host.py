@@ -67,18 +67,25 @@ def test_a_restarted_native_worker_does_not_restart_again_for_the_publication_it
     assert host.restart_requested.is_set() and recorded == ['restart.pending', 'restart.requested']
 
 def test_a_publication_restart_waits_for_a_call_its_closed_task_left_in_flight(monkeypatch):
-    """Regression (10-30 23:37): her task's stage was cut at its limit while its publish call was in flight; the
-    restart was asked 233 ms after the task closed, cut the call, and no worker recorded the publication it made."""
+    """Regression (10-30): her first core publication (23:25) left a restart pending behind her running task; at
+    23:37 the task's stage was cut at its limit while its next publish call was in flight, the restart was asked
+    233 ms later, cut the call, and no worker recorded the publication it made. Each change of what holds the
+    restart is recorded."""
     recorded = []
     host = RuntimeHost({}, SimpleNamespace(record=lambda kind, payload: recorded.append((kind, payload))))
     applied(monkeypatch, {'_id': 'publish-receipt'})
-    host.app, host.schedule, flight = SimpleNamespace(store=SimpleNamespace()), None, [1]
-    host.controller = SimpleNamespace(active=None, active_task=None, calls_in_flight=lambda: flight[0],
+    host.app, host.schedule, flight = SimpleNamespace(store=SimpleNamespace()), None, [0]
+    host.controller = SimpleNamespace(active=None, active_task='task', calls_in_flight=lambda: flight[0],
                                       pending=Queue(), task_queue=Queue(), state_lock=threading.Lock(),
                                       restart_pending=host.restart_pending)
-    host._after_turn()                     # the cut task's turn has ended; its call has not
+    host._maybe_restart_after_publish()    # 23:25, her task still at work
+    host._maybe_restart_after_publish()
+    host.controller.active_task, flight[0] = None, 1
+    host._after_turn()                     # 23:37, the cut task's turn has ended; its call has not
     assert host.restart_pending.is_set() and not host.restart_requested.is_set()
-    assert recorded[-1][0] == 'restart.blocked' and recorded[-1][1]['calls_in_flight'] == 1
+    assert [(kind, payload.get('held_by')) for kind, payload in recorded] == [
+        ('restart.pending', None), ('restart.blocked', ['task']), ('restart.blocked', ['calls'])]
+    assert recorded[-1][1]['calls_in_flight'] == 1
     watch = threading.Thread(target=host._watch_published_restart, daemon=True)
     watch.start()
     try:
@@ -88,6 +95,23 @@ def test_a_publication_restart_waits_for_a_call_its_closed_task_left_in_flight(m
         host._restart_watch_stop.set()
         watch.join(5)
     assert host.restart_requested.is_set() and recorded[-1][0] == 'restart.requested'
+
+
+def test_a_pending_restart_with_nothing_left_to_load_lets_the_queues_go_on(monkeypatch):
+    """A restart pending for a publication a newer one overtook (byte for byte the running one, or one that needs
+    the Host restarted) would otherwise hold every turn and task of hers until someone restarts from outside."""
+    recorded = []
+    host = RuntimeHost({}, SimpleNamespace(record=lambda kind, payload: recorded.append(kind)))
+    host.app = SimpleNamespace(store=SimpleNamespace())
+    host.controller = SimpleNamespace(active=None, active_task='task', calls_in_flight=lambda: 0, pending=Queue(),
+                                      task_queue=Queue(), state_lock=threading.Lock(),
+                                      restart_pending=host.restart_pending)
+    applied(monkeypatch, {'_id': 'first'})
+    host._maybe_restart_after_publish()
+    applied(monkeypatch, None)             # superseded by one that needs no worker restart
+    host._maybe_restart_after_publish()
+    assert not host.restart_pending.is_set() and not host.restart_requested.is_set()
+    assert recorded == ['restart.pending', 'restart.blocked', 'restart.withdrawn']
 
 
 def test_after_every_turn_the_host_also_checks_her_heartbeat(monkeypatch):

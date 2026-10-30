@@ -11,8 +11,9 @@
   `host.tool_overrun` (the call id, brain, tool, stream, seconds, limit and the call thread's STACK_DEPTH innermost
   frames, file names and code only), one lane fault (lane `tools`, stage the tool, error `overrun`) and one warning
   line in the Host log. It only records: the call goes on, and is never released or restarted from here.
-- `Calls.holding` counts the calls in flight within their limit; every check that a worker restart waits on reads it
-  (the publication restart, her quiet restart, a settings apply), since a call can outlive its task.
+- `Calls.holding` counts the calls in flight within their limit; `holding` counts them over every `Calls` of the
+  process (the worker has one), and every check that a worker restart waits on reads it (the publication restart, her
+  quiet restart, a settings apply, the recovery activation through the worker's status).
 - Before `attach` (no worker running: tests, tools) calls are timed and nothing is written.
 """
 from __future__ import annotations
@@ -23,6 +24,7 @@ import threading
 import time
 import traceback
 import uuid
+import weakref
 from contextlib import contextmanager
 
 OVERRUN_SECONDS = 600
@@ -36,6 +38,14 @@ def limit_of(tool, args):
     """The seconds a call may run before it is recorded as an overrun."""
     given = args.get('timeout') if isinstance(args, dict) and tool in TIMED_TOOLS else None
     return given + TIMEOUT_SLACK_SECONDS if type(given) is int and given > 0 else OVERRUN_SECONDS
+
+
+_ALL = weakref.WeakSet()       # every Calls of this process
+
+
+def holding(now=None):
+    """The calls in flight within their limit, over every `Calls` of this process."""
+    return sum(calls.holding(now) for calls in list(_ALL))
 
 
 def stack_of(frame):
@@ -54,6 +64,7 @@ class Calls:
         self.flight = {}
         self.store = self.evidence = self.fault = None
         self.stopping = threading.Event()
+        _ALL.add(self)
 
     def attach(self, store, evidence, fault):
         """Write from now on, and start the watchdog."""

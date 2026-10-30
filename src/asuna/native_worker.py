@@ -584,7 +584,6 @@ class BusinessWorker:
                     'kind': 'native-channel-projection', 'since': now(), 'scope_key': 'operator'}, stream='native-channel-projection')
             self.controller.on_input_received = self.project_input
             self.controller.on_episode_finished = self.episode_finished
-            self.controller.calls_in_flight = self.calls.holding
             self.app.coordinator.native_session_resolver = self.resolve_role_session
             self.app.coordinator.on_collab = self.collab
             self.app.coordinator.on_action_message = self.action_message
@@ -1614,6 +1613,9 @@ class NativeDevelopmentBridge:
             supersede_waiting(self.store, result.get('project'), result['receipt_id'])
             if result['state'] == 'ACTIVE':
                 self.worker.host._complete_activations()
+            elif result['state'] == 'APPLIED':
+                # Marked pending now, while this call still holds it: a task already closed has no turn left to end.
+                self.worker.host._maybe_restart_after_publish()
         return result
 
 

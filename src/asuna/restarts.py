@@ -105,6 +105,9 @@ class Desk:
         if getattr(self.controller, 'active_task', None):
             task = task_records.get(store, self.controller.active_task, fields=['title', 'goal']) or {}
             items.append('行动脑正在跑「%s」：会停在暂停里，要有人说继续才接着做' % (task.get('title') or task.get('goal') or '一个任务')[:40])
+        elif getattr(self.controller, 'calls_in_flight', lambda: 0)():
+            items.append('行动脑还有 %d 个工具调用没回来（它的任务已经结束）：现在重启会打断，做没做成要再查'
+                         % self.controller.calls_in_flight())
         queued = [row.get('title') or row.get('goal') or '' for row in task_records.in_states(store, 'READY').rows(
             limit=5, fields=['title', 'goal'])]
         if queued:

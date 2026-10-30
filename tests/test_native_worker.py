@@ -466,9 +466,12 @@ def test_a_started_worker_gives_her_task_the_publication_no_worker_recorded(stor
     worker.dispatch('publication.activated', {'publications': [
         {**loaded, 'receipt_id': 'hers', 'project': 'core',
          'origin': {'task_id': 'task-p', 'scope_key': 'scene:s', 'intent_revision': 2}},
-        {**loaded, 'receipt_id': 'install', 'project': 'napcat-qq'}]})
+        {**loaded, 'receipt_id': 'install', 'project': 'napcat-qq'},
+        {**loaded, 'receipt_id': 'elsewhere', 'project': 'persona',
+         'origin': {'task_id': 'task-p', 'scope_key': 'scene:other'}}]})
     hers = receipt_records.sink_get(store, 'hers')
     assert (hers['kind'], hers['task_id'], hers['scope_key'], hers['state']) == (
         'self_development_publish', 'task-p', 'scene:s', 'ACTIVE')
     assert receipt_records.sink_get(store, 'install')['kind'] == 'native_recovery_publish'
+    assert receipt_records.sink_get(store, 'elsewhere')['kind'] == 'native_recovery_publish', 'not in its scope'
     assert offered == [('self-development:publish:hers', 'task-p', 'ACTIVE')]

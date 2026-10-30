@@ -113,7 +113,7 @@ Two writes make a new task row: `Coordinator.delegate` and `Coordinator.message_
 
 | Reads the fields as | Readers | This design |
 |---|---|---|
-| the conversation whose data the task may read | `history_query.query_for_task`, `discussion_digest.digest_for_task`, `vision` (`read_image_for_task`, `readable_image_scenes`, `scene_attachments`, `attachment_by_ref`, `task_attachment_context`, `stored_image`, `path_image`, `picture_to_edit`, `local_upload_bytes`, `media_source_url`), `received_files.received_from`, `ToolBroker.call` (artifacts' scope), `TaskService.valid` and `stale_reason` (the epoch fence), `cancel`, `pause_for_restart`, `Executor._run_claimed` (the execution binding) | follows the place: a task moved to the home line reads the Web chat's history and pictures, not the line's |
+| the conversation whose data the task may read | `history_query.query_for_task`, `discussion_digest.digest_for_task`, `vision` (`read_image_for_task`, `readable_image_scenes`, `scene_attachments`, `attachment_by_ref`, `task_attachment_context`, `stored_image`, `path_image`, `picture_to_edit`, `local_upload_bytes`, `media_source_url`), `received_files.received_from`, `ToolBroker.call` (artifacts' scope), `TaskService.valid` and `stale_reason` (the epoch fence), `cancel`, `pause_for_restart`, `Executor._run_claimed` (the execution binding) | history and the digest read the conversation it was asked about (`whose`); the rest follows the place (§2.3) |
 | whose folder, class and tools | `Chat._tasks` (`workspace_folder`), `ToolBroker.bind`, `Executor._run_workspace` (grant, class, the action brain's persona and notes), `ToolBroker.call` (`allowed_capabilities`, `development_grant`, `integration_profile`, and a `workspace_grant` re-check), `NativeDevelopmentBridge.call` (`development_grant` and the owner-private class), `credentials.home_task` | the four folder reads go through one `grants.task_grant(config, task)` (§3.8); the grant fields are written from `whose` and the place (§2.4) |
 | where the result is said | `Chat.hand_back`, `TaskService.feedback`, `require_current_feedback`, the watchdog, `publish.py`'s walk | follows; `publish.py` needs nothing new because a task never moves to another platform conversation |
 | who may steer or stop it | `RoleTools._own_task` (same scene, `requester_id` = the turn's person, same epoch), `Coordinator.message_action` (the grants check and the PAUSED rule), `TaskService.cancel` (`person_id` = `requester_id`), `Chat.stop` | the fence compares the person each is for there (`whose.here`, §3.7); the grants check reads `whose`; the PAUSED rule changes (§3.4) |
@@ -160,6 +160,7 @@ owner, an agent on its own line, or her self-development asked for.
 whose = {
   'by':        'words' | 'standing' | 'own',
   'scene_id':  where it was asked (or, for her own, where she was),
+  'scope_key', 'policy_epoch': that conversation's, when the turn opened (the read fence of §2.3),
   'person_id': words: the person whose words asked; standing: the owner; own: the owner in the Web chat, none
                anywhere else,
   'chosen':    True when she named the person (a group's `for`) or the line (a plan's `line`),
@@ -183,7 +184,7 @@ the event (`errands.carried(event)` for an errand, since `ep['errand']` is set o
 
 | The turn | Its `whose` |
 |---|---|
-| on an errand (`errands.carried(event)`) | the home turn's `whose`, when it names that home conversation; otherwise `own` there (a home turn acting for a note from outside sent it, on the owner's own line, ADR-066; it still carries the outside step, so it earns nothing) |
+| on an errand (`errands.carried(event)`) | the home turn's `whose`, when it names that home conversation; otherwise **none** (a home turn acting for a note from outside sent it, on the owner's own line, ADR-066: it carries the outside step, so the errand hands nothing over and plans nothing) |
 | `external` (a person's line) | `words`: the person whose line opened the turn, in this conversation |
 | `task_feedback`, `consult` | the task's `whose` |
 | `scheduled` | the plan's `whose`; a public conversation never carries one that names an owner-private conversation (an old errand plan in a group): then `own` there |
@@ -208,6 +209,18 @@ The second function, the only place that decides where a task runs and for whom 
 | `words` on an agent line (its agent, or the owner joining it) | true | that line | the asker | `workspace_grant(line, asker)`, as today | the asker |
 | anything else: misc on an agent line, everything in the Web chat, the owner's DM, her sister's line, a home group; `standing`; her own work in any owner-private conversation | any | **the home line, the Web chat** | the owner | home's | the owner |
 | none (§2.2) | — | nowhere: the turn hands nothing over | | | |
+
+**What a task reads.** History and the discussion digest (`history_query.query_for_task`,
+`discussion_digest.digest_for_task`) are read in the conversation the task was asked about, `whose`'s, with the scope and
+epoch `whose` recorded, not in the one it runs in: a misc task moved home from an agent line, her sister's line, a home
+group or the owner's DM reads that conversation, never the Web chat's, and can still "sum up the discussion above".
+Everything else a task reads (pictures, files, its epoch fence) stays with the conversation it runs in; pictures and
+files already reach every conversation from home's class (`received_files.py`, `vision.readable_image_scenes`).
+
+**Who authorizes her own work's turns.** For her own task or plan in a public conversation the stored
+`requester_id` / `person_id` only names the visitor it was made with; every turn it opens (its result, its consult,
+its firing) is authorized as the visitor **then** (`places.visitor`), since a block or a new member with a lower id
+changes the visitor and a blocked member leaves the scene's members (`host._speaks`).
 
 A **plan** is placed as misc (`develop` false): in the public conversation of its `whose`, or on the home line. The
 agent line hosts no new plans. A plan she made with `line` stays a plan of hers in that peer line (the owner,
@@ -264,6 +277,11 @@ stays where it is and runs out there; what is begun from it is placed by §2.3.
 - `of_turn(store, ep, event) -> whose | None`: §2.2. `of(store, ep)`: `ep['whose']`, else `of_turn`.
   `of_task(store, task)`, `of_plan(store, plan)`: the stored record, else §2.6's reading.
 - `place(store, whose, develop) -> {scene_id, scope_key, policy_epoch, requester_id, folder, here} | None`: §2.3.
+- `authorizer(store, row) -> person id`: the person a task's or plan's next turn is authorized as: its stored
+  `requester_id` / `person_id`, or for her own work in a public conversation the visitor then (§2.3). Read by
+  `Chat.hand_back`, `TaskService.feedback`, `Coordinator.consult`, `require_current_feedback` (which compares it, with
+  the task's `whose`, instead of the stored person) and `Schedule._deliver_locked` (its authorize and its route-member
+  check).
 - `here(store, whose, scene_id) -> person id | None`: the person a task or turn is for in that conversation: the asker
   in a public conversation or on an agent line, none for her own there, the owner on the home line.
 - `standing(store, whose) -> 'here' | 'left' | 'blocked' | 'closed'`: `left` when the person's grant on the group's
@@ -306,8 +324,11 @@ refuse DEVELOP_NOT_HERE when develop and not earns_development(whose)
 place  = whose.place(store, whose, develop)
 scene  = scene_records.authorize(place.scene_id, place.requester_id)
 development, integration, names = grants.for_whose(store, whose, place, develop)
-session = the turn's own when the task runs in the turn's conversation (home's live one for an errand or a reflection,
-          as `_task_session` does today); otherwise the session the resolver gives that conversation's own turn
+session = the live session of the conversation the task runs in: the turn's own when that is the turn's conversation
+          and the turn is not a one-shot one; otherwise the resolver's for that conversation, from a proto built of the
+          target scene alone (its own `character_context`, a fresh id, no `task_id`, no context), so nothing of the
+          handing-over turn (its plan, its reflection) is read into it. A session is bound to one scene
+          (`NativeWorker.bind_session`), so a task's session must be its own conversation's
 raw    = ['in-' + the authority turn] as today (never empty: `host._recover_tasks`, `feedback` and the task list's sort
           need it); for a person she named in a group, that person's newest line this turn had in view
 task   = {... as today ..., scene_id/scope_key/policy_epoch/requester_id from place, whose, develop (when true),
@@ -321,7 +342,8 @@ The task is written in one save; the episode's `task_ids` update after it stays 
 
 The `delegate` result gains `for`: `TASK[by]` (with the label), then `LINE_DEV_ONLY` when misc leaves an agent line,
 then `RESULT_HERE` or `RESULT_HOME`; its `action_brain` reads `BRIEF_ONLY` when the input lies outside the task's
-conversation; its `note` keeps `HOME_TASK` on an errand and `REFLECTION_TASK` in a reflection.
+conversation (and the result item then carries no `_why_then`: her thought stays in the conversation she wrote it in,
+as `original_input` does); its `note` keeps `HOME_TASK` on an errand and `REFLECTION_TASK` in a reflection.
 
 The spec (`role_tools.TOOLS['delegate']`): the description gains
 `在哪儿做由程序定：群里托的在群里，agent 线只做它托的开发，别的都回家里；交出时会说。`; `develop` (boolean,
@@ -336,7 +358,7 @@ requester), keeps its `whose` and `develop`, and gets `for_whose(task.whose, tas
 turn's grants. The turn may continue it when `_own_task` found it (§3.7) and the turn reaches the task's grants: a task
 with the development grant takes words only from a turn whose `whose` earns it, one with an integration profile only
 from a turn whose `whose` would get the same profile. Today's reverse refusal (an owner's turn may not add words to a
-narrow task) goes, because a continuation no longer takes the turn's grants. A `PAUSED` task continues on an
+narrow task) goes, because a continuation no longer takes the turn's grants. `TaskService.cancel` checks the fence of §3.7 instead of `person_id == requester_id`. A `PAUSED` task continues on an
 `external` turn whose `whose.here` there is the task's: on the home line the owner, as today; on an agent line its agent
 (today it never can, since only the owner in the Web chat may, and `task` finds only the turn's own conversation's
 tasks).
@@ -371,20 +393,28 @@ tasks).
 
 `_own_task` keeps its fence (same conversation, same person, same epoch) and compares `whose.here` of the task with
 that of the turn instead of the task's `requester_id` with the episode's `person_id`; `task` `stop` passes the same to
-`TaskService.cancel`. On the home line both are the owner, so every home turn steers every home task, as today. On an
+`TaskService.cancel`. On the home line a turn for the owner or for herself (`whose` the owner's words, `standing` or `own`) steers every
+task there, as today; a turn that carries someone else's `whose` there (an agent's, her sister's or a home-group
+member's result turn or plan firing) steers only the tasks with that same `whose`, so it cannot stop or add words to the
+owner's work. `task` `stop` keeps no grant check of its own today (`RoleTools.tool_task_stop`), so this fence is its
+only one. On an
 agent line the agent steers its own tasks; her own note's turn there steers none. In a group a member steers their own
 tasks, and her own turns there (a visit, her plan's firing, her task's result) steer hers; her visit no longer steers
-the first member's tasks, and every member's task answers `OTHERS_TASK` with the member who really asked.
+the first member's tasks, and every member's task answers `OTHERS_TASK` with the member who really asked (`OTHERS_TASK` names `whose.here` of
+the task, and says `你自己` for her own task in a member's turn).
 
 ### 3.8 Her folder in a group, and one folder rule
 
 `grants.task_grant(config, task)` is the one answer to "which folder and read-only paths": for a task of hers in a
 public conversation (`whose.by == 'own'` there), `grants.her_folder(config, scene_id)`; otherwise
-`workspace_grant(task.scene_id, task.requester_id)`, as today. `Chat._tasks`, `ToolBroker.bind`,
-`Executor._run_workspace` and `ToolBroker.call`'s re-check read it. Her folder is
-`<data>/channels/her-<first 32 hex of sha(scene id)>`, checked against the other channel folders like a member's
-(`host._checked_workspace`), made on first need (`grants.workspace_folder`), and kept like a member's folder: erasure
-deletes no task folder (`privacy.py`), and a folder stays when an admission ends (ADR-107).
+`workspace_grant(task.scene_id, task.requester_id)`, as today. Its readers are the four that pick a task's folder
+today: `Chat._tasks` (`workspace_folder`), `ToolBroker.bind`, `Executor._run_workspace` and the action stage's binding
+in `native_worker.py` (its `cwd`, made there, and its `skill_directories`, which for her own task read the
+conversation's kind with no person). Her folder is `<data>/channels/her-<first 32 hex of sha(scene id)>`, made on
+first need (`grants.workspace_folder`), and kept like a member's folder: erasure deletes no task folder (`privacy.py`),
+and a folder stays when an admission ends (ADR-107). The `her-` prefix is reserved: `host._checked_workspace` refuses
+a configured or admitted grant under it, so no grant can come to equal or contain one of hers (admitted folders are
+`auto-`, `channel_admission.admitted`).
 
 ### 3.9 Plans (L3)
 
@@ -396,8 +426,9 @@ deletes no task folder (`privacy.py`), and a folder stays when an admission ends
   `person_id` is the place's `requester_id`. It no longer writes `integration_profile`. `RoleTools.tool_plan` stops
   computing `where` for outside notes; when the plan is placed on the home line from another conversation its result
   says `PLAN_HOME`.
-- `Schedule.update` and `cancel` keep their fence by scene, person and epoch, and in a public conversation add the same
-  split as the list: her own turns there change only her own plans (`whose.by` `own`), a member's turns only theirs.
+- `Schedule.update` and `cancel` keep their fence by scene, person and epoch, and in a public conversation split as
+  the list does: her own turns there change only her own plans, found by scene, epoch and `whose.by == 'own'` with no
+  person condition (the visitor can change, §2.3); a member's turns only theirs.
   `tool_plan`'s `there` (the scene, person and epoch the fences use) is taken from the plan whenever the plan's scene is
   not the turn's (a plan an errand turn just made at home, one an outside-note turn made in the origin). A plan made
   again after it fired (`PLAN_MOVED_FIRED`) carries the old plan's `whose`.
@@ -405,8 +436,8 @@ deletes no task folder (`privacy.py`), and a folder stays when an admission ends
   `PLAN[by]` and `STANDING[...]` to the plan block it builds for a `scheduled` turn. A firing that fails is recorded as
   today and never moved.
 - The plans list (`records.plans.of_conversation`): by the turn's person as today; in a public conversation, her own
-  turns list the plans whose `whose.by` is `own`, and a member's turns that member's plans that are not (an old plan,
-  without `whose`, counts as not). On the home line every plan's person is the owner, so the list is what it is today.
+  turns list the plans whose `whose.by` is `own` (by scene and epoch, no person condition), and a member's turns that
+  member's plans that are not (`NoneOf(['own'])`, which also matches an old plan without `whose`, `store/words.py`). On the home line every plan's person is the owner, so the list is what it is today.
   The view states `Exists` on `whose` for the new rows, so the None rule (`records/view.py`) cannot match an old row by
   a missing field; the contract already covers nested `Exists` (`integration/store_contract.py` W17), and the view gets
   its unit test.
@@ -465,6 +496,9 @@ Brains: CB the character brain, AB the action brain, RG the relevance gate (whic
 | Compaction of the session that held the hand-over | the result turn carries the title, the brief, her thought then, whose it is and the report | — | — |
 | An agent line she closed while its work is in flight | its development tasks' result turns still run there (a closed line passes over the agent's messages, not her own work), saying `（这条线你关着）`; her words go out if she speaks | her words, if any | unchanged |
 | An errand from home | the task is home's (ADR-066); a plan made there is the home line's, `PLAN_HOME` | the destination sees what she said | `whose` = the home turn's |
+| An errand sent from a home turn a note from outside opened | it hands nothing over and plans nothing (its `whose` is none) | the destination sees what she said on the errand | `whose` none |
+| A result turn or plan of someone else's at home (an agent's misc, her sister's, a home-group member's) | it steers only the tasks with its own `whose`; the owner's tasks answer `OTHERS_TASK` | — | — |
+| The visitor of her group work changes (a block, a new member with a lower id) | nothing: her task's and plan's next turns are authorized as the visitor then, and her plans are found without a person | — | — |
 | A note written on an errand, read at home | its turn acts as the errand's conversation (`own` there), never as home's: its plans live there and earn nothing | — | `whose` own there |
 | A note from outside sent on into a home group, or one that is gone | its turn acts for no one: it hands nothing over and plans nothing | — | `whose` none |
 | Her visit | as today: the task runs in that group, now in her own folder and steered only by her own turns there; a plan made there is hers there | what she says there | `whose` own |
@@ -493,11 +527,13 @@ Only those that guard a fence or a failure that would be silent and costly. All 
 | Test (new module `tests/test_whose.py` unless named) | Guards |
 |---|---|
 | `test_whose_by_turn_kind`: every row of §2.2, including an errand, an outside note, an outside note written on an errand, an onward outside note into a home group, an errand sent from an outside-note turn, a gone note, an erased turn, a trusted note, a visit, a plan and a task made before the install | the record: a wrong row is a wrong grant or a wrong place, silently |
-| `test_where_a_task_runs`: every row of §2.3: a group member's ask; her visit; the agent's development and misc on its line; the owner joining the line; the owner in the Web chat, in his DM, in a home group; her sister's line; a heartbeat; self-development; none | the owner's rule |
+| `test_where_a_task_runs`: every row of §2.3, and an errand sent from an outside-note turn (none): a group member's ask; her visit; the agent's development and misc on its line; the owner joining the line; the owner in the Web chat, in his DM, in a home group; her sister's line; a heartbeat; self-development; none | the owner's rule |
 | `test_development_only_where_whose_earns_it_and_she_marked_it`: the earners and non-earners of §2.4, `develop` on and off, `standing`; an old task's continuation capped at its stored grant | the authorization fence |
 | `test_misc_from_a_line_runs_home`: a misc task from an agent-line turn has the Web chat's scene, scope, epoch, person, folder and session (a stub resolver); its result is queued there; the executor's, the hand-back's and the consult's reads of its input give nothing of the line; a development task from the same turn stays on the line | privacy across conversations and the routing |
 | `test_a_result_turn_hands_its_whose_on`: a result turn delegates again and the new task has the first one's `whose`, place and grants; a forgotten `develop` corrected from the home result turn goes back to the line | the chain |
-| `test_her_visit_works_in_her_own_folder`: a visit's task runs in `her_folder`, not the visitor's; on the visit `task` `stop` of a member's task answers `OTHERS_TASK`; a member cannot steer her task | the placeholder never owns or steers |
+| `test_her_visit_works_in_her_own_folder`: a visit's task runs in `her_folder` (broker, executor and stage binding), not the visitor's; on the visit `task` `stop` of a member's task answers `OTHERS_TASK`; a member cannot steer her task; after the visitor is blocked, her task's result turn still opens, authorized as the new visitor |
+| `test_someone_elses_turn_at_home_steers_only_its_own`: an agent's misc result turn at home cannot stop or add words to the owner's task; the owner's turn and her heartbeat can steer both | escalation on the home line |
+| `test_a_moved_task_reads_where_it_was_asked`: a misc task moved home from a home group queries that group's history and digest, not the Web chat's | the read fence | the placeholder never owns or steers |
 | `test_a_group_task_is_the_person_she_names`: `for` with a label in the turn gives that person's folder, steering and their own line as the input; a label not in the turn is refused | the person boundary inside a group |
 | `test_a_plan_is_placed_as_misc` (L3): from an errand, on the home line; from an agent line, on the home line; from an outside note, at the origin; with `line`, in the line; its firing's turn has the plan's `whose`; in a group, her own plans and a member's are listed and changed apart; an old errand plan fires in its destination as her own | follow-up plans, the list, the fences, old plans |
 | `records.plans` view (L3, beside `tests/test_store_contract.py`): new rows by `whose.by`, old rows by `person_id`, never an old row through a missing field | the None rule |
@@ -595,6 +631,20 @@ taken.
 | G | A task she names for B kept A's line as its input | B's newest line in the turn (§3.3) |
 | H | The result item's words were said to be recomputed at each preparation | Computed once, kept in the episode's context (§3.6, §4.1) |
 
-### 10.3 The redesign to the owner's rule (`see the commit that adds this line`)
+### 10.3 The redesign to the owner's rule (`4dca4dff7f1d`), 8 findings
 
-To be filled with the same reviewer's reading of this version.
+No blocker. Each was checked against the code before it was taken.
+
+| # | Finding | Severity | Done |
+|---|---|---|---|
+| 1 | An errand sent from an outside-note turn fell back to `own` in the destination, ran there and was drawn in home's session, which `bind_session` refuses (`NATIVE_BINDING_IDENTITY_CHANGED`): every hand-back would fail (earlier finding 1 in a new form) | major | The errand row's fallback is none (§2.2); a task's session is always its own conversation's (§3.3) |
+| 2 | On the home line someone else's result turn or plan (an agent's misc, her sister's, a home-group member's) could stop or add words to the owner's tasks; `task` `stop` has no grant check | major | At home only the owner's or her own turns steer every task; another's steer only theirs (§3.7) |
+| 3 | A misc task moved home read the Web chat's history and lost its own conversation's | major | History and the digest read `whose`'s conversation (§2.3, `whose` keeps its scope and epoch) |
+| 4 | Her visit task still used the visitor in the stage binding (folder, skills), in `cancel`, in `OTHERS_TASK`, and failed when the visitor was blocked | major | One folder rule for all four folder readers (§3.8); `cancel` and `OTHERS_TASK` read the fence and `whose` (§3.4, §3.7); turns authorized as the visitor then (`whose.authorizer`, §2.3, §3.1) |
+| 5 | Her plans in a group dropped out of the list and the fences when the visitor changed | major | Found by scene, epoch and `whose.by` with no person condition (§3.9) |
+| 6 | The resolver's proto for a task placed elsewhere could read the handing-over turn's plan, reflection or context | minor | A proto of the target scene alone (§3.3) |
+| 7 | Her home thought (`_why_then`) reached the agent line with a development task handed over at home | minor | Withheld when the task runs outside the conversation it was handed over in (§3.3) |
+| 8 | Her folders were never in `ChannelWorkspaces`; the reader list named a re-check that does not exist | minor | The `her-` prefix reserved in `_checked_workspace`; the four real readers named (§3.8) |
+
+The reviewer found clean: `require_current_feedback`, the publication path, the input fence, credentials, sandbox, and
+the pictures and files fences; its first-draft findings 2, 3, 6, 8, 9 and 10 did not come back.

@@ -106,7 +106,8 @@ machinery). Only she can tell development from misc, so the rule needs the mark;
    never a home conversation (ADR-088).
 3. **One function places a task** from `whose` and `develop` (design.md §2.3): the conversation it runs in, the person
    it is for there, its folder. Grants follow from the place and `whose` only (`grants.for_whose`), never from the turn
-   that started it. A continuation runs where its task runs, with its task's grants.
+   that started it. A continuation runs where its task runs, with its task's grants. A task moved home still reads the
+   history of the conversation it was asked about, never the Web chat's.
 4. **Plans place the same way,** as misc: a plan fires in the public conversation it belongs to or on the home line.
    The agent line hosts no plans; her `line` plans to a peer line stay as the owner decided on 2026-10-06. A plan made on
    an errand fires at home.
@@ -121,8 +122,10 @@ machinery). Only she can tell development from misc, so the rule needs the mark;
 9. **What she reads says where and for whom,** from one versioned table, in three places only: the `delegate` result,
    the result item of a result turn, the plan block of a plan's firing; the last two are added when the turn is
    prepared, never into the stored event. Nothing is added to every turn.
-10. **A paused task continues on the words of the person it is for, where it runs:** at home the owner, as today; on an
-    agent line its agent (today it never can).
+10. **Who steers a task:** the person it is for, where it runs. On the home line the owner's turns and her own steer
+    every task there, as today; a turn carrying someone else's ask there (an agent's misc result, her sister's) steers
+    only its own. A paused task continues on those same words: at home the owner, as today; on an agent line its agent
+    (today it never can).
 11. **The agent line's narrow integration grant** goes with the agent's development tasks there, the same as the
     development grant, and nowhere else.
 12. **Old records keep their meaning;** nothing rewrites a row (design.md §2.6).
@@ -145,8 +148,10 @@ machinery). Only she can tell development from misc, so the rule needs the mark;
 A fresh reviewer read the first draft (`d7e7decd7126`) against the code and found 14 problems, 2 of them blockers
 (a note written on an errand could carry home's authority back home; tasks with no recorded input crashed the
 hand-back). The lead checked each against the code and fixed it (`affd95133a06`); the reviewer re-checked those fixes
-and found 8 more, all fixed (`877dff90b81a`). The full list, with what was done, is design.md §10. The redesign to the
-owner's rule was then read by the same reviewer; its findings are design.md §10.3.
+and found 8 more, all fixed (`877dff90b81a`). The redesign to the owner's rule (`4dca4dff7f1d`) was read by the same
+reviewer: 8 more, no blocker, all fixed (the worst: an errand sent from an outside-note turn would have run in a
+session bound to another conversation, and someone else's result turn at home could have stopped the owner's tasks).
+The full lists, with what was done, are design.md §10.
 
 ## Not in this ADR
 

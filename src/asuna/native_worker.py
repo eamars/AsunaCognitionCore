@@ -74,6 +74,18 @@ def take_persona(config, persona):
     config['persona_model'] = model
 
 
+def supersede_waiting(store, project, newest):
+    """The Host selects only a project's newest publication: an earlier one still waiting to start never will.
+    Left APPLIED, it would keep asking for a worker restart that never activates it. Called both when the worker
+    records a publication and when a started worker reports what it loaded, since a publication can land while
+    the worker that asked for it is already stopping and never records it."""
+    for older in receipt_records.sink_of_kind(store, 'self_development_publish', project=project,
+            states=['APPLIED', 'HOST_RESTART_REQUIRED'], besides=newest).each():
+        receipt_records.save_sink(store, {**older, 'state': 'SUPERSEDED', 'superseded_by': newest,
+            'superseded_at': clock.now().isoformat()},
+            expected=older['revision'], stream=older.get('task_id', older['_id']))
+
+
 def gate_session_id(binding, operation):
     """A fresh gate session for each question, its repairs included: the material is complete every time, so the
     gate keeps no history and never compacts (attend.py)."""
@@ -1439,6 +1451,7 @@ class BusinessWorker:
                     # role task. Its activation stays in its own receipt stream.
                     receipt_records.save_sink(self.app.store, {**publication, '_id': receipt_id,
                         'kind': 'native_recovery_publish'}, stream=receipt_id)
+                supersede_waiting(self.app.store, publication.get('project'), receipt_id)
             self.host._complete_activations()
             self.host.activation_settled.set()
             return {'accepted': True}
@@ -1543,14 +1556,7 @@ class NativeDevelopmentBridge:
                 **result, '_id':result['receipt_id'], 'kind':'self_development_publish',
                 'scope_key':task['scope_key'], 'task_id':task['_id'],
                 'intent_revision':task['intent_revision']}, stream=task['_id'])
-            # The Host selects only a project's newest publication: an earlier one still waiting to start
-            # never will. Left APPLIED, it would keep asking for a worker restart that never activates it.
-            for older in receipt_records.sink_of_kind(self.store, 'self_development_publish',
-                    project=result.get('project'), states=['APPLIED','HOST_RESTART_REQUIRED'],
-                    besides=result['receipt_id']).each():
-                receipt_records.save_sink(self.store, {**older, 'state':'SUPERSEDED', 'superseded_by':result['receipt_id'],
-                    'superseded_at':clock.now().isoformat()},
-                    expected=older['revision'], stream=older.get('task_id', older['_id']))
+            supersede_waiting(self.store, result.get('project'), result['receipt_id'])
             if result['state'] == 'ACTIVE':
                 self.worker.host._complete_activations()
         return result

@@ -394,3 +394,22 @@ def test_a_long_wait_for_the_effects_lock_is_recorded_once_and_a_short_one_not_a
         assert 'unrecorded' in failing.pending, 'a failure to record is not the stage\'s'
     finally:
         remove_lock_files(effects_lock_path(name))
+
+
+def test_a_started_worker_supersedes_a_publication_it_did_not_load(store):
+    """Regression (10-30): her second core publication landed while the worker that was stopping for the first
+    never recorded it. The started worker reported only the second as loaded; the first stayed APPLIED and asked
+    for a worker restart after every turn, each one revoking her running tasks."""
+    from asuna.records import receipts as receipt_records
+    for _id, project in (('first-core', 'core'), ('waiting-channel', 'napcat-qq')):
+        receipt_records.save_sink(store, {'_id': _id, 'kind': 'self_development_publish', 'state': 'APPLIED',
+                                          'project': project, 'task_id': 'task'}, stream='task')
+    worker = BusinessWorker()
+    worker.app = SimpleNamespace(store=store)
+    worker.host = SimpleNamespace(_complete_activations=lambda: None, activation_settled=threading.Event())
+    worker.dispatch('publication.activated', {'publications': [
+        {'receipt_id': 'second-core', 'project': 'core', 'state': 'ACTIVE', 'activated_at': 'now'}]})
+    first = receipt_records.sink_get(store, 'first-core')
+    assert (first['state'], first['superseded_by']) == ('SUPERSEDED', 'second-core')
+    assert receipt_records.sink_get(store, 'waiting-channel')['state'] == 'APPLIED'
+    assert receipt_records.sink_of_kind(store, 'self_development_publish', state='APPLIED', project='core').first() is None

@@ -160,7 +160,7 @@ Not designed here:
 
 - **C1, the limit itself.** The owner's decision, open since ADR-084 §10.
 - **C2.** Designed and built in §9.
-- **C4.** Evidence retention that a restart loop cannot erase.
+- **C4.** Designed and built in §10.
 - **Paused tasks have no end** but her stop or the owner's "continue". Open on 10-31 00:40: `task-b141054d` (10-16,
   agent home line), `task-d55513ac` (10-25), `task-5afc50d4` and `task-abba75af` (23:51 and 23:57). The owner's
   restart policy; left as it is unless he decides otherwise.
@@ -269,7 +269,84 @@ publication leaves a `self_development_publish` receipt for its task.
 
 ### 9.6 Not in this change
 
-- **C4**, evidence retention: its own design. A count of starts is erased by a loop of starts; a fix keeps by time
-  and by size, not by count.
+- **C4**, evidence retention: §10.
 - **C1**, **paused tasks without an end**, **the 12:39 crash**: as in §7.
+
+## 10. C4: the evidence of a start outlives a loop of starts
+
+Written from the code at `83e1493`; the sizes of the live reports were not read for this section (§10.5 reads them).
+
+### 10.1 What the code does
+
+- Each worker start writes its Host report to a new folder, `<data>/reports/native-host-<10 hex>`, one JSON file per
+  record (`Evidence`). Within a start only its newest 3,000 records stay (`KEPT_HOST_RECORDS`), besides the pinned
+  kinds `runtime.ready` (the supervisor's proof that the start came up, `readySince`) and `clock.zone`.
+- At each start, right after its own folder is made, `prune_host_reports` sorts the `native-host-*` folders by their
+  last write and removes all but the newest 5 (`KEPT_HOST_REPORTS`).
+- What reads the folders: the supervisor (`asuna-supervisor.mjs` `readySince`, one stat per folder while it waits for
+  a start), people and agents after an incident. Nothing else.
+- What only they hold: the restart trail (`restart.pending`, `restart.blocked` with what held it, `restart.requested`
+  with the receipt), `host.task_paused`, `chat.task_error` tracebacks, `host.tool_overrun` stacks, the recovery
+  timings. The database's `audit_events` hold neither these nor the process's view of a start.
+
+So the unit of retention is the start, and the bound is a count. A start costs what it writes, not one unit: a
+start that lives 2 to 6 minutes writes far fewer records than one that lives a day. The count bound erased eleven
+small reports and kept five, sized for five full ones.
+
+### 10.2 How retention is usually bounded
+
+Log stores bound by age and by size together and never by count of files alone: journald (`MaxRetentionSec` with
+`SystemMaxUse` and `SystemMaxFiles`), logrotate (`maxage` with `size`), Windows event logs (a size, then overwrite).
+The age says what must survive; the size is the disk's safety bound; reaching the size bound is itself reported.
+
+### 10.3 Design
+
+**D3. Kept by time, bounded by size; an erasure the bound forces is recorded.**
+
+- **Kept:** the newest 5 starts (as now: the start before a quiet week explains why it ended), and every start that
+  wrote in the last 48 hours (`KEPT_HOST_REPORT_HOURS`), however many starts that is. Age is from the folder's last
+  write, read against `asuna.clock`.
+- **Bounded:** at most 60,000 records (`HOST_REPORTS_MOST_RECORDS`, twenty full starts) and 1,000 starts
+  (`HOST_REPORTS_MOST`) in all. The unit is a record, the same unit as the per-start bound, so no file-system
+  accounting is needed; a record is one small file (about 0.4 to 1 KB, a stack or traceback a few KB). The start
+  bound keeps the supervisor's stat per folder bounded when starts write almost nothing (a crash at start).
+- **Order:** newest first. The current start always stays. When a wanted start does not fit, it and every older one
+  go, so what is kept has no gap.
+- **Said:** when the bound removes a start the rule wanted, the new start records `host.reports_pruned` (how many
+  starts it removed, how many of them it wanted, the starts and records kept, and the age of the oldest kept), a
+  pinned kind. Nothing is recorded on the normal path.
+
+What it costs: the old bound was at most 15,000 records; the new one is at most 60,000, about 25 to 60 MB in file
+bytes. A start's prune lists each kept folder once (`os.scandir`: on Windows the listing carries what is needed
+without a stat per file).
+
+**Considered and left out.** Pinning the restart trail within a long start: a busy hour writes about a thousand
+records, so a restart held for 30 minutes keeps its trail well within 3,000; nothing shows it was ever lost. Copying
+the trail into the database: the audit has a retention of its own (ADR-074), and the files are enough once they
+are kept.
+
+### 10.4 Review: does it reach the root cause?
+
+- **Replay of 10-30.** The loop's starts (23:37 to 00:08, eleven, each a few minutes) and the start that ran the cut
+  task are all within 48 hours of anyone reading them on 10-31; together they are far below 60,000 records. All
+  kept. The same night under the old rule kept five.
+- **A loop left running.** A loop of light starts (a hundred or so records each) reaches the 1,000-start bound after
+  about 33 hours at one start every 2 minutes, which a person notices well before: each restart pauses her tasks.
+  When it does reach it, the erasure is recorded, so the report says the evidence is incomplete rather than looking
+  complete.
+- **A quiet system** keeps what it kept before: its newest 5 starts, plus anything of the last two days.
+- **Two sides at different versions.** Only the worker prunes; the supervisor's reading of the folders is unchanged.
+- **The broken invariant** was "a count-based retention is erased by the very failure it is needed for". The kept set
+  no longer depends on the number of starts within 48 hours, and a bound reached is visible.
+
+### 10.5 Tests and landing
+
+| Test | Guards | Fails without |
+|---|---|---|
+| `test_native_worker.py` `test_host_reports_of_a_restart_loop_outlive_the_loop` | a dozen short starts in an hour all kept; old starts beyond the newest 5 removed | D3 (the old rule keeps 5) |
+| `test_native_worker.py` `test_host_reports_past_their_bound_go_oldest_first_and_say_so` | the bound on disk, no gap, `host.reports_pruned` recorded | D3's bound |
+
+At landing, before the restart, read the size of `<data>/reports/native-host-*` (records and bytes per start) and
+check that a full start is near 3,000 records and a few MB. After the restart: the reports of the previous starts of
+the last two days are still there.
 

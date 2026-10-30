@@ -1,13 +1,12 @@
 # ADR-111: Whose work a task is
 
-Status: **Decided** 2026-10-30. The owner gave the rule and answered five questions the same day (below); the lead
-(Claude Code, big sis) revised the design to them on branch `claude/elegant-goodall-2ip12g`, from `main` at
-`ac620ad17d40`. Nothing is built. A fresh reviewer read the first draft against the code and re-checked its fixes; the
-revision to the owner's rule was read again by the same reviewer (the review, at the end). **Owner's rule for this ADR:
-the character does not read it until the feature is fully built**; she was not contacted while it was written.
+Status: **Decided** 2026-10-30 by the owner (his rule and his answers, below); designed by the lead (Claude Code, big
+sis) on branch `claude/elegant-goodall-2ip12g`. Nothing is built. **Owner's rule for this ADR: the character does not
+read it until the feature is fully built**; she was not contacted while it was written.
 
-The design to the end: [design.md](design.md) (the survey with its commands, the interfaces, the life cycle of every
-text and stored field, the failure modes, the tests and the landings).
+The design to the end: [design.md](design.md): the survey with its commands, the record and how it is decided, the
+interfaces, the life cycle of every text and stored field, the failure modes, the defects found, the tests and the
+landings.
 
 ## The ask
 
@@ -21,144 +20,107 @@ The lead's brief (2026-10-30, its essentials verbatim):
 >
 > A task carries whose work it is: the conversation and the person it serves. Wherever the program can know that, the
 > program decides it (the person whose words asked, the origin a plan keeps, an errand's home). Her choice, where one
-> is needed, is categorical and mapped by the program.
+> is needed, is categorical and mapped by the program. Grants, where the result turn happens, follow-up plans and what
+> she sees of the task all follow that answer, not the turn that happened to start the task.
+>
+> Grants follow the work: a development grant only for development work the owner, or an agent on its line, asked for
+> there.
 
-The owner, on the first version of this page (2026-10-30, verbatim):
+The owner (2026-10-30, verbatim):
 
 > My rule: She won't read it until the feature is fully built.
 >
-> I think the issue is, no one treats the home line as the ONLY place that is supposed to handle external requests.
+> MY only intention is to make the home line the default place to handle requests from outside. That it.
 >
-> Yes the agent line can handle request and it should have the development permission, but this line is NEVER
-> intended to handle other misc tasks.
->
-> So my bottomline is, any misc request goes to home line, and not randomly picking any line that has development
-> permission.
+> You may put the defect you find in the ADR, but you shall NEVER prompt for changes outside our agreed range and trick
+> me allowing you to expand the scope.
 
 The evidence is the lead's (task records since 10-20, counted by structure only), not re-derived here: on the agent
 line 197 tasks were started by a message there, 82 by a result turn, 41 by her own plan firing and 8 by a note; in QQ
 groups 137, 22, 16 and 16 by a visit; in the owner's chat 23, 33, 22, 11, plus 46 self-development turns, 17 heartbeat
-turns and 3 errand visits. Agent-line tasks rose to 59 a day on 10-27 and 10-28. All 23 agent-line tasks from the
-10-29 evening to the 10-30 afternoon carried the development grant, a long-form writing task for a group's client
-among them.
+turns and 3 errand visits. All 23 agent-line tasks from the 10-29 evening to the 10-30 afternoon carried the
+development grant, a long-form writing task for a group's client among them.
 
-In scope: where a task and a plan run, for whom, with which grants, and everything that follows (folder, result turn,
-steering, what she reads). Anything wider is said as wider.
+**In scope:** whose work a task is, recorded once and followed by its grants, its result turn, its follow-up plans
+and what she reads; requests from outside default to the home line. Everything else works as it does today.
 
-## The owner's decisions (2026-10-30, in the question tool)
+## The owner's answers (2026-10-30, in the question tool)
 
-1. **Work someone asks for in a group runs in that group,** for that member: their folder, the group's limits, the
-   result where they asked.
-2. **The home line is only the Web chat.** Even misc work the owner asks in his own platform DM runs and reports in the
-   Web chat.
-3. **No one else gets the development tools:** only the owner, a coding agent on its own line, and her own
-   self-development turns. Her sister's line, the other members of a home group, and her heartbeat plans and notes lose
-   them; what they ask is misc and goes to the home line.
-4. **Visits keep today's behaviour** ("I'd prefer the current behavior if not conflict with my previous
-   requirements"): a task she starts on her own visit runs in the group she visits.
-5. **In a group she names whose request a task answers** when several people's lines are in her turn; without it the
-   task is the opener's.
+1. Work someone asks for in a group runs in that group, for that member (as today).
+2. The home line is the Web chat. (My question also moved what he asks in his own platform DM to the Web chat; that came
+   from my over-reading of his rule and is withdrawn: his DM works as today.)
+3. Only the owner, a coding agent on its own line, and her self-development turns get the development tools; no one
+   else (the brief's rule).
+4. Visits keep today's behaviour.
+5. In a group, when several people's lines are in her turn, she names whose request a task answers; without it, the
+   opener's.
 
-## What exists (counted on `ac620ad17d40`; commands and the full census in design.md §1)
+## What exists (counted on `ac620ad17d40`; design.md §1)
 
-- **Two code paths write a new task**, both in `coordinator.py`: `delegate` (its callers: the `delegate` tool and
-  `ask` to the action brain), which copies `scene_id`, `scope_key`, `requester_id` and `policy_epoch` from the turn
-  that called it (from home's turn on an errand, ADR-066), and `message_action` (a finished task continued), which
-  copies them from the turn.
-- **The grants come from the turn's kind and scene,** not from who asked or what the work is: `development_granted`
-  gives the development grant to every `external`, `scheduled` and `self_development` turn in an owner-private
-  conversation, to a trusted note's turn, and to a result turn whose task had it. On an agent line that is every turn,
-  and a task begun in a result turn keeps the grant, so a line with the grant draws every kind of work.
-- **No line is the place for misc work.** A task runs wherever the turn that started it happened to be: a result turn
-  runs in its task's conversation, a plan fires where it was made, and anything begun in either stays there.
-- **The person on an internal turn is a placeholder.** A visit enters a group as the first member of its route, sorted
-  by id (`places.visitor`). A task begun there runs in that member's folder, they may steer it, and the refusal for
-  another member's task tells her they asked for it (`OTHERS_TASK`); her visit may steer and stop that member's own
-  tasks; the plans list and the plan update and cancel fences go by that person too.
-- **The person on a group turn is the one who opened it.** A request from B that she answers in a turn A's line opened
+- **Two code paths write a new task** (`Coordinator.delegate`, `Coordinator.message_action`); both copy the
+  conversation, scope, epoch and person from the turn that called them (home's on an errand, ADR-066).
+- **The development grant comes from the turn's kind and scene,** not from who asked: every `external`, `scheduled`
+  and `self_development` turn in an owner-private conversation, a trusted note's turn, and a result turn whose task had
+  it. On an agent line that is every turn, and a task begun in a result turn keeps the grant.
+- **Her notes from outside already come home only to the Web chat or the owner's own DMs, never to an agent line**
+  (`notes.targets`). Work for someone outside reaches an agent line only when she starts it in a turn of her own there:
+  a result turn, a plan's firing, or the agent's message. Nothing records that the work is someone outside's, so it
+  is filed as the line's, gets the line's development grant, and every result and plan after it stays on the line.
+- **The person on a group turn is the one who opened it:** a request from B she answers in a turn A's line opened
   becomes A's task.
-- **44 functions in 13 modules read these fields of a task by name,** and a few more select tasks by them (design.md
-  §1.5). Most already read "the task's conversation and person" as "where it runs and for whom". They are right as
-  soon as those fields are.
 
-## The rule (the owner's, made exact)
+## The invariant
 
-**Work is done where it belongs, and the program decides where; she never picks a line.**
+**A task records whose work it is: who asked, and where. The program decides that from stored state wherever it can,
+and every result, plan and task that follows carries the same answer. Work runs where it was asked, as today; work for
+someone outside that she takes on in one of her home conversations runs on the home line, the Web chat. The development
+grant follows the record: only for what the owner, an agent on its own line, or her self-development asked for.**
 
-1. **A public conversation's work runs in it,** for whoever there asked (their folder, its limits, its result there);
-   her own work on a visit runs there too, in a folder of hers.
-2. **Development asked for on an agent's line runs on that line:** by its agent, or by the owner joining the line.
-3. **Everything else runs on the home line, the Web chat:** misc work arising in any owner-private conversation (the
-   owner's own DM, an agent line, her sister's line, a home group), her own work at home, her self-development.
-4. **The development tools go only with development work** the owner, an agent on its own line, or her
-   self-development asked for.
+## Decisions
 
-The program decides from two things: `whose`, a record of who asked and where, written once when a turn opens and
-carried along results, plans and errands; and one mark she gives a task, `develop` (this changes or runs her own
-machinery). Only she can tell development from misc, so the rule needs the mark; everything else is the program's.
+1. **One record, `whose`** (`{by: words | standing | own | outside, scene_id, person_id}`), decided by one function
+   from stored state when a turn opens, kept on the episode and copied into every task and plan the turn makes
+   (design.md §2).
+2. **Carried along the chain:** a result turn has its task's `whose`, a plan's firing the plan's, an errand turn home's
+   (ADR-066). A turn opened by a note from outside takes the writing turn's own place, never a home conversation's
+   (ADR-088).
+3. **Requests from outside default to the home line.** In a home conversation, `delegate`'s `for` takes the place of
+   the outside conversation the work is for (from her note places); the task then runs and reports on the Web chat,
+   and whatever follows it stays there. That is the one change to where work runs.
+4. **In a group, `for` takes the label of a person in her turn** (the owner's answer 5); the task is theirs, in that
+   group, as today.
+5. **The development grant follows `whose`:** the owner's own words in his conversations, an agent's words on its own
+   line, her self-development. Not her sister's line, not a home group's other members, not her own heartbeat plans
+   and notes (the owner's answer 3), and never work for someone outside. Integration and every other grant stay as
+   today; work for someone outside gets no integration grant.
+6. **What she reads says whose,** from one versioned table, in three places only: the `delegate` result, the result
+   item of a result turn and the plan block of a plan's firing; the last two are added when the turn is prepared, never
+   into the stored event. Nothing is added to every turn.
+7. **A task never shows a line of another conversation:** a task that runs on the Web chat for work begun on a line
+   reads its input within the Web chat, so the action brain sees her brief, not the line's words as someone's request.
+8. **Old records keep their meaning;** nothing rewrites a row (design.md §2.6).
 
-## Decisions (the lead's, following from the owner's)
+The brief's "development work" is met by who asked, not by what the work is: telling development from other work an
+earner asks for would need a mark from her on every task, which is outside the agreed range. The case that was seen
+(an outside client's writing with the development grant) is closed by decisions 3 and 5.
 
-1. **One record, `whose`** (`{by: words | standing | own, scene_id, person_id}`), decided by one function from stored
-   state, kept on episodes, tasks and plans (design.md §2.1, §2.2).
-2. **Inherited along the chain, never across a less trusted step:** a result turn has its task's `whose`, a plan's
-   firing the plan's, an errand turn home's; a turn opened by a note from outside takes the writing turn's own place and
-   never a home conversation (ADR-088).
-3. **One function places a task** from `whose` and `develop` (design.md §2.3): the conversation it runs in, the person
-   it is for there, its folder. Grants follow from the place and `whose` only (`grants.for_whose`), never from the turn
-   that started it. A continuation runs where its task runs, with its task's grants. A task moved home still reads the
-   history of the conversation it was asked about, never the Web chat's.
-4. **Plans place the same way,** as misc: a plan fires in the public conversation it belongs to or on the home line.
-   The agent line hosts no plans; her `line` plans to a peer line stay as the owner decided on 2026-10-06. A plan made on
-   an errand fires at home.
-5. **She chooses only what the program cannot know:** `develop` (shown where it can be earned), and in a group the
-   person whose request it is (`for`, a label from her turn).
-6. **Her visit's task gets a folder of her own in that group,** made on first need and kept like a member's folder,
-   instead of the first member's. Nothing else of visits changes (owner's decision 4).
-7. **A task shows no line of another conversation:** every read of its input that reaches a model is fenced by the
-   task's conversation.
-8. **Nothing is re-routed** after the fact: a result whose conversation is gone is suppressed, a plan's failure is
-   recorded as today.
-9. **What she reads says where and for whom,** from one versioned table, in three places only: the `delegate` result,
-   the result item of a result turn, the plan block of a plan's firing; the last two are added when the turn is
-   prepared, never into the stored event. Nothing is added to every turn.
-10. **Who steers a task:** the person it is for, where it runs. On the home line the owner's turns and her own steer
-    every task there, as today; a turn carrying someone else's ask there (an agent's misc result, her sister's) steers
-    only its own. A paused task continues on those same words: at home the owner, as today; on an agent line its agent
-    (today it never can).
-11. **The agent line's narrow integration grant** goes with the agent's development tasks there, the same as the
-    development grant, and nowhere else.
-12. **Old records keep their meaning;** nothing rewrites a row (design.md §2.6).
+## Defects found, not in this ADR
 
-## Earlier decisions this changes or keeps
+Found in the survey and the reviews; each with its evidence in design.md §6. None is designed here.
 
-- **Changed by the owner's decision 3:** ADR-050 (her sister's line keeps home rights, the development tools among
-  them), the owner's 2026-10-18 decision (a home group keeps home's development rights for every member), and the
-  owner's 2026-10-12 decision (her plans coming due and her trusted notes at home carry the development grant).
-- **Changed by the rule:** ADR-066 row 1 (a plan begun on an errand fires in the destination) becomes home's; the
-  2026-10-11 rule (a plan carries only the owner's integration grant) is replaced by decision 11.
-- **Kept:** ADR-011 §6.1 and §6.2 (the development tools only with the owner's own delegations and her
-  self-improvement, never anyone else's request); ADR-066 (an errand's task is home's); ADR-017 and ADR-018 (a group's
-  task reports to that group; a note never grants; a result turn inherits from its task); ADR-088 (a turn opened by a
-  note from outside acts with its origin's authority); ADR-075 (the tier belongs to the task and its continuations);
-  ADR-107 (an admission ends as a mark; folders stay); ADR-108 D5 (a program-woken turn shows no speaker).
+1. A visit's task runs in the folder of the route's first member by id (`places.visitor`), that member may steer it,
+   and `OTHERS_TASK` tells her they asked; her visit may steer that member's own tasks; plans made on a visit are
+   listed in that member's turns and changeable by them.
+2. A task paused by a restart on an agent line can never be continued (only the owner in the Web chat may continue a
+   paused task, and `task` finds only the turn's own conversation's tasks).
+3. A plan made on an errand fires in the destination with an intent she wrote while holding home's authority.
+4. A repeating plan whose conversation is gone records a failure at every occurrence.
+5. `TaskService.feedback` fails on a result whose conversation no longer exists (it reads the missing scene's epoch).
+6. A group she has left or that was disbanded has no state (ADR-107 has no rule for it).
 
 ## The review
 
-A fresh reviewer read the first draft (`d7e7decd7126`) against the code and found 14 problems, 2 of them blockers
-(a note written on an errand could carry home's authority back home; tasks with no recorded input crashed the
-hand-back). The lead checked each against the code and fixed it (`affd95133a06`); the reviewer re-checked those fixes
-and found 8 more, all fixed (`877dff90b81a`). The redesign to the owner's rule (`4dca4dff7f1d`) was read by the same
-reviewer: 8 more, no blocker, all fixed (the worst: an errand sent from an outside-note turn would have run in a
-session bound to another conversation, and someone else's result turn at home could have stopped the owner's tasks).
-The full lists, with what was done, are design.md §10.
-
-## Not in this ADR
-
-- A group she has left or that was disbanded has no state (ADR-107 has no rule for it); results said there fail at
-  the adapter and show as failed deliveries.
-- A fair task queue across conversations (ADR-050's deferred item).
-- The owner's view of where a task runs in the Web thread: a new UI field needs his approval; the records and audit
-  carry it.
-- The publication activation turn (`host._complete_activations`) stays a self-development turn at home.
-- A repeating plan that keeps failing to fire records its outcome at every occurrence, as today.
+A fresh reviewer read the first draft against the code (14 findings, 2 blockers), re-checked the fixes (8 more) and
+read a later, wider version (8 more). Everything in those reviews that bears on what stays in this ADR is fixed in
+it; the rest reviewed parts that are no longer here. design.md §10 lists them. The same reviewer read this version;
+its findings are design.md §10.4.

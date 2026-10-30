@@ -2,8 +2,8 @@
 
 Status: **Proposed** 2026-10-30. Designed by the cloud lead (Claude Code, big sis) on branch
 `claude/elegant-goodall-2ip12g`, from `main` at `ac620ad17d40`. Nothing is built. The owner's eight questions (below)
-are open. One fresh reviewer read the first draft (`d7e7decd7126`) against the code; its 14 findings and what was done
-with each are at the end. The character has not read this page and was not contacted while it was written.
+are open. One fresh reviewer read the first draft (`d7e7decd7126`) against the code, then re-checked its fixes
+(`affd95133a06`); its 14 findings, the eight items of its re-check and what was done with each are at the end. The character has not read this page and was not contacted while it was written.
 
 The design to the end: [design.md](design.md) (the survey with its commands, the interfaces, the life cycle of every
 text and stored field, the failure modes, the tests and the landings).
@@ -81,7 +81,8 @@ reach home's grants (design.md §2.4).
    its own conversation and requester fields are the rest (design.md §2.1).
 2. **Inherited along the chain, never across a less trusted step.** A result turn has its task's `whose`, a plan's
    firing the plan's (honored only where the plan lives), an errand turn home's (ADR-066). A turn opened by a note from
-   outside takes the writing turn's own place and never what that turn carried from elsewhere (ADR-088). A turn she
+   outside takes the writing turn's own place, never what that turn carried from elsewhere and never a home
+   conversation; when that leaves nothing, the turn acts for no one and hands over and plans nothing (ADR-088). A turn she
    opened herself (a heartbeat, a visit, the nightly settlement, her own trusted note) is `own`.
 3. **A task's own fields are its `whose`.** `scene_id`, `scope_key`, `policy_epoch` and `requester_id` are those of
    `whose`, so every reader that already treats them as "whose" stays as it is. Only the readers that meant "the turn
@@ -196,6 +197,20 @@ the task's grants", since a continuation no longer takes the turn's; "her own wo
 of the conversation `whose` names, not the turn's (an errand runs in a group's session with home's `whose`); a paused
 task is continued by its own person, which for her own home tasks is the owner, as today; and every task written
 before L2 (L1's included) reads a missing `develop` as its stored development grant.
+
+**The re-check of `affd95133a06`.** Findings 2, 3, 6 and 9 were fixed as written. Its remaining items, each checked
+against the code and fixed in design.md:
+
+| | Item | Done |
+|---|---|---|
+| A | An outside note sent on into a home group (home groups are not among the conversations an onward note is kept from, `visibility.owner_private_scenes`) fell back to `own` at home | The outside row never names a home conversation; with nothing left, the turn has no `whose` and hands over and plans nothing (§2.2) |
+| B | An errand turn could not change the home plan it made (`Schedule.update` fences the turn's scene); her own group plans (person none) could not be found by the fences | `there` comes from the plan whenever the plan's scene is not the turn's; a none person is matched with `IsNull` (§3.6) |
+| C | `own` on a line still had the line's speaker as its person, so her note's turn could steer the speaker's tasks and the speaker could change her line plans | `own` has a person only in the local chat (§2.1, §3.7) |
+| D | A task L1 recorded for a visit or a line kept the placeholder in its result turn | The result row gives no person to `own` outside the local chat (§2.2) |
+| E | An old row whose turn was erased has none of the inputs `of_turn` needs | A missing or erased turn answers `own` there, earning nothing (§2.2) |
+| F | `IsNull` matches only a stored null; rhythm plans have no `whose` | `whose.person_id` always written; `whose` declared nullable (§3.6) |
+| G | A task she names for B kept A's line as its input | Its input is B's newest line in the turn (§3.3) |
+| H | "Recomputed at each preparation" was wrong: a turn is prepared once and a resumed turn reuses its stored context | Said as computed once, kept in the episode's context (§3.5, §4.1) |
 
 ## Not in this ADR
 

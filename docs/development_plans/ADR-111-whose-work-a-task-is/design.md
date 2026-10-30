@@ -169,9 +169,8 @@ state only; every task and plan the turn makes copies it, and everything about t
 whose = {
   'by':        'words' | 'standing' | 'own',
   'scene_id':  the conversation it belongs to,
-  'person_id': words: the person whose words asked; standing: the owner; own: the conversation's own person
-               where it is a direct one (the owner in the local chat, a line's or a DM's route person), none in a
-               group,
+  'person_id': words: the person whose words asked; standing: the owner; own: the owner in the local chat, none
+               anywhere else (no one there asked: not a line's speaker, not a group's visitor),
   'chosen':    True only when she picked it (delegate's `for`, plan's `line`),
   'version':   WHOSE_VERSION,
 }
@@ -181,7 +180,8 @@ Where it is stored:
 
 - **episodes** keep the whole record (`ep.whose`), written in the episode's first save;
 - **plans** keep the whole record (`plan.whose`), from L3: a plan's own `person_id` stays the person its firing is
-  authorized as (the visitor for her own plan in a group, whose `whose.person_id` is none);
+  authorized as (for her own plan outside the local chat, whose `whose.person_id` is none: the line's speaker or
+  the group's visitor);
 - **tasks** keep only `whose_by` and, when she gave it, `develop`. A task's `scene_id`, `scope_key`, `policy_epoch` and
   `requester_id` are its `whose`'s, so a second copy would be two values for one fact. `chosen` goes to the audit.
 
@@ -203,16 +203,19 @@ only after `prepare`).
 |---|---|
 | on an errand (`errands.carried(event)`) | the home turn's `whose`, when it belongs to that home conversation; otherwise `own` there (a home turn acting for a note from outside could send the errand only on the owner's own line, ADR-066; it still carries the outside step, so it earns nothing) |
 | `external` (a person's line) | `words`: the person whose line opened the turn, in this conversation |
-| `task_feedback`, `consult` | the task's: `{by: task.whose_by, scene_id: task.scene_id, person_id: task.requester_id}` |
+| `task_feedback`, `consult` | the task's: `{by: task.whose_by, scene_id: task.scene_id, person_id: task.requester_id}`, the person none when `whose_by` is `own` outside the local chat (a task L1 recorded for a visit or a line) |
 | `scheduled` | the plan's `whose`, when it names the conversation the plan lives in; otherwise `own` there |
-| `note` or `visit` opened by a note from outside, in an owner-private conversation (`notes.outside_class`) | the writing turn's own place: its `whose` computed **without** the errand row, when that belongs to the note's `from_scene`; otherwise `own` in `from_scene`. A note that is gone: `own` here, and ADR-088's refusals (`OUTSIDE_NEEDS_HOME`, `OUTSIDE_GONE`) keep the turn from handing over or planning |
+| `note` or `visit` opened by a note from outside, in an owner-private conversation (`notes.outside_class`) | the writing turn's `whose`, computed **without** the errand row (a note written on an errand acts as that conversation, not as home); an onward note's writer is itself such a turn and gives its own. Never one that names an owner-private conversation, and never for a note that is gone: then **none**, and the turn acts for no one |
 | `note` (trusted), `visit` (her own, or opened by a note of hers), `presence`, `settlement` | `own`, in this conversation |
 | `self_development` | `standing`, in the local chat |
 | any kind added later | `own`, in this conversation (no grant until a decision gives one) |
 
 Inheritance never crosses a less trusted step: an outside note stops it (its turn takes the writer's own place, never
-what the writer carried), and an errand carries home only what lives at home. A walk through stored rows (an old row,
-§2.5) stops after eight steps and answers `own` there.
+what the writer carried, and never a home conversation), and an errand carries home only what lives at home. A turn
+with no `whose` (none) hands nothing over and plans nothing; its tools for that are not usable, without a guard of its
+own. A walk through stored rows (an old row, §2.5) stops after eight steps, and a turn it needs that is missing or
+erased (an erasure keeps none of a turn's inputs, `records/view.py` `REDACTION_KEEPS`), answers `own` there, earning
+nothing.
 
 ### 2.3 Grants: `grants.for_whose(store, whose, develop)`
 
@@ -337,7 +340,9 @@ development, integration, names = grants.for_whose(store, whose, develop)
 session = the turn's own when whose is the turn's conversation (home's live one for an errand or a reflection, as
           `_task_session` does today); otherwise the session the resolver gives that conversation's own turn
 raw    = ['in-' + the authority turn] as today (never empty: `host._recover_tasks`, `feedback` and the task list's
-          sort need it); a reader that shows it to a model reads it within the task's conversation (§3.4)
+          sort need it); for a person she named in a group, that person's newest line this turn had in view, so the
+          action brain and her result read their words, not the opener's; a reader that shows it to a model reads it
+          within the task's conversation (§3.4)
 task   = {... as today ..., scene_id/scope_key/policy_epoch/requester_id from whose and its scene,
           whose_by, develop (when true), development_grant, integration_profile, allowed_capabilities,
           native_session_id}
@@ -378,7 +383,8 @@ The spec (`role_tools.TOOLS['delegate']`): the description gains `结果回到�
 
 - The whose words are not put into the stored event: `feedback` rebuilds the event on every attempt and `ingress.py`
   refuses a stored input whose text differs, so a word that changes (a departure, the install itself) would fail every
-  full hand-back. `ContextBuilder.prepare` adds them, each time the turn is prepared, to what she reads: the result
+  full hand-back. `ContextBuilder.prepare` adds them, when the turn is prepared (once per episode; a resumed turn reuses its stored
+  context), to what she reads: the result
   item of a `task_feedback` turn (and of the short hand-back) gains `for`: `TASK[by]`, `HANDED` when the task was
   handed over in another conversation, `STANDING[...]` when the person can no longer be reached. The stored event,
   its text and its `integration_profile` stay byte for byte as today.
@@ -396,17 +402,21 @@ The spec (`role_tools.TOOLS['delegate']`): the description gains `结果回到�
 
 ### 3.6 Plans (L3)
 
-- **The catalog** declares `whose` (an object) and `whose.person_id` (nullable text) for `plans`, since only declared
-  fields may be named in a condition (`store/catalog.py`).
+- **The catalog** declares `whose` (a nullable object: rhythm plans have none) and `whose.person_id` (nullable text)
+  for `plans`, since only declared fields may be named in a condition (`store/catalog.py`). `whose.person_id` is always
+  written, as null when there is none, because `IsNull` matches only a stored null, not a missing field
+  (`integration/store_contract.py` W17, W18).
 - `Schedule.create`: the target is the turn's `whose` conversation (an errand turn's is home's; an outside-note turn's
-  is the writing turn's own place, which is what `RoleTools._as_place` gives today); `line` makes it
-  `{by: own, scene_id: the line, person_id: the line's person, chosen: True}`. The row carries `whose`; its own
-  `person_id` is `whose.person_id`, or, when that is none (her own plan in a group), the person the conversation's turns
+  is the writing turn's own place, which is what `RoleTools._as_place` gives today; a turn with none plans nothing);
+  `line` makes it `{by: own, scene_id: the line, person_id: none, chosen: True}`. The row carries `whose`; its own
+  `person_id` is `whose.person_id`, or, when that is none (her own plan anywhere but the local chat), the person the conversation's turns
   are authorized as. It no longer writes `integration_profile`. `RoleTools.tool_plan` stops computing `where` for
   outside notes; on an errand its result says `PLAN_HOME`.
-- `Schedule.update` and `cancel` fence by the plan's `whose.person_id` against the turn's (an old plan: its
-  `person_id`, as today). `tool_plan`'s `there` is taken from the plan whenever the plan's `whose` is not the turn's, and
-  a plan made again after it fired (`PLAN_MOVED_FIRED`) carries the old plan's `whose`.
+- `Schedule.update` and `cancel` fence by the plan's `whose.person_id` against the turn's, a none matched with
+  `IsNull` (an old plan: its `person_id`, as today). `tool_plan`'s `there` (the scene, person and epoch the fences use)
+  is taken from the plan whenever the plan's scene is not the turn's: an errand turn changing the home plan it just
+  made, an outside-note turn changing the plan it made in the origin. A plan made again after it fired
+  (`PLAN_MOVED_FIRED`) carries the old plan's `whose`.
 - `Schedule._deliver_locked` is unchanged; the scheduled turn's `whose` is the plan's (§2.2), and `prepare` adds `for`:
   `PLAN[by]` and `STANDING[...]` to the plan block it already builds for a `scheduled` turn. A firing that fails is
   recorded on the plan as today and is never moved to another conversation.
@@ -414,15 +424,17 @@ The spec (`role_tools.TOOLS['delegate']`): the description gains `结果回到�
   `whose.person_id`: `Or(And(Exists(whose), whose.person_id = P), And(Not(Exists(whose)), person_id = the episode's
   person))`, with `P` none matched as `IsNull` (`records/view.py`'s None rule would otherwise find nothing for a fence
   given None). At home every record's person is the owner, so the list is what it is today; on a line the line's
-  speaker and the owner joining it each see their own, as today; in a group a member's turns list that member's plans
-  and her own turns list hers. The contract already covers nested `Exists` and `IsNull` (`integration/store_contract.py`);
+  speaker and the owner joining it each see their own, as today, and her own plans there (made with `line`, or in her
+  note's turn) are listed in her own turns there; in a group a member's turns list that member's plans and her own
+  turns list hers. The contract already covers nested `Exists` and `IsNull` (`integration/store_contract.py`);
   the view gets its unit test.
 
 ### 3.7 Steering: the same fence, with the person the work is for
 
 `_own_task` keeps its fence (same conversation, same person, same epoch) and compares the task's `requester_id` with
 the turn's `whose.person_id` instead of the episode's `person_id`; `task` `stop` passes the same person to
-`TaskService.cancel`. At home, on a line and in a person's own turns these are the same person. On a visit today the
+`TaskService.cancel`. At home and in a person's own turns these are the same person. Her own turn on a line (her note's) now
+steers only her own work there, not the line speaker's tasks. On a visit today the
 fence's person is the route's first member, so her visit may steer and stop that member's tasks; with `whose` it is no
 one, so every task there answers `OTHERS_TASK`, naming the member who really asked.
 
@@ -440,8 +452,8 @@ Brains: CB the character brain, AB the action brain, RG the relevance gate (whic
 | `task` description | unchanged | | | | |
 | `delegate` result `for` (about 15–30 characters, with the label) and `BRIEF_ONLY` (23, only when the input is elsewhere) | `RoleTools.tool_delegate`, from the stored task | CB, the turn that delegated | never | when the session's history is compacted (the summary keeps what she kept) | restart: the tool call's recorded result is replayed, not recomputed; redelivery: the same task id gives the same words; a retired one-shot session: the result turn says whose it is again |
 | `task_state_from_program` | unchanged: no field added; it lists the conversation's own tasks, which are now `whose`'s | CB, every turn with tasks | | | |
-| the result item's `for` in a result turn (10–30 characters) | `ContextBuilder.prepare`, each time the `task_feedback` turn is prepared, from the task's `whose_by`, its requester's label and `standing` then; never stored | CB, that turn (one per result; the short one too) | recomputed at each preparation (a resumed turn reads the person's standing as it is then) | with the turn's history at compaction | restart: recomputed; redelivery: the stored event is unchanged, so the identity check passes; compaction: kept in the summary as she kept it |
-| a plan block's `for` in a plan's firing (10–25 characters) | `ContextBuilder.prepare`, in the plan block it builds for a `scheduled` turn, from the plan's `whose` and `standing` | CB, the `scheduled` turn | recomputed at each preparation | as above | as above; a plan made before L3 reads §2.5's answer |
+| the result item's `for` in a result turn (10–30 characters) | `ContextBuilder.prepare`, when the `task_feedback` turn is prepared, from the task's `whose_by`, its requester's label and `standing` then; kept in the episode's stored context, never in the event | CB, that turn (one per result; the short one too) | never: a resumed turn reuses its stored context | with the turn's history at compaction | restart: the stored context is reused; redelivery: the stored event is unchanged, so the identity check passes; compaction: kept in the summary as she kept it |
+| a plan block's `for` in a plan's firing (10–25 characters) | `ContextBuilder.prepare`, in the plan block it builds for a `scheduled` turn, from the plan's `whose` and `standing` | CB, the `scheduled` turn | never, as above | as above | as above; a plan made before L3 reads §2.5's answer |
 | the stored result text, the stored plan text, the visit's text | unchanged byte for byte | | | | |
 | `OWN_PUBLIC` (62) | the refusal when she calls `delegate` in her own turn in a public conversation | CB, visits and her own plans' turns in public conversations, only when she tries | by a release | with the tool result | as any tool result |
 | `DEVELOP_NOT_HERE` (61), `FOR_UNKNOWN` (64 + the label) | the refusals of `develop` where it is not earned, and of a label not in the turn | CB, only when she tries | by a release | as above | as above |
@@ -474,12 +486,13 @@ Brains: CB the character brain, AB the action brain, RG the relevance gate (whic
 | She names the wrong owner (`你自己的` when an agent asked) | `结果回家里…` in the `delegate` result; at home `是你在…交出去的` | the agent sees nothing on its line until she says something there | `chosen` in the audit row |
 | She names no owner when the work was hers, or the opener when another person asked | the `delegate` result says whose it went to (`这件是A托你的`) | the asker gets her words if she speaks | the asker's `whose`; its grants are the asker's, never more |
 | A crash between the task's write and the episode's update | on resume the task is listed as already handed over (`_run_turn` merges `of_episode`, as today) | — | the task row |
-| The same event delivered twice | one turn: the episode id comes from the event id; `whose` is recomputed identically from stored rows; a rebuilt result or plan event is byte for byte the stored one | — | `ingress.deduped` |
+| The same event delivered twice | one turn: the episode id comes from the event id, and the existing episode returns with the `whose` it stored; a rebuilt result or plan event is byte for byte the stored one | — | `ingress.deduped` |
 | A restart while a task runs, or while its result waits | running: paused, then continued on its person's words (question 6); waiting: the watchdog hands it to the task's conversation | — | the pause; the hand-back |
 | Compaction of the session that held the hand-over | the result turn carries the title, the brief, her thought then, whose it is and the report; nothing depends on the compacted `delegate` result | — | — |
 | An agent line she closed while its work is in flight | its result turns and plans still run there (a closed line passes over the agent's messages, not her own work), saying `（这条线你关着）`; her words go out if she speaks | her words, if any | unchanged |
 | An errand from home | the task is home's, its result at home (ADR-066); a plan made there is home's, `PLAN_HOME` | the destination sees what she said on the errand | `whose` = the home turn's |
 | A note written on an errand, read at home | its turn acts as the errand's conversation (`own` there), never as home's: its plans live there and earn nothing | — | `whose` own in that conversation |
+| A note from outside sent on into a home group, or one that is gone | its turn acts for no one: it hands nothing over and plans nothing (its `whose` would otherwise name a home conversation) | — | `whose` none |
 | A visit | `delegate` is not usable; `OWN_PUBLIC` if she tries; a plan made there is hers there, listed and changed only in her own turns there | what she says on the visit | `whose` own |
 | A result that mentions another conversation's content | a task reads only its own conversation (history, digest, pictures and files are fenced by its fields; its input is read within it); her brief is her own words, like a note; a development task reads the whole database, and `whose` gives that grant only to the owner's, an agent's on its own line or her self-development work, so those reports are read only on home lines; outside home the report is cleaned (ADR-050) | — | — |
 | A task that would serve a less trusted person than the turn that started it | in a group she can name only a person whose line is in the turn (same conversation, same class); at home only home; inheritance keeps the same `whose` or stops at an outside note; a task's grants are its `whose`'s, never the turn's | — | — |
@@ -512,13 +525,13 @@ Only those that guard a fence or a failure that would be silent and costly. All 
 
 | Test (new module `tests/test_whose.py` unless named) | Guards |
 |---|---|
-| `test_whose_by_turn_kind`: every row of §2.2, including an errand, an outside note, an outside note written on an errand, an errand sent from an outside-note turn, a gone note, a trusted note, a visit, a plan and a task made before the install | the invariant itself: a wrong row is a wrong grant or a result in the wrong conversation, silently |
+| `test_whose_by_turn_kind`: every row of §2.2, including an errand, an outside note, an outside note written on an errand, an onward outside note into a home group, an errand sent from an outside-note turn, a gone note, an erased turn, a trusted note, a visit, a plan and a task made before the install | the invariant itself: a wrong row is a wrong grant or a result in the wrong conversation, silently |
 | `test_development_only_where_whose_earns_it_and_she_marked_it`: the owner at home, in his DM, on a line he joins; an agent on its line; a peer line's speaker; a home group's other member; a public member; `own`; `standing`; `develop` on and off; an old task's continuation capped at its stored grant | the authorization fence |
 | `test_her_own_work_on_a_line_belongs_home`: `delegate` with `for` from an agent-line turn, and in a trusted note's turn there, gives home's scene, scope, epoch, person and folder and home's session (a stub resolver); its result is queued at home; the executor's, the hand-back's and the consult's reads of its input give nothing of the line | privacy across conversations and the routing |
 | `test_a_result_turn_hands_its_whose_on`: a task's result turn delegates again and the new task has the first one's `whose` and grants | the chain |
 | `test_her_own_turn_in_a_group_hands_nothing_over`: a visit and a turn her visit-made plan opens have no usable `delegate`, `ask` to the action brain is refused, the words are `OWN_PUBLIC`; on a visit `task` `stop` of a member's task answers `OTHERS_TASK` | the placeholder never becomes an asker or a steerer |
-| `test_a_group_task_is_the_person_she_names`: `for` with a label in the turn gives that person's folder and steering; a label not in the turn is refused | the person boundary inside a group |
-| `test_a_plan_lives_where_its_whose_is` (L3): from an errand, at home; from an outside note, at the origin; with `line`, in the line as hers; its firing's turn has the plan's `whose`; a visit's plan is listed and changed only in her own turns there; an old errand plan fires in its destination as her own | follow-up plans, the list, the fences, old plans |
+| `test_a_group_task_is_the_person_she_names`: `for` with a label in the turn gives that person's folder, steering and their own line as the input; a label not in the turn is refused | the person boundary inside a group |
+| `test_a_plan_lives_where_its_whose_is` (L3): from an errand, at home; from an outside note, at the origin; with `line`, in the line as hers; its firing's turn has the plan's `whose`; a visit's plan is listed and changed only in her own turns there; an errand turn changes the home plan it made; an old errand plan fires in its destination as her own | follow-up plans, the list, the fences, old plans |
 | `records.plans` view (L3, `tests/test_store_contract.py` beside the contract cases): the `whose.person_id` view finds new rows by person and by none, and old rows by `person_id`, never an old row through a missing field | the None rule |
 
 Changed: `tests/test_specs_by_place.py` (the two forms of `for` and `develop` by class and kind),

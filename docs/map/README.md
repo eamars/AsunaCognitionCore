@@ -524,6 +524,7 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`probe_plugin_install.mjs`](../../tools/probe_plugin_install.mjs) — Probe of a clean install: the packed tarballs go into a new DSH profile outside this checkout, and every core export and persona package resolves and imports through DSH's public resolver.
 - [`project_map.py`](../../tools/project_map.py) — Write the project map (docs/map): what each module owns and what it offers, from the code's own docstrings.
 - [`publication_scan.py`](../../tools/publication_scan.py) — The checks that guard main, run on a candidate before it is published (`PublicationFloor.publish`, packages/cognition-core/src/floor.js), so a publication is refused where it can still be fixed:
+- [`qq_face_census.py`](../../tools/qq_face_census.py) — ADR-103: what the faces, stickers and face clicks people send her look like in the stored rows, in counts only.
 - [`refusal_probe.py`](../../tools/refusal_probe.py) — Refusal probe (ADR-080): can the model under test do what the character brain needs with the current design, without being refused? PASS or FAIL, for that model on that day.
 - [`release.py`](../../tools/release.py) — Build and check a GitHub Release of the distributable plugins (ADR-010 D10).
 - [`setup_native_profile.py`](../../tools/setup_native_profile.py) — Install the core, one persona package and its channel packages into a local-only native Web profile.

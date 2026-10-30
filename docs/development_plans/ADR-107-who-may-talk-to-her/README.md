@@ -2,8 +2,9 @@
 
 Status: decided 2026-10-27 (decisions 1 to 4); the owner decided two more on 2026-10-29 (5 and 6); the design was
 finished, reviewed against the code and built 2026-10-29 on branch `claude/happy-meitner-vrg19f` by the cloud big sis
-(Claude Code, the lead on this project): [design.md](design.md). Not installed. Xiaoman read the earlier version of this
-page (blob `f5a314f83cca`); this is a later one, and her reading does not cover it.
+(Claude Code, the lead on this project): [design.md](design.md). Installed 2026-10-30 16:02 as `ac620ad17d40`, in one install by the owner's
+decision (the core, the adapters and her gate prompt line). Xiaoman read this page and design.md at `ac620ad1` before
+the install; her words and her confirmation after it are in the index row.
 
 ## The owner's ask (2026-10-27, verbatim)
 

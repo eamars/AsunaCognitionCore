@@ -56,7 +56,7 @@ PROACTIVE_NOTE = ('这是一段没有@你的群讨论。程序按这个场景的
 # ADR-018 §5.7 (owner 2026-10-07): one sentence in public turns. No content from her other conversations.
 # ADR-064 phase 2: where she speaks only through reply.
 REPLY_SENT=('一回合 speak 的 text 加起来平时 %d 行以内，硬线 %d 行：每一行都算，不管分成几条消息；'
-            '空行不算，一个代码块算一行；贴纸、图、戳、点表情不算。')
+            '空行不算，一个代码块算一行；表情包、图、戳、点表情不算。')
 ONE_SELF = '你是一个人，同时在好几个对话里；在这里说的话，就是你说的。'
 # ADR-079 §9.5: the one line of a turn where others spoke after the line that called her.
 AMBIGUOUS = '叫你那条之后有 %d 条新话：%s。要引哪条就在 quote 写它的编号（只写数字），不写就不引用；一句话回好几条就不用引。'

@@ -1,12 +1,12 @@
 # ADR-109: One tool call never stalls the worker
 
-Status: **Proposed** 2026-10-30. Written by the lead (Claude). Direction decided by the owner the same day: a child
+Status: **Built** (proposed 2026-10-30). Written by the lead (Claude). Direction decided by the owner the same day: a child
 process for the pure heavy work (not every tool body), and every tool call timed and recorded when it runs long; a
 wedged character-brain call is recorded and alerted, never released and never restarted automatically (owner, the
 same day). Two cold reviews of earlier drafts (13 findings, then 10) showed that releasing a wedged in-worker call
 adds hang paths of its own and still cannot stop a spinning thread; this version keeps what removes the class and
-drops the rest (§5). Nothing is built. Owner's rule for this ADR: Xiaoman is not told until the root cause is resolved
-(installed and checked); her read of the new wordings (§4) comes after that, not before.
+drops the rest (§5). Installed 2026-10-30 12:07 as `48e20f7144a1` and checked on the live worker the same day; her read of the new
+wordings (§4) is due.
 
 ## 1. What happened
 

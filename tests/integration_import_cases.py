@@ -199,16 +199,17 @@ def t4_target_path_escape_is_denied():
         note = '绝对路径、盘符、.. 与怪字符全部拒绝，工作区外没有多出文件'
         # 符号链接指向外面时也要挡住（Windows 上没权限建符号链接就跳过这一项）。
         try:
-            link = workspace / 'link.txt'
-            outside = Path(tempfile.mkdtemp()) / 'outside.txt'
-            outside.write_bytes(b'outside')
-            link.symlink_to(outside)
-            result = import_artifact({'endpoint': 'napcat', 'artifact_path': '/a',
-                                      'target_relative_path': 'link.txt'},
-                                     endpoints=ENDPOINTS, workspace=workspace,
-                                     fetch=fetch_returning(status=200, body=b'x'))
-            assert result.get('error') == 'TARGET_PATH_OUTSIDE_WORKSPACE', result
-            assert outside.read_bytes() == b'outside', '符号链接被写穿了'
+            with tempfile.TemporaryDirectory() as away:
+                link = workspace / 'link.txt'
+                outside = Path(away) / 'outside.txt'
+                outside.write_bytes(b'outside')
+                link.symlink_to(outside)
+                result = import_artifact({'endpoint': 'napcat', 'artifact_path': '/a',
+                                          'target_relative_path': 'link.txt'},
+                                         endpoints=ENDPOINTS, workspace=workspace,
+                                         fetch=fetch_returning(status=200, body=b'x'))
+                assert result.get('error') == 'TARGET_PATH_OUTSIDE_WORKSPACE', result
+                assert outside.read_bytes() == b'outside', '符号链接被写穿了'
             note += '；符号链接指向外面也挡住'
         except (OSError, NotImplementedError) as exc:
             note += '；符号链接项跳过（%s）' % type(exc).__name__

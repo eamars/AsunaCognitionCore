@@ -98,7 +98,7 @@ def _action(tool, args):
     if tool == 'attach_image':
         return '发了一张图'
     if tool == 'sticker' and op in ('keep', 'drop'):
-        return '把一个表情' + ('收进了架子' if op == 'keep' else '从架子上拿掉了')
+        return '把一个表情包' + ('收进了架子' if op == 'keep' else '从架子上拿掉了')
     return None
 
 

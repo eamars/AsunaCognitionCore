@@ -735,6 +735,8 @@ The kind module tells the core one platform's id formats and adapter conventions
 | `MEDIA_KEYS`, `media_key_name`, `media_key_in`, `sign_media`, `media_refusal` | no | signed media links ([media keys](#post-the-current-media-link-keys)) |
 | `sticker_of(item)`, `sticker_md5(item)` | no | read a stored media item as a sticker, and its file's md5 |
 
+A kind that declares `FACES` and `STICKERS` writes the three things a person can send or click with the forms the guide tells her (`stickers.FACES_NOTE`): a face in an inbound line is `[表情:名字]`, or `[表情]` when nothing names it; a sticker is its own line, `[表情包]` or `[表情包:名字]`; a click on a line is a notice (`raw.asuna_notice`, kind `reaction`, [notices](#post-a-notice-for-her-home)). A kind that writes them otherwise changes that note with it.
+
 The shipped kinds are in `packages/channels/*/python/`.
 
 ## Her tools

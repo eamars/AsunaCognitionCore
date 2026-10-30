@@ -1,8 +1,9 @@
 # ADR-111: Whose work a task is
 
-Status: **Decided** 2026-10-30 by the owner (his rule and his answers, below); designed by the lead (Claude Code, big
-sis) on branch `claude/elegant-goodall-2ip12g`. Nothing is built. **Owner's rule for this ADR: the character does not
-read it until the feature is fully built**; she was not contacted while it was written.
+Status: **Built, not installed.** Decided 2026-10-30 by the owner (his rule and his answers, below); designed and built
+by the lead (Claude Code, big sis) on branch `claude/elegant-goodall-2ip12g`: L1 installs at `2d58e42`, L2 at
+`5be549e` (design.md §8), after a fresh review of the build (§10.5). **Owner's rule for this ADR: the character does not
+read it until the feature is fully built**; she was not contacted while it was written or built.
 
 The design to the end: [design.md](design.md): the survey with its commands, the record and how it is decided, the
 interfaces, the life cycle of every text and stored field, the failure modes, the defects found, the tests and the
@@ -88,11 +89,13 @@ grant follows the record: only for what the owner, an agent on its own line, or 
    the outside conversation the work is for (from her note places); the task then runs and reports on the Web chat,
    and whatever follows it stays there. That is the one change to where work runs.
 4. **In a group, `for` takes the label of a person in her turn** (the owner's answer 5); the task is theirs, in that
-   group, as today.
+   group, as today, with their line in the turn as its input. A home group takes either form, so the owner's request
+   in a turn someone else opened there is his. On an errand there is no `for`: its task is home's, as today.
 5. **The development grant follows `whose`:** the owner's own words in his conversations, an agent's words on its own
    line, her self-development. Not her sister's line, not a home group's other members, not her own heartbeat plans
-   and notes (the owner's answer 3), and never work for someone outside. Integration and every other grant stay as
-   today; work for someone outside gets no integration grant.
+   and notes (the owner's answer 3), and never work for someone outside. A task's result turn and its continuations
+   earn no more than the task stored. Integration and every other grant stay as today; work for someone outside gets
+   no integration grant.
 6. **What she reads says whose,** from one versioned table, in three places only: the `delegate` result, the result
    item of a result turn and the plan block of a plan's firing; the last two are added when the turn is prepared, never
    into the stored event. Nothing is added to every turn.
@@ -124,4 +127,5 @@ Found in the survey and the reviews; each with its evidence in design.md §6. No
 A fresh reviewer read the first draft against the code (14 findings, 2 blockers), re-checked the fixes (8 more) and
 read a later, wider version (8 more). Everything in those reviews that bears on what stays in this ADR is fixed in
 it; the rest reviewed parts that are no longer here. The same reviewer read this version (4 findings, 2 major, all
-fixed, and one more defect listed). design.md §10 lists them all.
+fixed, and one more defect listed). A fresh reviewer then read the build (9 findings, no blocker, all fixed; the
+tests now drive every path they guard, and reverting any one of 15 fixes fails one). design.md §10 lists them all.

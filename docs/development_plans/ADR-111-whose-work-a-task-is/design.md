@@ -13,7 +13,8 @@ Placeholders follow the test fixtures (`tests/fixtures/world.json`): people `A`,
 ### 1.1 Commands
 
 All run on `ac620ad17d40` (2026-10-30, from the checkout root). Counts are from their output; the reviewer re-ran them
-and got the same.
+and got the same. `main` moved on to `99a69f3` the same day; `git diff --stat ac620ad 99a69f3 -- src packages` touches
+sticker and face wording only, none of the paths below.
 
 ```bash
 grep -rn "task_records.save(self.store, {'_id'" src/asuna --include=*.py          # where a new task is written: 2

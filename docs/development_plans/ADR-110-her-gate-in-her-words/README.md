@@ -2,9 +2,9 @@
 
 Status: **Proposed** 2026-10-30. Written by the lead (Claude). Direction: the owner, the same day (§1). A cold review of
 the first draft against the code (11 findings, all taken) is in this version. Built 2026-10-30 on the owner's word
-("start building the plan") on branch `claude/adr110-build`, before her reading: on an integration day there is no
-contact with her, so she reads the finished build once before it lands (§9.5). Not installed; it lands after ADR-107
-and ADR-109 are installed and checked (§9.1).
+("start building the plan") on branch `claude/adr110-build` from the latest main (`d68913bc`), before her reading: on
+an integration day there is no contact with her, so she reads the finished build once before it lands (§9.5). Not on
+main, not installed.
 
 ## 1. The ask
 
@@ -293,10 +293,10 @@ subject).
 
 ## 9. Build
 
-### 9.1 Order
+### 9.1 Branch
 
-After ADR-107 (on main, not installed: the running instruction is 445 characters, main's 485) and ADR-109 are
-installed and checked. One branch from main at that time, one landing, one restart.
+Its own branch from the latest main, waiting on nothing else; one landing, one restart. Which other ADRs are
+installed when it lands does not gate it (owner, 2026-10-30).
 
 ### 9.2 Changes
 

@@ -2,8 +2,8 @@
 
 Status: requirements recorded 2026-10-27; designed to final 2026-10-29 with the owner's three decisions below (the
 question tool, his recommended options each time) and one fresh review whose findings are fixed in this page. Built
-2026-10-29 on `claude/eloquent-shannon-fcxodi` (`Built`, below); not landed, not yet read by Xiaoman. The local Claude
-Code takes the readings, brings it to her and lands it.
+2026-10-29 on `claude/eloquent-shannon-fcxodi` (`Built`, below); installed 2026-10-30 13:24 as `22ddafd6bcde`. Xiaoman
+read the page before the landing; her three follow-ups are in the index row, in her words.
 
 The ask, in one line: **she lives on one clock in every conversation, and no zone is hard-coded per group**. Anything
 wider is not in this ADR (`Not in this ADR` lists what was found and left out).

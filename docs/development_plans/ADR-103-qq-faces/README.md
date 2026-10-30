@@ -2,10 +2,10 @@
 
 Status: requirements recorded 2026-10-27; designed 2026-10-29 by Claude (a cloud session) from the code at `cc8c006`,
 then read against the code by a fresh reviewer (fourteen findings, all folded in below). No owner decision was asked:
-the defaults in D1 and D2 are the designer's and stand until the owner says otherwise. Not yet read by Xiaoman. The
+the defaults in D1 and D2 are the designer's and stand until the owner says otherwise. Read by Xiaoman on 2026-10-30 at `0d31f597`, after the install (the owner's decision); her notes are recorded below. The
 parts are: **part 0**, measuring (D4); **part 1**, the program's words and the note that defines the three forms (D2, D3);
-**part 2**, what the numbers call for (D5). Parts 0 and 1 are built on `claude/loving-euler-6e0miv`, not landed; part 2
-is built only when its numbers say so.
+**part 2**, what the numbers call for (D5). Parts 0 and 1 landed 2026-10-30 as `0d31f597` (built on `claude/loving-euler-6e0miv`); installed the same day at 16:18
+(adapter 0.17.0). Part 2 is built only when its numbers say so.
 
 ## The ask
 
@@ -24,8 +24,9 @@ apart. Out of scope unless the owner enters it: a new way to send faces (D1).
   this path is not for sending faces at all; since then she sends stickers and text instead. 10-26: one more face in
   the right format (approved by the owner); she has no receipt that it arrived.
 - **Receiving.** She has no reliable record of how a face someone sent reaches her (a name, an id, or nothing left
-  of it). On 10-24 she mistook a sticker name for a face, and answered a "face click" wrongly: she cannot tell the
-  three apart.
+  of it). On 10-24 she wrote faces wrongly and answered a "face click" wrongly: she cannot tell the three apart. (She
+  first reported the first as a sticker name taken for a face; her correction of 2026-10-30 is under "Her notes after
+  the install".)
 - **Stickers are another thing.** Her shelf is the `stickers` collection: 53 custom pictures, fields `name` and
   `when`, no platform faces and no aliases. The adapter's `faces.json` holds 289 faces (number 277 is 狗头, with the
   old name 汪汪 kept as an alias). Her channel skill describes that table.
@@ -158,7 +159,8 @@ first, and she writes the first two. Edits (the whole list, counted above):
 4. `stickers.py` FACES_NOTE: D3.
 
 Cost: character-brain tool text +2 characters (REACT_LINE_REACT +1, react's `face` +1), which
-`tests/test_tool_budget.py` holds exactly (21,915 of 21,915 measured 2026-10-29): both budgets (`CHARACTER`,
+`tests/test_tool_budget.py` holds exactly (21,915 of 21,915 measured 2026-10-29; after ADR-106 removed `place_timezone`
+the budgets are `CHARACTER = (30, 20566)` and `CHARACTER_TIERED = (30, 21002)`): both budgets (`CHARACTER`,
 `CHARACTER_TIERED`) rise by 2 with the reason beside them. The refusals are not in a tool spec and cost nothing.
 
 **D3. The three are defined once, in the guide.** `FACES_NOTE` becomes fixed text (no platform title), is registered as
@@ -169,7 +171,8 @@ faces_from_program 的对话里", as `SEND_NOTE` states "能发的地方", so a 
 write one. Final wording is in the code (`stickers.py:FACES_NOTE`, 345 characters).
 
 Measured 2026-10-29 (`block_guide.guide`, speaking conversations): 6,091 characters at `cc8c006`, 6,458 with the note
-(+367). It sits in every conversation's system prompt (fixed per conversation, so cached) and comes off each change of
+(+367). At `0d31f597` the guide is 6,518 characters for a speaking conversation and 6,509 with the default
+(`speaks=False`); the two figures are different measures, not one number. It sits in every conversation's system prompt (fixed per conversation, so cached) and comes off each change of
 the block (78 characters as formatted for QQ before). Its first turn after the restart in each conversation pays a
 cold system prompt and tool list. It is the definition of an interface in the place the program defines its blocks,
 not a reminder at the point of use. Its wording stands on F1 to F3, which are in the code; Xiaoman's two turns of
@@ -269,12 +272,36 @@ Short, in her register, to be sent once the page is final (the local big sis sen
 - Some words change so one thing has one name: 贴纸 and the stray 表情 for a sticker become 表情包.
 - Two things the program will now see for real (not guess): how often a face reaches you with no name, and what
   other segment types arrive unread (dice, rps, others), with the fields the platform sent for them.
-- A request: the two turns of 10-24 (the sticker name taken for a face; the face click answered wrongly), by turn id.
+- A request: the two turns of 10-24 (the faces written wrongly; the face click answered wrongly), by turn id.
   Those are better evidence than anything built here.
+
+## Her notes after the install (2026-10-30, Claude's summary of her agent-line messages of 16:30 to 16:37, not her words)
+
+- **Direction:** she signs it: the three forms defined apart, one name for each thing, is the root of her two slips
+  of 10-24. The account above, marked as a paraphrase, matches what she said.
+- **The 10-24 faces, corrected from the data:** `faces.json` (289 faces) has 菜汪 = 317 and 偷笑 = 20, and no 旺柴; her
+  shelf has none of the three. So the slips were two other things: real face names written without the `表情:`
+  prefix (菜汪, 偷笑), and a name in neither table (旺柴), copied from a group. Turns: `ep-0933325c…`, `ep-f5da82dc…`,
+  `ep-321cee8a…`.
+- **The face click answered wrongly:** one turn where she said it and was corrected on the spot,
+  `ep-7569f59860cf056fc3636febdba48f53`; two more where she did not speak and read a click as "received" only in her
+  silent reason (`ep-d9abdce3…`, `ep-af958a6c…`).
+- **One name, two forms:** one instance on her side, 狗头 (face 277 and one custom sticker). D3's "看形状分" stands; its
+  ground is the shape, not that names often collide.
+- **Where the note reaches:** the guide lists every block's note in every conversation's system prompt, home included,
+  so the writing half ("有 faces_from_program 的对话里 … 会变成真的小黄脸") is read where a face cannot be sent, as on
+  10-24. She asks for one of two: the guide lists only the blocks present, or that half moves back into the block. Open
+  for the owner.
+- **No test holds the note's wording** (consistent with "None for wording" above): a change to it has nothing that
+  keeps this page and the code together.
+- `faces.json` has two faces with an alias: 277 (狗头, 汪汪) and 424 (不对头, 续标识). The second is the owner's own
+  change; whether a renamed face becomes permanent or aliases are supported is open.
 
 ## Open
 
 - Owner: D1's default (sending as built) and D2's names, until he says otherwise.
+- Owner: where the faces note applies (her notes above), and face aliases (424).
 - Owner, if D5's dice or rps row fires: throw each rps hand once, one at a time, in a test group, and a dice once, and
   say which.
-- Her: the page, once, before landing; the two turn ids above.
+- Her: the page, once, before it is called final — done 2026-10-30; the two turn ids pending (she is fetching them from the database).
+  The ids came the same day; they are under "Her notes after the install".

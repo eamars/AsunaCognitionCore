@@ -1,9 +1,9 @@
 # ADR-108: Her tool interface, and what enters her turn
 
-Status: **Proposed** 2026-10-29. Written by the design agent (Claude) from the lead's brief, after two surveys of
+Status: **Built** (proposed 2026-10-29). Written by the design agent (Claude) from the lead's brief, after two surveys of
 the same day (structural and system, section 7). Built in one pass on the branch `claude/keen-turing-nylmyr`
-(section 9); not landed. Next: the lead integrates it, Xiaoman reads section 8 and the finished words once, one
-landing. The detail each decision needs to be built is in [design.md](design.md).
+(section 9); installed 2026-10-30 12:59 as `1850b590582d` by the owner's decision, before Xiaoman's reading of
+Revision 2 was complete. What she read, and her four follow-ups, are in the index row in her words. The detail each decision needs to be built is in [design.md](design.md).
 
 Decision D4a reverses an owner decision of 2026-10-22 (ADR-054, "What she reads names only the ask") and D4c one of
 her asks (ADR-054, the offered cut showing what it leaves out). The owner said yes to D4a on 2026-10-29; Xiaoman said

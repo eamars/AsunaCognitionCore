@@ -1,11 +1,11 @@
 # ADR-111: Whose work a task is
 
 Status: **Proposed** 2026-10-30. Designed by the cloud lead (Claude Code, big sis) on branch
-`claude/elegant-goodall-2ip12g`, from `main` at `ac620ad17d40`. Nothing is built. The owner's questions (below) are
-open. One fresh reviewer read the design against the code; the findings and what was done with each are at the end.
-The character has not read this page and was not contacted while it was written.
+`claude/elegant-goodall-2ip12g`, from `main` at `ac620ad17d40`. Nothing is built. The owner's eight questions (below)
+are open. One fresh reviewer read the first draft (`d7e7decd7126`) against the code; its 14 findings and what was done
+with each are at the end. The character has not read this page and was not contacted while it was written.
 
-The design to the end: [design.md](design.md) (the survey with its commands, the interfaces, the lifecycle of every
+The design to the end: [design.md](design.md) (the survey with its commands, the interfaces, the life cycle of every
 text and stored field, the failure modes, the tests and the landings).
 
 ## The ask (the lead's brief, 2026-10-30, verbatim in its essentials)
@@ -35,8 +35,9 @@ turn happens, who may steer it, what she reads). Anything wider is said as wider
 ## What exists (counted on `ac620ad17d40`; commands and the full census in design.md §1)
 
 - **Two code paths write a new task**, both in `coordinator.py`: `delegate` (its callers: the `delegate` tool and
-  `ask` to the action brain) and `message_action` (a finished task continued). Each copies `scene_id`, `scope_key`,
-  `requester_id` and `policy_epoch` from the turn that called it (from home's turn on an errand, ADR-066).
+  `ask` to the action brain), which copies `scene_id`, `scope_key`, `requester_id` and `policy_epoch` from the turn
+  that called it (from home's turn on an errand, ADR-066), and `message_action` (a finished task continued), which
+  copies them from the turn.
 - **The grants come from the turn's kind and scene,** not from who asked: `grants.development_granted` gives the
   development grant to every `external`, `scheduled` and `self_development` turn in an owner-private conversation, to a
   trusted note's turn, and to a result turn whose task had it. On an agent line that is every turn. A task begun in a
@@ -45,8 +46,11 @@ turn happens, who may steer it, what she reads). Anything wider is said as wider
   by id (`places.visitor`); a note enters as the route's person; a heartbeat and a self-development turn as the owner.
   A task begun there records that person as the one who asked: it runs in their folder, they may steer it, and the
   refusal for another member's task tells her that person asked for it (`OTHERS_TASK`). Nobody did. The other way
-  round, her visit may steer and stop that member's own tasks. The plans list of a group turn is filtered by the
-  turn's person, so plans made on a visit appear in that member's turns, and theirs on her visits.
+  round, her visit may steer and stop that member's own tasks. The plans list and the plan update and cancel fences
+  go by the turn's person, so plans made on a visit appear in that member's turns and are theirs to change, and theirs
+  on her visits.
+- **The person on a group turn is the one who opened it.** A request from B that she answers in a turn A's line
+  opened becomes A's task.
 - **Every follow-up stays where the first turn was.** A result turn runs in the task's conversation, a plan fires in
   the conversation it was made in, and anything begun in either stays there. A plan made on an errand fires in the
   destination group with the intent she wrote while holding home's authority.
@@ -58,9 +62,9 @@ turn happens, who may steer it, what she reads). Anything wider is said as wider
 ## The invariant (proposed)
 
 **A task is for the one whose authority its turn acts with: a person whose words asked, in the conversation they asked
-in, or herself. The program records that answer once, when the turn is opened, from stored state only; every task and
-plan the turn makes copies it, and everything about them is read from it. Her choice is needed only to say that work is
-her own and belongs at home.**
+in, or herself; her own work is home's. The program records that answer once, when the turn is opened, from stored
+state only; every task and plan the turn makes copies it, and everything about them is read from it. Inheritance never
+crosses a less trusted step.**
 
 This is smaller than "the conversation and the person it serves" as a free choice. The code already computes the
 authority of a turn in four places (the speaker, `errands.home_turn`, ADR-088's `_as_place`, the session class); it
@@ -73,36 +77,40 @@ reach home's grants (design.md §2.4).
 
 1. **One record, `whose`,** decided by one function, `whose.of_turn`, from stored state: `{by, scene_id, person_id}`
    with `by` one of `words` (a person's words asked), `standing` (a self-development turn: the owner's standing ask)
-   and `own` (her own). It is stored on the episode when the turn is opened and copied, in the same write, into every
-   task and plan the turn makes (design.md §2).
+   and `own` (her own). Episodes and plans keep the whole record; a task keeps only `whose_by` (and `develop`), because
+   its own conversation and requester fields are the rest (design.md §2.1).
 2. **Inherited along the chain, never across a less trusted step.** A result turn has its task's `whose`, a plan's
-   firing the plan's, an errand turn home's (ADR-066). A turn opened by a note from outside has its origin's (ADR-088). A
-   turn she opened herself (a heartbeat, a visit, the nightly settlement, her own trusted note) is `own` where it runs.
+   firing the plan's (honored only where the plan lives), an errand turn home's (ADR-066). A turn opened by a note from
+   outside takes the writing turn's own place and never what that turn carried from elsewhere (ADR-088). A turn she
+   opened herself (a heartbeat, a visit, the nightly settlement, her own trusted note) is `own`.
 3. **A task's own fields are its `whose`.** `scene_id`, `scope_key`, `policy_epoch` and `requester_id` are those of
    `whose`, so every reader that already treats them as "whose" stays as it is. Only the readers that meant "the turn
-   that handed it over" change: the consult check, the executor's input, the session the task is drawn in, the folder
-   check in `delegate` (design.md §1.5).
+   that handed it over" change: the consult check and its persona, the executor's input, the session the task is drawn
+   in, the folder check in `delegate`, the steering fence's person (design.md §1.5).
 4. **Grants follow `whose` only,** through one function, `grants.for_whose`, which replaces `development_granted` and
    the event's integration profile at every place a task's grants are decided (delegate, a continuation, the
-   capabilities block of her turn). No turn kind and no scene decides them any more.
-5. **Her own work in a public conversation has no task.** `own` in a group or someone else's chat has no folder of
-   anyone's, so a visit (and a turn her own plan opens there) hands nothing to the action brain (question 1).
-6. **She chooses only at home, and only one thing:** `delegate`'s `for` takes one value, `你自己的` (yours), which makes
-   the task `own` at home: its folder and result are home's, and it carries no development or integration grant unless
-   it is a self-development turn's. The field is shown only in owner-private conversations (question 4).
-7. **A task shows no line of another conversation.** The input the action brain and her result turn are given is read
-   within the task's own conversation; the executor's read gets the fence the hand-back and the consult already have.
+   capabilities block of her turn). No turn kind and no scene decides them any more. A continuation keeps its task's
+   grants, never the turn's.
+5. **Her own work is home's.** A task of hers whose `whose` names an owner-private conversation (a heartbeat, her
+   trusted note on a line, a visit to a home group) runs in home's folder and reports at home, the way an errand's task does. Her own work
+   in a public conversation has no task (question 1).
+6. **She chooses only what the program cannot know, from a list it maps:** at home, that the work is her own
+   (`for: 你自己的`, question 4); in a group, which person whose line is in the turn asked for it (`for`: their label,
+   question 8).
+7. **A task shows no line of another conversation.** Its input keeps its meaning; every read of it that reaches a model
+   is fenced by the task's conversation (the executor's read gets the fence the hand-back and the consult have).
 8. **Plans live and fire where their `whose` is.** One rule replaces three: a plan made on an errand is home's, one made
-   from an outside note is its origin's (as ADR-088 decided), one with `line` is hers in that line. The plans list shows
-   a person's turns their plans and her own turns hers (question 5).
-9. **Nothing is re-routed.** When the conversation of `whose` is gone, fenced or left, a result is suppressed and a plan
-   suspended, each recorded; neither is ever handed to another conversation.
+   from an outside note is its origin's (as ADR-088 decided), one with `line` is hers in that line. The plans list and
+   the plan update and cancel fences go by the plan's `whose` person (question 5).
+9. **Nothing is re-routed.** When the conversation of `whose` is gone, fenced or left, a result is suppressed and a
+   plan's failure recorded as today; neither is ever handed to another conversation.
 10. **What she reads says whose,** from one versioned table (`whose.WHOSE_VERSION`), in three places only: the
-    `delegate` result, the result turn's text and a plan's firing. Nothing is added to every turn (design.md §4, §8).
-11. **The crash gap is closed by reading the rows.** A turn resumed after a crash lists the tasks whose `episode_id` is
-    the turn (`task_records.of_episode`), not the episode's own list, which the crash can leave short.
-12. **Old records keep their meaning.** A task or plan without `whose` reads as `words` from its own conversation and
-    person, which is what the code assumed when it was written. Nothing rewrites it (design.md §2.5).
+    `delegate` result, the result item of a result turn and the plan block of a plan's firing. The last two are added
+    when the turn is prepared, never written into the stored event, so a redelivered or rebuilt event stays byte for
+    byte what was stored (`ingress.py` refuses one that differs). Nothing is added to every turn (design.md §4, §8).
+11. **Old records keep their meaning.** A task or plan without `whose` reads it from the turn that made it (episodes are
+    kept), placed where the row lives, and nothing inherited from an old task gets more than it stored. Nothing
+    rewrites a row (design.md §2.5).
 
 ## The owner's questions
 
@@ -111,8 +119,10 @@ Each is a trade-off or changes what she can do. My recommendation is first; the 
 1. **Her own work in a group (a visit, a plan she made on one).** *Recommended:* none: such a turn has no `delegate`,
    and what she wants done she takes home with a plan or a note. Cost of the alternative (a folder of hers in each
    conversation, made on first need and erased with it): a new kind of folder with its own life cycle and erasure, and
-   a result turn in a group that nobody there asked for. Cost of the recommendation: about 16 visit tasks in ten days
-   lose their path; a picture or a look-up for a visit is commissioned at home first.
+   a result turn in a group that nobody there asked for. Sending such a task home instead (the reviewer's suggestion)
+   was set aside: the visit read what anyone there wrote, and its task would reach home's folder, sandbox and
+   credentials. Cost of the recommendation: about 16 visit tasks in ten days lose their path; a picture or a look-up
+   for a visit is commissioned at home first.
 2. **The development grant needs her mark per task.** *Recommended:* yes: `delegate` takes `develop` (true when the
    work changes or runs her own machinery: code, skills, packages, adapters), and it gates both the development tools
    and integration; a self-development turn's tasks count as marked. Cost of the alternative (`whose` alone): every task
@@ -123,23 +133,27 @@ Each is a trade-off or changes what she can do. My recommendation is first; the 
    peer line (ADR-050), any member of a home group (owner, 2026-10-18), and her own heartbeat plans and trusted notes at
    home (owner, 2026-10-12) keep reaching the development tools. Cost of the recommendation: those three lose it; her
    sister's ask becomes an idea she decides on in self-development (ADR-011 §6.2).
-4. **She may say "this is mine".** *Recommended:* yes, the one value `你自己的` at home. Cost of the alternative (no
-   choice): work she does on an agent line for someone else stays recorded as the agent's, its result returns to that
-   line and the line keeps filling. Cost of the recommendation: one field and a judgement each time; a wrong pick moves
-   a result home that the agent waited for, said in the `delegate` result.
+4. **At home she may say "this is mine".** *Recommended:* yes, the one value `你自己的`, shown only in owner-private
+   conversations. Cost of the alternative (no choice): work she does on an agent line for someone else stays recorded
+   as the agent's, its result returns to that line and the line keeps filling. Cost of the recommendation: one field
+   and a judgement each time; a wrong pick moves home a result the agent waited for, which the `delegate` result says.
 5. **A plan made on an errand fires at home.** *Recommended:* yes (the invariant). Cost of the alternative (today,
    ADR-066 row 1): it fires in the destination as that group's, with an intent written while she held home's
    authority, so home's words enter a public session. Cost of the recommendation: to say something there later she
    sends another errand.
 6. **A paused task is continued by the one it serves.** *Recommended:* yes: after a restart, a task resumes on the words
-   of its `whose` person in its conversation (the owner keeps his say at home). Today only the owner in the local chat
-   can continue a paused task, and `task` finds only tasks of the turn's own conversation, so a paused agent-line task
-   can never be continued. This is wider than the ask; it is listed because it is a reader of `requester_id`. Cost of
-   the alternative: those tasks stay paused for good.
+   of its own person in its own conversation (its asker; for a task of hers at home, the owner, as today). Today only the owner in the local chat can continue a paused task, and
+   `task` finds only tasks of the turn's own conversation and person, so a paused agent-line task can never be
+   continued. This is wider than the ask; it is listed because it is a reader of `requester_id`. Cost of the
+   alternative: those tasks stay paused for good.
 7. **The narrow agent grant follows the agent's plans and results.** *Recommended:* yes, since it falls out of the
    invariant (an agent's plan carries the agent's `whose`). Cost of the alternative (the 2026-10-11 rule: a plan carries
    only the owner's grant): an exception kept by hand in `schedule.py`. Cost of the recommendation: an agent's plan that
    fires can start or read its adapter (`integration_start`, `integration_status`), only with `develop`.
+8. **In a group she may say whose request a task answers.** *Recommended:* yes: `for` takes the label of another person
+   whose line is in this turn (`people_from_program`); without it the task is the opener's. Cost of the alternative:
+   B's request answered in A's turn stays A's (A's folder, A may steer it), said in the `delegate` result. Cost of the
+   recommendation: a second form of `for` in groups (+109 characters in the tool list there) and a label to copy.
 
 ## Earlier decisions this keeps (design.md §1.6)
 
@@ -154,9 +168,34 @@ Each is a trade-off or changes what she can do. My recommendation is first; the 
 - ADR-107: an admission ends as a mark on the grant; the folder, person and scene stay.
 - ADR-108 D5: a program-woken turn shows no speaker; the authorizing person stays on the episode.
 
-## The review (one fresh reader, against the code)
+## The review (one fresh reader of `d7e7decd7126`, against the code)
 
-To be filled in with the reviewer's findings and what was done with each.
+The reviewer re-ran the survey's counts and got the same. Each finding was checked against the code before it was
+taken; what was done is in the right column.
+
+| # | Finding | Severity | Done |
+|---|---|---|---|
+| 1 | The errand row and the outside-note row combined: a note written home on an errand inherited home's authority back into home (escalation); an errand sent from an outside-note turn landed its task in the origin group | blocker | Inheritance stops at an outside note: its turn takes the writing turn's own place, computed without the errand row; an errand carries home's `whose` only when it lives at home, else `own` there (§2.2) |
+| 2 | An empty `raw_input_refs` crashes `feedback`, `_short_event` and the recovery walk, and drops the task out of the task list's sort; the `delegate` result would say the action brain sees the asker's words | blocker | `raw_input_refs` keeps today's meaning and is never empty; every model-facing read of it is fenced instead; `BRIEF_ONLY` when the input is elsewhere (§3.3, §3.4) |
+| 3 | The result and plan texts change between rebuilds and break `ingress.py`'s identity check | major | Found also by the lead's own check: the words are added at preparation into the result item and the plan block; the stored event is unchanged (§3.5, §3.6) |
+| 4 | `own` on home lines kept the placeholder (the line's speaker as requester) and broke in home groups | major | Taken in the form the reviewer proposed for owner-private conversations: her own tasks are home's (§2.4). Not for visits to public groups (question 1) |
+| 5 | Reading old records as `words` widened grants and kept the visit placeholder; L1 tasks without `develop` would lose their grant on continuation | major | Old rows read `whose` from the turn that made them, placed where the row lives; an old task's `develop` is its stored grant, and nothing inherits more than it stored (§2.5) |
+| 6 | Plans recorded at L1 but still living in a group would hand home's authority to that group's turn | major | L1 writes no `plans.whose` (audit only); a plan's `whose` is honored only in the conversation it lives in (§2.2, §7) |
+| 7 | Plan update and cancel are fenced by the turn's person, so the placeholder still steers plans; `there` and moved plans ignore the plan's `whose` | major | Fences by the plan's `whose` person; `there` from the plan; a plan made again after it fired copies the old `whose` (§3.6) |
+| 8 | The plans-list query names an undeclared field and a None fence finds nothing | major | Catalog entries for `whose` and `whose.person_id`; the view written with `Exists` and `IsNull`; its unit test beside the store contract (§3.6, §6) |
+| 9 | "Suspended once" does not hold (`_deliver_locked` puts a repeating plan back to ACTIVE) and is not needed | major | Dropped; a failing plan records its outcome as today and is never moved (§9) |
+| 10 | The `external` row records who opened the turn, not who asked | major | Said as the opener; question 8 lets her name another person in the turn |
+| 11 | The crash gap is already closed (`_run_turn` merges `of_episode` on resume) | minor | Decision and section dropped; the failure row cites the existing merge |
+| 12 | Consult took the hand-over turn's persona and context | minor | From the task's session row (§3.4) |
+| 13 | Tasks would store a second copy of their own fields; `STANDING` stored; `chosen` only for the audit | minor | Tasks store `whose_by` and `develop`; standing read at preparation; `chosen` in the audit (§2.1) |
+| 14 | Wording and counts: `message_action` copies from the turn; development reports are on home lines, not only home; question 6's "the owner's words" cannot reach an agent-line task; the integration check undefined; `DEVELOP_NOT_HERE` had no text; the result's count left out the label; `ep['errand']` is set after `prepare`; no row for a gone note | minor | All corrected in the README and design.md (§1.2, §2.2, §3.1, §3.4, §5, §8) |
+
+Five more the lead found while folding these in, each fixed in design.md: in a self-development turn, `你自己的` keeps
+the self-development answer (the work is already hers at home); a continuation's check compares only "the turn reaches
+the task's grants", since a continuation no longer takes the turn's; "her own work is home's" is decided by the class
+of the conversation `whose` names, not the turn's (an errand runs in a group's session with home's `whose`); a paused
+task is continued by its own person, which for her own home tasks is the owner, as today; and every task written
+before L2 (L1's included) reads a missing `develop` as its stored development grant.
 
 ## Not in this ADR
 
@@ -167,5 +206,6 @@ To be filled in with the reviewer's findings and what was done with each.
   carry it.
 - The publication activation turn (`host._complete_activations`) stays a self-development turn at home: it reports her
   own published change, not the task's result, which went to its `whose` already.
+- A repeating plan that keeps failing to fire records its outcome at every occurrence, as today.
 - Tracing the owner's "random group" case on the live data. The design closes both suspects (visits, plans made on
   them) structurally; the trace, by structure only, is the first landing's check.

@@ -1,7 +1,7 @@
 # ADR-112: A working task cut at the stage limit, and the restart loop that followed
 
-Status: **Open**. Two fixes are installed (§6). The root causes are identified (§5). What is still open (§7) is not
-designed here.
+Status: **Open**. Two fixes are installed (§6). The root causes are identified (§5). C2 is designed and built in §9,
+on branch `claude/focused-hamilton-wy3xp7`, not yet installed. What else is open (§7) is not designed here.
 
 All times are New Zealand local time (NZDT, UTC+13), 2026-10-30 evening to 2026-10-31 early morning, unless marked UTC.
 
@@ -159,9 +159,7 @@ the loaded commit and all 166 installed files checked. She confirmed both instal
 Not designed here:
 
 - **C1, the limit itself.** The owner's decision, open since ADR-084 §10.
-- **C2.** A publish that went through while her task records a failure. The Host's selection already carries the
-  publishing task (`origin.task_id`), which a start could use to give that task its true result. Proposed, not
-  designed.
+- **C2.** Designed and built in §9.
 - **C4.** Evidence retention that a restart loop cannot erase.
 - **Paused tasks have no end** but her stop or the owner's "continue". Open on 10-31 00:40: `task-b141054d` (10-16,
   agent home line), `task-d55513ac` (10-25), `task-5afc50d4` and `task-abba75af` (23:51 and 23:57). The owner's
@@ -176,3 +174,102 @@ Not designed here:
   so the first run scanned nothing. A rescan of the real range (12 message lines, 215 added lines) found 0 hits.
 - I first wrote "10-25 to 10-29" to her for the blocked nights. Those were UTC dates; the local nights are 10-26 to
   10-30. I corrected it to her the same hour.
+
+## 9. C2: a call in flight holds the restart, and a start gives a lost publication to its task
+
+Written from the code at `9b2fe32` and the records quoted in §2 to §5; the live data was not read for this section.
+
+### 9.1 What the code does, end to end
+
+1. Her action brain's tool call reaches the worker as a `tool` request, which the dispatcher runs on a thread of its
+   own (`DETACHED`). The call checks its stage once, at its start (`pending[operation]`), then runs:
+   `ToolBroker.call` → `NativeDevelopmentBridge.call` → `host_call('development')` waits up to 120 s for the Host.
+2. The stage's deadline passes in `NativeLane.wait`: `TimeoutError`, `task_fenced` to the plugin, the operation
+   leaves `pending`. The executor closes the task `BLOCKED`. The task thread's `finally` clears `active_task` and
+   calls `on_turn_finished` → `RuntimeHost._after_turn` → `_maybe_restart_after_publish`.
+3. The gate saw `569c3b54` `APPLIED`, `active` and `active_task` both empty, and asked for the restart. The plugin
+   restarted the worker; `BusinessWorker.close` failed every waiting `host_call` with `DSH_HOST_DISCONNECTED` (the
+   `raised` 1 ms later); the Host's publish went on in the plugin and finished 2 s later with no worker to answer.
+4. The started worker got the selection in `publication.activated`, found no receipt for `78492805`, and wrote a
+   `native_recovery_publish` row. `_complete_activations` offers her only `self_development_publish` receipts, so
+   her task was never told.
+
+The worker already knows every call in flight: `tool_watch.Calls.flight`, with each call's limit. Nothing that
+decides a restart read it. Four checks decide one, each reading "at work" its own way, and none counted a call:
+
+| Check | Stops the worker when | File |
+|---|---|---|
+| the publication restart | a core receipt is `APPLIED` and no turn or task is active | `host.py` `_maybe_restart_after_publish` |
+| her quiet restart | no turn, task or queued work (or after `QUIET_MINUTES`) | `restarts.py` `Desk.quiet` |
+| a settings apply | no turn, task, stage or queued work | `native_worker.py` `settings.quiesce` |
+| a recovery activation | the worker's `status` shows no turn, task or queued work | `index.js` `activateRecovery` |
+
+### 9.2 Design
+
+**D1. A call in flight within its limit holds every restart.** `Calls.holding()` counts the calls in flight not yet
+past their limit (600 s, or a timed tool's own timeout + 120 s; a development call ends sooner, at its `host_call`
+wait of 120 s). The controller carries it as `calls_in_flight` (0 outside the native worker), and all four checks
+read it; `status` reports it as `calls_in_flight`, which an older plugin ignores and a newer plugin reads as 0 from
+an older worker. The publication restart's watch loop now also looks while a restart is pending, because no turn
+ends when the last call does.
+
+- Slow call: the restart waits for it. The queues already hold while a restart is pending, so no new work starts.
+- Failing call: it ends, and the restart follows within 0.5 s.
+- Hung call: it holds the restart until its limit, where the watchdog has already recorded it (`host.tool_overrun`);
+  the restart then goes ahead and is its recovery. Nothing waits without a bound.
+
+**D2. A started worker gives a publication no worker recorded to its task.** In `publication.activated`, a
+publication with no receipt whose Host record names its task (`origin.task_id`, a task that exists, in the
+`origin.scope_key` it was published from) is recorded as that task's `self_development_publish` receipt, as the
+publish path records it. `_complete_activations` then offers her its result as it does every other's. A selection
+with no task (an install by the launcher, `native-install-*`) stays `native_recovery_publish`.
+
+D1 removes the cause seen that night. D2 closes the class for every other way a worker stops between the Host's
+publish and the answer: a crash (§4), a restart from outside, a `host_call` past its 120 s wait. It is the same
+choice as fix 1: settle the record at the one moment that always comes, a start.
+
+### 9.3 Review: does it reach the root cause?
+
+- **Replay of 23:37 with D1.** 06.062 the task closes; the gate finds `569c3b54` `APPLIED`, sets the restart pending
+  and is held by the publish call (started 23:36:51.8, well within its limit), `restart.blocked` with
+  `calls_in_flight: 1`. About 08.07 the Host answers; the worker records `78492805` for task `8b579a2a` and marks
+  `569c3b54` `SUPERSEDED` (fix 1's helper); the call then ends `raised` at the broker's closing fence (its task is
+  closed: by design a call's answer never revives a closed task) but the receipt is already written. The watch loop
+  sees no call and asks for one restart. The started worker activates `78492805` and offers her its result for that
+  task. No loop, no lost publication, one restart.
+- **Without fix 1**, D1 alone would also have prevented the loop, because the newer receipt would have been recorded.
+  With both, each covers the other's failure.
+- **C1 is not touched.** The stage still ends at 1,800 s; D1 only stops the restart cutting what the cut left
+  running. Draining a task's calls before closing it would lengthen the stage past its limit, which is the owner's
+  decision (§7).
+- **Not a bandage for one tool.** D1 holds for any call of either brain on every restart path; D2 for any stop.
+- **Her task's own record stays `BLOCKED`** with the stage cut at its limit, which is true. The publication's
+  result reaches her the way every core publication's does, after the restart, naming the task.
+- **Existing rows.** The recovery row written for `78492805` that night is left as it is (D2 acts only where no
+  receipt exists). Whether that task should still be told is the owner's choice; it needs no code.
+
+### 9.4 Tests that earn their place
+
+| Test | Guards | Fails without |
+|---|---|---|
+| `test_host.py` `test_a_publication_restart_waits_for_a_call_its_closed_task_left_in_flight` | the 23:37 cut, and a restart left pending for ever once the last call ends (every queue would stop) | D1's gate (first assert), D1's watch loop (the wait) |
+| `test_tool_watch.py` overrun test, `holding` at 149 / 151 / 601 s | a hung call cannot hold a restart for ever | `holding`'s limit |
+| `test_native_worker.py` `test_a_started_worker_gives_her_task_the_publication_no_worker_recorded` | S4: the task is told; an install stays a recovery | D2 |
+
+All three were run against the tree without the change: 3 failed; with only the watch-loop line reverted, the first
+fails. With the change: `tests/` 841 passed, 30 skipped, 3 failed, the same 3 that fail at `9b2fe32` on a machine
+without `config/local.json` and node (`test_no_server`, two in `test_refusal_probe`).
+
+### 9.5 Landing
+
+One core landing: the suite, `pytest integration`, the node tests (`npm run test:native`: one line in `index.js`,
+not run in the cloud session that built this), the push gate, the restart, the loaded commit checked. Then read on
+the live system: the next `restart.blocked` record carries `calls_in_flight`, and a stage cut at its limit during a
+publication leaves a `self_development_publish` receipt for its task.
+
+### 9.6 Not in this change
+
+- **C4**, evidence retention: its own design. A count of starts is erased by a loop of starts; a fix keeps by time
+  and by size, not by count.
+- **C1**, **paused tasks without an end**, **the 12:39 crash**: as in §7.
+

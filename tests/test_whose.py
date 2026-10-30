@@ -65,8 +65,14 @@ def test_whose_by_turn_kind(home):
     asked = turn(store, 'dm-a', 'A', 'e2')
     store.put('tasks', {'_id': 'task-new', 'request_key': 'task-new', 'scene_id': 'dm-a', 'requester_id': 'A',
                         'episode_id': asked['_id'], 'whose': asked['whose'], 'development_grant': False})
+    # A result turn has its task's whose, and never earns more than the task stored.
     assert whose.of_turn(store, None, {'scene_id': 'dm-a', 'person_id': 'A', 'episode_kind': 'task_feedback',
-                                       'task_id': 'task-new'}) == asked['whose']
+                                       'task_id': 'task-new'}) == {**asked['whose'], 'earns': False}
+    granted = turn(store, LOCAL, OWNER, 'e2b')
+    store.put('tasks', {'_id': 'task-granted', 'request_key': 'task-granted', 'scene_id': LOCAL, 'requester_id': OWNER,
+                        'episode_id': granted['_id'], 'whose': granted['whose'], 'development_grant': True})
+    assert whose.of_turn(store, None, {'scene_id': LOCAL, 'person_id': OWNER, 'episode_kind': 'task_feedback',
+                                       'task_id': 'task-granted'}) == granted['whose']
     # A task made before ADR-111: read from the turn that made it, never earning more than it stored.
     store.put('tasks', {'_id': 'task-old', 'request_key': 'task-old', 'scene_id': LOCAL, 'requester_id': OWNER,
                         'episode_id': turn(store, LOCAL, OWNER, 'e3')['_id'],

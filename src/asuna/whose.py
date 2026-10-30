@@ -21,8 +21,9 @@ from .records import tasks as task_records
 
 WHOSE_VERSION = 1
 BY = ('words', 'standing', 'own', 'outside')
-# A walk through stored rows (an old task or plan, a chain of them) stops here and answers `own` where it is.
-STEPS_MOST = 8
+# A walk through stored rows (an old task or plan, a chain of them) stops here and answers `own` where it is: a guard
+# against a broken chain, not a measure of a real one (a chain of results begun before ADR-111 is walked once a hop).
+STEPS_MOST = 64
 
 TASK = {'words': '这件是%s托你的', 'standing': '这件是你自我改进时交的', 'own': '这件是你自己的事',
         'outside': '这件是%s那边托的'}
@@ -36,6 +37,8 @@ BRIEF_ONLY = '新开一份上下文：它只看得到这次的 brief。'
 FOR_UNKNOWN_PLACE = ('「%s」不是外面的一处：for 照抄 note_places_from_program 里群或私聊的 place，'
                      '或者不写（就是这一回合叫你的那位）。')
 FOR_UNKNOWN_PERSON = '「%s」不是这一回合里的人：for 照抄 people_from_program 里的标签，或者不写（就是叫起这一回合的那位）。'
+FOR_UNKNOWN_HERE = ('「%s」不是这一回合里的人，也不是外面的一处：for 照抄 people_from_program 里的标签或'
+                    ' note_places_from_program 里群或私聊的 place，或者不写（就是叫起这一回合的那位）。')
 
 
 def record(by, scene_id, person_id=None, *, chosen=False, **extra):
@@ -118,10 +121,14 @@ def of(store, ep, steps=0):
 
 
 def of_task(store, task, steps=0):
-    """A task's `whose`: as stored, else (a task written before ADR-111) read from the turn that made it, never earning
-    more than the grant the task stored."""
+    """A task's `whose`: as stored, else (a task written before ADR-111) read from the turn that made it; either way
+    never earning more than the grant the task stored, so its result turn, its continuations and what they hand over
+    earn no more than it did (a result turn kept its task's grant before ADR-111 too)."""
     if task.get('whose'):
-        return task['whose']
+        found = task['whose']
+        if found.get('by') in ('words', 'standing') and not task.get('development_grant'):
+            return {**found, 'earns': False}
+        return found
     made = episode_records.get(store, task.get('episode_id'))
     found = of(store, made, steps) if made else None
     if not found or found.get('scene_id') != task.get('scene_id'):
@@ -234,8 +241,11 @@ def result_words(store, persona, task):
 
 def moved(task, made):
     """Whether a task runs on the Web chat for outside work she took on in another conversation (`made`: the turn
-    that handed it over): the one case, besides an errand's, of a task running elsewhere than its turn (§3.5)."""
-    return (task.get('whose') or {}).get('by') == 'outside' and (made or {}).get('scene_id') != task.get('scene_id')
+    that handed it over, whose task would otherwise run there, or at its errand's home): the one case, besides an
+    errand's, of a task running elsewhere than its turn (§3.5)."""
+    made = made or {}
+    return ((task.get('whose') or {}).get('by') == 'outside'
+            and (made.get('errand') or made).get('scene_id') != task.get('scene_id'))
 
 
 def named_person(store, ep, label):
@@ -259,7 +269,14 @@ def named_outside(store, ep, place):
     return found[0]
 
 
-def newest_line(store, scene_id, epoch, person_id):
-    """A person's newest line in a conversation: the input of a task she names for them in a group."""
-    row = message_records.inbound(store, scene_id, epoch, author=person_id).first(newest_first=True, fields=['_id'])
+def line_in_turn(store, ep, person_id):
+    """A person's line in this group turn, the input of a task she names for them: their first line to her waiting
+    behind the one that opened it, as `people_from_program` found them (understanding.group_people); never one that
+    came after."""
+    from .understanding import EXPLICIT
+    opened = message_records.get(store, 'in-' + ep['_id'], fields=['scene_seq'])
+    if (opened or {}).get('scene_seq') is None:
+        return None
+    row = message_records.inbound(store, ep['scene_id'], ep['policy_epoch'], author=person_id,
+                                  after=opened['scene_seq'], wakes=EXPLICIT).first(fields=['_id'])
     return (row or {}).get('_id')

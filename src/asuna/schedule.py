@@ -908,6 +908,12 @@ class ScheduleService:
             'updated_at': now(), 'status': 'ACTIVE',
             'last_update': {'from_rule': current['rule'], 'from_schedule_id': stale, 'note': note,
                             **({'from_timezone': other} if from_other else {})}}
+        if intent != current['intent']:
+            # ADR-111: what a plan asks is the turn's that wrote it, so a new wording records that turn's whose (as
+            # making the plan did); a new time alone keeps the plan's.
+            from . import whose as whose_of
+            record['whose'] = whose_of.for_plan(self.store, whose_of.of(self.store, ep), current['scene_id'],
+                                                current['person_id'])
         if timing:
             # The zone is stored only for a rule that has a wall zone, and then it is hers.
             record.pop('tz_source', None)

@@ -642,6 +642,7 @@ The model is the package's defaults for the core's parameters, checked against `
 | `PRIVATE_KEYS` (`rhythm.sleep_window`, `rhythm.public_clock`) | set only on the machine; a package may not default them |
 | `CORE_WRITABLE_KEYS` (`heartbeat.*` pace and visits, `heartbeat.dice_*`, `self_development.night_*`) | a package may default them; she sets them with `set_policy` within their ranges |
 | `OWNER_KEYS` (`heartbeat.enabled`, `render.identity_tokens`) | a package may default them; only the owner changes them |
+| `PACKAGE_WORDS` (`memory.tiers_told`, `heartbeat.idle_hint`, `self_review.exchanges_note`, `attend.guide`) | the persona's own words, read from the model only: changed by publishing the package; a package may not declare them in `policy_keys` |
 | `policy_keys` | keys the package declares for her; may not redeclare core keys |
 
 | Key | Core default | Meaning |
@@ -660,10 +661,23 @@ The model is the package's defaults for the core's parameters, checked against `
 | `self_review.exchanges_note` | neutral text | the note on her exchanges in a self-evaluation |
 | `heartbeat.idle_hint` | neutral text | the hint of an idle heartbeat beat |
 | `memory.tiers_told` | neutral text | how her memory's places (carried, at hand, put away) are told, once per conversation |
+| `attend.guide` | none (1–500 characters) | her own words for her relevance gate ([The relevance gate](#the-relevance-gate)) |
 
 Every other group (`affect`, `memory`, `recall_protocol`, `phrasing`, `rhythm.settle_at`, `self_development.every_min`) is defined in `CORE_DEFAULTS` and the schema.
 
 A persona, voice, `self` or `core` section tagged `place:home`, `place:peer`, `place:group` or `place:dm` is carried only in turns at that place; an untagged one everywhere (`src/asuna/visibility.py` `PLACES`).
+
+### The relevance gate
+
+A gated group line (`attend.GATED`) is one question in a session of its own, with three parts (`src/asuna/attend.py`):
+
+| Part | What | Where |
+|---|---|---|
+| system | `你是<name>。`, her core sentences as a group turn carries them, then `attend.guide` after the line 「你自己写的（接不接话）：」; nothing when she has none | `attend.system` |
+| question | the frame: the question, the answer's form, what each answer does, how the data is labelled | `src/asuna/resources/prompts/stage_attend.md` |
+| question | the data, as JSON: `scene`, `why_asked`, `speaker`, `speaker_familiarity`, `speaker_stance`, `since_you_spoke`, `lines`, `notices`, `your_notes_here`, `your_understanding_of_speaker`, `your_mood` | `attend.material` |
+
+The answer's first line starts with 接话 or 不理 (`attend.CHOICES`); the rest is the reason, stored at most 60 characters. A persona's words ask for those two.
 
 ### What she carries
 

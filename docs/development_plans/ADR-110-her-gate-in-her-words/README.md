@@ -1,9 +1,10 @@
 # ADR-110: Her relevance gate: a mechanical frame, the data, and her own words
 
 Status: **Proposed** 2026-10-30. Written by the lead (Claude). Direction: the owner, the same day (§1). A cold review of
-the first draft against the code (11 findings, all taken) is in this version. Nothing is built. Builds after ADR-107
-and ADR-109 are installed and checked (§9.1). Xiaoman reads the parts that touch her once, when the build starts; she
-is not told before (an integration day, no contact).
+the first draft against the code (11 findings, all taken) is in this version. Built 2026-10-30 on the owner's word
+("start building the plan") on branch `claude/adr110-build`, before her reading: on an integration day there is no
+contact with her, so she reads the finished build once before it lands (§9.5). Not installed; it lands after ADR-107
+and ADR-109 are installed and checked (§9.1).
 
 ## 1. The ask
 
@@ -325,7 +326,8 @@ Not changed: `coordinator.py`, the plugin, `GATED`, the parser, `common.md`, her
     existing reserved-key cases).
 - No test of the frame's wording or of the schema's bounds (jsonschema's own work).
 - Before the landing, counts only: how many of her core sections contain `speaker_understanding` or `mood` as a field
-  name (expected 0; a hit goes into her build message, F15).
+  name (expected 0; a hit goes into her build message, F15). Read 2026-10-30 on the build: `speaker_understanding` in
+  0 and `mood` in 0 of her 12 core sections.
 - Full suite once at the landing; `pytest integration` (nothing in it changes).
 
 ### 9.4 Landing and its checks on the real system
@@ -347,11 +349,12 @@ Not changed: `coordinator.py`, the plugin, `GATED`, the parser, `common.md`, her
 
 ### 9.5 Her reading, once
 
-When the build starts: one message on the agent line with the frozen blob of this page and of the frame, saying: what
+Before it lands (the build came first, on the owner's word; see the status line): one message on the agent line with the frozen
+blob of this page and of the frame, saying: what
 the gate reads now (§5); her key, its ceiling and where it appears (§5.3, §5.4); that until she publishes, the gate
 has no words of hers for this question, and to draft them outside her persona candidate until the landing (F16); the
 old judgment lines, to take from if she wants; what stays the program's and why (§5.6); that nobody writes her words
-for her. She signs it; the build follows. After the landing: one message, and her check by content.
+for her. She signs it; the landing follows. After the landing: one message, and her check by content.
 
 ### 9.6 Closure
 

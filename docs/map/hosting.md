@@ -13,6 +13,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
 - def `prune_host_reports` — Each worker start writes its evidence to a new reports folder; only the newest few are kept.
 - def `read_persona` — A persona package's model as the worker takes it, validated (jsonschema); raises PersonaModelError or PERSONA_STATE_ID_MISMATCH and changes nothing.
 - def `take_persona` — The persona package as the worker reads it: at its start and after each persona publication, so what a publication reports ACTIVE is what her turns use.
+- def `supersede_waiting` — The Host selects only a project's newest publication: an earlier one still waiting to start never will.
 - def `gate_session_id` — A fresh gate session for each question, its repairs included: the material is complete every time, so the gate keeps no history and never compacts (attend.py).
 - class `ContextOverflow` — A stage of her conversation was refused because the session no longer fits the model's window, after DSH's own overflow compaction (ADR-028).
 - class `ModeChanged` — Her conversation's session was opened with the other source of her thoughts (ADR-099): DSH keeps a session's first tools and system text at the head of every request, so it is carried to a new session instead.

@@ -448,9 +448,18 @@ idle, a check that the running code is the commit's (`loaded.commit`), one repor
 model endpoint in any test. **No message to her about this ADR until L2 is installed and checked (the owner's rule);
 then one message, and her reading of the whole page.**
 
-Built on `claude/elegant-goodall-2ip12g`: **L1 installs at `2d58e42`** (`553e2f3` and the build review's record
-fixes, §10.5, on a side line so it holds no L2 code), **L2 at `5be549e`** (`e1dd8b8` merged with that and the review's
-L2 fixes); the commits after it are this page. Neither is installed.
+Built on `claude/elegant-goodall-2ip12g`, both points on main as of `f2103a24` (ADR-110 built), so each fast-forwards
+it: **L1 installs at `e0f818e`** (`553e2f3`, the build review's record fixes `2d58e42` (§10.5), and that main; no L2
+code), **L2 at the branch head** (`e1dd8b8`, the review's L2 fixes `5be549e`, the same main through `e0f818e`, and this
+page). Neither is installed. If main moves before a landing, merge it into that point first and run the tests again.
+
+Not checked where it was built (a cloud session: no private word list, no node packages, no MongoDB, no live Host),
+so each landing runs them on the owner's machine: the personal-data scan of the added lines and messages, and
+`tests/test_personal_words.py` with the list; the tests that skip without node and the DSH sandbox
+(`tests/test_declared_specs_dsh.py`, the confined-command tests); `pytest integration` on a server; the restart and
+the real-system checks below. Measured there: the full suite at the L2 point 836 passed, 30 skipped, 3 failed, the
+same three that failed there on the unchanged base before the build (`test_no_server`'s unresolvable-address check,
+two of `test_refusal_probe`'s that need DSH's own conversion).
 
 **L1: record `whose`, change nothing she reads or can do.** `whose.py`; `episodes.whose`, `tasks.whose`, `plans.whose`
 written; the audit row; nothing reads them yet. Tests: the first. *On the real system,* by structure only (no

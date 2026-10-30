@@ -1,8 +1,9 @@
 # ADR-111: Whose work a task is
 
 Status: **Built, not installed.** Decided 2026-10-30 by the owner (his rule and his answers, below); designed and built
-by the lead (Claude Code, big sis) on branch `claude/elegant-goodall-2ip12g`: L1 installs at `2d58e42`, L2 at
-`5be549e` (design.md §8), after a fresh review of the build (§10.5). **Owner's rule for this ADR: the character does not
+by the lead (Claude Code, big sis) on branch `claude/elegant-goodall-2ip12g`: L1 installs at `e0f818e`, L2 at the
+branch head, both on main as of `f2103a24` (design.md §8, with what the landing still has to check), after a fresh
+review of the build (§10.5). **Owner's rule for this ADR: the character does not
 read it until the feature is fully built**; she was not contacted while it was written or built.
 
 The design to the end: [design.md](design.md): the survey with its commands, the record and how it is decided, the

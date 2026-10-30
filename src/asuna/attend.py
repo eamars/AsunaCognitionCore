@@ -15,10 +15,12 @@ pass reads like any other in her next turn. Each 不理 is kept (`hold_passed`, 
 `passed_line`) until her next turn there lists it once (`take_passed`): who, when, and her one-line reason, newest
 PASSED_MAX, the rest counted. A Host restart keeps what was not shown yet.
 
-The gate reads words only: why she is being asked, who is talking and how well she knows them, what was
-said here since she last spoke (bounded), and her mood as one public paragraph (ADR-086 D6; `affect.gate:
-none` leaves it out). Nothing is recalled, and the group's own conversation is not touched, so its cached
-prefix stays as it was.
+A question is three parts and nothing else (ADR-110): the program's frame (stage_attend.md: the question, the
+answer's form, what each answer does, how the data is labelled), the data in words (why she is being asked, who is
+talking and how well she knows them, what was said here lately, bounded, her notes here and her understanding of the
+speaker, and her mood as one public paragraph, ADR-086 D6; `affect.gate: none` leaves it out), and her own words: her
+core sentences and what she wrote for the gate (persona model `attend.guide`). Nothing is recalled, and the group's
+own conversation is not touched, so its cached prefix stays as it was.
 """
 from __future__ import annotations
 
@@ -178,7 +180,7 @@ def material(store, scene, event, row, persona):
         out['your_notes_here'] = notes
     about = speaker_understanding(store, scene, event['person_id'])
     if about:
-        out['speaker_understanding'] = about
+        out['your_understanding_of_speaker'] = about
     from .affect import AffectLedger, interpret
     from .render import model_and_policy
     from . import visibility
@@ -188,20 +190,26 @@ def material(store, scene, event, row, persona):
         # ADR-086 D6: the public paragraph (state, causes recorded here, pull); nothing at a quiet band.
         mood = interpret(ledger.model, ledger.projection(), visibility.PUBLIC, scope=scene.get('scope_key'))
         if mood:
-            out['mood'] = mood.get('心情') or {key: mood[key] for key in ('label', 'face', 'policy') if mood.get(key)}
+            out['your_mood'] = mood.get('心情') or {key: mood[key] for key in ('label', 'face', 'policy') if mood.get(key)}
     return out
 
 
+GUIDE_HEAD = '你自己写的（接不接话）：'
+
+
 def system(store, persona):
-    """Shared rules, then who she is: her core sentences (public), not her persona's rules for talking; small, so a cold
-    read is cheap (owner 2026-10-14: the gate only answers whether to join, she judges in her turn)."""
+    """Her own words only (ADR-110): who she is, her core sentences (public), then what she wrote for the gate
+    (persona model `attend.guide`), introduced as hers. No program rules: the frame is in the question."""
     from .carried import carried
     from .documents import render_markdown
-    from .render import common_text
+    from .persona_model import effective
     from . import visibility
     name = (store.config.get('chat') or {}).get('display_name') or persona
     sections = carried(store, persona, visibility.PUBLIC, 'group')['core']        # as a group turn carries it
-    return common_text(store.config) + '\n你是' + name + '。' + ('\n' + render_markdown(sections) if sections else '')
+    guide = effective(store.config.get('persona_model') or {}, 'attend.guide')
+    guide = guide.strip() if isinstance(guide, str) else ''                     # only spaces counts as none
+    return ('你是' + name + '。' + ('\n' + render_markdown(sections) if sections else '')
+            + ('\n\n' + GUIDE_HEAD + '\n' + guide if guide else ''))
 
 
 # What of this group's own context the gate reads, cut at the same place every time: the same line in the same group

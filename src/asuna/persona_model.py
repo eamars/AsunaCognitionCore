@@ -46,6 +46,9 @@ CORE_WRITABLE_KEYS = {
 # Only the owner turns her heartbeat on or off, and sets the ceiling of what each place carries of her identity: a
 # package may default them, never offer them to her as policy keys.
 OWNER_KEYS = {'heartbeat.enabled', 'render.identity_tokens'}
+# Words a persona gives the core, read from the model only: changed by publishing the package, never declared as a
+# policy key, so the schema's bounds and the publication scan cover every change (ADR-110).
+PACKAGE_WORDS = {'memory.tiers_told', 'heartbeat.idle_hint', 'self_review.exchanges_note', 'attend.guide'}
 HEARTBEAT_EVERY_MIN = (15, 240)
 # The core's neutral words where a persona words its own (persona-model keys, not hers to set_policy).
 TIERS_TOLD = ('你的东西分三个地方：随身，每一回合都带着；手边，不进提示，聊到相关的事或用 recall 能找到；'
@@ -104,6 +107,10 @@ def validate(model: dict, persona_id: str) -> dict:
     reserved = declared & (set(PRIVATE_KEYS) | set(CORE_WRITABLE_KEYS) | OWNER_KEYS)
     if reserved:
         raise PersonaModelError('PERSONA_MODEL_INVALID: policy_keys may not declare core keys: ' + ', '.join(sorted(reserved)))
+    words = declared & PACKAGE_WORDS
+    if words:
+        raise PersonaModelError("PERSONA_MODEL_INVALID: policy_keys may not declare the persona's own words; they change "
+                                'by publishing the package, never by set_policy: ' + ', '.join(sorted(words)))
     for key in PRIVATE_KEYS:
         if lookup(model, key) is not _MISSING:
             raise PersonaModelError('PERSONA_MODEL_INVALID: a package may not default the private key ' + key)

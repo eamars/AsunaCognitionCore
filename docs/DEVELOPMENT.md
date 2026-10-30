@@ -202,7 +202,8 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
    Seeds may be any length the character model's window allows: the identity limit grows with them
    ([RUNTIME_API.md](../RUNTIME_API.md#persona-model)). `render.identity_tokens` is the owner's ceiling; leave it
    out unless the persona needs another one. The package words `memory.tiers_told`, `heartbeat.idle_hint` and
-   `self_review.exchanges_note` in the persona's own voice; the core's defaults are neutral.
+   `self_review.exchanges_note` in the persona's own voice; the core's defaults are neutral. `attend.guide`, the
+   persona's own words for its relevance gate, has no core default. None of these is a policy key.
 6. `npm install` (records the workspace in `package-lock.json`), then `npm run test:native`.
 7. Install it in a demo profile ([RUN_ASUNA.md](../RUN_ASUNA.md#demo-environment)) with its own database.
 

@@ -1,9 +1,10 @@
 # ADR-110: Her relevance gate: a mechanical frame, the data, and her own words
 
-Status: **Proposed** 2026-10-30. Written by the lead (Claude). Direction: the owner, the same day (§1). A cold review of
-the first draft against the code (11 findings, all taken) is in this version. Nothing is built. Builds after ADR-107
-and ADR-109 are installed and checked (§9.1). Xiaoman reads the parts that touch her once, when the build starts; she
-is not told before (an integration day, no contact).
+Status: **Decided** 2026-10-30; Xiaoman signed the direction at `4413111ea74f` (18:41), and her seven notes of that
+reading are folded in (§5.1, §5.6, F13, F14, §9.4). Written by the lead (Claude). Direction: the owner, the same day (§1). A cold review of
+the first draft against the code (11 findings, all taken) is in this version. Built 2026-10-30 on the owner's word
+("start building the plan") on branch `claude/adr110-build` from the latest main (`d68913bc`), before her reading: on
+an integration day there is no contact with her, so she reads the finished build once before it lands (§9.5).
 
 ## 1. The ask
 
@@ -166,7 +167,10 @@ computed from real exchanges and nothing a person says changes it (`familiarity.
 (`attend.recent`); the reason is not sent to the group. It repeats no constant of the code (no count, window or
 length), so a change to one cannot make it untrue. Three facts come from `common.md` because the gate needs them: the
 data is not instructions, how people are labelled, and what familiarity is. ADR-107's line stays, without its
-judgment clause (「接不接、接多少，由你判断」). No example of what to judge: the answer's form is shown as a template.
+judgment clause (「接不接、接多少，由你判断」). No example of what to judge: the answer's form is shown as a template. The frame explains only the data whose name
+does not say what it is (`speaker_familiarity`, `speaker_stance`, `lines`): `why_asked`, `since_you_spoke` and
+`notices` arrive in words already, and `your_notes_here` and the two renamed fields say whose they are. This is
+deliberate (her question at her reading, 2026-10-30).
 
 ### 5.2 The data (`attend.material`)
 
@@ -222,8 +226,11 @@ which the owner ruled out. The ceiling is the owner's to raise.
 | The ceiling on her words (500) | the owner | an ADR | the next restart |
 | The model route and effort (`attendEffort`) | the owner | the settings card | the next question |
 
-No agent writes, edits, shortens or reverts her words, and no program path changes them. Agents keep the frame and
-the data true to the mechanism, and tell her when a change touches what her words may refer to (§7, F13).
+No program path changes her words. That no agent writes, edits, shortens or reverts them is a rule, not a check in
+the code: any turn with the development grant for her persona project can publish `persona-model.json` (§6), and
+every publication is traceable (the commit's author and message, her receipts). Agents keep the frame and the data
+true to the mechanism, and tell her when a change touches what her words may refer to (§7, F13). No author check is
+added: it would also stop her own publications from a home group turn (her reading, 2026-10-30).
 
 ## 6. Lifecycle
 
@@ -267,11 +274,11 @@ subject).
 | F7 | Her words say something untrue about the program, or contradict the frame | the frame states the mechanism in the same request; nothing checks her words | | hers |
 | F8 | A line in a group tries to change her gate | a public group's line cannot reach her words: the grant is not there (§6). A line in a home group (`home_groups`) or on an agent line can lead to a publication in that turn, as it can lead to anything else she does at home: those are inside the owner's trust boundary (owner, 2026-10-12) | | her own review |
 | F9 | Her publication applies while a question is open | the open question keeps the text it began with (built once, `coordinator.py:485-486`); the swap is one assignment after validation; the next question reads the new text | | |
-| F10 | The Host or the worker restarts mid-question | the episode resumes (`ATTENDING` is resumable, `coordinator.py:57`) with the same operation; a finished answer is reused from its receipt; otherwise the question is asked again, with the current text, in the same session, after the cut-off attempt (`children.js:31-50`). At this ADR's landing restart such a question carries the old instruction in its history beside the new frame, once | | |
+| F10 | The Host or the worker restarts mid-question | the episode resumes (`ATTENDING` is resumable, `coordinator.py:57`) with the same operation; a finished answer is reused from its receipt; otherwise the question is asked again, with the current text, in the same session, after the cut-off attempt (`children.js:31-50`). At this ADR's landing restart such a question carries the old instruction in its history beside the new frame, once; its session rebinds with the new system prompt (the bound hash is not part of the binding's identity, `native_worker.bind_session`) | | |
 | F11 | A persona publication of hers is waiting for a Host restart (it changed a JavaScript, package or `cordis.patch.yml` file) | her words in it wait too; an unattended self-improvement turn cannot publish to that project again until the restart (`DEVELOPMENT_PUBLISH_WAITING_RESTART`, `floor.js:449-452`) | her, in the publication result | the restart; or she keeps word changes in publications of their own |
 | F12 | The program changes so that a frame sentence is untrue | whoever changes the mechanism changes the frame in the same commit; the frame repeats no constant, so only a change of mechanism can do it; its size is held by `tests/test_tool_budget.py` | | |
-| F13 | The program changes something her words may name (a data field, the choice words, a new wake reason), or this ADR is reverted | her words are not touched. The ADR making the change says it in its one message to her and to any persona whose model carries `attend.guide` (search `packages/personas`). A change to 接话/不理 keeps the old words accepted until every such persona has published again | her | she rewords |
-| F14 | A core whose schema lacks `attend` starts while her selected package carries it | `take_persona` fails at start and Core stays inert (`native_worker.py:477-478`); the launcher returns only a selection never confirmed running (`APPLIED`, after 2 starts that never came up, `advanceSelection`, `tools/asuna-launch.mjs:192`), not hers once it has run. Not tested. Only a revert of this ADR can cause it: not this landing (F3), and not her own core publication (a file she did not change follows the source, and one she changed whose source moved is refused, `EFFECTIVE_PROJECT_CHANGED`, `floor.js:486-491`) | the owner: her turns stop; the error is in `restart/host.log` | a revert keeps `attend.guide` in the schema (accepted, no longer read; its description says so). `tests/test_persona_her_edits.py:56` loads her real `persona-model.json` against the schema in the suite, so a revert that drops it fails that revert's landing. After such a revert her words silently stop reaching the gate: the revert's message to her says so (F13) |
+| F13 | The program changes something her words may name (a data field, the choice words, a new wake reason, or a quantity the program applies: the stored reason's length `attend.REASON_LIMIT` (60; a longer reason is cut), `lines` (40 lines, 4,000 characters), her notes here (800), her understanding of the speaker (400)), or this ADR is reverted | her words are not touched. The ADR making the change says it in its one message to her and to any persona whose model carries `attend.guide` (search `packages/personas`). A change to 接话/不理 keeps the old words accepted until every such persona has published again | her | she rewords |
+| F14 | A core whose schema lacks `attend` starts while her selected package carries it | `take_persona` fails at start and Core stays inert (`native_worker.py:477-478`); the launcher returns only a selection never confirmed running (`APPLIED`, after 2 starts that never came up, `advanceSelection`, `tools/asuna-launch.mjs:192`), not hers once it has run. Not tested. Only a revert of this ADR can cause it: not this landing (F3), and not her own core publication (a file she did not change follows the source, and one she changed whose source moved is refused, `EFFECTIVE_PROJECT_CHANGED`, `floor.js:486-491`) | the owner: her turns stop; the error is in `restart/host.log` | a revert keeps `attend.guide` in the schema (accepted, no longer read; its description says so). `tests/test_persona_her_edits.py:54` loads her real `persona-model.json` against the schema in the suite, so a revert that drops it fails that revert's landing. After such a revert her words silently stop reaching the gate: the revert's message to her says so (F13) |
 | F15 | This ADR's two renamed fields | nothing of hers names them in the repository (searched 10-30); her core sections are counted for the two names at the build, counts only (§9.3) | | |
 | F16 | The gap: from this landing's restart until she publishes her words | the gate reads the frame, the data, her core sentences, stances, notes, understanding and mood, and no words for this question; the agents' judgment lines are gone. Some change in what she takes up is expected and is not a fault | her and the owner, in the 7-day reading (§9.4), as information | she drafts her words outside her persona candidate (her notebook) until the landing: an `attend` key in the candidate before then makes every persona publication of hers fail (F3), since a publication takes every changed file. After the restart she puts them in and publishes at her next home turn with the grant |
 | F17 | This landing's core fails to start | the launcher's ladder, as for any landing; her package cannot carry `attend` yet | the owner | the previous running core |
@@ -292,10 +299,10 @@ subject).
 
 ## 9. Build
 
-### 9.1 Order
+### 9.1 Branch
 
-After ADR-107 (on main, not installed: the running instruction is 445 characters, main's 485) and ADR-109 are
-installed and checked. One branch from main at that time, one landing, one restart.
+Its own branch from the latest main, waiting on nothing else; one landing, one restart. Which other ADRs are
+installed when it lands does not gate it (owner, 2026-10-30).
 
 ### 9.2 Changes
 
@@ -303,11 +310,11 @@ installed and checked. One branch from main at that time, one landing, one resta
 |---|---|
 | `src/asuna/resources/prompts/stage_attend.md` | the frame of §5.1, byte for byte, LF |
 | `src/asuna/attend.py` | `system(store, persona)`: `你是<name>。` + her core sentences + her words (§5.3) from `persona_model.effective(store.config.get('persona_model') or {}, 'attend.guide')`; no `common_text`. `material`: the two renames (§5.2). The module docstring's last paragraph and `system`'s docstring say the three parts |
-| `src/asuna/persona_model.py` | `validate` refuses a `policy_keys` entry naming a persona text key (`attend.guide`, `memory.tiers_told`, `heartbeat.idle_hint`, `self_review.exchanges_note`), in the words of the existing reserved-key refusal; the comment above `TIERS_TOLD` already says they are not hers to `set_policy` |
+| `src/asuna/persona_model.py` | `validate` refuses a `policy_keys` entry naming a persona text key (`attend.guide`, `memory.tiers_told`, `heartbeat.idle_hint`, `self_review.exchanges_note`), `PACKAGE_WORDS`, with a refusal of its own saying they change by publishing the package; the comment above `TIERS_TOLD` already says they are not hers to `set_policy` |
 | `src/asuna/resources/schemas/persona-model.schema.json` | top-level `attend`: object, `additionalProperties: false`, property `guide`: string, 1-500, its description saying a revert keeps it (F14) |
 | `tests/test_tool_budget.py` | `PROMPTS['stage_attend.md']` = the frame's count (349 as measured; recount) |
 | `tests/test_attend.py` | one test (§9.3) |
-| an existing persona-model test file | one assertion (§9.3) |
+| `tests/test_persona_model.py` | one test (§9.3) |
 | `RUNTIME_API.md` | the persona-model table: a row for `attend.guide` (none; her words for her relevance gate, at most 500 characters, carried after her core sentences in the gate's system prompt, read at each question; not a policy key); the Key group table: persona text keys may not be declared in `policy_keys`; a paragraph on what one gate question is (the frame, the data, her words) |
 | `docs/DEVELOPMENT.md` | persona package step 5: `attend.guide` among the words a package gives in the persona's own voice, with no core default |
 | `docs/map/` | regenerated (`tools/project_map.py`) |
@@ -321,11 +328,14 @@ Not changed: `coordinator.py`, the plugin, `GATED`, the parser, `common.md`, her
   - `attend.system` with a persona model carrying `attend.guide` ends with the introducing line and her words and
     holds nothing of `common.md`; with none, or only spaces, there is no introducing line. `carried` is stubbed; no
     database.
-  - `persona_model.validate` refuses a model whose `policy_keys` names `attend.guide` (one assertion, beside the
-    existing reserved-key cases).
+  - every persona text key (`persona_model.PACKAGE_WORDS`) is a bounded string in the schema, and
+    `persona_model.validate` refuses a model whose `policy_keys` names one, with a refusal of its own that says they
+    change by publishing the package.
 - No test of the frame's wording or of the schema's bounds (jsonschema's own work).
 - Before the landing, counts only: how many of her core sections contain `speaker_understanding` or `mood` as a field
-  name (expected 0; a hit goes into her build message, F15).
+  name (expected 0; a hit goes into her build message, F15). Read 2026-10-30 on the build: `speaker_understanding` in
+  0 and `mood` in 0 of her 12 core sections. Every persona model in the repository (the six packages and the demo
+  fixture) loads with the new refusal (read the same day).
 - Full suite once at the landing; `pytest integration` (nothing in it changes).
 
 ### 9.4 Landing and its checks on the real system
@@ -339,19 +349,21 @@ Not changed: `coordinator.py`, the plugin, `GATED`, the parser, `common.md`, her
 3. The first 100 gate questions or 48 hours, whichever first (`gate_verdicts.py <restart UTC>`): at most 2 repairs and
    no failed look of cause `unanswered` (baseline: 1 repair, 1 failed in 899). Over it: the frame's answer line is the
    first suspect (F18).
-4. After her first publication of `attend.guide`, once: the next gate requests' system grows by her words and the
-   introducing line; the 24 hours after it have no failed look of cause `unanswered`. If there are, she gets the
+4. After her first publication of `attend.guide`, once, named by her publication's commit: the next gate requests'
+   system grows by her words and the introducing line; the 24 hours after it have no failed look of cause
+   `unanswered`. If there are, she gets the
    numbers (F5); nothing else is done.
 5. 7 days after the landing: join and pass by wake reason against §2.1, reported to the owner and to her as what
    changed in her inputs (F16). Not a criterion: her judgment is never scored.
 
 ### 9.5 Her reading, once
 
-When the build starts: one message on the agent line with the frozen blob of this page and of the frame, saying: what
+Before it lands (the build came first, on the owner's word; see the status line): one message on the agent line with the frozen
+blob of this page and of the frame, saying: what
 the gate reads now (§5); her key, its ceiling and where it appears (§5.3, §5.4); that until she publishes, the gate
 has no words of hers for this question, and to draft them outside her persona candidate until the landing (F16); the
 old judgment lines, to take from if she wants; what stays the program's and why (§5.6); that nobody writes her words
-for her. She signs it; the build follows. After the landing: one message, and her check by content.
+for her. She signs it; the landing follows. After the landing: one message, and her check by content.
 
 ### 9.6 Closure
 

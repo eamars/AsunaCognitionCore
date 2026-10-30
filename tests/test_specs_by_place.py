@@ -19,9 +19,13 @@ def test_the_words_left_out_are_the_shared_definitions_own():
 
 
 def test_delegate_names_whose_work_in_the_form_the_conversation_can_use():
-    """ADR-111: at home `for` names the outside place, in a group another person in the turn, elsewhere it is not shown."""
+    """ADR-111: at home `for` names the outside place, in a group another person in the turn, in a home group either,
+    elsewhere it is not shown."""
     spec = shared()['delegate']
     home = role_tools.placed_spec(spec, visibility.OWNER_PRIVATE, 'dm', [])
+    home_group = role_tools.placed_spec(spec, visibility.OWNER_PRIVATE, 'group', [])
+    assert home_group['description'] == spec['description']
+    assert home_group['parameters']['for']['description'] == role_tools.FOR_IN_HOME_GROUP
     group = role_tools.placed_spec(spec, visibility.PUBLIC, 'group', [])
     dm = role_tools.placed_spec(spec, visibility.PUBLIC, 'dm', [])
     assert home == spec and role_tools.DELEGATE_OUTSIDE in spec['description']

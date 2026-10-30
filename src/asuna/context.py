@@ -1146,7 +1146,9 @@ class ContextBuilder:
             'delivery':(DELIVERY_AT_HOME if session_class==visibility.OWNER_PRIVATE else DELIVERY)}
         from .grants import development_for
         from . import whose as _whose_of
-        if development_for(self.store, _whose_of.of_turn(self.store, None, event)):
+        # As a task from this turn would get it (Coordinator._grants): a consult hands nothing over.
+        if (event.get('episode_kind') != 'consult'
+                and development_for(self.store, _whose_of.of_turn(self.store, None, event))):
             context['action_capabilities_from_program']['development'] = {
                 'candidate':'持久的有效项目候选（代码、技能、提示、种子）；可委托行动脑检查、修改和自行发布。',
                 'guide':'先读核心技能 asuna-self-improvement：改什么走哪层、怎么自检、怎么发布、什么会触发重启。'}

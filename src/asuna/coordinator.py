@@ -672,25 +672,28 @@ class Coordinator:
         # and its input are the home turn's that sent the errand (errands.home_turn).
         home=ep.get('errand') or ep
         authority=errands.home_turn(self.store,ep)
-        whose=whose or whose_of.of(self.store,ep)
-        if whose is None:
+        task_id='task-'+sha(canonical([ep['_id'],call_id]))[:32]
+        task=task_records.get(self.store, task_id)
+        named,whose=whose,whose or whose_of.of(self.store,ep)
+        raw_from=session=None
+        if task:
+            # A resumed turn: the task it made stands where it runs; nothing is decided again.
+            home={'scene_id':task['scene_id'],'person_id':task['requester_id']}
+        elif whose is None:
             raise role_tools.Refused(role_tools.OUTSIDE_NEEDS_HOME)
-        raw_from=None
-        if whose.get('by')=='outside' and home['scene_id']!=whose_of.home(self.store.config)[0]:
+        elif whose.get('by')=='outside' and home['scene_id']!=whose_of.home(self.store.config)[0]:
             # ADR-111: outside work she takes on in one of her home conversations runs on the home line, the Web chat.
             local,owner=whose_of.home(self.store.config)
             chat=scene_records.authorize(self.store,local,owner)
             home={'scene_id':local,'scope_key':chat['scope_key'],'policy_epoch':chat['policy_epoch'],'person_id':owner}
             session=self._session_of(local,owner,ep.get('persona'))
         else:
-            if whose.get('chosen') and whose.get('by')=='words':
-                # The person she named in a group: their task, with their own newest line as its input.
-                home={**home,'person_id':whose['person_id']}
-                raw_from=whose_of.newest_line(self.store,home['scene_id'],home['policy_epoch'],whose['person_id'])
+            if named and named.get('by')=='words':
+                # The person she named in this group turn: their task, with their line in the turn as its input.
+                home={**home,'person_id':named['person_id']}
+                raw_from=whose_of.line_in_turn(self.store,ep,named['person_id'])
             session=self._task_session(ep)
         workspace_grant(self.store.config,home['scene_id'],home['person_id'])
-        task_id='task-'+sha(canonical([ep['_id'],call_id]))[:32]
-        task=task_records.get(self.store, task_id)
         said=None
         if not task and tier:
             from . import action_tiers

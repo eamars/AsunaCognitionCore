@@ -96,7 +96,10 @@ STEERING = ('task.message', 'task.stop')
 DELEGATE_OUTSIDE = '外面（群、别人的私聊）托的事在家里做：for 写那边的 place，结果回家里。'
 FOR_AT_HOME = '这件是外面哪一处托的（群或私聊）：照抄 note_places_from_program 里那边的 place；不写＝这一回合叫你的那位托的'
 FOR_IN_GROUP = '这件是谁托的：不写＝叫起这一回合的那位；是这回合里另一个人托的，照抄 people_from_program 里 ta 的标签'
+FOR_IN_HOME_GROUP = ('这件是谁托的：不写＝叫起这一回合的那位；是这回合里另一个人托的，照抄 people_from_program 里 ta 的标签；'
+                     '外面（群或私聊）托的，照抄 note_places_from_program 里那边的 place')
 FOR_NOT_HERE = '这里不写 for：这件就是这一回合叫你的那位托的。'
+FOR_ON_ERRAND = '跑腿时交的事是家里的：这里不写 for。'
 # Why think comes first, said where it is refused (her count, 2026-10-20: 153 refusals that gave no reason).
 THINK_FIRST = '先用 think 写下这回合的心里话，再做别的：它是你这一回合每一步的理由，存了档，之后回想得起来为什么这么做。'
 
@@ -786,6 +789,10 @@ def placed_spec(spec, cls, scene_kind, listed):
             return spec
         return {**spec, 'description': _without(spec['description'], *([NOTE_DELIVER] if 'deliver' in left else [])),
                 'parameters': {k: v for k, v in spec['parameters'].items() if k not in left}}
+    if spec['name'] == 'delegate' and cls == visibility.OWNER_PRIVATE and scene_kind == 'group':
+        # ADR-111: a home group names an outside place, as home does, or a person in the turn, as a group does.
+        return {**spec, 'parameters': {**spec['parameters'],
+                                       'for': {**spec['parameters']['for'], 'description': FOR_IN_HOME_GROUP}}}
     if spec['name'] == 'delegate' and cls != visibility.OWNER_PRIVATE:
         # ADR-111: naming the outside place is home's; in a group `for` names a person in the turn; elsewhere none.
         fields = {k: v for k, v in spec['parameters'].items() if k != 'for'}
@@ -2310,24 +2317,30 @@ class RoleTools:
 
     def _delegate_for(self, ep, value):
         """`delegate`'s `for` as whose work it is (ADR-111), or None for the turn's own: at home an outside place, in a
-        group a person in this turn; refused (collected) when it names neither."""
+        group a person in this turn (a home group either); refused (collected) when it names neither, and on an
+        errand, whose task is home's (ADR-066)."""
         if value is None or value == '':
             return None
+        if ep.get('errand'):
+            return self._found(FOR_ON_ERRAND, 'FOR_ON_ERRAND')
         from . import whose as whose_of
         value = str(value).strip()
         scene = scene_records.get(self.store, ep['scene_id'], fields=['kind']) or {}
-        if self._place(ep) == visibility.OWNER_PRIVATE:
-            found = whose_of.named_outside(self.store, ep, value)
-            if found:
-                return whose_of.record('outside', found, chosen=True)
+        group, home = scene.get('kind') == 'group', self._place(ep) == visibility.OWNER_PRIVATE
+        person = whose_of.named_person(self.store, ep, value) if group else None
+        if person:
+            # The one who opened the turn is the turn's own answer.
+            return None if person == ep['person_id'] else whose_of.record('words', ep['scene_id'], person, chosen=True)
+        found = whose_of.named_outside(self.store, ep, value) if home else None
+        if found:
+            return whose_of.record('outside', found, chosen=True)
+        if home:
             usable = [place for place, (_, kind) in _notes.targets(self.store, ep['scene_id'],
                                                                    visibility.OWNER_PRIVATE).items()
                       if kind in ('group', 'dm')]
-            return self._found(whose_of.FOR_UNKNOWN_PLACE % value[:80] + refs_usable(usable), 'FOR_UNKNOWN_PLACE')
-        if scene.get('kind') == 'group':
-            person = whose_of.named_person(self.store, ep, value)
-            if person:
-                return whose_of.record('words', ep['scene_id'], person, chosen=True)
+            said = whose_of.FOR_UNKNOWN_HERE if group else whose_of.FOR_UNKNOWN_PLACE
+            return self._found(said % value[:80] + refs_usable(usable), 'FOR_UNKNOWN_PLACE')
+        if group:
             return self._found(whose_of.FOR_UNKNOWN_PERSON % value[:80], 'FOR_UNKNOWN_PERSON')
         return self._found(FOR_NOT_HERE, 'FOR_NOT_HERE')
 

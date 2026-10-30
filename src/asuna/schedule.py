@@ -806,7 +806,11 @@ class ScheduleService:
         plan = plan_records.get(self.store, plan_id)
         if not plan:
             source = message_records.get(self.store, 'in-' + ep['_id'])
-            plan = plan_records.save(self.store, {'_id': plan_id, **target,
+            # ADR-111: whose work the plan is for, recorded only where it lives (a line plan or one made on an errand is
+            # her own where it fires), so its firing carries no grant from elsewhere.
+            from . import whose as whose_of
+            whose = whose_of.for_plan(self.store, whose_of.of(self.store, ep), target['scene_id'], target['person_id'])
+            plan = plan_records.save(self.store, {'_id': plan_id, **target, 'whose': whose,
                 **({'from_scene_id': ep['scene_id']} if where else {}), 'source_episode_id': ep['_id'],
                 'intent': intent.strip(), 'rule': rule,
                 **({'timezone': zone['name']} if schedule_rules.has_wall_zone(rule) else {}),

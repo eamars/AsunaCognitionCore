@@ -123,6 +123,28 @@ Host-owned resource grants, never inferred from a message or model role.
 - def `conversation_workspace` — Whether anyone may hand work to the action brain in this conversation (it then lists the tools that do it; each turn still checks its own speaker with workspace_grant).
 - def `development_granted` — Who may hand work with the development tools to the action brain (ADR-011 §6.1).
 
+## `whose`
+
+[src/asuna/whose.py](../../src/asuna/whose.py)
+
+Whose work a task is (ADR-111): who asked, and where.
+
+- def `record`
+- def `home` — The home line, the Web chat, as a place: where work for someone outside runs (ADR-111).
+- def `of_turn` — The turn's `whose` (ADR-111 design §2.2), or None: a turn a note from outside opened whose origin is gone or would be a home conversation acts for no one, and hands nothing over and plans nothing.
+- def `of` — An episode's `whose`: as stored, else decided from its stored input (a turn in flight across the install); a turn that is gone or erased answers `own` where it was.
+- def `of_task` — A task's `whose`: as stored, else (a task written before ADR-111) read from the turn that made it, never earning more than the grant the task stored.
+- def `of_plan` — A plan's `whose`: as stored, else (a plan written before ADR-111) read from the turn that made it, honoured only where the plan lives (§3.7).
+- def `for_plan` — The `whose` a plan living in this conversation records: the turn's when it names this conversation (or is `outside`, whose work lives on the Web chat), else her own here (a line plan, a plan made on an errand).
+- def `earns_development` — Whether work for this `whose` may get the development tools (ADR-011 §6.1, ADR-111 §2.4): the owner's own words in one of his conversations, an agent's words on its own line, her self-development; nothing else.
+- def `standing` — Whether the person can still be reached where the work is: 'here', 'left' (their admission ended, ADR-107), 'blocked' (the channel's list or her block switch) or 'closed' (a line she has closed).
+- def `words` — Whose it is, in her words (TASK or PLAN), with where the person stands when they can no longer be reached.
+- def `result_words` — `for` on a result item: whose it is, and where it was handed over when that is another conversation.
+- def `moved` — Whether a task runs on the Web chat for outside work she took on in another conversation (`made`: the turn that handed it over): the one case, besides an errand's, of a task running elsewhere than its turn (§3.5).
+- def `named_person` — The person a group turn's `for` names: one whose line is in this turn (people_from_program), by label.
+- def `named_outside` — The outside conversation a home turn's `for` names: a group or a DM from her note places that is not a home one (a home group is listed among the outside places, `places.errand_targets`).
+- def `newest_line` — A person's newest line in a conversation: the input of a task she names for them in a group.
+
 ## `schedule`
 
 [src/asuna/schedule.py](../../src/asuna/schedule.py)

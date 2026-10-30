@@ -106,10 +106,11 @@ class Coordinator:
                 return existing
             from .ingress import persist_input
             persist_input(self.store,event)
-            from . import attend
+            from . import attend, whose as whose_of
+            whose=whose_of.of_turn(self.store,None,event)          # ADR-111: whose work this turn hands over
             if self.attend and attend.gated(scene,event):
                 # The gate first: nothing is recalled until she chooses to join (attend.py).
-                ep=episode_records.save(self.store, {'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'ATTENDING','persona':persona,'person_id':event['person_id'],'attend_event':event,'context':{},'manifest':{},'monologue_refs':[]},stream=ep_id)
+                ep=episode_records.save(self.store, {'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'ATTENDING','persona':persona,'person_id':event['person_id'],'attend_event':event,'context':{},'manifest':{},'monologue_refs':[],'whose':whose},stream=ep_id)
                 if scene.get('character_context'):
                     ep=self._update(ep,character_context=scene['character_context'])
                 if self.native_session_resolver:
@@ -119,7 +120,7 @@ class Coordinator:
             self.store.audit(ep_id,'context.prepared',prepared_record(manifest,event['person_id'],scene['policy_epoch']),scene['scope_key'])
             from . import errands
             errand=errands.carried(self.store,event)       # ADR-066: home's authority, for this turn only
-            ep=episode_records.save(self.store, {'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'person_id':event['person_id'],'monologue_refs':[],**({'errand':errand} if errand else {}),**{k:event[k] for k in ('task_id','intent_revision','delegation_depth') if k in event}},stream=ep_id)
+            ep=episode_records.save(self.store, {'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],'source_event_id':event['event_id'],'episode_kind':event.get('episode_kind','external'),'state':'PREPARED','persona':persona,'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'person_id':event['person_id'],'monologue_refs':[],'whose':whose,**({'errand':errand} if errand else {}),**{k:event[k] for k in ('task_id','intent_revision','delegation_depth') if k in event}},stream=ep_id)
             if scene.get('character_context'):
                 ep=self._update(ep,character_context=scene['character_context'])
             if event.get('native_session_id') or self.native_session_resolver:
@@ -161,7 +162,7 @@ class Coordinator:
             scene=scene_records.authorize(self.store, task['scene_id'], task['requester_id'])
             # She answers in the conversation the task belongs to: for one begun on an errand, the home turn that sent
             # it, whose place, person and scope the task carries (delegate).
-            from . import errands
+            from . import errands, whose as whose_of
             begun=episode_records.get(self.store, task['episode_id']) or {}
             belongs=begun.get('errand') or begun
             original=errands.home_turn(self.store,begun) if begun else None
@@ -190,6 +191,7 @@ class Coordinator:
                     'state':'PREPARED','persona':original['persona'],'person_id':task['requester_id'],
                     'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'monologue_refs':[],
                     'task_id':task['_id'],'native_session_id':original.get('native_session_id'),
+                    'whose':whose_of.of_task(self.store,task),
                     **({'character_context':original['character_context']} if original.get('character_context') else {})},
                     stream=ep_id)
             if ep['state']!='COMMITTED':
@@ -655,7 +657,7 @@ class Coordinator:
 
     def delegate(self, ep, call_id, title, brief, tier=None):
         """A new task: the action brain's first message is her brief (§4). `tier` (ADR-075): (tier, why) she chose."""
-        from . import errands, places
+        from . import errands, places, whose as whose_of
         from .grants import workspace_grant
         # A task begun on an errand is home's, and one begun in a reflection runs under home's own session: both turns
         # run in a session retired when they end, which a task would outlive (owner and her, 2026-10-20). Its grants
@@ -683,14 +685,28 @@ class Coordinator:
                     'intent_revision':1,'goal':title,'title':title,'brief':brief,'constraints':[],
                     'raw_input_refs':raw,'state':'READY','fencing_token':0,'tool_steps':0,
                     'integration_profile':integration,'development_grant':development,
-                    'allowed_capabilities':names,'native_session_id':session,
+                    'allowed_capabilities':names,'native_session_id':session,'whose':whose_of.of(self.store,ep),
                     **({'errand_place':places.place_id(ep['scene_id'])} if ep.get('errand') else {}),
                     **({'tier':tier} if tier else {}),'created_at':now()},stream=ep['_id'])
+            self._audit_whose(task,ep)
             self.crash('after_task_persist')
         fresh=episode_records.get(self.store, ep['_id'])
         self._update(fresh,task_ids=[*dict.fromkeys([*(fresh.get('task_ids') or []),task_id])])
         self.collab(task,'message',{'from':'character','text':brief,'title':title},entry_id='brief:'+task_id)
         return {**task,**({'tier_words':said} if said else {})}
+
+    def _audit_whose(self, task, ep):
+        """ADR-111: whose work a new task is, beside where it runs and the turn that handed it over, by structure only."""
+        from . import visibility
+        whose=task.get('whose') or {}
+        def where(scene_id, person_id):
+            scene=scene_records.get(self.store, scene_id, fields=['kind']) or {}
+            return {'kind':scene.get('kind'),'class':visibility.session_class(self.store.config,self.store,
+                                                                            {'_id':scene_id,**scene},person_id)}
+        self.store.audit(task['_id'],'task.whose',{'by':whose.get('by'),'chosen':bool(whose.get('chosen')),
+            'development_grant':bool(task.get('development_grant')),'integration_profile':task.get('integration_profile'),
+            'runs':where(task['scene_id'],task['requester_id']),'turn':where(ep['scene_id'],ep['person_id']),
+            **({'inherited':'unrecorded'} if whose.get('unrecorded') else {})},task['scope_key'])
 
     def _task_session(self, ep):
         """The role session a task of this turn belongs to: its own, or home's live one for a one-shot turn."""
@@ -713,6 +729,7 @@ class Coordinator:
 
     def message_action(self, ep, call_id, task, message):
         """Her words to the action brain about one task: steered into a running one, or continuing a finished one."""
+        from . import whose as whose_of
         development,integration,names=self._grants(ep)
         if (task.get('integration_profile')!=integration   # 比值，不是 truthy：owner 回合不能给窄授权任务补话，反过来也不行
                 or bool(task.get('development_grant')) and not development):
@@ -762,9 +779,11 @@ class Coordinator:
                     'constraints':[],'raw_input_refs':raw,'state':'READY','fencing_token':0,'tool_steps':0,
                     'integration_profile':integration,'development_grant':development,
                     'allowed_capabilities':names,'continues_task_id':task['_id'],'execution_binding':binding,
+                    'whose':whose_of.of_task(self.store,task),
                     **({'fresh_context':fresh} if fresh else {}),**({'tier':tier} if tier else {}),
                     'native_session_id':task.get('native_session_id') or ep.get('native_session_id'),
                     'created_at':now()},stream=ep['_id'])
+                self._audit_whose(continued,ep)
         fresh=episode_records.get(self.store, ep['_id'])
         self._update(fresh,task_ids=[*dict.fromkeys([*(fresh.get('task_ids') or []),task_id])])
         self.collab(continued,'message',{'from':'character','text':message},entry_id='brief:'+task_id)

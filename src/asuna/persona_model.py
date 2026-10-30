@@ -104,9 +104,13 @@ def validate(model: dict, persona_id: str) -> dict:
     if model['persona']['id'] != persona_id:
         raise PersonaModelError(f"PERSONA_ID_MISMATCH: model {model['persona']['id']!r} != registered {persona_id!r}")
     declared = set(model.get('policy_keys', {}))
-    reserved = declared & (set(PRIVATE_KEYS) | set(CORE_WRITABLE_KEYS) | OWNER_KEYS | PACKAGE_WORDS)
+    reserved = declared & (set(PRIVATE_KEYS) | set(CORE_WRITABLE_KEYS) | OWNER_KEYS)
     if reserved:
         raise PersonaModelError('PERSONA_MODEL_INVALID: policy_keys may not declare core keys: ' + ', '.join(sorted(reserved)))
+    words = declared & PACKAGE_WORDS
+    if words:
+        raise PersonaModelError("PERSONA_MODEL_INVALID: policy_keys may not declare the persona's own words; they change "
+                                'by publishing the package, never by set_policy: ' + ', '.join(sorted(words)))
     for key in PRIVATE_KEYS:
         if lookup(model, key) is not _MISSING:
             raise PersonaModelError('PERSONA_MODEL_INVALID: a package may not default the private key ' + key)

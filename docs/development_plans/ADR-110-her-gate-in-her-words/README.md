@@ -268,7 +268,7 @@ subject).
 | F7 | Her words say something untrue about the program, or contradict the frame | the frame states the mechanism in the same request; nothing checks her words | | hers |
 | F8 | A line in a group tries to change her gate | a public group's line cannot reach her words: the grant is not there (§6). A line in a home group (`home_groups`) or on an agent line can lead to a publication in that turn, as it can lead to anything else she does at home: those are inside the owner's trust boundary (owner, 2026-10-12) | | her own review |
 | F9 | Her publication applies while a question is open | the open question keeps the text it began with (built once, `coordinator.py:485-486`); the swap is one assignment after validation; the next question reads the new text | | |
-| F10 | The Host or the worker restarts mid-question | the episode resumes (`ATTENDING` is resumable, `coordinator.py:57`) with the same operation; a finished answer is reused from its receipt; otherwise the question is asked again, with the current text, in the same session, after the cut-off attempt (`children.js:31-50`). At this ADR's landing restart such a question carries the old instruction in its history beside the new frame, once | | |
+| F10 | The Host or the worker restarts mid-question | the episode resumes (`ATTENDING` is resumable, `coordinator.py:57`) with the same operation; a finished answer is reused from its receipt; otherwise the question is asked again, with the current text, in the same session, after the cut-off attempt (`children.js:31-50`). At this ADR's landing restart such a question carries the old instruction in its history beside the new frame, once; its session rebinds with the new system prompt (the bound hash is not part of the binding's identity, `native_worker.bind_session`) | | |
 | F11 | A persona publication of hers is waiting for a Host restart (it changed a JavaScript, package or `cordis.patch.yml` file) | her words in it wait too; an unattended self-improvement turn cannot publish to that project again until the restart (`DEVELOPMENT_PUBLISH_WAITING_RESTART`, `floor.js:449-452`) | her, in the publication result | the restart; or she keeps word changes in publications of their own |
 | F12 | The program changes so that a frame sentence is untrue | whoever changes the mechanism changes the frame in the same commit; the frame repeats no constant, so only a change of mechanism can do it; its size is held by `tests/test_tool_budget.py` | | |
 | F13 | The program changes something her words may name (a data field, the choice words, a new wake reason), or this ADR is reverted | her words are not touched. The ADR making the change says it in its one message to her and to any persona whose model carries `attend.guide` (search `packages/personas`). A change to 接话/不理 keeps the old words accepted until every such persona has published again | her | she rewords |
@@ -304,11 +304,11 @@ installed when it lands does not gate it (owner, 2026-10-30).
 |---|---|
 | `src/asuna/resources/prompts/stage_attend.md` | the frame of §5.1, byte for byte, LF |
 | `src/asuna/attend.py` | `system(store, persona)`: `你是<name>。` + her core sentences + her words (§5.3) from `persona_model.effective(store.config.get('persona_model') or {}, 'attend.guide')`; no `common_text`. `material`: the two renames (§5.2). The module docstring's last paragraph and `system`'s docstring say the three parts |
-| `src/asuna/persona_model.py` | `validate` refuses a `policy_keys` entry naming a persona text key (`attend.guide`, `memory.tiers_told`, `heartbeat.idle_hint`, `self_review.exchanges_note`), in the words of the existing reserved-key refusal; the comment above `TIERS_TOLD` already says they are not hers to `set_policy` |
+| `src/asuna/persona_model.py` | `validate` refuses a `policy_keys` entry naming a persona text key (`attend.guide`, `memory.tiers_told`, `heartbeat.idle_hint`, `self_review.exchanges_note`), `PACKAGE_WORDS`, with a refusal of its own saying they change by publishing the package; the comment above `TIERS_TOLD` already says they are not hers to `set_policy` |
 | `src/asuna/resources/schemas/persona-model.schema.json` | top-level `attend`: object, `additionalProperties: false`, property `guide`: string, 1-500, its description saying a revert keeps it (F14) |
 | `tests/test_tool_budget.py` | `PROMPTS['stage_attend.md']` = the frame's count (349 as measured; recount) |
 | `tests/test_attend.py` | one test (§9.3) |
-| an existing persona-model test file | one assertion (§9.3) |
+| `tests/test_persona_model.py` | one test (§9.3) |
 | `RUNTIME_API.md` | the persona-model table: a row for `attend.guide` (none; her words for her relevance gate, at most 500 characters, carried after her core sentences in the gate's system prompt, read at each question; not a policy key); the Key group table: persona text keys may not be declared in `policy_keys`; a paragraph on what one gate question is (the frame, the data, her words) |
 | `docs/DEVELOPMENT.md` | persona package step 5: `attend.guide` among the words a package gives in the persona's own voice, with no core default |
 | `docs/map/` | regenerated (`tools/project_map.py`) |
@@ -322,12 +322,14 @@ Not changed: `coordinator.py`, the plugin, `GATED`, the parser, `common.md`, her
   - `attend.system` with a persona model carrying `attend.guide` ends with the introducing line and her words and
     holds nothing of `common.md`; with none, or only spaces, there is no introducing line. `carried` is stubbed; no
     database.
-  - `persona_model.validate` refuses a model whose `policy_keys` names `attend.guide` (one assertion, beside the
-    existing reserved-key cases).
+  - every persona text key (`persona_model.PACKAGE_WORDS`) is a bounded string in the schema, and
+    `persona_model.validate` refuses a model whose `policy_keys` names one, with a refusal of its own that says they
+    change by publishing the package.
 - No test of the frame's wording or of the schema's bounds (jsonschema's own work).
 - Before the landing, counts only: how many of her core sections contain `speaker_understanding` or `mood` as a field
   name (expected 0; a hit goes into her build message, F15). Read 2026-10-30 on the build: `speaker_understanding` in
-  0 and `mood` in 0 of her 12 core sections.
+  0 and `mood` in 0 of her 12 core sections. Every persona model in the repository (the six packages and the demo
+  fixture) loads with the new refusal (read the same day).
 - Full suite once at the landing; `pytest integration` (nothing in it changes).
 
 ### 9.4 Landing and its checks on the real system

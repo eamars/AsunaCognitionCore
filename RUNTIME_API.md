@@ -673,11 +673,11 @@ A gated group line (`attend.GATED`) is one question in a session of its own, wit
 
 | Part | What | Where |
 |---|---|---|
-| system | `你是<name>。`, her core sentences as a group turn carries them, then `attend.guide` after the line 「你自己写的（接不接话）：」; nothing when she has none | `attend.system` |
+| system | `你是<name>。`, her core sentences as a group turn carries them, then `attend.guide` after the line 「你自己写的（接不接话）：」; without that line when she has none | `attend.system` |
 | question | the frame: the question, the answer's form, what each answer does, how the data is labelled | `src/asuna/resources/prompts/stage_attend.md` |
 | question | the data, as JSON: `scene`, `why_asked`, `speaker`, `speaker_familiarity`, `speaker_stance`, `since_you_spoke`, `lines`, `notices`, `your_notes_here`, `your_understanding_of_speaker`, `your_mood` | `attend.material` |
 
-The answer's first line starts with 接话 or 不理 (`attend.CHOICES`); the rest is the reason, stored at most 60 characters. A persona's words ask for those two.
+The answer's first line starts with 接话 or 不理 (`attend.CHOICES`); the rest is the reason, stored at most 60 characters. An answer in another form is asked again up to twice (`answers.REPAIRS`), then recorded as a failed look (`host_stops.missed_look`).
 
 ### What she carries
 

@@ -33,6 +33,7 @@ import z from '@deepseek-ai/schemastery';
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic';
 import { BlockAssembler, LlmError, contentHasImage, createUserMessage, errorChain } from '@deepseek-ai/dsh-llm';
 import { overflowed } from './carry.js';
+import { withCheckpointHead } from './marks.js';
 
 export const ROLE_COMPACTION_INSTRUCTION = [
   '现在请你作为这段对话的压缩器：把上面较早的一段对话整理成一份检查点，让同一个角色接着往下聊时不丢失来龙去脉。',
@@ -61,13 +62,16 @@ export const ROLE_COMPACTION_INSTRUCTION = [
   '- 用中文书写；人名、昵称、原话、数字、时间、文件名和代码照原样保留。',
   '- 程序每轮另行提供的资料（人格设定、自我、关系与偏好、对人的一句话印象（people_from_program）、人物档案、群里的笔记（group_notes_from_program）、情感、召回的记忆、任务与计划、历史消息块）之后会重新给出，不要转抄进检查点；只写这些资料里没有的对话经过。',
   '- 分清谁说了什么：对方的话、角色的话和程序提示不要混在一起；程序提示不是任何人说的话。',
+  '- 写谁说了、定了、答应了或更正了什么的条目，末尾写它出自的那一行的〔编号〕，照抄那一行标签行末尾的编号；说不出出自哪一行的，写成「（转述）」。网页里主人的话没有标签行，它的编号在紧跟着的程序通知里（event 的 line）。',
   '- 群聊里的人用程序给的标签称呼，方括号和 #编号 原样保留（如 [名字 #4]）：名字会重复、会改，编号不会。',
   '- 一件事只写在一个小节里：答应的事、更正和分歧、没聊完的话头写在「答应过的事」「更正与分歧」「未了的话头」；「对话脉络」只写经过，不重复它们的细节。',
   '- 不评价，不补写对话里没有的内容，不替角色决定感受。',
   '- 不要提到这次压缩或这条请求。',
   '- 只输出检查点正文，不调用工具。',
   '- 如果对话里已有 <compacted-summary> 块，那是更早的检查点：与新内容合并成一份，结构不变；不写“承接上一份检查点”这类指向它的话，合并后只有这一份。',
-  '- 合并时，它「答应过的事」「更正与分歧」里的条目逐条原样带过来；已经做到或不再成立的，在那条前面加「已了结：」、末尾加「（凭：谁在什么时候说的或做的那一句）」，留这一次；它里面已经标了「已了结：」的，这次删去。',
+  '- 已有检查点开头那行〔摘要〕是程序写的，不要抄进来。',
+  '- 合并时，旧检查点条目末尾的〔编号〕原样带过来。',
+  '- 合并时，它「答应过的事」「更正与分歧」里的条目逐条原样带过来；已经做到或不再成立的，在那条前面加「已了结：」、末尾加「（凭〔编号〕）」，留这一次；它里面已经标了「已了结：」的，这次删去。',
   '- 合并时，「答应过的事」「更正与分歧」一条一行：不把几条并成一句，也不写“其余不变”这类总括；条目多就把每条压短，压短只压经过，留下这一条的判据和来路（数字、idea-…、commit 短号、谁那句原话），每条都单独留着。',
   '- 合并时，它的经过并进「对话脉络」的开头，可以压短（这一处不受上面“一件事只写在一个小节里”的限制）；其他小节也可以压短；留下的人名、时间、数字和原话不改写。',
   '- 直接整理，不必反复推敲。',
@@ -358,13 +362,16 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
     };
     const whole = automatic.has(agent) ? { reason: 'automatic' } : turnEnding.has(agent) ? { reason: 'turn end' }
       : await this.wholeConversation(input, agent, target, signal, cap);
+    // The checkpoint's head (marks.js, ADR-108 D3) goes on the final summary only: the interim summary a span too large
+    // for one request is summarized through (inSteps) is the summarizer's input, not her conversation.
+    const headed = result => ({ ...result, summary: withCheckpointHead(result.summary) });
     if (whole?.messages) {
-      try { return await once(whole.messages, whole.tail); }
+      try { return headed(await once(whole.messages, whole.tail)); }
       catch (error) { if (!overflowed(error)) throw error; this.spanAlone(agent, 'refused for the window', whole, cap); }
     } else if (whole) this.spanAlone(agent, whole.reason, whole, cap);
     const [head, body] = input.messages[0]?.role === 'system'
       ? [input.messages.slice(0, 1), input.messages.slice(1)] : [[], input.messages];
-    return inSteps(head, body, messages => once(messages));
+    return headed(await inSteps(head, body, messages => once(messages)));
   }
 
   /** Whether this DSH's `compactNow` takes a keep-from point (its fourth parameter, `options.keepFrom`). Without one it

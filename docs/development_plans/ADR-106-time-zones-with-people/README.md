@@ -304,6 +304,20 @@ On the branch, in the checkout the build ran in. Python suites: 738 passed, 2 fa
 `tests/test_sandbox_backend.py::test_a_command_writes_only_its_task_folder_and_names_it_task`, which fail the same on
 `cc8c00627132` untouched (no Host sandbox runner in the cloud). Node tests: 257 pass, 4 fail, 4 cancelled, the same
 set as on `cc8c00627132` (turn-end compaction and ADR-098 roots, same cause). Integration tests were not run (no server).
+
+Merged with main `1850b59` (2026-10-30; ADRs 108 and 109 and what they brought in): five conflicts, all text (three
+source files, the tool-budget test, the generated map). Three places main added read a conversation's zone and now read
+her clock: the action brain's tool results (`native_worker.py`), the pointer to a line in another conversation
+(`people.py:source_of`), and the refusal of a plan that was not made (`role_tools.py:_plan_not_made`, which main had
+lifted out of `plan`, and which no longer names a zone). The ADR-109 data child needs nothing of its own: it is given a
+copy of the worker's config with every job and inherits its environment, so its history search draws on the same clock.
+After the merge: Python 828 passed, 0 failed, 9 skipped (the private-words checks and the speech model are unchecked, not
+passed); Node 276 pass, 4 fail, 4 cancelled. Main in a clean worktree gives 275 pass, 4 fail, 2 cancelled in the same
+full run: the same four failures (three ADR-098 roots tests, the ADR-065 clone test) and the same four turn-end compaction
+tests, which wait on a promise the cloud has no DSH to settle, so a full run counts two or four of them as cancelled;
+the compaction file alone gives 8 pass, 4 cancelled on both trees, three runs each. None of the eight touches a zone.
+Integration tests still not run. Map, secret and personal scans clean.
+
 The new tests were checked by mutation: 22 reintroduced defects, 21 killed by the new tests (three first survived and
 showed missing assertions, now added); the 22nd changed nothing the code did, because `plan_zone` already gives a rule
 with no wall zone her clock, and the redundant condition was removed. What the build settled that the design left
@@ -314,7 +328,8 @@ open, and where it differs in detail:
 - `places.local_date(config, moment)` lost its model and policy arguments; `Coordinator._zone()` and `carried._zone(store)`
   stay as one-line calls of `her_zone`; `restarts._zone` only turns a zone name into the `{'tz': ...}` shape.
 - `has_wall_zone` is not repeated where `plan_zone` already returns her clock (the `clock_note` gap is zero by then).
-- The tool-budget test lists 30 tools and 21,455 characters (tiered, 21,751): `place_timezone` was 460.
+- The tool-budget test lists 30 tools and 20,564 characters (tiered, 21,000), measured on her tools as the model is
+  sent them (ADR-108 D4b): `place_timezone` was 426 of that.
 - Not run here, so for the landing's check by content: a real worker start (the pinned `clock.zone` record), the Host's
   `ASUNA_HOST_TIMEZONE`, the action brain's `web_search` stamps, and DSH's daily rule with a moved plan.
 

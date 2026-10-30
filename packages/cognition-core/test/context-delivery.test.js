@@ -54,6 +54,16 @@ test('the line saying she is muted in this group is sent with every trigger, nev
   assert.deepEqual(Object.keys(second.context).slice(-2), ['muted_here_from_program', 'event'], 'read beside the trigger');
 });
 
+test('what woke her when no one spoke is sent with every program-woken turn, never folded as unchanged (ADR-108 D5)', () => {
+  const woken = '心跳到了';
+  const prepared = () => { const { event, ...rest } = context([]); return { scene: '本机', woken_by_program: woken, ...rest, event }; };
+  const first = composeContext(prepared(), visibleCarried(surface([])));
+  const second = composeContext(prepared(), visibleCarried(surface([notice(first, 'ep-1')])));
+  assert.equal(second.context.woken_by_program, woken, 'the same words, the next heartbeat while the first notice is on the surface');
+  assert.ok(!second.omitted.blocks.includes('woken_by_program'));
+  assert.deepEqual(Object.keys(second.context).slice(0, 2), ['scene', 'woken_by_program'], 'at the head, where speaker was');
+});
+
 test('group lines already projected into the conversation are not listed again as history', () => {
   const line = (id, text) => ({ type: 'user/message', data: { content: [{ type: 'text', text }],
     source: { kind: 'user', channel: 'qq', receipt: id } } });

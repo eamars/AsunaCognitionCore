@@ -33,7 +33,7 @@ from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import memories as memory_records
 from .records.view import View, fenced, is_text
-from .store.words import AddToSet, AnyOf, HoldsNone, Increase, NoneOf, OnCreate, Range, Set
+from .store.words import AddToSet, AnyOf, HoldsNone, Increase, NoneOf, OnCreate, Range, Set, Unset
 
 TIERS_VERSION = 1
 ENABLED = True                     # the switch (ADR-062 phase 2): hers and the owner's to turn on
@@ -508,10 +508,14 @@ class Tiers:
                     moves.append(self.move(corrected, PUT_AWAY, 'superseded', moment, scene_id=scene_id))
         declared = declared_nature(intent)
         if declared:
-            # What she says an item is, or where it came from, when she writes or tags it.
+            # What she says an item is, or where it came from, when she writes or tags it. The line it rests on goes
+            # with it, and exactly while it is someone's word (ADR-108 D2): another source removes it.
+            words = [Set({**declared, **anchor_field(declared, intent)})]
+            if declared.get('from') and declared['from'] not in OTHERS_SAID:
+                words.append(Unset('line'))
             for sid in ([sid for sid in new if sid not in old] if op in ('append_section', 'correction')
                         else [intent.get('sid')] if intent.get('sid') in new else []):
-                self.rows.update({'_id': item_id(self.persona, slug, sid)}, Set(declared))
+                self.rows.update({'_id': item_id(self.persona, slug, sid)}, words)
         sid = intent.get('sid')
         if op == 'replace_section' and sid in old and sid in new:
             row = self.item(slug, sid)
@@ -778,6 +782,28 @@ def declared_nature(intent):
     return {'nature': nature, 'fact': nature == FACT, **({'from': source} if source else {})}
 
 
+def anchor_field(declared, intent):
+    """{'line': anchor} when the write names a source that is someone's word and the program resolved the line it rests on
+    (`intent['anchor']`, set by the handler and never by her), else {}."""
+    anchor = intent.get('anchor')
+    if declared.get('from') in OTHERS_SAID and isinstance(anchor, dict):
+        return {'line': {'scene': anchor['scene'], 'seq': anchor['seq']}}
+    return {}
+
+
+def sources(store, persona, slug, scene):
+    """{section id: where its claim rests} for a document's items that rest on a line, as `scene` reads them (ADR-108
+    D2: People.source_of). An item shows its source only while it is someone's word."""
+    if not ENABLED:
+        return {}
+    from .people import People
+    people, found = People(store, persona), {}
+    for row in items(store, persona, doc=slug).rows():
+        if row.get('line') and row.get('from') in OTHERS_SAID:
+            found[row['sid']] = people.source_of(scene, row['line'])
+    return found
+
+
 def told(move):
     """A move as her result or the moved line says it, in words."""
     return '「%s」%s→%s（%s）' % (move.get('heading') or move['sid'], move['from'], move['to'],
@@ -808,9 +834,10 @@ def night_list(store, persona, moment=None, *, excerpt_chars=600):
 
     def entry(kind, row, why):
         text = body(row)
+        source = (sources(store, persona, row['doc'], None).get(row['sid']) if row.get('line') else None)    # ADR-108 D2
         return {'what': NIGHT_WHAT[kind], 'ref': ref(row['doc'], row['sid']), 'heading': row.get('heading'),
                 'store': STORE_WORDS[row['store']], 'nature': row.get('nature') or (FACT if row.get('fact') else MEMORY),
-                'why': why, 'body': excerpt(text, excerpt_chars)}
+                'why': why, 'body': excerpt(text, excerpt_chars), **({'source': source} if source else {})}
     items, offered = [], []
     # 写一句意思: lapsed down from carried, long or dated, no gist yet.
     for row in tiers.items(place=AT_HAND):

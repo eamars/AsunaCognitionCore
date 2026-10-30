@@ -44,9 +44,8 @@ def intent_problem(intent):
     """What is wrong with a plan's intent, with its length and the length she is asked for."""
     if not isinstance(intent, str) or not intent.strip():
         return 'intent 要写届时要重新考虑的事（文字，不能空）'
-    from .config import soft
-    length, ask = len(intent.strip()), soft(INTENT_CHARS)
-    return 'intent %d 字，要求 %d 字以内，超了 %d 字；精简到 %d 字以内，删哪段你自己定' % (length, ask, length - ask, ask)
+    from .config import soft, too_long
+    return too_long('intent', intent.strip(), INTENT_CHARS, soft(INTENT_CHARS), as_list=True)
 
 
 def night_stage_busy(store):

@@ -8,8 +8,6 @@ from .state import Store
 from .context import ContextBuilder
 from .coordinator import Coordinator
 from .retrieval import Retrieval
-from .history_query import HistoryQueryService
-from .discussion_digest import DiscussionDigestService
 from .tasks import TaskService,ToolBroker,Executor
 from .router import Router
 
@@ -28,7 +26,7 @@ class Application:
             self.store.migrate();self.stack.callback(self.store.close)
             self.retrieval=Retrieval(self.store,self.evidence);self.stack.callback(self.retrieval.close)
             self.service=TaskService(self.store)
-            self.broker=ToolBroker(self.service);self.stack.callback(self.broker.close)
+            self.broker=ToolBroker(self.service,self.evidence);self.stack.callback(self.broker.close)
             def persona_jobs(task,args):
                 from .persona_jobs import JobRunner
                 # Always a dry run: the action brain reads and analyses; identity writes are the character's.
@@ -39,12 +37,6 @@ class Application:
             self.broker.persona_jobs=persona_jobs
             if self.development_factory:
                 self.broker.development=self.development_factory(self.config,self.store)
-            # P1-b: the trusted read-only history entry reuses this store and retrieval;
-            # the broker binds every call to the calling task's own scene and epoch.
-            self.history=HistoryQueryService(self.store,self.retrieval);self.broker.history=self.history
-            # P1-c: on-demand group discussion digest reads the very same store/retrieval;
-            # no new service, port or collection, and nothing is ever sent to QQ.
-            self.digest=DiscussionDigestService(self.store,self.retrieval);self.broker.digest=self.digest
             # 看图（Pull）：同一个 store 与既有 GridFS BlobStore；不新建集合、不新建端口、不另起视觉服务。
             from .vision import VisionService
             self.vision=VisionService(self.store);self.broker.vision=self.vision

@@ -51,8 +51,10 @@ The DSH services, hooks, events, APIs, UI facilities and file formats the core p
 | `user/message` | received platform lines written into her conversation | `navigation.js` `recordChannelInput`; `pairing.js` |
 | `agent/inbox/spliced` (target `next-step`) | lines waiting before her first turn (at most 40) | `navigation.js` `queueing` |
 | `system/message` | the session head that must come before any line | `navigation.js` `recordChannelInput` |
-| `tool/call`, `tool/result`, `step/start`, `turn/start`, `turn/end` | keep a line from landing between a call and its result | `pairing.js` `toolCallOpen`, `strayLines` |
-| `compaction/start`, `compaction/end`, `compaction/summary`, `session/end-seed` | hold lines during a compaction; carry a conversation past its window | `pairing.js` `compactionOpen`; `carry.js` |
+| `step/start`, `step/end`, `turn/start`, `turn/end` | a platform line waits while a step is open (the request, her reply, its tool calls and results); `step/end` is appended in a `finally`, so a failed or aborted step closes too, and is where the held lines are released: `agent/turn-stopping` is dispatched only after a step that returned | `pairing.js` `stepOpen`, `mustHold`, `releaseAtBoundary` |
+| `tool/call`, `tool/result` | find a line already written between a call and its result | `pairing.js` `strayLines` |
+| `systemPrompt.context` (`working-directory:current`, registered `required`, which `suppressRuntimeContext()` keeps) | her lanes register an empty context of the same name through their own scope, which shadows it; the action brain keeps it | `contexts.js` `withoutWorkingDirectory` |
+| `compaction/start`, `compaction/end`, `compaction/summary`, `session/end-seed` | hold lines during a compaction (and release them as it ends); a step or compaction started before an `end-seed` runs no more; carry a conversation past its window | `pairing.js` `compactionOpen`, `releaseAtBoundary`; `carry.js` |
 | surface replace (`surfaceOp: {op: "replace"}`) | empty a stray line in place | `pairing.js` `repair` |
 | `image/offload` | turn retained pictures into DSH's placeholders after a refusal | `image-refusal.js` |
 | `session/title` | conversation titles | `navigation.js` |

@@ -100,8 +100,18 @@ BLOCKS = {
     'notes': ('note_from_program', 'notes_from_program', 'notes_sent_from_program', 'note_places_from_program'),
     'sender_identity': ('sender_identity',),
 }
-CONTEXT_HEAD = ('scene', 'speaker', 'session_class')
+CONTEXT_HEAD = ('scene', 'speaker', 'woken_by_program', 'session_class')
 SEGMENT_WORDS = {'face': '小黄脸', 'reply': '引用', 'at': '@', 'image': '图', 'record': '语音', 'mface': '表情包'}
+
+
+def local_line(source, event):
+    """The number of the line that called her when that line has no label line to carry it, else None (ADR-108 D2, A3). A
+    line from the local chat is DSH's own message, so the notice that follows it carries the number, in the form of a
+    label line's. A channel line carries its own; a turn the program opened has no calling line."""
+    if (source and source.get('scene_seq') and (event.get('episode_kind') or 'external')=='external'
+            and not (source.get('event') or {}).get('channel')):
+        return '〔%d〕'%source['scene_seq']
+    return None
 
 
 def landing_lost(verification):
@@ -204,10 +214,12 @@ def _section_view(section):
             for k in ('sid', 'heading', 'body', 'visibility', 'entry_date', 'tags') if k in section}
 
 
-def ledger_block(docs, cls):
-    """Every ledger she can read here, each within its per-turn limit (context_budget.note_view)."""
+def ledger_block(docs, cls, scene=None):
+    """Every ledger she can read here, each within its per-turn limit (context_budget.note_view). A section that says
+    someone said something shows the line it rests on (ADR-108 D2), as `scene` reads it."""
     from .carried import placed, sections as carried_sections
     from .context_budget import NOTE_CHARS, note_view
+    from . import memory_tiers
     out = []
     for slug in docs.slugs():
         revision, content = docs.read(slug)
@@ -216,8 +228,10 @@ def ledger_block(docs, cls):
         sections = carried_sections(placed(docs.store, docs.persona, slug, content), cls)
         if sections:
             kept, about = note_view(sections, NOTE_CHARS['ledger'])
+            sources = memory_tiers.sources(docs.store, docs.persona, slug, scene)
             out.append({'doc': slug, 'revision': revision, 'title': content.get('title'),
-                        'sections': [_section_view(s) for s in kept], **about})
+                        'sections': [{**_section_view(s), **({'source': sources[s['sid']]} if sources.get(s['sid']) else {})}
+                                     for s in kept], **about})
     return out
 
 
@@ -407,7 +421,7 @@ class ContextBuilder:
             # ADR-062: once she has written herself as items, the carried ones are what she reads of herself.
             for name,slug in _carried.SELF_BLOCKS:
                 if (identity.get(slug) or {}).get('sections'):
-                    self_state[name]=_carried.self_block(slug,carried_here[slug])
+                    self_state[name]=_carried.self_block(slug,carried_here[slug],memory_tiers.sources(self.store,persona,slug,scene))
         from .ingress import episode_id
         source = message_records.get(self.store, 'in-' + episode_id(event))
         # Newly accepted/future queued inputs must not enter an earlier turn.
@@ -680,6 +694,9 @@ class ContextBuilder:
                  # session that already holds it is not sent it again (context-delivery.js).
                  'clock_from_program':schedule_rules.local_clock(schedule_zone,moment),
                  'event':{'event_id':event['event_id'],'text':event['text'],'trusted_context_events':event.get('trusted_context_events',[])}}
+        line=local_line(source,event)
+        if line:
+            context['event']['line']=line
         if coverage_block:
             context['coverage_from_program']=coverage_block
         if held_back:
@@ -1040,7 +1057,7 @@ class ContextBuilder:
             context['group_continuity_from_program'] = continuity
         model,policy=model_and_policy(self.store,persona)
         documents={'persona':system_ref['persona_doc_revision'],'voice':system_ref['voice_doc_revision']}
-        ledgers=ledger_block(docs,session_class)
+        ledgers=ledger_block(docs,session_class,scene)
         if memory_tiers.ENABLED and not recall:
             # ADR-062: where her things are, in words, and what the program moved since this conversation was told.
             from .group_admin import notes_slug as _notes_slug
@@ -1277,10 +1294,10 @@ class ContextBuilder:
                 speak['one_self']=ONE_SELF          # ADR-018 §5.7: words only, nothing from elsewhere
             if replying and source and source.get('direction')=='inbound' and source.get('scene_seq') is not None:
                 # ADR-079 §9.5: only in a turn where others spoke after the line that called her, their numbers to copy.
-                from .capabilities import numbered
+                from .capabilities import can_quote
                 later=[row['scene_seq'] for row in message_records.inbound(self.store,scene['_id'],
                        after=source['scene_seq'],no_notice=True).rows(fields=['scene_seq'])] \
-                    if numbered(self.store,scene) else []
+                    if can_quote(self.store,scene) else []
                 if later:
                     shown='、'.join('〔%d〕'%n for n in later[:AMBIGUOUS_MAX])+('等' if len(later)>AMBIGUOUS_MAX else '')
                     speak['quote']=AMBIGUOUS%(len(later),shown)
@@ -1338,7 +1355,12 @@ class ContextBuilder:
         # The ceiling applies to what a turn sends, not to what is prepared (coordinator._deliver, context_budget.py).
         from .context_budget import size as _size
         manifest['context_chars']=_size(context)
-        people.relabel(context,scene,event['person_id'])
+        # ADR-108 D5: a turn the program opened says what woke her; the person on its event only authorized it.
+        from .wake_words import woken_by
+        woken=woken_by(self.store,persona,event)
+        people.relabel(context,scene,event['person_id'],speaking=woken is None)
+        if woken:
+            context['woken_by_program']=woken
         context=order_context(context,effective(model,'recall_protocol.order',policy))
         manifest['context_sha256']=sha(canonical(context))
         manifest['system_ref']=system_ref

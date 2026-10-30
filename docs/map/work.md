@@ -20,6 +20,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 - def `bounded_result`
 - class `FeedbackStale` — The action result no longer authorizes a pending role continuation.
 - def `require_current_feedback`
+- def `listed_files` — list_files' answer: the task folder walked folder by folder, at most LIST_FILES_MOST entries, its files sorted by path; `limited` says so when the walk stopped there.
 - def `workspace_file` — list_files / read_file / write_file inside the task folder; protected sources stay read-only.
 - class `ToolFailed` — A tool call that did not happen, for the reason its tool named: the call's error, in the words its FAILED artifact keeps.
 - def `failure_words` — The words of a definite failure a tool answered with, or None: its code, its note, then what else it named.

@@ -131,13 +131,16 @@ Who is who in a scene, as the character reads it.
   - `mentions` — The adapter's real @<number> of a known person (or of her own account) reads as their label.
   - `ensure_roster` — Label everyone who has written in this scene, so a lookup can name them all.
   - `resolve` — The people of this scene a lookup may mean.
+  - `copyable` — A person as she is to copy them, for a refusal that lists who she may name (ADR-108 D4c): the first form of the label that `resolve` takes back as that one person.
+  - `copyable_author` — `copyable` for a stored author (a person id).
   - `account_of` — The platform account behind a person in this scene, for the adapter's @ marker; None when unknown.
   - `numbers` — Numbers in her words that are someone's here, outside a label (a label leaves as a name or an @): [(what she wrote, their label)].
   - `outbound` — Labels never leave the program; the stored text keeps what she wrote.
   - `authors_of` — Every stored author id in these scenes that is this person (aliases by configuration).
   - `row_head` — Who wrote a stored row, as a history result names them: her own rows read as her name.
   - `speaker` — Label for a stored author (no notes): her own rows read `me` when given.
-  - `pointed` — A line another line points at (a quote, a reaction, a recall), in the one form every pointer has (ADR-079 §9.3), the same as its own label line: its number where the conversation shows numbers, its speaker (hers as 你), when it was said on h
+  - `pointed` — A line another line points at (a quote, a reaction, a recall), in the one form every pointer has (ADR-079 §9.3), the same as its own label line: its number, its speaker (hers as 你), when it was said on her clock, its first words.
+  - `source_of` — Where an item's claim rests, read when the item is shown (ADR-108 D2): in the conversation of its line, that line's pointer without its words (which line, who, when); in another conversation only when it was said, because another scene's la
   - `thought_then` — Under a line of hers that someone else points at (a quote, a reaction, a recall, an essence): what she thought when she said it, as she wrote it (reasons.py, ADR-043), as an anchor, not the whole old thought: read in full it passes for a ju
   - `line_of` — The line she names by its number in this conversation (as shown, brackets or not) or by 这条 (the line that called her): (row, None), or (None, why, in words she can act on) (ADR-079 §9.4).
   - `transcript` — One platform message as it enters her conversation: the speaker's label line, then the message, indented.

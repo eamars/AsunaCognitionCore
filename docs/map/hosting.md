@@ -20,7 +20,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `child_title` — A child session's title: content only (her task's title, or the conversation it serves), since DSH shows a stored title as it is and UI words must follow the viewer's language (ADR-011 §2.8).
   - `generate` — One stage of a native turn.
   - `turn_done` — Her turn has no further stage (coordinator._turn): the plugin ends the native turn.
-  - `wait` — The stage's result; her tool calls in the meantime run here, one at a time, in call order.
+  - `wait` — The stage's result; her tool calls in the meantime run here, one at a time, in call order, each timed for her episode `ep` (tool_watch.py).
   - `close`
 - class `BusinessWorker`
   - `register_stage` — Admit a stage: the Host is not reconfiguring, its task (if any) is still valid, and the operation runs once.
@@ -123,8 +123,9 @@ Paths and checks every module shares: `ROOT` (the source tree), `DATA` (this pro
 - def `soft` — The length she is asked for: four fifths of the limit the program refuses past, which stays where it was.
 - def `refs_usable` — What a refusal that named a wrong reference adds (ADR-087 §4.5): the ones that can be used there, a few.
 - def `over` — Words for a text kept although longer than she was asked for (`ask`, by default soft(limit)), or None.
+- def `excess_line` — (s, t): the line of a text that holds its first character past `limit`, and how many lines it has, as split on line breaks once trailing blank lines are gone.
+- def `too_long` — The refusal for a text past the line (ADR-108 D4c): the line, by how much she went over, the aim, where the line comes from, and where the excess starts, by characters.
 - def `cut` — An over-long text of hers cut to fit `limit` with the mark included: the beginning kept, the end cut at the last sentence end that fits (else at the limit), and the mark saying how much was cut, so that sending it as it is can never pass fo
-- def `cut_offer` — The cut version as a refusal offers it, on its own lines ready to copy, and the part that cut leaves out, so what would be lost is seen before it is sent (her ask, 2026-10-20).
 - def `excerpt` — Bounded text for a context block; a cut always says so and how long the original was.
 
 ## `repo_files`
@@ -332,6 +333,20 @@ Times a model reads are on her one clock (owner 2026-10-08; one clock in every c
 - def `stamp` — One time on the local clock face (`face`); the value as it was when it is no time.
 - def `for_model` — A copy of a context block or tool result with every timestamp field on the local clock.
 - def `her_zone` — Her one clock (schedule_rules.her_zone): the same in every conversation.
+
+## `tool_watch`
+
+[src/asuna/tool_watch.py](../../src/asuna/tool_watch.py)
+
+Every tool call of both brains, timed where the worker dispatches it (native_worker.py): the calls in flight, one `tool.time` audit row as each ends, and a watchdog that records a call running past its limit, once.
+
+- def `limit_of` — The seconds a call may run before it is recorded as an overrun.
+- def `stack_of` — A thread's innermost frames as `file:line function`; empty when the thread is gone.
+- class `Calls` — The worker's tool calls in flight, and their watchdog.
+  - `attach` — Write from now on, and start the watchdog.
+  - `close`
+  - `timed` — Around one call of `brain` ('action' or 'character') for `row` (its task or its episode); `failed`: the exception classes that are the tool's own failure.
+  - `look` — Record each call past its limit not yet recorded; the calls recorded.
 
 ## `store/__init__`
 

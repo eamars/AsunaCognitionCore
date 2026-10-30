@@ -34,6 +34,15 @@ def test_a_failing_cleanup_never_changes_the_counts_answer(store, monkeypatch):
                for cutoff in cutoffs)
 
 
+def test_the_hosts_own_lanes_are_known_and_counted(store):
+    """Every lane the Host counts in is in the list the readers know (the data child's, the tool watchdog's)."""
+    from asuna import media_children
+    for lane in (*media_children.FAULT_LANES.values(), 'tools'):
+        assert lane in lane_faults.LANES
+        lane_faults.record(store, 'host', lane, 'stage', 'error')
+    assert sorted(doc['lane'] for doc in counts(store)) == sorted({*media_children.FAULT_LANES.values(), 'tools'})
+
+
 def test_counts_leave_after_their_days_on_the_next_write(store):
     now = datetime.now(timezone.utc)
     lane_faults.record(store, 'qq', 'inbound', 'post', 'old', moment=now - timedelta(days=lane_faults.KEEP_DAYS, hours=2))

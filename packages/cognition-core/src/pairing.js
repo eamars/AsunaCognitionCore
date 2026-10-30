@@ -1,24 +1,27 @@
 /** A tool call and its result stay adjacent in her conversation, and a compaction sees the surface it summarizes.
  *
  * DSH never writes input between a call and its result: what arrives while tools run goes to the next step, after
- * the results, and Anthropic's API refuses a request with anything in between. A platform line that arrives while one
- * of her tool calls waits for its result is held here and joins the conversation at the next step boundary (the next
- * step's start, or the turn's end), never extending a turn. A line already written between a call and its result,
- * from before this rule, is replaced in place by an empty line, which no provider is sent.
+ * the results, and Anthropic's API refuses a request with anything in between. A platform line is held the same way
+ * for the whole of a step, because a request is built from the surface when the step starts: a line appended later
+ * lands after the call that never saw it, and the order of her conversation would say she had. So a platform line
+ * that arrives while a step is open (from `step/start` to `step/end`: the request, her reply, every tool call and
+ * result) is held here and joins the conversation at the next boundary: the step's end, the next step's start, or
+ * the turn's end. It never extends a turn. A line already written between a call and its result, from before this
+ * rule, is replaced in place by an empty line, which no provider is sent.
  *
  * A compaction inside her turn refuses its summary when the surface changed while it was written; a line that
  * arrives while a compaction runs on its conversation is held too, and joins the conversation as the compaction ends
  * (`compaction/end`, whether it committed or failed). */
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 
-/** Whether a tool call of the running step still waits for its result. */
-export function toolCallOpen(events) {
-  const answered = new Set();
+/** Whether a step runs on the conversation: the latest of its markers is a `step/start`. DSH appends `step/end` in a
+ * `finally`, so a failed or aborted step closes too. As with a compaction, a start older than the log's last
+ * `session/end-seed` (the conversation was opened again since, e.g. after the process stopped mid-step) runs no more. */
+export function stepOpen(events) {
   for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i];
-    if (event.type === 'tool/result') answered.add(event.data?.message?.source?.callId);
-    else if (event.type === 'tool/call') { if (!answered.has(event.data?.callId)) return true; }
-    else if (['step/start', 'step/end', 'turn/start', 'turn/end'].includes(event.type)) return false;
+    const type = events[i].type;
+    if (type === 'step/start') return true;
+    if (type === 'step/end' || type === 'turn/start' || type === 'turn/end' || type === 'session/end-seed') return false;
   }
   return false;
 }
@@ -34,7 +37,14 @@ export function compactionOpen(events) {
   return false;
 }
 
-/** Hold a line until the open tool call has its result, or the running compaction its end. */
+/** Whether a platform line arriving now waits: the conversation has its head, and a step or a compaction runs. A
+ * step counts only where the conversation has an agent (`hasAgent`): a conversation without one runs no step. */
+export function mustHold(events, hasAgent) {
+  return events.some(event => event.type === 'system/message')
+    && (Boolean(hasAgent) && stepOpen(events) || compactionOpen(events));
+}
+
+/** Hold a line until the open step ends, or the running compaction. */
 export function hold(core, id, message) {
   const held = core.held.get(id) ?? [];
   if (!held.some(line => line.source?.receipt === message.source?.receipt)) held.push(message);
@@ -60,14 +70,21 @@ export function release(core, session) {
   return true;
 }
 
-/** Lines held while a compaction ran join its conversation as it ends (after the event is published: DSH refuses an
- * append from inside a session observer). Returns the listener's disposer. */
-export function releaseAfterCompaction(core) {
+/** Lines held while a step or a compaction ran join the conversation as it ends (after the event is published: DSH
+ * refuses an append from inside a session observer). `step/end` is the one point every step passes, a failed or an
+ * aborted one included: `agent/turn-stopping` is dispatched only after a step that returned. Returns the listener's
+ * disposer. */
+export function releaseAtBoundary(core) {
   return core.ctx.on('session/event', (session, event) => {
-    if (event.type !== 'compaction/end' || !core.held.get(session.id)?.length) return;
+    if ((event.type !== 'compaction/end' && event.type !== 'step/end') || !core.held.get(session.id)?.length) return;
+    // A microtask that throws is an uncaught exception, and this runs at the end of every step of a conversation with
+    // held lines, aborts and the worker's fence included: a failure here is logged, never left to the process.
     queueMicrotask(() => {
-      if (!toolCallOpen(session.snapshotEvents()) && !compactionOpen(session.snapshotEvents()) && release(core, session))
-        core.ctx.sessions.flush(session).catch(error => core.ctx.logger.warn('Asuna: lines held during a compaction: ' + String(error)));
+      try {
+        const events = session.snapshotEvents();
+        if (!stepOpen(events) && !compactionOpen(events) && release(core, session))
+          core.ctx.sessions.flush(session).catch(error => core.ctx.logger.warn('Asuna: lines held during a step or a compaction: ' + String(error)));
+      } catch (error) { core.ctx.logger.warn('Asuna: lines held during a step or a compaction were not released: ' + String(error)); }
     });
   });
 }

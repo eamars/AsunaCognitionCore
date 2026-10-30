@@ -350,6 +350,11 @@ class RuntimeHost:
                 self.stack.callback(self.voice.close)
             media_children.start_video(enabled=media.get('video', True), fault=fault('video'))
             self.stack.callback(media_children.stop_video)
+            # The action brain's history search and discussion digest run in a child of their own, with a deadline
+            # (data_children.py), never in this process while it runs.
+            from . import data_children
+            data_children.start(fault=fault('data'))
+            self.stack.callback(data_children.stop)
             channels = Channels(self.controller)
             channels.recover_sending()
             self._recover_tasks()

@@ -31,7 +31,7 @@ from .records import messages as message_records
 from . import visibility
 from .errands import MARK as ERRAND_MARK
 from .vision import inline_summary as picture_receipt
-from .config import cut, cut_offer, over, refs_usable, soft
+from .config import cut, over, refs_usable, soft, too_long
 from .context_budget import SINGLE_BODY_CHARS
 from .records import episodes as episode_records
 from .records import plans as plan_records
@@ -45,6 +45,18 @@ THOUGHT_HARD_CHARS = 360             # refused past this; the room up to it is t
 # A field a refusal names, by the name she is shown (ADR-060).
 _SHOWN = {'body': 'content', 'reason': 'why', 'sid': 'section', 'line': 'place'}
 RECALLS_PER_TURN = 3
+SAFETY_CAP = 20000          # a limit this large is a failure catch (ADR-054), not a length she writes toward
+SAFETY_CAP_ADVICE = {'brief': '拆开：先交一部分，其余用 task 的 message 补。'}
+# ADR-108 D4c: why a line is where it is, for a length refusal: what the text is carried into. Each is written from the code
+# that carries it (the think description, plans_from_program, ideas_from_program, notes.py, the document's revision record);
+# a text with no entry here says no reason.
+LIMIT_WHY = {
+    ('think', 'thought'): '心里话会存档：这个对话里最近三段，下一回合一定看得到',
+    ('plan', 'intent'): '这条安排到点时会原样放回你面前，是留给将来的你看的',
+    ('ideas', 'idea'): '想法本里每一条都要在自我改进时一条条拿出来看',
+    ('ideas', 'why'): '想法本里每一条都要在自我改进时一条条拿出来看',
+    ('write_document', 'why'): '这句话会记进这一节的修订记录',
+}
 # ADR-084 step 7 (owner and her, 2026-10-20): a turn's tool calls and spoken lines have a usual and a hard line. Past the
 # usual each result gives the numbers (hers: numbers, not judgement); the hard lines catch only loops and model
 # failure. The 24th call is refused with the warning; the 25th runs and the turn ends after it.
@@ -110,10 +122,15 @@ CONSULT = 'consult'
 
 
 class Refused(Exception):
-    """A call she can correct herself: the message says, in words for her, what to do instead."""
+    """A call she can correct herself: the message says, in words for her, what to do instead. `codes`: the machine codes
+    of every problem it names (ADR-108 D4b), kept in the record and never in her words."""
+
+    def __init__(self, message='', codes=()):
+        super().__init__(message)
+        self.codes = tuple(code for code in codes if code)
 
 
-LIMIT_WORDS = '（%d 字以内）'    # what she is asked for; the program refuses only well past it (owner 2026-10-22)
+LIMIT_WORDS = '（%d 字以内，过了 %d 字不收）'    # her prose: the aim and the line, both stated (ADR-108 D4a)
 EXACT_WORDS = '（最多 %d 字）'    # a name or a search, not her prose
 
 
@@ -122,7 +139,7 @@ def _s(description, limit=None, exact=False, **extra):
     schema subset has no maxLength, and a key outside it fails the whole preset. Her prose is described by what she
     is asked for (config.soft); a name or a search by its exact limit."""
     if limit:
-        description += EXACT_WORDS % limit if exact else LIMIT_WORDS % soft(limit)
+        description += EXACT_WORDS % limit if exact else LIMIT_WORDS % (soft(limit), limit)
     return {'type': 'string', 'description': description, **extra}
 
 
@@ -138,6 +155,9 @@ AFFECT_FIELDS = {
     'who': _s('对谁的心情（种类是对人的那几种时）：照抄对方的标签；一对一的对话里不写就是对方。群里不写，这笔就算进你整体的心情'),
 }
 
+# ADR-108 D2: a claim that someone said something points at the line that said it.
+LINE_FOR_CLAIM = ('这一节记的是别人（或主人）说过的话时，写它出自哪一行：那一行的编号（只写数字，编号在每行末尾的〔〕里），'
+                  '或「这条」＝叫你的那条。程序按那一行是谁的，把 from 记成主人定的或别人说的，并在这一节旁边留着出处')
 # ADR-079 §9.4: one way to point at a line, in every tool: its number in this conversation, or 这条.
 QUOTE_LINE = ('引用哪条：写那条的编号（只写数字，编号在每行末尾的〔〕里），或「这条」＝叫你的那条；不写就不引用。'
               '你自己说过的话也能引，用来改口或补一句。一句话回好几条时不用引。编号只用来挑引用，别写进 text。')
@@ -146,7 +166,7 @@ REACT_LINE_RECALL = 'recall：撤你自己的哪一句，写它的编号'
 REACT_LINE = REACT_LINE_REACT + REACT_LINE_RECALL
 # Her own line taken back (her ask, the owner's yes, 2026-10-18): still queued it is cancelled, delivered it is recalled.
 RECALL_WHY_CHARS = 100
-RECALL_WHY = 'recall：为什么撤（必填，%d 字以内）' % soft(RECALL_WHY_CHARS)
+RECALL_WHY = 'recall：为什么撤（必填，%d 字以内，过了 %d 字不收）' % (soft(RECALL_WHY_CHARS), RECALL_WHY_CHARS)
 RECALL_QUEUED = '撤回 〔%d〕 交给平台了（还没确认）'
 RECALL_CANCELLED = '取消了 〔%d〕，那句没发出去'
 RECALL_TOO_LATE = '那句发出已经超过 %d 分钟，平台不让撤了；要改口就补一句，或者引它改口'
@@ -171,12 +191,14 @@ CALLS_FEW = '先想清楚哪一步不做'
 CALL_LAST = '这回合第 %d 次工具调用，到了硬线（%d）：这次不做。下一次是最后一次，照做，做完这回合就结束；%s'
 CAP_SAYS, CAP_SPEAKS = '用它写下要说的话，或 stay_silent。', '用它 speak 把要说的说完。'
 CALLS_ENDED = '这回合的工具调用过了硬线（%d），回合到这里结束。'
+TITLE_FROM_BRIEF = '没写 title：用了 brief 的第一句：%s'
 from .capabilities import CANNOT as LEG_CANNOT, WORDS as LEG_WORDS      # her words for a function not carried here
 # What speak carries itself where it is listed; and where only speak speaks, a turn that does not call it is silent,
 # so stay_silent has nothing left to do there (owner 2026-10-19; at home body text is speech and it stays).
 REPLY_REPLACES = ('await_answer', 'attach_image', 'stay_silent')
 
 from . import understanding as _understanding
+from . import tool_schema
 from . import notes as _notes, places as _places
 # ADR-099: a thought taken from the model's thinking is stored up to this long (a summary runs to 2,000 or so).
 THINKING_STORED_CHARS = 4000
@@ -186,7 +208,7 @@ STAY_SILENT_THINKING = '结束这回合，不再说话。回执会说这一回�
 TOOLS = {
     'think': {
         'description': ('写下这回合的心里话：注意到了什么、心里什么感觉、打算怎么做。用你自己的口吻写两三句' + LIMIT_WORDS
-                         % THOUGHT_CHARS + '，不是完整的推理过程。'
+                         % (THOUGHT_CHARS, THOUGHT_HARD_CHARS) + '，不是完整的推理过程。'
                          '每回合第一步调用它。心里话会存档：这个对话里最近三段，下一回合一定看得到（还在屏上的就在原处，不另给）；'
                          '更早的用 recall 找。'),
         'parameters': {'thought': _s('心里话', required=True)},
@@ -404,8 +426,8 @@ TOOLS = {
                          '那边的你会读到，那边的人看不到，但可能被照着说，所以只写愿意在那边说的；用你自己的话：'
                          '和这里别人刚说的一长段一样的，写明是谁说的也送不出去；别人托的，用你的话说清是谁的意思。'
                          'deliver：wake 马上叫醒那边（排在那边手上的事后面），next_time 那边下次有回合时看到；能选哪样看从哪写到哪，'
-                         '不写按那边的默认（回给群的回信默认 next_time）。叫醒一个群算一次出门。家里送家里 %d 字以内，别的 %d 字以内；一回合最多两张。'
-                         % (soft(_notes.HOME_NOTE_CHARS), soft(_notes.NOTE_CHARS))),
+                         '不写按那边的默认（回给群的回信默认 next_time）。叫醒一个群算一次出门。家里送家里 %d 字以内，过了 %d 字不收；别的 %d 字以内，过了 %d 字不收；一回合最多两张。'
+                         % (soft(_notes.HOME_NOTE_CHARS), _notes.HOME_NOTE_CHARS, soft(_notes.NOTE_CHARS), _notes.NOTE_CHARS)),
         'parameters': {'to': _s('送到哪儿：note_places_from_program 里的 place，或「家里」', required=True),
                        'text': _s('便条，你自己的话', required=True),
                        'mode': _s('wake 或 next_time，可省略', enum=['wake', 'next_time']),
@@ -515,7 +537,8 @@ def _tiered(tools):
     write['description'] += 'let_go 把一节放下一层。'
     write['parameters']['do']['enum'] = [*write['parameters']['do']['enum'], 'let_go']
     write['parameters']['nature'] = _s('这一节是', enum=['事实', '记忆'])
-    write['parameters']['from'] = _s('它从哪来', enum=['主人定的', '查过的', '别人说的', '我自己的判断'])
+    write['parameters']['from'] = _s('它从哪来；别人说的、主人定的要同时写 line，没写 line 就记成我自己的判断', enum=['主人定的', '查过的', '别人说的', '我自己的判断'])
+    write['parameters']['line'] = _s(LINE_FOR_CLAIM)
     out['recall']['description'] += 'sections 只写 doc 就列出它的标题。'
     out['recall']['parameters']['sections']['items']['properties']['section'] = _s('节的 section')
     out['promote_memory']['parameters']['about'] = _s('关于', enum=['self', 'person', 'place', 'world'])
@@ -563,8 +586,23 @@ def developer_ask(store, args):
             'patience': '一小时' if args.get('level') == 'wake' else '回了为止'}
 
 
+TAG_FIELDS = ('visibility', 'inject', 'tags', 'pin')
+
+
+def infer_doc_op(args):
+    """The do a write_document without one plainly is, by its fields (ADR-108 D4d): a heading and no section is a new
+    section; a section and content is its rewrite; a section with only tag fields is a tag change. None otherwise."""
+    if args.get('sid') is None:
+        return 'append_section' if args.get('heading') else None
+    if args.get('body') is not None:
+        return 'replace_section'
+    return 'set_tags' if any(args.get(field) is not None for field in TAG_FIELDS) and not args.get('heading') else None
+
+
 def infer_op(name, args):
     """The option a call without op plainly is, by its fields; None when they say none or several."""
+    if name == 'write_document':
+        return infer_doc_op(args)
     ops = {OP_FIELDS[name][key] for key in args if key in OP_FIELDS[name]}
     return ops.pop() if len(ops) == 1 else None if ops else OP_DEFAULT.get(name)
 
@@ -677,6 +715,11 @@ def speak_spec(kinds, quotes):
     if not quotes:
         spec['parameters'].pop('quote', None)
     return spec
+
+
+def declared_specs(specs):
+    """Specs as DSH registers them and the model reads them: each tool's parameters declared (tool_schema.declared)."""
+    return [{**spec, 'parameters': tool_schema.declared(spec['name'], spec['parameters'])} for spec in specs]
 
 
 def session_specs(store, scene_id, person_id=None):
@@ -1010,8 +1053,31 @@ HOME_AUTHORITY = frozenset(('delegate', 'task.message', 'task.stop', 'errand', '
                             'ideas.review', 'peer_line', 'group_action'))
 
 
+# ADR-108 D4c: what does the job when the tool or option she reached for is not in this turn: one table, each entry an ability
+# with what it does, intersected with this turn's tools. A test holds that every entry names an ability that exists.
+INSTEAD = {
+    'task.answer': (('task.message', '给行动脑补话、改目标'),),
+    'task.message': (('delegate', '把一件新的事交给行动脑'),),
+    'attach_image': (('delegate', '先让行动脑把图画出来'),),
+    'errand': (('visit', '自己出门去那个群看看'),),
+    'visit': (('plan', '把这件事留到将来再想'),),
+}
+INSTEAD_WORDS = '这一回合能做这件事的是：%s。'
+
+
+def instead_words(ep, name):
+    """The sentence naming what does the job here, or '' when nothing in this turn does."""
+    here = ep.get('turn_tools') or ()
+    found = ['%s（%s）' % (named(ability), what) for ability, what in INSTEAD.get(name, ()) if ability in here]
+    return INSTEAD_WORDS % '；'.join(found) if found else ''
+
+
 def not_now(store, ep, name):
-    """Why her conversation's tool or option `name` is not in this turn, and when it can be used."""
+    """Why her conversation's tool or option `name` is not in this turn, when it can be used, and what does the job here."""
+    return _why_not_now(store, ep, name) + instead_words(ep, name)
+
+
+def _why_not_now(store, ep, name):
     from . import local_time, switches
     off = switches.tools_off(store, ep['scene_id']).get(name.split('.')[0])
     if off:
@@ -1293,11 +1359,11 @@ def chat_lines(text):
 QUESTION_RECEIPT = '这是在问这里的人：问题 %s，等%s（%d 分钟）；有人回会叫你看一眼，回答进 questions_from_program。'
 
 
-def reply_receipt(queued, numbered=False):
-    """What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2); where
-    the conversation shows line numbers, each sent line's own (ADR-079)."""
+def reply_receipt(queued):
+    """What her reply call queued, in words: each part by its number, and what failed at once (ADR-064 phase 2); and
+    each sent line's own number in the conversation (ADR-079, ADR-108 D2)."""
     done = [row for row in queued if row['state'] not in ('FAILED', 'UNKNOWN', 'CANCELLED_AFTER_FAILURE')]
-    listed = '；'.join('%d %s%s' % (row['number'], row['shown'], ' 〔%d〕' % row['seq'] if numbered and row.get('seq') else '')
+    listed = '；'.join('%d %s%s' % (row['number'], row['shown'], ' 〔%d〕' % row['seq'] if row.get('seq') else '')
                       for row in done)
     if len(done) == len(queued):
         return '发出 %d 条，%s排上了：%s。送没送到看下一回合的历史。' % (len(queued), '都' if len(queued) > 1 else '', listed)
@@ -1338,6 +1404,25 @@ class RoleTools:
         self.store = coordinator.store
 
     # ── dispatch ────────────────────────────────────────────────────
+    # ADR-108 D4b: a call is checked in layers, and a refusal names every problem the layers that ran can find.
+    #   0  the call can be read: the tool is here, the arguments are an object, the call id is not another call's
+    #      (the plugin's guard has already checked the declared schema, tool_schema.py)
+    #   1  shape repair, no state (tool_schema.repair, the do a write_document or an op tool plainly is)
+    #   2  permission: the tool or option is usable in this turn and place. Stops alone, naming what does the job here
+    #   3  every argument and the turn, collected: the strict schema, THINK_FIRST, the call cap, then the handler's own
+    #      field checks (lengths, enums, empty fields, pairs)
+    #   4  state, collected for the fields layer 3 passed (section, ref, plan id, label), then the checks on the write
+    #   5  the effect. A failure here is one refusal.
+    # A handler collects only once it is split into a check part and an effect part (SPLIT): its checks append to
+    # `self.problems` while `self.collecting` is set, and it ends the check part with `self.checkpoint()`. Any other
+    # handler refuses at its first failure, as before, once the general layers have passed.
+    SPLIT = frozenset({'tool_think', 'tool_delegate', 'tool_task_answer', 'tool_task_message', 'tool_task_stop',
+                       'tool_ideas_note', 'tool_feel', 'tool_plan', 'tool_write_document', 'tool_speak'})
+    collecting, flagged, tool = False, frozenset(), None       # per call (see `call`); these are the values outside one
+    # When a refusal is longer than this, each candidate list in it keeps its first three; no problem is dropped.
+    REFUSAL_LONG = 1500
+    SHORT_LIST = 3
+
     def call(self, ep_id, call_id, name, args, thinking=None):
         """(result, concludes_turn). Raises Refused for a call she can correct herself. `thinking`: the model's own
         thinking in the response that made her first call of a stage (ADR-099), recorded before the call runs."""
@@ -1345,17 +1430,22 @@ class RoleTools:
         ep = episode_records.get(self.store, ep_id)
         if thinking is not None:
             ep = self.take_thought(ep, call_id, thinking)
+        self.problems, self.collecting, self.flagged, self.repairs = [], False, set(), []
         called_as, replaced = None, False
         if name in RENAMED and isinstance(args, dict):          # an old name runs as its option (ADR-055)
             called_as, (name, args) = name, renamed(name, args)
         elif name == MESSAGE_DEVELOPER['name'] and isinstance(args, dict):
             called_as, name, args = name, 'ask', developer_ask(self.store, args)       # ADR-061
-        olds = _names.old_used(name, args)
+        self.tool = name
+        # Layer 1: the call as she wrote it, repaired on a copy (the record keeps the repairs, never a second call).
+        written_args, self.repairs = tool_schema.repair(name, args)
+        olds = _names.old_used(name, written_args)
         gone = _names.retired(name, olds)               # ADR-069: an old name past its week is not taken
-        args, old_names = _names.inbound(name, args)
-        inferred = name in OPS and isinstance(args, dict) and not args.get('op') and infer_op(name, args)
-        if inferred:
-            args = {**args, 'op': inferred}
+        probe, _ = _names.inbound(name, written_args)
+        inferred = (name in OPS or name == 'write_document') and isinstance(probe, dict) and not probe.get('op') \
+            and infer_op(name, probe)
+        shown_args = {**written_args, 'do': inferred} if inferred else written_args
+        args, old_names = _names.inbound(name, shown_args)
         args = written(name, args)                      # ADR-098 D4: what she writes is kept with no local root
         done = (ep.get('tool_calls') or {}).get(call_id)
         if done:
@@ -1381,34 +1471,52 @@ class RoleTools:
                 replaced = True                   # where speak replaced it: silence as she meant (SILENT_WHERE_SPEAK)
             elif can not in (ep.get('turn_tools') or ()):
                 raise Refused(not_now(self.store, ep, can))
+            # Layer 3, the general checks: collected, none of them stops the others.
             from . import reasons
             # A read may come before her thought; anything else needs one (ADR-087 §4.2, reasons.READS).
             if (name != 'think' and asks_thought(ep) and not ep.get('turn_thought')
                     and not reasons.before_thought(name, args)):
-                raise Refused(THINK_FIRST)
+                self.problems.append(('THINK_FIRST', THINK_FIRST))
+            if name in tools():
+                for code, text, field in tool_schema.violations(name, tools()[name]['parameters'], shown_args):
+                    self.problems.append((code, text))
+                    self.flagged.add(field)
             made = len(ep.get('tool_calls') or {}) + 1                # this call's number in the turn
             if made == CALLS_HARD:
                 from . import channel_kinds
-                raise Refused(CALL_LAST % (made, CALLS_HARD, CAP_SPEAKS if channel_kinds.reply_parts(ep['scene_id'])
-                                           else CAP_SAYS))
+                self.problems.append(('CALL_LAST', CALL_LAST % (made, CALLS_HARD, CAP_SPEAKS if channel_kinds.reply_parts(ep['scene_id'])
+                                                                 else CAP_SAYS)))
+                raise self.combined()                # refused with its warning, whatever else is wrong
             if made > CALLS_HARD + 1:                                 # the last one was refused: nothing more runs
                 result, conclude = {'ended': CALLS_ENDED % CALLS_HARD}, True
             else:
                 self.over = []
+                self.__dict__.pop('report', None)
+                self.collecting = 'tool_' + can.replace('.', '_') in self.SPLIT
+                if not self.collecting:
+                    self.checkpoint()                 # a handler that is not split runs on what the general layers passed
                 result, conclude = getattr(self, 'tool_' + can.replace('.', '_'))(ep, call_id, args)
+                self.collecting = False
+                self.checkpoint()                     # a split handler that reached its end with problems found says so
                 if made > CALLS_HARD:
                     conclude = True
                     if isinstance(result, dict):
                         result = {**result, 'ended': CALLS_ENDED % CALLS_HARD}
         except Refused as exc:
-            self._record(ep_id, call_id, name, args, refused=str(exc), called_as=called_as, olds=olds)
+            codes = exc.codes
+            self._record(ep_id, call_id, name, args, refused=str(exc), called_as=called_as, olds=olds,
+                         code=codes[0] if codes else None, codes=list(codes) if len(codes) > 1 else None,
+                         repairs=self.repairs)
             if ep.get('errand'):
-                raise Refused('%s（%s）' % (exc, ERRAND_MARK)) from None
+                raise Refused('%s（%s）' % (exc, ERRAND_MARK), codes) from None
             raise
         except (Denied, Conflict, DocumentError, ValueError) as exc:
             message = words(exc)
-            self._record(ep_id, call_id, name, args, refused=message, called_as=called_as, code=code_of(exc), olds=olds)
-            raise Refused('%s（%s）' % (message, ERRAND_MARK) if ep.get('errand') else message) from None
+            self._record(ep_id, call_id, name, args, refused=message, called_as=called_as, code=code_of(exc), olds=olds,
+                         repairs=self.repairs)
+            raise Refused('%s（%s）' % (message, ERRAND_MARK) if ep.get('errand') else message, [code_of(exc)]) from None
+        finally:
+            self.collecting = False
         if self.over and isinstance(result, dict):
             result = {**result, 'length': '；'.join(self.over)}
         if CALLS_USUAL < made <= CALLS_HARD and isinstance(result, dict):
@@ -1423,6 +1531,8 @@ class RoleTools:
             result = {**result, 'old_names': ' '.join(old_names)}
         if inferred and isinstance(result, dict):
             result = {**result, 'do': '没写 do：按你写的字段当作 %s 办了。' % inferred}
+        if 'title' in self.repairs and isinstance(result, dict):
+            result = {**result, 'title_note': TITLE_FROM_BRIEF % args['title']}
         if ep.get('errand') and isinstance(result, dict):
             result = {**result, 'turn': ERRAND_MARK}         # ADR-066: which layer of her acted, on every result
         from . import memory_tiers
@@ -1433,8 +1543,39 @@ class RoleTools:
                 memory_tiers.Tiers(self.store, ep['persona']).used(cited, 'cited', ep['scene_id'])
         # A picture's bytes go back to the turn only: the record keeps the receipt (the bytes are in the blob store).
         self._record(ep_id, call_id, name, args, conclude=conclude, called_as=called_as, olds=olds,
+                     report=self.__dict__.pop('report', None), repairs=self.repairs,
                      result=picture_receipt(result) if name == _READ_IMAGE['name'] else result)
         return self._local(ep, result), conclude
+
+    # ── the problems a call has (ADR-108 D4b) ───────────────────────
+    def _found(self, text, code=None, short=None):
+        """A problem with this call. While a handler collects it is kept, the handler goes on and returns None; otherwise
+        it refuses at once. `short`: the same problem with its candidate list cut, for a long refusal."""
+        if self.collecting:
+            self.problems.append((code, text, short) if short else (code, text))
+            return None
+        raise Refused(text, [code])
+
+    def checkpoint(self):
+        """End of a handler's check part: refuses with everything found, or lets the effect begin."""
+        if self.problems:
+            raise self.combined()
+
+    def combined(self, sent=None, tail=''):
+        """The one refusal for a call: its problems numbered, the call's own first thought first, her words in none of
+        them; one problem stands alone. A long refusal cuts each candidate list, never a problem. `sent`: what the call did
+        not do (speak: 这次一条都没发), said with them; `tail` closes the refusal."""
+        found = [(item[0], item[1], item[2] if len(item) > 2 else None) for item in self.problems]
+        found.sort(key=lambda item: item[0] != 'THINK_FIRST')           # stable: the rest keep the order they were found
+        if len(found) > 1 and sum(len(text) for _, text, _ in found) > self.REFUSAL_LONG:
+            found = [(code, short or text, None) for code, text, short in found]
+        codes = [code for code, _, _ in found]
+        if len(found) == 1:
+            text = found[0][1] if not sent else '%s：%s。改好再调用一次 speak。' % (sent, found[0][1].rstrip('。'))
+            return Refused(text + tail, codes)
+        return Refused('这次调用有 %d 处要改%s，改好一起再调用一次：\n%s' % (
+            len(found), '，' + sent if sent else '',
+            '\n'.join('%d. %s' % (number, text) for number, (_, text, _) in enumerate(found, 1))) + tail, codes)
 
     def _local(self, ep, result):
         """What she reads back is on the local clock; the record keeps UTC (local_time.py)."""
@@ -1442,7 +1583,7 @@ class RoleTools:
         return local_time.for_model(result, local_time.her_zone(self.store))
 
     def _record(self, ep_id, call_id, name, args, *, result=None, refused=None, conclude=False, called_as=None, code=None,
-                olds=None):
+                olds=None, report=None, codes=None, repairs=None):
         c = self.coordinator
         ep = episode_records.get(self.store, ep_id)
         calls = dict(ep.get('tool_calls') or {})
@@ -1463,6 +1604,9 @@ class RoleTools:
                                               **({'old_names': olds} if olds else {}),
                                               **({'refused': refused} if refused else {'result': result}),
                                               **({'code': code} if code else {}),
+                                              **({'codes': codes} if codes else {}),
+                                              **({'repairs': repairs} if repairs else {}),
+                                              **({'report': report} if report else {}),
                                               **({'reason_ref': reason} if reason else {})},
                          ep['scope_key'])
 
@@ -1518,25 +1662,32 @@ class RoleTools:
         return local_roots.kept_words(sorted({n for t in texts for n in local_roots.kept(t, home)}))
 
     def _text(self, args, field, limit, *, required=True, ask=None, offer=True):
-        """A text field refused past `limit`; she is asked for `ask` (by default four fifths of it, config.soft).
-        offer=False for a list she writes (a plan's intent, an idea, an errand): its last line often says what counts
-        as done, and any cut of the end loses it, so the refusal leaves the choice of what to drop to her (her ask,
-        2026-10-22)."""
+        """A text field of hers, checked (ADR-108 D4c): refused past `limit` and asked for `ask` (by default four fifths of
+        it, config.soft). No refusal repeats her words, offers a cut or judges what to drop: it says the line, by how much
+        she went over, the aim, where the line comes from and where the excess starts. offer=False for a list she writes
+        (a plan's intent, an idea, an errand, a note): its last line often says what counts as done, so it also says on
+        which line the excess starts and leaves the choice to her. While a handler collects, a problem is kept and None
+        comes back; a field the strict schema has already named is not named twice."""
         ask = ask or soft(limit)
         value = args.get(field)
+        shown = _SHOWN.get(field, field)
         if value is None and not required:
             return None
+        if self.collecting and shown in self.flagged:
+            return None
         if value is not None and not isinstance(value, str):
-            raise Refused('%s 要是一段文字（%d 字以内），给的是%s。' % (field, ask, {
-                bool: ' true/false', int: '数字', float: '数字', list: '列表', dict: '对象'}.get(type(value), '别的类型')))
+            return self._found('%s 要是一段文字（%d 字以内），给的是%s。' % (shown, ask, {
+                bool: ' true/false', int: '数字', float: '数字', list: '列表', dict: '对象'}.get(type(value), '别的类型')),
+                'TEXT_TYPE')
         if not value or not value.strip():
-            raise Refused(('%s 要写内容（%d 字以内）。' if required else '%s 是空的：要么写内容（%d 字以内），要么不写这个字段。')
-                          % (field, ask))
+            return self._found(('%s 要写内容（%d 字以内）。' if required else '%s 是空的：要么写内容（%d 字以内），要么不写这个字段。')
+                               % (shown, ask), 'TEXT_EMPTY')
         if len(value) > limit:
-            # Refused past `limit`, worded by `ask`: what she reads is the length to aim for (owner 2026-10-22).
-            raise Refused('%s 太长了：%d 字，要求 %d 字以内，超了 %d 字。精简到 %d 字以内再调用%s'
-                          % (_SHOWN.get(field, field), len(value), ask, len(value) - ask, ask,
-                             '，或者照这个截好的写：' + cut_offer(value, ask) if offer else '，删哪段你自己定。'))
+            if limit >= SAFETY_CAP:                   # a failure catch, not a length she writes toward: no aim, no band
+                return self._found('%s 太长了：%d 字，最多 %d 字。%s' % (shown, len(value), limit, SAFETY_CAP_ADVICE.get(shown, '')),
+                                   'TEXT_TOO_LONG')
+            return self._found(too_long(shown, value, limit, ask, why=LIMIT_WHY.get((getattr(self, 'tool', None), shown)),
+                                        as_list=not offer), 'TEXT_TOO_LONG')
         self._longer(field, len(value), limit, ask)
         return value.strip()
 
@@ -1596,6 +1747,7 @@ class RoleTools:
     def tool_think(self, ep, call_id, args):
         # Asked for THOUGHT_CHARS, refused past THOUGHT_HARD_CHARS (ADR-087 §4.1); one kept between says so (`length`).
         thought = self._text(args, 'thought', THOUGHT_HARD_CHARS, ask=THOUGHT_CHARS)
+        self.checkpoint()
         from .config import character_id
         memory_id = 'mono-' + ep['_id'] + ':' + call_id
         home = ep.get('errand') or ep               # an errand's thoughts are kept at home (ADR-066)
@@ -1810,7 +1962,9 @@ class RoleTools:
         kinds = speak_kinds(self.store, scene)
         parts = args.get('parts')
         if not isinstance(parts, list) or not parts:
-            raise Refused('parts 要列出这次要发的，至少一个。')
+            if 'parts' not in self.flagged:
+                self._found('parts 要列出这次要发的，至少一个。', 'SPEAK_PARTS')
+            raise self.combined(sent='这次一条都没发')
         group = scene.get('kind') == 'group'
         model, policy = model_and_policy(self.store, ep['persona'])
         most = int(effective(model, 'speak.max_messages', policy) or 1)
@@ -1825,7 +1979,8 @@ class RoleTools:
             part = part if isinstance(part, dict) else {}
             kind = part.get('kind')
             if kind not in REPLY_KINDS:
-                problems.append('第 %d 条的 kind 是 %s 之一' % (index, '、'.join(kinds)))
+                if 'parts' not in self.flagged:             # else the strict schema has said it, once
+                    problems.append('第 %d 条的 kind 是 %s 之一' % (index, '、'.join(kinds)))
             elif kind == 'react' and scene.get('kind') == 'dm' and scene.get('channel_id') in REACT_OFF_IN_DMS:
                 problems.append('第 %d 条 %s' % (index, REACT_DM_OFF))
             elif kind not in kinds:
@@ -1925,9 +2080,10 @@ class RoleTools:
         if over:
             problems.append('text 一回合到硬线 %d 行为止（你平时 %d 行以内；每一行都算，空行不算，一个代码块算一行）：%s'
                             % (SPEAK_HARD_LINES, most, '；'.join(over)))
-        if problems:
-            raise Refused('这次一条都没发：%s。改好再调用一次 speak。' % '；'.join(problems)
-                          + ('真是别的数（PR 号之类），原样加 force=yes 再调用一次。' if numbered else ''))
+        if problems or self.problems:
+            self.problems.extend(('SPEAK_PART', text) for text in problems)
+            raise self.combined(sent='这次一条都没发',
+                                tail='真是别的数（PR 号之类），原样加 force=yes 再调用一次。' if numbered else '')
         if quoted:
             first = next(row for row in planned if row['kind'] in ('text', 'picture'))
             first.setdefault('fields', {})['quote_line'] = quoted['_id']      # publish turns it into the platform's id
@@ -1949,8 +2105,7 @@ class RoleTools:
                                            '\n'.join(row['text'] for row in planned if row['kind'] == 'text'), patience)
         self.coordinator._update(self._fresh(ep), reply={'parts': int(before.get('parts') or 0) + len(queued),
                                                           'calls': int(before.get('calls') or 0) + 1})
-        from .capabilities import numbered as shows_numbers
-        out = {'note': reply_receipt(queued, shows_numbers(self.store, scene)) if queued else '这次没发新的。'}
+        out = {'note': reply_receipt(queued) if queued else '这次没发新的。'}
         if any(part['kind'] == 'text' for part in planned):
             # Her budget reminder (ADR-084): the turn's lines so far, in numbers.
             out['lines'] = '这回合已说 %d 行（你平时 %d 行以内，硬线 %d）' % (lines, most, SPEAK_HARD_LINES)
@@ -1974,8 +2129,7 @@ class RoleTools:
         if not why:
             raise Refused('要写 why（为什么撤，%d 字以内）' % soft(RECALL_WHY_CHARS))
         if len(why) > RECALL_WHY_CHARS:
-            raise Refused('why 太长了：%d 字，要求 %d 字以内，超了 %d 字，精简到 %d 字以内'
-                          % (len(why), soft(RECALL_WHY_CHARS), len(why) - soft(RECALL_WHY_CHARS), soft(RECALL_WHY_CHARS)))
+            raise Refused(too_long('why', why, RECALL_WHY_CHARS, soft(RECALL_WHY_CHARS)), ['TEXT_TOO_LONG'])
         self._longer('why', len(why), RECALL_WHY_CHARS)
         text = str(part.get('line') or '').strip().strip('〔〕[]「」 ')
         if not text.isdigit():
@@ -2086,30 +2240,41 @@ class RoleTools:
                                               produced_only=mine_only, here=here, scene_id=scene_id)
 
     def tool_task_answer(self, ep, call_id, args):
-        answer = self._toward_action(ep, self._text(args, 'answer', 20000))
+        answer = self._toward(ep, self._text(args, 'answer', 20000))
+        self.checkpoint()
         self.coordinator._update(self._fresh(ep), answer=answer)
         return {'answered': True}, True
 
     # ── the action brain ────────────────────────────────────────────
     def _depth(self, ep):
         if int(ep.get('delegation_depth') or 0) >= DELEGATION_DEPTH_MAX:
-            raise Refused('这件事已经连着交给行动脑、拿回结果 %d 轮了，中间没有人说过话。先停下来：把进展说给对方听，'
-                          '等对方开口再接着交。' % DELEGATION_DEPTH_MAX)
+            return self._found('这件事已经连着交给行动脑、拿回结果 %d 轮了，中间没有人说过话。先停下来：把进展说给对方听，'
+                               '等对方开口再接着交。' % DELEGATION_DEPTH_MAX, 'DELEGATION_DEPTH')
+
+    def _toward(self, ep, text):
+        """`_toward_action`, or None with the problem kept while a handler collects (a raw root, an unknown name)."""
+        if text is None:
+            return None
+        try:
+            return self._toward_action(ep, text)
+        except ValueError as exc:                    # local_roots.PathRefused: in words, with its code
+            return self._found(words(exc), code_of(exc))
 
     def tool_delegate(self, ep, call_id, args):
         self._depth(ep)
         # The title reaches the action brain with the brief: the same expansion, or it would see a name it cannot open.
         title_as_written, brief_as_written = self._text(args, 'title', 80), self._text(args, 'brief', 20000)
-        title = self._toward_action(ep, title_as_written)
-        brief = self._toward_action(ep, brief_as_written)  # no credential value, no raw root
-        kept = self._kept(ep, title_as_written, brief_as_written)
+        title = self._toward(ep, title_as_written)
+        brief = self._toward(ep, brief_as_written)         # no credential value, no raw root
         from . import action_tiers
         tier = None
         if action_tiers.offered():
             try:
                 tier = action_tiers.chosen(args)
             except ValueError as exc:
-                raise Refused(str(exc))
+                self._found(str(exc), 'TIER_INVALID')
+        self.checkpoint()
+        kept = self._kept(ep, title_as_written, brief_as_written)
         task = self.coordinator.delegate(ep, call_id, title, brief, tier=tier)
         from .errands import HOME_TASK
         from .tasks import queue_words
@@ -2126,8 +2291,11 @@ class RoleTools:
         return [task.get('_id') for task in (ep.get('context') or {}).get('task_state_from_program') or []]
 
     def _own_task(self, ep, task_id):
+        if 'task' in self.flagged:
+            return None                               # the strict schema has named it
         if not isinstance(task_id, str) or not task_id:
-            raise Refused('task 要照抄 task_state_from_program 里的 _id。' + refs_usable(self._listed_tasks(ep)))
+            return self._found('task 要照抄 task_state_from_program 里的 _id。' + refs_usable(self._listed_tasks(ep)),
+                               'TASK_ID_NEEDED', 'task 要照抄 task_state_from_program 里的 _id。' + refs_usable(self._listed_tasks(ep), self.SHORT_LIST))
         task = task_records.get(self.store, task_id, scene=ep['scene_id'], requester=ep['person_id'],
                                 epoch=ep['policy_epoch'])
         if not task:
@@ -2139,19 +2307,22 @@ class RoleTools:
                 from .people import People
                 scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
                 who = People(self.store, ep.get('persona')).speaker(scene, theirs['requester_id'])
-                raise Refused(OTHERS_TASK % (task_id, who))
+                return self._found(OTHERS_TASK % (task_id, who), 'TASK_NOT_YOURS')
             close = [row['_id'] for row in task_records.by_prefix(
                 self.store, task_id[:12], scene=ep['scene_id'], requester=ep['person_id'],
                 epoch=ep['policy_epoch']).rows(limit=3, fields=['_id'])]
-            raise Refused('「%s」不是这个对话里的任务。照 task_state_from_program 原样抄 _id。%s'
-                          % (task_id, refs_usable([*close, *self._listed_tasks(ep)])))
+            return self._found('「%s」不是这个对话里的任务。照 task_state_from_program 原样抄 _id。%s'
+                               % (task_id, refs_usable([*close, *self._listed_tasks(ep)])), 'TASK_UNKNOWN',
+                               '「%s」不是这个对话里的任务。照 task_state_from_program 原样抄 _id。%s'
+                               % (task_id, refs_usable([*close, *self._listed_tasks(ep)], self.SHORT_LIST)))
         return task
 
     def tool_task_message(self, ep, call_id, args):
         self._depth(ep)
         task = self._own_task(ep, args.get('task'))
         as_written = self._text(args, 'message', 20000)
-        message = self._toward_action(ep, as_written)
+        message = self._toward(ep, as_written)
+        self.checkpoint()
         outcome = self.coordinator.message_action(ep, call_id, task, message)
         kept = self._kept(ep, as_written)
         if kept and isinstance(outcome, dict):
@@ -2161,6 +2332,7 @@ class RoleTools:
     def tool_task_stop(self, ep, call_id, args):
         task = self._own_task(ep, args.get('task'))
         reason = self._text(args, 'reason', 1000)
+        self.checkpoint()
         if task['state'] not in ('READY', 'RUNNING', 'PAUSED'):
             return {'task': task['_id'], 'state': task['state'], 'note': '这件事已经不在进行中，不用叫停。'}, False
         stopped = self.coordinator.tasks.cancel(task['_id'], reason='character_stop', person_id=ep['person_id'])
@@ -2253,9 +2425,12 @@ class RoleTools:
     def tool_write_document(self, ep, call_id, args):
         from .render import budget_gate
         item = {k: v for k, v in args.items() if k != 'body' and v is not None}
-        if not isinstance(item.get('doc'), str) or not item['doc']:
-            raise Refused('doc 要写文档名，如 persona、voice、group_notes。')
         cls = self._cls(ep)
+        docs, said = DocumentStore(self.store, ep['persona']), None
+        if not isinstance(item.get('doc'), str) or not item['doc']:
+            item, said = self._infer_doc(ep, docs, item, cls)
+            if not item.get('doc'):
+                self.checkpoint()                    # nothing below can be judged without the document
         if item['doc'] == 'group_notes':
             from .group_admin import notes_slug
             scene = scene_records.get(self.store, ep['scene_id'], fields=['kind'])
@@ -2275,10 +2450,9 @@ class RoleTools:
             if item['op'] == 'append_section' or 'inject' in item:
                 item['inject'] = item['inject'] if item.get('inject') in ('always', 'on_demand') else 'always'
         if 'pin' in item and not item['doc'].startswith('group:'):
-            raise Refused('pin 只用于群笔记（doc=group_notes）：别的文档没有折叠，置顶不起作用。')
-        if 'pin' in item and not isinstance(item['pin'], bool):
-            raise Refused('pin 写 yes 或 no%s。' % _given(item, 'pin'))
-        docs = DocumentStore(self.store, ep['persona'])
+            self._found('pin 只用于群笔记（doc=group_notes）：别的文档没有折叠，置顶不起作用。', 'PIN_ONLY_IN_GROUP_NOTES')
+        elif 'pin' in item and not isinstance(item['pin'], bool) and 'pin' not in self.flagged:
+            self._found('pin 写 yes 或 no%s。' % _given(item, 'pin'), 'PIN_YES_NO')
         slug = item['doc']
         base, before = docs.read(slug)
         if isinstance(item.get('sid'), str):
@@ -2290,23 +2464,27 @@ class RoleTools:
                 item = {**item, 'sid': named['sid']}
         mutation_id = f"{ep['_id']}:write:{call_id}"
         from . import memory_tiers
+        item.pop('anchor', None)                 # the line an item rests on is set by the program and never by her
+        source = None
         if memory_tiers.ENABLED:
             for field, allowed in (('nature', memory_tiers.NATURES), ('from', memory_tiers.SOURCES)):
-                if item.get(field) is not None and item[field] not in allowed:
-                    raise Refused('%s 写 %s 之一%s。' % (field, '、'.join(allowed), _given(item, field)))
+                if item.get(field) is not None and item[field] not in allowed and field not in self.flagged:
+                    self._found('%s 写 %s 之一%s。' % (field, '、'.join(allowed), _given(item, field)), 'ENUM_' + field.upper())
+            item, source = self._anchored(ep, item)
         if item.get('op') == 'let_go' and memory_tiers.ENABLED:
+            self.checkpoint()
             return self._let_go(ep, slug, item.get('sid'), before), False
         if memory_tiers.ENABLED and item.get('op') == 'replace_section' and item.get('sid'):
             verbatim = next((s.get('body') for s in (before or {}).get('sections') or [] if s['sid'] == item['sid']), None)
             dropped = memory_tiers.gist_refusal(memory_tiers.Tiers(self.store, ep['persona']).item(slug, item['sid']),
                                                 verbatim, args.get('body'))
             if dropped:
-                raise Refused(dropped)
+                self._found(dropped, 'GIST_NO_BASIS')
         if memory_tiers.ENABLED and (item.get('nature') or item.get('from')):
             unsigned = memory_tiers.signing(memory_tiers.Tiers(self.store, ep['persona']).item(slug, item.get('sid'))
                                             if item.get('sid') else None, item, args.get('body'))
             if unsigned:
-                raise Refused(unsigned)
+                self._found(unsigned, 'JUDGMENT_NOT_FACT')
         kept_away = None
         if memory_tiers.ENABLED and item.get('op') == 'set_tags' and item.get('inject') == 'always' and item.get('sid'):
             # A tag never carries an item back (no pin, owner 2026-10-13), so the tag is not written either: the
@@ -2324,15 +2502,20 @@ class RoleTools:
             listed = (before or {}).get('sections') or []
             found = named_section(listed, item.get('sid'))
             if not found:
-                raise DocumentError('DOC_SECTION_NOT_FOUND', missing_section(slug, item.get('sid'), listed))
+                self._found(words(DocumentError('DOC_SECTION_NOT_FOUND', missing_section(slug, item.get('sid'), listed))),
+                            'DOC_SECTION_NOT_FOUND')
+            self.checkpoint()
             item = {**item, 'sid': found['sid']}
             tiers = memory_tiers.Tiers(self.store, ep['persona'])
             tiers.sync()
             tiers.written(slug, item, before, before, scene_id=ep['scene_id'])
             return {'doc': slug, 'op': 'set_tags', 'sid': item['sid'], 'note': '记下了：%s。'
                     % '、'.join(filter(None, (memory_tiers.declared_nature(item).get('nature'), item.get('from')))),
+                    **({'source': source} if source else {}), **({'doc_note': said} if said else {}),
                     **({'place': kept_away} if kept_away else {})}, False
+        self._text({'reason': item.get('reason')}, 'reason', 2000)       # her reason is prose: aim 1,600, line 2,000
         if item.get('op') == 'adopt_seed':
+            self.checkpoint()
             kind, text = _seed_text(self.store, slug)
             if text is None:
                 seeds = [seed.get('slug') for seed in (self.store.config.get('persona_contribution') or {}).get('seeds', [])]
@@ -2343,10 +2526,15 @@ class RoleTools:
                                       budget=budget_gate(self.store, ep['persona']))
             return {'doc': slug, 'op': 'adopt_seed', **{k: v for k, v in outcome.items() if k != 'revision'}}, False
         body = args.get('body') if item.get('op') in WRITE_STAGE_OPS else None
+        gate = budget_gate(self.store, ep['persona'])
+        for error in docs.problems(slug, item, body, budget=gate):
+            self._found(words(error), code_of(error))
+        self.checkpoint()
         revision = docs.apply(slug, item, body, base_revision_id=base, author='character', mutation_id=mutation_id,
-                              budget=budget_gate(self.store, ep['persona']))
+                              budget=gate)
         result = {'doc': slug, 'op': item['op'], 'revision_id': revision['_id'], 'sid': item.get('sid'),
-                  'heading': item.get('heading'), 'note': '已写下。'}
+                  'heading': item.get('heading'), 'note': '已写下。', **({'source': source} if source else {}),
+                  **({'doc_note': said} if said else {})}
         after = docs.read(slug)[1]
         sections = (after or {}).get('sections', [])
         if memory_tiers.ENABLED:
@@ -2383,6 +2571,109 @@ class RoleTools:
                 result['pin'] = (PIN_NOTE % (NOTE_CHARS['group_notes'], memory_tiers.CAPS['group_notes'])
                                  if item['pin'] is True else UNPIN_NOTE)
         return result, False
+
+    DOC_FROM_SECTION = '没写 doc：按 section 当作 %s 写了'
+
+    def _infer_doc(self, ep, docs, item, cls):
+        """The document a write without `doc` means (ADR-108 D4d): where only a group's notes can be written, those; at home
+        the one document she may write that has a section of the name she gave. Otherwise a problem listing the
+        candidates. Returns (item, what to tell her)."""
+        from .documents import named_section
+        scene = scene_records.get(self.store, ep['scene_id'], fields=['kind'])
+        if cls != visibility.OWNER_PRIVATE:
+            if (scene or {}).get('kind') == 'group':
+                return {**item, 'doc': 'group_notes'}, self.DOC_FROM_SECTION % 'group_notes'
+            self._found('doc 要写文档名，如 persona、voice、group_notes。', 'DOC_NAME_NEEDED')
+            return item, None
+        wanted = item.get('sid')
+        names = [slug for slug in docs.slugs() if not slug.startswith(('group:', 'dossier:'))]
+        holding = [slug for slug in names
+                   if wanted and named_section((docs.read(slug)[1] or {}).get('sections') or [], wanted)]
+        if len(holding) == 1:
+            return {**item, 'doc': holding[0]}, self.DOC_FROM_SECTION % holding[0]
+        if len(holding) > 1:
+            text = '没写 doc，「%s」这一节不止一份文档有：%s。写上 doc。' % (str(wanted)[:40], '、'.join('%s#%s' % (slug, wanted) for slug in holding))
+        else:
+            said = '没写 doc%s；你能写的文档：' % ('，也没有哪份文档有「%s」这一节' % str(wanted)[:40] if wanted else '')
+            text = said + ('、'.join(names) or '（还没有）') + '。'
+            short = said + ('、'.join(names[:self.SHORT_LIST]) + ('…（还有 %d 个）' % (len(names) - self.SHORT_LIST) if len(names) > self.SHORT_LIST else '')
+                            or '（还没有）') + '。'
+            self._found(text, 'DOC_NAME_NEEDED', short)
+            return item, None
+        self._found(text, 'DOC_NAME_NEEDED')
+        return item, None
+
+    # ADR-108 D2: what a result says about the line a claim rests on.
+    SOURCE_NOTED = '记成「%s」，出自 %s'
+    SOURCE_CHANGED = '你写的 from 是「%s」，那一行是%s说的，按那一行改了'
+    SOURCE_NOT_USED = 'line 没用上：from 是「%s」，不是别人或主人说的话'
+    SOURCE_MINE = '记成「%s」：%s'
+    SOURCE_LATER = '；找到那一行以后，用 do=set_tags 写 section、from 和 line，补上出处，不用改正文'
+    SOURCE_NOT_A_FACT = '也没有记成事实：你自己的判断要等别人印证才算事实'
+    SOURCE_WRITTEN_BY_HER = '那一行是你自己说的'
+    SOURCE_WITHOUT_LINE = '没有指到哪一行'
+
+    def _anchored(self, ep, item):
+        """`_resolve`, and what it decided, structured, for the call's audit row (`report`: what she asked, what was recorded,
+        whether it rests on a line), so the acceptance counts it by field and not by wording (ADR-108 D4c)."""
+        asked, named = item.get('from'), item.get('line') is not None
+        out, note = self._resolve(ep, item)
+        if asked is not None or named:
+            self.__dict__['report'] = {'asked': asked, 'line_named': named, 'recorded': out.get('from'),
+                                       'anchored': 'anchor' in out}
+        return out, note
+
+    def _resolve(self, ep, item):
+        """(item, what to tell her): a claim that someone said something rests on the line that said it, resolved in this
+        conversation (ADR-108 D2). With `line` the program sets `from` itself: 主人定的 for the owner's line, 别人说的 for
+        another person's, and the item remembers the line (`item['anchor']`). 别人说的 or 主人定的 without a line, or a line
+        that is not one, is recorded as her own judgment and the result says so; 查过的 and 我自己的判断 stand as she
+        wrote them. A line of hers or one the program wrote is nobody's word."""
+        from . import memory_tiers
+        from .config import character_id
+        from .people import People
+        from .ingress import PROGRAM_AUTHOR
+        from . import scene_links
+        item = {key: value for key, value in item.items() if key != 'anchor'}
+        line, given = item.pop('line', None), item.get('from')
+        hers = memory_tiers.OWN_JUDGMENT
+        if given is not None and given not in memory_tiers.OTHERS_SAID:
+            return item, (self.SOURCE_NOT_USED % given if line is not None else None)
+        if line is None:
+            if given is None:
+                return item, None
+            kept = memory_tiers.Tiers(self.store, ep['persona']).item(item.get('doc'), item.get('sid')) if item.get('sid') else None
+            if kept and kept.get('line') and kept.get('from') == given:
+                return item, None                       # restated beside a line it already rests on: it stays
+            return self._hers(item, self.SOURCE_WITHOUT_LINE)
+        scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
+        people = People(self.store, ep['persona'])
+        row, why = people.line_of(scene, ep['_id'], line)
+        if row is None:
+            return self._hers(item, why)
+        author = row.get('author')
+        if row.get('direction') == 'outbound' or author == character_id(self.store.config):
+            return self._hers(item, self.SOURCE_WRITTEN_BY_HER, later=False)
+        if author == PROGRAM_AUTHOR:
+            return self._hers(item, '那一行是程序写的，不是谁说的话', later=False)
+        owner = visibility.owner_id(self.store.config)
+        said = (memory_tiers.OTHERS_SAID[1] if owner and scene_links.canonical_person_id(self.store.config, self.store, author)
+                == owner else memory_tiers.OTHERS_SAID[0])
+        note = self.SOURCE_NOTED % (said, people.pointed(scene, row))
+        if given is not None and given != said:
+            note += '；' + self.SOURCE_CHANGED % (given, '主人' if said == memory_tiers.OTHERS_SAID[1] else '别人')
+        return {**item, 'from': said, 'anchor': {'scene': ep['scene_id'], 'seq': row['scene_seq']}}, note
+
+    def _hers(self, item, why, later=True):
+        """The write recorded as her own judgment, which goes through (ADR-108 D2): a nature she gave as fact is dropped with
+        it, because her own judgment is a fact only once someone confirms it (memory_tiers.signing)."""
+        from . import memory_tiers
+        hers = memory_tiers.OWN_JUDGMENT
+        note = self.SOURCE_MINE % (hers, why) + (self.SOURCE_LATER if later else '')
+        if item.get('nature') == memory_tiers.FACT:
+            item = {key: value for key, value in item.items() if key != 'nature'}
+            note += '；' + self.SOURCE_NOT_A_FACT
+        return {**item, 'from': hers}, note
 
     def _carried_lines(self, ep, slug, section, result, was=0):
         """ADR-096: a write to her identity, or a let_go, says the section's weight and each place's room, in exact
@@ -2553,7 +2844,7 @@ class RoleTools:
         if person:
             found = people.resolve(scene, person)
             if len(found) != 1:
-                usable = [people.label(doc) for doc in sorted(people.ensure_roster(scene).values(),
+                usable = [people.copyable(scene, doc) for doc in sorted(people.ensure_roster(scene).values(),
                                                               key=lambda doc: str(doc.get('seen_at') or ''), reverse=True)
                           if doc.get('person') != people.self_id and people.person(doc.get('person')) != people.owner]
                 raise Refused(('「%s」对得上不止一个人：%s。' % (person, '、'.join(people.label(d) for d in found[:5])) if found
@@ -2649,26 +2940,34 @@ class RoleTools:
         place = self._as_place(ep)
         if op == 'record':
             fields, landed = self._feel_who(place, fields, ledger)
+            for error in ledger.record_problems(place, fields):
+                self._found(words(error), code_of(error))
+            self.checkpoint()
             row = ledger.record(place, 0, fields, cls, key=key)
             return {'event_id': row['_id'], 'feeling': kind_label(ledger.model, row.get('kind')), 'landed': landed}, False
         if op in ('close', 'void'):
             event_id = self._text(args, 'event_id', 300)
             why = self._text(args, 'why', 500, required=op == 'void')
+            self.checkpoint()
             ledger.amend(place, 0, {'op': op, 'event_id': event_id, **({'why': why} if why else {})}, cls, key=key)
             return {'op': op, 'event_id': event_id}, False
         if op == 'adopt':
             item = {'proposal_id': self._text(args, 'proposal_id', 300), 'decision': args.get('decision'),
                     'why': self._text(args, 'why', 300)}
             if item['decision'] not in ('accept', 'decline', 'edit'):
-                raise Refused('对提案，do 是 accept、decline 或 edit%s。' % _given(args, 'decision'))
-            if item['decision'] == 'edit':
+                self._found('对提案，do 是 accept、decline 或 edit%s。' % _given(args, 'decision'), 'FEEL_DECISION')
+            elif item['decision'] == 'edit':
                 if not isinstance(args.get('edit'), dict):
-                    raise Refused('do=edit 时要写 edit：改成的样子（feeling、intensity、ref、why 这些字段）。')
-                item['edit'] = args['edit']
+                    self._found('do=edit 时要写 edit：改成的样子（feeling、intensity、ref、why 这些字段）。', 'FEEL_EDIT_NEEDED')
+                else:
+                    item['edit'] = args['edit']
+            self.checkpoint()
             row = ledger.adopt(place, 0, item, cls, key=key)
             return {'proposal_id': item['proposal_id'], 'decision': item['decision'],
                     'event_id': row['_id'] if row else None}, False
-        raise Refused('do 是 record、close、void、accept、decline 或 edit%s；只记一笔心情时写 feeling 和 intensity 就行。' % _given(args, 'op'))
+        self._found('do 是 record、close、void、accept、decline 或 edit%s；只记一笔心情时写 feeling 和 intensity 就行。' % _given(args, 'op'),
+                    'FEEL_OP')
+        self.checkpoint()
 
     def _feel_who(self, ep, fields, ledger):
         """ADR-086 D1: a feeling of a person kind lands with that person. `who` is resolved from the label she wrote;
@@ -2679,15 +2978,16 @@ class RoleTools:
         scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         if kind not in person_kinds(ledger.model):
             if fields.get('who'):
-                raise Refused('「%s」不是对人的心情，不用写 who；去掉 who 再记。' % kind_label(ledger.model, kind))
+                self._found('「%s」不是对人的心情，不用写 who；去掉 who 再记。' % kind_label(ledger.model, kind), 'FEEL_WHO_NOT_NEEDED')
             return fields, '算进了你的心情'
         from .people import People
         people = People(self.store, ep['persona'])
         if fields.get('who'):
             found = people.resolve(scene, fields['who'])
             if len(found) != 1 or not found[0].get('person'):
-                raise Refused('who「%s」%s；照抄这回合里对方的标签（如 [名字 #4]），或者不写。'
-                              % (fields['who'], '对得上不止一个人' if len(found) > 1 else '不是这个对话里的人'))
+                self._found('who「%s」%s；照抄这回合里对方的标签（如 [名字 #4]），或者不写。'
+                            % (str(fields['who'])[:40], '对得上不止一个人' if len(found) > 1 else '不是这个对话里的人'), 'FEEL_WHO_UNKNOWN')
+                return fields, ''
             return {**fields, 'who': found[0]['person']}, '记在了对%s的心情里' % people.label(found[0])
         if scene.get('kind') != 'group' and ep.get('person_id') and ep['person_id'] != people.self_id:
             return {**fields, 'who': ep['person_id']}, '记在了对%s的心情里' % people.speaker(scene, ep['person_id'])
@@ -2705,6 +3005,22 @@ class RoleTools:
         inferred = not args.get('op') and op == 'create'
         planned = {row.get('_id'): row for row in (ep.get('context') or {}).get('plans_from_program') or []}
         moved = None
+
+        # ADR-108 D4b: what can be found without touching a plan is found together, before anything is written.
+        if op == 'create':
+            self._text(args, 'intent', 1000, offer=False)
+            self._plan_timing(ep, timing)
+        elif op in ('update', 'cancel'):
+            self._text(args, 'plan_id', 200)
+            if op == 'update':
+                if args.get('intent'):
+                    self._text(args, 'intent', 1000, offer=False)
+                if timing:
+                    self._plan_timing(ep, timing)
+        else:
+            self._found('do 是 create、update 或 cancel%s；新建要写 intent 和一种计时，改或取消要写 plan_id。'
+                        % _given(args, 'op'), 'PLAN_OP')
+        self.checkpoint()
 
         def run(action):
             with database_effects_lock(self.store.name):
@@ -2787,10 +3103,7 @@ class RoleTools:
                               % _given(args, 'op'))
         except ValueError as exc:
             # 换算/校验类失败（时间已过、钟点不存在、形状不对）回给她自己改，带上现在的钟面。
-            clock = schedule_rules.local_clock(schedule_rules.her_zone(self.store.config), schedule_rules.now_utc())
-            # The code stays in the record (words()); she reads the cause and the fix.
-            raise Refused('没安排成：%s。现在是 %s（%s）。' % (words(exc).rstrip('。'), clock['now_local'],
-                                                         clock['weekday'])) from None
+            raise Refused(self._plan_not_made(ep, exc), [code_of(exc)]) from None
         there = outside and scene_records.get(self.store, plan.get('scene_id'))
         if there:
             from .people import People
@@ -2801,6 +3114,20 @@ class RoleTools:
                 'plan_version': plan.get('plan_version', 1), **({'where': there} if there else {}),
                 **({'note': '没写 do：有 intent 和计时、没有 plan_id，按新建（create）办了。'} if inferred else {}),
                 **({'note': moved} if moved else {}), **({'clock_note': shifted} if shifted else {})}, False
+
+    def _plan_not_made(self, ep, exc):
+        """Why a plan was not made, in her words, with the clock face as it is now (the code stays in the record)."""
+        from . import schedule_rules
+        clock = schedule_rules.local_clock(schedule_rules.her_zone(self.store.config), schedule_rules.now_utc())
+        return '没安排成：%s。现在是 %s（%s）。' % (words(exc).rstrip('。'), clock['now_local'], clock['weekday'])
+
+    def _plan_timing(self, ep, timing):
+        """A plan's timing, judged on its shape alone (schedule_rules.normalize_rule touches no record)."""
+        from . import schedule_rules
+        try:
+            schedule_rules.normalize_rule(dict(timing))
+        except ValueError as exc:
+            self._found(self._plan_not_made(ep, exc), code_of(exc))
 
     def _fired_here(self, ep, plan, op, timing):
         """Whether this call moves a one-shot plan in the very turn it fired (ADR-087 §4.4)."""
@@ -2949,7 +3276,9 @@ class RoleTools:
         noted = [call for call in (ep.get('tool_calls') or {}).values()
                  if ability(call.get('tool'), call) == 'ideas.note' and 'result' in call]
         if len(noted) >= IDEAS_PER_TURN:
-            raise Refused('这回合已经记了 %d 条想法（上限 %d 条），先到这里；别的下回合再记。' % (len(noted), IDEAS_PER_TURN))
+            self._found('这回合已经记了 %d 条想法（上限 %d 条），先到这里；别的下回合再记。' % (len(noted), IDEAS_PER_TURN),
+                        'IDEAS_PER_TURN')
+        self.checkpoint()
         row = note_idea(self.store, ep['persona'], idea, why, key=[ep['_id'], call_id],
                         source={'by': 'character', 'scene_id': ep['scene_id'], 'episode_id': ep['_id'],
                                 'turn': turn_kind(ep)})
@@ -3323,6 +3652,12 @@ def read_sections(store, ep, items, cls):
                     item['doc'], section['sid']))
                 if verbatim:
                     out[-1]['detail'] = verbatim
+                # What a claim that someone said something rests on (ADR-108 D2), as this conversation reads it.
+                source = memory_tiers.sources(store, ep['persona'], item['doc'],
+                                              scene_records.get(store, ep['scene_id']) or {'_id': ep['scene_id']}
+                                              ).get(section['sid'])
+                if source:
+                    out[-1]['source'] = source
     return out, missing
 
 

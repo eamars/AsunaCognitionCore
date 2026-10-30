@@ -163,9 +163,11 @@ def system_text(common, found, docs=None):
     return out + ('\n' + voice if voice else '')
 
 
-def self_block(slug, found):
-    """The self or core block as a turn sends it."""
-    return {'items': [{'heading': s['heading'], 'body': s['body'], 'ref': 'doc:%s#%s' % (slug, s['sid'])} for s in found]}
+def self_block(slug, found, sources=None):
+    """The self or core block as a turn sends it. An item that says someone said something shows the line it rests on
+    (`sources`: section id -> where, memory_tiers.sources; ADR-108 D2)."""
+    return {'items': [{'heading': s['heading'], 'body': s['body'], 'ref': 'doc:%s#%s' % (slug, s['sid']),
+                       **({'source': sources[s['sid']]} if (sources or {}).get(s['sid']) else {})} for s in found]}
 
 
 def tokens(common, found, docs):

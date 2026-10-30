@@ -242,6 +242,33 @@ PROGRESS_TOOL = {'name':'report_progress',
     'description':'Leave your talking half a short progress note on a long task, without waiting: it reads it on its next turn and decides whether to tell anyone. Use sparingly; the final report is your last message.',
     'parameters':{'note':{'type':'string','required':True}}}
 
+LIST_FILES_MOST = 2000        # the entries (files and folders) one list_files walks at most
+LIST_FILES_LIMITED = '任务文件夹里不止 %d 项（文件和文件夹），只列了先走到的这些文件；没列出的文件还在，不是丢了' % LIST_FILES_MOST
+
+
+def listed_files(root):
+    """list_files' answer: the task folder walked folder by folder, at most LIST_FILES_MOST entries, its files sorted
+    by path; `limited` says so when the walk stopped there. A folder that cannot be read is passed over."""
+    found, seen, folders, limited = [], 0, [root], False
+    while folders and not limited:
+        try:
+            entries = os.scandir(folders.pop())
+        except OSError:
+            continue
+        with entries:
+            for entry in entries:
+                if seen == LIST_FILES_MOST:
+                    limited = True
+                    break
+                seen += 1
+                if entry.is_dir(follow_symlinks=False):
+                    folders.append(entry.path)
+                elif entry.is_file():
+                    found.append((Path(entry.path), entry.stat().st_size))
+    listed = {'files': [{'path': path.relative_to(root).as_posix(), 'size': size} for path, size in sorted(found)]}
+    return {**listed, 'limited': LIST_FILES_LIMITED} if limited else listed
+
+
 def workspace_file(root, protected, op, args):
     """list_files / read_file / write_file inside the task folder; protected sources stay read-only. A refused or
     failed operation is a result she reads (TASK_OPERATION_FAILED with the reason), not an exception."""
@@ -257,8 +284,7 @@ def workspace_file(root, protected, op, args):
         return target
     try:
         if op == 'list_files':
-            return {'files': [{'path': p.relative_to(root).as_posix(), 'size': p.stat().st_size}
-                              for p in sorted(root.rglob('*')) if p.is_file()]}
+            return listed_files(root)
         target = path(args['path'])
         if op == 'read_file':
             if target.stat().st_size > 32768:
@@ -696,9 +722,10 @@ def given_text(value):
 
 class ToolBroker:
     """Trusted host process; no DB/publication credentials enter model or child tools."""
-    def __init__(self, service:TaskService):
+    def __init__(self, service:TaskService, evidence):
         # Native Host tools use the private worker connection; there is no HTTP broker.
         self.service,self.store=service,service.store
+        self.evidence=evidence          # the worker's: the data child's records are kept here (data_children.py)
         self.bindings={}
 
     @property
@@ -770,12 +797,12 @@ class ToolBroker:
             task_records.save(self.store, {**current,'tool_steps':current['tool_steps']+1,'lease_expires_at':__import__('time').time()+600},expected=current['revision'],stream=task['_id'])
             artifact=artifact_records.save(self.store,{'_id':key,'scope_key':task['scope_key'],'task_id':task['_id'],'intent_revision':task['intent_revision'],'tool':tool,'args':args,'input_hash':input_hash,'state':'INTENT'},stream=task['_id'])
             self.service.crash('before_tool')
-        # Integration callbacks, role consultations and commands can wait on things outside this process.
-        # Never hold the effects lock across such a wait: every outbox claim (her words to QQ, the agent lines)
-        # and every cancellation needs it. A later cancellation still fences new calls; recording this accepted
+        # Integration callbacks, role consultations, commands and persona jobs can wait on things outside this
+        # process. Never hold the effects lock across such a wait: every outbox claim (her words to QQ, the agent
+        # lines) and every cancellation needs it. A later cancellation still fences new calls; recording this accepted
         # call cannot revive the task.
         with (nullcontext() if integration_gated(tool) or tool in DEVELOPMENT_NAMES or tool=='ask_character'
-                  or tool in ('generate_image','render_svg','private_words','sandbox_run','offer_file') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME or tool==RECEIVED_FILE_TOOL_NAME else self.service.lock):
+                  or tool in ('persona_job_run','generate_image','render_svg','private_words','sandbox_run','offer_file') or tool==HISTORY_TOOL_NAME or tool==DIGEST_TOOL_NAME or tool==READ_IMAGE_TOOL_NAME or tool==RECEIVED_FILE_TOOL_NAME else self.service.lock):
             if not integration_gated(tool):self.service.valid(task)
             if tool=='persona_job_run':
                 if not task.get('development_grant'):raise Denied(capability_refusal(self.store,task,tool))
@@ -811,18 +838,12 @@ class ToolBroker:
                         'scope_key':task['scope_key'],'created_at':now()},stream=task['_id'])
                 self.service.collab(task,'progress',{'from':'action','text':note.strip()},'progress:'+key)
                 result={'noted':True,'note':'说话的那一半下一回合会看到；要不要转告别人由那一半决定。'}
-            elif tool==HISTORY_TOOL_NAME:
-                # Read-only scoped history: the scene comes from the task binding, never
-                # from arguments. The effects lock stays released during the query so a
-                # cancellation or lease renewal cannot queue behind a Mongo read.
-                if not getattr(self, 'history', None):raise Denied('HISTORY_QUERY_UNAVAILABLE: 历史查询服务这会儿没接上；'+UNAVAILABLE)
-                result=self.history.query_for_task(task,args)
-                with self.service.lock:self.service.valid(task)
-            elif tool==DIGEST_TOOL_NAME:
-                # P1-c read-only discussion digest: same rule as history — scene from the
-                # task binding, no effects lock held across the Mongo reads.
-                if not getattr(self, 'digest', None):raise Denied('DISCUSSION_DIGEST_UNAVAILABLE: 群讨论整理服务这会儿没接上；'+UNAVAILABLE)
-                result=self.digest.digest_for_task(task,args)
+            elif tool in (HISTORY_TOOL_NAME,DIGEST_TOOL_NAME):
+                # Read-only scoped history and the discussion digest: the scene comes from the task binding, never
+                # from arguments. They run in the data child (data_children.py), with a deadline, and the effects
+                # lock stays released meanwhile, so a cancellation or lease renewal cannot queue behind them.
+                from . import data_children
+                result=data_children.run(tool,task,args,self.store.config,self.store.name,self.evidence)
                 with self.service.lock:self.service.valid(task)
             elif tool==READ_IMAGE_TOOL_NAME:
                 # Pull 模式看图：场景仍由任务绑定，参数换不了范围；拉取期间不持副作用锁，

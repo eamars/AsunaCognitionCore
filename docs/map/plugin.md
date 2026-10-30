@@ -156,6 +156,14 @@ Per-turn context delivery for the character brain: of the whole context the work
 - def `composeContext` — The context this notice sends, what it carries, and what it left out (for the audit).
 - def `trimTurn` — The turn's ceiling on what this notice sends (the worker's table, context_budget.ceiling): over it, the oldest rows of the listed lists go first, then the longest text left is halved, again and again, saying how much went.
 
+## `contexts.js`
+
+[packages/cognition-core/src/contexts.js](../../packages/cognition-core/src/contexts.js)
+
+What the host adds to her requests that is deployment detail and not hers (ADR-108 A11).
+
+- def `withoutWorkingDirectory` — DSH registers the session's working directory as a *required* context, which `suppressRuntimeContext()` leaves in place: every request would carry `Current working directory: "…"`.
+
 ## `fetch.js`
 
 [packages/cognition-core/src/fetch.js](../../packages/cognition-core/src/fetch.js)
@@ -306,6 +314,18 @@ Asuna's own log lines, kept. The Host's logger keeps a plugin's messages in memo
 - def `formatted` — A message's arguments as one line of text, `%s`, `%d` and `%o` filled in the way the Host's own logger does.
 - def `asunaLogExporter` — The exporter for `ctx.logger.exporter()`: each of Asuna's lines, stamped with its time and level, through `write`.
 
+## `marks.js`
+
+[packages/cognition-core/src/marks.js](../../packages/cognition-core/src/marks.js)
+
+What Asuna writes at the head of what it puts into her conversation, so a message says whose it is (ADR-108 D3).
+
+- def `MARKS_VERSION` — What Asuna writes at the head of what it puts into her conversation, so a message says whose it is (ADR-108 D3).
+- def `PROGRAM_MARK` — The first line of a stage, repair or restore notice.
+- def `CHECKPOINT_MARK` — The first line of a checkpoint's body: what it is, what its numbers mean.
+- def `marked` — A notice's text, marked as the program's: the mark is the message's own first line.
+- def `withCheckpointHead` — A checkpoint's summary blocks with the head first.
+
 ## `navigation.js`
 
 [packages/cognition-core/src/navigation.js](../../packages/cognition-core/src/navigation.js)
@@ -341,12 +361,13 @@ The span she was down while the Host ran on (ADR-101). Only this plugin knows wh
 
 A tool call and its result stay adjacent in her conversation, and a compaction sees the surface it summarizes.
 
-- def `toolCallOpen` — Whether a tool call of the running step still waits for its result.
+- def `stepOpen` — Whether a step runs on the conversation: the latest of its markers is a `step/start`.
 - def `compactionOpen` — Whether a compaction runs on the conversation: its last `compaction/start` has no `compaction/end` yet.
-- def `hold` — Hold a line until the open tool call has its result, or the running compaction its end.
+- def `mustHold` — Whether a platform line arriving now waits: the conversation has its head, and a step or a compaction runs.
+- def `hold` — Hold a line until the open step ends, or the running compaction.
 - def `isHeld`
 - def `release` — Write the held lines into the conversation, in arrival order; true when any was written.
-- def `releaseAfterCompaction` — Lines held while a compaction ran join its conversation as it ends (after the event is published: DSH refuses an append from inside a session observer).
+- def `releaseAtBoundary` — Lines held while a step or a compaction ran join the conversation as it ends (after the event is published: DSH refuses an append from inside a session observer).
 - def `strayLines` — Seqs of the lines on the conversation's surface that sit between a tool call and its result.
 - def `repair` — Replace each stray line with an empty one in place (DSH's surface replace); returns how many.
 

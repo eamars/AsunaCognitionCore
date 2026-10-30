@@ -28,7 +28,9 @@ import { readSpill } from './spill.js';
 import { normalizePersona, resolvePersona } from './persona.js';
 import { normalizeChannel } from './channel.js';
 import { lineBeforeTurn, organizeNativeWorkspaces, recordChannelInput, retitleSession } from './navigation.js';
-import { release, releaseAfterCompaction, repair } from './pairing.js';
+import { release, releaseAtBoundary, repair } from './pairing.js';
+import { withoutWorkingDirectory } from './contexts.js';
+import { marked } from './marks.js';
 import { NativeChildren } from './children.js';
 import { applySearch, registerWebSearch } from './search.js';
 import { applyFetch } from './fetch.js';
@@ -815,6 +817,8 @@ export class CognitionCore {
       // What a compaction takes off the surface after this is sent again at the next step (restored).
       this.state(session.id).notice = { stage, from: session.seq };
     }
+    // Her notices begin with the program's mark (marks.js, ADR-108 D3); the action brain's are not hers to read.
+    if (stage.lane === 'character') text = marked(text);
     // The summary is a stable identifier, never shown as prose; the client titles a turn's trigger
     // from `trigger` in the viewer's language (client.js).
     return createUserMessage({ content: [{ type: 'text', text }, ...(stage.pictureParts ?? [])],
@@ -835,7 +839,7 @@ export class CognitionCore {
     const composed = restoreContext(stage.context, visibleCarried(session, pending), stage.episode_id);
     if (!composed) return null;
     trimTurn(composed, stage.ceiling);
-    return createUserMessage({ content: [{ type: 'text', text: JSON.stringify(composed.context) }],
+    return createUserMessage({ content: [{ type: 'text', text: marked(JSON.stringify(composed.context)) }],
       source: { kind: 'asuna', form: 'notice', summary: 'asuna:' + stage.lane + ':restore',
         operation: stage.token, lane: stage.lane, phase: 'RESTORE',
         carried: { ...composed.carried, episode: stage.episode_id } } });
@@ -1254,6 +1258,7 @@ export class CognitionCore {
     // Every other lane is her too (or her internal machinery): none carries the harness identity or the
     // host's runtime snapshot (checkout path, Web GUI); deployment details stay in diagnostics (AGENTS.md).
     scope.systemPrompt.suppressRuntimeContext();
+    withoutWorkingDirectory(scope.systemPrompt, lane);
     scope.systemPrompt.section({ name: 'harness:identity',
       order: scope.systemPrompt.getSectionOrder('HARNESS_IDENTITY'), text: '' });
     // DSH's text for a developer using it (its checkout, its Web GUI, its `present` file cards) suits the action
@@ -1325,7 +1330,7 @@ export class CognitionCore {
     });
     scope.on('agent/pre-step', async ({ agent }, next) => {
       const state = this.state(agent.session.id);
-      release(this, agent.session);                 // lines held while her tool call ran: after its result
+      release(this, agent.session);                 // lines held while her last step ran: after its result
       const decision = await next();
       if (decision.kind !== 'enter') return decision;
       const stage = state.admitted; state.admitted = null;
@@ -1548,7 +1553,7 @@ export function apply(ctx, config = {}) {
   // once more, instead of ending her turn and every later one there (image-refusal.js).
   ctx.on('agent/request-error', imageRefusalListener(text => ctx.logger.warn('Asuna: ' + text)));
   // Platform lines held while a compaction ran on their conversation join it as the compaction ends (pairing.js).
-  releaseAfterCompaction(core);
+  releaseAtBoundary(core);
   // Her lanes' requests carry no local root of this computer: rewritten with the worker's table (roots.js, ADR-098).
   rootsAtTheModel(core);
   // A compaction summary is sent as its conversation's next request would be (compaction.js, ADR-094 §10.2).

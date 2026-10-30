@@ -85,7 +85,7 @@ def main(argv=None):
     claim_wait = max(1, min(int(args.claim_wait), 25))
     if args.selftest:
         from qqadapter import selftest as selftest_mod
-        return selftest_mod.run(cfg, args.data_dir, live=not args.offline, live_config=live_config)
+        return selftest_mod.run(cfg, live=not args.offline, live_config=live_config)
     if args.service:
         from qqadapter.service import Adapter
         return Adapter(cfg, args.data_dir, claim_wait=claim_wait, ack_timeout=args.ack_timeout,

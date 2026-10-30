@@ -161,7 +161,7 @@ LINE_FOR_CLAIM = ('这一节记的是别人（或主人）说过的话时，写�
 # ADR-079 §9.4: one way to point at a line, in every tool: its number in this conversation, or 这条.
 QUOTE_LINE = ('引用哪条：写那条的编号（只写数字，编号在每行末尾的〔〕里），或「这条」＝叫你的那条；不写就不引用。'
               '你自己说过的话也能引，用来改口或补一句。一句话回好几条时不用引。编号只用来挑引用，别写进 text。')
-REACT_LINE_REACT = 'react：点哪条，写它的编号（只写数字）或「这条」＝叫你的那条。点表情挂在那条上；贴纸是你发的一条新消息，两样都行。'
+REACT_LINE_REACT = 'react：点哪条，写它的编号（只写数字）或「这条」＝叫你的那条。点表情挂在那条上；表情包是你发的一条新消息，两样都行。'
 REACT_LINE_RECALL = 'recall：撤你自己的哪一句，写它的编号'
 REACT_LINE = REACT_LINE_REACT + REACT_LINE_RECALL
 # Her own line taken back (her ask, the owner's yes, 2026-10-18): still queued it is cancelled, delivered it is recalled.
@@ -256,7 +256,7 @@ TOOLS = {
                           'artifact_id': _s('；'.join(ARTIFACT_FROM.values())),
                           'who': _s('poke：戳谁，照抄标签；私聊里不写就是对方'),
                           'line': _s(REACT_LINE),
-                          'face': _s('react：表情名'),
+                          'face': _s('react：小黄脸名'),
                           'why': _s(RECALL_WHY)}}},
             'quote': _s(QUOTE_LINE),
             'wait': _s('群里：no 不等回话，question 在问这里的人（回答进 questions_from_program）；不写由程序定（@ 了谁或在回谁就等他三分钟）',
@@ -2066,7 +2066,7 @@ class RoleTools:
             if why:
                 problems.append('quote：' + why)
             elif not any(row['kind'] in ('text', 'picture') for row in planned):
-                problems.append('quote 要跟一条 text 或 picture 一起发（贴纸、戳、点表情带不了引用）')
+                problems.append('quote 要跟一条 text 或 picture 一起发（表情包、戳、点表情带不了引用）')
         if wait not in (None, 'no', 'question'):
             problems.append('wait 是 no 或 question')
         if wait and not group:
@@ -2187,7 +2187,7 @@ class RoleTools:
             face = str(part.get('face') or '').strip()
             faces = channel_kinds.faces_of(scene['_id'])
             if face not in faces:
-                raise Refused('「%s」不是这里的表情名' % face if face else '要写 face（表情名）')
+                raise Refused('「%s」不是这里的小黄脸名' % face if face else '要写 face（小黄脸名）')
             line, why = people.line_of(scene, ep['_id'], part.get('line') or '这条')
             if why:
                 raise Refused('line：' + why)

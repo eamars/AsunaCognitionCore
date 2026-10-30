@@ -227,6 +227,7 @@ OneBot message event -> host envelope, with the authorization gate.
 
 - class `SeenLRU` — Cheap guard against re-submitting the same platform message in the same scene.
   - `add_if_new`
+- def `shape_of` — Which fields a segment carried, never their words (ADR-103): the sorted key names of `data` and of `data.raw`, and the value of the few keys that are a small number the platform picks (a dice result, a chain count) when it is one to four di
 - def `sticker_kind` — 'market' for a store sticker, 'custom' for a picture sent as a sticker, None for a photo.
 - def `parse_message` — Normalise a OneBot v11 message into text / real at / real reply / media.
 - def `media_mode_of` — Config-bound, with the 0.4.0 default; a bad value never disables media.

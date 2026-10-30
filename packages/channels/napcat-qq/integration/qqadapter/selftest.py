@@ -14,8 +14,10 @@ import base64
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -1838,15 +1840,29 @@ def _check_admission(rep, root):
     rep.check("admission_checks_ran", True, "explicit and automatic measured separately")
 
 
-def run(cfg, data_dir, live=True, live_config=True):
+def run(cfg, live=True, live_config=True):
     """`cfg` is the config actually in hand; `live_config` says whether it came
     from a real file (then it is cross-checked) or from the built-in fixtures
     (then that section is skipped).  `live` is the only switch that lets a
     platform be contacted or the real outbox be claimed.
+
+    Every check works in one scratch folder made for this run and removed when
+    it ends, failed or not; nothing is written under the adapter's data folder.
+    A scratch folder that cannot be removed fails the run.
     """
+    root = tempfile.mkdtemp(prefix="qq-selftest-")
+    try:
+        code = _run(cfg, root, live, live_config)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+    if os.path.exists(root):
+        print("SELFTEST_SCRATCH_LEFT %s" % root, flush=True)
+        return 1
+    return code
+
+
+def _run(cfg, root, live, live_config):
     rep = Report()
-    root = os.path.join(data_dir, "selftest")
-    os.makedirs(root, exist_ok=True)
     gcfg = _fixture_deployment(rep)
     _check_config_policy(rep, gcfg)
     if live_config:
@@ -1858,6 +1874,7 @@ def run(cfg, data_dir, live=True, live_config=True):
     _check_admission(rep, root)
     _check_group_inbound(rep, gcfg)
     _check_media(rep, gcfg, root)
+    _check_shapes(rep, gcfg)
     _check_voice(rep, gcfg, root)
     _check_markdown(rep, gcfg, root)
     _check_lanes(rep, gcfg, root)
@@ -3091,6 +3108,38 @@ def _check_faults(rep, gcfg, root):
         raised = exc
     rep.check("faults_damaged_pending_ignored_and_add_never_raises", raised is None and len(damaged.pending) == 2
               and all(len(k[2]) <= faults_mod.NAME_CHARS for k in damaged.pending), str(raised))
+
+
+def _check_shapes(rep, gcfg):
+    """ADR-103: a face, and a segment of a type nobody here has a word for, carry which fields the platform sent --
+    key names and a few small numbers, never words -- with the line, bounded. Offline: synthetic events."""
+    grp = sorted(fixtures.GROUPS)[0]
+    member = sorted(fixtures.MEMBERS[grp])[0]
+    face = {"id": "277", "chainCount": 3, "raw": {"faceText": "/狗头", "faceType": 2, "resultId": 5, "packId": "secret-pack"}}
+    item = inbound_mod._media_item("face", face)
+    rep.check("shape_face_fields_not_words",
+              item.get("shape") == "data:chainCount,id,raw|raw:faceText,faceType,packId,resultId|values:chainCount=3,"
+              "raw.faceType=2,raw.resultId=5" and "secret-pack" not in json.dumps(item, ensure_ascii=False),
+              str(item.get("shape")))
+    dice = inbound_mod._media_item("dice", {"result": "12345", "other": 7})
+    rps = inbound_mod._media_item("rps", {"result": "2"})
+    rep.check("shape_unrecognized_type_and_a_number_only_when_small",
+              dice["shape"] == "data:other,result" and rps["shape"] == "data:result|values:result=2"
+              and dice["placeholder"] == "[dice消息（未解析）]", "%s / %s" % (dice.get("shape"), rps.get("shape")))
+    rep.check("shape_only_where_the_question_is_open",
+              all("shape" not in inbound_mod._media_item(kind, {"id": "1", "file": "a.png"})
+                  for kind in ("image", "record", "poke", "file")), "")
+    wide = inbound_mod._media_item("face", {"id": "1", "odd key!": 1, **{"k%02d" % n: 1 for n in range(60)},
+                                            "raw": {"x" * 30: 1}})
+    rep.check("shape_is_bounded_and_keeps_identifiers_only",
+              len(wide["shape"]) <= inbound_mod.MAX_SHAPE and "odd key" not in wide["shape"]
+              and "x" * 30 not in wide["shape"], wide["shape"][:80])
+    res, reason = _classify(_group_event(gcfg, grp, member, 5301, message=[
+        {"type": "text", "data": {"text": "掷出"}}, {"type": "dice", "data": {"result": 4}}]), gcfg,
+        inbound_mod.SeenLRU(8))
+    items = (res[0]["raw"].get(inbound_mod.MEDIA_KEY) or {}).get("items") if reason == "accepted" else []
+    rep.check("shape_travels_with_the_line", reason == "accepted" and res[0]["text"] == "掷出[dice消息（未解析）]"
+              and items and items[0]["shape"] == "data:result|values:result=4", json.dumps(items, ensure_ascii=False))
 
 
 def _check_voice(rep, gcfg, root):

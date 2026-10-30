@@ -1,7 +1,8 @@
 # ADR-112: A working task cut at the stage limit, and the restart loop that followed
 
-Status: **Open**. Two fixes are installed (§6). The root causes are identified (§5). C2 is designed and built in §9,
-on branch `claude/focused-hamilton-wy3xp7`, not yet installed. What else is open (§7) is not designed here.
+Status: **Open**. Two fixes are installed (§6). The root causes are identified (§5). C2 (§9) and C4 (§10) are
+designed, built and reviewed (§11) on branch `claude/focused-hamilton-wy3xp7`, not yet installed. C1 and the paused
+tasks without an end are the owner's decisions (§7); the 12:39 crash is not explained.
 
 All times are New Zealand local time (NZDT, UTC+13), 2026-10-30 evening to 2026-10-31 early morning, unless marked UTC.
 
@@ -206,14 +207,22 @@ decides a restart read it. Four checks decide one, each reading "at work" its ow
 
 ### 9.2 Design
 
-**D1. A call in flight within its limit holds every restart.** `Calls.holding()` counts the calls in flight not yet
-past their limit (600 s, or a timed tool's own timeout + 120 s; a development call ends sooner, at its `host_call`
-wait of 120 s). The controller carries it as `calls_in_flight` (0 outside the native worker), and all four checks
-read it; `status` reports it as `calls_in_flight`, which an older plugin ignores and a newer plugin reads as 0 from
-an older worker. The publication restart's watch loop now also looks while a restart is pending, because no turn
-ends when the last call does.
+**D1. A call in flight within its limit holds every restart that waits for quiet.** `Calls.holding()` counts the
+calls in flight not yet past their limit (600 s, or a timed tool's own timeout + 120 s; a development call ends
+sooner, at its `host_call` wait of 120 s), and `tool_watch.holding()` sums it over every `Calls` of the process (the
+worker has one). The controller reads it itself (`Chat.calls_in_flight`), so no wiring at start can leave a check
+blind, and all four checks read it; `status` reports it as `calls_in_flight`, which an older plugin ignores and a
+newer plugin reads as 0 from an older worker. The publication restart's watch loop also looks while a restart is
+pending, because no turn ends when the last call does; a core publication recorded `APPLIED` asks the gate at once,
+from the call that recorded it, because a task already closed has no turn left to end. `restart.blocked` is recorded
+at each change of what holds the restart (`held_by`: turn, task, calls), not once per worker: at 23:25 the restart
+was already held by the task, and the hold by the call after the cut would otherwise leave no record. A restart
+pending when no core publication is `APPLIED` any more (overtaken by one byte for byte the running one, or by one that
+needs the Host restarted) is withdrawn, `restart.withdrawn`: before, it held her queues until a restart from outside,
+and the watch loop would have polled for it for ever.
 
-- Slow call: the restart waits for it. The queues already hold while a restart is pending, so no new work starts.
+- Slow call: the restart waits for it, and so do her turns and tasks, which hold while a restart is pending: up to
+  the call's limit, 600 s for most tools. The usual call held at a cut is a publish answered within seconds.
 - Failing call: it ends, and the restart follows within 0.5 s.
 - Hung call: it holds the restart until its limit, where the watchdog has already recorded it (`host.tool_overrun`);
   the restart then goes ahead and is its recovery. Nothing waits without a bound.
@@ -230,9 +239,9 @@ choice as fix 1: settle the record at the one moment that always comes, a start.
 
 ### 9.3 Review: does it reach the root cause?
 
-- **Replay of 23:37 with D1.** 06.062 the task closes; the gate finds `569c3b54` `APPLIED`, sets the restart pending
-  and is held by the publish call (started 23:36:51.8, well within its limit), `restart.blocked` with
-  `calls_in_flight: 1`. About 08.07 the Host answers; the worker records `78492805` for task `8b579a2a` and marks
+- **Replay of 23:37 with D1.** 23:25 the restart goes pending, `restart.blocked` held by the task. 06.062 the task
+  closes; the gate finds `569c3b54` `APPLIED` and is held by the publish call (started 23:36:51.8, well within its
+  limit): `restart.blocked` again, `held_by: calls`, `calls_in_flight: 1`. About 08.07 the Host answers; the worker records `78492805` for task `8b579a2a` and marks
   `569c3b54` `SUPERSEDED` (fix 1's helper); the call then ends `raised` at the broker's closing fence (its task is
   closed: by design a call's answer never revives a closed task) but the receipt is already written. The watch loop
   sees no call and asks for one restart. The started worker activates `78492805` and offers her its result for that
@@ -242,7 +251,10 @@ choice as fix 1: settle the record at the one moment that always comes, a start.
 - **C1 is not touched.** The stage still ends at 1,800 s; D1 only stops the restart cutting what the cut left
   running. Draining a task's calls before closing it would lengthen the stage past its limit, which is the owner's
   decision (§7).
-- **Not a bandage for one tool.** D1 holds for any call of either brain on every restart path; D2 for any stop.
+- **Not a bandage for one tool.** D1 holds for any call of either brain on the four restarts that wait for quiet.
+  Restarts that do not wait (her `when: now`, her quiet request's fallback after `QUIET_MINUTES`, a restart after the
+  worker fails, the launcher's, the supervisor's, a recovery activation from an older plugin) still cut a call in
+  flight; for a publication, D2 settles its record at the next start whatever stopped the worker.
 - **Her task's own record stays `BLOCKED`** with the stage cut at its limit, which is true. The publication's
   result reaches her the way every core publication's does, after the restart, naming the task.
 - **Existing rows.** The recovery row written for `78492805` that night is left as it is (D2 acts only where no
@@ -252,20 +264,26 @@ choice as fix 1: settle the record at the one moment that always comes, a start.
 
 | Test | Guards | Fails without |
 |---|---|---|
-| `test_host.py` `test_a_publication_restart_waits_for_a_call_its_closed_task_left_in_flight` | the 23:37 cut, and a restart left pending for ever once the last call ends (every queue would stop) | D1's gate (first assert), D1's watch loop (the wait) |
+| `test_host.py` `test_a_publication_restart_waits_for_a_call_its_closed_task_left_in_flight` | the 23:25 to 23:37 sequence: held by the task, then by the call, each recorded; asked once the call ends | D1's gate, the record per change, the watch loop |
+| `test_host.py` `test_a_pending_restart_with_nothing_left_to_load_lets_the_queues_go_on` | her queues held for ever by a restart with nothing to load | the withdrawal |
+| `test_tool_watch.py` `test_a_call_in_flight_holds_every_restart_that_waits_for_quiet` | the checks read the process's calls through a real `Chat`: her quiet restart, a settings apply | `Chat.calls_in_flight` |
 | `test_tool_watch.py` overrun test, `holding` at 149 / 151 / 601 s | a hung call cannot hold a restart for ever | `holding`'s limit |
-| `test_native_worker.py` `test_a_started_worker_gives_her_task_the_publication_no_worker_recorded` | S4: the task is told; an install stays a recovery | D2 |
+| `test_native_worker.py` `test_a_started_worker_gives_her_task_the_publication_no_worker_recorded` | S4: the task is told; an install, and a task in another scope, stay a recovery | D2 |
 
-All three were run against the tree without the change: 3 failed; with only the watch-loop line reverted, the first
-fails. With the change: `tests/` 841 passed, 30 skipped, 3 failed, the same 3 that fail at `9b2fe32` on a machine
-without `config/local.json` and node (`test_no_server`, two in `test_refusal_probe`).
+Each was run with its fix reverted (the whole change; the watch-loop line alone; `Chat.calls_in_flight` returning 0;
+the record once per worker; no withdrawal) and failed. Suite figures are in §11.
 
 ### 9.5 Landing
 
 One core landing: the suite, `pytest integration`, the node tests (`npm run test:native`: one line in `index.js`,
 not run in the cloud session that built this), the push gate, the restart, the loaded commit checked. Then read on
-the live system: the next `restart.blocked` record carries `calls_in_flight`, and a stage cut at its limit during a
-publication leaves a `self_development_publish` receipt for its task.
+the live system: the next `restart.blocked` record carries `held_by` and `calls_in_flight`, and a stage cut at its
+limit during a publication leaves a `self_development_publish` receipt for its task.
+
+Before the restart, compare the receipt ids in `activation.json` (`projects` and `active`, and each one's `previous`)
+with `sink_receipts`: the first start with D2 records, and offers her, any selected publication with no receipt whose
+task still exists in the same scope. None is expected (every selection has had a receipt or a recovery row since its
+first start); one found is an old result she would be told about, and the owner decides before the restart.
 
 ### 9.6 Not in this change
 
@@ -336,6 +354,9 @@ are kept.
   complete.
 - **A quiet system** keeps what it kept before: its newest 5 starts, plus anything of the last two days.
 - **Two sides at different versions.** Only the worker prunes; the supervisor's reading of the folders is unchanged.
+  One gap: when the supervisor falls back to the core that ran before this change (`previous`, after starts that do
+  not come up), that older worker prunes back to five reports, erasing the evidence of that very fallback. It lasts
+  until the core that falls back is one with D3.
 - **The broken invariant** was "a count-based retention is erased by the very failure it is needed for". The kept set
   no longer depends on the number of starts within 48 hours, and a bound reached is visible.
 
@@ -349,4 +370,34 @@ are kept.
 At landing, before the restart, read the size of `<data>/reports/native-host-*` (records and bytes per start) and
 check that a full start is near 3,000 records and a few MB. After the restart: the reports of the previous starts of
 the last two days are still there.
+
+## 11. Review
+
+A fresh reviewer read §9 and §10 against the code at `3fb3d2e` and the working tree, told to judge the code and not
+the prose: whether C2 and C4 are closed, other paths that stop the worker, waits that could last for ever, the new
+code's edge cases, the two sides at different versions, whether the tests fail without their fixes, and the
+references. Its verdict: D1 closes C2 on the path of that night (the receipt is written before the call ends, so one
+restart follows), D2 settles every other stop, D3 closes C4 up to its bound. Its findings, each checked against the
+code, and what was done:
+
+| # | Finding | Done |
+|---|---|---|
+| 1 | The hook carrying D1 was one assignment at start, guarded by no test: deleting it would bring C2 back with every test green. | The hook is gone: `Chat.calls_in_flight` reads the process's calls (`tool_watch.holding`). Test through a real `Chat`, her quiet restart and a settings apply (§9.4). |
+| 2 | `restart.blocked` was written once per worker; at 23:25 it was already written, so the hold by the call after the cut would leave no record, and §9.3's replay and §9.5's check would read a stale one. | Recorded at each change of what holds it, with `held_by` (§9.2). |
+| 3 | A restart pending when nothing core is `APPLIED` any more held her queues until a restart from outside (older than this change), and D1's watch loop would poll for it every 0.5 s for ever. | Withdrawn, `restart.withdrawn` (§9.2), with its test. |
+| 4 | Her turns and tasks wait while a call holds the restart, up to its limit; §9.2 said only that the restart waits. | Said in §9.2 and RUNTIME_API. Left at the call's limit: holding a closed task's call only for its own wait would need a second limit per tool, and the usual held call is answered within seconds. |
+| 5 | A cut task's first core publication, recorded after the task closed with no restart pending, would wait for some later turn to end. | The publish path asks the gate as it records an `APPLIED` receipt (§9.2). |
+| 6 | A supervisor fallback to the core before D3 prunes back to five reports. | Stated in §10.4; it ends once the fallback core has D3. |
+| 7 | D2's first start could offer her an old result for a selection with no receipt. | A check before the landing's restart (§9.5). |
+| 8 | D2's test covered neither a task in another scope nor a missing one. | Another scope added to the test (a missing task takes the same branch). `host.reports_pruned` being written at start is not tested: `initialize` needs the whole Host; the prune's result it records is. |
+| 9 | §9.3 said D1 holds on every restart path; restarts that do not wait for quiet still cut a call. `Desk.preview` told her nothing was running while a call was. The references carried reasons, and omitted the recovery activation. | §9.3 corrected; `Desk.preview` names the calls still out; RUNTIME_API and DEVELOPMENT corrected. |
+
+Checked and fine by the reviewer: `Calls.holding` (no lock order against the controller's), no new call can join a
+stage once it is cut, the character brain's calls covered by its turn, `prune_host_reports` (kept starts are a prefix
+of the newest-first order, the current start always kept, mtime is the last record written on Linux and NTFS), the
+supervisor's `readySince`, and the version skew of `calls_in_flight` in `status`.
+
+Suite after the fixes (`tests/`, in the cloud session, no `config/local.json` and no node): 845 passed, 30 skipped,
+3 failed, the same 3 that fail at `9b2fe32` there (`test_no_server`, two in `test_refusal_probe`). Not run there:
+`pytest integration` and `npm run test:native` (§9.5).
 

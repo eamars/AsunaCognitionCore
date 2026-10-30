@@ -9,6 +9,7 @@ import TokenMeter from '@deepseek-ai/dsh-token-meter';
 import RoleCompactionEngine, { ROLE_COMPACTION_INSTRUCTION, ROLE_SECTIONS, TurnEnds, compactAtTurnEnd, hasSections, inSteps,
   lastTurnStart } from '../src/compaction.js';
 import { compactionOpen } from '../src/pairing.js';
+import { CHECKPOINT_MARK } from '../src/marks.js';
 
 const CHECKPOINT = ROLE_SECTIONS.map(head => head + '\n- （无）').join('\n\n');
 
@@ -33,16 +34,24 @@ test('role compaction keeps the replayed prefix and asks for a Chinese role-play
   assert.doesNotMatch(ROLE_COMPACTION_INSTRUCTION, /coding assistant|English/);
   assert.equal(sent.provider, 'p');
   assert.equal(sent.purpose, 'compaction');
-  assert.equal(result.summary[0].text, CHECKPOINT);
+  assert.equal(result.summary[0].text, CHECKPOINT_MARK + '\n', 'the checkpoint says what it is (ADR-108 D3), once');
+  assert.equal(result.summary[1].text, CHECKPOINT);
+  assert.equal(result.summary.length, 2);
   assert.equal(sent.reasoningEffort, undefined, 'no level configured: none named');
   // A merge carries the earlier promises and corrections item by item or marks them closed, and names no earlier
   // checkpoint (ADR-085 §7; her ask): the per-hop reading counts exactly these.
   assert.match(ROLE_COMPACTION_INSTRUCTION, /「答应过的事」「更正与分歧」里的条目逐条原样带过来/);
-  assert.match(ROLE_COMPACTION_INSTRUCTION, /前面加「已了结：」、末尾加「（凭：[^」]+）」，留这一次；它里面已经标了「已了结：」的，这次删去/);
+  assert.match(ROLE_COMPACTION_INSTRUCTION, /前面加「已了结：」、末尾加「（凭〔编号〕）」，留这一次；它里面已经标了「已了结：」的，这次删去/);
   assert.match(ROLE_COMPACTION_INSTRUCTION, /不写“承接上一份检查点”这类指向它的话/);
   // Folded into one line, a dozen corrections were carried once and lost at the next merge (ADR-085 §7, her reading).
   assert.match(ROLE_COMPACTION_INSTRUCTION, /一条一行：不把几条并成一句，也不写“其余不变”这类总括；.*压短只压经过，留下这一条的判据和来路/);
   assert.match(ROLE_COMPACTION_INSTRUCTION, /群里的笔记（group_notes_from_program）/);
+  // Every item that says who said, decided, promised or corrected something ends with the number of its line, copied
+  // from the label line (ADR-108 D2); a Web line's number is in the notice that follows it; the head is the program's.
+  assert.match(ROLE_COMPACTION_INSTRUCTION, /末尾写它出自的那一行的〔编号〕，照抄那一行标签行末尾的编号；说不出出自哪一行的，写成「（转述）」/);
+  assert.match(ROLE_COMPACTION_INSTRUCTION, /网页里主人的话没有标签行，它的编号在紧跟着的程序通知里（event 的 line）/);
+  assert.match(ROLE_COMPACTION_INSTRUCTION, /旧检查点条目末尾的〔编号〕原样带过来/);
+  assert.match(ROLE_COMPACTION_INSTRUCTION, /开头那行〔摘要〕是程序写的，不要抄进来/);
 
   engine.ctx.llm.stream = async function *() { yield { type: 'finish', reason: { kind: 'max-tokens' } }; };
   await assert.rejects(engine.summarize({ messages: prefix }, agent), { code: 'MAX_TOKENS' });

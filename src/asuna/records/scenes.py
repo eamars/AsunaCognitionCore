@@ -140,12 +140,21 @@ def set_character_context(store, scene_id, context):
     _set(store, scene_id, {'character_context': context})
 
 
-def set_timezone(store, scene_id, name):
-    """The conversation's time zone; None takes it away."""
-    if name is None:
-        _unset(store, scene_id, 'timezone')
-    else:
-        _set(store, scene_id, {'timezone': name})
+def _carrying(store):
+    """The conversations that still carry a `timezone`. The field is not declared (nothing reads it any more), so it
+    cannot be a condition: the rows are read and looked at."""
+    return [row['_id'] for row in _rows(store).find() if 'timezone' in row]
+
+
+def timezones(store):
+    """How many conversations still carry a `timezone` (ADR-106)."""
+    return len(_carrying(store))
+
+
+def clear_timezones(store):
+    """ADR-106's one-off: take `timezone` off every conversation that has one. Returns how many it changed; a second
+    run changes none."""
+    return sum(_rows(store).update({'_id': scene_id}, Unset('timezone')).changed for scene_id in _carrying(store))
 
 
 def note_fault(store, scene_id, fault):

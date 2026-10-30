@@ -136,6 +136,14 @@ Inventory or remove only explicitly inventoried Asuna test databases.
 
 - def `main`
 
+## `clear_scene_zones.py`
+
+[tools/clear_scene_zones.py](../../tools/clear_scene_zones.py)
+
+ADR-106's one-off: take the time zone off every conversation that still carries one.
+
+- def `main`
+
 ## `import_native_credentials.mjs`
 
 [tools/import_native_credentials.mjs](../../tools/import_native_credentials.mjs)

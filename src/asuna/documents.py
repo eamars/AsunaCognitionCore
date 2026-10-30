@@ -446,9 +446,67 @@ class DocumentStore:
                                 mutation_id=f'seed:{self.persona}:{slug}', extra={'seed_unknown_sids': unknown} if unknown else None)
         return revision
 
-    def apply(self, slug, intent, body=None, *, base_revision_id, author, mutation_id, budget=None):
+    def problems(self, slug, intent, body=None, *, budget=None):
+        """Every problem this write would meet before anything is written, as [DocumentError] (ADR-108 D4b): the intent's
+        own fields, then the document's state, then the budget on the document the write would leave. `apply` stays the
+        authority and refuses at the first it meets; this finds them together. A check whose input an earlier problem
+        spoiled is not run on a guess: the section's tags when the section is not found, the budget unless the rest is
+        clean. The reason's length is the caller's (it is her prose)."""
+        op = intent.get('op')
+        if op not in OPS or op == 'adopt_seed':
+            return [DocumentError('DOC_OP_UNKNOWN', ('没写 do' if op is None else 'do「%s」不认识' % op)
+                                  + '；do 是 replace_section、append_section、correction、set_tags 或 adopt_seed')]
+        found, kind = [], intent.get('kind')
+        if kind is not None and kind not in NEW_KINDS:
+            found.append(DocumentError('DOC_KIND_INVALID', _bad_tag('kind', kind, NEW_KINDS)))
+        if op in WRITE_STAGE_OPS and (not isinstance(body, str) or not body.strip()):
+            found.append(DocumentError('DOC_BODY_REQUIRED', '%s 的 content 是空的' % op))
+        if op == 'append_section' and not (intent.get('heading') or '').strip():
+            found.append(DocumentError('DOC_HEADING_REQUIRED', 'append_section 要写 heading（新节的标题）'))
+        for field, allowed in (('visibility', VISIBILITIES), ('inject', INJECTS)):
+            if intent.get(field) is not None and intent[field] not in allowed:
+                found.append(DocumentError('DOC_TAGS_INVALID', _bad_tag(field, intent[field], allowed)))
+        if intent.get('tags') is not None:
+            try:
+                _checked_tags(intent['tags'])
+            except DocumentError as error:
+                found.append(error)
+        journal = self.is_journal(slug)
+        revision_id, content = self.read(slug)
+        if journal and op in ('correction', 'adopt_seed'):
+            found.append(DocumentError('DOC_OP_NOT_ALLOWED', '「%s」是流水记录：补一节用 append_section，改一节用 replace_section' % slug))
+            return found
+        sections = []
+        if content is None:
+            if op != 'append_section':
+                found.append(DocumentError('DOC_NOT_FOUND', '「%s」不存在；已有的文档：%s' % (slug, self._own_slugs())))
+            elif slug.startswith('dossier:'):
+                found.append(DocumentError('DOC_OP_NOT_ALLOWED', '人物档案不再使用；对一个人的理解用 understand_person 写'))
+        else:
+            sections = content['sections']
+            if content['kind'] == 'contract':
+                return [*found, DocumentError('DOC_OP_NOT_ALLOWED', '「%s」是只读的约定文档，哪种操作都改不了；重试也一样' % slug)]
+            if kind is not None and kind != content['kind'] and not journal:
+                found.append(DocumentError('DOC_KIND_FIXED', '「%s」已经是 %s；kind 只在新建文档时选，建好就不改' % (slug, content['kind'])))
+        if op in ('replace_section', 'set_tags', 'correction') and (content is not None or journal):
+            if not named_section(sections, intent.get('sid')):
+                found.append(DocumentError('DOC_SECTION_NOT_FOUND', missing_section(slug, intent.get('sid'), sections)))
+            elif op == 'correction' and content is not None and content['kind'] != 'ledger':
+                found.append(DocumentError('DOC_OP_NOT_ALLOWED', 'correction 只用于活账（ledger），「%s」是 %s；'
+                                           '这份用 replace_section 改那一节，或 append_section 补一节' % (slug, content['kind'])))
+        if not found and budget and not journal:
+            try:
+                # The reason is the caller's to judge; the budget measures what the write will carry, whatever it says.
+                self.apply(slug, {**intent, 'reason': 'check'}, body, base_revision_id=revision_id, author='check',
+                           mutation_id='check:' + slug, budget=budget, dry=True)
+            except DocumentError as error:
+                found.append(error)
+        return found
+
+    def apply(self, slug, intent, body=None, *, base_revision_id, author, mutation_id, budget=None, dry=False):
         """One write intent. ``budget(slug, new_content, intent)`` may refuse growth (PERSONA_RENDER_OVER_BUDGET,
-        NOTE_OVER_LIMIT); it sees the intent, so it measures what the write will carry (carried.gate)."""
+        NOTE_OVER_LIMIT); it sees the intent, so it measures what the write will carry (carried.gate). ``dry``: run every
+        check including the budget and write nothing (`problems` uses it); the document it would leave comes back."""
         op = intent.get('op')
         if op not in OPS or op == 'adopt_seed':
             raise DocumentError('DOC_OP_UNKNOWN', ('没写 do' if op is None else 'do「%s」不认识' % op)
@@ -550,6 +608,8 @@ class DocumentStore:
             _pin(target, intent)
         if budget:
             budget(slug, content, intent)
+        if dry:
+            return content
         return self._commit(slug, content, base_revision_id=base_revision_id, reason=reason, author=author,
                             mutation_id=mutation_id)
 

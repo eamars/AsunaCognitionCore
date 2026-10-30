@@ -20,6 +20,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 - def `bounded_result`
 - class `FeedbackStale` — The action result no longer authorizes a pending role continuation.
 - def `require_current_feedback`
+- def `listed_files` — list_files' answer: the task folder walked folder by folder, at most LIST_FILES_MOST entries, its files sorted by path; `limited` says so when the walk stopped there.
 - def `workspace_file` — list_files / read_file / write_file inside the task folder; protected sources stay read-only.
 - class `ToolFailed` — A tool call that did not happen, for the reason its tool named: the call's error, in the words its FAILED artifact keeps.
 - def `failure_words` — The words of a definite failure a tool answered with, or None: its code, its note, then what else it named.
@@ -135,7 +136,7 @@ Business ownership for native DSH reminders; no host time wheel.
 - def `plan_title`
 - class `ScheduleService`
   - `close`
-  - `zone_of` — 这个场景/这条计划用哪个钟面。计划上已落库的时区优先：改配置不追改旧安排。
+  - `her` — 她的钟面（schedule_rules.her_zone）：每个场景都一样。一条计划自己存着的钟面另算（plan_zone）。
   - `ensure_self_development` — Register one native recurring opportunity, with no second host clock.
   - `ensure_night_development` — ADR-021: a native tick every NIGHT_TICK_SECONDS; each tick asks whether a night stage is due (_night_stage), so her own window and pace apply at once, with no record to re-arm.
   - `ensure_presence` — Heartbeat needs the persona model (heartbeat.enabled) and the owner's local target scene.
@@ -163,21 +164,30 @@ Business ownership for native DSH reminders; no host time wheel.
 ADR-005 P3：把自然语言里的时间换算成 DSH 的那一次钟点——纯换算，不碰网络也不碰 Mongo。
 
 - def `now_utc`
-- def `scene_timezone` — 这个场景（或这条计划创建时）用哪个时区。计划上已落库的时区优先，改配置不追改旧计划。
+- def `machine_zone_name` — The machine's own zone as an IANA name: what the Host reported, else `TZ`; None when neither loads.
+- def `her_zone` — The one clock everything she reads is on: the deployment's `timezone` setting; when it is not set (or does not load, `setting_unreadable`) the machine's zone; else UTC.
+- def `has_wall_zone` — Whether a rule's meaning depends on a zone: a daily or weekly clock, or an `at` written without an offset.
+- def `plan_zone` — The zone a plan's rule is written in: the one it stored when the rule has a wall zone and it loads, else hers.
+- def `moved_from` — The name of the zone a plan is moved off when a call gives it a timing: its rule has a wall zone and was written on a clock that is not hers.
+- def `pin_at` — An `at` written without an offset becomes the moment it names, so an appointment never depends on a zone; every other rule as it is.
 - def `offset_minutes`
 - def `wall_to_utc` — 本地墙钟 → UTC 瞬间，并说明这段本地时间是什么情况。
 - def `normalize_rule` — 校验并规范化一条时间安排；只认四种计时，别的都明确拒绝（不静默降级成"大概十分钟"）。
 - def `rule_kind`
 - def `rearms_after_fire` — 到期后要不要由宿主再挂一次原生单次：每日／每周要；原生自己重复的 every 不要。
 - def `next_fire` — 下一次绝对时刻（aware UTC）。时间已过／本地不存在都抛 ValueError，不静默当成已完成。
-- def `local_moment` — The moment on the wall clock of an IANA zone (rhythm, settlement dates).
+- def `local_moment` — The moment on the wall clock of a zone, given as an IANA name or as a tzinfo (rhythm, settlement dates).
 - def `minutes_later` — An ISO moment some minutes after now (her heartbeat pause).
 - def `is_iana` — An explicit IANA Area/Location zone (or UTC) that the native daily/weekly rules accept.
 - def `native_recurring` — Clock rules in an IANA zone map to native daily/weekly (weekday 0…6 → ISO 1…7); else None.
 - def `native_payload` — 给原生 /schedule/create 的载荷：固定间隔交给原生重复，其余一律换算成"多少秒之后"的单次。
-- def `describe`
-- def `project` — 把一条 plans 行投影成角色上下文里那一行：带人话、带场景时区的下一次，不让她自己换算。
-- def `local_clock` — 给角色的现场钟面：她换算"明天下午三点"要用，不让她猜自己在哪个时区。
+- def `describe` — A rule in words.
+- def `gap_words` — How one clock stands to another, in words that change only with a zone or a daylight-saving switch.
+- def `project` — 把一条 plans 行投影成角色上下文里那一行：带人话、带她那个钟面上的下一次，不让她自己换算。
+- def `clock_note` — A plan whose rule is written on another clock than hers (`gap`: its clock minus hers, in minutes).
+- def `moved_note` — What an update that has just put a plan written on another clock onto hers tells her (None when it did not).
+- def `plan_brief` — `project` cut to what a view of another place's plan, or the plan that has just come due, shows her.
+- def `local_clock` — 给角色的现场钟面：她换算"明天下午三点"要用。只有钟面和星期，不报时区名。
 - def `line_stamp` — When one stored line was said, on her clock face (local_time.face); '' when unknown.
 
 ## `sandbox`

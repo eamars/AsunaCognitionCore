@@ -53,6 +53,7 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 
 - def `register`
 - def `load` — Import each plugin's kind module: [{'python': <directory>, 'module': <name>}].
+- def `loaded` — The plugin entries this process loaded, in the order it loaded them (a data child loads the same).
 - def `get`
 - def `of` — The kind of a scene or person id, by its prefix; None for local ids and unknown kinds.
 - def `of_channel`
@@ -89,7 +90,7 @@ What a channel's running adapter says it carries (ADR-079 §9.7).
 - def `supports` — The names a channel's adapter last declared; empty when it never did.
 - def `limit` — The largest size in bytes a channel's adapter declared for one of its functions (`file:<bytes>`); None when it declared none.
 - def `carries` — Whether the scene's channel declares any of these.
-- def `numbered` — Lines there show their number: the channel carries quotes, out or in (ADR-079 §9.2).
+- def `can_quote` — She can quote a line by its number there: the channel carries quotes, out or in (ADR-079 §9.2).
 - def `forget`
 
 ## `channel_admission`
@@ -443,6 +444,7 @@ Voice and video decoding in child processes (ADR-095 §5.3.1): one long-lived ch
 - class `StartFailed` — The child exited, or did not say it was ready, while starting.
 - class `Closed` — The kind is closing (the Host stops): a job it ended is not the job's failure.
 - class `Timeout` — The job's try ran past its deadline, or the call's budget ran out.
+- class `Busy` — The job waited out its kind's lock-wait limit behind the kind's other jobs or a start; it never ran.
 - class `Died` — The child exited, or answered something that is not a frame, during the job.
 - class `JobError` — The job could not be done; `program` when the child's own code failed (not the job's content).
 - def `write_frame`

@@ -340,7 +340,7 @@ test('ADR-098: her requests carry zero roots and zero user names; the action bra
   assert.equal(h.requests.length, 2);
   const [hers, actions] = h.requests.map(request => request.messages.flatMap(m => m.content.map(x => x.text ?? '')).join('\n'));
   assert.doesNotMatch(hers, ROOTS, 'no root and no user name in the request of her lane');
-  assert.ok(hers.includes('Current working directory: "${ASUNA_DATA}' + BS + BS + 'work' + BS + BS + 'local-user".'));
+  assert.doesNotMatch(hers, /Current working directory/, 'DSH keeps it as a required context; her lane blanks it (ADR-108 A11)');
   assert.ok(hers.includes('你的源码在 ${ASUNA_WORKSPACE}' + BS + 'packages'));
   assert.ok(hers.includes('看 ${ASUNA_HOME}' + BS + 'Desktop' + BS + 'a.txt 和 "${ASUNA_WORKSPACE}' + BS + BS + 'src"'));
   assert.ok(hers.includes('whoami 是 ${ASUNA_USER}'));
@@ -351,6 +351,31 @@ test('ADR-098: her requests carry zero roots and zero user names; the action bra
   const tally = h.calls.find(x => x.method === 'roots.tally').args.sessions;
   assert.deepEqual(tally, [{ session_id: 'role', lane: 'character', requests: 1, rewritten: 1 }]);
   assert.equal(h.core.roots.status().rewritten, 1);
+});
+
+// ADR-108 A11, end to end through the preset mount: DSH registers the working folder as a REQUIRED runtime context, which
+// the plugin's suppression keeps; the preset's scoped blank shadows it for her lanes and not for the action brain's.
+// (The Windows fixtures above need a Windows host; this one opens its sessions in a POSIX folder.)
+test('ADR-108 A11: her request carries no working directory; the action brain\'s does', async t => {
+  const h = await rootsHarness(t, PATHS.tables.windows);
+  const cwd = '/srv/asuna/work/local-user';
+  const open = async (id, preset, mount) => {
+    const handle = await h.ctx.agents.create({ sessionId: id, agentOptions: { provider: 'fixture', model: 'one-model' },
+      meta: { cwd, agentPreset: preset }, setup: async scope => { await h.ctx.agentPresets.mount(scope, mount); } });
+    t.after(() => handle.dispose());
+    return handle.agent;
+  };
+  const role = await open('role', 'asuna', 'asuna');
+  role.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'hello' }] }));
+  await role.whenIdle();
+  const action = await open('action', 'asuna-action', 'ordinary');
+  action.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'do it' }] }));
+  await action.whenIdle();
+  assert.equal(h.requests.length, 2);
+  const [hers, actions] = h.requests.map(request => request.messages.flatMap(m => m.content.map(x => x.text ?? '')).join('\n'));
+  assert.doesNotMatch(hers, /Current working directory/);
+  assert.doesNotMatch(hers, /runtime context/i, 'nothing of the host reaches her request');
+  assert.ok(actions.includes('Current working directory: "' + cwd + '".'), 'the action brain works in a folder and keeps its line');
 });
 
 test('ADR-098: without a table her lane is refused with the coded fault and one audit event; the action lane runs', async t => {

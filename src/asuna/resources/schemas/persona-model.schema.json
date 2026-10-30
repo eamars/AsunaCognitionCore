@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "asuna:persona-model:1",
   "title": "ADR-009 persona model",
-  "description": "Persona parameters are data. Absent sections fall back to neutral core defaults (feature off or current behaviour). Private keys rhythm.timezone and rhythm.sleep_window must never be defaulted by a package.",
+  "description": "Persona parameters are data. Absent sections fall back to neutral core defaults (feature off or current behaviour). Private keys rhythm.sleep_window and rhythm.public_clock must never be defaulted by a package.",
   "type": "object",
   "required": [
     "model_version",
@@ -375,11 +375,6 @@
         "anyOf": [
           {
             "required": [
-              "timezone"
-            ]
-          },
-          {
-            "required": [
               "sleep_window"
             ]
           }
@@ -600,7 +595,6 @@
       "propertyNames": {
         "not": {
           "enum": [
-            "rhythm.timezone",
             "rhythm.sleep_window"
           ]
         }

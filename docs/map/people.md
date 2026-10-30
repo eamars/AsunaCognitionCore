@@ -131,13 +131,16 @@ Who is who in a scene, as the character reads it.
   - `mentions` — The adapter's real @<number> of a known person (or of her own account) reads as their label.
   - `ensure_roster` — Label everyone who has written in this scene, so a lookup can name them all.
   - `resolve` — The people of this scene a lookup may mean.
+  - `copyable` — A person as she is to copy them, for a refusal that lists who she may name (ADR-108 D4c): the first form of the label that `resolve` takes back as that one person.
+  - `copyable_author` — `copyable` for a stored author (a person id).
   - `account_of` — The platform account behind a person in this scene, for the adapter's @ marker; None when unknown.
   - `numbers` — Numbers in her words that are someone's here, outside a label (a label leaves as a name or an @): [(what she wrote, their label)].
   - `outbound` — Labels never leave the program; the stored text keeps what she wrote.
   - `authors_of` — Every stored author id in these scenes that is this person (aliases by configuration).
   - `row_head` — Who wrote a stored row, as a history result names them: her own rows read as her name.
   - `speaker` — Label for a stored author (no notes): her own rows read `me` when given.
-  - `pointed` — A line another line points at (a quote, a reaction, a recall), in the one form every pointer has (ADR-079 §9.3), the same as its own label line: its number where the conversation shows numbers, its speaker (hers as 你), when it was said on h
+  - `pointed` — A line another line points at (a quote, a reaction, a recall), in the one form every pointer has (ADR-079 §9.3), the same as its own label line: its number, its speaker (hers as 你), when it was said on her clock, its first words.
+  - `source_of` — Where an item's claim rests, read when the item is shown (ADR-108 D2): in the conversation of its line, that line's pointer without its words (which line, who, when); in another conversation only when it was said, because another scene's la
   - `thought_then` — Under a line of hers that someone else points at (a quote, a reaction, a recall, an essence): what she thought when she said it, as she wrote it (reasons.py, ADR-043), as an anchor, not the whole old thought: read in full it passes for a ju
   - `line_of` — The line she names by its number in this conversation (as shown, brackets or not) or by 这条 (the line that called her): (row, None), or (None, why, in words she can act on) (ADR-079 §9.4).
   - `transcript` — One platform message as it enters her conversation: the speaker's label line, then the message, indented.
@@ -242,16 +245,11 @@ Her places (ADR-012 §4.2, §4.4): the groups she can visit from home, and what 
 - def `errand_text` — by: who at home asked, when it was not the owner (the program names them; it is never assumed).
 - def `errands_block` — errands_from_program at home: what came of her last errands, as program words only -- never what anyone there said back (ADR-017: public words reach home only through her own review).
 - def `visitor` — Who a visit enters the group as: an authorized member, only so the turn is authorized there.
-- def `group_zone` — The time zone she set for this group (place_timezone), as a tzinfo; None when unset or no longer valid.
-- def `their_time` — 'HH:MM' on the group's own clock, or None when she has not set one.
-- def `clock_gap` — How the group's clock stands to hers (home: her tzinfo), in words that change only with a time zone or a daylight-saving switch, never with the minute; None when she has not set the group's time zone.
-- def `set_zone` — Set or (name None) clear a group's time zone.
-- def `zones` — Every group she is in: whether its time zone is set, and the time there now.
 - def `room` — The room as it is now, from stored rows only.
 - def `pace` — The group's talk as it reads now: the current stretch and, before it, the last pause and what came since.
 - def `episode_key`
 - def `outcome` — What happened on one visit, read from its turn and the room afterwards.
-- def `local_date` — Her local date (her rhythm's time zone), for the daily counts.
+- def `local_date` — Her local date, for the daily counts.
 - def `today` — Visits made on her local date; one that never got there, or never needed to, does not count.
 - def `last_visit`
 - def `eligibility` — (can go, words).

@@ -26,19 +26,19 @@ BEGIN, END = '<!-- map:modules -->', '<!-- /map:modules -->'
 AREAS = {
     'hosting': ('Entry and hosting', 'The worker the Host plugin starts, its store, configuration and audit.', [
         'native_worker', 'host', 'application', 'cli', 'config', 'repo_files', 'native_settings', 'lanes', 'queue', 'state', 'clock',
-        'audit', 'evidence', 'testing', 'restarts', 'host_stops', 'host_lease', 'local_time',
+        'audit', 'evidence', 'testing', 'restarts', 'host_stops', 'host_lease', 'local_time', 'tool_watch',
         'store/__init__', 'store/words', 'store/catalog', 'store/errors', 'store/adapters', 'store/memory',
         'store/mongodb', 'records/__init__', 'records/scenes', 'records/messages', 'records/episodes',
         'records/sessions', 'records/receipts', 'records/view', 'records/tasks', 'records/plans',
         'records/memories', 'records/artifacts', 'records/heads', 'records/people', 'records/ideas']),
     'turn': ('A turn', 'From an input to her words: queueing, context, her tools, the checks, publishing.', [
-        'ingress', 'router', 'coordinator', 'context', 'context_budget', 'block_guide', 'render', 'carried', 'role_tools', 'param_names', 'tool_args',
+        'ingress', 'router', 'coordinator', 'context', 'context_budget', 'block_guide', 'render', 'carried', 'role_tools', 'param_names', 'tool_args', 'tool_schema', 'wake_words',
         'answers', 'publish', 'lines', 'chat', 'handover', 'reasons']),
     'people': ('Groups and people', 'Who is talking, whether she joins in, her places, notes between conversations.', [
         'attend', 'proactive', 'rhythm', 'dice', 'self_review', 'tools_week', 'reflection_map', 'people', 'peer_context', 'familiarity', 'group_admin', 'group_members',
         'watches', 'waiting', 'places', 'errands', 'focus', 'switches', 'own_mute', 'condense', 'notes', 'questions', 'scene_links', 'visibility', 'understanding', 'private_words']),
     'memory': ('Memory', 'What she remembers, how it is recalled, her documents, mood and blobs.', [
-        'memory', 'memory_indexer', 'memory_pilot', 'memory_tiers', 'key_words', 'crossing', 'retrieval', 'history_query', 'dialogue_summary', 'discussion_digest',
+        'memory', 'memory_indexer', 'memory_pilot', 'memory_tiers', 'key_words', 'crossing', 'retrieval', 'history_query', 'dialogue_summary', 'discussion_digest', 'data_children', 'data_worker',
         'summary_trigger', 'summary_attribution', 'documents', 'self_state', 'night', 'affect', 'blobs', 'privacy']),
     'persona': ('Persona', 'The persona package, its model and policies, her skills and ideas.', [
         'persona_model', 'persona_data', 'persona_jobs', 'policy', 'skills']),

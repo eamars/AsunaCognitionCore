@@ -95,6 +95,8 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 - def `claim_chars` — A gist's length without its basis lines: the basis is never what the 160 characters squeeze out.
 - def `has_basis`
 - def `declared_nature` — The nature and source she gave a write ({} when neither): her word for the nature wins over the source's.
+- def `anchor_field` — {'line': anchor} when the write names a source that is someone's word and the program resolved the line it rests on (`intent['anchor']`, set by the handler and never by her), else {}.
+- def `sources` — {section id: where its claim rests} for a document's items that rest on a line, as `scene` reads them (ADR-108 D2: People.source_of).
 - def `told` — A move as her result or the moved line says it, in words.
 - def `night_list` — The night list (settlement, ADR-062 §4.2 step 8): at most NIGHT_ITEMS, chosen by rule and each told why, none of them a keep or drop choice: lapsed long or dated items waiting for their gist (写一句意思), items met in different conversations (几处
 - def `recalled` — {memory id: [episode ids]} for memories she recalled herself (`recall.read`) in at least two different conversations within the window: promotion's candidates come from her acts, not from what she was shown.
@@ -224,6 +226,35 @@ ADR-005 P1-c：按需整理当前授权群里指定时间／主题的讨论（�
 - class `DiscussionDigestService` — Application/Host 装配用：复用宿主已有的 Store 与 Retrieval，不新开连接、不另起服务。
   - `digest_for_task`
 
+## `data_children`
+
+[src/asuna/data_children.py](../../src/asuna/data_children.py)
+
+The action brain's history search and discussion digest, run in the data child (data_worker.py) while the Host runs, so their work, however long, never holds the worker's interpreter lock and ends at its deadline.
+
+- class `DataFault` — The data child's own code failed on a job (not the job's content).
+- def `start` — The Host's data child, started in the background (warm for the first job).
+- def `stop` — The data child stops with the Host: a job asked for afterwards is UNAVAILABLE, never run in this process.
+- def `reachable` — Whether the data child can open this database itself: a built-in adapter that reaches a server.
+- def `run` — The tool's result for one call: in the data child while the Host runs and the child can reach the database, else in this process.
+
+## `data_worker`
+
+[src/asuna/data_worker.py](../../src/asuna/data_worker.py)
+
+The data child (data_children.py): `python -X utf8 -P -m asuna.data_worker <host pid>`. It runs the action brain's history search and discussion digest on its own Store and Retrieval, so their work, however long, never holds the worker's interpreter lock. It says it is ready, then answers one job at a time on stdout in media_children's frames; stdout carries frames only.
+
+- def `refusal_class` — The known refusal class an exception is, most specific first; None for any other.
+- class `Collected` — The evidence of one job, kept for the worker to record.
+  - `record`
+- class `Services` — The child's Stores, Retrieval and channel plugins, kept from job to job.
+  - `store`
+  - `retrieval_for`
+  - `run` — The tool's result for one job (its refusals raised as the tool raises them).
+  - `close`
+- def `answer` — One job's answer frame (header, payload) from its payload; an error of this program raises.
+- def `main`
+
 ## `summary_trigger`
 
 [src/asuna/summary_trigger.py](../../src/asuna/summary_trigger.py)
@@ -281,6 +312,7 @@ Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).
   - `revision`
   - `slugs`
   - `seed` — Import a package seed only when the head is missing (package upgrades never overwrite).
+  - `problems` — Every problem this write would meet before anything is written, as [DocumentError] (ADR-108 D4b): the intent's own fields, then the document's state, then the budget on the document the write would leave.
   - `apply` — One write intent.
   - `adopt_seed` — Merge a newer package seed by sid; sections both sides changed are listed, never overwritten.
 
@@ -343,6 +375,7 @@ Affect ledger and projection (ADR-009 ARCHITECTURE §6).
   - `readable`
   - `check` — Program gates for a committed event (§6.4): any failure refuses only this item.
   - `commit` — A character-committed event: host timestamp, origin asuna, source scope from the session class.
+  - `record_problems` — Every gate `record` would refuse this feeling at, found without writing: [AffectError], in the order the gates come.
   - `record` — A feeling she recorded in words (DECIDE): mapped to numbers here, then the usual gates.
   - `amend` — One amendment of an existing event; ``key`` names which effect it is (DECIDE dedups by it).
   - `amendment`

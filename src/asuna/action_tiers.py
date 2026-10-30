@@ -58,8 +58,8 @@ def chosen(args):
     if tier == HIGH and not why:
         raise ValueError('选高要写 why：为什么这件要高档（%d 字以内）。%s。%s。' % (ask, LINES[LOW], LINES[HIGH]))
     if len(why) > WHY_CHARS:
-        raise ValueError('why 太长了：%d 字，要求 %d 字以内，超了 %d 字；说清为什么要高档就够了。'
-                         % (len(why), ask, len(why) - ask))
+        from .config import too_long
+        raise ValueError(too_long('why', why, WHY_CHARS, ask) + '说清为什么要高档就够了。')
     return tier, (why if tier == HIGH else None)
 
 

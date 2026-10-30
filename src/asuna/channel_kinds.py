@@ -36,6 +36,7 @@ from pathlib import Path
 import sys
 
 _KINDS = {}
+_LOADED = []
 
 
 def register(module):
@@ -50,6 +51,14 @@ def load(entries):
         if directory not in sys.path:
             sys.path.insert(0, directory)
         register(importlib.import_module(entry['module']))
+        found = {'python': directory, 'module': entry['module']}
+        if found not in _LOADED:
+            _LOADED.append(found)
+
+
+def loaded():
+    """The plugin entries this process loaded, in the order it loaded them (a data child loads the same)."""
+    return [dict(entry) for entry in _LOADED]
 
 
 def get(kind):

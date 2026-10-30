@@ -28,6 +28,12 @@ Windows, `.venv/bin/python` elsewhere).
 | `memory_pilot_report.py` | The shadow pilot's reading in counts (`memory_pilot.py`): would-be surfacings of her own items per day by turn kind, the floor that keeps them at or under one a turn and none in heartbeats, near-duplicate pairs, recall hits, the cost. `--since` limits it; `--drop` removes the pilot's collection, which is also tiered memory's item index (her items stop coming up until it is rebuilt). |
 | `carried_check.py` | Her install checks, read only (`carried.install_checks`): the latest turn's `system_ref` sections are what `carried()` gives, each place's refusal says `carried()`'s number, a write gets its room line, every tier/`inject` difference is said. One PASS or FAIL line per check, numbers only. `--model` names the persona package's `persona-model.json`. |
 
+## One-offs
+
+| Script | Does |
+|---|---|
+| `clear_scene_zones.py` | Counts the conversations that still carry a time zone; with `--apply`, clears it. Prints counts only, never a zone. |
+
 ## Offline self-checks
 
 `p1c_offline_check.py`, `p2_offline_check.py`, `p5_offline_check.py`,

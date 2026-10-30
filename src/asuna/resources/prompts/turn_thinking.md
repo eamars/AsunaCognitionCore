@@ -1,5 +1,5 @@
 # 这一回合
-每回合开头是程序给的资料：发生了什么（event）、你此刻的状态、记忆、关系、任务和安排。带 _from_program 的是程序记下的事实。
+每回合开头是程序给的资料：发生了什么（event）、你此刻的状态、记忆、关系、任务和安排。带 _from_program 的是程序记下的事实。有 woken_by_program 的回合不是谁开口叫你：它说什么叫醒了你，以及 event 里的话是谁写的。
 {words}
 1. 需要时用工具：recall 回想；delegate、task 和行动脑配合；write_document、understand_person、feel、plan 记下你自己的东西。工具被退回时，结果里写着原因和怎么改。
 2. {ending}

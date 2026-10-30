@@ -99,13 +99,12 @@ def words(weights):
 
 def table(model, policy, config, moment=None):
     """(period, weights) for now: asleep inside her declared sleep window, awake otherwise."""
-    from zoneinfo import ZoneInfo
-    from .persona_model import effective, timezone as persona_timezone
+    from .persona_model import effective
     from .rhythm import in_window
+    from .schedule_rules import her_zone
     moment = moment or clock.now()
-    zone, _ = persona_timezone(model, policy, config)
     try:
-        local = moment.astimezone(ZoneInfo(zone))
+        local = moment.astimezone(her_zone(config)['tz'])
         asleep = in_window(local, effective(model, 'rhythm.sleep_window', policy))
     except Exception:                            # no zone or no window: she is awake
         asleep = False

@@ -222,6 +222,31 @@ def test_a_call_waits_behind_its_kind_only_within_its_budget(child):
     assert c.faults == [('decode', 'deadline')], 'waiting in line is not a fault of the child'
 
 
+def test_with_one_try_a_job_past_its_deadline_ends_there_and_the_next_job_starts_a_fresh_child(child):
+    """A kind whose jobs have effects (the data child) is never run twice for one call, and no background start
+    queues on its lock after a kill: the next job starts the child within its own budget."""
+    c = child(tries=1).start()
+    pid = c.call({'do': 'echo'}, b'', 5)[0]['pid']
+    with pytest.raises(Timeout):
+        c.call({'do': 'hang'}, b'', 1, budget=10)
+    assert c.faults == [('decode', 'deadline')] and gone(pid) and c.proc is None, 'one try, nothing started after'
+    answer, _ = c.call({'do': 'echo'}, b'', 5)
+    assert answer['pid'] != pid and answer['times']['started_s'] > 0 and answer['times']['tries'] == 1
+
+
+def test_a_job_behind_another_past_the_lock_wait_is_busy_not_a_timeout(child):
+    c = child(lock_wait=0.5).start()
+    stuck = threading.Thread(target=lambda: pytest.raises(Timeout, c.call, {'do': 'hang'}, b'', 3, 3))
+    stuck.start()
+    time.sleep(0.3)
+    began = time.monotonic()
+    with pytest.raises(media_children.Busy):
+        c.call({'do': 'echo'}, b'', 5, budget=20)
+    assert time.monotonic() - began < 2, 'gave up at its lock wait, not at its budget'
+    stuck.join(15)
+    assert c.faults == [('decode', 'deadline')], 'waiting in line is not a fault of the child'
+
+
 def test_one_kind_hung_does_not_hold_the_other(child):
     """Proof test 9: a hung voice child while a video is cut, and the other way round."""
     for hung, other in ((child(), child()), (child(), child())):

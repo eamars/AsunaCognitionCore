@@ -33,7 +33,7 @@ def test_words_never_hands_her_a_bare_code():
 def test_a_plan_length_refusal_names_its_cause_not_the_schedule_code():
     from asuna import schedule
     problem = schedule.intent_problem('x' * 1200)
-    assert problem.startswith('intent 1200 字，要求 800 字以内，超了 400 字')
+    assert problem.startswith('intent 太长了：1200 字，过了 1000 字的线 200 字（要求 800 字以内）')
     # The scheduler's own guard carries a code that names the cause; role_tools shows words() of it.
     text = role_tools.words(ValueError('PLAN_INTENT_INVALID: ' + problem))
-    assert 'PLAN_INTENT_INVALID' not in text and text.startswith('intent 1200 字')
+    assert 'PLAN_INTENT_INVALID' not in text and text.startswith('intent 太长了：1200 字')

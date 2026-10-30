@@ -22,8 +22,7 @@ def fresh_capabilities():
 def test_the_speak_result_gives_each_sent_lines_number_and_a_number_in_her_words_is_refused():
     queued = [{'number': 1, 'shown': 'text', 'state': 'READY', 'seq': 320},
               {'number': 2, 'shown': 'text', 'state': 'READY', 'seq': 321}]
-    assert '1 text 〔320〕；2 text 〔321〕' in reply_receipt(queued, numbered=True)
-    assert '〔' not in reply_receipt(queued)
+    assert '1 text 〔320〕；2 text 〔321〕' in reply_receipt(queued)
     assert LINE_NUMBER.search('你看〔318〕那句') and not LINE_NUMBER.search('今天 3 点')
     assert NUMBER_NOT_WORDS == '编号是挑引用用的，不写进你说的话里。'
 

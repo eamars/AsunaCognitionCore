@@ -47,7 +47,7 @@ described in [RUN_ASUNA.md](../../RUN_ASUNA.md). Everything Docker-specific is i
 | `ASUNA_CHANNEL_CONFIG_JSON`, `ASUNA_INTEGRATION_CONFIG_JSON` | — | The channel and integration settings (the shapes of `config/asuna-channel.example.json` and `config/integration.example.json`). Written beside the config when missing, and read by the installer into a profile that has none. An enabled adapter for a channel starts by itself on the first start |
 | `ASUNA_CHANNEL_ADMISSION` | `explicit` | `automatic` admits new DMs, groups and members on their first valid message. A first choice only: the settings card's saved choice wins |
 | `ASUNA_HTTPS_PORT`, `ASUNA_HTTP_PORT` | 8443, 8781 | The host ports Caddy publishes: the page (HTTPS) and its root certificate (HTTP). Pick ports that are free on the host |
-| `TZ` | `UTC` | The container's local time zone (an IANA name). Default quiet hours follow local time, so set it to where she lives |
+| `TZ` | `UTC` | The container's local time zone (an IANA name): her clock when the config's `timezone` is not set. Default quiet hours follow local time, so set it to where she lives |
 | `ASUNA_NAME` | `asuna` | Container name prefix (`<name>`, `<name>-https`, `<name>-mongo`), so several stacks can run side by side |
 | `ASUNA_MONGO_PORT` | 27099 | The host loopback port the stack MongoDB is published on, for tools on the host |
 | `ASUNA_REPO`, `ASUNA_REF` | this repository, `main` | What the first start clones |

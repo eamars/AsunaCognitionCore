@@ -208,7 +208,7 @@ class FakeStore:
     def __init__(self, rows, sink=None, scenes=None, boom=False):
         class DB:
             pass
-        self.config = {}                     # read for the conversation's time zone (local_time.zone_of)
+        self.config = {}                     # read for her clock (local_time.her_zone)
         self.db = DB()
         self.db.messages = FakeCollection(rows, boom=boom)
         self.db.scenes = FakeCollection(scenes if scenes is not None else [scene_row()])
@@ -611,6 +611,32 @@ def case_linkage_read_stays_inside_the_scene_fence():
     assert reads, "没看到按 _id 批量的链读"
     for where in reads:
         assert where.get("scene_id") == SCENE_ID and where.get("policy_epoch") == EPOCH, where
+
+
+def case_cursor_fits_its_own_limit():
+    """待走环节本身就超过游标上限时：收缩必然结束，发出的游标收得回，丢掉的分支标 lost。
+    （去重集合只剩一条时旧循环原地打转，整个进程被这一次调用占住。）"""
+    frontier = ["m-%040d" % i for i in range(dd.MAX_THREAD_PENDING)]
+    for carry in (["one-id"], ["c-%040d" % i for i in range(dd.MAX_THREAD_CARRY)], []):
+        state, thread = {"frontier": list(frontier), "wanted": list(frontier)}, {}
+        wrapped = dd._fit_cursor("p1b", "f" * 16, list(carry), state, thread)
+        assert len(wrapped) <= dd.CURSOR_LIMIT, len(wrapped)
+        inner, _mark, delivered, resumed = dd._unwrap_cursor(wrapped)
+        assert inner == "p1b" and delivered == [], (inner, delivered)
+        assert resumed.get("lost") is True and resumed["frontier"], resumed
+        assert set(resumed["frontier"]) <= set(frontier)
+        assert thread.get("carry_truncated") is (True if carry else None), thread
+
+
+def case_cursor_sheds_carry_before_branches():
+    """装得下待走环节时只让去重集合，分支一条不丢、不标 lost。"""
+    state, thread = {"frontier": ["m-1", "m-2"], "wanted": []}, {}
+    carry = ["c-%040d" % i for i in range(dd.MAX_THREAD_CARRY)]
+    wrapped = dd._fit_cursor("p1b", "f" * 16, carry, state, thread)
+    _inner, _mark, delivered, resumed = dd._unwrap_cursor(wrapped)
+    assert len(wrapped) <= dd.CURSOR_LIMIT and 0 < len(delivered) < len(carry), len(delivered)
+    assert resumed["frontier"] == ["m-1", "m-2"] and "lost" not in resumed, resumed
+    assert thread["carry_truncated"] is True
 
 
 CASES = [name for name in sorted(globals()) if name.startswith("case_")]

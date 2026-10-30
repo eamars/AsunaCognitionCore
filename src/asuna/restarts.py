@@ -65,8 +65,8 @@ def _aware(value):
 
 def _zone(zone):
     """line_stamp's zone from a context's zone or an IANA name."""
-    from .schedule_rules import _zone as named
-    return named(zone) if isinstance(zone, str) else zone
+    from zoneinfo import ZoneInfo
+    return {'tz': ZoneInfo(zone)} if isinstance(zone, str) else zone
 
 
 def _span(seconds):

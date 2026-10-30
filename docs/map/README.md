@@ -229,7 +229,8 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`restarts`](../../src/asuna/restarts.py) — Her restarts (ADR-034): the worker side of the Host supervisor (tools/asuna-supervisor.mjs).
 - [`host_stops`](../../src/asuna/host_stops.py) — When the Host was taken away from outside, she should not have to infer from a gap in the logs whether she was away.
 - [`host_lease`](../../src/asuna/host_lease.py) — One running Host per database, across machines (ADR-020 M1).
-- [`local_time`](../../src/asuna/local_time.py) — Times a model reads are on the local clock (owner 2026-10-08): stored records keep UTC for the program, and everything handed to a model passes `for_model` first.
+- [`local_time`](../../src/asuna/local_time.py) — Times a model reads are on her one clock (owner 2026-10-08; one clock in every conversation, ADR-106): stored records keep UTC for the program, and everything handed to a model passes `for_model` first.
+- [`tool_watch`](../../src/asuna/tool_watch.py) — Every tool call of both brains, timed where the worker dispatches it (native_worker.py): the calls in flight, one `tool.time` audit row as each ends, and a watchdog that records a call running past its limit, once.
 - [`store/__init__`](../../src/asuna/store/__init__.py) — The store: the core's way to its database, with no database named.
 - [`store/words`](../../src/asuna/store/words.py) — The words the core describes records with: conditions, changes, sorts and totals, their JSON form for her read tool, and their validation against a collection's declaration before any adapter sees them.
 - [`store/catalog`](../../src/asuna/store/catalog.py) — The catalog: every collection the core keeps, declared once, and the vector spaces searched in them.
@@ -267,6 +268,8 @@ From an input to her words: queueing, context, her tools, the checks, publishing
 - [`role_tools`](../../src/asuna/role_tools.py) — Her mind's tools: what the character brain may do in one native turn (ADR-011 §3, §5.1).
 - [`param_names`](../../src/asuna/param_names.py) — ADR-060: one name per idea in what a tool shows, and the old names still working for a while.
 - [`tool_args`](../../src/asuna/tool_args.py) — What she plainly meant, before a tool checks its arguments (owner 2026-10-06).
+- [`tool_schema`](../../src/asuna/tool_schema.py) — The two schemas of one tool of hers (ADR-108 D4b), and the shapes the program repairs.
+- [`wake_words`](../../src/asuna/wake_words.py) — What woke her when no one spoke (ADR-108 D5): one versioned table by episode kind.
 - [`answers`](../../src/asuna/answers.py) — Deterministic checks on a model's answer wherever the program needs one to continue (owner 2026-10-05).
 - [`publish`](../../src/asuna/publish.py) — Sends her accepted lines: `PublishService.publish` checks the turn is still current, then queues a platform line for its channel route or delivers a local-chat line with an idempotent receipt.
 - [`lines`](../../src/asuna/lines.py) — Her own open/close of a peer line (ADR-013 §6).
@@ -319,6 +322,8 @@ What she remembers, how it is recalled, her documents, mood and blobs.
 - [`history_query`](../../src/asuna/history_query.py) — 查宿主保存的授权消息（P1-b）：字面检索覆盖完整 messages，原文整条回读。
 - [`dialogue_summary`](../../src/asuna/dialogue_summary.py) — Low-priority, source-bound summaries for new dialogue batches (DM and authorized groups).
 - [`discussion_digest`](../../src/asuna/discussion_digest.py) — ADR-005 P1-c：按需整理当前授权群里指定时间／主题的讨论（同一来源、同一授权）。
+- [`data_children`](../../src/asuna/data_children.py) — The action brain's history search and discussion digest, run in the data child (data_worker.py) while the Host runs, so their work, however long, never holds the worker's interpreter lock and ends at its deadline.
+- [`data_worker`](../../src/asuna/data_worker.py) — The data child (data_children.py): `python -X utf8 -P -m asuna.data_worker <host pid>`.
 - [`summary_trigger`](../../src/asuna/summary_trigger.py) — ADR-005 P2：自动摘要什么时候该动手——触发点从场景自己真实出现过的节奏里算出来。
 - [`summary_attribution`](../../src/asuna/summary_attribution.py) — ADR-005 P2：摘要条目上的说话人归属与更正——由程序从真实行算出来，不让模型自己认领。
 - [`documents`](../../src/asuna/documents.py) — Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).
@@ -410,11 +415,13 @@ The DSH plugin (JavaScript): the worker it starts, her sessions, the action brai
 - [`collab.js`](../../packages/cognition-core/src/collab.js) — The two brains' collaboration thread in her conversation (ADR-011 §7.1).
 - [`compaction.js`](../../packages/cognition-core/src/compaction.js) — Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoint.
 - [`context-delivery.js`](../../packages/cognition-core/src/context-delivery.js) — Per-turn context delivery for the character brain: of the whole context the worker prepares every turn, only what her session does not still show is sent.
+- [`contexts.js`](../../packages/cognition-core/src/contexts.js) — What the host adds to her requests that is deployment detail and not hers (ADR-108 A11).
 - [`fetch.js`](../../packages/cognition-core/src/fetch.js) — Her web_fetch, underneath (ADR-026 §6): one fetch provider on DSH's web seam.
 - [`floor.js`](../../packages/cognition-core/src/floor.js) — Minimal publication floor, deliberately independent of the business worker.
 - [`image-refusal.js`](../../packages/cognition-core/src/image-refusal.js) — A model that refuses a picture must not end her turn, nor leave the conversation resending it (owner 2026-10-06).
 - [`index.js`](../../packages/cognition-core/src/index.js) — The Host plugin's core: `CognitionCore` starts the Python worker and runs the turns it prepares in her native DSH sessions, with her role and action tools served by the worker.
 - [`log-sink.js`](../../packages/cognition-core/src/log-sink.js) — Asuna's own log lines, kept.
+- [`marks.js`](../../packages/cognition-core/src/marks.js) — What Asuna writes at the head of what it puts into her conversation, so a message says whose it is (ADR-108 D3).
 - [`navigation.js`](../../packages/cognition-core/src/navigation.js) — Her conversations as DSH sessions: `organizeNativeWorkspaces` creates and titles the workspaces and sessions the worker plans, and `recordChannelInput` writes a received platform line into its conversation without starting a turn.
 - [`outage.js`](../../packages/cognition-core/src/outage.js) — The span she was down while the Host ran on (ADR-101).
 - [`pairing.js`](../../packages/cognition-core/src/pairing.js) — A tool call and its result stay adjacent in her conversation, and a compaction sees the surface it summarizes.
@@ -497,6 +504,7 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`check_prepared_start.py`](../../tools/check_prepared_start.py) — Run the launcher's start preparation (rung 0) for one commit in a scratch folder and check what it installed.
 - [`check_staged_secrets.py`](../../tools/check_staged_secrets.py) — Report paths only; never print configured secret values or matching bytes.
 - [`cleanup_test_databases.py`](../../tools/cleanup_test_databases.py) — Inventory or remove only explicitly inventoried Asuna test databases.
+- [`clear_scene_zones.py`](../../tools/clear_scene_zones.py) — ADR-106's one-off: take the time zone off every conversation that still carries one.
 - [`import_native_credentials.mjs`](../../tools/import_native_credentials.mjs) — One-time private migration through DSH's credential provider; never logs values.
 - [`integration_import_offline_check.py`](../../tools/integration_import_offline_check.py) — 集成产物导入的离线自检：不需要 Mongo、不需要 pytest、不需要 WSL，直接跑同一套用例。
 - [`make_demo_config.py`](../../tools/make_demo_config.py) — Create the ignored demo config (ADR-009 §0.3) from config/demo.example.json.

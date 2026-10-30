@@ -181,7 +181,10 @@ def notes_block(docs, scene):
     its per-turn limit (context_budget.py): how full it is in words, and the sections it does not show by heading."""
     revision, content = docs.read(notes_slug(scene['_id']))
     kept, about = notes_view(docs.store, docs.persona, notes_slug(scene['_id']), content)
-    sections = [{k: s[k] for k in ('sid', 'heading', 'body') if k in s} for s in kept]
+    from . import memory_tiers
+    sources = memory_tiers.sources(docs.store, docs.persona, notes_slug(scene['_id']), scene)     # ADR-108 D2
+    sections = [{**{k: s[k] for k in ('sid', 'heading', 'body') if k in s},
+                 **({'source': sources[s['sid']]} if sources.get(s['sid']) else {})} for s in kept]
     note = ('你自己写的这个群的笔记：谁是谁、群里的规矩、你在这里的做法。要记新东西或改一节，用 write_document，'
             'doc 写 group_notes（do 用 append_section 或 replace_section；不常用的节用 set_tags 把 when_shown 改成 '
             'on_demand 收起来；pin=yes 置顶一节，笔记超长时它不折成标题）。这是你的笔记，不是群规的权威来源。')

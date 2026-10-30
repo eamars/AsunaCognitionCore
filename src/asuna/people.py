@@ -431,6 +431,20 @@ class People:
         key = name_key(text)
         return [d for d in docs if key and key in {name_key(self.shown(d)), name_key(d.get('card')), name_key(d.get('nickname'))}]
 
+    def copyable(self, scene, doc):
+        """A person as she is to copy them, for a refusal that lists who she may name (ADR-108 D4c): the first form of the
+        label that `resolve` takes back as that one person. What a refusal lists is what the same predicate accepts: the
+        owner's full label (the persona's word beside the bracket) is not one it takes, so it is never offered."""
+        forms = [self.label(doc), '[%s #%s]' % (self.shown(doc) or UNKNOWN_NAME, doc.get('handle')), '#%s' % doc.get('handle')]
+        for form in forms:
+            if {d.get('person') for d in self.resolve(scene, form)} == {doc.get('person')}:
+                return form
+        return forms[-1]
+
+    def copyable_author(self, scene, author):
+        """`copyable` for a stored author (a person id)."""
+        return self.copyable(scene, self.entry(scene, author))
+
     def account_of(self, scene, doc):
         """The platform account behind a person in this scene, for the adapter's @ marker; None when unknown."""
         platform = channel_kinds.of(scene['_id'])
@@ -509,23 +523,46 @@ class People:
             return me or self.self_name
         return self.label(self.entry(scene, author, row))
 
-    def pointed(self, scene, row):
+    def pointed(self, scene, row, words=True):
         """A line another line points at (a quote, a reaction, a recall), in the one form every pointer has
-        (ADR-079 §9.3), the same as its own label line: its number where the conversation shows numbers, its speaker
-        (hers as 你), when it was said on her clock, its first words. Number, speaker and time say which line; the
-        words say what it was (her choice: one length, POINTED_CHARS)."""
-        from .capabilities import numbered
+        (ADR-079 §9.3), the same as its own label line: its number, its speaker (hers as 你), when it was said on her
+        clock, its first words. Number, speaker and time say which line; the words say what it was (her choice: one
+        length, POINTED_CHARS). Every line has its number in every conversation (ADR-108 D2). `words=False`: the pointer
+        alone, which says which line and not what it said."""
         from .caught_up import CATCHUP_KEY, said_at
-        from .schedule_rules import line_stamp, scene_timezone
+        from .schedule_rules import line_stamp, her_zone
+        words_wanted = words
         said = self.mentions if row.get('direction') == 'outbound' else self.heard
         words = ' '.join(said(scene, row.get('text')).split())
-        number = '〔%d〕 ' % row['scene_seq'] if row.get('scene_seq') and numbered(self.store, scene) else ''
+        number = '〔%d〕 ' % row['scene_seq'] if row.get('scene_seq') else ''
         if not (row.get('received_at') or row.get('receipt_at')) and row.get('_id'):
             row = {**row, **(message_records.get(self.store, row['_id'], fields=[
                 'received_at', 'receipt_at', 'occurred_at', 'event.occurred_at', 'event.raw.' + CATCHUP_KEY]) or {})}
-        stamp = line_stamp(scene_timezone(self.config, scene), said_at(row))
-        return '%s%s%s：%s' % (number, self.speaker(scene, row.get('author'), me='你'), ' ' + stamp if stamp else '',
-                              words if len(words) <= POINTED_CHARS else words[:POINTED_CHARS] + '…')
+        stamp = line_stamp(her_zone(self.config), said_at(row))
+        head = '%s%s%s' % (number, self.speaker(scene, row.get('author'), me='你'), ' ' + stamp if stamp else '')
+        if not words_wanted:
+            return head.rstrip()
+        return '%s：%s' % (head, words if len(words) <= POINTED_CHARS else words[:POINTED_CHARS] + '…')
+
+    # ADR-108 D2: where an item that says someone said something rests, for whoever reads the item.
+    SOURCE_GONE = '出自的那一行已不在'
+    SOURCE_ELSEWHERE = '出自别处的一行（%s）'
+
+    def source_of(self, scene, anchor):
+        """Where an item's claim rests, read when the item is shown (ADR-108 D2): in the conversation of its line, that
+        line's pointer without its words (which line, who, when); in another conversation only when it was said, because
+        another scene's label would mislead. A line that is gone, or that an erasure redacted, shows that and nothing else
+        (not who said it, not when). None for no anchor."""
+        if not isinstance(anchor, dict) or not anchor.get('scene') or not isinstance(anchor.get('seq'), int):
+            return None
+        row = message_records.pointable(self.store, anchor['scene'], seq=anchor['seq']).first()
+        if not row or row.get('delivery_state') == 'REDACTED':      # an erasure keeps the position and takes the words
+            return self.SOURCE_GONE
+        if anchor['scene'] != (scene or {}).get('_id'):
+            from .caught_up import said_at
+            from .schedule_rules import line_stamp, her_zone
+            return self.SOURCE_ELSEWHERE % (line_stamp(her_zone(self.config), said_at(row)) or '时间不详')
+        return self.pointed(scene, row, words=False)
 
     def thought_then(self, row, once_in=None):
         """Under a line of hers that someone else points at (a quote, a reaction, a recall, an essence): what she
@@ -575,15 +612,14 @@ class People:
         self.note_self(scene, row)
         doc = self.entry(scene, row['author'], row)
         # When it was said, on her clock face: the conversation keeps every line, so its age must be readable.
-        from .schedule_rules import line_stamp, scene_timezone
+        from .schedule_rules import line_stamp, her_zone
         from .caught_up import CAUGHT_UP_WORD, is_caught_up, said_at
-        stamp = line_stamp(scene_timezone(self.config, scene), said_at(row))
+        stamp = line_stamp(her_zone(self.config), said_at(row))
         if stamp and is_caught_up(row):
             stamp += '（%s）' % CAUGHT_UP_WORD
-        from .capabilities import numbered
         from .channels import REPLY_ONLY_KEY
         from .notices import KEY as NOTICE_KEY, MARK as NOTICE_MARK
-        number = ' 〔%d〕' % row['scene_seq'] if row.get('scene_seq') and numbered(self.store, scene) else ''
+        number = ' 〔%d〕' % row['scene_seq'] if row.get('scene_seq') else ''
         came = ADMITTED_WORDS.get(event.get('admitted'))
         lines = [self.head(scene['_id'], doc, str(row.get('received_at') or now())) + (' ' + stamp if stamp else '')
                  + ('（%s）' % came if came else '')
@@ -721,7 +757,7 @@ class People:
             row['text'] = said(scene, row['text'])
         return row
 
-    def relabel(self, context, scene, author):
+    def relabel(self, context, scene, author, speaking=True):
         """Turn the author ids in her context blocks into the labels her conversation uses.
 
         Rows keep their ids (the program needs them); who wrote a row reads as `speaker`. A recalled
@@ -731,7 +767,8 @@ class People:
         for key in ('person_id', 'scene_id', 'scope_key', 'policy_epoch'):
             context.pop(key, None)
         context['scene'] = self.scene_title(scene)
-        context['speaker'] = self._author(scene, author)
+        if speaking:
+            context['speaker'] = self._author(scene, author)   # a turn the program opened has no speaker (wake_words.py)
         linked = context.get('linked_scenes_from_program')
         if isinstance(linked, dict):
             linked['readable'] = [self.scene_title(self._scene(s)) for s in linked.get('readable') or []]

@@ -79,6 +79,32 @@ profile for new UI or behavior ([Demo environment](../RUN_ASUNA.md#demo-environm
   and the same precision). Within one second, `.` sorts before `Z`, so `...:55.896576Z` comes before `...:55Z`. Rows
   whose time field is null or missing drop out of any time window.
 
+## Work in the worker process
+
+The worker is one Python process: inbound admission, the channel server, the outbox and every tool body of both
+brains are its threads, under one interpreter lock. One thread busy in Python makes every other thread wait for the
+lock after each blocking call, and a Python thread cannot be stopped.
+
+- **Data-sized work runs in a child.** Work whose cost grows with stored data or with a call's arguments runs in a
+  child process with a deadline, killed past it: the data child (history search and the discussion digest,
+  `data_children.py`, `data_worker.py`) and the media children (voices and videos, `media_children.py`). A worker
+  thread does only work with a stated bound.
+- **The effects lock.** No tool body holds the effects lock (`queue.database_effects_lock`) across a wait outside the
+  process or a walk without a count bound (`ToolBroker.call`; `list_files` stops at `LIST_FILES_MOST` entries).
+- **Timed.** Every tool call of both brains leaves a `tool.time` audit row, and a call past its limit is recorded
+  (`tool_watch.py`). A `tool.time` that grows with the data is what moves work below into a child.
+
+Data-sized work that stays in the worker, each with its bound:
+
+| Work | Bound | Timed as |
+|---|---|---|
+| `memory_pilot.rank` (recall's surfacing, context building, the pilot thread) | Python dot products over her readable items, linear in their count (50 ms at 1,243 items of 768 dimensions) | `recall` |
+| pictures in `read_image` | a still picture is only base64-encoded; an animated one's frames are walked in Pillow (`animated.py`) within the 8 MiB cap | `read_image` |
+| the `task` page and a task's feedback observations (`tasks.py` `observations_of`, `records_pages`) | every artifact result of the task; `records_pages` is quadratic in the record count | `task` |
+| credential scrubbing of results (`credentials.scrub`) | the result's size | every action call |
+| the persona job data API (`persona_jobs.py`) | the job's `timeout_s` | `persona_job_run` |
+| the failure path's file walk and hashing (`tasks.files_left`) | at most 20,000 files walked and 20 hashed | (the executor, not a tool call) |
+
 ## The project map
 
 [docs/map](map/README.md) answers how the main things are done (home and public kept apart, QQ to DSH and back, a
@@ -155,7 +181,8 @@ On Linux and macOS use `npm run test:native` and `.venv/bin/python`.
   `test_lock_files` (both locks match `package.json` / `pyproject.toml`), `test_no_docker_in_core` (no Docker in
   `src/` or `packages/`), `test_platform_branches` (OS branches only in the files it lists),
   `test_one_clock` (the worker reads the time only through `asuna.clock`, which never gives the same time twice in a
-  process), `persona.test.js` (every persona and channel package registers).
+  process), `test_one_zone` (every time a model reads is drawn on `schedule_rules.her_zone`, never on a room's zone),
+  `persona.test.js` (every persona and channel package registers).
 - `tools/p*_offline_check.py`, `tools/integration_import_offline_check.py` and `tools/outbound_image_offline_check.py`
   run the `tests/*_cases.py` modules without a database or pytest, on the in-memory adapter over each case's own
   rows (`tests/fake_collections.py`); they are the character's own checks inside her sandbox.
@@ -236,7 +263,8 @@ Every error a tool call can return is read by a model that has to act on it, so 
 
 - Form: `CODE: 原因（带实际值）；怎么办`, in Chinese. The code comes first and stays stable; tests, logs and the
   character brain's `WORDS` table (`role_tools.py`) key on it. A code has an underscore.
-- The cause carries the values the raise site knows: what was given, the limit, the allowed set.
+- The cause carries the values the raise site knows: what was given, the limit, the allowed set. It never repeats her
+  prose: a short identifier she wrote (a ref, a label, an enum value) may be named, nothing longer.
 - The fix is concrete: the correction, the program list that holds the valid values (named as her context names
   it), or, when no retry can help, `重试也一样` and what to do instead.
 - A condition that is not the caller's fault (a service missing, a task fenced off) says so.
@@ -246,9 +274,15 @@ Every error a tool call can return is read by a model that has to act on it, so 
   arrives as `TOOL_FAULT: 程序内部出错（Class: message）…`, which tells the caller its arguments are not the cause.
 - The character brain sees `WORDS[code]` followed by the detail written in words, never the code (`role_tools.words`;
   the code stays in the record); a coded error raised without a detail must have a `WORDS` entry
-  (`tests/test_refusal_words.py`); a `Refused` raised in `role_tools.py` is shown as written. A call that fails the
-  tool's schema never reaches the worker: the Host plugin refuses it in the same form, keeping DSH's own line
-  verbatim at the end (`tool-args.js`).
+  (`tests/test_refusal_words.py`); a `Refused` raised in `role_tools.py` is shown as written.
+- A call is checked in layers (`RoleTools.call`). The Host plugin's guard checks the schema the worker ships
+  (`tool_schema.declared`, permissive), in her words with DSH's own line verbatim at the end (`tool-args.js`). In the
+  worker: a permission refusal stops alone and names what does the job here (`INSTEAD`); everything else is collected
+  into one refusal, numbered, her call's own first thought first, the codes of all of them in the record: the strict
+  schema (`tool_schema.violations`, on the call as she wrote it after `tool_schema.repair`), the call cap, and the
+  checks of a handler in `RoleTools.SPLIT`, which ends its check part with `checkpoint()` before its first effect. Any
+  other handler refuses at its first failure once those have passed. A length refusal is `config.too_long`: the line,
+  how far over she went, the aim, why the line is where it is (`LIMIT_WHY`) and where the excess starts.
 
 ## Writing docs and recording decisions
 

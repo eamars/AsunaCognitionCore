@@ -6,6 +6,12 @@ import { mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
+/** The machine's own time zone as an IANA name on every platform ('' when the runtime cannot say). The worker uses it
+ * only when the deployment's `timezone` setting is not set (schedule_rules.her_zone). */
+function hostZone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; }
+}
+
 /** One private process connection. Model token streams never cross this boundary. */
 export class BusinessWorker {
   constructor(config, onEvent, logger) {
@@ -17,7 +23,7 @@ export class BusinessWorker {
     this.process = spawn(config.python, ['-u', '-m', 'asuna.native_worker'], {
       cwd: config.dataRoot, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1',
-        ASUNA_DATA_ROOT: config.dataRoot,
+        ASUNA_DATA_ROOT: config.dataRoot, ASUNA_HOST_TIMEZONE: hostZone(),
         PYTHONPATH: config.pythonPath ?? fileURLToPath(new URL('../python', import.meta.url)) },
     });
     this.lines = createInterface({ input: this.process.stdout });

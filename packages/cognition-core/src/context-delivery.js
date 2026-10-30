@@ -24,9 +24,11 @@
 import { createHash } from 'node:crypto';
 
 /** Orientation and the turn's trigger are always sent, and so is the line beside the trigger saying her words cannot
- * go out where she is muted. */
-const ALWAYS = new Set(['scene', 'speaker', 'session_class', 'muted_here_from_program', 'event']);
-const HEAD = ['scene', 'speaker', 'session_class'];
+ * go out where she is muted. What woke her when no one spoke (`woken_by_program`, ADR-108 D5) is the trigger's own
+ * orientation: its words repeat from one turn of a kind to the next, and a repeat folded as unchanged would leave the
+ * turn with no word of what woke it. */
+const ALWAYS = new Set(['scene', 'speaker', 'woken_by_program', 'session_class', 'muted_here_from_program', 'event']);
+const HEAD = ['scene', 'speaker', 'woken_by_program', 'session_class'];
 const NOTES = new Set(['unchanged_from_program', 'repeated_from_program']);
 
 const digest = value => createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex').slice(0, 16);

@@ -148,7 +148,7 @@ turned one cut-off stage into a loop.
 | Fix | Commit | Installed | Verified |
 |---|---|---|---|
 | 1. A started worker supersedes a publication it did not load (`native_worker.supersede_waiting`, called by `publication.activated` too) | `237dc1c4` + map `f144c650` | 00:09:10 | `569c3b54` `SUPERSEDED` at 00:09:10 by `native-install-8f68748d…`; no `APPLIED` receipt left; no restart requested since. Regression test `test_a_started_worker_supersedes_a_publication_it_did_not_load` fails without the fix. |
-| 2. A task paused by a restart does not hold the night stage (`night_stage_busy` reads `READY`, `RUNNING`) | `868c26e6` | 00:21:03 | Regression test `test_a_self_development_task_paused_by_a_restart_does_not_hold_the_night` fails without it. Tonight's first night stage (01:07) is still to be read. |
+| 2. A task paused by a restart does not hold the night stage (`night_stage_busy` reads `READY`, `RUNNING`) | `868c26e6` | 00:21:03 | Regression test `test_a_self_development_task_paused_by_a_restart_does_not_hold_the_night` fails without it. The night of 10-31: the night plan's check at 01:07:16 returned `ENQUEUED` (`audit_events`, `schedule.dispatched`; `plans.last_stage_at` 01:07:16), the first since 10-25 05:37, and that night turn (`ep-543d9466…`) ran to `COMMITTED`. `task-d55513ac` was still `PAUSED` after it: hers to decide. |
 
 Both landed through the usual landing: suite, integration, start check, push gate, her slot asked first, the restart,
 the loaded commit and all 166 installed files checked. She confirmed both installs on her side (her messages 0336,

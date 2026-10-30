@@ -825,21 +825,37 @@ def _check_outbound_verify(rep, gcfg, root):
               ver.get("result") == "segment_mismatch" and ver.get("sent_segments") == ["text", "face"] and
               ver.get("stored_segments") == ["text"], json.dumps(ver, ensure_ascii=False))
 
-    # A renamed face (424: 续标识 -> 不对头) is shown by its new name and still sent by either name.
-    rep.check("face_renamed_new_name_is_primary",
-              faces_mod.BY_ID.get("424") == "不对头" and faces_mod.BY_NAME.get("不对头") == "424",
-              json.dumps([faces_mod.BY_ID.get("424"), faces_mod.BY_NAME.get("不对头")], ensure_ascii=False))
-    rep.check("face_renamed_old_name_still_resolves",
-              faces_mod.BY_NAME.get("续标识") == "424" and outbound_mod.encode_faces("哎[表情:续标识]") ==
-              [T("哎"), F("424")] and outbound_mod.encode_faces("哎[表情:不对头]") == [T("哎"), F("424")],
-              json.dumps(outbound_mod.encode_faces("哎[表情:续标识]"), ensure_ascii=False))
-    rep.check("face_inbound_shows_current_name",
-              faces_mod.name_of({"id": "424"}) == "不对头" and
-              faces_mod.name_of({"id": "424", "raw": {"faceText": "/续标识"}}) == "不对头" and
-              faces_mod.name_of({"id": "277", "raw": {"faceText": "/汪汪"}}) == "狗头",
+    # 424 is named 不对劲 and keeps 不对头 as an alias (the owner, 2026-10-30; the earlier alias 续标识 is
+    # not kept -- "replaced" means her turns no longer show that word at all). So the table's current name is
+    # also what an INBOUND 424 reads: name_of looks the id up in this table before believing NapCat's literal,
+    # which is still the old /续标识. An id the table lacks keeps NapCat's word; 277's old word still maps.
+    rep.check("face_424_name_and_alias_are_the_table",
+              faces_mod.BY_ID.get("424") == "不对劲" and faces_mod.BY_NAME.get("不对劲") == "424" and
+              faces_mod.BY_NAME.get("不对头") == "424",
+              json.dumps([faces_mod.BY_ID.get("424"), faces_mod.BY_NAME.get("不对劲"),
+                          faces_mod.BY_NAME.get("不对头")], ensure_ascii=False))
+    rep.check("face_424_both_names_send_the_face",
+              outbound_mod.encode_faces("哎[表情:不对劲]") == [T("哎"), F("424")] and
+              outbound_mod.encode_faces("哎[表情:不对头]") == [T("哎"), F("424")],
+              json.dumps([outbound_mod.encode_faces("哎[表情:不对劲]"),
+                          outbound_mod.encode_faces("哎[表情:不对头]")], ensure_ascii=False))
+    rep.check("face_424_dropped_alias_stays_text",
+              faces_mod.BY_NAME.get("续标识") is None and
+              outbound_mod.encode_faces("哎[表情:续标识]") == [T("哎[表情:续标识]")],
+              json.dumps([faces_mod.BY_NAME.get("续标识"),
+                          outbound_mod.encode_faces("哎[表情:续标识]")], ensure_ascii=False))
+    rep.check("face_inbound_reads_the_table_name_and_keeps_napcat_words_for_ids_it_lacks",
+              faces_mod.name_of({"id": "424"}) == "不对劲" and
+              faces_mod.name_of({"id": "424", "raw": {"faceText": "/续标识"}}) == "不对劲" and
+              faces_mod.name_of({"id": "277"}) == "狗头" and
+              faces_mod.name_of({"id": "277", "raw": {"faceText": "/汪汪"}}) == "狗头" and
+              faces_mod.name_of({"id": "999999", "raw": {"faceText": "/没收录的名字"}}) == "没收录的名字" and
+              faces_mod.name_of({"id": ""}) == "",
               json.dumps([faces_mod.name_of({"id": "424"}),
                           faces_mod.name_of({"id": "424", "raw": {"faceText": "/续标识"}}),
-                          faces_mod.name_of({"id": "277", "raw": {"faceText": "/汪汪"}})], ensure_ascii=False))
+                          faces_mod.name_of({"id": "277", "raw": {"faceText": "/汪汪"}}),
+                          faces_mod.name_of({"id": "999999", "raw": {"faceText": "/没收录的名字"}}),
+                          faces_mod.name_of({"id": ""})], ensure_ascii=False))
     # 277 was renamed 汪汪 -> 狗头 (owner 2026-10-15). Upstream's literal did not change: NapCat still
     # writes /汪汪, she sees the table's current name, and her own old words still send 277.
     rep.check("face_277_renamed_inbound_shows_new_name",

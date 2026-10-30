@@ -201,9 +201,10 @@ def _media_item(stype, data):
         # than "there was a picture here"
         name = _clean(data.get("summary"), MAX_LABEL).strip("[]【】 ")
     elif stype == "face":
-        # NapCat names a face in raw.faceText ('/狗头'; a face we renamed may still
-        # arrive there as '/汪汪'); classic faces carry no name, and then the id is
-        # looked up in faces.json (0.6)
+        # faces.json names the id, and her current name for it wins: NapCat still
+        # writes an old word for a face she renamed ('/续标识' for 424). An id the
+        # table lacks is shown by whatever NapCat called it; a classic face with
+        # neither stays the bare `[表情]` (0.6)
         name = faces.name_of(data)
     elif stype == "location":
         name = _clean(data.get("name") or data.get("address"), MAX_LABEL)

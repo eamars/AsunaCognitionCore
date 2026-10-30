@@ -92,7 +92,9 @@ lock after each blocking call, and a Python thread cannot be stopped.
 - **The effects lock.** No tool body holds the effects lock (`queue.database_effects_lock`) across a wait outside the
   process or a walk without a count bound (`ToolBroker.call`; `list_files` stops at `LIST_FILES_MOST` entries).
 - **Timed.** Every tool call of both brains leaves a `tool.time` audit row, and a call past its limit is recorded
-  (`tool_watch.py`). A `tool.time` that grows with the data is what moves work below into a child.
+  (`tool_watch.py`). A call in flight within its limit holds a worker restart (a publication's, a quiet one of hers,
+  a settings apply) even after its task or turn has ended (`Calls.holding`). A `tool.time` that grows with the data is
+  what moves work below into a child.
 
 Data-sized work that stays in the worker, each with its bound:
 

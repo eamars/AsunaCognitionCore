@@ -542,6 +542,7 @@ class BusinessWorker:
                     'kind': 'native-channel-projection', 'since': now(), 'scope_key': 'operator'}, stream='native-channel-projection')
             self.controller.on_input_received = self.project_input
             self.controller.on_episode_finished = self.episode_finished
+            self.controller.calls_in_flight = self.calls.holding
             self.app.coordinator.native_session_resolver = self.resolve_role_session
             self.app.coordinator.on_collab = self.collab
             self.app.coordinator.on_action_message = self.action_message
@@ -901,7 +902,8 @@ class BusinessWorker:
                 'active_role': self.controller.active if self.controller else None,
                 'queued_inputs': self.controller.pending.qsize() if self.controller else 0,
                 'queued_tasks': self.controller.task_queue.qsize() if self.controller else 0,
-                'active_task': self.controller.active_task if self.controller else None}
+                'active_task': self.controller.active_task if self.controller else None,
+                'calls_in_flight': self.calls.holding()}
 
     def refusals_for(self, task):
         """For the plugin's guard (ADR-053): the broker's sentence for each action tool this task was not given."""
@@ -1148,7 +1150,7 @@ class BusinessWorker:
             # unfinished_tasks also includes work dequeued before its active
             # flag is set. The ingress fence closes admission in that window.
             with self.controller.ingress_lock, self.controller.state_lock, self.pending_lock:
-                if (self.controller.active or self.controller.active_task
+                if (self.controller.active or self.controller.active_task or self.calls.holding()
                         or any(getattr(future, 'asuna_lane', None) != 'summary' for future in self.pending.values())
                         or self.controller.pending.unfinished_tasks
                         or self.controller.task_queue.unfinished_tasks):
@@ -1447,10 +1449,21 @@ class BusinessWorker:
                     receipt_records.save_sink(self.app.store, {**prior, 'state': 'ACTIVE',
                         'activated_at': publication['activated_at']}, expected=prior['revision'], stream=prior.get('task_id', receipt_id))
                 else:
-                    # Recovery has a real native source, but is not a fabricated
-                    # role task. Its activation stays in its own receipt stream.
-                    receipt_records.save_sink(self.app.store, {**publication, '_id': receipt_id,
-                        'kind': 'native_recovery_publish'}, stream=receipt_id)
+                    origin = publication.get('origin') or {}
+                    task = task_records.get(self.app.store, origin['task_id']) if origin.get('task_id') else None
+                    if task and task['scope_key'] == origin.get('scope_key'):
+                        # Her publication whose answer reached no worker (the one that asked stopped first): recorded
+                        # now as its task's, as the publish path records it, so its result reaches her as any
+                        # other's does (_complete_activations) and her task is not left with a failure (ADR-112).
+                        receipt_records.save_sink(self.app.store, {**publication, '_id': receipt_id,
+                            'kind': 'self_development_publish', 'scope_key': task['scope_key'],
+                            'task_id': task['_id'], 'intent_revision': origin.get('intent_revision')},
+                            stream=task['_id'])
+                    else:
+                        # Recovery has a real native source, but is not a fabricated
+                        # role task. Its activation stays in its own receipt stream.
+                        receipt_records.save_sink(self.app.store, {**publication, '_id': receipt_id,
+                            'kind': 'native_recovery_publish'}, stream=receipt_id)
                 supersede_waiting(self.app.store, publication.get('project'), receipt_id)
             self.host._complete_activations()
             self.host.activation_settled.set()

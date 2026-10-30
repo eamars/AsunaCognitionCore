@@ -168,6 +168,7 @@ class Desk:
     def quiet(self):
         c = self.controller
         return (getattr(c, 'active', None) is None and getattr(c, 'active_task', None) is None
+                and not getattr(c, 'calls_in_flight', lambda: 0)()
                 and not getattr(getattr(c, 'pending', None), 'unfinished_tasks', 0)
                 and not getattr(getattr(c, 'task_queue', None), 'unfinished_tasks', 0))
 

@@ -1144,6 +1144,11 @@ While a project waits for a restart, a self-improvement turn cannot publish to i
 Each publication has its own receipt (`sink_receipts`, kind `self_development_publish`, id
 `self-publish-<content identity>-<publication time>`), so content published again (a revert) is a receipt of its own;
 a newer publication marks a project's earlier receipt still `APPLIED` or `HOST_RESTART_REQUIRED` as `SUPERSEDED`.
+A core publication restarts the worker once no turn, no task and no tool call within its limit is running (a call can
+outlive its task: a stage cut at its limit leaves its call in flight). A publication whose answer reached no worker
+(the one that asked stopped first) is recorded when a started worker reports what it loaded: as its task's receipt
+when the Host's selection names that task (`origin.task_id`, in the same scope), whose result then reaches her as any
+other's does; otherwise as `native_recovery_publish`.
 Beside the record's fields it says what happened:
 
 | Field | Meaning |

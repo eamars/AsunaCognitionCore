@@ -448,11 +448,15 @@ class RuntimeHost:
                 if not self.restart_pending.is_set():
                     self.evidence.record('restart.pending', {'receipt_id': applied['_id']})
                     self.restart_pending.set()
-                if self.controller.active or self.controller.active_task:
+                # A tool call of a task already closed (a stage cut at its limit) is still in flight: a restart now
+                # would cut it, a publication's answer included, which the worker then never records (ADR-112).
+                calls = self.controller.calls_in_flight()
+                if self.controller.active or self.controller.active_task or calls:
                     if not self._restart_blocked_logged:
                         self.evidence.record('restart.blocked', {
                             'active_task': self.controller.active_task,
                             'active_role': self.controller.active,
+                            'calls_in_flight': calls,
                             'pending_queue': self.controller.pending.qsize(),
                             'task_queue': self.controller.task_queue.qsize()})
                         self._restart_blocked_logged = True
@@ -465,10 +469,11 @@ class RuntimeHost:
 
     def _watch_published_restart(self):
         # APPLIED may occur inside a still-running action. Mark the lifecycle
-        # pending before that action returns, so the queues stop taking work.
+        # pending before that action returns, so the queues stop taking work. A pending restart is checked again
+        # too: no turn ends when the last tool call holding it does.
         checked = time.monotonic()
         while not self._restart_watch_stop.wait(.5) and not self.shutdown_requested.is_set():
-            if self.controller.active or self.controller.active_task:
+            if self.controller.active or self.controller.active_task or self.restart_pending.is_set():
                 self._maybe_restart_after_publish()
             if self.schedule and time.monotonic() - checked >= RHYTHM_WATCH_SECONDS:
                 checked = time.monotonic()

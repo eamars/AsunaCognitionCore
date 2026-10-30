@@ -347,6 +347,7 @@ Every tool call of both brains, timed where the worker dispatches it (native_wor
   - `attach` — Write from now on, and start the watchdog.
   - `close`
   - `timed` — Around one call of `brain` ('action' or 'character') for `row` (its task or its episode); `failed`: the exception classes that are the tool's own failure.
+  - `holding` — The calls in flight not yet past their limit: each holds a worker restart, even when its task or turn has ended (a stage cut at its limit leaves its call running).
   - `look` — Record each call past its limit not yet recorded; the calls recorded.
 
 ## `store/__init__`

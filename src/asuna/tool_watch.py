@@ -11,6 +11,8 @@
   `host.tool_overrun` (the call id, brain, tool, stream, seconds, limit and the call thread's STACK_DEPTH innermost
   frames, file names and code only), one lane fault (lane `tools`, stage the tool, error `overrun`) and one warning
   line in the Host log. It only records: the call goes on, and is never released or restarted from here.
+- `Calls.holding` counts the calls in flight within their limit; every check that a worker restart waits on reads it
+  (the publication restart, her quiet restart, a settings apply), since a call can outlive its task.
 - Before `attach` (no worker running: tests, tools) calls are timed and nothing is written.
 """
 from __future__ import annotations
@@ -98,6 +100,14 @@ class Calls:
                                                                 'error': type(exc).__name__})
             except Exception:                        # noqa: BLE001
                 pass
+
+    def holding(self, now=None):
+        """The calls in flight not yet past their limit: each holds a worker restart, even when its task or turn has
+        ended (a stage cut at its limit leaves its call running). A call past its limit holds nothing: it is already
+        recorded as an overrun, and the restart is what ends it."""
+        now = time.monotonic() if now is None else now
+        with self.lock:
+            return sum(1 for entry in self.flight.values() if now - entry['started'] <= entry['limit'])
 
     def look(self, now=None):
         """Record each call past its limit not yet recorded; the calls recorded."""

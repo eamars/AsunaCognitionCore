@@ -102,6 +102,9 @@ class Chat:
         self.on_episode_finished = None
         self.on_input_received = None
         self.restart_pending = threading.Event()
+        # Tool calls still running, within their limit (tool_watch.Calls.holding): a call can outlive its task, so a
+        # worker restart waits for these too, not only for an active turn or task (ADR-112).
+        self.calls_in_flight = lambda: 0
         # ADR-030: results on their way back to her (queued or being handed back now), and the watchdog over them.
         self.handbacks = set()
         self.watchdog = threading.Thread(target=self._watch, name='asuna-handover-watchdog', daemon=True)

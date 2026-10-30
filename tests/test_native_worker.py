@@ -413,3 +413,31 @@ def test_a_started_worker_supersedes_a_publication_it_did_not_load(store):
     assert (first['state'], first['superseded_by']) == ('SUPERSEDED', 'second-core')
     assert receipt_records.sink_get(store, 'waiting-channel')['state'] == 'APPLIED'
     assert receipt_records.sink_of_kind(store, 'self_development_publish', state='APPLIED', project='core').first() is None
+
+
+def test_a_started_worker_gives_her_task_the_publication_no_worker_recorded(store, monkeypatch):
+    """Regression (10-30 23:37): the worker that asked for her publication stopped before the Host's answer came back.
+    The next start wrote the publication as a recovery with no task, so her task kept a failed call and she was never
+    told the publication had gone through."""
+    from asuna.host import RuntimeHost
+    from asuna.records import receipts as receipt_records
+    from asuna.records import tasks as task_records
+    monkeypatch.setattr(task_records, 'get', lambda store, task_id, **kw:
+                        {'_id': 'task-p', 'scope_key': 'scene:s'} if task_id == 'task-p' else None)
+    offered = []
+    host = RuntimeHost({}, SimpleNamespace(record=lambda kind, payload: None), awaits_activation=True)
+    host.app = SimpleNamespace(store=store)
+    host.controller = SimpleNamespace(offer_self_development=lambda event_id, **kw: offered.append(
+        (event_id, kw['task_id'], kw['trusted_context_events'][0]['state'])))
+    worker = BusinessWorker()
+    worker.app, worker.host = SimpleNamespace(store=store), host
+    loaded = {'state': 'ACTIVE', 'activated_at': 'now', 'candidate': 'c', 'changed_files': ['a.py'], 'boot_probe': {}}
+    worker.dispatch('publication.activated', {'publications': [
+        {**loaded, 'receipt_id': 'hers', 'project': 'core',
+         'origin': {'task_id': 'task-p', 'scope_key': 'scene:s', 'intent_revision': 2}},
+        {**loaded, 'receipt_id': 'install', 'project': 'napcat-qq'}]})
+    hers = receipt_records.sink_get(store, 'hers')
+    assert (hers['kind'], hers['task_id'], hers['scope_key'], hers['state']) == (
+        'self_development_publish', 'task-p', 'scene:s', 'ACTIVE')
+    assert receipt_records.sink_get(store, 'install')['kind'] == 'native_recovery_publish'
+    assert offered == [('self-development:publish:hers', 'task-p', 'ACTIVE')]

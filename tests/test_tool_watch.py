@@ -110,6 +110,8 @@ def test_a_call_past_its_limit_is_recorded_once_with_its_stack_a_fault_and_a_log
             thread.start()
         assert inside.acquire(timeout=5) and inside.acquire(timeout=5), 'both calls are in their bodies'
         began = min(entry['started'] for entry in calls.flight.values())
+        # A call holds a worker restart within its limit only: a hung one cannot hold it for ever.
+        assert [calls.holding(began + 149), calls.holding(began + 151), calls.holding(began + 601)] == [2, 1, 0]
         assert calls.look(began + 149) == [], 'within both limits'
         assert [entry['call_id'] for entry in calls.look(began + 151)] == ['cmd'], 'its own timeout plus 120 s'
         assert [entry['call_id'] for entry in calls.look(began + 601)] == ['slow']

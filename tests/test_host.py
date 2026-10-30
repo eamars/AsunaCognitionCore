@@ -37,7 +37,7 @@ def test_restart_waits_for_active_action_but_not_durable_queue(monkeypatch):
     host.app = SimpleNamespace(store=SimpleNamespace())
     queue = Queue()
     queue.put(('queued-task', 1))
-    host.controller = SimpleNamespace(active=None, active_task='running-task', pending=Queue(),
+    host.controller = SimpleNamespace(active=None, active_task='running-task', calls_in_flight=lambda: 0, pending=Queue(),
                                       task_queue=queue, state_lock=threading.Lock(),
                                       restart_pending=host.restart_pending)
     host._maybe_restart_after_publish()
@@ -57,13 +57,38 @@ def test_a_restarted_native_worker_does_not_restart_again_for_the_publication_it
     host = RuntimeHost({}, SimpleNamespace(record=lambda kind, payload: recorded.append(kind)), awaits_activation=True)
     applied(monkeypatch, {'_id': 'publish-receipt'})
     host.app = SimpleNamespace(store=SimpleNamespace())
-    host.controller = SimpleNamespace(active=None, active_task=None, pending=Queue(), task_queue=Queue(),
-                                      state_lock=threading.Lock(), restart_pending=host.restart_pending)
+    host.controller = SimpleNamespace(active=None, active_task=None, calls_in_flight=lambda: 0, pending=Queue(),
+                                      task_queue=Queue(), state_lock=threading.Lock(),
+                                      restart_pending=host.restart_pending)
     host._maybe_restart_after_publish()
     assert not host.restart_pending.is_set() and not host.shutdown_requested.is_set() and recorded == []
     host.activation_settled.set()          # publication.activated: what is APPLIED now is a new publication
     host._maybe_restart_after_publish()
     assert host.restart_requested.is_set() and recorded == ['restart.pending', 'restart.requested']
+
+def test_a_publication_restart_waits_for_a_call_its_closed_task_left_in_flight(monkeypatch):
+    """Regression (10-30 23:37): her task's stage was cut at its limit while its publish call was in flight; the
+    restart was asked 233 ms after the task closed, cut the call, and no worker recorded the publication it made."""
+    recorded = []
+    host = RuntimeHost({}, SimpleNamespace(record=lambda kind, payload: recorded.append((kind, payload))))
+    applied(monkeypatch, {'_id': 'publish-receipt'})
+    host.app, host.schedule, flight = SimpleNamespace(store=SimpleNamespace()), None, [1]
+    host.controller = SimpleNamespace(active=None, active_task=None, calls_in_flight=lambda: flight[0],
+                                      pending=Queue(), task_queue=Queue(), state_lock=threading.Lock(),
+                                      restart_pending=host.restart_pending)
+    host._after_turn()                     # the cut task's turn has ended; its call has not
+    assert host.restart_pending.is_set() and not host.restart_requested.is_set()
+    assert recorded[-1][0] == 'restart.blocked' and recorded[-1][1]['calls_in_flight'] == 1
+    watch = threading.Thread(target=host._watch_published_restart, daemon=True)
+    watch.start()
+    try:
+        flight[0] = 0                      # the call ends, and no turn ends with it
+        assert host.shutdown_requested.wait(5), 'the pending restart is asked once the last call ends'
+    finally:
+        host._restart_watch_stop.set()
+        watch.join(5)
+    assert host.restart_requested.is_set() and recorded[-1][0] == 'restart.requested'
+
 
 def test_after_every_turn_the_host_also_checks_her_heartbeat(monkeypatch):
     host = RuntimeHost({}, SimpleNamespace(record=lambda kind, payload: None))

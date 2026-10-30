@@ -1512,7 +1512,7 @@ export function apply(ctx, config = {}) {
   ctx.provide('asuna', core);
   const activateRecovery = async value => {
     const status = core.lifecycle.state === 'ready' ? await core.worker.call('status') : null;
-    if (status?.active_role || status?.active_task || status?.queued_inputs || status?.queued_tasks)
+    if (status?.active_role || status?.active_task || status?.calls_in_flight || status?.queued_inputs || status?.queued_tasks)
       return { ...value, activation_note: 'Business work is active; apply saved settings when idle to load the selected artifact.' };
     await core.restart('recovery activated ' + value.project);
     return (await ctx.asunaFloor.selected()).projects[value.project];

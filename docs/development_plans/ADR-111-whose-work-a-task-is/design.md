@@ -409,8 +409,9 @@ Only those that guard a fence or a failure that would be silent and costly; unit
 | `test_outside_work_named_on_a_line_runs_home`: `delegate` with an outside place from an agent-line turn gives the Web chat's scene, scope, epoch, owner, folder and session (a stub resolver) and no development or integration grant; its result is queued on the Web chat and a plan made in that result turn fires there with the same `whose`; the executor's and the consult's reads of its input give nothing of the line | the owner's rule, and privacy across conversations |
 | `test_a_group_task_is_the_person_she_names`: `for` with a label in the turn gives that person's task and their line as input; a label not in the turn is refused | the person inside a group |
 
-Changed: `tests/test_specs_by_place.py` (the two forms of `for` by class and kind), `tests/test_home_groups.py` (a
-home group's other member earns no development grant). No new static check and no new integration test: no index,
+Changed: `tests/test_specs_by_place.py` (the two forms of `for` by class and kind); `tests/test_home_groups.py`
+only names the rule in its docstring, and a home group's other member earning no development grant is asserted in
+`test_development_only_where_whose_earns_it`. No new static check and no new integration test: no index,
 no query and no adapter promise is added. `pytest integration` runs at every landing.
 
 ## 8. Landings, in order

@@ -229,18 +229,49 @@ def test_the_session_binding_names_its_conversations_clock(monkeypatch):
     assert binding['scene_id'] == 'scene'
 
 
-def test_a_worker_start_keeps_only_the_newest_host_reports(tmp_path, monkeypatch):
+def host_reports(tmp_path, monkeypatch, ages_hours, records=1):
+    """Report folders of starts that last wrote `ages_hours` ago, newest first, `records` files each."""
     import os
+    from asuna import clock
     monkeypatch.setattr('asuna.native_worker.DATA', tmp_path)
-    reports = tmp_path / 'reports'
-    for index in range(KEPT_HOST_REPORTS + 3):
-        folder = reports / ('native-host-%02d' % index); folder.mkdir(parents=True)
-        (folder / 'events.jsonl').write_text('{}', encoding='utf-8')
-        os.utime(folder, (1000 + index, 1000 + index))
-    (reports / 'other-run').mkdir()
-    prune_host_reports()
-    kept = sorted(p.name for p in reports.iterdir())
-    assert kept == ['native-host-%02d' % i for i in range(3, KEPT_HOST_REPORTS + 3)] + ['other-run']
+    now, folders = clock.now().timestamp(), []
+    for index, age in enumerate(ages_hours):
+        folder = tmp_path / 'reports' / ('native-host-%03d' % index)
+        folder.mkdir(parents=True)
+        for n in range(records):
+            (folder / ('%05d-x.json' % n)).write_text('{}', encoding='utf-8')
+        os.utime(folder, (now - age * 3600, now - age * 3600))
+        folders.append(folder)
+    return folders
+
+
+def test_host_reports_of_a_restart_loop_outlive_the_loop(tmp_path, monkeypatch):
+    """Regression (10-30): eleven starts in 31 minutes, and each start kept only the newest five reports, so the
+    reports of the loop's first starts were gone within minutes. Every start of the last two days stays; past
+    them, the newest five, as before."""
+    loop = [n / 60 for n in range(0, 36, 3)]                  # twelve starts, one every 3 minutes
+    folders = host_reports(tmp_path, monkeypatch, loop + [50, 60, 70])
+    (tmp_path / 'reports' / 'other-run').mkdir()
+    pruned = prune_host_reports(folders[0])
+    kept = sorted(p.name for p in (tmp_path / 'reports').iterdir())
+    assert kept == sorted(f.name for f in folders[:len(loop)]) + ['other-run']
+    assert (pruned['kept'], pruned['removed'], pruned['removed_wanted']) == (len(loop), 3, 0)
+    quiet = host_reports(tmp_path / 'quiet', monkeypatch, [0, 100, 200, 300, 400, 500, 600])
+    prune_host_reports(quiet[0])
+    assert sorted(p.name for p in (tmp_path / 'quiet' / 'reports').iterdir()) == [f.name for f in quiet[:KEPT_HOST_REPORTS]]
+
+
+def test_host_reports_past_their_bound_go_oldest_first_and_say_so(tmp_path, monkeypatch):
+    """The disk bound holds over the time rule; what it removes leaves no gap, and the start says it removed evidence
+    the rule would have kept."""
+    from asuna import native_worker
+    monkeypatch.setattr(native_worker, 'HOST_REPORTS_MOST_RECORDS', 10)
+    folders = host_reports(tmp_path, monkeypatch, [0, .1, .2, .3, .4], records=3)
+    pruned = prune_host_reports(folders[0])
+    assert sorted(p.name for p in (tmp_path / 'reports').iterdir()) == [f.name for f in folders[:3]]
+    assert (pruned['kept'], pruned['kept_records'], pruned['removed_wanted']) == (3, 9, 2)
+    monkeypatch.setattr(native_worker, 'HOST_REPORTS_MOST', 2)
+    assert prune_host_reports(folders[0])['removed_wanted'] == 1, 'and by starts'
 
 
 def test_one_long_run_keeps_its_newest_records_and_their_chain(tmp_path):

@@ -10,6 +10,7 @@ import argparse
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack, nullcontext
 import json
+import os
 from pathlib import Path
 from queue import Queue, Empty
 import re
@@ -42,16 +43,54 @@ from .records import people as people_records
 from .records import tasks as task_records
 
 
-KEPT_HOST_REPORTS = 5     # this start's evidence and the starts just before it
+KEPT_HOST_REPORTS = 5     # the newest starts' evidence, whatever its age
+KEPT_HOST_REPORT_HOURS = 48           # and every start's that wrote within this time, however many starts that is
+HOST_REPORTS_MOST_RECORDS = 60_000    # bounded in all by records (twenty full starts)
+HOST_REPORTS_MOST = 1_000             # and by starts
 KEPT_HOST_RECORDS = 3000  # within one start, the newest records only: a busy hour writes about a thousand
 EFFECTS_WAIT_SECONDS = 1.0  # a task stage's wait for the effects lock this long or longer is recorded
 
 
-def prune_host_reports():
-    """Each worker start writes its evidence to a new reports folder; only the newest few are kept."""
-    starts = sorted((DATA / 'reports').glob('native-host-*'), key=lambda path: path.stat().st_mtime, reverse=True)
-    for old in starts[KEPT_HOST_REPORTS:]:
-        shutil.rmtree(old, ignore_errors=True)
+def records_in(folder):
+    """The records a report folder holds (one file each); 0 when it cannot be read."""
+    try:
+        with os.scandir(folder) as entries:
+            return sum(1 for entry in entries if entry.is_file())
+    except OSError:
+        return 0
+
+
+def prune_host_reports(current=None):
+    """Each worker start writes its evidence to a new reports folder (`current`, always kept). Kept: the newest
+    KEPT_HOST_REPORTS starts and every start that wrote within KEPT_HOST_REPORT_HOURS, so a loop of restarts cannot
+    erase its own beginning; bounded by HOST_REPORTS_MOST_RECORDS and HOST_REPORTS_MOST, newest first, and once a start
+    does not fit it goes with every older one. Returns what it did; `removed_wanted` counts the starts the rule would
+    have kept and the bound removed."""
+    starts = []
+    for folder in (DATA / 'reports').glob('native-host-*'):
+        try:
+            starts.append((folder.stat().st_mtime, folder))
+        except OSError:
+            continue
+    starts.sort(key=lambda start: start[0], reverse=True)
+    horizon = clock.now().timestamp() - KEPT_HOST_REPORT_HOURS * 3600
+    kept = records = removed = removed_wanted = 0
+    oldest, full = None, False
+    for index, (written, folder) in enumerate(starts):
+        if folder != current:
+            wanted = index < KEPT_HOST_REPORTS or written >= horizon
+            size = records_in(folder) if wanted and not full else 0
+            if not wanted or full or kept + 1 > HOST_REPORTS_MOST or records + size > HOST_REPORTS_MOST_RECORDS:
+                full = full or wanted
+                removed_wanted += wanted
+                removed += 1
+                shutil.rmtree(folder, ignore_errors=True)
+                continue
+        else:
+            size = records_in(folder)
+        kept, records, oldest = kept + 1, records + size, written
+    return {'kept': kept, 'kept_records': records, 'removed': removed, 'removed_wanted': removed_wanted,
+            'oldest_kept_hours': round((clock.now().timestamp() - oldest) / 3600, 1) if oldest is not None else None}
 
 
 def read_persona(config, persona):
@@ -521,8 +560,11 @@ class BusinessWorker:
         if releases:
             config['_native_integration_release'] = releases[0]
         evidence = Evidence(DATA / 'reports' / ('native-host-' + uuid.uuid4().hex[:10]), keep=KEPT_HOST_RECORDS,
-                            pinned=('runtime.ready', 'clock.zone'))   # ready: the supervisor's proof that this start came up
-        prune_host_reports()
+                            # ready: the supervisor's proof that this start came up
+                            pinned=('runtime.ready', 'clock.zone', 'host.reports_pruned'))
+        pruned = prune_host_reports(evidence.root)
+        if pruned['removed_wanted']:
+            evidence.record('host.reports_pruned', pruned)     # the bound erased evidence the rule would have kept
         # ADR-106: which source her one clock comes from, once per start and never with the zone's name (a zone is
         # personal data). A setting that is set but does not load is read as not set, so this record is where it shows.
         from .schedule_rules import her_zone

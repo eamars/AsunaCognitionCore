@@ -22,14 +22,15 @@
             config:
               # DSH's basic engine with a Chinese role-play checkpoint (core). The summary
               # cap leaves room for the character route's reasoning; DSH's kept tail is
-              # read again only after an in-turn compaction, the guard (ADR-094).
+              # read again only after an in-turn compaction, the guard (ADR-094), and is
+              # counted in the model's own tokens: 32% of the window less the output cap.
               - id: compaction-basic
                 name: '@asuna/cognition-core/compaction'
                 config:
                   maxTokens: 24576
                   # The summary thinks at its conversation's own level; this one when the conversation names none.
                   summaryReasoningEffort: medium
-                  retainRatio: 0.16
+                  retainRatio: 0.32
                   # Compact at 80% of the window: a compaction leaves her at about 35%, and one turn can add
                   # ~45k tokens at once while the summary request replays the prefix plus this cap.
                   thresholdRatio: 0.80

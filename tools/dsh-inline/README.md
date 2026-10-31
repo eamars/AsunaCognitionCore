@@ -8,8 +8,10 @@ ones:
 - **The compaction engine** (`dsh-compaction-basic`): its `compactNow` takes an optional keep-from point
   (`options.keepFrom`), so her conversation is compacted at the end of a turn with that whole turn kept as it is
   (`packages/cognition-core/src/compaction.js`, `compactTurnEnd`). Without it nothing is compacted at a turn's end;
-  DSH's in-turn compaction works either way. With no options it behaves as the released package. Its DSH
-  dependencies are peers, so the profile's copy uses DSH's own.
+  DSH's in-turn compaction works either way. With no options it behaves as the released package. And the recent
+  history a compaction inside a turn keeps (`retainRatio`, `retainTokens`) is counted in the model's own tokens, the
+  unit its threshold is checked in, not in DSH's estimate of them. Its DSH dependencies are peers, so the profile's
+  copy uses DSH's own.
 
 Stock DSH lets one owner declare the `conversation.chat.flow` slot and rejects reuse of the same factory under a
 different session. Two commits on the Asuna branch of the DSH fork add a Session-scoped native Chat factory,

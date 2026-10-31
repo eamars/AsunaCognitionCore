@@ -1,6 +1,6 @@
 /** Build the reviewed DSH patches from the pinned commit of the Asuna branch on the DSH fork: the native rendering
  * extension (two client packages) and the compaction engine (`dsh-compaction-basic`, whose `compactNow` takes a
- * keep-from point, ADR-094). */
+ * keep-from point, ADR-094, and whose kept tail is counted in the model's own tokens, ADR-114). */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';

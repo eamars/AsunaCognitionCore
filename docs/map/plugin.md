@@ -130,6 +130,7 @@ Character-brain compaction: DSH's basic engine with a Chinese role-play checkpoi
   - `run` — The end of one of her turns (`compactAtTurnEnd`, with `idle` the Host's own test).
 - def `lastTurnStart` — ADR-094 §8: the first surface node of her last turn, by place on the surface: the one after the last node from before the end of her turn before it, so the line that opened her turn stays with it.
 - def `keptRule` — The instruction's last rule when the summary request carries the retained tail: how many messages stay as they are, and the opening of the first one with text, quoted only to locate it.
+- def `shapeOf` — What a summary request returned instead of text, for its error: each block's type (a tool call with its tool's name, an empty block marked) and how the request finished; never their text.
 - def `summaryAsNextRequest` — ADR-094 §10.2: every compaction summary request of her sessions, from any engine (DSH's own engine in the action, background-summary and recovery presets sends one with no level and its config's cap), goes out as the conversation's next req
 - class `RoleCompactionEngine`
   - `summarize`

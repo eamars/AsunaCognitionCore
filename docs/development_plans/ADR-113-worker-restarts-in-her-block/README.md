@@ -104,44 +104,59 @@ second requirement and ADR-101's own shape (a count, at most three listed, 「�
 | `settings` | `settings applied` | 换设置 |
 | `settings_restored` | `settings restored after a failed apply` | 设置没换成，退回原来的设置 |
 | `recovery:<project>` | `recovery activated <project>`, the project matching `[a-z][a-z0-9-]{0,39}` | 换回能跑的版本（<project>） |
-| `again` | a request queued during a restart, with no reason of its own | 上一次重启时又排着一次 |
+| `again` | a request queued during a restart, with no reason of its own | 上一次重启时又排着一次（跟着上一次那次，谁排的没记下来） |
 | `unknown` | anything else, a project not matching included | 为什么重启没记下来 |
 
-A queued request that carried its own reason keeps that reason's cause. A new reason gets a kind here and its words
+A queued request that carried its own reason keeps that reason's cause.
+
+**No `tries`, on purpose.** ADR-101's `tries` counts the failed starts of one outage while it stays open. A worker
+restart is not that: each restart is its own event with its own row, never a retry of an earlier one, so there is
+nothing for `tries` to count. Restarts that follow each other are a run (D4); the changes of what held one restart are
+`changes` (D1). A new reason gets a kind here and its words
 together; her wording keys on the kind (before `:`), as in ADR-101.
 
 ### D4. Routine ones folded, the rest one by one
 
-Computed at each home turn over the restart rows of the window: asked within the last day, or not yet shown
-(ADR-101's `listed` rule).
+Computed at each home turn over the restart rows of the window: asked within the last day, or not yet shown. This is
+the rule ADR-101 states at its lines 81-85 (a stop stays until a home turn that showed it commits, `told` and
+`shown_at`, and in any case for a day), as its code applies it to outages (`host_stops.listed`, `host_stops.py:260`,
+through `unshown`, `:60`).
 
 - A restart is **routine** when its cause is `published` or `settings`, it was held less than 2 minutes or not at
   all (`held_sent` true), it came back within 2 minutes of being asked, and it is in no run.
 - A **run** is three or more restarts of the window, each asked within 10 minutes of the one before. It is said as one
   stretch, whatever its members' causes.
-- Every other restart is **listed**: newest first, at most 3 places (ADR-101's `LISTED`); a run takes one place.
+- Every other restart is **listed**: newest first, at most 3 places; a run takes one place. ADR-101's words for its
+  outages, lines 73-75: 「newest first, at most three, and says how many there were」, and 「A cut list never passes for
+  the whole.」 The code's bound is `host_stops.LISTED` (`host_stops.py:27`), the same 3.
 
 What she reads, in `host_from_program` beside ADR-101's outages, under `restarts`:
 
 - `count`: 「过去一天里，替你处理一切的那部分程序重启了 N 次（不算上面那些停机）」: N is every restart row of the
-  window. Always N = routine + the restarts in listed places + `not_listed` (tested).
+  window.
+- `note`, with `count`: 「这些重启时宿主一直在运行，不是又一次停机；每次重启那一两分钟里你没有在运行。」 So the two
+  numbers side by side are never read as a second incident.
 - `routine`, when any: 「其中 N 次是计划内的、很快起来的：<cause> N、…，最早 <time>，最近 <time>」.
 - Each listed restart:
   - `what`: 「替你处理一切的那部分程序为<cause>重启」, with 「（计划内）」 for `published` and `settings`.
-  - `when`: 「<asked> 要重启，<back> 重新起来，中间约 <span> 你没有运行」 (ADR-101's `when` and `_span`; with the clock
-    moved, ADR-101's 「中间多久不知道（时钟对不上）」).
+  - `when`: 「<asked> 要重启，<back> 重新起来，中间约 <span> 你没有运行」 (the form of ADR-101's `when`, line 77, 「中间约 X 分钟」,
+    through the code's `host_stops._span`; with the clock moved, ADR-101's 「中间多久不知道（时钟对不上）」, line 265).
   - `held`, when held: 「重启前挂了约 <span>（从 <since> 起）：先等<first>，最后等<last>；挂着时新回合和新任务都不开始」, with
     「，中间又换过 N 次」 when `changes` is more than 2. A holder: 「你的回合」, 「任务「<title>」」 (the title read from
     `tasks` at that turn, at most 20 characters; none found: 「一个任务」), 「N 个还没回来的工具调用」. When `held_sent` is
     false: 「挂没挂过不知道」.
-- A run: 「<first> 到 <last> 之间连着重启了 N 次（<cause> N、…），每次中间约 <shortest> 到 <longest>」, and when any member
-  was held 2 minutes or more, 「；挂得最久的一次在 <asked>，约 <span>，<its holders as above>」. A run crossing the window's
+- A run: 「<first> 到 <last> 之间连着重启了 N 次（<cause> N、…），每次中间约 <shortest> 到 <longest>」, always with its
+  longest hold: 「；挂得最久的一次在 <asked>，约 <span>，<its holders as above>」, or 「；每一次都没有挂」 when none was
+  held, or 「；挂没挂过不知道」 when no member sent it (her choice, 2026-10-31: the longest hold is what a fold hides). A run crossing the window's
   edge is said with its members inside the window; its shape can change as members leave.
 - `not_listed`: 「更早的 M 次没有列出」, M counting restarts, not places.
-- A row that cannot be put into words (a time that does not read) is counted in `unreadable`, ADR-101's tail sentence.
+- A row that cannot be put into words (a time that does not read) is counted in `unreadable`, with ADR-101's sentence
+  word for word (its tail, line 284; `host_stops.UNREADABLE`, `:39`): 「其中 N 次的记录读坏了，说不清是什么、在什么时候」.
+- A cut list never passes for the whole (ADR-101, line 74): every restart of the window is in `count`, and
+  N = routine + the restarts in listed places + `not_listed` + `unreadable`, tested.
 
 A restart stays until a home turn that showed it commits (`shown_at`, through the turn's `told.host_stops`) and in any
-case for a day: ADR-101's rule, a floor not a cap. A routine one folded into `routine` is shown when that line is.
+case for a day: ADR-101's rule (lines 81-85), a floor not a cap. A routine one folded into `routine` is shown when that line is.
 
 ### D5. Where it goes
 
@@ -163,10 +178,18 @@ sentences above with real lengths of times and titles (JSON keys and quotes add 
 | Day | Characters added |
 |---|---|
 | No worker restart in the window | 0 (no `restarts` key) |
-| Only routine ones (2 publications, 1 settings) | about 100 (`count` 36, `routine` 62) |
-| One listed restart, held 12 minutes by a task, then a call | about 180 |
-| The night of 10-30 (eleven restarts in 31 minutes, one run) | about 120, or about 170 with its longest hold said |
-| The most it can be: routine with every cause, 3 listed places each at their longest, `not_listed`, `unreadable` | about 680; the build's test asserts the case under 760 with the keys |
+| Only routine ones (2 publications, 1 settings) | about 140 (`count` 36, `note` 38, `routine` 62) |
+| One listed restart, held 12 minutes by a task, then a call | about 215 |
+| The night of 10-30 (eleven restarts in 31 minutes, one run, its longest hold said) | about 210 |
+| The most it can be: routine with every cause, 3 listed places each at their longest, `not_listed`, `unreadable` | about 720; the build's test asserts the case under 800 with the keys |
+
+Whether it can push other program blocks out (her question). The whole turn context has one ceiling, 48,000
+characters (`context_budget.TURN_CHARS`). Over it, `trim_turn` drops rows from these lists only, in this order
+(`TRIM_ORDER`): the member list, recent experience, settlement candidates, memories, group continuity, and the
+delivered history down to its last 4 rows. `host_from_program` is not among them: it is never cut, and every
+character it adds is paid, in a turn over the ceiling, by rows of those lists. In a turn under the ceiling nothing is
+pushed out. Measured 2026-10-31: no turn of hers was trimmed since 10-24 (`audit_events`, `context.trimmed`: 0 since
+10-24, 457 before), in any place.
 
 ## 5. Failure modes
 
@@ -215,7 +238,7 @@ Points where she may choose otherwise, each with what this design does:
 
 ## 10. Review
 
-**Claude's own check** against the code at `cb7d1964`: §2's claims, ADR-101's mechanisms (`host_stops.listed`,
+**Claude's own check** against the code at `cb7d1964`: §2's claims, ADR-101's mechanisms in the code (`host_stops.listed`,
 `unshown`, the `told` stamp), the catalog (`host_stops` lists rows by `back_at`, hence `asked_at` and its index), the
 places (`visibility.session_class`, `channel_kinds.home`). It found one false claim of its own: that her "70 字"
 measured her 随身 cap (D6 now says what is not known).

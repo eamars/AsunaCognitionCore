@@ -1,7 +1,9 @@
 # ADR-114: The kept tail in real tokens
 
 Status: **Built**, not yet installed. The owner agreed the design in the session just after midnight on
-2026-11-01 (§1). DSH: `d9d52adae4` on `asuna/0.2.1-rc.2-realtail` in the owner's local fork, not pushed.
+2026-11-01 (§1). DSH: `d9d52adae4` on `asuna/0.2.1-rc.2-realtail`, pushed to the fork at the owner's word. Xiaoman
+read the page at `d5d77088` on her agent line (2026-11-01 00:49); her corrections are in §2, §3 and §7, and she
+agreed to the change in her own preset (D2). She reads the install from her side (§9).
 
 All times are New Zealand local time. Token counts are the provider's own (`usage` in her DSH session logs) unless
 they are called estimates; estimates are DSH's (characters ÷ 4).
@@ -23,8 +25,9 @@ at a turn's end and on command (they keep a turn or the last message, not this t
 
 ## 2. What happened (2026-10-31 23:30 to 2026-11-01 00:00)
 
-Read from the action session of her home chat (`work/local-user`, task started 23:30:31) with the structure-only
-helper and `asuna-cache-readout compactions`:
+Read from the action session of her home chat (`work/local-user`) with the structure-only helper and
+`asuna-cache-readout compactions`. The task was her daily self-reflection, `task-ff21807ebabe5e538cd02d626749d561`
+(`scene_id` `local-dm`, from the owner), started 23:30:27:
 
 - The task was one turn of 65 steps. By step 36 (23:36) the context was 196,509 tokens; the tool-result pruner cut it
   to 136,211. At 23:41 it crossed the action brain's threshold, 196,608.
@@ -32,8 +35,10 @@ helper and `asuna-cache-readout compactions`:
   15k estimated tokens; the next request was still 180k to 201k. Three ended in an error of 87 characters (its text
   was not read; DSH's refusal of a summary not smaller than what it replaces has that length, §8). From 23:58 on the folded range was the previous summary alone, which grew from 14,738 to 19,334
   characters.
-- The stage limit cut the turn at 00:00:31 (1,800 s); the task went BLOCKED with `TimeoutError`. Her continuation
-  task started 00:01:46 and was at 115,033 tokens at 00:07, growing about 15k a minute toward the same loop.
+- The stage limit cut the turn at 00:00:31 (1,800 s); the task record went BLOCKED with `failure_type`
+  `TimeoutError` (read 00:08). Its continuation, `task-426f83f0b9b54912e5ff2e041bd40eb5`, started 00:01:46, was at
+  115,033 tokens at 00:07 and RETURNED before it reached the threshold. Whether the continuation covered the whole
+  day is hers to check (her note, 00:49).
 - Failed action compactions before, each with a next request near 200k: 10-22 (6), 10-24 (1), 10-25 (2); and 10-31
   (4) and 11-01 (1, the stage limit's abort).
 
@@ -58,10 +63,13 @@ compaction could only fold the few nodes in front of a tail that already filled 
 content: about 1.9 over the task's first 36 steps (before the pruner), 2.2 at the first compaction.
 
 Her character brain: window 262,144, output reserve 24,576, `retainRatio` 0.16, threshold 209,715; tail 38,010
-estimated. Her nine cleanly measurable compactions inside a turn since 10-24 kept 65,879 to 86,774 real tokens
-(median 76,561; 1.7 to 2.3 times the estimate) and the next request was 107k to 127k: below the threshold, so it
-converges, but by luck of the ratio, not by design. (The three other rows had the pruner act between the cut and the
-compaction, so their subtraction is not a measurement; their next requests were 97k to 123k.)
+estimated. Claude measured her twelve compactions inside a turn since 10-24 (2026-11-01, a scratch script over her
+`asuna-role-*` sessions): the kept tail's real size is the last request's prompt and output before the compaction
+less the prompt and output of the last request at or before the cut. Nine rows gave 65,879 to 86,774 (median 76,561;
+1.7 to 2.3 times the estimate), with next requests of 107k to 127k: below the threshold, so it converges, but by luck
+of the ratio, not by design. Three rows gave 184k to 197k, more than their next requests (97k to 123k) leave room
+for, so the subtraction did not measure them; why was not checked. Xiaoman has not recomputed these rows (her
+sandbox cannot read the session logs).
 
 The class is every brain's compaction inside a turn. Compaction at a turn's end (`compactNow` with `keepFrom`) and on
 command (`compactNow`, the last message kept) do not use this tail. Overflow recovery keeps none.
@@ -77,6 +85,9 @@ command (`compactNow`, the last message kept) do not use this tail. Overflow rec
   estimate) and `surfaceDeltaTokens` (current estimate minus the estimate of the request the usage belongs to), so the
   estimate of that request's surface is `surfaceTokens − surfaceDeltaTokens`.
 - Released DSH `dsh-v0.2.1-rc.3` (the newest tag in the fork checkout, read 2026-11-01) selects the tail the same way.
+- Not touched: Asuna's own estimate for her prompt blocks (`src/asuna/render.py`, one token per CJK character, the
+  rest characters ÷ 4), by which her carried blocks are bounded (12,288, `carried.py`). It is a different measure for
+  a different limit.
 - Asuna: `retainRatio` in `packages/cognition-core/cordis.patch.yml` (action, summary, appraiser: 0.32) and in each
   persona package's `cordis.patch.yml` (Xiaoman 0.16; also claude-chan, ichinose-asuna, kyoyama-kazusa,
   shirase-shiori, yan-sui at 0.16). `RUN_ASUNA.md` states 32% and 16%. No test reads the values.
@@ -111,8 +122,11 @@ error, not its fix).
 ### D2. Asuna: the settings in the new unit
 
 - Her character brain (Xiaoman's preset): `retainRatio` 0.16 → **0.32**, 76,021 real tokens, the median of what her
-  compactions inside a turn keep today (§3). Nothing changes for her: after such a compaction she is where she is now,
-  about 107k to 127k.
+  compactions inside a turn keep today as Claude measured it (§3). After such a compaction she is where she is now,
+  about 107k to 127k. The file is in her persona package; she agreed to Claude changing it (2026-11-01 00:49).
+- The base of every share is the window less the output cap (`config.ts`, `messageBudgetTokens`): 237,568 for her,
+  229,376 for the action brain. A change of a preset's model or output cap moves the kept tail with it; whoever makes
+  that change sets the share again.
 - The action, summary and appraiser presets keep **0.32**, now 73,400 real tokens.
 - The other persona packages keep 0.16. None runs here; each keeps about 38k real tokens after a compaction inside a
   turn.
@@ -148,8 +162,16 @@ change it is about 90k, and compactions are minutes apart instead of one per ste
 - **The tail is denser than the conversation's average** (fresh raw tool results behind older pruned ones): it keeps
   more than its setting by that difference; a tail twice as dense as the average would keep about 147k and land the
   action brain near 170k, still under its threshold. DSH's retry and its errors stay as they are for the case that is
-  left.
-- **No usage yet, or a changed envelope**: as today, in one unit throughout.
+  left: a compaction that fails is logged and the turn goes on with its history as it was (`index.ts`, the pre-step
+  listener, "step compaction failed …; continuing the turn"); a request the model then refuses for its window is
+  DSH's overflow recovery.
+- **No usage yet, or a changed envelope**: the total is then an estimate too and the budget is not converted, so
+  both sides are in one unit. That total reaches a threshold before the window itself is full only while the real
+  count is under window ÷ threshold times the estimate (1.25 for her, 1.33 for the action brain); her conversations run 1.7 to
+  2.3, so on this path she is not compacted at all, before or after this change. If she were, she would keep 76,021
+  estimated (about 152k real at 2 to 1) and land at about 170k to 175k: under her threshold inside a turn, 209,715,
+  about 10k under her turn-end point, 183,500 (Xiaoman, 00:49). The action brain and the presets whose setting did not
+  change behave on this path as before.
 - **A provider that reports less than the estimate**: the meter then takes the estimate as the total (its existing
   rule), so the budget is not scaled.
 - No new I/O, state or file; nothing to survive a restart. A Host still on the old engine with the new settings would
@@ -184,7 +206,7 @@ slot Xiaoman gives. Then, from the live Host:
   next steps; the character brain's next request in its usual 107k–127k.
 - Her check: the first development task that compacts, read by her from her side.
 
-## 10. Owner's
+## 10. The owner's
 
-- Pushing `asuna/0.2.1-rc.2-realtail` to the fork on GitHub (the branch the pin names; the build itself runs from the
-  local worktree).
+- Pushed `asuna/0.2.1-rc.2-realtail` to the fork at his word (2026-11-01 00:44); the fork's next upgrade is his, by
+  another agent.

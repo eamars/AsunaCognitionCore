@@ -45,17 +45,17 @@ from .records import tasks as task_records
 
 KEPT_HOST_REPORTS = 5     # the newest starts' evidence, whatever its age
 KEPT_HOST_REPORT_HOURS = 48           # and every start's that wrote within this time, however many starts that is
-HOST_REPORTS_MOST_RECORDS = 60_000    # bounded in all by records (twenty full starts)
+HOST_REPORTS_MOST_BYTES = 200 * 2**20  # bounded in all by bytes: a full start is about 28 MB (3,000 records)
 HOST_REPORTS_MOST = 1_000             # and by starts
 KEPT_HOST_RECORDS = 3000  # within one start, the newest records only: a busy hour writes about a thousand
 EFFECTS_WAIT_SECONDS = 1.0  # a task stage's wait for the effects lock this long or longer is recorded
 
 
-def records_in(folder):
-    """The records a report folder holds (one file each); 0 when it cannot be read."""
+def bytes_in(folder):
+    """The bytes of the records a report folder holds (one file each), from its listing; 0 when it cannot be read."""
     try:
         with os.scandir(folder) as entries:
-            return sum(1 for entry in entries if entry.is_file())
+            return sum(entry.stat().st_size for entry in entries if entry.is_file())
     except OSError:
         return 0
 
@@ -63,7 +63,7 @@ def records_in(folder):
 def prune_host_reports(current=None):
     """Each worker start writes its evidence to a new reports folder (`current`, always kept). Kept: the newest
     KEPT_HOST_REPORTS starts and every start that wrote within KEPT_HOST_REPORT_HOURS, so a loop of restarts cannot
-    erase its own beginning; bounded by HOST_REPORTS_MOST_RECORDS and HOST_REPORTS_MOST, newest first, and once a start
+    erase its own beginning; bounded by HOST_REPORTS_MOST_BYTES and HOST_REPORTS_MOST, newest first, and once a start
     does not fit it goes with every older one. Returns what it did; `removed_wanted` counts the starts the rule would
     have kept and the bound removed."""
     starts = []
@@ -74,22 +74,22 @@ def prune_host_reports(current=None):
             continue
     starts.sort(key=lambda start: start[0], reverse=True)
     horizon = clock.now().timestamp() - KEPT_HOST_REPORT_HOURS * 3600
-    kept = records = removed = removed_wanted = 0
+    kept = taken = removed = removed_wanted = 0
     oldest, full = None, False
     for index, (written, folder) in enumerate(starts):
         if folder != current:
             wanted = index < KEPT_HOST_REPORTS or written >= horizon
-            size = records_in(folder) if wanted and not full else 0
-            if not wanted or full or kept + 1 > HOST_REPORTS_MOST or records + size > HOST_REPORTS_MOST_RECORDS:
+            size = bytes_in(folder) if wanted and not full else 0
+            if not wanted or full or kept + 1 > HOST_REPORTS_MOST or taken + size > HOST_REPORTS_MOST_BYTES:
                 full = full or wanted
                 removed_wanted += wanted
                 removed += 1
                 shutil.rmtree(folder, ignore_errors=True)
                 continue
         else:
-            size = records_in(folder)
-        kept, records, oldest = kept + 1, records + size, written
-    return {'kept': kept, 'kept_records': records, 'removed': removed, 'removed_wanted': removed_wanted,
+            size = bytes_in(folder)
+        kept, taken, oldest = kept + 1, taken + size, written
+    return {'kept': kept, 'kept_bytes': taken, 'removed': removed, 'removed_wanted': removed_wanted,
             'oldest_kept_hours': round((clock.now().timestamp() - oldest) / 3600, 1) if oldest is not None else None}
 
 

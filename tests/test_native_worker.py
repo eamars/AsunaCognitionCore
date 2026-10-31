@@ -265,11 +265,11 @@ def test_host_reports_past_their_bound_go_oldest_first_and_say_so(tmp_path, monk
     """The disk bound holds over the time rule; what it removes leaves no gap, and the start says it removed evidence
     the rule would have kept."""
     from asuna import native_worker
-    monkeypatch.setattr(native_worker, 'HOST_REPORTS_MOST_RECORDS', 10)
+    monkeypatch.setattr(native_worker, 'HOST_REPORTS_MOST_BYTES', 20)   # a record here is 2 bytes
     folders = host_reports(tmp_path, monkeypatch, [0, .1, .2, .3, .4], records=3)
     pruned = prune_host_reports(folders[0])
     assert sorted(p.name for p in (tmp_path / 'reports').iterdir()) == [f.name for f in folders[:3]]
-    assert (pruned['kept'], pruned['kept_records'], pruned['removed_wanted']) == (3, 9, 2)
+    assert (pruned['kept'], pruned['kept_bytes'], pruned['removed_wanted']) == (3, 18, 2)
     monkeypatch.setattr(native_worker, 'HOST_REPORTS_MOST', 2)
     assert prune_host_reports(folders[0])['removed_wanted'] == 1, 'and by starts'
 

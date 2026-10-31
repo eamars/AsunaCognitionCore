@@ -324,19 +324,19 @@ The age says what must survive; the size is the disk's safety bound; reaching th
 - **Kept:** the newest 5 starts (as now: the start before a quiet week explains why it ended), and every start that
   wrote in the last 48 hours (`KEPT_HOST_REPORT_HOURS`), however many starts that is. Age is from the folder's last
   write, read against `asuna.clock`.
-- **Bounded:** at most 60,000 records (`HOST_REPORTS_MOST_RECORDS`, twenty full starts) and 1,000 starts
-  (`HOST_REPORTS_MOST`) in all. The unit is a record, the same unit as the per-start bound, so no file-system
-  accounting is needed; a record is one small file (about 0.4 to 1 KB, a stack or traceback a few KB). The start
-  bound keeps the supervisor's stat per folder bounded when starts write almost nothing (a crash at start).
+- **Bounded:** at most 200 MB of records (`HOST_REPORTS_MOST_BYTES`, about seven full starts) and 1,000 starts
+  (`HOST_REPORTS_MOST`) in all, the bytes read from each kept folder's listing. (Designed as 60,000 records on an
+  estimate of 0.4 to 1 KB a record; measured at landing, a record is about 9 KB: §10.6.) The start bound keeps the
+  supervisor's stat per folder bounded when starts write almost nothing (a crash at start).
 - **Order:** newest first. The current start always stays. When a wanted start does not fit, it and every older one
   go, so what is kept has no gap.
 - **Said:** when the bound removes a start the rule wanted, the new start records `host.reports_pruned` (how many
-  starts it removed, how many of them it wanted, the starts and records kept, and the age of the oldest kept), a
+  starts it removed, how many of them it wanted, the starts and bytes kept, and the age of the oldest kept), a
   pinned kind. Nothing is recorded on the normal path.
 
-What it costs: the old bound was at most 15,000 records; the new one is at most 60,000, about 25 to 60 MB in file
-bytes. A start's prune lists each kept folder once (`os.scandir`: on Windows the listing carries what is needed
-without a stat per file).
+What it costs: the old bound was at most 15,000 records, about 140 MB at the measured size; the new one is at most
+200 MB. A start's prune lists each kept folder once (`os.scandir`: on Windows the listing carries each file's size,
+so no stat per file).
 
 **Considered and left out.** Pinning the restart trail within a long start: a busy hour writes about a thousand
 records, so a restart held for 30 minutes keeps its trail well within 3,000; nothing shows it was ever lost. Copying
@@ -346,10 +346,11 @@ are kept.
 ### 10.4 Review: does it reach the root cause?
 
 - **Replay of 10-30.** The loop's starts (23:37 to 00:08, eleven, each a few minutes) and the start that ran the cut
-  task are all within 48 hours of anyone reading them on 10-31; together they are far below 60,000 records. All
+  task are all within 48 hours of anyone reading them on 10-31; together they are far below 200 MB (§10.6). All
   kept. The same night under the old rule kept five.
-- **A loop left running.** A loop of light starts (a hundred or so records each) reaches the 1,000-start bound after
-  about 33 hours at one start every 2 minutes, which a person notices well before: each restart pauses her tasks.
+- **A loop left running.** A loop of light starts (a hundred or so records, about 1 MB, each) reaches the 200 MB
+  bound after about 200 starts, nearly 7 hours at one start every 2 minutes, which a person notices well before:
+  each restart pauses her tasks.
   When it does reach it, the erasure is recorded, so the report says the evidence is incomplete rather than looking
   complete.
 - **A quiet system** keeps what it kept before: its newest 5 starts, plus anything of the last two days.
@@ -370,6 +371,17 @@ are kept.
 At landing, before the restart, read the size of `<data>/reports/native-host-*` (records and bytes per start) and
 check that a full start is near 3,000 records and a few MB. After the restart: the reports of the previous starts of
 the last two days are still there.
+
+### 10.6 Corrected at landing (2026-10-31 14:58, Claude)
+
+The check of §10.5 failed its expectation. The live `reports/native-host-*` before the restart, five starts:
+3,002 records and 28 MB (a full start), 150 and 1.2 MB, 71 and 585 KB, 38 and 154 KB, 18 and 95 KB: about 8 to 9 KB
+a record, not 0.4 to 1 KB (a `retrieval.selection` or a `provider.request` is 10 to 20 KB). At that size 60,000
+records would have been about 550 MB. The owner's decision the same day: bound by bytes, 200 MB. Built:
+`bytes_in` (the sizes from the folder's listing) in place of `records_in`, `HOST_REPORTS_MOST_BYTES`, and
+`host.reports_pruned` says `kept_bytes`; the bound's test reads bytes, and fails with the size read as 0. The short starts
+measured here were 95 KB to 1.2 MB each, so a loop like 10-30's (eleven starts and the cut task's full one) stays far
+below the bound.
 
 ## 11. Review
 

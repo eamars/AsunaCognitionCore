@@ -45,7 +45,7 @@ Ignored and local: `.runtime/`, `.venv/`, `node_modules/`, `reports/`, `config/l
   profile; without the setting it is `$DSH_HOME/asuna/<profile>/`, and a worker started without the variable uses
   `.runtime/`. It holds development candidates, the worker's Python environment, bridge positions, integration runs,
   task and channel workspaces (`work/`, `channels/`), the evidence of worker starts (`reports/native-host-*`, each its
-  newest 3,000 records: the newest five starts and every start of the last 48 hours, at most 60,000 records and 1,000
+  newest 3,000 records: the newest five starts and every start of the last 48 hours, at most 200 MB and 1,000
   starts in all, oldest going first; a start whose bound removed one of those says so in `host.reports_pruned`), the
   deployment's private files (`private/`, with the list of words that point at real people and places,
   `personal-words.txt`), the voice-recognition model (`models/sensevoice-2024-07-17/`,

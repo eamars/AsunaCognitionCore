@@ -1,6 +1,6 @@
 # ADR-114: The kept tail in real tokens
 
-Status: **Built**, not yet installed. The owner agreed the design in the session just after midnight on
+Status: **Built**, installed 2026-11-01 01:00 as `ec9211cc` (the engine `dsh-compaction-basic` `3153519e45ac`, her persona package `3fdf9c4c8f3e`). The owner agreed the design in the session just after midnight on
 2026-11-01 (§1). DSH: `d9d52adae4` on `asuna/0.2.1-rc.2-realtail`, pushed to the fork at the owner's word. Xiaoman
 read the page at `d5d77088` on her agent line (2026-11-01 00:49); her corrections are in §2, §3 and §7, and she
 agreed to the change in her own preset (D2). She reads the install from her side (§9).

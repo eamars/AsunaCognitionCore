@@ -285,6 +285,7 @@ class RuntimeHost:
         self.restart_pending = threading.Event()
         self._restart_watch_stop = threading.Event()
         self._restart_held_by = ()
+        self._restart_hold = None         # what held a pending restart, for the worker to send with it (ADR-113)
 
     def __enter__(self):
         try:
@@ -451,12 +452,14 @@ class RuntimeHost:
                     if not self.restart_requested.is_set():
                         self.restart_pending.clear()
                         self._restart_held_by = ()
+                        self._restart_hold = None
                         self.evidence.record('restart.withdrawn', {})
             return
         with self.controller.state_lock:
             if not self.restart_pending.is_set():
                 self.evidence.record('restart.pending', {'receipt_id': applied['_id']})
                 self.restart_pending.set()
+                self._restart_hold = {'since': now(), 'steps': [], 'changes': 0}
             # A tool call of a task already closed (a stage cut at its limit) is still in flight: a restart now
             # would cut it, a publication's answer included, which the worker then never records (ADR-112).
             calls = self.controller.calls_in_flight()
@@ -472,12 +475,34 @@ class RuntimeHost:
                         'pending_queue': self.controller.pending.qsize(),
                         'task_queue': self.controller.task_queue.qsize()})
                     self._restart_held_by = held
+                    self._held_step(held, self.controller.active_task, calls)
                 return
             if self.restart_requested.is_set():
                 return
             self.evidence.record('restart.requested', {'receipt_id': applied['_id']})
             self.restart_requested.set()
             self.shutdown_requested.set()
+
+    def _held_step(self, held, task_id, calls):
+        """One change of what holds the pending restart, kept for the worker to send with it: the first change and the
+        newest HELD_STEPS - 1, and how many changes there were (ADR-113)."""
+        from .host_stops import HELD_STEPS
+        hold = self._restart_hold
+        if hold is None:
+            return
+        step = {'by': list(held), 'since': now(),
+                **({'task_id': task_id} if 'task' in held and task_id else {}),
+                **({'calls': calls} if 'calls' in held else {})}
+        steps = hold['steps'] + [step]
+        hold['steps'] = steps if len(steps) <= HELD_STEPS else [steps[0], *steps[-(HELD_STEPS - 1):]]
+        hold['changes'] += 1
+
+    def restart_hold(self):
+        """What held the restart now asked for, taken once: {since, steps, changes}, or None when nothing held it. The
+        trail goes when it is taken, as when the restart is withdrawn."""
+        with self.controller.state_lock:
+            hold, self._restart_hold = self._restart_hold, None
+        return hold if hold and hold['steps'] else None
 
     def _watch_published_restart(self):
         # APPLIED may occur inside a still-running action. Mark the lifecycle

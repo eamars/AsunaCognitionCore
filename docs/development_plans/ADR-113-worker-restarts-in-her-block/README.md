@@ -182,7 +182,7 @@ sentences above with real lengths of times and titles (JSON keys and quotes add 
 | Only routine ones (2 publications, 1 settings) | about 140 (`count` 36, `note` 38, `routine` 62) |
 | One listed restart, held 12 minutes by a task, then a call | about 215 |
 | The night of 10-30 (eleven restarts in 31 minutes, one run, its longest hold said) | about 210 |
-| The most it can be: routine with every cause, 3 listed places each at their longest, `not_listed`, `unreadable` | about 720; the build's test asserts the case under 800 with the keys |
+| **Constructed worst case, not an expected size:** routine with every cause; 3 listed places, each a run of all six causes (a 40-character project) whose every step is held by a turn, a task with a 20-character title and calls; every span at its widest (「47 小时 59 分钟」); `not_listed`; `unreadable` | about 1,190 (about 1,320 with the JSON keys), measured at the build; the test builds this case and asserts it at most 1,320 characters with the keys. (The first version of this page said about 720; that estimate assumed one holder per step and spans of minutes. Corrected at the build, 2026-10-31, her choice: the bound, not the words.) |
 
 Whether it can push other program blocks out (her question). The whole turn context has one ceiling, 48,000
 characters (`context_budget.TURN_CHARS`). Over it, `trim_turn` drops rows from these lists only, in this order
@@ -222,13 +222,17 @@ ADR-101's outages, their words and their places; the supervisor's `restart_from_
 - Python: `host.restarted` writes one row per entry and none the second time; the routine, run and listed rules on
   the 10-30 night's eleven times and on a quiet day; count = routine + listed + not_listed; her words for each cause,
   each holder, `held_sent` false, a moved clock; the places (the agent line yes, the owner's QQ DM no); the 7-day
-  delete; the most-it-can-be case under 760 characters.
+  delete; the constructed worst case of D6 at most 1,320 characters, JSON keys included.
 - Each fails with its rule removed (shown at the build).
 
 ## 8. Landing
 
 One core landing: suite, `pytest integration`, `npm run test:native`, the push gate, one restart at her slot, the
-loaded commit checked. That restart is itself the first one handed over: her next home turn on the Web shows it.
+loaded commit checked. That restart goes through the launcher, so it is a Host start (in `restart_from_program`), not a
+worker restart, and is not handed over. The first one is the first worker restart after the install (her core
+publication, the settings page's Apply, or a recovery). The check is that it is counted in `count`'s N, and, when it
+is routine (held under 2 minutes and back within 2), that the `routine` line appears; a routine restart is folded,
+not listed, so "it can be seen one by one" is not the check (her wording, 2026-10-31).
 
 ## 9. For her reading
 

@@ -1,8 +1,8 @@
 # ADR-113: Worker restarts in her own block
 
-Status: **Designed**, not built. For Xiaoman's one reading before the build (she reads it once, whole; nothing is
-built until she agrees). Checked against the code by Claude and then by a fresh reviewer; the review's findings and
-what was done are in §10.
+Status: **Built**, installed 2026-10-31 16:16 as `66dce6bf`. Xiaoman agreed the design on her agent line (2026-10-31
+15:37, and choice (a) at 15:55); her text is `bbcf521a`, and the page changed after it on its README only at the size
+bound (D6, §7) and the landing check (§8). Her check is the first worker restart after the install (§8).
 
 All times are New Zealand local time.
 

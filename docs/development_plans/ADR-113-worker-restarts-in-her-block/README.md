@@ -61,7 +61,7 @@ second requirement and ADR-101's own shape (a count, at most three listed, 「�
 
 ## 4. Decisions
 
-### D1. The plugin hands each finished restart to the worker that it brought up (ADR-101's hand-over)
+### D1. The plugin hands each finished restart to the worker that it brought up (ADR-101's hand-over, its lines 60-63 and 267)
 
 - **What the stopping worker sends.** `restart_requested` carries `held`: `since` (when the restart went pending)
   and `steps`, the changes of what held it, each `{by: [turn|task|calls…], since, task_id?, calls?}` as the Host
@@ -78,14 +78,14 @@ second requirement and ADR-101's own shape (a count, at most three listed, 「�
   `back` through `host.restarted`; the worker answers which it recorded, and those are removed from the file. It is
   tried again every `HANDOVER_SECONDS`, and a failure is said once (`handOverSaid`), as for the span.
 - **What is not handed over.** A restart whose `ready()` throws is removed from the file: its start failed, which
-  ADR-101's span records as an outage. An entry left without a `back` by a Host stopped mid-restart is removed at
-  the next completed start: the Host's stop is ADR-101's `killed` or `crashed` row. `worker failed: …` restarts are
-  not written to the file: they are ADR-101's `worker_down` span. One event is said once.
+  ADR-101's span records as an outage (its lines 51-59). An entry left without a `back` by a Host stopped mid-restart is removed at
+  the next completed start: the Host's stop is ADR-101's `killed` or `crashed` row (its lines 64-70). `worker failed: …` restarts are
+  not written to the file: they are ADR-101's `worker_down` span (its lines 51-63). One event is said once.
 - **Bounded.** The file keeps at most 50 entries; one dropped beyond that is said in an `Asuna:` line.
   `worker-restarts.jsonl` stays the owner's log, written by the plugin only and read by nothing; past 256 KB the
   plugin keeps its newest 128 KB, cut at a line.
 
-### D2. The worker records each restart once, in ADR-101's store
+### D2. The worker records each restart once, in ADR-101's store (`host_stops`, its lines 71-72)
 
 - `host.restarted` writes one `host_stops` row per entry: `_id` `restart-<at>` (a second hand-over of the same entry
   writes nothing new), `how: worker_restart`, `cause`, `asked_at`, `back_at`, `held`, `held_sent`. Each row is
@@ -96,7 +96,7 @@ second requirement and ADR-101's own shape (a count, at most three listed, 「�
 - At each worker start, rows of `worker_restart` shown and older than 7 days are deleted (as `forget_missed` does for
   the gate's misses); an unshown row stays, as ADR-101's outages do.
 
-### D3. Causes, a closed list (ADR-101's way)
+### D3. Causes, a closed list (ADR-101's way, its lines 90-97)
 
 | `cause` | From | Her words |
 |---|---|---|
@@ -109,11 +109,11 @@ second requirement and ADR-101's own shape (a count, at most three listed, 「�
 
 A queued request that carried its own reason keeps that reason's cause.
 
-**No `tries`, on purpose.** ADR-101's `tries` counts the failed starts of one outage while it stays open. A worker
+**No `tries`, on purpose.** ADR-101's `tries` counts the failed starts of one outage while it stays open (its lines 54-57). A worker
 restart is not that: each restart is its own event with its own row, never a retry of an earlier one, so there is
 nothing for `tries` to count. Restarts that follow each other are a run (D4); the changes of what held one restart are
 `changes` (D1). A new reason gets a kind here and its words
-together; her wording keys on the kind (before `:`), as in ADR-101.
+together; her wording keys on the kind (before `:`), as in ADR-101 (its lines 96-97).
 
 ### D4. Routine ones folded, the rest one by one
 
@@ -134,7 +134,8 @@ What she reads, in `host_from_program` beside ADR-101's outages, under `restarts
 
 - `count`: 「过去一天里，替你处理一切的那部分程序重启了 N 次（不算上面那些停机）」: N is every restart row of the
   window.
-- `note`, with `count`: 「这些重启时宿主一直在运行，不是又一次停机；每次重启那一两分钟里你没有在运行。」 So the two
+- `note`, with `count`: 「这些重启时宿主一直在运行，不是又一次停机；每次重启的那段时间里你没有在运行。」（her wording, 2026-10-31: the length is in `held` and `when`, and a
+  second number here would one day contradict them） So the two
   numbers side by side are never read as a second incident.
 - `routine`, when any: 「其中 N 次是计划内的、很快起来的：<cause> N、…，最早 <time>，最近 <time>」.
 - Each listed restart:
@@ -175,7 +176,7 @@ not her memory (they take nothing of her 随身 cap) and not her skill list. Whi
 to this design; what it can say is how many characters each case adds to a home turn's context, counted from the
 sentences above with real lengths of times and titles (JSON keys and quotes add about 60 more when present):
 
-| Day | Characters added |
+| Day | Characters added (the sentences only; JSON keys and quotes add about 60 more) |
 |---|---|
 | No worker restart in the window | 0 (no `restarts` key) |
 | Only routine ones (2 publications, 1 settings) | about 140 (`count` 36, `note` 38, `routine` 62) |
@@ -186,9 +187,10 @@ sentences above with real lengths of times and titles (JSON keys and quotes add 
 Whether it can push other program blocks out (her question). The whole turn context has one ceiling, 48,000
 characters (`context_budget.TURN_CHARS`). Over it, `trim_turn` drops rows from these lists only, in this order
 (`TRIM_ORDER`): the member list, recent experience, settlement candidates, memories, group continuity, and the
-delivered history down to its last 4 rows. `host_from_program` is not among them: it is never cut, and every
-character it adds is paid, in a turn over the ceiling, by rows of those lists. In a turn under the ceiling nothing is
-pushed out. Measured 2026-10-31: no turn of hers was trimmed since 10-24 (`audit_events`, `context.trimmed`: 0 since
+delivered history down to its last 4 rows. `host_from_program` is not among them, so this first stage never cuts
+it, and every character it adds is paid, in a turn over the ceiling, by rows of those lists. If the turn is still over
+after that, a second stage halves the longest text left anywhere in the context, again and again
+(`_longest_text`), and that can reach this block. In a turn under the ceiling nothing is pushed out. Measured 2026-10-31: no turn of hers was trimmed since 10-24 (`audit_events`, `context.trimmed`: 0 since
 10-24, 457 before), in any place.
 
 ## 5. Failure modes

@@ -2,6 +2,7 @@
 up; the worker records it once (`host_stops.restarted`), and her Web chat and home lines say the restarts of the
 window afterwards: the routine ones folded, a run as one stretch, the rest one by one, bounded and counted whole."""
 import json
+import re
 import threading
 from datetime import datetime, timedelta, timezone
 from queue import Queue
@@ -77,6 +78,11 @@ def total(block):
 
 
 # ---- D2: recorded once ------------------------------------------------------------------------------------------
+
+
+def rid(at):
+    """A restart row's id, as host_stops.restarted makes it from its `at`."""
+    return 'restart-' + re.sub(r'[^0-9A-Za-z]', '', at)
 
 def test_a_handed_over_restart_is_one_row_and_handing_it_over_again_writes_nothing(store):
     first = [entry(NIGHT[0][0], held=hold(NIGHT[0][0], 720, [{'by': ['task'], 'task_id': 't1'}])),
@@ -220,13 +226,13 @@ def test_shown_restarts_older_than_a_week_go_at_a_worker_start_and_unshown_ones_
     now = datetime(2026, 11, 8, 0, 0, tzinfo=timezone.utc)
     host_stops.restarted(store, {'restarts': [entry('2026-10-30T01:00:00Z'), entry('2026-10-30T02:00:00Z'),
                                               entry('2026-11-06T02:00:00Z')]})
-    host_stops.shown(store, ['restart-20261030T010000Z'], at('2026-10-31T01:00:00Z'))
-    host_stops.shown(store, ['restart-20261106T020000Z'], at('2026-11-07T01:00:00Z'))
+    host_stops.shown(store, [rid('2026-10-30T01:00:00Z')], at('2026-10-31T01:00:00Z'))
+    host_stops.shown(store, [rid('2026-11-06T02:00:00Z')], at('2026-11-07T01:00:00Z'))
     host_stops.forget_restarts(store, now)
     left = [row['_id'] for row in store.collection('host_stops').find({'how': 'worker_restart'})]
-    assert sorted(left) == ['restart-20261030T020000Z', 'restart-20261106T020000Z']
+    assert sorted(left) == [rid('2026-10-30T02:00:00Z'), rid('2026-11-06T02:00:00Z')]
     # The window: one shown and asked more than a day ago is no longer said; one never shown still is.
-    assert [row['_id'] for row in host_stops.restart_window(store, now)] == ['restart-20261030T020000Z']
+    assert [row['_id'] for row in host_stops.restart_window(store, now)] == [rid('2026-10-30T02:00:00Z')]
 
 
 # ---- D6: the most it can be -------------------------------------------------------------------------------------

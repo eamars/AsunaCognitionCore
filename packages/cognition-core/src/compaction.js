@@ -274,6 +274,14 @@ function finishError(finish) {
   return undefined;
 }
 
+/** What a summary request returned instead of text, for its error: each block's type (a tool call with its tool's
+ * name, an empty block marked) and how the request finished; never their text. */
+export function shapeOf(blocks, finish) {
+  const parts = blocks.map(block => block.type === 'tool-call' ? 'tool-call ' + block.name
+    : block.type + (block.text?.trim() ? '' : ' (empty)'));
+  return (parts.join(', ') || 'no blocks') + '; finish ' + (finish?.kind ?? 'unknown');
+}
+
 /** One log line for each summary request sent as its conversation's next request (ADR-094 §10.2): its level and where
  * that came from, its output limit and its model, so a reading of compactions can tell them apart. */
 function summaryLine(logger, agent, instance) {
@@ -354,7 +362,8 @@ export default class RoleCompactionEngine extends BasicCompactionEngine {
       const rawOutput = assembler.blocks();
       if (contentHasImage(rawOutput)) throw new LlmError('compaction summary cannot contain image output', 'UNSUPPORTED_CONTENT');
       const summary = rawOutput.filter(block => block.type === 'text');
-      if (!summary.some(block => block.text.trim())) throw new Error('summarization produced no text summary content');
+      if (!summary.some(block => block.text.trim()))
+        throw new Error('summarization produced no text summary content (' + shapeOf(rawOutput, assembler.finish) + ')');
       if (!hasSections(summary.map(block => block.text).join('\n')))
         throw new Error('summary lacks sections of the checkpoint (cut short, or thinking spilled into it)');
       return { summary, rawOutput, llmStreamCall: true, provider: options.provider, model: options.model,

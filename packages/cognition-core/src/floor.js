@@ -4,7 +4,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolvePersona } from './persona.js';
 import { resolveChannel } from './channel.js';
@@ -96,6 +96,24 @@ async function files(root) {
     }
   }
   await visit(root); return result;
+}
+/** The files git tracks in a repository project's source (its index): only these reach the candidate, so a file
+ * someone left untracked in the checkout never rides along on her next publication (the owner, 2026-10-28). A source
+ * that is not a git checkout, or a machine without git, is refused in words, never answered with every file. */
+async function tracked(root) {
+  const git = args => new Promise((resolve, reject) => execFile('git', ['-C', root, ...args],
+    { maxBuffer: 64 * 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(stdout)));
+  const refused = () => new Error('DEVELOPMENT_SOURCE_NOT_TRACKED: 读不到这个项目的源目录里哪些文件是 git 跟踪的（它不是一个 git '
+    + '检出的根目录，或这台机器没有 git）——这是 Host 的配置问题，不是参数的问题；重试也一样：不改代码能做的先做，要改的写进报告，请 owner 检查');
+  try {
+    // The root itself must be a checkout's top: a folder inside another repository would answer with that one's files.
+    const top = (await git(['rev-parse', '--show-toplevel'])).trim();
+    const same = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+    if (!same(path.resolve(top), await fs.realpath(root))) throw refused();
+    return new Set((await git(['ls-files', '-z'])).split('\0').filter(Boolean));
+  } catch (error) {
+    throw error?.message?.startsWith('DEVELOPMENT_SOURCE_NOT_TRACKED') ? error : refused();
+  }
 }
 /** A repository project is the core's own paths: only these are copied into its candidate and only these publish. */
 const REPOSITORY_PATHS = /^(src\/|packages\/cognition-core\/|docs\/|tests\/|tools\/|(?:pyproject.toml|uv.lock|package.json|package-lock.json|README.md|AGENTS.md|INSTALL.md|RUN_ASUNA.md|NATIVE_PLUGIN.md|RUNTIME_API.md)$)/;
@@ -298,7 +316,11 @@ export class PublicationFloor {
     const candidate = path.join(this.workRoot, 'self-development', id);
     const baselineFile = path.join(this.base, 'development', id, 'baseline.json');
     const baseline = await json(baselineFile, {});
-    const sourceFiles = await files(source);
+    let sourceFiles = await files(source);
+    if (project.format === 'repository') {
+      const known = await tracked(source);
+      sourceFiles = new Map([...sourceFiles].filter(([relative]) => known.has(relative)));
+    }
     for (const [relative, prior] of Object.entries(baseline)) {
       if (sourceFiles.has(relative)) continue;
       const target = path.resolve(candidate, relative);

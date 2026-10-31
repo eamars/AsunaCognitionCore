@@ -10,6 +10,12 @@ import { CognitionCore } from '../src/index.js';
 import { asunaLogExporter } from '../src/log-sink.js';
 import { readSpill } from '../src/spill.js';
 
+/** A repository project's source is a git checkout: only the files it tracks reach a candidate (floor.tracked). */
+function tracked(root) {
+  execFileSync('git', ['init', '-q', root]);
+  execFileSync('git', ['-C', root, 'add', '-A']);
+}
+
 test('actual npm artifact freezes a bounded candidate; edits do not change active resources', async t => {
   await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });     // a fresh checkout has no data folder yet
   const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/publication-probe-'));
@@ -79,6 +85,7 @@ test('the checks that guard main run on her candidate before anything is publish
     + 'print(json.dumps(answer if isinstance(answer, dict) else {"findings": answer, "total": len(answer)}))\n');
   await fs.writeFile(path.join(channel, 'package.json'), JSON.stringify({ name: '@asuna/probe-demo', version: '0.0.0', files: ['notes.md'], type: 'module' }));
   await fs.writeFile(path.join(channel, 'notes.md'), 'Before\n');
+  tracked(checkout);
   const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'demo', python, projects: [
     { id: 'core', root: checkout, format: 'repository' }, { id: 'demo', root: channel, format: 'package' }] });
   await floor.call('development_write', { path: 'notes.md', text: 'After\n', overwrite: true });
@@ -428,6 +435,7 @@ test('a core candidate command has its own temporary folder, gone when it ends',
   t.after(() => fs.rm(workspace, { recursive: true, force: true }));
   const source = path.join(workspace, 'source'); await fs.mkdir(path.join(source, 'src'), { recursive: true });
   await fs.writeFile(path.join(source, 'src/x.py'), 'x = 1\n');
+  tracked(source);
   const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'probe', projects: [{ id: 'probe', root: source, format: 'repository' }] });
   floor.sandbox = () => ({ confine: async argv => ({ argv }) });
   const write = 'const fs = require("node:fs"), p = require("node:path"); fs.mkdirSync(p.join(process.env.TMPDIR, "d"));'
@@ -462,6 +470,7 @@ test('a repository candidate publishes only the project paths, not what a comman
   await fs.writeFile(path.join(core, 'package.json'), JSON.stringify({ name: '@asuna/probe', version: '0.0.0', type: 'module', exports: './src/index.js' }));
   await fs.writeFile(path.join(core, 'src/index.js'), 'export const name = "probe"; export function apply() {}');
   await fs.writeFile(path.join(source, 'src/x.py'), 'x = 1\n');
+  tracked(source);
   const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'probe', projects: [{ id: 'probe', root: source, format: 'repository' }] });
   await floor.call('development_write', { path: 'src/x.py', text: 'x = 2\n', overwrite: true });
   // A nested command once installed a whole Python (docs with .js files) into the candidate's top folder.
@@ -473,6 +482,26 @@ test('a repository candidate publishes only the project paths, not what a comman
   assert.deepEqual(published.changed_files, ['src/x.py']);
   assert.equal(await fs.readFile(path.join(source, 'src/x.py'), 'utf8'), 'x = 2\n');
   await assert.rejects(fs.stat(path.join(source, 'Python')), { code: 'ENOENT' });
+});
+
+test('only the files git tracks in the checkout reach her candidate; an untracked one never does', async t => {
+  await fs.mkdir(path.resolve('.runtime/adr008'), { recursive: true });
+  const workspace = await fs.mkdtemp(path.resolve('.runtime/adr008/publication-tracked-'));
+  t.after(() => fs.rm(workspace, { recursive: true, force: true }));
+  const source = path.join(workspace, 'source'); await fs.mkdir(path.join(source, 'src'), { recursive: true });
+  await fs.writeFile(path.join(source, 'src/x.py'), 'x = 1\n');
+  tracked(source);
+  await fs.writeFile(path.join(source, 'src/x.py'), 'x = 2\n');                  // a tracked file's uncommitted change
+  await fs.writeFile(path.join(source, 'src/stray.py'), 'half written\n');       // left untracked in the checkout
+  const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'probe', projects: [{ id: 'probe', root: source, format: 'repository' }] });
+  await floor.call('development_files', {});
+  const candidate = path.join(workspace, 'work/self-development/probe');
+  assert.equal(await fs.readFile(path.join(candidate, 'src/x.py'), 'utf8'), 'x = 2\n');
+  await assert.rejects(fs.stat(path.join(candidate, 'src/stray.py')), { code: 'ENOENT' });
+  // Not a git checkout: refused in words, never answered with every file.
+  const plain = path.join(workspace, 'plain'); await fs.mkdir(path.join(plain, 'src'), { recursive: true });
+  const other = new PublicationFloor({ dataRoot: path.join(workspace, 'other'), defaultProject: 'plain', projects: [{ id: 'plain', root: plain, format: 'repository' }] });
+  await assert.rejects(other.call('development_files', {}), /DEVELOPMENT_SOURCE_NOT_TRACKED/);
 });
 
 test('a repository candidate keeps the other packages its tests import as the source has them, read-only', async t => {
@@ -488,6 +517,7 @@ test('a repository candidate keeps the other packages its tests import as the so
   await fs.writeFile(path.join(source, 'src/x.py'), 'x = 1\n');
   await fs.writeFile(path.join(channel, 'kind.py'), 'PARTS = 1\n');
   await fs.writeFile(path.join(channel, 'old.py'), 'gone soon\n');
+  tracked(source);
   const floor = new PublicationFloor({ dataRoot: workspace, defaultProject: 'probe', projects: [{ id: 'probe', root: source, format: 'repository' }] });
   const candidate = path.join(workspace, 'work/self-development/probe');
   const listed = await floor.call('development_files', { prefix: 'packages/channels/' });

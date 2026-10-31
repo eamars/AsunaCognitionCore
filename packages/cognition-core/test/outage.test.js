@@ -164,7 +164,7 @@ test('the hand-over runs beside a start: it returns at once, and ready() does no
   core.worker = { closed: false, call: () => new Promise(() => {}) };       // a database that never answers
   assert.equal(core.handOver(), undefined, 'not a promise anyone could wait on');
   const source = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
-  assert.match(source, /await this\.worker\.call\('navigation\.ready'\);\n\s+this\.startFailures = 0;\n(\s+\/\/[^\n]*\n)*\s+this\.handOverSaid = new Set\(\);\n\s+this\.handOver\(\);/,
+  assert.match(source, /await this\.worker\.call\('navigation\.ready'\);\n\s+this\.startFailures = 0;\n(\s+\/\/[^\n]*\n)*\s+this\.tellFile\([^\n]*\);\n\s+this\.handOverSaid = new Set\(\);\n\s+this\.handOver\(\);/,
     'ready() calls it after navigation.ready without await');
   core.unloaded = true;
 });

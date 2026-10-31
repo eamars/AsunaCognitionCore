@@ -20,8 +20,8 @@ import { holdSteeredInput } from './steer.js';
 import { composeContext, restoreContext, trimTurn, visibleCarried, withoutVisibleAnswers } from './context-delivery.js';
 import { BusinessWorker } from './worker.js';
 import { ensureWorkingCopies } from './working-copy.js';
-import { appendFile } from 'node:fs/promises';
 import { KEPT, cameBack, exitCause, startCause, stopInside, wentDown } from './outage.js';
+import { appendLog, asked, cameUp, causeOf, startFailed, tell } from './restart-tell.js';
 import { NativeSchedules } from './schedule.js';
 import { AsunaApi } from './api.js';
 import { readSpill } from './spill.js';
@@ -341,7 +341,8 @@ export class CognitionCore {
       : { exit_code: 0, stdout: ' The running worker takes this persona package.\n', stderr: '' };
   }
 
-  ready() {
+  /** Start the worker. `restartAt`: the restart that runs this start (restart()), whose entry its completion stamps. */
+  ready(restartAt = null) {
     if (this.initializing) return this.initializing;
     const attempt = this.initializing = (async () => {
       const persona = this.personas.get(this.config.persona);
@@ -413,6 +414,8 @@ export class CognitionCore {
       this.startFailures = 0;
       // ADR-101: the start completed; the span she was down, if any, is handed over beside it, never holding it up.
       // A new worker starts with nothing said: what failed with the last one is said again if it fails with this one.
+      // ADR-113: the restart that ran this start is back; one left without a `back` by an earlier Host goes.
+      this.tellFile(dataRoot => cameUp(dataRoot, restartAt, this.warnLine));
       this.handOverSaid = new Set();
       this.handOver();
     })().catch(async error => {
@@ -448,8 +451,11 @@ export class CognitionCore {
       if (this.handOverSaid.size > HANDOVER_KEYS) this.handOverSaid.delete(this.handOverSaid.values().next().value);
       this.warnLine(text);
     };
-    cameBack(this.ctx.asunaFloor.dataRoot, span => worker.call('host.came_back', span), once).then(result => {
-      if (result !== KEPT || this.unloaded || this.worker !== worker || worker.closed) return;
+    // Then the worker restarts that came back (ADR-113), each recorded once, through the same tries and said-once set.
+    const dataRoot = this.ctx.asunaFloor.dataRoot;
+    cameBack(dataRoot, span => worker.call('host.came_back', span), once).then(async span => {
+      const told = dataRoot ? await tell(dataRoot, restarts => worker.call('host.restarted', restarts), once) : null;
+      if ((span !== KEPT && told !== KEPT) || this.unloaded || this.worker !== worker || worker.closed) return;
       // A worker replaced or closed meanwhile is not called: the next completed start hands it over.
       this.handOverTimer = setTimeout(() => {
         if (!this.unloaded && this.worker === worker && !worker.closed) this.handOver(worker);
@@ -463,6 +469,12 @@ export class CognitionCore {
   downNow(cause) {
     const dataRoot = this.ctx.asunaFloor?.dataRoot;
     if (dataRoot) wentDown(dataRoot, cause, this.warnLine);
+  }
+
+  /** The restarts to tell (restart-tell.js), in the data folder; nothing where the plugin has none. Never throws. */
+  tellFile(use) {
+    const dataRoot = this.ctx.asunaFloor?.dataRoot;
+    return dataRoot ? use(dataRoot) : undefined;
   }
 
   /** A start that failed is tried again, further apart each time, until one succeeds: a fault that passes (a
@@ -868,9 +880,14 @@ export class CognitionCore {
     }
     if (event.kind === 'restart_requested') {
       // A request from the worker a restart is still bringing up would otherwise be lost, leaving that
-      // worker holding its queues for a restart that never comes. Honor it once the current one settles.
-      if (this.restarting) { this.restartAgain = true; this.ctx.logger.warn('Asuna: restart requested during a restart; queued'); return; }
-      await this.restart('worker asked: ' + (event.reason ?? 'unspecified')); return;
+      // worker holding its queues for a restart that never comes. Honor it once the current one settles, with its own
+      // reason and what held it (ADR-113). `held_sent`: the request said what held it (an older worker says nothing).
+      const told = { held: event.held ?? null, held_sent: Object.hasOwn(event, 'held') };
+      if (this.restarting) {
+        this.restartAgain = { reason: event.reason ? 'worker asked: ' + event.reason : null, told };
+        this.ctx.logger.warn('Asuna: restart requested during a restart; queued'); return;
+      }
+      await this.restart('worker asked: ' + (event.reason ?? 'unspecified'), told); return;
     }
     if (event.kind === 'host_request') {
       try {
@@ -1184,27 +1201,41 @@ export class CognitionCore {
   }
 
   /** Every in-place restart says why: in the status (lifecycle.history) and in a durable log beside the worker's
-   * data (the Host's console is kept only under the supervisor, restart/host.log, and only its newest part). */
-  async restart(reason = 'unspecified') {
+   * data (the Host's console is kept only under the supervisor, restart/host.log, and only its newest part). One
+   * restart at a time: a second caller gets the restart already under way (set before anything is awaited). Each one
+   * but a failed worker's is kept to tell her afterwards (restart-tell.js, ADR-113), with `told`: what held it before
+   * the worker asked for it (`held`) and whether the request said (`held_sent`); a restart of the plugin's own was
+   * held by nothing. A request queued meanwhile runs next, with its own reason, or `again` when it had none. */
+  async restart(reason = 'unspecified', told = { held: null, held_sent: true }) {
     if (this.restarting) return this.restarting;
     const entry = { at: new Date().toISOString(), reason: String(reason).slice(0, 500) };
-    this.lifecycle.history = [...(this.lifecycle.history ?? []), entry].slice(-10);
-    this.ctx.logger.warn('Asuna worker restart: ' + entry.reason);
-    await appendFile(path.join(this.ctx.asunaFloor.dataRoot, 'worker-restarts.jsonl'), JSON.stringify(entry) + '\n')
-      .catch(error => this.ctx.logger.warn('Asuna: restart not logged: ' + String(error)));
-    this.restarting = (async () => {
+    const run = this.restarting = Promise.resolve().then(async () => {
+      this.lifecycle.history = [...(this.lifecycle.history ?? []), entry].slice(-10);
+      this.ctx.logger.warn('Asuna worker restart: ' + entry.reason);
+      const cause = causeOf(entry.reason);
+      const kept = cause !== null && this.tellFile(dataRoot => asked(dataRoot,
+        { at: entry.at, cause, held: told?.held ?? null, held_sent: told?.held_sent !== false }, this.warnLine));
+      await this.tellFile(dataRoot => appendLog(dataRoot, entry, this.warnLine));
       this.lifecycle.state = 'restarting'; this.lifecycle.restarts++;
       for (const [id, state] of this.states) {
         if (state.current) this.ctx.agents.get(id)?.cancel({ kind: 'user' });
         state.waiter?.reject(new Error('Asuna worker restarting'));
         state.current = null; state.waiter = null; state.queue = []; state.claimed = []; state.admitted = null;
       }
-      if (this.worker) { this.worker.onFailure = null; await this.worker.dispose(); }
-      this.initializing = null;
-      await this.ready();
-    })();
-    try { await this.restarting; } finally { this.restarting = null; }
-    if (this.restartAgain) { this.restartAgain = false; await this.restart('a restart requested during the last one'); }
+      try {
+        if (this.worker) { this.worker.onFailure = null; await this.worker.dispose(); }
+        this.initializing = null;
+        await this.ready(kept ? entry.at : null);
+      } catch (error) {
+        // Its start failed: the outage records it (worker-down.json), so it is not told as a restart too.
+        if (kept) this.tellFile(dataRoot => startFailed(dataRoot, entry.at, this.warnLine));
+        throw error;
+      }
+    });
+    let again = null;
+    try { await run; again = this.restartAgain; }
+    finally { this.restarting = null; this.restartAgain = null; }   // consumed whatever happened: never left behind
+    if (again) await this.restart(again.reason ?? 'a restart requested during the last one', again.told);
   }
 
   /** The tools a stage lists: her conversation's (role_tools.toolbox; the worker refuses one the turn may not use)

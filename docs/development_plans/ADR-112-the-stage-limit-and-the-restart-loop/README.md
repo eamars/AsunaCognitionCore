@@ -1,8 +1,8 @@
 # ADR-112: A working task cut at the stage limit, and the restart loop that followed
 
 Status: **Open**. Two fixes are installed (§6). The root causes are identified (§5). C2 (§9) and C4 (§10) are
-designed, built and reviewed (§11) on branch `claude/focused-hamilton-wy3xp7`, not yet installed. C1 and the paused
-tasks without an end are the owner's decisions (§7); the 12:39 crash is not explained.
+designed, built and reviewed (§11), corrected at landing (§10.6), and installed 2026-10-31 15:03 as `59e9e395`. C1 and
+the paused tasks without an end are the owner's decisions (§7); the 12:39 crash is not explained.
 
 All times are New Zealand local time (NZDT, UTC+13), 2026-10-30 evening to 2026-10-31 early morning, unless marked UTC.
 
@@ -160,8 +160,12 @@ the loaded commit and all 166 installed files checked. She confirmed both instal
 Not designed here:
 
 - **C1, the limit itself.** The owner's decision, open since ADR-084 §10.
-- **C2.** Designed and built in §9.
-- **C4.** Designed and built in §10.
+- **C2.** Designed and built in §9; installed 2026-10-31 15:03.
+- **C4.** Designed and built in §10; installed 2026-10-31 15:03.
+- **Nothing tells her a restart is held.** While a restart waits for a task or a call, new turns and tasks do not
+  start, so nothing reaches her; she cannot tell work held behind a restart from work that is stuck (her question,
+  2026-10-31 15:02). The hold is bounded: the running task's stage (at most 30 minutes) and then its calls (most at
+  most 600 s), and it ends in a restart. Not designed.
 - **Paused tasks have no end** but her stop or the owner's "continue". Open on 10-31 00:40: `task-b141054d` (10-16,
   agent home line), `task-d55513ac` (10-25), `task-5afc50d4` and `task-abba75af` (23:51 and 23:57). The owner's
   restart policy; left as it is unless he decides otherwise.

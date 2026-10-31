@@ -12,6 +12,11 @@ A worker that was down while the Host ran on (ADR-101) is one `worker_down` row:
 (<data>/worker-down.json) from its first failed start or exit until a start completes, then hands it over
 (`worker_down`). While a span is open, a lease left behind is part of that outage: no second row. Each row is one
 outage. A stop stays in her home turns until a turn that showed it has committed (`shown_at`), and at least a day.
+
+A worker replaced in place while the Host ran on (ADR-113) is one `worker_restart` row, handed over by the plugin
+after the start it ran completed (<data>/restarts-to-tell.json, `restarted`), with its cause, when it was asked and
+back, and what held it before. Her Web chat and home lines say them (`restarts_block`): the routine ones folded into
+one line, a run of them as one stretch, the rest one by one. They are not outages: `listed` and `block` leave them out.
 """
 from __future__ import annotations
 
@@ -328,6 +333,250 @@ def block(store, zone, moment=None, persona=None, rows=None):
     if missed:
         out['missed_looks'] = MISSED % missed
     return out or None
+
+
+# ── worker restarts (ADR-113) ──
+RESTART_KEPT_DAYS = 7
+ROUTINE_SECONDS = 120          # held less than this, and back within this of being asked: routine, when planned
+RUN_SECONDS = 600              # a run: RUN_LEAST or more restarts, each asked within this of the one before
+RUN_LEAST = 3
+TITLE_CHARS = 20
+HELD_STEPS = 5
+HOLDERS = ('turn', 'task', 'calls')
+RESTART_CAUSE = re.compile(r'^(published|settings|settings_restored|again|unknown|recovery:[a-z][a-z0-9-]{0,39})$')
+# A restart's cause in words, by its kind (the part before `:`); a new kind comes with its words.
+RESTART_CAUSE_WORDS = {'published': '装你发布的新版本', 'settings': '换设置', 'settings_restored': '设置没换成，退回原来的设置',
+                       'recovery': '换回能跑的版本（%s）',
+                       'again': '上一次重启时又排着一次（跟着上一次那次，谁排的没记下来）', 'unknown': '为什么重启没记下来'}
+PLANNED_CAUSES = ('published', 'settings')
+RESTART_COUNT = '过去一天里，替你处理一切的那部分程序重启了 %d 次（不算上面那些停机）'
+RESTART_NOTE = '这些重启时宿主一直在运行，不是又一次停机；每次重启的那段时间里你没有在运行。'
+ROUTINE = '其中 %d 次是计划内的、很快起来的：%s，最早 %s，最近 %s'
+RESTART_WHAT = '替你处理一切的那部分程序为%s重启'
+PLANNED = '（计划内）'
+RESTART_WHEN = '%s 要重启，%s 重新起来，中间约 %s 你没有运行'
+RESTART_WHEN_MOVED = '%s 要重启，%s 重新起来，中间多久不知道（时钟对不上）'
+HELD = '重启前挂了约 %s（从 %s 起）：%s；挂着时新回合和新任务都不开始'
+HOLDERS_WORDS = '先等%s，最后等%s'
+CHANGED = '，中间又换过 %d 次'
+NOT_SENT = '挂没挂过不知道'
+HOLDER_TURN, HOLDER_TASK, HOLDER_SOME_TASK, HOLDER_CALLS = '你的回合', '任务「%s」', '一个任务', '%d 个还没回来的工具调用'
+RUN = '%s 到 %s 之间连着重启了 %d 次（%s），每次中间约 %s 到 %s'
+RUN_MOVED = '%s 到 %s 之间连着重启了 %d 次（%s），中间多久不知道（时钟对不上）'
+RUN_HELD = '；挂得最久的一次在 %s，约 %s，%s'
+RUN_NOT_HELD = '；每一次都没有挂'
+
+
+def _moment(text):
+    try:
+        return _aware(datetime.fromisoformat(str(text).replace('Z', '+00:00'))).isoformat() if text else None
+    except ValueError:
+        return None
+
+
+def _count(value):
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def held_of(value):
+    """What held a restart as the stopping worker sent it, checked: {since, steps: [{by, since, task_id?, calls?}],
+    changes}, or None when nothing held it. A time that does not read is kept as None (said as unreadable)."""
+    if not isinstance(value, dict) or not isinstance(value.get('steps'), list):
+        return None
+    steps = []
+    for step in value['steps'][:HELD_STEPS]:
+        step = step if isinstance(step, dict) else {}
+        by = step.get('by') if isinstance(step.get('by'), list) else ()
+        steps.append({'by': [name for name in HOLDERS if name in by], 'since': _moment(step.get('since')),
+                      **({'task_id': step['task_id']} if is_text(step.get('task_id')) else {}),
+                      **({'calls': step['calls']} if _count(step.get('calls')) is not None else {})})
+    if not steps:
+        return None
+    return {'since': _moment(value.get('since')), 'steps': steps,
+            'changes': max(_count(value.get('changes')) or 0, len(steps))}
+
+
+def restarted(store, value):
+    """The worker restarts a completed start hands over (ADR-113): one `worker_restart` row each, complete when
+    written, its id from when it was asked, so handing one over again writes nothing new. Returns the `at` of each one
+    recorded (now or before), for the plugin to drop."""
+    recorded = []
+    entries = value.get('restarts') if isinstance(value, dict) else None
+    for entry in entries if isinstance(entries, list) else ():
+        if not isinstance(entry, dict) or not is_text(entry.get('at')):
+            continue
+        row_id = 'restart-' + re.sub(r'[^0-9A-Za-z]', '', entry['at'])[:40]
+        if not get(store, row_id):
+            cause = str(entry.get('cause') or '')
+            row = {'_id': row_id, 'how': 'worker_restart', 'cause': cause if RESTART_CAUSE.match(cause) else 'unknown',
+                   'asked_at': _moment(entry['at']), 'back_at': _moment(entry.get('back')),
+                   'held': held_of(entry.get('held')), 'held_sent': entry.get('held_sent') is not False,
+                   'scope_key': 'operator', 'shown_at': None}
+            save(store, row, stream=row_id)
+        recorded.append(entry['at'])
+    return recorded
+
+
+def forget_restarts(store, moment=None):
+    """At a worker start: the restart rows shown more than RESTART_KEPT_DAYS ago go; an unshown one stays."""
+    before = ((moment or clock.now()) - timedelta(days=RESTART_KEPT_DAYS)).isoformat()
+    store.collection(COLLECTION).delete({'how': 'worker_restart', 'shown_at': Range(lt=before)}, many=True)
+
+
+def restart_window(store, moment=None):
+    """The restart rows her home turn reads: asked within the last day, or not yet shown, by when they were asked."""
+    since = ((moment or clock.now()) - timedelta(hours=SHOWN_HOURS)).isoformat()
+    where = And({'how': 'worker_restart'}, Or({'asked_at': Range(gte=since)}, {'shown_at': IsNull()}))
+    return View(store, COLLECTION, where, (('asked_at', 1),)).rows()
+
+
+def _seconds(later, earlier):
+    return (datetime.fromisoformat(later) - datetime.fromisoformat(earlier)).total_seconds()
+
+
+def _readable(row):
+    """A restart row whose times all read, else None: asked, back, and when held, its start no later than asked."""
+    asked, back = _moment(row.get('asked_at')), _moment(row.get('back_at'))
+    held = row.get('held') if isinstance(row.get('held'), dict) else None
+    if not asked or not back:
+        return None
+    hold = None
+    if held and row.get('held_sent') is not False:
+        since = _moment(held.get('since'))
+        if not since or _seconds(asked, since) < 0 or not all(step.get('by') for step in held.get('steps') or ()):
+            return None
+        hold = _seconds(asked, since)
+    return {**row, 'asked_at': asked, 'back_at': back, 'hold': hold, 'down': _seconds(back, asked)}
+
+
+def _cause_words(cause):
+    kind, _, name = str(cause or 'unknown').partition(':')
+    if kind == 'recovery':
+        return RESTART_CAUSE_WORDS['recovery'] % name if name else RESTART_CAUSE_WORDS['unknown']
+    return RESTART_CAUSE_WORDS.get(kind, RESTART_CAUSE_WORDS['unknown'])
+
+
+def _tally(rows):
+    """'装你发布的新版本 2、换设置 1': each cause in words and how many, the most first."""
+    counts = {}
+    for row in rows:
+        words = _cause_words(row.get('cause'))
+        counts[words] = counts.get(words, 0) + 1
+    return '、'.join('%s %d' % pair for pair in sorted(counts.items(), key=lambda pair: -pair[1]))
+
+
+def _routine(row):
+    return (str(row.get('cause')) in PLANNED_CAUSES and row.get('held_sent') is not False
+            and (row['hold'] is None or row['hold'] < ROUTINE_SECONDS) and 0 <= row['down'] < ROUTINE_SECONDS)
+
+
+def _holders(store, step):
+    words = []
+    for name in step['by']:
+        if name == 'turn':
+            words.append(HOLDER_TURN)
+        elif name == 'task':
+            from .records import tasks as task_records
+            task = task_records.get(store, step.get('task_id'), ['title'])
+            title = str((task or {}).get('title') or '').strip()
+            words.append(HOLDER_TASK % title[:TITLE_CHARS] if title else HOLDER_SOME_TASK)
+        else:
+            words.append(HOLDER_CALLS % (step.get('calls') or 0))
+    return '、'.join(words)
+
+
+def _who_held(store, held):
+    """'先等<first>，最后等<last>', and how many changes between them when there were more."""
+    steps = held['steps']
+    said = HOLDERS_WORDS % (_holders(store, steps[0]), _holders(store, steps[-1]))
+    return said + (CHANGED % (held['changes'] - 2) if held['changes'] > 2 else '')
+
+
+def _one_restart(store, zone, row):
+    from .schedule_rules import line_stamp
+    cause = str(row.get('cause'))
+    said = {'what': RESTART_WHAT % _cause_words(cause) + (PLANNED if cause in PLANNED_CAUSES else '')}
+    asked, back = line_stamp(zone, row['asked_at']), line_stamp(zone, row['back_at'])
+    said['when'] = (RESTART_WHEN_MOVED % (asked, back) if row['down'] < 0
+                    else RESTART_WHEN % (asked, back, _span(row['down'])))
+    if row.get('held_sent') is False:
+        said['held'] = NOT_SENT
+    elif row['hold'] is not None:
+        said['held'] = HELD % (_span(row['hold']), line_stamp(zone, row['held']['since']), _who_held(store, row['held']))
+    return said
+
+
+def _run(store, zone, rows):
+    from .schedule_rules import line_stamp
+    first, last = line_stamp(zone, rows[0]['asked_at']), line_stamp(zone, rows[-1]['asked_at'])
+    downs = [row['down'] for row in rows if row['down'] >= 0]
+    said = (RUN % (first, last, len(rows), _tally(rows), _span(min(downs)), _span(max(downs))) if downs
+            else RUN_MOVED % (first, last, len(rows), _tally(rows)))
+    held = [row for row in rows if row['hold'] is not None]
+    if held:
+        longest = max(held, key=lambda row: row['hold'])
+        return said + RUN_HELD % (line_stamp(zone, longest['asked_at']), _span(longest['hold']),
+                                  _who_held(store, longest['held']))
+    if all(row.get('held_sent') is not False for row in rows):
+        return said + RUN_NOT_HELD
+    return said + '；' + NOT_SENT
+
+
+def told_restarts_here(config, scene_id):
+    """Whether a home turn in this scene says the worker restarts: the owner's local scene and a line whose channel
+    kind is a home one (channel_kinds.home), never the owner's direct messages on a platform or a home group."""
+    from . import channel_kinds
+    return scene_id == ((config or {}).get('chat') or {}).get('scene_id') or channel_kinds.home(scene_id)
+
+
+def restarts_block(store, zone, moment=None):
+    """The worker restarts for her home turn (ADR-113): `count` of every restart of the window (`restart_window`)
+    with its `note`; the routine ones (planned, held under ROUTINE_SECONDS or not at all, back within it, in no run)
+    folded into `routine`; the rest `listed`, newest first, at most LISTED places, a run (RUN_LEAST or more, each asked
+    within RUN_SECONDS of the one before) taking one; `not_listed` and `unreadable` count restarts, so count = routine
+    + the listed places' restarts + not_listed + unreadable. Returns (the block or None, the row ids it shows)."""
+    from .schedule_rules import line_stamp
+    rows = restart_window(store, moment)
+    if not rows:
+        return None, []
+    readable = sorted((row for row in map(_readable, rows) if row), key=lambda row: row['asked_at'])
+    unreadable = len(rows) - len(readable)
+    chains = []
+    for row in readable:
+        if chains and _seconds(row['asked_at'], chains[-1][-1]['asked_at']) <= RUN_SECONDS:
+            chains[-1].append(row)
+        else:
+            chains.append([row])
+    places, routine = [], []
+    for chain in chains:
+        if len(chain) >= RUN_LEAST:
+            places.append(chain)
+            continue
+        for row in chain:
+            if _routine(row):
+                routine.append(row)
+            else:
+                places.append([row])
+    places.sort(key=lambda place: place[-1]['asked_at'], reverse=True)
+    out = {'count': RESTART_COUNT % len(rows), 'note': RESTART_NOTE}
+    if routine:
+        out['routine'] = ROUTINE % (len(routine), _tally(routine), line_stamp(zone, routine[0]['asked_at']),
+                                    line_stamp(zone, routine[-1]['asked_at']))
+    said = []
+    for place in places[:LISTED]:
+        try:
+            said.append({'run': _run(store, zone, place)} if len(place) >= RUN_LEAST
+                        else _one_restart(store, zone, place[0]))
+        except Exception:           # noqa: BLE001 one broken row is counted, never takes her home turn with it
+            unreadable += len(place)
+    if said:
+        out['listed'] = said
+    left = sum(len(place) for place in places[LISTED:])
+    if left:
+        out['not_listed'] = NOT_LISTED % left
+    if unreadable:
+        out['unreadable'] = UNREADABLE % unreadable
+    return out, [row['_id'] for row in rows]
 
 
 def shown(store, ids, moment=None):

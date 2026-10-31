@@ -971,8 +971,14 @@ class ContextBuilder:
             from . import host_stops as _host_stops
             stops=_host_stops.listed(self.store,moment)
             away=_host_stops.block(self.store,schedule_zone,moment,persona,rows=stops)
-            if away:context['host_from_program']=away
             shown_stops=[row['_id'] for row in stops]      # stamped shown_at when this turn commits (ADR-101)
+            # ADR-113: her worker restarts, in her Web chat and her home lines only: never by place 'home', which the
+            # owner's direct messages on a channel are too.
+            if _host_stops.told_restarts_here(self.store.config,scene['_id']):
+                worker_restarts,restart_ids=_host_stops.restarts_block(self.store,schedule_zone,moment)
+                if worker_restarts:away={**(away or {}),'restarts':worker_restarts}
+                shown_stops+=restart_ids
+            if away:context['host_from_program']=away
             from . import restarts as _restarts
             restarted=_restarts.block(self.store,schedule_zone,moment)
             if restarted:context['restart_from_program']=restarted

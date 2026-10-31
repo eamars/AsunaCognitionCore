@@ -573,10 +573,11 @@ class BusinessWorker:
                                        'setting_unreadable': her['setting_unreadable']})
         def configure(host):
             self.app, self.controller = host.app, host.controller
+            from . import host_stops
             if lease.left_behind:                  # the last Host did not stop by itself (host_stops)
-                from . import host_stops
                 # ADR-101: the plugin's open span, read from the data folder (the worker never writes it).
                 self.folded_stop = host_stops.left_behind(self.app.store, lease, host_stops.open_span())
+            host_stops.forget_restarts(self.app.store)   # ADR-113: shown restarts older than a week go
             self.navigation = self.prepare_navigation(native_sessions or [])
             self.projection_start = artifact_records.get(self.app.store, 'native-channel-projection')
             if not self.projection_start:
@@ -821,7 +822,8 @@ class BusinessWorker:
     def watch_host(self):
         while not self.stopping.wait(.5):
             if self.host.restart_requested.is_set():
-                self.emit({'kind': 'restart_requested', 'reason': 'published-worker'})
+                # ADR-113: with what held it, taken once (None when nothing did), for her block afterwards.
+                self.emit({'kind': 'restart_requested', 'reason': 'published-worker', 'held': self.host.restart_hold()})
                 return
 
     def resolve_role_session(self, ep):
@@ -1205,6 +1207,10 @@ class BusinessWorker:
             # ADR-101: a start completed; the plugin hands over the span she was down, recorded once.
             from . import host_stops
             return {'stop_id': host_stops.worker_down(self.app.store, args)['_id']}
+        if method == 'host.restarted':
+            # ADR-113: the worker restarts that came back, each recorded once; the plugin drops the ones answered.
+            from . import host_stops
+            return {'recorded': host_stops.restarted(self.app.store, args)}
         if method == 'navigation.ready':
             for entry in self.navigation['entries']:
                 record = session_records.get(self.app.store, entry['session_id'])

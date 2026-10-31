@@ -473,12 +473,14 @@ CATALOG = Catalog([
         *_text('scene_id', 'group_id', 'channel_id', 'fetched_at', 'received_at', 'scope_key'),
         Field('members', 'list', of='object', nullable=True), Field('count', 'number', nullable=True)),
         versioned=True),
-    # A Host taken away from outside, found at the next start (host_stops.py); its times are ISO text.
+    # A Host taken away from outside, found at the next start, and a worker restart, handed over after it
+    # (host_stops.py); its times are ISO text. Restart rows are found and ordered by when they were asked.
     Collection('host_stops', 'host_stops', (
         Field('_last_op', 'text'), Field('schema_version', 'number'),
-        *_text('how', 'alive_until', 'back_at', 'scope_key', 'shown_at', 'by', 'cause'),
-        *(Field(path, 'number', nullable=True) for path in ('exit_code', 'tries', 'inside'))),
-        (index(('how', 1), ('back_at', -1)),),
+        *_text('how', 'alive_until', 'back_at', 'scope_key', 'shown_at', 'by', 'cause', 'asked_at'),
+        *(Field(path, 'number', nullable=True) for path in ('exit_code', 'tries', 'inside')),
+        Field('held', 'object', nullable=True)),
+        (index(('how', 1), ('back_at', -1)), index(('how', 1), ('asked_at', 1))),
         versioned=True),
     # A look the relevance gate could not decide (host_stops.py), by its turn's id; its time is ISO text.
     Collection('missed_looks', 'host_stops', _text('scene_id', 'at', 'cause')),

@@ -88,6 +88,7 @@ Long-lived owner of Application, queues and adapter listeners; Web is a client.
 - def `prepare_admission` — One admitted member: `sender` on `route`, which becomes `route_id` of `channel_id` once this succeeds.
 - def `write_route_keys` — Each route of a ROUTE_KEYS channel gets its key in <data>/private/route-keys/<channel>-<route>.json, ignored by git, for the agent on that line to read (ADR-033 D4).
 - class `RuntimeHost`
+  - `restart_hold` — What held the restart now asked for, taken once: {since, steps, changes}, or None when nothing held it.
 
 ## `application`
 
@@ -310,6 +311,12 @@ When the Host was taken away from outside, she should not have to infer from a g
 - def `cause_words` — A worker_down row's cause in words, by its kind (the part before `:`).
 - def `stop_words` — One outage in words, what and when; only the newest of a list is 「上次」, an older one 「再往前一次」.
 - def `block` — host_from_program for a home turn: the outages of the last day and those not yet shown (`listed`; killed from outside, crashed, or her worker down while the Host ran on), newest first, at most LISTED with how many there were, and the gate's
+- def `held_of` — What held a restart as the stopping worker sent it, checked: {since, steps: [{by, since, task_id?, calls?}], changes}, or None when nothing held it.
+- def `restarted` — The worker restarts a completed start hands over (ADR-113): one `worker_restart` row each, complete when written, its id from when it was asked, so handing one over again writes nothing new.
+- def `forget_restarts` — At a worker start: the restart rows shown more than RESTART_KEPT_DAYS ago go; an unshown one stays.
+- def `restart_window` — The restart rows her home turn reads: asked within the last day, or not yet shown, by when they were asked.
+- def `told_restarts_here` — Whether a home turn in this scene says the worker restarts: the owner's local scene and a line whose channel kind is a home one (channel_kinds.home), never the owner's direct messages on a platform or a home group.
+- def `restarts_block` — The worker restarts for her home turn (ADR-113): `count` of every restart of the window (`restart_window`) with its `note`; the routine ones (planned, held under ROUTINE_SECONDS or not at all, back within it, in no run) folded into `routine
 - def `shown` — A turn that showed these outages committed: each is stamped `shown_at` once.
 - def `main` — `python -m asuna.host_stops planned [--by NAME]`: mark the running Host's coming stop as a planned restart.
 

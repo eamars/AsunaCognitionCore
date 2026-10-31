@@ -250,9 +250,10 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `skillDirectories`
   - `applyInPlace` — A persona or channel publication that needs no restart: the worker takes the persona model at once, new action scopes discover its skills, and the next integration_start runs its adapter.
   - `personaProbe` — The running worker's reading of a persona package published to `root`, as it would take it on a swap or at the next start (persona.check: its model loaded and its id checked, nothing applied), in the boot probe's form.
-  - `ready`
+  - `ready` — Start the worker.
   - `handOver` — Hand the open span to the worker until it is recorded (ADR-101): beside a completed start, so a slow database never holds up the turns waiting for it, and again every HANDOVER_SECONDS while that worker runs, so a hand-over that failed does 
   - `downNow` — A worker went down unplanned (ADR-101): the open span in the data folder.
+  - `tellFile` — The restarts to tell (restart-tell.js), in the data folder; nothing where the plugin has none.
   - `startAgain` — A start that failed is tried again, further apart each time, until one succeeds: a fault that passes (a database connection reset while the network link drops during her first minute) must not leave her down while the Host runs on.
   - `dshHome` — DSH's home: the profile's, else the variable the Host was started with.
   - `attachSchedule`
@@ -440,6 +441,25 @@ The recovery preset plugin: a repair session limited to the project development 
 - def `name`
 - def `inject`
 - def `apply`
+
+## `restart-tell.js`
+
+[packages/cognition-core/src/restart-tell.js](../../packages/cognition-core/src/restart-tell.js)
+
+The worker restarts she is told about afterwards (ADR-113), kept until the worker each one brought up records it. Only this plugin replaces a worker in place while the Host runs on, so it keeps each restart in the profile's data folder, `restarts-to-tell.json`: a list of {at, cause, held, held_sent, back}. `at` is when the restart began, `cause` its kind from a closed list (`causeOf`), `held` what held it before it was asked for, as the stopping worker sent it (null when nothing held it), `held_sent` false when the request carried no `held` at all (an older worker), and `back` when the start it ran completed. A completed start hands each entry with a `back` to the worker (`host.restarted`), which records it once as a `worker_restart` row (host_stops.py); then it leaves the file.
+
+- def `FILE`
+- def `KEPT_ENTRIES`
+- def `LOG`
+- def `LOG_BYTES`
+- def `LOG_KEPT_BYTES`
+- def `causeOf` — A restart's reason as one kind of the closed list her words key on: `published`, `settings`, `settings_restored`, `recovery:<project>`, `again`, `unknown`; null for a worker that failed (not told here).
+- def `entries` — The restarts to tell, oldest first; empty when there are none.
+- def `asked` — A restart began: keep it to tell.
+- def `cameUp` — A start completed: the restart that ran it (`at`, null when no restart did) is stamped `back`, and every other entry still without one goes (left by a Host stopped mid-restart; the Host's stop is its own row).
+- def `startFailed` — The start a restart ran failed: the entry goes (the outage records it).
+- def `tell` — Hand every entry with a `back` to the worker; those it answers it recorded leave the file.
+- def `appendLog` — The owner's log of every restart, read by nothing: one line each; past LOG_BYTES its newest LOG_KEPT_BYTES are kept, cut at a line.
 
 ## `role.js`
 

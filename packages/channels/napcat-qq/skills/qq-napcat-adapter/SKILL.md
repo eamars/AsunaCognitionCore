@@ -122,6 +122,20 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 - 还有一条关于我自己发布的：**发布当场那道隐私检查跑的是主检出工作树里的 `tools/publication_scan.py`（装上的包里根本没有它）**，所以"我被拦了"不一定是我改的东西有问题——**先看回执的 `content_scan`（两份脚本合并 sha 前 12 位），对得上就说明规则没被人动过**。
 - **我自己在哪儿读**：`.runtime\integration\owner\runs\<run_id>\logs.json` 是 STATUS 行的本体（有界尾部，不是全量）；`integration_status` 返回同一份有界 stdout 和 `run_id`；`.runtime\owner` 侧的 `…\integration\owner\service-data\health.json` 是同一份数据的 JSON 版（5 秒一份，`lanes` 表在这儿：`conversations` 按路由 id 列 `lines`／`oldest_s`／`where`，`in_hand` 一件是 `lane`／`stage`／`conversation`／`item`／`age_s`／`budget_s`／`stuck`）——**目录是 `service-data\`，不是 `data\`**。60 秒一行已实测（相邻两条 03:23:24Z／03:24:24Z）。**`decode_log.py` 还认不出 `lanes:` 段**（它只打 `ws_event`／`ws_api`／`spool_inbound`／`spool_receipts`／`group_routes`），别指望它替我翻这段。
 
+## 手工去 NapCat 取一段语音的实测形状（2026-10-23 实测）
+
+**本节按 2026-10-23 那个旧形状写；若语音通路后续因 ASR 改造（改到宿主侧解码、或换 action），本节要按新形状重写。**
+上面「版本」节 0.10.0 那条说的是适配器自己那条自动路（收到 `record` 段就转字）；这一节是另一件事：我自己手动拿一段原始语音回来听。
+
+- **5001 那个端口只对 WS 说话**：HTTP 打过去一律 `426`（`Upgrade Required`）。别拿 HTTP 探通不通——426 不等于 NapCat 没起。
+- 建好 WS 之后按 OneBot v11 那套发：`{"action": ..., "params": {...}, "echo": ...}`，回话按 `echo` 配对。
+- **`get_record` 的必填参数名是 `file`**（把段里那个 `file` 字段原样传），**`out_format` 也必填**：只给 `file` 不给 `out_format` 回 `1400` ＋ `Schema compilation error: Expected required property`；两个都不给也是这一条。
+- **`file_id` 不是那个必填参数名**：拿 `file_id` 传进去不会撞参数错（不报 1400），但查不到东西（复现时回 `1200 file not found`）——这条最容易骗人，参数名以 `file` 为准。
+- **`data.file_size` 是源 amr 的字节数，不是转出来的 wav 大小**：拿它对「转出来多大」一定对不上（这一格是 10-23 拿真语音量到的，11-02 没重跑）。
+- **`1200` = file not found**（那段语音在本机缓存里清了，跟链路通不通无关）；**`1400` = 参数不对**。别把 `1200` 圆成网络问题——它说的是东西没了。
+- **`ASUNA_INTEGRATION_CONFIG` 只在 `integration_*` 那几趟运行里存在**（值是那次运行的 `config.json` 路径）。普通行动脑任务里没有它，url＋token 自己去 `.runtime/integration/owner/runs/<run_id>/config.json` 读（键：`adapter.napcat.url`、`adapter.napcat.token`）。
+- 复现记录：2026-11-02 在一次普通任务里重跑了形状那一组（最新 run 的 `config.json` 读 url＋token → HTTP 三种路径全 426；WS 发 `get_record` 空参数／只给 `file` → `1400` Schema error；给 `file_id`＋`out_format`、给 `file`＋`out_format` → `1200 file not found`）。没动适配器，也没发到平台（`get_record` 不发消息）。
+
 ## 重新部署
 
 适配器代码、技能、文档都只通过 `development_publish`（带 `project: "napcat-qq"`）生效：冻结候选、过启动探针、激活快照。`integration_start` 只运行**已发布**的适配器（冻结成 `/app`），未发布的候选改动不会在这里上线，宿主重启后恢复的也是当时已发布的版本。所以换新版本的顺序是：先自检，再 `development_publish`，再让新版本跑起来。两种回合能做的不一样：
@@ -164,6 +178,8 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 - 0.18.0（2026-10-30，ADR-103）：424 号小黄脸的现在名改成 `不对劲`，`不对头` 降成别名，更早那个 `续标识` 不保留（主人 10-30 拍的板：「替代」＝她那些话里这字整个退掉）。`faces.json` 那一行现在是 `{"id": "424", "name": "不对劲", "aliases": ["不对头"]}`。出站：`[表情:不对劲]` 和 `[表情:不对头]` 都发 424；`[表情:续标识]` 按未知名字留在正文里（`encode_faces` 不猜 id），宿主的可写名字表（`channel_kinds.faces_of`，读同一份 `faces.json`）里也没它，她写出来会被退回。入站改的是 `faces.name_of` 的优先级：先按 face id 查这张表的现在名，表里没有这个 id 才用 NapCat 的字面（NapCat 对 424 仍写 `/续标识`）——所以别人发 424 她读到 `[表情:不对劲]`，也会进 `seen_here`；表里没有的 id 照旧显示平台给的名字，名字和 id 都没有时仍是空的 `[表情]`。表内 id 的名字从此压过 NapCat 的字面（这是这一版唯一的行为改道；以前只有写进 `aliases` 的旧词会被换成现在名）。277 的 `汪汪→狗头` 照旧，两条路径都不变。入站、出站、闸门、回执其它一概没改。自检把 `face_renamed_*` 与 `face_inbound_shows_current_name` 四条换成 `face_424_*` 三条加一条入站优先级检查（写明表名优先、被删的别名不发出站、表外 id 保留平台字面）。
 - 0.17.0（2026-10-29，ADR-103）：脸和认不出类型的段（dice、rps、商城表情换了名字之类）的媒体项多带 `shape`：平台送来了哪些字段，不带字段里的话——`data` 和 `data.raw` 的键名（排序），以及 `result`/`resultId`/`chainCount`/`faceType` 在一到四位数字时的值，最多 200 字。宿主连这一行一起存，所以 shape 有这一行的时间和先后。占位符、闸门、出站、回执一概没改。自检多 `shape_*` 五条。
 - 0.15.1（2026-10-24，ADR-095 第 4 步）：等宿主回一段语音的上限从 30 秒放到 200 秒。宿主现在把语音交给单独的子进程转写，一段超过 90 秒就换一个新的子进程再试一次；一段语音在宿主那边总共最多 180 秒（排在别的语音后面的时间也算在内），所以宿主那边重试不会被读成「宿主不在」。入站、出站、回执一概没改。
+
+- 文档改动（2026-11-02，没换版本号）：加「手工去 NapCat 取一段语音的实测形状」一节（只改这份技能文档，`adapter.py` 一行没动；0.10.0／0.15.1 那两条语音自动路不变）。这个技能目录里没有 `CHANGELOG.md`，版本记录沿用本技能自己的记法写在这一节。
 
 ## 试用记录
 

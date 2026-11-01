@@ -3,7 +3,7 @@
 
 这份技能是「每日自省」的取数＋初判做法，所以这里查四件事：
 1. 文件本身：frontmatter 能解析、name 与目录名一致、章节在、脚本能编译、换行是 LF（读字节数 CR）；
-2. 内容要点：头判据句、取数各步、四维判据 a／b／c／d、c 的五种候选形态、d 的排除凭据、报告三块、
+2. 内容要点：头判据句、取数各步、四维判据 a／b／c／d、c 的五种候选形态、d 的排除凭据、报告四块（含发起统计与主动开话题读数表）、主动开话题维的判据要点、
    「改不改」三答案、四个落口、「夜间回合的边界」三拍与时间顺序都在；
 3. 家规：正文无日期、无来历叙述；不带别人的个人信息（禁词表、字面编号、这台机器的私密名单；
    名单配不上或 0 条有效词记红 `leak_scan_ran`，「没跑」不许长得像「过了」）；
@@ -33,6 +33,7 @@ SECTIONS = [
     "## 二、四维初判",
     "## 三、报告结构",
     "## 四、产出落口（一条只落一口）",
+    "## 主动开话题的效果",
     "## 夜间回合的边界",
     "## 做到的标准",
 ]
@@ -96,6 +97,28 @@ REPORT = [
     ("report_no_verdict_fails", "**只有「没判」不合格**"),
     ("report_change_items", "改什么、落哪一口、一句理由、证据行号"),
     ("report_no_judging_person", "不替那个人写感受和动机"),
+    ("report_four_blocks", "写成四块，顺序固定"),
+    ("report_block_4_title", "**4. 主动开话题读数表**"),
+    ("report_initiation_stats", "**发起统计**"),
+    ("report_stats_dedup_rows", "去重 K 行"),
+    ("report_stats_both_scales", "同尺不同刻度只并看不换算"),
+]
+
+NEWDIM = [
+    ("newdim_qq_group_only", "只计 QQ 群场景"),
+    ("newdim_internal_not_message", "「指向我的消息」不含 `internal` 行"),
+    ("newdim_this_scene_only", "前 10 分钟窗口只看本场景，不跨群"),
+    ("newdim_reply_to_rule", "`reply_to` 有值且指向他人行 → 该句归回复"),
+    ("newdim_reply_to_self", "`reply_to` 指向我自己上一句算续话，视同无值"),
+    ("newdim_proxy_two_conditions", "**且**内容是他人托付的话"),
+    ("newdim_proxy_zero_normal", "代发为 0 属常态"),
+    ("newdim_visit_mixed", "够判据仍归发起"),
+    ("newdim_response_row", "**回应行也算**"),
+    ("newdim_ngram_not_counted", "其余 n-gram 重合只列不计数"),
+    ("newdim_shared_row_dedup", "必须去重计数"),
+    ("newdim_rounds_per_row", "每个接话行计 1 轮"),
+    ("newdim_rounds_to_window_end", "统一数到窗口终点"),
+    ("newdim_anti_drift", "窗未满多、判据都能执行，不算数据不够"),
 ]
 
 OUTLETS = [
@@ -231,6 +254,8 @@ def main():
     desc = (fields or {}).get("description", "")
     check("description_specific_enough", len(desc) >= 120, "len=%d" % len(desc))
     check("description_has_head_criterion", "不需要迎合任何人" in desc)
+    check("description_has_initiation_dimension", "主动开话题" in desc)
+    check("body_no_three_blocks", "写成三块" not in body)
     kinds = re.findall(r"[a-z]+", (fields or {}).get("scene_kinds", ""))
     check("scene_kinds_home", "home" in kinds, "scene_kinds=%s" % ((fields or {}).get("scene_kinds") or "没写"))
 
@@ -242,7 +267,7 @@ def main():
     for index, section in enumerate(SECTIONS):
         check("section_%d" % index, ("\n" + section) in ("\n" + body), section)
 
-    for group in (FETCH, DIMENSIONS, REPORT, OUTLETS, BOUNDARY):
+    for group in (FETCH, DIMENSIONS, REPORT, NEWDIM, OUTLETS, BOUNDARY):
         for name, token in group:
             check(name, token in body, token)
 

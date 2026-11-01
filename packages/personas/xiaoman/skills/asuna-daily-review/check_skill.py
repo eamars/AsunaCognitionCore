@@ -119,6 +119,9 @@ NEWDIM = [
     ("newdim_rounds_per_row", "每个接话行计 1 轮"),
     ("newdim_rounds_to_window_end", "统一数到窗口终点"),
     ("newdim_anti_drift", "窗未满多、判据都能执行，不算数据不够"),
+    ("newdim_report_type_column", "报告型／单向交付句"),
+    ("newdim_rate_per_group", "被接率按群分报"),
+    ("newdim_total_strip_report_type", "剔掉报告型后再算一个数"),
 ]
 
 OUTLETS = [

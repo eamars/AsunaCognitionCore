@@ -1,6 +1,6 @@
 ---
 name: asuna-outbound-round
-description: 沈小满「出门那一轮」（在群／私聊露面）的固定做法。时机：就在我身处的那个场景做，查原话当场能用、群笔记当场落，不在本机这边绕道翻开发库。开口前几查：那条消息几点发的（凉了先探一句）、对方问的是非题还是开放题、点名形状（要 @ 就照抄整个标签，说起某人只写名字，不是人别带井号）、对方能不能一句话回我、原话里「你」「我」的归属（确认不了就标归属未定，先不动状态）。回看：接住和砸的都记，一次至多一条教训，笔记只写下次能照做的规则。一条边界：别拿回看自己发出的出站消息去验 @ 有没有落成提及——存的就是我写出去的原样，形状在发送前写对，落成与否判不了就写判不了。这条道上有哪几份技能的真名单（群 6 份／别人私聊 1 份／家里 12 份）也写在这里：调 skill 只用真名，别编名字换变体重试。出门开口前、复盘一轮对话时读这一份。附零依赖自检 check_skill.py。
+description: 沈小满「出门那一轮」（在群／私聊露面）的固定做法。时机：就在我身处的那个场景做，查原话当场能用、群笔记当场落，不在本机这边绕道翻开发库。开口前几查：那条消息几点发的（凉了先探一句）、对方问的是非题还是开放题、点名形状（要 @ 就照抄整个标签，说起某人只写名字，不是人别带井号）、对方能不能一句话回我、原话里「你」「我」的归属（确认不了就标归属未定，先不动状态）。回看：接住和砸的都记，一次至多一条教训，笔记只写下次能照做的规则。一条边界：别拿回看自己发出的出站消息去验 @ 有没有落成提及——存的就是我写出去的原样，形状在发送前写对，落成与否判不了就写判不了。这条道上有哪几份技能的真名单（群 7 份／别人私聊 2 份／家里 14 份，11-02 现量）也写在这里：调 skill 只用真名，别编名字换变体重试。出门开口前、复盘一轮对话时读这一份。附零依赖自检 check_skill.py。
 scene_kinds: [home, group, dm]
 ---
 
@@ -38,9 +38,11 @@ scene_kinds: [home, group, dm]
 
 ## 这条道上有哪几份技能——别编名字
 
-- **群（group）6 份**：`asuna-become-human`、`asuna-bot-or-person`、`asuna-image-generation-and-display`、`asuna-outbound-round`、`asuna-running-version`、`asuna-usage-readout`。
-- **别人私聊（dm）1 份**：只有 `asuna-outbound-round`——就是这一份。
-- **家里（home／owner_private，含 peer 线）12 份全给**：上面那 6 份，加 `asuna-offline-selfchecks`、`asuna-render-budget-per-place`、`asuna-credentials`、`asuna-database`、`asuna-self-improvement`、`qq-napcat-adapter` 这六份不带出去的。
+- **群（group）7 份**：`asuna-become-human`、`asuna-bot-or-person`、`asuna-image-generation-and-display`、`asuna-meme-lookup`、`asuna-outbound-round`、`asuna-running-version`、`asuna-usage-readout`。
+- **别人私聊（dm）2 份**：`asuna-outbound-round`（就是这一份）和 `asuna-meme-lookup`。
+- **家里（home／owner_private，含 peer 线）14 份全给**：上面那 7 份，加 `asuna-daily-review`、`asuna-offline-selfchecks`、`asuna-render-budget-per-place`、`asuna-credentials`、`asuna-database`、`asuna-self-improvement`、`qq-napcat-adapter` 这七份不带出去的。
+- **2026-11-02 这一版怎么量的**：从 `.runtime/adr008/activation.json` 里 `active` 选中那格的生效根（人格包＋认知核＋通道包各自的 `packageRoot/skills`）列出实际存在的技能目录，按各份 `SKILL.md` 头部 `scene_kinds` 字段数；头部没写 `scene_kinds` 的按只在家里算。这一趟是**生效根＋头部字段**算出来的，**没跑群任务现场 catalog 读数**。还有两格没验：群那一拍的角色回合能看见几份；被配成 owner_private 的那个群（那里所有根都出现，别拿它当群也是 14 份）。
+- **旧观测留一行不删**：10-22 那次实判是群 6 份／别人私聊 1 份（dm 那格当时是合成配对）／家里 12 份——那份名单里没有 `asuna-meme-lookup`，`asuna-daily-review` 也还没建，已过时。
 - 名单会变——改谁的 `scene_kinds`、新加一份技能都会变，用之前先当它是旧的。
 
 两条规矩：

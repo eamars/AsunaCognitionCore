@@ -130,7 +130,7 @@ rc=0 且 stderr 空才算数（沙箱绿了不等于现场能跑）。
 
 发布闸只管本次改动的文件：`publicationFindings` 会对本次改动的文件跑检出里的 `publication_scan.py`，回执里有 `content_check`／`content_scan`，检出里没有那份脚本就跳过并在回执里写 skipped。没改的文件、整个包根的基线、没有检出的环境它都不管，这份自检补的是这几块。这份有三格：`leak_scan_ran`（名单配不上或 0 条就红，不许「没跑」长得像「过了」）、`no_listed_words`（本技能目录里的文件，零命中）、`no_listed_words_outside_envoy`（找得到包根时扫整个包根，命中只许在 `integration/envoy_meters_read.py`；找不到包根就打一行 NOTE，没真扫）。
 
-基线：名单 69 条、命中 11 处全在 `integration/envoy_meters_read.py`——那 11 处是既有基线，不算新增。命中数与名单条目数会漂，漂了脚本只打 NOTE、按上面的三岔判，不靠它变红。缺口：脚本只在读得到本机名单的地方真扫（名单在 `.runtime/private/`，不进包）；换到读不到名单的机器上，会红在 `leak_scan_ran`，那是「没真查」，不是「干净」。
+基线：名单 90 条、命中 11 处全在 `integration/envoy_meters_read.py`——那 11 处是既有基线，不算新增。69 是 10-24 发布前的读数，11-02 现量 90 条（本机名单自己长出来的，主人判过不是串词）：名单条目数一长，正文这一格和脚本里的基线一起更。命中数与名单条目数会漂，漂了脚本只打 NOTE、按上面的三岔判，不靠它变红。缺口：脚本只在读得到本机名单的地方真扫（名单在 `.runtime/private/`，不进包）；换到读不到名单的机器上，会红在 `leak_scan_ran`，那是「没真查」，不是「干净」。
 
 钉：`pin_d_content_scan_documented`（这一格验的是本节写了这件事；扫描本身是上面三格在跑）。
 
@@ -153,3 +153,15 @@ rc=0 且 stderr 空才算数（沙箱绿了不等于现场能跑）。
 报告正文与它自己贴出的表／原始读数冲突时，以表格为准，并追问同一格；两趟只读对同一格报出两个值，别拿最新一版当默认。
 
 钉：`pin_h_table_beats_prose`。
+
+
+### (i) 派活交代里写死中间产物落点
+
+派活交代必须带这一句硬话：**`TEMP`／`TMP`／`TMPDIR` 只活一条命令——命令一结束那一格就被回收（`sandbox_run`、`development_run`
+都一样），跨命令要留的东西一律写 `/task`（或候选里），别拿 TEMP 当中间存储。**
+
+丢的形状要说清：脚本往 TEMP 写、下一条命令再读，读不到时那条写文件的命令早就 rc=0 交回过了——**静默丢，还丢在回执之后**，
+我看见的是一串绿。所以落点要在交代里写死，别留给「他大概会放对」。
+
+钉：`pin_i_temp_one_command`（这一节的字面）＋ `temp_rule_present_when_temp_mentioned`（正文一提到临时目录／TEMP 就必须带上
+上面那句落点，缺了就红；判本技能正文，读得到核心技能 `asuna-self-improvement` 的正文时一起判，读不到打 NOTE 说没真查）。

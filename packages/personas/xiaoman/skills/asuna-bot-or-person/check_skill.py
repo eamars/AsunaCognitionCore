@@ -229,6 +229,28 @@ SPEAKER_LABEL_RULE = [
 ]
 
 
+# 命令词候选表那一节（2026-11-02）：整节关键串挂在同一条判据名下，剥掉那一节只红这一格，缺哪些写进 detail。
+COMMAND_TABLE_RULES = [
+    "## 命令词候选表",
+    "每行标来历档位",
+    "群发序：硬证据先",
+    "管理指令不群发",
+    "带尾巴的两发全哑",
+    "登记键＝起头串＋`版本:` 行",
+    "不挂名片",
+    "这一族的子命令结果打折",
+]
+
+# 成员表降级口径那一节（同上：只查字面在不在，语义对不对归我）。
+MEMBER_FALLBACK_RULES = [
+    "## 成员表取不到时的降级口径",
+    "号码未解析",
+    "不写「不像」",
+    "权限类话只当形状读",
+    "看得见 **7 门**",
+    "已作废",
+]
+
 # 三档必须还是三档，且各家名字都在（分辨法靠它们）
 TIERS = ["**强**（", "**中**（", "**弱**（"]
 VENDORS = ["AstrBot", "Hermes", "ATRI", "MaiBot", "NapCat", "SnowLuma"]
@@ -410,6 +432,15 @@ def main():
           "归属判据缺 %d/%d 个关键串：%s"
           % (len(missing_attribution), len(SPEAKER_LABEL_RULE), "、".join(missing_attribution)))
 
+    # 命令词候选表／成员表降级两节（2026-11-02）：整节关键串挂在一条判据名下，剥一节只红那一格。
+    missing_command_table = [token for token in COMMAND_TABLE_RULES if token not in body]
+    check("command_word_candidate_table", not missing_command_table,
+          "命令词候选表判据缺 %d/%d 个关键串：%s"
+          % (len(missing_command_table), len(COMMAND_TABLE_RULES), "、".join(missing_command_table)))
+    missing_member_fallback = [token for token in MEMBER_FALLBACK_RULES if token not in body]
+    check("member_table_fallback", not missing_member_fallback,
+          "成员表降级口径缺 %d/%d 个关键串：%s"
+          % (len(missing_member_fallback), len(MEMBER_FALLBACK_RULES), "、".join(missing_member_fallback)))
     # 个人信息：字面编号、账号那样的长数字串；对照名单本身留在仓库外
     check("no_literal_ids", not LITERAL_ID.search(body),
           "出现字面编号：" + ",".join(LITERAL_ID.findall(body)[:5]))

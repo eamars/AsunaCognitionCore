@@ -99,6 +99,10 @@ anime 路由（实测 `selected_workflow=anima-turbo-v1-1`）。想要照片感�
 - 方言与粒度跟着选中 workflow 的 `prompting.granularity.recommended`；不要把别的模型族的触发词抄过来。
 - 角色、服装、姿势、光线这些细节留在 `parameters.prompt` 里（`routing_boundary`：不为一个角色或一套衣服造路由）。
 - 明确写 SFW 约束与不要的东西：`fully clothed` / `modest` / `no nsfw`，加 `watermark, text, extra fingers, deformed hands`。
+- **店招／货架那一族：小价签是乱码高发位**。`every label blank`、`no letters` 这种整体约束压不住货架上那些小价签。
+  实测两种写法有效：① 把价签本身要求写成 `blank white tag`，并且**整条提示词里不要再出现 `shelf label` 这个词**；
+  ② 让镜头离开货架特写，价签根本不出现在画面里。撞出这条的是 anime 那条 fallback 路线（`anima-turbo-v1-1`），
+  别的路线没重测。
 - 主人说「只画日常」时，宁可少要一点细节，也别为了效果擦边。这条是偏好，不是模型能自动保证的——
   它只是 `content_mode=sfw` 的路由选择，画面内容还得靠 prompt 与（能做到的）复核。
 
@@ -413,6 +417,8 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 
 1. 手和手指数量对，脸没崩；
 2. 画面里没有乱码文字——要带字就得字对，对不了就宁可无字；
+   判这一格要专门盯**小价签**：大招牌干净不等于没乱码，货架那些小价签最容易冒 `ON`／`VK` 这种小字母
+   （有效写法见「步骤 2」里店招／货架那一条）。
 3. 构图没跑：改图不能把人重画成另一个人、另一套衣服、另一个姿势；
 4. 内容适合那个群（不是那个场合该看的，就不发）。
 

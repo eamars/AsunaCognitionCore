@@ -17,7 +17,7 @@
 5. 补遗的钉：「判据补遗」一节里各条各一个 pin_* 检查，只认本节范围内的字面。
 6. 内容级私密词扫描（同日补）：leak_scan_ran／no_listed_words／no_listed_words_outside_envoy 三格。
    名单配不上或 0 条＝红 leak_scan_ran（没真查，不是干净）；本技能目录里的文件零命中；
-   找得到包根时再扫整个包根，命中只许落在 integration/envoy_meters_read.py（既有基线：名单 69 条、
+   找得到包根时再扫整个包根，命中只许落在 integration/envoy_meters_read.py（既有基线：名单 90 条、
    11 处，漂了只打 NOTE，不变红）。命中只报 文件:行号:类别，绝不回显词本身。
 
 不联网、不跑离线套件、不写 Mongo、不发 QQ。
@@ -102,15 +102,22 @@ BACKLOG_PINS = [
     ("pin_b_corroboration", ["必须带旁证", "不拿最新一版当现场"]),
     ("pin_c_module_file", ["`模块.__file__`", "主干那份 blob"]),
     ("pin_d_content_scan_documented", ["内容级私密词扫描",
-                                       "名单 69 条、命中 11 处全在 `integration/envoy_meters_read.py`"]),
+                                       "名单 90 条、命中 11 处全在 `integration/envoy_meters_read.py`"]),
     ("pin_f_which_zero", ["报 0 之前先说它是哪种 0", "必须显式给 `fields` 或先枚举键路径"]),
     ("pin_g_receipt_or_no_number", ["指不到就写「我没读到号」", "在跑，号等回执"]),
     ("pin_h_table_beats_prose", ["以表格为准，并追问同一格"]),
+    ("pin_i_temp_one_command", ["跨命令要留的东西一律写 `/task`", "别拿 TEMP 当中间存储"]),
 ]
 
-# 内容级私密词扫描的既有基线（2026-10-24 发布前扫整棵候选根的读数）：漂了只打 NOTE，不变红。
+# 派活交代的落点（2026-11-02 主人交代，来路是 10-22 部署环境那条 TEMP 回收改动）：正文一提到临时目录／TEMP，
+# 就必须同时写「跨命令要留的东西一律写 `/task`」。只提 TEMP 不提落点，等于叫行动脑把中间产物放进一条命令后
+# 就回收掉的地方——静默丢，还丢在回执之后，我看见的是绿。核心技能那份正文（asuna-self-improvement）同一条判据。
+TEMP_MENTION = re.compile(r"临时目录|TEMP|TMPDIR|\bTMP\b")
+TEMP_LANDING_RULE = "跨命令要留的东西一律写 `/task`"
+
+# 内容级私密词扫描的既有基线（2026-10-24 发布前扫整棵候选根的读数；名单条目数 2026-11-02 现量更新 69→90，主人当日判过）：漂了只打 NOTE，不变红。
 ENVOY_FILE = "integration/envoy_meters_read.py"
-BASELINE_LIST_ENTRIES = 69
+BASELINE_LIST_ENTRIES = 90
 BASELINE_ENVOY_HITS = 11
 
 SECTIONS = [
@@ -305,6 +312,25 @@ def read_frontmatter(text):
     return fields, body
 
 
+def core_skill_body():
+    """核心技能 asuna-self-improvement 的正文。按「core 候选 → 主检出」的顺序找，读到哪份写进 detail。"""
+    for rel in (
+        os.path.join(".runtime", "work", "self-development", "core",
+                    "packages", "cognition-core", "skills", CORE_SKILL, "SKILL.md"),
+        os.path.join("packages", "cognition-core", "skills", CORE_SKILL, "SKILL.md"),
+    ):
+        for start in (HERE, os.getcwd()):
+            d = os.path.abspath(start)
+            for _ in range(12):
+                d = os.path.dirname(d)
+                cand = os.path.join(d, rel)
+                if os.path.isfile(cand):
+                    text = read_utf8(cand)
+                    if text is None:
+                        return None, cand
+                    return read_frontmatter(text)[1], cand
+    return None, None
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "SKILL.md")
     results = []
@@ -361,6 +387,19 @@ def main():
     for name, tokens in BACKLOG_PINS:
         missing = [token for token in tokens if token not in backlog]
         check(name, not missing, "补遗一节里缺：" + "、".join(missing))
+    # TEMP 落点这一族（2026-11-02）：提到了临时目录就必须给落点。本技能正文必判；
+    # 核心技能那份读得到就一起判（读到哪份写进 detail），读不到打 NOTE——「没真查」不许长得像「过了」。
+    temp_missing = []
+    if TEMP_MENTION.search(body) and TEMP_LANDING_RULE not in body:
+        temp_missing.append("本技能正文")
+    core_body, core_path = core_skill_body()
+    if core_body is None:
+        notes.append("NOTE 读不到核心技能 %s 的正文（试过的位置：%s）——TEMP 落点这一格只真查了本技能正文"
+                     % (CORE_SKILL, core_path or "没找到路径"))
+    elif TEMP_MENTION.search(core_body) and TEMP_LANDING_RULE not in core_body:
+        temp_missing.append("核心技能正文")
+    check("temp_rule_present_when_temp_mentioned", not temp_missing,
+          "提到临时目录／TEMP 却没写「%s」：%s" % (TEMP_LANDING_RULE, "、".join(temp_missing)))
     # 通用清单回潮：命令字面量回到散文 = 又把核心技能抄了一遍
     regressed = [token for token in GENERIC_SUITE_TOKENS if token in prose]
     check("no_generic_suite_list_in_prose", not regressed, ",".join(regressed))

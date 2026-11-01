@@ -74,19 +74,25 @@ TIMING = [
     ("timing_no_dev_db_detour", "别在本机这边绕道翻开发库"),
 ]
 
-# 2026-10-22：「这条道上有哪几份技能——别编名字」一节。这份技能是出门那一轮本来就要带的，名单写在这里，
-# 所以真名单（群 6 份里除自己之外的 5 个名字、dm 1 份、家里 12 份里不带出去的那六份之一）、两条规矩、
-# 都得在——少了哪条，红的就是哪条，不合并成一条「名单在不在」。
+# 2026-10-22 起有这一节；名单每现量一次改一次（2026-11-02 现量：群 7／dm 2／家里 14）。
+# 这份技能是出门那一轮本来就要带的，名单写在这里，所以真名单（群那份里除自己之外的名字、dm 那两份、
+# 家里不带出去的那几份之一）、量法、旧观测那行、两条规矩，都得在——少了哪条红的就是哪条，不合并成一条「名单在不在」。
 ROSTER = [
-    ("roster_group_count", "群（group）6 份"),
+    ("roster_group_count", "群（group）7 份"),
     ("roster_group_become_human", "asuna-become-human"),
     ("roster_group_bot_or_person", "asuna-bot-or-person"),
     ("roster_group_image_generation", "asuna-image-generation-and-display"),
+    ("roster_group_meme_lookup", "asuna-meme-lookup"),
     ("roster_group_running_version", "asuna-running-version"),
     ("roster_group_usage_readout", "asuna-usage-readout"),
-    ("roster_dm_count", "别人私聊（dm）1 份"),
-    ("roster_home_count", "12 份全给"),
+    ("roster_dm_count", "别人私聊（dm）2 份"),
+    ("roster_dm_self", "asuna-outbound-round"),
+    ("roster_home_count", "14 份全给"),
+    ("roster_home_daily_review", "asuna-daily-review"),
     ("roster_home_kept_private", "asuna-credentials"),
+    ("roster_measured_method", "按各份 `SKILL.md` 头部 `scene_kinds` 字段数"),
+    ("roster_no_live_catalog_probe", "没跑群任务现场 catalog 读数"),
+    ("roster_old_reading_marked", "已过时"),
     ("roster_rule_real_names_only", "只用表里的真名"),
     ("roster_rule_no_variant_retry", "别换变体重试"),
     ("roster_rule_no_name_guessing", "别靠猜名字"),

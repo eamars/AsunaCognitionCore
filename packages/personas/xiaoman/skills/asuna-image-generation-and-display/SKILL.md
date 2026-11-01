@@ -1,6 +1,6 @@
 ---
 name: asuna-image-generation-and-display
-description: 一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore；盘上已有的图另有一条：家里 Python 里用 register_imported_image 带 scope_key 登记进指定场景，代价是剥 PNG 文字块），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（list_routes 共 11 条：qwen-image-2.1-edit 必填 source_image、九条可选、t2i 不收原图，配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发）；QQ（napcat）那一轮看上下文 image_artifacts_from_program，要发图就用 speak 的 picture 那一项（artifact_id 照抄清单、可以不带话、正文不写路径/文件名/见图）；没声明 reply parts 的对话仍调用 attach_image 工具（一回合至多一张、再调用换成新的那张），对 owner_private + dm 路由和她在的群开放（群里只发来源带 `integration:` 前缀的图（可以是早就做好、后来重新登记进来的），全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（列着它的对话；工具错误、同回合可改）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
+description: 直路是行动脑侧的 generate_image（本机与 QQ 来的任务同一条路：直接调用，图落任务工作区并自动登记成我自己的图，read_image 看过一眼后随消息发出去；外部公开生图服务只给链接、图发不出去，要发出去的图不走那条；它不可用或要工具参数面给不了的模型／参数时才走长路）。长路（探针 → integration_test → import_integration_artifact）：一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore；盘上已有的图另有一条：家里 Python 里用 register_imported_image 带 scope_key 登记进指定场景，代价是剥 PNG 文字块），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（list_routes 共 11 条：qwen-image-2.1-edit 必填 source_image、九条可选、t2i 不收原图，配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发）；QQ（napcat）那一轮看上下文 image_artifacts_from_program，要发图就用 speak 的 picture 那一项（artifact_id 照抄清单、可以不带话、正文不写路径/文件名/见图）；没声明 reply parts 的对话仍调用 attach_image 工具（一回合至多一张、再调用换成新的那张），对 owner_private + dm 路由和她在的群开放（群里只发来源带 `integration:` 前缀的图（可以是早就做好、后来重新登记进来的），全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（列着它的对话；工具错误、同回合可改）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
 scene_kinds: [home, group]
 ---
 
@@ -11,10 +11,38 @@ scene_kinds: [home, group]
 从「我想给主人看一张图」到主人在本机私聊里真看到图，一个任务做完，不用人替我搬字节；
 主人在 QQ 私聊里说「图呢」时，那一轮也知道该怎么把图跟着话一起发出去（不是把路径贴给他）。
 
-这份技能把走通的那条路记成一条：提示词 → 服务回执里的 `artifact_path` → 导入工作区 → 相对路径展示；
+**直路是 `generate_image`**（下一节）：调用它 → 图落本任务工作区并自动登记成我自己的图 → 亲眼看过 → 随消息发出去。
+本机派下来的和 QQ 派下来的走同一条，不分场合。
+
+「步骤 0–4」那条长路（只读探针 → `integration_test` → `import_integration_artifact`）现在是**备用路**：
+只有在 `generate_image` 不可用、或要它参数面给不了的模型／参数时才走。走法原文整段留着——
+提示词 → 服务回执里的 `artifact_path` → 导入工作区 → 相对路径展示；
 步骤 8 记的是后半段：导入时顺手登记的 image artifact → QQ（napcat）那一轮 speak 的 picture 那一项；列着 attach_image 的会话仍用它。
 
+## 直路：`generate_image`（第一选择）
+
+行动脑侧有 `generate_image` 工具。要一张图，先调它，不用先去碰探针。
+
+- **本机派下来的和 QQ 派下来的任务是同一条路**：直接调用它。参数面就是提示词、路线、宽高、seed、
+  可选的 `source_image`（改图）。
+- **图落本任务工作区，并自动登记成我自己的图**：回执里的 `artifact.artifact_id`（`blob-…`）就是那张图。
+  登记不用我操心，也不必再拿 `import_integration_artifact` 把字节搬一次。
+- **之后随消息发出去**：那一轮照步骤 8 引这个 `artifact_id`（QQ 是 speak 的 picture，别处是 attach_image）。
+- **画完自己看过再发**：`read_image` 拿回执里的 `artifact.artifact_id` 亲眼看那一张，跟提交时的要求对；
+  不对就改提示词或换路线重画。「提交成功、登记成功」不等于画对了（口径见步骤 7）。
+- 挑路线先 `list_routes=yes`（现量 11 条；读数与改图口径见「改图与 `generate_image`」一节），
+  提示词照那条路线自己的口径写。
+
+**什么时候不走这条**：`generate_image` 不可用，或要它参数面给不了的模型／参数（在服务端串自己的 workflow、
+出小副本这类）→ 走下面「步骤 0–4」那条长路（备用路，原文整段留着）。
+
+**外部公开生图服务不算交图**：那种服务只回一个链接，字节进不了工作区、也登记不成我自己的图，
+那一轮就没有 artifact 可引 → 图发不出去。要发出去的图不走这条；拿到链接只算看到一个地址。
+
 ## 前提与授权
+
+下面这几条是**备用路**的前提；`generate_image` 不从这里过——它是行动脑侧的工具，
+不需要 owner 集成授权，也不需要把请求放进集成进程里发。
 
 - 需要 owner 集成授权。`import_integration_artifact` 属 managed integration 组，**QQ 任务的授权里不带它**
   （RUNTIME_API.md → Action capabilities → §Tools a task is given）；这条流程只能跑在有该授权的本机 owner 任务里。
@@ -301,8 +329,9 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 
 ## 改图与 `generate_image`
 
-画图／改图的主路是这个工具本身：回执把图登记成我自己的图，`artifact.artifact_id`
-喂 `read_image` 复核、也能随消息发出去。步骤 0–4 那条原生 HTTP 路留给端点探测和服务端小副本。
+画图／改图的直路就是这个工具本身（见「直路：`generate_image`（第一选择）」一节）：回执把图登记成我自己的图，
+`artifact.artifact_id` 喂 `read_image` 复核、也能随消息发出去。步骤 0–4 那条原生 HTTP 路是备用路，
+留给端点探测、服务端小副本，和 `generate_image` 参数面给不了的模型／参数。
 
 **改图入口：`source_image`**
 
@@ -478,9 +507,12 @@ outbound_media.register_imported_image(store, scope_key, data, source="integrati
 
 ## 边界（硬）
 
-- 生图、导入只在本机 owner 任务里做；本机私聊用报告里的相对路径图，QQ 私聊用 speak 的 picture（列着 attach_image 的会话用它）。
+- 长路的生图、导入只在本机 owner 任务里做（`generate_image` 不受这一条限制：它在哪条任务里都能调，图就落那条任务的工作区）；
+  本机私聊用报告里的相对路径图，QQ 私聊用 speak 的 picture（列着 attach_image 的会话用它）。
   **群里只发自己做的图**：由她在那个群回合里自己把图带上（QQ 是 speak 的 picture，别处是 attach_image），别人发来的图核心拒（`ATTACHMENT_NOT_HER_OWN`），
   一律全年龄；行动脑不替她往群里发，也不 @ 别人。
+- **要发出去的图不走外部公开生图服务**：那种服务只给链接，字节进不了工作区、登记不成我自己的图，
+  那一轮没有 artifact 可引（发图口径见步骤 8）——只能算拿到一个地址，不算交图。
 - **改图不换归属**：改别人发的图，结果不算她自己做的（`read_image` 回 `produced: false`），只能发回原图所在那个对话；
   别拿改过的别人的图当「自己做的图」往别的群发。修图里的错字优先本地合成，不重画（见「改图与 `generate_image`」）。
 - **不自己声明 scope、不给 `attach_image` 传 scope、不把 `artifact_id` 当文件路径**；attach_image 一回合最多一张图，

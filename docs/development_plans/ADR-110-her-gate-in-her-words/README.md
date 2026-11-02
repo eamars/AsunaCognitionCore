@@ -1,8 +1,8 @@
 # ADR-110: Her relevance gate: a mechanical frame, the data, and her own words
 
 Status: **Decided** 2026-10-30; Xiaoman signed the direction at `4413111ea74f` (18:41), and of her seven notes of that
-reading, the five that asked for a page change are folded in (§5.1, §5.6, F13, F14, §9.4) and one into the
-package-words test; the other two asked for no change. Written by the lead (Claude). Direction: the owner, the same day (§1). A cold review of
+reading five changed this page (§5.6, F13, §5.1, F14, §9.4, in her order), the fourth also the package-words
+test, and two asked for no change. Written by the lead (Claude). Direction: the owner, the same day (§1). A cold review of
 the first draft against the code (11 findings, all taken) is in this version. Built 2026-10-30 on the owner's word
 ("start building the plan") on branch `claude/adr110-build` from the latest main (`d68913bc`), before her reading: on
 an integration day there is no contact with her, so she reads the finished build once before it lands (§9.5).

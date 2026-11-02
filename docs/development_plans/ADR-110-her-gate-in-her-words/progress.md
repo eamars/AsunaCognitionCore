@@ -8,4 +8,7 @@ Decided 2026-10-30 (direction: the owner, the same day); Xiaoman signed the dire
 
 Checked 2026-11-02 against git and the live install (`loaded.commit` `ec9211cc`): the build `a9519c73` is on main and
 installed; her words, `attend.guide` in her persona model, are her own publication `43d77a78` (2026-10-30 18:53),
-installed with it. Nothing of this ADR is left.
+installed with it. Left: the §9.4 reading of her words at work, hers, to look again 2026-11-06 20:30.
+
+"Her seven notes of that reading are folded in", in the paragraph moved from the index above, overstated: five
+changed the page, the fourth also the package-words test, and two asked for no change (the page's Status line).

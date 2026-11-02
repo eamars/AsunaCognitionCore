@@ -71,8 +71,9 @@ When I don't know what something means for me, I say so rather than pretend eith
 6. **Land.** One script per landing: tests, the push gate, fast-forward, the planned restart, a check that the running
    code is the commit's, one report. Then one message to her, and her check by content.
 
-The next ADR starts only when nothing of the recent ones is outstanding: merged, installed, verified by content,
-pushed, worktree removed, her check answered.
+Building may run in parallel; integration does not. One ADR is integrated at a time, and the next lands only when
+the one before is fully closed (merged, installed, verified by content, pushed, worktree removed, her check
+answered) or waits only for further data.
 
 ### Scope
 

@@ -19,3 +19,10 @@ visit/own 2, task_feedback/own 2, task_feedback/standing 2, scheduled/standing 2
 94; under §2.4 one would lose it (the note turn, `own`, as §2.4 intends) and none would gain it; the 34 on the agent
 line keep it. Begun before the install and still open: 13 tasks (11 BLOCKED, 2 PAUSED, the oldest from 10-05) and 14
 ACTIVE plans, which §2.6 reads. L2 next.
+
+L2 installed 2026-11-03 11:07 NZDT (`b2313f71e13f`, `loaded.commit` checked, 166 installed files match): the
+development grant from `whose` (`grants.for_whose`), `delegate`'s `for` (outside work runs on the Web chat; a person
+named in a group), continuations keep their task's grant, the executor's and consult's input fenced, and what she reads.
+Suite green on the commit (python 884, js 296), integration 133. Live specs: `for`'s home form in the 5 owner-private
+conversations, its group form in the 22 public groups, none in the 1 DM with someone else. She was told in one message
+and asked to read the whole page. Next: the two-day reading by structure (§8, L2).

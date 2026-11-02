@@ -134,3 +134,16 @@ def test_strict_without_personal_is_refused_never_a_silent_pass():
     done = subprocess.run([sys.executable, str(ROOT / 'tools/check_staged_secrets.py'), '--strict', 'tests/x.py'],
                           cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=60)
     assert done.returncode == 2 and 'STRICT_NEEDS_PERSONAL' in done.stderr and 'PASS' not in done.stdout
+
+
+def test_the_denylist_reads_the_private_words_form_and_says_when_it_has_no_list(tmp_path, monkeypatch, capsys):
+    """Her finding (11-03): a `category|word|why` list escaped whole never matched, and no list read as a clean 0."""
+    listed = tmp_path / 'words.txt'
+    listed.write_text('host|demo-word-zz|a placeholder\n', encoding='utf-8')
+    probe = tmp_path / 'probe.txt'
+    probe.write_text('demo-word-zz here\n', encoding='utf-8')
+    monkeypatch.setenv('ASUNA_PERSONAL_DENYLIST', str(listed))
+    assert check_staged_secrets.main(['--personal', '--strict', '--paths', str(probe)]) == 1
+    monkeypatch.setenv('ASUNA_PERSONAL_DENYLIST', str(tmp_path / 'absent.txt'))
+    check_staged_secrets.main(['--personal', '--paths', str(probe)])
+    assert 'denylist UNCHECKED' in capsys.readouterr().out

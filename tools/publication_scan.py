@@ -76,7 +76,7 @@ def _checks():
     secrets = _secrets()
     allow = set(secrets.load_list('ASUNA_PERSONAL_ALLOWLIST', ROOT / 'tools' / 'personal_scan_allow.txt'))
     entries = private_words.load()
-    return secrets, allow, secrets.denylist(), entries, release.persona_names()
+    return secrets, allow, secrets.denylist() or [], entries, release.persona_names()       # her private words are `entries`
 
 
 def scan_version():

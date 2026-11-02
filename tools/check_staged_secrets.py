@@ -17,8 +17,9 @@ Categories:
                    tools/publication_scan.py).
   denylist         entries of <data>/private/personal-denylist.txt (<data>: ASUNA_DATA_ROOT, else .runtime;
                    override: ASUNA_PERSONAL_DENYLIST); one
-                   case-insensitive literal per line, ``re:`` prefix for a regex, ``#`` comments. Absent file:
-                   category skipped. Invalid regex entries are skipped (never echoed).
+                   case-insensitive literal per line, ``re:`` prefix for a regex, ``#`` comments; a line in the
+                   private-words form ``category|word|why`` gives its word. Absent file: the category is skipped and
+                   the scan says ``denylist UNCHECKED``. Invalid regex entries are skipped (never echoed).
   timezone         concrete IANA Region/City literals; UTC and Etc/* never hit.
   persona_name     the bundled persona's id or display name, only under src/asuna/, packages/cognition-core/,
                    config/, tools/ (persona packages and tests/fixtures/ are exempt).
@@ -122,9 +123,15 @@ def load_list(env,default):
     return [s for s in (l.strip() for l in lines) if s and not s.startswith('#')]
 
 def denylist():
+    """The denylist's patterns, or None when there is no list (the category is then unchecked, and said so). A line in
+    the private-words form `category|word|why` gives its word: escaping the whole line would never match (her finding)."""
     out=[]
     data=Path(os.environ.get('ASUNA_DATA_ROOT') or ROOT/'.runtime')
-    for entry in load_list('ASUNA_PERSONAL_DENYLIST',data/'private'/'personal-denylist.txt'):
+    where=Path(os.environ.get('ASUNA_PERSONAL_DENYLIST') or data/'private'/'personal-denylist.txt')
+    if not where.is_file():return None
+    for entry in load_list('ASUNA_PERSONAL_DENYLIST',where):
+        parts=entry.split('|',2)
+        if len(parts)==3 and parts[1].strip():entry=parts[1].strip()
         try:out.append(re.compile(entry[3:]) if entry.startswith('re:') else re.compile(re.escape(entry),re.I))
         except re.error:pass
     return out
@@ -177,6 +184,9 @@ def personal_scan(argv):
     args=ap.parse_args(argv)
     sys.stdout.reconfigure(errors='backslashreplace')
     allow=set(load_list('ASUNA_PERSONAL_ALLOWLIST',ROOT/'tools'/'personal_scan_allow.txt'));deny=denylist();n=0
+    if deny is None:
+        print('personal-scan: denylist UNCHECKED: no list (ASUNA_PERSONAL_DENYLIST, else <data>/private/personal-denylist.txt)')
+        deny=[]
     for shown,key,raw in personal_sources(args):
         if SKIP.search(key):continue
         found={(0,c) for _,c in scan_lines(key,key,allow,deny)}

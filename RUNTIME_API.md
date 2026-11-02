@@ -856,7 +856,7 @@ A credential is a name (`^[a-z][a-z0-9-]{1,31}$`), a note and at most 6 environm
 
 - She files and drops one with her `credential` tool in her local chat; a turn sees names, notes and variable names, never a value.
 - Only a task from home may use one: `sandbox_run` with `credentials` sets those variables for that command (`CREDENTIALS_HOME_ONLY` elsewhere).
-- Every stored value is replaced by `[凭据已隐藏]` in tool results, briefs, messages and answers to the action brain and reports.
+- A secret value (its variable's name has `pass`, `token`, `secret` or `key`) is replaced by `[凭据已隐藏]` in tool results, briefs, messages and answers to the action brain and reports; any other value (a user name, an email, a host) stays as it is.
 
 ### Local roots
 

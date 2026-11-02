@@ -41,6 +41,9 @@ def test_a_credential_is_filed_by_name_and_no_listing_carries_its_value(vault):
     # Every form of a stored value is hidden: as written, url-encoded (a login form), inside lists and dicts.
     scrubbed = credentials.scrub({'out': 'pw=%s form=%s' % (SECRET, 'Pa55%21word-for-test'), 'rows': [SECRET]})
     assert SECRET not in str(scrubbed) and 'Pa55%21' not in str(scrubbed) and scrubbed['rows'] == ['[凭据已隐藏]']
+    # Only a secret is hidden: the login's email stays readable, in a URL too (ADR-115: a user name hid the owner's
+    # GitHub name in every brief).
+    assert credentials.scrub('https://example.org/a@example.org/repo') == 'https://example.org/a@example.org/repo'
     assert credentials.environment(['solar']) == {'SOLAR_EMAIL': 'a@example.org', 'SOLAR_PASSWORD': SECRET}
     with pytest.raises(Denied, match='CREDENTIAL_NOT_FOUND'):
         credentials.environment(['nope'])

@@ -8,8 +8,9 @@ Host for them through ``attach``.
   owner. The value passes her model once, in that turn; she is told never to repeat it.
 - Using one: only the action brain, only in a task that came from home, only inside one sandboxed command
   (``sandbox_run`` with ``credentials``): the variables are set for that process and nothing else. No prompt, brief
-  or report carries a value: tool results, her briefs to the action brain and its reports are scrubbed of every
-  stored value (``scrub``).
+  or report carries a secret: tool results, her briefs to the action brain and its reports are scrubbed of every
+  value whose variable name says it is secret (``SECRET_WORDS``: pass, token, secret, key; ``scrub``). A user name,
+  an email or a host is not a secret and stays readable.
 - What a turn sees: names, notes and variable names (``listing``), never a value.
 
 A script that holds a value can still send it anywhere the network reaches; the protection is that no model holds it.
@@ -33,6 +34,7 @@ NOTE_CHARS = 80
 MAX_VARIABLES = 6
 VALUE_CHARS = 4096
 HIDDEN = '[凭据已隐藏]'
+SECRET_WORDS = ('pass', 'token', 'secret', 'key')     # a variable whose name has one of these holds a secret (ADR-115)
 CACHE_SECONDS = 60
 CREDENTIALS_NOTE = ('这些是存在保险箱里的凭据（只有名字和用途，值谁都看不到，你和行动脑都看不到）。要用的时候交代行动脑：'
                     '让它 sandbox_run 时写 credentials（名字照抄），脚本从环境变量里读。交代里、话里都不写值。')
@@ -60,7 +62,7 @@ def _call(**args):
 
 
 def _refresh(force=False):
-    """Names, notes and the values to scrub, read again at most once a minute."""
+    """Names, notes and the secret values to scrub, read again at most once a minute."""
     with _lock:
         if not force and time.monotonic() - _cache['at'] < CACHE_SECONDS:
             return
@@ -68,7 +70,8 @@ def _refresh(force=False):
         values = set()
         for item in listing:
             payload = _call(op='read', name=item['name']) or {}
-            values.update(str(v) for v in (payload.get('env') or {}).values() if len(str(v)) >= 4)
+            values.update(str(v) for k, v in (payload.get('env') or {}).items()
+                          if len(str(v)) >= 4 and any(word in k.lower() for word in SECRET_WORDS))
         _cache.update(at=time.monotonic(), listing=listing, values=values)
 
 

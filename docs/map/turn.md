@@ -226,7 +226,6 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `tool_attach_image`
   - `tool_sticker`
   - `tool_write_document`
-  - `tool_update_self`
   - `tool_understand_person`
   - `tool_set_policy`
   - `tool_feel`

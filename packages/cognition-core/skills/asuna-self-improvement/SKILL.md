@@ -11,7 +11,7 @@ description: 改进她自己的唯一做法（ADR-011）：改什么走哪一层
 
 | 层 | 改什么 | 谁改 | 唯一路径 |
 |---|---|---|---|
-| 身份与状态 | 人格、口吻、人物档案、活账、工作文档、Character Core / Current Self、参数、心情、对人的理解 | 角色脑 | 她自己的工具：`write_document`、`update_self`、`set_policy`、`feel`、`understand_person`。每次写都带理由、留修订 |
+| 身份与状态 | 人格、口吻、人物档案、活账、工作文档、Character Core / Current Self、参数、心情、对人的理解 | 角色脑 | 她自己的工具：`write_document`、`set_policy`、`feel`、`understand_person`。每次写都带理由、留修订 |
 | 能力 | 人格包（种子、技能、persona-model）、认知核代码与提示、通道包（适配器） | 行动脑 | `development_*` 改候选，`development_publish` 生效 |
 
 - 行动脑**不写**她的身份数据：要改人格文本，在报告里建议她用 `write_document`；改了人格包里的种子，就请她用 `write_document` 的 `adopt_seed` 接收。

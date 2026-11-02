@@ -79,8 +79,9 @@ def test_with_tiered_memory_off_her_tools_are_exactly_as_before(monkeypatch):
     assert role_tools.tools() is role_tools.TOOLS and size(sent(role_tools.TOOLS)) == CHARACTER[1]
     assert 'let_go' not in str(role_tools.TOOLS['write_document'])
     monkeypatch.setattr(memory_tiers, 'ENABLED', True)
-    assert role_tools.tools() is role_tools.TIERED and role_tools.aliases()['update_self'] == 'write_document'
-    assert 'update_self' in [spec['name'] for spec in role_tools.all_specs()], 'the retired name still runs'
+    assert role_tools.tools() is role_tools.TIERED
+    retired = {'update_self', 'pass_note', 'leave_note'}                    # ADR-069: retired, never back
+    assert not retired & set(role_tools.aliases()) and not retired & {spec['name'] for spec in role_tools.all_specs()}
 
 
 def test_the_action_brain_stays_within_its_tool_budget():

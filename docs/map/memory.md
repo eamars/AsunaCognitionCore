@@ -324,7 +324,6 @@ Role-owned self descriptions, stored in the existing revision ledger.
 
 - class `SelfState`
   - `read`
-  - `commit` — Her own update_self call (ADR-011 §6.1): in an owner-private turn, like her documents.
 
 ## `night`
 

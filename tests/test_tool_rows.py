@@ -6,6 +6,9 @@ from pathlib import Path
 from asuna import param_names, role_tools, tasks
 
 CLIENT = (Path(__file__).resolve().parents[1] / 'packages/cognition-core/src/client.js').read_text(encoding='utf-8')
+# update_self is retired (ADR-069) and its calls stay in her history: the names DSH recorded in every one of them (606
+# calls in her live and archived sessions, read 2026-11-02; 12 also carried revision_id).
+RECORDED_UPDATE_SELF = {'target', 'body', 'reason'}
 
 
 def table(name):
@@ -18,16 +21,17 @@ def shown(row):
     options = {row_name: key.split('.')[0] for key, row_name in table('OPTION_ROWS').items()}
     tool = options.get(row, row)
     action = {spec['name']: spec for spec in (tasks.ASK_TOOL, tasks.PROGRESS_TOOL)}
-    if tool == 'update_self':                       # retired, still registered (ADR-069): its old records show
-        return set(role_tools.UPDATE_SELF['parameters'])
+    if tool == 'update_self':
+        return RECORDED_UPDATE_SELF
     spec = role_tools.TOOLS.get(tool) or action[tool]
     return set(spec['parameters'] if tool in role_tools.TOOLS else param_names.shown(tool, spec['parameters']))
 
 
 def test_every_field_a_row_reads_is_one_she_is_shown():
+    old = table('OLD_NAMES')                         # the page reads a field, else its old name (client.js `arg`)
     for which in ('TOOL_SUMMARY', 'TOOL_BODY'):
         for row, field in table(which).items():
-            assert field in shown(row), '%s reads %s.%s, which she is not shown' % (which, row, field)
+            assert {field, old.get(field)} & shown(row), '%s reads %s.%s, which she is not shown' % (which, row, field)
 
 
 def test_old_names_and_options_follow_the_program():

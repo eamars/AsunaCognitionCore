@@ -16,7 +16,6 @@ RENAMED = {
     'stay_silent': {'why': 'reason'},
     'task': {'why': 'reason'},
     'write_document': {'why': 'reason', 'section': 'sid', 'content': 'body', 'when_shown': 'inject'},
-    'update_self': {'why': 'reason', 'content': 'body'},
     'set_policy': {'why': 'reason'},
     'understand_person': {'content': 'body'},
     'feel': {'feeling': 'kind', 'unresolved': 'open'},

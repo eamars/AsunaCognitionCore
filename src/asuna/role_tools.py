@@ -517,10 +517,6 @@ TOOLS[_RECEIVED_FILE['name']] = {k: v for k, v in _RECEIVED_FILE.items() if k !=
 # Her list of words that point at real people and places, shared with the action brain (private_words.py).
 from .private_words import PRIVATE_WORDS_TOOL as _PRIVATE_WORDS
 TOOLS[_PRIVATE_WORDS['name']] = {k: v for k, v in _PRIVATE_WORDS.items() if k != 'name'}
-# ADR-069: retired; for a week an old call still runs (as write_document where she has written herself as items).
-UPDATE_SELF = {'description': '已并入 write_document（doc=self 或 core）；旧名照常可用。',
-               'parameters': {'target': _s('改哪一份', enum=['character_core', 'current_self']),
-                              'content': _s('完整的新正文'), 'why': _s('为什么改')}}
 # ADR-060: what she is shown is each parameter's new name; handlers read the old ones (param_names.inbound).
 from . import param_names as _names
 from .records import scenes as scene_records
@@ -567,7 +563,7 @@ OPS = {'task': ('message', 'answer', 'stop', 'page'), 'ideas': ('note', 'read', 
 # The old names run for a while (her ruling: her habits, notes and skills use them): as their option, saying so.
 RENAMED = {'reply': 'speak', 'message_action': 'task.message', 'answer_action': 'task.answer', 'stop_action': 'task.stop',
            'read_report': 'task.page', 'note_idea': 'ideas.note', 'read_ideas': 'ideas.read', 'review_idea': 'ideas.review',
-           'pass_note': 'note', 'leave_note': 'note'}
+}
 RENAMED_NOTE = '%s 已并入 %s 的 %s 选项，下次直接用这个。'
 # A field only one option takes says which option a call without op is (as plan's create, ADR-054).
 OP_FIELDS = {'task': {'message': 'message', 'answer': 'answer', 'reason': 'stop', 'page': 'page'},
@@ -677,9 +673,7 @@ def all_specs():
         return {'name': old, 'description': rename_note(old),
                 'parameters': {key: {k: v for k, v in spec.items() if k != 'required'}
                                for key, spec in TOOLS[tool]['parameters'].items() if key != 'op'}}
-    # update_self runs on, unlisted, where write_document is listed (ADR-055's rule for a retired name).
-    return specs(TOOL_NAMES) + [unlisted(old, can) for old, can in RENAMED.items()] + [
-        {'name': 'update_self', **UPDATE_SELF}, MESSAGE_DEVELOPER]
+    return specs(TOOL_NAMES) + [unlisted(old, can) for old, can in RENAMED.items()] + [MESSAGE_DEVELOPER]
 
 
 def speak_kinds(store, scene):
@@ -806,8 +800,8 @@ def _without(text, *parts):
 def aliases():
     """Old name -> the tool it runs as (the plugin lets one through where that tool is listed). stay_silent runs where
     speak replaced it (REPLY_REPLACES): there it ends the turn silently, as she meant (SILENT_WHERE_SPEAK)."""
-    return {**{old: can.split('.')[0] for old, can in RENAMED.items()}, 'update_self': 'write_document',
-            MESSAGE_DEVELOPER['name']: 'ask', 'stay_silent': 'speak'}
+    return {**{old: can.split('.')[0] for old, can in RENAMED.items()}, MESSAGE_DEVELOPER['name']: 'ask',
+            'stay_silent': 'speak'}
 
 
 # Where only speak speaks, a turn that does not call it says nothing: a stay_silent call there (26 a week in groups,
@@ -1455,7 +1449,7 @@ class RoleTools:
                 raise Refused(done['refused'])
             return self._local(ep, done['result']), bool(done.get('conclude'))
         try:
-            if name not in TOOLS and name != 'update_self':           # retired, runs for a week (ADR-069)
+            if name not in TOOLS:
                 raise Refused('没有 %s 这个工具。' % name)
             if not isinstance(args, dict):
                 raise Refused('参数要是一个对象（{字段: 值}），字段照这个工具的说明写。')
@@ -1464,10 +1458,7 @@ class RoleTools:
             can = ability(name, args)
             if gone:
                 raise Refused(_names.gone(gone))
-            if (can == 'update_self' and 'write_document' in (ep.get('turn_tools') or ())
-                    and visibility.OWNER_PRIVATE == self._cls(ep)):
-                pass                              # her retired name, where write_document is hers (ADR-062)
-            elif can == 'stay_silent' and 'speak' in (ep.get('turn_tools') or ()) and can not in ep['turn_tools']:
+            if can == 'stay_silent' and 'speak' in (ep.get('turn_tools') or ()) and can not in ep['turn_tools']:
                 replaced = True                   # where speak replaced it: silence as she meant (SILENT_WHERE_SPEAK)
             elif can not in (ep.get('turn_tools') or ()):
                 raise Refused(not_now(self.store, ep, can))
@@ -2704,29 +2695,6 @@ class RoleTools:
                   'note': memory_tiers.told(move) if move else '它已经收着了，再放就没有更下面的地方了；什么都没改。'}
         self._carried_lines(ep, slug, found, result, was)
         return result
-
-    def tool_update_self(self, ep, call_id, args):
-        from .self_state import SelfState
-        from . import memory_tiers
-        target = args.get('target')
-        doc = {'current_self': memory_tiers.SELF_DOC, 'character_core': memory_tiers.CORE_DOC}.get(target)
-        if memory_tiers.ENABLED and doc and DocumentStore(self.store, ep['persona']).read(doc)[1]:
-            # ADR-062: once she has written herself as items, the old name writes an item: the one its sid names,
-            # or a new one headed by what she gives (else her first line). The program never splits her text.
-            body = self._text(args, 'body', SINGLE_BODY_CHARS)
-            reason = self._text(args, 'reason', 2000)
-            sid = args.get('sid')
-            if sid:
-                return self.tool_write_document(ep, call_id, {'doc': doc, 'op': 'replace_section', 'sid': sid,
-                                                              'body': body, 'reason': reason})
-            first = body.splitlines()[0].lstrip('-*·• ').strip()
-            heading = (args.get('heading') or first)[:40]
-            return self.tool_write_document(ep, call_id, {'doc': doc, 'op': 'append_section', 'heading': heading,
-                                                          'body': body, 'reason': reason})
-        body = self._text(args, 'body', SINGLE_BODY_CHARS)
-        self._text(args, 'reason', 2000)
-        committed = SelfState(self.store).commit(self._fresh(ep), target, body, mutation=f"self-state:{ep['_id']}:{call_id}")
-        return {**committed, 'note': '已保存，之后的回合都能读到。'}, False
 
     def tool_understand_person(self, ep, call_id, args):
         from .memory import MemoryService

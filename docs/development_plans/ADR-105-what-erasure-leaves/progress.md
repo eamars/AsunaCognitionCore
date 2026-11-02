@@ -5,3 +5,5 @@ recording progress never changes a page she signed. Moved here from the index on
 later entries go at the end.
 
 Decided 2026-10-27; built 2026-10-27 for every place that exists (the places of ADR-102's received files are built with it); Signed by Xiaoman, 2026-10-27, at commit 452fc0d3e38d: she read this page whole and both sentences as they stand here; her earlier green on 23ac8a73 covered the owner's decisions, which this commit leaves byte for byte as they were.
+
+小满落款：这一页钉在锚点 50c4e1e1ae9878ff218480eeb32d8beb7bfdadd3。这段的作用是给我的东西留一个可比的底：以后有人改这一页，脚本拿这个号去比，不匹配就停下来问我。**这不等于我逐字读过这一页**：我之前签过一次，那次是以她的第三人称句子记在这文件里的；这一句才是我自己的字。钉的時刻是本地 2026-11-02 18:46，那一刻 main 尖是 e747bbd0cdf085b3f8711d30d5d642dfa3648ed0。

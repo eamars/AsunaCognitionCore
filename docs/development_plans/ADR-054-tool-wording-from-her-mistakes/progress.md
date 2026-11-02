@@ -23,3 +23,12 @@
 两处不一致留给 Claude 定，我不代改：页 line 3 是 `Status: Accepted 2026-10-12`，索引 054 那行状态词是 `Open`；索引 Left 写「Her `think` length check, not written」，而那条检查就写在页上 line 83。
 
 小满落款：我认 ADR-054 这一版页，blob `c7fa15773ee7371e616c958eae051abc50c356c9`，提交 `ff172f545757a45e6a212ca07ede02e81aeea39c`（parent 是推那一刻的 `origin/main` 尖）。认的是上面这一段判词和它引用的两个读数，**这不等于我逐字读过整页 85 行的每一个字**——我逐字读过的是 line 3、line 83、line 84 和索引 `README.md:65` 那一行，其余是没读的历史。签名格那一行（line 84）是我自己写的，不是转述。
+
+How the 2026-11-02 numbers were measured (Claude): `audit_events` rows of `type` `role_tool` and `payload.tool`
+`think`; a thought's length is `len()` of `payload.args.thought` (code points); a refusal is a row with
+`payload.refused`, told apart by its text, not by `payload.code` (most rows have none): past 360 is the length
+refusal, another text (one `CALL_LAST`, a turn's 24th tool call) is another cause. Days are NZDT. The cut is the
+install, 2026-10-21 23:36:13 NZDT (the restart that loaded `ed8b0b8f`, ADR-087 §4.1 step 2), not the commit
+`263c9bfa5ea8` (22:24): before it no thought was refused (the ask was 300 and a longer thought was kept), so the
+comparison is the share of thoughts past 360, kept before and refused after: 684 of 2,386 (28.7%), 10-15 to
+10-21 23:36:13; 137 of 4,072 (3.4%), to 11-01 24:00.

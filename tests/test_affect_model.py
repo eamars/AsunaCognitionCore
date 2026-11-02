@@ -71,3 +71,21 @@ def test_a_band_marked_quiet_sends_nothing_even_with_causes():
     assert interpret(model, state, 'public', scope='g1') is None
 
 
+
+
+def test_a_repeated_feeling_counts_against_what_she_expects_and_an_open_one_stops_holding():
+    """ADR-086 stage 2: each earlier same-kind feeling in the window weighs a new one by its sign's factor (variety and
+    other people are not discounted); an open feeling holds at most open_hold_h, then fades as if closed then."""
+    half = MODEL['affect']['kinds']['joy']['half_h']
+    joys = [event('joy', 20, hours_ago=h) for h in (0.5, 0.4, 0.3)]
+    plain = project(model_with(), joys, [], AT)['val']
+    model = model_with(repeat_discount={'positive': 0.5, 'negative': 1.0, 'window_h': 24})
+    weighted = project(model, joys, [], AT)['val']
+    expected = sum(20 * w * 0.5 ** (h / half) for w, h in ((1, 0.5), (0.5, 0.4), (0.25, 0.3)))
+    assert round(weighted, 6) == round(expected, 6) and weighted < plain
+    other = project(model, [joys[0], {**event('joy', 20, hours_ago=0.4), 'id': 'other', 'who': 'qq:1'}], [], AT)['val']
+    assert round(other) == round(20 * 0.5 ** (0.5 / half))       # someone else's joy is not this one's repeat
+    held = {**event('joy', 20, hours_ago=10), 'open': True}
+    assert project(model_with(), [held], [], AT)['val'] == 20                      # held without a limit
+    released = project(model_with(open_hold_h=4), [held], [], AT)['val']
+    assert round(released, 6) == round(20 * 0.5 ** (6 / half), 6)                  # fading since hour 4

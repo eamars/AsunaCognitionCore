@@ -207,6 +207,18 @@
         "proposal_ttl_h": {
           "$ref": "#/definitions/positive"
         },
+        "repeat_discount": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "positive": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+            "negative": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+            "window_h": {"$ref": "#/definitions/positive"}
+          }
+        },
+        "open_hold_h": {
+          "oneOf": [{"type": "null"}, {"$ref": "#/definitions/positive"}]
+        },
         "kinds": {
           "type": "object",
           "propertyNames": {

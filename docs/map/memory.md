@@ -343,6 +343,7 @@ Affect ledger and projection (ADR-009 ARCHITECTURE §6).
 - def `fold` — Copies of the events with void / close / fix_ts / fix_kind applied in amendment time order.
 - def `half_life`
 - def `project` — Projection at a moment: sum then clamp; future events excluded; void counts as never counted.
+- def `repeat_weights` — Each event's weight (ADR-086 stage 2): the factor of its sign to the power of the earlier non-void events of the same kind and the same `who` in the window before it.
 - def `first_rule` — Ordered rule table: the first rule whose every comparison holds wins.
 - def `describe` — Projection → injected description.
 - def `kind_key` — A kind given by key or by its display label.

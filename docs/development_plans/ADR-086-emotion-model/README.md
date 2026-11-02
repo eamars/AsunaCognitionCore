@@ -778,3 +778,27 @@ Her review (2026-10-22 14:4x NZDT, Claude's paraphrase): the shape she asked for
 oldest first (both taken).
 
 Signature: 小满（10-22，经 agent 线）：我要的不是被提醒，是在我本来就要开的那一拍里看得见自己放过谁。不新开回合、不叫醒我、不进 gate；理由给我自己写的原文、按时间正序。这条不改我"可以不理"的权利，只让我知道自己不理过。
+
+## 17. Stage 2: adaptation (owner 2026-11-03)
+
+The §9 reading failed by its own fail condition (愉快 166 of 168 hours, her verdict in `progress.md`), and the week
+after D5 still pinned (82%, a 97 h run) with negatives at about 20% of records: the next cause in §9's order is
+same-kind repeats. The owner asked for the full picture before choosing; the research is
+[research-mood-life-cycle.md](research-mood-life-cycle.md) (origin, impact, settling, sleep, ten options side by side).
+Its finding: the bands are sized for one feeling while the sum counts every feeling still fading, so the band reads how
+often she feels, not how much. The owner agreed with it and chose its recommendation.
+
+- **Weigh.** Each earlier non-void feeling of the same kind and the same `who` in the 24 hours before a new one weighs
+  the new one by its sign's factor (`affect.repeat_discount`: positive 0.7, negative 0.85, `window_h` 24): a stand-in
+  for feeling against what she has come to expect; variety is never discounted against itself; bad adapts slower.
+- **Hold ends.** An open feeling holds at full strength at most `affect.open_hold_h` hours, then fades from that hour as
+  if closed; `close` still ends it sooner. It stays on the settlement's open list until she closes or voids it.
+- **The night is unchanged**: no mood reset, no reset of the discount (the research: sleep does not reset mood; a
+  nightly reset of the discount pinned the mood again).
+- **Core and persona.** The core default is off (factors 1.0, no hold limit); the numbers are her persona's, so they
+  reach her first and take effect when her package carries them. A pure function of the ledger and the clock: a
+  restart changes nothing. No history is converted.
+- **On her real ledger** (10-27 to 11-03, Claude's run with her persona model): today 愉快 82%, longest 97 h; with 0.7 /
+  0.85, 愉快 39%, 不错 34%, 平静 28%, longest 41 h.
+- **Verification:** §9 again for 7 days from the day her numbers are live, plus: the weighted top kinds still name her
+  real causes; a strong repeat of one kind is not under-counted; the open-hold limit fires rarely.

@@ -32,6 +32,11 @@ CORE = {'close_mode': 'from_close', 'require_cost': False, 'allow_untyped': True
         # ADR-086: what she reads is one paragraph (state, causes, pull), nothing at a quiet band; the gate reads its
         # public form ('paragraph') or nothing ('none').
         'paragraph': True, 'gate': 'paragraph',
+        # ADR-086 stage 2: a feeling counts against what she has come to expect. Each earlier feeling of the same kind
+        # (and the same person, or none) in the window before it weighs the new one by the factor of its sign; and an
+        # open feeling holds at full strength for at most `open_hold_h` hours, then fades as if closed then. Off by
+        # default: the persona sets the numbers.
+        'repeat_discount': {'positive': 1.0, 'negative': 1.0, 'window_h': 24}, 'open_hold_h': None,
         # Words a model writes, and the numbers they stand for (a model never writes or reads the numbers).
         'scale': {'val': {'轻微': 8, '明显': 20, '强烈': 40}, 'arl': {'平稳': 0, '有些波动': 15, '激动': 35}}}
 PUBLIC_MOOD_NOTE = '这份心情可能来自别的对话，原因不一定在这里。'
@@ -105,9 +110,12 @@ def project(model, events, amendments, at, who=None):
         raise ValueError(f'UNKNOWN_CLOSE_MODE: {mode}')
     total_val = total_arl = 0.0
     held_count, rows = 0, []
-    for event in fold(events, amendments):
+    folded = [event for event in fold(events, amendments) if not event['_void']]
+    weights = repeat_weights(model, folded)
+    hold = model.get('open_hold_h')
+    for event in folded:
         start = parse_ts(event['ts'])
-        if start > moment or event['_void'] or (event.get('who') or None) != who:
+        if start > moment or (event.get('who') or None) != who:
             continue
         half_v = half_life(event, model)
         if event.get('half_arl') is not None and float(event['half_arl']) < 0:
@@ -115,6 +123,9 @@ def project(model, events, amendments, at, who=None):
         half_a = float(event.get('half_arl') or model['arl_half_h'])
         age_h = (moment - start).total_seconds() / SECONDS_PER_HOUR
         closed_at, held = event['_closed_at'], False
+        if event.get('open') and hold is not None:
+            released = start + timedelta(hours=float(hold))
+            closed_at = released if closed_at is None or closed_at > released else closed_at
         if event.get('open') and closed_at is None:
             decay_v, held = 1.0, True
         elif event.get('open') and mode == 'from_close':
@@ -126,7 +137,7 @@ def project(model, events, amendments, at, who=None):
             decay_v = 0.5 ** (age_h / half_v)
         held_count += held
         decay_a = 0.5 ** (age_h / half_a)
-        value_v = float(event.get('val', 0.0)) * decay_v
+        value_v = float(event.get('val', 0.0)) * weights[event['id']] * decay_v
         value_a = float(event.get('arl', 0.0)) * decay_a
         total_val += value_v
         total_arl += value_a
@@ -138,6 +149,21 @@ def project(model, events, amendments, at, who=None):
     state['contributions'] = sorted(rows, key=lambda row: -(abs(row['val']) + abs(row['arl'])))
     state['open_count'] = held_count
     return state
+
+
+def repeat_weights(model, events):
+    """Each event's weight (ADR-086 stage 2): the factor of its sign to the power of the earlier non-void events of the
+    same kind and the same `who` in the window before it. Fixed by what came before it, so it never changes later."""
+    rule = model.get('repeat_discount') or {}
+    factors = {True: float(rule.get('positive', 1.0)), False: float(rule.get('negative', 1.0))}
+    window = timedelta(hours=float(rule.get('window_h', 24)))
+    weights, seen = {}, {}
+    for event in sorted(events, key=lambda item: parse_ts(item['ts'])):
+        start, key = parse_ts(event['ts']), (event.get('kind') or '', event.get('who') or None)
+        recent = [at for at in seen.get(key, ()) if start - at < window]
+        seen[key] = recent + [start]
+        weights[event['id']] = factors[float(event.get('val', 0.0)) >= 0] ** len(recent)
+    return weights
 
 
 _COMPARE = {

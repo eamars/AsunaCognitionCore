@@ -28,10 +28,13 @@ def shown(row):
 
 
 def test_every_field_a_row_reads_is_one_she_is_shown():
-    old = table('OLD_NAMES')                         # the page reads a field, else its old name (client.js `arg`)
+    # A retired tool's rows are her old calls: the page reads its field, else the old name (client.js `arg`). Any other
+    # row reads a name she is shown.
+    old = table('OLD_NAMES')
     for which in ('TOOL_SUMMARY', 'TOOL_BODY'):
         for row, field in table(which).items():
-            assert {field, old.get(field)} & shown(row), '%s reads %s.%s, which she is not shown' % (which, row, field)
+            names = {field, old.get(field)} if row == 'update_self' else {field}
+            assert names & shown(row), '%s reads %s.%s, which she is not shown' % (which, row, field)
 
 
 def test_old_names_and_options_follow_the_program():

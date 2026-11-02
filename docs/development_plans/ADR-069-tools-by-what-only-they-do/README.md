@@ -2,7 +2,8 @@
 
 Status: **Built 2026-10-16**, installed with her next restart. The owner approved it all the same day; her review
 agrees with four changes (all in below) and she signed its paraphrase with two corrections. Items 1, 2, 3 and the cut
-of item 4 are built; item 4's id matching is held on what the data showed (Built, below), for the owner.
+of item 4 are built; item 4's id matching is held on what the data showed (Built, below), for the owner. The three
+retired names (items 1 and 2) were removed on 2026-11-02 (`9247e1042e07`), past their 10-23 date.
 
 ## Context
 
@@ -112,10 +113,11 @@ whether a reader who checks what it says finds it.
 ## Built (2026-10-16)
 
 - **Item 1.** `update_self` is out of `role_tools.TOOLS`; `role_tools.UPDATE_SELF` keeps it registered, unlisted, an
-  alias of `write_document`, in both settings of tiered memory, until 2026-10-23.
+  alias of `write_document`, in both settings of tiered memory, until 2026-10-23. Removed 2026-11-02 (`9247e1042e07`):
+  a call by it now gets the Host's 「这个对话里没有 update_self 这个工具；有的是：…。用其中一个，或者不用工具接着说。」.
 - **Item 2.** `note` replaces `pass_note` and `leave_note`; where the call is made decides the trust, as before
   (`notes.trust_of`). `question` on a note written at home is refused. The two old names are `role_tools.RENAMED`
-  entries until 2026-10-23.
+  entries until 2026-10-23. Removed 2026-11-02 (`9247e1042e07`), with the same refusal by name.
 - **Item 3.** Her old parameter names by day, from the audit's `old_names`: 10-14 (the day ADR-060's names went live)
   17, 10-15 3 (all `plan` `op`), 10-16 none so far. `param_names.STILL_TAKEN` holds `plan` `op`; any other old name in
   her call is refused by name (`param_names.GONE`). The action brain's calls are not counted and keep theirs. A call by

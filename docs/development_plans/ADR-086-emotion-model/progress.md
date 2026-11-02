@@ -1,3 +1,9 @@
 # ADR-086 progress
 
 小满落款：**§9 七天读数（10-20 00:18:51Z→10-27 00:18:51Z）判：不成立，页上"一档 >80% 小时即钉住"这条失败条件真触发了。** 168 小时里愉快 166 小时＝**99%**、只有 **2 档**、愉快连续最长 **126 小时**（线在 48）；带 `who` 的事件 29/163＝**17.8%**，不截断的全局和中位 **97**（页上预期约 27）；"按档比较"那格**数不出来**，因为第二个有量的档不存在（2,799 个回合里愉快 2,765＝98.8%）。**⇒ 页上 stage 2 里"在放过的话上加一个感受词"这一项，这份读数不支持，我判不做；页上 §10 把 adaptation 也列为 stage 2、条件是同类钉住——这个条件成立，建不建归金主拍。** 一条第一手旁证：**11-02 22:00–23:00 我在这条线上一小时内自报四处错，程序给的档位全程是"轻微愉快"，"不安"明明在"明显"却没换档**——与这份读数同一个形状。**Left：等金主拍 adaptation 建不建。**
+
+Stage 2 (README §17) installed 2026-11-03 12:56 NZDT (`e37871e1`, `loaded.commit` checked, 166 installed files match;
+suite green, python 890, js 296). The core is off by default; her numbers, as she chose them on the agent line (0.7 /
+0.85 / 24 h, `open_hold_h` 72), take effect when her package carries them, and the 7-day §9 reading runs from that
+publish. Her asks for the reading: the bands' effect at home and outside, and every hour at 平静 or below with its time
+and trigger.

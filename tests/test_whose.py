@@ -114,3 +114,86 @@ def test_whose_by_turn_kind(home):
                                        'episode_kind': 'self_development'}) == whose.record('standing', LOCAL, OWNER)
     assert whose.of_turn(store, None, {'scene_id': LOCAL, 'person_id': OWNER,
                                        'episode_kind': 'presence'}) == whose.record('own', LOCAL, OWNER)
+
+
+@pytest.fixture
+def coordinator(home, monkeypatch):
+    """Her coordinator on the fixture world, the sandbox available, sessions named by their conversation."""
+    from asuna import sandbox_backend
+    from asuna.coordinator import Coordinator
+    monkeypatch.setattr(sandbox_backend, 'available', lambda config: True)
+    found = Coordinator(home, None)
+    found.native_session_resolver = lambda proto: 'session-' + proto['scene_id']
+    return found
+
+
+def test_development_only_where_whose_earns_it(coordinator):
+    store = coordinator.store
+    earns = lambda found: whose.earns_development(store, found)
+    assert earns(whose.record('words', LOCAL, OWNER)) and earns(whose.record('words', 'dm-owner', OWNER))
+    assert earns(whose.record('words', LINE, AGENT)) and earns(whose.record('standing', LOCAL, OWNER))
+    # A home group's other member, someone in a public group, her own work and outside work earn nothing.
+    for found in (whose.record('words', 'g2', 'C'), whose.record('words', 'g1', 'A'), whose.record('own', LOCAL, OWNER),
+                  whose.record('outside', 'g1', chosen=True)):
+        assert not earns(found), found
+    # A task gets the grant its whose earns, never the turn's; its continuation keeps the task's.
+    asked = turn(store, LOCAL, OWNER, 'k1')
+    task = coordinator.delegate(asked, 'c1', '标题', '交代')
+    assert task['development_grant'] is True
+    mine = coordinator.delegate(asked, 'c2', '标题', '交代', whose=whose.record('own', LOCAL, OWNER))
+    assert mine['development_grant'] is False
+    done = task_records_get(store, mine['_id'])
+    store.put('tasks', {**done, 'state': 'RETURNED'}, expected=done['revision'])
+    later = turn(store, LOCAL, OWNER, 'k2')
+    said = coordinator.message_action(later, 'c3', task_records_get(store, mine['_id']), '再做一趟')
+    continued = task_records_get(store, said['task'])
+    assert continued['development_grant'] is False and continued['whose']['by'] == 'own'
+
+
+def task_records_get(store, task_id):
+    from asuna.records import tasks as task_records
+    return task_records.get(store, task_id)
+
+
+def test_outside_work_named_on_a_line_runs_home(coordinator):
+    from asuna import places
+    from asuna.records import messages as message_records
+    from asuna.role_tools import Refused
+    store = coordinator.store
+    asked = turn(store, LINE, AGENT, 'k3')
+    named = coordinator.tools._for(asked, places.place_id('g1'))
+    assert named == whose.record('outside', 'g1', chosen=True)
+    for wrong in (places.place_id('g2'), places.place_id(LOCAL), 'nowhere'):      # a home group, home, nothing
+        with pytest.raises(Refused):
+            coordinator.tools._for(asked, wrong)
+    task = coordinator.delegate(asked, 'c4', '标题', '交代', whose=named)
+    local = scene_records.get(store, LOCAL)
+    assert (task['scene_id'], task['requester_id'], task['scope_key'], task['policy_epoch']) == \
+        (LOCAL, OWNER, local['scope_key'], local['policy_epoch'])
+    assert task['native_session_id'] == 'session-' + LOCAL
+    assert task['development_grant'] is False and task['integration_profile'] is None
+    assert whose.moved(task, asked)
+    # Read within the task's scope (the executor, the consult), the line's words are not its request.
+    assert message_records.get(store, task['raw_input_refs'][0], scope=task['scope_key'],
+                               epoch=task['policy_epoch']) is None
+    # A plan made in its result turn on the Web chat fires there with the same whose.
+    assert whose.for_plan(store, task['whose'], LOCAL, OWNER) == task['whose']
+
+
+def test_a_group_task_is_the_person_she_names(coordinator):
+    from asuna.people import People
+    from asuna.role_tools import Refused
+    store = coordinator.store
+    asked = turn(store, 'g1', 'A', 'k5', group_context={'wake_reason': 'mentioned_account'})
+    _, waiting = line(store, 'g1', 'B', 'k6', text='帮我查一下', group_context={'wake_reason': 'mentioned_account'})
+    asked = store.put('episodes', {**asked, 'manifest': {**asked['manifest'], 'people_shown': {'A': 1, 'B': 1}},
+                                   'context': {'people_from_program': {'items': []}}},
+                      expected=asked['revision'], stream=asked['_id'])
+    label = People(store, PERSONA).speaker(scene_records.get(store, 'g1'), 'B')
+    named = coordinator.tools._for(asked, label)
+    assert named == whose.record('words', 'g1', 'B', chosen=True)
+    with pytest.raises(Refused):
+        coordinator.tools._for(asked, '不在这里的人')
+    task = coordinator.delegate(asked, 'c5', '标题', '交代', whose=named)
+    assert task['requester_id'] == 'B' and task['raw_input_refs'] == ['in-' + waiting]
+    assert task['development_grant'] is False

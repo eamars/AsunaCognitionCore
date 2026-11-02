@@ -695,8 +695,7 @@ class TaskService:
 GIVEN_TO = (
     (lambda tool: tool == 'sandbox_run', '只给家里的对话（家里·私聊、主人私聊、agent 线、peer 线）交的任务'),
     (lambda tool: tool.startswith('development_') or tool.startswith('persona_job'),
-     '只给家里的对话里这几种回合交的任务：有人说话叫起来的、你的自我改进、你自己的计划到点、家里另一条线的便条叫起来的'
-     '（自我开发要开着）'),
+     '只给主人在自己的对话里、agent 在自己的线上交的任务，和自我改进时交的（自我开发要开着）'),
     (lambda tool: tool.startswith('integration') or tool == 'import_integration_artifact',
      '只给主人在家里交的任务（集成要开着）；agent 线交的只有 integration_start 和 integration_status'),
     (lambda tool: tool == 'generate_image', '生图服务开着时，每个任务都有'),
@@ -1041,7 +1040,9 @@ class Executor:
     def _run_claimed(self,task,workspace,healthy):
         binding=task.get('execution_binding') or f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"
         self.broker.bind('s-'+sha(binding.encode())[:40],task,workspace)
-        source=message_records.get(self.service.store, task['raw_input_refs'][0])
+        # Read within the task's scope and epoch (ADR-111 §3.5): work moved to the Web chat from a line gets her brief,
+        # never the line's words, as its request.
+        source=message_records.get(self.service.store, task['raw_input_refs'][0],scope=task['scope_key'],epoch=task['policy_epoch'])
         return self._run_workspace(task,binding,source,healthy)
 
     def _run_workspace(self,task,binding,source,healthy):

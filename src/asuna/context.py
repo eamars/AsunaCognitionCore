@@ -701,6 +701,15 @@ class ContextBuilder:
         line=local_line(source,event)
         if line:
             context['event']['line']=line
+        # ADR-111 §3.6: a result says whose work it is, here in her context and never in the stored event, which the
+        # hand-back rebuilds and ingress compares byte for byte.
+        from . import whose as _whose
+        items=[]
+        for item in context['event']['trusted_context_events']:
+            task=task_records.get(self.store, item.get('task')) if item.get('kind')=='task_result' else None
+            said=_whose.result_words(self.store,persona,task) if task else None
+            items.append({**item,'for':said} if said else item)
+        context['event']['trusted_context_events']=items
         if coverage_block:
             context['coverage_from_program']=coverage_block
         if held_back:
@@ -988,18 +997,25 @@ class ContextBuilder:
         if event.get('episode_kind')=='scheduled':
             plan=plan_records.get(self.store, event.get('scheduled_plan_id'),
                 ['_id','intent','rule','timezone','status','scheduled_at','next_fire_at','last_occurrence_id',
-                 'last_outcome','source_episode_id'],
+                 'last_outcome','source_episode_id','whose','scene_id','person_id'],
                 scene=scene['_id'],scope=scope,person=event['person_id'],epoch=scene['policy_epoch'])
             if not plan:raise Denied('SCHEDULE_PLAN_CONTEXT_MISSING')
             # Why she set it: her thought when she made the plan, as she wrote it (reasons.py, ADR-043).
             from . import reasons as _reasons
-            then=_reasons.for_call(self.store,plan.pop('source_episode_id',None),'plan_id',plan['_id'])
+            source_episode=plan.pop('source_episode_id',None)
+            then=_reasons.for_call(self.store,source_episode,'plan_id',plan['_id'])
             # The plan in words on her clock, as in her plans block; its stored rule stays the program's (a wall time
             # in it is not hers to convert).
             brief={key:value for key,value in schedule_rules.plan_brief(plan,schedule_zone,moment).items()
                    if key!='next_fire_at'}
+            stored=plan
             plan={key:plan[key] for key in ('_id','last_occurrence_id','last_outcome') if key in plan}
             if then:plan['your_thought_then']=then
+            # ADR-111 §3.6: whose work the plan is for, and where that person stands now.
+            from . import whose as _whose
+            said=_whose.words(self.store,persona,_whose.of_plan(self.store,{**stored,'source_episode_id':source_episode}),
+                              _whose.PLAN)
+            if said:plan['for']=said
             context['scheduled_plan_from_program']={**plan,**brief}
         target_note=('只更新对当前说话人的理解：layer=person 写人那层（你在哪儿遇到他都看得到），layer=here 写这里那层'
                      + ('（只在这个对话里看得到）' if not target['shared'] else
@@ -1131,9 +1147,13 @@ class ContextBuilder:
             'available':bool(grant),'route':'用 delegate 把事交给行动脑；补话、接着做或叫停用 task（message、stop）。文件、网页、沙箱、原话检索和看图都是行动脑的事。',
             'cancellation_available':True,
             'network':'行动脑可以按需搜索公共网页并读取页面。',
-            'delivery':'程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。'}
-        from .grants import development_granted
-        if development_granted(self.store, scene, event, session_class):
+            'delivery':('程序自动执行委托，结果作为独立事件返回当前场景（外面托的写 for，结果回家里）；等待时仍可聊天。'
+                        if session_class==visibility.OWNER_PRIVATE else
+                        '程序自动执行委托，结果作为独立事件返回当前场景；等待时仍可聊天。')}
+        from .grants import for_whose
+        from . import whose as _whose_of
+        # ADR-111 §2.4: the development tools only where this turn's whose earns them.
+        if for_whose(self.store, _whose_of.of_turn(self.store, None, event)):
             context['action_capabilities_from_program']['development'] = {
                 'candidate':'持久的有效项目候选（代码、技能、提示、种子）；可委托行动脑检查、修改和自行发布。',
                 'guide':'先读核心技能 asuna-self-improvement：改什么走哪层、怎么自检、怎么发布、什么会触发重启。'}

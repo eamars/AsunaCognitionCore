@@ -756,6 +756,9 @@ def conversation_class(store, scene, person_id=None):
 # options the conversation lists. One spec per place and class.
 NOTE_DELIVER = ('deliver：wake 马上叫醒那边（排在那边手上的事后面），next_time 那边下次有回合时看到；能选哪样看从哪写到哪，'
                 '不写按那边的默认（回给群的回信默认 next_time）。')
+DELEGATE_FOR_HOME = '外面（群、别人的私聊）托的事在家里做：for 写那边的 place，结果回家里。'
+FOR_HOME = '这件是外面哪一处托的（群或私聊）：照抄 note_places_from_program 里那边的 place；不写＝这一回合叫你的那位托的'
+FOR_GROUP = '这件是谁托的：不写＝叫起这一回合的那位；是这回合里另一个人托的，照抄 people_from_program 里 ta 的标签'
 IDEAS_CHOOSE = '，do 选一样：note '
 IDEAS_OP_WORDS = {'read': 'read 读出还没处理完的，先没处理的、再暂缓的，旧的在前，一页 %d 条。' % IDEAS_PAGE,
                   'review': 'review 对一条写处理结果：adopt 采纳（接着用 delegate 交代行动脑去做）、defer 暂缓、drop 放弃，都写 why。'}
@@ -772,6 +775,15 @@ def placed_spec(spec, cls, scene_kind, listed):
             return spec
         return {**spec, 'description': _without(spec['description'], *([NOTE_DELIVER] if 'deliver' in left else [])),
                 'parameters': {k: v for k, v in spec['parameters'].items() if k not in left}}
+    if spec['name'] == 'delegate':
+        # ADR-111 §2.5: whose work it is, by conversation: at home an outside place, in a public group a person in the
+        # turn; elsewhere (someone else's DM) nothing to choose.
+        if cls == visibility.OWNER_PRIVATE:
+            return {**spec, 'description': spec['description'] + DELEGATE_FOR_HOME,
+                    'parameters': {**spec['parameters'], 'for': _s(FOR_HOME)}}
+        if cls == visibility.PUBLIC and scene_kind == 'group':
+            return {**spec, 'parameters': {**spec['parameters'], 'for': _s(FOR_GROUP)}}
+        return spec
     if spec['name'] == 'ideas':
         ops = [op for op in OPS['ideas'] if 'ideas.' + op in listed]
         if len(ops) == len(OPS['ideas']):
@@ -2264,18 +2276,43 @@ class RoleTools:
                 tier = action_tiers.chosen(args)
             except ValueError as exc:
                 self._found(str(exc), 'TIER_INVALID')
+        named = self._for(ep, args.get('for'))
         self.checkpoint()
         kept = self._kept(ep, title_as_written, brief_as_written)
-        task = self.coordinator.delegate(ep, call_id, title, brief, tier=tier)
+        task = self.coordinator.delegate(ep, call_id, title, brief, tier=tier, whose=named)
         from .errands import HOME_TASK
         from .tasks import queue_words
+        from . import whose as whose_of
+        moved = whose_of.moved(task, ep)
         return {'task': task['_id'], 'state': '已交给行动脑',
                 **({'tier': task['tier_words']} if task.get('tier_words') else {}),
-                'action_brain': '新开一份上下文：它只看得到这次的 brief 和对方的原话。',
+                'for': (whose_of.words(self.store, ep.get('persona'), task['whose']) + '；'
+                        + (whose_of.RESULT_OUTSIDE if moved else whose_of.RESULT_HERE)),
+                'action_brain': whose_of.BRIEF_ONLY if moved else '新开一份上下文：它只看得到这次的 brief 和对方的原话。',
                 'queue': queue_words(self.store, task['_id']),
                 'note': (HOME_TASK if ep.get('errand') else REFLECTION_TASK if _one_shot(ep)
                          else '结果回来会再叫你；在那之前不要说已经做完。'),
                 **({'paths_kept': kept} if kept else {})}, False
+
+    def _for(self, ep, value):
+        """Whose work a task is, when her `for` names it (ADR-111 §2.5): at home an outside place from her note places,
+        in a public group a person whose line is in this turn; not written, the turn's own (None)."""
+        if value in (None, ''):
+            return None
+        from . import whose as whose_of
+        value = str(value).strip()
+        cls = (ep.get('manifest') or {}).get('session_class')
+        if not ep.get('errand') and cls == visibility.OWNER_PRIVATE:
+            scene_id = whose_of.named_outside(self.store, ep, value)
+            if scene_id:
+                return whose_of.record('outside', scene_id, chosen=True)
+            return self._found(whose_of.FOR_UNKNOWN_PLACE % value, 'FOR_UNKNOWN_PLACE')
+        if not ep.get('errand') and cls == visibility.PUBLIC and (ep.get('context') or {}).get('people_from_program'):
+            person_id = whose_of.named_person(self.store, ep, value)
+            if person_id:
+                return whose_of.record('words', ep['scene_id'], person_id, chosen=True)
+            return self._found(whose_of.FOR_UNKNOWN_PERSON % value, 'FOR_UNKNOWN_PERSON')
+        return self._found(whose_of.FOR_UNKNOWN_HERE % value, 'FOR_UNKNOWN_HERE')
 
     def _listed_tasks(self, ep):
         """The ids of the tasks this turn lists (task_state_from_program): what a task reference can name."""

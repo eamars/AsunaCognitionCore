@@ -2,7 +2,6 @@
 from pathlib import Path
 
 from .state import Denied
-from .records import tasks as task_records
 
 
 def home_workspaces(config):
@@ -71,28 +70,15 @@ def conversation_workspace(config, scene_id):
     return False
 
 
-def development_granted(store, scene, event, session_class=None):
-    """Who may hand work with the development tools to the action brain (ADR-011 §6.1).
-
-    With self-development enabled, in owner-private conversations: someone's words there (the owner, or an agent on
-    its line), her own self-improvement turns, and her own initiative there: a plan of hers coming due, or a note
-    from another of her trusted home conversations (owner 2026-10-12). Her feedback turns keep the grant of the task
-    they answer. Nobody else's request carries it: in other scenes an improvement can only become an entry in her
-    idea notebook (role_tools.note_idea).
+def for_whose(store, whose):
+    """Whether work for this `whose` gets the development tools (ADR-011 §6.1, ADR-111 §2.4): with self-development
+    enabled and the sandbox available (her candidates are tested there, ADR-010 D5), only where `whose` earns it: the
+    owner's own words in one of his conversations, an agent's on its own line, her self-improvement. Nobody else's
+    request carries it; elsewhere an improvement can only become an entry in her idea notebook (role_tools.note_idea).
     """
-    from . import visibility
     if (store.config.get('self_development') or {}).get('enabled') is not True:
         return False
-    from . import sandbox_backend
+    from . import sandbox_backend, whose as whose_of
     if not sandbox_backend.available(store.config):
-        return False                      # her candidates are tested in the sandbox (ADR-010 D5)
-    kind = event.get('episode_kind') or 'external'
-    if kind == 'task_feedback':
-        return bool((task_records.get(store, event.get('task_id')) or {}).get('development_grant'))
-    cls = session_class or visibility.session_class(store.config, store, scene, event['person_id'])
-    if cls != visibility.OWNER_PRIVATE:
         return False
-    if kind == 'note':
-        from . import notes
-        return (notes.opening_for(store, event) or {}).get('trust') == notes.TRUSTED
-    return kind in ('self_development', 'external', 'scheduled')
+    return bool(whose_of.earns_development(store, whose))

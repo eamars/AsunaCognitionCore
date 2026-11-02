@@ -39,7 +39,7 @@ NOTE_CHARS = 300                 # a note that crosses between home and outside
 HOME_NOTE_CHARS = 1500           # from home to another home line: no boundary to guard, room for the context
 PER_TURN = 2
 # Daily caps on notes from public conversations; a reply is outside them and not counted in them.
-PUBLIC_HOME_PER_SCENE = 6        # public -> home, per sending conversation and home it goes to
+PUBLIC_HOME_PER_SCENE = 10       # public -> home (the Web chat), per sending conversation a day; 10-20..11-03 a group wanted 9 at most
 PUBLIC_PAIR = 3                  # public -> public, per pair of conversations
 PUBLIC_TOTAL = 10                # public -> public, in all
 MAX_HOP = 2                      # a note, its reply, and no more

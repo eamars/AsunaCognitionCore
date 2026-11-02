@@ -52,3 +52,7 @@ went to his direct chat minutes later (62 to the Web chat, 2 to his direct chat)
 which was refused. His decision: the Web chat is her work channel and the one door home for notes from outside; his
 direct chats and the agent lines are not destinations for them. Built with the follow-ups of her reading
 (`notes.targets`; test `test_a_note_from_outside_has_one_door_home`).
+
+The same day, the owner's second decision: the daily cap of notes from one public conversation goes from 6 to 10. Read
+10-20 to 11-03 by structure: per group and day she wanted a median 3, at most 9 (notes plus turns refused at the cap);
+the cap of 6 refused her 24 times in 22 turns, on 13 of 15 days.

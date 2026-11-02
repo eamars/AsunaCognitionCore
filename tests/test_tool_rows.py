@@ -6,8 +6,8 @@ from pathlib import Path
 from asuna import param_names, role_tools, tasks
 
 CLIENT = (Path(__file__).resolve().parents[1] / 'packages/cognition-core/src/client.js').read_text(encoding='utf-8')
-# update_self is retired (ADR-069) and its calls stay in her history: the names DSH recorded in every one of them (606
-# calls in her live and archived sessions, read 2026-11-02; 12 also carried revision_id).
+# update_self is retired (ADR-069) and its calls stay in her history: the names DSH recorded in every one of them (75
+# calls, 606 copies across her live and archived sessions, read 2026-11-02; one also carried revision_id).
 RECORDED_UPDATE_SELF = {'target', 'body', 'reason'}
 
 

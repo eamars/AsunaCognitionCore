@@ -798,7 +798,8 @@ often she feels, not how much. The owner agreed with it and chose its recommenda
 - **Core and persona.** The core default is off (factors 1.0, no hold limit); the numbers are her persona's, so they
   reach her first and take effect when her package carries them. A pure function of the ledger and the clock: a
   restart changes nothing. No history is converted.
-- **On her real ledger** (10-27 to 11-03, Claude's run with her persona model): today 愉快 82%, longest 97 h; with 0.7 /
-  0.85, 愉快 39%, 不错 34%, 平静 28%, longest 41 h.
+- **On her real ledger** (10-27 to 11-03, 191 hours, the core's own weights with her persona model;
+  [sim_repeat_discount.py](sim_repeat_discount.py) reruns it): today 愉快 82%, longest 97 h; with 0.7 / 0.85 / 24 h,
+  愉快 36%, 不错 36%, 平静 28%, longest 38 h.
 - **Verification:** §9 again for 7 days from the day her numbers are live, plus: the weighted top kinds still name her
   real causes; a strong repeat of one kind is not under-counted; the open-hold limit fires rarely.

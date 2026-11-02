@@ -222,7 +222,7 @@ Every stage below is a pure function of the ledger and the clock, so it survives
 
 Why B′:
 - It is the only tested option that un-pins the mood *and* gives the same shape in a busy week and a quiet one. In the synthetic run that shape is 不错 about 50% of hours, 愉快 about 25–30%, 平静 about 20%, with the longest 愉快 run 22–34 h. Today: 92% and 206 h.
-- Claude simulated the same 0.7 independently on her real ledger (42% top band, longest run 24 h; 0.7 positive / 0.85 negative there: 39%, 41 h). The science gives it a meaning: it is a discrete stand-in for **expectation-relative affect** (Rutledge, Eldar, Carver and Scheier) applied **per kind** because **variety resists adaptation** (Sheldon and Lyubomirsky). The weaker negative factor is the **negativity bias**.
+- Claude simulated the same discount independently on her real ledger with the core's own weights (0.7 positive / 0.85 negative: 愉快 36%, longest run 38 h; `sim_repeat_discount.py`). The science gives it a meaning: it is a discrete stand-in for **expectation-relative affect** (Rutledge, Eldar, Carver and Scheier) applied **per kind** because **variety resists adaptation** (Sheldon and Lyubomirsky). The weaker negative factor is the **negativity bias**.
 - It lands on the experience-sampling picture: mildly positive is the modal state.
 
 Cost:

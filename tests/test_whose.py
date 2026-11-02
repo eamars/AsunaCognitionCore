@@ -213,8 +213,11 @@ def test_a_walk_cut_short_answers_own_and_says_so(home, monkeypatch):
     assert audit.count(store, 'whose.walk_cut') == 1
 
 
-def test_a_note_from_outside_has_one_door_home(home):
-    """The owner (11-03): from a public conversation a note goes home only to the Web chat, her work channel; not his
-    own direct chats, not an agent line, so a full day's cap never sends outside work to another private line."""
+def test_a_note_from_outside_goes_home_for_messages_and_opens_no_work(home):
+    """The owner (11-03): the Web chat is her work channel; his direct chats take messages, not work; an agent line takes
+    neither. From a public conversation a note goes home to the Web chat or his direct chat, never an agent line, and the
+    turn it opens has no home authority (ADR-088), so nothing is handed to the action brain there."""
+    from asuna import role_tools
     homes = {sid for sid, kind in notes.targets(home, 'g1', visibility.PUBLIC).values() if kind == 'home'}
-    assert homes == {LOCAL}
+    assert homes == {LOCAL, 'dm-owner'}
+    assert {'delegate', 'task.message', 'task.stop'} <= role_tools.HOME_AUTHORITY

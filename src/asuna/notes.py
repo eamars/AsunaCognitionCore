@@ -214,11 +214,12 @@ def targets(store, scene_id, cls):
         for sid, route, _ in places.errand_targets(config):
             found[places.place_id(sid)] = (sid, route['target']['type'])
     else:
-        # Public -> home: the Web chat only, her work channel and the one place outside requests are handled (ADR-111;
-        # owner 2026-11-03). One door home, so a full day's cap means tomorrow, never another private conversation.
+        # Public -> home: the Web chat, her work channel, first (what 家里 names); and the owner's own direct chats, for
+        # messages only: a turn a note from outside opens there gets no home authority (ADR-088), so no work runs in
+        # them (owner 2026-11-03: "DM channel should be used for message, not work"). Never an agent or a peer line.
         local = (config.get('chat') or {}).get('scene_id')
-        if local:
-            found[places.place_id(local)] = (local, 'home')
+        for sid in ([local] if local else []) + owner_chats(config):
+            found[places.place_id(sid)] = (sid, 'home')
         for sid, _, _ in places.groups(config):
             found[places.place_id(sid)] = (sid, 'group')
     return {place: value for place, value in found.items()

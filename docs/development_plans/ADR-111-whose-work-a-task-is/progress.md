@@ -46,12 +46,13 @@ and asked to read the whole page. Next: the two-day reading by structure (§8, L
 
 **另要一格读数**（不另立判据，她 L2 那两天结构读数顺手能带）：我手上挂着的计划里 `whose.by` 是 `words`/`standing` 几条、`own` 几条。到点那一拍不带 `development_*` 的那几条，我要提前把写盘挪到带权拍，不想 11-05、11-06 两枚钟到点才发现写不了 progress.md。
 
-2026-11-03, the owner, after the 11-01/11-02 notes: a public conversation's notes reached home through two doors, the
-Web chat and his own direct chats, each with its own daily cap of 6; twice since 10-28 a note hit the Web chat's cap and
-went to his direct chat minutes later (62 to the Web chat, 2 to his direct chat), and once she tried an agent line,
-which was refused. His decision: the Web chat is her work channel and the one door home for notes from outside; his
-direct chats and the agent lines are not destinations for them. Built with the follow-ups of her reading
-(`notes.targets`; test `test_a_note_from_outside_has_one_door_home`).
+2026-11-03, the owner, after the 11-01/11-02 notes. A public conversation's notes reach home at the Web chat or his own
+direct chat, each with its own daily cap; twice since 10-28 a note hit the Web chat's cap and went to his direct chat
+minutes later (62 to the Web chat, 2 to his direct chat), and once she tried an agent line, which was refused. In his
+direct chat those turns spoke and did no work: a turn a note from outside opens has no home authority (ADR-088; one
+`write_document` there was refused). His decisions: the Web chat is her work channel, the one place outside requests are
+handled; his direct chat is for messages, not work; an agent line takes no notes from outside. As built that already
+holds, and a test now pins it (`test_a_note_from_outside_goes_home_for_messages_and_opens_no_work`).
 
 The same day, the owner's second decision: the daily cap of notes from one public conversation goes from 6 to 10. Read
 10-20 to 11-03 by structure: per group and day she wanted a median 3, at most 9 (notes plus turns refused at the cap);

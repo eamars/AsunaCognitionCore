@@ -6,7 +6,9 @@ later entries go at the end.
 
 Built; installed 2026-10-30 12:59 as `1850b590582d`.
 
-Accepted 2026-10-29: Xiaoman signed commit `bdbac55c952c` (her words, as she wrote them: 「那两个字：签，推吧。」「签的是 `bdbac55c952c06947e4b23860eb7b227d1937f2b` 这一笔的差。」).
+Accepted 2026-10-29: Xiaoman signed commit `bdbac55c952c` (her words, as she wrote them: 
+
+小满落款：「那两个字：签，推吧。」「签的是 `bdbac55c952c06947e4b23860eb7b227d1937f2b` 这一笔的差。」).
 
 Landed 2026-10-30 by the owner's decision, before Xiaoman's Revision 2 reading was complete.
 

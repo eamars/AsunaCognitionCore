@@ -29,3 +29,12 @@ def test_delegate_for_by_class_and_kind():
     assert home['description'].endswith(role_tools.DELEGATE_FOR_HOME)
     assert group['parameters']['for']['description'] == role_tools.FOR_GROUP and group['description'] == delegate['description']
     assert theirs == delegate and 'for' not in delegate['parameters']
+
+
+def test_a_home_group_names_only_an_outside_place():
+    """ADR-111, the owner (11-03): a home group is private but not where outside work is handled; `for` there names an
+    outside place (that work runs on the Web chat), never a person in the turn."""
+    from asuna import visibility
+    delegate = shared()['delegate']
+    home_group = role_tools.placed_spec(delegate, visibility.OWNER_PRIVATE, 'group', ())
+    assert home_group['parameters']['for']['description'] == role_tools.FOR_HOME

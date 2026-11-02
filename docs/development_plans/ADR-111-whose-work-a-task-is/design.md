@@ -165,7 +165,7 @@ the event (`errands.carried(event)` for an errand, since `ep['errand']` is set o
 | `self_development` | `standing` |
 | any kind added later | `own` |
 
-A walk through stored rows (an old row, §2.6) stops after eight steps, and a turn it needs that is missing or erased
+A walk through stored rows (an old row, §2.6) stops after 64 steps (`STEPS_MOST`), writing the audit row `whose.walk_cut` (the turn's kind and the steps walked), and a turn it needs that is missing or erased
 (an erasure keeps none of a turn's inputs, `records/view.py` `REDACTION_KEEPS`) answers `own` there.
 
 ### 2.3 Where it runs
@@ -238,7 +238,7 @@ There is no history conversion (docs/DEVELOPMENT.md). Nothing rewrites a stored 
   route carries ADR-107's `ended_at`, `blocked` when the channel lists them in `blocked_senders` or her block switch
   holds them (`switches.blocked`), `closed` when the conversation is a line she has closed (`lines.is_closed`). Read
   when a turn is prepared, never stored.
-- The words (versioned, `WHOSE_VERSION = 1`; a change to any of them bumps it), all addressing her as 你:
+- The words (versioned, `WHOSE_VERSION = 2`; a change to any of them bumps it), all addressing her as 你:
 
 ```python
 TASK = {'words': '这件是%s托你的', 'standing': '这件是你自我改进时交的', 'own': '这件是你自己的事',
@@ -253,6 +253,8 @@ BRIEF_ONLY = '新开一份上下文：它只看得到这次的 brief。'
 FOR_UNKNOWN_PLACE = ('「%s」不是外面的一处：for 照抄 note_places_from_program 里群或私聊的 place，'
                      '或者不写（就是这一回合叫你的那位）。')
 FOR_UNKNOWN_PERSON = '「%s」不是这一回合里的人：for 照抄 people_from_program 里的标签，或者不写（就是叫起这一回合的那位）。'
+FOR_UNKNOWN_HERE = ('这一回合不写 for：for 只在家里（写外面那一处的 place）和公开群里有人叫你的回合（写这回合里另一个人的标签）用；'
+                    '不写就按这一回合的来路算——谁的话叫起这一回合算谁的，程序自己叫起的（心跳、计划到点）是你自己的事。')
 ```
 
   `%s` is a person's label as she reads it there (`People.speaker`) or a place's title (`People.scene_title`); never an
@@ -342,6 +344,7 @@ Brains: CB the character brain, AB the action brain, RG the relevance gate (whic
 | the result item's `for` (10–40) | `ContextBuilder.prepare`, when the `task_feedback` turn is prepared, from the task's `whose`, a label and `standing` then; kept in the episode's stored context, never in the event | CB, that turn (one per result) | never: a resumed turn reuses its stored context | at compaction | restart: the stored context is reused; redelivery: the stored event is unchanged, so the identity check passes |
 | a plan block's `for` (10–25) | `ContextBuilder.prepare`, in the plan block of a `scheduled` turn | CB, that turn | never | at compaction | as above |
 | `FOR_UNKNOWN_PLACE` (75), `FOR_UNKNOWN_PERSON` (64), each with the value she wrote | the refusal of a value not on the list | CB, only when she tries | by a release | with the tool result | as any tool result |
+| `FOR_UNKNOWN_HERE` (112) | the refusal of `for` where it is not taken (an errand, someone else's DM, a group turn no one's line opened) | CB, only when she tries | by a release | with the tool result | as any tool result |
 | `action_capabilities_from_program` `delivery` (+17, owner-private conversations) | `ContextBuilder.prepare` each turn | CB, every turn where `delegate` is available; sent whole only when it changes, otherwise named unchanged (`context-delivery.js`) | by a release | replaced by the next turn's | rebuilt every turn |
 | `capability_refusal`'s development line (46) | the broker's refusal of a development tool | AB, only on that refusal | by a release | with the tool result | as any tool result |
 
@@ -353,6 +356,7 @@ Brains: CB the character brain, AB the action brain, RG the relevance gate (whic
 | `tasks.whose` | `delegate`, `message_action`, in the task's one save | its result turn and consults, its continuations, the words | never | with the task | yes |
 | `plans.whose` | `Schedule.create`, in the plan's first save | its firing's turn, the words | never: update keeps it | with the plan | yes |
 | audit `task.whose` | with the task's save | the landings' structure counts | never | after 30 days (ADR-074) | yes |
+| audit `whose.walk_cut` | when a walk through stored rows passes `STEPS_MOST` and answers `own` | the readings | never | after 30 days (ADR-074) | yes |
 
 ## 5. Failure modes
 
@@ -439,7 +443,7 @@ numbers for 10-27 and 10-28 (for the owner's reading, not a gate).
   conversations (363 → 519) and by 109 in public groups (363 → 472); unchanged in someone else's DM.
 - **Per event:** 15–43 characters in each `delegate` result; 10–40 in each result turn's item; 10–25 in each plan's
   firing.
-- **Only on a mistake:** `FOR_UNKNOWN_PLACE` (75), `FOR_UNKNOWN_PERSON` (64).
+- **Only on a mistake:** `FOR_UNKNOWN_PLACE` (75), `FOR_UNKNOWN_PERSON` (64), `FOR_UNKNOWN_HERE` (112).
 
 ## 10. The review
 

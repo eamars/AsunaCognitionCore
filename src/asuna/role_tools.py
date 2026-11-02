@@ -2312,7 +2312,7 @@ class RoleTools:
             if person_id:
                 return whose_of.record('words', ep['scene_id'], person_id, chosen=True)
             return self._found(whose_of.FOR_UNKNOWN_PERSON % value, 'FOR_UNKNOWN_PERSON')
-        return self._found(whose_of.FOR_UNKNOWN_HERE % value, 'FOR_UNKNOWN_HERE')
+        return self._found(whose_of.FOR_UNKNOWN_HERE, 'FOR_UNKNOWN_HERE')
 
     def _listed_tasks(self, ep):
         """The ids of the tasks this turn lists (task_state_from_program): what a task reference can name."""

@@ -19,7 +19,7 @@ from .records import messages as message_records
 from .records import plans as plan_records
 from .records import tasks as task_records
 
-WHOSE_VERSION = 1
+WHOSE_VERSION = 2
 BY = ('words', 'standing', 'own', 'outside')
 # A walk through stored rows (an old task or plan, a chain of them) stops here and answers `own` where it is: a guard
 # against a broken chain, not a measure of a real one (a chain of results begun before ADR-111 is walked once a hop).
@@ -37,8 +37,8 @@ BRIEF_ONLY = '新开一份上下文：它只看得到这次的 brief。'
 FOR_UNKNOWN_PLACE = ('「%s」不是外面的一处：for 照抄 note_places_from_program 里群或私聊的 place，'
                      '或者不写（就是这一回合叫你的那位）。')
 FOR_UNKNOWN_PERSON = '「%s」不是这一回合里的人：for 照抄 people_from_program 里的标签，或者不写（就是叫起这一回合的那位）。'
-FOR_UNKNOWN_HERE = ('「%s」不是这一回合里的人，也不是外面的一处：for 照抄 people_from_program 里的标签或'
-                    ' note_places_from_program 里群或私聊的 place，或者不写（就是叫起这一回合的那位）。')
+FOR_UNKNOWN_HERE = ('这一回合不写 for：for 只在家里（写外面那一处的 place）和公开群里有人叫你的回合（写这回合里另一个人的标签）用；'
+                    '不写就按这一回合的来路算——谁的话叫起这一回合算谁的，程序自己叫起的（心跳、计划到点）是你自己的事。')
 
 
 def record(by, scene_id, person_id=None, *, chosen=False, **extra):
@@ -67,6 +67,10 @@ def of_turn(store, ep, event, steps=0):
     event = event or {}
     scene_id, person_id = event.get('scene_id'), event.get('person_id')
     if steps > STEPS_MOST:
+        # Cut, and seen: the walk answers `own`, which earns nothing, and says so in the audit (structure only).
+        store.audit(event.get('event_id') or scene_id or 'whose', 'whose.walk_cut',
+                    {'kind': event.get('episode_kind') or 'external', 'steps': steps},
+                    _scene(store, scene_id).get('scope_key') or 'operator')
         return record('own', scene_id, person_id)
     kind = event.get('episode_kind') or 'external'
     from . import errands

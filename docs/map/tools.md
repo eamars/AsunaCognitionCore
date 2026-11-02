@@ -120,7 +120,7 @@ Report paths only; never print configured secret values or matching bytes.
 - def `secret_scan`
 - def `report_only`
 - def `load_list`
-- def `denylist`
+- def `denylist` — The denylist's patterns, or None when there is no list (the category is then unchecked, and said so).
 - def `account_id`
 - def `private_address` — A private address in this line (the marker and the allow list exempt it): checked in every committed file.
 - def `scan_lines`

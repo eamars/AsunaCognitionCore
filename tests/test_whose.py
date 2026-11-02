@@ -197,3 +197,17 @@ def test_a_group_task_is_the_person_she_names(coordinator):
     task = coordinator.delegate(asked, 'c5', '标题', '交代', whose=named)
     assert task['requester_id'] == 'B' and task['raw_input_refs'] == ['in-' + waiting]
     assert task['development_grant'] is False
+
+
+def test_a_walk_cut_short_answers_own_and_says_so(home, monkeypatch):
+    """A chain of results longer than STEPS_MOST answers `own` (earning nothing) and leaves an audit row."""
+    store = home
+    monkeypatch.setattr(whose, 'STEPS_MOST', 0)
+    asked = turn(store, LOCAL, OWNER, 'w1')
+    store.put('tasks', {'_id': 'task-w', 'request_key': 'task-w', 'scene_id': LOCAL, 'requester_id': OWNER,
+                        'episode_id': asked['_id'], 'development_grant': True})
+    found = whose.of_turn(store, None, {'event_id': 'w2', 'scene_id': LOCAL, 'person_id': OWNER,
+                                        'episode_kind': 'task_feedback', 'task_id': 'task-w'}, steps=1)
+    assert found['by'] == 'own' and not whose.earns_development(store, found)
+    from asuna import audit
+    assert audit.count(store, 'whose.walk_cut') == 1

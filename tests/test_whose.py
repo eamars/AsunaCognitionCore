@@ -211,3 +211,10 @@ def test_a_walk_cut_short_answers_own_and_says_so(home, monkeypatch):
     assert found['by'] == 'own' and not whose.earns_development(store, found)
     from asuna import audit
     assert audit.count(store, 'whose.walk_cut') == 1
+
+
+def test_a_note_from_outside_has_one_door_home(home):
+    """The owner (11-03): from a public conversation a note goes home only to the Web chat, her work channel; not his
+    own direct chats, not an agent line, so a full day's cap never sends outside work to another private line."""
+    homes = {sid for sid, kind in notes.targets(home, 'g1', visibility.PUBLIC).values() if kind == 'home'}
+    assert homes == {LOCAL}

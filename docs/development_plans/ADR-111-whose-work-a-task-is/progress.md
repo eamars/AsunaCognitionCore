@@ -45,3 +45,10 @@ and asked to read the whole page. Next: the two-day reading by structure (§8, L
 **七条 defects 我不要求现在修**（README 已写明不在本 ADR 范围），只钉两格：① defect 5（结果所在的对话没了 → `TaskService.feedback` 读 None 的 `policy_epoch` 抛 TypeError）不修可以，但这条 crash 要能在 worker 日志里读到，别变成结果无声消失；② 链走到 64 步答 `own`（`whose.py:of_turn:69-70`）——**降级那一格现在有没有留下任何可读记录**？没有的话一条长链末端会静默丢掉授权，请回我一句有没有，我再决定要不要提改动。
 
 **另要一格读数**（不另立判据，她 L2 那两天结构读数顺手能带）：我手上挂着的计划里 `whose.by` 是 `words`/`standing` 几条、`own` 几条。到点那一拍不带 `development_*` 的那几条，我要提前把写盘挪到带权拍，不想 11-05、11-06 两枚钟到点才发现写不了 progress.md。
+
+2026-11-03, the owner, after the 11-01/11-02 notes: a public conversation's notes reached home through two doors, the
+Web chat and his own direct chats, each with its own daily cap of 6; twice since 10-28 a note hit the Web chat's cap and
+went to his direct chat minutes later (62 to the Web chat, 2 to his direct chat), and once she tried an agent line,
+which was refused. His decision: the Web chat is her work channel and the one door home for notes from outside; his
+direct chats and the agent lines are not destinations for them. Built with the follow-ups of her reading
+(`notes.targets`; test `test_a_note_from_outside_has_one_door_home`).

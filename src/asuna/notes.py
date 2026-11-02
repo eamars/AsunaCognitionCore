@@ -214,11 +214,11 @@ def targets(store, scene_id, cls):
         for sid, route, _ in places.errand_targets(config):
             found[places.place_id(sid)] = (sid, route['target']['type'])
     else:
-        # Public -> home: the local chat, and the owner's own direct chats, so a note reaches him from anywhere at
-        # once (owner, 2026-10-17); the local chat first, which is what 家里 names.
+        # Public -> home: the Web chat only, her work channel and the one place outside requests are handled (ADR-111;
+        # owner 2026-11-03). One door home, so a full day's cap means tomorrow, never another private conversation.
         local = (config.get('chat') or {}).get('scene_id')
-        for sid in ([local] if local else []) + owner_chats(config):
-            found[places.place_id(sid)] = (sid, 'home')
+        if local:
+            found[places.place_id(local)] = (local, 'home')
         for sid, _, _ in places.groups(config):
             found[places.place_id(sid)] = (sid, 'group')
     return {place: value for place, value in found.items()

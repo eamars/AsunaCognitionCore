@@ -130,6 +130,8 @@ pushed, worktree removed, her check answered.
   listed word.
 - Restarts are the lead's: install merged, approved work while she is quiet, tell her first, a small batch at a time,
   verified by content before the next.
+- A change to her memory or her prompt gets observation time on real turns before the next step builds on it. Her
+  per-turn input is profiled after each install; anything sent twice is a defect, fixed before the next step.
 - Whoever creates a database, folder or worktree removes it when its job ends.
 
 ## When I drift

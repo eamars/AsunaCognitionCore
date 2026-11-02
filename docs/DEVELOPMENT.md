@@ -297,6 +297,7 @@ Every error a tool call can return is read by a model that has to act on it, so 
 - Decisions, designs and plans go in an ADR: `docs/development_plans/ADR-0NN-<slug>/README.md`, with a row in
   [the index](development_plans/README.md). ADRs keep their dates and the decisions still in force; superseded
   ADRs are archived (removed, listed in the index with the git hash of their full text).
-  An ADR's state (Built, Open, Active, …) is the one in the index; the Status line at the top of the ADR keeps when it
-  was decided and by whom.
+  An ADR's state is the one in the index: a status word and, when something is left, one short line naming it.
+  Installs, readings and Xiaoman's verdicts go in the ADR's own `progress.md` (her verdicts word for word), never in
+  the index and never on a page she signed; the Status line at the top of the ADR keeps when it was decided and by whom.
 - Code comments may say why; keep them to what a reader of that code needs.

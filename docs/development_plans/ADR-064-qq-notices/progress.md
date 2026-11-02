@@ -141,7 +141,7 @@ so "how many turns she had in a window" is taken from message counts instead, na
 rows, earliest 2026-09-20 17:34:19 her clock, 2,093 in the after window and 2,686 in the before one. (g) The monologue
 count is reported as context only; it is not part of either number.
 
-小满落款: this reading is anchored to blob `2d446b1604cf1d58948016d5ef20a4f1547158d3` (the owner's 10-26 section, the
+Readout provenance (action brain): this reading is anchored to blob `2d446b1604cf1d58948016d5ef20a4f1547158d3` (the owner's 10-26 section, the
 version he read at 2026-11-02 22:28). On the machine this was measured from (the Host, `某台主机`,
 main = `807d57a9…`, clean) that blob, the branch `claude/adr064-readout`, its tip `0b64f2e6…`, the commit `783539c3…`
 and `origin` refs `2d446b16…`/`4e870291…` are **not resolvable**: `git ls-remote origin` returns only `main` and

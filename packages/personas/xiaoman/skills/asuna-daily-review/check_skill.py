@@ -122,6 +122,9 @@ NEWDIM = [
     ("newdim_report_type_column", "报告型／单向交付句"),
     ("newdim_rate_per_group", "被接率按群分报"),
     ("newdim_total_strip_report_type", "剔掉报告型后再算一个数"),
+("newdim_intra_segment_cell", "段内被接"),
+("newdim_intra_segment_second_tier", "被接第二档"),
+("newdim_intra_segment_rows", "段内指向我的行"),
 ]
 
 OUTLETS = [

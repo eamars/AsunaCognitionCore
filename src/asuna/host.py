@@ -538,6 +538,7 @@ class RuntimeHost:
 
     def _recover_tasks(self):
         store = self.app.store
+        queued = []
         for task in task_records.in_states(store, ['READY', 'RUNNING', 'RETURNED', 'DONE', 'PARTIAL', 'BLOCKED',
                                                    'NEEDS_CHARACTER_DECISION', 'UNKNOWN']).each():
             source = message_records.get(store, task['raw_input_refs'][0])
@@ -554,27 +555,22 @@ class RuntimeHost:
                 continue
             if task['state'] in handover.FINISHED:
                 continue        # ADR-030 D6: its work is done; the watchdog's first sweep hands its result over
-            # Approved restart policy: unfinished actions/results remain
-            # durable, but do not run or call the role model on startup.
-            # A new explicit local DECIDE may continue their native context.
-            paused = self.app.service.pause_for_restart(task['_id'])
-            self.evidence.record('host.task_paused', {'task_id': task['_id'],
-                'previous_state': task['state'], 'state': paused['state']})
-        # A finished task whose result she had already taken was once paused here when her turn on it handed
-        # the work on to another task (its feedback stayed WAITING_TASK): it read as open work. Give it back.
-        for task in task_records.paused(store, 'host_restart', states=['RETURNED', 'BLOCKED', 'DONE', 'PARTIAL',
-                                                                    'UNKNOWN', 'NEEDS_CHARACTER_DECISION']).each():
-            if not self._feedback_taken(task):
+            if task['state'] == 'READY':
+                queued.append(task)     # ADR-112 §12.3: it never ran, so it cannot be what stopped the worker
                 continue
-            restored = {key: value for key, value in task.items()
-                        if key not in ('pause_reason', 'paused_at', 'paused_state', 'paused_feedback_state')}
-            restored = task_records.save(store, {**restored, 'state': task['paused_state'],
-                                           'feedback_state': task.get('paused_feedback_state')},
-                                 expected=task['revision'], stream=task['_id'])
-            self._settle_received(restored)
-            self.app.service.collab(restored, 'status', {'state': 'done' if restored['state'] == 'RETURNED' else 'failed'},
-                                    'status:' + task['_id'] + ':restored:' + str(restored['revision']))
-            self.evidence.record('host.task_unpaused', {'task_id': task['_id'], 'state': restored['state']})
+            # Cut while it ran (the plugin cancels every run when the worker restarts): it comes back to her.
+            back = self.app.service.interrupted_by_restart(task['_id'])
+            self.evidence.record('host.task_interrupted', {'task_id': task['_id'], 'previous_state': task['state'],
+                                                           'state': back['state']})
+        # Tasks an older start paused: each comes back to her once, none runs by itself (ADR-112 §12.3).
+        for task in task_records.in_states(store, 'PAUSED').each():
+            back = self.app.service.interrupted_by_restart(task['_id'])
+            self.evidence.record('host.task_interrupted', {'task_id': task['_id'], 'previous_state': 'PAUSED',
+                                                           'paused_state': task.get('paused_state'),
+                                                           'state': back['state']})
+        # The task queue lives in memory: what was queued is queued again, oldest first.
+        for task in sorted(queued, key=lambda row: row.get('created_at') or ''):
+            self.controller._schedule(task['_id'])
 
     def _feedback_taken(self, task):
         """Her turn on this task's result ran: it committed, or it handed the work on to another task."""

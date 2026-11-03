@@ -56,11 +56,14 @@ class SessionCarried(RuntimeError):
 # Every state a turn can be resumed from after a restart (chat.py, tasks.py, recover()).
 RESUMABLE = ('ATTENDING', 'PREPARED', 'TURN', 'SPEAK_ACCEPTED', 'INTERRUPTED')
 # What started a turn, for the conversation's trigger title (the client words it in the viewer's language).
-TRIGGERS = {'task_feedback': 'task_result', 'consult': 'question', 'self_development': 'internal',
+TRIGGERS = {'task_feedback': 'task_result', 'consult': 'question', 'task_time': 'internal', 'self_development': 'internal',
             'presence': 'internal', 'settlement': 'internal', 'scheduled': 'schedule', 'visit': 'visit', 'note': 'note'}
 # The one line of the turn instruction kept at the end of every notice, next to where she writes (ADR-056, 2026-10-14):
 # said only in her system prompt, a missing first think was refused 1.75 times as often.
 THINK_FIRST = '这一回合第一步先调用 think 写心里话。'
+# ADR-112 §12.2: in the turn the program asks her about one task, her task tool acts on that task alone.
+TIME_UP_OTHER = '这一回合只定程序来问你的那一件（%s）；别的事等下一回合。'
+TIME_UP_BACK = '这件事已经交回来了：要接着做，在它的结果交到你手上的那一回合用 task 的 message。'
 # ADR-064 phase 2: where only reply speaks, words written in the body come back once in the same turn.
 # Said, not pushed (ADR-064, 2026-10-26): most body text written where only speak speaks is her own closing, and the
 # old ending (「在这里说话用 speak。」) made her say it; she is told it stayed, and that saying it is speak.
@@ -92,6 +95,7 @@ class Coordinator:
         # conversation, and a message for a running action session. Both are optional observers.
         self.on_collab=None
         self.on_action_message=None
+        self.restart_pending=lambda:False      # whether a worker restart waits (Chat wires it; ADR-112 §12.2)
         from .tasks import TaskService
         self.tasks=task_service or TaskService(store)
         self.tools=role_tools.RoleTools(self)
@@ -157,60 +161,84 @@ class Coordinator:
         if set(args)-{'question','context'} or not isinstance(args.get('question'),str) or not args['question'].strip():
             raise ValueError('CONSULT_QUESTION_REQUIRED')
         if not isinstance(args.get('context',''),str):raise ValueError('CONSULT_CONTEXT_MUST_BE_TEXT')
+        question=args['question'].strip()
         with self.lock:
-            self.tasks.valid(task)
-            scene=scene_records.authorize(self.store, task['scene_id'], task['requester_id'])
-            # She answers in the conversation the task belongs to: for one begun on an errand, the home turn that sent
-            # it, whose place, person and scope the task carries (delegate).
-            from . import errands, whose as whose_of
-            begun=episode_records.get(self.store, task['episode_id']) or {}
-            belongs=begun.get('errand') or begun
-            original=errands.home_turn(self.store,begun) if begun else None
-            moved=whose_of.moved(task,begun)
-            if moved and original:
-                # Work moved to the Web chat from a line (ADR-111 §3.5): authorized by the task's own fields, in the
-                # task's session, with that session's persona and character context.
-                row=session_records.get(self.store, task.get('native_session_id'),
-                                        fields=['persona','character_context']) or {}
-                original={'persona':row.get('persona') or original['persona'],
-                          'native_session_id':task.get('native_session_id'),
-                          **({'character_context':row['character_context']} if row.get('character_context') else {})}
-            elif (not original or scene['scope_key']!=task['scope_key']
-                    or any(belongs.get(field)!=task[key] for field,key in (('scene_id','scene_id'),
-                           ('person_id','requester_id'),('scope_key','scope_key'),('policy_epoch','policy_epoch')))):
-                raise Denied('CONSULT_CONTEXT_UNAVAILABLE')
-            source=message_records.get(self.store,task['raw_input_refs'][0],
-                scene=task['scene_id'],scope=task['scope_key'],epoch=task['policy_epoch'])
-            if not source and not moved:raise ValueError('CONSULT_SOURCE_MISSING')
-            source=source or {'text':None,'_id':None}
-            question=args['question'].strip()
-            self.collab(task,'question',{'from':'action','text':question},entry_id='q:'+call_key)
-            ep_id='ep-'+sha(canonical([task['scene_id'],call_key,'consult']))[:32]
-            ep=episode_records.get(self.store, ep_id)
-            if not ep:
-                event={'event_id':call_key,'scene_id':task['scene_id'],'person_id':task['requester_id'],
-                    'text':question,'episode_kind':'consult','task_id':task['_id'],
-                    'trusted_context_events':[{'kind':'action_question','task':task['_id'],'title':task.get('title') or task['goal'],
-                        'brief':task.get('brief') or task['goal'],'original_input':source['text'],
-                        'original_input_id':source['_id'],'question':question,
-                        'action_context':args.get('context','')}]}
-                if group:=program_group_context(source):event['group_context']=group
-                _,context,manifest=self.context.prepare(event,original['persona'])
-                ep=episode_records.save(self.store, {'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],
-                    'policy_epoch':scene['policy_epoch'],'source_event_id':call_key,'episode_kind':'consult',
-                    'state':'PREPARED','persona':original['persona'],'person_id':task['requester_id'],
-                    'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'monologue_refs':[],
-                    'task_id':task['_id'],'native_session_id':original.get('native_session_id'),
-                    'whose':whose_of.of_task(self.store,task),
-                    **({'character_context':original['character_context']} if original.get('character_context') else {})},
-                    stream=ep_id)
-            if ep['state']!='COMMITTED':
-                ep=self._turn(ep)
+            ep=self._task_turn(task,'consult',call_key,question,
+                {'kind':'action_question','question':question,'action_context':args.get('context','')},
+                before=lambda:self.collab(task,'question',{'from':'action','text':question},entry_id='q:'+call_key))
             if ep['state']!='COMMITTED' or not ep.get('answer'):
                 raise ProtocolFailure('CONSULT_NOT_ANSWERED: '+str(ep.get('failure') or ep['state']))
             self.collab(task,'answer',{'from':'character','text':ep['answer']},entry_id='a:'+call_key)
             return {'answer':ep['answer'],'kind':'character_interpretation','internal':True,
                 'context_diagnostics':{k:ep['context'][k] for k in ('retrieval_diagnostic_from_host',) if k in ep['context']}}
+
+    # ── a stage of the action brain at its limit (ADR-112 §12.2) ──────
+    def time_up(self, task, facts, asks):
+        """Her task_time turn, on a thread of its own while the stage goes on: the program tells her the stage reached
+        its limit, and she chooses with her task tool (more, message, stop) or lets it end (time_up.py). A failure is
+        recorded; the stage's window still bounds it."""
+        from .time_up import TEXT, TIME_UP_VERSION
+        try:
+            with self.lock:
+                current=task_records.get(self.store, task['_id'])
+                if not current or current['state']!='RUNNING' or not current.get('time_up'):
+                    return None          # it ended before her turn could start
+                return self._task_turn(current,'task_time','time-up:%s:%d'%(task['_id'],asks),TEXT,
+                    {'kind':'task_time','version':TIME_UP_VERSION,**facts})
+        except Exception as exc:         # noqa: BLE001 recorded; the window ends the stage
+            self.store.audit(task['_id'],'task.time_up_failed',{'ask':asks,'error':type(exc).__name__,
+                             'detail':excerpt(str(exc),300)},task['scope_key'])
+            return None
+
+    def _task_turn(self, task, kind, event_key, text, trusted, before=None):
+        """A turn of hers about a running task, in the conversation the task belongs to: for one begun on an errand,
+        the home turn that sent it, whose place, person and scope the task carries (delegate); for work moved to the
+        Web chat from a line (ADR-111 §3.5), the task's own session. Runs it unless it already committed."""
+        self.tasks.valid(task)
+        scene=scene_records.authorize(self.store, task['scene_id'], task['requester_id'])
+        from . import errands, whose as whose_of
+        begun=episode_records.get(self.store, task['episode_id']) or {}
+        belongs=begun.get('errand') or begun
+        original=errands.home_turn(self.store,begun) if begun else None
+        moved=whose_of.moved(task,begun)
+        if moved and original:
+            # Authorized by the task's own fields, in the task's session, with that session's persona and character
+            # context.
+            row=session_records.get(self.store, task.get('native_session_id'),
+                                    fields=['persona','character_context']) or {}
+            original={'persona':row.get('persona') or original['persona'],
+                      'native_session_id':task.get('native_session_id'),
+                      **({'character_context':row['character_context']} if row.get('character_context') else {})}
+        elif (not original or scene['scope_key']!=task['scope_key']
+                or any(belongs.get(field)!=task[key] for field,key in (('scene_id','scene_id'),
+                       ('person_id','requester_id'),('scope_key','scope_key'),('policy_epoch','policy_epoch')))):
+            raise Denied('CONSULT_CONTEXT_UNAVAILABLE')
+        source=message_records.get(self.store,task['raw_input_refs'][0],
+            scene=task['scene_id'],scope=task['scope_key'],epoch=task['policy_epoch'])
+        if not source and not moved:raise ValueError('CONSULT_SOURCE_MISSING')
+        source=source or {'text':None,'_id':None}
+        if before:before()
+        ep_id='ep-'+sha(canonical([task['scene_id'],event_key,kind]))[:32]
+        ep=episode_records.get(self.store, ep_id)
+        if not ep:
+            event={'event_id':event_key,'scene_id':task['scene_id'],'person_id':task['requester_id'],
+                'text':text,'episode_kind':kind,'task_id':task['_id'],
+                'trusted_context_events':[{'kind':trusted['kind'],'task':task['_id'],'title':task.get('title') or task['goal'],
+                    'brief':task.get('brief') or task['goal'],'original_input':source['text'],
+                    'original_input_id':source['_id'],**trusted}]}
+            if group:=program_group_context(source):event['group_context']=group
+            _,context,manifest=self.context.prepare(event,original['persona'])
+            ep=episode_records.save(self.store, {'_id':ep_id,'scene_id':scene['_id'],'scope_key':scene['scope_key'],
+                'policy_epoch':scene['policy_epoch'],'source_event_id':event_key,'episode_kind':kind,
+                'state':'PREPARED','persona':original['persona'],'person_id':task['requester_id'],
+                'manifest':manifest,'context':context,'system_ref':manifest['system_ref'],'monologue_refs':[],
+                'task_id':task['_id'],'native_session_id':original.get('native_session_id'),
+                'whose':whose_of.of_task(self.store,task),
+                **({'character_context':original['character_context']} if original.get('character_context') else {})},
+                stream=ep_id)
+        if ep['state']!='COMMITTED':
+            ep=self._turn(ep)
+        return ep
 
     # ── one turn ────────────────────────────────────────────────────
     def _notice(self, ep):
@@ -219,8 +247,9 @@ class Coordinator:
         instruction is in her system prompt (block_guide.py, ADR-056)."""
         kind=role_tools.turn_kind(ep)
         asks=role_tools.asks_thought(ep)      # ADR-099: no think in this turn, nothing asks for her thought
-        extra=prompt_path(self.store.config,'turn_consult.md' if asks else 'turn_consult_thinking.md').read_text(
-            encoding='utf-8') if kind=='consult' else ''
+        own={'consult':'turn_consult','task_time':'turn_task_time'}.get(kind)
+        extra=prompt_path(self.store.config,own+('.md' if asks else '_thinking.md')).read_text(
+            encoding='utf-8') if own else ''
         if ep.get('resume_diagnostic'):
             # The stored failure (often a traceback with paths) is read only at home; elsewhere she is told plainly
             # that the turn did not finish, in words she could repeat without giving away the machine (ADR-050).
@@ -278,7 +307,7 @@ class Coordinator:
         operation=self._operation(ep['_id'],generation)
         instruction=self._notice(ep)
         from . import channel_kinds
-        replying=bool(channel_kinds.reply_parts(ep['scene_id'])) and kind!='consult'
+        replying=bool(channel_kinds.reply_parts(ep['scene_id'])) and kind not in role_tools.ABOUT_A_TASK
         handler=lambda call_id,name,args,thinking=None:self.tools.call(ep['_id'],call_id,name,args,thinking)
         note=''
         seen=[]
@@ -297,6 +326,9 @@ class Coordinator:
                 raise ProtocolFailure('TURN_NOT_FINISHED: '+json.dumps({'finish_reason':value.finish_reason,
                     'diagnostic':value.diagnostic,'request_refs':value.request_refs},ensure_ascii=False))
             if kind=='consult' and ep.get('answer'):
+                return self._update(ep,state='COMMITTED')
+            if kind==role_tools.TASK_TIME:
+                # ADR-112 §12.2: she chose with her task tool, or let the stage end; nothing of it is said to anyone.
                 return self._update(ep,state='COMMITTED')
             speech=self._speech(ep,value)
             if replying:
@@ -556,7 +588,7 @@ class Coordinator:
     def advance(self, ep_id: str):
         ep=self._advance(ep_id)
         if (self.appraiser and ep.get('state') in ('COMMITTED','WAITING_TASK') and ep['_id'] not in self.appraisals
-                and ep.get('episode_kind')!='consult' and (ep.get('attend') or {}).get('choice')!='quiet'):
+                and ep.get('episode_kind') not in role_tools.ABOUT_A_TASK and (ep.get('attend') or {}).get('choice')!='quiet'):
             import threading as _threading
             worker=_threading.Thread(target=self.appraiser.run,args=(ep['_id'],),name='asuna-appraise',daemon=True)
             self.appraisals[ep['_id']]=worker
@@ -611,7 +643,8 @@ class Coordinator:
 
     def recover(self):
         self.store.recover_commits()
-        episodes=episode_records.open(self.store,['PREPARED','TURN','SPEAK_ACCEPTED'],not_kind='consult').rows()
+        episodes=episode_records.open(self.store,['PREPARED','TURN','SPEAK_ACCEPTED'],
+                                      not_kind=role_tools.ABOUT_A_TASK).rows()
         for ep in episodes:
             if ep['state']=='TURN':
                 self.publish_queued(ep['_id'])        # what her reply queued before the Host stopped still leaves
@@ -639,7 +672,7 @@ class Coordinator:
         ep=errands.home_turn(self.store,ep)
         source=message_records.get(self.store, 'in-'+ep['_id']) or {}
         event=source.get('event',{})
-        development=ep.get('episode_kind')!='consult' and for_whose(self.store,whose)
+        development=ep.get('episode_kind') not in role_tools.ABOUT_A_TASK and for_whose(self.store,whose)
         capabilities=list(WORKSPACE_TOOLS)
         if development:
             from .development import DEVELOPMENT_TOOLS, PERSONA_JOB_TOOLS
@@ -755,6 +788,19 @@ class Coordinator:
         from .schedule_rules import her_zone
         return her_zone(self.store.config)
 
+    def _steer(self, ep, call_id, task, message):
+        """Her words into a queued or running action session, read at its next step (ADR-011 §4)."""
+        message_id='msg-'+sha(canonical([ep['_id'],call_id]))[:32]
+        if not task_records.thread_message(self.store, message_id):
+            task_records.save_message(self.store, {'_id':message_id,'task_id':task['_id'],'thread':task.get('thread') or task['_id'],
+                'from':'character','text':message,'episode_id':ep['_id'],'delivered':False,
+                'scope_key':task['scope_key'],'created_at':now()},stream=task['_id'])
+            self.collab(task,'message',{'from':'character','text':message},entry_id=message_id)
+            if self.on_action_message:
+                self.on_action_message(task,{'id':message_id,'text':message})
+        return {'task':task['_id'],'state':'行动脑下一步就会看到这句话',
+                'action_brain':'它正在做这件事，接着原来的上下文：之前查到的它都还看得到。'}
+
     def message_action(self, ep, call_id, task, message):
         """Her words to the action brain about one task: steered into a running one, or continuing a finished one."""
         from . import whose as whose_of
@@ -762,30 +808,25 @@ class Coordinator:
         # ADR-111 §2.4: the continuation keeps its task's whose and the grant it earns, never the turn's; the turn may
         # add words to work with the development grant only if its own whose earns it too.
         whose=whose_of.of_task(self.store,task)
+        if ep.get('episode_kind')==role_tools.TASK_TIME:
+            # The program asking her about this running task (ADR-112 §12.2): her words steer it within its own
+            # grants; continuing it once it is back belongs to the turn its result opens.
+            if task['state'] not in ('READY','RUNNING'):
+                raise role_tools.Refused(TIME_UP_BACK)
+            return self._steer(ep,call_id,task,message)
         development,integration,names=self._grants(ep,whose)
         if (task.get('integration_profile')!=integration   # 比值，不是 truthy：owner 回合不能给窄授权任务补话，反过来也不行
                 or bool(task.get('development_grant')) and not for_whose(self.store,whose_of.of(self.store,ep))):
             # Work under the owner's grants takes words only from a turn with the same grants (ADR-011 §6.2).
             raise role_tools.Refused('这一回合的授权和原来那件事不一样，不能给它补话或接着做；要做就用 delegate 交一件新的。')
         if task['state'] in ('READY','RUNNING'):
-            message_id='msg-'+sha(canonical([ep['_id'],call_id]))[:32]
-            if not task_records.thread_message(self.store, message_id):
-                task_records.save_message(self.store, {'_id':message_id,'task_id':task['_id'],'thread':task.get('thread') or task['_id'],
-                    'from':'character','text':message,'episode_id':ep['_id'],'delivered':False,
-                    'scope_key':task['scope_key'],'created_at':now()},stream=task['_id'])
-                self.collab(task,'message',{'from':'character','text':message},entry_id=message_id)
-                if self.on_action_message:
-                    self.on_action_message(task,{'id':message_id,'text':message})
-            return {'task':task['_id'],'state':'行动脑下一步就会看到这句话',
-                    'action_brain':'它正在做这件事，接着原来的上下文：之前查到的它都还看得到。'}
+            return self._steer(ep,call_id,task,message)
         local=(ep['scene_id'],ep['person_id'])==(self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])
         source=(message_records.get(self.store, 'in-'+ep['_id']) or {}).get('event',{})
         if task['state']=='STALE':
             raise role_tools.Refused('这件事正在被改（不是你的错）：等它的新版本回来再补话，结果回来会再叫你。')
         if task['state']=='CANCELLED' and task.get('cancel_reason')!='host_stop':
             raise role_tools.Refused('这件事已经叫停了，不能接着做；要再做就用 delegate 交一件新的。')
-        if task['state']=='PAUSED' and not (ep.get('episode_kind')=='external' and local and not source.get('channel')):
-            raise role_tools.Refused('这件事在重启时暂停了：只有主人明确要继续时才能接着做。')
         task_id='task-'+sha(canonical([ep['_id'],call_id]))[:32]
         continued=task_records.get(self.store, task_id)
         said=None

@@ -293,10 +293,6 @@ def block(store, zone, moment=None, root=None, integration_state=None):
         value['reverted'] = record['reverted']
     if record.get('interrupted'):
         value['interrupted'] = record['interrupted']
-    paused = [row.get('title') or row.get('goal') for row in task_records.paused(
-        store, 'host_restart', since=record['down_at']).rows(limit=5, fields=['title', 'goal'])]
-    if paused:
-        value['paused_tasks'] = ['「%s」：停在暂停里，工具记录都在，说一声继续就接着做' % str(t)[:40] for t in paused]
     adapter = integration_state if integration_state is not None else _adapter_since(record['back_at'], root)
     if adapter:
         value['qq_adapter'] = adapter

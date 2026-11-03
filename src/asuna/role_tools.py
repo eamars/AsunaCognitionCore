@@ -119,6 +119,8 @@ CONDENSE_REFUSED = ('压不压一个群的对话，只在出门看群的那一�
 DELEGATION_DEPTH_MAX = 6
 # The tools a turn always has; the rest follow the turn's kind, scene and grants (`exposed`).
 CONSULT = 'consult'
+TASK_TIME = 'task_time'          # a stage at its limit, the program asking her (ADR-112 §12.2)
+ABOUT_A_TASK = (CONSULT, TASK_TIME)   # her turns about a running task: no channel, no grant, never resumed
 
 
 class Refused(Exception):
@@ -234,11 +236,11 @@ TOOLS = {
     },
     'task': {
         'description': ('已经交给行动脑的事，do 选一样：message 补话（补信息、改目标，或让做完的再做一趟）；answer 回答它刚问你的问题（只在它问你的那一回合，'
-                         '回答只给它看，答完这回合结束）；stop 叫停一件还在做或暂停着的事（对方明确取消、或你确定不该再做时；换话题、说不急都不算取消）'
-                         '；page 翻读它交回的长报告原文。新的事用 delegate。'),
+                         '回答只给它看，答完这回合结束）；stop 叫停一件还在做的事（对方明确取消、或你确定不该再做时；换话题、说不急都不算取消）'
+                         '；page 翻读它交回的长报告原文；more 给到点的那一段加时（只在程序来问的那一回合）。新的事用 delegate。'),
         'parameters': {'op': _s('做哪一样（不写时：只写了 message、answer、why、page 中的一样，就是那一样）',
-                             enum=['message', 'answer', 'stop', 'page']),
-                       'task': _s('任务 _id，照抄 task_state_from_program 或交回的结果里的（message、stop、page 要）'),
+                             enum=['message', 'answer', 'stop', 'page', 'more']),
+                       'task': _s('任务 _id，照抄 task_state_from_program 或交回的结果里的（message、stop、page、more 要）'),
                        'message': _s('要对行动脑说的话（message 要）'),
                        'answer': _s('你的回答（answer 要）'),
                        'reason': _s(limit=1000, description='为什么叫停（stop 要）'),
@@ -558,7 +560,7 @@ def tiered_delegate(spec):
                                    'why': _s('选高时写：为什么这件要高档', limit=action_tiers.WHY_CHARS)}}
 # ADR-055: the action brain's follow-ups and her notebook are one tool each, chosen by op. What a conversation lists
 # and a turn may use is kept by option ('task.message'); the model is shown the tools.
-OPS = {'task': ('message', 'answer', 'stop', 'page'), 'ideas': ('note', 'read', 'review'),
+OPS = {'task': ('message', 'answer', 'stop', 'page', 'more'), 'ideas': ('note', 'read', 'review'),
        'ask': ('ask', 'read', 'close')}
 # The old names run for a while (her ruling: her habits, notes and skills use them): as their option, saying so.
 RENAMED = {'reply': 'speak', 'message_action': 'task.message', 'answer_action': 'task.answer', 'stop_action': 'task.stop',
@@ -849,6 +851,8 @@ def _turn_rules(store, ep):
     names = ['recall'] if thinking_mode(store.config) else ['think', 'recall']
     if kind == CONSULT:
         return names + ['task.answer']
+    if kind == TASK_TIME:
+        return names + ['task.more', 'task.message', 'task.stop']
     if her_pictures(store, ep):
         names.append('read_image')
     names.append('received_file')       # listed where files can be read; a ref nothing offers is answered as not found
@@ -882,9 +886,9 @@ def _turn_rules(store, ep):
         names.append('delegate')
         if tasks:
             names.append('task.message')
-    # A paused task is open work in her context, so she can close it as well (ADR-011 §7.1).
+    # A queued or running task is open work in her context, so she can close it as well (ADR-011 §7.1).
     if tasks and not outside and task_records.many(store, [task['_id'] for task in tasks],
-                                                   states=['READY', 'RUNNING', 'PAUSED']).first(fields=['_id']):
+                                                   states=['READY', 'RUNNING']).first(fields=['_id']):
         names.append('task.stop')
     if context.get('image_artifacts_from_program'):
         names.append('attach_image')
@@ -1051,6 +1055,8 @@ ERRAND_NOTE = ('外面写来的便条叫起来的回合，只有便条带着主�
                '要去办，就在这里说出来，主人在这里看得到。')
 CONSULT_ONLY = '行动脑在问你话：这一回合只用 task 的 answer 回答它（think、recall 也能用），别的事等下一回合。'
 CONSULT_ONLY_THINKING = '行动脑在问你话：这一回合只用 task 的 answer 回答它（recall 也能用），别的事等下一回合。'
+TIME_UP_ONLY = '程序在问你一件到了时间上限的事：这一回合只用 task 的 more、message、stop 定它（think、recall 也能用），别的事等下一回合。'
+TIME_UP_ONLY_THINKING = '程序在问你一件到了时间上限的事：这一回合只用 task 的 more、message、stop 定它（recall 也能用），别的事等下一回合。'
 # ADR-088 §4.2: what needs home's authority, refused in a turn a note from outside opened at home, says where it goes.
 OUTSIDE_NEEDS_HOME = ('这一回合是外面写来的便条叫起来的，带的是便条那边的权限；这件事要家里的权限。'
                       '真要做，就在这里说出来，主人在这里看得到。')
@@ -1092,6 +1098,8 @@ def _why_not_now(store, ep, name):
     kind = turn_kind(ep)
     if kind == CONSULT:
         return CONSULT_ONLY_THINKING if thinking_mode(store.config) else CONSULT_ONLY
+    if kind == TASK_TIME:
+        return TIME_UP_ONLY_THINKING if thinking_mode(store.config) else TIME_UP_ONLY
     if ep.get('errand') and name in STEERING:
         from .errands import NO_STEER
         return NO_STEER
@@ -2345,9 +2353,16 @@ class RoleTools:
                                % (task_id, refs_usable([*close, *self._listed_tasks(ep)], self.SHORT_LIST)))
         return task
 
+    def _asked_about(self, ep, task):
+        """In a task_time turn (ADR-112 §12.2) her task tool acts only on the task the program asks about."""
+        if task is not None and turn_kind(ep) == TASK_TIME and task['_id'] != ep.get('task_id'):
+            from .coordinator import TIME_UP_OTHER
+            raise Refused(TIME_UP_OTHER % ep.get('task_id'))
+        return task
+
     def tool_task_message(self, ep, call_id, args):
         self._depth(ep)
-        task = self._own_task(ep, args.get('task'))
+        task = self._asked_about(ep, self._own_task(ep, args.get('task')))
         as_written = self._text(args, 'message', 20000)
         message = self._toward(ep, as_written)
         self.checkpoint()
@@ -2357,11 +2372,18 @@ class RoleTools:
             outcome = {**outcome, 'paths_kept': kept}
         return outcome, False
 
+    def tool_task_more(self, ep, call_id, args):
+        from . import time_up
+        task = self._asked_about(ep, self._own_task(ep, args.get('task')))
+        self.checkpoint()
+        words, _ = time_up.grant(self.coordinator.tasks, task, self.coordinator.restart_pending)
+        return {'task': task['_id'], 'note': words}, False
+
     def tool_task_stop(self, ep, call_id, args):
-        task = self._own_task(ep, args.get('task'))
+        task = self._asked_about(ep, self._own_task(ep, args.get('task')))
         reason = self._text(args, 'reason', 1000)
         self.checkpoint()
-        if task['state'] not in ('READY', 'RUNNING', 'PAUSED'):
+        if task['state'] not in ('READY', 'RUNNING'):
             return {'task': task['_id'], 'state': task['state'], 'note': '这件事已经不在进行中，不用叫停。'}, False
         stopped = self.coordinator.tasks.cancel(task['_id'], reason='character_stop', person_id=ep['person_id'])
         self.coordinator.collab(stopped, 'status', {'state': 'stopped', 'reason': reason})

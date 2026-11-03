@@ -14,6 +14,8 @@
 - `Calls.holding` counts the calls in flight within their limit; `holding` counts them over every `Calls` of the
   process (the worker has one), and every check that a worker restart waits on reads it (the publication restart, her
   quiet restart, a settings apply, the recovery activation through the worker's status).
+- `Calls.activity` says how a stream's calls went lately (ended in the last minutes, how long since the last, still in
+  flight), from the ends this process saw: what she is told when a stage reaches its limit (time_up.py, ADR-112 §12).
 - Before `attach` (no worker running: tests, tools) calls are timed and nothing is written.
 """
 from __future__ import annotations
@@ -25,6 +27,7 @@ import time
 import traceback
 import uuid
 import weakref
+from collections import OrderedDict, deque
 from contextlib import contextmanager
 
 OVERRUN_SECONDS = 600
@@ -32,6 +35,9 @@ TIMEOUT_SLACK_SECONDS = 120
 TIMED_TOOLS = ('sandbox_run', 'development_run')
 LOOK_SECONDS = 10
 STACK_DEPTH = 60
+# The ends kept per stream, and the streams kept: enough for the last minutes of a busy stage.
+ENDS_KEPT = 64
+STREAMS_KEPT = 256
 
 
 def limit_of(tool, args):
@@ -62,6 +68,7 @@ class Calls:
     def __init__(self):
         self.lock = threading.Lock()
         self.flight = {}
+        self.ends = OrderedDict()      # stream -> the monotonic times its last calls ended
         self.store = self.evidence = self.fault = None
         self.stopping = threading.Event()
         _ALL.add(self)
@@ -93,9 +100,15 @@ class Calls:
             outcome = 'failed'
             raise
         finally:
+            ended = time.monotonic()
             with self.lock:
                 self.flight.pop(key, None)
-            self._time(entry, row, outcome, time.monotonic() - entry['started'])
+                if entry['stream']:
+                    self.ends.setdefault(entry['stream'], deque(maxlen=ENDS_KEPT)).append(ended)
+                    self.ends.move_to_end(entry['stream'])
+                    while len(self.ends) > STREAMS_KEPT:
+                        self.ends.popitem(last=False)
+            self._time(entry, row, outcome, ended - entry['started'])
 
     def _time(self, entry, row, outcome, seconds):
         store = self.store
@@ -111,6 +124,16 @@ class Calls:
                                                                 'error': type(exc).__name__})
             except Exception:                        # noqa: BLE001
                 pass
+
+    def activity(self, stream, seconds, now=None):
+        """How `stream`'s calls went in the last `seconds`: {'ended': how many ended, 'since_last': seconds since the last
+        ended (None when none ended in this process), 'running': how many are in flight}."""
+        now = time.monotonic() if now is None else now
+        with self.lock:
+            ends = list(self.ends.get(stream, ()))
+            running = sum(1 for entry in self.flight.values() if entry['stream'] == stream)
+        return {'ended': sum(1 for t in ends if now - t <= seconds),
+                'since_last': now - ends[-1] if ends else None, 'running': running}
 
     def holding(self, now=None):
         """The calls in flight not yet past their limit: each holds a worker restart, even when its task or turn has

@@ -102,6 +102,9 @@ class Chat:
         self.on_episode_finished = None
         self.on_input_received = None
         self.restart_pending = threading.Event()
+        # Read at call time: the Host replaces the event with its own (ADR-112 §12.2: no more time while one waits).
+        if getattr(app, 'coordinator', None):
+            app.coordinator.restart_pending = lambda: self.restart_pending.is_set()
         # ADR-030: results on their way back to her (queued or being handed back now), and the watchdog over them.
         self.handbacks = set()
         self.watchdog = threading.Thread(target=self._watch, name='asuna-handover-watchdog', daemon=True)

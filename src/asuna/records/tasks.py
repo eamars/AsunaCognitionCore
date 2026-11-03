@@ -15,8 +15,7 @@ from .view import ANY, View, fenced, is_number, is_text, pinned, redact, texts
 COLLECTION, MESSAGES = 'tasks', 'task_messages'
 ACTIVE = ('READY', 'RUNNING')
 # What the conversation's task list shows of each task (context's task_state_from_program), as the aggregate projected.
-SHOWN = ('_id', 'state', 'goal', 'title', 'feedback_state', 'finished_at', 'cancel_reason', 'pause_reason',
-         'paused_at', 'tier')
+SHOWN = ('_id', 'state', 'goal', 'title', 'feedback_state', 'finished_at', 'cancel_reason', 'tier')
 RECENT = 16
 INPUTS_A_READ = 1000
 
@@ -95,16 +94,6 @@ def awaiting_feedback(store, finished, taken):
 def lease_expired(store, moment):
     """View: the running tasks whose lease expired before `moment` (seconds since the epoch)."""
     return _view(store, {'state': 'RUNNING', 'lease_expires_at': Range(lt=moment)} if is_number(moment) else None)
-
-
-def paused(store, reason, *, states=ANY, since=ANY):
-    """View: the paused tasks paused for `reason` (that were in these states; paused since a time)."""
-    where = {'state': 'PAUSED'}
-    if states is not ANY:
-        where = {**where, 'paused_state': AnyOf(list(states))} if isinstance(states, (list, tuple, set)) else None
-    if where is not None and since is not ANY:
-        where = {**where, 'paused_at': Range(gte=since)} if is_text(since) else None
-    return _view(store, pinned(where, {'pause_reason': (reason, is_text)}))
 
 
 def of_conversations(store, scene_ids, by=None):

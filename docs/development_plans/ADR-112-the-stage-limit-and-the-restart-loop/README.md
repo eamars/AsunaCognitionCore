@@ -538,6 +538,8 @@ particular person to end it.
 
 ### 12.4 D3. After a restart she hears how long it waited, and for what
 
+Found at build: this was already built by ADR-113, so it is not built again (§12.8).
+
 When the publication restart is asked (`restart.requested`), the gate writes on the `APPLIED` receipt how long it was
 held (from its first `restart.pending`) and by what (`held_by`: a turn, a task, calls in flight; for a task, its
 title). The started worker's `_complete_activations` adds one line to the publication result she already receives:
@@ -582,3 +584,26 @@ that they are coming and why, with the seven task ids, so that she knows each on
 `task_time` turn; the next restart leaves no `PAUSED` row and schedules any `READY` one; the next publication result
 names its wait. C1 and the paused tasks are then closed in §7, and the ADR is Built once the first heads-up has been
 read.
+
+### 12.8 Found while building (2026-11-03, Claude)
+
+- **D3 already exists.** ADR-113 (Built) says each worker restart in `host_from_program` in her Web chat and home
+  lines, with how long it was held and by what (「重启前挂了约 3 分钟（从 …起）：任务「…」；挂着时新回合和新任务都不开始」);
+  a hold under 2 minutes, back within 2, is folded into the routine count. §7's "not designed" predates ADR-113, and the
+  brief to the owner repeated it without checking. Nothing is added for D3.
+- **No run outlives a worker restart.** The plugin cancels every running session when it restarts the worker
+  (`index.js` `restart`), so a start sends no `task_fenced` for a task it hands back (§12.3 point 2's open check).
+- **In a `task_time` turn her task tool acts on that task alone** (`role_tools._asked_about`): another task is refused
+  in words. `message` there steers the running task within its own grants (the turn has no source line of its own, so
+  the grant comparison of a continuation does not apply); once the task is back, continuing it belongs to the turn its
+  result opens, and `message` says so.
+- **The audit rows** are `task.time_up` (at each ask), `task.time_more`, `task.time_up_outcome` and
+  `task.time_up_failed` (her turn could not run), not one row with the outcome as §12.2 point 4 wrote.
+- **PAUSED's readers removed** by the search: the guard in `message_action`, `pause_for_restart`, the start's unpause
+  loop, `records/tasks.paused`, the paused list in her restart report (`restarts.py`), the rule in her context
+  (`task_continuation_from_program`), the state words in `handover.py`, `self_review`'s open list, the stop tool's
+  state list, the pause fields in the task list she sees and in the store's declaration. `schedule.py`'s `PAUSED` is a
+  plan's, not a task's, and stays.
+- **Not in this change: a clean stop.** When the Host stops cleanly with no restart pending, `Chat.stop` still
+  cancels its queued and running tasks (`host_stop`); such a task already has an exit (she continues it with `task
+  message`). 7 tasks were ever cancelled this way, the last on 10-05.

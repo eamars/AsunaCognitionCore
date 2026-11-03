@@ -96,8 +96,6 @@ def status_words(task, continued_by=None):
         return '排着队，还没开始跑'
     if state == 'RUNNING':
         return '在跑'
-    if state == 'PAUSED':
-        return '做到一半宿主重启停了：主人说继续才接着做'
     if state == 'CANCELLED':
         return '宿主停机时撤下了：要做就用 task 的 message 接着做' if task.get('cancel_reason') == 'host_stop' else '叫停了'
     if state == 'STALE':

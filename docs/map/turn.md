@@ -40,6 +40,7 @@ One character turn per episode (ADR-011 §3).
 - class `Coordinator`
   - `ingest`
   - `consult` — One internal turn in her role session: she answers the action brain with task op answer.
+  - `time_up` — Her task_time turn, on a thread of its own while the stage goes on: the program tells her the stage reached its limit, and she chooses with her task tool (more, message, stop) or lets it end (time_up.py).
   - `queue_reply` — ADR-064 phase 2: her reply's parts as outbound rows in order, at typing pace after what this turn already queued, each published at once; a part that fails cancels the ones after it.
   - `advance`
   - `recover`
@@ -220,6 +221,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `tool_task_answer`
   - `tool_delegate`
   - `tool_task_message`
+  - `tool_task_more`
   - `tool_task_stop`
   - `tool_read_image`
   - `tool_received_file`

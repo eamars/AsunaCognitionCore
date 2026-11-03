@@ -222,7 +222,7 @@ def require_current_feedback(store, episode):
     event = (source or {}).get('event', {})
     task = task_records.get(store, event.get('task_id'))
     scene = scene_records.get(store, episode['scene_id'])
-    if (not task or not scene or task['state'] in ('CANCELLED', 'STALE', 'PAUSED')
+    if (not task or not scene or task['state'] in ('CANCELLED', 'STALE')
             or task['intent_revision'] != event.get('intent_revision')
             or (task['scene_id'], task['requester_id'], task['scope_key'], task['policy_epoch']) !=
                (episode['scene_id'], episode['person_id'], episode['scope_key'], episode['policy_epoch'])
@@ -448,11 +448,16 @@ from .records import messages as message_records
 WORKSPACE_TOOLS.append(RECEIVED_FILE_TASK_TOOL)
 
 
+# ADR-112 §12.3: what a task a restart cut, or one paused before that, says when it comes back to her.
+INTERRUPTED = '宿主重启时这一段被打断了，还没交报告；原目标有没有做完没有确认。'
+NOT_STARTED = '排队时宿主重启了，一直没开始；还要做就用 task 的 message 接着交代，不做就不用管。'
+UNCONFIRMED = '已发起而没有回执的操作须先核实，不可盲目重做。'
+
+
 def stale_reason(task,current,scene):
     """Why a call's task no longer holds its authority, as the program sees it."""
     if not current:return '这个任务已经不在了'
     if current['state']=='CANCELLED':return '这个任务已经被取消了'
-    if current['state']=='PAUSED':return '这个任务因宿主重启暂停了'
     if current['intent_revision']!=task['intent_revision']:return '这个任务的交代改了（新的交代取代了这一版）'
     if scene and scene['policy_epoch']!=task['policy_epoch']:return '这个对话的权限换了一版'
     if current['state']!='RUNNING':return '这个任务已经结束了（%s）'%current['state']
@@ -508,21 +513,29 @@ class TaskService:
         self.collab(cancelled,'status',{'state':'stopped','reason':reason},'status:'+task_id+':cancelled')
         return self._notify_fenced(cancelled, 'task_cancelled')
 
-    def pause_for_restart(self, task_id):
-        """Preserve old work and receipts; only a new local request can resume."""
+    def interrupted_by_restart(self, task_id):
+        """ADR-112 §12.3: a task a restart cut while it ran, or one an older start paused, comes back to her as a
+        result: BLOCKED, its words saying where it stood, its feedback READY for the watchdog to hand back. It never
+        runs again by itself; she continues it with task message, or leaves it. A paused one that had not started
+        says so. Its old receipts and tool records stay."""
         with self.lock:
             task = task_records.get(self.store, task_id)
-            if not task or task['state'] in ('CANCELLED', 'STALE', 'PAUSED'):
+            if not task or task['state'] not in ('RUNNING', 'PAUSED'):
                 return task
-            paused = task_records.save(self.store, {**task, 'state': 'PAUSED', 'pause_reason': 'host_restart',
-                'paused_at': now(), 'paused_state': task['state'], 'paused_feedback_state': task.get('feedback_state'),
-                'feedback_state': 'PAUSED', 'fencing_token': task['fencing_token'] + 1,
+            started = task['state'] == 'RUNNING' or task.get('paused_state') != 'READY'
+            result = ({'status': 'blocked', 'text': INTERRUPTED, 'uncertainties': [UNCONFIRMED]} if started
+                      else {'status': 'blocked', 'text': NOT_STARTED})
+            kept = {key: value for key, value in task.items()
+                    if key not in ('pause_reason', 'paused_at', 'paused_state', 'paused_feedback_state', 'time_up')}
+            back = task_records.save(self.store, {**kept, 'state': 'BLOCKED', 'failure_type': 'HostRestart',
+                'result': result, 'feedback_state': 'READY', 'fencing_token': task['fencing_token'] + 1,
                 'execution_binding': task.get('execution_binding') or
                     f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"},
                 expected=task['revision'], stream=task_id)
-        # Without it the thread would still read as queued or running (ADR-011 §7.1).
-        self.collab(paused,'status',{'state':'paused','reason':'host_restart'},'status:'+task_id+':paused:'+str(paused['fencing_token']))
-        return paused
+        # Without it the thread would still read as queued, running or paused (ADR-011 §7.1).
+        self.collab(back,'status',{'state':'failed','reason':'host_restart'},
+                    'status:'+task_id+':interrupted:'+str(back['fencing_token']))
+        return back
 
     @contextmanager
     def keepalive(self,task,interval=30):
@@ -602,7 +615,7 @@ class TaskService:
             ep=coordinator.advance(ep['_id'])
         with self.lock:
             latest = task_records.get(self.store, task['_id'])
-            if (latest['state'] in ('CANCELLED', 'STALE', 'PAUSED')
+            if (latest['state'] in ('CANCELLED', 'STALE')
                     or latest['intent_revision'] != task['intent_revision']):
                 return ep  # Never overwrite a cancellation/revision while inference was in flight.
             task_records.save(self.store, {**latest,'feedback_state':'READY' if ep['state']=='FAILED_PROTOCOL' else 'DELIVERED' if ep['state']=='COMMITTED' else ep['state'],'feedback_episode':ep['_id']},expected=latest['revision'],stream=latest['_id'])

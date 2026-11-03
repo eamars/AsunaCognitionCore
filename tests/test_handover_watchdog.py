@@ -13,7 +13,6 @@ def test_her_task_list_says_where_each_task_stands_in_words():
     assert words({'state': 'RETURNED', 'feedback_state': 'DELIVERED'}) == '跑完了，结果已经交给你'
     assert words({'state': 'RETURNED', 'feedback_state': 'READY'}) == '跑完了，结果还没交到你手上：报告存着，程序会交给你'
     assert words({'state': 'BLOCKED', 'feedback_state': 'UNDELIVERABLE'}).startswith('没做成，但结果交不到你手上')
-    assert words({'state': 'PAUSED'}).startswith('做到一半宿主重启停了')
     assert words({'state': 'CANCELLED', 'cancel_reason': 'host_stop'}).endswith('task 的 message 接着做')
 
 

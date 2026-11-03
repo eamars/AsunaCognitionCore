@@ -295,7 +295,7 @@ CATALOG = Catalog([
     Collection('tasks', 'records.tasks', (
         Field('_last_op', 'text'), Field('schema_version', 'number'), Field('request_key', 'text', required=True),
         *_text('state', 'scene_id', 'scope_key', 'requester_id', 'episode_id', 'continues_task_id', 'feedback_state',
-               'pause_reason', 'paused_state', 'paused_at', 'created_at', 'finished_at'),
+               'created_at', 'finished_at'),
         Field('policy_epoch', 'number', nullable=True), Field('lease_expires_at', 'number', nullable=True)),
         (index(('request_key', 1), unique=True),),
         versioned=True),

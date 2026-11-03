@@ -7,7 +7,7 @@ nothing. A turn's kind is required, never null or missing, so a kind of None fin
 views (`View`: `rows`, `first`, `count`), in the database's order, as the replaced reads had none. `save` is the
 revisioned write (`Store.put`).
 """
-from ..store.words import AnyOf, Exists, Not
+from ..store.words import AnyOf, Exists, NoneOf, Not
 from .view import ANY, View, fenced, is_number, is_text, redact, texts
 
 COLLECTION = 'episodes'
@@ -72,14 +72,14 @@ def of_kind(store, kind, *, scenes=ANY):
 
 
 def open(store, states, *, kind=ANY, not_kind=None):
-    """View: the turns in these states (of a kind, or of any kind but one)."""
+    """View: the turns in these states (of a kind, or of any kind but `not_kind`, one or a tuple)."""
     where = {'state': AnyOf(list(states))}
     if kind is not ANY:
         if not is_text(kind):
             return _view(store, None)
         where['episode_kind'] = kind
     if not_kind is not None:
-        where['episode_kind'] = Not(not_kind)
+        where['episode_kind'] = NoneOf(list(not_kind)) if isinstance(not_kind, tuple) else Not(not_kind)
     return _view(store, where)
 
 

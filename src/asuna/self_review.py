@@ -25,7 +25,7 @@ from .records import messages as message_records
 from .records import tasks as task_records
 
 EXAMPLE_CHARS = 80
-TASK_STATES = {'READY': '排着', 'RUNNING': '在做', 'PAUSED': '停着', 'RETURNED': '交回来了', 'FAILED': '没做成',
+TASK_STATES = {'READY': '排着', 'RUNNING': '在做', 'RETURNED': '交回来了', 'FAILED': '没做成',
                'CANCELLED': '撤了'}
 # The blocks only a reflection turn carries (ADR-072): a turn that carries one runs in a session of its own, so its
 # readings are never part of her home conversation's context.
@@ -106,7 +106,7 @@ def block(store, persona, zone_name, moment=None):
         item['times'] += 1
     open_tasks = [{'title': row.get('title') or row.get('goal'), 'where': where(row['scene_id']),
                    'state': TASK_STATES.get(row['state'], row['state'])}
-                  for row in task_records.in_states(store, ['READY', 'RUNNING', 'PAUSED']).each(
+                  for row in task_records.in_states(store, ['READY', 'RUNNING']).each(
                       fields=['title', 'goal', 'scene_id', 'state'])]
     return {'said': list(said.values()), 'tasks': tasks, 'refused': list(refused.values()), 'open': open_tasks,
             'since_at': since, 'note': NOTE}

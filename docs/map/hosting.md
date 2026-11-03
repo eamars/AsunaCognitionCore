@@ -23,6 +23,7 @@ Private business worker for the DSH Host plugin; no model or Web runtime.
   - `generate` — One stage of a native turn.
   - `turn_done` — Her turn has no further stage (coordinator._turn): the plugin ends the native turn.
   - `wait` — The stage's result; her tool calls in the meantime run here, one at a time, in call order, each timed for her episode `ep` (tool_watch.py).
+  - `time_up_clock`
   - `close`
 - class `BusinessWorker`
   - `register_stage` — Admit a stage: the Host is not reconfiguring, its task (if any) is still valid, and the operation runs once.
@@ -356,8 +357,23 @@ Every tool call of both brains, timed where the worker dispatches it (native_wor
   - `attach` — Write from now on, and start the watchdog.
   - `close`
   - `timed` — Around one call of `brain` ('action' or 'character') for `row` (its task or its episode); `failed`: the exception classes that are the tool's own failure.
+  - `activity` — How `stream`'s calls went in the last `seconds`: {'ended': how many ended, 'since_last': seconds since the last ended (None when none ended in this process), 'running': how many are in flight}.
   - `holding` — The calls in flight not yet past their limit: each holds a worker restart, even when its task or turn has ended (a stage cut at its limit leaves its call running).
   - `look` — Record each call past its limit not yet recorded; the calls recorded.
+
+## `time_up`
+
+[src/asuna/time_up.py](../../src/asuna/time_up.py)
+
+An action stage at its limit (ADR-112 §12.2): the program asks her, and cuts only if she does not decide.
+
+- def `lately` — Her line on how the stage's calls went in the last RECENT_SECONDS (tool_watch.Calls.activity).
+- def `behind` — What waits behind this task for the one action worker, always said, none too.
+- def `facts` — What only the program knows when a stage reaches its limit, as words for her `task_time` turn.
+- class `StageClock` — The deadline of one executor stage; `due()` once a tick, `ended()` when the stage ends however it ends.
+  - `due` — True when the stage is to be cut now.
+  - `ended` — The stage ended (a result, her stop, or an error): if she was being asked, say how it ended.
+- def `grant` — Her `more`: one more block for a stage she is being asked about.
 
 ## `store/__init__`
 
@@ -684,7 +700,7 @@ The owner of `episodes`: her turns (what woke her, what she was given, what she 
 - def `many` — View: the turns with these ids (in these states).
 - def `of_source` — The turn a source event opened (of this kind, in this conversation), or None.
 - def `of_kind` — View: the turns of a kind (in these conversations).
-- def `open` — View: the turns in these states (of a kind, or of any kind but one).
+- def `open` — View: the turns in these states (of a kind, or of any kind but `not_kind`, one or a tuple).
 - def `answered` — How many turns she answered these people with words (at most `limit`).
 - def `of_scope` — The turns of a scope.
 - def `save` — The revisioned write of a whole turn (`Store.put`: `expected`, `stream`, `reset_counters`).
@@ -755,7 +771,6 @@ The owner of `tasks` and `task_messages`: the work she hands to the action brain
 - def `continuations` — View: the tasks that continue these, in the order they were created.
 - def `awaiting_feedback` — The tasks in these finished states whose feedback has a state, and not one of `taken` (the states of a result that reached her).
 - def `lease_expired` — View: the running tasks whose lease expired before `moment` (seconds since the epoch).
-- def `paused` — View: the paused tasks paused for `reason` (that were in these states; paused since a time).
 - def `of_conversations` — View: the tasks of these conversations (ordered by `by`).
 - def `created` — View: the tasks created since a time (before `until`; of these conversations, an empty list being those of none; not of `besides`).
 - def `of_episode` — View: the tasks a turn made.

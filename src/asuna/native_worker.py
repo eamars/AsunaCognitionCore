@@ -386,13 +386,39 @@ class NativeLane:
 
     def wait(self, future, timeout, ep):
         """The stage's result; her tool calls in the meantime run here, one at a time, in call order, each timed for
-        her episode `ep` (tool_watch.py)."""
+        her episode `ep` (tool_watch.py). An action stage with a task is not cut at its deadline: she is asked, and it
+        is cut only if she does not give it more time (time_up.py, ADR-112 §12.2)."""
         from .role_tools import Refused
+        task = getattr(future, 'asuna_task', None)
+        stage = (self.time_up_clock(task, timeout) if getattr(self, 'lane', None) == 'executor' and task
+                 else None)
         deadline = time.monotonic() + timeout
+        try:
+            return NativeLane._wait(self, future, deadline, stage, ep, Refused)
+        finally:
+            if stage:
+                stage.ended()
+
+    def time_up_clock(self, task, timeout):
+        from . import time_up
+        app = self.worker.app
+        def ask(current, minutes, asks):
+            facts = time_up.facts(app.store, current, minutes=minutes, block=timeout,
+                                  activity=self.worker.calls.activity(current['_id'], time_up.RECENT_SECONDS))
+            threading.Thread(target=app.coordinator.time_up, args=(current, facts, asks),
+                             name='asuna-time-up', daemon=True).start()
+        return time_up.StageClock(app.service, task, timeout, ask)
+
+    def _wait(self, future, deadline, stage, ep, Refused):
         while not future.done():
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise TimeoutError('NATIVE_STAGE_TIMEOUT')
+            if stage:
+                if stage.due():
+                    raise TimeoutError('NATIVE_STAGE_TIMEOUT')
+                remaining = 1
+            else:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError('NATIVE_STAGE_TIMEOUT')
             try:
                 item = future.asuna_calls.get(timeout=min(remaining, 1))
             except Empty:

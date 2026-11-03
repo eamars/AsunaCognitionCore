@@ -624,10 +624,8 @@ class ContextBuilder:
         task_states=task_records.recent_with_inputs(self.store,scene['_id'],scope,scene['policy_epoch'])
         # Every open task (and every finished one whose result has not reached her), and only the last few others
         # (their results came back as their own turns).
-        open_tasks=[task for task in task_states if task['_active'] or task['state']=='PAUSED'
-                    or _handover.waiting(task)]
+        open_tasks=[task for task in task_states if task['_active'] or _handover.waiting(task)]
         task_states=open_tasks+[task for task in task_states if task not in open_tasks][:FINISHED_TASKS_SHOWN]
-        paused=any(task['state']=='PAUSED' for task in task_states)
         carried_on=_handover.continuations(self.store,[task['_id'] for task in task_states])
         from .tasks import FIRST_PAGE_CHARS, task_pages
         for task in task_states:
@@ -652,7 +650,7 @@ class ContextBuilder:
             if tier and action_tiers.offered():
                 task['tier']=action_tiers.words(tier)
             running=task['state'] in ('READY','RUNNING')
-            for key in ('state','feedback_state','cancel_reason','pause_reason','paused_at'):
+            for key in ('state','feedback_state','cancel_reason'):
                 task.pop(key,None)
             if not running:
                 continue
@@ -718,12 +716,6 @@ class ContextBuilder:
         if thoughts:
             context['recent_thoughts_from_program']={'items':thoughts,
                 'note':THOUGHTS_NOTE}
-        if paused:
-            context['task_continuation_from_program'] = (
-                '「做到一半宿主重启停了」的是重启后等待操作者决定的旧行动，历史与回执仍保留。'
-                '只有主人明确要继续时才可以用 task 的 message 接着做；'
-                '普通聊天、内部机会及旧任务反馈不构成继续旧工作的授权。'
-                '继续时先核实已有结果，未确认回执的操作不能盲目重做。')
         if read['linked_scenes']:
             context['linked_scenes_from_program']={
                 'readable':read['linked_scenes'],'canonical_person':target['canonical'],
@@ -991,7 +983,7 @@ class ContextBuilder:
             from . import restarts as _restarts
             restarted=_restarts.block(self.store,schedule_zone,moment)
             if restarted:context['restart_from_program']=restarted
-        if note_kind!='consult':
+        if note_kind not in ('consult','task_time'):
             note_places=_notes.places_view(self.store,persona,scene['_id'],session_class,first_note)
             if note_places:context['note_places_from_program']=note_places
         if event.get('episode_kind')=='scheduled':

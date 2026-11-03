@@ -6,12 +6,13 @@ speaking beside the action brain's text is the precondition for taking that text
 
 The words are program text for the character brain: 你 is her. Bump WAKE_VERSION with any change to them.
 """
-WAKE_VERSION = 1
+WAKE_VERSION = 2
 
 # Episode kind -> the words. `note` names the place the note was written in (a %s).
 WAKE_WORDS = {
     'task_feedback': '你交给行动脑的事交回了结果；event 里是行动脑写的',
     'consult': '行动脑做事时有话问你；event 里是行动脑写的',
+    'task_time': '你交给行动脑的一件事到了时间上限，程序来问你要不要接着做；event 里是程序写的',
     'scheduled': '你自己定的计划到点了',
     'visit': '你自己出门来这里看看',
     'presence': '心跳到了',

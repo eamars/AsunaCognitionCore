@@ -83,7 +83,7 @@ def of_turn(store, ep, event, steps=0):
         return record('own', errand['scene_id'], errand.get('person_id'))
     if kind == 'external':
         return record('words', scene_id, person_id)
-    if kind in ('task_feedback', 'consult'):
+    if kind in ('task_feedback', 'consult', 'task_time'):
         task = task_records.get(store, event.get('task_id'))
         return of_task(store, task, steps + 1) if task else record('own', scene_id, person_id)
     if kind == 'scheduled':

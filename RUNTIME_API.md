@@ -113,7 +113,7 @@ Checked when the worker starts or a proposal is validated (`src/asuna/native_set
 | `active_groups` | `4` | the usual number of active groups, 1–100 (`INVALID_ACTIVE_GROUPS`) |
 | `thoughts` | `tool` | where her 心里话 come from: `tool`, her `think` call, first in every turn; `thinking`, the summary of the character model's own first thinking in the turn, recorded by the program, shown cut at 120 characters and marked as another model's summary (`INVALID_THOUGHTS`). `thinking` needs a character route and group effort with a thinking level (`THOUGHTS_NEED_THINKING`); a conversation opened in the other mode continues in a new session at its next turn. In either mode, a turn that does not ask for her thought leaves one audit row once its first stage ends: `thought.taken`, or `thought.none` with its `why` (`no_thinking`, `redacted`, `capture_failed`, or `not_carried` when no call carried the model's thinking); her week's `thoughts` reading shows them whenever there are some, as the program's capture |
 | `provider_idle_timeout_seconds` | `1800` | read timeout of a model request, 1–86,400 (`INVALID_TIMEOUT`) |
-| `workflow_timeout_seconds` | `1800` | how long one native stage may run before it is fenced, 1–86,400 (`INVALID_TIMEOUT`) |
+| `workflow_timeout_seconds` | `1800` | how long one native stage may run, 1–86,400 (`INVALID_TIMEOUT`): her own turn's stage is fenced then; an action stage is asked about ([A stage at its limit](#an-action-stage-at-its-limit)) |
 | `sandbox.backend` | `auto` | `auto` or `none` ([Sandbox](#sandbox)) |
 | `home_groups` | none | group scene ids that read as home (owner-private) and are still groups (`visibility.home_group`) |
 | `timezone` | the machine's zone, else UTC | the IANA time zone of her one clock: every time she reads, her plans and her rhythms ([Her clock](#her-clock)) |
@@ -805,6 +805,22 @@ A task's tools are fixed when she hands it over (`src/asuna/coordinator.py` `Coo
 | development and persona-job tools | `development.py` `DEVELOPMENT_TOOLS`, `PERSONA_JOB_TOOLS` | with the development grant ([Self-development](#self-development)) |
 
 - `ask_character` asks her for a judgment and waits for her answer; `report_progress` leaves her a note without waiting. Neither creates a public reply, a task or a grant.
+
+#### An action stage at its limit
+
+An action stage that reaches `workflow_timeout_seconds` is not cut: it goes on working while she is asked, in one
+turn of kind `task_time` in the task's own conversation (as `ask_character`'s turn: no channel, no grant, never
+resumed at a start). Its event's trusted item (kind `task_time`, `version`) has the task's title, brief and original
+input, and in words how long the stage has run, the task's tool steps, its calls in the last 5 minutes, what waits
+behind it in the action queue, how many times she already gave it more time, and the window. The turn offers only her
+`task` tool's `more`, `message` and `stop` (and `think`, `recall`). `more` gives the same run one more block of
+`workflow_timeout_seconds` (`time_more` on the task counts them) and she is asked again when it runs out; it is refused
+in words outside such an ask, for a task no longer running, and while a worker restart is pending. When 10 minutes pass
+from the deadline with no `more`, the stage is fenced and the task is `BLOCKED` with the limit's words, as before;
+a stage that reports or that she stops in the window ends as always. The task carries `time_up` (`{ask, at}`) while
+she is asked. The audit has `task.time_up` (`ask`, `minutes`, `steps`), `task.time_more`, `task.time_up_outcome`
+(`ask`, `outcome`: `more`, `ended`, `stopped`, `cut`) and, when her turn could not run, `task.time_up_failed`
+(`time_up.py`).
 - `list_files` walks the task folder up to 2,000 entries (files and folders) and lists the files it found, sorted by path; when the folder has more, its answer also has `limited`, in words (`tasks.py` `LIST_FILES_MOST`).
 - History search and the discussion digest run in the data child ([Process layout](#process-layout)): 30 seconds a call, a call at a time, at most 30 seconds behind another call or the child's start. On a database the child cannot open itself (an in-process one, or an adapter loaded from a database package) they run in the worker, without these limits. A call that did not run to its end is `FAILED` with one of these (`src/asuna/data_children.py`):
 

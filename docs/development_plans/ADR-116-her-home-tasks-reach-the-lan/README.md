@@ -21,16 +21,21 @@ for `web_fetch`'s private-network refusal).
   variable or permission mode turns it off.
 - **Upstream removed it** in `2f01ad549c` (2026-10-20, "let web_fetch reach non-public destinations": the check "did
   not confine a model that has shell network access"), on master, in no release yet.
-- **Her home tasks already reach the LAN.** `sandbox_run` confines writes only; reads and network are not restricted
-  (RUNTIME_API), and it is given only to tasks of the owner's own conversations (`Coordinator._grants`). Every task gets
+- **Her home tasks already reach the LAN**, by reading, not measured: `sandbox_run` confines writes only; reads and
+  network are not restricted (RUNTIME_API's `sandbox_run` entry; DSH `packages/sandbox/sandbox/README.md:166`, "the seam
+  expresses no network…restrictions", and `sandbox-windows-acl/README.md:125`, a confined child can "open sockets"),
+  and it is given only where the session class is owner-private (`Coordinator._grants`). A measured fetch of a LAN
+  device from `sandbox_run` is the first reading after landing (§6). Every task gets
   `web_fetch` (`tasks.ACTION_DSH_CAPABILITIES`), a task begun in a public group included: for those, the fetch gate is
   the only barrier to the LAN.
 - **Her `web_fetch` is our provider.** `packages/cognition-core/src/fetch.js` wraps DSH's `HttpFetchProvider` (the npm
   `@deepseek-ai/dsh-web-fetch-http` 0.2.1-rc.2, not the fork), whose constructor already takes a resolver
   (`HttpFetchResolver`). The provider is given only `{url}`: it cannot tell which task calls.
-- **The services she could reach are token-authorized** (checked 11-03 with a GET carrying no token): her DSH Web
-  (`127.0.0.1:8780`) answers 401; her Host's channel server (`127.0.0.1:8766`) answers 400 `UNKNOWN_CHANNEL_ENDPOINT`
-  without a route key; the QQ adapter's NapCat endpoint (on the LAN) has a token set. `web_fetch` sends a bare URL and no
+- **The services she could reach are token-authorized** (measured 11-03 ~15:45 with a GET carrying no token): her DSH
+  Web (`127.0.0.1:8780`) answers 401; her Host's channel server (`127.0.0.1:8766`) answers 400
+  `UNKNOWN_CHANNEL_ENDPOINT` without a route key; the QQ adapter's NapCat endpoint (on the LAN) has a token set (read
+  from its run config, value not printed). Both of her Host's ports listen on `127.0.0.1` only, not `0.0.0.0`
+  (`netstat -ano`, same time): opening loopback lets this machine's tasks reach them, not the LAN. `web_fetch` sends a bare URL and no
   header. A service that takes its token in the URL could be reached by a task that read the token from disk, which a
   home task can already do with `sandbox_run`: opening `web_fetch` adds no reach a home task does not have.
 
@@ -41,10 +46,22 @@ was meant to stop, and only gets in the way.
 
 **Rule: `web_fetch` reaches what `sandbox_run` reaches.**
 
-- **D1. The grant.** A task's network is decided once, when it is handed over, by the same line as `sandbox_run`: a
-  task whose delegating turn is in an owner-private conversation (`session_class == OWNER_PRIVATE`) gets `network:
-  'any'`; every other task `network: 'public'`. It is recorded on the task with its grant (`_grants` returns it), so a
-  continuation keeps it, and goes to the plugin in the session binding.
+- **D1. The grant.** A task's network is decided once, when it is handed over, by the same line as `sandbox_run`: the
+  session class of the turn that delegates it (`visibility.session_class`, read by `Coordinator._grants` from the
+  turn's manifest). `OWNER_PRIVATE` gives `network: 'any'`, everything else `network: 'public'`. It is recorded on the
+  task with its grant, so a continuation keeps it, and goes to the plugin in the session binding. By place:
+
+  | Where the delegating turn is | Session class | Network |
+  |---|---|---|
+  | the Web chat | owner-private | any |
+  | the owner's private chat on a channel (a DM whose canonical person is the owner) | owner-private | any |
+  | a home line (`channel_kinds.home`: the agent lines, the peer line) | owner-private | any |
+  | a group the owner configured as home (`home_groups`); others speak there too | owner-private | any |
+  | a home turn woken by a note from outside that delegates with `for` (ADR-111): the work runs in the Web chat | owner-private (the delegating turn is at home) | any |
+  | any other group or private chat | public | public |
+
+  This is exactly where `sandbox_run` is given today; the rows that may carry other people's words (a home group, work
+  asked from outside) reach the LAN by commands already.
 - **D2. The provider.** `fetch.js` builds two providers: DSH's as now (public only), and one with a resolver that
   resolves the host (`dns.lookup`, all addresses, verbatim order; an IP literal as it is) and passes every address,
   loopback included. Pinning, the same-origin redirect rule and each hop's resolution stay DSH's. Which one serves a

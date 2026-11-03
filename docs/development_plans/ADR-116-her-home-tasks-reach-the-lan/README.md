@@ -16,14 +16,15 @@ for `web_fetch`'s private-network refusal).
 - **One gate: `web_fetch`.** DSH's HTTP fetch provider refuses every non-public address: it resolves the host first and
   passes only `unicast` addresses (private, loopback, link-local, CGNAT, `0.0.0.0`, multicast refused; IPv4-mapped IPv6
   judged by its IPv4), pins the connection to the checked addresses, follows same-origin redirects only and checks each
-  hop (`deepseek-harness:packages/web/web-fetch-http/src/network.ts:54-212`, `provider.ts:66-144`, at the pinned
+  hop (`deepseek-harness:packages/web/web-fetch-http/src/network.ts` `isPublicIpAddress`, `resolve`, `createPinnedLookup`;
+  `provider.ts` `fetch`, `requestOnce`; at the pinned
   `d9d52ada`). The refusal: `URL hostname "…" resolves to a non-public IP address` (`WEB_BLOCKED_URL`). No setting,
   variable or permission mode turns it off.
 - **Upstream removed it** in `2f01ad549c` (2026-10-20, "let web_fetch reach non-public destinations": the check "did
   not confine a model that has shell network access"), on master, in no release yet.
 - **Her home tasks already reach the LAN**, by reading, not measured: `sandbox_run` confines writes only; reads and
-  network are not restricted (RUNTIME_API's `sandbox_run` entry; DSH `packages/sandbox/sandbox/README.md:166`, "the seam
-  expresses no network…restrictions", and `sandbox-windows-acl/README.md:125`, a confined child can "open sockets"),
+  network are not restricted (RUNTIME_API's `sandbox_run` entry; DSH `packages/sandbox/sandbox/README.md`, "the seam
+  expresses no network…restrictions", and `sandbox-windows-acl/README.md`, a confined child can "open sockets"),
   and it is given only where the session class is owner-private (`Coordinator._grants`). To be measured before the
   build (§6): pending. Every task gets
   `web_fetch` (`tasks.ACTION_DSH_CAPABILITIES`), a task begun in a public group included: for those, the fetch gate is
@@ -33,9 +34,10 @@ for `web_fetch`'s private-network refusal).
   (`HttpFetchResolver`). The provider is given only `{url}`: it cannot tell which task calls.
 - **The services she could reach are token-authorized.** Her DSH Web (`127.0.0.1:8780`) answers 401 to a GET with no
   token (measured 11-03 ~15:45; which code answers it is not checked). Her Host's channel server (`127.0.0.1:8766`)
-  takes a request only with its bearer token (`channels.py:275` `ChannelController.authenticate`,
+  takes a request only with its bearer token (`channels.py` `ChannelController.authenticate`,
   `secrets.compare_digest(authorization, 'Bearer ' + token)`, by reading); the 400 `UNKNOWN_CHANNEL_ENDPOINT` measured
-  the same minute comes from the path check before authentication (`channels.py:931`) and is no evidence of the token.
+  the same minute comes from the path check before authentication (`channels.py` `ChannelServer`'s request handler,
+  `handle_request`) and is no evidence of the token.
   The QQ adapter's NapCat endpoint (on the LAN) has a token set (read from its run config, value not printed). Both of her Host's ports listen on `127.0.0.1` only, not `0.0.0.0`
   (`netstat -ano`, same time): opening loopback lets this machine's tasks reach them, not the LAN. `web_fetch` sends a bare URL and no
   header. A service that takes its token in the URL could be reached by a task that read the token from disk, which a
@@ -85,7 +87,9 @@ was meant to stop, and only gets in the way.
 **Upgrading DSH.** Upstream `2f01ad549c` removes the check and, with it, `HttpFetchResolver` and the provider's
 resolver parameter that D2 uses. While the pin has the check (it does at `d9d52ada`, and no release tag contains the
 commit yet), D2 stands; the DSH upgrade that brings the commit in makes every fetch reach every address, and D2 is then
-rewritten as a check of ours in `fetch.js` for public tasks. The upgrade guide that commit adds sits under a `v0.2.1-rc.2`
+rewritten as a check of ours in `fetch.js` for public tasks, carrying all of what DSH's check does: every resolved
+  address judged (not the first only), IPv4-mapped IPv6 by its IPv4, the NAT64 translation, and pinning to the
+  addresses checked. The upgrade guide that commit adds sits under a `v0.2.1-rc.2`
 folder although no release contains it; not looked into.
 
 Not in scope: work asked from outside, which runs in the Web chat (ADR-111), gets `network: 'any'` as it gets

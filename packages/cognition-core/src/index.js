@@ -1305,7 +1305,7 @@ export class CognitionCore {
     // Steer into her running turn waits as the next turn instead of failing it (steer.js).
     if (lane === 'character') scope.on('agent/inbox/inserted', ({ agent, message }) => {
       if (!agent) return;
-      queueMicrotask(() => holdSteeredInput(agent, message, Boolean(this.state(agent.session.id).current)));
+      queueMicrotask(() => holdSteeredInput(agent, message));
     });
     // A platform line that waited for the conversation's first turn (navigation.js) is history, not local input.
     scope.on('agent/inbox/claimed', ({ agent, message }) => {

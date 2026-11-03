@@ -629,3 +629,29 @@ order (the coordinator's lock before the effects lock, no reverse path), no wait
 is asked, the re-queue's order and its guard against running a task twice, no task `PAUSED` reader left in `src`,
 and `task_time` following `consult` wherever it should.
 
+
+### 12.10 D4. She can settle a returned task herself
+
+Decided by the owner 2026-11-03, from her observation that afternoon: `task-7f919f74`, handed back interrupted by
+D2, had in fact been delivered by her 11:44 publication, and the record could say so only through one more run of the
+action brain. It is not open work anywhere once its result has reached her (§12.8); the record is merely untrue.
+
+**Broken invariant:** a task's record says how it ended, but only the action brain's report can set it; what she knows
+of its end has no way in.
+
+**Design.** Her `task` tool gets one more choice, `settle`, with a categorical field `as`: 「已办完」 (done) or 「不做了」
+(dropped), mapped by the program to `done` and `dropped`.
+
+- It takes a task whose run has ended other than well (`BLOCKED`, `PARTIAL`, `UNKNOWN`, `NEEDS_CHARACTER_DECISION`)
+  and whose result has reached her (`feedback_state` taken). Otherwise it is refused in words: a queued or running
+  task is stopped with `stop`; a `RETURNED` or `DONE` one needs nothing; one whose result has not reached her yet
+  waits for it.
+- The program writes `settled: {as, at, episode_id}` on the task and records `task.settled`. Nothing runs again, no
+  state changes, no grant is touched. Her task list then says her judgment in place of the report's
+  (「你判定已经办完」 / 「你决定不再做」).
+- It is offered where `message` is (her home conversations that list tasks), never in a turn about a running task
+  (`consult`, `task_time`). A later `message` to a settled task continues it as today; the continuation is then the
+  record to go by.
+
+**Cost.** One option and one field in her tool list (the tool budget raised by what it measures), one line in
+RUNTIME_API, one test. Installed with the next core landing (owner: bundled, no restart of its own).

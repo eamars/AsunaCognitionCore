@@ -271,7 +271,9 @@ def test_she_settles_a_returned_task_herself_and_her_list_says_her_judgment(stor
     from asuna import handover
     from asuna.tasks import SETTLED_WORDS, SETTLE_NOT_YET, SETTLE_RUNNING, SETTLE_WELL
     service = TaskService(store)
-    from_home(store, 'task-back', 'BLOCKED', feedback_state='DELIVERED', result={'status': 'blocked', 'text': INTERRUPTED})
+    from_home(store, 'task-back', 'BLOCKED', feedback_state='DELIVERED', failure_type='HostRestart',
+              result={'status': 'blocked', 'text': INTERRUPTED})
+    from_home(store, 'task-lost', 'BLOCKED', feedback_state='UNDELIVERABLE')
     from_home(store, 'task-waiting', 'BLOCKED', feedback_state='READY')
     from_home(store, 'task-done', 'RETURNED', feedback_state='DELIVERED')
     from_home(store, 'task-busy', 'RUNNING')
@@ -281,7 +283,12 @@ def test_she_settles_a_returned_task_herself_and_her_list_says_her_judgment(stor
     assert service.settle('task-back', 'done', 'ep-1') == SETTLED_WORDS['done']
     back = task_records.get(store, 'task-back')
     assert back['state'] == 'BLOCKED' and back['settled']['as'] == 'done'           # nothing re-runs, its state stays
-    assert handover.status_words(back) == '你判定已经办完'
+    assert handover.status_words(back) == '你判定已经办完（原：宿主重启打断）'
+    assert service.settle('task-back', 'dropped', 'ep-2') == SETTLED_WORDS['dropped']     # the later judgment stands
+    assert task_records.get(store, 'task-back')['settled']['as'] == 'dropped'
+    assert len(audits(store, 'task.settled')) == 2                                    # each one is history
+    service.settle('task-lost', 'done', 'ep-3')                 # a result that never reached her can be settled too
+    assert handover.status_words(task_records.get(store, 'task-lost')) == '你判定已经办完（原：没做成；结果没送到你手上）'
     assert handover.status_words(back, 'task-later') == '后来接着做了一趟，以 task-later 那条为准'
     assert 'settled' not in task_records.get(store, 'task-waiting')
 

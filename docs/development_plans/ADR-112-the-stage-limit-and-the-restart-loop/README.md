@@ -634,7 +634,9 @@ and `task_time` following `consult` wherever it should.
 
 Decided by the owner 2026-11-03, from her observation that afternoon: `task-7f919f74`, handed back interrupted by
 D2, had in fact been delivered by her 11:44 publication, and the record could say so only through one more run of the
-action brain. It is not open work anywhere once its result has reached her (§12.8); the record is merely untrue.
+action brain. Once its hand-back is over the task is not open work anywhere (her context's open tasks are the active
+ones and those `handover.waiting`; `self_review`'s open list and the night stage count only `READY` and `RUNNING`);
+the record is merely untrue.
 
 **Broken invariant:** a task's record says how it ended, but only the action brain's report can set it; what she knows
 of its end has no way in.
@@ -643,15 +645,22 @@ of its end has no way in.
 (dropped), mapped by the program to `done` and `dropped`.
 
 - It takes a task whose run has ended other than well (`BLOCKED`, `PARTIAL`, `UNKNOWN`, `NEEDS_CHARACTER_DECISION`)
-  and whose result has reached her (`feedback_state` taken). Otherwise it is refused in words: a queued or running
-  task is stopped with `stop`; a `RETURNED` or `DONE` one needs nothing; one whose result has not reached her yet
-  waits for it.
-- The program writes `settled: {as, at, episode_id}` on the task and records `task.settled`. Nothing runs again, no
-  state changes, no grant is touched. Her task list then says her judgment in place of the report's
-  (「你判定已经办完」 / 「你决定不再做」).
+  and whose hand-back is over (`feedback_state` in `handover.TAKEN`: delivered, or given up as `SUPPRESSED` or
+  `UNDELIVERABLE`, the dead ones most in need of an end). Otherwise it is refused in words: a queued or running task
+  is stopped with `stop`; a `RETURNED` or `DONE` one needs nothing; one still being handed back waits for it. Which
+  task is hers is `_own_task`'s, with its own refusals: no new check.
+- The program writes `settled: {as, at, episode_id, was}` on the task (`was`: how it ended, in words: 宿主重启打断,
+  到了时间上限, or the outcome's) and records `task.settled`. Nothing runs again, no state changes, no grant is
+  touched. Settled again, the later judgment stands, and each `task.settled` row is its history: no undo field. Her
+  task list then says her judgment beside how it ended, and says when its result never reached her
+  (「你判定已经办完（原：宿主重启打断）」, 「你决定不再做（原：没做成；结果没送到你手上）」). `settled` is not declared in the
+  store: nothing filters or sorts on it.
 - It is offered where `message` is (her home conversations that list tasks), never in a turn about a running task
   (`consult`, `task_time`). A later `message` to a settled task continues it as today; the continuation is then the
   record to go by.
 
 **Cost.** One option and one field in her tool list, 103 characters as measured (the tool budget raised by that), one
-line in RUNTIME_API, two tests. Installed with the next core landing (owner: bundled, no restart of its own).
+paragraph in RUNTIME_API, two tests: `test_she_settles_a_returned_task_herself_and_her_list_says_her_judgment` (the
+preconditions, a dead hand-back settled and said, the later judgment standing with each one recorded, the original
+end kept) and `test_settle_is_offered_where_message_is_and_never_in_a_turn_about_a_running_task`. Read by her
+2026-11-03 15:22 (progress.md). Installed with the next core landing (owner: bundled, no restart of its own).

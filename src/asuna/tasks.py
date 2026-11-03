@@ -448,6 +448,15 @@ from .records import messages as message_records
 WORKSPACE_TOOLS.append(RECEIVED_FILE_TASK_TOOL)
 
 
+def ended_as(task):
+    """How a returned task ended, in words, kept beside her judgment when she settles it (ADR-112 §12.10)."""
+    if task.get('failure_type') == 'HostRestart':
+        return '宿主重启打断'
+    if str((task.get('result') or {}).get('text') or '').startswith(STOPPED_AT_LIMIT.split('（')[0]):
+        return '到了时间上限'
+    return handover.OUTCOME_WORDS.get(task['state'], '跑完了')
+
+
 # ADR-112 §12.10: what her settle says back.
 SETTLED_WORDS = {'done': '记下了：这件你判定已经办完，不会再跑。', 'dropped': '记下了：这件你决定不再做，不会再跑。'}
 SETTLE_RUNNING = '这件还在排或在跑：不做了就用 stop。'
@@ -533,7 +542,9 @@ class TaskService:
                 return SETTLE_GONE
             if task.get('feedback_state') not in handover.TAKEN:
                 return SETTLE_NOT_YET
-            task_records.save(self.store, {**task, 'settled': {'as': judged, 'at': now(), 'episode_id': episode_id}},
+            # Settled again, the later judgment stands; each is its own task.settled row. How it ended stays beside it.
+            task_records.save(self.store, {**task, 'settled': {'as': judged, 'at': now(), 'episode_id': episode_id,
+                                                               'was': ended_as(task)}},
                               expected=task['revision'], stream=task_id)
         self.store.audit(task_id, 'task.settled', {'as': judged, 'episode_id': episode_id}, task['scope_key'])
         return SETTLED_WORDS[judged]

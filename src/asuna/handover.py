@@ -101,9 +101,13 @@ def status_words(task, continued_by=None):
         return '宿主停机时撤下了：要做就用 task 的 message 接着做' if task.get('cancel_reason') == 'host_stop' else '叫停了'
     if state == 'STALE':
         return '交代改过了，这一份作废'
-    settled = (task.get('settled') or {}).get('as')
-    if settled:
-        return SETTLED.get(settled, SETTLED['done'])          # her own judgment of how it ended (ADR-112 §12.10)
+    settled = task.get('settled') or {}
+    if settled.get('as'):
+        # Her own judgment of how it ended, beside how it ended, and whether its result ever reached her (ADR-112 §12.10).
+        notes = [('原：' + settled['was']) if settled.get('was') else None,
+                 '结果没送到你手上' if task.get('feedback_state') in ('SUPPRESSED', 'UNDELIVERABLE') else None]
+        notes = [note for note in notes if note]
+        return SETTLED.get(settled['as'], SETTLED['done']) + ('（%s）' % '；'.join(notes) if notes else '')
     outcome = OUTCOME_WORDS.get(state, '跑完了')
     handed = task.get('feedback_state')
     if handed is None:

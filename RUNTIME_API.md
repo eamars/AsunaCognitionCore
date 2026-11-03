@@ -826,9 +826,11 @@ of each stage is its own turn. The task carries `time_up` (`{ask, at, turn_at?}`
 (`time_up.py`).
 
 Her `task` tool's `settle` (`as`: 「已办完」 or 「不做了」) records her judgment of how a returned task ended: only on a
-`BLOCKED`, `PARTIAL`, `UNKNOWN` or `NEEDS_CHARACTER_DECISION` task whose result reached her, as `settled` (`{as: done |
-dropped, at, episode_id}`) and `task.settled`; nothing runs again and the state stays. Her task list then says her
-judgment; a later continuation is the record to go by. Elsewhere it is refused in words (`TaskService.settle`).
+`BLOCKED`, `PARTIAL`, `UNKNOWN` or `NEEDS_CHARACTER_DECISION` task whose hand-back is over (`feedback_state` in
+`handover.TAKEN`), as `settled` (`{as: done | dropped, at, episode_id, was}`, `was` how it ended in words) and one
+`task.settled` row each time; the latest judgment stands, nothing runs again and the state stays. Her task list then
+says her judgment beside how it ended, and when its result never reached her; a later continuation is the record to go
+by. Elsewhere it is refused in words (`TaskService.settle`).
 - `list_files` walks the task folder up to 2,000 entries (files and folders) and lists the files it found, sorted by path; when the folder has more, its answer also has `limited`, in words (`tasks.py` `LIST_FILES_MOST`).
 - History search and the discussion digest run in the data child ([Process layout](#process-layout)): 30 seconds a call, a call at a time, at most 30 seconds behind another call or the child's start. On a database the child cannot open itself (an in-process one, or an adapter loaded from a database package) they run in the worker, without these limits. A call that did not run to its end is `FAILED` with one of these (`src/asuna/data_children.py`):
 

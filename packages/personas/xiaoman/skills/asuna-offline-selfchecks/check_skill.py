@@ -120,6 +120,17 @@ ENVOY_FILE = "integration/envoy_meters_read.py"
 BASELINE_LIST_ENTRIES = 90
 BASELINE_ENVOY_HITS = 11
 
+# 11-04：发布前一条命令（pre_publish_scan.py）并进「发布前自检（私密词扫描）」一节。一条判据名底下挂几个关键串，缺哪个写进 detail。
+PREPUB_SCRIPT_RULES = [
+    ("prepub_script_named", "pre_publish_scan.py"),
+    ("prepub_script_expect_flag", "--expect"),
+    ("prepub_script_missing_is_stop", "缺失默认算停"),
+    ("prepub_script_expect_entries", "--expect-entries"),
+    ("prepub_script_unjudged_said", "②没判"),
+    ("prepub_script_exit_codes", "2 = 没法判"),
+    ("prepub_script_self_compare", "--candidate <ACTIVE 的 packageRoot>"),
+]
+
 SECTIONS = [
     "## 用途",
     "## 增量",
@@ -381,6 +392,8 @@ def main():
     missing_prepub = [name + "（" + token + "）" for name, token in PREPUB_SCAN_RULES
                       if token not in body]
     check("prepublish_private_word_criterion", not missing_prepub, "、".join(missing_prepub))
+    missing_script = [name + "（" + token + "）" for name, token in PREPUB_SCRIPT_RULES if token not in body]
+    check("prepublish_script_documented", not missing_script, "、".join(missing_script))
 
     # 「判据补遗」一节的八条钉：只认本节范围内的字面（别处复述的不算）。
     backlog = section_of(body, BACKLOG_TITLE) or ""

@@ -1,6 +1,6 @@
 ---
 name: asuna-outbound-round
-description: 沈小满「出门那一轮」（在群／私聊露面）的固定做法。时机：就在我身处的那个场景做，查原话当场能用、群笔记当场落，不在本机这边绕道翻开发库。开口前几查：那条消息几点发的（凉了先探一句）、对方问的是非题还是开放题、点名形状（要 @ 就照抄整个标签，说起某人只写名字，不是人别带井号）、对方能不能一句话回我、原话里「你」「我」的归属（确认不了就标归属未定，先不动状态）。回看：接住和砸的都记，一次至多一条教训，笔记只写下次能照做的规则。一条边界：别拿回看自己发出的出站消息去验 @ 有没有落成提及——存的就是我写出去的原样，形状在发送前写对，落成与否判不了就写判不了。这条道上有哪几份技能的真名单（群 7 份／别人私聊 2 份／家里 17 份，11-03 现量）也写在这里：调 skill 只用真名，别编名字换变体重试。出门开口前、复盘一轮对话时读这一份。附零依赖自检 check_skill.py。
+description: 沈小满「出门那一轮」（在群／私聊露面）的固定做法。时机：就在我身处的那个场景做，查原话当场能用、群笔记当场落，不在本机这边绕道翻开发库。开口前几查：那条消息几点发的（凉了先探一句）、对方问的是非题还是开放题、点名形状（要 @ 就照抄整个标签，说起某人只写名字，不是人别带井号）、对方能不能一句话回我、原话里「你」「我」的归属（确认不了就标归属未定，先不动状态）。回看：接住和砸的都记，一次至多一条教训，笔记只写下次能照做的规则。一条边界：别拿回看自己发出的出站消息去验 @ 有没有落成提及——存的就是我写出去的原样，形状在发送前写对，落成与否判不了就写判不了。这条道上有哪几份技能的真名单也写在这里（群／别人私聊／家里各几份不手数，跑本目录 skill_roster.py 取；名单是 11-03 快照）：调 skill 只用真名，别编名字换变体重试。出门开口前、复盘一轮对话时读这一份。附零依赖自检 check_skill.py。
 scene_kinds: [home, group, dm]
 ---
 
@@ -38,12 +38,13 @@ scene_kinds: [home, group, dm]
 
 ## 这条道上有哪几份技能——别编名字
 
-- **群（group）7 份**：`asuna-become-human`、`asuna-bot-or-person`、`asuna-image-generation-and-display`、`asuna-meme-lookup`、`asuna-outbound-round`、`asuna-running-version`、`asuna-usage-readout`。
-- **别人私聊（dm）2 份**：`asuna-outbound-round`（就是这一份）和 `asuna-meme-lookup`。
-- **家里（home／owner_private，含 peer 线）17 份全给**：上面那 7 份，加 `asuna-daily-review`、`asuna-offline-selfchecks`、`asuna-render-budget-per-place`、`asuna-credentials`、`asuna-database`、`asuna-self-improvement`、`qq-napcat-adapter` 这七份，再加头部只写 home 的 `asuna-lofter-login`、`bilibili`、`lofter` 三份，共十份不带出去的。
+- **群（group）**（个数跑脚本取，11-03 快照 7 份）：`asuna-become-human`、`asuna-bot-or-person`、`asuna-image-generation-and-display`、`asuna-meme-lookup`、`asuna-outbound-round`、`asuna-running-version`、`asuna-usage-readout`。
+- **别人私聊（dm）**（个数跑脚本取，11-03 快照 2 份）：`asuna-outbound-round`（就是这一份）和 `asuna-meme-lookup`。
+- **家里（home／owner_private，含 peer 线）全给**（个数跑脚本取，11-03 快照 17 份）：上面那 7 份，加 `asuna-daily-review`、`asuna-offline-selfchecks`、`asuna-render-budget-per-place`、`asuna-credentials`、`asuna-database`、`asuna-self-improvement`、`qq-napcat-adapter` 这七份，再加头部只写 home 的 `asuna-lofter-login`、`bilibili`、`lofter` 三份，共十份不带出去的。
 - **2026-11-02 这一版怎么量的**：从 `.runtime/adr008/activation.json` 里 `active` 选中那格的生效根（人格包＋认知核＋通道包各自的 `packageRoot/skills`）列出实际存在的技能目录，按各份 `SKILL.md` 头部 `scene_kinds` 字段数；头部没写 `scene_kinds` 的按只在家里算。这一趟是**生效根＋头部字段**算出来的，**没跑群任务现场 catalog 读数**。还有两格没验：群那一拍的角色回合能看见几份；被配成 owner_private 的那个群（那里所有根都出现，别拿它当群也是 17 份）。
 - **2026-11-03 重量**：同一办法（按各份 `SKILL.md` 头部 `scene_kinds`，头部没写的按只在家里算）重数：群 7／dm 2 没变，家里 14→17（多出 `asuna-lofter-login`、`bilibili`、`lofter`，都只写 home）。仍是头部字段算出来的，没跑群任务现场 catalog 读数；`qq-napcat-adapter` 那份的头部这一版没再读，沿用上一版。
 - **旧观测留一行不删**：10-22 那次实判是群 6 份／别人私聊 1 份（dm 那格当时是合成配对）／家里 12 份——那份名单里没有 `asuna-meme-lookup`，`asuna-daily-review` 也还没建，已过时。
+- **个数跑脚本取，别手数**：`python3 skills/asuna-outbound-round/skill_roster.py`（本目录的 `skill_roster.py`，只读）。它读 `activation.json` 里 `active.<项目>.packageRoot/skills` 各份 `SKILL.md` 头部的 `scene_kinds`，输出群／dm／家里三份名单和个数；头部没写 `scene_kinds` 的并进家里（并单列出来）；同名跨根只算一份并报出来。`--root <包根>` 改读指定根（发布前拿候选根对一遍），`--json` 机器可读，退出码 0 = 数出来了、1 = 没找到根或一份头部都没读到。它和上面这几行名单不一致时，以脚本输出为准，再回来改这几行快照。跑它要读得到数据根的地方（家里）；群里那一拍没有脚本，就照上面的快照名单，并当它是旧的。
 - 名单会变——改谁的 `scene_kinds`、新加一份技能都会变，用之前先当它是旧的。
 
 两条规矩：

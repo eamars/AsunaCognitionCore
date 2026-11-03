@@ -100,6 +100,14 @@ python3 skills/asuna-running-version/version_probe.py --package core --file skil
 
 digest 不动，不能读成「技能没换」。
 
+**这三样并成一条命令（`--receipt`）**：
+
+```sh
+python3 skills/asuna-running-version/version_probe.py --receipt --package xiaoman --file skills/<技能名>/SKILL.md --needle "<只有新版才带的字面>" [--expect-sha <改后的 sha 前缀>]
+```
+
+一次打出：① `activation.json` 该项目 selection 与 active 并排的 candidate／previous（两边 candidate 一致且 state 是 ACTIVE 才算落到 ACTIVE）；② 最近一次 self-publish 回执（`receipt_id`、`published_at`、`changed_files`、`origin`、`content_check`、`boot_probe`、reason 前段），读的是 selection 那格自带的那份，不是别处翻出来的；③ 运行时那份文件的内容 sha256／字节数、needle 在不在、`--expect-sha` 对得上对不上。末尾一行三样各写“通过／不通过／没给”，**缺一样不算判过**；没给 `--file` 时第三样写“没给”，读数里明说这不算判过。退出码：0 = 三样都读到且都通过；1 = 该读的没读到；3 = 都读到了但 needle 不在、sha 对不上或 selection 与 active 不一致（读数，不是故障）。它不替我给“判生效”这个结论，只把三样读数一次拿齐。同目录脚本已带这一步。
+
 ## 六、回执说「本机检出有 origin/main 没有的提交」＝本机比远端新
 
 那是 `checkout.state = diverged`：本机有远端没有的提交，快进不了，这次装的是磁盘上原来的检出。**这不是「没装」**。

@@ -27,6 +27,17 @@
   3. --needle 字面在不在（可重复传；字面按 UTF-8 字节匹配）
 退出码：0 = 三行都读到（needle 在，或没传）；1 = 该读的没读到（没 activation／没这个项目／文件不在）；
 3 = 都读到了但某个 needle 不在（这是读数，不是故障）。
+
+第六步（加 --receipt，只读）：「判这次发布生效没」的三样并成一条命令：
+    python3 version_probe.py --receipt --package xiaoman --file skills/<技能>/SKILL.md --needle <只有新版才带的字面> [--expect-sha <改后的 sha 前缀>]
+一次打出：
+  1. activation.json 该项目的 candidate／previous（selection 与 active 并排，两边 candidate 一致才算落到 ACTIVE）；
+  2. 最近一次 self-publish 回执（receipt_id、published_at、changed_files、origin、content_check、boot_probe、
+     reason 前段），读的是 activation.json 里 selection 那格自带的那份；
+  3. 运行时那份 --file 的内容 sha256／字节数，needle 在不在，--expect-sha 对得上对不上。
+末尾一行三样各写「通过／不通过／没给」，缺一样不算判过。退出码：0 = 三样都读到且都通过；1 = 该读的没读到；
+3 = 都读到了但 needle 不在或 sha 对不上或 selection 与 active 不一致（读数，不是故障）。没给 --file 时第三样写「没给」，
+退出码仍按前两样算，但文字里明说这不算判过。
 判据来源（读数时别读错，同样写在 SKILL.md 第五节）：
   - launch.json 的 installed（loaded.packages 就读它）报的是「该装的那档」，不是在跑的那档；
   - 被退回（supervisor 退回上一档）的重启不进 audit_events，只落 activation.json；
@@ -298,6 +309,97 @@ def part_package(data, project, relfile, needles):
     return 3 if missing else 0
 
 
+def part_receipt(data, project, relfile, needles, expect_sha):
+    """「判这次发布生效没」三样并一条：activation（candidate／previous）＋最近 self-publish 回执＋指定文件内容 sha／needle。"""
+    raw, shifted = clock_lines()
+    section("6. 判「这次发布生效没」三样并一条：%s" % project)
+    print("读的时刻：UTC %s → UTC+13 %s ／ UTC+8 %s（同一个 UTC 读数的两种换算）" % (raw, shifted[13], shifted[8]))
+    activation = read_json(os.path.join(data, "adr008", "activation.json"))
+    if not activation or "_坏在哪" in activation:
+        print("读不到 activation.json：", activation)
+        return 1
+    selected = (activation.get("projects") or {}).get(project)
+    active = (activation.get("active") or {}).get(project)
+    if not selected or not active:
+        print("activation.json 里没有 %s（projects 可选：%s；active 可选：%s）"
+              % (project, "、".join(sorted(activation.get("projects") or {})), "、".join(sorted(activation.get("active") or {}))))
+        return 1
+    previous = selected.get("previous") or {}
+    same = bool(selected.get("candidate")) and selected.get("candidate") == active.get("candidate")
+    print("\n【第一样】activation.json")
+    print("  selection(projects.%s): state=%s candidate=%s" % (project, selected.get("state"), selected.get("candidate")))
+    print("                         published_at=%s activated_at=%s" % (selected.get("published_at"), selected.get("activated_at")))
+    print("  previous: candidate=%s published_at=%s" % (previous.get("candidate"), previous.get("published_at")))
+    print("  active(真跑起来的): state=%s candidate=%s activated_at=%s" % (active.get("state"), active.get("candidate"), active.get("activated_at")))
+    print("  selection.candidate %s active.candidate，selection.state=%s" % ("==" if same else "!=", selected.get("state")))
+    first_ok = same and selected.get("state") == "ACTIVE"
+    receipt = selected
+    print("\n【第二样】最近一次 self-publish 回执（activation.json 里 selection 那格自带）")
+    print("  receipt_id: %s" % receipt.get("receipt_id"))
+    print("  published_at: %s  content_check: %s  content_scan: %s" % (receipt.get("published_at"), receipt.get("content_check"), receipt.get("content_scan")))
+    origin = receipt.get("origin") or {}
+    print("  origin: task_id=%s unattended=%s" % (origin.get("task_id"), origin.get("unattended")))
+    changed = receipt.get("changed_files") or []
+    print("  changed_files(%d): %s" % (len(changed), "、".join(changed)))
+    print("  deleted_files: %s" % ("、".join(receipt.get("deleted_files") or []) or "无"))
+    probe = receipt.get("boot_probe") or {}
+    print("  boot_probe.exit_code: %s" % probe.get("exit_code"))
+    print("  reason（前 300 字）: %s" % str(receipt.get("reason") or "")[:300])
+    second_ok = bool(receipt.get("receipt_id"))
+    third = "没给"
+    code = 0
+    print("\n【第三样】运行时那份文件内容")
+    if not relfile:
+        print("  没给 --file：这一样没读，不算判过。")
+    else:
+        root = active.get("packageRoot")
+        forms = package_file_forms(root, relfile) if root else []
+        hit = next((form for form in forms if os.path.isfile(form[1])), None)
+        if not hit:
+            print("  运行时那份文件找不到。试过的写法（packageRoot=%s）：" % root)
+            for form, joined in forms:
+                print("     %s → %s" % (form, joined))
+            third, code = "不通过（文件找不到）", 1
+        else:
+            used, target = hit
+            with open(target, "rb") as handle:
+                blob = handle.read()
+            digest = hashlib.sha256(blob).hexdigest()
+            print("  运行时 %s: sha256=%s 字节=%d" % (used, digest, len(blob)))
+            in_changed = any(used == c or used.endswith(c) or c.endswith(used) for c in changed)
+            print("  这个文件在回执 changed_files 里：%s" % ("是" if in_changed else "否（上一次发布没动它，读到的是更早的那份）"))
+            bad = []
+            if expect_sha:
+                ok_sha = digest.startswith(expect_sha.lower())
+                print("  --expect-sha %s：%s" % (expect_sha, "对得上" if ok_sha else "对不上"))
+                if not ok_sha:
+                    bad.append("sha")
+            else:
+                print("  --expect-sha 没给：sha 只报读数，没对照。")
+            for needle in needles:
+                count = blob.count(needle.encode("utf-8"))
+                print("  needle %r: %s（出现 %d 处）" % (needle, "在" if count else "不在", count))
+                if not count:
+                    bad.append("needle " + needle)
+            if not needles:
+                print("  needle 没传（--needle <字面>）")
+            if bad:
+                third, code = "不通过（%s）" % "、".join(bad), 3
+            elif needles or expect_sha:
+                third = "通过"
+            else:
+                third = "没对照（没给 --needle 也没给 --expect-sha，只有读数）"
+    print("\n三样：1 activation —— %s；2 回执 —— %s；3 内容 —— %s"
+          % ("通过" if first_ok else "不通过（selection 与 active 不一致或 state 不是 ACTIVE）",
+             "通过" if second_ok else "不通过（没有 receipt_id）", third))
+    print("缺一样不算判过；“没给”“没对照”不算通过。")
+    if code:
+        return code
+    if not first_ok:
+        return 3
+    return 0 if second_ok else 1
+
+
 def main():
     parser = argparse.ArgumentParser(description="现在跑的是哪版（只读探针）")
     parser.add_argument("--repo", help="检出的根目录（默认从 asuna.config.ROOT 或 ASUNA_REPO 找）")
@@ -307,6 +409,8 @@ def main():
     parser.add_argument("--file", help="配合 --package：运行时那份里要读的文件，两种写法都试：包内相对 packageRoot"
                                        "（skills/<技能>/SKILL.md），或仓库相对（packages/cognition-core/skills/<技能>/SKILL.md）")
     parser.add_argument("--needle", action="append", default=[], help="配合 --package：要找的字面，可重复")
+    parser.add_argument("--receipt", action="store_true", help="配合 --package：把「判这次发布生效没」三样并成一条（activation＋最近 self-publish 回执＋文件 sha／needle）")
+    parser.add_argument("--expect-sha", help="配合 --receipt：运行时那份 --file 的 sha256 要以这串开头")
     args = parser.parse_args()
     found_repo, found_data = find_roots()
     repo = args.repo or found_repo
@@ -316,6 +420,11 @@ def main():
     if not data:
         print("没有数据根就什么都查不到：带 --data <数据根> 再跑。")
         return 1
+    if args.receipt:
+        if not args.package:
+            print("--receipt 要配 --package <项目名>（--file 可选，不给就第三样写「没给」）")
+            return 1
+        return part_receipt(data, args.package, args.file, args.needle, args.expect_sha)
     if args.package:
         if not args.file:
             print("--package 要配 --file <相对 packageRoot 的路径>")

@@ -91,6 +91,16 @@ rc=0 且 stderr 空才算数（沙箱绿了不等于现场能跑）。
 
 发人格包之前那趟私密词（「别带出去」名单）扫描是我自己跑的，程序不替我跑：`development_publish`（`packages/cognition-core/src/floor.js` 的 `privateName` 那一格）拒的是地板文件、私密**文件名**、persona-model 与技能头部，不拿名单去扫文件内容；`publicationFindings` 只扫本次改动的文件，见下面「判据补遗」(d)。内容级的词闸只有两处——推公开仓库前的 `tests/test_personal_words.py`，和各份技能 `check_skill.py` 里那条泄露扫描（`leak_scan_ran`／`no_listed_words`；本技能这份也有，见下面「判据补遗」(d)）。
 
+**一条命令并进来（`pre_publish_scan.py`）**：发布前手敲的几条检查现在并成本目录一个只读脚本，在候选根跑（项目按 `development_*` 挂的那个）：
+
+```sh
+python3 skills/asuna-offline-selfchecks/pre_publish_scan.py --expect skills/<这次要动的技能> [--expect-entries <上一份报告的名单条数>] [--allow-missing <确实要删的路径>]
+```
+
+它一次做四件事：① 候选对 ACTIVE 冻结快照逐文件比 sha256，列 changed／added／missing（缺失＝防吞），`--expect` 给了就要求改动全落在预期前缀内，缺失默认算停；② 按候选 `package.json` 的 `files` 白名单扫候选根，白名单外、ACTIVE 里没有的新路径算停（既有的、空目录只报 NOTE），另报 `__pycache__` 残留；③ 私密词扫描，候选与 ACTIVE 各扫一次整棵根，按下面「三岔」判（① 命中落在 `integration/envoy_meters_read.py` 以外的文件；② 名单条数和 `--expect-entries` 对不上，不给就是“②没判”、最后一行明说；③ envoy 那个文件本身被改；另候选与 ACTIVE 逐文件命中数对不上也停），名单读不到或 0 条算“没真查”；④ 对有改动的技能目录跑它自己的 `check_skill.py`。退出码语义照自检的原样：0 = 通过、可发；1 = 停（最后一行列是哪几条）；2 = 没法判（名单、ACTIVE、候选根找不到）。拿当前 ACTIVE 当候选对拍用 `--candidate <ACTIVE 的 packageRoot>`（应 changed／added／missing 全 0）。它不替代下面“常设判据”的判断，只是把需要手数的那几步程序化；核心技能 asuna-self-improvement 的发布前自检命令清单（core 候选用）不在这个脚本的范围里，照那一份办。
+
+下面是它第③件事对着的判据原文和手工跑法。
+
 跑法：`asuna.private_words` 读本机名单（`<data>/private/personal-words.txt`），逐行 `find()` 扫整棵候选根，命中只报**文件＋行号＋类别＋名单行号**，绝不回显词本身；报告里照抄两行——一行命中数（`TOTAL HITS: N`），一行名单条目数。
 
 **常设判据 — 三岔，判完就走，不再逐次问**：

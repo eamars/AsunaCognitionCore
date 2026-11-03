@@ -78,16 +78,19 @@ TIMING = [
 # 这份技能是出门那一轮本来就要带的，名单写在这里，所以真名单（群那份里除自己之外的名字、dm 那两份、
 # 家里不带出去的那几份之一）、量法、旧观测那行、两条规矩，都得在——少了哪条红的就是哪条，不合并成一条「名单在不在」。
 ROSTER = [
-    ("roster_group_count", "群（group）7 份"),
+    ("roster_group_count", "群（group）**（个数跑脚本取"),
     ("roster_group_become_human", "asuna-become-human"),
     ("roster_group_bot_or_person", "asuna-bot-or-person"),
     ("roster_group_image_generation", "asuna-image-generation-and-display"),
     ("roster_group_meme_lookup", "asuna-meme-lookup"),
     ("roster_group_running_version", "asuna-running-version"),
     ("roster_group_usage_readout", "asuna-usage-readout"),
-    ("roster_dm_count", "别人私聊（dm）2 份"),
+    ("roster_dm_count", "别人私聊（dm）**（个数跑脚本取"),
     ("roster_dm_self", "asuna-outbound-round"),
-    ("roster_home_count", "17 份全给"),
+    ("roster_home_count", "全给**（个数跑脚本取"),
+    ("roster_script_named", "skill_roster.py"),
+    ("roster_script_no_hand_count", "个数跑脚本取，别手数"),
+    ("roster_script_conflict_rule", "以脚本输出为准"),
     ("roster_home_lofter_login", "asuna-lofter-login"),
     ("roster_home_bilibili", "`bilibili`"),
     ("roster_home_lofter", "`lofter`"),

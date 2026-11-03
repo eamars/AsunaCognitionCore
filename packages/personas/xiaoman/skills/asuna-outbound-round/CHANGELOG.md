@@ -1,5 +1,6 @@
 # CHANGELOG · asuna-outbound-round
 
+- 11-04：加 `skill_roster.py`（只读，按各生效包 `skills/*/SKILL.md` 头部 `scene_kinds` 数群／dm／家里名单和个数，头部没写的并进家里并单列，同名跨根只算一份，`--root` 可指候选根）。正文「别编名字」节三个手数的个数（群 7／dm 2／家里 17）改成「个数跑脚本取」，11-03 的数降为快照保留，名单真名保留（群里那一拍没有脚本，要靠快照）；description 里三个数同步改。口径先读正文现状核对：“家里”＝头部有 home 或没写 scene_kinds（后者包括 asuna-offline-selfchecks、asuna-render-budget-per-place 这两份和核心、通道包里几份），真跑结果群 7／dm 2／家里 17，与正文快照一致。check_skill 名单钉的三个数字字面改成「个数跑脚本取」，加脚本名、不手数、冲突以脚本为准三钉。来路：金主原则 5149，盘点报告的自动化审计。
 - 11-03：名单重量——家里 14→17（`asuna-lofter-login`、`bilibili`、`lofter` 三份头部只写 home，归“不带出去”那组），群 7／dm 2 不变；description、正文三处“14”、重量说明一条、check_skill 名单钉同步（家里计数钉改 17，加三份名字钉）。量法仍是头部字段，没跑现场 catalog。来路：金主令 5149 全量盘点，按目录实际内容数出来和正文 14 对不上。
 - 11-02：名单现量并更正——群 7 份（加 `asuna-meme-lookup`）／别人私聊 2 份（本份＋`asuna-meme-lookup`）／家里 14 份全给（多出 `asuna-daily-review` 那一档，七份不带出去的）。量法与两格没验写进正文：读 `activation.json` 生效根里实际存在的技能目录、按各份头部 `scene_kinds` 字段数，没跑群任务现场 catalog 读数；10-22 那次旧观测（群 6／dm 1／家里 12）留一行不删。frontmatter description 里那三个数一并改成 7／2／14。自检 50 格 → 56 格（名单钉加 meme-lookup、daily-review、量法、未现场实测、旧观测已作废这几格）。来路：11-02 交代清掉 asuna-bot-or-person 里 catalog 那句旧口径，顺带照 10-22 那套办法重新量这份名单，不抄旧数。改后 56/56 通过。
 - 10-30：从正文剥离来历叙述 4 处（摘要：删「版本」「试用记录」两节；删「这条道上有哪几份技能」节里的「来路」段（27 次 unknown 的那一轮）；删「实判读数（2026-10-22 …）」那句，只留「名单会变，用之前先当它是旧的」；五查、回看、边界、名单与两条规矩未动）。

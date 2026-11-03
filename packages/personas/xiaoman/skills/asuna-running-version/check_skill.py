@@ -309,6 +309,14 @@ def main():
           b"def part_package" in probe_src and b"--package" in probe_src and b"--needle" in probe_src,
           "version_probe.py 里找不到 part_package／--package／--needle")
 
+    # 11-04：正文说有 --receipt 这一步（三样并一条），探针里就得真有（字节级读），正文也得写全
+    check("probe_has_receipt_step",
+          b"def part_receipt" in probe_src and b"--receipt" in probe_src and b"--expect-sha" in probe_src,
+          "version_probe.py 里找不到 part_receipt／--receipt／--expect-sha")
+    missing_receipt = [token for token in ("--receipt", "缺一样不算判过", "--expect-sha", "没给 `--file`")
+                       if token not in body]
+    check("receipt_step_documented", not missing_receipt, "正文缺：" + "、".join(missing_receipt))
+
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
     check("check_script_shipped", os.path.basename(__file__) in scripts, ",".join(scripts))
 

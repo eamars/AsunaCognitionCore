@@ -1,5 +1,6 @@
 # CHANGELOG · asuna-running-version
 
+- 11-04：`version_probe.py` 加 `--receipt`（只读，第六步）：把11-03 那节「判这次发布生效没」的三样并成一条命令——activation.json 里 selection 与 active 并排的 candidate／previous、最近 self-publish 回执（receipt_id、published_at、changed_files、origin、content_check、boot_probe、reason 前段）、运行时那份 --file 的 sha256／字节数／needle／可选 --expect-sha；末尾一行三样各写通过／不通过／没给，退出码 0／1／3。正文在「判这次发布生效没」小节末加一段命令说明，原三样判据一字未改；check_skill 加两条（`probe_has_receipt_step`、`receipt_step_documented`）。规格与实况的微调：“最近 self-publish 回执”读 activation.json 里 selection 那格自带的字段（没有单独的回执目录可读）；加 --expect-sha 让「改后的 sha 对得上」也能一条命令判。来路：金主原则 5149。
 - 11-03：第五节加小节「判“这次发布生效没”：看技能内容，不看包 digest」——技能就地换，安装目录不换号、`loaded.packages` digest 不动也可能已经换了技能；读三样：`activation.json` 的 candidate／previous、self-publish 回执、运行时 SKILL.md 内容 sha（`version_probe.py --package <project> --file ... --needle ...`，用 xiaoman 包实跑过一次能读到运行时 sha）。第十节第 3 条指过去。check_skill 加 3 个钉。来路：已采纳想法 idea-af4feeda（金主令 5149 盘点顺带）。
 - 10-30：从正文剥离来历叙述 17 处（摘要：删「版本」「试用记录」两节；去掉「问过八回」「10-15 白改期」「10-15 判错一次」「Claude 10-20 给的」「10-20 实测 sha 对照」「主人 10-20 交代」「10-25 现场凭据与任务号」「今天实测…落后 1 笔」「asuna-launch 90-105 活样本」等；第三节的 116 个文件计数换成只留「三个文件不算差异」；判据、位置、读法、退出码未动）。
 - 10-30：`check_skill.py` 同步删 4 条钉来历文字的断言（section_11「## 版本」、section_12「## 试用记录」、criterion_diverged_misread「读成没装」、selfcheck_documented「正文里出现 check_skill.py」）；检查条数 61→57，全绿。

@@ -68,6 +68,11 @@ ANCHORS = [
     ("selfcheck_no_lying", "不撒谎，有人问是不是 AI 就照实答"),
     ("selfcheck_no_fake_typos", "不加错字、不耍装人的小把戏"),
     ("selfcheck_no_pressure", "不给任何人压力"),
+    # 11-04 起：到点由脚本判，不人肉数
+    ("due_script_named", "become_human_due.py"),
+    ("due_script_no_hand_count", "到没到点不人肉数，跑脚本取"),
+    ("due_script_exit_codes", "10 = 到点（读数，不是故障）"),
+    ("due_script_first_come", "**先到为准**"),
     # 10-18 晚同时改的那格：闸门本身在正文里有交代
     ("gate_declared_in_body", "check_skill.py"),
 ]

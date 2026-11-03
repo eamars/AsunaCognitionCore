@@ -25,8 +25,12 @@ for `web_fetch`'s private-network refusal).
 - **Her home tasks already reach the LAN**, by reading, not measured: `sandbox_run` confines writes only; reads and
   network are not restricted (RUNTIME_API's `sandbox_run` entry; DSH `packages/sandbox/sandbox/README.md`, "the seam
   expresses no network…restrictions", and `sandbox-windows-acl/README.md`, a confined child can "open sockets"),
-  and it is given only where the session class is owner-private (`Coordinator._grants`). To be measured before the
-  build (§6): pending. Every task gets
+  and it is given only where the session class is owner-private (`Coordinator._grants`). Measured by her 11-03
+  16:17-16:22 from a home task's `sandbox_run` (her message 0503): the default gateway answered on 80 (302) and 443
+  (200), other LAN hosts with 426, 200, refused and timeout, each shaped differently; the two hosts other than the
+  gateway carry VMware addresses and are probably virtual machines on this computer, so the gateway is the one
+  physical device off this machine. Before the change, `web_fetch` of the gateway answered
+  `URL hostname "…" resolves to a non-public IP address`. Not measured: IPv6, UDP, the firewall rules themselves. Every task gets
   `web_fetch` (`tasks.ACTION_DSH_CAPABILITIES`), a task begun in a public group included: for those, the fetch gate is
   the only barrier to the LAN.
 - **Her `web_fetch` is our provider.** `packages/cognition-core/src/fetch.js` wraps DSH's `HttpFetchProvider` (the npm
@@ -114,8 +118,9 @@ channel architecture.
 
 ## 6. Landing
 
-Before the build, measured (her ask): a home task of hers reaches a LAN device with `sandbox_run` today, so §2's
-reading is checked against the live system before anything is installed on it. Then one core landing (the plugin and
+Before the build, measured (her ask, done 11-03 16:22, §2): a home task of hers reaches a LAN device with
+`sandbox_run`. For the acceptance after landing she picks a plain-HTTP target: the self-signed HTTPS ones would fail
+on the certificate, and the gateway's 302 to HTTPS is a cross-origin redirect `web_fetch` does not follow. Then one core landing (the plugin and
 the worker), the suite, the node tests, the push gate, her slot asked first, the restart, the loaded commit checked.
 Then read on the live system, by her: a home task's `web_fetch` of a LAN device (status code and time), and D4's
 refusal seen in a task she hands over in a group (acceptance, not a staged scene). Bundled with ADR-112 §12.10 (`settle`), which waits for the next

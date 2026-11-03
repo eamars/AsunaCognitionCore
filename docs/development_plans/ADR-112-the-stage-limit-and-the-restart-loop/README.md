@@ -1,8 +1,9 @@
 # ADR-112: A working task cut at the stage limit, and the restart loop that followed
 
 Status: **Open**. Two fixes are installed (§6). The root causes are identified (§5). C2 (§9) and C4 (§10) are
-designed, built and reviewed (§11), corrected at landing (§10.6), and installed 2026-10-31 15:03 as `59e9e395`. C1 and
-the paused tasks without an end are the owner's decisions (§7); the 12:39 crash is not explained.
+designed, built and reviewed (§11), corrected at landing (§10.6), and installed 2026-10-31 15:03 as `59e9e395`. C1,
+the paused tasks without an end and her question about a held restart were decided by the owner on 2026-11-03 and
+are designed in §12, not built; the 12:39 crash is not explained.
 
 All times are New Zealand local time (NZDT, UTC+13), 2026-10-30 evening to 2026-10-31 early morning, unless marked UTC.
 
@@ -159,16 +160,16 @@ the loaded commit and all 166 installed files checked. She confirmed both instal
 
 Not designed here:
 
-- **C1, the limit itself.** The owner's decision, open since ADR-084 §10.
+- **C1, the limit itself.** The owner's decision, open since ADR-084 §10. Decided 2026-11-03, designed in §12.2.
 - **C2.** Designed and built in §9; installed 2026-10-31 15:03.
 - **C4.** Designed and built in §10; installed 2026-10-31 15:03.
 - **Nothing tells her a restart is held.** While a restart waits for a task or a call, new turns and tasks do not
   start, so nothing reaches her; she cannot tell work held behind a restart from work that is stuck (her question,
   2026-10-31 15:02). The hold is bounded: the running task's stage (at most 30 minutes) and then its calls (most at
-  most 600 s), and it ends in a restart. Not designed.
+  most 600 s), and it ends in a restart. Decided 2026-11-03, designed in §12.4.
 - **Paused tasks have no end** but her stop or the owner's "continue". Open on 10-31 00:40: `task-b141054d` (10-16,
-  agent home line), `task-d55513ac` (10-25), `task-5afc50d4` and `task-abba75af` (23:51 and 23:57). The owner's
-  restart policy; left as it is unless he decides otherwise.
+  agent home line), `task-d55513ac` (10-25), `task-5afc50d4` and `task-abba75af` (23:51 and 23:57). Decided
+  2026-11-03, designed in §12.3.
 - **The 12:39 crash** (§4). One occurrence, not explained.
 
 ## 8. My own errors that night
@@ -417,3 +418,158 @@ Suite after the fixes (`tests/`, in the cloud session, no `config/local.json` an
 3 failed, the same 3 that fail at `9b2fe32` there (`test_no_server`, two in `test_refusal_probe`). Not run there:
 `pytest integration` and `npm run test:native` (§9.5).
 
+
+## 12. The stage limit asks her, a restart gives every task an exit, and she hears how long a restart waited
+
+Designed 2026-11-03 from the code at `0f1a7c99` and the live records read that day (the reading scripts:
+`.runtime/private/adr112-1103/`). Not built.
+
+### 12.1 What the records show (read 2026-11-03)
+
+**The limit.** Of the 173 tasks with tool calls since 10-24, 168 finished: 103 within 5 minutes, 34 within 10, 21
+within 15, 9 within 20, none within 25, one at 26.4 minutes. Five were cut at 1,800 s (a sixth, 10-28, is from before
+`tool.time` existed). The four cuts since C2's install (10-31, 11-01, 11-02 twice) were all working when cut: 3 to
+26 tool calls in their last 5 minutes, the last one 5 to 95 s before the cut, 77 to 126 steps. She continued three of
+the six cuts and let three go. A stuck stage is already caught below this limit: a model stream silent for
+`provider_idle_timeout_seconds` (1,800 s) ends, and every tool call has its own limit (120 s, a command up to 600 s,
+§9.2). What the stage limit still bounds is the one action worker: tasks run one at a time, so a long stage holds
+every task queued behind it.
+
+**Paused tasks.** 47 tasks were ever paused by a restart. The 29 of 10-03 and 10-04 were closed by the operator. Of
+the 18 since 10-05 she stopped 11, and 7 are still `PAUSED`: one each from 10-16 and 10-25, two from 10-30, and three
+from the worker exits of 11-03 10:46. Five of the seven had not started (`paused_state` `READY`, 0 steps). None paused
+since 10-05 was ever continued. The only exit besides her stop is a turn the owner starts in the Web chat
+(`coordinator.message_action`: 「只有主人明确要继续时才能接着做」): the shape of C5, a state with no exit of its own.
+
+**Holds.** Since C2's install one publication restart was held: 11-02 02:24:40 to 02:27:48, 3 min 8 s, by a running
+task and its calls (`restart.pending`, `restart.blocked`, `restart.requested` in the kept reports).
+
+### 12.2 D1. At the limit the program asks her; it cuts only if she does not decide
+
+The owner's decision: at the limit a heads-up goes to her character brain, and she decides.
+
+What already exists, checked in the code:
+
+- A turn of hers about a running task, in the task's own conversation, while the task waits: `Coordinator.consult`,
+  the action brain's question. It finds the conversation the task belongs to (the turn that sent it, an errand's
+  home turn, a task moved to the Web chat under ADR-111 §3.5), carries the task's title, brief and original input,
+  and speaks to no channel.
+- Her `task` tool steers a running task: `message` reaches the action brain at its next step
+  (`native_worker.action_message`), `stop` fences and ends it. `_own_task` finds the task in a turn whose scene and
+  person are the task's own, which a consult turn's are.
+- The limit is the worker's: `NativeLane.wait` sets `deadline` once and raises at it. In Asuna's code
+  `workflow_timeout_seconds` is otherwise only shown on the settings page (`client.js`) and used for two start-up
+  waits; whether DSH's native run has a run limit of its own is checked at build. The task's lease is renewed every
+  30 s while it waits (`keepalive`).
+
+What is new:
+
+1. **The heads-up.** For an executor stage with a task, `wait` at its deadline no longer raises. It records
+   `task.time_up` (the stage's minutes, the task's steps, which ask this is) and starts, on a thread of its own, one
+   turn of hers built as a consult is: episode kind `task_time`, in the same conversation, with the same task facts,
+   and, as words, what only the program knows: how long the stage has run, its tool steps, its recent activity (calls
+   in the last 5 minutes and how long ago the last came, or that none came), what waits behind it (`queue_words`),
+   how many times she has already given it more time, and the window (point 4). The turn's text is a prompt file,
+   `turn_task_time.md`, beside `turn_consult.md`. Nothing is said to the action brain: it goes on working while she
+   reads.
+2. **Her choices**, each through her `task` tool on that task: `more` (new: one more block of
+   `workflow_timeout_seconds`), `message` (existing: her own words, for example to wrap up and report), `stop`
+   (existing). Choosing none is a choice too (point 4).
+3. **`more`** writes `time_more: n+1` on the task (a categorical choice the program maps to one block, never a number
+   she gives), records `task.time_more`, and moves that stage's deadline one block on from the deadline it passed.
+   The same native run goes on: nothing is stopped, restarted or re-briefed, and its context and tool history stay
+   intact. At the new deadline she is asked again. While a publication restart is pending, `more` is refused in words
+   (「宿主在等这件事做完好重启：现在不能加时；要它先交报告就用 task message。」), so a held restart stays bounded.
+4. **The window.** From the deadline, `wait` keeps waiting up to `TIME_UP_WINDOW` (10 minutes) for the stage to end
+   or for her `more`, reading the task record once a second. If the stage ends by itself (it reported, often after her
+   `message`), its result goes back as always. If she stopped it, as `stop` does today. If the window passes with no
+   `more` (she let it end, or her turn failed or never ran), the stage is cut as today (`TimeoutError`, `task_fenced`,
+   `BLOCKED` with `STOPPED_AT_LIMIT`). `task.time_up` records the outcome: `more`, `ended`, `stopped` or `cut`.
+5. **The stage ends before her turn starts:** the turn is not run (its task is no longer `RUNNING`). It ends during
+   her turn: `more` answers that the work is already back, and the result reaches her as any result does.
+
+Every executor stage keeps its own deadline: a fix attempt (`answers.ask`) and a further round for late messages
+(`MESSAGE_ROUNDS`) are stages of their own and are asked about the same way. Her own turns (the character lane) keep
+the plain limit and are not in scope.
+
+Bounds: without her `more`, a stage holds the action worker at most one block plus the window (40 minutes), and a
+publication restart the same. With it, each further block is her decision, taken with the queue in front of her.
+
+### 12.3 D2. A restart keeps the queue and hands an interrupted task back to her
+
+The owner's decision: queued work stays queued; a task cut by a restart returns to her and she decides; the
+owner-only "continue" goes away; the seven paused today return to her once and none runs by itself.
+
+At a start, `RuntimeHost._recover_tasks` today pauses every unfinished task. It becomes:
+
+1. **`READY`** (not started) stays `READY`. The task queue lives in memory (`Chat.task_queue`), so the start
+   schedules each such task again, oldest first, through `Chat._schedule`. A task that never ran cannot be what
+   stopped the worker, so this cannot loop.
+2. **`RUNNING`** (cut by the stop) becomes `BLOCKED`, `failure_type` `HostRestart`, with the result
+   「宿主重启时这一段被打断了，还没交报告；原目标有没有做完没有确认。」 and the same uncertainty as a cut at the limit
+   (「已发起而没有回执的操作须先核实，不可盲目重做。」), `feedback_state` `READY`, its fencing token raised, and
+   `task_fenced` sent for its operation, so that a run still alive in the plugin after a worker-only restart stops
+   (checked at build: whether the plugin keeps a run across a worker restart). The watchdog's first sweep hands it
+   back as it hands back every finished task at a start (ADR-030 D6). She continues it with `task message` in its own
+   conversation (a `BLOCKED` task can be continued), under ADR-111's rules, or leaves it. A task that stops the worker
+   every time comes back each time as interrupted and runs again only by her turn: no loop without her.
+3. **`PAUSED` is retired.** The guard in `message_action` goes, and with it its producer (`pause_for_restart`), the
+   start's unpause loop for finished tasks paused earlier, and `PAUSED` in the readers that only served it
+   (`self_review`'s in-progress list and the state lists in `tasks.py`, `handover.py` and `host.py`). A search for
+   `PAUSED` in `src/` at build lists every reader.
+4. **The seven paused now** are handed back once, at the first start with D2, by the same code. One paused while
+   `RUNNING` comes back as interrupted (point 2). Each paused while `READY` comes back as not started,
+   「排队时宿主重启了，一直没开始；还要做就用 task message 接着交代，不做就不用管。」, also `BLOCKED` with `feedback_state`
+   `READY`. None is scheduled: the oldest is 18 days old. Each goes to the conversation it came from, as any result:
+   four to the Web chat, two to the agent line, one to a QQ private chat (`task-abba75af`, 10-30). If the owner would
+   rather close the QQ one himself, it is closed before the landing's restart.
+
+This is the start settling the stored state, the same choice as fix 1 and §9's D2: no state is left that needs a
+particular person to end it.
+
+### 12.4 D3. After a restart she hears how long it waited, and for what
+
+When the publication restart is asked (`restart.requested`), the gate writes on the `APPLIED` receipt how long it was
+held (from its first `restart.pending`) and by what (`held_by`: a turn, a task, calls in flight; for a task, its
+title). The started worker's `_complete_activations` adds one line to the publication result she already receives:
+「这次重启等了约 3 分钟才开始：在等一件任务做完（『标题』）。」, or 「这次重启没有等：发布后马上开始。」 when nothing held it.
+Minutes are formatted for reading; under one minute is 「不到一分钟」. The receipt carries it because the worker that saw
+the hold is not the one that starts.
+
+### 12.5 Review: does it reach the root cause?
+
+- **C1's broken invariant** was that a limit meant to catch a stuck stage ends one making progress. After D1 the
+  limit ends nothing on its own: it asks the one who owns the work, with the evidence of progress in front of her. A
+  stuck stage is still caught where it was (the model's idle limit, each call's limit), and a stage nobody decides
+  about still ends within the window.
+- **The paused state** had no exit of its own. After D2 no state needs a particular person to end it: a queued task
+  runs, an interrupted one is hers like any other result.
+- **Not a bandage on one number.** Raising the limit, which the owner did not choose, would have kept the blind cut,
+  only later.
+- **What it costs.** One turn of hers per long stage (about one a day in the week read) and, for each block she
+  grants, that long a wait for the tasks behind it, which she sees when she decides. After a restart, one result turn
+  per interrupted task.
+- **Against ADR-111.** The heads-up runs in the task's own conversation with the task's own `whose`, as consult does;
+  `more` grants nothing. A task moved to the Web chat is asked about there.
+
+### 12.6 Tests that earn their place
+
+| Test | Guards | Fails without |
+|---|---|---|
+| a stage at its deadline is not cut while the window runs; `more` moves the deadline and the same run's result arrives | C1: the blind cut | D1's wait |
+| the window passes with no `more`: cut as today, `task.time_up` records `cut` | a stage nobody decides about holding the worker for ever | the window |
+| `more` while a publication restart is pending is refused | a held restart without a bound | the refusal |
+| a start: a `READY` task is scheduled and runs; a `RUNNING` one comes back `BLOCKED` as interrupted, handed back once | the owner-only exit | D2 |
+| a start with an old `PAUSED` row hands it back once and does not schedule it | the seven | D2 point 4 |
+| the publication result after a held restart names the wait; after none, it says so | her question | D3 |
+
+Each is run with its fix reverted and must fail. Unit tests on the memory adapter; nothing new in `integration/`.
+
+### 12.7 Landing
+
+One core landing, as §9.5: the suite, `pytest integration`, the push gate, her slot asked first, the restart, the
+loaded commit checked. The first start hands the seven back (12.3 point 4); she is told on her line before the restart
+that they are coming and why. Then read on the live system: the next stage at its limit leaves `task.time_up` and her
+`task_time` turn; the next restart leaves no `PAUSED` row and schedules any `READY` one; the next publication result
+names its wait. C1 and the paused tasks are then closed in §7, and the ADR is Built once the first heads-up has been
+read.

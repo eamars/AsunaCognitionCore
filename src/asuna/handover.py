@@ -22,6 +22,7 @@ SWEEP_SECONDS = 60
 FINISHED = ('RETURNED', 'BLOCKED', 'DONE', 'PARTIAL', 'NEEDS_CHARACTER_DECISION', 'UNKNOWN')
 TAKEN = ('DELIVERED', 'WAITING_TASK', 'SUPPRESSED', 'UNDELIVERABLE')
 FULL, SHORT, GIVE_UP = 'full', 'short', 'give_up'
+SETTLED = {'done': '你判定已经办完', 'dropped': '你决定不再做'}
 REPORT_FAILURES_BEFORE_SHORT = 2
 
 
@@ -100,6 +101,9 @@ def status_words(task, continued_by=None):
         return '宿主停机时撤下了：要做就用 task 的 message 接着做' if task.get('cancel_reason') == 'host_stop' else '叫停了'
     if state == 'STALE':
         return '交代改过了，这一份作废'
+    settled = (task.get('settled') or {}).get('as')
+    if settled:
+        return SETTLED.get(settled, SETTLED['done'])          # her own judgment of how it ended (ADR-112 §12.10)
     outcome = OUTCOME_WORDS.get(state, '跑完了')
     handed = task.get('feedback_state')
     if handed is None:

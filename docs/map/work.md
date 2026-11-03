@@ -37,6 +37,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
   - `claim`
   - `valid`
   - `cancel`
+  - `settle` — Her judgment of how a returned task ended (ADR-112 §12.10): `done` or `dropped`, written as `settled` on a task whose run ended other than well and whose result reached her.
   - `interrupted_by_restart` — ADR-112 §12.3: a task a restart cut while it ran, or one an older start paused, comes back to her as a result: BLOCKED, its words saying where it stood, its feedback READY for the watchdog to hand back.
   - `keepalive` — Renew only this live worker's fenced lease while it waits on a model.
   - `feedback` — Hand a finished task's result back to her in a turn of her own.

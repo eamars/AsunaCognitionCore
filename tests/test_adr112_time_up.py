@@ -264,3 +264,31 @@ def test_a_clock_that_fails_cuts_the_stage_through_the_fence(store):
         raise AssertionError('the stage was not cut')
     except TimeoutError as cut:
         assert str(cut) == 'NATIVE_STAGE_TIMEOUT'
+
+
+def test_she_settles_a_returned_task_herself_and_her_list_says_her_judgment(store):
+    """ADR-112 §12.10: a task handed back interrupted whose work she had delivered another way."""
+    from asuna import handover
+    from asuna.tasks import SETTLED_WORDS, SETTLE_NOT_YET, SETTLE_RUNNING, SETTLE_WELL
+    service = TaskService(store)
+    from_home(store, 'task-back', 'BLOCKED', feedback_state='DELIVERED', result={'status': 'blocked', 'text': INTERRUPTED})
+    from_home(store, 'task-waiting', 'BLOCKED', feedback_state='READY')
+    from_home(store, 'task-done', 'RETURNED', feedback_state='DELIVERED')
+    from_home(store, 'task-busy', 'RUNNING')
+    assert service.settle('task-busy', 'done', 'ep-1') == SETTLE_RUNNING
+    assert service.settle('task-done', 'done', 'ep-1') == SETTLE_WELL
+    assert service.settle('task-waiting', 'dropped', 'ep-1') == SETTLE_NOT_YET
+    assert service.settle('task-back', 'done', 'ep-1') == SETTLED_WORDS['done']
+    back = task_records.get(store, 'task-back')
+    assert back['state'] == 'BLOCKED' and back['settled']['as'] == 'done'           # nothing re-runs, its state stays
+    assert handover.status_words(back) == '你判定已经办完'
+    assert handover.status_words(back, 'task-later') == '后来接着做了一趟，以 task-later 那条为准'
+    assert 'settled' not in task_records.get(store, 'task-waiting')
+
+
+def test_settle_is_offered_where_message_is_and_never_in_a_turn_about_a_running_task(store):
+    from asuna import role_tools
+    assert 'task.settle' in role_tools.WITH_ACTION and 'settle' in role_tools.OPS['task']
+    ep = {'_id': 'ep-time', 'episode_kind': 'task_time', 'task_id': 'task-long', 'scene_id': 'local-dm',
+          'person_id': 'owner', 'context': {}}
+    assert 'task.settle' not in role_tools._turn_rules(store, ep)

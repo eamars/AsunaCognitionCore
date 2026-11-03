@@ -653,5 +653,5 @@ of its end has no way in.
   (`consult`, `task_time`). A later `message` to a settled task continues it as today; the continuation is then the
   record to go by.
 
-**Cost.** One option and one field in her tool list (the tool budget raised by what it measures), one line in
-RUNTIME_API, one test. Installed with the next core landing (owner: bundled, no restart of its own).
+**Cost.** One option and one field in her tool list, 103 characters as measured (the tool budget raised by that), one
+line in RUNTIME_API, two tests. Installed with the next core landing (owner: bundled, no restart of its own).

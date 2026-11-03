@@ -15,7 +15,7 @@ from .view import ANY, View, fenced, is_number, is_text, pinned, redact, texts
 COLLECTION, MESSAGES = 'tasks', 'task_messages'
 ACTIVE = ('READY', 'RUNNING')
 # What the conversation's task list shows of each task (context's task_state_from_program), as the aggregate projected.
-SHOWN = ('_id', 'state', 'goal', 'title', 'feedback_state', 'finished_at', 'cancel_reason', 'tier')
+SHOWN = ('_id', 'state', 'goal', 'title', 'feedback_state', 'finished_at', 'cancel_reason', 'settled', 'tier')
 RECENT = 16
 INPUTS_A_READ = 1000
 

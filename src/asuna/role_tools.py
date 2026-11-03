@@ -119,6 +119,8 @@ CONDENSE_REFUSED = ('压不压一个群的对话，只在出门看群的那一�
 DELEGATION_DEPTH_MAX = 6
 # The tools a turn always has; the rest follow the turn's kind, scene and grants (`exposed`).
 CONSULT = 'consult'
+# Her judgment of how a returned task ended (ADR-112 §12.10): the words she picks -> what the program stores.
+SETTLED_AS = {'已办完': 'done', '不做了': 'dropped'}
 TASK_TIME = 'task_time'          # a stage at its limit, the program asking her (ADR-112 §12.2)
 ABOUT_A_TASK = (CONSULT, TASK_TIME)   # her turns about a running task: no channel, no grant, never resumed
 
@@ -237,14 +239,15 @@ TOOLS = {
     'task': {
         'description': ('已经交给行动脑的事，do 选一样：message 补话（补信息、改目标，或让做完的再做一趟）；answer 回答它刚问你的问题（只在它问你的那一回合，'
                          '回答只给它看，答完这回合结束）；stop 叫停一件还在做的事（对方明确取消、或你确定不该再做时；换话题、说不急都不算取消）'
-                         '；page 翻读它交回的长报告原文；more 给到点的那一段加时（只在程序来问的那一回合）。新的事用 delegate。'),
+                         '；page 翻读它交回的长报告原文；more 给到点的那一段加时（只在程序来问的那一回合）；settle 给交回没跑好的那件写上你的定论。新的事用 delegate。'),
         'parameters': {'op': _s('做哪一样（不写时：只写了 message、answer、why、page 中的一样，就是那一样）',
-                             enum=['message', 'answer', 'stop', 'page', 'more']),
-                       'task': _s('任务 _id，照抄 task_state_from_program 或交回的结果里的（message、stop、page、more 要）'),
+                             enum=['message', 'answer', 'stop', 'page', 'more', 'settle']),
+                       'task': _s('任务 _id，照抄 task_state_from_program 或交回的结果里的（message、stop、page、more、settle 要）'),
                        'message': _s('要对行动脑说的话（message 要）'),
                        'answer': _s('你的回答（answer 要）'),
                        'reason': _s(limit=1000, description='为什么叫停（stop 要）'),
-                       'page': {'type': 'integer', 'description': '报告第几页，从 1 开始（page 要）'}},
+                       'page': {'type': 'integer', 'description': '报告第几页，从 1 开始（page 要）'},
+                       'as': _s('settle 要', enum=list(SETTLED_AS))},
     },
     'speak': {
         'description': SPEAK_HEAD + '、'.join(REPLY_KINDS) + '，各写它的字段；' + SPEAK_RECALL + SPEAK_TAIL,
@@ -560,7 +563,7 @@ def tiered_delegate(spec):
                                    'why': _s('选高时写：为什么这件要高档', limit=action_tiers.WHY_CHARS)}}
 # ADR-055: the action brain's follow-ups and her notebook are one tool each, chosen by op. What a conversation lists
 # and a turn may use is kept by option ('task.message'); the model is shown the tools.
-OPS = {'task': ('message', 'answer', 'stop', 'page', 'more'), 'ideas': ('note', 'read', 'review'),
+OPS = {'task': ('message', 'answer', 'stop', 'page', 'more', 'settle'), 'ideas': ('note', 'read', 'review'),
        'ask': ('ask', 'read', 'close')}
 # The old names run for a while (her ruling: her habits, notes and skills use them): as their option, saying so.
 RENAMED = {'reply': 'speak', 'message_action': 'task.message', 'answer_action': 'task.answer', 'stop_action': 'task.stop',
@@ -568,7 +571,7 @@ RENAMED = {'reply': 'speak', 'message_action': 'task.message', 'answer_action': 
 }
 RENAMED_NOTE = '%s 已并入 %s 的 %s 选项，下次直接用这个。'
 # A field only one option takes says which option a call without op is (as plan's create, ADR-054).
-OP_FIELDS = {'task': {'message': 'message', 'answer': 'answer', 'reason': 'stop', 'page': 'page'},
+OP_FIELDS = {'task': {'message': 'message', 'answer': 'answer', 'reason': 'stop', 'page': 'page', 'as': 'settle'},
              'ideas': {'idea': 'note', 'id': 'review', 'decision': 'review', 'search': 'read', 'page': 'read'},
              'ask': {'question': 'ask', 'patience': 'ask', 'took': 'close'}}
 # The option a call without op and without any field above is (ask: reading).
@@ -885,7 +888,7 @@ def _turn_rules(store, ep):
     if capabilities.get('available') and not outside:
         names.append('delegate')
         if tasks:
-            names.append('task.message')
+            names += ['task.message', 'task.settle']
     # A queued or running task is open work in her context, so she can close it as well (ADR-011 §7.1).
     if tasks and not outside and task_records.many(store, [task['_id'] for task in tasks],
                                                    states=['READY', 'RUNNING']).first(fields=['_id']):
@@ -950,7 +953,7 @@ def _turn_rules(store, ep):
 # Her tools by where the conversation is (visibility.place) and what its channel carries. Every turn of a conversation
 # lists the same ones; `exposed` picks which of them the turn may use.
 EVERYWHERE = ('think', 'recall', 'stay_silent', 'ideas.note', 'plan', 'private_words', 'understand_person')
-WITH_ACTION = ('delegate', 'task.message', 'task.stop', 'task.page', 'task.answer', 'task.more')
+WITH_ACTION = ('delegate', 'task.message', 'task.stop', 'task.page', 'task.answer', 'task.more', 'task.settle')
 # Her home lines: the owner's own conversations and the trusted lines (his agents, her other self). Things about
 # herself go wherever she is at home; sending her on someone's errand is for the owner's conversations only.
 AT_HOME = ('write_document', 'note', 'set_policy', 'ideas.read', 'ideas.review',
@@ -2377,6 +2380,14 @@ class RoleTools:
         task = self._asked_about(ep, self._own_task(ep, args.get('task')))
         self.checkpoint()
         words, _ = time_up.grant(self.coordinator.tasks, task, self.coordinator.restart_pending)
+        return {'task': task['_id'], 'note': words}, False
+
+    def tool_task_settle(self, ep, call_id, args):
+        task = self._own_task(ep, args.get('task'))
+        if args.get('as') not in SETTLED_AS:
+            raise Refused('as 选一样：%s。' % '、'.join(SETTLED_AS))
+        self.checkpoint()
+        words = self.coordinator.tasks.settle(task['_id'], SETTLED_AS[args['as']], ep['_id'])
         return {'task': task['_id'], 'note': words}, False
 
     def tool_task_stop(self, ep, call_id, args):

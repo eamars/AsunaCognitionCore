@@ -31,12 +31,14 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 - def `opening_text` — The action brain's first words for a task: her brief; a continuation's new words; after the idle limit (ADR-053) a fresh context told so, with the last report.
 - def `place_words` — Where a queued task came from, coarse: never a group's or a person's name.
 - def `queue_words` — What is ahead of this task for the one action worker (ADR-053), always said, an empty queue too.
+- def `ended_as` — How a returned task ended, in words, kept beside her judgment when she settles it (ADR-112 §12.10).
 - def `stale_reason` — Why a call's task no longer holds its authority, as the program sees it.
 - class `TaskService`
   - `collab` — One entry of the two brains' thread in her conversation (coordinator.collab); a view only.
   - `claim`
   - `valid`
   - `cancel`
+  - `settle` — Her judgment of how a returned task ended (ADR-112 §12.10): `done` or `dropped`, written as `settled` on a task whose run ended other than well and whose result reached her.
   - `interrupted_by_restart` — ADR-112 §12.3: a task a restart cut while it ran, or one an older start paused, comes back to her as a result: BLOCKED, its words saying where it stood, its feedback READY for the watchdog to hand back.
   - `keepalive` — Renew only this live worker's fenced lease while it waits on a model.
   - `feedback` — Hand a finished task's result back to her in a turn of her own.

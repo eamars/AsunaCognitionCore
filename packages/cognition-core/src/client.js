@@ -679,7 +679,7 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
   const OLD_NAMES = { do: 'op', why: 'reason', content: 'body', section: 'sid', place: 'line' };
   const arg = (args, field) => field ? args[field] ?? args[OLD_NAMES[field]] : undefined;
   // A tool with options (role_tools.OPS): the option written, or the one its fields plainly say (role_tools.OP_FIELDS).
-  const OPTION_FIELDS = { task: { message: 'message', answer: 'answer', why: 'stop', page: 'page' },
+  const OPTION_FIELDS = { task: { message: 'message', answer: 'answer', why: 'stop', page: 'page', as: 'settle' },
     ideas: { idea: 'note', id: 'review', decision: 'review', search: 'read', page: 'read' } };
   const optionOf = (tool, args) => {
     const written = arg(args, 'do');

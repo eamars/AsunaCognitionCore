@@ -650,7 +650,7 @@ class ContextBuilder:
             if tier and action_tiers.offered():
                 task['tier']=action_tiers.words(tier)
             running=task['state'] in ('READY','RUNNING')
-            for key in ('state','feedback_state','cancel_reason'):
+            for key in ('state','feedback_state','cancel_reason','settled'):
                 task.pop(key,None)
             if not running:
                 continue

@@ -222,6 +222,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
   - `tool_delegate`
   - `tool_task_message`
   - `tool_task_more`
+  - `tool_task_settle`
   - `tool_task_stop`
   - `tool_read_image`
   - `tool_received_file`

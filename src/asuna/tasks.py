@@ -448,6 +448,21 @@ from .records import messages as message_records
 WORKSPACE_TOOLS.append(RECEIVED_FILE_TASK_TOOL)
 
 
+def ended_as(task):
+    """How a returned task ended, in words, kept beside her judgment when she settles it (ADR-112 §12.10)."""
+    if task.get('failure_type') == 'HostRestart':
+        return '宿主重启打断'
+    if str((task.get('result') or {}).get('text') or '').startswith(STOPPED_AT_LIMIT.split('（')[0]):
+        return '到了时间上限'
+    return handover.OUTCOME_WORDS.get(task['state'], '跑完了')
+
+
+# ADR-112 §12.10: what her settle says back.
+SETTLED_WORDS = {'done': '记下了：这件你判定已经办完，不会再跑。', 'dropped': '记下了：这件你决定不再做，不会再跑。'}
+SETTLE_RUNNING = '这件还在排或在跑：不做了就用 stop。'
+SETTLE_WELL = '这件已经跑完、交回的就是做成了，不用再结。'
+SETTLE_GONE = '这件已经叫停或作废了，不用再结。'
+SETTLE_NOT_YET = '这件的结果还没交到你手上：等它交到了再定。'
 # ADR-112 §12.3: what a task a restart cut, or one paused before that, says when it comes back to her.
 INTERRUPTED = '宿主重启时这一段被打断了，还没交报告；原目标有没有做完没有确认。'
 NOT_STARTED = '排队时宿主重启了，一直没开始；还要做就用 task 的 message 接着交代，不做就不用管。'
@@ -512,6 +527,27 @@ class TaskService:
             cancelled=task_records.save(self.store, {**task,'state':'CANCELLED','intent_revision':task['intent_revision']+1,'fencing_token':task['fencing_token']+1,'cancel_reason':reason,'feedback_state':'SUPPRESSED'},expected=task['revision'],stream=task_id)
         self.collab(cancelled,'status',{'state':'stopped','reason':reason},'status:'+task_id+':cancelled')
         return self._notify_fenced(cancelled, 'task_cancelled')
+
+    def settle(self, task_id, judged, episode_id):
+        """Her judgment of how a returned task ended (ADR-112 §12.10): `done` or `dropped`, written as `settled` on a task
+        whose run ended other than well and whose result reached her. Nothing runs again and its state stays. Returns her
+        words."""
+        with self.lock:
+            task = task_records.get(self.store, task_id)
+            if task['state'] in ('READY', 'RUNNING'):
+                return SETTLE_RUNNING
+            if task['state'] in ('RETURNED', 'DONE'):
+                return SETTLE_WELL
+            if task['state'] not in handover.FINISHED:
+                return SETTLE_GONE
+            if task.get('feedback_state') not in handover.TAKEN:
+                return SETTLE_NOT_YET
+            # Settled again, the later judgment stands; each is its own task.settled row. How it ended stays beside it.
+            task_records.save(self.store, {**task, 'settled': {'as': judged, 'at': now(), 'episode_id': episode_id,
+                                                               'was': ended_as(task)}},
+                              expected=task['revision'], stream=task_id)
+        self.store.audit(task_id, 'task.settled', {'as': judged, 'episode_id': episode_id}, task['scope_key'])
+        return SETTLED_WORDS[judged]
 
     def interrupted_by_restart(self, task_id):
         """ADR-112 §12.3: a task a restart cut while it ran, or one an older start paused, comes back to her as a

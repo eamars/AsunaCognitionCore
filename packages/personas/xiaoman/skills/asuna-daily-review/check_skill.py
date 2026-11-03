@@ -127,6 +127,19 @@ NEWDIM = [
 ("newdim_intra_segment_rows", "段内指向我的行"),
 ]
 
+ANCHORS = [
+    ("anchors_step_zero", "**锚点底稿（脚本生成，不手找）**"),
+    ("anchors_copy_rule", "这些数一律照底稿抄"),
+    ("anchors_end_before_midnight", "终点之后到次日零点的出站行数"),
+    ("anchors_group_name_rule", "名未核实"),
+    ("anchors_note_key_prefix", "按前缀找"),
+    ("anchors_state_literal", "状态字面"),
+    ("anchors_check_report", "--check-report"),
+    ("anchors_run_discipline", "边写边落盘"),
+    ("anchors_task_evidence", "跑批凭据"),
+    ("report_origin_outlet", "**报告正本自己落哪**"),
+]
+
 OUTLETS = [
     ("outlet_group_notes", "**群笔记**"),
     ("outlet_person_understanding", "**对人的理解**"),
@@ -261,6 +274,8 @@ def main():
     check("description_specific_enough", len(desc) >= 120, "len=%d" % len(desc))
     check("description_has_head_criterion", "不需要迎合任何人" in desc)
     check("description_has_initiation_dimension", "主动开话题" in desc)
+    check("description_outlets_four_plus_report", "四口＋报告正本落口" in desc)
+    check("description_anchors_by_script", "anchors.py" in desc)
     check("body_no_three_blocks", "写成三块" not in body)
     kinds = re.findall(r"[a-z]+", (fields or {}).get("scene_kinds", ""))
     check("scene_kinds_home", "home" in kinds, "scene_kinds=%s" % ((fields or {}).get("scene_kinds") or "没写"))
@@ -273,7 +288,7 @@ def main():
     for index, section in enumerate(SECTIONS):
         check("section_%d" % index, ("\n" + section) in ("\n" + body), section)
 
-    for group in (FETCH, DIMENSIONS, REPORT, NEWDIM, OUTLETS, BOUNDARY):
+    for group in (FETCH, DIMENSIONS, REPORT, NEWDIM, ANCHORS, OUTLETS, BOUNDARY):
         for name, token in group:
             check(name, token in body, token)
 
@@ -330,6 +345,15 @@ def main():
 
     scripts = sorted(f for f in os.listdir(HERE) if f.endswith(".py"))
     check("check_script_shipped", os.path.basename(__file__) in scripts, ",".join(scripts))
+    check("anchors_script_shipped", "anchors.py" in scripts, ",".join(scripts))
+    if "anchors.py" in scripts:
+        import subprocess
+        try:
+            run = subprocess.run([sys.executable, os.path.join(HERE, "anchors.py"), "--selftest"],
+                                 capture_output=True, text=True, encoding="utf-8", timeout=30)
+            check("anchors_selftest_passes", run.returncode == 0, (run.stdout + run.stderr)[-200:])
+        except Exception as exc:  # noqa: BLE001
+            check("anchors_selftest_passes", False, "%s: %s" % (type(exc).__name__, exc))
     for script in scripts:
         try:
             with open(os.path.join(HERE, script), "rb") as handle:

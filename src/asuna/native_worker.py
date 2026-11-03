@@ -402,18 +402,24 @@ class NativeLane:
     def time_up_clock(self, task, timeout):
         from . import time_up
         app = self.worker.app
-        def ask(current, minutes, asks):
+        def ask(current, minutes, key):
             facts = time_up.facts(app.store, current, minutes=minutes, block=timeout,
                                   activity=self.worker.calls.activity(current['_id'], time_up.RECENT_SECONDS))
-            threading.Thread(target=app.coordinator.time_up, args=(current, facts, asks),
+            threading.Thread(target=app.coordinator.time_up, args=(current, facts, key),
                              name='asuna-time-up', daemon=True).start()
         return time_up.StageClock(app.service, task, timeout, ask)
 
     def _wait(self, future, deadline, stage, ep, Refused):
         while not future.done():
             if stage:
-                if stage.due():
-                    raise TimeoutError('NATIVE_STAGE_TIMEOUT')
+                try:
+                    cut = stage.due()
+                except Exception as exc:                 # noqa: BLE001 a failing clock cuts as the plain limit did
+                    raise TimeoutError('NATIVE_STAGE_TIMEOUT') from exc
+                if cut:
+                    error = TimeoutError('NATIVE_STAGE_TIMEOUT')
+                    error.stage_minutes = stage.minutes()    # the cut's words say how long it really ran
+                    raise error
                 remaining = 1
             else:
                 remaining = deadline - time.monotonic()

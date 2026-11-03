@@ -173,20 +173,22 @@ class Coordinator:
                 'context_diagnostics':{k:ep['context'][k] for k in ('retrieval_diagnostic_from_host',) if k in ep['context']}}
 
     # ── a stage of the action brain at its limit (ADR-112 §12.2) ──────
-    def time_up(self, task, facts, asks):
+    def time_up(self, task, facts, key):
         """Her task_time turn, on a thread of its own while the stage goes on: the program tells her the stage reached
         its limit, and she chooses with her task tool (more, message, stop) or lets it end (time_up.py). A failure is
         recorded; the stage's window still bounds it."""
-        from .time_up import TEXT, TIME_UP_VERSION
+        from .time_up import TEXT, TIME_UP_VERSION, started
         try:
             with self.lock:
-                current=task_records.get(self.store, task['_id'])
-                if not current or current['state']!='RUNNING' or not current.get('time_up'):
-                    return None          # it ended before her turn could start
-                return self._task_turn(current,'task_time','time-up:%s:%d'%(task['_id'],asks),TEXT,
+                current=started(self.tasks,task['_id'])
+                if not current:
+                    self.store.audit(task['_id'],'task.time_up_failed',{'key':key,'error':'STAGE_ALREADY_OVER'},
+                                     task['scope_key'])
+                    return None          # it ended, or was cut, before her turn could start
+                return self._task_turn(current,'task_time','time-up:'+key,TEXT,
                     {'kind':'task_time','version':TIME_UP_VERSION,**facts})
         except Exception as exc:         # noqa: BLE001 recorded; the window ends the stage
-            self.store.audit(task['_id'],'task.time_up_failed',{'ask':asks,'error':type(exc).__name__,
+            self.store.audit(task['_id'],'task.time_up_failed',{'key':key,'error':type(exc).__name__,
                              'detail':excerpt(str(exc),300)},task['scope_key'])
             return None
 

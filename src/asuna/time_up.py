@@ -5,14 +5,17 @@
 a thread of its own); the stage goes on working. Her `task` option `more` raises the task's `time_more` by one and
 removes `time_up`: the clock sees the count rise and moves the deadline one block on, and the same native run goes on.
 A stage that ends while she is asked ends as always; one she stops ends as `stop` does; when TIME_UP_WINDOW passes with
-no `more`, `due` says to cut, and the stage is cut as it was before. `task.time_up_outcome` records which of these it
-was: more, ended, stopped or cut.
+no `more`, `due` says to cut, and the stage is cut as it was before. The window runs from when her turn starts
+(`time_up.turn_at`, written by her turn): while her other turns hold her, the stage goes on working, up to one more
+block, and is then cut as `not_asked`. `task.time_up_outcome` records which it was: more, ended, stopped, cut or
+not_asked. Each stage's asks have their own key (`key`), so a task's later stage is asked again.
 
 The words for her are program text: 你 is her. Bump TIME_UP_VERSION with any change to them.
 """
 from __future__ import annotations
 
 import time
+import uuid
 
 from .records import tasks as task_records
 from .state import now as utc_now
@@ -41,7 +44,9 @@ def lately(activity):
                                                        _span(activity['since_last']))
     if activity['running']:
         return '最近 %d 分钟没有用完的工具调用；这会儿有 %d 个还没回来' % (RECENT_SECONDS // 60, activity['running'])
-    return '最近 %d 分钟没有用工具' % (RECENT_SECONDS // 60)
+    if activity['since_last'] is not None:
+        return '最近 %d 分钟没有用工具（上一次在%s前）' % (RECENT_SECONDS // 60, _span(activity['since_last']))
+    return '最近 %d 分钟没有用工具（这一段还没用过）' % (RECENT_SECONDS // 60)
 
 
 def behind(store, task_id):
@@ -76,9 +81,15 @@ class StageClock:
         self.block, self.window, self.ask, self.clock = block, window, ask, clock
         self.started = clock()
         self.deadline = self.started + block
-        self.until = None          # while she is asked: when the window ends
+        self.until = None          # while she is asked: the latest the window can end (her turn not started)
         self.granted = 0           # the task's time_more when she was asked
         self.asks = 0
+        self.stage = uuid.uuid4().hex[:12]
+        self.turn_seen = None      # when this clock first saw her turn started
+
+    def key(self):
+        """This ask of this stage: what her turn is known by."""
+        return '%s:%s:%d' % (self.task_id, self.stage, self.asks)
 
     def due(self):
         """True when the stage is to be cut now."""
@@ -87,15 +98,33 @@ class StageClock:
             if moment >= self.deadline:
                 self._ask(moment)
             return False
-        task = task_records.get(self.service.store, self.task_id, fields=['time_more'])
+        task = task_records.get(self.service.store, self.task_id, fields=['time_more', 'time_up'])
         if task and (task.get('time_more') or 0) > self.granted:
-            self._outcome('more')
-            self.deadline += self.block
-            self.until = None
+            return self._more()
+        if self.turn_seen is None and ((task or {}).get('time_up') or {}).get('turn_at'):
+            self.turn_seen = moment         # her turn has started: the window runs from here
+        if moment < (self.until if self.turn_seen is None else self.turn_seen + self.window):
             return False
-        if moment >= self.until:
-            self._outcome('cut', clear=True)
-            return True
+        with self.service.lock:
+            # Her more and the cut are decided under one lock: a grant saved a moment ago is not cut.
+            task = task_records.get(self.service.store, self.task_id)
+            if task and (task.get('time_more') or 0) > self.granted:
+                return self._more()
+            if task and task.get('time_up'):
+                task_records.save(self.service.store, {k: v for k, v in task.items() if k != 'time_up'},
+                                  expected=task['revision'], stream=self.task_id)
+        self._outcome('cut' if self.turn_seen is not None else 'not_asked')
+        return True
+
+    def minutes(self):
+        """How long this stage has run, in whole minutes."""
+        return round((self.clock() - self.started) / 60)
+
+    def _more(self):
+        self.turn_seen = None
+        self._outcome('more')
+        self.deadline += self.block
+        self.until = None
         return False
 
     def ended(self):
@@ -108,7 +137,7 @@ class StageClock:
 
     def _ask(self, moment):
         self.asks += 1
-        self.until = self.deadline + self.window
+        self.until = self.deadline + self.block
         with self.service.lock:
             task = task_records.get(self.service.store, self.task_id)
             if not task or task['state'] != 'RUNNING':
@@ -119,7 +148,7 @@ class StageClock:
         minutes = round((moment - self.started) / 60)
         self.service.store.audit(self.task_id, 'task.time_up', {'ask': self.asks, 'minutes': minutes,
                                                                 'steps': task.get('tool_steps') or 0}, self.scope)
-        self.ask(task, minutes, self.asks)
+        self.ask(task, minutes, self.key())
 
     def _outcome(self, outcome, clear=False):
         self.service.store.audit(self.task_id, 'task.time_up_outcome', {'ask': self.asks, 'outcome': outcome},
@@ -131,6 +160,17 @@ class StageClock:
             if task and task.get('time_up'):
                 task_records.save(self.service.store, {k: v for k, v in task.items() if k != 'time_up'},
                                   expected=task['revision'], stream=self.task_id)
+
+
+def started(service, task_id):
+    """Her turn about a stage starts: `time_up.turn_at` marks it, and the stage's clock runs the window from when it
+    sees the mark. None when the stage is no longer waiting for her."""
+    with service.lock:
+        task = task_records.get(service.store, task_id)
+        if not task or task['state'] != 'RUNNING' or not task.get('time_up'):
+            return None
+        return task_records.save(service.store, {**task, 'time_up': {**task['time_up'], 'turn_at': utc_now()}},
+                                 expected=task['revision'], stream=task_id)
 
 
 def grant(service, task, restart_pending):

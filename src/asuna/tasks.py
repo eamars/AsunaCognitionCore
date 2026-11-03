@@ -1042,7 +1042,8 @@ class Executor:
                 if current and current['state']=='RUNNING' and current['intent_revision']==task['intent_revision'] and current['fencing_token']==task['fencing_token']:
                     error=redact_text(traceback.format_exc(),self.service.store.config)
                     if isinstance(exc,TimeoutError) and STAGE_TIMEOUT in str(exc):
-                        text=STOPPED_AT_LIMIT%(self.service.store.config['workflow_timeout_seconds']//60)
+                        text=STOPPED_AT_LIMIT%getattr(exc,'stage_minutes',
+                                                      self.service.store.config['workflow_timeout_seconds']//60)
                     else:
                         text='行动运行失败，原目标仍未完成。'+(LEFT_NOTE if left else '')
                     result={'status':'blocked','text':text,'error':error,'uncertainties':['已发起而没有回执的操作须先核实，不可盲目重做。'],

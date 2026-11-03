@@ -371,8 +371,11 @@ An action stage at its limit (ADR-112 §12.2): the program asks her, and cuts on
 - def `behind` — What waits behind this task for the one action worker, always said, none too.
 - def `facts` — What only the program knows when a stage reaches its limit, as words for her `task_time` turn.
 - class `StageClock` — The deadline of one executor stage; `due()` once a tick, `ended()` when the stage ends however it ends.
+  - `key` — This ask of this stage: what her turn is known by.
   - `due` — True when the stage is to be cut now.
+  - `minutes` — How long this stage has run, in whole minutes.
   - `ended` — The stage ended (a result, her stop, or an error): if she was being asked, say how it ended.
+- def `started` — Her turn about a stage starts: `time_up.turn_at` marks it, and the stage's clock runs the window from when it sees the mark.
 - def `grant` — Her `more`: one more block for a stage she is being asked about.
 
 ## `store/__init__`

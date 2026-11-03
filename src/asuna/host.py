@@ -562,8 +562,23 @@ class RuntimeHost:
             back = self.app.service.interrupted_by_restart(task['_id'])
             self.evidence.record('host.task_interrupted', {'task_id': task['_id'], 'previous_state': task['state'],
                                                            'state': back['state']})
-        # Tasks an older start paused: each comes back to her once, none runs by itself (ADR-112 §12.3).
+        # Tasks an older start paused: each comes back to her once, none runs by itself (ADR-112 §12.3). One whose
+        # work had finished keeps its own result: its state and, unless her turn on it already ran, a hand-back.
         for task in task_records.in_states(store, 'PAUSED').each():
+            if task.get('paused_state') in handover.FINISHED:
+                taken = self._feedback_taken(task)
+                kept = {key: value for key, value in task.items()
+                        if key not in ('pause_reason', 'paused_at', 'paused_state', 'paused_feedback_state')}
+                restored = task_records.save(store, {**kept, 'state': task['paused_state'], 'feedback_state':
+                                                     task.get('paused_feedback_state') if taken else 'READY'},
+                                             expected=task['revision'], stream=task['_id'])
+                if taken:
+                    self._settle_received(restored)
+                self.app.service.collab(restored, 'status', {'state': 'done' if restored['state'] == 'RETURNED'
+                                                             else 'failed'},
+                                        'status:' + task['_id'] + ':restored:' + str(restored['revision']))
+                self.evidence.record('host.task_unpaused', {'task_id': task['_id'], 'state': restored['state']})
+                continue
             back = self.app.service.interrupted_by_restart(task['_id'])
             self.evidence.record('host.task_interrupted', {'task_id': task['_id'], 'previous_state': 'PAUSED',
                                                            'paused_state': task.get('paused_state'),

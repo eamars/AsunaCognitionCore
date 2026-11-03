@@ -607,3 +607,25 @@ read.
 - **Not in this change: a clean stop.** When the Host stops cleanly with no restart pending, `Chat.stop` still
   cancels its queued and running tasks (`host_stop`); such a task already has an exit (she continues it with `task
   message`). 7 tasks were ever cancelled this way, the last on 10-05.
+
+### 12.9 Review (2026-11-03)
+
+A fresh reviewer read `e94cd9d7` against the code (races, locks, waits without end, restarts while she is asked,
+PAUSED left behind, the re-queue, every place `consult` was special-cased, tests that pass without their fix). Its
+findings, each checked against the code, and what was done:
+
+| # | Finding | Done |
+|---|---|---|
+| 1 | `more` was never offered: `exposed()` keeps only what the conversation lists, and `WITH_ACTION` had no `task.more`. D1 did nothing but add the window. | Listed; a test checks that every choice of the turn is in the list. |
+| 2 | A task's later stage (a fix attempt, a further round) built the same turn id as its first ask and found it committed: she was never asked again. | Each ask of each stage has its own key (`StageClock.key`). |
+| 3 | The window ran from the deadline while her other turns held the coordinator lock: busy over 10 minutes, the stage was cut before she was asked, with no record. | The window runs from her turn's start (`time_up.turn_at`); not started within one block, the stage is cut as `not_asked`, and a turn that finds the stage over records it. |
+| 4 | An old `PAUSED` row whose work had finished was marked interrupted, losing its report. | It gets its own state and result back, handed back unless her turn on it ran (the old unpause loop's rule). |
+| 5 | An error inside the clock left the wait as something other than the limit: no fence, the run spent model calls. | A failing clock cuts at once through the same fence. |
+| 6 | Her `task_time` turn does not hold a publication restart. | Left as consult's turn is: `more` is refused while a restart waits, and a turn cut by the restart is never resumed. |
+| 7 | The cut's words said 30 minutes after she had given more; a grant could land between the clock's read and its cut; the activity line did not say when the last call came. | The words say how long the stage ran; the cut is decided and `time_up` cleared under the same lock as a grant; the line says when, or that none came. |
+
+Checked and fine by the reviewer: every save of the task's new fields under `service.lock` with a fresh read, lock
+order (the coordinator's lock before the effects lock, no reverse path), no wait without a bound, a restart while she
+is asked, the re-queue's order and its guard against running a task twice, no task `PAUSED` reader left in `src`,
+and `task_time` following `consult` wherever it should.
+

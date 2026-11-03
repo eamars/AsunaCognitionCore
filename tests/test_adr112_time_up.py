@@ -36,8 +36,8 @@ def audits(store, kind):
 def staged(store, clock):
     service = TaskService(store)
     asked = []
-    stage = time_up.StageClock(service, running(store), BLOCK, lambda task, minutes, asks: asked.append((minutes, asks)),
-                               clock=clock)
+    stage = time_up.StageClock(service, running(store), BLOCK,
+                               lambda task, minutes, key: asked.append((minutes, int(key.rsplit(':', 1)[1]))), clock=clock)
     return service, stage, asked
 
 
@@ -63,13 +63,43 @@ def test_a_stage_at_its_limit_asks_her_and_more_lets_the_same_run_go_on(store):
 
 def test_a_window_with_no_more_cuts_the_stage_as_before(store):
     clock = Clock()
-    _, stage, asked = staged(store, clock)
+    service, stage, asked = staged(store, clock)
     clock.t += BLOCK
     assert not stage.due() and asked
-    clock.t += time_up.TIME_UP_WINDOW
+    clock.t += 120                                   # her turn starts two minutes on: the window runs from there
+    assert time_up.started(service, 'task-long')['time_up']['turn_at']
+    assert not stage.due()
+    clock.t += time_up.TIME_UP_WINDOW - 1
+    assert not stage.due()
+    clock.t += 1
     assert stage.due()
     assert [row['outcome'] for row in audits(store, 'task.time_up_outcome')] == ['cut']
     assert 'time_up' not in task_records.get(store, 'task-long')
+
+
+def test_a_stage_whose_ask_never_reaches_her_works_on_one_block_and_is_cut_as_not_asked(store):
+    clock = Clock()
+    _, stage, _ = staged(store, clock)
+    clock.t += BLOCK
+    stage.due()
+    clock.t += time_up.TIME_UP_WINDOW              # her other turns hold her: the stage goes on working
+    assert not stage.due()
+    clock.t += BLOCK - time_up.TIME_UP_WINDOW
+    assert stage.due()
+    assert [row['outcome'] for row in audits(store, 'task.time_up_outcome')] == ['not_asked']
+
+
+def test_each_stage_of_a_task_asks_her_with_its_own_key(store):
+    service = TaskService(store)
+    keys = []
+    task = running(store)
+    for _ in range(2):                               # a task's later stage (a fix attempt, a further round)
+        clock = Clock()
+        stage = time_up.StageClock(service, task, BLOCK, lambda t, m, key: keys.append(key), clock=clock)
+        clock.t += BLOCK
+        stage.due()
+        stage.ended()
+    assert len(set(keys)) == 2
 
 
 def test_a_stage_that_reports_while_she_is_asked_ends_as_always(store):
@@ -201,4 +231,36 @@ def test_what_she_is_told_at_the_limit_is_words(store):
     assert said['ran'] == '这一段已经跑了约 30 分钟（每段上限 30 分钟）' and said['steps'] == '这件事一共用了 90 步工具'
     assert said['lately'] == '最近 5 分钟用了 7 次工具，最后一次在 6 秒前'
     assert said['queue'].startswith('后面还有 1 件在排（来自') and said['more_so_far'] == '你已经给它加过 1 次时'
-    assert time_up.lately({'ended': 0, 'since_last': None, 'running': 0}) == '最近 5 分钟没有用工具'
+    assert time_up.lately({'ended': 0, 'since_last': None, 'running': 0}) == '最近 5 分钟没有用工具（这一段还没用过）'
+
+
+def test_more_reaches_her_in_the_turn_at_a_limit(store):
+    """Review (11-03): exposed() keeps only what the conversation lists; more missing from the list was never offered."""
+    from asuna import role_tools
+    ep = {'_id': 'ep-time', 'episode_kind': 'task_time', 'task_id': 'task-long', 'scene_id': 'local-dm',
+          'person_id': 'owner', 'context': {}}
+    offered = set(role_tools._turn_rules(store, ep)) - set(role_tools.EVERYWHERE)
+    assert offered == {'task.more', 'task.message', 'task.stop'} and offered <= set(role_tools.WITH_ACTION)
+
+
+def test_an_old_paused_task_whose_work_had_finished_keeps_its_own_result(store):
+    """Review (11-03): such a row once went back by the start's unpause loop; marked interrupted, its report was lost."""
+    from_home(store, 'task-paused-done', 'PAUSED', pause_reason='host_restart', paused_state='RETURNED',
+              paused_feedback_state='WAITING', result={'status': 'done', 'text': '做完了'})
+    recovering(store, [])._recover_tasks()
+    done = task_records.get(store, 'task-paused-done')
+    assert (done['state'], done['feedback_state'], done['result']['text']) == ('RETURNED', 'READY', '做完了')
+
+
+def test_a_clock_that_fails_cuts_the_stage_through_the_fence(store):
+    """Review (11-03): an error inside the clock left wait as something other than the limit, so no fence was sent."""
+    future = Future()
+    future.asuna_calls, future.asuna_handler = Queue(), None
+    future.asuna_task = running(store)
+    broken = SimpleNamespace(due=lambda: (_ for _ in ()).throw(RuntimeError('store down')), ended=lambda: None)
+    lane = SimpleNamespace(lane='executor', worker=None, time_up_clock=lambda task, timeout: broken)
+    try:
+        NativeLane.wait(lane, future, BLOCK, {'_id': 'ep-x'})
+        raise AssertionError('the stage was not cut')
+    except TimeoutError as cut:
+        assert str(cut) == 'NATIVE_STAGE_TIMEOUT'

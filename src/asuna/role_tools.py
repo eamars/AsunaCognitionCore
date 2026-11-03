@@ -950,7 +950,7 @@ def _turn_rules(store, ep):
 # Her tools by where the conversation is (visibility.place) and what its channel carries. Every turn of a conversation
 # lists the same ones; `exposed` picks which of them the turn may use.
 EVERYWHERE = ('think', 'recall', 'stay_silent', 'ideas.note', 'plan', 'private_words', 'understand_person')
-WITH_ACTION = ('delegate', 'task.message', 'task.stop', 'task.page', 'task.answer')
+WITH_ACTION = ('delegate', 'task.message', 'task.stop', 'task.page', 'task.answer', 'task.more')
 # Her home lines: the owner's own conversations and the trusted lines (his agents, her other self). Things about
 # herself go wherever she is at home; sending her on someone's errand is for the owner's conversations only.
 AT_HOME = ('write_document', 'note', 'set_policy', 'ideas.read', 'ideas.review',

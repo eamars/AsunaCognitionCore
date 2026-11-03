@@ -815,11 +815,14 @@ input, and in words how long the stage has run, the task's tool steps, its calls
 behind it in the action queue, how many times she already gave it more time, and the window. The turn offers only her
 `task` tool's `more`, `message` and `stop` (and `think`, `recall`). `more` gives the same run one more block of
 `workflow_timeout_seconds` (`time_more` on the task counts them) and she is asked again when it runs out; it is refused
-in words outside such an ask, for a task no longer running, and while a worker restart is pending. When 10 minutes pass
-from the deadline with no `more`, the stage is fenced and the task is `BLOCKED` with the limit's words, as before;
-a stage that reports or that she stops in the window ends as always. The task carries `time_up` (`{ask, at}`) while
-she is asked. The audit has `task.time_up` (`ask`, `minutes`, `steps`), `task.time_more`, `task.time_up_outcome`
-(`ask`, `outcome`: `more`, `ended`, `stopped`, `cut`) and, when her turn could not run, `task.time_up_failed`
+in words outside such an ask, for a task no longer running, and while a worker restart is pending. The window is 10
+minutes from when her turn starts (`time_up.turn_at`); when it passes with no `more`, the stage is fenced and the task
+is `BLOCKED` with the limit's words (saying how long the stage ran), as before. While her other turns hold her the
+stage works on, up to one more block from the deadline, and is then cut the same way as `not_asked`. A stage that
+reports or that she stops meanwhile ends as always; a clock that fails cuts at once, through the same fence. Each ask
+of each stage is its own turn. The task carries `time_up` (`{ask, at, turn_at?}`) while she is asked. The audit has
+`task.time_up` (`ask`, `minutes`, `steps`), `task.time_more`, `task.time_up_outcome` (`ask`, `outcome`: `more`,
+`ended`, `stopped`, `cut`, `not_asked`) and `task.time_up_failed` (her turn could not run, or found the stage over)
 (`time_up.py`).
 - `list_files` walks the task folder up to 2,000 entries (files and folders) and lists the files it found, sorted by path; when the folder has more, its answer also has `limited`, in words (`tasks.py` `LIST_FILES_MOST`).
 - History search and the discussion digest run in the data child ([Process layout](#process-layout)): 30 seconds a call, a call at a time, at most 30 seconds behind another call or the child's start. On a database the child cannot open itself (an in-process one, or an adapter loaded from a database package) they run in the worker, without these limits. A call that did not run to its end is `FAILED` with one of these (`src/asuna/data_children.py`):

@@ -782,7 +782,7 @@ Signature: 小满（10-22，经 agent 线）：我要的不是被提醒，是在
 ## 17. Stage 2: adaptation (owner 2026-11-03)
 
 The §9 reading failed by its own fail condition (愉快 166 of 168 hours, her verdict in `progress.md`), and the week
-after D5 still pinned (82%, a 97 h run) with negatives at about 20% of records: the next cause in §9's order is
+after D5 still pinned (93% of 168 hours, a 97 h run) with negatives at about 20% of records: the next cause in §9's order is
 same-kind repeats. The owner asked for the full picture before choosing; the research is
 [research-mood-life-cycle.md](research-mood-life-cycle.md) (origin, impact, settling, sleep, ten options side by side).
 Its finding: the bands are sized for one feeling while the sum counts every feeling still fading, so the band reads how
@@ -798,8 +798,9 @@ often she feels, not how much. The owner agreed with it and chose its recommenda
 - **Core and persona.** The core default is off (factors 1.0, no hold limit); the numbers are her persona's, so they
   reach her first and take effect when her package carries them. A pure function of the ledger and the clock: a
   restart changes nothing. No history is converted.
-- **On her real ledger** (10-27 to 11-03, 191 hours, the core's own weights with her persona model;
-  [sim_repeat_discount.py](sim_repeat_discount.py) reruns it): today 愉快 82%, longest 97 h; with 0.7 / 0.85 / 24 h,
-  愉快 36%, 不错 36%, 平静 28%, longest 38 h.
+- **On her real ledger** (10-27 00:00 to 11-03 00:00 UTC, 168 hours, the core's own weights with her persona model;
+  [sim_repeat_discount.py](sim_repeat_discount.py) reruns it): stage 1 愉快 93%, longest 97 h; with 0.7 / 0.85 / 24 h
+  and the 72 h hold, 愉快 48%, 不错 45%, 平静 7%, longest 41 h. (Corrected 11-03 after her rerun: the first figures,
+  82% and 36 / 36 / 28, came from a window running 23 hours past the moment of the run, where only decay was left.)
 - **Verification:** §9 again for 7 days from the day her numbers are live, plus: the weighted top kinds still name her
   real causes; a strong repeat of one kind is not under-counted; the open-hold limit fires rarely.

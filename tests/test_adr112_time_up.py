@@ -282,11 +282,11 @@ def test_she_settles_a_returned_task_herself_and_her_list_says_her_judgment(stor
     assert service.settle('task-done', 'done', 'ep-1') == SETTLE_WELL
     assert service.settle('task-waiting', 'dropped', 'ep-1') == SETTLE_NOT_YET
     assert service.settle('task-never-handed', 'done', 'ep-1') == SETTLE_NOT_YET
-    assert service.settle('task-back', 'done', 'ep-1') == SETTLED_WORDS['done']
+    assert service.settle('task-back', 'done', 'ep-1') == SETTLED_WORDS['done'] % '宿主重启打断'
     back = task_records.get(store, 'task-back')
     assert back['state'] == 'BLOCKED' and back['settled']['as'] == 'done'           # nothing re-runs, its state stays
     assert handover.status_words(back) == '你判定已经办完（原：宿主重启打断）'
-    assert service.settle('task-back', 'dropped', 'ep-2') == SETTLED_WORDS['dropped']     # the later judgment stands
+    assert service.settle('task-back', 'dropped', 'ep-2') == SETTLED_WORDS['dropped'] % '宿主重启打断'   # the later stands
     assert task_records.get(store, 'task-back')['settled']['as'] == 'dropped'
     assert len(audits(store, 'task.settled')) == 2                                    # each one is history
     service.settle('task-lost', 'done', 'ep-3')                 # a result that never reached her can be settled too

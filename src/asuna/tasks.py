@@ -458,7 +458,7 @@ def ended_as(task):
 
 
 # ADR-112 §12.10: what her settle says back.
-SETTLED_WORDS = {'done': '记下了：这件你判定已经办完，不会再跑。', 'dropped': '记下了：这件你决定不再做，不会再跑。'}
+SETTLED_WORDS = {'done': '记下了：这件你判定已经办完（原：%s），不会再跑。', 'dropped': '记下了：这件你决定不再做（原：%s），不会再跑。'}
 SETTLE_RUNNING = '这件还在排或在跑：不做了就用 stop。'
 SETTLE_WELL = '这件已经跑完、交回的就是做成了，不用再结。'
 SETTLE_GONE = '这件已经叫停或作废了，不用再结。'
@@ -543,11 +543,12 @@ class TaskService:
             if task.get('feedback_state') not in handover.TAKEN:
                 return SETTLE_NOT_YET
             # Settled again, the later judgment stands; each is its own task.settled row. How it ended stays beside it.
+            was = ended_as(task)
             task_records.save(self.store, {**task, 'settled': {'as': judged, 'at': now(), 'episode_id': episode_id,
-                                                               'was': ended_as(task)}},
+                                                               'was': was}},
                               expected=task['revision'], stream=task_id)
         self.store.audit(task_id, 'task.settled', {'as': judged, 'episode_id': episode_id}, task['scope_key'])
-        return SETTLED_WORDS[judged]
+        return SETTLED_WORDS[judged] % was     # how it ended, in the reply too (her ask, 11-03)
 
     def interrupted_by_restart(self, task_id):
         """ADR-112 §12.3: a task a restart cut while it ran, or one an older start paused, comes back to her as a

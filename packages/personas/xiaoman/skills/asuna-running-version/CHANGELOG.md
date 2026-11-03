@@ -1,5 +1,6 @@
 # CHANGELOG · asuna-running-version
 
+- 11-03：第五节加小节「判“这次发布生效没”：看技能内容，不看包 digest」——技能就地换，安装目录不换号、`loaded.packages` digest 不动也可能已经换了技能；读三样：`activation.json` 的 candidate／previous、self-publish 回执、运行时 SKILL.md 内容 sha（`version_probe.py --package <project> --file ... --needle ...`，用 xiaoman 包实跑过一次能读到运行时 sha）。第十节第 3 条指过去。check_skill 加 3 个钉。来路：已采纳想法 idea-af4feeda（金主令 5149 盘点顺带）。
 - 10-30：从正文剥离来历叙述 17 处（摘要：删「版本」「试用记录」两节；去掉「问过八回」「10-15 白改期」「10-15 判错一次」「Claude 10-20 给的」「10-20 实测 sha 对照」「主人 10-20 交代」「10-25 现场凭据与任务号」「今天实测…落后 1 笔」「asuna-launch 90-105 活样本」等；第三节的 116 个文件计数换成只留「三个文件不算差异」；判据、位置、读法、退出码未动）。
 - 10-30：`check_skill.py` 同步删 4 条钉来历文字的断言（section_11「## 版本」、section_12「## 试用记录」、criterion_diverged_misread「读成没装」、selfcheck_documented「正文里出现 check_skill.py」）；检查条数 61→57，全绿。
 - 10-25（v1.5）：改写第五节 `loaded.packages` 那一格——监工起包名只来自 `installed`、digest 由选择覆盖，报的是在跑的那一档；补「在不在跑仍只认 `active.<项目>.sha256` ＋ 运行时那份文件」和「`loaded.commit` 是启动那一刻的 HEAD」；「选择覆盖 digest」只在夹具里证实过，真文件上两边 sha 相同、是空转，不算现场验过。新增「过期选择的形状要自己算」一条：当晚 19:48:45 那次起来，`loaded.packages` 正好 7 项、无 `@asuna/dsh-peer`、无 frozen 目录名拼出的假包，`selections` 里 `dsh-peer` 仍 `ACTIVE`（凭据 `task-3e7a12804f475d9d17b323e708d0db03`，拿真文件跑 `loaded()`，父版本 9 项、差集正好那两条）。

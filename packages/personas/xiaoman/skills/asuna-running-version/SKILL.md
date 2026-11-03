@@ -90,6 +90,16 @@ python3 skills/asuna-running-version/version_probe.py --package core --file skil
 
 `activation.json` 里的时刻原始值是 UTC 的 ISO 串，结构里 `packageRoot` 下的路径按包内相对路径写 --file。
 
+### 判「这次发布生效没」：看技能内容，不看包 digest
+
+技能是就地换的：发布后选择指向新的冻结快照，技能从选中那份读，安装目录（`node_modules` 里那份）不换号、`loaded.packages` 的 digest 也可能原样不动，技能却已经换了。所以「这次发布生效没」不读 `loaded.packages` 的 digest，读三样，缺一样不算判过：
+
+1. `activation.json` 里该 project 的 `candidate`／`previous`：selection 的 candidate 是不是这次那一份、previous 是不是上一份；
+2. 发布时的 self-publish 回执（`receipt_id`、`changed_files`、`published_at`）；
+3. 运行时那份 `SKILL.md` 的内容 sha256：用 `version_probe.py --package <project> --file skills/<技能名>/SKILL.md --needle <只有新版才带的字面>`，对得上这次改后的 sha、needle 在，才算技能内容在跑。
+
+digest 不动，不能读成「技能没换」。
+
 ## 六、回执说「本机检出有 origin/main 没有的提交」＝本机比远端新
 
 那是 `checkout.state = diverged`：本机有远端没有的提交，快进不了，这次装的是磁盘上原来的检出。**这不是「没装」**。
@@ -118,7 +128,7 @@ python3 skills/asuna-running-version/version_probe.py --package core --file skil
 
 1. 这一回合有没有 `loaded`？没有 → 是「没重启或过了 24 小时」，不是「没装」，问一句再动闹钟。
 2. `activation.json` 里那个 project 的 `state` 是什么？只有 ACTIVE 是在跑。
-3. 要比版本，比 commit ＋ 逐文件 sha256，不比包 sha。
+3. 要比版本，比 commit ＋ 逐文件 sha256，不比包 sha。判「这次发布生效没」走上面「看技能内容，不看包 digest」那三样。
 4. 回执里 `checkout` 是哪个 state？`diverged`、`changed_files` 都不是「没装」。
 5. 新参数进没进，看这一回合的工具表。
 

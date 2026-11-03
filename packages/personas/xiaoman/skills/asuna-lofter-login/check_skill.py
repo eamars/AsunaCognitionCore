@@ -88,6 +88,7 @@ XPOS = [
 # 登录态与验通
 STATE = [
     ("state_is_body_token", "服务端不下发登录态 cookie"),
+    ("state_points_to_lofter_skill", "走技能 `lofter`"),
     ("state_only_tracking_cookie", "usertrack"),
     ("state_plant_like_frontend", "LOFTER-PHONE-LOGIN-AUTH"),
     ("state_api_header", "lofter-phone-login-auth"),

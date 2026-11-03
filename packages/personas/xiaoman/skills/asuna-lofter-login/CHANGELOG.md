@@ -1,5 +1,6 @@
 # CHANGELOG · asuna-lofter-login
 
+- 11-03：“登录态放在哪、怎么验通”节首加一条指引——日常探活／取数／失效重登走技能 `lofter`（`lofter_auto.py`），本技能只留原理与单步诊断探针；check_skill 加 1 个钉。来路：金主令 5149 盘点，lofter 技能已发布。
 - 11-03 新建：LOFTER 无浏览器登录（含拼图滑块）实测完，做法固化成技能。正本材料在任务 task-28e7a8defd9dd55201cf8a18cbbfe45e（接着 task-17f3b137b8ebe7557881ba0dbc81ac9d）的工作区：`capB.py`→`captcha_stage_b.py`（只把 state 打印那行改成读新的 `readings` 键，逻辑一字未动）、`lofter_probe.py`→`lofter_login_probe.py`（逐字抄）；`capA_state.json` 与图片没抄进来（里面是一次性 `id` 与临时 AES key/iv）。正文口径全部来自那趟实测：首答 4071 → 取图 → 四把投票 166–169 取 167 → 一次 check（`code:0`／`success:true`／32 位票据）→ 带 `capttoken` 一次登录 HTTP 200 拿 96 位 token（响应只下发打点 `usertrack`，无登录态 cookie）→ 种前端 cookie 后 `loginCheck.do` 401→200、`postCollection.api` `meta.status` 200。日期与来路只进这份 CHANGELOG，正文不带。
 - 11-03 `captcha_stage_a.py` 不是原件逐字抄：原件（`capA.py`）只有两把（轮廓打分＋洞内暗度），这一份把正文承诺的四把补全（补 模糊 NCC ＋ 接缝色差），并加 `--bg/--front` 离线复算模式与「≥3 把落在 ±5 像素才算一致、否则退码 3 换图」的投票闸。补完在真图上核过一遍：拿当时真发出去那一张（`capA_bg.jpeg`／`capA_front.png`，几何量出条内第 3..67 列与原件一致）离线复算 → edge 167／dark 168／ncc 219（离群）／seam 166 → 三把一致、投出 167.0，与当时送出去并一次过的那个值相同（rc 0，不联网）。
 - 11-03 附 `check_skill.py`（110 格，跑出来 110/110 通过）：头与节名、四把与投票闸的字面、凭据纪律（`xiaoman-lofter`／`LOFTER_PHONE`／`LOFTER_PASS`、正文无手机号形状的数字串）、未核实清单四条、配额与停手、探针能编译、本机私密名单泄露扫描（`leak_scan_ran`／`no_listed_words`，名单配不上就红，不许「没跑」长得像「过了」）。

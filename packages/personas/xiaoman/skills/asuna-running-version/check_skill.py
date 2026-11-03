@@ -82,6 +82,9 @@ CRITERIA = [
     ("criterion_package_step_usage", "--package"),
     ("criterion_package_step_three_lines", "三行读数"),
     ("criterion_loaded_packages_is_should_install", "「该装的那档」，不是在跑的那档"),
+    ("criterion_publish_effect_by_content", "看技能内容，不看包 digest"),
+    ("criterion_publish_effect_receipt", "self-publish 回执"),
+    ("criterion_publish_effect_runtime_sha", "运行时那份 `SKILL.md` 的内容 sha256"),
     ("criterion_revert_not_in_audit", "不进 `audit_events`，只落 `activation.json`"),
     ("criterion_installed_at_only_previous", "`installed_at` 不在 `active.*` 块里，只在 `previous` 里"),
 ]

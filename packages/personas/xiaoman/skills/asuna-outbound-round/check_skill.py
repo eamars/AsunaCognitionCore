@@ -74,7 +74,7 @@ TIMING = [
     ("timing_no_dev_db_detour", "别在本机这边绕道翻开发库"),
 ]
 
-# 2026-10-22 起有这一节；名单每现量一次改一次（2026-11-02 现量：群 7／dm 2／家里 14）。
+# 2026-10-22 起有这一节；名单每现量一次改一次（2026-11-03 现量：群 7／dm 2／家里 17）。
 # 这份技能是出门那一轮本来就要带的，名单写在这里，所以真名单（群那份里除自己之外的名字、dm 那两份、
 # 家里不带出去的那几份之一）、量法、旧观测那行、两条规矩，都得在——少了哪条红的就是哪条，不合并成一条「名单在不在」。
 ROSTER = [
@@ -87,7 +87,10 @@ ROSTER = [
     ("roster_group_usage_readout", "asuna-usage-readout"),
     ("roster_dm_count", "别人私聊（dm）2 份"),
     ("roster_dm_self", "asuna-outbound-round"),
-    ("roster_home_count", "14 份全给"),
+    ("roster_home_count", "17 份全给"),
+    ("roster_home_lofter_login", "asuna-lofter-login"),
+    ("roster_home_bilibili", "`bilibili`"),
+    ("roster_home_lofter", "`lofter`"),
     ("roster_home_daily_review", "asuna-daily-review"),
     ("roster_home_kept_private", "asuna-credentials"),
     ("roster_measured_method", "按各份 `SKILL.md` 头部 `scene_kinds` 字段数"),

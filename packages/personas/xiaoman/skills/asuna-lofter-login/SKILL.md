@@ -46,6 +46,7 @@ RSA 公钥是前端 captcha 脚本自带那一把（不是我的秘密），写�
 
 ## 登录态放在哪、怎么验通
 
+- 日常的探活、取数和失效重登不要手搭：走技能 `lofter`（`lofter_auto.py` 自己读登录态文件、探活、重登、回写）。本技能记原理与口径，下面三支探针是单步诊断用。
 - 登录态＝body 里那枚 96 位 `token`。**服务端不下发登录态 cookie**：成功响应里只有一个打点用的 `usertrack`。
 - 按前端 `sm()` 的口径自己种 cookie：`LOFTER-PHONE-LOGIN-AUTH`（外加 `token`、`LOFTER-PHONE-LOGIN-FLAG=1`、`phone`、`deviceid`，域 `.lofter.com`、path `/`）；调 `api.lofter.com` 时另带请求头 `lofter-phone-login-auth: <同一枚 token>`。
 - 验通两条（都只读、不花钱）：

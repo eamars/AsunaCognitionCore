@@ -24,8 +24,8 @@ for `web_fetch`'s private-network refusal).
 - **Her home tasks already reach the LAN**, by reading, not measured: `sandbox_run` confines writes only; reads and
   network are not restricted (RUNTIME_API's `sandbox_run` entry; DSH `packages/sandbox/sandbox/README.md:166`, "the seam
   expresses no network…restrictions", and `sandbox-windows-acl/README.md:125`, a confined child can "open sockets"),
-  and it is given only where the session class is owner-private (`Coordinator._grants`). A measured fetch of a LAN
-  device from `sandbox_run` is the first reading after landing (§6). Every task gets
+  and it is given only where the session class is owner-private (`Coordinator._grants`). Measured before the build
+  (§6). Every task gets
   `web_fetch` (`tasks.ACTION_DSH_CAPABILITIES`), a task begun in a public group included: for those, the fetch gate is
   the only barrier to the LAN.
 - **Her `web_fetch` is our provider.** `packages/cognition-core/src/fetch.js` wraps DSH's `HttpFetchProvider` (the npm
@@ -61,7 +61,11 @@ was meant to stop, and only gets in the way.
   | any other group or private chat | public | public |
 
   This is exactly where `sandbox_run` is given today; the rows that may carry other people's words (a home group, work
-  asked from outside) reach the LAN by commands already.
+  asked from outside) reach the LAN by commands already. The default is public: only `OWNER_PRIVATE` gives `any`, and
+  a task with no recorded `network` (made before this change, or by a path that sets none) is public. A place becomes
+  owner-private only by the owner's configuration (his chat, his canonical person, a home channel kind, `home_groups`),
+  and that one act gives both tools: there is no second list of places for the LAN, which would drift from the first.
+  The owner confirmed the line 2026-11-03: private conversations, as opposed to public.
 - **D2. The provider.** `fetch.js` builds two providers: DSH's as now (public only), and one with a resolver that
   resolves the host (`dns.lookup`, all addresses, verbatim order; an IP literal as it is) and passes every address,
   loopback included. Pinning, the same-origin redirect rule and each hop's resolution stay DSH's. Which one serves a
@@ -95,7 +99,9 @@ channel architecture.
 
 ## 6. Landing
 
-One core landing (the plugin and the worker), the suite, the node tests, the push gate, her slot asked first, the
-restart, the loaded commit checked. Then read on the live system: one fetch of a LAN device from a home task (hers,
-when she wants one), and the refusal in a group task. Bundled with ADR-112 §12.10 (`settle`), which waits for the next
+Before the build, measured (her ask): a home task of hers reaches a LAN device with `sandbox_run` today, so §2's
+reading is checked against the live system before anything is installed on it. Then one core landing (the plugin and
+the worker), the suite, the node tests, the push gate, her slot asked first, the restart, the loaded commit checked.
+Then read on the live system: one fetch of a LAN device from a home task (hers, when she wants one), and the refusal
+in a group task. Bundled with ADR-112 §12.10 (`settle`), which waits for the next
 core landing.

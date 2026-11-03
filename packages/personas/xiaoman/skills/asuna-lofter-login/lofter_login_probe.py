@@ -148,6 +148,23 @@ for k, v in found.items():
         break
 print("token picked: %s" % (bool(token) and ("yes len=%d" % len(token)) or "no"))
 
+_BLOG_KEYS = ("blogName", "blogId", "blogdomain", "blogNickName")
+
+
+def _m(v):
+    """打码：账号事实只报首末两位，不进 stdout。"""
+    s = "" if v is None else str(v)
+    return (s[:2] + "~" + s[-2:]) if len(s) > 4 else ("~" if s else s)
+
+
+def _mb(o):
+    if isinstance(o, dict):
+        return {k: (_m(v) if k in _BLOG_KEYS and not isinstance(v, (dict, list)) else _mb(v)) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_mb(x) for x in o]
+    return o
+
+
 # 只读验证 1：loginCheck.do（带返回 cookie）
 sc = httpx.Client(headers={"user-agent": UA}, timeout=25, follow_redirects=True)
 if token:
@@ -159,13 +176,13 @@ if token:
 r1 = sc.get("https://www.lofter.com/loginCheck.do", headers={"referer": "https://www.lofter.com/"})
 print("READONLY-1 GET loginCheck.do status=%s" % r1.status_code)
 try:
-    dump("  json:", r1.json(), 900)
+    dump("  json:", _mb(r1.json()), 900)
     blog_name = None
     j = r1.json()
     resp_node = j.get("response") or {}
     if isinstance(resp_node, dict):
         blog_name = resp_node.get("blogName")
-    print("  blogName=%s blogId=%s" % (blog_name, resp_node.get("blogId") if isinstance(resp_node, dict) else None))
+    print("  blogName=%s blogId=%s" % (_m(blog_name), _m(resp_node.get("blogId")) if isinstance(resp_node, dict) else None))
 except Exception as e:
     blog_name = None
     print("  非 JSON:", scrub(r1.text)[:300], type(e).__name__)
@@ -181,7 +198,7 @@ r2 = sc.post(
         "lofter-phone-login-auth": token or "",
     },
 )
-print("READONLY-2 POST postCollection.api status=%s blogdomain=%s.lofter.com" % (r2.status_code, blog_name))
+print("READONLY-2 POST postCollection.api status=%s blogdomain=%s.lofter.com" % (r2.status_code, _m(blog_name)))
 try:
     j2 = r2.json()
     meta = j2.get("meta") if isinstance(j2, dict) else None

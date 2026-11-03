@@ -356,6 +356,8 @@ def ensure(force=False):
 def task_collections(token, dev):
     acct = load_account()
     v, info = probe(token, dev)
+    if acct and not acct.get("blogdomain"):
+        print("WARN 账号文件在，但没有 blogdomain 这个键（读到的键名=%s）；回退到 loginCheck 的 blogName" % sorted(acct.keys()))
     dom = acct.get("blogdomain") or ((info.get("blogName") or "") + ".lofter.com")
     c = new_client({"referer": "https://www.lofter.com/"})
     plant(c, token, dev)

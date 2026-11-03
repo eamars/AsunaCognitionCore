@@ -15,7 +15,7 @@ for _s in (sys.stdout, sys.stderr):
 HERE = os.path.dirname(os.path.abspath(__file__))
 NAME = os.path.basename(HERE)
 SECTIONS = ['## 什么时候读这一份', '## 文件与凭据约定', '## 自动化的最低形状', '## 已验端点', '## 什么时候该停、什么时候喊人', '## 重登预算', '## 未核实']
-MUST = [('vault_name', 'xiaoman-lofter'), ('env_names', 'LOFTER_PHONE'), ('probe_401_200', '401＝死、200＝活'), ('unknown_no_relogin', '无法判定不重登'), ('slider_vote', '四把投票'), ('one_check', '同一张图只发一次 check'), ('stop_new_risk', '4071 之外的新风控形状'), ('account_file', 'lofter-account.txt'), ('verified_endpoint', 'getCollectionList'), ('no_dwr', '没打通')]
+MUST = [('vault_name', 'xiaoman-lofter'), ('env_names', 'LOFTER_PHONE'), ('probe_401_200', '401＝死、200＝活'), ('unknown_no_relogin', '无法判定不重登'), ('slider_vote', '四把投票'), ('one_check', '同一张图只发一次 check'), ('stop_new_risk', '4071 之外的新风控形状'), ('account_file', 'lofter-account.txt'), ('verified_endpoint', 'getCollectionList'), ('no_dwr', '没打通'), ('who_reads_account_file', '本技能里只有 `lofter_auto.py` 读'), ('wrong_key_silent', '静默回退到 `blogName`')]
 SCRIPTS = ['lofter_auto.py', 'captcha_stage_a.py']
 
 checks = []

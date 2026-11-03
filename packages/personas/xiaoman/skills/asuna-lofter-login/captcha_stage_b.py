@@ -170,12 +170,29 @@ if auth:
             c.cookies.set("deviceid", v, domain=".lofter.com", path="/")
     print("已按前端 sm() 的口径把登录 cookie 装上（值不外传）")
 
+_BLOG_KEYS = ("blogName", "blogId", "blogdomain", "blogNickName")
+
+
+def _m(v):
+    """打码：账号事实只报首末两位，不进 stdout。"""
+    s = "" if v is None else str(v)
+    return (s[:2] + "~" + s[-2:]) if len(s) > 4 else ("~" if s else s)
+
+
+def _mb(o):
+    if isinstance(o, dict):
+        return {k: (_m(v) if k in _BLOG_KEYS and not isinstance(v, (dict, list)) else _mb(v)) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_mb(x) for x in o]
+    return o
+
+
 r1 = c.get("https://www.lofter.com/loginCheck.do", headers={"referer": "https://www.lofter.com/"})
 print("=== 只读 1: GET /loginCheck.do HTTP %s ===" % r1.status_code)
 blog = None
 try:
     j1 = r1.json()
-    print("   ", json.dumps(walk(j1), ensure_ascii=False)[:900])
+    print("   ", json.dumps(walk(_mb(j1)), ensure_ascii=False)[:900])
     n = j1.get("response") or {}
     if isinstance(n, dict):
         blog = n.get("blogName")
@@ -187,7 +204,7 @@ r2 = c.post("https://api.lofter.com/v1.1/postCollection.api", params={"product":
             headers={"user-agent": "LOFTER-Android 8.1.0 (V2245A; Android 12; null) WIFI",
                      "content-type": "application/x-www-form-urlencoded; charset=utf-8",
                      "lofter-phone-login-auth": auth or ""})
-print("=== 只读 2: POST postCollection.api blogdomain=%s.lofter.com HTTP %s ===" % (blog, r2.status_code))
+print("=== 只读 2: POST postCollection.api blogdomain=%s.lofter.com HTTP %s ===" % (_m(blog), r2.status_code))
 try:
     j2 = r2.json()
     print("   meta=", walk(j2.get("meta")), " msg=", walk((j2.get("meta") or {}).get("msg")))

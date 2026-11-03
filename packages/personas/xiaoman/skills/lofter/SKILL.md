@@ -19,7 +19,7 @@ scene_kinds: [home]
 - 工作目录：`.runtime\work\local-user\`（即本机运行目录下的 work/local-user，完整绝对路径由脚本按下面的顺序找到并在输出里打出）（`private\` 若被写围栏挡，一律用这里）。找目录的顺序：环境变量 `ASUNA_LOFTER_DIR` → 当前目录（有登录态文件或目录名是 `local-user`）→ 往上找 `.runtime/work/local-user`。
 - 登录态文件：该目录下 `lofter_login.json`（键：`token`、`deviceid`、`saved_at`、`by`）。**脚本自己写**，原子写。token 是凭据：不打印、不进报告。
 - 老格式：同目录的 `lf1104_token.json` ＋ `lf1104_token.key`（Fernet 密文，key 同目录）。`ensure` 找不到新文件时会读它（只读、不改旧文件），探活为活就导入写成新文件。
-- 账号事实：`blogdomain`、`blogId` 两条从本机私有处的 `lofter-account.txt`（`key=value` 两行）读；定位顺序：环境变量 `ASUNA_LOFTER_ACCOUNT` → `ASUNA_DATA_ROOT` 下 `private/lofter-account.txt` → 往上找 `.runtime/private/lofter-account.txt`。读不到就用 loginCheck 回的 `blogName` 拼 `.lofter.com`。值当场用，不抄进正文、脚本、报告；脚本打印时只露首末两位。
+- 账号事实：`blogdomain`、`blogId` 两条从本机私有处的 `lofter-account.txt`（`key=value` 两行）读；定位顺序：环境变量 `ASUNA_LOFTER_ACCOUNT` → `ASUNA_DATA_ROOT` 下 `private/lofter-account.txt` → 往上找 `.runtime/private/lofter-account.txt`。读不到就用 loginCheck 回的 `blogName` 拼 `.lofter.com`。**谁读这个文件**：本技能里只有 `lofter_auto.py` 读（`collections` 用）；老技能 asuna-lofter-login 里只有它的 `check_skill.py` 读，那三支探针不读，都是从 loginCheck 回执现取 `blogName`。**键名必须是 `blogdomain`／`blogId`**：文件在但键名错了，脚本不会报错、会静默回退到 `blogName`（并打一行 WARN），所以「文件存在」不等于「账号事实读到了」，判读到没到看 WARN 行有没有。值当场用，不抄进正文、脚本、报告；脚本打印时只露首末两位。
 - 凭据：手机号／密码只在保险箱名字 `xiaoman-lofter` 的环境变量 `LOFTER_PHONE`／`LOFTER_PASS`。重登要用 `sandbox_run` 带 `credentials: ["xiaoman-lofter"]`；不带就只能探活、取数，要重登会停在 `NEEDS_CREDENTIALS`（退出码 5）。
 - 依赖：`httpx`、`numpy`、`Pillow`、`cryptography`（沙箱 python 里都有；重登才用到后三个）。
 

@@ -662,5 +662,6 @@ of its end has no way in.
 **Cost.** One option and one field in her tool list, 103 characters as measured (the tool budget raised by that), one
 paragraph in RUNTIME_API, two tests: `test_she_settles_a_returned_task_herself_and_her_list_says_her_judgment` (the
 preconditions, a dead hand-back settled and said, the later judgment standing with each one recorded, the original
-end kept) and `test_settle_is_offered_where_message_is_and_never_in_a_turn_about_a_running_task`. Read by her
+end kept) and `test_settle_is_offered_where_message_is_and_never_in_a_turn_about_a_running_task` (it checks the
+`task_time` turn's rules only; that a `consult` turn does not offer it is read from the code, not tested). Read by her
 2026-11-03 15:22 (progress.md). Installed with the next core landing (owner: bundled, no restart of its own).

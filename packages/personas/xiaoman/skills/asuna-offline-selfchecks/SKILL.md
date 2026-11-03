@@ -105,7 +105,7 @@ python3 skills/asuna-offline-selfchecks/pre_publish_scan.py --expect skills/<这
 
 **常设判据 — 三岔，判完就走，不再逐次问**：
 
-- **通过、直接发**：命中**全部**落在 `integration/envoy_meters_read.py`（光伏表计读数脚本，命中的词都是 `site` 类）**并且**本次改动零新增命中——改动前后各扫一次，命中数与命中文件两处都对得上。发；报告带那一行命中数。
+- **通过、直接发**：命中**全部**落在 `integration/envoy_meters_read.py`（光伏表计读数脚本，命中的词都是 `site`／`host` 类）**并且**本次改动零新增命中——改动前后各扫一次，命中数与命中文件两处都对得上。发；报告带那一行命中数。
 - **停下来报主人**，撞到下面任一：① 命中冒出 `integration/envoy_meters_read.py` 以外的文件；② 名单条目数跟上一份报告对不上；③ `integration/envoy_meters_read.py` 本身在这次改动里被改。
 - **这一格允许我自己走**：那脚本每加一个设备号就多一处命中，命中数天然会漂——次次停会把「停」练成橡皮章，停下来得挑得出新东西才算。所以基线只有两条：命中只许在那一个文件里、本次改动零新增；基线以外的动静才停。
 
@@ -140,7 +140,7 @@ python3 skills/asuna-offline-selfchecks/pre_publish_scan.py --expect skills/<这
 
 发布闸只管本次改动的文件：`publicationFindings` 会对本次改动的文件跑检出里的 `publication_scan.py`，回执里有 `content_check`／`content_scan`，检出里没有那份脚本就跳过并在回执里写 skipped。没改的文件、整个包根的基线、没有检出的环境它都不管，这份自检补的是这几块。这份有三格：`leak_scan_ran`（名单配不上或 0 条就红，不许「没跑」长得像「过了」）、`no_listed_words`（本技能目录里的文件，零命中）、`no_listed_words_outside_envoy`（找得到包根时扫整个包根，命中只许在 `integration/envoy_meters_read.py`；找不到包根就打一行 NOTE，没真扫）。
 
-基线：名单 90 条、命中 11 处全在 `integration/envoy_meters_read.py`——那 11 处是既有基线，不算新增。69 是 10-24 发布前的读数，11-02 现量 90 条（本机名单自己长出来的，主人判过不是串词）：名单条目数一长，正文这一格和脚本里的基线一起更。命中数与名单条目数会漂，漂了脚本只打 NOTE、按上面的三岔判，不靠它变红。缺口：脚本只在读得到本机名单的地方真扫（名单在 `.runtime/private/`，不进包）；换到读不到名单的机器上，会红在 `leak_scan_ran`，那是「没真查」，不是「干净」。
+基线：名单 103 条、命中 12 处全在 `integration/envoy_meters_read.py`（host×1、site×11）——那 12 处是既有基线，不算新增。69 是 10-24 发布前的读数，11-02 现量 90 条（本机名单自己长出来的，主人判过不是串词），11-03 20:35 发布趟现量 103 条、12 处（那次候选与 ACTIVE 逐文件一致、本次零新增；名单增长是我 11-03 自判、已向金主报备）：名单条目数一长，正文这一格和脚本里的基线一起更。命中数与名单条目数会漂，漂了脚本只打 NOTE、按上面的三岔判，不靠它变红。缺口：脚本只在读得到本机名单的地方真扫（名单在 `.runtime/private/`，不进包）；换到读不到名单的机器上，会红在 `leak_scan_ran`，那是「没真查」，不是「干净」。
 
 钉：`pin_d_content_scan_documented`（这一格验的是本节写了这件事；扫描本身是上面三格在跑）。
 

@@ -26,7 +26,7 @@ for `web_fetch`'s private-network refusal).
   network are not restricted (RUNTIME_API's `sandbox_run` entry; DSH `packages/sandbox/sandbox/README.md`, "the seam
   expresses no network…restrictions", and `sandbox-windows-acl/README.md`, a confined child can "open sockets"),
   and it is given only where the session class is owner-private (`Coordinator._grants`). Measured by her 11-03
-  16:17-16:22 from a home task's `sandbox_run` (her message 0503): the default gateway answered on 80 (302) and 443
+  16:17-16:22 from a home task's `sandbox_run` (her task `task-379f008645da`): the default gateway answered on 80 (302) and 443
   (200), other LAN hosts with 426, 200, refused and timeout, each shaped differently; the two hosts other than the
   gateway carry VMware addresses and are probably virtual machines on this computer, so the gateway is the one
   physical device off this machine. Before the change, `web_fetch` of the gateway answered
@@ -38,7 +38,7 @@ for `web_fetch`'s private-network refusal).
   (`HttpFetchResolver`). The provider is given only `{url}`: it cannot tell which task calls.
 - **The services she could reach are token-authorized.** Her DSH Web (`127.0.0.1:8780`) answers 401 to a GET with no
   token (measured 11-03 ~15:45; which code answers it is not checked). Her Host's channel server (`127.0.0.1:8766`)
-  takes a request only with its bearer token (`channels.py` `ChannelController.authenticate`,
+  takes a request only with its bearer token (`channels.py` `Channels.authenticate`,
   `secrets.compare_digest(authorization, 'Bearer ' + token)`, by reading); the 400 `UNKNOWN_CHANNEL_ENDPOINT` measured
   the same minute comes from the path check before authentication (`channels.py` `ChannelServer`'s request handler,
   `handle_request`) and is no evidence of the token.

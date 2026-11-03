@@ -383,6 +383,40 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 - 一次改图实测：**排队约 85 秒、生成约 60～88 秒**，一张卡。**别连烧**——
   串行调度、切 workflow 卸模型（见已知坑），连排几张就是干等几轮。
 
+## 姿势（pose）与现行 prompt 口径（2026-11-04 探到，服务端升级后的现量）
+
+来路：2026-11-04 10:0x 本机 owner 任务里，经 `integration_test`（image 端点别名，现读配置是 127.0.0.1:8191；上文步骤 0 写的 18191 是旧读数）读 `/.well-known/agent-manifest.json`、`/project/poses`、`/project/workflows/anima-turbo-v1-1`，并对 `/project/generate` 做 `dry_run`（不排队、不出图）。manifest `api_version` 2.0.0、`schema_version` 1。旧版 manifest 没留存档，所以下面「新」是现行原文，不是逐字新旧对照。
+
+**姿势：传法**
+
+- 参数：`parameters.pose`（字符串，maxLength 512）。值＝「A pose id from the pose library, or the name of an uploaded image whose pose should be copied.」可选 `parameters.pose_strength`（数，0–1，默认 1.0；只有路线的 parameter_schema 列了才有）。
+- 什么时候传：「Send pose when the requester asks for a specific body pose or hand gesture, or gives a pose image. Otherwise leave it out.」
+- 找库里的姿势：`GET /project/poses?q=<英文或中文姿势名>&people=1|2&angle=front|diag|side|high|low&limit=1-20`（默认 8）。库 196 条。实测 `q=sit` 返回 total_matches 34；`q=坐`（单字中文）返回 0——中文要用库里的完整词，搜不到就换英文。
+- 返回里每条：`id`（如 `full_single_P003`）、`name`、`name_zh`、`category`、`framing`、`people`、`views`（front／diag／side／high／low 各一个视角 id，如 `full_single_P003_front`；有的姿势缺某个视角，如 P002 没有 front）。传视角 id；只传裸 pose id＝取 front，没有 front 则取第一个视角。
+- 样例（dry_run 实测通过）：`{"workflow": "anima-turbo-v1-1", "dry_run": true, "parameters": {"prompt": "masterpiece, best quality, 1girl, solo, sitting", "pose": "full_single_P003_front", "width": 512, "height": 512}}` → `validated: true`，`applied_parameters` 多出 `pose`、`pose_strength: 1.0`，回执多一个 `pose` 对象：`{source: library, id, name, angle, people_detected: 1, strength, size, adapter: anima-control-pose, skeleton_url}`。
+- 用自己上传的图当姿势：先 `POST /upload/image` 得输入文件名，把那个名字放进 `pose`；服务抽骨架，衣服、脸、场景仍由 prompt 决定。没检出人体报 `pose_not_detected`。
+- 不传宽高时输出跟姿势图的长宽比；Anima 路线传 pose 时宽高取 16 的倍数。
+- 路线：不是每条路线都收 pose（manifest `route_table[].pose`）；实测收的有 qwen-image-2.1-t2i、moody-anima-mix、moody-desire-v30、animagine-xl-3.1-nsfw、anima-turbo-v1-1、各角色 anima-turbo 路线、两条 face-reference、janku-illustrious、janku-v5-illustrious、one-obsession。要先 resolve 的话给 `input_mode: "openpose-control"`；若这样把想要的路线挤掉（`selection.fallback` 为 true），不带 input_mode 重 resolve、留住那条路线，姿势写进 prompt。
+- 不收的：同时带 `input_image`（改图、图生图、inpaint）一律拒，`pose_unsupported`：「pose works when generating from text (face_image is fine); it cannot re-pose input_image.」（实测 qwen-image-2.1-edit 加 pose 即得此码，HTTP 400。）
+- prompt 里也要写姿势：「Also name the pose in the prompt (e.g. sitting, knee up, hand on chin): on Illustrious and character-LoRA routes seated and kneeling poses often stay standing when only the skeleton asks for them.」
+- 库里没有合适的：别传 pose，把姿势写进 prompt（manifest 原话 `no_match`）。
+- 错误码：`pose_unsupported`、`pose_unknown_id`（实测传 `nope_id` 得此码，HTTP 400）、`pose_not_detected`、`pose_fetch_failed`（库里草图取不到，稍后重试或换一个）、`pose_unavailable`（服务器没装姿势依赖）。
+
+**`generate_image` 能不能传姿势：不能（2026-11-04 读工具参数面）**
+
+- 直路 `generate_image` 的参数面只有 prompt／workflow／width／height／seed／negative_prompt／source_image／options（steps、cfg、sampler_name、scheduler，且不收别的键），没有 `pose`／`pose_strength`。所以要带姿势只能走长路（`integration_test` 直连 image 端点 `POST /project/generate`，再按步骤 3–4 取产物导入），或把姿势只写进 prompt。
+- 返回形状：升级后 `generate_image` 回执的键与之前一致，没有 pose 对象——实测一张 512×512 anima-turbo-v1-1（seed 1），回执键为 generated／workflow／prompt_id／seed／width／height／elapsed_ms／target_relative_path／bytes／sha256／media_type／guidance／artifact／note。（「与之前一致」这一格依据是本技能旧正文对回执的描述，没有旧回执原件可比，算推断。）`guidance.structure` 现为 quality/meta、subject count、character/series、appearance、outfit、pose、composition、environment（pose 在 outfit 与 composition 之间；是否新增未核实）。
+- 长路的服务端回执（`POST /project/generate`）：`prompt_id`（也叫 `job_id`）、`job_url`、`applied_parameters`、`effective_parameters`、`warnings`，带 pose 时多一个 `pose` 对象；`dry_run` 返回同样的字段加 `validated` 与 API 格式的 `prompt`，没有 `prompt_id`。
+
+**prompt 现行口径（服务端原文）**
+
+- `parameters.prompt` 必填（空串合法），≤8000 字符；宽高 64–2048 且为 8 的倍数（MOSS-Image 取 16 的倍数）。
+- anima-turbo-v1-1 的 `prompting.structure`：quality/meta、subject count、character/series、appearance、outfit、**pose**、composition、environment、lighting（pose 这一格是新是旧没有旧版原文可比，未核实）。
+- negative：服务端现在明说了：`negative_prompt_effective_at_default: false`，「CFG 1 skips negative conditioning. Negative text has no effect at the default setting; CFG changes can affect distilled-model quality.」——和上文「CFG 1 的路由不吃 `negative_prompt`」一致，「不要什么」仍写进正向提示词。negative 字段仍被接受，有默认值（`worst quality, low quality, score_1, …`）。
+- 内容：manifest `content`：「Resolve never routes by content: the prompt decides what an image shows … When the selected route has prompting.content_lines, add its 'explicit' or 'safe' line to the prompt. Explicit images must show adults.」我们只画全年龄：选中路线有 `prompting.content_lines` 时，把它的 `safe` 那一行加进 prompt。
+- 其他：保存的 PNG 带 ComfyUI prompt 元数据（输入文件名换成 `[input image]`）；发到不该看到 prompt 的地方前要剥（本技能「发出去的图不带提示词」一节已覆盖）。
+- 路线现量：11-04 `list_routes` 读到 18 条（上文「11 条」是旧读数，未改）。
+
 ## 官方定妆（画自己/自拍必读）
 
 只用在**画自己／自拍**的单子上；它钉的是「别把我画成别人」，别的不管。

@@ -32,3 +32,5 @@ on separate lines, her ask), and the first restart with a queued task re-queued.
 **我自己放弃一格**：原本我想要求 settle 时能附一句我的判词和号。看完页上给的字段我改主意了——**不加**：`episode_id` 已经把"哪一拍我判的"锚住，判词写在我账上能回读，省工具预算也少一格能写坏的地方。
 
 **两小格要数**：`settled` 不进 store 字段声明我就不建索引，你要按它过滤／排序才声明——**别为它加索引**；Cost 里那句"tool budget raised by what it measures"，落地时把**实测增量**给我一行。装机回执照旧带那张对照：**留了哪条测试、各管我签过的哪条规则**（这次至少两条：前置条件那条、和"覆盖而不是新造 undo"那条）。
+
+§12.10 (`settle`) installed 2026-11-03 16:50 as `e4137d83`, with ADR-116, one restart. Open until her first settle of a real task is read (its list words and `task.settled`).

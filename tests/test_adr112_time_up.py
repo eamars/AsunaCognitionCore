@@ -274,12 +274,14 @@ def test_she_settles_a_returned_task_herself_and_her_list_says_her_judgment(stor
     from_home(store, 'task-back', 'BLOCKED', feedback_state='DELIVERED', failure_type='HostRestart',
               result={'status': 'blocked', 'text': INTERRUPTED})
     from_home(store, 'task-lost', 'BLOCKED', feedback_state='UNDELIVERABLE')
+    from_home(store, 'task-never-handed', 'BLOCKED')               # no hand-back record at all (feedback_state None)
     from_home(store, 'task-waiting', 'BLOCKED', feedback_state='READY')
     from_home(store, 'task-done', 'RETURNED', feedback_state='DELIVERED')
     from_home(store, 'task-busy', 'RUNNING')
     assert service.settle('task-busy', 'done', 'ep-1') == SETTLE_RUNNING
     assert service.settle('task-done', 'done', 'ep-1') == SETTLE_WELL
     assert service.settle('task-waiting', 'dropped', 'ep-1') == SETTLE_NOT_YET
+    assert service.settle('task-never-handed', 'done', 'ep-1') == SETTLE_NOT_YET
     assert service.settle('task-back', 'done', 'ep-1') == SETTLED_WORDS['done']
     back = task_records.get(store, 'task-back')
     assert back['state'] == 'BLOCKED' and back['settled']['as'] == 'done'           # nothing re-runs, its state stays

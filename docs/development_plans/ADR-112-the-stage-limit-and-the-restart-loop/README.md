@@ -426,8 +426,10 @@ Designed 2026-11-03 from the code at `0f1a7c99` and the live records read that d
 
 ### 12.1 What the records show (read 2026-11-03)
 
-**The limit.** Of the 173 tasks with tool calls since 10-24, 168 finished: 103 within 5 minutes, 34 within 10, 21
-within 15, 9 within 20, none within 25, one at 26.4 minutes. Five were cut at 1,800 s (a sixth, 10-28, is from before
+**The limit.** The window starts at UTC 2026-10-24 00:00 (13:00 local; `created_at` is compared as a string). Of the
+173 tasks with tool calls since then, 168 ended other than by the limit (`RETURNED`, `DONE`, or `BLOCKED` for another
+reason: not all of them succeeded). A stage's length here is its first to its last `tool.time` record, not the task's
+lifetime: 103 within 5 minutes, 34 within 10, 21 within 15, 9 within 20, none within 25, one at 26.4 minutes. Five were cut at 1,800 s (a sixth, 10-28, is from before
 `tool.time` existed). The four cuts since C2's install (10-31, 11-01, 11-02 twice) were all working when cut: 3 to
 26 tool calls in their last 5 minutes, the last one 5 to 95 s before the cut, 77 to 126 steps. She continued three of
 the six cuts and let three go. A stuck stage is already caught below this limit: a model stream silent for
@@ -437,7 +439,8 @@ every task queued behind it.
 
 **Paused tasks.** 47 tasks were ever paused by a restart. The 29 of 10-03 and 10-04 were closed by the operator. Of
 the 18 since 10-05 she stopped 11, and 7 are still `PAUSED`: one each from 10-16 and 10-25, two from 10-30, and three
-from the worker exits of 11-03 10:46. Five of the seven had not started (`paused_state` `READY`, 0 steps). None paused
+from the worker exits of 11-03 10:46. Six of the seven had not started (`paused_state` `READY`, 0 steps); one had
+run 38 steps (`paused_state` `RUNNING`). None paused
 since 10-05 was ever continued. The only exit besides her stop is a turn the owner starts in the Web chat
 (`coordinator.message_action`: 「只有主人明确要继续时才能接着做」): the shape of C5, a state with no exit of its own.
 
@@ -484,7 +487,9 @@ What is new:
    or for her `more`, reading the task record once a second. If the stage ends by itself (it reported, often after her
    `message`), its result goes back as always. If she stopped it, as `stop` does today. If the window passes with no
    `more` (she let it end, or her turn failed or never ran), the stage is cut as today (`TimeoutError`, `task_fenced`,
-   `BLOCKED` with `STOPPED_AT_LIMIT`). `task.time_up` records the outcome: `more`, `ended`, `stopped` or `cut`.
+   `BLOCKED` with `STOPPED_AT_LIMIT`, `feedback_state` `READY`). `task.time_up` records the outcome: `more`, `ended`,
+   `stopped` or `cut`. A cut task can still be continued with her `task message`, as today: `message_action` refuses
+   only `PAUSED`, `CANCELLED` (unless a Host stop cancelled it) and `STALE`, and D2 point 3 removes `PAUSED`.
 5. **The stage ends before her turn starts:** the turn is not run (its task is no longer `RUNNING`). It ends during
    her turn: `more` answers that the work is already back, and the result reaches her as any result does.
 
@@ -514,15 +519,19 @@ At a start, `RuntimeHost._recover_tasks` today pauses every unfinished task. It 
    conversation (a `BLOCKED` task can be continued), under ADR-111's rules, or leaves it. A task that stops the worker
    every time comes back each time as interrupted and runs again only by her turn: no loop without her.
 3. **`PAUSED` is retired.** The guard in `message_action` goes, and with it its producer (`pause_for_restart`), the
-   start's unpause loop for finished tasks paused earlier, and `PAUSED` in the readers that only served it
-   (`self_review`'s in-progress list and the state lists in `tasks.py`, `handover.py` and `host.py`). A search for
-   `PAUSED` in `src/` at build lists every reader.
+   start's unpause loop for finished tasks paused earlier, and every reader that only served it. Among them are two
+   texts she reads: the rule her context carries whenever a task is `PAUSED` (`context.py`,
+   `task_continuation_from_program`: 「只有主人明确要继续时才可以用 task 的 message 接着做」) and the state words in
+   `handover.py` (「做到一半宿主重启停了：主人说继续才接着做」); left in place, they would describe a state that no longer
+   exists. A search on 11-03 for `PAUSED` and `paused(` in `src/asuna` found 20 lines in `context.py`,
+   `coordinator.py`, `handover.py`, `host.py`, `native_worker.py`, `records/tasks.py`, `restarts.py`, `role_tools.py`,
+   `schedule.py`, `self_review.py` and `tasks.py`; the build goes through that search, not through a list written here.
 4. **The seven paused now** are handed back once, at the first start with D2, by the same code. One paused while
    `RUNNING` comes back as interrupted (point 2). Each paused while `READY` comes back as not started,
    「排队时宿主重启了，一直没开始；还要做就用 task message 接着交代，不做就不用管。」, also `BLOCKED` with `feedback_state`
-   `READY`. None is scheduled: the oldest is 18 days old. Each goes to the conversation it came from, as any result:
-   four to the Web chat, two to the agent line, one to a QQ private chat (`task-abba75af`, 10-30). If the owner would
-   rather close the QQ one himself, it is closed before the landing's restart.
+   `READY`. None is scheduled: the oldest was paused on 10-16, 17 days and 18 hours before 11-03. Each goes to the
+   conversation it came from, as any result: four to the Web chat, two to the agent line, one to a QQ private chat
+   (`task-abba75af`, 10-30), which she closes herself.
 
 This is the start settling the stored state, the same choice as fix 1 and §9's D2: no state is left that needs a
 particular person to end it.
@@ -569,7 +578,7 @@ Each is run with its fix reverted and must fail. Unit tests on the memory adapte
 
 One core landing, as §9.5: the suite, `pytest integration`, the push gate, her slot asked first, the restart, the
 loaded commit checked. The first start hands the seven back (12.3 point 4); she is told on her line before the restart
-that they are coming and why. Then read on the live system: the next stage at its limit leaves `task.time_up` and her
+that they are coming and why, with the seven task ids, so that she knows each one when it arrives. Then read on the live system: the next stage at its limit leaves `task.time_up` and her
 `task_time` turn; the next restart leaves no `PAUSED` row and schedules any `READY` one; the next publication result
 names its wait. C1 and the paused tasks are then closed in §7, and the ADR is Built once the first heads-up has been
 read.

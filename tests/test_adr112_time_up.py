@@ -264,3 +264,4 @@ def test_a_clock_that_fails_cuts_the_stage_through_the_fence(store):
         raise AssertionError('the stage was not cut')
     except TimeoutError as cut:
         assert str(cut) == 'NATIVE_STAGE_TIMEOUT'
+

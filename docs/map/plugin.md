@@ -173,6 +173,9 @@ Her web_fetch, underneath (ADR-026 §6): one fetch provider on DSH's web seam. D
 
 - def `FETCH_PROVIDER_ID`
 - def `FETCH_LIMITS`
+- def `LAN_REFUSED` — What a public-only task is told when its address is on the local network or this machine, after DSH's line.
+- def `withNetwork` — Run `fn` as a call of a task whose recorded network is `network`; anything but 'any' is public.
+- def `resolveAny` — Every address `hostname` resolves to, none refused (DSH's resolver contract: [{address, family}]); an IP literal as it is.
 - def `slimHtml` — The page without what is not its content: the head reduced to its title, no scripts, styles, SVG or templates.
 - def `isCloudflareChallenge` — Cloudflare's challenge: it answers 403 or 503 and loads its challenge platform.
 - class `SlimFetch`

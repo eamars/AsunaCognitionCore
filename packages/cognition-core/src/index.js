@@ -33,7 +33,7 @@ import { withoutWorkingDirectory } from './contexts.js';
 import { marked } from './marks.js';
 import { NativeChildren } from './children.js';
 import { applySearch, registerWebSearch } from './search.js';
-import { applyFetch } from './fetch.js';
+import { applyFetch, withNetwork } from './fetch.js';
 import { renderSvg } from './svg.js';
 import { carrySession, lastSummary, overflowed } from './carry.js';
 import { TurnEnds, summaryAsNextRequest } from './compaction.js';
@@ -1278,6 +1278,11 @@ export class CognitionCore {
       }
       return next();
     });
+    // Where a tool body's web_fetch may go (fetch.js, ADR-116): DSH runs the body as the last step of this waterfall
+    // (dsh-tools ToolRuntime: `tools/execute` ending in dispatchToolBody), so the scope set here is the one the fetch
+    // reads. The action lane: its task's recorded network; every other lane: public, never an inherited scope.
+    scope.on('tools/execute', (exec, next) => withNetwork(
+      lane === 'executor' ? this.state(exec.agent.session.id).network : 'public', next));
     scope.systemPrompt.section({ name: PERSONA_PREFIX_SECTION,
       order: scope.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
       interpolate: false, text: ({ agent }) => agent ? this.state(agent.session.id).system : '' });
@@ -1488,6 +1493,8 @@ export class CognitionCore {
     const allowed = new Set(binding.allowed_capabilities);
     this.state(agent.session.id).allowed = allowed;
     this.state(agent.session.id).refusals = binding.capability_refusals ?? {};
+    // Where its web_fetch may go: the task's recorded network, copied into the binding (fetch.js, ADR-116).
+    this.state(agent.session.id).network = binding.network === 'any' ? 'any' : 'public';
     // Restrictions filter inherited/global tools; each granted tool below is
     // registered in this action scope. Do not pass scoped names as globals.
     scope.tools.restrict({ allow: [] });

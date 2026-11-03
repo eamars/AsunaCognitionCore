@@ -59,8 +59,10 @@ was meant to stop, and only gets in the way.
   turn's manifest), never by where the action brain runs (work moved to the Web chat keeps what its delegating turn
   gave). `OWNER_PRIVATE` gives `network: 'any'`; any other class, present or added later, is public by construction
   (`_grants` tests `!= OWNER_PRIVATE`, as for `sandbox_run`). It is recorded on the task with its grant, and that record
-  is the one source: a continuation copies it, and the session binding sent to the plugin copies the task's recorded
-  `network`, never computing it again (an action session serves one task). By place:
+  is the one source: the session binding sent to the plugin copies the task's recorded `network`, never computing it
+  again (an action session serves one task), and a continuation keeps it but never widens it: `any` only while the
+  continuing turn would give `any` too, as its `sandbox_run` follows that turn (review 11-03: a group removed from
+  `home_groups` kept `any` without `sandbox_run`). By place:
 
   | Where the delegating turn is | Session class | Network |
   |---|---|---|
@@ -81,9 +83,12 @@ was meant to stop, and only gets in the way.
   resolves the host (`dns.lookup`, all addresses, verbatim order; an IP literal as it is) and passes every address,
   loopback included. Pinning, the same-origin redirect rule and each hop's resolution stay DSH's. Which one serves a
   call is read from an async-local scope (`AsyncLocalStorage`, as `roots.js` scopes her requests).
-- **D3. The scope.** The plugin's `tools/pre-execute` hook for the action lane, which already validates the stage per
-  session, runs `next()` inside the scope `{network}` of that session's binding. A call outside any scope (DSH's own
-  UI, a session the plugin did not bind) gets the public provider.
+- **D3. The scope.** The plugin's `tools/execute` hook runs `next()` inside the scope of that session's binding:
+  DSH runs a tool body as the last step of that waterfall (dsh-tools `ToolRuntime`: `tools/execute` ending in
+  `dispatchToolBody`), so the fetch reads the scope set there. `tools/pre-execute` only decides whether a call may run;
+  a scope set there ends before the body (review 11-03, which found the first build there). The action lane takes its
+  task's network; every other lane runs `public`, never an inherited scope. A call outside any scope (DSH's own UI, a
+  session the plugin did not bind) gets the public provider.
 - **D4. Words.** Her action brain's `web_fetch` in a public-only task is refused as now; the refusal is DSH's English
   line. It gets one sentence of ours in the action brain's language: the address is on the local network and this task
   was not handed over at home. No other text changes.

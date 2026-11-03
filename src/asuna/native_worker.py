@@ -299,6 +299,8 @@ class NativeLane:
                 'parent_session_id': parent_id if self.lane != 'character' else None,
                 'broker_session': 's-' + sha(binding.encode())[:40],
                 **({'execution_binding': binding} if self.lane == 'executor' else {}),
+                # Where its web_fetch may go: the task's recorded network, copied, never computed again (ADR-116).
+                **({'network': task.get('network') or 'public'} if self.lane == 'executor' and task else {}),
                 'allowed_capabilities': task['allowed_capabilities'] if self.lane == 'executor' else [],
                 **({'capability_refusals': self.worker.refusals_for(task)} if self.lane == 'executor' else {}),
                 'system_sha256': sha(system.encode()),

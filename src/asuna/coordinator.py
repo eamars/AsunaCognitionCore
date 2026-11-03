@@ -663,9 +663,11 @@ class Coordinator:
 
     # ── working with the action brain (ADR-011 §4) ──────────────────
     def _grants(self, ep, whose):
-        """(development, integration profile, capabilities) for a task of this `whose` delegated from this episode: the
-        development tools where `whose` earns them (ADR-111 §2.4), the rest from the turn whose authority it carries
-        (errands.home_turn: on an errand, the home turn that sent it); work for someone outside gets no integration."""
+        """(development, integration profile, capabilities, network) for a task of this `whose` delegated from this
+        episode: the development tools where `whose` earns them (ADR-111 §2.4), the rest from the turn whose authority it
+        carries (errands.home_turn: on an errand, the home turn that sent it); work for someone outside gets no
+        integration. `network` (ADR-116): 'any' where the turn is owner-private, the line sandbox_run is given by, else
+        'public'; any other session class is public by construction."""
         from .tasks import WORKSPACE_TOOLS, ACTION_DSH_CAPABILITIES
         from .vision import route_filtered_tool_names
         from .integration import event_profile, integration_tools
@@ -691,13 +693,14 @@ class Coordinator:
         from .private_words import PRIVATE_WORDS_TOOL
         capabilities.append(PRIVATE_WORDS_TOOL)
         from . import sandbox_backend, visibility
+        home=(ep.get('manifest') or {}).get('session_class')==visibility.OWNER_PRIVATE
         # Running commands is for the owner's own scenes (owner 2026-10-06): the Host sandbox confines writes only,
         # so in anyone else's scene the boundary is that the tool is not given.
-        if (not sandbox_backend.available(self.store.config)
-                or (ep.get('manifest') or {}).get('session_class')!=visibility.OWNER_PRIVATE):
+        if not sandbox_backend.available(self.store.config) or not home:
             capabilities=[tool for tool in capabilities if (tool['name'] if isinstance(tool,dict) else tool)!='sandbox_run']
         names=[*dict.fromkeys([*route_filtered_tool_names(capabilities,self.store.config),*ACTION_DSH_CAPABILITIES])]
-        return development,integration,names
+        # web_fetch reaches what sandbox_run reaches (ADR-116): by the same line, whether or not the sandbox runs here.
+        return development,integration,names,('any' if home else 'public')
 
     def delegate(self, ep, call_id, title, brief, tier=None, whose=None):
         """A new task: the action brain's first message is her brief (§4). `tier` (ADR-075): (tier, why) she chose.
@@ -734,7 +737,7 @@ class Coordinator:
             from . import action_tiers
             tier,said=action_tiers.at_dispatch(*tier,self._zone())
         if not task:
-            development,integration,names=self._grants(ep,whose)
+            development,integration,names,network=self._grants(ep,whose)
             source_ref=('in-'+authority['_id']) if authority.get('episode_kind')!='consult' else None
             if whose.get('chosen') and whose['by']=='words':
                 source_ref=whose_of.line_in_turn(self.store,ep,whose['person_id']) or source_ref
@@ -747,7 +750,7 @@ class Coordinator:
                     'policy_epoch':where['policy_epoch'],'persona_revision':ep['manifest']['persona_revision'],
                     'intent_revision':1,'goal':title,'title':title,'brief':brief,'constraints':[],
                     'raw_input_refs':raw,'state':'READY','fencing_token':0,'tool_steps':0,
-                    'integration_profile':integration,'development_grant':development,
+                    'integration_profile':integration,'development_grant':development,'network':network,
                     'allowed_capabilities':names,'native_session_id':session,'whose':whose,
                     **({'errand_place':places.place_id(ep['scene_id'])} if ep.get('errand') else {}),
                     **({'tier':tier} if tier else {}),'created_at':now()},stream=ep['_id'])
@@ -816,7 +819,7 @@ class Coordinator:
             if task['state'] not in ('READY','RUNNING'):
                 raise role_tools.Refused(TIME_UP_BACK)
             return self._steer(ep,call_id,task,message)
-        development,integration,names=self._grants(ep,whose)
+        development,integration,names,network=self._grants(ep,whose)
         if (task.get('integration_profile')!=integration   # 比值，不是 truthy：owner 回合不能给窄授权任务补话，反过来也不行
                 or bool(task.get('development_grant')) and not for_whose(self.store,whose_of.of(self.store,ep))):
             # Work under the owner's grants takes words only from a turn with the same grants (ADR-011 §6.2).
@@ -853,6 +856,9 @@ class Coordinator:
                     'goal':task.get('title') or task['goal'],'title':task.get('title') or task['goal'],'brief':message,
                     'constraints':[],'raw_input_refs':raw,'state':'READY','fencing_token':0,'tool_steps':0,
                     'integration_profile':integration,'development_grant':development,
+                    # The task's own record, never widened (ADR-116 D1): 'any' only while this turn would give it too,
+                    # as sandbox_run follows this turn's grants.
+                    'network':'any' if task.get('network')=='any' and network=='any' else 'public',
                     'allowed_capabilities':names,'continues_task_id':task['_id'],'execution_binding':binding,
                     'whose':whose,
                     **({'fresh_context':fresh} if fresh else {}),**({'tier':tier} if tier else {}),

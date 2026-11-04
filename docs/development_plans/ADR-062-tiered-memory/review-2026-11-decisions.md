@@ -232,7 +232,9 @@ is the new ADR's first step; D7 joins the D1 batch.
 
 The lead read the review, checked three claims against the code (they hold), agreed with D1, D3-A, D4-A, D5b-A,
 D5c-A, D6 and the order, and raised five points. The reviewer's answers, each with the data read for it (her
-database, read-only, 2026-11-05 13:00–13:30 NZDT), and the amendments that follow.
+database, read-only, 2026-11-05 13:00–13:30 NZDT), and the amendments that follow. The lead then agreed on all
+five as amended (2026-11-05 afternoon) with one addition under point 3, and takes the agreed set to the owner; the
+"Decided" lines stay his.
 
 ### Point 1 → D7. Duplicates one level below items: two units of one source message in a turn
 
@@ -306,7 +308,12 @@ never the text):
 If the owner wants the exemption anyway: model it on ADR-096 D6's note pins (bounded, at most K per person, hers
 to set, never a program act), not on a `nature` value, so a pin budget cannot become the whole record. Her own
 promises have no `from` word today (主人定的 and 查过的 do not fit); if they are to get the tie-break, that is a new
-word on the table, hers to name. **Decided:** —
+word on the table, hers to name.
+
+**Addition (the lead, 2026-11-05, agreed by the reviewer):** her own promises to a person are the other half of
+the hard case. The ADR asks her to name a `from` word for them (hers; the program only reads it), and a section
+with that word gets the same lapse-last tie-break as an anchored 别人说的 section. The bounded note-pin model above
+stays the fallback to offer the owner if he wants an exemption. **Decided:** —
 
 ### Point 4 → D6 reordered: the memory side's load on the shared box, per turn
 

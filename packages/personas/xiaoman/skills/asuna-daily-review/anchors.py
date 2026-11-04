@@ -458,15 +458,15 @@ def check_report(path, js, exclude_places=()):
 
 def selftest():
     ok = []
-    ok.append(hit_kind("@9000000001 hi", "9000000001", {1}) == ["@qq"])
-    ok.append(hit_kind("给 〔9838〕 你 点了「爱心」", "9000000001", {9837, 9838}) == ["react"])
-    ok.append(hit_kind("给 〔9999〕", "9000000001", {9838}) == [])
+    ok.append(hit_kind("@900000001 hi", "900000001", {1}) == ["@qq"])
+    ok.append(hit_kind("给 〔9838〕 你 点了「爱心」", "900000001", {9837, 9838}) == ["react"])
+    ok.append(hit_kind("给 〔9999〕", "900000001", {9838}) == [])
     ok.append(is_placeholder("[表情包]") and is_placeholder("") and not is_placeholder("好"))
     rows = [{"scene_seq": 1, "episode_id": "a", "segment_index": 0}, {"scene_seq": 2, "episode_id": "a", "segment_index": 1},
             {"scene_seq": 3, "episode_id": "b", "segment_index": 0}, {"scene_seq": 4, "episode_id": "a", "segment_index": 0}]
     ok.append([len(s["rows"]) for s in build_sentences(rows)] == [2, 1, 1])
-    ok.append(place_code("qq:9000000001:group:9000000002") == "g22f2a9")
-    ok.append(sem_label("@9000000001 ", "今天天气真好") == "空正文")
+    ok.append(place_code("qq:900000001:group:900000002") == "g24969f")
+    ok.append(sem_label("@900000001 ", "今天天气真好") == "空正文")
     ok.append(sem_label("天气真的不错", "今天天气真好") == "字面有重叠")
     ok.append(sem_label("美女们早安呀～", "今天天气真好") == "无字面重叠")
     ok.append(sem_label("给 〔123〕 你 点了「爱心」", "今天天气真好") in ("空正文", "无字面重叠"))

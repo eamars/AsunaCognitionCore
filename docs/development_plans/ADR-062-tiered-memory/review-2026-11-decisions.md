@@ -222,3 +222,128 @@ things in the review that get worse with time; the rest can wait.
 3. D3 with D4-A as one ADR (the stored side), after she has read both.
 4. D5a as its own ADR, after B3; D5b and D5c closed in ADR-062's index row.
 5. D6's B3 and B8 as their own landings.
+
+Amended by the exchange below: D6's B3 and the lexical-pool index move ahead of D2 and D3; the B6 profile reading
+is the new ADR's first step; D7 joins the D1 batch.
+
+---
+
+## Exchange with the lead (Claude Code, 2026-11-05 afternoon), with the measurements it asked for
+
+The lead read the review, checked three claims against the code (they hold), agreed with D1, D3-A, D4-A, D5b-A,
+D5c-A, D6 and the order, and raised five points. The reviewer's answers, each with the data read for it (her
+database, read-only, 2026-11-05 13:00–13:30 NZDT), and the amendments that follow.
+
+### Point 1 → D7. Duplicates one level below items: two units of one source message in a turn
+
+Measured on the 7 days' 2,030 retrieval manifests, with the selected units fetched by id:
+
+| Pair in one turn's six | Pairs | Turns | Share of turns |
+|---|---|---|---|
+| a chunk and the dialogue summary covering its message | 268 | 198 | 9.8% |
+| two halves of one long message (the chunker cuts at 900 bytes, no overlap) | 122 | 119 | 5.9% |
+| two of her thoughts from one turn | 3 | 3 | 0.1% |
+
+Long messages are selected out of proportion: chunks of multi-segment messages are 16% of the distinct chunks
+selected (401 of 2,481) but 23% of chunk selections (1,904 of 8,202).
+
+| Option | Pros | Cons | Cost |
+|---|---|---|---|
+| **A. One slot per message: when two halves of one message are selected, they are joined in segment order into one entry** (recommended) | Frees a slot in 6% of turns and loses no text (the lead's "keep the best-scoring half" would drop the half the query may have matched; the halves are different text) | The joined entry is longer than one chunk; the turn's excerpt cap (800 characters) cuts it as it cuts any unit; recall reads the rest | build: hours in `retrieval.search` after selection; risk: none visible |
+| B. One unit per message, best-scoring kept (the lead's proposal) | Same slot saving | Drops text that matched | build: hours |
+| C. Also collapse chunk + summary pairs (keep the chunk) | Frees a slot in 10% of turns | They are not one idea: the chunk is the line, the summary the batch's gist with its attribution; the step-back rule already removes faded chunks a summary covers, these are fresh ones | build: hours; risk: losing the window's context |
+| D. Nothing | – | 6% of turns spend a slot on a second half | – |
+
+Not covered by any option and left as a known number: the same six units as the previous turn of the conversation
+in 8.6% of turns (partly by design: two slots are reserved for the most recent statements).
+
+**Recommendation.** A, in the D1 batch. **Decided:** —
+
+### Point 2 → D2 amended: no interim state; the lapse order gets a tie-break
+
+The lead's worry: 6 of the 12 program lapses came back within 0.1 day, so a program lapse as the default overflow
+should wait until D1 has run a week; meanwhile an over-ceiling write would land and she would be told she is over,
+with no lapse.
+
+Data: (a) the heartbeat echo does not touch the carried set's order: of the 120 carried items, none has a
+`surfaced_again` moment (their last moments: rewritten 58, none 55, recalled 4, cited 3); the echo lands on
+at-hand journal rows. A week of D1 changes nothing in the pick. (b) The regret comes from the pick rule among the 55
+carried items that never had a moment: ties go by document order, the oldest section first, which is arbitrary.
+(c) The drift of an unbounded week: the persona and `self` grew +171 and +181 characters a day net over the last 14
+days with the gate refusing 5.7 writes a day; a landed growing step is +258 characters at the median (+750 at p90).
+If the refused writes had landed: worst case +1,470 characters a day, about +7,700 estimated tokens in a week (63%
+of the home ceiling); a middle case +3,000–4,000 (25–30%). A week of that is paid in every home turn's prefix.
+
+Amendment to D2-A: (i) no interim "land without lapse" state: D1 and the one-line fixes land now, D2-A lands whole
+later (a week later if the owner wants D1's readings first, though they do not bear on the pick); (ii) the lapse
+order among items with equal `memorable_at` is by the program's own carried score, `carried_counts.program_score`
+over the last 30 days (how many turns' retrieval would have brought the section up; ADR-096 D5 keeps it per
+section, pair and day: 5,428 rows for 21 days), lowest first, `felt` last as now; (iii) the order weighs the pair
+that is over: a section carried only there frees room only there. Her choice turn, the moved line and her 0.1-day
+reversal stay the safety net the 12 cases show. **Decided:** —
+
+### Point 3 → D5a amended: the hard case without a pin
+
+The lead's proposal: sections she marks as a boundary or a promise leave the carried set only by her let_go, never
+by overflow or lapse. The reviewer disagrees with it as designed: it is a pin by another name, which ADR-062 rejected
+on measured grounds, her told text rules out (「我也不能喊留着；只有放手是我自己的动作」) and the owner upheld on 10-18.
+
+Counts: no boundary can be counted in the person records today (they are bodies, not sections); across her
+documents 16 items carry `from: 别人说的` (14 facts, 2 memories) and 17 carry a line anchor (ADR-108 D2), so the
+marking habit exists and is small. After her split the count is the sections with 别人说的 and an anchor per person.
+
+Alternative with the same guarantee where it exists today, structural (the program reads `from` and the anchor,
+never the text):
+1. The carried budget per person is today's 4,000 characters, not an item count: every record is carried whole
+   as today until it passes 4,000; only the owner's record (3,563) is near it.
+2. Over the budget: her choice turn first, then the lapse order puts sections that are someone's own stated words
+   with the line they rest on (`from: 别人说的` + anchor) last, after `felt`. A visible tie-break, not an
+   exemption: it can still lapse when the whole carried set is such sections, which is the honest limit.
+3. In groups, the woken person's entry carries, beside the short, that person's carried sections with 别人说的 and
+   an anchor, up to a bound (about 300 characters). That is what puts a boundary in front of her in a group turn;
+   no short-only design does.
+
+If the owner wants the exemption anyway: model it on ADR-096 D6's note pins (bounded, at most K per person, hers
+to set, never a program act), not on a `nature` value, so a pin budget cannot become the whole record. Her own
+promises have no `from` word today (主人定的 and 查过的 do not fit); if they are to get the tie-break, that is a new
+word on the table, hers to name. **Decided:** —
+
+### Point 4 → D6 reordered: the memory side's load on the shared box, per turn
+
+Measured 13:10 NZDT on the three busiest scopes of the week:
+
+| Read, every character turn | Round trips | Bytes | Server work |
+|---|---|---|---|
+| the lexical pool (`retrieval.search`: the newest 4,096 units of the scope) | 1–2 | 9.1 MB | an index scan of every active unit of the scope (8,116 / 10,234 / 19,506 examined), a fetch of each, an in-memory sort, then the first 4,096: 111 / 111 / 209 ms |
+| the authoritative recheck of candidates (one get per candidate) | about 50 | small | index gets |
+| `Tiers.sync` (every document's current revision: an entry probe, a head, a revision each; the journal's rows) | about 125 (3 × 40 documents + the journal's 4) | 1.8 MB + 3.6 MB | index gets; 43 + 15 ms |
+| `tick`, `things`, `deliver`, `overflows` (tier row scans), room, moves, came_back | about 10 | 1.7 MB each scan | collection scans of `memory_tiers`, 21 ms each |
+
+About 200 round trips and 15 MB a turn from the memory side alone, about 300 turns a day; the admission figure the
+lead cites (150 sequential round trips) is the same order. The round-trip count for `sync` is from the code
+(`DocumentStore.read` per slug), not from a driver trace.
+
+Amendment: B3 and the pool move ahead of D2 and D3. The pool's first fix is an index that carries the sort: with
+`occurred_at` in the index after (scope_key, status, policy_epoch) the scan stops at 4,096 and the SORT stage goes
+(one catalog line); the 9.1 MB transfer stays until the per-scope lexical index of review §6.5 replaces the window.
+**Decided:** —
+
+### Point 5 → B6 into the ADR; the expected order of a recall's parts
+
+Agreed: the profile reading is the new ADR's first step. What the code and one measurement say about the parts:
+
+1. **`crossing.history('work_log')` rebuild.** Its cache seal is the journal's last revision; the journal gets 33
+   revisions a day and she recalls 8.7 times a day, so nearly every recall with a query rebuilds. A rebuild reads the
+   frozen document's 250 revisions (88.8 MB serialised, 548 ms warm) and the 988 journal revisions (40 ms), then
+   diffs in Python (11 ms): about 0.6 s a recall today, growing with the journal and cold reads. Top suspect.
+   Fix: the pre-rows history is fixed since 10-12; read it once per process (or drop it from `history()` once the
+   rows' own revisions hold the changes) and key the cache on the journal alone.
+2. **The recall's own `prepare`** (everything a normal turn builds, the pool's 9.1 MB and sort, about 50 recheck
+   round trips, a query embedding; the retrieval cache never hits because the pool is capped).
+3. **`crossing.top_up`:** the group lines since the mark, each cut by jieba in Python, then one update per word;
+   50 lines were waiting right after the 11-04 settlement rebuild, hundreds between recalls. Estimate 0.1–0.5 s.
+4. **Two embedding calls** (retrieval and her thoughts elsewhere), on the local route; unmeasured.
+5. Headings, keys, past versions' matching: small.
+
+The profile should write one duration per part into the `tool.time` row of a recall, then bound the largest.
+**Decided:** —

@@ -21,9 +21,9 @@ or a stable release only makes each merge larger. Asuna's coupling to DSH:
 
 ## Decision
 
-- **D1. Follow every DSH alpha**, so each merge covers about a week of upstream work.
+- **D1. Follow every DSH alpha**, so each merge covers about a week of upstream work. *(Replaced by D8, 2026-11-04.)*
 - **D2. Supply-chain delay: 7 days.** A DSH tag is taken once it is at least 7 days old (for DSH this replaces the
-  general two-week rule for dependencies).
+  general two-week rule for dependencies). *(Replaced by D9, 2026-11-04.)*
 - **D3. Keep the inline action-brain view.** The owner prefers it to DSH's subagent view. Upstreaming Asuna's design
   is doubtful; a small generic extension point that would make the patch unnecessary may be offered upstream.
 - **D4. Patches are commits on a fork**, not a diff file: https://github.com/eamars/deepseek-harness. Remotes in the
@@ -35,11 +35,46 @@ or a stable release only makes each merge larger. Asuna's coupling to DSH:
   switch of the live profile.
 - **D6. Shrink the coupling over time**: export or replace the `ContextMeter` read; move `persistence.js` to DSH's
   session-record API once it is no longer experimental (alpha.2 adds it).
+- **D7. A requirements ICD between DSH and Asuna** (owner, 2026-11-04). Asuna states what it needs from DSH as
+  requirements, not code: the code interface may change, the requirements stay stable and are agreed by both
+  sides. Big sis writes the ICD and its tests. The tests run against DSH alone (a DSH tag plus the fork's patches,
+  no Asuna checkout, no live profile), so the DSH upgrade agent can test and verify a new DSH version on its own.
+  Asuna then picks the new version up with its own code changes; an interface change is allowed while the ICD
+  holds, and big sis takes it without a broad compatibility test.
+- **D8. Migrations are manual and prompt** (owner, 2026-11-04). There is no automated reminder: when the owner hears
+  of a new DSH version, he takes it up with the DSH upgrade agent. Delaying a migration slowly builds technical
+  debt, so it is taken up as soon as time and bandwidth allow.
+- **D9. No waiting period; the source tag is the guard** (owner, 2026-11-04). A version is taken once its `dsh-v*`
+  tag exists on `upstream`, however new. A version published only on npm, without the tag, waits.
 
-## The routine (one alpha)
+### Decision update (2026-11-04)
 
-1. **Pick the tag**: the newest `dsh-v*` tag on `upstream` that is at least 7 days old. Read its release notes for
-   breaking changes; grep Asuna for each.
+The owner's words: "Merge with RC5. Test the 0.2.2 compatibility. If we don't have clear boundary between DSH and
+Asuna, then you need to message Big Sis Session (the master agent) to produce the clear ICD to make the future
+migration easier. The intention is for Asuna project to expose a clear 'What the project needs, from requirement
+perspective, not coding'. The code interface can change, but requirement should be consistent, and agreed between
+up and downstream dependencies. The ICD should also allow the DSH migration agent to independently test and verify,
+without relying on Asuna to cooperate. The Asuna project should then pickup the change with code changes (interface
+change is allowed, as long as the ICD is clear, and Big Sis can pickup without excessive compatibility test. Ditch
+the 7 day rule. And note down: delaying the compatibility migration will slowly building up technical debt." On
+when: "When I remember to pick this up. This is manual work. I don't have automated workflow as the reminder." The
+owner chose to keep the source-tag guard (D9) and that big sis writes the ICD's tests too (D7).
+
+The DSH upgrade agent's survey on that day (upstream had `dsh-v0.2.1-rc.5` and `dsh-v0.2.2-alpha.3`):
+
+- **0.2.1-rc.5** (8 fixes after rc.3): the three fork commits cherry-pick cleanly and the patched packages' tests
+  pass (1,149). The rc.4 reasoning-body slot change does not reach `client.js`. Asuna moves from rc.2, so the items
+  of the pending rc.3 note (entry customization, its three checks) still apply.
+- **0.2.2-alpha.3** (1,910 commits): the `ui-chat` commit conflicts (upstream reworked the chat view's injected
+  props); Schedule's Session-bound `create`/`list`/`update`/`delete` and timing selectors are replaced by one
+  Host-wide `edit` API with typed timing, which `schedule.js`, `schedule.py` and `role_tools.py` use; the Schedule
+  store moves to v2 on its first write and a v1 binary refuses it afterwards, so step 7's rollback needs a backup of
+  that store. The coupling table above lists files and APIs, not requirements: that is the gap D7 closes.
+
+## The routine (one version)
+
+1. **Pick the tag**: the newest `dsh-v*` tag on `upstream` (D9). Read its release notes for breaking changes; check
+   the ICD's requirements (D7) against them, and grep Asuna for each.
 2. **Rebase the patch**: `git checkout -b asuna/<version> <tag>` then cherry-pick the previous `asuna/*` branch's
    patch commits; resolve conflicts commit by commit; run the patched packages' own tests (`ui-chat`,
    `ui-renderer`); push the branch to `origin`.

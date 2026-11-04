@@ -144,19 +144,29 @@ OUTLETS = [
     ("outlet_group_notes", "**群笔记**"),
     ("outlet_person_understanding", "**对人的理解**"),
     ("outlet_pocket_ledger", "**随身账**"),
-    ("outlet_pocket_ledger_rule", "只在她今天的做法撞了已有规矩时才动"),
+    ("outlet_pocket_ledger_rule", "只在她被复盘那天的做法撞了已有规矩时才动"),
     ("outlet_ideas_book", "**想法本**"),
     ("outlet_ideas_review_by_self_improvement", "过堂归自我改进那一拍"),
 ]
 
 BOUNDARY = [
-    ("boundary_self_review_scope", "**每日自省（这一份，23:30）管方法与人**"),
+    ("boundary_self_review_scope", "**每日自省（这一份，晨版 08:00 跑）管方法与人**"),
     ("boundary_settlement_scope", "**夜间沉淀管事实与领悟的记忆晋升**"),
     ("boundary_cite_not_repromote", "沉淀只引用、不重复晋升"),
     ("boundary_self_improvement_scope", "**自我改进拍管想法本过堂**"),
     ("boundary_mood_backfill", "自省当场补记"),
     ("boundary_mood_close_void", "close／void"),
-    ("boundary_time_order", "自省 23:30 在前，夜间沉淀在后"),
+    ("boundary_time_order", "夜间沉淀在前（凌晨），晨版自省在后"),
+    ("boundary_owner_not_scored", "owner 的反应剔出计分统计"),
+    ("boundary_owner_non_scored_tag", "非计分"),
+    ("boundary_owner_family_group_out", "小满家群（`g9a8e3b`）整群剔出自省范围"),
+    ("boundary_owner_reason_a", "会长回「以他为标准调行为」"),
+    ("boundary_owner_reason_b", "我怎么会不向着你呢"),
+    ("boundary_understanding_layer", "理解层素材"),
+    ("morning_edition", "晨版"),
+    ("anchors_semantic_annotation", "语义在接(仅标注)"),
+    ("anchors_annotation_no_count_change", "只标注、不改任何计数"),
+    ("window_full_timestamp", "两端一律传带时刻的完整时间戳"),
 ]
 
 PERSONAL_TOKENS = ["主人", "旧居", "交流群", "姐姐", "金主"]

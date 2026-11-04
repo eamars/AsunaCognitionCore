@@ -1,6 +1,6 @@
 ---
 name: asuna-image-generation-and-display
-description: 直路是行动脑侧的 generate_image（本机与 QQ 来的任务同一条路：直接调用，图落任务工作区并自动登记成我自己的图，read_image 看过一眼后随消息发出去；外部公开生图服务只给链接、图发不出去，要发出去的图不走那条；它不可用或要工具参数面给不了的模型／参数时才走长路）。长路（探针 → integration_test → import_integration_artifact）：一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore；盘上已有的图另有一条：家里 Python 里用 register_imported_image 带 scope_key 登记进指定场景，代价是剥 PNG 文字块），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（list_routes 共 11 条：qwen-image-2.1-edit 必填 source_image、九条可选、t2i 不收原图，配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发）；QQ（napcat）那一轮看上下文 image_artifacts_from_program，要发图就用 speak 的 picture 那一项（artifact_id 照抄清单、可以不带话、正文不写路径/文件名/见图）；没声明 reply parts 的对话仍调用 attach_image 工具（一回合至多一张、再调用换成新的那张），对 owner_private + dm 路由和她在的群开放（群里只发来源带 `integration:` 前缀的图（可以是早就做好、后来重新登记进来的），全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（列着它的对话；工具错误、同回合可改）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
+description: 直路是行动脑侧的 generate_image（本机与 QQ 来的任务同一条路：直接调用，图落任务工作区并自动登记成我自己的图，read_image 看过一眼后随消息发出去；外部公开生图服务只给链接、图发不出去，要发出去的图不走那条；它不可用或要工具参数面给不了的模型／参数时才走长路）。长路（探针 → integration_test → import_integration_artifact）：一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore；盘上已有的图另有一条：家里 Python 里用 register_imported_image 带 scope_key 登记进指定场景，代价是剥 PNG 文字块），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（list_routes 的条数现读、技能不存（每次 list_routes=yes 回来数一遍；标 source_image: required 的改图路线必填、标 optional 的可选、不带这个标的 t2i 路线不收原图），配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发）；QQ（napcat）那一轮看上下文 image_artifacts_from_program，要发图就用 speak 的 picture 那一项（artifact_id 照抄清单、可以不带话、正文不写路径/文件名/见图）；没声明 reply parts 的对话仍调用 attach_image 工具（一回合至多一张、再调用换成新的那张），对 owner_private + dm 路由和她在的群开放（群里只发来源带 `integration:` 前缀的图（可以是早就做好、后来重新登记进来的），全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（列着它的对话；工具错误、同回合可改）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
 scene_kinds: [home, group]
 ---
 
@@ -30,7 +30,7 @@ scene_kinds: [home, group]
 - **之后随消息发出去**：那一轮照步骤 8 引这个 `artifact_id`（QQ 是 speak 的 picture，别处是 attach_image）。
 - **画完自己看过再发**：`read_image` 拿回执里的 `artifact.artifact_id` 亲眼看那一张，跟提交时的要求对；
   不对就改提示词或换路线重画。「提交成功、登记成功」不等于画对了（口径见步骤 7）。
-- 挑路线先 `list_routes=yes`（现量 11 条；读数与改图口径见「改图与 `generate_image`」一节），
+- 挑路线先 `list_routes=yes`（条数现读：数 `list_routes=yes` 回来的 `workflows` 数组，技能不存这个数；改图口径见「改图与 `generate_image`」一节），
   提示词照那条路线自己的口径写。
 
 **什么时候不走这条**：`generate_image` 不可用，或要它参数面给不了的模型／参数（在服务端串自己的 workflow、
@@ -82,7 +82,7 @@ for x in (res.get("matches") or [])[:3]:
     print("CAND", x.get("workflow_id"), "ready=", x.get("ready"), "score=", x.get("score"))
 ```
 
-- 期望：`ENDPOINT_KEYS ['host', 'image', 'napcat']`、`IMAGE_ENDPOINT {'host': '127.0.0.1', 'port': 18191}`。
+- 期望：`ENDPOINT_KEYS ['host', 'image', 'napcat']`、`IMAGE_ENDPOINT {'host': …, 'port': …}`（host 与 port 是现读值：取自集成配置的 `endpoints.image`，只在 `integration_test`／`integration_start` 那一趟里读得到——跑一遍 `json.load(open(os.environ['ASUNA_INTEGRATION_CONFIG']))` 再打印；技能不存端口，旧正文写过的一个端口数已作废）。
 - `resolve` 不加载模型、不排队，所以这一步**不会生成新图**；已有产物在不在，用步骤 3 的 job/history 查，别靠重画来"确认"。
 - 配置里没有 `image`：停，回报「集成配置里没有 image 端点」。加端点要改集成 profile 并重启宿主才出现转发——
   这两件都不在本次授权里。
@@ -109,7 +109,7 @@ for x in (res.get("matches") or [])[:3]:
 anime 路由（实测 `selected_workflow=anima-turbo-v1-1`）。想要照片感就写进 prompt，并预期结果偏插画——
 不要把 resolve 的选择当成「这台机器认为这是照片」。
 
-当前路线面：`generate_image` 的 `list_routes` 共 11 条、含改图路线（必填／可选／不收原图三种标记都有）。
+当前路线面：`generate_image` 的 `list_routes` 条数现读（出处：`list_routes=yes` 回执的 `workflows`；技能不存这个数），含改图路线（必填／可选／不收原图三种标记都有）。
 上面那段只作 t2i 侧的读数；当前改图口径见「改图与 `generate_image`」一节。
 
 先按目标选路由：
@@ -337,8 +337,8 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 
 - `generate_image` 有 `source_image` 参数：收图旁标的 ref，或一张已存好图的 `artifact_id`（`blob-…`）。
   **能喂哪些图，和这一回合 `read_image` 能看哪些完全一样**——read_image 看得到的，这里就改得动（ref 口径见步骤 7）。
-- `list_routes=yes` 现在共 **11 条**路线：`qwen-image-2.1-edit` 标 `source_image: required`；
-  **九条标 `optional`**（能纯文字画、也能改图）；剩下 `qwen-image-2.1-t2i` 不收原图。
+- `list_routes=yes` 回来的路线条数现读、技能不存（出处：回执 `workflows` 数组；两处旧写死数已拿掉）：`qwen-image-2.1-edit` 标 `source_image: required`；
+  其余多数标 `optional`（能纯文字画、也能改图，数目现读）；不带 `source_image` 标的 t2i 路线（如 `qwen-image-2.1-t2i`）不收原图。
 - **带 `source_image` 不写 workflow 时，服务自己挑一条改图路线**（实测），不必点名 edit 那条。
 - edit 路线自述（`list_routes` 里读到的）：输出尺寸跟着原图走（按 32 的倍数取整）；提示词写成直接指令——
   改什么、点名什么必须不动。
@@ -385,7 +385,7 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 
 ## 姿势（pose）与现行 prompt 口径（2026-11-04 探到，服务端升级后的现量）
 
-来路：2026-11-04 10:0x 本机 owner 任务里，经 `integration_test`（image 端点别名，现读配置是 127.0.0.1:8191；上文步骤 0 写的 18191 是旧读数）读 `/.well-known/agent-manifest.json`、`/project/poses`、`/project/workflows/anima-turbo-v1-1`，并对 `/project/generate` 做 `dry_run`（不排队、不出图）。manifest `api_version` 2.0.0、`schema_version` 1。旧版 manifest 没留存档，所以下面「新」是现行原文，不是逐字新旧对照。
+来路：2026-11-04 10:0x 本机 owner 任务里，经 `integration_test`（image 端点别名；端口现读自集成配置，上文步骤 0 已改成现读句式）读 `/.well-known/agent-manifest.json`、`/project/poses`、`/project/workflows/anima-turbo-v1-1`，并对 `/project/generate` 做 `dry_run`（不排队、不出图）。manifest `api_version` 2.0.0、`schema_version` 1。旧版 manifest 没留存档，所以下面「新」是现行原文，不是逐字新旧对照。
 
 **姿势：传法**
 
@@ -404,7 +404,7 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 
 **`generate_image` 能不能传姿势：不能（2026-11-04 读工具参数面）**
 
-- 直路 `generate_image` 的参数面只有 prompt／workflow／width／height／seed／negative_prompt／source_image／options（steps、cfg、sampler_name、scheduler，且不收别的键），没有 `pose`／`pose_strength`。所以要带姿势只能走长路（`integration_test` 直连 image 端点 `POST /project/generate`，再按步骤 3–4 取产物导入），或把姿势只写进 prompt。
+- 直路 `generate_image` 的参数面只有 prompt／workflow／width／height／seed／negative_prompt／source_image／options（steps、cfg、sampler_name、scheduler，且不收别的键），没有 `pose`／`pose_strength`（2026-11-04 午后复核：本回合 `generate_image` 工具参数表仍无 `pose`，依据是工具表本身；以后判这一格先看当回合工具参数表，不抄这句）。所以要带姿势只能走长路（`integration_test` 直连 image 端点 `POST /project/generate`，再按步骤 3–4 取产物导入），或把姿势只写进 prompt。
 - 返回形状：升级后 `generate_image` 回执的键与之前一致，没有 pose 对象——实测一张 512×512 anima-turbo-v1-1（seed 1），回执键为 generated／workflow／prompt_id／seed／width／height／elapsed_ms／target_relative_path／bytes／sha256／media_type／guidance／artifact／note。（「与之前一致」这一格依据是本技能旧正文对回执的描述，没有旧回执原件可比，算推断。）`guidance.structure` 现为 quality/meta、subject count、character/series、appearance、outfit、pose、composition、environment（pose 在 outfit 与 composition 之间；是否新增未核实）。
 - 长路的服务端回执（`POST /project/generate`）：`prompt_id`（也叫 `job_id`）、`job_url`、`applied_parameters`、`effective_parameters`、`warnings`，带 pose 时多一个 `pose` 对象；`dry_run` 返回同样的字段加 `validated` 与 API 格式的 `prompt`，没有 `prompt_id`。
 
@@ -415,7 +415,7 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 - negative：服务端现在明说了：`negative_prompt_effective_at_default: false`，「CFG 1 skips negative conditioning. Negative text has no effect at the default setting; CFG changes can affect distilled-model quality.」——和上文「CFG 1 的路由不吃 `negative_prompt`」一致，「不要什么」仍写进正向提示词。negative 字段仍被接受，有默认值（`worst quality, low quality, score_1, …`）。
 - 内容：manifest `content`：「Resolve never routes by content: the prompt decides what an image shows … When the selected route has prompting.content_lines, add its 'explicit' or 'safe' line to the prompt. Explicit images must show adults.」我们只画全年龄：选中路线有 `prompting.content_lines` 时，把它的 `safe` 那一行加进 prompt。
 - 其他：保存的 PNG 带 ComfyUI prompt 元数据（输入文件名换成 `[input image]`）；发到不该看到 prompt 的地方前要剥（本技能「发出去的图不带提示词」一节已覆盖）。
-- 路线现量：11-04 `list_routes` 读到 18 条（上文「11 条」是旧读数，未改）。
+- 路线条数：现读 `list_routes=yes`（技能不存条数；11-04 那一趟读到的数已按现读口径从正文拿掉，正文几处旧写死数一并改成现读句式）。
 
 ## 官方定妆（画自己/自拍必读）
 
@@ -567,7 +567,7 @@ python3 -m compileall -q skills/asuna-image-generation-and-display  # 语法面�
 退出码 0 = 全绿；非 0 时最后一行是 `N/M 通过，失败：<检查名>`。
 它只查技能文件自己：frontmatter 能解析、`name` 与目录名一致、关键工具名 / 端点 / 服务路径 /
 关键步骤 / 边界语句在不在、发图那条路（QQ speak 的 picture、别处 attach_image）的清单字段与失败码在不在、
-改图那条路（`source_image` 入口、11 条路线读数、三条 `IMAGE_WORKFLOW_*` 即时拒绝码、改图归属与剥文字块判据）在不在、
+改图那条路（`source_image` 入口、路线条数现读口径、三条 `IMAGE_WORKFLOW_*` 即时拒绝码、改图归属与剥文字块判据）在不在、
 群聊生图上限那条（这一节标题在不在、节内「最多 4 张」与「到顶怎么办：默认不发」在不在、
 「唯一的例外」措辞对不对、旧措辞「超了要在交回时写一句」有没有被抄回这一节）在不在、
 退役说法（`integration_dev`、`/skills` 挂载、把 DECIDE 的 `attach` 字段当当前流程、`九条路线全是 t2i`）有没有回到散文里、

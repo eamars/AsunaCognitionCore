@@ -5,9 +5,9 @@
 
 用法（在 sandbox_run 或 development_run project=core 里，工作目录＝任务工作区；asuna.dbread 只读）：
     python3 anchors.py [--day YYYY-MM-DD] [--end 'YYYY-MM-DD HH:MM[:SS]'] [--out DIR]
-        默认 day＝本地今天；end＝次日零点与读的那一刻里较早的那个。
+        默认 day＝本地今天（脚本默认值没改）；晨版每天 08:00 跑、复盘昨天一整天，必须显式传 --day <昨天>，不靠默认值；end＝次日零点与读的那一刻里较早的那个。
         写出 DIR/anchors_<day>.json 与 DIR/anchors_<day>.md，stdout 只打摘要。
-    python3 anchors.py --check-report 报告.md [--json anchors_<day>.json]
+    python3 anchors.py --check-report 报告.md [--json anchors_<day>.json] [--exclude-place gXXXXXX ...]
         拿报告逐句表里的时刻、前窗行数、后窗接话行、后窗未满、delivery_state、窗口终点、漏句，
         逐条对底稿；有一条对不上退出码 1。
     python3 anchors.py --selftest     # 离线：只验纯函数，不连库
@@ -59,6 +59,26 @@ def hit_kind(text, qq, segs):
     if m and int(m.group(1)) in segs:
         kinds.append("react")
     return kinds
+
+
+RE_MENTION = re.compile(r"@\S+|给\s*〔\d+〕|\[[^\]]*\]")
+
+
+def _bigrams(text):
+    """去掉 @、「给 〔行号〕」、[…] 占位、标点空白后的字面二元组集合（只给「语义在接」标注用，不进任何计数）。"""
+    body = re.sub(r"[\W_]+", "", RE_MENTION.sub("", text or ""))
+    return {body[i:i + 2] for i in range(len(body) - 1)}
+
+
+def sem_label(row_text, her_text):
+    """「语义在接」标注格（只标注、不改任何计数）：给一个其他人的行打一个字面标签。
+    空正文：去掉 @／回应字样后不足两个字（纯 @、纯表情回应）；字面有重叠：与她那句共享至少一个二元组；
+    无字面重叠：有正文但一个二元组都不共享（疑似是在接别的话头，终判归小满）。"""
+    mine = _bigrams(row_text)
+    body = re.sub(r"[\W_]+", "", RE_MENTION.sub("", row_text or ""))
+    if len(body) < 2:
+        return "空正文"
+    return "字面有重叠" if mine & _bigrams(her_text) else "无字面重叠"
 
 
 def build_sentences(rows):
@@ -173,6 +193,13 @@ def sentence_anchor(S, others, qq, soft_ok, tz, start, end, internal_by_ep):
     A["post_hit_first"] = ph[0][0] if ph else None
     A["post_soft_nick"] = [o["scene_seq"] for o in post if RE_NICK.search(o.get("text") or "")
                            and not hit_kind(o.get("text"), qq, segs)][:5]
+    # 「语义在接」标注（只标注，不改上面任何一个计数）：① 每条机械接话命中行的字面标签；
+    # ② 后窗里没带机械线索、但字面与她那句有两个以上二元组重叠的行（疑似语义上在接、字面没带词）。
+    her_full = "".join(real)
+    A["sem_hit_labels"] = [(x[0], sem_label(next((o.get("text") for o in post if o["scene_seq"] == x[0]), ""), her_full))
+                           for x in ph[:8]]
+    A["sem_nonhit_overlap"] = [o["scene_seq"] for o in post if not hit_kind(o.get("text"), qq, segs)
+                               and len(_bigrams(o.get("text")) & _bigrams(her_full)) >= 2][:5]
     gap = [(o["scene_seq"], hit_kind(o.get("text"), qq, segs), local_str(o["_t"], tz),
             int((o["_t"] - t0).total_seconds())) for o in others
            if t0 < o["_t"] < t1 and hit_kind(o.get("text"), qq, segs)]
@@ -306,6 +333,14 @@ def gen(db, args):
     return result
 
 
+def sem_cell(a):
+    """「语义在接」标注格的文字：命中行各打一个字面标签；后窗里没带机械线索但字面有重叠的行另列为「疑似在接」。只标注。"""
+    parts = ["%d:%s" % (s, lab) for s, lab in a.get("sem_hit_labels", [])]
+    if a.get("sem_nonhit_overlap"):
+        parts.append("疑似在接(无机械线索):" + "、".join(str(x) for x in a["sem_nonhit_overlap"]))
+    return "；".join(parts) or "—"
+
+
 def md_of(res):
     h = res["head"]
     L = ["# 锚点底稿 " + h["day"], "",
@@ -333,20 +368,21 @@ def md_of(res):
               % (g["others_rows"], g["others_people"], g["others_len_median"], g["others_placeholder_rows"],
                  g["her_len_median"], g["her_commas_mean"]),
               "- 群笔记键：%s（%s）" % (g["note_doc_ids"] or "无", g["note_lookup"]), "",
-              "| 行号 | 时刻 | 段数 | 状态 | 前窗(行/人/末行距) | 后窗(行/人/未满) | 机械接话首行(30/90/6h) | 段内指向我 | 迟到接话行数 | 末段后全场(行/末行) | 归类提示 | 她的话 |",
-              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+              "| 行号 | 时刻 | 段数 | 状态 | 前窗(行/人/末行距) | 后窗(行/人/未满) | 机械接话首行(30/90/6h) | 语义在接(仅标注) | 段内指向我 | 迟到接话行数 | 末段后全场(行/末行) | 归类提示 | 她的话 |",
+              "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for a in g["sentences"]:
             if "pre_n" not in a:
-                L.append("| %d–%d | %s | %d | %s | 时刻未知 | | | | | | | %s |" % (
+                L.append("| %d–%d | %s | %d | %s | 时刻未知 | | | | | | | | %s |" % (
                     a["lo"], a["hi"], a["t0"], a["n_seg"], ",".join(a["states"]), a["text80"]))
                 continue
             pl = a["pre_last"]
             f = lambda k: ("%s%s" % (a[k]["hits"][0][0] if a[k]["hits"] else "无", "·窗未满" if a[k]["unfull"] else ""))
-            L.append("| %d–%d | %s–%s | %d | %s | %d/%d/%s | %d/%d/%s | %s/%s/%s | %s | %d | %d/%s | %s | %s |" % (
+            L.append("| %d–%d | %s–%s | %d | %s | %d/%d/%s | %d/%d/%s | %s/%s/%s | %s | %s | %d | %d/%s | %s | %s |" % (
                 a["lo"], a["hi"], a["t0"], a["t1"], a["n_seg"], ",".join(a["states"]),
                 a["pre_n"], a["pre_people"], ("%ds" % pl["gap_sec"]) if pl else "场冷",
                 a["post_n"], a["post_people"], "后窗未满" if a["post_unfull"] else "满",
                 f("h30"), f("h90"), f("h6h"),
+                sem_cell(a),
                 "、".join("%d(+%ds)" % (x[0], x[3]) for x in a["gap_hits_inside_segments"]) or "无",
                 a["late_hit_n"], a["after_n"], (a["after_last"] or {}).get("seq", "—"),
                 a["cls_hint"].split("(")[0], a["text80"].replace("|", "｜")))
@@ -359,7 +395,7 @@ def seq_range(cell):
     return int(m.group(1)) if m else None
 
 
-def check_report(path, js):
+def check_report(path, js, exclude_places=()):
     res = json.load(open(js, encoding="utf-8"))
     byplace = {g["place"]: g for g in res["groups"].values()}
     text = open(path, encoding="utf-8").read()
@@ -409,6 +445,8 @@ def check_report(path, js):
         if A["not_delivered"] and not re.search(r"UNKNOWN|CANCELLED|未送达|delivery_state|投递", line):
             bad.append("%s：底稿有非 DELIVERED 行 %s，报告这一行没写状态" % (tag, A["not_delivered"]))
     for place, g in byplace.items():
+        if place in exclude_places:
+            continue  # 整群剔出自省范围（小满家群）：底稿里仍有、报告不列，不算漏句。只影响对账，不改底稿任何计数。
         for a in g["sentences"]:
             if (place, a["lo"]) not in seen:
                 bad.append("%s %d–%d：底稿有这一句，报告逐句表里没有（%s）" % (place, a["lo"], a["hi"], a["t0"]))
@@ -428,6 +466,10 @@ def selftest():
             {"scene_seq": 3, "episode_id": "b", "segment_index": 0}, {"scene_seq": 4, "episode_id": "a", "segment_index": 0}]
     ok.append([len(s["rows"]) for s in build_sentences(rows)] == [2, 1, 1])
     ok.append(place_code("qq:9000000001:group:9000000002") == "g22f2a9")
+    ok.append(sem_label("@9000000001 ", "今天天气真好") == "空正文")
+    ok.append(sem_label("天气真的不错", "今天天气真好") == "字面有重叠")
+    ok.append(sem_label("美女们早安呀～", "今天天气真好") == "无字面重叠")
+    ok.append(sem_label("给 〔123〕 你 点了「爱心」", "今天天气真好") in ("空正文", "无字面重叠"))
     ok.append(seq_range("9552–9553") == 9552 and seq_range("x") is None)
     print("selftest %d/%d" % (sum(ok), len(ok)))
     return 0 if all(ok) else 1
@@ -440,6 +482,8 @@ def main():
     ap.add_argument("--out", default=".")
     ap.add_argument("--check-report")
     ap.add_argument("--json")
+    ap.add_argument("--exclude-place", action="append", default=[],
+                    help="对账时跳过这个群的漏句检查（可重复；小满家群整群剔出自省范围用）")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     if args.selftest:
@@ -448,7 +492,7 @@ def main():
         js = args.json
         if not js:
             sys.exit("--check-report 要 --json anchors_<day>.json（先跑一遍生成）")
-        return check_report(args.check_report, js)
+        return check_report(args.check_report, js, tuple(args.exclude_place))
     from asuna import dbread as db
     if not args.day:
         args.day = db.now()[:10]

@@ -3,7 +3,7 @@
 
 只查技能文件自己：frontmatter 能不能解析、name 与目录名是否一致、关键工具名 / 端点别名 /
 服务路径 / 关键步骤 / 边界语句在不在、发图那条路（QQ（napcat）speak 的 picture，别处 attach_image）的清单字段与失败码在不在、
-改图那条路（「改图与 generate_image」一节：source_image 入口、11 条路线读数、三条 IMAGE_WORKFLOW_*
+改图那条路（「改图与 generate_image」一节：source_image 入口、路线条数现读口径、三条 IMAGE_WORKFLOW_*
 即时拒绝码、改图归属、本地 Pillow 修字、剥文字块判据、排队成本）在不在、
 群聊生图上限那条（「群聊生图上限」一节标题、节内「最多 4 张」与「到顶默认不发」、
 「唯一的例外」是不是 10:59 更正版、10:57 旧措辞有没有被抄回这一节）在不在、
@@ -197,9 +197,9 @@ ATTACH = [
 EDIT = [
     # 入口：source_image 收 ref / artifact_id，能喂的图 = read_image 这一回合能看的那些
     ("edit_source_image_entry", "source_image"),
-    ("edit_route_count", "11 条"),
+    ("edit_route_count", "条数现读"),
     ("edit_route_required", "qwen-image-2.1-edit"),
-    ("edit_route_optional_nine", "九条标"),
+    ("edit_route_optional_marked", "标 `optional`"),
     ("edit_service_picks_edit_route", "服务自己挑一条改图路线"),
     # 配错路线：瞬时返回，不排队、不白传图
     ("edit_err_takes_no_source", "IMAGE_WORKFLOW_TAKES_NO_SOURCE"),
@@ -295,8 +295,12 @@ STALE_CLAIMS = [
     "maxItems: 1",
     # 2026-10-14：QQ 那轮发图已是 speak 的 picture；反引号外裸写回这句（当现行流程）才红
     "那一轮调用 attach_image",
-    # 2026-10-16：改图路线已上线（list_routes 11 条、含 edit）；反引号外裸写回这句（当现行事实）才红
+    # 2026-10-16：改图路线已上线（含 edit）；反引号外裸写回这句（当现行事实）才红
     "九条路线全是 t2i",
+    # 2026-11-04 v8.2：路线条数与端口改成现读；写死的旧读数写回散文（反引号外）才红
+    "共 11 条",
+    "现量 11 条",
+    "18191",
     # 2026-10-24：「只有 render_svg 这一条路」是 10-21 想法本里的待提案，本技能正文从没写过；
     # 反引号外裸写回散文（当现行事实）才红，反引号里的引用不算。
     "只有 render_svg 这一条路",

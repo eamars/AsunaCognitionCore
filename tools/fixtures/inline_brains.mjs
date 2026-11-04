@@ -80,7 +80,6 @@ export function apply(ctx, config) {
   const core = new CognitionCore(ctx, { persona: 'inline-fixture', routes: { character: route, action: route } });
   core.ready = async () => {};
   core.personas.set('inline-fixture', { preset: 'inline-role' });
-  core.roleSpecs = ROLE_SPECS;
   core.specs = ACTION_SPECS;
   ctx.provide('asuna', core); new AsunaApi(ctx, core);
   const roleId = 'brain-inline-role-v2', bindings = new Map(), operations = new Map(), turns = new Map();
@@ -113,6 +112,7 @@ export function apply(ctx, config) {
     if (method === 'stage.valid') return { valid: operations.has(args.token)
       && (!args.session_id || operations.get(args.token).session_id === args.session_id) };
     if (method === 'session') return bindings.get(args.session_id);
+    if (method === 'role_tool_specs') return ROLE_SPECS;
     if (method === 'input_policies') {
       if (config.policyDelayMs) await delay(config.policyDelayMs);
       return config.policyReadOnly ? { [roleId]: { key: 'read_only', platform: 'QQ' } } : {};
@@ -135,7 +135,13 @@ export function apply(ctx, config) {
       return { value: { saved: true } };
     } else if (method === 'result') {
       const event = operations.get(args.token);
-      if (args.error) { operations.delete(args.token); return {}; }
+      if (args.error) {
+        operations.delete(args.token);
+        // As the worker does: a failed task's thread says so.
+        if (event?.lane === 'executor') await collab({ id: event.task._id, title: event.task.title },
+          { id: 'status:' + event.task._id + ':failed', kind: 'status', state: 'failed' });
+        return {};
+      }
       if (event?.lane === 'character') {
         const turn = turns.get(args.token) ?? {};
         setTimeout(() => core.onEvent({ kind: 'turn_done', session_id: event.session_id }), 5);

@@ -165,3 +165,32 @@ adds DeepSeek's Search and Fetch APIs behind a settings switch, off by default. 
   skips there unless that `Scripts` folder is on PATH.
 - `pyproject.toml` and the worker's bundled `pyproject.toml` named `0.1.0`; both now follow Asuna's version, and
   `tests/test_versions.py` checks the first.
+
+## Fourth run (0.2.2-alpha.3, 2026-11-04)
+
+The owner's plan (2026-11-04, decision update above): two landings, skipping rc.5. First, Asuna owns the LAN policy
+for public-only tasks on rc.2 (ADR-116 §7, installed 16:30, `f080c38c`), because 0.2.2 dropped DSH's fetch address
+check (upstream `2f01ad549c`). Then rc.2 to 0.2.2-alpha.3 in one switch. rc.3's entry-customization menus are disabled
+in her profile (owner).
+- Beyond the DSH agent's pickup list (from its ICD run, D7), 0.2.2 changed three things Asuna uses: the system prompt's
+  assemble no longer carries tools, so her role tools register with `tools.register(def, {when})` and stage admission
+  moved to `admit()` (an ICD tools requirement is still to be written); `sessions.prepare` is read-only until announced,
+  so cold conversations are written through `Session.create(id, prepared.snapshotEvents(), prepared.header,
+  prepared.inheritedEventCount)`; services gained an async `Service.init`, so test harnesses start through
+  `ctx.plugin(AgentLoop)`. A fourth surfaced only on the live system: **a turn's model is resolved before the
+  `agent/pre-step` hooks run**, so an agent without a provider and model ends every turn in an error even when a
+  pre-step hook would have handled it.
+- Rehearsal on copies (all 1,910 session logs through 0.2.2's own reader, 0 refused; the schedule store v1 to v2 kept
+  her 28 plans) passed, but it counted the scheduler's dispatch rows, not the worker's `schedule.dispatched` audit, and
+  so missed the fourth change: from the switch until 22:49 every scheduler turn ended "has no provider/model" and no
+  plan fired. Fixed with `1ae2df95` (the scheduler agent carries the character brain's route and never calls it; a
+  test runs a real scheduler turn); the firings that went stale meanwhile were skipped (`schedule.stale_skipped`).
+  Lesson: verify a path at its consumer, not at an intermediate log.
+- Switch 2026-11-04 21:08:56 to 21:10:40, one restart, no fallback; main `d8b9b795`. The suite runs in a worktree with
+  0.2.2's own `node_modules`, and the main checkout's `node_modules` is reinstalled only while the Host is stopped.
+- Rollback: restore the backups and `git revert -m 1` the switch. rc.2 and 0.2.2 share the 62 event types and format
+  4, so rc.2 reads 0.2.2's logs; only `schedule.json` needs its v1 copy. Backups: `.runtime/private/dsh-022-switch-1104/`
+  (774 KB: schedule v1, activation, launch and inline manifests, profile patch, package and lock, SHA256SUMS), deleted
+  once she runs clean.
+- Her checks after the switch: her package matches main file for file; 28 plans active; her two fetch checks on
+  11-05 (ADR-116 progress).

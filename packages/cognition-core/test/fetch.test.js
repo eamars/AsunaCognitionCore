@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { formatFetchOutput } from '@deepseek-ai/dsh-tool-web';
 import { HttpFetchProvider } from '@deepseek-ai/dsh-web-fetch-http';
 import { createServer } from 'node:http';
+import { HttpFetchProvider as PublicFetchProvider, resolvePublicAddresses } from '../src/vendor/web-fetch-http-rc2.js';
 import { FETCH_LIMITS, FETCH_PROVIDER_ID, LAN_REFUSED, SlimFetch, isCloudflareChallenge, resolveAny, slimHtml,
   withNetwork } from '../src/fetch.js';
 
@@ -38,10 +39,11 @@ test('text and other bodies pass as they came', async () => {
   assert.equal(await new SlimFetch(inner(text)).fetch({ url: text.url }), text);
 });
 
-test('it is DSH\'s HTTP provider underneath, reading up to the 5 MB response limit', () => {
+test('the public lane is the copy of DSH\'s checked provider, the owner lane DSH\'s own; both read up to 5 MB', () => {
   const provider = new SlimFetch();
   assert.equal(provider.id, FETCH_PROVIDER_ID);
-  assert.ok(provider.inner instanceof HttpFetchProvider);
+  assert.ok(provider.inner instanceof PublicFetchProvider);
+  assert.ok(provider.open instanceof HttpFetchProvider);
   assert.equal(provider.available(), true);
   assert.equal(FETCH_LIMITS.maxBodyChars, FETCH_LIMITS.maxResponseBytes);
 });
@@ -68,6 +70,34 @@ test("any other task, and a call outside any scope, keeps DSH's public-only chec
     await assert.rejects(run(() => new SlimFetch().fetch({ url })),
       error => error.code === 'WEB_BLOCKED_URL' && /non-public/.test(error.message) && error.message.endsWith(LAN_REFUSED));
   }
+});
+
+test('the public lane judges every address of an answer, an IPv4-mapped one by its IPv4', async () => {
+  const signal = new AbortController().signal;
+  const answer = addresses => async () => addresses.map(address => ({ address, family: address.includes(':') ? 6 : 4 }));
+  assert.deepEqual(await resolvePublicAddresses('public.example', signal, answer(['1.1.1.1'])), [{ address: '1.1.1.1', family: 4 }]);
+  for (const mixed of [['1.1.1.1', '10.0.0.1'], ['1.1.1.1', '::ffff:10.0.0.1'], ['1.1.1.1', '127.0.0.1']]) {   // personal-scan: ok (generic private addresses)
+    await assert.rejects(resolvePublicAddresses('mixed.example', signal, answer(mixed)),
+      error => error.code === 'WEB_BLOCKED_URL' && /non-public/.test(error.message));
+  }
+});
+
+test('the public lane checks a redirect hop again: a name that answers public, then private, is refused', async t => {
+  const server = createServer((request, response) => {
+    if (request.url === '/') { response.writeHead(302, { location: '/next' }); response.end(); return; }
+    response.writeHead(200, { 'content-type': 'text/plain' }); response.end('should not be read');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const url = `http://rebind.example:${server.address().port}/`;
+  // The first answer stands in for a public address (it is this machine's test server); the second is a LAN address
+  // and goes through the real check, as a name that changes its answer between two hops would.
+  let calls = 0;
+  const resolve = (hostname, signal) => (++calls === 1 ? Promise.resolve([{ address: '127.0.0.1', family: 4 }])
+    : resolvePublicAddresses(hostname, signal, async () => [{ address: '10.0.0.1', family: 4 }]));   // personal-scan: ok
+  await assert.rejects(new SlimFetch(new PublicFetchProvider(FETCH_LIMITS, resolve)).fetch({ url }),
+    error => error.code === 'WEB_BLOCKED_URL' && error.message.endsWith(LAN_REFUSED));
+  assert.equal(calls, 2);
 });
 
 test('the open resolver passes every address as it is: IP literals, bracketed IPv6, a resolved name', async () => {

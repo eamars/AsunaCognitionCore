@@ -130,3 +130,55 @@ the worker), the suite, the node tests, the push gate, her slot asked first, the
 Then read on the live system, by her: a home task's `web_fetch` of a LAN device (status code and time), and D4's
 refusal seen in a task she hands over in a group (acceptance, not a staged scene). Bundled with ADR-112 §12.10 (`settle`), which waits for the next
 core landing.
+
+## 7. Asuna owns the public-only check (designed 2026-11-04, before the DSH 0.2.2 switch)
+
+**Why now.** The owner's plan of 2026-11-04 (ADR-037): this change lands on its own, on the current DSH, and then
+DSH moves to 0.2.2 in one switch. DSH 0.2.2 contains upstream `2f01ad549c`: its HTTP fetch reaches every address,
+and the resolver parameter D2 uses is gone. Asuna's core is JavaScript, so the resolver would be ignored without an
+error, and every public-only task would reach the LAN. The ICD's SVC-1 already says which addresses a fetch may reach
+is the plugin's own policy. A public-only task has no `sandbox_run` (D1), so for it this check is the only barrier
+to the LAN, and upstream's reason for dropping it (a model with shell network access) does not apply.
+
+**Broken invariant after 0.2.2:** a public-only task's fetch reaches what such a task may reach, public addresses only;
+DSH no longer enforces that, so Asuna must.
+
+**D5. The public lane is Asuna's own transfer, a copy of DSH's check.** `fetch.js`'s public provider stops being
+DSH's `HttpFetchProvider` and becomes a vendored copy of DSH's own provider as it is today: the built `lib/index.js`
+of `@deepseek-ai/dsh-web-fetch-http` 0.2.1-rc.2 (MIT, 681 lines), kept as one file with DSH's notice
+(`packages/cognition-core/src/vendor/web-fetch-http-rc2.js`). Its behaviour therefore stays exactly what she has
+today: every resolved address judged (not the first only), IPv4-mapped IPv6 by its IPv4, NAT64 through RFC 7050
+discovery, the connection pinned to the checked addresses through a per-request agent (no second DNS answer), each
+redirect hop checked again and followed only when it is same-origin, and the same limits and refusal line
+(`URL hostname "…" resolves to a non-public IP address`, `WEB_BLOCKED_URL`), so D4's sentence and the 11-03
+refusal she verified keep their exact text. Four edits to the copy, each marked in it:
+- **No proxy route.** It imports `proxyRouteFor` from DSH's `dsh-http-proxy`; the copy always connects directly,
+  pinned. Her Host has no proxy configured (read 2026-11-04: no `HTTP(S)_PROXY` for the user or the machine). If one is
+  ever needed, a public-only fetch fails to connect, which fails closed.
+- **Its two DSH imports go.** `deadline`/`timeoutOf` (`dsh-timeout`) become a few local lines, and `WebError` comes
+  from `@deepseek-ai/dsh-web`, which Asuna already imports (part of SVC-1's result shape). `ipaddr.js` 2.5.0 and
+  `undici` 8.11.2, the versions rc.2 resolves today, become the core package's own dependencies.
+- **Only the provider stays.** The copy's plugin wrapper (`Config`, `apply`, `name`, `inject`, which also import
+  `schemastery`) goes; `fetch.js` constructs `HttpFetchProvider` itself, as it does now.
+- **The check is exported** (`resolvePublicAddresses`), so its tests can hand it a DNS answer.
+
+**D6. The owner lane is DSH's.** A task of the owner's own conversations (`any`) keeps DSH's provider: on rc.2 with
+`resolveAny`, as now; on 0.2.2 the plain provider, which reaches every address by itself. That is the only line the
+0.2.2 pickup changes here.
+
+**Rejected:** a check before DSH's own fetch, because DSH resolves the name again and a second DNS answer can point at
+the LAN; and a process-wide dispatcher routed by async scope, because it is global state the whole Host shares
+(her LAN model server is reached through it) and depends on how DSH sends.
+
+**Failure modes.** The copy drifts from upstream fixes: it is DSH's last version of a check upstream has dropped, so
+there is nothing upstream left to follow, and its tests stay with it. A lost scope still gets the public lane (§4).
+A malformed or empty DNS answer refuses as today.
+
+**Tests that earn their place.** The two LAN cases in `fetch.test.js` (public refused with D4's sentence, owner lane
+reaches a loopback page) now run through the copy and must stay green unchanged. Added: an answer mixing a public and
+a private address is refused (every address is judged), and a redirect hop to a private literal is refused. Both use
+the copy's own resolver seam, so nothing leaves this machine.
+
+**Landing.** One core landing on the current DSH, with her slot asked first. Then on the live system: one fetch of a
+LAN address from a task she hands over in a public group is refused with the same line as 11-03, and one public page
+fetched from a group task arrives. The 0.2.2 switch (ADR-037) then changes D6's one line and nothing here.

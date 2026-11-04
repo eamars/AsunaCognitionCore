@@ -1,4 +1,4 @@
-/** Her web_fetch, underneath (ADR-026 §6): one fetch provider on DSH's web seam. DSH's own HTTP provider retrieves
+/** Her web_fetch, underneath (ADR-026 §6): one fetch provider on DSH's web seam. An HTTP provider retrieves
  * the page, with its address checks, pinning and redirect rules, reading up to its 5 MB response limit instead of
  * the first 100,000 characters; an HTML page then loses what is not its content before DSH's web_fetch converts it:
  * the head (its title kept), scripts, styles, SVG and templates. A page whose head alone passed 100,000 characters
@@ -9,14 +9,17 @@
  *
  * Where a fetch may go (ADR-116): it reaches what `sandbox_run` reaches. A call made for an action task of the owner's
  * own conversations runs in the scope `any` (index.js sets it per tool call from the task's binding) and resolves
- * every address, the LAN and this machine included; every other call, and one outside any scope, keeps DSH's
- * public-only check. Pinning and the same-origin redirect rule stay DSH's either way. */
+ * every address, the LAN and this machine included, through DSH's own provider; every other call, and one outside
+ * any scope, goes through the public-only provider in vendor/web-fetch-http-rc2.js: DSH's own check as DSH 0.2.1-rc.2
+ * ships it, kept by Asuna since later DSH drops it (ADR-116 §7). Pinning and the same-origin redirect rule hold in
+ * both. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import domino from '@mixmark-io/domino';
 import { WebError } from '@deepseek-ai/dsh-web';
 import { DEFAULT_USER_AGENT, HttpFetchProvider } from '@deepseek-ai/dsh-web-fetch-http';
+import { HttpFetchProvider as PublicFetchProvider } from './vendor/web-fetch-http-rc2.js';
 
 export const FETCH_PROVIDER_ID = 'asuna-fetch';
 export const FETCH_LIMITS = { maxResponseBytes: 5_000_000, maxBodyChars: 5_000_000, timeoutMs: 30_000, maxRedirects: 5,
@@ -72,7 +75,7 @@ export function isCloudflareChallenge(result) {
 export class SlimFetch {
   id = FETCH_PROVIDER_ID;
 
-  constructor(inner = new HttpFetchProvider(FETCH_LIMITS), open = new HttpFetchProvider(FETCH_LIMITS, resolveAny)) {
+  constructor(inner = new PublicFetchProvider(FETCH_LIMITS), open = new HttpFetchProvider(FETCH_LIMITS, resolveAny)) {
     this.inner = inner;
     this.open = open;
   }

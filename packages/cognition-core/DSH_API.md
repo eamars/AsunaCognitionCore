@@ -73,7 +73,7 @@ The DSH services, hooks, events, APIs, UI facilities and file formats the core p
 | `@deepseek-ai/dsh-tools` (`defineTool`, `validateArgs`) | tool definitions; argument refusals in DSH's own terms | `index.js`; `tool-args.js`; `search.js` |
 | `@deepseek-ai/dsh-system-prompt` (`PERSONA_PREFIX_SECTION`) | her persona section's place | `index.js`; `recovery.js` |
 | `@deepseek-ai/dsh-skill`, `dsh-skill-filesystem`, `dsh-tool-skill`, `dsh-tool-todo`, `dsh-tool-web` | the action brain's `skill`, `todo_write`, `web_search`, `web_fetch` | `index.js`; `search.js` `registerWebSearch` |
-| `@deepseek-ai/dsh-web`, `dsh-web-fetch-http`, `dsh-web-search-exa` | the search and fetch providers | `search.js`; `fetch.js` |
+| `@deepseek-ai/dsh-web`, `dsh-web-fetch-http`, `dsh-web-search-exa` | the search and fetch providers; `dsh-web-fetch-http` serves the owner lane only, the public lane is the core's copy of its rc.2 check | `search.js`; `fetch.js`; `vendor/web-fetch-http-rc2.js` |
 | `@deepseek-ai/dsh-credentials` (`credentialKey`, `credentialRef`), `@deepseek-ai/dsh-settings` (`redactSecrets`) | secret references and redaction | `index.js`; `search.js` |
 | `@deepseek-ai/dsh-spill-local` (`sessionDir`) | where a session's spilled output is | `spill.js` |
 | `@deepseek-ai/dsh-typert-protocol` (`TypertRemoteService`, `Remote`) | the plugin's `/api` service the Web client calls | `api.js` `AsunaApi`; `client.js` |

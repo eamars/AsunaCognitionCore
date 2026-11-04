@@ -169,7 +169,7 @@ What the host adds to her requests that is deployment detail and not hers (ADR-1
 
 [packages/cognition-core/src/fetch.js](../../packages/cognition-core/src/fetch.js)
 
-Her web_fetch, underneath (ADR-026 §6): one fetch provider on DSH's web seam. DSH's own HTTP provider retrieves the page, with its address checks, pinning and redirect rules, reading up to its 5 MB response limit instead of the first 100,000 characters; an HTML page then loses what is not its content before DSH's web_fetch converts it: the head (its title kept), scripts, styles, SVG and templates. A page whose head alone passed 100,000 characters used to reach her as its title only.
+Her web_fetch, underneath (ADR-026 §6): one fetch provider on DSH's web seam. An HTTP provider retrieves the page, with its address checks, pinning and redirect rules, reading up to its 5 MB response limit instead of the first 100,000 characters; an HTML page then loses what is not its content before DSH's web_fetch converts it: the head (its title kept), scripts, styles, SVG and templates. A page whose head alone passed 100,000 characters used to reach her as its title only.
 
 - def `FETCH_PROVIDER_ID`
 - def `FETCH_LIMITS`

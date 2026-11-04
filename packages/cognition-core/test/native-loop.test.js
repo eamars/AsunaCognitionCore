@@ -423,3 +423,29 @@ test("ADR-098: the image note's path is contracted in her request only (DSH's fs
   assert.equal(h.ctx.get('fs').processPathFromHostPath(host), host, 'outside a request of hers the mapping is unchanged');
 });
 
+
+test('a reminder reaches the worker through a real scheduler turn, with no model request', async t => {
+  // Regression (DSH 0.2.2): the agent loop resolves a turn's model before its pre-step hooks, so a scheduler agent
+  // made without one ended every turn in an error and no reminder reached the worker. Unit tests that call
+  // `delivered` directly could not see it; this one runs the turn.
+  const h = await harness(t);
+  const record = { id: 'n1', target: { kind: 'session', sessionId: 'sched' }, prompt: 'ASUNA_PLAN:p1', kind: 'every',
+    everySeconds: 300, status: 'active', scheduledAt: '2026-01-02T09:00:00Z' };
+  // The Host services the scheduler reads around the loop (its catalog, the store's stat, the floor, the rename).
+  const host = { schedule: { catalog: async () => [record] }, sessionPersistence: { stat: async () => false },
+    asunaFloor: { dataRoot: '/data' }, sessionController: { rename: async () => {} } };
+  h.core.schedules.ctx = new Proxy(h.ctx, { get: (target, key) => key in host ? host[key] : target[key] });
+  await h.ctx.agentPresets.register({ id: 'asuna-scheduler',
+    plugins: [{ name: new URL('../src/scheduler.js', import.meta.url).href }] });
+  const agent = await h.core.schedules.agent('sched');
+  t.after(() => h.core.handles.get('sched')?.dispose());
+  agent.session.append('asuna/schedule', { operation: 'create', schedule: record });
+  agent.followup(createUserMessage({ source: { kind: 'schedule' }, content: [{ type: 'text',
+    text: '[SCHEDULE REMINDER BATCH]\nreminders_json: ' + JSON.stringify([{ schedule_id: 'n1', occurrence_at: 'x' }]) }] }));
+  await agent.whenIdle();
+  const ends = agent.session.snapshotEvents().filter(e => e.type === 'turn/end').map(e => e.data.reason);
+  assert.deepEqual(ends, [{ kind: 'blocked' }], JSON.stringify(ends));
+  assert.equal(h.requests.length, 0, 'the scheduler never asks a model');
+  const deliver = h.business.find(x => x.method === 'schedule.deliver');
+  assert.deepEqual(deliver?.args.dispatches.map(d => d.id), ['n1']);
+});

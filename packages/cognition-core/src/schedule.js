@@ -6,6 +6,8 @@
  * firing is told from such a notice by its first line, `[SCHEDULE REMINDER` (single or batch); both carry
  * `schedule_id_json`.
  */
+import { nativeRoute } from './settings.js';
+
 const FIRING = '[SCHEDULE REMINDER';
 /** Python sends DSH's selector alone ({after_seconds}, {every_seconds}, {daily}, {weekly}); DSH takes it with its kind. */
 const KINDS = { after_seconds: 'after', every_seconds: 'every', daily: 'daily', weekly: 'weekly', at: 'at' };
@@ -26,11 +28,15 @@ export class NativeSchedules {
     const existing = this.ctx.agents.get(sessionId);
     if (existing) return existing;
     const setup = scope => this.ctx.agentPresets.mount(scope, 'asuna-scheduler').then(() => undefined);
+    // DSH 0.2.2 resolves a turn's model before its pre-step hooks run, so an agent without one ends every turn in an
+    // error before the scheduler preset can hand the reminders on. It carries the character brain's route and never
+    // calls it: the preset rejects every step (scheduler.js).
+    const agentOptions = nativeRoute(this.core.routeFor('character'));
     const saved = await this.ctx.sessionPersistence.stat(sessionId);
     const handle = saved
-      ? await this.ctx.agents.resume({ resumeSessionId: sessionId, setup })
+      ? await this.ctx.agents.resume({ resumeSessionId: sessionId, agentOptions, setup })
       : await this.ctx.agents.create({ sessionId, meta: { cwd: this.ctx.asunaFloor.dataRoot,
-        agentPreset: 'asuna-scheduler' }, setup });
+        agentPreset: 'asuna-scheduler' }, agentOptions, setup });
     this.core.handles.set(sessionId, handle);
     if (!saved) await this.ctx.sessionController.rename({ sessionId, title: this.core.uiTitles?.schedules ?? 'Asuna schedules' });
     return handle.agent;

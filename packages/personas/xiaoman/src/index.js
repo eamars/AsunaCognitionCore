@@ -13,5 +13,5 @@ export function apply(ctx) {
     skill_directories: [fileURLToPath(new URL('../skills/', import.meta.url))],
     preset: 'asuna-xiaoman',
   });
-  ctx.on('dispose', remove);
+  ctx.effect(() => remove);
 }

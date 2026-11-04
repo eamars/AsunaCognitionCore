@@ -230,7 +230,7 @@ export function applySearch(ctx, core) {
   ctx.inject(['web'], child => {
     // Kept for the action scopes' web_search (registerWebSearch), which run outside this injection.
     core.web = child.web;
-    child.on('dispose', () => { if (core.web === child.web) core.web = null; });
+    child.effect(() => () => { if (core.web === child.web) core.web = null; });
     const search = new OrderedSearch({
       settings: () => core.config?.deployment?.search,
       registry: () => registered(child.web),

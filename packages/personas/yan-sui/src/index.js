@@ -16,5 +16,5 @@ export function apply(ctx) {
     ],
     preset: 'asuna-yan-sui',
   });
-  ctx.on('dispose', remove);
+  ctx.effect(() => remove);
 }

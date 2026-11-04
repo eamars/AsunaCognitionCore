@@ -24,7 +24,7 @@ function core(persona = 'demo') {
 async function install(core, directory) {
   const plugin = await import(pathToFileURL(path.join(directory, 'src/index.js')).href);
   const disposers = [];
-  plugin.apply({ asuna: core, on: (_event, dispose) => disposers.push(dispose) });
+  plugin.apply({ asuna: core, effect: execute => disposers.push(execute()) });
   return JSON.parse(await fs.readFile(path.join(directory, 'package.json'), 'utf8'));
 }
 

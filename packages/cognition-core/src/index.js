@@ -1596,7 +1596,7 @@ export function apply(ctx, config = {}) {
   rootsAtTheModel(core);
   // A compaction summary is sent as its conversation's next request would be (compaction.js, ADR-094 §10.2).
   summaryAsNextRequest(core);
-  ctx.on('dispose', () => {
+  ctx.effect(() => () => {
     if (ctx.asunaFloor.activateRecovery === activateRecovery) delete ctx.asunaFloor.activateRecovery;
     return core.dispose();
   });

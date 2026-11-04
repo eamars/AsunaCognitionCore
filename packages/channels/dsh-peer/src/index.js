@@ -24,7 +24,7 @@ export function apply(ctx, config = {}) {
     resource_root: fileURLToPath(new URL('../', import.meta.url)),
     python: 'python', module: 'dsh_peer',
   });
-  ctx.on('dispose', remove);
+  ctx.effect(() => remove);
   if (!config.url || !config.sessionId || !config.routeId || !config.senderId) {
     ctx.logger?.info?.('dsh-peer: no peer session configured; the bridge is idle');
     return;
@@ -38,5 +38,5 @@ export function apply(ctx, config = {}) {
     log: message => ctx.logger?.warn?.('dsh-peer: ' + message),
   });
   bridge.start().catch(error => ctx.logger?.warn?.('dsh-peer: ' + error.message));
-  ctx.on('dispose', () => bridge.stop());
+  ctx.effect(() => () => bridge.stop());
 }

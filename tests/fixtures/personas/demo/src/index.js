@@ -21,5 +21,5 @@ export function apply(ctx) {
     skill_directories: ['skills'],
     preset: 'asuna-demo',
   });
-  ctx.on('dispose', remove);
+  ctx.effect(() => remove);
 }

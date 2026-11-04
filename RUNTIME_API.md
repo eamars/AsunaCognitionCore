@@ -613,7 +613,9 @@ says why in words.
 
 What a persona package gives the core plugin. For package authors. How to write one step by step: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
-A package's `src/index.js` calls `ctx.asuna.registerPersona({...})` (`packages/cognition-core/src/persona.js` `normalizePersona`).
+A package's `src/index.js` calls `ctx.asuna.registerPersona({...})` (`packages/cognition-core/src/persona.js` `normalizePersona`). It returns the function that removes the registration; the package registers it as
+its cleanup with `ctx.effect(() => remove)`, which runs when the plugin is disposed (cordis emits no `dispose` event,
+so a `ctx.on('dispose', ...)` listener never runs).
 
 | Field | Required | Rule | Meaning |
 |---|---|---|---|
@@ -705,7 +707,9 @@ The answer's first line starts with 接话 or 不理 (`attend.CHOICES`); the res
 
 What a channel package gives the core plugin. For package authors; the API its adapter speaks is the [Channel API](#channel-api).
 
-A package's `src/index.js` calls `ctx.asuna.registerChannel({...})` (`packages/cognition-core/src/channel.js` `normalizeChannel`).
+A package's `src/index.js` calls `ctx.asuna.registerChannel({...})` (`packages/cognition-core/src/channel.js` `normalizeChannel`). It returns the function that removes the registration; the package registers it as
+its cleanup with `ctx.effect(() => remove)`, which runs when the plugin is disposed (cordis emits no `dispose` event,
+so a `ctx.on('dispose', ...)` listener never runs).
 
 | Field | Required | Rule | Meaning |
 |---|---|---|---|

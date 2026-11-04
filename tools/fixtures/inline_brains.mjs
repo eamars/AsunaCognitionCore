@@ -167,7 +167,7 @@ export function apply(ctx, config) {
     }
     return {};
   }, async dispose() {} };
-  ctx.on('dispose', () => core.dispose());
+  ctx.effect(() => () => core.dispose());
   void (async () => {
     await fs.mkdir(localDir, { recursive: true });
     await fs.mkdir(actionDir, { recursive: true });

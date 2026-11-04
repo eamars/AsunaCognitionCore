@@ -15,7 +15,7 @@ export function apply(ctx) {
     resource_root: fileURLToPath(new URL('../', import.meta.url)),
     python: 'python', module: 'qq_bot',
   });
-  ctx.on('dispose', remove);
+  ctx.effect(() => remove);
   if (!ctx.asunaFloor) return;                 // registering the kind alone (no Host data folder): no bridge
   const bridge = new QQBotBridge({
     endpoint: () => ctx.asuna.channelEndpoint('qqbot'),
@@ -24,5 +24,5 @@ export function apply(ctx) {
     info: message => ctx.logger?.info?.('qq-bot: ' + message),
   });
   bridge.start().catch(error => ctx.logger?.warn?.('qq-bot: ' + error.message));
-  ctx.on('dispose', () => bridge.stop());
+  ctx.effect(() => () => bridge.stop());
 }

@@ -12,5 +12,5 @@ export function apply(ctx) {
     resource_root: fileURLToPath(new URL('../', import.meta.url)),
     python: 'python', module: 'agent_line',
   });
-  ctx.on('dispose', remove);
+  ctx.effect(() => remove);
 }

@@ -14,5 +14,5 @@ export function apply(ctx) {
     integration_directory: 'integration',
     skill_directories: [fileURLToPath(new URL('../skills/', import.meta.url))],
   });
-  ctx.on('dispose', remove);
+  ctx.effect(() => remove);
 }

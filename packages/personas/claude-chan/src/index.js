@@ -16,5 +16,5 @@ export function apply(ctx) {
     ],
     preset: 'asuna-claude-chan',
   });
-  ctx.on('dispose', remove);
+  ctx.effect(() => remove);
 }

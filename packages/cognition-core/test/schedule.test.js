@@ -5,19 +5,26 @@ import { NativeSchedules } from '../src/schedule.js';
 
 function harness() {
   const events = [];
-  let record = { id: 'n1', sessionId: 's', prompt: 'ASUNA_PLAN:p1', kind: 'daily', status: 'active',
-    daily: { time: '09:00:00', time_zone: 'UTC' }, scheduledAt: '2026-01-02T09:00:00Z' };
+  // DSH 0.2.2's Schedule: Host-wide tasks with a delivery target; changes go through edit, checked by revision.
+  let record = { id: 'n1', target: { kind: 'session', sessionId: 's' }, prompt: 'ASUNA_PLAN:p1', kind: 'daily',
+    status: 'active', time: '09:00:00', timeZone: 'UTC', scheduledAt: '2026-01-02T09:00:00Z',
+    updatedAt: '2026-01-01T00:00:00.000Z' };
   const agent = { session: { id: 's', append: (type, data) => events.push({ type, data, seq: events.length + 1 }),
     snapshotEvents: () => events } };
   const calls = [];
   const ctx = { sessions: { flush: async () => {} }, schedule: {
     catalog: async () => [record],
-    list: async ({ sessionId }) => [record].filter(row => row.sessionId === sessionId)
-      .map(({ sessionId: _s, status: _st, lastDelivery: _l, ...stored }) => stored),
-    update: async request => { calls.push(request);
-      record = { ...record, ...(request.change ?? {}), ...(request.change ? { kind: request.change.kind } : {}),
-        ...(request.title ? { title: request.title } : {}) };
-      return { id: record.id, updated: true, record }; },
+    view: async ({ id }) => (id === record.id ? record : { id, code: 'schedule_not_found' }),
+    edit: async (request, actor) => { calls.push({ request, actor });
+      if (request.expectedUpdatedAt !== undefined && request.expectedUpdatedAt !== record.updatedAt)
+        return { id: request.id, code: 'schedule_conflict' };
+      if (request.action === 'delete') return { id: request.id, deleted: true };
+      const timing = request.patch.timing;
+      // DSH stores a daily or weekly timing flat (time, timeZone, weekdays) on the record.
+      const clock = timing?.daily ?? timing?.weekly;
+      record = { ...record, ...(timing ? { kind: timing.kind } : {}), ...(clock ? { time: clock.time, timeZone: clock.time_zone } : {}),
+        ...(request.patch.title ? { title: request.patch.title } : {}), updatedAt: '2026-01-01T00:00:01.000Z' };
+      return record; },
   } };
   const schedules = new NativeSchedules({ ctx, config: {} });
   schedules.agent = async () => agent;
@@ -25,37 +32,39 @@ function harness() {
   return { schedules, agent, events, calls };
 }
 
-test('T5.8 schedule_update changes timing in place and reconciliation keeps one live record', async () => {
+test('T5.8 schedule_update changes timing in place, as her own session, and reconciliation keeps one live record', async () => {
   const h = harness();
   const result = await h.schedules.request({ session_id: 's', path: '/schedule/update',
     payload: { id: 'n1', change: { kind: 'daily', daily: { time: '10:15:00', time_zone: 'UTC' } } } });
   assert.equal(result.id, 'n1');
-  assert.equal(h.calls[0].expected.id, 'n1');
-  // The record as stored, never a catalog entry (Schedule refuses one as an invalid record).
-  assert.equal('status' in h.calls[0].expected || 'sessionId' in h.calls[0].expected, false);
+  assert.deepEqual(h.calls[0].request.patch, { timing: { kind: 'daily', daily: { time: '10:15:00', time_zone: 'UTC' } } });
+  assert.equal(h.calls[0].request.expectedUpdatedAt, '2026-01-01T00:00:00.000Z', 'checked against the revision just read');
+  assert.equal(h.calls[0].actor, 's', 'made as her scheduler session: DSH sends it no change notice');
   await h.schedules.refresh(h.agent);
   const ops = h.events.filter(e => e.type === 'asuna/schedule').map(e => e.data.operation);
   assert.deepEqual(ops, ['create', 'update']);
-  assert.equal(h.events.at(-1).data.schedule.daily.time, '10:15:00');
+  assert.equal(h.events.at(-1).data.schedule.time, '10:15:00');
 });
 
 test('ADR-012: a task is named as she reads it, and what DSH changes is logged as an update', async () => {
   const h = harness();
   const created = [];
-  h.schedules.ctx.schedule.create = async (sessionId, request) => { created.push(request);
-    return { id: 'n2', ...request, kind: 'every', everySeconds: request.every_seconds, scheduledAt: '2026-01-02T10:00:00Z' }; };
+  h.schedules.ctx.schedule.create = async (request, actor) => { created.push({ request, actor });
+    return { id: 'n2', ...request, kind: 'every', everySeconds: request.timing.every_seconds, scheduledAt: '2026-01-02T10:00:00Z' }; };
   await h.schedules.request({ session_id: 's', path: '/schedule/create',
     payload: { plan_id: 'plan-asuna-presence', title: '心跳 · Heartbeat', every_seconds: 3600 } });
-  assert.equal(created[0].title, '心跳 · Heartbeat');
-  assert.equal(created[0].prompt, 'ASUNA_PLAN:plan-asuna-presence');
+  assert.equal(created[0].request.title, '心跳 · Heartbeat');
+  assert.equal(created[0].request.prompt, 'ASUNA_PLAN:plan-asuna-presence');
+  assert.deepEqual(created[0].request.timing, { kind: 'every', every_seconds: 3600 });
+  assert.deepEqual(created[0].request.target, { kind: 'session', sessionId: 's' });
+  assert.equal(created[0].actor, 's');
   // A title-only update sends no timing change.
   await h.schedules.request({ session_id: 's', path: '/schedule/update', payload: { id: 'n1', title: 'Named' } });
-  assert.equal(h.calls.at(-1).title, 'Named');
-  assert.equal('change' in h.calls.at(-1), false);
+  assert.deepEqual(h.calls.at(-1).request.patch, { title: 'Named' });
   // DSH moves the next target after a delivery: the next refresh logs the record as it is now, once.
   const before = h.events.length;
-  h.schedules.ctx.schedule.catalog = async () => [{ id: 'n1', sessionId: 's', prompt: 'ASUNA_PLAN:p1', kind: 'daily',
-    status: 'active', daily: { time: '09:00:00', time_zone: 'UTC' }, scheduledAt: '2026-01-03T09:00:00Z', title: 'Named' }];
+  h.schedules.ctx.schedule.catalog = async () => [{ id: 'n1', target: { kind: 'session', sessionId: 's' }, prompt: 'ASUNA_PLAN:p1',
+    kind: 'daily', status: 'active', time: '09:00:00', timeZone: 'UTC', scheduledAt: '2026-01-03T09:00:00Z', title: 'Named' }];
   await h.schedules.refresh(h.agent);
   await h.schedules.refresh(h.agent);
   const logged = h.events.slice(before).filter(e => e.data.operation === 'update');
@@ -63,17 +72,33 @@ test('ADR-012: a task is named as she reads it, and what DSH changes is logged a
   assert.equal(logged[0].data.schedule.scheduledAt, '2026-01-03T09:00:00Z');
 });
 
-test('an update that changes nothing answers with the record, not a status', async () => {
-  // Regression: a wording-only change of a daily plan sent the same timing; DSH answered {updated: false, record}
-  // and the worker read the record's fields off that status (KeyError 'scheduledAt').
+test('an update that changes nothing answers with the record, and is not logged', async () => {
+  // Regression: a wording-only change of a daily plan sent the same timing; the worker read the record's fields off
+  // a status (KeyError 'scheduledAt'). DSH 0.2.2 answers every edit with the record.
   const h = harness();
-  h.schedules.ctx.schedule.update = async request => { h.calls.push(request);
-    return { id: 'n1', updated: false, record: request.expected }; };
   const before = h.events.length;
-  const result = await h.schedules.request({ session_id: 's', path: '/schedule/update', payload: { id: 'n1', title: 'Same' } });
+  const result = await h.schedules.request({ session_id: 's', path: '/schedule/update',
+    payload: { id: 'n1', change: { kind: 'daily', daily: { time: '09:00:00', time_zone: 'UTC' } } } });
   assert.equal(result.id, 'n1');
   assert.equal(result.scheduledAt, '2026-01-02T09:00:00Z');
   assert.equal(h.events.length, before, 'a no-op is not logged as an update');
+});
+
+test('a change notice from DSH is never read as a firing; a finished one-shot leaves her log', async () => {
+  const h = harness();
+  const change = { id: 'notice', source: { kind: 'schedule' }, content: [{ type: 'text',
+    text: '[SCHEDULE CHANGE]\nchange: updated\nschedule_id_json: "n1"\nschedule_title_json: "x"' }] };
+  const firing = { id: 'fire', source: { kind: 'schedule' }, content: [{ type: 'text',
+    text: '[SCHEDULE REMINDER]\nschedule_id_json: "n1"\noccurrence_at: 2026-01-02T09:00:00Z' }] };
+  for (const message of [change, firing]) h.events.push({ type: 'agent/inbox/spliced', seq: h.events.length + 1,
+    data: { target: 'next-turn', start: 0, inserted: [message] } });
+  await h.schedules.refresh(h.agent);
+  const dispatches = h.events.filter(e => e.data?.operation === 'dispatch');
+  assert.deepEqual(dispatches.map(e => e.data.message_id), ['fire']);
+  h.schedules.ctx.schedule.catalog = async () => [{ id: 'n1', target: { kind: 'session', sessionId: 's' }, prompt: 'ASUNA_PLAN:p1',
+    kind: 'daily', status: 'ended', time: '09:00:00', timeZone: 'UTC', scheduledAt: '2026-01-02T09:00:00Z' }];
+  await h.schedules.refresh(h.agent);
+  assert.ok(h.events.some(e => e.data?.operation === 'delete' && e.data.id === 'n1'), 'an ended task leaves her log');
 });
 
 test('reminders queued in the scheduler session are removed once read; one arriving meanwhile stays', async () => {

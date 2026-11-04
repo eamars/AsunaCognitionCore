@@ -191,6 +191,9 @@ def profile_patch(config, config_path, persona, profile='asuna-native', channels
     data_root, state_dir = data_folder(profile)
     return [
         {'id': 'session-title-llm', 'disabled': True},
+        # DSH's More menus (Browse other plugins, Create your plugin): nothing of hers lives there, and Create your plugin
+        # would put a Creator session among her conversations (owner, 2026-11-04).
+        {'id': 'entry-customization', 'disabled': True},
         # Her web_search and web_fetch go through the cognition core's providers (search.js, fetch.js).
         {'id': 'web', 'config': {'searchProvider': 'asuna-search', 'fetchProvider': 'asuna-fetch'}},
         {'id': 'agent-preset-registry', 'config': {'default': persona['preset']}},

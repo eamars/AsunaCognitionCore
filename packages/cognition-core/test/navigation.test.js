@@ -15,6 +15,8 @@ import Workspace from '@deepseek-ai/dsh-workspace';
 import LlmRuntime, { LlmAdapter, createUserMessage, errorChain } from '@deepseek-ai/dsh-llm';
 import AgentRegistry from '@deepseek-ai/dsh-agent';
 import AgentLoop from '@deepseek-ai/dsh-agent-loop';
+import { start } from './dsh-start.js';
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native';
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt';
 import Tools from '@deepseek-ai/dsh-tools';
 import Loader from '@deepseek-ai/cordis-plugin-loader';
@@ -31,11 +33,12 @@ test('native continuation preserves history and task children retain their actua
   t.after(() => ctx.fiber.dispose());
   new SessionStore(ctx); new SessionProjectionRegistry(ctx); new Storage(ctx);
   ctx.sessionProjections.register(titleProjectionDefinition);
-  new LlmRuntime(ctx); new AgentRegistry(ctx); new SystemPrompt(ctx, {}); new Tools(ctx);
-  new AgentLoop(ctx, { agents: [], maxParallelToolCalls: 4 });
+  new LlmRuntime(ctx); await start(new AgentRegistry(ctx)); new SystemPrompt(ctx, {}); new Tools(ctx);
+  await ctx.plugin(AgentLoop, { agents: [], maxParallelToolCalls: 4 });
+  await ctx.plugin(NativeToolExecutor);   // DSH 0.2.2 runs tool calls only through a mounted executor
   new Loader(ctx, { baseUrl: import.meta.url });
-  new AgentPresetRegistry(ctx, { default: 'ordinary', selectedDefault: { get: () => undefined } });
-  new Subagents(ctx, { maxActiveSubagents: { get: () => 8 }, maxDepth: { get: () => 1 } });
+  await start(new AgentPresetRegistry(ctx, { default: 'ordinary', selectedDefault: { get: () => undefined } }));
+  await start(new Subagents(ctx, { maxActiveSubagents: { get: () => 8 }, maxDepth: { get: () => 1 } }));
   await ctx.plugin(JsonStorage, { root: path.join(root, 'state') });
   await ctx.plugin(Domain, { backend: 'json' });
   await ctx.plugin(Persistence, { root: path.join(root, 'sessions') });

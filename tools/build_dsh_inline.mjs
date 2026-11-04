@@ -44,8 +44,8 @@ function run(command, args, cwd, step) {
   });
 }
 await run('pnpm', ['install', '--frozen-lockfile', '--ignore-scripts'], source, 'inline-install');
-await run('pnpm', ['exec', 'tsc', '-b', 'tsconfig.host.json', '--pretty', 'false'], source, 'inline-host-types');
-await run('pnpm', ['exec', 'tsdown', '--config-loader', 'native', '--env.DSH_BUILD_FACE', 'host'], source, 'inline-host-build');
+// DSH's own library build (0.2.2: Typert generation first, then the host packages' sources and bundles).
+await run('pnpm', ['exec', 'tsx', 'scripts/compile-referenced-projects.ts', 'host-libraries'], source, 'inline-host-libraries');
 await run('pnpm', ['exec', 'tsc', '-b', 'packages/client/ui-chat/tsconfig.json', '--pretty', 'false'], source, 'inline-client-types');
 // One package per call: pnpm refuses one filtered run over the two packages, which depend on each other.
 for (const name of ['ui-renderer', 'ui-chat'])

@@ -4,7 +4,7 @@ import { formatFetchOutput } from '@deepseek-ai/dsh-tool-web';
 import { HttpFetchProvider } from '@deepseek-ai/dsh-web-fetch-http';
 import { createServer } from 'node:http';
 import { HttpFetchProvider as PublicFetchProvider, resolvePublicAddresses } from '../src/vendor/web-fetch-http-rc2.js';
-import { FETCH_LIMITS, FETCH_PROVIDER_ID, LAN_REFUSED, SlimFetch, isCloudflareChallenge, resolveAny, slimHtml,
+import { FETCH_LIMITS, FETCH_PROVIDER_ID, LAN_REFUSED, SlimFetch, isCloudflareChallenge, slimHtml,
   withNetwork } from '../src/fetch.js';
 
 const html = (status, content, url = 'https://page.example/a') => ({ url, statusCode: status, body: { kind: 'html', content }, truncated: false });
@@ -101,13 +101,6 @@ test('the public lane checks a redirect hop again: a name that answers public, t
   await assert.rejects(new SlimFetch(new PublicFetchProvider(FETCH_LIMITS, resolve)).fetch({ url }),
     error => error.code === 'WEB_BLOCKED_URL' && error.message.endsWith(LAN_REFUSED));
   assert.equal(calls, 2);
-});
-
-test('the open resolver passes every address as it is: IP literals, bracketed IPv6, a resolved name', async () => {
-  assert.deepEqual(await resolveAny('10.0.0.1'), [{ address: '10.0.0.1', family: 4 }]);   // personal-scan: ok (a generic private address)
-  assert.deepEqual(await resolveAny('[::1]'), [{ address: '::1', family: 6 }]);
-  const local = await resolveAny('localhost');
-  assert.ok(local.length >= 1 && local.every(row => [4, 6].includes(row.family)));
 });
 
 test('the tools/execute hook runs a tool body in its task\'s network scope; other lanes are public', async () => {

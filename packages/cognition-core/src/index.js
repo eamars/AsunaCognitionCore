@@ -1314,36 +1314,15 @@ export class CognitionCore {
       if (lane === 'executor' && message.source.kind === 'asuna' && message.source.message_id)
         this.worker?.call('action_message.delivered', { message_id: message.source.message_id }).catch(() => {});
     });
-    // DSH assembles BEFORE pre-step. Claimed input is prepared at this public
-    // scoped assembly boundary, so the first request has its actual persona.
+    // DSH assembles BEFORE pre-step, and resolves the step's tools before it assembles (each tool's `when`, which
+    // attachRole gives her role tools). Claimed input is admitted at whichever comes first (admit), so the first
+    // request has its actual persona and the stage's own tools.
     scope.on('system-prompt/assemble', async (_assembly, { agent, signal }, next) => {
       if (!agent) return next();
       const state = this.state(agent.session.id);
-      await this.ready();
-      if (state.claimed.length) {
-        if (lane !== 'character') throw new Error('Action sessions accept only their bound task');
-        if (state.current) throw new Error('Asuna role input arrived during an unfinished stage');
-        const humans = state.claimed.splice(0);
-        // DSH's attachment store when the host provides one (read without making it a requirement of the role).
-        const attachments = scope.reflect.get('attachments');
-        const images = attachments ? await imagesOf(attachments, humans, signal) : [];
-        const waiting = this.next(agent.session.id, signal);
-        // Observe both failures immediately; the signal also releases waiting.
-        const [, stage] = await Promise.all([
-          this.worker.call('input', { session_id: agent.session.id, cwd: agent.session.header.cwd,
-            message_ids: humans.map(x => x.id), text: humans.map(textOf).join('\n'),
-            ...(images.length ? { images } : {}) }), waiting,
-        ]);
-        if (stage.error) throw new Error(stage.error);
-        // A group turn's pictures (role_tools.turn_pictures) become image parts of her turn's message.
-        if (stage.pictures?.length && attachments) stage.pictureParts = await pictureParts(attachments, stage.pictures);
-        state.admitted = stage;
-        if (stage.kind === 'stage') { state.current = stage; state.system = stage.system; }
-      }
+      await this.admit(lane, scope, agent, signal);
       const assembly = await next();
-      const exposed = this.exposed(lane, agent.session.id);
       return { ...assembly,
-        tools: assembly.tools.filter(tool => exposed?.has(tool.name)),
         sections: lane === 'character'
           ? [{ name: PERSONA_PREFIX_SECTION, text: state.system, interpolate: false }]
           : assembly.sections.map(section =>
@@ -1451,6 +1430,41 @@ export class CognitionCore {
     scope.on('agent/disposed', ({ agent }) => this.disposed(agent));
   }
 
+  /** A role turn's claimed input, admitted once per step: the worker answers with the stage (its persona and its
+   * tools). The step's first tool condition (attachRole's `when`) or its assembly, whichever DSH runs first, waits
+   * for it; the other finds nothing left to admit. */
+  async admit(lane, scope, agent, signal) {
+    const id = agent.session.id;
+    const running = this.admitFor?.get(id);
+    if (running) return running;
+    const state = this.state(id);
+    const work = (async () => {
+      await this.ready();
+      if (!state.claimed.length) return;
+      if (lane !== 'character') throw new Error('Action sessions accept only their bound task');
+      if (state.current) throw new Error('Asuna role input arrived during an unfinished stage');
+      const humans = state.claimed.splice(0);
+      // DSH's attachment store when the host provides one (read without making it a requirement of the role).
+      const attachments = scope.reflect.get('attachments');
+      const images = attachments ? await imagesOf(attachments, humans, signal) : [];
+      const waiting = this.next(id, signal);
+      // Observe both failures immediately; the signal also releases waiting.
+      const [, stage] = await Promise.all([
+        this.worker.call('input', { session_id: id, cwd: agent.session.header.cwd,
+          message_ids: humans.map(x => x.id), text: humans.map(textOf).join('\n'),
+          ...(images.length ? { images } : {}) }), waiting,
+      ]);
+      if (stage.error) throw new Error(stage.error);
+      // A group turn's pictures (role_tools.turn_pictures) become image parts of her turn's message.
+      if (stage.pictures?.length && attachments) stage.pictureParts = await pictureParts(attachments, stage.pictures);
+      state.admitted = stage;
+      if (stage.kind === 'stage') { state.current = stage; state.system = stage.system; }
+    })();
+    this.admitFor = this.admitFor ?? new Map();
+    this.admitFor.set(id, work);
+    try { return await work; } finally { if (this.admitFor.get(id) === work) this.admitFor.delete(id); }
+  }
+
   /** Her mind's tools in a role session (ADR-011 §5.1); each turn exposes some of them (exposed()). */
   async attachRole(agent) {
     const scope = agent.ctx;
@@ -1460,6 +1474,11 @@ export class CognitionCore {
     // Kept for the guard: a call's arguments are checked against this session's own definitions (tool-args.js).
     this.state(agent.session.id).specs = Object.fromEntries((specs ?? []).map(spec => [spec.name, spec]));
     for (const spec of specs ?? []) {
+      // Offered in a step only when that step's stage lists it (exposed()); the stage is admitted first (admit).
+      const when = async ({ agent: subject, signal }) => {
+        await this.admit('character', agent.ctx, subject, signal);
+        return this.exposed('character', subject.session.id)?.has(spec.name) === true;
+      };
       scope.tools.register(defineTool({ ...spec,
         output: { schema: { type: 'json' }, render: asunaRender },
         execute: async (args, exec) => {
@@ -1481,7 +1500,7 @@ export class CognitionCore {
           // read_image is the action brain's tool, shared: its bytes become an attachment she sees this turn.
           return attachImage({ attachments: scope.reflect.get('attachments') }, reply.value);
         },
-      }));
+      }), { when });
     }
   }
 

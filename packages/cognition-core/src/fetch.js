@@ -8,14 +8,12 @@
  * as an error: another route will not get past it. No other site or wording is recognised.
  *
  * Where a fetch may go (ADR-116): it reaches what `sandbox_run` reaches. A call made for an action task of the owner's
- * own conversations runs in the scope `any` (index.js sets it per tool call from the task's binding) and resolves
- * every address, the LAN and this machine included, through DSH's own provider; every other call, and one outside
+ * own conversations runs in the scope `any` (index.js sets it per tool call from the task's binding) and reaches
+ * every address, the LAN and this machine included, through DSH's own provider, which checks none; every other call, and one outside
  * any scope, goes through the public-only provider in vendor/web-fetch-http-rc2.js: DSH's own check as DSH 0.2.1-rc.2
  * ships it, kept by Asuna since later DSH drops it (ADR-116 §7). Pinning and the same-origin redirect rule hold in
  * both. */
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
 import domino from '@mixmark-io/domino';
 import { WebError } from '@deepseek-ai/dsh-web';
 import { DEFAULT_USER_AGENT, HttpFetchProvider } from '@deepseek-ai/dsh-web-fetch-http';
@@ -33,29 +31,6 @@ export const LAN_REFUSED = '这个地址在局域网或本机上；这件任务�
 /** Run `fn` as a call of a task whose recorded network is `network`; anything but 'any' is public. */
 export function withNetwork(network, fn) { return NETWORK.run(network === 'any' ? 'any' : 'public', fn); }
 
-/** Every address `hostname` resolves to, none refused (DSH's resolver contract: [{address, family}]); an IP literal as
- * it is. */
-export async function resolveAny(hostname, signal) {
-  signal?.throwIfAborted();
-  const bare = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
-  const family = isIP(bare);
-  if (family) return [{ address: bare, family }];
-  const found = await raced(lookup(bare, { all: true, order: 'verbatim' }), signal);
-  if (!found.length) throw new WebError(`URL hostname "${hostname}" did not resolve`, 'WEB_PROVIDER_ERROR');
-  return found.map(({ address, family: kind }) => ({ address, family: kind }));
-}
-
-/** `promise`, or the signal's abort if it comes first: a slow lookup of a LAN name is cut by the fetch's deadline, as
- * DSH's own resolver is. */
-function raced(promise, signal) {
-  if (!signal) return promise;
-  return new Promise((resolve, reject) => {
-    const abort = () => reject(signal.reason);
-    signal.addEventListener('abort', abort, { once: true });
-    promise.then(value => { signal.removeEventListener('abort', abort); resolve(value); },
-      error => { signal.removeEventListener('abort', abort); reject(error); });
-  });
-}
 const CHALLENGE_PLATFORM = '/cdn-cgi/challenge-platform/';
 
 /** The page without what is not its content: the head reduced to its title, no scripts, styles, SVG or templates. */
@@ -75,7 +50,7 @@ export function isCloudflareChallenge(result) {
 export class SlimFetch {
   id = FETCH_PROVIDER_ID;
 
-  constructor(inner = new PublicFetchProvider(FETCH_LIMITS), open = new HttpFetchProvider(FETCH_LIMITS, resolveAny)) {
+  constructor(inner = new PublicFetchProvider(FETCH_LIMITS), open = new HttpFetchProvider(FETCH_LIMITS)) {
     this.inner = inner;
     this.open = open;
   }

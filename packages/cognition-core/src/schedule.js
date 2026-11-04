@@ -1,6 +1,23 @@
 /** Business receipt adapter over the single native Host scheduler.
  * These are Asuna acknowledgments, never fabricated DSH schedule/change events.
+ *
+ * Every change is made as her scheduler session (DSH's `actorSessionId`): DSH tells each other session a task involves
+ * about a change by an injected `[SCHEDULE CHANGE]` notice, and a change of hers would otherwise reach a model. A
+ * firing is told from such a notice by its first line, `[SCHEDULE REMINDER` (single or batch); both carry
+ * `schedule_id_json`.
  */
+const FIRING = '[SCHEDULE REMINDER';
+/** Python sends DSH's selector alone ({after_seconds}, {every_seconds}, {daily}, {weekly}); DSH takes it with its kind. */
+const KINDS = { after_seconds: 'after', every_seconds: 'every', daily: 'daily', weekly: 'weekly', at: 'at' };
+export function timingOf(selector) {
+  const keys = Object.keys(selector);
+  if (keys.length !== 1 || !KINDS[keys[0]]) throw new Error('Asuna schedule timing needs exactly one selector: ' + keys.join(', '));
+  return { kind: KINDS[keys[0]], [keys[0]]: selector[keys[0]] };
+}
+/** A task of hers: delivered to that session. */
+const targets = (row, sessionId) => row.target?.kind === 'session' && row.target.sessionId === sessionId;
+/** DSH 0.2.2 ends a finished one-shot; a record stored by an older DSH reads `inactive`. */
+const ended = status => status === 'ended' || status === 'inactive';
 export class NativeSchedules {
   constructor(core) { this.core = core; this.ctx = core.ctx; this.serial = Promise.resolve(); }
 
@@ -45,7 +62,7 @@ export class NativeSchedules {
   }
 
   async refresh(agent) {
-    const catalog = (await this.ctx.schedule.catalog()).filter(row => row.sessionId === agent.session.id
+    const catalog = (await this.ctx.schedule.catalog()).filter(row => targets(row, agent.session.id)
       && row.prompt.startsWith('ASUNA_PLAN:'));
     let rows = this.rows(agent);
     for (const record of catalog) {
@@ -70,6 +87,7 @@ export class NativeSchedules {
         : event.type === 'user/message' ? [event.data] : [];
       for (const message of messages.filter(m => m.source?.kind === 'schedule')) {
       const text = (message.content ?? []).filter(x => x.type === 'text').map(x => x.text).join('\n');
+      if (!text.startsWith(FIRING)) continue;
       const fields = Object.fromEntries(text.split('\n').flatMap(line => {
         const at = line.indexOf(': '); return at < 0 ? [] : [[line.slice(0, at), line.slice(at + 2)]];
       }));
@@ -87,7 +105,7 @@ export class NativeSchedules {
     }
     rows = this.rows(agent);
     for (const record of catalog) {
-      if (record.status !== 'inactive' || rows.some(e => e.data.operation === 'delete' && e.data.id === record.id)) continue;
+      if (!ended(record.status) || rows.some(e => e.data.operation === 'delete' && e.data.id === record.id)) continue;
       const delivered = rows.some(e => e.data.operation === 'dispatch' && e.data.id === record.id);
       if (!delivered || !['after', 'at'].includes(record.kind))
         agent.session.append('asuna/schedule', { operation: 'delete', id: record.id });
@@ -107,32 +125,32 @@ export class NativeSchedules {
       if (path === '/schedule/create') {
         // The worker names each task as she and the owner read it (her plan's words, or her rhythm).
         const { plan_id: planId, title, ...timing } = payload;
-        const result = await this.ctx.schedule.create(sessionId, {
-          title: title || 'Asuna · ' + planId, prompt: 'ASUNA_PLAN:' + planId, ...timing });
+        const result = await this.ctx.schedule.create({ title: title || 'Asuna · ' + planId, prompt: 'ASUNA_PLAN:' + planId,
+          timing: timingOf(timing), target: { kind: 'session', sessionId } }, sessionId);
         if (result.id) agent.session.append('asuna/schedule', { operation: 'create', schedule: result });
         await this.ctx.sessions.flush(agent.session);
         return result;
       }
       if (path === '/schedule/update') {
-        // ADR-009 D-5: change timing in place (native schedule_update), logged like create/delete
-        // so reconciliation never mistakes it for a delete followed by a create.
-        // `expected` is the record exactly as stored (Schedule's `list`, as its own schedule_update tool reads
-        // it). A catalog entry also carries sessionId, status and lastDelivery, and is refused as invalid.
-        const expected = (await this.ctx.schedule.list({ sessionId })).find(row => row.id === payload.id);
-        if (!expected) return { id: payload.id, updated: false, code: 'schedule_not_found' };
-        const request = { sessionId, id: payload.id, expected };
-        if (payload.change) request.change = payload.change;
-        if (payload.title) request.title = payload.title;
-        const result = await this.ctx.schedule.update(request);
-        if (result.updated && result.record) {
-          agent.session.append('asuna/schedule', { operation: 'update', schedule: result.record });
+        // ADR-009 D-5: change timing in place, logged like create/delete so reconciliation never mistakes it for a
+        // delete followed by a create. The edit is checked against the revision just read (`expectedUpdatedAt`).
+        const current = await this.ctx.schedule.view({ id: payload.id });
+        if (current.code) return { id: payload.id, updated: false, code: current.code };
+        const patch = {};
+        if (payload.change) patch.timing = payload.change;
+        if (payload.title) patch.title = payload.title;
+        const result = await this.ctx.schedule.edit({ id: payload.id, action: 'update', patch,
+          expectedUpdatedAt: current.updatedAt ?? null }, sessionId);
+        if (result.code) return { id: payload.id, updated: false, code: result.code };
+        // An edit that leaves the task as it was (the same timing again) answers with the record and is not logged.
+        if (NativeSchedules.fields(result) !== NativeSchedules.fields(current)) {
+          agent.session.append('asuna/schedule', { operation: 'update', schedule: result });
           await this.ctx.sessions.flush(agent.session);
         }
-        // A change that leaves the record as it is (a no-op) answers with the record too.
-        return result.record ?? result;
+        return result;
       }
       if (path === '/schedule/delete') {
-        const result = await this.ctx.schedule.delete({ sessionId, id: payload.id });
+        const result = await this.ctx.schedule.edit({ id: payload.id, action: 'delete' }, sessionId);
         if (result.deleted) agent.session.append('asuna/schedule', { operation: 'delete', id: payload.id });
         await this.ctx.sessions.flush(agent.session);
         return result;

@@ -1,5 +1,6 @@
 /** Her conversations as DSH sessions: `organizeNativeWorkspaces` creates and titles the workspaces and sessions the
  * worker plans, and `recordChannelInput` writes a received platform line into its conversation without starting a turn. */
+import { Session } from '@deepseek-ai/dsh-session';
 import { projectionCacheDomainSpec } from '@deepseek-ai/dsh-session-projection-cache';
 import { localWorkspace } from './paths.js';
 import { hold, isHeld, mustHold } from './pairing.js';
@@ -215,10 +216,13 @@ export async function organizeNativeWorkspaces(core, plan) {
           if (end >= 0) seed = result.events.slice(0, end + 1);
         } finally { await handle.close(); }
       }
-      session = ctx.sessions.prepare(id, { meta: { cwd: binding.cwd,
+      // The store validates the id, metadata and seed and builds the header; its prepared session stays read-only
+      // until the store announces it (DSH 0.2.2), so the conversation is written through a detached copy of it.
+      const prepared = ctx.sessions.prepare(id, { meta: { cwd: binding.cwd,
         agentPreset: core.personas.get(core.config.persona).preset,
         ...(seed ? { parentSession: source, isSeeded: true } : {}) },
         ...(seed ? { seed, inheritedEventCount: seed.length } : {}) });
+      session = Session.create(id, prepared.snapshotEvents(), prepared.header, prepared.inheritedEventCount);
       session.append('session/title', titleData(binding.native_title));
       const handle = await ctx.sessionPersistence.create(session.header,
         { inheritedEventCount: session.inheritedEventCount });

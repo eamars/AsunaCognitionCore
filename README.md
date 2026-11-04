@@ -126,7 +126,7 @@ The repository is split the same way:
 
 ## Getting started
 
-You need DeepSeek Harness 0.2.1-rc.2, Python 3.12+, MongoDB with vector search, a model server for each brain (both brains may share
+You need DeepSeek Harness 0.2.2-alpha.3, Python 3.12+, MongoDB with vector search, a model server for each brain (both brains may share
 one), and a persona package. Which models may run which brain, and the warnings about Claude models, are in
 [docs/MODELS.md](docs/MODELS.md). Optional: NapCat for QQ. Commands run under DSH's own sandbox, on Windows, Linux or
 macOS.

@@ -175,7 +175,6 @@ Her web_fetch, underneath (ADR-026 §6): one fetch provider on DSH's web seam. A
 - def `FETCH_LIMITS`
 - def `LAN_REFUSED` — What a public-only task is told when its address is on the local network or this machine, after DSH's line.
 - def `withNetwork` — Run `fn` as a call of a task whose recorded network is `network`; anything but 'any' is public.
-- def `resolveAny` — Every address `hostname` resolves to, none refused (DSH's resolver contract: [{address, family}]); an IP literal as it is.
 - def `slimHtml` — The page without what is not its content: the head reduced to its title, no scripts, styles, SVG or templates.
 - def `isCloudflareChallenge` — Cloudflare's challenge: it answers 403 or 503 and loads its challenge platform.
 - class `SlimFetch`
@@ -304,6 +303,7 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `restart` — Every in-place restart says why: in the status (lifecycle.history) and in a durable log beside the worker's data (the Host's console is kept only under the supervisor, restart/host.log, and only its newest part).
   - `exposed` — The tools a stage lists: her conversation's (role_tools.toolbox; the worker refuses one the turn may not use) or the action task's grant.
   - `attachPreset`
+  - `admit` — A role turn's claimed input, admitted once per step: the worker answers with the stage (its persona and its tools).
   - `attachRole` — Her mind's tools in a role session (ADR-011 §5.1); each turn exposes some of them (exposed()).
   - `attachAction`
   - `dispose`
@@ -500,7 +500,8 @@ No local root of this computer reaches her character brain (ADR-098). The worker
 
 Business receipt adapter over the single native Host scheduler. These are Asuna acknowledgments, never fabricated DSH schedule/change events.
 
-- class `NativeSchedules` — Business receipt adapter over the single native Host scheduler.
+- def `timingOf`
+- class `NativeSchedules`
   - `agent`
   - `retitle` — The scheduler session's title in the language of the names the program gives (ui-language.js).
   - `exclusive`

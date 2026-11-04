@@ -10,6 +10,8 @@ import SessionStore from '@deepseek-ai/dsh-session';
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection';
 import AgentRegistry from '@deepseek-ai/dsh-agent';
 import AgentLoop from '@deepseek-ai/dsh-agent-loop';
+import { start } from './dsh-start.js';
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native';
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt';
 import Tools, { defineTool } from '@deepseek-ai/dsh-tools';
 import Loader, { Group } from '@deepseek-ai/cordis-plugin-loader';
@@ -26,11 +28,12 @@ import { rootsAtTheModel } from '../src/roots.js';
 async function harness(t, finish = 'stop', composition) {
   const ctx = new Context();
   new LlmRuntime(ctx); new SessionStore(ctx); new SessionProjectionRegistry(ctx);
-  new AgentRegistry(ctx); new SystemPrompt(ctx, {}); new Tools(ctx);
-  new AgentLoop(ctx, { agents: [], maxParallelToolCalls: 4 });
+  await start(new AgentRegistry(ctx)); new SystemPrompt(ctx, {}); new Tools(ctx);
+  await ctx.plugin(AgentLoop, { agents: [], maxParallelToolCalls: 4 });
+  await ctx.plugin(NativeToolExecutor);   // DSH 0.2.2 runs tool calls only through a mounted executor
   new Loader(ctx, { baseUrl: import.meta.url });
-  new AgentPresetRegistry(ctx, { default: 'asuna', selectedDefault: { get: () => undefined } });
-  if (composition) { ctx.loader.builtins.group = Group; new TokenMeter(ctx); new Commands(ctx); }
+  await start(new AgentPresetRegistry(ctx, { default: 'asuna', selectedDefault: { get: () => undefined } }));
+  if (composition) { ctx.loader.builtins.group = Group; await start(new TokenMeter(ctx)); new Commands(ctx); }
   const requests = [];
   let enter;
   const entered = new Promise(resolve => { enter = resolve; });

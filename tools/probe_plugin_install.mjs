@@ -10,7 +10,8 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Context } from '@deepseek-ai/cordis';
-import { initProfile, PROFILE_TEMPLATES, loadProfileDirectory,
+import { PROFILE_TEMPLATES } from '@deepseek-ai/dsh-official-bundles';
+import { initProfile, loadProfileDirectory,
   createRuntimeResolution, PluginPackages } from '@deepseek-ai/dsh-app-boot';
 
 const root = fileURLToPath(new URL('../', import.meta.url));

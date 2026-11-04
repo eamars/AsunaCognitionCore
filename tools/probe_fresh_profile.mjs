@@ -17,7 +17,8 @@ import { fileURLToPath } from 'node:url';
 import { Context } from '@deepseek-ai/cordis';
 import Credentials from '@deepseek-ai/dsh-credentials-local';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
-import { initProfile, PROFILE_TEMPLATES } from '@deepseek-ai/dsh-app-boot';
+import { initProfile } from '@deepseek-ai/dsh-app-boot';
+import { PROFILE_TEMPLATES } from '@deepseek-ai/dsh-official-bundles';
 import YAML from 'yaml';
 
 const root = fileURLToPath(new URL('../', import.meta.url));

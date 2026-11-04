@@ -1,6 +1,7 @@
 # ADR-116: Her home tasks reach the LAN
 
-Status: **Open**. Designed 2026-11-03 from the owner's decisions that evening; not built.
+Status: **Built**. Designed 2026-11-03 from the owner's decisions that evening; installed 2026-11-03 16:50 (`e4137d83`),
+§7 installed 2026-11-04 16:30 (`f080c38c`); her acceptance held on DSH rc.2 and again on 0.2.2 ([progress.md](progress.md)).
 
 ## 1. The ask
 

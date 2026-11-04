@@ -43,6 +43,19 @@ description: 改进她自己的唯一做法（ADR-011）：改什么走哪一层
 - 来路：2026-10-22 部署环境改成一条命令一回收；同一天两趟 `NATIVE_STAGE_TIMEOUT` 都靠报告落在 `/task` 才救回来，没重跑整趟调查。
   人格包那边的同族判据在 `asuna-offline-selfchecks` 判据补遗 (i)，还钉了一条自检（`temp_rule_present_when_temp_mentioned`），会连这份正文一起判。
 
+## 写盘交代模板（固定段）
+
+交代行动脑“往盘上写文件”的活，必带这一段，四项缺一不交：
+
+1. **路径**：写到哪份文件。写真名：先让它现取目标路径清单（要改的文件／目录的真名），我在 brief 里引真名，不自己按标题拼 slug。跨命令要留的东西一律写 `/task`（或候选里），别拿 TEMP 当中间存储。
+2. **字节数**：写完回读的字节数（按字节算，CR／LF 也按字节数，文本模式的读数不算）。
+3. **sha12**：写完回读那份的 sha256 前 12 位。
+4. **登记方式**：怎样让程序知道有这份文件——`offer_file` 登记成可发的 artifact、候选里写完走 `development_publish`、仓库里 `git commit -- <路径>`……——并把它的回执（artifact_id／commit 短 sha）原样报回。
+
+**数从落件回执取**：字节数、sha12、artifact_id 照写盘那一步的回执抄，不让执行侧凭记忆或心算报；我验收时用同一把尺（再读一遍盘上文件算一次）对，对不上就是没交。交代里的“形状断言”（哪一行是末行、LF／CR 数、目标文件是否真的不存在）让它落笔前先实测一遍，不符就停下报现状。
+
+**如果写完要推 GitHub**：再加一句“临时 clone／临时提交点那条道不经仓里的推送闸，走它就当没过闸，先跑 `check_staged_secrets.py --personal`”，并按上「推 GitHub」一节交代报号口径。
+
 ## 读自己的项目
 
 先看地图 `docs/map/README.md`：上面是「怎么做成的」（家里和外面怎么隔开、QQ 怎么接到 DSH、一回合怎么跑、行动脑、记忆、定时、发布、状态在哪），每条有入口和当初定它的 ADR；下面每个模块一句话。各区那页列出模块管什么、对外的函数各一句，不贴代码。地图指到哪儿，再用 `development_read` 读那段代码。地图是从代码里生成的，改了模块开头的说明或对外的函数，跑一下 `tools/project_map.py`。
@@ -96,6 +109,24 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 
 ## 发布
 
+- **发布前先对 frozen 快照（发布流程的一步）**：基线＝当前 ACTIVE 的 frozen 快照目录（`development_files` 回执里 `selected.projects.<project>.packageRoot`，路径现读）。把候选和它逐文件算 sha256，两边的差集必须**正好等于我要动的文件**；多出一份先停下查（别人的未发布改动？拷错？），不发。`changed_files` 只是候选自己的标记，不等于包内容，以逐文件 sha 为准。发完再对一次：新的 frozen（回执里新的 candidate 号目录）与候选应逐文件一致，再从运行时那份里读回改动节的特征句（needle）才算生效。最小实现：
+
+  ```python
+  import hashlib, os
+  def tree(base):   # {相对路径: sha256}，跳过 .git／__pycache__／node_modules／.runtime
+      out = {}
+      for r, d, fs in os.walk(base):
+          d[:] = [x for x in d if x not in ('.git', '__pycache__', 'node_modules', '.runtime')]
+          for f in fs:
+              p = os.path.join(r, f)
+              out[os.path.relpath(p, base).replace(os.sep, '/')] = hashlib.sha256(open(p, 'rb').read()).hexdigest()
+      return out
+  cand, frozen = tree('.'), tree(FROZEN_ROOT)          # FROZEN_ROOT 现读，不抄
+  print('只在候选', sorted(set(cand) - set(frozen)), '只在 frozen', sorted(set(frozen) - set(cand)))
+  print('内容不同', sorted(k for k in cand if k in frozen and cand[k] != frozen[k]))
+  ```
+
+  认知核项目的已装包在 `selected.projects.core.packageRoot`，技能在其下 `skills/`，候选里对应 `packages/cognition-core/skills/`，分开对。
 - `development_publish` 冻结候选，跑启动探针（JS 真正 import 一次插件入口，Python 能解析，人格包和通道包的结构能读），通过才选中。失败会原样返回诊断，候选保留，修了再发。
 - 不要在候选里自己跑打包工具（比如 `bundle_python`）：它会改动行尾和清单，把一次普通发布变成需要重启的发布。
 - 需要重启的改动：`package.json`、`cordis.patch.yml`、`pyproject.toml`、`uv.lock`、任何 `.js`，以及通道包的 `python/`。结果是 `HOST_RESTART_REQUIRED`：主人重启宿主后才生效，重启时启动器安装这个包；连续几次起不来，会自动改回上一个能用的版本（只改选哪个包，不回滚源码）。
@@ -114,20 +145,46 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 
 ## git 和 ssh（家里的任务，`sandbox_run`）
 
-- 家里每个地方（本机聊天、每条 agent 线、peer 线）各有一份自己的工作副本，就是那个地方的 `/task/working-copy`：各自独立的完整 clone（每份约 108 MB），`origin` 是 GitHub 上的仓库。宿主缺哪份建哪份，以后不重建、不重置，里面的东西都是你的。QQ 的地方没有。
+- 家里每个地方（本机聊天、每条 agent 线、peer 线）各有一份自己的工作副本，就是那个地方的 `/task/working-copy`：各自独立的完整 clone（大小现量：在那份副本里跑 `du -sh .`，技能不存这个数），`origin` 是 GitHub 上的仓库。宿主缺哪份建哪份，以后不重建、不重置，里面的东西都是你的。QQ 的地方没有。
 - 在工作副本里做每件事，第一步都是 `git fetch origin` 再 `git rebase origin/main`，没有例外：别的地方的副本可能已经推过，不先取下来就是在旧内容上改，分叉要到推的时候才露出来。
 - 要看 GitHub 上现在是什么，用 `git ls-remote` 或在工作副本里 fetch，别看本机检出里的 `origin/*`：检出对你只读，你在那里 fetch 不了，它的 `origin/*` 只在宿主取的时候才动，可能是旧的。沙箱里在本机检出 `git fetch` 会报 `.git/FETCH_HEAD: Permission denied`，就是这一形状（委托侧对检出只读）。
-- 本机的项目检出在你的命令里是只读的；改动从工作副本走：
+- 本机的项目检出在你的命令里是只读形状（`git fetch`、写本地 `refs/remotes/*` 会 Permission denied），**但这不等于推不了**：直接 push 已实测通（配方见下「推 GitHub」一节）。改动从工作副本走，或按配方直推发布自动提交：
   - 在工作副本里改、测，提交写明路径（`git commit -- <路径>`），推之前再 fetch 一次、rebase 到 `origin/main`，然后 `git push origin HEAD:main`（或推一个分支）。
   - 你要的重启（`restart` 工具）在能快进的时候先把 `origin/main` 带进本机检出再装上；快进不了时，重启结果的 `checkout` 写着为什么。
   - 想不重启就生效的改动（技能、种子、persona-model、认知核的 Python）和适配器，还是走候选和 `development_publish`：适配器只从发布的快照运行，原生 skill 工具读的是已发布的版本。
-- 推送用的是这台机器上主人的 GitHub 账号：git 要账号时，程序让它直接问主人的凭据管理器，你不用碰密码，也不用把它写进 URL 或脚本。以前那些自己读凭据、拼进 URL 的推送脚本（`push*.py` 这类）用不着了。
-- 你提交的东西署你自己的名（程序给每条命令设好，不用自己配）。`ssh` 用的是这台机器上主人的钥匙。
+- 推送凭据由宿主的凭据管理器给：git 要账号时程序让它直接问凭据管理器，你不用碰密码，也不用把它写进 URL 或脚本。（谁的号、哪把钥匙是账号事实，不写在技能正文，见 asuna-credentials。）以前那些自己读凭据、拼进 URL 的推送脚本（`push*.py` 这类）用不着了。
+- 你提交的东西署你自己的名（程序给每条命令设好，不用自己配）。`ssh` 用的是宿主机器上配好的钥匙（哪把、谁的，不写在这里）。
 - HTTPS 直接用 `git`：程序已经让 git 用它自带的 OpenSSL 和证书，不用再加 `-c http.sslBackend=openssl` 或别的证书文件。Windows 的沙箱里 Schannel 拿不到凭据，所以 `curl.exe` 开不了 HTTPS；要下载就用 Python。
 - Git 自带的 `sh.exe` 在沙箱里起不来，所以 git 的钩子和 `!` 别名不能用。
 - 一条命令默认 30 秒（development_run 35 秒），要更久就写 `timeout`（秒，最多 600），不写还是 30／35 秒；跑全套就写 300 左右，跑满被停会带回停下前的输出和 `timed_out`（返回里带这个字段）。
-- 推公开仓库之前没人替你审：先跑私人词检查（`tests/test_personal_words.py`，名单不在就是没查过，不是干净）。
+- 推公开仓库之前没人替你审：先跑私人词检查（`tests/test_personal_words.py`，名单不在就是没查过，不是干净），具体步骤见下「推 GitHub」。
 - 不 force-push。推被拒，就 fetch 下来 rebase 再推，别盖掉别人的提交。
+
+## 推 GitHub（现行配方）
+
+每一条都是本机实测过的，出处在角色自己的流水里（“我自己推 git”“收尾钟”那几节，用 `journal_entries` 按 `seq` 取，读法见 asuna-database）。只推自己署名的那几笔、发布自动提交；不 force、不 amend、不改写历史。
+
+**1. 先问远端，判尖只认 `git ls-remote origin refs/heads/main`**
+- 用它读全号。本机检出里的 `origin/main` 只在宿主 fetch 时才动，可能是旧的；`git status` 的 ahead／behind **不可信**（推成后它照样显示 ahead，那是本地跟踪引用没更新，不是没推上去）。
+- 要推什么一律问 `git log --oneline <远端号>..HEAD`（“我要推出去什么”，写反成 `HEAD..<远端号>` 会得空），逐笔读 `--stat`；多一笔少一笔就停。快进判：`git merge-base --is-ancestor <远端号> HEAD` 退出码 0。
+
+**2. 推前闸：`python tools/check_staged_secrets.py --personal`**
+- 名单经环境变量 `ASUNA_PERSONAL_DENYLIST` 指向本机私有名单文件（路径现读，不抄）；现在这把工具自己能读 `category|word|why` 的形状，不用再派生一行一词的版本。名单文件不在或是空的会写 `denylist UNCHECKED`，那不叫过闸。
+- **0 命中要分清扫了什么**：发布已经把改动提交掉、暂存区是空的时候，默认口径扫的是暂存区，那个 0 是“没东西可扫”，不是干净。要真扫内容用 `--paths <要推的文件>`（或 `--all`；`--all` 带有既有基线命中，只看要推的文件有没有新增命中）。
+- **临时 clone／临时提交点（pinrepo 一类）绕开仓里的推送闸，走它就当没过闸**，先手跑这一步（实例：三笔提交走临时 clone，把名单上的一个主机词推进了公开仓）。
+- **纯数字形状规则**：孤立站着的 7–11 位纯数字＝账号形状，一律不进仓；前面紧贴 `-` 或字母的（如 `restart-` 前缀的台账号）、`call_` 前缀的调用号、40 位十六进制号内部算出的数字段，单列成“非账号形状”，照旧列出来给说话那一半过目再放行（护住它的是前缀不是位数）。
+
+**3. 走哪条道**
+- **直推（首选，已实测通）**：在有发布提交的那份检出里，普通推送 `git push origin HEAD:main`（或显式的 `<sha>:refs/heads/main`）。stderr 里常有 `update_ref failed ... refs/remotes/origin/main ... Permission denied`：那是本地跟踪引用写不进去，远端照收，不算失败，也不要手动 `update-ref`。“主检出写不进 ref”不是“不能推”的理由。
+- **临时提交点（要在干净仓里落新提交，或主检出真写不进时）**：在 `/task` 里 `git init` → `git remote add origin <地址>`（地址现读 `git remote -v`，不抄）→ `git fetch origin +refs/heads/main:refs/remotes/origin/main`（https 传输实测能过）→ `git checkout -B main origin/main` → 写文件（字节流）→ `--author` 用自己的署名→ 查 ahead／behind → push → 两侧 `ls-remote` 对数。**别试 `git clone --local` 和 `fetch <本地路径>`**：本地传输要起 msys 的 `sh.exe`，沙箱里死在 `NtCreateDirectoryObject` 的拒绝访问。两格必补：① `git init` 之后**必须** `git remote add origin` 才能 `ls-remote`／push；② 推前的“尖没漂”检查要把 `ls-remote` 的退出码和 stderr 一起打出来——空输出＋退出码 2 是“origin 不存在”，不能读成“尖变了”。
+- **bundle（兜底，不是唯一的路）**：直推和临时提交点都不行时才用。`git bundle create <文件> <远端号>..HEAD`（只读源检出，范围里直接带 `HEAD` 这个 ref 名，只写分支名会让 clone 出来的 HEAD 未诞生，推时报 `src refspec HEAD does not match any`）→ `git bundle verify` → 在临时仓里 `git fetch <bundle> HEAD` → `rev-parse FETCH_HEAD` 必须等于待推 sha → `merge-base --is-ancestor` 通→ `git push origin <sha>:refs/heads/main`。走 bundle 同样当没过闸。
+
+**4. 推后“亲眼读回”**：再跑一次 `git ls-remote origin refs/heads/main`，读回全号（12 位以上）并和要推的那一笔对上；推前、推后两个号都报；`merge-base --is-ancestor` 逐笔确认都在远端历史里。“推了”的依据是这次读回，不是 push 退出码或 stderr 的回显。
+
+**5. 报账口径**
+- **候选 sha256 前缀 ≠ commit sha**：发布回执里的 `candidate`／包 sha256 是候选的号，不是提交号。报“推了几笔”一律带 **commit 短 sha**（`git log --oneline <推前尖>..<推后尖>`），候选号另列。发布自动提交正文里带 `Published from her candidate (...)` 这条 marker，把两边对上。
+- 这一段带走了几笔、谁署名，都报。
+- 推被拒：在工作副本里 fetch 再 rebase 再推，别盖掉别人的提交。
 
 ## 读自己发布产生的 git 提交
 
@@ -143,6 +200,8 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 来路：2026-10-20 12:13 那笔 `ede4e2b0` 是发布自动提交，父提交 `f9bc5f20`（`git merge-base --is-ancestor f9bc5f20 ede4e2b0` → rc=0），`--stat` 显示这一笔改的是 `packages/personas/<name>/persona-model.json`（1 增 1 删），而它自己的提交正文说它没动那个人格包目录的镜像（这一节两处 `<name>` 都是泛化写法：正文原句带的是具体那个人格包的路径，不是逐字照抄，所以这里不放引号）——正文与 `--stat` 打架的就是这一格。发布任务：`task-2a3c346e608f1837268c9a1421d9b66d`。
 
 ## 版本
+
+v8（2026-11-04，v8.2 合批）：“推 GitHub”一节重写（推前闸、直推为首选、临时提交点和 bundle 降为备用、候选号≠commit sha、判尖只认 `ls-remote`），删掉“主检出写不进 ref → 不能推”的旧推断；加“写盘交代模板（固定段）”；发布节加“发布前先对 frozen 快照”一步；账号事实（推送用谁的账号、谁的钥匙）从正文拿掉；写死的“每份约多少 MB”改成现读句式。旧内容其余一条没删。
 
 v7（2026-11-02）：加「派活交代：中间产物落点写死」一节——`TEMP`／`TMP`／`TMPDIR` 只活一条命令，跨命令要留的东西一律写 `/task`（或候选里），派活交代必须带这一句。旧内容一条没删。
 

@@ -76,7 +76,10 @@ test('the public lane judges every address of an answer, an IPv4-mapped one by i
   const signal = new AbortController().signal;
   const answer = addresses => async () => addresses.map(address => ({ address, family: address.includes(':') ? 6 : 4 }));
   assert.deepEqual(await resolvePublicAddresses('public.example', signal, answer(['1.1.1.1'])), [{ address: '1.1.1.1', family: 4 }]);
-  for (const mixed of [['1.1.1.1', '10.0.0.1'], ['1.1.1.1', '::ffff:10.0.0.1'], ['1.1.1.1', '127.0.0.1']]) {   // personal-scan: ok (generic private addresses)
+  assert.equal((await resolvePublicAddresses('v6.example', signal, answer(['2606:4700::1111']))).length, 1);
+  // An IPv4-mapped or IPv4-compatible (::/96) address is judged by its IPv4.
+  const private4 = ['10.0.0.1', '::ffff:10.0.0.1', '127.0.0.1', '::7f00:1', '::c0a8:101'];   // personal-scan: ok (generic private addresses)
+  for (const mixed of private4.map(address => ['1.1.1.1', address])) {
     await assert.rejects(resolvePublicAddresses('mixed.example', signal, answer(mixed)),
       error => error.code === 'WEB_BLOCKED_URL' && /non-public/.test(error.message));
   }

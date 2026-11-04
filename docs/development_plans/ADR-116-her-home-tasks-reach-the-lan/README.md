@@ -151,7 +151,7 @@ today: every resolved address judged (not the first only), IPv4-mapped IPv6 by i
 discovery, the connection pinned to the checked addresses through a per-request agent (no second DNS answer), each
 redirect hop checked again and followed only when it is same-origin, and the same limits and refusal line
 (`URL hostname "…" resolves to a non-public IP address`, `WEB_BLOCKED_URL`), so D4's sentence and the 11-03
-refusal she verified keep their exact text. Four edits to the copy, each marked in it:
+refusal she verified keep their exact text. Five edits to the copy, each marked in it:
 - **No proxy route.** It imports `proxyRouteFor` from DSH's `dsh-http-proxy`; the copy always connects directly,
   pinned. Her Host has no proxy configured (read 2026-11-04: no `HTTP(S)_PROXY` for the user or the machine). If one is
   ever needed, a public-only fetch fails to connect, which fails closed.
@@ -161,6 +161,8 @@ refusal she verified keep their exact text. Four edits to the copy, each marked 
 - **Only the provider stays.** The copy's plugin wrapper (`Config`, `apply`, `name`, `inject`, which also import
   `schemastery`) goes; `fetch.js` constructs `HttpFetchProvider` itself, as it does now.
 - **The check is exported** (`resolvePublicAddresses`), so its tests can hand it a DNS answer.
+- **IPv4-compatible IPv6 (`::/96`) is judged by its IPv4**, as IPv4-mapped already is: DSH's check let `[::127.0.0.1]`
+  pass (independent review, 2026-11-04). Unrouted on her Host, refused anyway.
 
 **D6. The owner lane is DSH's.** A task of the owner's own conversations (`any`) keeps DSH's provider: on rc.2 with
 `resolveAny`, as now; on 0.2.2 the plain provider, which reaches every address by itself. That is the only line the

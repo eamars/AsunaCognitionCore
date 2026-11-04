@@ -1,8 +1,8 @@
 /* ADR-116 §7: her public-only lane's web fetch. A copy of DSH's own HTTP fetch provider as DSH 0.2.1-rc.2 ships it
  * (the built lib/index.js of @deepseek-ai/dsh-web-fetch-http 0.2.1-rc.2), because DSH 0.2.2 drops its public-only
  * address check (upstream 2f01ad549c) and a public-only task has no other barrier to the LAN. Kept as DSH wrote it,
- * with four edits, each marked "Asuna edit": no proxy route, two DSH helper imports made local, only the provider
- * kept (no plugin wrapper), and the check exported for its tests.
+ * with five edits, each marked "Asuna edit": no proxy route, two DSH helper imports made local, only the provider
+ * kept (no plugin wrapper), the check exported for its tests, and IPv4-compatible IPv6 judged by its IPv4.
  *
  * MIT License
  *
@@ -99,6 +99,10 @@ function isPublicIpAddress(input) {
 	}
 	if (parsed instanceof ipaddr.IPv4) return parsed.range() === "unicast";
 	if (parsed.isIPv4MappedAddress()) return parsed.toIPv4Address().range() === "unicast";
+	// Asuna edit: an IPv4-compatible address (::/96, deprecated) is judged by its IPv4 too; ipaddr.js calls the range
+	// unicast, so `[::127.0.0.1]` passed (review 2026-11-04; unrouted on this Host, refused anyway).
+	const bytes = parsed.toByteArray();
+	if (bytes.slice(0, 12).every((byte) => byte === 0)) return ipaddr.fromByteArray(bytes.slice(12)).range() === "unicast";
 	return parsed.range() === "unicast";
 }
 /**

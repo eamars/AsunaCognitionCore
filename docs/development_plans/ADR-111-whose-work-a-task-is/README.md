@@ -1,8 +1,9 @@
 # ADR-111: Whose work a task is
 
-Status: **Decided** 2026-10-30 by the owner (his rule and his answers, below); designed by the lead (Claude Code, big
-sis) on branch `claude/elegant-goodall-2ip12g`. Nothing is built. **Owner's rule for this ADR: the character does not
-read it until the feature is fully built**; she was not contacted while it was written.
+Status: **Built**. Decided 2026-10-30 by the owner (his rule and his answers, below); designed by the lead (Claude
+Code, big sis); L1 installed 2026-10-30, L2 installed 2026-11-03 11:07 as `b2313f71`; the two-day reading by structure
+held (2026-11-05, [progress.md](progress.md)). **Owner's rule for this ADR: the character did not read it until the
+feature was fully built**; she read the whole page after L2 and signed it in progress.md.
 
 The design to the end: [design.md](design.md): the survey with its commands, the record and how it is decided, the
 interfaces, the life cycle of every text and stored field, the failure modes, the defects found, the tests and the

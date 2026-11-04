@@ -57,3 +57,15 @@ holds, and a test now pins it (`test_a_note_from_outside_goes_home_for_messages_
 The same day, the owner's second decision: the daily cap of notes from one public conversation goes from 6 to 10. Read
 10-20 to 11-03 by structure: per group and day she wanted a median 3, at most 9 (notes plus turns refused at the cap);
 the cap of 6 refused her 24 times in 22 turns, on 13 of 15 days.
+
+L2 reading, 2026-11-05 by structure (no content), the two days from the install (`b2313f71`, 11-03 11:07 NZDT) to
+11-05 11:07: 105 new tasks, all with `whose`. The development grant agrees with `whose.earns_development` on every one:
+59 granted for the owner's words in his conversations or her self-development, 27 granted for an agent's words on its
+own line (the line's own agent, `agent:claude-code`), 19 without it (her own turns: presence, visit, note, her own
+plans; people in groups; outside work); no task got the grant where `whose` does not earn it, and none was refused it
+where it does. Outside work: 2 tasks with `whose.by == 'outside'`, both ever. The first (11-04 15:05) was handed from
+an agent line naming a place outside; it ran on the Web chat without a grant, and its result was delivered there. The second
+was its continuation on the Web chat. Its input is a line on the agent line, and the task's fenced read (Web chat
+scene and scope) finds nothing of it. `whose.walk_cut`: 0 audit rows. Agent-line tasks a day, for the owner (all with
+the grant except one `note` turn on 11-04, which is `own`): 48 on 10-27, 64 on 10-28, before L2; 23 on 11-03, 7 on
+11-04. L2 holds; ADR-111 is Built.

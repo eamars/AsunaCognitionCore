@@ -44,7 +44,7 @@ One character turn per episode (ADR-011 §3).
   - `queue_reply` — ADR-064 phase 2: her reply's parts as outbound rows in order, at typing pace after what this turn already queued, each published at once; a part that fails cancels the ones after it.
   - `advance`
   - `recover`
-  - `publish_queued` — Her reply's parts written but not yet handed on (ADR-064 phase 2), in order; a failed one cancels the rest.
+  - `publish_queued` — Her reply's parts written but not yet handed on (ADR-064 phase 2), in order; a FAILED one cancels the rest (UNKNOWN does not).
   - `delegate` — A new task: the action brain's first message is her brief (§4).
   - `message_action` — Her words to the action brain about one task: steered into a running one, or continuing a finished one.
   - `collab` — One entry of the collaboration thread in her conversation (§7.1); the plugin draws it.
@@ -322,7 +322,7 @@ Deterministic checks on a model's answer wherever the program needs one to conti
 Sends her accepted lines: `PublishService.publish` checks the turn is still current, then queues a platform line for its channel route or delivers a local-chat line with an idempotent receipt.
 
 - class `PublishService`
-  - `cancel_after` — A failed or unknown segment cancels every later segment of the same SPEAK (ADR-009 §11.1).
+  - `cancel_after` — A FAILED segment cancels every later segment of the same SPEAK (ADR-009 §11.1).
   - `publish`
 
 ## `lines`

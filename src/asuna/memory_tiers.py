@@ -135,12 +135,19 @@ NIGHT_WHY = {'gist': '刚放到手边，还是原样的长段',
 GIST_NO_BASIS = ('这句意思没带依据，没写进去：原文有依据（%s），意思后面留一行依据（谁、何时、从哪来，不算在 %d 字里）'
                  '再写一次。' % ('%s', GIST_CHARS))
 # ADR-117 L3: a place's identity layer over its ceiling (`Tiers.identity_over`, `lapse_over`). Her line and the lapse's
-# are the persona's words (persona_model `memory.over_line`, `memory.lapse_line`); a section listed under the line;
-# what a choice says while only her felt sections could make the place fit; how long a turn that showed the choice
-# may hold the lapse (one cut and never resumed does not hold it for ever).
+# are the persona's words (persona_model `memory.over_line`, `memory.lapse_line`). A section listed under the line, in
+# the order the program would let them go (its days since last thought of, its 30-day score there, what it frees); a
+# felt section, listed after the rest and never let go by the program; what a choice says when the program will let
+# nothing go (only a felt section would make it fit; or only document order would decide between the section it would
+# take and the next one, her choice of 2026-11-06); a place over even with every section gone, said once; how long a
+# turn that showed the choice may hold the lapse (one cut and never resumed does not hold it for ever).
 PAIR_OVER = 'pair_over'
-OVER_SECTION = '「%s」%d 天｜约 %s token'
+OVER_SECTION = '「%s」%d 天没想到，30 天里想到 %d 次｜约 %s token'
+FELT_MARK = '（记下了感受：程序不替你放）'
 FELT_WAIT = '只放没记下感受的节已经不够让这一处回到上限以内；记下感受的节程序不替你放，等你挑。'
+TIE_WAIT = '程序要放的那一节和下一节分不出先后（一样多天没想到，30 天里想到的次数也一样），程序不按文档顺序替你放，等你挑。'
+CANNOT_FIT = '这一处就算把你在这里随身带的节都放下，也还超上限（现在 %s／上限 %s）：程序什么都没放。'
+WAITS = {'felt_wait': FELT_WAIT, 'tie_wait': TIE_WAIT}
 SHOWN_WAIT_SECONDS = 3600
 # Her choice when a store is over its cap (her ask, 2026-10-18; no keep act, ADR-062): what is carried, and the default.
 OVER_LINE = ('随身满了（%s %d/%d）：随身的有 %s。想换就 let_go 一条；这一回合不挑，下一回合程序照旧放最久没用到的「%s」。')
@@ -157,7 +164,7 @@ def told_text(config):
     return effective((config or {}).get('persona_model') or {}, 'memory.tiers_told')
 THINGS_NOTE = ('你的东西在哪：活账和群笔记的随身还能放多少条，其余的随身、手边、收着各有几条；moved 是程序挪过的，每件只说一次'
                '（又用到、改写出变化就回来）；identity_room 是各处每回合随身带的（%s 合起来）用了上限的多少：%s；变了才说；'
-               'identity_over 是哪一处超了上限、随身的节各腾出多少，先由你挑；'
+               'identity_over 是哪一处超了上限：随身的节按程序会放的先后列着，各腾出多少，先由你挑；'
                'came_back 是最近一天里各样东西按词回来过几次，每天说一次；'
                'self_items 是把 current_self 拆成条的提议。')
 # What came back in the last day (ADR-097 D5), each kind in words; told once a day in each conversation.
@@ -466,9 +473,10 @@ class Tiers:
         return lines
 
     # ── her identity over a place's ceiling (ADR-117 L3) ────────────
-    # One row `pair_over` per (place, class) pair a write of hers took over its ceiling, from that write until the pair
-    # fits: `shown_in` the turns (episode ids) that showed her the choice, `shown_at` the first, `felt_wait` when only
-    # her felt sections could make it fit. Each step is one audit line `memory.identity_over` (its `phase`).
+    # One row `pair_over` per (place, class) pair over its ceiling, from the write that left it over (note_over, after
+    # every write of her identity and at process start) until it fits: `shown_in` the turns (episode ids) that showed
+    # her the choice, `shown_at` the first, `shown_plan` the plan the latest showing said (lapse_plan's verdict). Each
+    # step is one audit line `memory.identity_over` (its `phase`).
     def _over_key(self, pair):
         return 'pair_over:%s:%s|%s' % (self.persona, pair[0], pair[1])
 
@@ -476,16 +484,25 @@ class Tiers:
         self.store.audit('memory:' + self.persona, 'memory.identity_over',
                          {'pair': '%s/%s' % tuple(pair), 'phase': phase, **payload}, 'global-safe')
 
-    def over_pairs(self, plan, moment=None, *, scene_id=None):
-        """A write of hers took these pairs over their ceiling ({pair: tokens over}, carried.over_plan): each waits for
-        her choice in her next home turn that can write. A pair already waiting keeps its row as it is."""
-        moment = moment or clock.now()
-        for pair, over in plan.items():
+    def note_over(self, moment=None):
+        """Every pair over its ceiling now has its row, waiting for her choice in her next home turn that can write:
+        read from the state, so whatever left a pair over (her write, a seed adopted, a crash before this ran) is
+        caught by the next write of her identity or the next process start. A pair already waiting keeps its row.
+        Returns the pairs newly found over."""
+        from . import carried
+        ceiling = carried.limit(self.store, self.persona)
+        if not ceiling:
+            return []
+        found = []
+        for pair, size in carried.identity(self.store, self.persona).items():
             key = self._over_key(pair)
-            if not self.rows.get(key, ['_id']):
+            if size > ceiling and not self.rows.get(key, ['_id']):
                 self.rows.update({'_id': key}, OnCreate({'row': PAIR_OVER, 'persona': self.persona, 'pair': list(pair),
-                                                         'since': _iso(moment), 'shown_in': []}), create=True)
-            self._over_said(pair, 'over', over=over, **({'scene_id': scene_id} if scene_id else {}))
+                                                         'since': _iso(moment or clock.now()), 'shown_in': []}),
+                                 create=True)
+                self._over_said(pair, 'over', over=size - ceiling)
+                found.append(pair)
+        return found
 
     def _over_rows(self):
         from .carried import ordered
@@ -508,43 +525,99 @@ class Tiers:
                                                                          fields=CARRIED_FIELDS)}
         return carried.limit(self.store, self.persona), docs, common, laid, rows
 
+    def lapse_plan(self, pair, found, measured, moment=None):
+        """What letting go would do for one pair whose carried sections are `found` ({slug: sections}), with `measured`
+        from _identity, read only. The order is one measure for what she is shown and what the program does: the
+        sections the program may let go (carried, with their tier row, not felt), the most days since last thought of
+        first (the later of the last memorable moment and the last use, `unused`), then the lowest 30-day program score
+        in this pair (carried.program_scores), then document order; the felt sections after them, never let go by the
+        program. Returns {'verdict', 'order' [(doc, sid, days, score)], 'felt' (the same), 'picked' [(doc, sid)]}:
+        `fits` (nothing to do), `lapse` (let `picked` go), `felt_wait` (only with a felt section would it fit),
+        `tie_wait` (the last section it would take and the first it would keep differ in document order only: her
+        choice, 2026-11-06), `cannot_fit` (not even with every section gone). The two waits let nothing go."""
+        from . import carried
+        moment = moment or clock.now()
+        ceiling, docs, common, _, carried_rows = measured
+        if not ceiling or carried.tokens(common, found, docs) <= ceiling:
+            return {'verdict': 'fits', 'order': [], 'felt': [], 'picked': []}
+        position = {(slug, section['sid']): (n, i) for n, slug in enumerate(carried.IDENTITY)
+                    for i, section in enumerate((docs.get(slug) or {}).get('sections') or [])}
+        keys = [(slug, section['sid']) for slug in carried.IDENTITY for section in found.get(slug) or []
+                if (slug, section['sid']) in carried_rows]       # every section has its row (ADR-117 B3)
+        scores = carried.program_scores(self.store, self.persona, [ref(*key) for key in keys], pair) if keys else {}
+        measure = {key: (unused(carried_rows[key], moment), scores.get(ref(*key), 0)) for key in keys}
+        ranked = sorted(keys, key=lambda key: (-measure[key][0], measure[key][1], position.get(key, (len(position), 0))))
+        felt = [key for key in ranked if carried_rows[key].get('felt')]
+        order = [key for key in ranked if not carried_rows[key].get('felt')]
+        plan = {'order': [(*key, *measure[key]) for key in order], 'felt': [(*key, *measure[key]) for key in felt],
+                'picked': []}
+
+        def fits(keys_gone):
+            return carried.tokens(common, _without(found, set(keys_gone)), docs) <= ceiling
+        for n in range(1, len(order) + 1):
+            if fits(order[:n]):
+                picked = order[:n]
+                kept = order[n] if n < len(order) else None
+                tied = kept is not None and measure[picked[-1]] == measure[kept]
+                return {**plan, 'verdict': 'tie_wait' if tied else 'lapse', 'picked': picked}
+        for n in range(1, len(felt) + 1):
+            if fits(order + felt[:n]):
+                return {**plan, 'verdict': 'felt_wait', 'picked': order + felt[:n]}
+        return {**plan, 'verdict': 'cannot_fit', 'picked': order + felt}
+
     def identity_over(self, turn, moment=None):
         """For her home turn that can write (`turn`: its episode id): one choice per pair over its ceiling, in her
-        order of places, each with her line (persona_model `memory.over_line`) and the pair's carried sections: days
-        since each was last memorable or used, and the tokens letting it go would free in that pair, the longest
-        unused first. A pair that fits again is closed. Marks the turn as having shown each choice."""
+        order of places, from the plan as it is now (lapse_plan): her line (persona_model `memory.over_line`), the
+        pair's sections in the order the program would let them go, each with its days since last thought of, its
+        30-day score there and the tokens letting it go frees there, the felt ones after them marked as never let go
+        by the program, and `waiting` when the program will let nothing go. A pair that fits again is closed; a pair
+        over even with every section gone is said once and closed. Marks the turn as having shown each choice, and
+        what it said (`shown_plan`)."""
         from . import carried
         from .persona_model import words as persona_words
         rows = self._over_rows()
         if not rows:
             return []
         moment = moment or clock.now()
-        ceiling, docs, common, laid, carried_rows = self._identity()
+        measured = self._identity()
+        ceiling, docs, common, laid, _ = measured
         out = []
         for row in rows:
             pair = tuple(row['pair'])
             found, size = laid.get(pair, ({}, 0))
-            if not ceiling or size <= ceiling:
+            plan = self.lapse_plan(pair, found, measured, moment)
+            where = carried.PAIR_WORDS.get(pair, '%s/%s' % pair)
+            if plan['verdict'] == 'fits':
                 self._over_closed(row, 'fits', tokens=size, limit=ceiling)
                 continue
-            listed = []
-            for slug in carried.IDENTITY:
-                for section in found.get(slug) or []:
-                    freed = size - carried.tokens(common, _without(found, {(slug, section['sid'])}), docs)
-                    listed.append((unused(carried_rows.get((slug, section['sid'])), moment),
-                                   section.get('heading') or section['sid'], freed))
-            listed.sort(key=lambda entry: (-entry[0], entry[1]))
-            choice = {'where': carried.PAIR_WORDS.get(pair, '%s/%s' % pair),
+            if plan['verdict'] == 'cannot_fit':
+                out.append({'where': where, 'line': CANNOT_FIT % (carried.number(size), carried.number(ceiling))})
+                self._over_closed(row, 'cannot_fit', tokens=size, limit=ceiling, episode=turn)
+                continue
+            heading = {(slug, section['sid']): section.get('heading') or section['sid']
+                       for slug in carried.IDENTITY for section in found.get(slug) or []}
+
+            def entry(doc, sid, days, score, mark=''):
+                freed = size - carried.tokens(common, _without(found, {(doc, sid)}), docs)
+                return OVER_SECTION % (heading[doc, sid], days, score, carried.number(freed)) + mark
+            choice = {'where': where,
                       'line': persona_words(self.store.config, 'memory.over_line', over=carried.number(size - ceiling),
                                             now=carried.number(size), cap=carried.number(ceiling)),
-                      'sections': [OVER_SECTION % (heading, days, carried.number(freed)) for days, heading, freed in listed]}
-            if row.get('felt_wait'):
-                choice['waiting'] = FELT_WAIT
+                      'sections': [entry(*item) for item in plan['order']]
+                                  + [entry(*item, mark=FELT_MARK) for item in plan['felt']]}
+            if plan['verdict'] in WAITS:
+                choice['waiting'] = WAITS[plan['verdict']]
             out.append(choice)
-            if turn and turn not in (row.get('shown_in') or []):
-                change = [AddToSet('shown_in', turn)] + ([] if row.get('shown_at') else [Set({'shown_at': _iso(moment)})])
+            first = turn and turn not in (row.get('shown_in') or [])
+            change = [Set({'shown_plan': plan['verdict']})]
+            if first:
+                change.append(AddToSet('shown_in', turn))
+                if not row.get('shown_at'):
+                    change.append(Set({'shown_at': _iso(moment)}))
+            if first or row.get('shown_plan') != plan['verdict']:
                 self.rows.update({'_id': row['_id']}, change)
-                self._over_said(pair, 'shown', episode=turn, over=size - ceiling, sections=len(listed))
+                self._over_said(pair, 'shown', episode=turn, plan=plan['verdict'], over=size - ceiling,
+                                sections=len(plan['order']) + len(plan['felt']))
         return out
 
     def _shown_ended(self, row, moment):
@@ -561,74 +634,47 @@ class Tiers:
         # A turn whose episode is not written yet (its prepare runs first) is still running.
         return len(found) == len(set(shown)) and not any(episode.get('state') in RESUMABLE for episode in found)
 
-    def lapse_plan(self, pair, found, measured):
-        """What letting go would do for one pair whose carried sections are `found` ({slug: sections}), with `measured`
-        from _identity: (verdict, the (doc, sid) it lets go in order, the scores read). Verdict: `fits` (nothing to
-        do), `lapse` (let these go), `felt_wait` (only with a felt one among them: nothing moves), `cannot_fit` (not
-        even all of them). Reads, never writes."""
-        from . import carried
-        ceiling, docs, common, _, carried_rows = measured
-        if not ceiling or carried.tokens(common, found, docs) <= ceiling:
-            return 'fits', [], {}
-        position = {(slug, section['sid']): (n, i) for n, slug in enumerate(carried.IDENTITY)
-                    for i, section in enumerate((docs.get(slug) or {}).get('sections') or [])}
-        # What the program can let go: a carried section with its tier row (every section has one, ADR-117 B3).
-        keys = [(slug, section['sid']) for slug in carried.IDENTITY for section in found.get(slug) or []
-                if (slug, section['sid']) in carried_rows]
-        scores = carried.program_scores(self.store, self.persona, [ref(*key) for key in keys], pair)
-        order = sorted(keys, key=lambda key: (bool((carried_rows.get(key) or {}).get('felt')),
-                                              (carried_rows.get(key) or {}).get('memorable_at') or '',
-                                              scores.get(ref(*key), 0), position.get(key, (len(position), 0))))
-        picked = []
-        for key in order:
-            picked.append(key)
-            if carried.tokens(common, _without(found, set(picked)), docs) <= ceiling:
-                break
-        else:
-            return 'cannot_fit', picked, scores
-        if any((carried_rows.get(key) or {}).get('felt') for key in picked):
-            return 'felt_wait', picked, scores
-        return 'lapse', picked, scores
-
-    def lapse_over(self, moment=None):
-        """After the home turn that showed her the choice: each pair still over lets its carried sections go, one place
-        down, in order until it fits: felt ones last, then the oldest memorable moment, then the lowest program score
-        of the last 30 days in that pair (carried.program_scores), then document order. A section carried in several
-        pairs frees them all. When it fits only by letting a felt section go, nothing moves: the pair waits for her
-        choice again (`felt_wait`). Each move is told with her line (persona_model `memory.lapse_line`). The moves."""
+    def lapse_over(self, moment=None, rows=None):
+        """After every home turn that showed her the choice has ended: each pair still over lets `picked` go one place
+        down, from the plan as it is now (lapse_plan), but only when the plan she was last shown said so too
+        (`shown_plan` lapse). Otherwise nothing moves and her next home turn shows the plan as it is (a wait, a change
+        since she was shown it, or a place that cannot fit, said once there). A section carried in several pairs frees
+        them all. Each move is told with her line (persona_model `memory.lapse_line`). The moves."""
         from . import carried
         from .persona_model import words as persona_words
         moment = moment or clock.now()
-        rows = [row for row in self._over_rows() if self._shown_ended(row, moment)]
+        rows = [row for row in (self._over_rows() if rows is None else rows) if self._shown_ended(row, moment)]
         if not rows:
             return []
         measured = self._identity()
-        ceiling, docs, common, laid, carried_rows = measured
+        ceiling, docs, common, laid, _ = measured
         gone, moves = set(), []
         for row in rows:
             pair = tuple(row['pair'])
             found = _without(laid.get(pair, ({}, 0))[0], gone)
             size = carried.tokens(common, found, docs)
-            verdict, picked, scores = self.lapse_plan(pair, found, measured)
-            if verdict in ('fits', 'cannot_fit'):
-                self._over_closed(row, verdict, tokens=size, limit=ceiling)
+            plan = self.lapse_plan(pair, found, measured, moment)
+            if plan['verdict'] == 'fits':
+                self._over_closed(row, 'fits', tokens=size, limit=ceiling)
                 continue
-            if verdict == 'felt_wait':
-                self.rows.update({'_id': row['_id']}, [Set({'felt_wait': True, 'shown_in': []}), Unset('shown_at')])
-                self._over_said(pair, 'felt_wait', over=size - ceiling, sections=len(picked))
+            if plan['verdict'] != 'lapse' or row.get('shown_plan') != 'lapse':
+                self.rows.update({'_id': row['_id']}, [Set({'shown_in': []}), Unset('shown_at')])
+                self._over_said(pair, plan['verdict'] if plan['verdict'] != 'lapse' else 'changed',
+                                over=size - ceiling, shown=row.get('shown_plan'))
                 continue
-            for key in picked:
+            measure = {(doc, sid): (days, score) for doc, sid, days, score in plan['order']}
+            for key in plan['picked']:
                 item = self.rows.get(item_id(self.persona, *key))
                 if not item or item['place'] != CARRIED:
                     continue
-                days, score = unused(item, moment), scores.get(ref(*key), 0)
+                days, score = measure[key]
                 line = persona_words(self.store.config, 'memory.lapse_line', 节名=item.get('heading') or key[1],
                                      over=carried.number(size - ceiling), days=days, score=score)
                 said = {'lapse_line': '%s：%s' % (carried.PAIR_WORDS.get(pair, '%s/%s' % pair), line),
                         'pair': list(pair), 'over': size - ceiling, 'days': days, 'score': score}
                 moves.append(self.move(item, AT_HAND, 'ceiling', moment, said=said))
-            gone |= set(picked)
-            self._over_closed(row, 'lapsed', sections=len(picked), over=size - ceiling)
+            gone |= set(plan['picked'])
+            self._over_closed(row, 'lapsed', sections=len(plan['picked']), over=size - ceiling)
         return [move for move in moves if move]
 
     # ── her writes ─────────────────────────────────────────────────
@@ -682,17 +728,22 @@ class Tiers:
                 plan.setdefault(sid, []).append((told, 'let_go'))
         return plan
 
-    def written(self, slug, intent, before, after, *, scene_id=None, felt=False, moment=None, before_revision=None,
-                over=None):
+    def written(self, slug, intent, before, after, *, scene_id=None, felt=False, moment=None, before_revision=None):
         """After a document write (hers; or a seed adopted, an import: `intent` of another op), the moves
         placement_after gives, made: every new section gets its row (her new item starts carried, a running record's
         at hand; another write's takes its place from its `inject`, as sync would, and takes no store over its cap), a
         rewrite that changed an item starts its stay again from carried, a correction supersedes the item it corrects.
-        A group's notes refold. `over`: the pairs her write took over their ceiling (the gate's plan), which wait for
-        her choice (over_pairs). Returns the moves a reader should be told of (an overflow names what it lapsed)."""
+        A group's notes refold. After a write of her identity, every pair it leaves over its ceiling waits for her
+        choice (note_over). Returns the moves a reader should be told of (an overflow names what it lapsed)."""
+        moves = self._written(slug, intent, before, after, scene_id=scene_id, felt=felt, moment=moment,
+                              before_revision=before_revision)
+        from .carried import IDENTITY
+        if slug in IDENTITY:
+            self.note_over(moment)
+        return moves
+
+    def _written(self, slug, intent, before, after, *, scene_id=None, felt=False, moment=None, before_revision=None):
         moment = moment or clock.now()
-        if over:
-            self.over_pairs(over, moment, scene_id=scene_id)
         kind = store_of(slug, (after or {}).get('kind'))
         if not kind:
             return []
@@ -966,14 +1017,18 @@ def tick_due(store, persona):
 
 def lapse_due(store, persona):
     """A turn's lapses over a place's identity ceiling (Tiers.lapse_over), before the turn reads anything: one indexed
-    read when no place is over. A fault here never fails her turn: it is one audit line, and the place stays over
-    until a later turn. Returns the moves."""
+    read when no place is over. Returns whether a place is still over (its choice for a home turn to show). A fault
+    here never fails her turn: it is one audit line, and the place stays over until a later turn."""
+    tiers = Tiers(store, persona)
+    rows = tiers._over_rows()
+    if not rows:
+        return False
     try:
-        return Tiers(store, persona).lapse_over()
+        tiers.lapse_over(rows=rows)
     except Exception as exc:                          # noqa: BLE001 her turn goes on; the place waits
         store.audit('memory:' + persona, 'memory.identity_over', {'phase': 'failed', 'error': type(exc).__name__},
                     'global-safe')
-        return []
+    return bool(tiers._over_rows())
 
 
 def signing(row, intent, body=None):
@@ -1213,14 +1268,14 @@ def land(store, ep, item, episodes):
     from .render import budget_gate
     docs = DocumentStore(store, ep['persona'])
     before = docs.read(slug)
-    # What it adds is carried: the same gate as her own writes (ADR-096): a place it takes over waits for her choice.
+    # What it adds is carried: the same gate as her own writes (ADR-096): a place it leaves over waits for her choice.
     gate = budget_gate(store, ep['persona'], refuse=False)
     docs.apply(slug, intent, body, base_revision_id=before[0], author='character',
                mutation_id='%s:promote:%s' % (ep['_id'], sha(canonical(item))[:16]), budget=gate)
     after = docs.read(slug)[1]
     sid = after['sections'][-1]['sid']
     Tiers(store, ep['persona']).written(slug, {**intent, 'nature': FACT}, before[1], after, scene_id=ep.get('scene_id'),
-                                        before_revision=before[0], over=gate.planned)
+                                        before_revision=before[0])
     return ref(slug, sid), '记进了 %s' % ref(slug, sid)
 
 

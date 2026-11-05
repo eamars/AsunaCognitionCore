@@ -583,6 +583,7 @@ class ContextBuilder:
         shown_stops=[]                  # the outages this turn shows (host_from_program, home turns only)
         from . import memory_tiers
         age_bound={}                    # what may come up by itself outside recall (memory_tiers.within_age)
+        over_left=False                 # a place still over its identity ceiling, its choice for a home turn to show
         if memory_tiers.ENABLED and not recall:
             # ADR-062: the lapses due, before anything is read for the turn (at most every TICK_SECONDS in this
             # process). Every item already has its row: a write makes it (ADR-117 B3), the process start syncs.
@@ -591,7 +592,7 @@ class ContextBuilder:
             _tm,_tp=_tier_model(self.store,persona)
             memory_tiers.tick_due(self.store,persona)
             # ADR-117 L3: a place over its identity ceiling, once the home turn that showed her the choice has ended.
-            memory_tiers.lapse_due(self.store,persona)
+            over_left=memory_tiers.lapse_due(self.store,persona)
             age_bound={'half_life_days':float(_tier_effective(_tm,'memory.forgetting.half_life_days',_tp) or 30),
                        'step_back_below':float(_tier_effective(_tm,'memory.forgetting.step_back_below',_tp) or 0.1)}
         scope=scene['scope_key']
@@ -1150,7 +1151,7 @@ class ContextBuilder:
                 session_class,scene,schedule_rules.her_zone(self.store.config),moment,
                 home=session_class==visibility.OWNER_PRIVATE,
                 readable_docs={_notes_slug(scene['_id'])} if scene['kind']=='group' else set(),
-                choose=_turn_episode(event) if writes_at_home(self.store,_turn,first_note) else None)
+                choose=_turn_episode(event) if over_left and writes_at_home(self.store,_turn,first_note) else None)
         if ledgers:
             context['ledgers_from_program']=ledgers
             documents.update({item['doc']:item['revision'] for item in ledgers})

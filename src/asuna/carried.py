@@ -343,14 +343,11 @@ def over_plan(store, persona, slug, new_content, intent=None):
 def gate(store, persona, *, refuse):
     """For DocumentStore.apply and adopt_seed: growth of a note far over its own limit is refused (note_gate). A write
     that grows the identity layer in a pair over its ceiling is measured (over_plan): `refuse` (a persona job's
-    import) refuses it; a write of hers lands, and the gate keeps what it measured last (`gate.planned`), which the
-    writer hands to memory_tiers.Tiers.written."""
+    import) refuses it; a write of hers lands and the gate returns what it measured. A pair a write leaves over waits
+    for her choice, read from the state afterwards (memory_tiers.Tiers.written, note_over)."""
     from .context_budget import note_gate
     from .documents import DocumentError, DocumentStore
-    planned = {}
-
     def check(slug, new_content, intent=None):
-        planned.clear()
         if slug not in IDENTITY:
             before = DocumentStore(store, persona).read(slug)[1]
             moved = placements_after(store, persona, slug, intent, before, new_content)
@@ -366,9 +363,7 @@ def gate(store, persona, *, refuse):
                 said += '\n' + OVER_ALSO % (len(over), '｜'.join('%s 超 %s' % (PAIR_WORDS[p], number(over[p]))
                                                                 for p in over))
             raise DocumentError('PERSONA_RENDER_OVER_BUDGET', said)
-        planned.update(over)
-        return dict(over)
-    check.planned = planned
+        return over
     return check
 
 

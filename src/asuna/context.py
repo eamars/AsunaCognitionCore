@@ -216,15 +216,13 @@ def _section_view(section):
 
 def ledger_block(docs, cls, scene=None):
     """Every ledger she can read here, each within its per-turn limit (context_budget.note_view). A section that says
-    someone said something shows the line it rests on (ADR-108 D2), as `scene` reads it."""
+    someone said something shows the line it rests on (ADR-108 D2), as `scene` reads it. Only the ledgers are read
+    (`DocumentStore.of_kind`), never the other documents or a running record."""
     from .carried import placed, sections as carried_sections
     from .context_budget import NOTE_CHARS, note_view
     from . import memory_tiers
     out = []
-    for slug in docs.slugs():
-        revision, content = docs.read(slug)
-        if not content or content.get('kind') != 'ledger':
-            continue
+    for slug, revision, content in docs.of_kind('ledger'):
         sections = carried_sections(placed(docs.store, docs.persona, slug, content), cls)
         if sections:
             kept, about = note_view(sections, NOTE_CHARS['ledger'])
@@ -633,16 +631,14 @@ class ContextBuilder:
         open_tasks=[task for task in task_states if task['_active'] or _handover.waiting(task)]
         task_states=open_tasks+[task for task in task_states if task not in open_tasks][:FINISHED_TASKS_SHOWN]
         carried_on=_handover.continuations(self.store,[task['_id'] for task in task_states])
-        from .tasks import FIRST_PAGE_CHARS, task_pages
+        from .tasks import FIRST_PAGE_CHARS
         for task in task_states:
             task.pop('_active',None)
-            # A report longer than its first page reached her as that page; the rest she reads with task op page.
-            if task.pop('_report_chars',0)>FIRST_PAGE_CHARS:
-                row=task_records.get(self.store, task['_id'], fields=['result.text', 'intent_revision']) or {'_id':task['_id']}
-                text=((row.get('result') or {}).get('text')) or ''
-                pages=task_pages(self.store,row)
-                if len(pages)>1:
-                    task['report']='报告 %d 页（原文 %d 字），交回来时只给了第一页；其余用 task 的 page 翻读'%(len(pages),len(text))
+            # A report longer than its first page reached her as that page; the rest she reads with task op page. Its
+            # length and pages are the task row's (tasks.sized), not the report and its records read again.
+            chars,pages=task.pop('_report_chars',0),task.pop('_report_pages',0)
+            if chars>FIRST_PAGE_CHARS and pages>1:
+                task['report']='报告 %d 页（原文 %d 字），交回来时只给了第一页；其余用 task 的 page 翻读'%(pages,chars)
             # A task's title is what she called it; the old goal text only when there is no title.
             if task.get('title'):
                 task.pop('goal',None)

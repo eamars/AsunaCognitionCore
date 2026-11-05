@@ -64,7 +64,11 @@ def persist_input(store, event, *, managed=False):
                 or previous.get('event', {}).get('integration_profile') != event.get('integration_profile')):
             raise Denied('INPUT_IDENTITY_OR_CONTENT_CONFLICT')
         return previous, False
-    sequence = scene_records.next_seq(store, scene['_id'])
+    # A line that carries its group's name (channels keep it in event.raw) names the conversation in the same claim:
+    # the scene row keeps the newest named line's, and her title of it (People.scene_title) reads no line.
+    raw = event.get('raw')
+    named = {'name': raw['group_name']} if isinstance(raw, dict) and 'group_name' in raw else {}
+    sequence = scene_records.next_seq(store, scene['_id'], **named)
     message = {'_id': 'in-' + key, 'episode_id': key,
                'adapter_id': event.get('adapter_id', 'fixture'),
                'platform_event_id': event['event_id'], 'scene_id': scene['_id'],

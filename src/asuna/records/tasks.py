@@ -9,7 +9,7 @@ reason, the side a message came from, whether it was delivered) given None finds
 missing. The other reads are views (`View`: `rows`, `each`, `first`, `count`), in the replaced read's order (none
 where it had none). `save` and `save_message` are the revisioned writes (`Store.put`). `recent_with_inputs` answers what the conversation-context aggregate did, by reads.
 """
-from ..store.words import And, AnyOf, Exists, NoneOf, Not, Range, StartsWith
+from ..store.words import And, AnyOf, Exists, NoneOf, Not, Or, Range, Set, StartsWith
 from .view import ANY, View, fenced, is_number, is_text, pinned, redact, texts
 
 COLLECTION, MESSAGES = 'tasks', 'task_messages'
@@ -142,11 +142,12 @@ def thread(store, task_id, *, sender=ANY, delivered=ANY):
 def recent_with_inputs(store, scene_id, scope_key, epoch):
     """A conversation's RECENT most relevant tasks in an epoch: the running and queued first, then by the newest time
     one of their input lines was received (those without one last), then by id; each with the SHOWN fields it has,
-    `_active` (1 running or queued, else 0) and `_report_chars` (the length of its result's text). Read as the
-    conversation's tasks, then their input lines by id."""
+    `_active` (1 running or queued, else 0), `_report_chars` and `_report_pages` (its result's stored size,
+    tasks.sized; 0 without one). Read as the conversation's tasks without their results' texts, then their input
+    lines by id."""
     from . import messages
     where = fenced({}, _fences(scene=scene_id, scope=scope_key, epoch=epoch))
-    tasks = _view(store, where).rows(fields=[*SHOWN, 'raw_input_refs', 'result.text'])
+    tasks = _view(store, where).rows(fields=[*SHOWN, 'raw_input_refs', 'result.chars', 'result.pages'])
     refs = sorted({ref for task in tasks for ref in _refs(task)})
     received = {}
     for start in range(0, len(refs), INPUTS_A_READ):
@@ -155,10 +156,10 @@ def recent_with_inputs(store, scene_id, scope_key, epoch):
     rows = []
     for task in tasks:
         times = [received[ref] for ref in _refs(task) if received.get(ref) is not None]
-        text = (task.get('result') or {}).get('text') if isinstance(task.get('result'), dict) else None
+        size = task.get('result') if isinstance(task.get('result'), dict) else {}
         shown = {key: value for key, value in task.items() if key in SHOWN}
         shown['_active'] = 1 if task.get('state') in ACTIVE else 0
-        shown['_report_chars'] = len(text) if isinstance(text, str) else 0
+        shown['_report_chars'], shown['_report_pages'] = size.get('chars') or 0, size.get('pages') or 0
         rows.append((shown, max(times) if times else None))
     rows.sort(key=lambda row: row[0]['_id'])
     rows.sort(key=lambda row: (row[0]['_active'], row[1] is not None, row[1] or ''), reverse=True)
@@ -180,6 +181,19 @@ def redact_scope(store, scope, deletion, epoch):
 def save(store, task, **kwargs):
     """The revisioned write of a whole task (`Store.put`: `expected`, `stream`, `reset_counters`)."""
     return store.put(COLLECTION, task, **kwargs)
+
+
+def lacking_size(store):
+    """ADR-117 L2b's one-off (tools/adr117_l2b_backfill.py, deleted with it). View: the tasks whose result carries no
+    stored size (`chars` or `pages` missing, tasks.sized)."""
+    return _view(store, Or({'result.chars': Exists(False)}, {'result.pages': Exists(False)}))
+
+
+def backfill_size(store, task_id, chars, pages):
+    """ADR-117 L2b's one-off: a finished task's stored size, as its finish writes it now. An update of its own, not a
+    revision: a worker holding the row keeps writing it, and a write that drops the size is filled again."""
+    return store.collection(COLLECTION).update({'_id': task_id, 'result': Exists(True)},
+                                               Set({'result.chars': chars, 'result.pages': pages}))
 
 
 def save_message(store, message, **kwargs):

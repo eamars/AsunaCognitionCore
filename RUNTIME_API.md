@@ -293,7 +293,7 @@ A channel kind that declares `ROUTE_KEYS` (the `agent` kind) also accepts a key 
 | `asuna_mentioned` | profile objects | profiles of mentioned accounts, at most 10, each in `mentioned_account_ids` and this group (`peer_context.snapshot_mentioned`) |
 | `asuna_media` | `{"items": [...]}` | pictures, videos and other media ([Inbound media](#inbound-media)) |
 | `asuna_forward` | blocks | a merged forward: at most 3 blocks `{ref: "f" + 8 hex, nodes, source}`, at most 100 nodes `{name, user_id, time, text}` of 500 characters (`forwards.kept`) |
-| `group_name` | string | the group's name (kept to 60 characters) |
+| `group_name` | string | the group's name (kept to 60 characters); her conversation keeps the newest line's as the group's name, a line without one leaves it as it is, and an erasure of the conversation takes it with the lines |
 | `asuna_catchup` | `{reason, fetched_at}` | a line fetched from the platform's history after a gap; `reason` `startup` or `reconnect` |
 | `asuna_reply_only` | `true` | the message only quotes another, with no words of its own |
 | `asuna_aside` | `true` | a line not addressed to her: stored, wakes no one |

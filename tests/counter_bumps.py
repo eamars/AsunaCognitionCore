@@ -5,7 +5,8 @@ from asuna.store.words import AddToSet, Increase, Set
 
 THEN, NOW = '2026-10-28T01:00:00+00:00', '2026-10-29T01:00:00+00:00'
 BUMPS = {
-    'scenes': ({'sequence': 3}, Increase('sequence'), {'sequence': 4}),                             # ingress, coordinator
+    'scenes': ({'sequence': 3, 'name': 'before'},                                                   # ingress, coordinator
+               [Increase('sequence'), Set({'name': 'renamed'})], {'sequence': 4, 'name': 'renamed'}),
     'memory_units': ({'salience': {'ref_count': 1}},                                                # retrieval
                      [Increase('salience.ref_count'), Set({'salience.last_ref_seq': 9})],
                      {'salience': {'ref_count': 2, 'last_ref_seq': 9}}),

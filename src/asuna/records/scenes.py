@@ -2,8 +2,9 @@
 marks the program keeps on it), read and written only through these operations.
 
 `get` and the other reads return records as stored (`fields` names what to return, `_id` always comes back); a
-missing id or scope finds nothing. `next_seq` is the conversation's position counter, raised in one step. `save` is the
-revisioned write (`Store.put`). The other writes each change one mark of the record.
+missing id or scope finds nothing. `next_seq` is the conversation's position counter, raised in one step, with the
+group's name when the line taking it carries one (`name`, kept like the counter). `save` is the revisioned write
+(`Store.put`). The other writes each change one mark of the record.
 """
 from ..store.words import AnyOf, Exists, Increase, Larger, Not, Set, Unset
 from .view import ANY, pinned
@@ -85,9 +86,11 @@ def authorize(store, scene_id, person_id):
 
 # Writes.
 
-def next_seq(store, scene_id):
-    """The conversation's next position, taken in one step."""
-    return _rows(store).claim({'_id': scene_id}, Increase('sequence'))['sequence']
+def next_seq(store, scene_id, *, name=ANY):
+    """The conversation's next position, taken in one step. `name`: the group's name as the line taking it carries it
+    (None included), written in the same step; the newest named line's is the one kept (a counter, state.COUNTER_FIELDS)."""
+    change = Increase('sequence') if name is ANY else [Increase('sequence'), Set({'name': name})]
+    return _rows(store).claim({'_id': scene_id}, change)['sequence']
 
 
 def save(store, scene, **kwargs):
@@ -155,6 +158,16 @@ def clear_timezones(store):
     """ADR-106's one-off: take `timezone` off every conversation that has one. Returns how many it changed; a second
     run changes none."""
     return sum(_rows(store).update({'_id': scene_id}, Unset('timezone')).changed for scene_id in _carrying(store))
+
+
+def forget_name(store, scene_id):
+    """An erasure of the conversation's lines takes the name they carried with them."""
+    _unset(store, scene_id, 'name')
+
+
+def backfill_name(store, scene_id, name):
+    """ADR-117 L2b's one-off (tools/adr117_l2b_backfill.py, deleted with it): the name its newest named line carries."""
+    _set(store, scene_id, {'name': name})
 
 
 def note_fault(store, scene_id, fault):

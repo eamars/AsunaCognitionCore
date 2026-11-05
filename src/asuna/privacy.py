@@ -59,6 +59,7 @@ class PrivacyService:
         self.store.audit(deletion,'privacy.intent',{'memory_id':key,'scope':scope},scope)
         scene=scene_records.by_scope(self.store, scope)
         scene_records.save(self.store, {**scene,'policy_epoch':scene['policy_epoch']+1},expected=scene['revision'],stream=deletion)
+        scene_records.forget_name(self.store, scene['_id'])      # the group's name came with the lines erased below
         # Immediate fencing precedes potentially slow file cleanup.
         from .blobs import BlobStore
         erased_blobs=BlobStore(self.store).erase_scope(scope,deletion)

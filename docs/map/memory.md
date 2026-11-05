@@ -315,6 +315,7 @@ Document layer ``doc:<persona>:<slug>`` (ADR-009 ARCHITECTURE §5).
   - `read` — (revision id, content) or (None, None).
   - `revision`
   - `slugs`
+  - `of_kind` — [(slug, revision id, content)] of the documents of this kind, by slug: the heads of that kind read once (a head carries its document's kind, `_commit`), then their revisions only.
   - `seed` — Import a package seed only when the head is missing (package upgrades never overwrite).
   - `problems` — Every problem this write would meet before anything is written, as [DocumentError] (ADR-108 D4b): the intent's own fields, then the document's state, then the budget on the document the write would leave.
   - `apply` — One write intent.

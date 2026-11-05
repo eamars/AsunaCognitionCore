@@ -73,7 +73,10 @@ def test_privacy_erasure_marks_the_rows_with_its_own_deletion_id(world):
     rows.update({'_id': row_id}, Set({'name': 'a.png'}))
     rows.insert({'_id': 'task-output', 'schema_version': 1, 'scope_key': memory['scope_key'], 'kind': 'task_report',
                  'state': 'DONE', 'text': 'a paraphrase of the chat'})
+    scene_id = scene_records.by_scope(store, memory['scope_key'])['_id']
+    scene_records.next_seq(store, scene_id, name='a name its lines carried')       # as a named line's claim (ingress)
     result = PrivacyService(store).delete_memory('M09', operator=True)
+    assert 'name' not in scene_records.get(store, scene_id), 'the name its lines carried goes with them'
     row = rows.get(row_id)
     assert row['storage'] == 'erased' and row['deletion_id'] == result['deletion_id']
     assert row['name'] == 'a.png' and row['kind'] == 'image' and row['size'] and row['created_at'], \

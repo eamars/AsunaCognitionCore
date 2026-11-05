@@ -22,7 +22,11 @@ class PublishService:
         self.store,self.idempotent,self.crash = store,idempotent,crash
 
     def cancel_after(self, failed: dict):
-        """A failed or unknown segment cancels every later segment of the same SPEAK (ADR-009 §11.1)."""
+        """A failed segment cancels every later segment of the same SPEAK (ADR-009 §11.1). An UNKNOWN one does not: it is unconfirmed, not a confirmed failure; callers pass only FAILED rows."""
+        # UNKNOWN = send result unconfirmed, not a confirmed failure (11-05 retcode 1200 image was on the platform, two text
+        # parts were cancelled): it never cancels the rest. Covers the receipt path and recover_sending (channels.py) too.
+        if failed.get('delivery_state') == 'UNKNOWN':
+            return 0
         index = failed.get('segment_index')
         if index is None:
             return 0

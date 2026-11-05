@@ -650,7 +650,9 @@ class Channels:
                 earlier = message_records.turn_parts(
                     self.store, row['episode_id'], before_segment=row['segment_index'],
                     not_states=self.PART_SETTLED, by=None).rows(fields=['delivery_state', KIND])
-                if any(part['delivery_state'] not in self.PART_ON_ITS_WAY for part in earlier):
+                # UNKNOWN = send result unconfirmed, not a confirmed failure (11-05 retcode 1200 image reached the platform,
+                # two text parts were cancelled): it neither holds nor cancels the parts after it, and is not DELIVERED.
+                if any(part['delivery_state'] not in self.PART_ON_ITS_WAY and part['delivery_state']!='UNKNOWN' for part in earlier):
                     message_records.save(self.store, {**row, 'delivery_state': 'CANCELLED_AFTER_FAILURE'},
                                          expected=row['revision'], stream=row['episode_id'])
                     continue

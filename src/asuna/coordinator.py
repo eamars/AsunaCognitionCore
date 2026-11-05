@@ -490,7 +490,8 @@ class Coordinator:
             published=self.publisher.publish(item['key'])
             item['state']=published.get('delivery_state') or 'READY'
             self.crash('after_reply_part_publish')
-            if item['state'] in ('FAILED','UNKNOWN'):
+            # UNKNOWN=sent-result unconfirmed, not a confirmed failure (11-05: retcode 1200 image was on the platform, two text parts were cancelled): only FAILED cancels the rest.
+            if item['state']=='FAILED':
                 self.publisher.cancel_after(published)
                 for later in queued[queued.index(item)+1:]:
                     later['state']='CANCELLED_AFTER_FAILURE'
@@ -653,11 +654,12 @@ class Coordinator:
         return [self.advance(ep['_id']) for ep in episodes]
 
     def publish_queued(self, ep_id):
-        """Her reply's parts written but not yet handed on (ADR-064 phase 2), in order; a failed one cancels the rest."""
+        """Her reply's parts written but not yet handed on (ADR-064 phase 2), in order; a FAILED one cancels the rest (UNKNOWN does not)."""
         for row in message_records.turn_parts(self.store,ep_id,speech=False,state='READY',reply_parts=True,
                                               by='segment_index').rows():
             published=self.publisher.publish(row['_id'])
-            if published.get('delivery_state') in ('FAILED','UNKNOWN'):
+            # UNKNOWN=sent-result unconfirmed, not a confirmed failure (11-05: retcode 1200 image was on the platform, two text parts were cancelled): only FAILED cancels the rest.
+            if published.get('delivery_state')=='FAILED':
                 self.publisher.cancel_after(published)
                 break
 

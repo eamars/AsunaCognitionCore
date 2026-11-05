@@ -16,34 +16,6 @@ ADR-117 L2b's one-off: the three stored fields a turn's blocks now read, filled 
 - def `run`
 - def `main`
 
-## `adr117_l2b_identity.py`
-
-[tools/adr117_l2b_identity.py](../../tools/adr117_l2b_identity.py)
-
-ADR-117 L2b's identity check: what her turn shows is the same with the old code and the new. It exists only for this landing and is deleted with tools/adr117_l2b_backfill.py after the install.
-
-- class `Clock`
-  - `tick`
-  - `set`
-- class `Ticking` — The core's clock reads this: every reading a millisecond on from the moment set.
-  - `now`
-- def `still` — The in-memory server's clock (a written `Now`): the core clock's last reading, without moving it.
-- def `open_store` — The fixture world's settings (tests/conftest.py's turn settings) and a store on the in-memory adapter (holding a saved store's records, when `image` is given).
-- def `ingest`
-- def `write_doc`
-- def `report`
-- def `build` — The world, through each code's own writes: documents, named group lines, tasks finished four ways, notes.
-- def `root_of`
-- def `store_now`
-- def `turns`
-- def `shows_what_it_is_for` — Each turn carries what it is in the comparison for (checked on A): else the comparison compared nothing.
-- def `breaks` — One new reader made wrong on purpose (`no_backfill`: B runs without the backfill).
-- def `drive`
-- def `first_difference`
-- def `old_tree`
-- def `compare`
-- def `main`
-
 ## `agent_line.py`
 
 [tools/agent_line.py](../../tools/agent_line.py)

@@ -367,3 +367,42 @@ Per landing:
 3. The lead reviews the diff against this page and the code, runs the suite, and lands it.
 
 A difference from this page goes back into this page first.
+
+## 14. Her reading (2026-11-05 13:43) and what it adds
+
+She read the whole page at `42d34042` (README blob `0074927`, 369 lines); the census and decisions pages' later parts
+she did not read, and said so. **Her verdict: the direction signed, the four landings and their order agreed; build
+from L1; L4's log conversion waits for her visibility check.** Her answers and additions, binding on the landings:
+
+- **D1:** none of her recurring plans is a fixed text (her intents are hers and need a judgment each time), so
+  scheduled turns count; note-woken turns count. As designed.
+- **L3, her words** (the core's neutral lines land first; hers replace them):
+  - choice line: `这一档随身超了 {over} 个估算 token（现在 {now}／{cap}）。下面每节写着它多少天没被想到、放手能腾出多少：想留哪几节就留着；不选也行，我照"最久没被想起"替你放。`
+  - lapse line: `{节名} 从这一档的随身放下了（超 {over} token；它 {days} 天没被想到，30 天里会被想到 {score} 次）。改写它就能回来。`
+  - Neither uses words like 很久没用. One turn may lapse several sections, told once.
+  - **Her addition:** if the pair fits only by lapsing a `felt` section, that turn reports and lapses nothing, and
+    waits for her choice.
+- **L3 reading:** every program lapse listed with its time and section; the regret share is not reported as met
+  before 20 lapses.
+- **L4:**
+  - She rewrites her told text (about 230 characters; she sends the final text before the install).
+  - She does not restore her 6 short forms now (her home pair has 177 tokens of room); after L3 she picks one.
+  - Her log becomes rows only after she has read every section's `visibility` and set internal records to
+    `owner_private`; then the owner runs the command.
+  - She keeps writing short forms by hand as a habit.
+- **Gaps she found, added:**
+  1. §11: the `present` rule (point 6) and `resolve`'s write rule (point 9) together would stop her writing a
+     person's layer in a visit turn, while the 10-31 rule is that a person's layer is written on the line where she
+     meets them. The person-layer ADR must either say that visit turns write only the here layer, or give her a way
+     out.
+  2. L4 reading: after the install, take two of her items that really were corrected and retrieve their old wording
+     through the ledger. It counts only if it comes back.
+  3. L2 reading: one outbound line of hers with a known platform id: its words must be in the crossing index (QQ's
+     delivery gap of about four minutes makes this the likeliest place for the loss).
+  4. L1 landing: after the install, the index list is read back word for word (name and options), not only
+     `explain`.
+  5. The owner's person record (3,563 of 4,000) needs an interim answer before the person-layer ADR, so that it does
+     not hit the cap first. The owner decides.
+- **Her `budget_per_place.py`:** the lead's suggested fix was wrong. `store_for_limit()` reads the default config
+  path, which would break the copy runs. The right shape is a `state.Store` on the same `args.config` in place of the
+  two shims. Hers; it rides with the next landing.

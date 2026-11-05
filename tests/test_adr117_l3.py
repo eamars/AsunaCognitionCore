@@ -200,16 +200,85 @@ def test_when_only_document_order_would_decide_nothing_goes_and_when_one_differs
     assert [move['sid'] for move in home.tiers.lapse_over()] == ['third']
 
 
-def test_a_place_over_even_with_every_section_gone_is_said_once(home):
+def test_a_place_that_cannot_get_back_is_said_once_until_a_new_write_of_hers(home, monkeypatch):
+    from asuna import render
     write(home, 'one', 60)
-    home.ceiling[0] = carried.tokens(memory_tiers.Tiers(home.store, PERSONA)._identity()[2], {}, {}) - 10
+    home.ceiling[0] = size(home, HOME) + 10
     write(home, 'two', 60)
-    choices = shown_at_home(home, turn(home))       # below the program's own opening text: every place is over
-    choice = next(choice for choice in choices if choice['where'] == '家里')
-    assert choice['line'] == memory_tiers.CANNOT_FIT % (carried.number(size(home, HOME)), carried.number(home.ceiling[0]))
-    assert all('sections' not in choice for choice in choices)
-    assert over_rows(home) == [] and shown_at_home(home, turn(home)) is None, 'said once'
+    target = over_rows(home)[0]['target']
+    assert target == home.ceiling[0]
+    common = render.common_text(home.store.config)        # the program's own text grows after her write
+    monkeypatch.setattr(render, 'common_text', lambda config: common + '字' * 3000)
+    [choice] = shown_at_home(home, turn(home))
+    assert choice['line'] == memory_tiers.CANNOT_FIT % (carried.number(size(home, HOME)), carried.number(target))
+    assert 'sections' not in choice and over_rows(home) == []
+    assert shown_at_home(home, turn(home)) is None, 'said once'
+    ep_id = turn(home)                                     # a write of hers that makes it smaller opens nothing
+    home.tools.call(ep_id, ep_id + ':0', 'write_document', {'doc': 'self', 'do': 'replace_section', 'section': 'one',
+                                                            'content': '字' * 10, 'why': 'shorter'})
+    assert over_rows(home) == [] and shown_at_home(home, turn(home)) is None, 'still once'
+    write(home, 'three', 60)                               # one that grows it again is hers to choose about
+    [again] = shown_at_home(home, turn(home))
+    assert 'sections' in again and listed(again)
     assert home.tiers.item('self', 'one')['place'] == memory_tiers.CARRIED
+
+
+def test_a_place_over_without_a_write_of_hers_waits_for_nothing_and_loses_nothing(home):
+    write(home, 'one', 60)
+    write(home, 'two', 60)
+    aged(home, 'one', 30)
+    home.ceiling[0] = size(home, HOME) - 50                # the owner lowers the ceiling
+    ep_id = turn(home)                                     # her write that does not grow the place
+    home.tools.call(ep_id, ep_id + ':0', 'write_document', {'doc': 'self', 'do': 'replace_section', 'section': 'two',
+                                                            'content': '字' * 50, 'why': 'shorter'})
+    assert over_rows(home) == [], 'only a write of hers that took it over opens a wait'
+    showing = turn(home)
+    assert shown_at_home(home, showing) is None
+    ended(home, showing)
+    assert memory_tiers.lapse_due(home.store, PERSONA) is False and home.tiers.lapse_over() == []
+    assert home.tiers.item('self', 'one')['place'] == memory_tiers.CARRIED
+
+
+def test_already_over_her_write_is_asked_back_only_to_where_it_found_the_place(home):
+    write(home, 'old', 60)
+    write(home, 'mid', 60)
+    aged(home, 'old', 30)
+    aged(home, 'mid', 10)
+    home.ceiling[0] = size(home, HOME) - 100               # over for another reason before she writes
+    before = size(home, HOME)
+    write(home, 'new', 60)
+    [row] = over_rows(home)
+    assert row['target'] == before, 'the size before her write, not the ceiling'
+    showing = turn(home)
+    [choice] = shown_at_home(home, showing)
+    assert carried.number(size(home, HOME) - before) in choice['line'], '{over} is what her write put it over'
+    ended(home, showing)
+    assert [move['sid'] for move in home.tiers.lapse_over()] == ['old']
+    assert home.ceiling[0] < size(home, HOME) <= before, 'back to where her write found it, not to the ceiling'
+
+
+def test_a_plan_that_changes_in_the_turn_that_showed_it_is_shown_again_first(home):
+    for heading, days in (('old', 30), ('mid', 20), ('young', 10)):
+        write(home, heading, 60)
+        aged(home, heading, days)
+    home.ceiling[0] = size(home, HOME) + 20
+    write(home, 'new', 60)
+    showing = turn(home)
+    [choice] = shown_at_home(home, showing)
+    assert 'waiting' not in choice and over_rows(home)[0]['shown_picked'] == ['doc:self#old']
+    # In that turn she writes 150 more: the plan would now take more than the one section she was shown.
+    home.tools.call(showing, showing + ':0', 'write_document', {'doc': 'self', 'do': 'append_section', 'heading': 'more',
+                                                                'content': '字' * 150, 'why': 'mine',
+                                                                'tags': ['place:home']})
+    ended(home, showing)
+    assert home.tiers.lapse_over() == [], 'nothing goes that she was not shown'
+    showing = turn(home)
+    shown_at_home(home, showing)
+    shown = [ref.split('#')[1] for ref in over_rows(home)[0]['shown_picked']]
+    assert len(shown) > 1
+    ended(home, showing)
+    assert [move['sid'] for move in home.tiers.lapse_over()] == shown, 'exactly what she was shown'
+    assert over_rows(home) == [] and size(home, HOME) <= home.ceiling[0]
 
 
 def test_an_import_over_the_ceiling_is_refused_and_a_seed_adopted_as_a_new_document_waits_for_her(home, tmp_path):

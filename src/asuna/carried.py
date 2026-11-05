@@ -326,8 +326,9 @@ def over_words(store, persona, pair, before, after, ceiling, docs=None):
 
 
 def over_plan(store, persona, slug, new_content, intent=None):
-    """The pairs a write of `slug` takes over their ceiling, or grows while over it: {pair: tokens over after it},
-    each pair on its own, measured as the write will carry it; {} when it takes none over or nothing bounds them."""
+    """The pairs a write of `slug` takes over their ceiling, or grows while over it, each on its own, measured as the
+    write will carry it: {pair: {'over': tokens over the ceiling after it, 'before': the pair's size before it,
+    'after': after it}}; {} when it takes none over or nothing bounds them."""
     from .documents import DocumentStore
     ceiling = limit(store, persona)
     if slug not in IDENTITY or not ceiling:
@@ -337,17 +338,21 @@ def over_plan(store, persona, slug, new_content, intent=None):
     current = contents(store, persona)
     now = identity(store, persona, docs=current)
     then = identity(store, persona, docs={**current, slug: new_content}, placements={slug: moved})
-    return {pair: then[pair] - ceiling for pair in ordered(then) if then[pair] > now[pair] and then[pair] > ceiling}
+    return {pair: {'over': then[pair] - ceiling, 'before': now[pair], 'after': then[pair]}
+            for pair in ordered(then) if then[pair] > now[pair] and then[pair] > ceiling}
 
 
 def gate(store, persona, *, refuse):
     """For DocumentStore.apply and adopt_seed: growth of a note far over its own limit is refused (note_gate). A write
     that grows the identity layer in a pair over its ceiling is measured (over_plan): `refuse` (a persona job's
-    import) refuses it; a write of hers lands and the gate returns what it measured. A pair a write leaves over waits
-    for her choice, read from the state afterwards (memory_tiers.Tiers.written, note_over)."""
+    import) refuses it; a write of hers lands, and the gate keeps what it measured last (`gate.planned`), which her
+    write hands to memory_tiers.Tiers.written: only her own write that took a pair over opens its wait for her choice."""
     from .context_budget import note_gate
     from .documents import DocumentError, DocumentStore
+    planned = {}
+
     def check(slug, new_content, intent=None):
+        planned.clear()
         if slug not in IDENTITY:
             before = DocumentStore(store, persona).read(slug)[1]
             moved = placements_after(store, persona, slug, intent, before, new_content)
@@ -356,14 +361,15 @@ def gate(store, persona, *, refuse):
         over = over_plan(store, persona, slug, new_content, intent)
         if over and refuse:
             ceiling, current = limit(store, persona), contents(store, persona)
-            now = identity(store, persona, docs=current)
-            pair = max(over, key=lambda p: over[p])
-            said = over_words(store, persona, pair, now[pair], over[pair] + ceiling, ceiling, current)
+            pair = max(over, key=lambda p: over[p]['over'])
+            said = over_words(store, persona, pair, over[pair]['before'], over[pair]['after'], ceiling, current)
             if len(over) > 1:     # every pair this write takes or keeps over, so trimming one is not refused again
-                said += '\n' + OVER_ALSO % (len(over), '｜'.join('%s 超 %s' % (PAIR_WORDS[p], number(over[p]))
+                said += '\n' + OVER_ALSO % (len(over), '｜'.join('%s 超 %s' % (PAIR_WORDS[p], number(over[p]['over']))
                                                                 for p in over))
             raise DocumentError('PERSONA_RENDER_OVER_BUDGET', said)
+        planned.update(over)
         return over
+    check.planned = planned
     return check
 
 
@@ -630,8 +636,8 @@ def install_checks(store, persona):
             plan, refused = {}, exc.code
         then = identity(store, persona, docs={**docs, 'persona': proposed})
         expected = then[pair] - ceiling if ceiling else None
-        out.append(('over_write_is_planned', bool(ceiling and not refused and plan.get(pair) == expected),
-                    {'pair': PAIR_WORDS[pair], 'planned': {PAIR_WORDS.get(p, '%s/%s' % p): n for p, n in plan.items()},
+        out.append(('over_write_is_planned', bool(ceiling and not refused and (plan.get(pair) or {}).get('over') == expected),
+                    {'pair': PAIR_WORDS[pair], 'planned': {PAIR_WORDS.get(p, '%s/%s' % p): n['over'] for p, n in plan.items()},
                      'carried': sizes[pair], 'limit': ceiling, 'expected': expected, 'refused': refused}))
     home = carried(store, persona, visibility.OWNER_PRIVATE, 'home', docs=docs)
     sample = next(((slug, s) for slug in IDENTITY for s in home[slug]), None)

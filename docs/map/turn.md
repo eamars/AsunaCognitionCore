@@ -155,7 +155,7 @@ What she carries: one function says it for every reader (ADR-096).
 - def `room_ranges` — ROOM_WORDS as the ranges the program uses, for the note that explains them.
 - def `tier_line` — When a section's `inject` and its tier differ: both, and its last move (when, who, why) on the next line; None when they agree or tiers are off.
 - def `over_words` — An import's refusal: the pair, how far over it is (or would be), the way out, and the three largest sections it carries now; every number is that pair's own (laid_out, as carried counts it).
-- def `over_plan` — The pairs a write of `slug` takes over their ceiling, or grows while over it: {pair: tokens over after it}, each pair on its own, measured as the write will carry it; {} when it takes none over or nothing bounds them.
+- def `over_plan` — The pairs a write of `slug` takes over their ceiling, or grows while over it, each on its own, measured as the write will carry it: {pair: {'over': tokens over the ceiling after it, 'before': the pair's size before it, 'after': after it}}; 
 - def `gate` — For DocumentStore.apply and adopt_seed: growth of a note far over its own limit is refused (note_gate).
 - def `program_scores` — In how many turns of the last COUNT_DAYS the program's retrieval scored each section in this pair (carried_counts.program_score summed): {ref: score}; a section with no rows is 0.
 - def `room_block` — things_from_program: how full each pair readable here is, in coarse words, only when the words changed since this conversation was last told; None otherwise.

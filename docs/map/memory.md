@@ -77,10 +77,10 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
   - `tick` — Lapses whose stay ran out.
   - `memorable` — A memorable moment: the stay starts again from now and, once per stay, the next one doubles.
   - `overflows` — The stores over their cap that this turn reads: shown once each, for her to choose; one already shown in an earlier turn lapses by the program's rule first (so a cap is over for one turn at most).
-  - `note_over` — Every pair over its ceiling now has its row, waiting for her choice in her next home turn that can write: read from the state, so whatever left a pair over (her write, a seed adopted, a crash before this ran) is caught by the next write of 
-  - `lapse_plan` — What letting go would do for one pair whose carried sections are `found` ({slug: sections}), with `measured` from _identity, read only.
-  - `identity_over` — For her home turn that can write (`turn`: its episode id): one choice per pair over its ceiling, in her order of places, from the plan as it is now (lapse_plan): her line (persona_model `memory.over_line`), the pair's sections in the order 
-  - `lapse_over` — After every home turn that showed her the choice has ended: each pair still over lets `picked` go one place down, from the plan as it is now (lapse_plan), but only when the plan she was last shown said so too (`shown_plan` lapse).
+  - `over_pairs` — Her own write took these pairs over their ceiling, or grew them while over it ({pair: {'over', 'before', 'after'}}, carried.over_plan): each waits for her choice in her next home turn that can write.
+  - `lapse_plan` — What letting go would do for one pair whose carried sections are `found` ({slug: sections}), with `measured` from _identity, read only, until the pair is back to `target` (its row's, else the ceiling).
+  - `identity_over` — For her home turn that can write (`turn`: its episode id): one choice per pair her write took over, in her order of places, from the plan as it is now (lapse_plan, back to the row's target): her line (persona_model `memory.over_line`; `{ove
+  - `lapse_over` — After every home turn that showed her the choice has ended: each pair still over its target lets `picked` go one place down, from the plan as it is now (lapse_plan), but only when the plan she was last shown let the same sections go (`shown
   - `placement_after` — Where a write leaves each section it moves, {sid: [(place, reason), ...]} in order, the last one the place it ends in: the one rule for the write (written) and for the gate that measures it first (carried.gate).
   - `written` — After a document write (hers; or a seed adopted, an import: `intent` of another op), the moves placement_after gives, made: every new section gets its row (her new item starts carried, a running record's at hand; another write's takes its p
   - `fold_order` — The order a group's notes fold in over their per-turn limit: the section that surfaced longest ago first.

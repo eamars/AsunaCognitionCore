@@ -135,13 +135,10 @@ def attach(context, store, persona, retrieval):
     switch is on (it then also writes its rows) or when tiered memory is on (memory_tiers.ENABLED: its items come up
     in her turns from these vectors, whatever the pilot's switch says). `retrieval` makes its own embedding client.
     With tiered memory on, the process's one full tier sync runs first (memory_tiers.Tiers.sync): rows for what was
-    written while the worker was down; every write makes its own. Then every place over its identity ceiling has its
-    row (Tiers.note_over), whatever left it over while no write of hers measured it."""
+    written while the worker was down; every write makes its own."""
     from . import memory_tiers
     if memory_tiers.ENABLED and persona:
-        tiers = memory_tiers.Tiers(store, persona)
-        tiers.sync()
-        tiers.note_over()
+        memory_tiers.Tiers(store, persona).sync()
     if not (SHADOW_PILOT or memory_tiers.ENABLED) or not persona or getattr(context, 'retrieval', None) is None:
         return None
     context.pilot = Pilot(store, persona, retrieval(), logging=SHADOW_PILOT).start()

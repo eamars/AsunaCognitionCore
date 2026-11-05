@@ -498,7 +498,6 @@ Each platform plugin: its kind module (ids and formats), its Host plugin and its
 
 Commands for setup, packing, launching, probes and maintenance.
 
-- [`adr117_l2b_backfill.py`](../../tools/adr117_l2b_backfill.py) — ADR-117 L2b's one-off: the three stored fields a turn's blocks now read, filled on the rows written before them.
 - [`agent_line.py`](../../tools/agent_line.py) — A coding agent's line to her (ADR-033): post a message, poll her answers.
 - [`asuna-launch.mjs`](../../tools/asuna-launch.mjs) — Stable entry: native Web and repair tools boot without importing Python code.
 - [`asuna-supervisor.mjs`](../../tools/asuna-supervisor.mjs) — The Host supervisor (ADR-034): the launcher stays as DSH's parent, restarts it when she asks or when it exits on its own, and brings it back down a fallback ladder when a start fails.

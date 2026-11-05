@@ -9,7 +9,7 @@ reason, the side a message came from, whether it was delivered) given None finds
 missing. The other reads are views (`View`: `rows`, `each`, `first`, `count`), in the replaced read's order (none
 where it had none). `save` and `save_message` are the revisioned writes (`Store.put`). `recent_with_inputs` answers what the conversation-context aggregate did, by reads.
 """
-from ..store.words import And, AnyOf, Exists, NoneOf, Not, Or, Range, Set, StartsWith
+from ..store.words import And, AnyOf, Exists, NoneOf, Not, Range, StartsWith
 from .view import ANY, View, fenced, is_number, is_text, pinned, redact, texts
 
 COLLECTION, MESSAGES = 'tasks', 'task_messages'
@@ -181,19 +181,6 @@ def redact_scope(store, scope, deletion, epoch):
 def save(store, task, **kwargs):
     """The revisioned write of a whole task (`Store.put`: `expected`, `stream`, `reset_counters`)."""
     return store.put(COLLECTION, task, **kwargs)
-
-
-def lacking_size(store):
-    """ADR-117 L2b's one-off (tools/adr117_l2b_backfill.py, deleted with it). View: the tasks whose result carries no
-    stored size (`chars` or `pages` missing, tasks.sized)."""
-    return _view(store, Or({'result.chars': Exists(False)}, {'result.pages': Exists(False)}))
-
-
-def backfill_size(store, task_id, chars, pages):
-    """ADR-117 L2b's one-off: a finished task's stored size, as its finish writes it now. An update of its own, not a
-    revision: a worker holding the row keeps writing it, and a write that drops the size is filled again."""
-    return store.collection(COLLECTION).update({'_id': task_id, 'result': Exists(True)},
-                                               Set({'result.chars': chars, 'result.pages': pages}))
 
 
 def save_message(store, message, **kwargs):

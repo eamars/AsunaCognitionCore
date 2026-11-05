@@ -490,7 +490,7 @@ class Coordinator:
             published=self.publisher.publish(item['key'])
             item['state']=published.get('delivery_state') or 'READY'
             self.crash('after_reply_part_publish')
-            # UNKNOWN=sent-result unconfirmed, not a confirmed failure (11-05: retcode 1200 image was on the platform, two text parts were cancelled): only FAILED cancels the rest.
+            # only FAILED cancels the rest: UNKNOWN (send result unconfirmed) may already be on the platform
             if item['state']=='FAILED':
                 self.publisher.cancel_after(published)
                 for later in queued[queued.index(item)+1:]:
@@ -658,7 +658,7 @@ class Coordinator:
         for row in message_records.turn_parts(self.store,ep_id,speech=False,state='READY',reply_parts=True,
                                               by='segment_index').rows():
             published=self.publisher.publish(row['_id'])
-            # UNKNOWN=sent-result unconfirmed, not a confirmed failure (11-05: retcode 1200 image was on the platform, two text parts were cancelled): only FAILED cancels the rest.
+            # only FAILED cancels the rest: UNKNOWN (send result unconfirmed) may already be on the platform
             if published.get('delivery_state')=='FAILED':
                 self.publisher.cancel_after(published)
                 break

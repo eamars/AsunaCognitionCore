@@ -114,3 +114,31 @@ Her two questions after the jam (2026-10-22 ~01:00 NZDT, her reading of the code
 
 Tests: `test_conversations_take_turns_by_when_their_lines_were_queued` (test_adr009_p5_speak.py),
 `test_a_line_still_queued_is_cancelled_and_never_leaves` (test_own_recall.py); both fail on the code before.
+
+## Addendum 2026-11-05: UNKNOWN neither holds nor cancels the parts after it; FAILED still does (11.1)
+
+11.1 says a later part cannot be claimed while an earlier one is not delivered, and is cancelled when an earlier one fails.
+This addendum fixes how that reads for one state; the 11.1 text above is unchanged.
+
+**UNKNOWN is a terminal state and the platform may already have taken the part, so it does not count as "not delivered".**
+It means the part was handed to the platform and no confirmed answer came back. `PublishService._publish` returns an
+UNKNOWN row as it is and never sends it again, so a later part that waited for it would wait for ever. Therefore:
+
+- An UNKNOWN part does not hold the parts after it: `Channels._next` hands the next part out. (UNKNOWN is still not
+  DELIVERED; `PART_SETTLED` and `PART_ON_ITS_WAY` are unchanged.)
+- An UNKNOWN part does not cancel the parts after it: `PublishService.cancel_after` returns 0 for it, and
+  `Coordinator.queue_reply` and `publish_queued` cancel the rest only after a FAILED part.
+- **FAILED still cascades**: the parts after a FAILED part are cancelled (`cancel_after` for those that exist, `_next`
+  for those queued later), as before. A part still READY, QUEUED_EXTERNAL or SENDING still holds the parts after it.
+
+This also narrows the wording of the 2026-10-22 addendum above, "(failed, unknown, cancelled after a failure)": unknown is
+no longer in that list.
+
+Live 2026-11-05: an image part of a turn came back with retcode 1200 and was recorded UNKNOWN although it had reached the
+platform; the two text parts after it were cancelled as CANCELLED_AFTER_FAILURE. Installed 2026-11-05 17:50 NZDT (commit
+`7793aeab`, the code; this addendum and the test move came after). What retcode 1200 really means is a question about the
+adapter's reading of the platform's answer and is not settled here; this change does not touch the adapter.
+
+Tests: `tests/test_unknown_no_cascade.py` (9 cases on the in-memory store: the UNKNOWN cases for `queue_reply`,
+`publish_queued`, `cancel_after`, `_next`, their FAILED counterparts, and a SENDING part still holding the next one). On
+the code before `7793aeab` the 4 UNKNOWN cases fail and the 5 FAILED/SENDING cases pass.

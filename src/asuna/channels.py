@@ -619,7 +619,8 @@ class Channels:
                 raise Denied('PUBLICATION_INTENT_STALE')
 
     # A part of her turn waits for the parts before it: while one is still on its way the later ones wait; once one has
-    # settled without arriving (failed, unknown, cancelled after a failure) the later ones never go.
+    # settled without arriving (failed, cancelled after a failure) the later ones never go. An unknown one (the platform
+    # may have it) is neither: it holds nothing and cancels nothing.
     PART_ON_ITS_WAY = ('READY', 'QUEUED_EXTERNAL', 'SENDING')
     PART_SETTLED = ('DELIVERED', 'CANCELLED_BY_HER')            # one she took back is settled
 
@@ -650,8 +651,8 @@ class Channels:
                 earlier = message_records.turn_parts(
                     self.store, row['episode_id'], before_segment=row['segment_index'],
                     not_states=self.PART_SETTLED, by=None).rows(fields=['delivery_state', KIND])
-                # UNKNOWN = send result unconfirmed, not a confirmed failure (11-05 retcode 1200 image reached the platform,
-                # two text parts were cancelled): it neither holds nor cancels the parts after it, and is not DELIVERED.
+                # UNKNOWN = send result unconfirmed, the platform may already have the part: it is not DELIVERED, but it
+                # neither holds nor cancels the parts after it (only a failed or cancelled earlier part cancels them).
                 if any(part['delivery_state'] not in self.PART_ON_ITS_WAY and part['delivery_state']!='UNKNOWN' for part in earlier):
                     message_records.save(self.store, {**row, 'delivery_state': 'CANCELLED_AFTER_FAILURE'},
                                          expected=row['revision'], stream=row['episode_id'])

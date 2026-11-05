@@ -694,7 +694,9 @@ class People:
         return cache[key]
 
     def scene_title(self, scene):
-        """A conversation as she reads it: 家里·私聊, 群聊「name」 or 私聊 with the person's label; never an id."""
+        """A conversation as she reads it: 家里·私聊, 群聊「name」 or 私聊 with the person's label; never an id. A group's
+        name is the one its row keeps (its newest named line's, written by ingress); a row given without the field is
+        read for it by id."""
         cache = self.__dict__.setdefault('_titles', {})
         if not scene:
             return '别处'
@@ -703,9 +705,8 @@ class People:
             if scene['_id'] == chat.get('scene_id'):
                 title = '家里·私聊'
             elif scene.get('kind') == 'group':
-                row = message_records.lines(self.store, scene['_id'], group_name=True, by='received_at').first(
-                    newest_first=True, fields=['event.raw.group_name'])
-                name = safe_name(((row or {}).get('event') or {}).get('raw', {}).get('group_name'), 30)
+                row = scene if 'name' in scene else scene_records.get(self.store, scene['_id'], fields=['name']) or {}
+                name = safe_name(row.get('name'), 30)
                 title = '群聊「%s」' % name if name else '一个群聊'
             else:
                 others = [d for d in self.roster(scene['_id']).values() if d.get('person') != self.self_id]

@@ -4,7 +4,8 @@ Persona, voice, ledger and working documents are whole revisable texts
 stored by section on the existing state_heads/state_revisions ledger (scope
 ``global-safe``; visibility lives on each section). Package markdown only
 seeds a missing head. There is no delete: only operator erasure writes a
-tombstone section.
+tombstone section. A document's head carries its kind, so a reader of one kind
+reads only those documents (`DocumentStore.of_kind`).
 
 A running record (JOURNALS) reads and writes the same way, but is stored one row per entry (journal_entries), each
 change kept beside its entry (journal_revisions): as one document every write copied the whole record.
@@ -243,6 +244,7 @@ def render_markdown(sections) -> str:
 class DocumentStore:
     def __init__(self, store, persona: str):
         self.store, self.persona = store, persona
+        self._journals = None    # the running records' names as `slugs()` last read them, while this instance lives
 
     def entity(self, slug):
         return f'doc:{self.persona}:{slug}'
@@ -251,8 +253,14 @@ class DocumentStore:
         return self.entity(slug) + '|' + SCOPE
 
     def is_journal(self, slug):
-        """A running record: work_log, or a document she made with kind journal (it has rows, never a head)."""
-        return slug in JOURNALS or bool(entry_of(self.store, self.persona, slug, fields=['_id']))
+        """A running record: work_log, or a document she made with kind journal (it has rows, never a head). Once
+        `slugs()` has run on this instance, the answer comes from the names that read grouped (and the records this
+        instance started since); before, from a read of one entry."""
+        if slug in JOURNALS:
+            return True
+        if self._journals is not None:
+            return slug in self._journals
+        return bool(entry_of(self.store, self.persona, slug, fields=['_id']))
 
     def head(self, slug):
         if self.is_journal(slug):
@@ -273,8 +281,23 @@ class DocumentStore:
     def slugs(self, prefix=''):
         rows = head_records.with_prefix(self.store, f'doc:{self.persona}:' + prefix).rows(fields=['_id'])
         found = {row['_id'][len(f'doc:{self.persona}:'):-len('|' + SCOPE)] for row in rows}
-        found |= {slug for slug in slugs(self.store, self.persona) if slug.startswith(prefix)}
+        self._journals = set(slugs(self.store, self.persona))
+        found |= {slug for slug in self._journals if slug.startswith(prefix)}
         return sorted(found)
+
+    def of_kind(self, kind):
+        """[(slug, revision id, content)] of the documents of this kind, by slug: the heads of that kind read once
+        (a head carries its document's kind, `_commit`), then their revisions only. A running record has no head
+        and is never one."""
+        prefix = f'doc:{self.persona}:'
+        heads = {row['_id'][len(prefix):-len('|' + SCOPE)]: row['revision_id']
+                 for row in head_records.with_prefix(self.store, prefix, kind=kind).rows(fields=['revision_id'])
+                 if row['_id'].endswith('|' + SCOPE)}
+        heads = {slug: revision_id for slug, revision_id in heads.items() if slug not in JOURNALS}
+        stored = {row['_id']: row.get('content') for row in
+                  head_records.revisions(self.store, list(heads.values())).rows(fields=['content'])} if heads else {}
+        return [(slug, heads[slug], stored[heads[slug]]) for slug in sorted(heads)
+                if (stored.get(heads[slug]) or {}).get('kind') == kind]
 
     # ── running records (JOURNALS): one row per entry ───────────────
     def _journal_import(self, slug):
@@ -374,6 +397,8 @@ class DocumentStore:
                     'seq': (last or {}).get('seq', 0) + 1, 'scope_key': SCOPE,
                     **{k: section[k] for k in SECTION_KEYS if k in section},
                     'created_at': now(), 'updated_at': now(), 'last_mutation': mutation_id}, stream='doc:' + mutation_id)
+                if self._journals is not None:
+                    self._journals.add(slug)          # a record this instance starts is one from here on
             else:
                 target = named_section(sections, intent.get('sid'))
                 if not target:
@@ -427,12 +452,14 @@ class DocumentStore:
             'content': content, 'source_ids': list(sources), 'parent_revision_id': current, 'reason': reason,
             'author': author, 'created_at': now(), **(extra or {})}, stream='doc:' + mutation_id)
         try:
+            # The head carries the document's kind, so a reader of one kind (`of_kind`) reads only its heads.
             if head:
-                head_records.save_head(self.store, {**head, 'revision_id': revision_id}, expected=head['revision'],
-                                       stream='doc:' + mutation_id)
+                head_records.save_head(self.store, {**head, 'revision_id': revision_id, 'kind': content.get('kind')},
+                                       expected=head['revision'], stream='doc:' + mutation_id)
             else:
                 head_records.save_head(self.store, {'_id': self.key(slug), 'scope_key': SCOPE,
-                                                    'revision_id': revision_id}, stream='doc:' + mutation_id)
+                                                    'revision_id': revision_id, 'kind': content.get('kind')},
+                                       stream='doc:' + mutation_id)
         except Conflict:
             self.store.audit('doc:' + mutation_id, 'state.conflict', {'entity': self.entity(slug),
                              'base_revision_id': base_revision_id, 'reason': 'BASE_REVISION_STALE'}, SCOPE)

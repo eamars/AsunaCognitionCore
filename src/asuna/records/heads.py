@@ -11,7 +11,7 @@ first revision; `mutate` writes her relationship or scene-affect revision from s
 `save_revision` are the revisioned writes (`Store.put`); `point_to`, `drop_head` and `tombstone_revision` an erasure's.
 """
 from ..store.words import AnyOf, NoneOf, Range, Set, StartsWith
-from .view import ANY, View, fenced, is_text, texts
+from .view import ANY, View, fenced, is_text, pinned, texts
 
 HEADS, REVISIONS = 'state_heads', 'state_revisions'
 
@@ -59,10 +59,11 @@ def by_mutation(store, mutation_id, fields=None):
 
 # Views.
 
-def with_prefix(store, *prefixes):
-    """View: the heads whose id starts with any of these prefixes."""
+def with_prefix(store, *prefixes, kind=ANY):
+    """View: the heads whose id starts with any of these prefixes (of this `kind`: a document's head carries its
+    document's kind, documents.DocumentStore._commit)."""
     prefixes = texts(prefixes)
-    return _heads(store, {'_id': StartsWith(*prefixes)} if prefixes else None)
+    return _heads(store, pinned({'_id': StartsWith(*prefixes)}, {'kind': (kind, is_text)}) if prefixes else None)
 
 
 def heads(store, ids=ANY, *, scope=ANY, scopes=ANY, by=()):
@@ -108,6 +109,12 @@ def save_head(store, row, **kwargs):
 def save_revision(store, row, **kwargs):
     """The write of a revision (`Store.put`)."""
     return store.put(REVISIONS, row, **kwargs)
+
+
+def backfill_kind(store, head_id, kind):
+    """ADR-117 L2b's one-off (tools/adr117_l2b_backfill.py, deleted with it): a document's head takes its document's
+    kind. An update of its own, not a revision: a writer holding the head keeps writing it."""
+    return store.collection(HEADS).update({'_id': head_id}, Set({'kind': kind}))
 
 
 def point_to(store, head_id, revision_id, revision_number):

@@ -226,15 +226,17 @@ CATALOG = Catalog([
         *(Field(path, 'text', required=True) for path in ('platform', 'account_id')), *_text('person_id')),
         (index(('platform', 1), ('account_id', 1), unique=True),),
         versioned=True),
-    # A conversation (records/scenes.py): the fields its owner names; the rest is stored and returned as written.
+    # A conversation (records/scenes.py): the fields its owner names; the rest is stored and returned as written. A
+    # group's `name` is the one its newest named line carried, written with the line's position (ingress).
     Collection('scenes', 'records.scenes', (
         Field('_last_op', 'text'), Field('schema_version', 'number'), Field('kind', 'text'), Field('scope_key', 'text'),
         Field('policy_epoch', 'number'), Field('sequence', 'number'), Field('members', 'list', of='text'),
         Field('channel_id', 'text', nullable=True), Field('condense_wanted', 'object', nullable=True),
         Field('condensed_at', 'text', nullable=True), Field('fault', 'object', nullable=True),
         Field('fault.at', 'text', nullable=True), Field('unsent', 'object', nullable=True),
-        Field('unsent.episode_id', 'text', nullable=True), Field('asides_shown_seq', 'number')),
-        versioned=True, counters=('sequence',)),
+        Field('unsent.episode_id', 'text', nullable=True), Field('asides_shown_seq', 'number'),
+        Field('name', 'text', nullable=True)),
+        versioned=True, counters=('sequence', 'name')),
     # A line of a conversation (records/messages.py): the fields its owner names; the rest is stored and returned as
     # written. Its times are ISO text, as the core writes them.
     Collection('messages', 'records.messages', (
@@ -291,12 +293,15 @@ CATALOG = Catalog([
          index(('person_id', 1), ('state', 1))),
         versioned=True),
     # A task and its messages (records/tasks.py): the fields their owner names; the rest is stored as written. The
-    # field of the tasks' unique index is required (3.5). Their times are ISO text, but a lease's expiry: seconds.
+    # field of the tasks' unique index is required (3.5). Their times are ISO text, but a lease's expiry: seconds. A
+    # result with a text report carries its length (`chars`) and its pages (`pages`), written with it (tasks.sized).
     Collection('tasks', 'records.tasks', (
         Field('_last_op', 'text'), Field('schema_version', 'number'), Field('request_key', 'text', required=True),
         *_text('state', 'scene_id', 'scope_key', 'requester_id', 'episode_id', 'continues_task_id', 'feedback_state',
                'created_at', 'finished_at'),
-        Field('policy_epoch', 'number', nullable=True), Field('lease_expires_at', 'number', nullable=True)),
+        Field('policy_epoch', 'number', nullable=True), Field('lease_expires_at', 'number', nullable=True),
+        Field('result', 'object', nullable=True), Field('result.chars', 'number', nullable=True),
+        Field('result.pages', 'number', nullable=True)),
         (index(('request_key', 1), unique=True),),
         versioned=True),
     # A plan (records/plans.py): the fields its owner names; the rest is stored as written. Its times are ISO text.
@@ -327,9 +332,9 @@ CATALOG = Catalog([
     Collection('chunk_marks', 'records.memories', (Field('seq', 'number'), Field('at', 'text'))),
     # Her revisioned state (records/heads.py): a head per entity and scope, and its revisions; the fields their owner
     # names, the rest stored as written. A revision's mutation id is its plain unique index's field, required (3.5);
-    # its times are ISO text.
+    # its times are ISO text. A document's head carries its document's `kind` (documents.DocumentStore._commit).
     Collection('state_heads', 'records.heads', (
-        Field('_last_op', 'text'), Field('schema_version', 'number'), *_text('revision_id', 'scope_key')),
+        Field('_last_op', 'text'), Field('schema_version', 'number'), *_text('revision_id', 'scope_key', 'kind')),
         versioned=True),
     Collection('state_revisions', 'records.heads', (
         Field('_last_op', 'text'), Field('schema_version', 'number'), Field('mutation_id', 'text', required=True),

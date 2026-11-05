@@ -17,6 +17,7 @@ The action brain's tasks: `TaskService` claims, leases, cancels and hands each r
 - def `records_pages` — Every tool record of the task as the report's last pages, each at most `size` characters like the report's own (a task makes up to a hundred and more calls: one page of them all ran past what a tool result carries inline); none when it made
 - def `observations_of` — The task's finished tool calls, each as its tool and an excerpt of its result (a failed one: its error).
 - def `task_pages` — The pages task op page reads: the report's, then its tool records.
+- def `sized` — A result as a finish writes it: one with a text report carries the report's length (`chars`) and the number of pages task op page reads (`pages`, `task_pages` as stored, unredacted), so the conversation's task list says how long a report is
 - def `bounded_result`
 - class `FeedbackStale` — The action result no longer authorizes a pending role continuation.
 - def `require_current_feedback`

@@ -185,13 +185,23 @@ def task_pages(store, task, shown=lambda value: value):
     return pages + records_pages(observations_of(store, task, shown))
 
 
+def sized(store, task, result):
+    """A result as a finish writes it: one with a text report carries the report's length (`chars`) and the number of
+    pages task op page reads (`pages`, `task_pages` as stored, unredacted), so the conversation's task list says how
+    long a report is without reading the report or its records. A finished task's report and records do not change."""
+    text = result.get('text') if isinstance(result, dict) else None
+    if not isinstance(text, str):
+        return result
+    return {**result, 'chars': len(text), 'pages': len(task_pages(store, {**task, 'result': result}))}
+
+
 def bounded_result(result, records=()):
     if isinstance(result, dict) and isinstance(result.get('text'), str):
         # The ids of its tool records are audit, not something she reads: a count says how much was done. `facts`
         # repeats the report with every record's id (the stored result keeps it). `records`: the pages of tool records
-        # that follow the report (records_pages).
+        # that follow the report (records_pages). Its stored size (`sized`) is the task list's, not hers to read here.
         refs = result.get('artifact_refs')
-        value = {key: item for key, item in result.items() if key not in ('artifact_refs', 'facts')}
+        value = {key: item for key, item in result.items() if key not in ('artifact_refs', 'facts', 'chars', 'pages')}
         pages = report_pages(result['text'])
         titles = [page_title(page) for page in [*pages[1:], *records]]
         count = len(pages) + len(records)
@@ -565,7 +575,7 @@ class TaskService:
             kept = {key: value for key, value in task.items()
                     if key not in ('pause_reason', 'paused_at', 'paused_state', 'paused_feedback_state', 'time_up')}
             back = task_records.save(self.store, {**kept, 'state': 'BLOCKED', 'failure_type': 'HostRestart',
-                'result': result, 'feedback_state': 'READY', 'fencing_token': task['fencing_token'] + 1,
+                'result': sized(self.store, task, result), 'feedback_state': 'READY', 'fencing_token': task['fencing_token'] + 1,
                 'execution_binding': task.get('execution_binding') or
                     f"task:{task['_id']}:{task['scope_key']}:{task['policy_epoch']}:{task['intent_revision']}"},
                 expected=task['revision'], stream=task_id)
@@ -733,7 +743,7 @@ class TaskService:
             result={'task_id':task['_id'],'intent_revision':current['intent_revision'],'artifact_refs':refs,
                     'text':'行动脑这次执行中断了：它的进程不在了，没有交回报告。工具记录是它中断前做到的。',
                     'facts':[],'uncertainties':['中断前已发起而没有回执的操作须先核实，不可盲目重做。']}
-            closed=task_records.save(self.store, {**current,'state':'BLOCKED','failure_type':'ORPHANED','result':result,
+            closed=task_records.save(self.store, {**current,'state':'BLOCKED','failure_type':'ORPHANED','result':sized(self.store,current,result),
                 'finished_at':now(),'feedback_state':'READY','fencing_token':current['fencing_token']+1},
                 expected=current['revision'],stream=task['_id'])
         self.collab(closed,'status',{'state':'failed'},'status:'+task['_id']+':orphaned')
@@ -1085,7 +1095,7 @@ class Executor:
                         text='行动运行失败，原目标仍未完成。'+(LEFT_NOTE if left else '')
                     result={'status':'blocked','text':text,'error':error,'uncertainties':['已发起而没有回执的操作须先核实，不可盲目重做。'],
                             **({'files':left} if left else {})}
-                    return task_records.save(self.service.store, {**current,'state':'BLOCKED','failure_type':type(exc).__name__,'result':result,'feedback_state':'READY'},expected=current['revision'],stream=task_id)
+                    return task_records.save(self.service.store, {**current,'state':'BLOCKED','failure_type':type(exc).__name__,'result':sized(self.service.store,current,result),'feedback_state':'READY'},expected=current['revision'],stream=task_id)
             raise
 
     def _run_claimed(self,task,workspace,healthy):
@@ -1175,6 +1185,8 @@ class Executor:
                 'uncertainties':(['行动脑没有给出可用的报告（'+unusable+'）；保留已产生的工具事实，不宣称目标完成。'] if unusable
                     else [] if value.finish_reason=='stop' else ['原生回合未正常结束；保留已产生的工具事实，不宣称目标完成。'])}
         returned=value.finish_reason=='stop' and not unusable
+        # Its size is read before the lock: the run's records are written (valid() holds its intent revision).
+        result=sized(self.service.store,task,result)
         with self.service.lock:
             current=self.service.valid(task)
             finished=task_records.save(self.service.store, {**current,'state':'RETURNED' if returned else 'BLOCKED',

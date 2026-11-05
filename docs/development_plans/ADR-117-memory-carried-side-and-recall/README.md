@@ -406,3 +406,17 @@ from L1; L4's log conversion waits for her visibility check.** Her answers and a
 - **Her `budget_per_place.py`:** the lead's suggested fix was wrong. `store_for_limit()` reads the default config
   path, which would break the copy runs. The right shape is a `state.Store` on the same `args.config` in place of the
   two shims. Hers; it rides with the next landing.
+
+## 15. After her reading: decisions and changes (2026-11-05)
+
+- **The owner:** his person record (3,563 of 4,000) is left as it is until the person-layer ADR, with no interim cap
+  and nothing moved; persona-job imports keep the refusal (L3).
+- **Her answer on note turns, revised (14:17):** a home turn woken by a note retrieves on a fixed template
+  (`notes.WAKE_TEXT`); the note itself is only in `note_from_program`. The page said note turns count because their
+  text is someone's note, which is false in code (the builder found it). Her answer is now that they count nothing;
+  `note` joins `PROGRAM_TEXT_KINDS` with L2. Her own recall in such a turn still counts. Searching by the note's own
+  text is her idea, not this ADR.
+- **L1 as built** (`af8933db`, `19ae939e`): `NOT_BACK` loses its clause 「再被用到只让它不再往下放」 already in L1,
+  because nothing at hand moves down by disuse from L1 on. When two chunks that are not adjacent segments of one message
+  are joined, '…' stands between them. `crossing.cue` already returns before firing in any non-external turn, so D1
+  needs no change there. No cooled row existed (0 `cooled` moves, 11-05), so no restore path was built.

@@ -169,6 +169,18 @@ BOUNDARY = [
     ("window_full_timestamp", "两端一律传带时刻的完整时间戳"),
 ]
 
+# 「22:12 十二条修订」的落点（索引节）：正文里必须留一枚查得到的标。
+# 防的是这一族：口径本身在正文里，但没有能被人查到的名字，于是每天派活靠 brief 手动带、
+# 正文与实际执行的口径越走越远。索引节被顺手删掉、标题被改写得认不出、或它偷偷变成了另立口径，都红在这里。
+TWELVE = [
+    ("twelve_marker_heading", "## 「22:12 十二条修订」的落点"),
+    ("twelve_index_not_a_rule", "这一节只是索引"),
+    ("twelve_brief_needle", "brief 不必再手动带口径"),
+    ("twelve_landing_table", "| 修订 | 落在哪一节 |"),
+    ("twelve_own_author_rows", "也剔她自己的角色 id——她自己发出去的行"),
+    ("twelve_topic_end_first", "「话题结束」（带凭据）优先报"),
+]
+
 PERSONAL_TOKENS = ["主人", "旧居", "交流群", "姐姐", "金主"]
 
 # 无日期、无来历：正文里出现这些形状就红（CHANGELOG 不查）。
@@ -298,7 +310,7 @@ def main():
     for index, section in enumerate(SECTIONS):
         check("section_%d" % index, ("\n" + section) in ("\n" + body), section)
 
-    for group in (FETCH, DIMENSIONS, REPORT, NEWDIM, ANCHORS, OUTLETS, BOUNDARY):
+    for group in (FETCH, DIMENSIONS, REPORT, NEWDIM, ANCHORS, OUTLETS, BOUNDARY, TWELVE):
         for name, token in group:
             check(name, token in body, token)
 

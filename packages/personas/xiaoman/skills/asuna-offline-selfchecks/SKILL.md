@@ -1,6 +1,6 @@
 ---
 name: asuna-offline-selfchecks
-description: 沈小满在核心技能 asuna-self-improvement 的离线自检之上记的增量笔记：「挂错项目」红的读法（xiaoman 候选没有 tools/tests，No such file or directory 是选错项目不是产品坏）、单独跑某个用例文件、p3 用例删除后的现行跑法与 pytest 不收 *_cases.py 的盲区、p5b 退役后「文件不存在 + exit 2」怎么读、「没收录 ≠ 已退役」、适配器自检在 qq-napcat-adapter 技能里不在这套里。通用离线自检的命令清单、退出码读法、__pycache__ 清理、project 归属、发布与重启口径一律以 asuna-self-improvement（随认知核发布）为准，这里不再重复；两份不一致按核心技能办。候选根里的一次性脚本写到哪儿、发布前怎么按 `files` 白名单扫候选根、判「文件有没有进到装给 worker 的包里」只认 artifact 那串 sha256 与 `.tgz` 的文件清单（`changed_files` 不等于包内容），都记在「候选根」一节。附零依赖离线自检 check_skill.py。
+description: 沈小满在核心技能 asuna-self-improvement 的离线自检之上记的增量笔记：「挂错项目」红的读法（xiaoman 候选没有 tools/tests，No such file or directory 是选错项目不是产品坏）、单独跑某个用例文件、p3 用例删除后的现行跑法与 pytest 不收 *_cases.py 的盲区、p5b 退役后「文件不存在 + exit 2」怎么读、「没收录 ≠ 已退役」、适配器自检在 qq-napcat-adapter 技能里不在这套里。通用离线自检的命令清单、退出码读法、__pycache__ 清理、project 归属、发布与重启口径一律以 asuna-self-improvement（随认知核发布）为准，这里不再重复；两份不一致按核心技能办。候选根里的一次性脚本写到哪儿、发布前怎么按 `files` 白名单扫候选根、判「文件有没有进到装给 worker 的包里」只认 artifact 那串 sha256 与 `.tgz` 的文件清单（`changed_files` 不等于包内容），都记在「候选根」一节。**要哈希就在沙箱里 `hashlib` 本地算、别为了算 sha 出网**（现成一行命令＋公网哈希服务反例清单；没有沙箱那一格写「哈希未算」、别拿外部服务返回值当本机号），记在「判据补遗 (j)」。附零依赖离线自检 check_skill.py。
 ---
 
 # asuna-offline-selfchecks
@@ -175,3 +175,17 @@ python3 skills/asuna-offline-selfchecks/pre_publish_scan.py --expect skills/<这
 
 钉：`pin_i_temp_one_command`（这一节的字面）＋ `temp_rule_present_when_temp_mentioned`（正文一提到临时目录／TEMP 就必须带上
 上面那句落点，缺了就红；判本技能正文，读得到核心技能 `asuna-self-improvement` 的正文时一起判，读不到打 NOTE 说没真查）。
+
+### (j) 要哈希就在沙箱里 hashlib 本地算，别为了算 sha 出网
+
+算 sha256／sha1／字节数一律在沙箱里本地算（`sandbox_run`、`development_run` 里起 `python3`，读字节 → 算 → 打印），**不许把要量的字面送进公网哈希服务换结果**。现成一行：
+
+```sh
+python3 -c "import hashlib,sys;print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())"
+```
+
+反例（真发生过，写死在这儿）：11-05 09:32 那趟只读活，要为一条私网守卫的拒话算 sha256，本回合工具表里没有 `sandbox_run` 也没有 `development_run`，于是把整行拒话按 UTF-8 百分号编码送进 `md5calc.com` 的 GET 哈希 API 算，还得借它的 base64 往返和已知向量倒推「送出去的字节就是我看到的字节」；那趟记下来的域名清单里还有 `api.hashify.net`、`api.sha256.com`、`api.allorigins.win`、`api.codetabs.com`（这四个只在 idea 字面里读到，那趟 `audit_events` 里核到的是 `md5calc.com` 一个域名 13 处，另外四个没核到）。代价是两头的：慢；而且把被测内容（要测的 URL、拒话正文）交给第三方算——**尺子和被测物不同源，那一格就不许写成「本机核实过」**。
+
+**没有沙箱那一格怎么落**：只读／无开发授权的回合里（那趟现场量过：`allowed_capabilities` 18 项，`sandbox_run` 与 `development_run` 都不在里面，本地确实没手），哈希那一格写「**哈希未算**（本回合没有沙箱）」，字面与字节数照抄，别出网、也别拿外部服务返回值当本机号。真要那个号：把字面原样写进报告或 `/task`（跨命令要留的东西一律写 `/task`，别拿 TEMP 当中间存储），下一趟带沙箱的活现算。
+
+钉：`pin_j_local_hash_offline`（只认这一节的字面）。

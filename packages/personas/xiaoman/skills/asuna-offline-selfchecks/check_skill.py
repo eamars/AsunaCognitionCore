@@ -107,6 +107,7 @@ BACKLOG_PINS = [
     ("pin_g_receipt_or_no_number", ["指不到就写「我没读到号」", "在跑，号等回执"]),
     ("pin_h_table_beats_prose", ["以表格为准，并追问同一格"]),
     ("pin_i_temp_one_command", ["跨命令要留的东西一律写 `/task`", "别拿 TEMP 当中间存储"]),
+    ("pin_j_local_hash_offline", ["别为了算 sha 出网", "哈希未算", "import hashlib,sys"]),
 ]
 
 # 派活交代的落点（2026-11-02 主人交代，来路是 10-22 部署环境那条 TEMP 回收改动）：正文一提到临时目录／TEMP，

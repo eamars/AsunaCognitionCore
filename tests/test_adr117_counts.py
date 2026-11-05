@@ -26,8 +26,8 @@ def retrieval(world, tmp_path, monkeypatch):
     value.close()
 
 
-def unit(world, memory_id, body, **fields):
-    scene = scene_records.get(world, 'dm-a')
+def unit(world, memory_id, body, scene_id='dm-a', **fields):
+    scene = scene_records.get(world, scene_id)
     return {'_id': memory_id, 'schema_version': 1, 'scope_key': scene['scope_key'],
             'policy_epoch': scene['policy_epoch'], 'character_id': world.config['character_id'], 'status': 'active',
             'kind': 'chat_chunk', 'epistemic_type': 'public_statement', 'body_markdown': body,
@@ -110,3 +110,13 @@ def test_two_halves_of_one_long_message_take_one_slot_joined_in_segment_order(wo
         'its halves in segment order, though the second ranked first'
     assert {m['_id'] for m in selected} - set(halves) == set(singles), 'the slot it freed went to the next memory'
     assert set(manifest['selected']) == {*halves, *singles}, 'both halves stay in the manifest'
+
+    # Segments 0 and 2 of a three-part message: the missing middle reads as '…', never as glued text.
+    world.collection('memory_units').insert([
+        unit(world, 'v-%d' % index, body, 'dm-b', segment_index=index, segment_count=3, source_event_ids=['m-three'])
+        for index, body in ((0, 'It starts with %s' % WORD), (2, '%s at the very end.' % WORD))])
+    other = scene_records.get(world, 'dm-b')
+    selected, manifest = retrieval.search(other['scope_key'], other['policy_epoch'], WORD)
+    assert [m['body_markdown'] for m in selected if m['_id'] in ('v-0', 'v-2')] == \
+        ['It starts with %s…%s at the very end.' % (WORD, WORD)]
+    assert {'v-0', 'v-2'} <= set(manifest['selected'])

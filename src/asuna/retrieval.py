@@ -46,13 +46,16 @@ def _message_of(unit):
 
 
 def _joined(units):
-    """One entry for the chunks of one message: the first chunk's fields, the bodies joined in segment order (a
-    message's chunks are its text cut in pieces, nothing between them), and every chunk's id (`joined_ids`). A single
-    unit is itself."""
+    """One entry for the chunks of one message: the first chunk's fields, the bodies joined in segment order, and
+    every chunk's id (`joined_ids`). A message's chunks are its text cut in pieces, so adjacent ones join with nothing
+    between them, and '…' stands where a segment between them is missing. A single unit is itself."""
     if len(units)==1:return units[0]
     ordered=sorted(units,key=lambda m:(m.get('segment_index') or 0,m['_id']))
-    return {**ordered[0],'body_markdown':''.join(m.get('body_markdown') or '' for m in ordered),
-            'joined_ids':[m['_id'] for m in ordered]}
+    body=''
+    for before,m in zip([None,*ordered],ordered):
+        if before is not None and (m.get('segment_index') or 0)-(before.get('segment_index') or 0)>1:body+='…'
+        body+=m.get('body_markdown') or ''
+    return {**ordered[0],'body_markdown':body,'joined_ids':[m['_id'] for m in ordered]}
 
 
 class Retrieval:

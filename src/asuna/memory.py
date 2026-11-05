@@ -1,11 +1,14 @@
 """Her written memory: `commit_understanding` saves the understanding of a person she writes in a turn, `chunk`
-cuts chat lines into memory units for recall, and `rollback` is the operator's audited undo.
+cuts chat lines into memory units for recall, in each conversation up to its mark (`chunk_marks`, before which every
+line is settled), and `rollback` is the operator's audited undo.
 
 Every write goes through the store's revision check. role_tools.py, memory_indexer.py and `asuna rollback` call it.
 """
 from __future__ import annotations
 import copy
 import json
+from datetime import datetime,timedelta,timezone
+from . import clock
 from .config import character_id
 from .evidence import canonical,sha
 from .state import Store,Denied,Conflict,now
@@ -207,29 +210,83 @@ class MemoryService:
             return revision
 
     def chunk(self,scene_id):
+        """Cut a conversation's lines after its mark into memory units for recall. A round (ADR-117 B8) reads the
+        lines after the mark (records.memories.chunk_mark) in every state, chunks each settled spoken line of this
+        epoch (`settled`, `spoken`; a unit whose id exists is skipped, so a lost mark only starts again from 0), and
+        moves the mark to just before the first line not settled yet: a reply still on its way holds it and is chunked
+        once it is delivered. The lines themselves are never written. Returns the units made."""
         scene=scene_records.get(self.store, scene_id)
-        rows=message_records.said(self.store,scene_id,people_only=True).rows()
-        made=[]
-        for row in rows:
-            if row.get('policy_epoch',1)!=scene['policy_epoch']:continue
-            if row.get('memory_chunk_version')==2:continue
+        mark=memory_records.chunk_mark(self.store,scene_id)
+        moment=clock.now()
+        reached,held,lines=mark,False,[]
+        for row in message_records.lines(self.store,scene_id,after=mark).each(fields=LINE_FIELDS):
+            if not settled(row,scene['policy_epoch'],moment):
+                held=True;continue
+            if not held:reached=row['scene_seq']
+            if spoken(row) and row.get('policy_epoch',1)==scene['policy_epoch']:lines.append(row)
+        cut=[]
+        for row in lines:
             # Stable per-message segments: adding another turn cannot regroup
             # old events or drop the last single message. No text is discarded.
             parts=[];part='';size=0
-            for char in row['text']:
+            for char in row.get('text') or '':
                 cost=len(char.encode('utf-8'))
                 if size+cost>900:parts.append(part);part='';size=0
                 part+=char;size+=cost
             if part:parts.append(part)
-            for index,body in enumerate(parts):
-                key='chunk-'+sha(canonical([row['_id'],2,index]))
-                if memory_records.get(self.store,key):continue
-                made.append(memory_records.save(self.store,{'_id':key,'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],
-                    'character_id':character_id(self.store.config),'kind':'chat_chunk','body_markdown':body,
-                    'epistemic_type':'reported_speech' if row['direction']=='inbound' else 'public_statement',
-                    'speaker':row['author'],'scene_seq':row['scene_seq'],'occurred_at':row.get('occurred_at',row.get('received_at')),
-                    'segment_index':index,'segment_count':len(parts),'source_event_ids':[row['_id']],
-                    'depends_on':[row['_id']],'status':'active','embedding_status':'PENDING',
-                    'chunk_budget_method':'UTF8_bytes_conservative_bound','overlap_tokens':0},stream='chunk:'+scene_id))
-            message_records.save(self.store, {**row,'memory_chunk_version':2},expected=row['revision'],stream='chunk:'+scene_id)
+            cut+=[(row,index,body,len(parts),'chunk-'+sha(canonical([row['_id'],2,index]))) for index,body in enumerate(parts)]
+        keys=[key for *_,key in cut]
+        found=set()
+        for start in range(0,len(keys),EXISTS_BATCH):
+            found|={unit['_id'] for unit in memory_records.many(self.store,keys[start:start+EXISTS_BATCH]).each(fields=['_id'])}
+        made=[]
+        for row,index,body,count,key in cut:
+            if key in found:continue
+            made.append(memory_records.save(self.store,{'_id':key,'scope_key':scene['scope_key'],'policy_epoch':scene['policy_epoch'],
+                'character_id':character_id(self.store.config),'kind':'chat_chunk','body_markdown':body,
+                'epistemic_type':'reported_speech' if row['direction']=='inbound' else 'public_statement',
+                'speaker':row['author'],'scene_seq':row['scene_seq'],'occurred_at':row.get('occurred_at',row.get('received_at')),
+                'segment_index':index,'segment_count':count,'source_event_ids':[row['_id']],
+                'depends_on':[row['_id']],'status':'active','embedding_status':'PENDING',
+                'chunk_budget_method':'UTF8_bytes_conservative_bound','overlap_tokens':0},stream='chunk:'+scene_id))
+        if reached>mark:
+            memory_records.mark_chunked(self.store,scene_id,reached,clock.stamp())
         return made
+
+
+# ADR-117 B8: which lines a chunk round may step past (`settled`).
+TERMINAL_STATES=('DELIVERED','FAILED','CANCELLED_AFTER_FAILURE','CANCELLED_BY_HER','REDACTED')
+LEFT_SETTLES=timedelta(hours=1)        # her line on its way this long counts as settled (and is not chunked)
+LINE_FIELDS=['text','direction','delivery_state','author','policy_epoch','scene_seq','occurred_at','received_at',
+             'receipt_at','claimed_at','queued_at']
+EXISTS_BATCH=500                       # chunk ids looked up per read
+
+
+def settled(row,epoch,moment):
+    """Whether nothing can change any more whether this line is chunked, so a chunk round may step past it: a line
+    that came in (a person's, or the program's own moment), a line of another epoch, her line delivered or in a
+    terminal state (TERMINAL_STATES: failed, cancelled after a failure, cancelled by her, redacted), or her line left
+    on its way (ready, queued, sending, unknown) for more than LEFT_SETTLES, from its receipt, else its claim, else
+    when it was queued. Her line on its way within the hour is not, nor one that carries none of those times (a
+    reply between its write and its publishing). `moment`: now, an aware datetime."""
+    if row.get('policy_epoch',1)!=epoch or row.get('direction')!=message_records.OUTBOUND:
+        return True
+    if row.get('delivery_state') in TERMINAL_STATES:
+        return True
+    left=row.get('receipt_at') or row.get('claimed_at') or row.get('queued_at')
+    try:
+        since=datetime.fromisoformat(str(left).replace('Z','+00:00')) if left else None
+    except ValueError:
+        since=None
+    if since is not None and since.tzinfo is None:
+        since=since.replace(tzinfo=timezone.utc)
+    return since is not None and moment-since>LEFT_SETTLES
+
+
+def spoken(row):
+    """Whether a line is chunked once settled: a person's line, or hers delivered (`message_records.said`, people
+    only); never the program's own line, never a redacted one."""
+    if row.get('author')==message_records.PROGRAM_AUTHOR or row.get('delivery_state')=='REDACTED':
+        return False
+    return row.get('direction')==message_records.INBOUND or (row.get('direction')==message_records.OUTBOUND
+                                                             and row.get('delivery_state')==message_records.DELIVERED)

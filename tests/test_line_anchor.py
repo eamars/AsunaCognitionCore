@@ -96,6 +96,7 @@ def test_a_source_restated_beside_a_line_it_already_rests_on_keeps_it(world):
     _, content = docs.read('notes')
     sid = content['sections'][0]['sid']
     tiers = memory_tiers.Tiers(store, 'demo')
+    tiers.written('notes', {'op': 'append_section'}, None, content, scene_id=SCENE)     # her write makes its row
     anchor = {'scene': SCENE, 'seq': world.other['scene_seq']}
     tiers.written('notes', {'op': 'set_tags', 'sid': sid, 'from': '别人说的', 'anchor': anchor}, content, content, scene_id=SCENE)
     restated = {'op': 'set_tags', 'sid': sid, 'doc': 'notes', 'from': '别人说的', 'tags': ['x']}
@@ -140,6 +141,7 @@ def test_the_item_has_its_line_exactly_while_it_is_someones_word(world):
     _, before = docs.read('notes')
     sid = before['sections'][0]['sid']
     tiers = memory_tiers.Tiers(store, 'demo')
+    tiers.written('notes', {'op': 'append_section'}, None, before, scene_id=SCENE)      # her write makes its row
     anchor = {'scene': SCENE, 'seq': world.other['scene_seq']}
 
     def write(**fields):
@@ -179,6 +181,7 @@ def test_sources_lists_only_the_items_that_rest_on_a_line(world):
     _, content = docs.read('notes')
     first, second = (section['sid'] for section in content['sections'])
     tiers = memory_tiers.Tiers(store, 'demo')
+    tiers.written('notes', {'op': 'append_section'}, None, content, scene_id=SCENE)     # her writes make their rows
     anchor = {'scene': SCENE, 'seq': world.other['scene_seq']}
     tiers.written('notes', {'op': 'set_tags', 'sid': first, 'from': '别人说的', 'anchor': anchor}, content, content, scene_id=SCENE)
     tiers.written('notes', {'op': 'set_tags', 'sid': second, 'from': '我自己的判断'}, content, content, scene_id=SCENE)

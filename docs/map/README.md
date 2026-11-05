@@ -248,7 +248,7 @@ The worker the Host plugin starts, its store, configuration and audit.
 - [`records/view`](../../src/asuna/records/view.py) — What the owners of `episodes`, `sessions` and the receipts share: a named read (`View`) and the checks of a fence.
 - [`records/tasks`](../../src/asuna/records/tasks.py) — The owner of `tasks` and `task_messages`: the work she hands to the action brain (its request, lease, state, result and hand-back) and the messages between her and the action session about it, read and written only through these operations.
 - [`records/plans`](../../src/asuna/records/plans.py) — The owner of `plans`: what she and the program scheduled (her plans in a conversation, the rhythms of the heartbeat, settlement, self-development and condensing, their next fire and last outcome), read and written only through these operati
-- [`records/memories`](../../src/asuna/records/memories.py) — The owner of `memory_units`: her recall (the chat chunks of her conversations, their summaries, her thoughts, imported entries) and its vector space, read and written only through these operations.
+- [`records/memories`](../../src/asuna/records/memories.py) — The owner of `memory_units`: her recall (the chat chunks of her conversations, their summaries, her thoughts, imported entries) and its vector space, read and written only through these operations; and of `chunk_marks`, how far each convers
 - [`records/artifacts`](../../src/asuna/records/artifacts.py) — The owner of `artifacts`: the rows of what she and the program keep apart from the conversation (stored files and pictures with their bytes' manifest, the action brain's tool records, held notices and passed lines, requests and group action
 - [`records/heads`](../../src/asuna/records/heads.py) — The owner of `state_heads` and `state_revisions`: her revisioned state (documents, relationships and the person layer, scene affect, policy, self descriptions), a head per entity and scope naming its current revision, read and written only 
 - [`records/people`](../../src/asuna/records/people.py) — The owner of `identities` and `scene_people`: who a person is on this machine (their identity: platform, account, the name the operator gave them) and how each conversation labels them (its label rows: number, card, nickname, role, when las
@@ -313,7 +313,7 @@ Who is talking, whether she joins in, her places, notes between conversations.
 
 What she remembers, how it is recalled, her documents, mood and blobs.
 
-- [`memory`](../../src/asuna/memory.py) — Her written memory: `commit_understanding` saves the understanding of a person she writes in a turn, `chunk` cuts chat lines into memory units for recall, and `rollback` is the operator's audited undo.
+- [`memory`](../../src/asuna/memory.py) — Her written memory: `commit_understanding` saves the understanding of a person she writes in a turn, `chunk` cuts chat lines into memory units for recall, in each conversation up to its mark (`chunk_marks`, before which every line is settle
 - [`memory_indexer`](../../src/asuna/memory_indexer.py) — Index persisted local dialogue off the generation thread; restart scans pending work.
 - [`memory_pilot`](../../src/asuna/memory_pilot.py) — The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
 - [`memory_tiers`](../../src/asuna/memory_tiers.py) — Tiered memory (ADR-062): where each of her items lives, kept up by what is memorable, moved down by the program.

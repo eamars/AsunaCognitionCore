@@ -26,6 +26,7 @@ her `inject`: the tier is the record of what is carried. She reads all of it as 
 from __future__ import annotations
 
 import re
+import time
 from datetime import datetime, timedelta, timezone
 
 from . import clock
@@ -76,10 +77,16 @@ STAY_DAYS, STAY_CAP_DAYS = 14, 56
 # group's notes 28..56), never past the stay cap, so what nothing uses lapses gradually, not all on one day (owner
 # 2026-10-13, after the dry run). Later items take the usual first stay.
 JOURNAL_AGE_DAYS = 30             # a running record's row comes up by itself while used within this (within_age)
+TICK_SECONDS = 600                # a turn runs `tick` at most this often in one process (tick_due)
+# What a turn's readers read of each item row (ADR-117 B3): never whole rows. Counts stay counts of rows.
+THINGS_FIELDS = ['store', 'place', 'doc', 'visibility']
+CARRIED_FIELDS = ['store', 'place', 'doc', 'sid', 'felt', 'memorable_at', 'last_use_at', 'heading']
+DELIVER_FIELDS = ['doc', 'sid', 'place', 'store', 'fact', 'added', 'heading', 'memorable_at', 'last_use_at']
 # ADR-117 D1: the turns whose message is program text (a heartbeat, a visit, self-development, the night's
-# settlement). Their items still come up, but nothing is counted: no use, no memorable moment, no rehearsal, no
-# program score, no came-back count (context.prepare). Her own recall in such a turn counts.
-PROGRAM_TEXT_KINDS = ('presence', 'visit', 'self_development', 'settlement')
+# settlement, and a turn a note woke, whose message is notes.WAKE_TEXT; the note itself is in note_from_program).
+# Their items still come up, but nothing is counted: no use, no memorable moment, no rehearsal, no program score, no
+# came-back count (context.prepare). Her own recall in such a turn counts.
+PROGRAM_TEXT_KINDS = ('presence', 'visit', 'self_development', 'settlement', 'note')
 AGE_WORDS = ((1, '刚写的'), (7, '这几天'), (14, '前阵子'), (45, '上个月'), (None, '更早'))
 COUNT_WORDS = ((0, '没有'), (3, '几条'), (9, '好几条'), (19, '十几条'), (99, '几十条'), (None, '很多条'))
 # How much room a store's 随身 has left under its cap, said in every turn instead of its count: the carried items are
@@ -244,8 +251,9 @@ class Tiers:
         self.rows = store.collection(COLLECTION)
 
     # ── items ──────────────────────────────────────────────────────
-    def items(self, **query):
-        return items(self.store, self.persona, **query).rows()
+    def items(self, *, fields=None, **query):
+        """Her items' rows meeting `query`; `fields`: only these of each (and `_id`), as a turn's readers read them."""
+        return items(self.store, self.persona, **query).rows(fields=fields)
 
     def item(self, doc, sid):
         return self.rows.get(item_id(self.persona, doc, sid))
@@ -278,7 +286,9 @@ class Tiers:
     def sync(self, moment=None):
         """Every item has a row. One the program has not seen takes its place from its `inject` (always 随身,
         on_demand 手边, never 收着) with a fresh stay: nothing lapses on the day the switch goes on. On that day (no
-        rows yet), each first stay is spread per item from its usual length to twice that, within the cap."""
+        rows yet), each first stay is spread per item from its usual length to twice that, within the cap. It reads
+        every document, so it runs once per process start (memory_pilot.attach), for what was written while the
+        worker was down; every write makes its own rows (`written`)."""
         from .documents import DocumentStore
         moment = moment or clock.now()
         docs = DocumentStore(self.store, self.persona)
@@ -362,7 +372,11 @@ class Tiers:
     PER_DOC = ('ledger', 'group_notes', 'self', 'core')
 
     def _carried(self, doc, kind):
-        return self.items(doc=doc, place=CARRIED) if kind in self.PER_DOC else self.items(store=kind, place=CARRIED)
+        """A store's carried rows (per document where its cap is), only the fields its readers use (CARRIED_FIELDS);
+        a move reads its row whole."""
+        if kind in self.PER_DOC:
+            return self.items(doc=doc, place=CARRIED, fields=CARRIED_FIELDS)
+        return self.items(store=kind, place=CARRIED, fields=CARRIED_FIELDS)
 
     def _lapse_order(self, rows):
         """The order carried items lapse in over a cap: least recently memorable first, felt ones last. Items one
@@ -392,11 +406,11 @@ class Tiers:
             self.rows.update({'_id': key}, [OnCreate({'row': 'over', 'persona': self.persona, 'doc': doc,
                                                       'store': kind, 'since': _iso(moment), 'shown_in': []}),
                                             Set({'keep': keep})], create=True)
-            return [move for move in (self.move(row, AT_HAND, 'overflow', moment)
+            return [move for move in (self.move(self.rows.get(row['_id']), AT_HAND, 'overflow', moment)
                                       for row in order[:max(0, len(carried) - cap - 1)]) if move]
         self.rows.delete({'_id': key})
-        return [move for move in (self.move(row, AT_HAND, 'overflow', moment) for row in order[:len(carried) - cap])
-                if move]
+        return [move for move in (self.move(self.rows.get(row['_id']), AT_HAND, 'overflow', moment)
+                                  for row in order[:len(carried) - cap]) if move]
 
     def overflows(self, here, scene_id, moment):
         """The stores over their cap that this turn reads: shown once each, for her to choose; one already shown
@@ -477,15 +491,15 @@ class Tiers:
         return plan
 
     def written(self, slug, intent, before, after, *, scene_id=None, felt=False, moment=None, before_revision=None):
-        """After one of her document writes, the moves placement_after gives, made: a new item starts carried (a
-        running record's at hand), a rewrite that changed an item starts its stay again from carried, a correction
-        supersedes the item it corrects. A group's notes refold. Returns the moves a reader should be told of (an
-        overflow names what it lapsed)."""
+        """After a document write (hers; or a seed adopted, an import: `intent` of another op), the moves
+        placement_after gives, made: every new section gets its row (her new item starts carried, a running record's
+        at hand; another write's takes its place from its `inject`, as sync would, and takes no store over its cap), a
+        rewrite that changed an item starts its stay again from carried, a correction supersedes the item it corrects.
+        A group's notes refold. Returns the moves a reader should be told of (an overflow names what it lapsed)."""
         moment = moment or clock.now()
         kind = store_of(slug, (after or {}).get('kind'))
         if not kind:
             return []
-        self.sync(moment)                        # rows for anything not seen yet (her other documents too)
         old = {s['sid']: s for s in (before or {}).get('sections') or []}
         new = {s['sid']: s for s in (after or {}).get('sections') or []}
         op, moves = intent.get('op'), []
@@ -498,7 +512,8 @@ class Tiers:
                 'place': (plan.get(sid) or [(row['place'], None)])[-1][0], 'heading': new[sid].get('heading') or sid,
                 'visibility': new[sid].get('visibility'),
                 **({'scene_id': scene_id} if scene_id else {}), **({'felt': True} if felt else {})}))
-            if self.item(slug, sid)['place'] == CARRIED:
+            # Only her write takes a store over its cap here; another write's rows are made as sync made them.
+            if op in HER_OPS and self.item(slug, sid)['place'] == CARRIED:
                 moves += self._overflow(slug, kind, row['_id'], moment)
             if op == 'correction' and new[sid].get('corrects') in old:
                 corrected = self.item(slug, new[sid]['corrects'])
@@ -670,7 +685,7 @@ class Tiers:
                 return readable_docs is not None and row['doc'] in readable_docs
             return True
         counts, docs = {}, {}
-        for row in self.items():
+        for row in self.items(fields=THINGS_FIELDS):
             if here(row):
                 counts.setdefault(row['store'], {CARRIED: 0, AT_HAND: 0, PUT_AWAY: 0})[row['place']] += 1
                 docs.setdefault(row['store'], set()).add(row['doc'])
@@ -735,6 +750,20 @@ class Tiers:
         self.rows.update({'_id': key}, Set({'row': 'told', 'persona': self.persona, 'scene_id': scene['_id'],
                                             'day': day}), create=True)
         return '最近一天：' + '；'.join(parts)
+
+
+_ticked = {}                      # (database, persona): when this process last ran tick (time.monotonic)
+
+
+def tick_due(store, persona):
+    """A turn's `tick`: run when this process has not run it for this persona within TICK_SECONDS (a memo of this
+    process; nothing is written for it). Returns the moves."""
+    key = (store.name, persona)
+    if key in _ticked and time.monotonic() - _ticked[key] < TICK_SECONDS:
+        return []
+    moves = Tiers(store, persona).tick()
+    _ticked[key] = time.monotonic()
+    return moves
 
 
 def signing(row, intent, body=None):
@@ -1009,7 +1038,8 @@ def week(store, persona, zone, moment=None):
                                                     'recall 过它' if again else '没再 recall 它'))
     block = {'left': left or ['这一周没有东西从随身放下。']}
     week_id = moment.isocalendar()[:2]
-    away = sorted(tiers.items(place=PUT_AWAY), key=lambda row: sha(canonical([list(week_id), row['_id']])))
+    away = sorted(tiers.items(place=PUT_AWAY, fields=['doc', 'sid', 'heading']),
+                  key=lambda row: sha(canonical([list(week_id), row['_id']])))
     if away:
         row = away[0]
         content = DocumentStore(store, persona).read(row['doc'])[1] or {}
@@ -1017,7 +1047,8 @@ def week(store, persona, zone, moment=None):
         if text:
             block['put_away'] = {'ref': ref(row['doc'], row['sid']), 'heading': row.get('heading'),
                                  'text': excerpt(text, WEEK_TEXT_CHARS)}
-    changed = [row.get('heading') or row['sid'] for row in tiers.items() if (row.get('rewritten_at') or '') >= since]
+    changed = [row.get('heading') or row['sid'] for row in tiers.items(fields=['sid', 'heading', 'rewritten_at'])
+               if (row.get('rewritten_at') or '') >= since]
     block['changed'] = ('这周你改过：' + '、'.join('「%s」' % name for name in changed)) if changed else '这周你没改过哪一条。'
     tiers.rows.update({'_id': 'offer:week:%s:%d-%d' % (persona, *week_id)}, OnCreate({
         'row': 'offer', 'persona': persona, 'what': 'week', 'at': _iso(moment)}), create=True)
@@ -1080,7 +1111,7 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
     if not items:
         return [], []
     tiers = Tiers(store, persona)
-    rows = {(row['doc'], row['sid']): row for row in tiers.items()}
+    rows = {(row['doc'], row['sid']): row for row in tiers.items(fields=DELIVER_FIELDS)}
     allowed = (AT_HAND, PUT_AWAY) if recall else (AT_HAND,)
     moment = moment or clock.now()
     from .group_admin import folded as _folded

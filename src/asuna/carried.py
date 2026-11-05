@@ -397,7 +397,7 @@ class _Past:
     def __init__(self, store, persona):
         from . import memory_tiers
         from .documents import DocumentStore
-        rows = memory_tiers.Tiers(store, persona).items()
+        rows = memory_tiers.Tiers(store, persona).items(fields=['doc', 'sid', 'store', 'place', 'added'])
         self.items = {row['_id']: row for row in rows}
         self.moves = {}
         for move in memory_tiers.moves(store, persona).each(fields=['item', 'from', 'to', 'at']):

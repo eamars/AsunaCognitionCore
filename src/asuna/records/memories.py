@@ -1,5 +1,6 @@
 """The owner of `memory_units`: her recall (the chat chunks of her conversations, their summaries, her thoughts,
-imported entries) and its vector space, read and written only through these operations.
+imported entries) and its vector space, read and written only through these operations; and of `chunk_marks`, how far
+each conversation's lines are cut into chunks (`chunk_mark`, `chunk_marks`, `mark_chunked`).
 
 `get` returns a memory as stored (`fields` names what to return, or `Without(...)` what to leave out; `_id` always
 comes back), within the fences given. None follows section 4's rule: an id or a fence (scope, epoch, character, turn,
@@ -11,10 +12,11 @@ none). `save` is the revisioned write (`Store.put`); `tombstone`, `set_epoch` an
 recall's own writes. `nearest` is the space's exact vector search, its pairs an `Or` of the pairs' conditions.
 """
 from ..store.catalog import Space
-from ..store.words import And, AnyOf, Contains, Holds, HoldsAny, Increase, NoneOf, Not, Or, Set, Without
+from ..store.words import And, AnyOf, Contains, Holds, HoldsAny, Increase, Larger, NoneOf, Not, Or, Set, Without
 from .view import ANY, View, fenced, is_number, is_text, pinned, texts
 
 COLLECTION = 'memory_units'
+MARKS = 'chunk_marks'
 ALIVE, ERASED = 'active', 'tombstone'
 # kind: her own thoughts in other conversations are searched apart from their talk (retrieval's own_thoughts).
 SPACE = Space(name='asuna_memory_v1', collection=COLLECTION, path='embedding', dimensions=768,
@@ -198,6 +200,29 @@ def touch_salience(store, memory_id, moment, seq):
     """A real turn used the memory: one more reference, and when and at which position of its conversation."""
     store.collection(COLLECTION).update({'_id': memory_id}, [
         Increase('salience.ref_count'), Set({'salience.last_ref_at': moment, 'salience.last_ref_seq': seq})])
+
+
+# How far each conversation's lines are chunked (`chunk_marks`): one row per conversation, `_id` its scene id.
+
+def chunk_mark(store, scene_id):
+    """The position a conversation's lines are chunked up to; 0 when it has no mark (a lost mark starts again)."""
+    row = store.collection(MARKS).get(scene_id, ['seq']) if is_text(scene_id) else None
+    return (row or {}).get('seq') or 0
+
+
+def chunk_marks(store, scene_ids):
+    """{scene id: position} of these conversations' marks, in one read; one without a mark is left out."""
+    ids = texts(scene_ids)
+    if not ids:
+        return {}
+    return {row['_id']: row.get('seq') or 0 for row in store.collection(MARKS).find({'_id': AnyOf(ids)}, fields=['seq'])}
+
+
+def mark_chunked(store, scene_id, seq, at):
+    """A conversation's lines are chunked up to `seq` (`at`: when). The mark only ever grows: the indexer and a turn's
+    on-demand chunk both write it."""
+    if is_text(scene_id) and is_number(seq):
+        store.collection(MARKS).update({'_id': scene_id}, [Larger('seq', seq), Set({'at': at})], create=True)
 
 
 # The vector space.

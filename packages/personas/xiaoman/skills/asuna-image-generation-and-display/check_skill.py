@@ -64,6 +64,14 @@ scope_key 那一格在不在（scope 字面值从 `scenes` 读、`source` 前缀
 负面三项 white hair, silver hair, gray hair、以及两条限制（仅该路线验证、画完仍逐次 read_image）五条字面
 押在该节切片里——配方与限制同等承重，只留配方不留限制，下次就会被当通用配方搬去别的路线。
 
+2026-11-05 起再补两组判据（11-04 四张人像实测＋11-05 一趟真探测：新界面字段面与经验落正文）：
+「人像实测」那一节（标题在 SECTIONS，节内保守字面「坐直＋拉链拉到下巴＋领口折起来」、反例构图「趴床／前倾／斜倚」、
+英文写法 `zipper pulled up to chin`、自拍那条「手臂伸出画外」与「手机进画」当可选项、局部放大复核的三块裁图与 `resize`、
+人物小平面那条 `no graphic` 与路线限制）押在该节切片里；11-05 现读字段面押在全篇
+（回执 `warnings` 要看、参数面没有 `pose`／`pose_strength`、`list_routes` 每条给哪些键那一小节、
+「两把尺不是一把」——manifest `route_table` 与工具 `list_routes` 不是一个名单）。
+切片为空不等于查过，标题被删那几条一起红。
+
 不联网、不调生图服务、不生成图、不写 Mongo、不发 QQ。
 
 用法：
@@ -280,6 +288,7 @@ SECTIONS = [
     "## 改图与 `generate_image`",
     "## 群聊生图上限",
     "## 本机已有那张图怎么进可发清单",
+    "## 人像实测：构图决定拉链、自拍别指望手机、交图前放大复核",
 ]
 
 # 已经过期的说法：出站图片能力上线后、DECIDE 退役后不能再这么写（只看散文，反引号里的引用不算）
@@ -310,6 +319,47 @@ STALE_CLAIMS = [
     "两条，都由程序登记",
     "群里只发她自己生成并导入的图",
 ]
+
+# 人像实测（2026-11-05 落正文；11-04 四张人像实测 + 11-05 一趟便宜档复核）。
+# 押在「人像实测」这一节的切片里：这些是下次画人像能直接照抄的字面，散到别处或删掉就等于经验又丢了。
+PORTRAIT_HEADING = "## 人像实测：构图决定拉链、自拍别指望手机、交图前放大复核"
+PORTRAIT = [
+    ("portrait_leaning_opens_zipper", "趴床／前倾／斜倚"),
+    ("portrait_conservative_literal", "坐直＋拉链拉到下巴＋领口折起来"),
+    ("portrait_english_zipper", "zipper pulled up to chin"),
+    ("portrait_english_collar", "folded collar"),
+    ("portrait_cheap_draft_not_verdict", "判不了"),
+    ("portrait_selfie_arm_out_frame", "手臂伸出画外"),
+    ("portrait_selfie_phone_optional", "当**可选项**"),
+    ("portrait_read_before_send", "登记进清单 ≠ 能发"),
+    ("portrait_three_crops", "领口／拉链、手、脸"),
+    ("portrait_zoom_upscale", "resize"),
+    ("portrait_small_planes_no_graphic", "no graphic"),
+    ("portrait_small_planes_route_limit", "别的路线没重测"),
+]
+
+# 11-05 现读字段面（押全篇：这几条住在「直路」与「姿势」两节，判的是「别把工具面当服务端面」）。
+FIELD_SURFACE = [
+    ("field_warnings_read", "出图 ≠ 参数被接受"),
+    ("field_no_pose_param", "没有 `pose`／`pose_strength`"),
+    ("field_list_routes_keys", "每条给哪些键"),
+    ("field_two_rulers", "两把尺不是一把"),
+    ("field_job_is_resume", "超时续取"),
+]
+
+
+def portrait_section_slice(body):
+    """「## 人像实测…」标题下、下一个二级标题之前的正文。"""
+    out, taking = [], False
+    for line in body.splitlines():
+        if line.startswith("## 人像实测"):
+            taking = True
+        elif taking and line.startswith("## "):
+            break
+        if taking:
+            out.append(line)
+    return "\n".join(out)
+
 
 # 反引号里的字面量是引用（示例、错误码、历史段与被改坏副本里引用的旧句子），只在散文里判红。
 PROSE = re.compile(r'`[^`]*`', re.S)
@@ -765,6 +815,16 @@ def main():
     for name, token in BLACK_HAIR:
         check(name, token in look_slice,
               "「%s」不在「官方定妆」这一节里（切片 %d 字）" % (token, len(look_slice)))
+
+    # 人像实测那一节（2026-11-05）：标题被删 → 切片为空 → 下面几条一起红；
+    # 保守字面与「判不了」那条同等承重——只留配方不写适用面，下次会拿便宜档草稿的漂移去判配方失效。
+    portrait_slice = portrait_section_slice(body)
+    check("portrait_section_present", bool(portrait_slice), "「人像实测」一节切不出正文（标题被改或删）")
+    for name, token in PORTRAIT:
+        check(name, token in portrait_slice,
+              "「%s」不在「人像实测」这一节里（切片 %d 字）" % (token, len(portrait_slice)))
+    for name, token in FIELD_SURFACE:
+        check(name, token in body, token)
 
     check("display_relative_markdown_image", bool(RELATIVE_IMAGE.search(body)))
     check("display_no_absolute_image_path", not ABSOLUTE_IMAGE.search(body))

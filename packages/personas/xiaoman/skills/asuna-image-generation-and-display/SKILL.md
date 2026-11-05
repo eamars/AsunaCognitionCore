@@ -1,6 +1,6 @@
 ---
 name: asuna-image-generation-and-display
-description: 直路是行动脑侧的 generate_image（本机与 QQ 来的任务同一条路：直接调用，图落任务工作区并自动登记成我自己的图，read_image 看过一眼后随消息发出去；外部公开生图服务只给链接、图发不出去，要发出去的图不走那条；它不可用或要工具参数面给不了的模型／参数时才走长路）。长路（探针 → integration_test → import_integration_artifact）：一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore；盘上已有的图另有一条：家里 Python 里用 register_imported_image 带 scope_key 登记进指定场景，代价是剥 PNG 文字块），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（list_routes 的条数现读、技能不存（每次 list_routes=yes 回来数一遍；标 source_image: required 的改图路线必填、标 optional 的可选、不带这个标的 t2i 路线不收原图），配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发）；QQ（napcat）那一轮看上下文 image_artifacts_from_program，要发图就用 speak 的 picture 那一项（artifact_id 照抄清单、可以不带话、正文不写路径/文件名/见图）；没声明 reply parts 的对话仍调用 attach_image 工具（一回合至多一张、再调用换成新的那张），对 owner_private + dm 路由和她在的群开放（群里只发来源带 `integration:` 前缀的图（可以是早就做好、后来重新登记进来的），全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（列着它的对话；工具错误、同回合可改）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。附零依赖离线自检 check_skill.py。
+description: 直路是行动脑侧的 generate_image（本机与 QQ 来的任务同一条路：直接调用，图落任务工作区并自动登记成我自己的图，read_image 看过一眼后随消息发出去；外部公开生图服务只给链接、图发不出去，要发出去的图不走那条；它不可用或要工具参数面给不了的模型／参数时才走长路）。长路（探针 → integration_test → import_integration_artifact）：一个任务内走完「文字生图 → 导入本机工作区 → 在本机私聊展示」，并接上「主人在 QQ 私聊要图时那一轮怎么把图发出去」：先确认集成配置里有 image 端点（只在集成进程里读 /integration/config.json），再 GET /.well-known/agent-manifest.json 按服务自述 POST /project/resolve 选 ready=true 的 workflow、提交日常不露骨的提示词、POST /project/generate 排队并轮询 /project/jobs/{prompt_id} 拿 /view 相对 URL 当 artifact_path，用 import_integration_artifact 把字节写进本任务工作区（字节是图就顺手登记进 BlobStore；盘上已有的图另有一条：家里 Python 里用 register_imported_image 带 scope_key 登记进指定场景，代价是剥 PNG 文字块），报告里用相对路径 Markdown 图片展示；generate_image 是画图与改图的主路（list_routes 的条数现读、技能不存（每次 list_routes=yes 回来数一遍；标 source_image: required 的改图路线必填、标 optional 的可选、不带这个标的 t2i 路线不收原图），配错路线即时拒绝不排队；改别人发的图结果不算她的、只能发回原图所在对话，发出去的图剥掉 PNG 文字块）、群聊派下来的生图／改图任务最多 4 张、到顶默认不发（四道质量关不过就一张都不发）；QQ（napcat）那一轮看上下文 image_artifacts_from_program，要发图就用 speak 的 picture 那一项（artifact_id 照抄清单、可以不带话、正文不写路径/文件名/见图）；没声明 reply parts 的对话仍调用 attach_image 工具（一回合至多一张、再调用换成新的那张），对 owner_private + dm 路由和她在的群开放（群里只发来源带 `integration:` 前缀的图（可以是早就做好、后来重新登记进来的），全年龄，ATTACHMENT_NOT_HER_OWN）。含大小上限与服务端小副本做法、attach_image 拒绝码（列着它的对话；工具错误、同回合可改）、speak 有一条 part 不对整批不排队、与字节端点/适配器层失败码读法（ATTACH_TARGET_NOT_ALLOWED / ATTACH_ARTIFACT_NOT_IN_CONTEXT / ATTACHMENT_SCOPE_DENIED / ATTACHMENT_NOT_AN_IMAGE / ATTACHMENT_OVER_LIMIT / ATTACHMENT_HASH_MISMATCH / ATTACHMENT_NOT_DECLARED 与适配器侧 failed 原因）、read_image 视觉复核（ref 两类：已存好图的 artifact_id——自己画的、本场景存的、这一轮可发的；或本场景附件 att-…；画完或发之前用它亲眼看一遍）、改图那条路（source_image 入口、IMAGE_WORKFLOW_* 即时拒绝码、改图归属、本地 Pillow 修错字、排队成本）、硬边界（群里只发自己做的图、不 base64 分段搬运、不停 QQ 适配器、不改宿主配置、不重新生成图）。含人像实测三则（构图决定连帽衫拉链的保守字面、手持自拍别指望手机进画、交图前按局部放大复核）与 11-05 现读参数面（工具面无 pose、回执有 warnings）。附零依赖离线自检 check_skill.py。
 scene_kinds: [home, group]
 ---
 
@@ -32,6 +32,12 @@ scene_kinds: [home, group]
   不对就改提示词或换路线重画。「提交成功、登记成功」不等于画对了（口径见步骤 7）。
 - 挑路线先 `list_routes=yes`（条数现读：数 `list_routes=yes` 回来的 `workflows` 数组，技能不存这个数；改图口径见「改图与 `generate_image`」一节），
   提示词照那条路线自己的口径写。
+- **回执里 `warnings` 那一格要看**：越界的参数服务端只警告、不拒收，值照用（实测两条原文：
+  `negative_prompt_inactive: At CFG 1 the sampler skips negative conditioning; negative_prompt has no effect at this setting.`、
+  `outside_recommended_range: steps=4 is outside the recommended range [8, 12] for anima-turbo-v1-1; the requested value was retained.`）。
+  ⇒ **出图 ≠ 参数被接受**：`anima-turbo-v1-1` 推荐步数 8–12，正式图别停在 4 步；CFG 1 下 negative 白写（与「步骤 1」末尾那条一致）。
+- **`guidance` 回的是选中那条路线自己的提示词口径**（style／structure／quality_prefix／prompt_scope／best_for／not_for／size／example）：
+  照它写，别照记忆写。`job` 是超时续取的凭据——一次调用超时不等于画失败，拿回到的 `prompt_id` 再调一次取回来，别重画。
 
 **什么时候不走这条**：`generate_image` 不可用，或要它参数面给不了的模型／参数（在服务端串自己的 workflow、
 出小副本这类）→ 走下面「步骤 0–4」那条长路（备用路，原文整段留着）。
@@ -402,10 +408,10 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 - 库里没有合适的：别传 pose，把姿势写进 prompt（manifest 原话 `no_match`）。
 - 错误码：`pose_unsupported`、`pose_unknown_id`（实测传 `nope_id` 得此码，HTTP 400）、`pose_not_detected`、`pose_fetch_failed`（库里草图取不到，稍后重试或换一个）、`pose_unavailable`（服务器没装姿势依赖）。
 
-**`generate_image` 能不能传姿势：不能（2026-11-04 读工具参数面）**
+**`generate_image` 能不能传姿势：不能（11-04 读参数面，11-05 复核仍未有）**
 
-- 直路 `generate_image` 的参数面只有 prompt／workflow／width／height／seed／negative_prompt／source_image／options（steps、cfg、sampler_name、scheduler，且不收别的键），没有 `pose`／`pose_strength`（2026-11-04 午后复核：本回合 `generate_image` 工具参数表仍无 `pose`，依据是工具表本身；以后判这一格先看当回合工具参数表，不抄这句）。所以要带姿势只能走长路（`integration_test` 直连 image 端点 `POST /project/generate`，再按步骤 3–4 取产物导入），或把姿势只写进 prompt。
-- 返回形状：升级后 `generate_image` 回执的键与之前一致，没有 pose 对象——实测一张 512×512 anima-turbo-v1-1（seed 1），回执键为 generated／workflow／prompt_id／seed／width／height／elapsed_ms／target_relative_path／bytes／sha256／media_type／guidance／artifact／note。（「与之前一致」这一格依据是本技能旧正文对回执的描述，没有旧回执原件可比，算推断。）`guidance.structure` 现为 quality/meta、subject count、character/series、appearance、outfit、pose、composition、environment（pose 在 outfit 与 composition 之间；是否新增未核实）。
+- 直路 `generate_image` 的参数面（11-05 照当回合工具参数表列全）：prompt／negative_prompt／workflow／style／width／height／seed／options（只收 steps、cfg、sampler_name、scheduler 四个键，多给的键不收）／job／source_image／list_routes／target_relative_path／timeout。里面没有 `pose`／`pose_strength`（11-05 复核，依据是当回合工具参数表本身；以后判这一格先看当回合工具表，不抄这句）。所以要带姿势只能走长路（`integration_test` 直连 image 端点 `POST /project/generate`，再按步骤 3–4 取产物导入），或把姿势只写进 prompt。
+- 返回形状：`generate_image` 回执没有 pose 对象——实测一张 512×512 anima-turbo-v1-1（seed 1），回执键为 generated／workflow／prompt_id／seed／width／height／elapsed_ms／target_relative_path／bytes／sha256／media_type／guidance／artifact／note；11-05 那张多一个 `warnings`（11-04 记的键表里没有这一格——当时没出现还是那次没注意，判不了，旧回执原件没留）。`guidance.structure` 现为 quality/meta、subject count、character/series、appearance、outfit、pose、composition、environment（pose 在 outfit 与 composition 之间；是否新增未核实）。
 - 长路的服务端回执（`POST /project/generate`）：`prompt_id`（也叫 `job_id`）、`job_url`、`applied_parameters`、`effective_parameters`、`warnings`，带 pose 时多一个 `pose` 对象；`dry_run` 返回同样的字段加 `validated` 与 API 格式的 `prompt`，没有 `prompt_id`。
 
 **prompt 现行口径（服务端原文）**
@@ -416,6 +422,56 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 - 内容：manifest `content`：「Resolve never routes by content: the prompt decides what an image shows … When the selected route has prompting.content_lines, add its 'explicit' or 'safe' line to the prompt. Explicit images must show adults.」我们只画全年龄：选中路线有 `prompting.content_lines` 时，把它的 `safe` 那一行加进 prompt。
 - 其他：保存的 PNG 带 ComfyUI prompt 元数据（输入文件名换成 `[input image]`）；发到不该看到 prompt 的地方前要剥（本技能「发出去的图不带提示词」一节已覆盖）。
 - 路线条数：现读 `list_routes=yes`（技能不存条数；11-04 那一趟读到的数已按现读口径从正文拿掉，正文几处旧写死数一并改成现读句式）。
+
+**`list_routes=yes` 每条给哪些键（11-05 照回执列）**
+
+- 路线条目：`workflow`、`description`、`style`、`structure`、`quality_prefix`、`prompt_scope`、`best_for`、`not_for`、`size`、`example`；
+  改图路线另有 `source_image`（`required` / `optional`，11-05 那一趟：1 条 required、多数 optional、t2i 那几条不带这个键）。
+  **条目里没有 pose 相关的键**——工具面上姿势只能进 prompt（服务端那套 `parameters.pose` 见上面「传法」，走长路）。
+- 顶层另有 `note`（挑路线与写提示词的口径：按 best_for／not_for 选、用它要的 style 和语言，多数要英文）。
+- 11-05 那一趟读到的名单（**快照**，出处＝那一趟回执的 `workflows` 数组；现行条数照旧现读，别拿这串当计数）：
+  `qwen-image-2.1-t2i`（自然语言；静物／写实／带字海报；不收原图）、`qwen-image-2.1-edit`（`source_image: required`）、
+  `moss-image-sft-t2i`（自然语言；版面与文字位置要准；短 prompt 会画崩解剖）、`moody-anima-mix`、`moody-desire-v30`（Flux.2 Klein 4 步；写实人物）、
+  `animagine-xl-3.1-nsfw`（tag 方言）、`anima-turbo-v1-1`（anime 默认）、八条角色路线
+  （`deepseek-whale-girl-anima-turbo`、`claude-girl-anima-turbo`、`chatgpt-girl-anima-turbo`、`qwen-girl-anima-turbo`、
+  `gemini-girl-anima-turbo`、`glm-girl-anima-turbo`、`grok-girl-anima-turbo`、`kimi-girl-anima-turbo`，各有触发词）、
+  `janku-illustrious`、`janku-v5-illustrious`、`one-obsession`。
+- **两把尺不是一把**：11-04 记的「收 pose 的路线」名单来自服务端 manifest 的 `route_table[].pose`，里面有两条 face-reference；
+  这两条不在 11-05 的 `list_routes` 清单里（inpaint 那族同样不在）。清单＝`generate_image` 用得上的路线，不等于服务端路线全集；
+  报「有没有这条路线」要先说哪把尺。
+
+## 人像实测：构图决定拉链、自拍别指望手机、交图前放大复核
+
+自画像／人像单子的三条现场经验（前三条来自同一批四张实测加一次便宜档复核，路线是 anima／illustrious 这一族；每条末尾写适用面）。
+
+**① 构图决定连帽衫拉链开不开**
+
+- 「趴床／前倾／斜倚」这一类构图**几乎必然**把拉链画开（实测两连败）；
+  「坐直＋拉链拉到下巴＋领口折起来」这一串字面**一次就中**（实测双中）。要给保守版交底，就照抄这串字面，别改措辞。
+- 英文写法照 prompt 走：`sitting upright`、`zipper pulled up to chin`、`folded collar`。
+- **便宜档别拿来判配方**：11-05 一张草稿（`anima-turbo-v1-1`、512×512、steps 4，低于推荐的 8–12）坐姿命中、拉链没画开，
+  但拉头落在胸口、领口没折。那格漂移算在步数还是字面上**判不了**（要判得在推荐步数里重测）。
+
+**② 手持自拍透视：别指望模型把手机画进手里**
+
+- 实测三张全把手机丢了或放在桌上——「手里拿着手机自拍」这个语义它接不住。
+- 可行写法是**手臂伸出画外**（`arm extended toward viewer, out of frame`）：自拍感靠手臂方向给，不靠手机本体。
+- 交底口径：把「手机进画」当**可选项**、别列硬项（与「官方定妆」里「手机＝场景道具」同一条）。
+
+**③ 交图前 `read_image` 亲眼看，而且要局部放大**
+
+- 登记进清单 ≠ 能发；回执、sha、artifact 都只是流程证据（口径见「步骤 7」）。
+- **缩略图会藏崩的地方**（11-05 实测）：整张看着是微笑，放大才看到拉链头挂在嘴边垂到下巴；
+  整张看着「拉链拉到顶」，放大才看到拉头其实在胸口、领口摊开。
+- 做法（家里沙箱，不联网不花钱）：Pillow 按坐标裁出**领口／拉链、手、脸**三块，`resize` 放大 3 倍（LANCZOS）存进任务工作区，
+  再按路径逐块 `read_image`。整张看过一遍不等于这三块看过。
+
+**④ 人物身上的小平面同「小价签」一族**
+
+- 胸口图案、手机背面、墙上画框这类小平面：要么在 prompt 里用 `plain`／`no graphic` 压住，要么预期长出乱码字母或发光贴图
+  （实测四张里三张在这三类平面上出问题）。
+- 交图前按局部裁开放大复核这几处，别只看整张缩略（与上面第③条同一做法）。
+- 适用面：那四张读出来自 `janku-illustrious`；小价签那一族来自 `anima-turbo-v1-1`。**别的路线没重测**，搬过去先测。
 
 ## 官方定妆（画自己/自拍必读）
 
@@ -481,7 +537,8 @@ against a real client」。说「QQ 那边已经能看到图了」要有依据�
 1. 手和手指数量对，脸没崩；
 2. 画面里没有乱码文字——要带字就得字对，对不了就宁可无字；
    判这一格要专门盯**小价签**：大招牌干净不等于没乱码，货架那些小价签最容易冒 `ON`／`VK` 这种小字母
-   （有效写法见「步骤 2」里店招／货架那一条）。
+   （有效写法见「步骤 2」里店招／货架那一条）。人物身上的小平面（胸口图案、手机背面、墙上画框）同族，
+   判完整张还要按局部裁开放大看（做法见「人像实测」那一节）。
 3. 构图没跑：改图不能把人重画成另一个人、另一套衣服、另一个姿势；
 4. 内容适合那个群（不是那个场合该看的，就不发）。
 
@@ -570,6 +627,7 @@ python3 -m compileall -q skills/asuna-image-generation-and-display  # 语法面�
 改图那条路（`source_image` 入口、路线条数现读口径、三条 `IMAGE_WORKFLOW_*` 即时拒绝码、改图归属与剥文字块判据）在不在、
 群聊生图上限那条（这一节标题在不在、节内「最多 4 张」与「到顶怎么办：默认不发」在不在、
 「唯一的例外」措辞对不对、旧措辞「超了要在交回时写一句」有没有被抄回这一节）在不在、
+人像实测那一节（标题在不在，节内「拉链拉到下巴／领口折起来」保守字面、「手臂伸出画外」、局部放大复核的做法与小平面那一族在不在）在不在、
 退役说法（`integration_dev`、`/skills` 挂载、把 DECIDE 的 `attach` 字段当当前流程、`九条路线全是 t2i`）有没有回到散文里、
 示例图路径是不是相对的、脚本语法能不能编译
 （内存 `compile(源码, 路径, 'exec')`，不落文件；只查语法，不查 import 和运行时）。

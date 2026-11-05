@@ -804,7 +804,7 @@ The owner of `plans`: what she and the program scheduled (her plans in a convers
 
 [src/asuna/records/memories.py](../../src/asuna/records/memories.py)
 
-The owner of `memory_units`: her recall (the chat chunks of her conversations, their summaries, her thoughts, imported entries) and its vector space, read and written only through these operations.
+The owner of `memory_units`: her recall (the chat chunks of her conversations, their summaries, her thoughts, imported entries) and its vector space, read and written only through these operations; and of `chunk_marks`, how far each conversation's lines are cut into chunks (`chunk_mark`, `chunk_marks`, `mark_chunked`).
 
 - def `get` — The memory with this id (in these (scope, epoch) pairs; of this scope, epoch, turn, character; of this kind or one of these; in this status; `erased=False`: not a tombstone), or None.
 - def `summary_of` — The alive summary of a conversation's epoch that covers this line, or None.
@@ -820,6 +820,9 @@ The owner of `memory_units`: her recall (the chat chunks of her conversations, t
 - def `tombstone` — An erasure's tombstone in place of the memory: its id, scope and next revision, no text, no sources, the erasure's id and the conversation's new epoch.
 - def `set_epoch` — Move a memory to an epoch (an erasure keeps what it did not erase readable in the new one).
 - def `touch_salience` — A real turn used the memory: one more reference, and when and at which position of its conversation.
+- def `chunk_mark` — The position a conversation's lines are chunked up to; 0 when it has no mark (a lost mark starts again).
+- def `chunk_marks` — {scene id: position} of these conversations' marks, in one read; one without a mark is left out.
+- def `mark_chunked` — A conversation's lines are chunked up to `seq` (`at`: when).
 - def `ensure_vectors` — The space's search index, made or brought up to the space's filter fields; True once it can be queried.
 - def `nearest` — The k memories nearest to `vector` in these (scope, epoch) pairs, of this character, status and embedding revision (of this kind), best first as (id, cosine); exact.
 

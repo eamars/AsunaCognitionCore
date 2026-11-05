@@ -338,8 +338,9 @@ def build(store, moment=None):
 
 
 def top_up(store):
-    """Add the group lines said since the index's mark: each group's chunked lines after its last indexed one, up to
-    the first line the indexer has not chunked yet. Returns the generation to read."""
+    """Add the group lines said since the index's mark: each group's lines after its last indexed one, up to its chunk
+    mark (records.memories.chunk_marks: every line before it is settled, and chunked when spoken), so a reply the
+    indexer waited for is indexed once it is delivered. Returns the generation to read."""
     column = store.collection(WORDS)
     mark = column.get('mark')
     if not mark:
@@ -347,28 +348,24 @@ def top_up(store):
         return column.get('mark')['generation']
     vocabulary(store)
     from .evidence import canonical, sha
-    from .ingress import PROGRAM_AUTHOR
+    from .memory import spoken
     groups = _groups(store)
     seqs = dict(mark.get('seqs') or {})
+    chunked = memory_records.chunk_marks(store, list(groups))        # one read of the groups' chunk marks
     me = character_id(store.config)
     reached, units = {}, []
     for scene_id, scene in groups.items():
-        upto = seqs.get(scene_id, 0)
-        rows = message_records.lines(store, scene_id, after=upto).rows(
-            fields=['text', 'direction', 'delivery_state', 'author', 'policy_epoch', 'memory_chunk_version', 'scene_seq'])
+        upto, until = seqs.get(scene_id, 0), chunked.get(scene_id, 0)
+        if until <= upto:
+            continue                     # the indexer has not chunked past it yet: a later recall takes it
+        rows = message_records.lines(store, scene_id, after=upto, upto=until).rows(
+            fields=['text', 'direction', 'delivery_state', 'author', 'policy_epoch'])
         ids = []
         for row in rows:
-            chunked = row.get('memory_chunk_version') == 2
-            never = (row.get('author') == PROGRAM_AUTHOR or row.get('policy_epoch', 1) != scene.get('policy_epoch', 1)
-                     or (row.get('direction') == 'outbound' and row.get('delivery_state') != 'DELIVERED'))
-            if not chunked and not never:
-                break                    # the indexer has not reached it yet: a later recall takes it
-            if chunked:
+            if spoken(row) and row.get('policy_epoch', 1) == scene.get('policy_epoch', 1):
                 parts = len((row.get('text') or '').encode()) // 900 + 2
                 ids += ['chunk-' + sha(canonical([row['_id'], 2, index])) for index in range(parts)]
-            upto = row['scene_seq']
-        if upto != seqs.get(scene_id, 0):
-            reached[scene_id] = upto
+        reached[scene_id] = until
         if ids:
             units += memory_records.many(store, ids, character=me, kind='chat_chunk', status='active').rows(
                 fields=['body_markdown', 'scope_key', 'epistemic_type', 'occurred_at', 'source_event_ids'])

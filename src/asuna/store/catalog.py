@@ -322,6 +322,9 @@ CATALOG = Catalog([
                only_where_present=('source_identity',))),
         retired=('scope_key_1_status_1_policy_epoch_1',),
         versioned=True, counters=('salience',), derived=('embedding',)),
+    # How far each conversation's lines are cut into memories (records/memories.py, memory.MemoryService.chunk): one
+    # row per conversation, `_id` its scene id; `seq` a position that only grows, `at` ISO text. Not versioned.
+    Collection('chunk_marks', 'records.memories', (Field('seq', 'number'), Field('at', 'text'))),
     # Her revisioned state (records/heads.py): a head per entity and scope, and its revisions; the fields their owner
     # names, the rest stored as written. A revision's mutation id is its plain unique index's field, required (3.5);
     # its times are ISO text.
@@ -535,7 +538,9 @@ CATALOG = Catalog([
         (index(('channel_id', 1), ('hour', 1)), index(('lane', 1), ('stage', 1), ('error', 1), ('hour', 1))),
         retired=('hour_at_1',), versioned=True),
     # Tiered memory (memory_tiers.py): one collection of rows of several kinds (`row`: item, move, over, fold, rarity,
-    # told, offer, room_told), not versioned; the fields its code names or writes itself, its times ISO text.
+    # told, offer, room_told), not versioned; the fields its code names or writes itself, its times ISO text. Its
+    # indexes serve a turn's readers of her items: by store and place (things, what is carried), by document and
+    # section (deliver, a document's rows).
     Collection('memory_tiers', 'memory_tiers', (
         *_text('row', 'persona', 'doc', 'sid', 'store', 'place', 'item', 'from', 'to', 'reason', 'by', 'at', 'what',
                'day', 'scene_id', 'heading', 'visibility', 'nature', 'added', 'memorable_at', 'stay_from',
@@ -546,7 +551,9 @@ CATALOG = Catalog([
         *(Field(path, 'bool', nullable=True) for path in ('fact', 'doubled', 'felt')),
         *(Field(path, 'list', of='text', nullable=True) for path in ('told_in', 'recalled_in', 'surfaced_in',
                                                                      'shown_in', 'order', 'common', 'said')),
-        *(Field(path, 'object', nullable=True) for path in ('gist', 'detail_of', 'words')))),
+        *(Field(path, 'object', nullable=True) for path in ('gist', 'detail_of', 'words'))),
+        (index(('persona', 1), ('row', 1), ('store', 1), ('place', 1), ('doc', 1)),
+         index(('persona', 1), ('row', 1), ('doc', 1), ('sid', 1), ('place', 1)))),
     # The item index of tiered memory and its pilot's rows (memory_pilot.py), not versioned: the fields its code names
     # or writes itself (a vector, and the pilot's per-row counts and lists, are stored as written).
     Collection('memory_shadow', 'memory_pilot', (

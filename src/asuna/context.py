@@ -380,13 +380,12 @@ class ContextBuilder:
         counts=recall or (turn_kind or event.get('episode_kind') or 'external') not in memory_tiers.PROGRAM_TEXT_KINDS
         age_bound={}                    # what may come up by itself outside recall (memory_tiers.within_age)
         if memory_tiers.ENABLED and not recall:
-            # ADR-062: rows for new items, then the lapses due, before anything is read for the turn.
+            # ADR-062: the lapses due, before anything is read for the turn (at most every TICK_SECONDS in this
+            # process). Every item already has its row: a write makes it (ADR-117 B3), the process start syncs.
             from .persona_model import effective as _tier_effective
             from .render import model_and_policy as _tier_model
             _tm,_tp=_tier_model(self.store,persona)
-            _tiers=memory_tiers.Tiers(self.store,persona)
-            _tiers.sync()
-            _tiers.tick()
+            memory_tiers.tick_due(self.store,persona)
             age_bound={'half_life_days':float(_tier_effective(_tm,'memory.forgetting.half_life_days',_tp) or 30),
                        'step_back_below':float(_tier_effective(_tm,'memory.forgetting.step_back_below',_tp) or 0.1)}
         scope=scene['scope_key']

@@ -2585,9 +2585,7 @@ class RoleTools:
                             'DOC_SECTION_NOT_FOUND')
             self.checkpoint()
             item = {**item, 'sid': found['sid']}
-            tiers = memory_tiers.Tiers(self.store, ep['persona'])
-            tiers.sync()
-            tiers.written(slug, item, before, before, scene_id=ep['scene_id'])
+            memory_tiers.Tiers(self.store, ep['persona']).written(slug, item, before, before, scene_id=ep['scene_id'])
             return {'doc': slug, 'op': 'set_tags', 'sid': item['sid'], 'note': '记下了：%s。'
                     % '、'.join(filter(None, (memory_tiers.declared_nature(item).get('nature'), item.get('from')))),
                     **({'source': source} if source else {}), **({'doc_note': said} if said else {}),
@@ -2603,6 +2601,10 @@ class RoleTools:
             outcome = docs.adopt_seed(slug, kind, text, base_revision_id=base, author='character',
                                       mutation_id=mutation_id, reason=item.get('reason') or 'adopt package seed',
                                       budget=budget_gate(self.store, ep['persona']))
+            if memory_tiers.ENABLED and outcome['state'] != 'unchanged':
+                # ADR-117 B3: the seed's new sections have their tier rows now, placed from their inject.
+                memory_tiers.Tiers(self.store, ep['persona']).written(slug, {'op': 'adopt_seed'}, before,
+                                                                      docs.read(slug)[1])
             return {'doc': slug, 'op': 'adopt_seed', **{k: v for k, v in outcome.items() if k != 'revision'}}, False
         body = args.get('body') if item.get('op') in WRITE_STAGE_OPS else None
         gate = budget_gate(self.store, ep['persona'])
@@ -2775,7 +2777,6 @@ class RoleTools:
             raise DocumentError('DOC_SECTION_NOT_FOUND', missing_section(slug, sid, listed))
         sid = found['sid']
         tiers = memory_tiers.Tiers(self.store, ep['persona'])
-        tiers.sync()
         from . import carried
         was = len(carried.carrying(self.store, ep['persona'], slug, sid)) if slug in carried.IDENTITY else 0
         move = tiers.let_go(slug, sid, scene_id=ep['scene_id'])

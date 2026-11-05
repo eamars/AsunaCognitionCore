@@ -11,6 +11,7 @@ OWNERS = {'scenes': 'src/asuna/records/scenes.py', 'messages': 'src/asuna/record
           'lane_receipts': 'src/asuna/records/receipts.py', 'sink_receipts': 'src/asuna/records/receipts.py',
           'tasks': 'src/asuna/records/tasks.py', 'task_messages': 'src/asuna/records/tasks.py',
           'plans': 'src/asuna/records/plans.py', 'memory_units': 'src/asuna/records/memories.py',
+          'chunk_marks': 'src/asuna/records/memories.py',
           'artifacts': 'src/asuna/records/artifacts.py',
           'state_heads': 'src/asuna/records/heads.py', 'state_revisions': 'src/asuna/records/heads.py',
           'journal_entries': 'src/asuna/documents.py', 'journal_revisions': 'src/asuna/documents.py',

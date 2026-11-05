@@ -50,7 +50,9 @@ def item(sid):
             'lexical': sid + '\nabout ' + WORD}
 
 
-def test_a_heartbeat_brings_memories_up_but_counts_nothing_and_her_recall_in_it_counts(world, retrieval):
+# A heartbeat, and a home turn a note woke (its message is notes.WAKE_TEXT, her answer of 2026-11-05 14:17).
+@pytest.mark.parametrize('kind', ['presence', 'note'])
+def test_a_heartbeat_brings_memories_up_but_counts_nothing_and_her_recall_in_it_counts(world, retrieval, kind):
     tiers = memory_tiers.Tiers(world, PERSONA)
     for sid, place in (('hand', memory_tiers.AT_HAND), ('held', memory_tiers.CARRIED)):
         row = tiers._new('self', sid, 'self', {'heading': sid, 'body': 'about ' + WORD}, place, clock.now())
@@ -60,8 +62,8 @@ def test_a_heartbeat_brings_memories_up_but_counts_nothing_and_her_recall_in_it_
     builder = ContextBuilder(world, retrieval)
     builder.pilot = Items([item('hand'), item('held')])
     before = {row['sid']: row for row in tiers.items(doc='self')}
-    event = {'event_id': 'presence:beat-1', 'scene_id': 'dm-a', 'person_id': 'A', 'episode_kind': 'presence',
-             'text': 'a heartbeat about ' + WORD}
+    event = {'event_id': kind + ':beat-1', 'scene_id': 'dm-a', 'person_id': 'A', 'episode_kind': kind,
+             'text': 'a program text about ' + WORD}
 
     _, context, manifest = builder.prepare(event, PERSONA)
     assert 'doc:self#hand' in [m['_id'] for m in context['memories']], 'her item still comes up'
@@ -76,8 +78,8 @@ def test_a_heartbeat_brings_memories_up_but_counts_nothing_and_her_recall_in_it_
     assert 'salience' not in memory_records.get(world, 'u-word'), 'no rehearsal'
     assert crossing.fire_rows(world, '2000-01-01').rows() == [], 'no came-back count'
 
-    # Her own recall inside the same heartbeat counts.
-    builder.prepare({**event, 'text': WORD}, PERSONA, recall=True, turn_kind='presence')
+    # Her own recall inside the same turn counts.
+    builder.prepare({**event, 'text': WORD}, PERSONA, recall=True, turn_kind=kind)
     recalled = tiers.item('self', 'hand')
     assert recalled.get('recalled_in') == ['dm-a'] and recalled['uses'] == 1
     assert memory_records.get(world, 'u-word')['salience']['ref_count'] == 1

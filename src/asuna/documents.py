@@ -278,7 +278,8 @@ class DocumentStore:
 
     # ── running records (JOURNALS): one row per entry ───────────────
     def _journal_import(self, slug):
-        """A record kept as one document before it became rows moves into rows once; its old revisions stay."""
+        """A record kept as one document before it became rows moves into rows once; its old revisions stay. Its
+        entries get their tier rows as it lands (memory_tiers.Tiers.written), placed as sync places them."""
         head = head_records.head(self.store, self.key(slug))
         if not head:
             return
@@ -303,6 +304,11 @@ class DocumentStore:
         head_records.drop_head(self.store, head['_id'], revision_id=head['revision_id'])
         self.store.audit('doc:import:' + slug, 'journal.imported', {'entity': self.entity(slug),
                          'from_revision': head['revision_id']}, SCOPE)
+        from . import memory_tiers
+        if memory_tiers.ENABLED:
+            # ADR-117 B3: its entries have their tier rows without a turn's sync (a running record's: at hand).
+            memory_tiers.Tiers(self.store, self.persona).written(slug, {'op': 'import'}, None,
+                                                                 self._journal_read(slug)[1])
 
     def _section_times(self, slug):
         """When each section of a record kept as one document first appeared and when its text last changed, from the

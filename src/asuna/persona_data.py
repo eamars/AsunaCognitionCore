@@ -142,7 +142,14 @@ class PersonaDataAPI:
         budget_gate(self.store, self.persona)(slug, content)      # what an import adds is carried as her writes are
         revision = self.docs._commit(slug, content, base_revision_id=revision_id, reason=f'import from {origin}',
                                      author='persona_job:' + self.job_id, mutation_id=mutation_id)
+        self._tier_rows(slug, current, content)
         return {**result, 'action': action, 'revision_id': revision['_id'], 'sections': len(sections)}
+
+    def _tier_rows(self, slug, before, after):
+        """ADR-117 B3: what an import adds has its tier rows without a turn's sync, placed from its inject."""
+        from . import memory_tiers
+        if memory_tiers.ENABLED:
+            memory_tiers.Tiers(self.store, self.persona).written(slug, {'op': 'import'}, before, after)
 
     def documents_append(self, args):
         """Append-only union by origin + source_identity (logs, imported notes)."""
@@ -173,6 +180,7 @@ class PersonaDataAPI:
         revision = self.docs._commit(slug, content, base_revision_id=revision_id, reason=f'append from {origin}',
                                      author='persona_job:' + self.job_id,
                                      mutation_id=f"append:{self.persona}:{origin}:{args['source_identity']}")
+        self._tier_rows(slug, current, content)
         return {'action': 'appended', 'slug': slug, 'revision_id': revision['_id'], 'visibility_defaulted': defaulted}
 
     def documents_get(self, args):

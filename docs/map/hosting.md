@@ -638,7 +638,6 @@ The owner of `scenes`: a conversation's record (its kind, members, scope and epo
 - def `timezones` — How many conversations still carry a `timezone` (ADR-106).
 - def `clear_timezones` — ADR-106's one-off: take `timezone` off every conversation that has one.
 - def `forget_name` — An erasure of the conversation's lines takes the name they carried with them.
-- def `backfill_name` — ADR-117 L2b's one-off (tools/adr117_l2b_backfill.py, deleted with it): the name its newest named line carries.
 - def `note_fault`
 - def `clear_fault` — The fault mark goes, if it is still the one shown (`fault.at`).
 - def `hold_unsent`
@@ -786,8 +785,6 @@ The owner of `tasks` and `task_messages`: the work she hands to the action brain
 - def `recent_with_inputs` — A conversation's RECENT most relevant tasks in an epoch: the running and queued first, then by the newest time one of their input lines was received (those without one last), then by id; each with the SHOWN fields it has, `_active` (1 runni
 - def `redact_scope` — An erasure of a scope's tasks (`view.redact`).
 - def `save` — The revisioned write of a whole task (`Store.put`: `expected`, `stream`, `reset_counters`).
-- def `lacking_size` — ADR-117 L2b's one-off (tools/adr117_l2b_backfill.py, deleted with it).
-- def `backfill_size` — ADR-117 L2b's one-off: a finished task's stored size, as its finish writes it now.
 - def `save_message` — The revisioned write of a task message (`Store.put`).
 
 ## `records/plans`
@@ -886,7 +883,6 @@ The owner of `state_heads` and `state_revisions`: her revisioned state (document
 - def `stale_revisions` — View: a scope's revisions but these (the ones no head points at, when `besides` are its heads' revisions).
 - def `save_head` — The revisioned write of a head (`Store.put`: `expected`, `stream`).
 - def `save_revision` — The write of a revision (`Store.put`).
-- def `backfill_kind` — ADR-117 L2b's one-off (tools/adr117_l2b_backfill.py, deleted with it): a document's head takes its document's kind.
 - def `point_to` — An erasure moves a head to an older revision (its own revision number given).
 - def `drop_head` — Delete a head (only while it still names `revision_id`); how many went.
 - def `tombstone_revision` — An erasure empties a revision: no content, no sources, a tombstone of this erasure.

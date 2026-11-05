@@ -165,11 +165,6 @@ def forget_name(store, scene_id):
     _unset(store, scene_id, 'name')
 
 
-def backfill_name(store, scene_id, name):
-    """ADR-117 L2b's one-off (tools/adr117_l2b_backfill.py, deleted with it): the name its newest named line carries."""
-    _set(store, scene_id, {'name': name})
-
-
 def note_fault(store, scene_id, fault):
     _set(store, scene_id, {'fault': fault})
 

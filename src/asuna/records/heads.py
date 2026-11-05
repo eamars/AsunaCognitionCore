@@ -111,12 +111,6 @@ def save_revision(store, row, **kwargs):
     return store.put(REVISIONS, row, **kwargs)
 
 
-def backfill_kind(store, head_id, kind):
-    """ADR-117 L2b's one-off (tools/adr117_l2b_backfill.py, deleted with it): a document's head takes its document's
-    kind. An update of its own, not a revision: a writer holding the head keeps writing it."""
-    return store.collection(HEADS).update({'_id': head_id}, Set({'kind': kind}))
-
-
 def point_to(store, head_id, revision_id, revision_number):
     """An erasure moves a head to an older revision (its own revision number given)."""
     return store.collection(HEADS).update({'_id': head_id}, Set({'revision_id': revision_id,

@@ -167,6 +167,16 @@ A fixed random sample of 40 of the 432, read by Claude (private words masked): a
 5 clearly answered a later line, often the same person's next one; 4 answered both; 1 quoted a task result. Very
 roughly one in eight of the 432 is wrong; an estimate from 40 cases, not a count.
 
+Notes from Xiaoman's recount (2026-11-06; her reading is in progress.md):
+- The script of this survey was not kept, and the sample's seed was not recorded. Which line "others had spoken in
+  between" was measured from (the line quoted, or the line `reply_to` names) is not known; the two differ only when a
+  quote hangs elsewhere.
+- The split 560 / 71 (the program's rule / her own choice) cannot be recomputed today: before step 2's install no
+  stored field says who chose a quote, and the audits keep no quote argument.
+- 432 counts quotes that coexist with others speaking in between; it is not a count of wrong quotes. The database's
+  mechanical tag (whether a line @-mentions her) is no measure of a wrong quote either: all 16 lines it marked "no" in
+  her two 40-line samples answer the line they quote.
+
 Xiaoman read these turns differently in four places (her reading, Claude's paraphrase, 13:2x NZDT): one "wrong"
 answered both lines; one "wrong" summed up three lines, where no quote is the right answer; one "both" may span two
 turns; and in two cases the line that called her was itself a reply to her, so it is the line she answered. On her

@@ -494,3 +494,47 @@ L2b is designed to final in its build brief from the census of these five functi
 L2's: memory-side and block-side round trips and bytes on 50 turns, against today's 325 round trips and 16 MB.
 
 The order is now L1 (in), L2, L2b, R, L3, L4; §16's gates apply, with R's above.
+
+## 18. L2, L2b and R as built and installed (2026-11-05 and 06)
+
+| Landing | Commit (main) | Installed (NZDT) | Core package |
+|---|---|---|---|
+| L2 | `f6fe1a77` | 11-05 21:34:39 stop, 21:35:24 back | `16b975b03dae` |
+| L2b | `ac8023e8` | 11-06 11:00:09 stop, 11:00:52 back | `91fcdaa2d3d2` |
+| L2b's one-time code removed | `fac16029` | with R (removes only code nothing calls) | – |
+| R | `fedeb7a8` | 11-06 11:29:34 stop, 11:30:15 back | `21972d7071e3` |
+
+**L2.** Before its stop, `chunk_marks` was seeded by hand per scene (27 rows) at its newest chunked line, lowered below
+any spoken line not yet chunked and held below a reply still on its way within the hour (0 of either). §16's gate
+passed the next morning (the numbers are in §16).
+
+**L2b.**
+- Its one-time identity check (old vs new `prepare` on the same events, equal) ran before the landing and was removed
+  from the branch first, because its read of the store's checked layer broke the store-boundary test.
+- Running the backfill on her data found a defect L2b would have installed. Two of her tool records from 2026-10-08
+  were stored before tool results were stored as JSON (10-09); they hold a database id object (`development_database_read`,
+  `result.rows[].legacy._id`). `tasks.observations_of` serialized stored results with plain `json.dumps`, and L2b
+  calls it at the four finish writes (`tasks.sized`), so a finishing task with such a record would have failed to
+  finish. Fixed at the root: `tasks.json_data`, the broker's serializer, now also reads stored results
+  (`c3aec27d`), with one test. The two records are the only ones: the store refuses such a value at write today.
+- The backfill filled 40 document heads (`kind`), 1,679 tasks (`result.chars`, `result.pages`) and 23 group names,
+  in bulk while the old worker ran; the catch-up after the stop did not run (a landing-tool fault), so it ran by hand
+  15 s after the start: 1 task, and no turn ran in between. The tool and its owner functions were then deleted.
+
+**R.**
+- `ContextBuilder.recall` and `_prepare` share two helpers, `_in_view` and `_memories`, moved verbatim.
+- What the page's list missed: `tool_recall` reads the memories after `people.relabel` (labels, `scope_key` popped),
+  now `People.memories`, called by both. Not needed: the read target and the place.
+- `prepare.rest` is the whole less search and deliver (`tool_watch.part(name, less=…)`); parts are timed with
+  `perf_counter` (monotonic ticks every 15.6 ms here). A call that builds a turn inside it (`ask_character`) also
+  carries the three `prepare.` parts.
+- A recall no longer fails when an unrelated block of a turn raises, and no longer makes those blocks' incidental
+  writes. A person first seen during a recall can take another label number than before (first sight in a
+  conversation no turn has labelled yet).
+- Measured read-only on her data (the old code is already L2b's): a recall's prepare 1.32 → 0.65 s warm (2.64 →
+  1.04 s cold), 219 → 82 round trips, 12.4 → 11.1 MB; live adds the embedding (about 0.24 s). It misses the page's
+  65 round trips and 10 MB: the pool and one recheck per candidate remain (`memory_units`, 53 calls, 9.5 MB).
+  Identity: equal on three of her real recalls, one of them bringing up two of her own items.
+- The monologue index was built by hand before the stop (1.0 s).
+- Not built (suggestions): an errand's recall still embeds twice (the home search misses the cache on scope);
+  `own_thoughts_elsewhere` reads one scene row per group for its name.

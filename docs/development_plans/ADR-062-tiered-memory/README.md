@@ -4,6 +4,8 @@ Status: **Built, switched on 2026-10-14** at her quiet restart, after she had wr
 first 12 core sentences (§7). The surprise path was dropped 2026-10-20 (§11). Accepted 2026-10-13 (the owner's finding and direction; the design by Claude, building
 on Claude's earlier proposal and the owner's). She answered all nine questions (2026-10-13 evening, §9) and they are
 built: phase 0, the phase 1 pilot and phase 2 (`memory_tiers.ENABLED`). ADR-063, its gate, is done.
+Phase 3 was not built: the [2026-11 review](review-2026-11.md) read it against her records, and the owner moved
+it and the review's decisions to [ADR-117](../ADR-117-memory-carried-side-and-recall/README.md) (2026-11-05).
 
 *Her review:* signed on the agent line, 2026-10-13 about 20:45 (her answers to §9 are below).
 

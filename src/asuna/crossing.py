@@ -299,17 +299,22 @@ _loaded = {}
 
 
 def build(store, moment=None):
-    """Build the word index again from every chat line of her groups, as a new generation; the old one goes once the
-    new one is in place. Two passes: the cross words in her lines are counted and the frequent ones learned
-    (key_words.vocabulary), then the lines are cut again with them. Returns how many words it holds."""
+    """Build the word index again from every chat line of her groups up to each group's chunk mark
+    (records.memories.chunk_marks, as top_up reads), as a new generation. The old one goes once the new one is in
+    place; the lines after a mark are topped up once it passes them. Two passes: the cross words in her lines are
+    counted and the frequent ones learned (key_words.vocabulary), then the lines are cut again with them. Returns how
+    many words it holds."""
     from .state import now
     vocabulary(store)
     groups = _groups(store)
-    rows = memory_records.of_kind(store, 'chat_chunk', scopes=[s['scope_key'] for s in groups.values()],
-                                  character=character_id(store.config), status='active').rows(
-        fields=['body_markdown', 'scope_key', 'epistemic_type', 'occurred_at', 'source_event_ids'])
-    times = _said_at(store, [unit for unit in rows if not unit.get('occurred_at')])
     scenes = {scene['scope_key']: scene_id for scene_id, scene in groups.items()}
+    chunked = memory_records.chunk_marks(store, list(groups))
+    rows = [unit for unit in memory_records.of_kind(
+                store, 'chat_chunk', scopes=[s['scope_key'] for s in groups.values()],
+                character=character_id(store.config), status='active').each(
+                fields=['body_markdown', 'scope_key', 'epistemic_type', 'occurred_at', 'source_event_ids', 'scene_seq'])
+            if (unit.get('scene_seq') or 0) <= chunked.get(scenes.get(unit['scope_key']), 0)]
+    times = _said_at(store, [unit for unit in rows if not unit.get('occurred_at')])
     counts = Counter(word for unit in rows for word in key_words.cross_words(
         unit.get('body_markdown'), _mention(scenes.get(unit['scope_key']))))
     learned = key_words.vocabulary(counts)
@@ -318,8 +323,7 @@ def build(store, moment=None):
     column = store.collection(WORDS)
     mark = column.get('mark') or {}
     generation = int(mark.get('generation') or 0) + 1
-    seqs = {scene_id: (message_records.lines(store, scene_id).first(newest_first=True, fields=['scene_seq'])
-                       or {}).get('scene_seq', 0) for scene_id in groups}
+    seqs = {scene_id: chunked.get(scene_id, 0) for scene_id in groups}
     batch = [{'_id': '%d:%s' % (generation, word), 'row': 'word', 'generation': generation, 'word': word,
               'hers': entry['hers'],
               'theirs': sorted(entry['theirs'], key=lambda posting: posting[2])[-OTHERS_KEPT:],    # oldest first

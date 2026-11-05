@@ -157,7 +157,7 @@ What she learned elsewhere comes back when she asks (ADR-097 D3, D4): lines from
 - def `elsewhere` — recall: lines of her other groups that have a word of the query that may cross, at most ELSEWHERE_SHOWN, best first.
 - def `fire_rows` — View: the count rows of these kinds (of a persona) at or after `since` (ISO text).
 - def `vocabulary` — The learned words of the index's build, learned in this process once per build; `ensure` builds the index first when there is none (a place's words must be cut as the index cuts them).
-- def `build` — Build the word index again from every chat line of her groups, as a new generation; the old one goes once the new one is in place.
+- def `build` — Build the word index again from every chat line of her groups up to each group's chunk mark (records.memories.chunk_marks, as top_up reads), as a new generation.
 - def `top_up` — Add the group lines said since the index's mark: each group's lines after its last indexed one, up to its chunk mark (records.memories.chunk_marks: every line before it is settled, and chunked when spoken), so a reply the indexer waited for
 - def `seen_for` — {word: [(scope, lines in the window, latest)]} from the index, topped up first.
 - def `lines_for` — [(unit id, scope, hers)] of the lines that have one of the words, the index topped up first.

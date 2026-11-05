@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from asuna import crossing, memory_tiers
+from asuna import clock, crossing, memory_tiers
 from asuna.evidence import canonical, sha
 from asuna.memory import MemoryService
 from asuna.persona_data import PersonaDataAPI
@@ -60,12 +60,12 @@ def test_a_line_whose_revision_changes_during_the_round_is_still_chunked_and_the
 
 def test_a_reply_delivered_after_a_later_line_was_chunked_is_chunked_and_its_words_reach_the_crossing_index(group):
     store = group
-    crossing.top_up(store)                          # the word index exists before the lines do
-    line(store, 1, mine=True, state='SENDING', claimed_at='2026-11-05T01:00:00+00:00', text='my reply says ' + WORD)
+    line(store, 1, mine=True, state='SENDING', claimed_at=clock.stamp(), text='my reply says ' + WORD)
     line(store, 2)
     MemoryService(store).chunk(GROUP)
     assert chunked(store, 2) and not chunked(store, 1), 'the later line is chunked; her reply is on its way'
     assert memory_records.chunk_mark(store, GROUP) == 0, 'her reply on its way holds the mark'
+    crossing.build(store)                           # the night's settlement rebuilds the word index meanwhile
     assert crossing.lines_for(store, [WORD]) == [], 'nothing past the mark reaches the index'
 
     row = message_records.get(store, 'line-1')
@@ -75,7 +75,9 @@ def test_a_reply_delivered_after_a_later_line_was_chunked_is_chunked_and_its_wor
     mine = chunked(store, 1)
     assert mine and mine['body_markdown'] == 'my reply says ' + WORD
     assert memory_records.chunk_mark(store, GROUP) == 2
-    assert (mine['_id'], 'scene:' + GROUP, True) in crossing.lines_for(store, [WORD]), 'her words are in the index'
+    indexed = crossing.lines_for(store, [WORD])
+    assert (mine['_id'], 'scene:' + GROUP, True) in indexed, 'her words are in the index'
+    assert [unit for unit, *_ in indexed].count(chunked(store, 2)['_id']) == 1, 'the later line is indexed once'
 
 
 def test_a_failed_reply_does_not_hold_the_mark(group):

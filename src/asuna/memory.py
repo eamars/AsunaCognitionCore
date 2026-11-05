@@ -256,9 +256,9 @@ class MemoryService:
 
 # ADR-117 B8: which lines a chunk round may step past (`settled`).
 TERMINAL_STATES=('DELIVERED','FAILED','CANCELLED_AFTER_FAILURE','CANCELLED_BY_HER','REDACTED')
-UNKNOWN_SETTLES=timedelta(hours=1)
+LEFT_SETTLES=timedelta(hours=1)        # her line on its way this long counts as settled (and is not chunked)
 LINE_FIELDS=['text','direction','delivery_state','author','policy_epoch','scene_seq','occurred_at','received_at',
-             'receipt_at','claimed_at']
+             'receipt_at','claimed_at','queued_at']
 EXISTS_BATCH=500                       # chunk ids looked up per read
 
 
@@ -266,23 +266,21 @@ def settled(row,epoch,moment):
     """Whether nothing can change any more whether this line is chunked, so a chunk round may step past it: a line
     that came in (a person's, or the program's own moment), a line of another epoch, her line delivered or in a
     terminal state (TERMINAL_STATES: failed, cancelled after a failure, cancelled by her, redacted), or her line left
-    unknown for more than UNKNOWN_SETTLES since its last receipt or claim. Her line still on its way (ready, queued,
-    sending, unknown within the hour) is not. `moment`: now, an aware datetime."""
+    on its way (ready, queued, sending, unknown) for more than LEFT_SETTLES, from its receipt, else its claim, else
+    when it was queued. Her line on its way within the hour is not, nor one that carries none of those times (a
+    reply between its write and its publishing). `moment`: now, an aware datetime."""
     if row.get('policy_epoch',1)!=epoch or row.get('direction')!=message_records.OUTBOUND:
         return True
-    state=row.get('delivery_state')
-    if state in TERMINAL_STATES:
+    if row.get('delivery_state') in TERMINAL_STATES:
         return True
-    if state=='UNKNOWN':
-        left=row.get('receipt_at') or row.get('claimed_at')
-        try:
-            since=datetime.fromisoformat(str(left).replace('Z','+00:00')) if left else None
-        except ValueError:
-            since=None
-        if since is not None and since.tzinfo is None:
-            since=since.replace(tzinfo=timezone.utc)
-        return since is None or moment-since>UNKNOWN_SETTLES
-    return False
+    left=row.get('receipt_at') or row.get('claimed_at') or row.get('queued_at')
+    try:
+        since=datetime.fromisoformat(str(left).replace('Z','+00:00')) if left else None
+    except ValueError:
+        since=None
+    if since is not None and since.tzinfo is None:
+        since=since.replace(tzinfo=timezone.utc)
+    return since is not None and moment-since>LEFT_SETTLES
 
 
 def spoken(row):

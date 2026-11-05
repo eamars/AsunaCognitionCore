@@ -2,12 +2,15 @@
 finished task's result carries its report's length and pages (what the task list says, silently wrong otherwise); a
 group's name is written by the line that carries it, the newest one's kept. On the unit run's store holding the
 fixture world (conftest.py)."""
+from bson import ObjectId
+
 from asuna.ingress import persist_input
 from asuna.lanes import FakeLane, LaneResult
 from asuna.people import People
 from asuna.records import artifacts as artifact_records
 from asuna.records import scenes as scene_records
 from asuna.records import tasks as task_records
+from asuna.store import memory as memory_adapter
 from asuna.tasks import Executor, TaskService, task_pages
 
 REPORT = '\n'.join('## 第%d部分\n' % n + '这一部分的内容，一行一行写下去。\n' * 80 for n in range(1, 5))
@@ -47,6 +50,27 @@ def test_a_finished_task_carries_its_reports_length_and_pages(world):
     [shown] = [row for row in task_records.recent_with_inputs(world, 'dm-a', running['scope_key'], 1)
                if row['_id'] == 't-long']
     assert (shown['_report_chars'], shown['_report_pages']) == (done['result']['chars'], done['result']['pages'])
+
+
+def test_a_tool_record_holding_a_database_id_does_not_fail_the_finish(world):
+    """A tool record stored before results were made JSON data (a database row's ObjectId, 2026-10-08) is read as the
+    broker stores results now (tasks.json_data): the finish write that sizes the report lands, and its pages read."""
+    service = TaskService(world)
+    queued(world, 't-oid')
+    running = service.claim('t-oid')
+    artifact_records.save(world, {'_id': 'call-oid', 'scope_key': running['scope_key'], 'task_id': 't-oid',
+                                  'intent_revision': 1, 'tool': 'development_database_read', 'args': {},
+                                  'input_hash': 'oid', 'state': 'DONE', 'result': {'rows': [{'legacy': {'_id': ''}}]}},
+                          stream='t-oid')
+    # The store refuses such a value now; the old record is on the server as it was written, under the checked layer.
+    stored = memory_adapter._DATABASES[world.name].records['artifacts']['call-oid']
+    stored['result']['rows'][0]['legacy']['_id'] = ObjectId('5f0c2b9e8a1d4e3b2c1a0f9e')
+    Executor(service, FakeLane(world, [LaneResult(content=REPORT)]), Broker())._run_claimed(running, 'w', lambda: None)
+    done = task_records.get(world, 't-oid')
+    assert done['state'] == 'RETURNED'
+    pages = task_pages(world, done)
+    assert (done['result']['chars'], done['result']['pages']) == (len(REPORT), len(pages))
+    assert '5f0c2b9e8a1d4e3b2c1a0f9e' in pages[-1], 'the id reads as its text'
 
 
 def test_a_groups_name_is_its_newest_named_lines(world):

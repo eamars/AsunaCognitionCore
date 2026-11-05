@@ -170,11 +170,19 @@ def records_pages(observations, size=REPORT_CHARS):
     return pages
 
 
+def json_data(value):
+    """A tool result as JSON data, the one form a tool record is stored, handed back and read in: a value JSON has no
+    type for (a database row's ObjectId) becomes its text. Records stored before results were made JSON (before
+    2026-10-09) can still hold one."""
+    return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+
+
 def observations_of(store, task, shown=lambda value: value):
     """The task's finished tool calls, each as its tool and an excerpt of its result (a failed one: its error)."""
     return [{'source': item['_id'], 'tool': item['tool'],
              'result_excerpt': excerpt(item['error'] if item['state'] == 'FAILED' else
-                                       json.dumps(shown(item['result']), ensure_ascii=False), OBSERVATION_CHARS)}
+                                       json.dumps(shown(json_data(item['result'])), ensure_ascii=False),
+                                       OBSERVATION_CHARS)}
             for item in artifact_records.of_task(store, task['_id'], task.get('intent_revision'),
                                                  states=['DONE', 'FAILED']).rows()]
 
@@ -986,7 +994,7 @@ class ToolBroker:
                 result=credentials.scrub(result)          # no stored credential value reaches her or a receipt
             # A result is JSON data: the receipt and her character brain's view of it are JSON, and a raw database row
             # can hold other values (an archived message's original ObjectId).
-            result=json.loads(json.dumps(result,ensure_ascii=False,default=str))
+            result=json_data(result)
             self.service.crash('after_tool_before_receipt')
             # A definite failure is an error on both layers: the artifact is FAILED and the call's error says the same.
             failed=failure_words({**result,**({'adjusted':adjusted} if adjusted else {})})

@@ -136,6 +136,19 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 - **`ASUNA_INTEGRATION_CONFIG` 只在 `integration_*` 那几趟运行里存在**（值是那次运行的 `config.json` 路径）。普通行动脑任务里没有它，url＋token 自己去 `.runtime/integration/owner/runs/<run_id>/config.json` 读（键：`adapter.napcat.url`、`adapter.napcat.token`）。
 - 复现记录：2026-11-02 在一次普通任务里重跑了形状那一组（最新 run 的 `config.json` 读 url＋token → HTTP 三种路径全 426；WS 发 `get_record` 空参数／只给 `file` → `1400` Schema error；给 `file_id`＋`out_format`、给 `file`＋`out_format` → `1200 file not found`）。没动适配器，也没发到平台（`get_record` 不发消息）。
 
+## 处理群邀请卡片的实测 API 形状（2026-11-05 实测）
+
+来源：**11-05 处理群邀请卡片两趟误判实测**。形状是手动按 OneBot v11 那套发 action 拿到的（url＋token 的口子见上面「手工去 NapCat 取一段语音的实测形状」那一节），不是适配器跑出来的：`get_group_system_msg` 与 `get_group_system_notice` 至今不在「权限与边界」那一节的读面上，`qqadapter/` 里一次都没出现过（这一节也不动代码）。
+
+- **列待处理群邀请的正确接口是 `get_group_system_msg`**：回包分两摞——`invited_requests`（别人拉我进群的那种）与 `join_requests`（申请进某个群的那种）。
+- **`join_requests` 连 `checked:true` 的历史条目都留着**：「这条办过没有」只能看条目自己那个 `checked`，不能看它还在不在列表里——「列表里有」不等于「还在待处理」。
+- **`get_group_system_notice` 才是回 `1404`「不支持的API」的那个**（这台 NapCat 4.18.0；`get_packet_status` 也是同一类 1404，见 0.9.1 那条）。两个名字只差几个字，一个有数据一个是**不支持**，**别混**：拿错的那个去探，看到的「什么都没有」是接口不支持，不是没有邀请。
+- **邀请卡片 `jumpUrl` 里的 `groupcode` 就是 NapCat 能直接用的 `group_id`**（实测 `groupCode==groupUin`）：不用先换算，也不用另外要一张映射表。
+- **`get_group_info(groupcode)` 对自己不在的群也回 `0`**，并且照样带 `groupName`／`memberNum`／`ownerUin`／`groupCreateTime`／`cmdUinJoinTime` 回来。所以「回 0」说的是这个群查得到，**不等于我在里面**。
+- **同名群判同判异拿 `ownerUin`＋`groupCreateTime`＋`memberNum` 三样一起比，别拿群名**：群名会撞车也会被改，这三样同时对上才算同一个群（连写字面 ownerUin＋groupCreateTime＋memberNum，下次一个字 grep 就到这一格）。
+- **判「进没进群」看 `get_group_list` 里有没有那个群，加上回包里的 `cmdUinJoinTime` 字段，不靠邀请卡片消失与否**（卡片在不在不是进出的凭据；0.8.0 那条已写「接受不等于准入」，卡片消失同样不等于进群）。
+- 没核实的（写下来免得下次当成已核实）：`checked` 在一条请求被处理完之后会不会翻、多久翻；`get_group_system_msg` 有没有分页或时间窗；自己没进过的群里 `cmdUinJoinTime` 是缺字段还是给 0——11-05 那一趟只量了上面这几格。
+
 ## 重新部署
 
 适配器代码、技能、文档都只通过 `development_publish`（带 `project: "napcat-qq"`）生效：冻结候选、过启动探针、激活快照。`integration_start` 只运行**已发布**的适配器（冻结成 `/app`），未发布的候选改动不会在这里上线，宿主重启后恢复的也是当时已发布的版本。所以换新版本的顺序是：先自检，再 `development_publish`，再让新版本跑起来。两种回合能做的不一样：
@@ -180,6 +193,7 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 - 0.15.1（2026-10-24，ADR-095 第 4 步）：等宿主回一段语音的上限从 30 秒放到 200 秒。宿主现在把语音交给单独的子进程转写，一段超过 90 秒就换一个新的子进程再试一次；一段语音在宿主那边总共最多 180 秒（排在别的语音后面的时间也算在内），所以宿主那边重试不会被读成「宿主不在」。入站、出站、回执一概没改。
 
 - 文档改动（2026-11-02，没换版本号）：加「手工去 NapCat 取一段语音的实测形状」一节（只改这份技能文档，`adapter.py` 一行没动；0.10.0／0.15.1 那两条语音自动路不变）。这个技能目录里没有 `CHANGELOG.md`，版本记录沿用本技能自己的记法写在这一节。
+- 文档改动（2026-11-05，没换版本号）：加「处理群邀请卡片的实测 API 形状（2026-11-05 实测）」一节，三格字面照抄当回合实测——① 列待处理群邀请用 `get_group_system_msg`（回 `invited_requests`／`join_requests`；`join_requests` 连 `checked:true` 的历史条目都留着），回 `1404` 不支持的是 `get_group_system_notice`，别混；② 卡片 `jumpUrl` 里的 `groupcode` 就是 NapCat 能用的 `group_id`（实测 `groupCode==groupUin`），`get_group_info(groupcode)` 对自己不在的群也回 0，带 `groupName`／`memberNum`／`ownerUin`／`groupCreateTime`／`cmdUinJoinTime`；③ 同名群判同判异比 `ownerUin`＋`groupCreateTime`＋`memberNum` 三样、别拿群名，判进没进群看 `get_group_list` 里有无该群＋`cmdUinJoinTime`，不靠邀请卡片消失与否。来源：11-05 处理群邀请卡片两趟误判实测。只改这一份技能文档，`adapter.py` 与 `qqadapter/` 一行没动，适配器读面不变。这个技能目录里没有 `CHANGELOG.md`，版本记录沿用本技能自己的记法写在这一节。
 
 ## 试用记录
 

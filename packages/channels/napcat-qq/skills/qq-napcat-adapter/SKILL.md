@@ -149,6 +149,13 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 - **判「进没进群」看 `get_group_list` 里有没有那个群，加上回包里的 `cmdUinJoinTime` 字段，不靠邀请卡片消失与否**（卡片在不在不是进出的凭据；0.8.0 那条已写「接受不等于准入」，卡片消失同样不等于进群）。
 - 没核实的（写下来免得下次当成已核实）：`checked` 在一条请求被处理完之后会不会翻、多久翻；`get_group_system_msg` 有没有分页或时间窗；自己没进过的群里 `cmdUinJoinTime` 是缺字段还是给 0——11-05 那一趟只量了上面这几格。
 
+## retCode 1200 判据（11-06 官方出処查全）
+
+- 1200 不在官方文档与 OpenAPI（docs 仓 90399c4、4.18.42，91 个版本 retcode 示例只有 0/1400/1404）；它是官方源码 OneBotAction.ts:114（HEAD 98d781d，提交 2026-10-30）WebSocket 路径 catch-all 兜底码——同一异常走 HTTP 路径回 200（:100）。**码跟传输路径走，不跟语义走。**
+- 判据：1200＝「没拿到确认」，**不得记发送失败**；官方声明的失败码只有 1400/1401/1404。同码两种真相：真失败（issue #1045，result:-1 rich media transfer failed，2025-05-26）／实际已发出但确认超时（#2120 群图已可见仍回 1200，maintainer MliKiowa 2026-10-30 回「webui 调高预期时间」后 not_planned 关闭；#1410 内核 result:0 仍报超时）。
+- 送达判定只认 get_msg／平台回读，不认返回码（同族：回执是一拍的快照）。撤回类 1200 另有权限型真因（#1173：管理员撤不了群主/管理员消息）——推测适用性，未逐枚核实。
+- 证据：task-f3d2447864e86fad971490ac3099bbc1 报告（15 条带 URL 日期）；OneBot 11 规范本身无 retcode 数字表（2022-08-12 后未更新），1200 含义完全由实现自定。
+
 ## 重新部署
 
 适配器代码、技能、文档都只通过 `development_publish`（带 `project: "napcat-qq"`）生效：冻结候选、过启动探针、激活快照。`integration_start` 只运行**已发布**的适配器（冻结成 `/app`），未发布的候选改动不会在这里上线，宿主重启后恢复的也是当时已发布的版本。所以换新版本的顺序是：先自检，再 `development_publish`，再让新版本跑起来。两种回合能做的不一样：
@@ -194,6 +201,8 @@ python3 /app/adapter.py --peers --data-dir /data                # 导出对方�
 
 - 文档改动（2026-11-02，没换版本号）：加「手工去 NapCat 取一段语音的实测形状」一节（只改这份技能文档，`adapter.py` 一行没动；0.10.0／0.15.1 那两条语音自动路不变）。这个技能目录里没有 `CHANGELOG.md`，版本记录沿用本技能自己的记法写在这一节。
 - 文档改动（2026-11-05，没换版本号）：加「处理群邀请卡片的实测 API 形状（2026-11-05 实测）」一节，三格字面照抄当回合实测——① 列待处理群邀请用 `get_group_system_msg`（回 `invited_requests`／`join_requests`；`join_requests` 连 `checked:true` 的历史条目都留着），回 `1404` 不支持的是 `get_group_system_notice`，别混；② 卡片 `jumpUrl` 里的 `groupcode` 就是 NapCat 能用的 `group_id`（实测 `groupCode==groupUin`），`get_group_info(groupcode)` 对自己不在的群也回 0，带 `groupName`／`memberNum`／`ownerUin`／`groupCreateTime`／`cmdUinJoinTime`；③ 同名群判同判异比 `ownerUin`＋`groupCreateTime`＋`memberNum` 三样、别拿群名，判进没进群看 `get_group_list` 里有无该群＋`cmdUinJoinTime`，不靠邀请卡片消失与否。来源：11-05 处理群邀请卡片两趟误判实测。只改这一份技能文档，`adapter.py` 与 `qqadapter/` 一行没动，适配器读面不变。这个技能目录里没有 `CHANGELOG.md`，版本记录沿用本技能自己的记法写在这一节。
+
+- 文档改动（2026-11-06，没换版本号）：11-06 新增 retCode 1200 判据节（官方源码＋文档仓＋issue 检索，task-f3d24478）——正文是上面那节「retCode 1200 判据（11-06 官方出処查全）」，四格照抄当回合查证（1200 的官方出处、判据、送达判定、证据）。只改这一份技能文档，`adapter.py` 与 `qqadapter/` 一行没动，适配器读面、权限、回执形状不变，本次不重启适配器。这个技能目录里没有 `CHANGELOG.md`，版本记录沿用本技能自己的记法写在这一节。
 
 ## 试用记录
 

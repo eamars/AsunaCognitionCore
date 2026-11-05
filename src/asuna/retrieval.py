@@ -37,6 +37,24 @@ def refused(exc):
     return isinstance(exc,httpx.HTTPStatusError) and exc.response is not None and exc.response.status_code==400
 
 
+def _message_of(unit):
+    """The line a chunk of a long message stands for (its source ids), or None for any other unit."""
+    count=unit.get('segment_count')
+    if unit.get('kind')=='chat_chunk' and isinstance(count,int) and count>1 and unit.get('source_event_ids'):
+        return tuple(unit['source_event_ids'])
+    return None
+
+
+def _joined(units):
+    """One entry for the chunks of one message: the first chunk's fields, the bodies joined in segment order (a
+    message's chunks are its text cut in pieces, nothing between them), and every chunk's id (`joined_ids`). A single
+    unit is itself."""
+    if len(units)==1:return units[0]
+    ordered=sorted(units,key=lambda m:(m.get('segment_index') or 0,m['_id']))
+    return {**ordered[0],'body_markdown':''.join(m.get('body_markdown') or '' for m in ordered),
+            'joined_ids':[m['_id'] for m in ordered]}
+
+
 class Retrieval:
     REST_SECONDS=120
 
@@ -205,6 +223,9 @@ class Retrieval:
 
     def search(self, scope, epoch, query, *, exclude_sources=(), require_vector=False, linked_scopes=(), private_scope=None,
                coverage_floor=0.0, forgetting=None, record_use=False, automatic=True):
+        """The memories a query finds here, best first, and the manifest: at most six entries, each one memory or the
+        chunks of one long message joined in segment order (`joined_ids` holds their ids); the manifest's `selected`
+        has every unit's id, and `record_use` rehearses each unit."""
         # 跨场景只读联动（A2）：配置给这个场景挂的别的场景，它的记忆可以一起被召回；写权限一点没变。
         # owner-private 只看会话类（private_scope 仅在 owner_private 会话里由调用方给出），与联动无关。
         linked=[item for item in dict.fromkeys(linked_scopes or ())
@@ -284,15 +305,24 @@ class Retrieval:
         # statements already returned by this query, never arbitrary recency.
         recent_sources=sorted((m for m in candidates if m.get('epistemic_type')=='reported_speech'
             and m['scope_key'] in readable),key=lambda m:m.get('scene_seq',0),reverse=True)[:2]
-        selected=[];seen=set()
+        # ADR-117 D7: the six slots count by message. The chunks of one long message (one source line, chat_chunk,
+        # segment_count > 1) take one slot together, as one entry joined in segment order; a summary is its own
+        # entry. The units stay counted one by one (`units`: the cut, the rehearsal, the coverage, the manifest).
+        selected=[];units=[];seen=set();parts={}
         for m in candidates[:1]+recent_sources+candidates:
             if m['_id'] in seen:continue
-            seen.add(m['_id']);selected.append(m)
+            seen.add(m['_id']);units.append(m)
+            line=_message_of(m)
+            if line in parts:
+                parts[line].append(m);continue
+            if line:parts[line]=[m]
+            selected.append(m)
             if len(selected)==6:break
+        selected=[_joined(parts.get(_message_of(m)) or [m]) for m in selected]
         # Records that would have made the cut but whose source she still sees (the recent tail): counted, so a
         # recall can say where the rest is instead of reading as "not found".
         position={key:i for i,key in enumerate(ordered)}
-        cut=max((position[m['_id']] for m in selected),default=-1) if len(selected)==6 else len(ordered)
+        cut=max((position[m['_id']] for m in units),default=-1) if len(selected)==6 else len(ordered)
         in_view=[e['id'] for e in excluded if e['reason']=='source_in_recent_tail' and position[e['id']]<cut]
         for m in selected:
             m['historical_sources']=[]
@@ -303,18 +333,18 @@ class Retrieval:
         if failure is None and vector:
             # Her coverage floor reads 0..1 (memory.coverage_floor): a cosine c counts as (1 + c) / 2.
             scores={row['_id']:(1+row.get('score',-1.0))/2 for row in vector}
-            coverage_score=max((scores.get(m['_id'],0.0) for m in selected),default=0.0);coverage_basis='vector_cosine'
+            coverage_score=max((scores.get(m['_id'],0.0) for m in units),default=0.0);coverage_basis='vector_cosine'
         else:
             raw=terms(query)
-            coverage_score=max((len(raw & terms(m['body_markdown']))/len(raw) for m in selected),default=0.0) if raw else 0.0
+            coverage_score=max((len(raw & terms(m['body_markdown']))/len(raw) for m in units),default=0.0) if raw else 0.0
             coverage_basis='lexical_overlap'
         coverage='insufficient' if not selected or coverage_score<float(coverage_floor or 0) else 'sufficient'
         moment=now()
-        for m in selected if record_use else ():
+        for m in units if record_use else ():
             # Rehearsal: a memory a real turn used is fresh again, in time and in conversation volume.
             memory_records.touch_salience(self.store,m['_id'],moment,sequences.get(m['scope_key']))
         manifest={'path':'server_vector_rrf' if failure is None else 'scoped_lexical_recent_fallback',
-                  'coverage':coverage,'coverage_score':coverage_score,'coverage_basis':coverage_basis,'vector_verified':failure is None,'failure':failure,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'embedding_weight_revision_verified':self.weight_verified,'filter':vector_filter,'exact':True,'vector_ranks':vector,'lexical_ids':[m['_id'] for m in lexical],'ranks':ranks,'selected':[m['_id'] for m in selected],'excluded':excluded,'in_view':in_view,'pending_backread':[m['_id'] for m in pending]}
+                  'coverage':coverage,'coverage_score':coverage_score,'coverage_basis':coverage_basis,'vector_verified':failure is None,'failure':failure,'query_sha256':sha(query.encode()),'embedding_revision':self.revision,'embedding_weight_revision_verified':self.weight_verified,'filter':vector_filter,'exact':True,'vector_ranks':vector,'lexical_ids':[m['_id'] for m in lexical],'ranks':ranks,'selected':[m['_id'] for m in units],'excluded':excluded,'in_view':in_view,'pending_backread':[m['_id'] for m in pending]}
         manifest.update(cache_key=key_fields,cache_key_sha256=cache_key,cache_hit=cache_hit,cache_contains='ids_and_scores_only',
                         recent_source_ids=[m['_id'] for m in recent_sources], lexical_candidate_count=len(rows), lexical_candidate_limit=4096,
                         cache_disabled_for_bounded_sample=not cacheable)

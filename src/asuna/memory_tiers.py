@@ -6,8 +6,10 @@ the item's place (随身 carried in every turn where it is readable, 手边 at h
 `recall`, 收着 put away: found by `recall` only), when it was last memorable and its stay. A 随身 item lapses to 手边
 when its stay runs out; each memorable moment (recall returned it, a rewrite that changed it, its `doc:` ref cited, a
 second conversation it came up in, a near-duplicate met from another conversation) starts the stay again and, once per stay, doubles the
-next. A store over its count cap lapses its least recently memorable item. Memories (`self`, running records) cool to
-收着 by disuse; facts (persona, voice, ledgers, group notes, `core`) never do: a correction or a merge supersedes
+next. A store over its count cap lapses its least recently memorable item. Nothing at hand moves down by disuse: a
+memory at hand (an item that is not a fact) comes up by itself only while its last use or memorable moment is within
+its age bound (`within_age`: JOURNAL_AGE_DAYS for a running record's row, the forgetting half-life's step-back for the
+rest), and `recall` reaches it whatever its age; facts have no age bound, and a correction or a merge supersedes
 them. Every move is one row `move` and one audit line `memory.moved`, saying who made it (`by`: `her` for her let_go
 and her own `inject` writes, `program` for the rest), and is told once in each conversation that can read the item
 (`things_from_program`). Where a write leaves each section is one rule, `Tiers.placement_after`, which the identity
@@ -15,8 +17,9 @@ gate (carried.py) measures before the write lands. A group's notes over their pe
 (`fold_order`, kept and recomputed on a write and at settlement); a folded section is at hand for `deliver`. An item
 at hand comes up when the turn's message has one of its keys (key_words.py: her tags, and a group note's rare heading
 words), or when it is close enough in meaning; each place's common words, which decide what is rare there, are kept
-beside the fold order (rows `rarity`, recomputed at settlement and made when missing). The program never writes her
-`inject`: the tier is the record of what is carried. She reads all of it as words from the tables below.
+beside the fold order (rows `rarity`, recomputed at settlement and made when missing). A turn whose message is program
+text (`PROGRAM_TEXT_KINDS`) still brings items up, but marks nothing (`deliver`'s `counts`). The program never writes
+her `inject`: the tier is the record of what is carried. She reads all of it as words from the tables below.
 
 `ENABLED` is the switch; off, nothing here is read or written and her turns are as before.
 """
@@ -48,8 +51,8 @@ SELF_DOC, CORE_DOC = 'self', 'core'
 SELF_DOCS = (SELF_DOC, CORE_DOC)
 STORE_WORDS = {'persona': '人设', 'voice': '口吻', 'ledger': '活账', 'group_notes': '群笔记', 'core': 'core',
                'self': '自我', 'journal': '流水'}
-# Each item is a fact (what is: never cools by disuse, replaced only by correction) or a memory (what happened, or
-# her own judgment: follows the cycle). Her answer (2026-10-13): per item, not per store. The store gives the default;
+# Each item is a fact (what is: no age bound, replaced only by correction) or a memory (what happened, or her own
+# judgment: follows the cycle). Her answer (2026-10-13): per item, not per store. The store gives the default;
 # she may say it, or say where the item came from, when she writes it.
 FACTS = ('persona', 'ledger', 'group_notes', 'core')       # stores whose items are facts unless she says
 MEMORIES = ('self', 'journal', 'voice')                    # her voice is something she keeps changing (her answer)
@@ -72,7 +75,11 @@ STAY_DAYS, STAY_CAP_DAYS = 14, 56
 # The switch-on day only: each first stay spread per item from its usual length up to twice that (14..28 days; a
 # group's notes 28..56), never past the stay cap, so what nothing uses lapses gradually, not all on one day (owner
 # 2026-10-13, after the dry run). Later items take the usual first stay.
-JOURNAL_COOL_DAYS = 30
+JOURNAL_AGE_DAYS = 30             # a running record's row comes up by itself while used within this (within_age)
+# ADR-117 D1: the turns whose message is program text (a heartbeat, a visit, self-development, the night's
+# settlement). Their items still come up, but nothing is counted: no use, no memorable moment, no rehearsal, no
+# program score, no came-back count (context.prepare). Her own recall in such a turn counts.
+PROGRAM_TEXT_KINDS = ('presence', 'visit', 'self_development', 'settlement')
 AGE_WORDS = ((1, '刚写的'), (7, '这几天'), (14, '前阵子'), (45, '上个月'), (None, '更早'))
 COUNT_WORDS = ((0, '没有'), (3, '几条'), (9, '好几条'), (19, '十几条'), (99, '几十条'), (None, '很多条'))
 # How much room a store's 随身 has left under its cap, said in every turn instead of its count: the carried items are
@@ -121,7 +128,7 @@ OVER_LINE = ('随身满了（%s %d/%d）：随身的有 %s。想换就 let_go �
 SEARCHED = '找了：随身、手边、收着'
 NOTHING = '随身、手边、收着三处都没找到'
 # A tag never carries an item back (no pin, owner 2026-10-13): only a changed rewrite does (ADR-062 §4.2 step 7); a
-# use keeps it from cooling but does not lift it.
+# use keeps it within its age bound but does not lift it.
 NOT_BACK = ('when_shown 改成 always 不会把它带回随身：你把它改写出变化，它才会回来；再被用到只让它不再往下放；'
             '现在它在%s。')
 # What she is told once per conversation, in her system prompt where the memory rules are (ADR-062 §4.3): the persona
@@ -334,22 +341,15 @@ class Tiers:
                          **({'scene_id': scene_id} if scene_id else {})}, 'global-safe')
         return move
 
-    def tick(self, moment=None, *, half_life_days=30.0, step_back_below=0.1):
-        """Lapses whose stay ran out and memories cooled by disuse; facts never cool. Returns the moves."""
+    def tick(self, moment=None):
+        """Lapses whose stay ran out. Nothing at hand moves by disuse (its age bound is `within_age`). Returns the
+        moves."""
         moment = moment or clock.now()
         moves = []
-        for row in self.items(place=AnyOf([CARRIED, AT_HAND])):
-            if row['place'] == CARRIED:
-                start = _at(row.get('memorable_at')) or moment
-                if moment - start > timedelta(days=float(row.get('stay_days') or STAY_DAYS)):
-                    moves.append(self.move(row, AT_HAND, 'stay', moment))
-            elif not row.get('fact'):
-                last = max(filter(None, (_at(row.get('memorable_at')), _at(row.get('last_use_at')))), default=moment)
-                days = (moment - last).total_seconds() / 86400
-                cooled = (days > JOURNAL_COOL_DAYS if row['store'] == 'journal'
-                          else half_life_days and 0.5 ** (days / half_life_days) < step_back_below)
-                if cooled:
-                    moves.append(self.move(row, PUT_AWAY, 'cooled', moment))
+        for row in self.items(place=CARRIED):
+            start = _at(row.get('memorable_at')) or moment
+            if moment - start > timedelta(days=float(row.get('stay_days') or STAY_DAYS)):
+                moves.append(self.move(row, AT_HAND, 'stay', moment))
         return [move for move in moves if move]
 
     def memorable(self, row, why, moment=None, *, scene_id=None):
@@ -1052,15 +1052,30 @@ def placed(store, persona, slug, content, override=None):
     return Tiers(store, persona).placed(slug, content, override) if ENABLED else content
 
 
-def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, recall=False, moment=None,
-            excerpt_chars=800):
-    """Her own items a turn brings up by itself (手边; a recall also reaches 收着): an item whose key the message has
-    (key_words.py), or one scored above FLOOR as memories are; at most OWN_SLOTS in fused order, as memory entries with
-    their store, place and age words, a doc ref, and the word that brought it. What is carried (随身) is already in
-    front of her and is never brought up again, except a group-notes section folded to its heading this turn
-    (ADR-096), which comes up labelled as carried and folded. Each one surfaced is marked: recalled, or surfaced in
-    this conversation. Returns (the entries, the refs of carried items the turn would have brought up had they not
-    been carried: the program's score for what she carries)."""
+def within_age(row, moment, *, half_life_days=30.0, step_back_below=0.1):
+    """Whether an item at hand may come up by itself (deliver, outside recall): a fact always; a memory while its
+    last use or memorable moment is within JOURNAL_AGE_DAYS (a running record's row) or before its freshness,
+    0.5 ** (days / half_life_days), falls below step_back_below (the rest). Nothing is written."""
+    if row.get('fact'):
+        return True
+    last = max(filter(None, (_at(row.get('memorable_at')), _at(row.get('last_use_at')))), default=moment)
+    days = (moment - last).total_seconds() / 86400
+    if row['store'] == 'journal':
+        return days <= JOURNAL_AGE_DAYS
+    return not (half_life_days and 0.5 ** (days / half_life_days) < step_back_below)
+
+
+def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, recall=False, counts=True,
+            half_life_days=30.0, step_back_below=0.1, moment=None, excerpt_chars=800):
+    """Her own items a turn brings up by itself (手边 within its age bound, `within_age`; a recall also reaches 收着
+    and every age): an item whose key the message has (key_words.py), or one scored above FLOOR as memories are; at
+    most OWN_SLOTS in fused order, as memory entries with their store, place and age words, a doc ref, and the word
+    that brought it. What is carried (随身) is already in front of her and is never brought up again, except a
+    group-notes section folded to its heading this turn (ADR-096), which comes up labelled as carried and folded. Each
+    one surfaced is marked: recalled, or surfaced in this conversation. Returns (the entries, the refs of carried items
+    the turn would have brought up had they not been carried: the program's score for what she carries). With
+    `counts` False (a turn whose message is program text, PROGRAM_TEXT_KINDS) the entries still come up, but nothing
+    is marked and no score is returned."""
     from .config import excerpt
     from .memory_pilot import rank
     items = list(getattr(pilot, 'items', None) or [])
@@ -1069,6 +1084,7 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
     tiers = Tiers(store, persona)
     rows = {(row['doc'], row['sid']): row for row in tiers.items()}
     allowed = (AT_HAND, PUT_AWAY) if recall else (AT_HAND,)
+    moment = moment or clock.now()
     from .group_admin import folded as _folded
     folded = {(doc, sid) for doc in {item['doc'] for item in items if item['store'] == 'group_notes'
                                      and item['scope_key'] in readable}
@@ -1079,8 +1095,16 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
 
     def is_folded(item):
         return tier(item) == CARRIED and (item['doc'], item['sid']) in folded
+
+    def in_pool(item):
+        if is_folded(item):
+            return True
+        if tier(item) not in allowed:
+            return False
+        return recall or within_age(rows[(item['doc'], item['sid'])], moment, half_life_days=half_life_days,
+                                    step_back_below=step_back_below)
     readable_items = [item for item in items if item['scope_key'] in readable and tier(item)]
-    pool = [item for item in readable_items if tier(item) in allowed or is_folded(item)]
+    pool = [item for item in readable_items if in_pool(item)]
     carried = [item for item in readable_items if tier(item) == CARRIED and not is_folded(item)]
     if not pool and not carried:
         return [], []
@@ -1090,7 +1114,6 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
         vector = retrieval.query_vector(query) or retrieval.embed([query], 'query')[0]
     except Exception:
         vector = None                    # the embedding route is down: the exact word still brings an item back
-    moment = moment or clock.now()
 
     def admit(candidates):
         if vector is None:
@@ -1099,7 +1122,7 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
         order += [item['key'] for item in candidates if said[item['key']] and item['key'] not in order]
         return [key for key in order if said[key] or scores.get(key, 0) >= FLOOR][:OWN_SLOTS]
     would = []
-    if carried and not recall:
+    if carried and not recall and counts:
         # A carried item is never brought up (it is in front of her), so it cannot show use that way: one the turn
         # would have brought up, had it not been carried, is used in this conversation.
         above = admit(pool + carried)
@@ -1118,7 +1141,7 @@ def deliver(store, persona, pilot, retrieval, query, readable, scene_id, *, reca
                     'age': FACT if row.get('fact') else age_word(row.get('added'), moment),
                     **({'why': BROUGHT_BY % said[key]} if said[key] else {})})
         refs.append((item['doc'], item['sid']))
-    if refs:
+    if refs and counts:
         tiers.used(refs, 'recalled', scene_id) if recall else tiers.surfaced(refs, scene_id)
     return out, would
 

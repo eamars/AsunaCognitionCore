@@ -363,7 +363,8 @@ class ContextBuilder:
         return schedule_rules.line_stamp(zone,self.said_at(unit)) or None
 
     def prepare(self, event: dict, persona='P1', recall=False, turn_kind=None):
-        """`turn_kind`: a recall's own turn kind, for the shadow pilot's row only."""
+        """`turn_kind`: a recall's own turn kind, for the shadow pilot's row only. A turn of a kind whose message is
+        program text (memory_tiers.PROGRAM_TEXT_KINDS) counts nothing it brings up; a recall always counts."""
         try:
             return self._prepare(event, persona, recall, turn_kind)
         finally:
@@ -374,15 +375,20 @@ class ContextBuilder:
         scene=scene_records.authorize(self.store, event['scene_id'], event['person_id'])
         shown_stops=[]                  # the outages this turn shows (host_from_program, home turns only)
         from . import memory_tiers
+        # ADR-117 D1: a turn whose message is program text brings memories up but counts nothing (no use, no
+        # memorable moment, no rehearsal, no program score, no came-back count); her own recall in it counts.
+        counts=recall or (turn_kind or event.get('episode_kind') or 'external') not in memory_tiers.PROGRAM_TEXT_KINDS
+        age_bound={}                    # what may come up by itself outside recall (memory_tiers.within_age)
         if memory_tiers.ENABLED and not recall:
-            # ADR-062: rows for new items, then the lapses and cooling due, before anything is read for the turn.
+            # ADR-062: rows for new items, then the lapses due, before anything is read for the turn.
             from .persona_model import effective as _tier_effective
             from .render import model_and_policy as _tier_model
             _tm,_tp=_tier_model(self.store,persona)
             _tiers=memory_tiers.Tiers(self.store,persona)
             _tiers.sync()
-            _tiers.tick(half_life_days=float(_tier_effective(_tm,'memory.forgetting.half_life_days',_tp) or 30),
-                        step_back_below=float(_tier_effective(_tm,'memory.forgetting.step_back_below',_tp) or 0.1))
+            _tiers.tick()
+            age_bound={'half_life_days':float(_tier_effective(_tm,'memory.forgetting.half_life_days',_tp) or 30),
+                       'step_back_below':float(_tier_effective(_tm,'memory.forgetting.step_back_below',_tp) or 0.1)}
         scope=scene['scope_key']
         moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
         session_class=visibility.session_class(self.store.config,self.store,scene,event['person_id'])
@@ -524,7 +530,7 @@ class ContextBuilder:
                 memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources,
                                                                    coverage_floor=_effective(_m,'memory.coverage_floor',_p) or 0,
                                                                    forgetting={k:_effective(_m,'memory.forgetting.'+k,_p) for k in ('half_life_days','half_life_messages','step_back_below')},
-                                                                   record_use=True,automatic=not recall,
+                                                                   record_use=counts,automatic=not recall,
                                                                    linked_scopes=read['linked_scope_keys'],
                                                                    private_scope=visibility.owner_private_scope(persona)
                                                                        if session_class==visibility.OWNER_PRIVATE else None)
@@ -553,18 +559,19 @@ class ContextBuilder:
                     _private=visibility.owner_private_scope(persona) if session_class==visibility.OWNER_PRIVATE else None
                     own,would_surface=memory_tiers.deliver(self.store,persona,self.pilot,self.retrieval,event['text'],
                                              {'global-safe',scope,*([_private] if _private else [])},scene['_id'],
-                                             recall=recall,excerpt_chars=MEMORY_CHARS)
+                                             recall=recall,counts=counts,excerpt_chars=MEMORY_CHARS,**age_bound)
                 except Exception:
                     own,would_surface=[],[]
                 if own:
                     memories=memories[:memory_tiers.SLOTS-len(own)]
-                brought_up=[item['_id'] for item in own]
+                brought_up=[item['_id'] for item in own] if counts else []
                 if not recall:
-                    # ADR-097: what came back is counted (D5), and one line of presence for a word her other groups
-                    # know may take a free own-item slot (D2).
+                    # ADR-097: what came back is counted (D5; not in a program-text turn, ADR-117 D1, where the cue
+                    # never fires either: it is for someone's line), and one line of presence for a word her other
+                    # groups know may take a free own-item slot (D2).
                     try:
                         from . import crossing as _crossing
-                        for item in own:
+                        for item in own if counts else ():
                             word=item['why'][len(memory_tiers.BROUGHT_BY.split('%s')[0]):-1] if item.get('why') else None
                             _crossing.fired(self.store,persona,'note',scene,event,ref=item['_id'],word=word,
                                             by='word' if word else 'meaning')
@@ -1108,7 +1115,7 @@ class ContextBuilder:
             *['doc:%s#%s'%(item['doc'],section['section']) for item in ledgers for section in item['sections']],
             *['doc:persona#'+section['sid'] for section in carried_here['persona']]]))
         if doc_refs:context['doc_refs_from_program']=doc_refs
-        manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'person_revision':person_head[0]['revision_id'] if person_head else None,'person_entity_key':person_entity+'|'+_understanding.PERSON_SCOPE,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[m['_id'] for m in memories],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
+        manifest={'session_class':session_class,'documents':documents,'persona_revision':system_ref['persona_doc_revision'],'persona_sha256':sha(body.encode()),'relationship_revision':relation[0]['revision_id'] if relation else None,'relationship_entity_key':relation[0]['_id'] if relation else target['entity']+'|'+target['scope'],'person_revision':person_head[0]['revision_id'] if person_head else None,'person_entity_key':person_entity+'|'+_understanding.PERSON_SCOPE,'linked_scenes':read['linked_scenes'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'selected':[key for m in memories for key in m.get('joined_ids') or [m['_id']]],'retrieval':retrieval_manifest,'context_sha256':sha(canonical(context))}
         if shown_stops:manifest.setdefault('told',{})['host_stops']=shown_stops
         if scene['kind']=='group':
             # ADR-082: a group is read by people. The person who starts the turn (and whoever's @ or reply to her waits

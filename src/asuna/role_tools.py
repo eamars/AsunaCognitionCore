@@ -1797,32 +1797,45 @@ class RoleTools:
             raise Refused('sections 是至多 3 条 {doc, section}（都是文字，section 照抄 recall 或文档里的）%s。'
                           % ('；给了 %d 条' % len(sections) if isinstance(sections, list) and len(sections) > 3 else ''))
         c = self.coordinator
+        # ADR-117 B6: each part of a recall is timed into its tool.time row (`parts`); a timer never fails it.
+        from .tool_watch import part
         # What she recalls is what the place the turn acts for would recall (_as_place).
         where = self._as_place(ep)
         event = {'event_id': ep['source_event_id'], 'scene_id': where['scene_id'], 'person_id': where['person_id'],
                  'text': query}
-        recalled = c.context.prepare(event, ep['persona'], recall=True, turn_kind=turn_kind(ep))[1] if query else {}
+        recalled = {}
+        if query:
+            with part('prepare'):
+                recalled = c.context.prepare(event, ep['persona'], recall=True, turn_kind=turn_kind(ep))[1]
         if ep.get('errand') and query:
             # ADR-066: home's memories as well, as home would recall them.
-            home = c.context.prepare({**event, 'scene_id': ep['errand']['scene_id'], 'person_id': ep['errand']['person_id']},
-                                     ep['persona'], recall=True, turn_kind=turn_kind(ep))[1]
+            with part('prepare'):
+                home = c.context.prepare({**event, 'scene_id': ep['errand']['scene_id'],
+                                          'person_id': ep['errand']['person_id']},
+                                         ep['persona'], recall=True, turn_kind=turn_kind(ep))[1]
             seen = {m.get('_id') for m in recalled.get('memories') or []}
             recalled = {**recalled, 'memories': [*(recalled.get('memories') or []),
                                                  *(m for m in home.get('memories') or [] if m.get('_id') not in seen)]}
-        documents, missing = read_sections(self.store, where, [s for s in sections if s not in listing], self._cls(ep))
+        with part('read_sections'):
+            documents, missing = read_sections(self.store, where, [s for s in sections if s not in listing],
+                                               self._cls(ep))
         # At home her recall also reaches what she herself thought in her groups (her own words, never theirs).
         elsewhere = []
         if self._cls(ep) == visibility.OWNER_PRIVATE and query:
             scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
-            elsewhere = c.context.own_thoughts_elsewhere(scene, query)
+            with part('own_thoughts_elsewhere'):
+                elsewhere = c.context.own_thoughts_elsewhere(scene, query)
         # ADR-097 D3: lines of her other groups that may leave them, and past versions of her notes, by the word.
         crossed, before = [], []
         if query:
             from . import crossing, schedule_rules
             here = scene_records.get(self.store, where['scene_id']) or {'_id': where['scene_id']}
             zone = schedule_rules.her_zone(self.store.config)
-            crossed = crossing.elsewhere(self.store, ep['persona'], here, query, zone)
-            before = crossing.before(self.store, ep['persona'], here, self._cls(ep), query, zone)                 if memory_tiers.ENABLED else []
+            with part('elsewhere'):
+                crossed = crossing.elsewhere(self.store, ep['persona'], here, query, zone)
+            if memory_tiers.ENABLED:
+                with part('before'):
+                    before = crossing.before(self.store, ep['persona'], here, self._cls(ep), query, zone)
         ep = self._fresh(ep)
         c._update(ep, recall_count=count + 1,
                   recalled=[*(ep.get('recalled') or []), *[m.get('_id') for m in recalled.get('memories') or []],
@@ -1858,8 +1871,9 @@ class RoleTools:
         if query and memory_tiers.ENABLED:
             # ADR-097 D5: what this recall brought back, and whether it found what the turn itself had not (W6).
             from . import crossing
-            crossing.recalled(self.store, ep['persona'], ep, here, [m.get('_id') for m in result['memories']],
-                              crossed, before)
+            with part('recalled'):
+                crossing.recalled(self.store, ep['persona'], ep, here, [m.get('_id') for m in result['memories']],
+                                  crossed, before)
         if memory_tiers.ENABLED:
             # ADR-062: what she reads back is used; she sees which places were searched, and what else exists there.
             tiers = memory_tiers.Tiers(self.store, ep['persona'])
@@ -1867,17 +1881,21 @@ class RoleTools:
                        ep['scene_id'])
             docs = DocumentStore(self.store, ep['persona'])
             for item in listing:
-                content = docs.read(item['doc'])[1]
-                if content:
-                    result.setdefault('documents', []).append({'doc': item['doc'], 'headings': memory_tiers.doc_headings(
-                        self.store, ep['persona'], item['doc'], content, self._cls(ep))})
-                else:
-                    result.setdefault('not_read', []).append('%s：没有这份文档' % item['doc'])
+                with part('headings'):
+                    content = docs.read(item['doc'])[1]
+                    if content:
+                        result.setdefault('documents', []).append({'doc': item['doc'], 'headings':
+                            memory_tiers.doc_headings(self.store, ep['persona'], item['doc'], content, self._cls(ep))})
+                    else:
+                        result.setdefault('not_read', []).append('%s：没有这份文档' % item['doc'])
             readable = {'global-safe', where['scope_key'], *([visibility.owner_private_scope(ep['persona'])]
                                                              if self._cls(ep) == visibility.OWNER_PRIVATE else [])}
             shown = {m.get('_id') for m in result['memories']}
-            found = memory_tiers.headings(self.store, ep['persona'], c.context.pilot, query, readable, self._cls(ep),
-                                          where['scene_id'], shown) if query else []
+            found = []
+            if query:
+                with part('headings'):
+                    found = memory_tiers.headings(self.store, ep['persona'], c.context.pilot, query, readable,
+                                                  self._cls(ep), where['scene_id'], shown)
             if found:
                 result['headings'] = found
             result['searched'] = memory_tiers.SEARCHED

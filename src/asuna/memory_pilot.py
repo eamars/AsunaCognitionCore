@@ -1,10 +1,11 @@
 """The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
 
-Her own items (persona and voice sections, the lines of `current_self`, journal rows, ledgers, `self` and `core`,
-each group's notes sections) are embedded on the memory route into one collection of their own, `memory_shadow` (rows
-`item`), never the index her turns read; near-duplicate pairs within a store are written as they are found (rows
-`pair`). Tiered memory reads both: `memory_tiers.deliver` and `recall` bring her items up from these vectors, and the
-night list takes its merge pairs from them, so dropping the collection takes that away until the index is rebuilt.
+Her own items (persona and voice sections, the lines of `current_self` until `self` has sections, journal rows,
+ledgers, `self` and `core`, each group's notes sections) are embedded on the memory route into one collection of their
+own, `memory_shadow` (rows `item`), never the index her turns read; near-duplicate pairs within a store are written as
+they are found (rows `pair`). Tiered memory reads both: `memory_tiers.deliver` and `recall` bring her items up from
+these vectors, and the night list takes its merge pairs from them, so dropping the collection takes that away until
+the index is rebuilt.
 
 The pilot measured, after each character turn, which items the turn would have surfaced (rows `turn`, and `recall`
 for a recall); its readings set the floor and the slots (ADR-062) and `tools/memory_pilot_report.py` still reads them.
@@ -69,9 +70,10 @@ def own_items(store, persona):
     for slug in ('persona', 'voice'):
         for section in (docs.read(slug)[1] or {}).get('sections') or []:
             add(slug, slug, section, scope_of(section))
-    # current_self as it is split today: its list lines of some length (ADR-062 §1.1).
+    # current_self as it is split today: its list lines of some length (ADR-062 §1.1), until `self` has sections.
     from .records import heads as head_records
-    head = head_records.current(store, 'current_self:' + persona, 'global-safe')
+    head = None if (docs.read('self')[1] or {}).get('sections') else \
+        head_records.current(store, 'current_self:' + persona, 'global-safe')
     for line in ((head[1]['content'].get('body') or '') if head else '').splitlines():
         if SELF_ITEM.match(line) and len(line.strip()) >= SELF_ITEM_CHARS:
             add('self', 'current_self', {'sid': sha(line.strip().encode())[:16], 'body': line.strip(),

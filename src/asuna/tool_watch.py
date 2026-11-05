@@ -4,8 +4,12 @@
 - `Calls.timed` is around one call. When the call ends, in its `finally`, the store's audit gets `tool.time` on the
   task's stream (the action brain) or the episode's (the character brain), in the scope those calls' own rows have:
   the call id, the tool, `duration_s` (3 decimals) and the outcome, `done`, `failed` (the tool's own failure: an
-  action call closed FAILED, a refusal of hers) or `raised` (any other exception). A failure to write it never
-  changes the call (`host.tool_time_failed` in the evidence says so).
+  action call closed FAILED, a refusal of hers) or `raised` (any other exception), and `parts` ({name: seconds}, 3
+  decimals) when the call timed parts of itself with `part` (a recall does). A failure to write it never changes the
+  call (`host.tool_time_failed` in the evidence says so).
+- `part(name)` is around one part of a call, in the call's own thread: its seconds are added to the call's `parts`
+  under `name` (a part that runs twice is summed). Outside a timed call it times nothing, and a fault of its own never
+  fails the call.
 - The watchdog, one daemon thread, looks every LOOK_SECONDS. A call running longer than OVERRUN_SECONDS, or than its
   own `timeout` argument plus TIMEOUT_SLACK_SECONDS for a tool that takes one (TIMED_TOOLS), gets one evidence record
   `host.tool_overrun` (the call id, brain, tool, stream, seconds, limit and the call thread's STACK_DEPTH innermost
@@ -52,6 +56,36 @@ _ALL = weakref.WeakSet()       # every Calls of this process
 def holding(now=None):
     """The calls in flight within their limit, over every `Calls` of this process."""
     return sum(calls.holding(now) for calls in list(_ALL))
+
+
+def _in_flight_here():
+    """The timed call in flight in this thread (the innermost), or None."""
+    me = threading.get_ident()
+    for calls in list(_ALL):
+        with calls.lock:
+            found = [entry for entry in calls.flight.values() if entry['thread'] == me]
+        if found:
+            return max(found, key=lambda entry: entry['started'])
+    return None
+
+
+@contextmanager
+def part(name):
+    """Around one part of a timed call, in its thread: the part's seconds are added to the call's `parts`."""
+    entry = started = None
+    try:
+        entry, started = _in_flight_here(), time.monotonic()
+    except Exception:                                # noqa: BLE001 a timer never fails the call
+        entry = None
+    try:
+        yield
+    finally:
+        if entry is not None:
+            try:
+                parts = entry.setdefault('parts', {})
+                parts[name] = parts.get(name, 0.0) + time.monotonic() - started
+            except Exception:                        # noqa: BLE001 a timer never fails the call
+                pass
 
 
 def stack_of(frame):
@@ -115,8 +149,11 @@ class Calls:
         if store is None:
             return
         try:
+            parts = entry.get('parts')
             store.audit(row['_id'], 'tool.time', {'call_id': entry['call_id'], 'tool': entry['tool'],
-                                                  'duration_s': round(seconds, 3), 'outcome': outcome},
+                                                  'duration_s': round(seconds, 3), 'outcome': outcome,
+                                                  **({'parts': {name: round(value, 3) for name, value in parts.items()}}
+                                                     if parts else {})},
                         row['scope_key'])
         except Exception as exc:                     # noqa: BLE001 the call's answer stands
             try:

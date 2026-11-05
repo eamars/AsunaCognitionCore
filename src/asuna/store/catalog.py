@@ -307,7 +307,8 @@ CATALOG = Catalog([
         (index(('scene_id', 1), ('person_id', 1), ('status', 1)),),
         versioned=True),
     # A memory (records/memories.py): the fields its owner names; the rest is stored and returned as written. Its
-    # times are ISO text, as the core writes them; its embedding is the vector space's.
+    # times are ISO text, as the core writes them; its embedding is the vector space's. The first index carries the
+    # lexical pool's sort (newest first by occurred_at, _id), so the pool's scan stops at its limit.
     Collection('memory_units', 'records.memories', (
         Field('_last_op', 'text'), Field('schema_version', 'number'),
         *_text('scope_key', 'character_id', 'status', 'kind', 'source', 'episode_id', 'epistemic_type', 'body_markdown',
@@ -316,9 +317,10 @@ CATALOG = Catalog([
         Field('policy_epoch', 'number', nullable=True),
         *(Field(path, 'list', of='text', nullable=True) for path in ('source_event_ids', 'depends_on')),
         Field('embedding', 'vector', dimensions=768, nullable=True)),
-        (index(('scope_key', 1), ('status', 1), ('policy_epoch', 1)),
+        (index(('scope_key', 1), ('status', 1), ('policy_epoch', 1), ('occurred_at', 1), ('_id', 1)),
          index(('scope_key', 1), ('origin', 1), ('source_identity', 1), unique=True,
                only_where_present=('source_identity',))),
+        retired=('scope_key_1_status_1_policy_epoch_1',),
         versioned=True, counters=('salience',), derived=('embedding',)),
     # Her revisioned state (records/heads.py): a head per entity and scope, and its revisions; the fields their owner
     # names, the rest stored as written. A revision's mutation id is its plain unique index's field, required (3.5);
@@ -329,7 +331,7 @@ CATALOG = Catalog([
     Collection('state_revisions', 'records.heads', (
         Field('_last_op', 'text'), Field('schema_version', 'number'), Field('mutation_id', 'text', required=True),
         *_text('entity_key', 'scope_key', 'created_at')),
-        (index(('mutation_id', 1), unique=True),),
+        (index(('mutation_id', 1), unique=True), index(('entity_key', 1), ('created_at', 1))),
         versioned=True),
     # A native session's binding (records/sessions.py): the fields its owner names; the rest is stored as written.
     Collection('sessions', 'records.sessions', (

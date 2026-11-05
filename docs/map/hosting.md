@@ -352,6 +352,7 @@ Every tool call of both brains, timed where the worker dispatches it (native_wor
 
 - def `limit_of` — The seconds a call may run before it is recorded as an overrun.
 - def `holding` — The calls in flight within their limit, over every `Calls` of this process.
+- def `part` — Around one part of a timed call, in its thread: the part's seconds are added to the call's `parts`.
 - def `stack_of` — A thread's innermost frames as `file:line function`; empty when the thread is gone.
 - class `Calls` — The worker's tool calls in flight, and their watchdog.
   - `attach` — Write from now on, and start the watchdog.

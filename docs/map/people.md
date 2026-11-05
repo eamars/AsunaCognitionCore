@@ -147,6 +147,7 @@ Who is who in a scene, as the character reads it.
   - `identity_line` — The current speaker, in full: label, notes, names in quotes, and how the owner is known.
   - `scene_title` — A conversation as she reads it: 家里·私聊, 群聊「name」 or 私聊 with the person's label; never an id.
   - `relabel` — Turn the author ids in her context blocks into the labels her conversation uses.
+  - `memories` — Recalled memories as she reads them, in a turn's context (relabel) and in her recall's result alike: where each is from when not from here, who said it, @ as labels, who is in a summary and whether the current speaker (`author`) is.
   - `corrections` — Program-found corrections (summary_attribution) as sentences with labels.
 
 ## `peer_context`

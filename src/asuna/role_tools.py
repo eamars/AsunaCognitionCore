@@ -1805,14 +1805,14 @@ class RoleTools:
                  'text': query}
         recalled = {}
         if query:
+            # Only what a recall reads of a turn (ContextBuilder.recall), not the turn's other blocks.
             with part('prepare'):
-                recalled = c.context.prepare(event, ep['persona'], recall=True, turn_kind=turn_kind(ep))[1]
+                recalled = c.context.recall(event, ep['persona'], turn_kind(ep))
         if ep.get('errand') and query:
             # ADR-066: home's memories as well, as home would recall them.
             with part('prepare'):
-                home = c.context.prepare({**event, 'scene_id': ep['errand']['scene_id'],
-                                          'person_id': ep['errand']['person_id']},
-                                         ep['persona'], recall=True, turn_kind=turn_kind(ep))[1]
+                home = c.context.recall({**event, 'scene_id': ep['errand']['scene_id'],
+                                         'person_id': ep['errand']['person_id']}, ep['persona'], turn_kind(ep))
             seen = {m.get('_id') for m in recalled.get('memories') or []}
             recalled = {**recalled, 'memories': [*(recalled.get('memories') or []),
                                                  *(m for m in home.get('memories') or [] if m.get('_id') not in seen)]}

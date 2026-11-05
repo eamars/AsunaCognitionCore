@@ -195,12 +195,13 @@ class Retrieval:
     def own_thoughts(self, scopes, query, limit=3):
         """Her own thoughts (kind monologue) in the given conversations [(scope_key, policy_epoch)] matching the query,
         best first: vector and lexical ranks fused, each read back under the same filter. Only her thoughts, never
-        the talk around them; callers decide where she may read them (at home)."""
+        the talk around them; callers decide where she may read them (at home). The vector a search just computed for
+        the same query is reused, not embedded again."""
         if not scopes:
             return []
         me=character_id(self.store.config)
         try:
-            v=self.embed([query],'query')[0]
+            v=self.query_vector(query) or self.embed([query],'query')[0]
             vector=memory_records.nearest(self.store,v,12,list(scopes),character=me,revision=self.revision,
                                           kind='monologue')
         except Exception:

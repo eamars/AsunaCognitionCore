@@ -792,9 +792,17 @@ class People:
                 self._row(scene, row)
         if isinstance(context.get('event'), dict) and isinstance(context['event'].get('text'), str):
             context['event']['text'] = self.heard(scene, context['event']['text'])
-        for fact in context.get('memories') or []:
-            self._memory(fact, current, scene)
+        self.memories(context.get('memories'), scene, author)
         return context
+
+    def memories(self, facts, scene, author):
+        """Recalled memories as she reads them, in a turn's context (relabel) and in her recall's result alike: where
+        each is from when not from here, who said it, @ as labels, who is in a summary and whether the current
+        speaker (`author`) is."""
+        current = self.person(author)
+        for fact in facts or []:
+            self._memory(fact, current, scene)
+        return facts
 
     def _memory(self, fact, current, here=None):
         scene = self._scene(fact['scene_id']) if fact.get('scene_id') else self._scene(scope_key=fact.get('scope_key'))

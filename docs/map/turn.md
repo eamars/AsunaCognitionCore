@@ -67,6 +67,7 @@ Builds what her turn shows her: `ContextBuilder.prepare` reads one event's scene
   - `said_at` — When a memory's source was said: a thought when she had it; a chunk its line, a summary its last line.
   - `when` — A recalled record's time as her history lines show it: '10/11 19:16'.
   - `prepare` — `turn_kind`: a recall's own turn kind, for the shadow pilot's row only.
+  - `recall` — What her recall reads of a turn built for its query: `memories`, and `coverage_from_program` and `held_back_from_program` when there are any.
 
 ## `context_budget`
 

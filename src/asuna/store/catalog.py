@@ -313,7 +313,8 @@ CATALOG = Catalog([
         versioned=True),
     # A memory (records/memories.py): the fields its owner names; the rest is stored and returned as written. Its
     # times are ISO text, as the core writes them; its embedding is the vector space's. The first index carries the
-    # lexical pool's sort (newest first by occurred_at, _id), so the pool's scan stops at its limit.
+    # lexical pool's sort (newest first by occurred_at, _id), so the pool's scan stops at its limit; the third her
+    # thoughts' (a kind, newest first by formed_at, _id), so the read of her thoughts in her groups stops at its own.
     Collection('memory_units', 'records.memories', (
         Field('_last_op', 'text'), Field('schema_version', 'number'),
         *_text('scope_key', 'character_id', 'status', 'kind', 'source', 'episode_id', 'epistemic_type', 'body_markdown',
@@ -324,7 +325,8 @@ CATALOG = Catalog([
         Field('embedding', 'vector', dimensions=768, nullable=True)),
         (index(('scope_key', 1), ('status', 1), ('policy_epoch', 1), ('occurred_at', 1), ('_id', 1)),
          index(('scope_key', 1), ('origin', 1), ('source_identity', 1), unique=True,
-               only_where_present=('source_identity',))),
+               only_where_present=('source_identity',)),
+         index(('scope_key', 1), ('status', 1), ('policy_epoch', 1), ('kind', 1), ('formed_at', 1), ('_id', 1))),
         retired=('scope_key_1_status_1_policy_epoch_1',),
         versioned=True, counters=('salience',), derived=('embedding',)),
     # How far each conversation's lines are cut into memories (records/memories.py, memory.MemoryService.chunk): one

@@ -76,6 +76,8 @@ RELATED_FIELDS = ['text', 'author', 'direction', 'scene_seq', 'delivery_state', 
                   'episode_id', 'occurred_at', 'receipt_at', 'received_at']
 FINISHED_TASKS_SHOWN = 3              # task state: every open task, and only the last few finished
 RECENT_THOUGHTS = 3          # ADR-011 §3.2: her last few thoughts in this scene carry into the next turn
+# The parts a prepare or a recall times inside itself (tool_watch.part); `prepare.rest` is the rest of it.
+FOUND_PARTS = ('prepare.search', 'prepare.deliver')
 
 # ADR-009 §8.2: context blocks in the persona's recall order; keys never sorted.
 BLOCKS = {
@@ -363,72 +365,49 @@ class ContextBuilder:
     def prepare(self, event: dict, persona='P1', recall=False, turn_kind=None):
         """`turn_kind`: a recall's own turn kind, for the shadow pilot's row only. A turn of a kind whose message is
         program text (memory_tiers.PROGRAM_TEXT_KINDS) counts nothing it brings up; a recall always counts."""
+        from .tool_watch import part
         try:
-            return self._prepare(event, persona, recall, turn_kind)
+            with part('prepare.rest', less=FOUND_PARTS):
+                return self._prepare(event, persona, recall, turn_kind)
         finally:
             from .people import anchors_shown
             anchors_shown(event['scene_id'])        # her thought under a line of hers: once a turn
 
-    def _prepare(self, event, persona, recall, turn_kind):
-        scene=scene_records.authorize(self.store, event['scene_id'], event['person_id'])
-        shown_stops=[]                  # the outages this turn shows (host_from_program, home turns only)
-        from . import memory_tiers
-        # ADR-117 D1: a turn whose message is program text brings memories up but counts nothing (no use, no
-        # memorable moment, no rehearsal, no program score, no came-back count); her own recall in it counts.
-        counts=recall or (turn_kind or event.get('episode_kind') or 'external') not in memory_tiers.PROGRAM_TEXT_KINDS
-        age_bound={}                    # what may come up by itself outside recall (memory_tiers.within_age)
-        if memory_tiers.ENABLED and not recall:
-            # ADR-062: the lapses due, before anything is read for the turn (at most every TICK_SECONDS in this
-            # process). Every item already has its row: a write makes it (ADR-117 B3), the process start syncs.
-            from .persona_model import effective as _tier_effective
-            from .render import model_and_policy as _tier_model
-            _tm,_tp=_tier_model(self.store,persona)
-            memory_tiers.tick_due(self.store,persona)
-            age_bound={'half_life_days':float(_tier_effective(_tm,'memory.forgetting.half_life_days',_tp) or 30),
-                       'step_back_below':float(_tier_effective(_tm,'memory.forgetting.step_back_below',_tp) or 0.1)}
+    def recall(self, event, persona='P1', turn_kind=None):
+        """What her recall reads of a turn built for its query: `memories`, and `coverage_from_program` and
+        `held_back_from_program` when there are any. They are `prepare(event, persona, recall=True)`'s, built by the
+        same code (`_in_view`, `_memories`) without the turn's other blocks (role_tools.tool_recall)."""
+        from .tool_watch import part
+        try:
+            with part('prepare.rest', less=FOUND_PARTS):
+                scene=scene_records.authorize(self.store, event['scene_id'], event['person_id'])
+                moment=schedule_rules.now_utc()
+                session_class=visibility.session_class(self.store.config,self.store,scene,event['person_id'])
+                read,_,_,tail_sources=self._in_view(scene,event)
+                # A recall reaches her items of any age (no age bound) and shows no presence cue (no history lines).
+                found=self._memories(event,persona,scene,session_class,read,tail_sources,moment,
+                                     recall=True,turn_kind=turn_kind,age_bound={})
+                out={'memories':found['facts']}
+                if found['coverage']:
+                    out['coverage_from_program']=found['coverage']
+                if found['held_back']:
+                    out['held_back_from_program']=found['held_back']
+                People(self.store,persona).memories(out['memories'],scene,event['person_id'])
+                return out
+        finally:
+            from .people import anchors_shown
+            anchors_shown(event['scene_id'])        # as a prepare does
+
+    def _in_view(self, scene, event):
+        """What a turn sees of its conversation, the same for the turn and for her recall: the conversations it reads
+        (`read`), the line that called her (`source`, None in a turn the program opened), the history rows newest first
+        as stored (a group's catch-up, a linked conversation's lines merged in), and `tail_sources`, the ids of what
+        she still sees there (those rows, her last thoughts here, the lines queued behind the calling one), which the
+        memories leave out."""
         scope=scene['scope_key']
-        moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
-        session_class=visibility.session_class(self.store.config,self.store,scene,event['person_id'])
-        place=visibility.place(self.store.config,self.store,scene,event['person_id'])
-        from . import channel_kinds as _kinds
-        from . import stickers as _stickers
-        # What the guide explains is only what this conversation can get (ADR-103): the faces note is said where
-        # its platform declares its faces and stickers can leave -- the condition that adds faces_from_program.
-        system,system_ref=render_system(self.store,persona,session_class,place,
-                                        bool(scene.get('channel_id')) and bool(_kinds.reply_parts(scene['_id'])),
-                                        _stickers.has_faces(scene))
-        docs=DocumentStore(self.store,persona)
-        persona_doc=docs.read('persona')[1]
-        body=render_markdown(readable_sections(persona_doc,visibility.OWNER_PRIVATE))
-        content_lines=[line for line in body.splitlines() if line.strip() and not line.startswith('#')]
-        if len(''.join(content_lines))<80:
-            raise ValueError('REQUIRED_PERSONA_BODY_MISSING')
         read=(scene_links.read_scope(self.store.config,scene) if scene_links else
               {'scene_id':scene['_id'],'scene_ids':[scene['_id']],'linked_scenes':[],
                'scope_keys':[scope],'linked_scope_keys':[]})
-        target=(scene_links.relationship_target(self.store.config,self.store,scene,event['person_id'])
-                if scene_links else {'entity':'relationship:'+event['person_id'],'scope':scope,
-                                     'canonical':event['person_id'],'shared':False,'linked_scopes':[]})
-        # 没配 canonical 映射时 target 就是原来那一份（relationship:<本人>｜本场景 scope）。
-        relation=head_records.current(self.store,target['entity'],target['scope'])
-        # The person layer (understanding.py): one record for this person, read wherever she meets them.
-        from . import understanding as _understanding
-        person_entity=_understanding.person_entity(self.store.config,self.store,event['person_id'])
-        person_head=head_records.current(self.store,person_entity,_understanding.PERSON_SCOPE)
-        from .self_state import SelfState
-        self_state=SelfState(self.store).read(persona,scope)
-        # ADR-096: what this turn carries of her identity, for its (place, class) pair: one function for every reader.
-        from . import carried as _carried
-        identity=_carried.contents(self.store,persona)
-        carried_here=_carried.carried(self.store,persona,session_class,place,docs=identity)
-        carried_here.update({slug:[s for sid in system_ref['carried'][slug]
-                                   for s in (identity.get(slug) or {}).get('sections') or [] if s['sid']==sid]
-                             for slug in system_ref['carried']})     # persona and voice exactly as the system rendered
-        if memory_tiers.ENABLED:
-            # ADR-062: once she has written herself as items, the carried ones are what she reads of herself.
-            for name,slug in _carried.SELF_BLOCKS:
-                if (identity.get(slug) or {}).get('sections'):
-                    self_state[name]=_carried.self_block(slug,carried_here[slug],memory_tiers.sources(self.store,persona,slug,scene))
         from .ingress import episode_id
         source = message_records.get(self.store, 'in-' + episode_id(event))
         # Newly accepted/future queued inputs must not enter an earlier turn.
@@ -451,49 +430,6 @@ class ContextBuilder:
             history=catch_up(self.store,scene,history)
         if read['linked_scenes']:
             history=self._merge_linked_history(history,scene,read,history_projection)
-        self._reply_context(history, scene, keep_event=True)
-        zone=schedule_rules.her_zone(self.store.config)
-        for row in history:                      # no raw times: when it was said, on her clock face
-            said=caught_up.said_at(row); late=caught_up.is_caught_up(row)
-            got=row.get('receipt_at') or row.get('received_at')
-            for key in ('received_at','receipt_at','occurred_at'):row.pop(key,None)
-            stamp=schedule_rules.line_stamp(zone,said)
-            if stamp:row['at']=stamp+('（%s）'%caught_up.CAUGHT_UP_WORD if late else '')
-            # When it reached the other side, only when that is another minute: the gap is the delay (her ask).
-            arrived=schedule_rules.line_stamp(zone,got)
-            if stamp and arrived and arrived!=stamp:row['arrived']=arrived
-        for row in history:
-            if ((row.pop('event', None) or {}).get('raw') or {}).get('asuna_notice'):
-                row['notice']=notices.HISTORY_WORD
-            if row.pop('recalled_at',None):
-                row['recalled']='你撤回了这句'
-            # The platform took the line but stored less of it (a face, a quote): she reads which part did not land.
-            lost=landing_lost((row.pop('platform_receipt',None) or {}).get('response',{}).get('verification'))
-            if lost:row['not_landed']=lost
-        undelivered=message_records.outgoing(self.store,scene['_id'],['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']).rows(
-            newest_first=True,limit=4,fields=['text','delivery_state','author','platform_receipt.response.reason',
-            'platform_receipt.response.retcode','action.kind','file.name','failure','failure_detail',
-            'platform_receipt.response.platform'])
-        for row in undelivered:
-            row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
-            response=((row.get('platform_receipt') or {}).get('response') or {})
-            if row.pop('file',None) is not None and row.get('delivery_state')=='FAILED':
-                # A file that did not go says why, the program's reason or the platform's (ADR-092 D7).
-                from . import outbound_files
-                row['delivery_state']=outbound_files.failure_words(row)
-                for key in ('platform_receipt','failure','failure_detail'):row.pop(key,None)
-                continue
-            row.pop('failure',None);row.pop('failure_detail',None)
-            if (row.pop('action',None) or {}).get('kind')=='recall' and row.get('delivery_state') in ('FAILED','UNKNOWN'):
-                # Her taking back a line of hers that did not go through, said as such (her ask): never left as "handed over".
-                row.pop('platform_receipt',None)
-                row['delivery_state']=('撤回没成：平台没执行' if row['delivery_state']=='FAILED' else '撤回不知道成没成：平台没回话') \
-                    +('（%s）'%(response.get('reason') or 'retcode %s'%response.get('retcode')) if response.get('reason') or response.get('retcode') is not None else '')
-                continue
-            reason=((row.pop('platform_receipt',None) or {}).get('response') or {}).get('reason')
-            # In words (AGENTS.md): an unknown send has most likely arrived, so she does not send it twice.
-            row['delivery_state']=(own_mute.FAILED_WORDS if row.get('delivery_state')=='FAILED' and reason==own_mute.REASON
-                                   else UNDELIVERED_WORDS.get(row.get('delivery_state'),row.get('delivery_state')))
         tail_sources={x for m in history for x in (m['_id'],m.get('platform_event_id')) if x}
         # Her last few thoughts here reach every turn (recent_thoughts, or still on screen): in view like these lines.
         tail_sources.update(m['_id'] for m in memory_records.of_kind(
@@ -503,19 +439,21 @@ class ContextBuilder:
             for queued in message_records.inbound(self.store, scene['_id'], from_seq=source['scene_seq'],
                                                   by=None).rows(fields=['platform_event_id']):
                 tail_sources.update((queued['_id'], queued.get('platform_event_id')))
-        # The lines this turn delivers, for the presence cue (ADR-097 D2), before their numbers are dropped.
-        history_lines=[(row.get('scene_seq'),row.get('text') or '',row.get('direction')) for row in history]
-        for row in history:
-            # A native role session leaves out rows (and its own replies) it still shows; it needs the ids.
-            row.pop('scene_seq',None)
-            row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
-            if row.get('direction')!='outbound':
-                row.pop('episode_id',None)
-            if outbound_media is not None:
-                # 已送达的图在她历史里显示成「我发过这张图」；没跟着出去的、回执对不上的都另说，不含混。
-                slot=outbound_media.history_slot(row,self.store)
-                if slot:row['attachment']=slot
-                else:row.pop('attachment',None)
+        return read,source,history,tail_sources
+
+    def _memories(self, event, persona, scene, session_class, read, tail_sources, moment, *, recall, turn_kind,
+                  age_bound, history_lines=()):
+        """What the turn's message, or her recall's query, brings up, the same for the turn and for her recall: the
+        memories block before its labels (`facts`: the retrieval's entries as she reads them, then her own items),
+        the retrieval's entries (`memories`) and manifest (`retrieval`), the items it brought up and the carried ones
+        it would have (ADR-096), and the held-back and coverage lines (or None). `history_lines`: the lines the turn
+        delivers, for the presence cue (a turn's, not a recall's)."""
+        from . import memory_tiers
+        from .tool_watch import part
+        scope=scene['scope_key']
+        # ADR-117 D1: a turn whose message is program text brings memories up but counts nothing (no use, no
+        # memorable moment, no rehearsal, no program score, no came-back count); her own recall in it counts.
+        counts=recall or (turn_kind or event.get('episode_kind') or 'external') not in memory_tiers.PROGRAM_TEXT_KINDS
         own=[]
         brought_up=[]                    # her own items this turn's retrieval brought up (ADR-096)
         would_surface=[]                 # carried items it would have brought up, had they not been carried
@@ -524,13 +462,14 @@ class ContextBuilder:
                 from .persona_model import effective as _effective
                 from .render import model_and_policy as _model_and_policy
                 _m,_p=_model_and_policy(self.store,persona)
-                memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources,
-                                                                   coverage_floor=_effective(_m,'memory.coverage_floor',_p) or 0,
-                                                                   forgetting={k:_effective(_m,'memory.forgetting.'+k,_p) for k in ('half_life_days','half_life_messages','step_back_below')},
-                                                                   record_use=counts,automatic=not recall,
-                                                                   linked_scopes=read['linked_scope_keys'],
-                                                                   private_scope=visibility.owner_private_scope(persona)
-                                                                       if session_class==visibility.OWNER_PRIVATE else None)
+                with part('prepare.search'):
+                    memories, retrieval_manifest=self.retrieval.search(scope,scene['policy_epoch'],event['text'],exclude_sources=tail_sources,
+                                                                       coverage_floor=_effective(_m,'memory.coverage_floor',_p) or 0,
+                                                                       forgetting={k:_effective(_m,'memory.forgetting.'+k,_p) for k in ('half_life_days','half_life_messages','step_back_below')},
+                                                                       record_use=counts,automatic=not recall,
+                                                                       linked_scopes=read['linked_scope_keys'],
+                                                                       private_scope=visibility.owner_private_scope(persona)
+                                                                           if session_class==visibility.OWNER_PRIVATE else None)
             except (Denied, PermissionError):
                 raise
             except Exception:
@@ -554,9 +493,10 @@ class ContextBuilder:
                 # ADR-062: two of the six slots for her own items at hand (a recall reaches put-away ones too).
                 try:
                     _private=visibility.owner_private_scope(persona) if session_class==visibility.OWNER_PRIVATE else None
-                    own,would_surface=memory_tiers.deliver(self.store,persona,self.pilot,self.retrieval,event['text'],
-                                             {'global-safe',scope,*([_private] if _private else [])},scene['_id'],
-                                             recall=recall,counts=counts,excerpt_chars=MEMORY_CHARS,**age_bound)
+                    with part('prepare.deliver'):
+                        own,would_surface=memory_tiers.deliver(self.store,persona,self.pilot,self.retrieval,event['text'],
+                                                 {'global-safe',scope,*([_private] if _private else [])},scene['_id'],
+                                                 recall=recall,counts=counts,excerpt_chars=MEMORY_CHARS,**age_bound)
                 except Exception:
                     own,would_surface=[],[]
                 if own:
@@ -622,6 +562,137 @@ class ContextBuilder:
             if fact.get('when'):
                 fact.pop('occurred_at',None);fact.pop('generated_at',None)
         facts.extend(own)
+        # Recall is said in words only when it falls short (AGENTS.md: interpreted state); the score stays in the manifest.
+        # A recall she asked for says what it held back because she still sees it, and where that is.
+        in_view=(retrieval_manifest.get('in_view') or []) if recall else []
+        held_back=None
+        if in_view:
+            said=sorted(filter(None,(self.said_at(u) for u in memory_records.many(self.store,in_view).each(
+                fields=['kind','scene_seq','source_window','scope_key','occurred_at','formed_at','generated_at']))))
+            earliest=schedule_rules.line_stamp(memory_zone,said[0]) if said else ''
+            held_back='另有 %d 条相关的没重复给：都在你眼前这段对话里%s。'%(len(in_view),'（最早是 %s 那条）'%earliest if earliest else '')
+        coverage_block=None
+        if retrieval_manifest.get('coverage')=='insufficient' and not (held_back and not memories):
+            coverage_block=('关于眼前这件事，你想不起相关的记忆；不要编，记不清就直说。' if not memories
+                            else '想起来的这些和眼前的事关系不大：只能当灵感，不能当事实说。')
+        return {'facts':facts,'memories':memories,'retrieval':retrieval_manifest,'brought_up':brought_up,
+                'would_surface':would_surface,'held_back':held_back,'coverage':coverage_block}
+
+    def _prepare(self, event, persona, recall, turn_kind):
+        scene=scene_records.authorize(self.store, event['scene_id'], event['person_id'])
+        shown_stops=[]                  # the outages this turn shows (host_from_program, home turns only)
+        from . import memory_tiers
+        age_bound={}                    # what may come up by itself outside recall (memory_tiers.within_age)
+        if memory_tiers.ENABLED and not recall:
+            # ADR-062: the lapses due, before anything is read for the turn (at most every TICK_SECONDS in this
+            # process). Every item already has its row: a write makes it (ADR-117 B3), the process start syncs.
+            from .persona_model import effective as _tier_effective
+            from .render import model_and_policy as _tier_model
+            _tm,_tp=_tier_model(self.store,persona)
+            memory_tiers.tick_due(self.store,persona)
+            age_bound={'half_life_days':float(_tier_effective(_tm,'memory.forgetting.half_life_days',_tp) or 30),
+                       'step_back_below':float(_tier_effective(_tm,'memory.forgetting.step_back_below',_tp) or 0.1)}
+        scope=scene['scope_key']
+        moment=schedule_rules.now_utc()          # 本轮只用一个时刻：算下一次钟点与给她看的钟面同源
+        session_class=visibility.session_class(self.store.config,self.store,scene,event['person_id'])
+        place=visibility.place(self.store.config,self.store,scene,event['person_id'])
+        from . import channel_kinds as _kinds
+        from . import stickers as _stickers
+        # What the guide explains is only what this conversation can get (ADR-103): the faces note is said where
+        # its platform declares its faces and stickers can leave -- the condition that adds faces_from_program.
+        system,system_ref=render_system(self.store,persona,session_class,place,
+                                        bool(scene.get('channel_id')) and bool(_kinds.reply_parts(scene['_id'])),
+                                        _stickers.has_faces(scene))
+        docs=DocumentStore(self.store,persona)
+        persona_doc=docs.read('persona')[1]
+        body=render_markdown(readable_sections(persona_doc,visibility.OWNER_PRIVATE))
+        content_lines=[line for line in body.splitlines() if line.strip() and not line.startswith('#')]
+        if len(''.join(content_lines))<80:
+            raise ValueError('REQUIRED_PERSONA_BODY_MISSING')
+        target=(scene_links.relationship_target(self.store.config,self.store,scene,event['person_id'])
+                if scene_links else {'entity':'relationship:'+event['person_id'],'scope':scope,
+                                     'canonical':event['person_id'],'shared':False,'linked_scopes':[]})
+        # 没配 canonical 映射时 target 就是原来那一份（relationship:<本人>｜本场景 scope）。
+        relation=head_records.current(self.store,target['entity'],target['scope'])
+        # The person layer (understanding.py): one record for this person, read wherever she meets them.
+        from . import understanding as _understanding
+        person_entity=_understanding.person_entity(self.store.config,self.store,event['person_id'])
+        person_head=head_records.current(self.store,person_entity,_understanding.PERSON_SCOPE)
+        from .self_state import SelfState
+        self_state=SelfState(self.store).read(persona,scope)
+        # ADR-096: what this turn carries of her identity, for its (place, class) pair: one function for every reader.
+        from . import carried as _carried
+        identity=_carried.contents(self.store,persona)
+        carried_here=_carried.carried(self.store,persona,session_class,place,docs=identity)
+        carried_here.update({slug:[s for sid in system_ref['carried'][slug]
+                                   for s in (identity.get(slug) or {}).get('sections') or [] if s['sid']==sid]
+                             for slug in system_ref['carried']})     # persona and voice exactly as the system rendered
+        if memory_tiers.ENABLED:
+            # ADR-062: once she has written herself as items, the carried ones are what she reads of herself.
+            for name,slug in _carried.SELF_BLOCKS:
+                if (identity.get(slug) or {}).get('sections'):
+                    self_state[name]=_carried.self_block(slug,carried_here[slug],memory_tiers.sources(self.store,persona,slug,scene))
+        read,source,history,tail_sources=self._in_view(scene,event)
+        self._reply_context(history, scene, keep_event=True)
+        zone=schedule_rules.her_zone(self.store.config)
+        for row in history:                      # no raw times: when it was said, on her clock face
+            said=caught_up.said_at(row); late=caught_up.is_caught_up(row)
+            got=row.get('receipt_at') or row.get('received_at')
+            for key in ('received_at','receipt_at','occurred_at'):row.pop(key,None)
+            stamp=schedule_rules.line_stamp(zone,said)
+            if stamp:row['at']=stamp+('（%s）'%caught_up.CAUGHT_UP_WORD if late else '')
+            # When it reached the other side, only when that is another minute: the gap is the delay (her ask).
+            arrived=schedule_rules.line_stamp(zone,got)
+            if stamp and arrived and arrived!=stamp:row['arrived']=arrived
+        for row in history:
+            if ((row.pop('event', None) or {}).get('raw') or {}).get('asuna_notice'):
+                row['notice']=notices.HISTORY_WORD
+            if row.pop('recalled_at',None):
+                row['recalled']='你撤回了这句'
+            # The platform took the line but stored less of it (a face, a quote): she reads which part did not land.
+            lost=landing_lost((row.pop('platform_receipt',None) or {}).get('response',{}).get('verification'))
+            if lost:row['not_landed']=lost
+        undelivered=message_records.outgoing(self.store,scene['_id'],['READY','QUEUED_EXTERNAL','SENDING','FAILED','UNKNOWN']).rows(
+            newest_first=True,limit=4,fields=['text','delivery_state','author','platform_receipt.response.reason',
+            'platform_receipt.response.retcode','action.kind','file.name','failure','failure_detail',
+            'platform_receipt.response.platform'])
+        for row in undelivered:
+            row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
+            response=((row.get('platform_receipt') or {}).get('response') or {})
+            if row.pop('file',None) is not None and row.get('delivery_state')=='FAILED':
+                # A file that did not go says why, the program's reason or the platform's (ADR-092 D7).
+                from . import outbound_files
+                row['delivery_state']=outbound_files.failure_words(row)
+                for key in ('platform_receipt','failure','failure_detail'):row.pop(key,None)
+                continue
+            row.pop('failure',None);row.pop('failure_detail',None)
+            if (row.pop('action',None) or {}).get('kind')=='recall' and row.get('delivery_state') in ('FAILED','UNKNOWN'):
+                # Her taking back a line of hers that did not go through, said as such (her ask): never left as "handed over".
+                row.pop('platform_receipt',None)
+                row['delivery_state']=('撤回没成：平台没执行' if row['delivery_state']=='FAILED' else '撤回不知道成没成：平台没回话') \
+                    +('（%s）'%(response.get('reason') or 'retcode %s'%response.get('retcode')) if response.get('reason') or response.get('retcode') is not None else '')
+                continue
+            reason=((row.pop('platform_receipt',None) or {}).get('response') or {}).get('reason')
+            # In words (AGENTS.md): an unknown send has most likely arrived, so she does not send it twice.
+            row['delivery_state']=(own_mute.FAILED_WORDS if row.get('delivery_state')=='FAILED' and reason==own_mute.REASON
+                                   else UNDELIVERED_WORDS.get(row.get('delivery_state'),row.get('delivery_state')))
+        # The lines this turn delivers, for the presence cue (ADR-097 D2), before their numbers are dropped.
+        history_lines=[(row.get('scene_seq'),row.get('text') or '',row.get('direction')) for row in history]
+        for row in history:
+            # A native role session leaves out rows (and its own replies) it still shows; it needs the ids.
+            row.pop('scene_seq',None)
+            row['text']=excerpt(row.get('text'),HISTORY_ROW_CHARS)
+            if row.get('direction')!='outbound':
+                row.pop('episode_id',None)
+            if outbound_media is not None:
+                # 已送达的图在她历史里显示成「我发过这张图」；没跟着出去的、回执对不上的都另说，不含混。
+                slot=outbound_media.history_slot(row,self.store)
+                if slot:row['attachment']=slot
+                else:row.pop('attachment',None)
+        found=self._memories(event,persona,scene,session_class,read,tail_sources,moment,recall=recall,
+                             turn_kind=turn_kind,age_bound=age_bound,history_lines=history_lines)
+        facts,memories,retrieval_manifest=found['facts'],found['memories'],found['retrieval']
+        brought_up,would_surface=found['brought_up'],found['would_surface']
         # A storage revision counts writes/tool calls, not conversational time.
         # Use each task's durable input timestamp, including legacy tasks, so
         # recently returned work is not hidden behind old high-write tasks.
@@ -671,19 +742,7 @@ class ContextBuilder:
         # 已暂停（SUSPENDED）也列出来：不列就等于她不知道自己有一条挂着的安排没生效。
         schedule_zone=schedule_rules.her_zone(self.store.config)
         plans=[schedule_rules.project(row,schedule_zone,moment) for row in plan_rows]
-        # Recall is said in words only when it falls short (AGENTS.md: interpreted state); the score stays in the manifest.
-        # A recall she asked for says what it held back because she still sees it, and where that is.
-        in_view=(retrieval_manifest.get('in_view') or []) if recall else []
-        held_back=None
-        if in_view:
-            said=sorted(filter(None,(self.said_at(u) for u in memory_records.many(self.store,in_view).each(
-                fields=['kind','scene_seq','source_window','scope_key','occurred_at','formed_at','generated_at']))))
-            earliest=schedule_rules.line_stamp(memory_zone,said[0]) if said else ''
-            held_back='另有 %d 条相关的没重复给：都在你眼前这段对话里%s。'%(len(in_view),'（最早是 %s 那条）'%earliest if earliest else '')
-        coverage_block=None
-        if retrieval_manifest.get('coverage')=='insufficient' and not (held_back and not memories):
-            coverage_block=('关于眼前这件事，你想不起相关的记忆；不要编，记不清就直说。' if not memories
-                            else '想起来的这些和眼前的事关系不大：只能当灵感，不能当事实说。')
+        held_back,coverage_block=found['held_back'],found['coverage']
         context={'scene_id':scene['_id'],'scope_key':scope,'policy_epoch':scene['policy_epoch'],'person_id':event['person_id'],
                  # How well she knows them (familiarity.py) and what she has written about them, in words.
                  'relationship':{**familiarity_words(self.store,event['person_id'],persona),

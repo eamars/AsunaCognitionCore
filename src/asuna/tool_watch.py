@@ -8,8 +8,9 @@
   decimals) when the call timed parts of itself with `part` (a recall does). A failure to write it never changes the
   call (`host.tool_time_failed` in the evidence says so).
 - `part(name)` is around one part of a call, in the call's own thread: its seconds are added to the call's `parts`
-  under `name` (a part that runs twice is summed). Outside a timed call it times nothing, and a fault of its own never
-  fails the call.
+  under `name` (a part that runs twice is summed). `part(name, less=(...))` leaves out the seconds of the parts so
+  named that ran inside it, so a part around a whole can be the rest of it. Outside a timed call it times nothing, and
+  a fault of its own never fails the call.
 - The watchdog, one daemon thread, looks every LOOK_SECONDS. A call running longer than OVERRUN_SECONDS, or than its
   own `timeout` argument plus TIMEOUT_SLACK_SECONDS for a tool that takes one (TIMED_TOOLS), gets one evidence record
   `host.tool_overrun` (the call id, brain, tool, stream, seconds, limit and the call thread's STACK_DEPTH innermost
@@ -70,11 +71,16 @@ def _in_flight_here():
 
 
 @contextmanager
-def part(name):
-    """Around one part of a timed call, in its thread: the part's seconds are added to the call's `parts`."""
+def part(name, less=()):
+    """Around one part of a timed call, in its thread: the part's seconds are added to the call's `parts`, less those
+    of the parts named in `less` that ran inside it (a part that is the rest of a whole)."""
     entry = started = None
+    inner = 0.0
     try:
-        entry, started = _in_flight_here(), time.monotonic()
+        # perf_counter: monotonic's ticks can be 16 ms (Windows), as long as some parts.
+        entry, started = _in_flight_here(), time.perf_counter()
+        if entry is not None:
+            inner = sum((entry.get('parts') or {}).get(other, 0.0) for other in less)
     except Exception:                                # noqa: BLE001 a timer never fails the call
         entry = None
     try:
@@ -83,7 +89,8 @@ def part(name):
         if entry is not None:
             try:
                 parts = entry.setdefault('parts', {})
-                parts[name] = parts.get(name, 0.0) + time.monotonic() - started
+                inside = sum(parts.get(other, 0.0) for other in less) - inner
+                parts[name] = parts.get(name, 0.0) + time.perf_counter() - started - inside
             except Exception:                        # noqa: BLE001 a timer never fails the call
                 pass
 

@@ -1,14 +1,19 @@
 """ADR-117 L1: a turn whose message is program text brings memories up but counts nothing, while her own recall in it
 still counts (D1); and the chunks of one long message take one of the six memory slots, joined in segment order
-(D7). On the unit run's store holding the fixture world; the embedding route is never reached (lexical recall)."""
+(D7). ADR-117 R: her recall reads what a recall turn would show her (ContextBuilder.recall). On the unit run's store
+holding the fixture world; the embedding route is never reached (lexical recall)."""
+import copy
+
 import pytest
 
 from asuna import clock, crossing, memory_tiers
 from asuna.context import ContextBuilder
 from asuna.evidence import Evidence
+from asuna.ingress import persist_input
 from asuna.records import memories as memory_records
 from asuna.records import scenes as scene_records
 from asuna.retrieval import Retrieval
+from asuna.store import memory as memory_adapter
 from asuna.store.words import Set
 
 WORD = 'zephyrine'           # a tag of hers (ASCII: a key in any place), and the word the units say
@@ -122,3 +127,33 @@ def test_two_halves_of_one_long_message_take_one_slot_joined_in_segment_order(wo
     assert [m['body_markdown'] for m in selected if m['_id'] in ('v-0', 'v-2')] == \
         ['It starts with %s…%s at the very end.' % (WORD, WORD)]
     assert {'v-0', 'v-2'} <= set(manifest['selected'])
+
+
+def test_her_recall_reads_what_a_recall_turn_would_show_her(world, retrieval):
+    """ContextBuilder.recall builds only the three keys her recall reads, from the code a turn builds them with: they
+    equal prepare(recall=True)'s, on the same store. A drift between the two is silent and changes what she finds."""
+    memory_tiers.Tiers(world, PERSONA)._new('self', 'held', 'self', {'heading': 'held', 'body': 'about ' + WORD},
+                                            memory_tiers.PUT_AWAY, clock.now())
+    persist_input(world, {'event_id': 'ev-seen', 'scene_id': 'dm-a', 'person_id': 'A', 'text': 'I said ' + WORD})
+    persist_input(world, {'event_id': 'ev-ask', 'scene_id': 'dm-a', 'person_id': 'A', 'text': 'and then?'})
+    world.collection('memory_units').insert([
+        unit(world, 'u-seen', 'A said %s a moment ago' % WORD, source_event_ids=['ev-seen'], speaker='A'),
+        unit(world, 'u-far', 'A said %s long ago' % WORD, source_event_ids=['m-far'], speaker='A')])
+    builder = ContextBuilder(world, retrieval)
+    builder.pilot = Items([item('held')])
+    event = {'event_id': 'ev-ask', 'scene_id': 'dm-a', 'person_id': 'A', 'text': WORD}
+    stored = memory_adapter._DATABASES[world.name]
+    before = copy.deepcopy(stored.records)               # a recall writes (uses, rehearsals): both start from here
+
+    recalled = builder.recall(event, PERSONA, 'external')
+    stored.records = before
+    retrieval.cache.clear()
+    context = builder.prepare(event, PERSONA, recall=True, turn_kind='external')[1]
+
+    assert recalled == {key: context[key] for key in ('memories', 'coverage_from_program', 'held_back_from_program')
+                        if key in context}
+    # It compared something: a memory with its speaker as a label, her put-away item, the line she still sees.
+    far = next(m for m in recalled['memories'] if m['_id'] == 'u-far')
+    assert far['speaker'] != 'A' and 'scope_key' not in far
+    assert 'doc:self#held' in [m['_id'] for m in recalled['memories']]
+    assert 'u-seen' not in [m['_id'] for m in recalled['memories']] and recalled['held_back_from_program']

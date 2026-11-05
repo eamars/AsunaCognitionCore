@@ -429,13 +429,20 @@ from L1; L4's log conversion waits for her visibility check.** Her answers and a
 The next landing starts the day its gate's data is in, whatever the clock; §10's readings go on after the gate as
 readings, not as a wait. Bug fixes land on their own between gates, never inside an ADR-117 landing.
 
-| Gate | Enough data to move on |
-|---|---|
-| L1 → L2 | 5 recalls with `parts` in `tool.time`; 5 program-text turns with no use, memorable moment, program-score ref or came-back count written, beside at least 30 counted turns that still count; 1 turn with a joined entry (`joined_ids`); 0 worker errors from the changed code |
-| L2 → L3 | 20 of her writes, each with its tier row without a turn running; 200 receipts with 0 `state.conflict` from `chunk`; 1 reply chunked after a delivery lag; her reverse check passed once (§14 gap 3); memory-side round trips and bytes measured on 50 turns |
-| L3 → L4 | 1 over-ceiling write of hers handled end to end (landed, the choice line in a home turn, then her `let_go` or a program lapse); 0 refusals for length on 10 writes of hers. Her 20-lapse regret reading continues and is not a gate |
-| recall fix → L4 | recall's slowest part (L1's reading) bounded and measured again on 5 recalls |
-| L4 → Built | 1 settlement turn with no night list; the log import's rows equal its sections; 20 appends, every `like:` naming its own document; her two corrected items retrieved through the ledger (§14 gap 2) |
+**Each gate item names the risk it tests, and passes once that risk is checked directly on her real data** (the
+owner agreed, 2026-11-06). A check over every record since the install beats a count of samples: the count was a
+stand-in for "it happened often enough to be seen", and a whole-population check has seen it. A count stays only for an
+event too rare to check any other way, and then one real occurrence is the gate. A measurement for the record (round
+trips, bytes, timings) is taken but does not hold a landing. Her own reports (the reverse check, regret) are standing
+watches she makes in passing, not gates.
+
+| Gate | Risk it tests | Passed when |
+|---|---|---|
+| L1 → L2 | Recall's parts unrecorded; program text still counting; joined halves shown apart; the changed code failing | Recalls carry `parts` in `tool.time`; program-text turns write no use, memorable moment, program-score ref or came-back count, while counted turns still count; a turn shows a joined entry (`joined_ids`); 0 worker errors from the changed code. **Passed 2026-11-05 18:01** (8 recalls, 9 program-text turns with 0 counted, 32 counted turns, 2 joined entries, 0 errors) |
+| L2 → L3 | Tier rows stop arriving once the per-turn sync is gone; the chunker's write conflicts; a line on its way passed by the chunk mark and silently lost | Every write of hers that changed a section has that section's tier row within 30 s, without a turn running (a section rewritten again later is checked at its last write); every tiered section's row matches its current text; 0 `state.conflict` from `chunk`; every spoken line the marks have passed since the install has its chunk. **Passed 2026-11-06 morning:** 9/9 writes within 0.2 s, 332/332 sections matching, 0 chunk conflicts (19 the day before), 2,057/2,057 passed lines chunked. Round trips and bytes per turn are measured with R's probe (5 turns on 3 conversations, before and after), for the record |
+| L3 → L4 | An over-ceiling write lost or refused; any write refused for length | One real over-ceiling write of hers handled end to end (landed, the choice line in a home turn, then her `let_go` or a program lapse) — a rare event, so one occurrence; 0 length refusals among all her writes since L3 |
+| R → L4 | Recall still slow; recall returning anything other than before | 0 differences between `recall()` and the three keys of `prepare(recall=True)` on the probe's real events; her recalls after R carry `parts`, median under 2 s over her first 5 |
+| L4 → Built | The settlement still writes a night list; the import losing or inventing rows; `like:` naming the wrong document; her corrected items unreachable | A settlement turn with no night list; the log import's rows equal its sections; every append since L4 whose `like:` names its own document; her two corrected items retrieved through both paths (memory_units recall, and the persona ledger / `crossing.before`; §14 gap 2) |
 
 ## 17. The recall fix (R) and the per-turn block reads (L2b), from L1's first reading (2026-11-05)
 

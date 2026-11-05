@@ -94,19 +94,24 @@ tools (`packages/cognition-core/src/client.js`), so either side may be older.
 - **D1, program text counts nothing.**
   - The turn kinds: presence (heartbeat), visit, self-development and settlement. In these turns, items still come
     up, but four effects are skipped:
-    - `deliver`'s `surfaced` call: no use, no memorable moment;
+    - `deliver`'s two `surfaced` calls: no use, no memorable moment;
     - the manifest's `would_surface` / `brought_up` refs that feed `carried_counts.program_score`;
     - retrieval's `record_use` rehearsal (`touch_salience`);
-    - `crossing.fired('note')`, the came-back count she reads in `things`.
+    - every `crossing.fired` from the turn's prepare (`note` and `cue`), the came-back counts she reads in `things`.
   - Her own `recall` inside such a turn still counts (`used`).
   - Scheduled, task-feedback and note turns count: their texts are her plans', her tasks' and someone's note, not
     templates (her view asked, §6).
 - **D7:** the selection in `retrieval.search` counts by message. Two chunks of one long message take one of the six
   slots, joined in segment order; the manifest keeps both ids. This is what frees a slot; joining after selection
   would leave five.
-- **Cooling stops:** the cooling branch of `tick` (memories 手边→收着 by disuse, journal rows after 30 days) is
-  removed here rather than in L4, because its first wave is due 11-13. If L1 lands after any row has cooled, those
-  rows return to 手边 at install (reason `cooled`, from the move log).
+- **Cooling stops, and the age bound replaces it:**
+  - The cooling branch of `tick` (memories 手边→收着 by disuse, journal rows after 30 days) is removed here rather
+    than in L4, because its first wave is due 11-13.
+  - In the same landing, the age bound cooling gave `deliver`'s pool becomes a filter on the row's own dates, outside
+    recall only: a 手边 item comes up by itself only while its last use or memorable moment is within 30 days (journal)
+    or the half-life's step-back (the rest). Nothing is written. A recall still reaches 收着 and everything older.
+  - If L1 lands after any row has cooled, those rows return to 手边 at install. The move is recorded with reason
+    `restored`, and told once with its own neutral line, not with 很久没用.
 - **Landing:**
   - The `memory_units` index (193,609 rows, 2.1 GB) is built by hand while she is quiet, before the restart, with
     exactly the name and options `ensure` computes. A build of that size loads the shared Mongo box, so it runs
@@ -128,13 +133,17 @@ tools (`packages/cognition-core/src/client.js`), so either side may be older.
   it uses, not whole rows:
   - `things`: store, place, doc, visibility;
   - `_carried`: store, place, doc, sid, felt, memorable_at, last_use_at, heading;
-  - `deliver`: doc, sid, place, store, fact, added, heading.
+  - `deliver`: doc, sid, place, store, fact, added, heading, memorable_at, last_use_at (the age bound).
 - **Counts stay counts of rows**, so nothing can drift. The journal's 3.6 MB and the 40 document reads per turn stop.
 - **B8, the chunk watermark.**
   - The watermark moves off the message row into `chunk_marks` (one row per scene), and `crossing.top_up` reads it.
-  - The mark advances only to just before the first line that is not yet settled: an outbound line of hers that is
-    not yet delivered, or a line not yet chunked. This is `top_up`'s existing rule. Without it, a reply delivered
-    after a later inbound line was chunked would never be chunked.
+  - A round reads the scene's lines after the mark (`lines()`, every state, as `top_up` reads; `said()` hides an
+    undelivered reply). The mark advances only to just before the first line that is not settled.
+  - A line is settled when it is inbound, delivered, in a terminal state (failed, cancelled after failure,
+    redacted), from an earlier epoch, or left unknown for more than an hour. Only settled lines that are spoken
+    are chunked. Without this, a reply delivered after a later inbound line was chunked is never chunked.
+  - `crossing.top_up` has the same loss today: it steps past an undelivered reply and never indexes its words. It
+    takes the same settled rule.
   - Writes to the mark only ever increase it, because the indexer and the on-demand chunk in her turn both write it.
   - A lost mark re-chunks from zero and skips the ids that exist (idempotent).
   - The 314 write conflicts with the Host's receipts, and the indexer pauses they cause, stop.
@@ -143,8 +152,8 @@ tools (`packages/cognition-core/src/client.js`), so either side may be older.
 
 - **Her writes are not refused.** For a write of hers, `carried.gate` returns the pairs the write takes over and by
   how much, and the write lands.
-- **Her choice comes first, at home.** In her next home turn (`write_document`, `let_go` included, works only at
-  home), she sees one choice line per over pair. It lists, in tokens, the pair's carried sections, days unused, and
+- **Her choice comes first, at home.** In her next home turn that offers `write_document` (`let_go` included; a
+  turn opened by a note from outside has none), she sees one choice line per over pair. It lists, in tokens, the pair's carried sections, days unused, and
   about how much each would free (her 10-18 ask: she chooses first).
 - **Then the program lapses.** If a pair is still over after that home turn, sections lapse in order until it fits:
   - `felt` last;
@@ -154,14 +163,16 @@ tools (`packages/cognition-core/src/client.js`), so either side may be older.
 
   A section carried in several pairs is ordered by the over pair's rows. She is told once in the moved line, and
   rewriting a lapsed section brings it back (what she did with 6 of the 12 program lapses so far).
-- **Owner-side imports keep the refusal.** A persona-job import that would take a pair over is still refused, so the
-  owner sees it and trims his own package; it never lapses her sections.
+- **Owner-side imports keep the refusal.** A persona-job import (`persona_data`, author `persona_job:`) that would
+  take a pair over is still refused, so the owner sees it and trims his own package; it never lapses her sections.
+  `adopt_seed` is her act, though the text is the package's, so it follows her rule.
 - **Removed:**
   - the identity stores' count caps (`CAPS` for self, persona, voice, core);
-  - their room words, and `THINGS_NOTE`'s room sentence (每份随身还能放多少), which becomes false;
+  - their room words; `THINGS_NOTE`'s room sentence (每份随身还能放多少) is reworded to cover only ledgers and group
+    notes, which keep their caps;
   - the over-budget refusal and its words;
-  - `carried.install_checks` check 2, which expects that refusal: replaced by a check that an over write leaves a
-    pending plan.
+  - `carried.install_checks` check 2, which expects that refusal: replaced by a read-only check that the gate
+    returns a plan for an over write.
 - **Unchanged:** ledgers and group notes keep their caps and `note_gate`'s per-turn limit. The stay lapse in `tick`
   stays.
 
@@ -176,18 +187,19 @@ tools (`packages/cognition-core/src/client.js`), so either side may be older.
   "What did I hold before" stays answerable through the revision ledger and the line-level 「已被更正」 mark.
 - **Kept:** `let_go` to 收着 (her act), `nature`/`from`, signing and the basis rule for facts, `confirmed`, the weekly
   reading.
-- **The age bound** that cooling gave `deliver`'s pool stays as a filter on the row's own dates, outside recall only.
-  A recall still reaches 收着 and everything older. Nothing is written.
-- **Her 6 gists:** before this landing she reads her 6 gisted items (their verbatims still show through `detail` in
-  `read_sections`) and rewrites any she wants back in full. Then `gist` and `detail_of` are unset, and the verbatims
-  stay in the revision ledger.
+- **Her 6 gists:**
+  - No new gist is written. The 6 gisted items keep their `detail_of`, and `read_sections` keeps showing their
+    verbatim (`detail`), read-only, so invariant 1 holds for them.
+  - She is handed their 6 refs with the page. Rewriting one back in full lifts it to 随身 as any changed rewrite does,
+    which can take a pair over and start L3's plan; she can let it go to 手边 afterwards.
 - **The write-time line:**
   - An `append_section` whose body is at 0.93 or above to an existing section of the same document, among the items
     readable in this turn, gets `like: {ref, heading}` in its result: no refusal, no merge.
   - Comparing within the same document keeps one group's note from naming another group's.
   - `confirmed` keeps its own bar of 0.95, as the night list had it.
-  - The new body is embedded in the pilot thread, and the tool waits at most 1.5 s. When the route is slow or down,
-    the line is simply absent.
+  - The tool embeds the new body itself, with a 1.5 s client timeout. It does not queue behind the pilot's sync
+    (which embeds in batches and is forced by every write), and it hands the vector to the pilot so the index does
+    not embed it again. When the route is slow or down, the line is simply absent.
 - **Logs are rows:**
   - Her running log (working document #12: 125 sections, 320 KB a revision, reaching the 1 MiB wall at about 400
     sections) becomes journal rows, if she says yes.
@@ -198,7 +210,7 @@ tools (`packages/cognition-core/src/client.js`), so either side may be older.
     journal rows do.
   - The conversion waits for L1's recall-history fix.
 - **At install:**
-  - `superseded_at` (0 rows) is unset;
+  - `superseded_at` (0 rows) is unset (`gist` and `detail_of` stay on the 6 rows);
   - only the gist, merge and repeated offer rows are deleted (telemetry);
   - `NOT_BACK`'s text (a use only stops an item going further down), now false, is rewritten;
   - her told text, which names mechanisms that go, is hers to rewrite before this landing (§6).
@@ -216,7 +228,8 @@ She reads this page once, whole, at a frozen commit, before anything is built. W
 4. **L4:**
    - her told text (`memory.tiers_told`, 328 characters, hers), which says facts are replaced only by correction and
      memories fade: she rewrites it before L4 lands;
-   - her 6 gisted items: rewrite any back in full before L4;
+   - her 6 gisted items (refs handed to her): their verbatims stay readable; rewrite any back in full if she wants
+     them carried whole;
    - whether her running log becomes rows, knowing its public sections then come up by themselves at home and in
      groups: her yes, then the owner's one-time command;
    - whether she keeps writing short gists by hand as a habit (nothing is built either way).
@@ -227,10 +240,10 @@ She reads this page once, whole, at a frozen commit, before anything is built. W
 
 | Landing | Change per turn |
 |---|---|
-| L1 | No words change. D7 frees a slot in about 6% of turns (a sixth memory appears, +300–800 characters). In program-text turns the same rows still come up by score; what changes is that they stop being counted, so they stop gaining memorable moments and offers |
+| L1 | No words change. D7 frees a slot in about 6% of turns (a sixth memory appears, +300–800 characters). In program-text turns the same rows still come up by score; what changes is that they stop being counted, so they stop gaining memorable moments and offers. The age bound keeps unused rows older than 30 days from coming up by themselves, as cooling did. A restored row (only if any cooled before L1) is told once |
 | L2 | Nothing |
 | L3 | The refusal (about 200 characters, 125 times in 22 days) is gone. The choice line appears in a home turn only when a pair is over (300–600 characters, her wording). `things` loses its room words (about 30 of 164 characters). `THINGS_NOTE` (the cached guide) loses its room sentence |
-| L4 | The night list is gone (about 2,500 characters in a settlement turn, every night). `write_document` loses `correction` (−45 characters in the tool list, a cached prefix). A `like:` line on about 3% of appends (about 60 characters). The `detail` field on her 6 gisted sections is gone after she has read them. `NOT_BACK`'s text is rewritten |
+| L4 | The night list is gone (about 2,500 characters in a settlement turn, every night). `write_document` loses `correction` (−45 characters in the tool list, a cached prefix). A `like:` line on about 3% of appends (about 60 characters). `NOT_BACK`'s text is rewritten |
 
 ## 8. Failure modes
 
@@ -256,7 +269,9 @@ Each guards a failure that happened, or one that would be silent and costly; all
 - **L2 B8:**
   - a message row whose revision changes during the round is still chunked and the mark advances (the 314
     conflicts);
-  - a reply delivered after a later inbound line was chunked is still chunked (silent loss from recall).
+  - a reply delivered after a later inbound line was chunked is still chunked, and its words reach the crossing
+    index (silent loss from recall);
+  - a failed reply does not hold the mark.
 - **L2 B3:** a section written by her, by `adopt_seed`, and by an import each has its tier row without a turn running
   (a section with no row never comes up).
 - **L3:**
@@ -307,17 +322,25 @@ in direction. The fresh review of this page showed it cannot be designed to fina
    authorizer).
 7. **The transition:** a bounded end for reading old `relationship:…|person` heads. `listing`, `_everyone` and the
    memory tab must prefer the document.
-8. **Her answers:** her promise word, which records she moves and when, and whether the here layer follows.
+8. **Moved lines and came-back names:** `things` tells each move with the section's heading in every conversation
+   whose filter passes, and that filter checks only visibility (and the document for group notes). A person section's
+   move or came-back line must appear only with that person.
+9. **The write side:** section ops through `understand_person` in a group follow `resolve`'s write rule, including
+   setting `visibility` from a public turn.
+10. **Her answers:** her promise word, which records she moves and when, and whether the here layer follows.
 
 It is designed after L4 has landed and been read, with her answers, and she reads it once on its own. The owner's
-record (3,563 of 4,000 characters, +194 a rewrite) is the deadline that matters. Until then the 4,000 cap stands, and
-she is told how close it is.
+record (3,563 of 4,000 characters, +194 a rewrite) is the deadline that matters. Until then the 4,000 cap stands; the
+message that presents this page tells her how close it is.
 
 ## 12. The fresh review (2026-11-05) and the census corrections
 
 A fresh reviewer read the first version of this page against the code at `d2152da0` and found it not ready: 6
 blocking findings (four privacy fences, a silent loss in B8, the stay lapse against the person's boundary) and about
-20 more. All are fixed above, or moved with the person layer into §11. Corrections to the census, which this page
+20 more. All are fixed above, or moved with the person layer into §11. Its re-check of the fixes at `59e42e48` found
+nothing blocking and five more to fix: B8's settled rule (and the same loss in `top_up`), D1's `cue` count, the
+`like:` line queued behind the pilot's sync, the 6 gists' verbatims, and the pool unbounded between L1 and L4; and
+two fences for §11. These are fixed above too. Corrections to the census, which this page
 follows:
 
 - `understanding.py` line numbers are about 495 lines too high (`layers` is at :93, `person_view` :68, `entry` :119,

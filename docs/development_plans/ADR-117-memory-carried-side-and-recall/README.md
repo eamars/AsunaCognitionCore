@@ -436,3 +436,54 @@ readings, not as a wait. Bug fixes land on their own between gates, never inside
 | L3 → L4 | 1 over-ceiling write of hers handled end to end (landed, the choice line in a home turn, then her `let_go` or a program lapse); 0 refusals for length on 10 writes of hers. Her 20-lapse regret reading continues and is not a gate |
 | recall fix → L4 | recall's slowest part (L1's reading) bounded and measured again on 5 recalls |
 | L4 → Built | 1 settlement turn with no night list; the log import's rows equal its sections; 20 appends, every `like:` naming its own document; her two corrected items retrieved through the ledger (§14 gap 2) |
+
+## 17. The recall fix (R) and the per-turn block reads (L2b), from L1's first reading (2026-11-05)
+
+L1's per-part profile on her first real recalls: `prepare` 4.13–4.50 s of 5.7–7.8 s, `own_thoughts_elsewhere`
+1.05–1.28 s, the suspected history rebuild (`before`) 0.01–0.69 s. The reviewer then timed a recall's prepare piece by
+piece, read-only ([recall write-up](../ADR-062-tiered-memory/review-2026-11-recall.md), probe beside it). The cost is
+the 22 blocks of a normal turn, which a recall builds and never reads: 1.05–1.46 s, 325 round trips, 16 MB. The pool
+transfer is small (0.14 s for 9.3 MB). About 2 s are not reachable from outside the process (per-round-trip latency
+under her load, the pilot's job, GC); they ride on the round trips.
+
+### R. The recall fix (lands before L4; after L2, both touch `context._prepare`)
+
+- **`ContextBuilder.recall(event, persona, turn_kind)`**: only the lines of `_prepare` that build what `tool_recall`
+  reads (authorize, counts, scope/moment/class/place, the read target, the source line and history rows as now,
+  search, submit, deliver, facts, held_back and the coverage line). It returns `memories`, `coverage_from_program`
+  and `held_back_from_program`. `_prepare` calls the same helper for its own memories, so the results are identical by
+  construction. `tool_recall` (its place and the errand's home) calls it. `prepare`'s `finally` (anchors shown) stays
+  in the wrapper.
+- **`own_thoughts_elsewhere`:**
+  - a `memory_units` index (scope_key, status, policy_epoch, kind, formed_at, _id), so the monologue read stops at
+    its 2,048 instead of fetching every unit of 23 groups (173,283 documents, 778 ms server time); built by hand while
+    she is quiet, read back word for word;
+  - the query vector the search already computed is reused instead of embedding the query a second time.
+- **Three part marks inside `_prepare`** (`prepare.search`, `prepare.deliver`, `prepare.rest`), so a day of her
+  recalls shows where the unreachable 2 s sit.
+- **Expected:** about 1.1 s a recall (from 4.1–4.5), about 65 round trips (from about 380), 10 MB (from 26); her three
+  recalls in a turn about 3.3 s (from 12.6).
+- **Test:** one, on the in-memory adapter: `recall(event)` equals the three keys of `prepare(event, recall=True)` for
+  one event. A drift between the two is silent and changes what she finds.
+- **Gate R → L4:** 5 recalls after R with `parts`, the median total under 2 s; 0 differences in what recall returns
+  (the test plus the manifests).
+
+### L2b. A normal turn's blocks stop reading whole stores (after L2; same class as B3)
+
+The same profile shows every normal turn paying this. These blocks read whole stores to show a little:
+- `ledger_block` reads all 52 documents whole to find the ledgers (0.35 s), the work log's 3.6 MB of entries
+  included;
+- `tasks.recent_with_inputs` reads every task of the scene with its whole result text (9.3 MB, 0.13 s);
+- `People.scene_title` reads one message per scene named (×13, 0.14 s);
+- `notes.sent_block` takes 0.17 s and `task_pages`/`observations_of` 0.17 s.
+
+Design, results identical:
+- each reader projects the fields its block shows;
+- `ledger_block` reads the ledgers by kind instead of every document;
+- the task page reads result texts only for the tasks it shows;
+- a scene's title comes from the scene row where it is kept.
+
+L2b is designed to final in its build brief from the census of these five functions, and its gate is the same as
+L2's: memory-side and block-side round trips and bytes on 50 turns, against today's 325 round trips and 16 MB.
+
+The order is now L1 (in), L2, L2b, R, L3, L4; §16's gates apply, with R's above.

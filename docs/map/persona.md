@@ -12,6 +12,8 @@ Persona model: validation and effective parameter values (ADR-009 PERSONA_CONTRA
 
 - class `PersonaModelError`
 - def `validate` — Return a validated copy or raise PersonaModelError with a readable code and detail.
+- def `fields_of` — The {names} a line of words fills in; a line the formatter cannot read names a field no one fills.
+- def `words` — A persona's words for `key` (PACKAGE_WORDS, read from the model only) with its fields filled in; the core's neutral words when the model has none.
 - def `load`
 - def `neutral` — Model used for a v1 contribution that ships none: every feature at its core default.
 - def `lookup`

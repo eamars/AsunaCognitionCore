@@ -590,6 +590,8 @@ class ContextBuilder:
             from .render import model_and_policy as _tier_model
             _tm,_tp=_tier_model(self.store,persona)
             memory_tiers.tick_due(self.store,persona)
+            # ADR-117 L3: a place over its identity ceiling, once the home turn that showed her the choice has ended.
+            memory_tiers.lapse_due(self.store,persona)
             age_bound={'half_life_days':float(_tier_effective(_tm,'memory.forgetting.half_life_days',_tp) or 30),
                        'step_back_below':float(_tier_effective(_tm,'memory.forgetting.step_back_below',_tp) or 0.1)}
         scope=scene['scope_key']
@@ -1140,10 +1142,15 @@ class ContextBuilder:
         if memory_tiers.ENABLED and not recall:
             # ADR-062: where her things are, in words, and what the program moved since this conversation was told.
             from .group_admin import notes_slug as _notes_slug
+            # ADR-117 L3: a home turn that can write shows each place over its identity ceiling, for her to choose first.
+            from .role_tools import writes_at_home
+            from .ingress import episode_id as _turn_episode
+            _turn={'episode_kind':note_kind,'scene_id':scene['_id'],'manifest':{'session_class':session_class}}
             context['things_from_program']=memory_tiers.Tiers(self.store,persona).things(
                 session_class,scene,schedule_rules.her_zone(self.store.config),moment,
                 home=session_class==visibility.OWNER_PRIVATE,
-                readable_docs={_notes_slug(scene['_id'])} if scene['kind']=='group' else set())
+                readable_docs={_notes_slug(scene['_id'])} if scene['kind']=='group' else set(),
+                choose=_turn_episode(event) if writes_at_home(self.store,_turn,first_note) else None)
         if ledgers:
             context['ledgers_from_program']=ledgers
             documents.update({item['doc']:item['revision'] for item in ledgers})

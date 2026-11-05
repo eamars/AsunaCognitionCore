@@ -847,6 +847,18 @@ def _one_shot(ep):
     return bool(ep.get('errand')) or self_review.reflecting(ep.get('context'))
 
 
+def writes_at_home(store, ep, first=None):
+    """Whether a turn writes her own documents at home, as _turn_rules and exposed give write_document: a home turn,
+    not the program's consult or time-up, not opened by a note from outside (`first`, the note that opened it), with
+    write_document not switched off in its conversation. Where her choice of what to let go is shown (ADR-117 L3)."""
+    from . import notes, switches
+    if turn_kind(ep) in (CONSULT, TASK_TIME):
+        return False
+    if (ep.get('manifest') or {}).get('session_class') != visibility.OWNER_PRIVATE or notes.outside_class(store, ep, first):
+        return False
+    return 'write_document' not in switches.tools_off(store, ep['scene_id'])
+
+
 def _turn_rules(store, ep):
     context = ep.get('context') or {}
     kind = turn_kind(ep)
@@ -1228,7 +1240,6 @@ WORDS = {
     'BASE_REVISION_STALE': '要改的东西刚被别处改过。',
     'VOID_REQUIRES_WHY': 'void 要写 why：为什么这一笔的前提不成立。',
     'SOURCE_IDENTITY_REQUIRED': '这一笔要写 source_identity（它来自哪条记录）。',
-    'PERSONA_RENDER_OVER_BUDGET': '这样写完，那个地方每回合随身带的（程序的开头说明、persona、voice、self、core）会超出上限。',
     'POLICY_SET_REQUIRES_OWNER_PRIVATE': '参数只能在家里（家里·私聊、主人私聊这类可信的对话）改。',
     'PROMOTE_ONLY_IN_SETTLEMENT': '提升长期记忆只在夜间沉淀时做。',
     'PROMOTION_QUOTA': '今天提升长期记忆的配额用完了。',
@@ -2598,16 +2609,19 @@ class RoleTools:
                 seeds = [seed.get('slug') for seed in (self.store.config.get('persona_contribution') or {}).get('seeds', [])]
                 raise DocumentError('DOC_SEED_NOT_FOUND', '「%s」没有种子；有种子的文档：%s'
                                     % (slug, '、'.join(filter(None, seeds)) or '（人格包没带种子）'))
+            # Adopting a seed is her act, though its text is the package's: a place it takes over waits for her choice.
+            gate = budget_gate(self.store, ep['persona'], refuse=False)
             outcome = docs.adopt_seed(slug, kind, text, base_revision_id=base, author='character',
                                       mutation_id=mutation_id, reason=item.get('reason') or 'adopt package seed',
-                                      budget=budget_gate(self.store, ep['persona']))
+                                      budget=gate)
             if memory_tiers.ENABLED and outcome['state'] != 'unchanged':
                 # ADR-117 B3: the seed's new sections have their tier rows now, placed from their inject.
                 memory_tiers.Tiers(self.store, ep['persona']).written(slug, {'op': 'adopt_seed'}, before,
-                                                                      docs.read(slug)[1])
+                                                                      docs.read(slug)[1], over=gate.planned)
             return {'doc': slug, 'op': 'adopt_seed', **{k: v for k, v in outcome.items() if k != 'revision'}}, False
         body = args.get('body') if item.get('op') in WRITE_STAGE_OPS else None
-        gate = budget_gate(self.store, ep['persona'])
+        # ADR-117 L3: her write is not refused for her identity's length; a place it takes over waits for her choice.
+        gate = budget_gate(self.store, ep['persona'], refuse=False)
         for error in docs.problems(slug, item, body, budget=gate):
             self._found(words(error), code_of(error))
         self.checkpoint()
@@ -2621,7 +2635,8 @@ class RoleTools:
         if memory_tiers.ENABLED:
             felt = any(call.get('tool') == 'feel' for call in (self._fresh(ep).get('tool_calls') or {}).values())
             tiers = memory_tiers.Tiers(self.store, ep['persona'])
-            moves = tiers.written(slug, item, before, after, scene_id=ep['scene_id'], felt=felt, before_revision=base)
+            moves = tiers.written(slug, item, before, after, scene_id=ep['scene_id'], felt=felt, before_revision=base,
+                                  over=gate.planned)
 
             if moves:
                 result['moved'] = [memory_tiers.told(move) for move in moves]

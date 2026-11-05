@@ -116,7 +116,7 @@ Role system prompt rendering (ADR-009 §8.1).
 - def `render_system` — Render the current role system prompt for a session class and place, and whether its conversation speaks only through speak; returns (text, system_ref).
 - def `render_status` — Each pair's identity layer against its limit, for the settings card and memory tab: the largest one's estimate, whether any pair is over, and every pair's size.
 - def `report_budget` — Audit, once for each state of it, a pair whose identity layer is over its limit.
-- def `budget_gate` — For DocumentStore.apply, adopt_seed and promote_memory: refuse a write that grows her identity layer in a pair over its limit, and growth of a note already far over its own (carried.gate).
+- def `budget_gate` — For DocumentStore.apply, adopt_seed and promote_memory: growth of a note already far over its own limit is refused; growth of her identity layer in a pair over its limit is planned for her writes (`refuse` False) and refused for a persona j
 - def `over_budget_words` — How far a pair is over (or a write would take it), the way out, and the largest sections it carries now (carried.over_words).
 - def `system_for` — Re-render the system prompt an episode fixed at preparation time: the sections its ref recorded as carried, from the revisions it names.
 - def `episode_system` — Stage system prompt, re-rendered from the episode's system_ref (drift is audited).
@@ -154,8 +154,10 @@ What she carries: one function says it for every reader (ADR-096).
 - def `room_word` — The coarse word for a pair's share of its limit (ROOM_WORDS; the limit itself is still 快满了).
 - def `room_ranges` — ROOM_WORDS as the ranges the program uses, for the note that explains them.
 - def `tier_line` — When a section's `inject` and its tier differ: both, and its last move (when, who, why) on the next line; None when they agree or tiers are off.
-- def `over_words` — A refusal: the pair, how far over it is (or would be), the way out, and the three largest sections it carries now; every number is that pair's own (laid_out, as carried counts it).
-- def `gate` — For DocumentStore.apply and adopt_seed: refuse a write that grows the identity layer in a pair over its limit (each pair on its own, measured as the write will carry it), and growth of a note far over its own limit.
+- def `over_words` — An import's refusal: the pair, how far over it is (or would be), the way out, and the three largest sections it carries now; every number is that pair's own (laid_out, as carried counts it).
+- def `over_plan` — The pairs a write of `slug` takes over their ceiling, or grows while over it: {pair: tokens over after it}, each pair on its own, measured as the write will carry it; {} when it takes none over or nothing bounds them.
+- def `gate` — For DocumentStore.apply and adopt_seed: growth of a note far over its own limit is refused (note_gate).
+- def `program_scores` — In how many turns of the last COUNT_DAYS the program's retrieval scored each section in this pair (carried_counts.program_score summed): {ref: score}; a section with no rows is 0.
 - def `room_block` — things_from_program: how full each pair readable here is, in coarse words, only when the words changed since this conversation was last told; None otherwise.
 - def `manifest` — What a turn carried, for its episode manifest: the section refs of its pair, the group-notes sections shown, the sections its own retrieval brought up, and the carried ones it would have brought up had they not been carried (together, the p
 - def `day_counts` — The carried_counts rows of one local day, per section × pair: the turns that carried it, the pair's turns that day, her recalls of it there, and in how many turns the program's retrieval scored it above the floor (program_score: brought up,
@@ -193,6 +195,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `aliases` — Old name -> the tool it runs as (the plugin lets one through where that tool is listed).
 - def `turn_kind`
 - def `exposed` — What this turn may use, by option: the turn's own rules (its kind, context and grants, §2.6) within the conversation's list (abilities).
+- def `writes_at_home` — Whether a turn writes her own documents at home, as _turn_rules and exposed give write_document: a home turn, not the program's consult or time-up, not opened by a note from outside (`first`, the note that opened it), with write_document no
 - def `toolbox` — The tools her conversation lists, the same in each of its turns (what the model is shown).
 - def `abilities` — What her conversation lists, by option, the same in each of its turns: decided by its place, its channel and the configuration, never by the turn's kind or context.
 - def `instead_words` — The sentence naming what does the job here, or '' when nothing in this turn does.

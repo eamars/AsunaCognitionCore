@@ -48,7 +48,11 @@ CORE_WRITABLE_KEYS = {
 OWNER_KEYS = {'heartbeat.enabled', 'render.identity_tokens'}
 # Words a persona gives the core, read from the model only: changed by publishing the package, never declared as a
 # policy key, so the schema's bounds and the publication scan cover every change (ADR-110).
-PACKAGE_WORDS = {'memory.tiers_told', 'heartbeat.idle_hint', 'self_review.exchanges_note', 'attend.guide'}
+PACKAGE_WORDS = {'memory.tiers_told', 'heartbeat.idle_hint', 'self_review.exchanges_note', 'attend.guide',
+                 'memory.over_line', 'memory.lapse_line'}
+# The fields a persona's words may name ({name}): the program fills them in, a line naming another is refused when
+# the model is read (validate), never in a turn.
+WORD_FIELDS = {'memory.over_line': ('over', 'now', 'cap'), 'memory.lapse_line': ('节名', 'over', 'days', 'score')}
 HEARTBEAT_EVERY_MIN = (15, 240)
 # The core's neutral words where a persona words its own (persona-model keys, not hers to set_policy).
 TIERS_TOLD = ('你的东西分三个地方：随身，每一回合都带着；手边，不进提示，聊到相关的事或用 recall 能找到；'
@@ -57,6 +61,11 @@ TIERS_TOLD = ('你的东西分三个地方：随身，每一回合都带着；�
               '群笔记的节可以置顶：笔记超长时置顶的节不折成标题，但它照样会因为一阵子没用到离开随身，也照样占随身的名额。'
               '往下放不是删掉，原话一直都在。事实只会被更正替换，不会因为没人用而退；记忆会淡。'
               '要说「没有、没答应过、没说过」之前，先 recall 一下，它会告诉你找了哪几层。')
+# ADR-117 L3: a place's identity layer over its ceiling. The choice line her next home turn shows for it (the
+# sections listed under it), and the line that tells one section the program put down.
+OVER_LINE = ('这一处随身超了 {over} 个估算 token（现在 {now}／上限 {cap}）。下面每节写着它多少天没用到、放下能腾出多少：'
+             '要放哪节就 let_go 它；不挑，这一回合之后程序按最久没用到的先放，直到回到上限以内。')
+LAPSE_LINE = '{节名} 从这一处的随身放下了（超 {over} token；它 {days} 天没用到，30 天里程序找出它 {score} 次）。改写它就能回来。'
 EXCHANGES_NOTE = '这是你那天说过的原话、你那一回合写下的心里话，和之后那边发生了什么；程序没有给它打分，也没有替你下结论。'
 IDLE_HINT = '这一拍没有指定的事。'
 CORE_DEFAULTS = {
@@ -76,7 +85,9 @@ CORE_DEFAULTS = {
     'memory': {'forgetting': {'half_life_days': 30, 'half_life_messages': 1500, 'step_back_below': 0.1}, 'coverage_floor': 0,
                'promotion': {'daily_quota': 0, 'min_roots': 2, 'min_dates': 2, 'window_days': 7},
                # How her memory's places are told once per conversation (block_guide); a persona words it.
-               'tiers_told': TIERS_TOLD},
+               'tiers_told': TIERS_TOLD,
+               # A place over its identity ceiling (memory_tiers.Tiers.identity_over, lapse_over); a persona words them.
+               'over_line': OVER_LINE, 'lapse_line': LAPSE_LINE},
     'speak': {'max_messages': 1, 'chars_per_second': 12, 'min_gap_s': 1, 'max_gap_s': 5},
     'phrasing': {'window': 20},
     'self_development': {'every_min': None, 'night_start_hour': 1, 'night_hours': 5, 'night_every_min': 30},
@@ -117,7 +128,34 @@ def validate(model: dict, persona_id: str) -> dict:
     for key in declared:
         if lookup(model, key) is _MISSING and lookup(CORE_DEFAULTS, key) is _MISSING:
             raise PersonaModelError('PERSONA_MODEL_INVALID: declared policy key has no model or core value: ' + key)
+    for key in WORD_FIELDS:
+        value = lookup(model, key)
+        if value is not _MISSING and fields_of(value) - set(WORD_FIELDS[key]):
+            raise PersonaModelError('PERSONA_MODEL_INVALID: %s may name only {%s}' % (key, '}, {'.join(WORD_FIELDS[key])))
     return copy.deepcopy(model)
+
+
+def fields_of(text):
+    """The {names} a line of words fills in; a line the formatter cannot read names a field no one fills."""
+    import string
+    found = set()
+    try:
+        for _, name, spec, conversion in string.Formatter().parse(text):
+            if name is not None:
+                found.add('\0' if spec or conversion else name)     # a format spec or conversion is not a field
+    except ValueError:
+        found.add('\0')
+    return found
+
+
+def words(config, key, **values):
+    """A persona's words for `key` (PACKAGE_WORDS, read from the model only) with its fields filled in; the core's
+    neutral words when the model has none."""
+    text = effective((config or {}).get('persona_model') or {}, key)
+    try:
+        return text.format_map(values)
+    except (KeyError, ValueError, AttributeError):
+        return lookup(CORE_DEFAULTS, key).format_map(values)
 
 
 def load(path, persona_id: str) -> dict:

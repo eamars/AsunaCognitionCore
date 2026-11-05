@@ -5,9 +5,9 @@ session class and place (public first, then owner-private) + the voice document'
 (each section where its tier puts it, its `place:` tags honoured). It is the complete system prompt of a role
 session. Episodes keep only ``system_ref`` (revisions, class, place, the carried section ids and hashes) and every
 stage re-renders exactly those sections from it; results are cached by ``render_sha256``. The render is never
-truncated: a pair whose identity layer is over its limit is reported (audit + red status) instead, and a write that
-grows it is refused (budget_gate). The limit follows the package's own seeds: a persona that ships more seed text
-gets room for it (budget_limit).
+truncated: a pair whose identity layer is over its limit is reported (audit + red status) instead; a write of hers that
+takes it over lands and is planned, an import that would is refused (budget_gate). The limit follows the package's own
+seeds: a persona that ships more seed text gets room for it (budget_limit).
 """
 from __future__ import annotations
 
@@ -179,11 +179,12 @@ def report_budget(store, persona, persona_doc=None, voice_doc=None, common=None)
         store.audit('render:' + persona, 'render.over_budget', {'pairs': over, 'limit_tokens': limit}, 'global-safe')
 
 
-def budget_gate(store, persona):
-    """For DocumentStore.apply, adopt_seed and promote_memory: refuse a write that grows her identity layer in a pair
-    over its limit, and growth of a note already far over its own (carried.gate)."""
+def budget_gate(store, persona, *, refuse):
+    """For DocumentStore.apply, adopt_seed and promote_memory: growth of a note already far over its own limit is
+    refused; growth of her identity layer in a pair over its limit is planned for her writes (`refuse` False) and
+    refused for a persona job's import (`refuse` True) (carried.gate)."""
     from .carried import gate
-    return gate(store, persona)
+    return gate(store, persona, refuse=refuse)
 
 
 # Each pair has its own identity layer, bounded on its own: a section pinned to one place never fills another's.

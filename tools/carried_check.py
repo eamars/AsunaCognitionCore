@@ -2,9 +2,9 @@
 
 Usage: python tools/carried_check.py [--config config/local.json] [--model <persona-model.json>]
 
-Checks (carried.install_checks): the latest turn's system_ref section list equals carried() for its pair; each pair's
-refusal gives carried()'s number for the pair it names (the write is only measured, never made); a write gets its
-room line; every section whose inject and tier differ is said. Prints one line per check, PASS or FAIL, with the
+Checks (carried.install_checks): the latest turn's system_ref section list equals carried() for its pair; a write of
+hers that would take a pair over is planned, not refused, with carried()'s number for how far over (the write is only
+measured, never made); a write gets its room line; every section whose inject and tier differ is said. Prints one line per check, PASS or FAIL, with the
 numbers it saw; no section text, no headings. A home task's command gets the database from the Host (the
 variables dbread reads); otherwise the checkout's config names it.
 """

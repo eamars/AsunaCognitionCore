@@ -8,8 +8,10 @@ it; her notes and ledgers go through `note_sections`. Where a write leaves each 
 `memory_tiers.Tiers.placement_after`, so the gate measures what the write will carry.
 
 Each pair has its own identity budget (`render.identity_tokens`, owner-only): `common.md`, persona, voice and the self
-and core blocks as sent, in estimated tokens. A write that grows the layer in a pair over it is refused (`gate`); one
-that shrinks it or keeps it the same goes through. A write returns the exact numbers (`room_line`);
+and core blocks as sent, in estimated tokens. A write of hers that grows the layer in a pair over it lands, and `gate`
+says which pairs it took over and by how much (`over_plan`): her next home turn lists the pair's sections for her to
+choose, then the program lets the least recently memorable go (memory_tiers.Tiers.identity_over, lapse_over). An
+import from a persona job that would do so is refused. A write returns the exact numbers (`room_line`);
 `things_from_program` says how full each pair is in coarse words when they change (`room_block`). `count_days` keeps
 per section × pair × day how many turns carried it, her recalls of it and the program's score (`carried_counts`, 30
 days), and each section's first and last time carried (`carried_sections`). `install_checks` are her four checks
@@ -27,7 +29,7 @@ from .evidence import canonical, sha
 from .records import scenes as scene_records
 from .records import episodes as episode_records
 from .records.view import is_text
-from .store.words import Larger, Range, Set, Smaller
+from .store.words import AnyOf, Larger, Range, Set, Smaller
 
 IDENTITY = ('persona', 'voice', 'self', 'core')
 SELF_BLOCKS = (('current_self', 'self'), ('character_core', 'core'))    # the context names of the self and core blocks
@@ -52,6 +54,7 @@ TIER_LINE = '这一节的真带是 %s；你写的 when_shown 是 %s'      # her 
 TIER_LAST = '上一次挪档：%s · %s · %s'
 TIER_NONE = '挪档史：无记录'
 BY_WORDS = {'her': '你', 'program': '程序'}
+# The refusal a persona job's import meets when it would take a pair over (her own writes are not refused).
 OVER_WORDS = '%s 现在超 %s token，这次改动会让它更长。要腾地方：let_go 一节，或者把它写短。现在带得最多的是：%s'
 # A write that takes a pair from within its limit to over it: the same words, from the number it would reach.
 OVER_PAST = '%s 这次改动会让它超 %s token。要腾地方：let_go 一节，或者把它写短。现在带得最多的是：%s'
@@ -311,8 +314,8 @@ def tier_line(store, persona, slug, section):
 
 
 def over_words(store, persona, pair, before, after, ceiling, docs=None):
-    """A refusal: the pair, how far over it is (or would be), the way out, and the three largest sections it carries
-    now; every number is that pair's own (laid_out, as carried counts it)."""
+    """An import's refusal: the pair, how far over it is (or would be), the way out, and the three largest sections it
+    carries now; every number is that pair's own (laid_out, as carried counts it)."""
     found = laid_out(store, persona, docs=docs)[pair][0]
     sizes = sorted(((weight(slug, s), s.get('heading') or s['sid']) for slug in IDENTITY for s in found[slug]),
                    reverse=True)[:3]
@@ -322,35 +325,64 @@ def over_words(store, persona, pair, before, after, ceiling, docs=None):
     return OVER_PAST % (PAIR_WORDS[pair], number(after - ceiling), largest)
 
 
-def gate(store, persona):
-    """For DocumentStore.apply and adopt_seed: refuse a write that grows the identity layer in a pair over its limit
-    (each pair on its own, measured as the write will carry it), and growth of a note far over its own limit."""
+def over_plan(store, persona, slug, new_content, intent=None):
+    """The pairs a write of `slug` takes over their ceiling, or grows while over it: {pair: tokens over after it},
+    each pair on its own, measured as the write will carry it; {} when it takes none over or nothing bounds them."""
+    from .documents import DocumentStore
+    ceiling = limit(store, persona)
+    if slug not in IDENTITY or not ceiling:
+        return {}
+    before = DocumentStore(store, persona).read(slug)[1]
+    moved = placements_after(store, persona, slug, intent, before, new_content)
+    current = contents(store, persona)
+    now = identity(store, persona, docs=current)
+    then = identity(store, persona, docs={**current, slug: new_content}, placements={slug: moved})
+    return {pair: then[pair] - ceiling for pair in ordered(then) if then[pair] > now[pair] and then[pair] > ceiling}
+
+
+def gate(store, persona, *, refuse):
+    """For DocumentStore.apply and adopt_seed: growth of a note far over its own limit is refused (note_gate). A write
+    that grows the identity layer in a pair over its ceiling is measured (over_plan): `refuse` (a persona job's
+    import) refuses it; a write of hers lands, and the gate keeps what it measured last (`gate.planned`), which the
+    writer hands to memory_tiers.Tiers.written."""
     from .context_budget import note_gate
     from .documents import DocumentError, DocumentStore
+    planned = {}
 
     def check(slug, new_content, intent=None):
-        before = DocumentStore(store, persona).read(slug)[1]
-        moved = placements_after(store, persona, slug, intent, before, new_content)
+        planned.clear()
         if slug not in IDENTITY:
+            before = DocumentStore(store, persona).read(slug)[1]
+            moved = placements_after(store, persona, slug, intent, before, new_content)
             note_gate(slug, placed(store, persona, slug, before), placed(store, persona, slug, new_content, moved))
-            return
-        ceiling = limit(store, persona)
-        if not ceiling:
-            return
-        current = contents(store, persona)
-        proposed, placements = {**current, slug: new_content}, {slug: moved}
-        now = identity(store, persona, docs=current)
-        then = identity(store, persona, docs=proposed, placements=placements)
-        over = [(then[pair] - ceiling, pair) for pair in then if then[pair] > now[pair] and then[pair] > ceiling]
-        if over:
-            pair = max(over)[1]
-            said = over_words(store, persona, pair, now[pair], then[pair], ceiling, current)
+            return {}
+        over = over_plan(store, persona, slug, new_content, intent)
+        if over and refuse:
+            ceiling, current = limit(store, persona), contents(store, persona)
+            now = identity(store, persona, docs=current)
+            pair = max(over, key=lambda p: over[p])
+            said = over_words(store, persona, pair, now[pair], over[pair] + ceiling, ceiling, current)
             if len(over) > 1:     # every pair this write takes or keeps over, so trimming one is not refused again
-                pairs = [p for p in then if any(p == q for _, q in over)]
-                said += '\n' + OVER_ALSO % (len(pairs), '｜'.join('%s 超 %s' % (PAIR_WORDS[p], number(then[p] - ceiling))
-                                                                  for p in pairs))
+                said += '\n' + OVER_ALSO % (len(over), '｜'.join('%s 超 %s' % (PAIR_WORDS[p], number(over[p]))
+                                                                for p in over))
             raise DocumentError('PERSONA_RENDER_OVER_BUDGET', said)
+        planned.update(over)
+        return dict(over)
+    check.planned = planned
     return check
+
+
+def program_scores(store, persona, refs, pair):
+    """In how many turns of the last COUNT_DAYS the program's retrieval scored each section in this pair
+    (carried_counts.program_score summed): {ref: score}; a section with no rows is 0."""
+    refs = [ref for ref in refs if is_text(ref)]
+    if not is_text(persona) or not refs:
+        return {}
+    scores = {ref: 0 for ref in refs}
+    for row in store.collection(COUNTS).find({'persona': persona, 'pair': PAIR_WORDS.get(pair, '%s/%s' % pair),
+                                              'section': AnyOf(refs)}, fields=['section', 'program_score']):
+        scores[row['section']] = scores.get(row['section'], 0) + int(row.get('program_score') or 0)
+    return scores
 
 
 def room_block(store, persona, cls, scene_id):
@@ -559,26 +591,20 @@ def count_days(store, persona, moment=None):
 
 
 # ── install checks (hers, read only) ───────────────────────────────
-# A section that would grow one pair only, to see that pair's refusal: (visibility, place tag).
+# A section that would grow one pair only, to see that pair's plan: (visibility, place tag).
 PROBE = {('home', visibility.OWNER_PRIVATE): ('owner_private', 'home'),
          ('peer', visibility.OWNER_PRIVATE): ('owner_private', 'peer'),
          ('group', visibility.OWNER_PRIVATE): ('owner_private', 'group'),
          ('group', visibility.PUBLIC): ('public', 'group'), ('dm', visibility.PUBLIC): ('public', 'dm')}
 
 
-def _named(text):
-    """The pair a refusal names (the longest pair word it starts with)."""
-    words = sorted(PAIR_WORDS.items(), key=lambda item: -len(item[1]))
-    return next((pair for pair, word in words if (text or '').startswith(word + ' ')), None)
-
-
 def install_checks(store, persona):
     """The four checks she runs after an install, reading only: [(check, passed, what it saw, in numbers)].
     1. The latest turn's system_ref section list is what carried() gives its pair now.
-    2. Each pair's refusal says carried()'s number for the pair it names (a write that would grow it, never made).
+    2. A write of hers that would take a pair over is planned, not refused: the gate names that pair, with carried()'s
+       number for how far over it would be (a write measured, never made).
     3. A write to her identity gets its room line.
     4. Every section whose inject and tier differ is said."""
-    import re
     from . import memory_tiers
     from .documents import DocumentError
     out, ep = [], None
@@ -595,27 +621,23 @@ def install_checks(store, persona):
     else:
         out.append(('system_ref_is_carried', False, {'turns_with_carried_ref': 0}))
     ceiling, docs = limit(store, persona), contents(store, persona)
-    sizes, check = identity(store, persona, docs=docs), gate(store, persona)
+    sizes, check = identity(store, persona, docs=docs), gate(store, persona, refuse=False)
     persona_doc = docs.get('persona') or {'sections': []}
     for pair in [pair for pair in ordered(sizes) if pair in PROBE]:
-        shown, (seen, tag) = None, PROBE[pair]
+        refused, (seen, tag) = None, PROBE[pair]
         probe = {'sid': 'install-check', 'heading': 'install-check', 'visibility': seen, 'inject': 'always',
                  'tags': ['place:' + tag], 'body': '字' * (max((ceiling or 0) - sizes[pair], 0) + 200),
                  'body_sha256': 'install-check'}
         proposed = {**persona_doc, 'sections': [*persona_doc.get('sections', []), probe]}
         try:
-            check('persona', proposed, None)
+            plan = check('persona', proposed, None)
         except DocumentError as exc:
-            shown = exc.detail
-        named, then = _named(shown), identity(store, persona, docs={**docs, 'persona': proposed})
-        expected = None
-        if named and ceiling:
-            expected = sizes[named] - ceiling if sizes[named] > ceiling else then[named] - ceiling
-        said = re.search(r'超 ([\d,]+) token', shown or '')
-        got = int(said.group(1).replace(',', '')) if said else None
-        out.append(('refusal_is_carried_number', bool(named and got == expected),
-                    {'pair': PAIR_WORDS[pair], 'named': PAIR_WORDS.get(named), 'carried': sizes[pair],
-                     'limit': ceiling, 'said': got, 'expected': expected}))
+            plan, refused = {}, exc.code
+        then = identity(store, persona, docs={**docs, 'persona': proposed})
+        expected = then[pair] - ceiling if ceiling else None
+        out.append(('over_write_is_planned', bool(ceiling and not refused and plan.get(pair) == expected),
+                    {'pair': PAIR_WORDS[pair], 'planned': {PAIR_WORDS.get(p, '%s/%s' % p): n for p, n in plan.items()},
+                     'carried': sizes[pair], 'limit': ceiling, 'expected': expected, 'refused': refused}))
     home = carried(store, persona, visibility.OWNER_PRIVATE, 'home', docs=docs)
     sample = next(((slug, s) for slug in IDENTITY for s in home[slug]), None)
     line = room_line(store, persona, *sample) if sample else None

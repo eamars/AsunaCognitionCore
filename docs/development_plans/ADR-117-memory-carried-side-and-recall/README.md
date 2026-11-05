@@ -420,3 +420,19 @@ from L1; L4's log conversion waits for her visibility check.** Her answers and a
   because nothing at hand moves down by disuse from L1 on. When two chunks that are not adjacent segments of one message
   are joined, '…' stands between them. `crossing.cue` already returns before firing in any non-external turn, so D1
   needs no change there. No cooled row existed (0 `cooled` moves, 11-05), so no restore path was built.
+
+## 16. Gates between landings: data, not time (the owner, 2026-11-05)
+
+> "There is risk of further bug fixes interrupting with ADR. I think once the data capturing is sufficient then we
+> should move on. I'd the gating factor between each stage data bounded, not time bounded."
+
+The next landing starts the day its gate's data is in, whatever the clock; §10's readings go on after the gate as
+readings, not as a wait. Bug fixes land on their own between gates, never inside an ADR-117 landing.
+
+| Gate | Enough data to move on |
+|---|---|
+| L1 → L2 | 5 recalls with `parts` in `tool.time`; 5 program-text turns with no use, memorable moment, program-score ref or came-back count written, beside at least 30 counted turns that still count; 1 turn with a joined entry (`joined_ids`); 0 worker errors from the changed code |
+| L2 → L3 | 20 of her writes, each with its tier row without a turn running; 200 receipts with 0 `state.conflict` from `chunk`; 1 reply chunked after a delivery lag; her reverse check passed once (§14 gap 3); memory-side round trips and bytes measured on 50 turns |
+| L3 → L4 | 1 over-ceiling write of hers handled end to end (landed, the choice line in a home turn, then her `let_go` or a program lapse); 0 refusals for length on 10 writes of hers. Her 20-lapse regret reading continues and is not a gate |
+| recall fix → L4 | recall's slowest part (L1's reading) bounded and measured again on 5 recalls |
+| L4 → Built | 1 settlement turn with no night list; the log import's rows equal its sections; 20 appends, every `like:` naming its own document; her two corrected items retrieved through the ledger (§14 gap 2) |

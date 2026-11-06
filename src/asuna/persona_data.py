@@ -139,7 +139,9 @@ class PersonaDataAPI:
         if args.get('dry_run'):
             return {**result, 'action': action, 'dry_run': True, 'sections': len(sections)}
         from .render import budget_gate
-        budget_gate(self.store, self.persona)(slug, content)      # what an import adds is carried as her writes are
+        # What an import adds is carried as her writes are; one that would take a place over its ceiling is refused,
+        # so the owner trims his own package (it never lets her sections go).
+        budget_gate(self.store, self.persona, refuse=True)(slug, content)
         revision = self.docs._commit(slug, content, base_revision_id=revision_id, reason=f'import from {origin}',
                                      author='persona_job:' + self.job_id, mutation_id=mutation_id)
         self._tier_rows(slug, current, content)
@@ -176,7 +178,7 @@ class PersonaDataAPI:
         if args.get('dry_run'):
             return {'action': 'appended', 'slug': slug, 'dry_run': True, 'visibility_defaulted': defaulted}
         from .render import budget_gate
-        budget_gate(self.store, self.persona)(slug, content)
+        budget_gate(self.store, self.persona, refuse=True)(slug, content)
         revision = self.docs._commit(slug, content, base_revision_id=revision_id, reason=f'append from {origin}',
                                      author='persona_job:' + self.job_id,
                                      mutation_id=f"append:{self.persona}:{origin}:{args['source_identity']}")

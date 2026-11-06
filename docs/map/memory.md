@@ -56,6 +56,7 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 
 - def `moved_by` — Who made a move: its `by`, or for a row written before moves said it, the same rule from its reason.
 - def `told_text`
+- def `unused` — Whole days since an item was last memorable or used (0 when it never was, or no row).
 - def `words`
 - def `age_word`
 - def `store_of` — Which store a document is, or None when it is not tiered (her working documents).
@@ -76,6 +77,10 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
   - `tick` — Lapses whose stay ran out.
   - `memorable` — A memorable moment: the stay starts again from now and, once per stay, the next one doubles.
   - `overflows` — The stores over their cap that this turn reads: shown once each, for her to choose; one already shown in an earlier turn lapses by the program's rule first (so a cap is over for one turn at most).
+  - `over_pairs` — Her own write took these pairs over their ceiling, or grew them while over it ({pair: {'over', 'before', 'after'}}, carried.over_plan): each waits for her choice in her next home turn that can write.
+  - `lapse_plan` — What letting go would do for one pair whose carried sections are `found` ({slug: sections}), with `measured` from _identity, read only, until the pair is back to `target` (its row's, else the ceiling).
+  - `identity_over` — For her home turn that can write (`turn`: its episode id): one choice per pair her write took over, in her order of places, from the plan as it is now (lapse_plan, back to the row's target): her line (persona_model `memory.over_line`; `{ove
+  - `lapse_over` — After every home turn that showed her the choice has ended: each pair still over its target lets `picked` go one place down, from the plan as it is now (lapse_plan), but only when the plan she was last shown let the same sections go (`shown
   - `placement_after` — Where a write leaves each section it moves, {sid: [(place, reason), ...]} in order, the last one the place it ends in: the one rule for the write (written) and for the gate that measures it first (carried.gate).
   - `written` — After a document write (hers; or a seed adopted, an import: `intent` of another op), the moves placement_after gives, made: every new section gets its row (her new item starts carried, a running record's at hand; another write's takes its p
   - `fold_order` — The order a group's notes fold in over their per-turn limit: the section that surfaced longest ago first.
@@ -93,6 +98,7 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
   - `things` — things_from_program: her items by store and place in words, and the moves since this conversation was last told, each once, with its clock time.
   - `came_back` — Once a local day in each conversation: what came back in the last day, each kind in words, and the notes readable here that came back most (never which place it was).
 - def `tick_due` — A turn's `tick`: run when this process has not run it for this persona within TICK_SECONDS (a memo of this process; nothing is written for it).
+- def `lapse_due` — A turn's lapses over a place's identity ceiling (Tiers.lapse_over), before the turn reads anything: one indexed read when no place is over.
 - def `signing` — Why this write may not make the item a fact (her own judgment signed by herself), or None.
 - def `gist_refusal` — Why her rewrite may not be taken as the gist of a listed item, or None: it keeps the claim and drops the basis its verbatim had (her rule: a claim without its basis is loss, not fading).
 - def `claim_chars` — A gist's length without its basis lines: the basis is never what the 160 characters squeeze out.
@@ -100,7 +106,7 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 - def `declared_nature` — The nature and source she gave a write ({} when neither): her word for the nature wins over the source's.
 - def `anchor_field` — {'line': anchor} when the write names a source that is someone's word and the program resolved the line it rests on (`intent['anchor']`, set by the handler and never by her), else {}.
 - def `sources` — {section id: where its claim rests} for a document's items that rest on a line, as `scene` reads them (ADR-108 D2: People.source_of).
-- def `told` — A move as her result or the moved line says it, in words.
+- def `told` — A move as her result or the moved line says it, in words: the line it was made with (`lapse_line`, a lapse over a place's ceiling), else its heading, places and reason.
 - def `night_list` — The night list (settlement, ADR-062 §4.2 step 8): at most NIGHT_ITEMS, chosen by rule and each told why, none of them a keep or drop choice: lapsed long or dated items waiting for their gist (写一句意思), items met in different conversations (几处
 - def `recalled` — {memory id: [episode ids]} for memories she recalled herself (`recall.read`) in at least two different conversations within the window: promotion's candidates come from her acts, not from what she was shown.
 - def `candidates` — promotion_candidates with tiered memory on: what she recalled in different conversations.

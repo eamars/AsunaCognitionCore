@@ -652,6 +652,9 @@ class DocumentStore:
         is the same gate as apply's."""
         revision_id, content = self.read(slug)
         if content is None:
+            if budget:
+                # A new document from the seed is measured as it will land, as every other write through this gate is.
+                budget(slug, {'kind': kind, 'sections': parse_markdown(text, kind)[1]}, {'op': 'adopt_seed'})
             return {'state': 'seeded', 'revision': self.seed(slug, kind, text)}
         if revision_id != base_revision_id:
             raise Conflict(stale(slug))

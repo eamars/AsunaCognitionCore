@@ -538,3 +538,55 @@ passed the next morning (the numbers are in §16).
 - The monologue index was built by hand before the stop (1.0 s).
 - Not built (suggestions): an errand's recall still embeds twice (the home search misses the cache on scope);
   `own_thoughts_elsewhere` reads one scene row per group for its name.
+- Her first two recalls after the install: 1.49 s and 1.20 s whole (5.7–7.8 s before L1); `prepare.search` 0.81–0.83 s,
+  `prepare.deliver` 0.10–0.11 s, `prepare.rest` 0.04 s.
+
+### L3 as built and installed (2026-11-06)
+
+`d47f1c22` (merge of `e25c6625`), installed 13:12:29 stop, 13:13:10 back; core package `d42a9015e9be`. No step on her
+data and no one-time tool. At the install no place was over (home 12,240 of 12,288) and no row existed. A fresh
+reviewer read the build three times; what changed because of it is marked (review).
+
+- **Who opens a wait.** Only her write paths: `write_document`, `adopt_seed` (a new document included, now measured
+  by the gate) and `promote_memory`, when the write took a place over its ceiling or grew it while over
+  (`carried.over_plan` gives each place's size before and after). Imports keep the refusal and open nothing; a process
+  start, the owner changing `render.identity_tokens`, `common.md` growing or a new seed estimate open nothing; a
+  write that does not grow the place opens nothing. (review: a first version opened a row for any place over,
+  whatever the cause, and would have lapsed her sections for the owner's or the program's share.)
+- **What she is asked to free: only what her writes added.** The row keeps `target`, the larger of the ceiling and
+  the place's size just before her first write that took it over; later writes keep the earliest target. The plan,
+  the choice and the lapse bring the place back to the larger of that target and the ceiling as it is now; a ceiling
+  raised above the place's size, or no ceiling, closes the row with nothing let go. In her line `{cap}` is that
+  target and `{over}` = `{now}` − `{cap}`. (review: the raised ceiling.)
+- **One measure for what she is shown and what goes.** "Days since last thought of", the later of `memorable_at` and
+  `last_use_at` (a carried section the retrieval scored above the floor for the turn's message counts as thought
+  of), in whole days. The list she sees is the plan's order: most days first, then the lowest 30-day
+  `program_score` in that place, then document order (persona, voice, self, core, then position). Felt sections come
+  after the rest, marked as never let go by the program. §5 named two measures; this is the one. (review: the list and
+  the lapse used different ones.)
+- **Her rule A (her answer, 2026-11-06).** When the last section the plan would let go and the first it would keep
+  tie on both days and score, so that only document order would decide, nothing is let go and the choice is shown
+  again with the waiting line: the shape of her felt rule. Document order only orders what she is shown. At the
+  install the measure separated her sections (10–13 distinct day values a place) but the front 11–12 in every place
+  tied (untouched since the switch-on, 2026-10-13, score 0), so today every place would wait for her.
+- **When the program lets go.** After every turn that showed the choice has ended (or an hour after the first
+  showing), at the top of the next turn wherever it runs, and only if the plan picks exactly the sections she was
+  last shown (`shown_picked`); otherwise the new plan is shown first. A place that cannot get back even with every
+  section it carries let go is said once at her next home turn and closed; only a new growing write of hers reopens
+  it.
+- **The excess.** It is carried over the ceiling and never cut from her identity. Persona and voice sit in the system
+  prompt, which is never truncated; self and core travel in the turn context, which the Host trims by
+  `context_budget.TRIM_ORDER` only when the whole sent context passes 48,000 characters. Every home turn that can
+  write carries the choice with the current amount.
+- **Her words.** `memory.over_line` and `memory.lapse_line` are persona-package word keys with neutral core lines;
+  the fields a line may name are fixed and a line naming another is refused at load. The lapse line is told with the
+  place's word in front (`家里：…`), because it is told in other conversations too. She publishes her two lines in her
+  own package.
+- **Removed:** the identity stores' count caps and room words, the over-budget refusal for her writes, install check
+  2's expectation of it (now: an over write is planned, not refused).
+- **Accepted gaps.** A crash between a write's commit and `written` leaves that write without its wait (a replayed
+  apply returns before the gate). A lapse can be put off more than once when another conversation keeps touching the
+  section at the front; it is shown again each time and never blocked for good. Two processes preparing turns for
+  one persona are not handled; `Coordinator.lock` serializes prepare and tools in the one worker.
+- **Tests:** `tests/test_adr117_l3.py`, 11 cases on the in-memory adapter; 20 one-line mutations of its rules were
+  each caught.

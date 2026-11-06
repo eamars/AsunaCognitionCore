@@ -72,6 +72,7 @@ export class NativeChildren {
     const state = core.state(agent.id);
     state.current = stage; state.system = stage.system;
     await core.collab.start(stage);
+    core.selectRoute(agent, stage.lane, stage);         // before the turn: DSH fixes its route when it prepares a step
     agent.followup(core.message(stage));
     // Freeze the visible range only after the native Turn end is durable.
     const result = agent.whenIdle().then(() => core.collab.finish(stage));

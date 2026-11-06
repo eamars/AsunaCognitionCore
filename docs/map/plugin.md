@@ -264,6 +264,8 @@ The Host plugin's core: `CognitionCore` starts the Python worker and runs the tu
   - `stageEfforts` — Per-stage effort on the character route, as chosen on the settings card from the levels its model offers: the relevance gate (attendEffort) and her group turns (groupEffort).
   - `tierRoute` — ADR-075: the route of a request in a job she sent to 高, while it has not fallen and 高 is not resting; else undefined (the action route).
   - `requestRoute` — The provider, model, level and output limit the next request of this conversation takes (before nativeRoute): a deliberate native model selection stays authoritative for its session; otherwise 高 for a job she sent there, else the lane's rou
+  - `selectRoute` — DSH 0.2.2 fixes a step's provider, model and level when it prepares the step, before any hook of ours runs: the session's recorded model selection (the last one made, else its last request's, else the options it was opened with), and it ref
+  - `choose` — `route` selected for the session's next step when its selection differs, marked as the program's.
   - `laneOf` — The lane of one of her sessions, by the preset it was opened with; undefined for a session not hers.
   - `summaryInstance` — ADR-094 §10.2: a compaction summary of this conversation is sent as its next request would be: that request's provider and model; its level: the conversation's own (its last request's on that model), else the route's, else the compaction en
   - `fall` — The job falls to 低 for good; the worker records it on the task, said to her in capability words.

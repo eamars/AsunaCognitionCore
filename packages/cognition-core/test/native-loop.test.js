@@ -19,11 +19,14 @@ import { AgentPresetRegistry } from '@deepseek-ai/dsh-agent-preset-registry';
 import TokenMeter from '@deepseek-ai/dsh-token-meter';
 import Commands from '@deepseek-ai/dsh-commands';
 import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import YAML from 'yaml';
 import { CognitionCore, pictureParts } from '../src/index.js';
 import { asunaRender, attachImage } from '../src/tool-output.js';
 import { rootsAtTheModel } from '../src/roots.js';
+import Persistence from '../src/persistence.js';
 
 async function harness(t, finish = 'stop', composition) {
   const ctx = new Context();
@@ -448,4 +451,104 @@ test('a reminder reaches the worker through a real scheduler turn, with no model
   assert.equal(h.requests.length, 0, 'the scheduler never asks a model');
   const deliver = h.business.find(x => x.method === 'schedule.deliver');
   assert.deepEqual(deliver?.args.dispatches.map(d => d.id), ['n1']);
+});
+
+
+test("a gate question and her group turns run at their stage's own level through DSH's loop", async t => {
+  // Regression (DSH 0.2.2): the loop fixes a step's provider, model and level when it prepares the step, and refuses a
+  // request that names others; the request hook named the stage's level only after that, so every gate question and
+  // a group turn failed with "agent/request proposed reasoning effort ... after step preparation fixed ...".
+  const h = await harness(t);
+  const core = h.core;
+  // A model with levels, as a reasoning model's adapter declares them.
+  class Thinking extends LlmAdapter {
+    resolveModel(provider, id) {
+      return Promise.resolve({ provider, id, name: id, reasoning: { defaultEffort: 'high',
+        efforts: ['low', 'medium', 'high'].map(effort => ({ id: effort, name: effort })) } });
+    }
+    async *stream(options) {
+      h.requests.push(options);
+      yield { type: 'text-delta', index: 0, text: 'actual native assistant event' };
+      yield { type: 'finish', reason: { kind: 'stop' } };
+    }
+  }
+  h.ctx.llm.registerAdapter(['thinking'], new Thinking());
+  core.config = { ...core.config, persona: 'p', routes: { character: { provider: 'thinking', model: 'one-model',
+    reasoningEffort: 'high', attendEffort: 'low', groupEffort: 'medium' } } };
+  core.personas.set('p', { preset: 'asuna' });
+  core.efforts = { attend: 'low', group: 'medium' };          // stageEfforts, as the Host reads them at start
+  // Sessions are stored, so a gate's repair resumes its session; the workspace a conversation is listed in is the
+  // Host's.
+  const stored = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-stage-route-'));
+  t.after(() => fs.rm(stored, { recursive: true, force: true }));
+  await h.ctx.plugin(Persistence, { root: stored });
+  await new Promise(resolve => h.ctx.inject(['sessionPersistence'], () => resolve()));
+  const host = { workspaceRegistry: { create: async () => ({ attachSession: async () => {} }), unarchiveSession: async () => {} } };
+  core.ctx = new Proxy(h.ctx, { get: (target, key) => key in host ? host[key] : target[key] });
+  await h.ctx.agentPresets.register({ id: 'asuna-attend',
+    plugins: [{ name: new URL('../src/attend.js', import.meta.url).href }] });
+  const results = new Map();
+  const done = token => new Promise(resolve => results.set(token, resolve));
+  const group = { _id: 'group-g', cwd: '/data', scene_id: 'g1' };
+  core.worker = { async call(method, args) {
+    if (method === 'role_tool_specs') return [];
+    if (method === 'stage.valid') return { valid: true };
+    if (method === 'session') return group;
+    // Local input in the group's conversation is admitted with its stage, inside the step DSH already prepared.
+    if (method === 'input') await core.onEvent({ kind: 'stage', session_id: args.session_id, lane: 'character',
+      scene_kind: 'group', phase: 'TURN', token: 'turn-input', text: 'typed here', system: 'persona', binding: group });
+    if (method === 'result') {
+      results.get(args.token)?.(args);
+      if (args.token.startsWith('turn-')) setImmediate(() => core.onEvent({ kind: 'turn_done', session_id: group._id }));
+    }
+    return { accepted: true };
+  } };
+  t.after(async () => { await core.children.dispose(); for (const [, handle] of core.handles) await handle.dispose(); });
+  const effortOf = id => h.requests.filter(r => r.sessionId === id).map(r => r.reasoningEffort);
+  // A gate question: its own hidden session, at the gate's level.
+  const ask = async token => {
+    const answered = done(token);
+    await core.onEvent({ kind: 'stage', session_id: 'asuna-attend-1', lane: 'attend', phase: 'attend', token,
+      text: 'join in?', system: 'gate', binding: { _id: 'asuna-attend-1', cwd: '/data', scene_id: 'g1',
+        parent_session_id: group._id, lane: 'attend' } });
+    const result = await answered;
+    assert.equal(result.error, undefined, result.error);
+    return effortOf('asuna-attend-1').at(-1);
+  };
+  assert.equal(await ask('attend-1'), 'low');
+  // Its repair resumes the stored session, whose last request was at another level: the gate's own is selected.
+  core.efforts = { attend: 'medium', group: 'medium' };
+  assert.equal(await ask('attend-1:fix-1'), 'medium');
+  assert.deepEqual(effortOf('asuna-attend-1'), ['low', 'medium'], 'one stored session, two questions');
+  // A stored session holding the program's own selection loads again (its mark is an event DSH may skip).
+  assert.equal(await ask('attend-1:fix-2'), 'medium');
+  // Her turns in the group: at the group's level.
+  const turn = async token => {
+    const answered = done(token);
+    await core.onEvent({ kind: 'stage', session_id: group._id, lane: 'character', scene_kind: 'group', phase: 'TURN',
+      token, text: 'a line in the group', system: 'persona', binding: group });
+    const result = await answered;
+    assert.equal(result.error, undefined, result.error);
+    await h.ctx.agents.get(group._id).whenIdle();               // the worker said the episode is done: the turn ends
+    return effortOf(group._id).at(-1);
+  };
+  assert.equal(await turn('turn-1'), 'medium');
+  // A level changed on the settings card applies to the next turn: the program's own selection is not deliberate.
+  core.efforts = { attend: 'low', group: 'low' };
+  assert.equal(await turn('turn-2'), 'low');
+  // A stage known only when its input is admitted goes on the level the step was prepared with, never an error;
+  // the next turn takes the stage's own.
+  const agent = h.ctx.agents.get(group._id);
+  core.efforts = { attend: 'low', group: 'medium' };
+  const typed = done('turn-input');
+  agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'typed here' }] }));
+  assert.equal((await typed).error, undefined, (await typed).error);
+  await agent.whenIdle();
+  assert.equal(effortOf(group._id).at(-1), 'low');
+  assert.equal(await turn('turn-4'), 'medium');
+  // A model chosen in DSH for this conversation stays authoritative.
+  agent.model.select({ provider: 'thinking', model: 'one-model', reasoningEffort: 'high' });
+  assert.equal(await turn('turn-5'), 'high');
+  const ends = agent.session.snapshotEvents().filter(e => e.type === 'turn/end').map(e => e.data.reason?.kind);
+  assert.deepEqual(ends, Array(5).fill('completed'));
 });

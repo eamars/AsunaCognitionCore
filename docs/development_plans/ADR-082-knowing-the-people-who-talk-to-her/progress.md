@@ -13,11 +13,11 @@
 格三，未验，库里没那把尺：`dbread.fields` 扫 `state_revisions/state_heads/audit_events/episodes/messages/ideas/notes`，含 correct 字样的字段只落在 `memory_units`（`attribution.corrections`、`corrected_at`、`corrected_by`，由 `summary_attribution.py:121-145` 写，全库非空 119 条，作用在摘要不是 understanding 修订）；`content` 只许 `body/short`（`records/heads.py:156`）；`change_class` 无此档（78 行全 `interpretation`）；`audit_events` 里带 correct 的只有 `author.corrected` 全库 1 条（ADR-089 那趟一次性回执）。要出数得把每条写和之后同场景那人的话对起来，那一步要读群里的原话，未得许可没读。页 L304 说清单住 `.runtime/private/adr082/corrections.md`：目录在、16 个文件，没有那个文件（只查存在，内容没读）。Left：等大姐许可或她改判据，再读群线原话坐实；回看 11-08 20:30。
 
 格三, 「写入后被本人更正」, read 2026-11-07 by Claude as §9 sets it (her consent of 2026-10-20; a fresh agent read the
-people's own lines only, nothing of hers but the written layers). Window 10-19 06:15Z to 11-06 08:00Z: **78 writes
-(30 person, 48 here), 6 then corrected by the person** (1 person, 5 here; one correction of a form of address covers
-3 of them). Not judged: 5, all about someone who said nothing in that conversation in the window. Ten writes about an
-agent line were judged by a search of about 950 lines for corrections, not by reading each line: none found, counted
-as not corrected, a weaker judgment. Corrections made before a write and not taken up: 1 clear, 1 borderline; not
+people's own lines only, nothing of hers but the written layers). Window 10-19 06:15Z to 11-06 08:00Z: 78 writes (30
+person, 48 here). **Read: 63, of them 6 then corrected by the person** (1 person, 5 here; one correction of a form of
+address covers 3 of them). Not read, so not counted either way: 5 about someone who said nothing in that conversation
+in the window, and 10 about an agent line, only searched (about 950 lines) for corrections, none found; a search that
+finds nothing is not a read (her correction, 11-07). Corrections made before a write and not taken up: 1 clear, 1 borderline; not
 common, so the read was not widened. Each corrected write, with person, layer, date and line, and the borderline
 cases, is in `.runtime/private/adr082/corrections.md` (4,704 bytes, private). A lower bound on wrong writes, not an
 accuracy.

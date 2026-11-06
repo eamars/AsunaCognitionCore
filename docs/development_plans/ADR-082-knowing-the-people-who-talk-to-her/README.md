@@ -123,7 +123,8 @@ she left it out in 41 of 108 runs. Reading a person is remembering them, so it m
   is a note to herself, not words to say** (her ask: a compressed "who he is, how to talk with him" is the easiest thing
   to read out by accident).
 - **A long `short` is kept, not refused**: the result says how many characters over 80 (her rule for `think`,
-  2026-10-14: a refusal costs a whole retry). Measured: median 46, max 93, 4 of 290 over.
+  2026-10-14: a refusal costs a whole retry). Measured before go-live (2026-10-19): median 46, max 93, 4 of 290
+  over. Her live shorts are longer (her reading of 2026-11-06, in progress.md); 80 stays a word in the description.
 - **Blocking moves to `watch`** (`do` `block`, `hours`): with `layer`, `content` and `short` required, a call that only
   blocks could not pass `understand_person` any more. It still blocks the account speaking to her, never at home;
   `watch` is listed in every platform conversation, groups and private chats (her yes, 2026-10-19: watching and

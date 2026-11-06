@@ -25,3 +25,20 @@ runtime-context; the system 1,081 characters against 1,243 before. Expected: 1,2
 (her core sections may have changed in between, which the check allows for). 3 (`gate_verdicts.py`, since
 05:49:01Z): 183 gate questions, 0 repairs, 0 failed looks, 0 fallbacks (at most 2 repairs and no failed look of
 cause `unanswered` allowed). 4: the 24 hours after her publication had no failed look. Left: item 5.
+
+§9.4 item 5, the 7-day reading, read 2026-11-07 (Claude) from `messages.attend` by `received_at`, from her words
+(10-30 18:53 NZDT, 05:53Z) to 11-06 18:53, in three parts, as she asked: the owner's order to stay quiet with bots
+and tests (11-01 21:32) splits the first two; the third is the owner's DSH 0.2.2 switch.
+
+| Part | Questions | 接话 | 不理 | Failed | `mentioned_account` 接话 / 不理 |
+|---|---|---|---|---|---|
+| Baseline, §2.1 (10-23 to 10-30) | 899 | 662 | 236 | 1 | 545 / 26 (95%) |
+| A: 10-30 18:53 to 11-01 21:32 | 120 | 67 | 53 | 0 | 62 / 9 (87%) |
+| B: 11-01 21:32 to 11-04 21:10 | 158 | 86 | 72 | 0 | 66 / 12 (85%) |
+| C: 11-04 21:10 to 11-06 18:53 | 64 | 0 | 0 | 64 | 0 / 0 (41 failed) |
+
+In A and B, no repairs and no failed looks. The records cannot tell the lines her order covers (tests, questions
+about her inside, play with her being a bot) from the others; she reads that part herself. C is not her judgment:
+every question failed on one program error. DSH 0.2.2 fixes a turn's effort at step preparation, and the plugin
+still changed the gate's effort in its request hook, which 0.2.2 refuses. That is a defect of the DSH switch, fixed
+apart from this ADR, and C is no reading of her words.

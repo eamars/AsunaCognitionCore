@@ -525,8 +525,9 @@ The owner's requirement decides how the work runs:
 4. **Her readings, and one sign-off.** Before the landing she reads this section once (one message from the lead, the
    changed parts only). The words the build writes from code (`LIMIT_WHY`, `WORDS[code]`, `INSTEAD`, `WAKE_WORDS`, the
    marks and the compaction rules) are in the build, finished; she reads them once at a frozen commit, before the
-   landing. If she asks for other words, they change in those tables only (each table is one file, with a version
-   constant that is raised with the text), as a text change on the same branch before the landing; no mechanism changes
+   landing. If she asks for other words, they change in those tables only (as built, `LIMIT_WHY` and `WORDS` share
+   `role_tools.py` and carry no version constant; none was added, since no code reads one), as a text change on the
+   same branch before the landing; no mechanism changes
    with a word, and she reads only what changed. That reading and her check by content after the landing are her part of
    one sign-off, of the product; it is recorded once, after acceptance.
 5. **One acceptance.** Section 5's "Proves, and how" column and [design.md](design.md) section 8 are one table, read once,

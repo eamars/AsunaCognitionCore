@@ -34,8 +34,8 @@ The DSH services, hooks, events, APIs, UI facilities and file formats the core p
 | DSH thing | What Asuna uses it for | file:name |
 |---|---|---|
 | `tools/pre-execute` | check each action tool call against its task's fence (`stage.valid`) | `index.js` `attachPreset` |
-| `agent/inbox/inserted`, `agent/inbox/claimed` | lines waiting in her conversation's next-step inbox | `index.js` `attachPreset` |
-| `system-prompt/assemble` | her role system prompt | `index.js` `attachPreset`; `recovery.js` |
+| `agent/inbox/inserted`, `agent/inbox/claimed` | lines waiting in her conversation's next-step inbox; a repair session's route selected when its input arrives | `index.js` `attachPreset`; `recovery.js` |
+| `system-prompt/assemble` | her role system prompt | `index.js` `attachPreset` |
 | `agent/request` | attribute each request (`asuna/stage`); its model and effort are the ones DSH fixed when it prepared the step, and a route known only then (a stage admitted with its input, 高 after a fall) is selected for the next step | `index.js` `attachPreset` |
 | `agent/pre-step` | deliver the turn's notice and held lines at a step boundary | `index.js` `attachPreset`, `openAgent`; `scheduler.js` |
 | `agent/assistant-stream`, `agent/turn-stopping`, `agent/status`, `agent/error`, `agent/disposed` | follow her turns and end them | `index.js` `attachPreset` |
@@ -43,7 +43,7 @@ The DSH services, hooks, events, APIs, UI facilities and file formats the core p
 | `agent/created` | attach the role and action presets to a new agent | `role.js`; `action.js` |
 | `session/event`, `domain/changed` | wait for a session's head and its projection checkpoint | `navigation.js`; `pairing.js` |
 | `agent.inbox.splice`, `agent.inbox.nextStep`, `agent.followup` | queue lines before her first step; continue a stage | `navigation.js`; `children.js` |
-| `agent.model` (`current`, `select`) | DSH fixes a step's provider, model and effort when it prepares the step: the route a stage's requests take (the gate's, a group turn's and a summary's own effort among them) is selected before its turn starts, and a session opens with the stage's effort | `index.js` `selectRoute`, `choose`, `openAgent`; `children.js` |
+| `agent.model` (`current`, `select`) | DSH fixes a step's provider, model and effort when it prepares the step: the route a stage's requests take (the gate's, a group turn's and a summary's own effort among them) is selected before its turn starts, and a session opens with the stage's effort; a repair session's, the publication floor's, when input arrives | `settings.js` `selectFor`; `index.js` `selectRoute`, `openAgent`; `children.js`; `recovery.js` |
 
 ## Session event types
 
@@ -60,7 +60,7 @@ The DSH services, hooks, events, APIs, UI facilities and file formats the core p
 | `image/offload` | turn retained pictures into DSH's placeholders after a refusal | `image-refusal.js` |
 | `session/title` | conversation titles | `navigation.js` |
 | `assistant/message`, `assistant/live-chunk`, `subagent/descriptor`, `subagent/catalog`, `model/selection` | read in the client and API projections | `client.js`; `api.js` |
-| Asuna's own `asuna/stage`, `asuna/stage-result`, `asuna/schedule`, `asuna/collab`, `asuna/web-search`, `asuna/route` | written `ignorable: true`, so plain DSH readers skip them; `asuna/route` names a `model/selection` the program made itself, which never counts as a deliberate choice | `persistence.js` `ASUNA_EVENTS`; `index.js` `deliberate` |
+| Asuna's own `asuna/stage`, `asuna/stage-result`, `asuna/schedule`, `asuna/collab`, `asuna/web-search`, `asuna/route` | written `ignorable: true`, so plain DSH readers skip them; `asuna/route` names a `model/selection` the program made itself, which never counts as a deliberate choice | `persistence.js` `ASUNA_EVENTS`; `settings.js` `deliberate` |
 
 ## Package APIs
 

@@ -453,14 +453,9 @@ test('a reminder reaches the worker through a real scheduler turn, with no model
   assert.deepEqual(deliver?.args.dispatches.map(d => d.id), ['n1']);
 });
 
-
-test("a gate question and her group turns run at their stage's own level through DSH's loop", async t => {
-  // Regression (DSH 0.2.2): the loop fixes a step's provider, model and level when it prepares the step, and refuses a
-  // request that names others; the request hook named the stage's level only after that, so every gate question and
-  // a group turn failed with "agent/request proposed reasoning effort ... after step preparation fixed ...".
-  const h = await harness(t);
-  const core = h.core;
-  // A model with levels, as a reasoning model's adapter declares them.
+/** A model with levels, as a reasoning model's adapter declares them, on provider `thinking`; its requests are recorded
+ * with the harness's. */
+function thinking(h) {
   class Thinking extends LlmAdapter {
     resolveModel(provider, id) {
       return Promise.resolve({ provider, id, name: id, reasoning: { defaultEffort: 'high',
@@ -473,6 +468,15 @@ test("a gate question and her group turns run at their stage's own level through
     }
   }
   h.ctx.llm.registerAdapter(['thinking'], new Thinking());
+}
+
+test("a gate question and her group turns run at their stage's own level through DSH's loop", async t => {
+  // Regression (DSH 0.2.2): the loop fixes a step's provider, model and level when it prepares the step, and refuses a
+  // request that names others; the request hook named the stage's level only after that, so every gate question and
+  // a group turn failed with "agent/request proposed reasoning effort ... after step preparation fixed ...".
+  const h = await harness(t);
+  const core = h.core;
+  thinking(h);
   core.config = { ...core.config, persona: 'p', routes: { character: { provider: 'thinking', model: 'one-model',
     reasoningEffort: 'high', attendEffort: 'low', groupEffort: 'medium' } } };
   core.personas.set('p', { preset: 'asuna' });
@@ -551,4 +555,32 @@ test("a gate question and her group turns run at their stage's own level through
   assert.equal(await turn('turn-5'), 'high');
   const ends = agent.session.snapshotEvents().filter(e => e.type === 'turn/end').map(e => e.data.reason?.kind);
   assert.deepEqual(ends, Array(5).fill('completed'));
+});
+
+
+test("a repair session runs on the publication floor's route through DSH's loop, also on an agent opened on another", async t => {
+  // The emergency path (recovery.js): the same regression as the stages', in its own request hook. A recovery session
+  // the owner opened on another model or level kept failing before it could repair anything.
+  const h = await harness(t);
+  thinking(h);
+  h.ctx.provide('asunaFloor', { config: { route: { provider: 'thinking', model: 'one-model', reasoningEffort: 'low' } },
+    call: async () => ({}) });
+  await h.ctx.agentPresets.register({ id: 'asuna-recovery',
+    plugins: [{ name: new URL('../src/recovery.js', import.meta.url).href }] });
+  const handle = await h.ctx.agents.create({ sessionId: 'repair', agentOptions: { provider: 'thinking',
+    model: 'one-model', reasoningEffort: 'high' }, setup: async scope => { await h.ctx.agentPresets.mount(scope, 'asuna-recovery'); } });
+  t.after(() => handle.dispose());
+  const agent = handle.agent;
+  agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'repair it' }] }));
+  await agent.whenIdle();
+  const ends = agent.session.snapshotEvents().filter(e => e.type === 'turn/end').map(e => e.data.reason);
+  assert.deepEqual(ends.map(reason => reason.kind), ['completed'], JSON.stringify(ends));
+  assert.deepEqual(h.requests.map(r => r.reasoningEffort), ['low'], "the floor's own level");
+  const offered = (h.requests[0].tools ?? []).map(tool => tool.name);
+  assert.ok(['development_files', 'development_publish'].every(name => offered.includes(name)), String(offered));
+  // A model chosen in DSH for the repair stays authoritative.
+  agent.model.select({ provider: 'thinking', model: 'one-model', reasoningEffort: 'medium' });
+  agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'again' }] }));
+  await agent.whenIdle();
+  assert.equal(h.requests.at(-1).reasoningEffort, 'medium');
 });

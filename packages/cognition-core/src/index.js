@@ -42,7 +42,7 @@ import { languageWords, savedLanguage } from './ui-language.js';
 import { Collab } from './collab.js';
 import { failureClass, restFor, resting } from './tiers.js';
 import { redactSecrets } from '@deepseek-ai/dsh-settings';
-import { assertSecretReferences, nativeRoute, secretReferences } from './settings.js';
+import { assertSecretReferences, deliberate, nativeRoute, sameSelection, secretReferences, selectFor } from './settings.js';
 import { credentialKey, credentialRef } from '@deepseek-ai/dsh-credentials';
 import { ensurePythonEnvironment } from './python-env.js';
 import z from '@deepseek-ai/schemastery';
@@ -119,21 +119,6 @@ export const DSH_DEVELOPER_SECTIONS = [['harness:source', 'HARNESS_SOURCE'],
 const PRESETS = { executor: 'asuna-action', summary: 'asuna-summary', appraiser: 'asuna-appraiser', attend: 'asuna-attend' };
 /** The recovery preset's id (cordis.patch.yml); its sessions route by the publication floor's own route. */
 const RECOVERY_PRESET = 'asuna-recovery';
-/** The program's own model selections in a session (selectRoute), each naming the `model/selection` event it made, so
- * that only another one counts as deliberate (deliberate). */
-const ROUTE_EVENT = 'asuna/route';
-
-/** The session's last native model selection that the program did not make itself: one made in DSH (the owner's
- * choice), which stays authoritative for its session; undefined when there is none. */
-function deliberate(session) {
-  const events = session.snapshotEvents();
-  const ours = new Set(events.filter(event => event.type === ROUTE_EVENT).map(event => event.data.selection_seq));
-  return events.findLast(event => event.type === 'model/selection' && !ours.has(event.seq))?.data;
-}
-
-/** Whether two routes name the same provider, model and level (no level being one). */
-const sameSelection = (a, b) => Boolean(a && b) && a.provider === b.provider && a.model === b.model
-  && (a.reasoningEffort || undefined) === (b.reasoningEffort || undefined);
 const textOf = message => (message?.content ?? []).filter(x => x.type === 'text').map(x => x.text).join('\n');
 
 /** What one stage of her turn said and saw, from her session's log (coordinator: her speech, and the lines it
@@ -606,26 +591,11 @@ export class CognitionCore {
     return { ...route, reasoningEffort: effort ?? route?.reasoningEffort };
   }
 
-  /** DSH 0.2.2 fixes a step's provider, model and level when it prepares the step, before any hook of ours runs: the
-   * session's recorded model selection (the last one made, else its last request's, else the options it was opened
-   * with), and it refuses a request that names others. So the route a stage's requests take (requestRoute: the
-   * relevance gate's, a group turn's and a summary's own level among them) is selected before its turn starts, when the
-   * session's differs. The selection made here is marked as the program's (ROUTE_EVENT), never a deliberate one. */
+  /** The route a stage's requests take (requestRoute: the relevance gate's, a group turn's and a summary's own level
+   * among them), selected before its turn starts when the session's differs (settings.js `selectFor`: DSH 0.2.2 fixes
+   * a step's route when it prepares the step). */
   selectRoute(agent, lane, stage) {
-    this.choose(agent, nativeRoute(this.requestRoute(agent, lane, stage, { quiet: true })));
-  }
-
-  /** `route` selected for the session's next step when its selection differs, marked as the program's. */
-  choose(agent, route) {
-    if (!route?.provider || !route.model) return;
-    const selection = { provider: route.provider, model: route.model,
-      ...(route.reasoningEffort ? { reasoningEffort: route.reasoningEffort } : {}) };
-    if (sameSelection(agent.model.current(), selection)) return;
-    const selections = () => agent.session.snapshotEvents().filter(event => event.type === 'model/selection');
-    const before = selections().length;
-    agent.model.select(selection);
-    const made = selections();
-    if (made.length > before) agent.session.append(ROUTE_EVENT, { selection_seq: made.at(-1).seq });
+    selectFor(agent, nativeRoute(this.requestRoute(agent, lane, stage, { quiet: true })));
   }
 
   /** The lane of one of her sessions, by the preset it was opened with; undefined for a session not hers. */
@@ -1385,7 +1355,7 @@ export class CognitionCore {
       // stage's route was selected before its turn (selectRoute). One known only now (a stage admitted with its input,
       // 高 after a fall) goes on the step's own and is selected for the next step.
       const route = nativeRoute(this.requestRoute(agent, lane, stage));
-      if (!sameSelection(route, request)) { this.choose(agent, route); return request; }
+      if (!sameSelection(route, request)) { selectFor(agent, route); return request; }
       return nativeRoute({ ...request, ...route });
     });
     scope.on('agent/pre-step', async ({ agent }, next) => {

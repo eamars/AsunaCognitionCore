@@ -525,8 +525,12 @@ class Tiers:
         return carried.limit(self.store, self.persona), docs, common, laid, rows
 
     def _target(self, row, ceiling):
-        """What a row asks her to free back down to (over_pairs); the ceiling for a row that kept none."""
-        return row.get('target') or ceiling
+        """What a row asks her to free back down to: its kept target (over_pairs), never below the ceiling as it is now
+        (a ceiling the owner raised since her write asks for less); None when nothing bounds the pair any more, which
+        then fits. A ceiling lowered since her write keeps the kept target."""
+        if not ceiling:
+            return None
+        return max(row.get('target') or ceiling, ceiling)
 
     def lapse_plan(self, pair, found, measured, moment=None, target=None):
         """What letting go would do for one pair whose carried sections are `found` ({slug: sections}), with `measured`

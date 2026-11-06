@@ -239,6 +239,25 @@ def test_a_place_over_without_a_write_of_hers_waits_for_nothing_and_loses_nothin
     assert home.tiers.item('self', 'one')['place'] == memory_tiers.CARRIED
 
 
+def test_a_ceiling_the_owner_raised_or_removed_since_her_write_asks_her_for_nothing(home):
+    write(home, 'one', 60)
+    aged(home, 'one', 30)
+    home.ceiling[0] = size(home, HOME) + 10
+    write(home, 'two', 60)
+    showing = turn(home)
+    assert shown_at_home(home, showing), 'over the ceiling her write found'
+    home.ceiling[0] = size(home, HOME) + 100               # the owner raises it above the place
+    ended(home, showing)
+    assert home.tiers.lapse_over() == [] and over_rows(home) == [], 'it fits now: nothing goes'
+
+    home.ceiling[0] = size(home, HOME) + 10
+    write(home, 'three', 60)
+    assert over_rows(home)
+    home.ceiling[0] = None                                 # the owner removes the bound
+    assert shown_at_home(home, turn(home)) is None and over_rows(home) == []
+    assert all(home.tiers.item('self', sid)['place'] == memory_tiers.CARRIED for sid in ('one', 'two', 'three'))
+
+
 def test_already_over_her_write_is_asked_back_only_to_where_it_found_the_place(home):
     write(home, 'old', 60)
     write(home, 'mid', 60)

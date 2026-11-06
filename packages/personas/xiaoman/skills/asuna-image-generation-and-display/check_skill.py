@@ -72,6 +72,13 @@ scope_key 那一格在不在（scope 字面值从 `scenes` 读、`source` 前缀
 「两把尺不是一把」——manifest `route_table` 与工具 `list_routes` 不是一个名单）。
 切片为空不等于查过，标题被删那几条一起红。
 
+2026-11-06 起再补一节判据（「只画一次」——金主拍板「一张图只画一次，崩了就崩了，不要修」，
+主人同日 15:26 补定交付端三条）：节标题进 SECTIONS，节内 20 条字面押在该节切片里——生产端四条
+（一单一画、看过才算交、不许自行改提示词重画与它那条理由、崩了如实报、禁止暗修暗补、重画只在点单人
+明确要之后且必须用原提示词）＋交付端三条（一次只出一版、不挑不攒、小瑕疵随图一句说明直接发、
+大毛病只有「直接发」与「不发」两个出口）＋两条「不算重画」的边界与「本节优先于旧口径」。
+切片为空不等于查过：标题被删那 20 条一起红。
+
 不联网、不调生图服务、不生成图、不写 Mongo、不发 QQ。
 
 用法：
@@ -289,6 +296,7 @@ SECTIONS = [
     "## 群聊生图上限",
     "## 本机已有那张图怎么进可发清单",
     "## 人像实测：构图决定拉链、自拍别指望手机、交图前放大复核",
+    "## 只画一次（一单一画，崩了不修）",   # 2026-11-06 新增：一单一画、崩了不修
 ]
 
 # 已经过期的说法：出站图片能力上线后、DECIDE 退役后不能再这么写（只看散文，反引号里的引用不算）
@@ -346,6 +354,51 @@ FIELD_SURFACE = [
     ("field_two_rulers", "两把尺不是一把"),
     ("field_job_is_resume", "超时续取"),
 ]
+
+
+# 只画一次（2026-11-06 金主拍板「一张图只画一次，崩了就崩了，不要修」，主人 15:26 补定交付端三条）。
+# 押在「只画一次」这一节的切片里：这一节管的是「崩了别自己偷偷修」，字面丢了规矩就等于丢了。
+# 切片为空不等于查过——标题被删那 20 条一起红。
+ONCE_HEADING = "## 只画一次（一单一画，崩了不修）"
+ONCE = [
+    # 两头都没有「修」这个出口（总纲）
+    ("once_no_fix_exit_at_all", "两头都没有「修」这个出口"),
+    # 生产端 ①–④
+    ("once_one_call_per_order", "一次点单只调一次生成"),
+    ("once_read_image_gates_handoff", "看过才算交"),
+    ("once_n_orders_are_n_single_draws", "点单要 N 张＝ N 条单子各画一次"),
+    ("once_no_self_redraw", "不自己重画"),
+    ("once_reason_drift", "每修一次画面就离原单远一格"),
+    ("once_owner_verdict", "崩了就崩了，不要修"),
+    ("once_report_crash_plainly", "如实报崩了"),
+    ("once_no_silent_fix", "禁止暗修暗补"),
+    ("once_redraw_only_on_order", "重画只发生在点单人明确说「再画」之后"),
+    ("once_redraw_uses_original_prompt", "用原提示词"),
+    ("once_not_broken_base", "不拿崩掉那版当底"),
+    # 交付端 ⑤–⑦（主人 11-06 15:26 补定）
+    ("once_delivery_one_version", "交付端一次只出一版"),
+    ("once_pick_one_no_stacking", "不挑不攒"),
+    ("once_minor_flaw_send_with_note", "小瑕疵随图一句说明直接发"),
+    ("once_major_flaw_two_exits", "要么直接发，要么不发——没有「修」"),
+    ("once_no_bad_version_as_base", "不拿坏版本当底改提示词，不自作主张重画"),
+    # 两条「不算重画」的边界与旧口径优先
+    ("once_timeout_not_redraw", "超时不等于画失败"),
+    ("once_cap_is_budget_only", "不是默认张数"),
+    ("once_this_section_wins", "以本节为准"),
+]
+
+
+def once_section_slice(body):
+    """「## 只画一次…」标题下、下一个二级标题之前的正文（含 ### 子节）。"""
+    out, taking = [], False
+    for line in body.splitlines():
+        if line.startswith("## 只画一次"):
+            taking = True
+        elif taking and line.startswith("## "):
+            break
+        if taking:
+            out.append(line)
+    return "\n".join(out)
 
 
 def portrait_section_slice(body):
@@ -825,6 +878,14 @@ def main():
               "「%s」不在「人像实测」这一节里（切片 %d 字）" % (token, len(portrait_slice)))
     for name, token in FIELD_SURFACE:
         check(name, token in body, token)
+
+    # 只画一次（2026-11-06）：节标题在 SECTIONS 里查（那个 section_N 的名字按当次跑出来的红名单看），
+    # 这里查节内 20 条字面。标题被删 → 切片为空 → 下面几条一起红：切片为空不等于查过，不会绿着放过。
+    once_slice = once_section_slice(body)
+    check("once_section_present", bool(once_slice), "「只画一次」一节切不出正文（标题被改或删）")
+    for name, token in ONCE:
+        check(name, token in once_slice,
+              "「%s」不在「只画一次」这一节里（切片 %d 字）" % (token, len(once_slice)))
 
     check("display_relative_markdown_image", bool(RELATIVE_IMAGE.search(body)))
     check("display_no_absolute_image_path", not ABSOLUTE_IMAGE.search(body))

@@ -62,8 +62,10 @@ before relying on an old row.
   for its thoughts, and her 心里话 are the summary of its own thinking, which the API returns.
 - **Sonnet 5.5 always thinks.** DSH's catalog gives it no "off" level, so every request uses adaptive thinking at the
   route's effort. The probe's `--effort` sends the same shape.
-- **On `actionHigh`, a refusal falls back to the low tier.** A refused 高 request is retried on `action`, and the task
-  records `fell: refused`. A refusal does not make 高 rest.
+- **On `actionHigh`, a refusal falls back to the low tier, from the job's next step.** DSH retries a failed request
+  on the route its step was prepared with, so a refused 高 request is retried on 高 once more, and if that is refused
+  too the step ends in an error; the job's later steps run on `action`. The task records `fell: refused`. A refusal
+  does not make 高 rest.
 - **Claude routes are paid** on the owner's key, per token.
 
 ## 5. Testing a model

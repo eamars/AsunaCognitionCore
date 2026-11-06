@@ -13,6 +13,38 @@ export function nativeRoute(route) {
   return value;
 }
 
+// DSH 0.2.2 fixes a step's provider, model and level when it prepares the step, before any hook runs: the session's
+// recorded model selection (the last one made, else its last request's, else the options it was opened with), and it
+// refuses a request that names others. A route the program wants is therefore selected before the step (`selectFor`);
+// such a selection is marked as the program's (ROUTE_EVENT, written ignorable by persistence.js), so that only a
+// selection made in DSH counts as deliberate.
+export const ROUTE_EVENT = 'asuna/route';
+
+/** The session's last native model selection that the program did not make itself: one made in DSH (the owner's
+ * choice), which stays authoritative for its session; undefined when there is none. */
+export function deliberate(session) {
+  const events = session.snapshotEvents();
+  const ours = new Set(events.filter(event => event.type === ROUTE_EVENT).map(event => event.data.selection_seq));
+  return events.findLast(event => event.type === 'model/selection' && !ours.has(event.seq))?.data;
+}
+
+/** Whether two routes name the same provider, model and level (no level being one). */
+export const sameSelection = (a, b) => Boolean(a && b) && a.provider === b.provider && a.model === b.model
+  && (a.reasoningEffort || undefined) === (b.reasoningEffort || undefined);
+
+/** `route` selected for the session's next step when its selection differs, marked as the program's. */
+export function selectFor(agent, route) {
+  if (!route?.provider || !route.model) return;
+  const selection = { provider: route.provider, model: route.model,
+    ...(route.reasoningEffort ? { reasoningEffort: route.reasoningEffort } : {}) };
+  if (sameSelection(agent.model.current(), selection)) return;
+  const selections = () => agent.session.snapshotEvents().filter(event => event.type === 'model/selection');
+  const before = selections().length;
+  agent.model.select(selection);
+  const made = selections();
+  if (made.length > before) agent.session.append(ROUTE_EVENT, { selection_seq: made.at(-1).seq });
+}
+
 // A secret in the settings is a reference into DSH's credential store ({"$secret": "ASUNA_MONGO_URI"}), named like an
 // environment variable; the value lives only in the store (ADR-010 D6). Matching is by substring, like the
 // worker's redaction, so a key such as bot_token or apiKey cannot carry a value either.

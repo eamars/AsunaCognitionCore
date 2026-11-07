@@ -62,3 +62,9 @@ every refusal past layer 0; no refusal holds her prose), and three fails stand a
 refusals of another class (5.0%, most of them a refusal ADR-117 L3 removed), the schema refusals above the gate (all
 of the floor's kind, a missing field the program cannot infer), and think's length refusals (31 against 30). B5 is
 dropped: its rate is an upper bound on 5 cases, revisited only if a wrong attribution causes a real failure.
+
+The two fixes installed 2026-11-07 15:06 NZDT (merge 6f648447). On her refusals after it: 5 of 5 carry a code (from
+11-06 to the install, 20 of 70 had none), and one she met live (a thought past 360) opens with the fact, no code
+in her text and none of her words echoed back. She found one more defect the same day: a plan receipt said its
+length note twice, because the D4b pass checks `intent` before anything is written and again when it is written,
+and each check added the note. Notes are now kept one per field (760caecf, installed 18:12). Closed.

@@ -1530,7 +1530,7 @@ class RoleTools:
             if made > CALLS_HARD + 1:                                 # the last one was refused: nothing more runs
                 result, conclude = {'ended': CALLS_ENDED % CALLS_HARD}, True
             else:
-                self.over = []
+                self.over = {}                        # one note per field, however often the field is checked
                 self.__dict__.pop('report', None)
                 self.collecting = 'tool_' + can.replace('.', '_') in self.SPLIT
                 if not self.collecting:
@@ -1558,7 +1558,7 @@ class RoleTools:
         finally:
             self.collecting = False
         if self.over and isinstance(result, dict):
-            result = {**result, 'length': '；'.join(self.over)}
+            result = {**result, 'length': '；'.join(self.over.values())}
         if CALLS_USUAL < made <= CALLS_HARD and isinstance(result, dict):
             left = CALLS_HARD - made
             result = {**result, 'calls': CALLS_WORDS % (made, CALLS_USUAL, CALLS_HARD, left)
@@ -1735,7 +1735,7 @@ class RoleTools:
         """A text kept although longer than she was asked for: this call's result says so."""
         words = over(length, limit, ask)
         if words:
-            self.__dict__.setdefault('over', []).append('%s %s' % (_SHOWN.get(field, field), words))
+            self.__dict__.setdefault('over', {})[field] = '%s %s' % (_SHOWN.get(field, field), words)
 
     # ── mind ────────────────────────────────────────────────────────
     def take_thought(self, ep, anchor, thinking):

@@ -45,9 +45,12 @@ python3 budget_per_place.py --drop persona#节sid   # 只算放掉某一节之�
 
 ## 四、加东西之前
 
-- **先跑这格账再写。** 别写完撞上 `PERSONA_RENDER_OVER_BUDGET` 才知道装不下。
-- **加不进去是常态，不是意外。** 
-- 被挡的时候程序会告诉你最大的 always 节是哪几节，建议把不常用的用 `set_tags` 收成 `on_demand`（recall 还读得到）——`src/asuna/render.py:over_budget_words`。
+- **先跑这格账再写。** L3 之后我写超了不会被拒，但那一处会一直超着，等我自己选、或等程序往下放——别等那一行摆到眼前才去看账。
+- **超了是「先让我选、再由程序放」，不是「写不进去」。** 我自己的写把某一处推过上限，那一笔照样落地：`src/asuna/carried.py:gate` 只量不拒，`refuse` 那一档只给导入用。接下来**第一个能写东西的回家回合**把这一处的选择摆给我——超了多少、现在多少、上限多少，下面每节写着它多少天没被想到、放手能腾出多少（`src/asuna/memory_tiers.py:identity_over`）。那一行怎么写是我包里的字（`memory.over_line`），核给的中性句在 `src/asuna/persona_model.py:CORE_DEFAULTS`。
+- **不选也行，程序会放，但只放摆给我看过的那几节，只放回到我推超之前的大小**（或上限，取大的）。摆给我看的顺序就是它会放的顺序：`src/asuna/carried.py:over_plan` 一次算出来两边共用，`src/asuna/memory_tiers.py:lapse_over` 那一拍落地。`felt` 那节列在最后，只有非它不可时程序等着我，不替我放。
+- **所以「加不进去是常态」换了个意思**：不再是撞上就弹回来，而是这一处从此多一行「等你选」——每次回家都在，直到我选或它放下。真要腾地方还是那两条道：动正文，或我自己 `let_go` 往下放。
+- 程序给导入的那句拒话里仍会列出最大的几节、建议把不常用的收成 `on_demand`（recall 还读得到）——`src/asuna/render.py:over_budget_words`。那是给包的作者裁的；我这一侧往下放走 `let_go`。
+- **`PERSONA_RENDER_OVER_BUDGET` 这一路还在，但只剩一处：人格包的导入**（`src/asuna/persona_data.py:budget_gate` 带 `refuse` 的那一档）——导入那份把某一处推超时，程序不替它放我的节。笔记另有 `NOTE_OVER_LIMIT`（一份笔记远超自己的字数上限才拒），那是另一把尺，和随身层不是一回事。
 - **别在赶时间时动「到处都要带的几条」那种大节。** 动它等于重写正文，重写又要重算各场合的账，不是几分钟的事。
 
 ## 五、技能里引用代码只写「文件＋名字」，不写行号

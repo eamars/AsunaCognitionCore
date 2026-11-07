@@ -26,14 +26,19 @@ v2（2026-10-25）：同一份库有**两种口径**，并排打，不替哪一�
     python3 budget_per_place.py                  # 两份口径 + 逐节差异 + 自我层 + 锚点形状 + 每节的账
     python3 budget_per_place.py --top 12         # 每节的账只列最大的 12 节
     python3 budget_per_place.py --drop persona#某节sid   # 只算「放掉这一节」之后最大那份变成多少（预算口径）
-退出码 0 = 账跑出来了（超没超预算写在输出里，不是退出码）；锚点形状不对只写在输出里。
+v3（2026-11-07）：带出门口径要真 `state.Store`——`memory_tiers.placed` 走 `Tiers(store, persona)`，
+它读 `store.collection(...)`，只带 db 的壳（`SimpleNamespace(db=db)`）在 L3 之后当场 AttributeError。
+这份脚本没有 `--config`：读哪一份库跟着 `ASUNA_MONGO_URI`＋`ASUNA_DATABASE` 走（两个都给才算），
+都没给才退回检出的 config／local.json（与 `asuna.dbread` 同一条规矩）；`Store` 也建在同一份 config 上，
+所以「拿一份数据库副本＋这两个环境变量」就能在副本上复现（2026-11-07 先在副本上复现崩、再验修好）。
+退出码 0 = 账跑出来了（超没超预算写在输出里，不是退出码）；锚点形状不对只写在输出里；
+store 建不起来（库连不上）＝两份口径都算不出，打一行原因退 1。
 """
 import argparse
 import copy
 import os
 import re
 import sys
-import types
 
 # 宿主普通 Windows 控制台默认码页是 cp1252：中文一 print 就 UnicodeEncodeError 整段崩
 # （2026-10-15 实测）。我的沙箱 env 带 PYTHONUTF8=1／PYTHONIOENCODING=utf-8，自检撞不到这一族。
@@ -69,22 +74,32 @@ def content_of(db, persona, slug):
     return (revision or {}).get("content"), head.get("revision")
 
 
-def store_for_limit():
-    """算上限要一个 store：宿主给的库优先，没有就读检出的 config/local.json（和 dbread 同一条退路）。
+def config_source():
+    """这一次跑读的那一份 config：宿主给的库优先（`ASUNA_MONGO_URI`＋`ASUNA_DATABASE` 两个都给才算），
+    没有就读检出的 config/local.json（和 dbread 同一条退路）。
 
-    返回 (store, 说明)。上限取 max(budget_tokens, 包里种子渲染 ×1.25)，
+    绝不在这下面硬编默认 config 路径：脚本指向一份数据库副本靠的就是那两个环境变量，
+    另一头再读默认路径，就会一份账跑在副本、一枚 store 跑在真库。
+    """
+    uri, name = os.environ.get("ASUNA_MONGO_URI"), os.environ.get("ASUNA_DATABASE")
+    if uri and name:
+        return {"mongo_uri": uri, "database": name, "allowed_databases": [name]}
+    from asuna.config import ROOT, load
+    return load(ROOT / "config" / "local.json")
+
+
+def open_store(config):
+    """在 config 那一份库上造真 `state.Store`（返回 (store, 说明)）。
+
+    `memory_tiers.placed` 走 `Tiers(store, persona)`，它要 `store.collection(...)`——
+    只带 db 的壳在 L3 之后不够（2026-11-05 我核过成因，11-07 在数据库副本上复现）。
+    上限那一格也用同一枚：`render.budget_limit`／`seed_estimate` 读的是 store.config。
     这份 config 读不到 persona_contribution 时，种子那一格算不出来——输出里照实写。
     """
     from asuna import state
-    uri, name = os.environ.get("ASUNA_MONGO_URI"), os.environ.get("ASUNA_DATABASE")
-    if uri and name:
-        config = {"mongo_uri": uri, "database": name, "allowed_databases": [name]}
-    else:
-        from asuna.config import ROOT, load
-        config = load(ROOT / "config" / "local.json")
     try:
         return state.Store(config), None
-    except Exception as exc:                           # noqa: BLE001 建不了 store 就没上限
+    except Exception as exc:                           # noqa: BLE001 建不了 store 就没上限、也没 placed
         return None, "%s: %s" % (type(exc).__name__, exc)
 
 
@@ -118,9 +133,13 @@ def main():
              len((raw["voice"] or {}).get("sections") or []), revs["persona"], revs["voice"]))
 
     # 带出门口径：同一个函数 render_system 走的那条（memory_tiers.placed）。
-    # placed 只读 store.db['memory_tiers']，给它一个只带 db 的壳就够，不建 store、不写。
-    shim = types.SimpleNamespace(db=db)
-    placed = {slug: (memory_tiers.placed(shim, persona, slug, content) if content else content)
+    # L3 之后 placed 要真 Store（不是只带 db 的壳），而且必须建在这一次跑的同一份 config 上：
+    # 另拿默认 config 路径去造，就会一份账跑在副本、一枚 store 跑在真库，「在副本上复现」当场废掉。
+    store, problem = open_store(config_source())
+    if store is None:
+        print("store 建不起来（%s）：placed 与上限都要它 ⇒ 带出门口径与上限都算不出，这一趟不出账。" % problem)
+        return 1
+    placed = {slug: (memory_tiers.placed(store, persona, slug, content) if content else content)
               for slug, content in raw.items()}
     print("memory_tiers.ENABLED = %s%s" % (memory_tiers.ENABLED, "" if memory_tiers.ENABLED else "（关着：两份口径应当相等）"))
 
@@ -148,16 +167,12 @@ def main():
 
     # 上限：policy 存储 > persona-model 默认 > 核默认（render.budget_tokens），再和种子渲染 ×1.25 取大
     limit, limit_note, seed_note = None, "", ""
-    store, problem = store_for_limit()
-    if store is None:
-        limit_note = "（上限没算出来：%s）" % problem
-    else:
-        try:
-            limit = render.budget_limit(store, persona)
-            if not render.seed_estimate(store, persona):
-                seed_note = "，种子那一格读不到（这份 config 没有 persona_contribution），界面那格可能比这里高"
-        except Exception as exc:                       # noqa: BLE001 拿不到上限也要给账
-            limit_note = "（上限没算出来：%s: %s）" % (type(exc).__name__, exc)
+    try:                                          # 上限用的是上面为 placed 造的那一枚 store（同一份 config）
+        limit = render.budget_limit(store, persona)
+        if not render.seed_estimate(store, persona):
+            seed_note = "，种子那一格读不到（这份 config 没有 persona_contribution），界面那格可能比这里高"
+    except Exception as exc:                           # noqa: BLE001 拿不到上限也要给账
+        limit_note = "（上限没算出来：%s: %s）" % (type(exc).__name__, exc)
 
     print("\n两份口径并排（token；persona＋voice 的整份渲染，两边都是同一个 compose）：")
     print("  %-6s %-18s %10s %10s %7s" % ("场合", "场合/可见级", "预算口径", "带出门", "差"))
@@ -237,7 +252,7 @@ def main():
         if not content:
             print("  %-5s 读不到" % slug)
             continue
-        own = memory_tiers.placed(shim, persona, slug, content)
+        own = memory_tiers.placed(store, persona, slug, content)
 
         def cells_of(doc):
             out = []

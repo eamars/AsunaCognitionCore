@@ -108,6 +108,19 @@ python3 skills/asuna-running-version/version_probe.py --receipt --package xiaoma
 
 一次打出：① `activation.json` 该项目 selection 与 active 并排的 candidate／previous（两边 candidate 一致且 state 是 ACTIVE 才算落到 ACTIVE）；② 最近一次 self-publish 回执（`receipt_id`、`published_at`、`changed_files`、`origin`、`content_check`、`boot_probe`、reason 前段），读的是 selection 那格自带的那份，不是别处翻出来的；③ 运行时那份文件的内容 sha256／字节数、needle 在不在、`--expect-sha` 对得上对不上。末尾一行三样各写“通过／不通过／没给”，**缺一样不算判过**；没给 `--file` 时第三样写“没给”，读数里明说这不算判过。退出码：0 = 三样都读到且都通过；1 = 该读的没读到；3 = 都读到了但 needle 不在、sha 对不上或 selection 与 active 不一致（读数，不是故障）。它不替我给“判生效”这个结论，只把三样读数一次拿齐。同目录脚本已带这一步。
 
+### 判「我改的那段码在跑没」：也不看包 digest，看 worker 读的那份文件
+
+代码和技能是同一族，上面那格给的一条判据对代码同样成立：**包 digest 与 `loaded.packages` 不动，不等于没换**——就地 swap 过的那种，跑的是选中那份 `packageRoot` 里的内容，不是安装目录（`node_modules` 里那份）的号。读法还是 `--receipt` 那几样，只把 `--file` 从 `SKILL.md` 换成 `.py`：
+
+```sh
+python3 skills/asuna-running-version/version_probe.py --receipt --package core --file python/asuna/memory_tiers.py --needle "def identity_over"
+```
+
+`--file` 写 packageRoot 下的相对路径：core 的 Python 在 `python/asuna/` 下，技能在 `skills/<技能名>/` 下，同一份 packageRoot。`--needle` 换成只有新版才带的字面——函数名、那句新写的字都行；要顺手对 sha 再加 `--expect-sha`。这条命令不是技能的专属用法，代码一样跑它。
+
+一处坑还是那一处：脚本里 `import asuna` 拿到的是本机检出 `src` 那一份，不是 worker 读的这份（见 §八）。「我这边脚本跑出来是对的」替代不了上面那几样读数。
+
+
 ## 六、回执说「本机检出有 origin/main 没有的提交」＝本机比远端新
 
 那是 `checkout.state = diverged`：本机有远端没有的提交，快进不了，这次装的是磁盘上原来的检出。**这不是「没装」**。

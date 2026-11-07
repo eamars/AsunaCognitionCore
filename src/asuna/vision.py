@@ -23,6 +23,7 @@ from urllib.parse import urlsplit
 
 from . import clock
 from . import animated, channel_kinds, media_children, visibility
+from .config import echoed
 from .evidence import canonical, sha
 from .scene_links import message_times, read_scope
 from .state import Denied
@@ -644,10 +645,10 @@ def read_image_for_task(store, blobs, task, config, args, *, route='executor', o
         if session_class == visibility.OWNER_PRIVATE:
             # At home the search covered all her conversations: say that, not this one's recent lines.
             raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在你所有对话最近 %d 天的图里：超过 %d 天的图 ref 找不回，'
-                             'ref 抄错一个字也是这样；%s' % (ref, REF_DAYS, REF_DAYS,
+                             'ref 抄错一个字也是这样；%s' % (echoed(ref), REF_DAYS, REF_DAYS,
                                                     '这个对话最近的图是 ' + '、'.join(recent) if recent else GIVE_UP))
         raise ValueError('IMAGE_ATTACHMENT_NOT_IN_SCENE: %s 不在这个对话最近 %d 天的图里；%s'
-                         % (ref, REF_DAYS, '最近的是 ' + '、'.join(recent) + '，ref 照抄其中一个' if recent
+                         % (echoed(ref), REF_DAYS, '最近的是 ' + '、'.join(recent) + '，ref 照抄其中一个' if recent
                             else '最近 %d 条消息里没有图，%s' % (SCENE_SCAN_MESSAGES, GIVE_UP)))
     if not entry.get('pullable'):
         raise ValueError('IMAGE_NOT_PULLABLE: 这张图拉不了（%s）；%s'

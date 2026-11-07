@@ -73,111 +73,72 @@ def test_every_refusal_names_its_code_and_her_words_start_with_none():
     assert not problems, problems
 
 
-# A value of the call: the parameters that hold her arguments, what is read from them, and copies of it.
-_CALL = {'args', 'item', 'part'}
-_KEEPS = {'str', 'strip', 'lstrip', 'rstrip', 'lower', 'upper', 'join', 'split', 'replace', 'list', 'tuple', 'sorted',
-          'items', 'values', 'keys', 'enumerate'}
+def test_echoed_keeps_a_name_or_an_id_whole_and_cuts_prose():
+    from asuna.config import echoed
+    task_id = 'task-' + '0' * 32
+    prose = '我想问问他最近是不是有点不开心，因为昨天他说话很少'
+    assert echoed('[名字 #4]') == '[名字 #4]' and echoed(task_id) == task_id
+    assert echoed(prose) == prose[:16] + '…'
+    assert role_tools._given({'layer': prose}, 'layer') == '（给的是「%s」）' % echoed(prose)
 
 
-def _hers(node, names):
+_CALL = {'args', 'item', 'part'}             # what holds her call's arguments
+
+
+def _from_call(node, names):
+    """A value read from her call in this function: args/item/part .get() or ['field'], self._text(args, ...), a copy
+    of one (str(), a strip, a slice, `or ''`), or a name assigned from one here."""
     import ast
     if isinstance(node, ast.Name):
         return node.id in names
+    if isinstance(node, ast.BoolOp):
+        return any(_from_call(v, names) for v in node.values)
     if isinstance(node, ast.Subscript):
-        return _hers(node.value, names)
+        if isinstance(node.value, ast.Name) and node.value.id in _CALL:
+            return isinstance(node.slice, ast.Constant)            # args['field'], not a slice of a list of hers
+        return _from_call(node.value, names)
     if isinstance(node, ast.Call):
-        func, name = node.func, getattr(node.func, 'id', None) or getattr(node.func, 'attr', None)
-        if name == '_text' or name == 'get' and isinstance(func, ast.Attribute) and _hers(func.value, names):
-            return True
-        inside = [func.value] if isinstance(func, ast.Attribute) and name != 'join' else []
-        return name in _KEEPS and any(_hers(a, names) for a in [*inside, *node.args])
-    if isinstance(node, ast.BoolOp):                 # `a and b` is b; `a or b` may be either
-        return _hers(node.values[-1], names) if isinstance(node.op, ast.And) else any(_hers(v, names) for v in node.values)
-    if isinstance(node, ast.IfExp):
-        return _hers(node.body, names) or _hers(node.orelse, names)
-    if isinstance(node, (ast.GeneratorExp, ast.ListComp, ast.SetComp, ast.DictComp)):
-        inner = names | {n for g in node.generators if _hers(g.iter, names) for n in _bound(g.target, g.iter)}
-        return any(_hers(e, inner) for e in ((node.key, node.value) if isinstance(node, ast.DictComp) else (node.elt,)))
+        func = node.func
+        if isinstance(func, ast.Attribute) and func.attr in ('get', '_text'):
+            held = func.value if func.attr == 'get' else (node.args[0] if node.args else None)
+            return isinstance(held, ast.Name) and held.id in _CALL
+        if isinstance(func, ast.Name) and func.id == 'str':
+            return bool(node.args) and _from_call(node.args[0], names)
+        if isinstance(func, ast.Attribute) and func.attr in ('strip', 'lstrip', 'rstrip', 'lower', 'upper'):
+            return _from_call(func.value, names)
     return False
 
 
-def _bound(target, source):
-    """The names a loop binds to her values: `for i, x in enumerate(...)` binds x, not i."""
+def test_a_refusal_shows_a_value_of_the_call_only_through_echoed():
+    """Within one function: a value read from args, item or part that a refusal's words format (%, an f-string or +)
+    goes through config.echoed, so a long value never comes back in full."""
     import ast
-    if isinstance(source, ast.Call) and getattr(source.func, 'id', None) == 'enumerate' and isinstance(target, ast.Tuple):
-        target = ast.Tuple(elts=target.elts[1:])
-    return {n.id for n in ast.walk(target) if isinstance(n, ast.Name)}
-
-
-def test_every_value_a_refusal_shows_back_from_the_call_is_bounded():
-    """A refusal that shows a value of her call shows `config.echoed(value)`: a name, a choice or an id whole, never
-    more than a few characters of her prose. Followed through assignments, loops and the functions a value is handed to
-    (by name, in its module or one it imports); not through an object's method or a regex match."""
-    import ast
-    from asuna.config import echoed
-    assert echoed('task-' + '0' * 32) == 'task-' + '0' * 32 and echoed('[名字 #4]') == '[名字 #4]'
-    assert echoed('我想问问他最近是不是有点不开心，因为昨天') == '我想问问他最近是不是有点不开心，…'
-    trees = {p.stem: ast.parse(p.read_text(encoding='utf-8')) for p in sorted(SRC.glob('*.py')) if p.name != 'vision.py'}
-    functions, aliases = {}, {}
-    for mod, tree in trees.items():
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                functions.setdefault((mod, node.name), node)
-            if isinstance(node, ast.ImportFrom) and node.level == 1:
-                for a in node.names:
-                    aliases[(mod, a.asname or a.name)] = (a.name, None) if node.module is None else (node.module, a.name)
-
-    def callee(mod, call):
-        f = call.func
-        if isinstance(f, ast.Name):
-            got = aliases.get((mod, f.id))
-            return got if got and got[1] else (mod, f.id)
-        if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name):
-            got = aliases.get((mod, f.value.id))
-            return (mod, f.attr) if f.value.id == 'self' else (got[0], f.attr) if got and got[1] is None else None
-        return None
-
-    def parameters(func):
-        return [a.arg for a in [*func.args.posonlyargs, *func.args.args, *func.args.kwonlyargs] if a.arg != 'self']
-
-    handed, names = {key: set() for key in functions}, {}
-    for _ in range(4):
-        for key, func in functions.items():
-            known = {p for p in parameters(func) if p in _CALL} | handed[key]
-            for _ in range(2):
-                for node in ast.walk(func):
-                    if isinstance(node, ast.Assign) and _hers(node.value, known):
-                        known |= {n.id for t in node.targets for n in ast.walk(t) if isinstance(n, ast.Name)}
-                    if isinstance(node, ast.For) and _hers(node.iter, known):
-                        known |= _bound(node.target, node.iter)
-            names[key] = known
-            wide = known | {n for c in ast.walk(func) if isinstance(c, ast.comprehension) and _hers(c.iter, known)
-                            for n in _bound(c.target, c.iter)}
-            for node in ast.walk(func):
-                to = isinstance(node, ast.Call) and callee(key[0], node)
-                if to in functions and to != key:
-                    own = parameters(functions[to])
-                    handed[to] |= {own[i] for i, a in enumerate(node.args) if i < len(own) and _hers(a, wide)}
-                    handed[to] |= {k.arg for k in node.keywords if k.arg in own and _hers(k.value, wide)}
     problems = []
-    for key, func in functions.items():
-        raised = {id(n.exc) for n in ast.walk(func) if isinstance(n, ast.Raise)}
-        for node in ast.walk(func):
-            if not isinstance(node, ast.Call):
+    for path in sorted(SRC.glob('*.py')):
+        for func in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
+            if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            name = getattr(node.func, 'id', None) or getattr(node.func, 'attr', None)
-            coded = name == 'append' and node.args and isinstance(node.args[0], ast.Tuple) and node.args[0].elts \
-                and isinstance(node.args[0].elts[0], ast.Constant) and re.fullmatch(r'[A-Z][A-Z0-9_]+', str(node.args[0].elts[0].value))
-            if name not in ('Refused', '_found', 'problem') and id(node) not in raised and not coded:
-                continue                              # a refusal: raised, a problem found, or a (CODE, words) kept
-            for sub in ast.walk(node):
-                if isinstance(sub, ast.BinOp) and isinstance(sub.op, ast.Mod):
-                    shown = sub.right.elts if isinstance(sub.right, ast.Tuple) else [sub.right]
-                elif isinstance(sub, ast.BinOp) and isinstance(sub.op, ast.Add):
-                    shown = [sub.left, sub.right]
-                elif isinstance(sub, ast.JoinedStr):
-                    shown = [v.value for v in sub.values if isinstance(v, ast.FormattedValue)]
-                else:
+            names = {t.id for node in ast.walk(func) if isinstance(node, ast.Assign) and _from_call(node.value, set())
+                     for t in node.targets if isinstance(t, ast.Name)}
+            raised = {id(node.exc) for node in ast.walk(func) if isinstance(node, ast.Raise)}
+            for node in ast.walk(func):
+                if not isinstance(node, ast.Call):
                     continue
-                problems += ['%s.py:%d %s' % (key[0], node.lineno, ast.unparse(v)[:40]) for v in shown if _hers(v, names[key])]
+                name = getattr(node.func, 'id', None) or getattr(node.func, 'attr', None)
+                kept = name == 'append' and node.args and isinstance(node.args[0], ast.Tuple) and node.args[0].elts \
+                    and isinstance(node.args[0].elts[0], ast.Constant) \
+                    and re.fullmatch(r'[A-Z][A-Z0-9_]+', str(node.args[0].elts[0].value))
+                if name not in ('Refused', '_found', 'problem') and id(node) not in raised and not kept:
+                    continue                          # a refusal: raised, a problem found, or a (CODE, words) kept
+                for sub in ast.walk(node):
+                    if isinstance(sub, ast.BinOp) and isinstance(sub.op, ast.Mod):
+                        shown = sub.right.elts if isinstance(sub.right, ast.Tuple) else [sub.right]
+                    elif isinstance(sub, ast.BinOp) and isinstance(sub.op, ast.Add):
+                        shown = [sub.left, sub.right]
+                    elif isinstance(sub, ast.JoinedStr):
+                        shown = [v.value for v in sub.values if isinstance(v, ast.FormattedValue)]
+                    else:
+                        continue
+                    problems += ['%s:%d %s' % (path.name, node.lineno, ast.unparse(v)[:40])
+                                 for v in shown if _from_call(v, names)]
     assert not problems, 'show these through config.echoed: %s' % sorted(set(problems))

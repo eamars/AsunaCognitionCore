@@ -60,7 +60,7 @@ class PolicyStore:
             except ValueError as exc:
                 code = str(exc).split(':', 1)[0]
                 raise ValueError('%s: %s 给的是 %s，要的是%s；改成合适的值再写' % (
-                    code, item['key'], echoed(json.dumps(item.get('value'), ensure_ascii=False)),
+                    code, echoed(item['key']), echoed(json.dumps(item.get('value'), ensure_ascii=False)),
                     value_words(spec))) from None
             out[item['key']] = {'value': item['value'], 'what': what, 'class': 'param'}
         return out

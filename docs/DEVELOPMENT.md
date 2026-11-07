@@ -282,7 +282,9 @@ Every error a tool call can return is read by a model that has to act on it, so 
   (`tests/test_refusal_words.py`); a `Refused` raised in `role_tools.py` is shown as written. Every `Refused(words,
   codes)` and every problem a handler finds (`_found(words, code)`) names its codes, which the record keeps and her
   words never start with (the same test); an exception turned into a refusal keeps the code it carries (`code_of`: its
-  `code`, or the `CODE:` its message starts with; one that carries none, the refusal names).
+  `code`, or the `CODE:` its message starts with; one that carries none, the refusal names). Its words name the field
+  and the problem and do not repeat what she wrote in a prose field; at most they point at a token in it (a sticker
+  token, a line number) or show the value she gave for a choice or a reference.
 - A call is checked in layers (`RoleTools.call`). The Host plugin's guard checks the schema the worker ships
   (`tool_schema.declared`, permissive), in her words with DSH's own line verbatim at the end (`tool-args.js`). In the
   worker: a permission refusal stops alone and names what does the job here (`INSTEAD`); everything else is collected

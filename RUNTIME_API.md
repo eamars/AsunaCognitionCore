@@ -922,8 +922,8 @@ No local root of this computer reaches the character brain; the action brain wor
   to 行动脑 lose every credential value, then each placeholder the place hands over becomes its real path with the
   host's separators (a public place: `WORKSPACE`, `DATA`; home: all but `LOCAL_PATH`); any other stays as written, and the
   tool's result names it (`paths_kept`).
-  Refused, in words: a raw root (with the whole text rewritten), an `${ASUNA_...}` name the table does not have where it stands as a path's root (followed by a separator; elsewhere it is text, as the deployment's own `${ASUNA_...}` variables are), a
-  `..` segment in a path at a root or placeholder, and in a public place a relative path that climbs.
+  Refused, in words that quote none of the text: a raw root (naming the placeholder to write it as), an `${ASUNA_...}` name the table does not have where it stands as a path's root (followed by a separator; elsewhere it is text, as the deployment's own `${ASUNA_...}` variables are), a
+  `..` segment in a path at a root or placeholder (naming that root), and in a public place a relative path that climbs.
 - **Her writing.** Every other string argument of her tools is stored contracted, except a credential's values and her
   private words.
 - **Her speech.** A raw root in a `speak` text or her end-of-turn text is replaced by its placeholder before it is

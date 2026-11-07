@@ -47,10 +47,10 @@ def test_a_filesystem_or_drive_root_refuses_the_table(case):
     assert str(refused.value).startswith('ROOT_TABLE_REFUSED:')
 
 
-def test_a_raw_root_refusal_offers_the_string_rewritten():
+def test_a_raw_root_refusal_names_the_placeholder_and_quotes_none_of_her_text():
     with pytest.raises(local_roots.PathRefused) as refused:
         TABLES['windows'].outbound('改 C:\\workplace\\asuna_core\\src\\a.py 里的函数', True)
-    assert str(refused.value).endswith('改成这样就能交：\n改 ${ASUNA_WORKSPACE}\\src\\a.py 里的函数')
+    assert str(refused.value) == 'PATH_RAW_ROOT: 写了本机的真实路径：改写成挂在 ${ASUNA_WORKSPACE} 上的样子'
 
 
 def test_an_unknown_name_refusal_lists_the_names_there_are():

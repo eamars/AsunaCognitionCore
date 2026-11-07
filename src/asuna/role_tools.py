@@ -2830,8 +2830,8 @@ class RoleTools:
         short = self._text(args, 'short', 20000)      # a guard only: a long short is kept and the result says so
         layer = args.get('layer')
         if layer not in ('person', 'here'):
-            raise Refused('layer 要写 person（人那层，哪儿都看得到）或 here（这里那层，只在这个对话里）；'
-                          '给的是 %r。拿不准就问自己：这条换个群还成立吗，成立是 person，不成立是 here' % (layer,),
+            raise Refused('layer 要写 person（人那层，哪儿都看得到）或 here（这里那层，只在这个对话里）%s。'
+                          '拿不准就问自己：这条换个群还成立吗，成立是 person，不成立是 here' % _given(args, 'layer'),
                           ['UNDERSTANDING_LAYER_REQUIRED'])
         scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         group = scene.get('kind') == 'group'
@@ -3308,8 +3308,7 @@ class RoleTools:
             from . import questions
             row = questions.get(self.store, str(qid), persona=ep['persona'])
             if not row or not any(s.get('kind') == 'group' and s.get('scene_id') == ep['scene_id'] for s in row['sources']):
-                raise Refused('question「%s」不是你在这里问的问题：照抄 questions_from_program 里的 q-…' % qid,
-                              ['NOTE_QUESTION_UNKNOWN'])
+                raise Refused('question 对不上你在这里问的问题：照抄 questions_from_program 里的 q-…', ['NOTE_QUESTION_UNKNOWN'])
             args = {**args, 'answers': row['_id']}
         return self._note(ep, call_id, {k: v for k, v in args.items() if k != 'question'}, visibility.PUBLIC)
 

@@ -363,24 +363,22 @@ class Table:
             out.append(('PATH_NAME_UNKNOWN', '%s 不是程序的名字；程序的名字只有这些：%s，照抄其中一个' % (
                 '、'.join('${%s%s}' % (PREFIX, n) for n in unknown),
                 '、'.join('${%s%s}' % (PREFIX, n) for n in self.names))))
-        anchored = [m.group(0) for m in TOKEN_TAIL.finditer(text) if _climbs(m.group(2))]
+        # Her text is never quoted back: a path is named by the root it hangs on.
+        anchored = [m.group(1) for m in TOKEN_TAIL.finditer(text) if _climbs(m.group(2))]
         contracted, _ = self.contract_text(text)
         # A raw root is a path; the account name alone is not one (the action brain may read it as she wrote it).
-        raw = sum(1 for m in self.pattern.finditer(text) if self._name(m) != USER)
-        anchored += [m.group(0) for m in TOKEN_TAIL.finditer(contracted) if _climbs(m.group(2))
+        raw = list(dict.fromkeys('${%s%s}' % (PREFIX, self._name(m)) for m in self.pattern.finditer(text)
+                                 if self._name(m) != USER))
+        anchored += [m.group(1) for m in TOKEN_TAIL.finditer(contracted) if _climbs(m.group(2))
                      and m.group(0) not in text]
         if anchored:
-            out.append(('PATH_CLIMBS', '路径里有 ..（「%s」）：挂在根上的路径不往上爬，直接写到要去的那一层'
-                        % '」「'.join(dict.fromkeys(anchored))))
+            out.append(('PATH_CLIMBS', '挂在 %s 上的路径里有 ..：挂在根上的路径不往上爬，直接写到要去的那一层'
+                        % '、'.join('${%s%s}' % (PREFIX, name) for name in dict.fromkeys(anchored))))
         if not home and _CLIMB_BARE.search(TOKEN_TAIL.sub('', contracted)):
             out.append(('PATH_CLIMBS_HERE', '这条线从严：相对路径里的 ..（往上一层）在这里不交出去；换成挂在 '
                         '${ASUNA_WORKSPACE} 上的写法，或者从家里派'))
         if raw:
-            if out:
-                out.append(('PATH_RAW_ROOT', '还写了本机的真实路径：路径写成挂在 ${ASUNA_…} 上的样子'))
-            else:
-                out.append(('PATH_RAW_ROOT', '写了本机的真实路径：路径写成挂在 ${ASUNA_…} 上的样子；'
-                            '改成这样就能交：\n' + contracted))
+            out.append(('PATH_RAW_ROOT', '%s写了本机的真实路径：改写成挂在 %s 上的样子' % ('还' if out else '', '、'.join(raw))))
         return out
 
     def expand(self, text, home):

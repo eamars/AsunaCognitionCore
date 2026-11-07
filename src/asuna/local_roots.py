@@ -35,6 +35,7 @@ import re
 import tempfile
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from urllib.parse import quote
+from .config import echoed
 
 VERSION = 1
 PREFIX = 'ASUNA_'
@@ -361,26 +362,26 @@ class Table:
                           if m.group(1) not in self.names and m.group(2)[:1] in ('\\', '/')})
         if unknown:
             out.append(('PATH_NAME_UNKNOWN', '%s 不是程序的名字；程序的名字只有这些：%s，照抄其中一个' % (
-                '、'.join('${%s%s}' % (PREFIX, n) for n in unknown),
+                '、'.join('${%s%s}' % (PREFIX, echoed(n)) for n in unknown),
                 '、'.join('${%s%s}' % (PREFIX, n) for n in self.names))))
-        anchored = [m.group(0) for m in TOKEN_TAIL.finditer(text) if _climbs(m.group(2))]
+        # Her text is never quoted back: a climbing path is named by the root it hangs on, a raw one by its rewritten path.
+        anchored = [m.group(1) for m in TOKEN_TAIL.finditer(text) if _climbs(m.group(2))]
         contracted, _ = self.contract_text(text)
         # A raw root is a path; the account name alone is not one (the action brain may read it as she wrote it).
-        raw = sum(1 for m in self.pattern.finditer(text) if self._name(m) != USER)
-        anchored += [m.group(0) for m in TOKEN_TAIL.finditer(contracted) if _climbs(m.group(2))
+        raw = any(self._name(m) != USER for m in self.pattern.finditer(text))
+        anchored += [m.group(1) for m in TOKEN_TAIL.finditer(contracted) if _climbs(m.group(2))
                      and m.group(0) not in text]
         if anchored:
-            out.append(('PATH_CLIMBS', '路径里有 ..（「%s」）：挂在根上的路径不往上爬，直接写到要去的那一层'
-                        % '」「'.join(dict.fromkeys(anchored))))
+            out.append(('PATH_CLIMBS', '挂在 %s 上的路径里有 ..：挂在根上的路径不往上爬，直接写到要去的那一层'
+                        % '、'.join('${%s%s}' % (PREFIX, echoed(name)) for name in dict.fromkeys(anchored))))
         if not home and _CLIMB_BARE.search(TOKEN_TAIL.sub('', contracted)):
             out.append(('PATH_CLIMBS_HERE', '这条线从严：相对路径里的 ..（往上一层）在这里不交出去；换成挂在 '
                         '${ASUNA_WORKSPACE} 上的写法，或者从家里派'))
         if raw:
-            if out:
-                out.append(('PATH_RAW_ROOT', '还写了本机的真实路径：路径写成挂在 ${ASUNA_…} 上的样子'))
-            else:
-                out.append(('PATH_RAW_ROOT', '写了本机的真实路径：路径写成挂在 ${ASUNA_…} 上的样子；'
-                            '改成这样就能交：\n' + contracted))
+            rewritten = list(dict.fromkeys(m.group(0) for m in TOKEN_TAIL.finditer(contracted)
+                                           if m.group(1) != USER and m.group(0) not in text))
+            out.append(('PATH_RAW_ROOT', '%s写了本机的真实路径：改写成 %s' % (
+                '还' if out else '', _paths(rewritten) if rewritten else '挂在 ${%s…} 上的样子' % PREFIX)))
         return out
 
     def expand(self, text, home):
@@ -411,6 +412,15 @@ class Table:
 
 def _climbs(tail):
     return any(part == '..' for part in re.split(r'[\\/]+|%5[Cc]|%2[Ff]', tail or ''))
+
+
+PATH_SHOWN, PATHS_SHOWN = 80, 5        # a rewritten path a refusal shows: bounded, and never the text around it
+
+
+def _paths(tokens):
+    """Her raw paths as they are written with their placeholders, for the refusal: a few, each bounded."""
+    shown = [token if len(token) <= PATH_SHOWN else token[:PATH_SHOWN] + '…' for token in tokens[:PATHS_SHOWN]]
+    return '、'.join(shown) + ('（还有 %d 处）' % (len(tokens) - PATHS_SHOWN) if len(tokens) > PATHS_SHOWN else '')
 
 
 def build(facts):

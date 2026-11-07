@@ -24,7 +24,7 @@ from . import clock
 from . import sandbox_backend, channel_kinds, errands, tool_watch
 from .application import Application
 from .host import RuntimeHost
-from .config import DATA, ROOT, database_lock, redact_text
+from .config import DATA, ROOT, database_lock, redact_text, echoed
 from .evidence import Evidence, sha
 from .lanes import LaneResult
 from .grants import workspace_grant
@@ -1609,14 +1609,14 @@ class NativeDevelopmentBridge:
             if collection not in COLLECTIONS:
                 # Not a permission: the name does not exist. Say which do, and where the common guesses live.
                 raise Denied('DEVELOPMENT_COLLECTION_DENIED: 没有集合 %r；有的是 %s。关系、文档和自我描述都是 '
-                             'state_heads/state_revisions 里的行；collection 照抄其中一个' % (collection, ', '.join(COLLECTIONS)))
+                             'state_heads/state_revisions 里的行；collection 照抄其中一个' % (echoed(collection), ', '.join(COLLECTIONS)))
             if not isinstance(query,dict) or projection is not None and not isinstance(projection,dict):
                 raise ValueError('DEVELOPMENT_QUERY_INVALID: filter 要是对象（给的是 %s），projection 要是对象或不写（给的是 %s）；'
                                  '例如 filter {"kind": "x"}，projection {"text": 1}'
                                  % (type(query).__name__, type(projection).__name__))
             if type(skip) is not int or skip<0 or type(limit) is not int or not 1<=limit<=50:
                 raise ValueError('DEVELOPMENT_PAGE_INVALID: skip 要是 0 或更大的整数，limit 要是 1..50 的整数；给的是 skip=%s，limit=%s'
-                                 % (str(skip)[:20], str(limit)[:20]))
+                                 % (echoed(skip), echoed(limit)))
             if sort is not None and (not isinstance(sort,dict) or any(v not in (1,-1) for v in sort.values())):
                 raise ValueError('DEVELOPMENT_SORT_INVALID: sort 要写成 {字段: 1 或 -1}，例如 {"created_at": -1}；给的是 %s'
                                  % json.dumps(sort, ensure_ascii=False, default=str)[:120])
@@ -1643,7 +1643,7 @@ class NativeDevelopmentBridge:
         except RuntimeError as exc:
             if tool == 'development_write' and 'EEXIST' in str(exc):
                 raise ValueError('DEVELOPMENT_FILE_EXISTS: %s 已经存在；要替换就加 overwrite: true，要保留就换个路径'
-                                 % str(args.get('path'))[:200]) from None
+                                 % echoed(args.get('path'))) from None
             raise
         if tool == 'development_publish' and result.get('receipt_id'):
             receipt_records.save_sink(self.store, {

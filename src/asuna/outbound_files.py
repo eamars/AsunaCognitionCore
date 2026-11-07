@@ -27,6 +27,7 @@ from pathlib import Path
 from .state import Denied, now
 from .records import artifacts as artifact_records
 from .records import messages as message_records
+from .config import echoed
 
 KIND = 'file'                      # the artifacts row's kind, and the claim's and the row's field
 CAPABILITY = 'file'                # what an adapter declares on its claim, with its platform's limit: file:<bytes>
@@ -243,7 +244,7 @@ def register(store, task, root, args):
         target = (root / str(args['path'])).resolve()
         if not target.is_relative_to(root):
             raise PermissionError('PATH_DENIED: path %r 在任务文件夹外；写 /task 里的相对路径，例如 notes.txt 或 '
-                                  'out/result.json（不带 /task/ 前缀，不用 ..）' % given)
+                                  'out/result.json（不带 /task/ 前缀，不用 ..）' % echoed(given))
         if target.is_dir():
             raise IsADirectoryError(given)
         size = target.stat().st_size
@@ -252,7 +253,7 @@ def register(store, task, root, args):
         if problem:
             raise ValueError('FILE_NAME_INVALID: %s；name 写人看到的文件名，例如 报告.pdf' % problem)
         if size == 0:
-            raise ValueError('FILE_EMPTY: %s 是空文件（0 字节），对方收到也打不开；先把内容写进去再登记' % given)
+            raise ValueError('FILE_EMPTY: %s 是空文件（0 字节），对方收到也打不开；先把内容写进去再登记' % echoed(given))
         relative = target.relative_to(root).as_posix()
         with target.open('rb') as handle:
             head = handle.read(HEAD_BYTES)

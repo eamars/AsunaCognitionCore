@@ -30,6 +30,7 @@ from datetime import timedelta
 from . import clock
 
 from .records import episodes as episode_records
+from .config import echoed
 
 OUTCOMES = ('nothing', 'interesting', 'self_development', 'self_evaluation', 'review_dice', 'reach_out', 'idle')
 NAMES = {'nothing': '歇着', 'interesting': '有趣', 'self_development': '自我开发', 'self_evaluation': '自我评估',
@@ -79,10 +80,10 @@ def parse(value):
     for part in parts:
         match = ITEM.fullmatch(part)
         if not match:
-            raise _problem('「%s」不是「名字 权重」。' % part[:20])
+            raise _problem('「%s」不是「名字 权重」。' % echoed(part))
         outcome = BY_NAME.get(match.group('name').strip())
         if not outcome:
-            raise _problem('没有「%s」这一面。' % match.group('name').strip()[:20])
+            raise _problem('没有「%s」这一面。' % echoed(match.group('name').strip()))
         if outcome in seen:
             raise _problem('「%s」写了两次。' % NAMES[outcome])
         seen.add(outcome)

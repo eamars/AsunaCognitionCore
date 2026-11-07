@@ -34,6 +34,7 @@ from .records import scenes as scene_records
 from .records import messages as message_records
 from .records.view import ANY, View, fenced, is_text
 from .store.words import And, Holds, Or, Range
+from .config import echoed
 
 TOKEN = re.compile(r'\[表情包:([^\[\]\n]{1,12})\]')
 FACE_TOKEN = re.compile(r'\[表情:([^\[\]\s:]{1,12})\]')
@@ -248,7 +249,7 @@ def _name(value, what='name'):
     text = ' '.join(str(value or '').split())
     if not 1 <= len(text) <= NAME_CHARS or re.search(r'[\[\]:]', text):
         raise Denied('STICKER_NAME_INVALID: %s 是 1–%d 个字，不含 [ ] :；%s' % (
-            what, NAME_CHARS, '给的「%s」%d 个字' % (text[:20], len(text)) if text else '没写 ' + what))
+            what, NAME_CHARS, '给的「%s」%d 个字' % (echoed(text), len(text)) if text else '没写 ' + what))
     return text
 
 
@@ -290,10 +291,10 @@ def keep(store, blobs, ep, persona, args, config):
         from .blobs import refuse_erased
         row = artifact_records.get(store, ref, kind='image', state='DONE')
         if not row or not produced(row):
-            raise Denied('STICKER_NOT_YOURS: 「%s」不是你自己画好的图' % ref)
+            raise Denied('STICKER_NOT_YOURS: 「%s」不是你自己画好的图' % echoed(ref))
         refuse_erased(store, row, ep['scene_id'])           # hers, erased with the conversation it was made in
         if row.get('storage') != artifact_records.STORED:
-            raise Denied('STICKER_NOT_YOURS: 「%s」不是你自己画好的图' % ref)
+            raise Denied('STICKER_NOT_YOURS: 「%s」不是你自己画好的图' % echoed(ref))
         doc.update(origin='own', kind='custom', artifact_id=ref, sha256=row['sha256'], size=row['size'],
                    media_type=row.get('media_type'), identity='sha:' + row['sha256'],
                    picture=_picture_of(store, ref))
@@ -303,14 +304,14 @@ def keep(store, blobs, ep, persona, args, config):
         if not entry:
             raise Denied('STICKER_REF_NOT_HERE: ' + _ref_problem(ref))
         if not entry.get('sticker'):
-            raise Denied('STICKER_IS_A_PHOTO: 「%s」' % ref)
+            raise Denied('STICKER_IS_A_PHOTO: 「%s」' % echoed(ref))
         doc['origin'] = 'collected'
         if entry['sticker'] == 'market':
             doc.update(kind='market', market={**entry['market'], 'summary': entry.get('summary') or '[商城表情]'},
                        identity='market:' + entry['market']['emoji_id'])
         else:
             if not entry.get('pullable'):
-                raise Denied('STICKER_NOT_REACHABLE: %s；重试也一样' % (entry.get('not_pullable_because') or '「%s」' % ref))
+                raise Denied('STICKER_NOT_REACHABLE: %s；重试也一样' % (entry.get('not_pullable_because') or '「%s」' % echoed(ref)))
             data, media_type, _, _ = pull_bytes({**entry, **media_source(store, scene, config, entry)}, config)
             stored = blobs.put_once(data, SCOPE, 'image', source_ids=[SOURCE + entry['source_message_id']])
             doc.update(kind='custom', artifact_id=stored['artifact_id'], sha256=stored['sha256'], size=stored['size'],
@@ -330,7 +331,7 @@ def keep(store, blobs, ep, persona, args, config):
 def drop(store, persona, name):
     row = find(store, persona, _name(name))
     if not row:
-        raise Denied('STICKER_NOT_ON_SHELF: 「%s」' % name)
+        raise Denied('STICKER_NOT_ON_SHELF: 「%s」' % echoed(name))
     drop_sticker(store, row['_id'], row['revision'])
     store.audit('stickers:' + persona, 'sticker.dropped', {'name': row['name'], 'identity': row['identity']})
     return {'dropped': row['name']}
@@ -339,12 +340,12 @@ def drop(store, persona, name):
 def rename(store, persona, name, new_name=None, when=None):
     row = find(store, persona, _name(name))
     if not row:
-        raise Denied('STICKER_NOT_ON_SHELF: 「%s」' % name)
+        raise Denied('STICKER_NOT_ON_SHELF: 「%s」' % echoed(name))
     changes = {}
     if new_name:
         new_name = _name(new_name, 'new_name')
         if new_name != row['name'] and find(store, persona, new_name):
-            raise Denied('STICKER_NAME_TAKEN: ' + new_name)
+            raise Denied('STICKER_NAME_TAKEN: ' + echoed(new_name))
         changes['name'] = new_name
     if when:
         changes['when'] = _when(when)
@@ -651,7 +652,7 @@ def keep_candidate(store, ep, persona, args):
     candidate = str(args.get('candidate') or '').strip()
     row = candidate_of(store, candidate)
     if not row:
-        raise Denied(CANDIDATE_GONE % candidate)
+        raise Denied(CANDIDATE_GONE % echoed(candidate))
     if candidate not in (ep.get('looked') or []) and not known(store, persona, _pool_key(store, row)):
         raise Denied('STICKER_CANDIDATE_NOT_LOOKED')       # one she knows from before counts as looked
     if shelf_size(store, persona) >= STICKER_SHELF:
@@ -865,7 +866,7 @@ def remember(store, ep, persona, args, config):
     if candidate:
         row = candidate_of(store, candidate)
         if not row:
-            raise Denied(CANDIDATE_GONE % candidate)
+            raise Denied(CANDIDATE_GONE % echoed(candidate))
         if candidate not in looked:
             raise Denied('STICKER_CANDIDATE_NOT_LOOKED')
         _know(store, persona, _pool_key(store, row), name, when, 'looked',
@@ -878,7 +879,7 @@ def remember(store, ep, persona, args, config):
     if not entry:
         raise Denied('STICKER_REF_NOT_HERE: ' + _ref_problem(ref))
     if not entry.get('sticker'):
-        raise Denied('STICKER_IS_A_PHOTO: 「%s」' % ref)
+        raise Denied('STICKER_IS_A_PHOTO: 「%s」' % echoed(ref))
     if ref not in looked:
         raise Denied('STICKER_NOT_LOOKED')
     key = memory_key(entry)

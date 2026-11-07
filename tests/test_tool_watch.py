@@ -71,7 +71,7 @@ def test_every_role_call_leaves_one_time_row_done_failed_or_raised(store):
 
     def handler(call_id, tool, args, **extra):
         if tool == 'refused':
-            raise Refused('NOT_NOW: 这会儿不行')
+            raise Refused('这会儿不行', ['NOT_NOW'])
         if tool == 'broken':
             raise RuntimeError('boom')
         if tool == 'last':

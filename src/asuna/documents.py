@@ -17,6 +17,7 @@ import json
 import re
 import unicodedata
 
+from .config import echoed
 from .evidence import canonical, sha
 from .records import heads as head_records
 from .records.view import ANY, View, fenced, is_text, pinned
@@ -487,7 +488,7 @@ class DocumentStore:
         clean. The reason's length is the caller's (it is her prose)."""
         op = intent.get('op')
         if op not in OPS or op == 'adopt_seed':
-            return [DocumentError('DOC_OP_UNKNOWN', ('没写 do' if op is None else 'do「%s」不认识' % op)
+            return [DocumentError('DOC_OP_UNKNOWN', ('没写 do' if op is None else 'do「%s」不认识' % echoed(op))
                                   + '；do 是 replace_section、append_section、correction、set_tags 或 adopt_seed')]
         found, kind = [], intent.get('kind')
         if kind is not None and kind not in NEW_KINDS:
@@ -542,7 +543,7 @@ class DocumentStore:
         check including the budget and write nothing (`problems` uses it); the document it would leave comes back."""
         op = intent.get('op')
         if op not in OPS or op == 'adopt_seed':
-            raise DocumentError('DOC_OP_UNKNOWN', ('没写 do' if op is None else 'do「%s」不认识' % op)
+            raise DocumentError('DOC_OP_UNKNOWN', ('没写 do' if op is None else 'do「%s」不认识' % echoed(op))
                                 + '；do 是 replace_section、append_section、correction、set_tags 或 adopt_seed')
         reason = intent.get('reason')
         if not isinstance(reason, str) or not 1 <= len(reason) <= 2000:

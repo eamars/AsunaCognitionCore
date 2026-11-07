@@ -30,6 +30,7 @@ from .state import Denied, now
 from .records import artifacts as artifact_records
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .config import echoed
 
 KIND = 'received_file'             # its own kind: put_once matches kind, so it is never matched to a file of hers
 SOURCE = 'received-file:'          # the source id prefix (media_life.POLICY)
@@ -497,7 +498,7 @@ def found(store, where, config, ref, session_class):
     if not row:
         row = artifact_records.kept(store, KIND, state='DONE', ref=ref, scopes=sorted(scopes)).first()
     if not entry and not row:
-        raise Denied(REF_NOT_FOUND % (REF_DAYS, ref))
+        raise Denied(REF_NOT_FOUND % (REF_DAYS, echoed(ref)))
     return entry, row, scopes
 
 
@@ -619,7 +620,7 @@ def run(store, where, config, args, *, persona, session_class, moment=None, task
     ref = str(args.get('ref') or '').strip()
     _, row, scopes = found(store, where, config, ref, session_class)
     if not row:
-        raise Denied(NOT_READ_YET % op)
+        raise Denied(NOT_READ_YET % echoed(op))
     if op == 'keep':
         return {'ref': ref, **keep(store, row['_id'], args.get('why'), scopes, where.get('scene_id'), moment)}
     return {'ref': ref, **let_go(store, row['_id'], scopes, where.get('scene_id'), moment)}

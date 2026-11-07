@@ -21,6 +21,7 @@ import json
 import re
 
 from . import param_names as _names
+from .config import echoed
 
 # (tool, field): what the program does when the field is missing. These fields are not required in the declared schema.
 REQUIRED_FILLED = {
@@ -143,7 +144,7 @@ def _check(field, value, path, found, top=None):
         return
     values = field.get('enum')
     if values and value not in values:
-        found.append(('ARGS_ENUM', '%s 只能是 %s 之一（给的是「%s」）' % (path, '、'.join(str(v) for v in values), str(value)[:HEAD_CHARS]), top))
+        found.append(('ARGS_ENUM', '%s 只能是 %s 之一（给的是「%s」）' % (path, '、'.join(str(v) for v in values), echoed(value)), top))
         return
     if kind == 'object' and isinstance(field.get('properties'), dict):
         _object(field, value, path, found, top)
@@ -165,9 +166,9 @@ def _object(schema, value, path, found, top=None, skip=()):
             continue                                      # an optional field written as null is not written
         _check(field, value[name], shown, found, here)
     if schema.get('additionalProperties') is False:
-        for name in value:
-            if name not in properties:
-                found.append(('ARGS_UNDECLARED', '%s 里没有 %s 这个字段' % (path or '参数', str(name)[:HEAD_CHARS]), top))
+        for written in value:
+            if written not in properties:
+                found.append(('ARGS_UNDECLARED', '%s 里没有 %s 这个字段' % (path or '参数', echoed(written)), top))
 
 
 def violations(tool, parameters, args):

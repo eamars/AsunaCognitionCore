@@ -947,6 +947,7 @@ from .records import messages as message_records
 from .records import receipts as receipt_records
 from .records import people as people_records
 from . import clock
+from .config import echoed
 
 
 try:                                  # 宿主内：复用已有的 Denied 语义（409 失败回执走原路径）
@@ -1010,7 +1011,7 @@ def _bounded_int(value, low, high, name, prefix="INVALID_HISTORY_"):
     if type(value) is not int or not low <= value <= high:
         raise ValueError("%s%s: %s 只能是 %d..%d 的整数，给的是 %s；改成范围内的整数，或不写用默认"
                          % (prefix, name, name.lower(), low, high,
-                            value if type(value) is int else _given(value)))
+                            echoed(value) if type(value) is int else _given(value)))
     return value
 
 

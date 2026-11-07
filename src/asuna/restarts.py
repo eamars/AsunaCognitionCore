@@ -17,6 +17,7 @@ from . import clock as core_clock   # `clock` is the injectable one below
 
 from .records import tasks as task_records
 from .records import plans as plan_records
+from .config import echoed
 
 QUIET_MINUTES = 30            # at most this long waiting for no turn, task or queued input
 TICK_SECONDS = 15
@@ -157,7 +158,7 @@ class Desk:
             hour, minute = (int(part) for part in str(when).split(':'))
             local = moment.astimezone(ZoneInfo(self.zone)).replace(hour=hour, minute=minute, second=0, microsecond=0)
         except (ValueError, TypeError):
-            raise ValueError('RESTART_WHEN_INVALID: when 是 now、quiet 或当地时刻 HH:MM（给的是 %r）' % (when,))
+            raise ValueError('RESTART_WHEN_INVALID: when 是 now、quiet 或当地时刻 HH:MM（给的是「%s」）' % echoed(when))
         if local <= moment:
             local += timedelta(days=1)
         return local.astimezone(timezone.utc)

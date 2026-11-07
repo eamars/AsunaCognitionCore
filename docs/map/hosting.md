@@ -125,6 +125,7 @@ Paths and checks every module shares: `ROOT` (the source tree), `DATA` (this pro
 - def `redacted`
 - def `ago` — How long ago, as she and the owner read it: 刚才, N 分钟前, N 小时前, N 天前.
 - def `soft` — The length she is asked for: four fifths of the limit the program refuses past, which stays where it was.
+- def `echoed` — A value from her call as a refusal shows it back: whole when short or one id, else its head and a mark.
 - def `refs_usable` — What a refusal that named a wrong reference adds (ADR-087 §4.5): the ones that can be used there, a few.
 - def `over` — Words for a text kept although longer than she was asked for (`ask`, by default soft(limit)), or None.
 - def `excess_line` — (s, t): the line of a text that holds its first character past `limit`, and how many lines it has, as split on line breaks once trailing blank lines are gone.

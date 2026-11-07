@@ -31,7 +31,7 @@ from .records import messages as message_records
 from . import visibility
 from .errands import MARK as ERRAND_MARK
 from .vision import inline_summary as picture_receipt
-from .config import cut, over, refs_usable, soft, too_long
+from .config import cut, over, refs_usable, soft, too_long, echoed
 from .context_budget import SINGLE_BODY_CHARS
 from .records import episodes as episode_records
 from .records import plans as plan_records
@@ -81,7 +81,7 @@ PLAN_ENDED = {'CANCELLED': '取消', 'SUSPENDED': '停', 'FIRED': '跑完', None
 # ADR-087 §4.4 (with her ask: the new id named, the old one plainly still fired).
 PLAN_MOVED_FIRED = ('「%s」这回合已经到点跑完了，它还是跑完的那条，没有改动；按你给的时间新建了一条：%s。'
                     '这件事以后改期或取消，用新的这条。')
-ASK_UNKNOWN = 'ASK_QUESTION_UNKNOWN: 没有「%s」这个问题：id 照抄 questions_from_program 或 ask 的结果。'
+ASK_UNKNOWN = '没有「%s」这个问题：id 照抄 questions_from_program 或 ask 的结果。'
 # ADR-088 §4.2: a plan from a turn a note from outside opened at home is made where the note came from.
 PLAN_THERE = '建在%s（便条来的那边）：到点在那边跑，带那边的权限'
 PLAN_OUTSIDE_LINE = '这一回合是外面的便条叫起来的：安排自动建在便条来的那边，不用写 place；去掉 place 再建。'
@@ -129,9 +129,9 @@ class Refused(Exception):
     """A call she can correct herself: the message says, in words for her, what to do instead. `codes`: the machine codes
     of every problem it names (ADR-108 D4b), kept in the record and never in her words."""
 
-    def __init__(self, message='', codes=()):
+    def __init__(self, message, codes):
         super().__init__(message)
-        self.codes = tuple(code for code in codes if code)
+        self.codes = (codes,) if isinstance(codes, str) else tuple(code for code in codes if code)
 
 
 LIMIT_WORDS = '（%d 字以内，过了 %d 字不收）'    # her prose: the aim and the line, both stated (ADR-108 D4a)
@@ -1309,16 +1309,31 @@ WORDS = {
 }
 
 
+_CODE = __import__('re').compile(r'[A-Z][A-Z0-9_]+')
+
+
+def _code_head(text):
+    """The code a message starts with (`CODE` or `CODE: detail`), or None: words before a colon are no code."""
+    head = text.split(':', 1)[0].strip()
+    return head if _CODE.fullmatch(head) else None
+
+
 def code_of(exc):
-    """The machine code of a refusal, kept in the record (ADR-060), never in her words."""
-    return getattr(exc, 'code', None) or str(exc).split(':', 1)[0].strip() or type(exc).__name__
+    """The machine code of a refusal, kept in the record (ADR-060), never in her words; an exception that names none is
+    recorded by its class."""
+    return getattr(exc, 'code', None) or _code_head(str(exc)) or type(exc).__name__
 
 
 def words(exc):
     """A refusal in words for her (ADR-060): what is wrong and what to do. The code stays in the record (the audit
-    keeps the exception); a detail in words is kept, a machine detail (a platform's raw reply, an id) is not."""
-    code = getattr(exc, 'code', None) or str(exc).split(':', 1)[0].strip() or type(exc).__name__
-    detail = getattr(exc, 'detail', '') or (str(exc).split(':', 1)[1].strip() if ':' in str(exc) else '')
+    keeps the exception); a detail in words is kept, a machine detail (a platform's raw reply, an id) is not. Only a
+    message that starts with its code is split there; any other colon is part of the words, and a message that starts
+    with no code is all detail."""
+    text = str(exc)
+    code = code_of(exc)
+    head = _code_head(text)
+    detail = getattr(exc, 'detail', '') or (text.split(':', 1)[1].strip() if head and ':' in text
+                                            else '' if head else text)
     said = WORDS.get(code, '')
     plain = detail if _HAN.search(detail or '') else ''
     return (said + plain) if (said or plain) else '这次没办成（%s）。' % code
@@ -1404,7 +1419,7 @@ def _given(args, field):
     """What she gave for an enum field, for a refusal: '（给的是「x」）' or '（没写 x）'."""
     value = (args or {}).get(field) if isinstance(args, dict) else None
     shown = {'op': 'do', 'decision': 'do', **_SHOWN}.get(field, field)
-    return '（没写 %s）' % shown if value is None else '（给的是「%s」）' % str(value)[:40]
+    return '（没写 %s）' % shown if value is None else '（给的是「%s」）' % echoed(value)
 
 
 # Why her understanding of someone was not saved (MemoryService.commit_understanding: NOT_COMMITTED), in words.
@@ -1478,24 +1493,24 @@ class RoleTools:
         done = (ep.get('tool_calls') or {}).get(call_id)
         if done:
             if done['tool'] != name or done['args_sha256'] != sha(canonical(args)):
-                raise Refused('CALL_ID_REUSED: 这个调用编号已经用在另一次调用上了（不是你的错）；重新调用一次就行。')
+                raise Refused('这个调用编号已经用在另一次调用上了（不是你的错）；重新调用一次就行。', ['CALL_ID_REUSED'])
             if done.get('refused'):
-                raise Refused(done['refused'])
+                raise Refused(done['refused'], [done.get('code') or 'CALL_REPLAYED'])
             return self._local(ep, done['result']), bool(done.get('conclude'))
         try:
             if name not in TOOLS:
-                raise Refused('没有 %s 这个工具。' % name)
+                raise Refused('没有 %s 这个工具。' % name, ['TOOL_UNKNOWN'])
             if not isinstance(args, dict):
-                raise Refused('参数要是一个对象（{字段: 值}），字段照这个工具的说明写。')
+                raise Refused('参数要是一个对象（{字段: 值}），字段照这个工具的说明写。', ['ARGS_TYPE'])
             if name in OPS and args.get('op') not in OPS[name]:
-                raise Refused('%s 的 do 是 %s 之一%s。' % (name, '、'.join(OPS[name]), _given(args, 'op')))
+                raise Refused('%s 的 do 是 %s 之一%s。' % (name, '、'.join(OPS[name]), _given(args, 'op')), ['ARGS_ENUM'])
             can = ability(name, args)
             if gone:
-                raise Refused(_names.gone(gone))
+                raise Refused(_names.gone(gone), ['NAME_RETIRED'])
             if can == 'stay_silent' and 'speak' in (ep.get('turn_tools') or ()) and can not in ep['turn_tools']:
                 replaced = True                   # where speak replaced it: silence as she meant (SILENT_WHERE_SPEAK)
             elif can not in (ep.get('turn_tools') or ()):
-                raise Refused(not_now(self.store, ep, can))
+                raise Refused(not_now(self.store, ep, can), ['NOT_NOW'])
             # Layer 3, the general checks: collected, none of them stops the others.
             from . import reasons
             # A read may come before her thought; anything else needs one (ADR-087 §4.2, reasons.READS).
@@ -1573,7 +1588,7 @@ class RoleTools:
         return self._local(ep, result), conclude
 
     # ── the problems a call has (ADR-108 D4b) ───────────────────────
-    def _found(self, text, code=None, short=None):
+    def _found(self, text, code, short=None):
         """A problem with this call. While a handler collects it is kept, the handler goes on and returns None; otherwise
         it refuses at once. `short`: the same problem with its candidate list cut, for a long refusal."""
         if self.collecting:
@@ -1666,7 +1681,7 @@ class RoleTools:
         origin = first and episode_records.get(self.store, first.get('from_episode'),
                                                fields=['scene_id', 'person_id', 'scope_key', 'policy_epoch'])
         if not origin:
-            raise Refused(OUTSIDE_GONE)
+            raise Refused(OUTSIDE_GONE, ['OUTSIDE_GONE'])
         return {**ep, **{k: origin[k] for k in ('scene_id', 'person_id', 'scope_key', 'policy_epoch')}}
 
     def _place(self, ep):
@@ -1792,7 +1807,7 @@ class RoleTools:
         query = self._text(args, 'query', 500, required=not (args.get('sections') or args.get('person')))
         count = int(ep.get('recall_count') or 0)
         if count >= RECALLS_PER_TURN:
-            raise Refused('这回合已经回想了 %d 次：用已经想起来的回答，记不清就直说。' % RECALLS_PER_TURN)
+            raise Refused('这回合已经回想了 %d 次：用已经想起来的回答，记不清就直说。' % RECALLS_PER_TURN, ['RECALLS_PER_TURN'])
         if args.get('person'):
             result = self._recall_person(ep, count, args['person'])
             if query or args.get('sections'):
@@ -1806,7 +1821,8 @@ class RoleTools:
                 not isinstance(item, dict) or not isinstance(item.get('doc'), str)
                 or not (isinstance(item.get('sid'), str) or item in listing) for item in sections):
             raise Refused('sections 是至多 3 条 {doc, section}（都是文字，section 照抄 recall 或文档里的）%s。'
-                          % ('；给了 %d 条' % len(sections) if isinstance(sections, list) and len(sections) > 3 else ''))
+                          % ('；给了 %d 条' % len(sections) if isinstance(sections, list) and len(sections) > 3 else ''),
+                          ['RECALL_SECTIONS_INVALID'])
         c = self.coordinator
         # ADR-117 B6: each part of a recall is timed into its tool.time row (`parts`); a timer never fails it.
         from .tool_watch import part
@@ -1936,7 +1952,7 @@ class RoleTools:
             return credentials.keep(args.get('name'), args.get('note'), args.get('env')), False
         if args.get('op') == 'drop':
             return credentials.drop(args.get('name')), False
-        raise Refused('do 是 keep 或 drop%s。' % _given(args, 'op'))
+        raise Refused('do 是 keep 或 drop%s。' % _given(args, 'op'), ['ARGS_ENUM'])
 
     def _recall_person(self, ep, count, value):
         """recall's person (ADR-082): both layers of one person as this conversation reads them, pinned for a write;
@@ -1949,7 +1965,7 @@ class RoleTools:
         c = self.coordinator
         if text == _understanding.LIST_WORD:
             if not home:
-                raise Refused(_understanding.LIST_HOME_ONLY)
+                raise Refused(_understanding.LIST_HOME_ONLY, ['PERSON_LIST_HOME_ONLY'])
             c._update(self._fresh(ep), recall_count=count + 1)
             rows = _understanding.listing(self.store, ep['persona'])
             left_out = sum(row.get('left_out', 0) for row in rows)       # the closing entry is no person
@@ -1960,7 +1976,7 @@ class RoleTools:
         try:
             person_id = _understanding.resolve(self.store, where, scene, text, ep['persona'], home=home, for_read=True)
         except _understanding.Unknown as exc:
-            raise Refused(str(exc))
+            raise Refused(str(exc), ['PERSON_UNKNOWN'])
         view, shown = _understanding.read(self.store, scene, person_id)
         ep = self._fresh(ep)
         c._update(ep, recall_count=count + 1,
@@ -1976,16 +1992,16 @@ class RoleTools:
             return self._block(ep, args.get('hours') if args.get('hours') is not None else 24, args.get('person')), False
         if op == 'on':
             if (scene_records.get(self.store, ep['scene_id'], fields=['kind']) or {}).get('kind') not in ('group', 'dm'):
-                raise Refused('这里不是群或私聊，盯不了人：到看得到他的群或私聊里再用 on。')
+                raise Refused('这里不是群或私聊，盯不了人：到看得到他的群或私聊里再用 on。', ['WATCH_NOT_A_CHAT'])
             return watches.add(self.store, ep, ep['persona'], self._place(ep), args), False
         if op == 'off':
             return watches.stop(self.store, ep['persona'], args.get('id')), False
-        raise Refused('do 是 on、off 或 block%s。' % _given(args, 'op'))
+        raise Refused('do 是 on、off 或 block%s。' % _given(args, 'op'), ['ARGS_ENUM'])
 
     def tool_await_answer(self, ep, call_id, args):
         wait = args.get('wait', 'yes')
         if wait not in ('yes', 'no'):
-            raise Refused('wait 是 yes 或 no%s。' % _given(args, 'wait'))
+            raise Refused('wait 是 yes 或 no%s。' % _given(args, 'wait'), ['ARGS_ENUM'])
         if wait == 'no':
             self.coordinator._update(self._fresh(ep), await_answer={'off': True})
             return {'note': '这回合不等回话。'}, False
@@ -2014,6 +2030,10 @@ class RoleTools:
         before = ep.get('reply') or {}
         lines, texts = spoken(self.store, ep)
         problems, planned, over, cancels = [], [], [], []
+
+        def problem(text, code='SPEAK_PART'):           # a part a check of its own refused keeps that check's code
+            problems.append((code, text))
+
         # A number that is someone's here reads as nothing to the people here (owner 2026-10-14: a warning she may
         # overrule with force, not a conversion).
         from .people import People
@@ -2023,12 +2043,12 @@ class RoleTools:
             kind = part.get('kind')
             if kind not in REPLY_KINDS:
                 if 'parts' not in self.flagged:             # else the strict schema has said it, once
-                    problems.append('第 %d 条的 kind 是 %s 之一' % (index, '、'.join(kinds)))
+                    problem('第 %d 条的 kind 是 %s 之一' % (index, '、'.join(kinds)))
             elif kind == 'react' and scene.get('kind') == 'dm' and scene.get('channel_id') in REACT_OFF_IN_DMS:
-                problems.append('第 %d 条 %s' % (index, REACT_DM_OFF))
+                problem('第 %d 条 %s' % (index, REACT_DM_OFF))
             elif kind not in kinds:
-                problems.append('第 %d 条 %s 这里发不了%s' % (index, kind, '：' + LEG_CANNOT % LEG_WORDS[kind]
-                                                               if kind in LEG_WORDS else ''))
+                problem('第 %d 条 %s 这里发不了%s' % (index, echoed(kind), '：' + LEG_CANNOT % LEG_WORDS[kind]
+                                                       if kind in LEG_WORDS else ''))
             elif kind == 'text':
                 text = part.get('text') if isinstance(part.get('text'), str) else ''
                 text, found = local_roots.contract_text(text)          # ADR-098 D5: no raw root leaves
@@ -2036,20 +2056,20 @@ class RoleTools:
                 same = ' '.join(text.split())
                 face = same and stickers.speech_problem(self.store, ep, text)
                 if not same:
-                    problems.append('第 %d 条是空的' % index)
+                    problem('第 %d 条是空的' % index)
                 elif stickers.TOKEN.search(text):
-                    problems.append('第 %d 条里的「%s」要写成一个 kind=sticker 的 part' % (index, stickers.TOKEN.search(text).group(0)))
+                    problem('第 %d 条里的「%s」要写成一个 kind=sticker 的 part' % (index, stickers.TOKEN.search(text).group(0)))
                 elif '[分条]' in text:
-                    problems.append('第 %d 条：一个 text 就是一条消息，要分开就写成几个 text' % index)
+                    problem('第 %d 条：一个 text 就是一条消息，要分开就写成几个 text' % index)
                 elif LINE_NUMBER.search(text):
-                    problems.append('第 %d 条里的「%s」：%s' % (index, LINE_NUMBER.search(text).group(0), NUMBER_NOT_WORDS))
+                    problem('第 %d 条里的「%s」：%s' % (index, LINE_NUMBER.search(text).group(0), NUMBER_NOT_WORDS))
                 elif face:
-                    problems.append('第 %d 条：%s' % (index, face))
+                    problem('第 %d 条：%s' % (index, face))
                 elif same in texts:
-                    problems.append('第 %d 条这回合已经发过一样的' % index)
+                    problem('第 %d 条这回合已经发过一样的' % index)
                 elif people and people.numbers(scene, text):
                     numbered = True
-                    problems.append('第 %d 条里%s，这里的人看不懂：写名字，或 @ 整个标签' % (index, '，'.join(
+                    problem('第 %d 条里%s，这里的人看不懂：写名字，或 @ 整个标签' % (index, '，'.join(
                         '「%s」是 %s 的编号' % found for found in people.numbers(scene, text))))
                 elif lines + chat_lines(text) > SPEAK_HARD_LINES:    # this turn's lines that left, and this call's
                     over.append('第 %d 条有 %d 行' % (index, chat_lines(text)) + ('（前面已经 %d 行）' % lines if lines else ''))
@@ -2062,11 +2082,11 @@ class RoleTools:
                 try:
                     stickers.refuse_erased(self.store, ep['persona'], name, ep['scene_id'])
                 except Denied as exc:
-                    problems.append('第 %d 条 sticker「%s」%s' % (index, name, words(exc)))
+                    problem('第 %d 条 sticker「%s」%s' % (index, echoed(name), words(exc)), code_of(exc))
                     continue
                 fields = stickers.outbound(self.store, ep['persona'], '[表情包:%s]' % name) if name else None
                 if not fields:
-                    problems.append('第 %d 条 sticker「%s」你没收着' % (index, name) if name else '第 %d 条 sticker 要写 name' % index)
+                    problem('第 %d 条 sticker「%s」你没收着' % (index, echoed(name)) if name else '第 %d 条 sticker 要写 name' % index)
                 else:
                     planned.append({'kind': 'sticker', 'text': '[表情包:%s]' % name, 'fields': fields, 'name': name,
                                     'shown': 'sticker「%s」' % name})
@@ -2074,21 +2094,21 @@ class RoleTools:
                 try:
                     planned.append(self._action_part(ep, scene, kind, part))
                 except Refused as exc:
-                    problems.append('第 %d 条 %s' % (index, str(exc)))
+                    problem('第 %d 条 %s' % (index, str(exc)), exc.codes[0])
             elif kind == 'recall':
                 try:
                     taken = self._recall_part(ep, scene, part)
                 except Refused as exc:
-                    problems.append('第 %d 条 recall：%s' % (index, str(exc)))
+                    problem('第 %d 条 recall：%s' % (index, str(exc)), exc.codes[0])
                 else:
                     (cancels if taken.get('cancel') else planned).append(taken)
             elif kind == 'picture':
                 try:
                     meta = self._picture(ep, scene, str(part.get('artifact_id') or ''))
                 except Refused as exc:
-                    problems.append('第 %d 条 picture %s' % (index, str(exc)))
+                    problem('第 %d 条 picture %s' % (index, str(exc)), exc.codes[0])
                 except Denied as exc:
-                    problems.append('第 %d 条 picture %s' % (index, words(exc)))
+                    problem('第 %d 条 picture %s' % (index, words(exc)), code_of(exc))
                 else:
                     planned.append({'kind': 'picture', 'text': '', 'fields': {'attachment': dict(meta)},
                                     'shown': 'picture'})
@@ -2096,35 +2116,35 @@ class RoleTools:
                 from . import outbound_files
                 meta, why = outbound_files.check(self.store, ep, scene, str(part.get('artifact_id') or ''))
                 if why:
-                    problems.append('第 %d 条 file %s' % (index, why))
+                    problem('第 %d 条 file %s' % (index, why))
                 else:
                     planned.append(outbound_files.part(meta))
         wait, quoted = args.get('wait'), None
         from . import capabilities
         if args.get('quote') not in (None, '') and not capabilities.carries(self.store, scene, 'quote'):
-            problems.append('quote：' + LEG_CANNOT % LEG_WORDS['quote'])
+            problem('quote：' + LEG_CANNOT % LEG_WORDS['quote'])
         elif args.get('quote') not in (None, ''):
             # ADR-079 §9.4: the line she chose, by its number or 这条; the program never chooses one for her.
             quoted, why = People(self.store, ep['persona']).line_of(scene, ep['_id'], args['quote'])
             if why:
-                problems.append('quote：' + why)
+                problem('quote：' + why)
             elif not any(row['kind'] in ('text', 'picture') for row in planned):
-                problems.append('quote 要跟一条 text 或 picture 一起发（表情包、戳、点表情带不了引用）')
+                problem('quote 要跟一条 text 或 picture 一起发（表情包、戳、点表情带不了引用）')
         if wait not in (None, 'no', 'question'):
-            problems.append('wait 是 no 或 question')
+            problem('wait 是 no 或 question')
         if wait and not group:
-            problems.append('wait 只在群里用')
+            problem('wait 只在群里用')
         patience = args.get('patience')
         from . import questions
         if patience is not None and (wait != 'question' or patience not in questions.GROUP_PATIENCE):
-            problems.append('patience 只跟 wait=question 一起用，写 %s 之一' % '、'.join(questions.GROUP_PATIENCE))
+            problem('patience 只跟 wait=question 一起用，写 %s 之一' % '、'.join(questions.GROUP_PATIENCE))
         if wait == 'question' and not any(row['kind'] == 'text' for row in planned):
-            problems.append('wait=question 要有一个 text 写问题')
+            problem('wait=question 要有一个 text 写问题')
         if over:
-            problems.append('text 一回合到硬线 %d 行为止（你平时 %d 行以内；每一行都算，空行不算，一个代码块算一行）：%s'
-                            % (SPEAK_HARD_LINES, most, '；'.join(over)))
+            problem('text 一回合到硬线 %d 行为止（你平时 %d 行以内；每一行都算，空行不算，一个代码块算一行）：%s'
+                    % (SPEAK_HARD_LINES, most, '；'.join(over)))
         if problems or self.problems:
-            self.problems.extend(('SPEAK_PART', text) for text in problems)
+            self.problems.extend(problems)
             raise self.combined(sent='这次一条都没发',
                                 tail='真是别的数（PR 号之类），原样加 force=yes 再调用一次。' if numbered else '')
         if quoted:
@@ -2170,23 +2190,24 @@ class RoleTools:
         from .people import People
         why = str(part.get('why') or '').strip()
         if not why:
-            raise Refused('要写 why（为什么撤，%d 字以内）' % soft(RECALL_WHY_CHARS))
+            raise Refused('要写 why（为什么撤，%d 字以内）' % soft(RECALL_WHY_CHARS), ['ARGS_MISSING'])
         if len(why) > RECALL_WHY_CHARS:
             raise Refused(too_long('why', why, RECALL_WHY_CHARS, soft(RECALL_WHY_CHARS)), ['TEXT_TOO_LONG'])
         self._longer('why', len(why), RECALL_WHY_CHARS)
         text = str(part.get('line') or '').strip().strip('〔〕[]「」 ')
         if not text.isdigit():
-            raise Refused('line 写你那句的编号（只写数字）')
+            raise Refused('line 写你那句的编号（只写数字）', ['LINE_NOT_A_NUMBER'])
         row = message_records.at(self.store, scene['_id'], int(text), direction='outbound',
                                  author=character_id(self.store.config))
         if not row:
             line, why_not = People(self.store, ep['persona']).line_of(scene, ep['_id'], text)
-            raise Refused(RECALL_NOT_YOURS if line else why_not)
+            raise Refused(RECALL_NOT_YOURS if line else why_not, ['RECALL_NOT_YOURS' if line else 'LINE_UNKNOWN'])
         state = row.get('delivery_state')
         if state in ('READY', 'QUEUED_EXTERNAL'):
             return {'cancel': True, 'row': row['_id'], 'seq': row['scene_seq'], 'why': why}
         if state != 'DELIVERED':
-            raise Refused(RECALL_SENDING if state == 'SENDING' else '那句没发出去，不用撤')
+            raise Refused(RECALL_SENDING if state == 'SENDING' else '那句没发出去，不用撤',
+                          ['RECALL_SENDING' if state == 'SENDING' else 'RECALL_NOT_SENT'])
         limit = getattr(channel_kinds.of(scene['_id']), 'OWN_RECALL_SECONDS', None)
         if limit and not (scene.get('kind') == 'group' and People(self.store, ep['persona']).self_role(scene) in ('owner', 'admin')):
             sent = row.get('receipt_at')
@@ -2196,9 +2217,9 @@ class RoleTools:
             except ValueError:
                 age = None
             if age is None or age > limit:
-                raise Refused(RECALL_TOO_LATE % (limit // 60))
+                raise Refused(RECALL_TOO_LATE % (limit // 60), ['RECALL_TOO_LATE'])
         if not row.get('platform_message_id'):
-            raise Refused('那句平台没给编号，撤不了（不是你的错）')
+            raise Refused('那句平台没给编号，撤不了（不是你的错）', ['PLATFORM_ID_MISSING'])
         pointed = People(self.store, ep['persona']).pointed(scene, row)
         return {'kind': 'recall', 'text': '撤回 %s（为什么：%s）%s' % (pointed, why, ACTION_MARK),
                 'shown': 'recall 〔%d〕' % row['scene_seq'], 'recall_seq': True, 'seq': row['scene_seq'],
@@ -2226,19 +2247,20 @@ class RoleTools:
         people = People(self.store, ep['persona'])
         if kind == 'react':
             if scene.get('kind') == 'dm' and scene.get('channel_id') in REACT_OFF_IN_DMS:
-                raise Refused(REACT_DM_OFF)
+                raise Refused(REACT_DM_OFF, ['REACT_DM_OFF'])
             face = str(part.get('face') or '').strip()
             faces = channel_kinds.faces_of(scene['_id'])
             if face not in faces:
-                raise Refused('「%s」不是这里的小黄脸名' % face if face else '要写 face（小黄脸名）')
+                raise Refused('「%s」不是这里的小黄脸名' % echoed(face) if face else '要写 face（小黄脸名）',
+                              ['REACT_FACE_UNKNOWN' if face else 'ARGS_MISSING'])
             line, why = people.line_of(scene, ep['_id'], part.get('line') or '这条')
             if why:
-                raise Refused('line：' + why)
+                raise Refused('line：' + why, ['LINE_UNKNOWN'])
             if line.get('direction') == 'outbound':
-                raise Refused('那是你自己的话，不用给自己点')
+                raise Refused('那是你自己的话，不用给自己点', ['REACT_OWN_LINE'])
             message_id = ((line.get('event') or {}).get('channel') or {}).get('platform_event_id')
             if not message_id:
-                raise Refused('那一条平台没给编号，点不了（不是你的错）')
+                raise Refused('那一条平台没给编号，点不了（不是你的错）', ['PLATFORM_ID_MISSING'])
             # Her reaction reads like anyone's (ADR-079 §9.3): the line by its number, speaker and first words.
             pointed = people.pointed(scene, line)
             return {'kind': 'react', 'text': '给 %s 点了「%s」%s' % (pointed, face, ACTION_MARK),
@@ -2249,16 +2271,18 @@ class RoleTools:
             who = ep['person_id']                 # a private chat has one other person: who may be left out
         found = people.resolve(scene, who) if who else []
         if not found:
-            raise Refused('找不到「%s」：who 照抄标签' % who if who else '要写 who（照抄标签）')
+            raise Refused('找不到「%s」：who 照抄标签' % echoed(who) if who else '要写 who（照抄标签）',
+                          ['PERSON_UNKNOWN' if who else 'ARGS_MISSING'])
         if len(found) > 1:
-            raise Refused('「%s」对得上 %s：用标签里的 #编号' % (who, '、'.join(people.label(doc) for doc in found[:5])))
+            raise Refused('「%s」对得上 %s：用标签里的 #编号' % (echoed(who), '、'.join(people.label(doc) for doc in found[:5])),
+                          ['PERSON_AMBIGUOUS'])
         doc = found[0]
         if doc.get('person') == people.self_id:
-            raise Refused('不能对你自己')
+            raise Refused('不能对你自己', ['ACTION_ON_SELF'])
         label = people.label(doc)
         account = people.account_of(scene, doc)
         if not account:
-            raise Refused('程序还不知道 %s 在平台上的账号（不是你的错）' % label)
+            raise Refused('程序还不知道 %s 在平台上的账号（不是你的错）' % label, ['ACCOUNT_UNKNOWN'])
         return {'kind': 'poke', 'text': '戳了戳 %s%s' % (label, ACTION_MARK), 'shown': 'poke %s' % label,
                 'fields': {'action': {'kind': 'poke', 'account': account}}}
 
@@ -2269,7 +2293,7 @@ class RoleTools:
         cls = self._place(ep)                  # what may go out is the conversation's (ADR-066: her pictures go anywhere)
         allowed, reason = outbound_media.target_allowed(self.store.config, scene, cls)
         if not allowed:
-            raise Refused('发不了：%s' % ATTACH_REASONS.get(reason, reason))
+            raise Refused('发不了：%s' % ATTACH_REASONS.get(reason, reason), ['ATTACH_TARGET_NOT_ALLOWED'])
         mine_only = outbound_media.own_only(self.store.config, scene, cls)
         scopes = [] if mine_only else outbound_media.image_scopes(self.store, self.store.config, scene, cls,
                                                                   ep.get('person_id'))
@@ -2278,7 +2302,7 @@ class RoleTools:
         if artifact not in {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)}:
             outbound_media.refuse_erased_named(self.store, artifact, scopes, produced_only=mine_only, here=here,
                                                scene_id=scene_id)
-            raise Refused('不在 image_artifacts_from_program 里')
+            raise Refused('不在 image_artifacts_from_program 里', ['ATTACH_ARTIFACT_NOT_IN_CONTEXT'])
         return outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact, scopes,
                                               produced_only=mine_only, here=here, scene_id=scene_id)
 
@@ -2346,12 +2370,12 @@ class RoleTools:
             scene_id = whose_of.named_outside(self.store, ep, value)
             if scene_id:
                 return whose_of.record('outside', scene_id, chosen=True)
-            return self._found(whose_of.FOR_UNKNOWN_PLACE % value, 'FOR_UNKNOWN_PLACE')
+            return self._found(whose_of.FOR_UNKNOWN_PLACE % echoed(value), 'FOR_UNKNOWN_PLACE')
         if not ep.get('errand') and cls == visibility.PUBLIC and (ep.get('context') or {}).get('people_from_program'):
             person_id = whose_of.named_person(self.store, ep, value)
             if person_id:
                 return whose_of.record('words', ep['scene_id'], person_id, chosen=True)
-            return self._found(whose_of.FOR_UNKNOWN_PERSON % value, 'FOR_UNKNOWN_PERSON')
+            return self._found(whose_of.FOR_UNKNOWN_PERSON % echoed(value), 'FOR_UNKNOWN_PERSON')
         return self._found(whose_of.FOR_UNKNOWN_HERE, 'FOR_UNKNOWN_HERE')
 
     def _listed_tasks(self, ep):
@@ -2375,21 +2399,21 @@ class RoleTools:
                 from .people import People
                 scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
                 who = People(self.store, ep.get('persona')).speaker(scene, theirs['requester_id'])
-                return self._found(OTHERS_TASK % (task_id, who), 'TASK_NOT_YOURS')
+                return self._found(OTHERS_TASK % (echoed(task_id), who), 'TASK_NOT_YOURS')
             close = [row['_id'] for row in task_records.by_prefix(
                 self.store, task_id[:12], scene=ep['scene_id'], requester=ep['person_id'],
                 epoch=ep['policy_epoch']).rows(limit=3, fields=['_id'])]
             return self._found('「%s」不是这个对话里的任务。照 task_state_from_program 原样抄 _id。%s'
-                               % (task_id, refs_usable([*close, *self._listed_tasks(ep)])), 'TASK_UNKNOWN',
+                               % (echoed(task_id), refs_usable([*close, *self._listed_tasks(ep)])), 'TASK_UNKNOWN',
                                '「%s」不是这个对话里的任务。照 task_state_from_program 原样抄 _id。%s'
-                               % (task_id, refs_usable([*close, *self._listed_tasks(ep)], self.SHORT_LIST)))
+                               % (echoed(task_id), refs_usable([*close, *self._listed_tasks(ep)], self.SHORT_LIST)))
         return task
 
     def _asked_about(self, ep, task):
         """In a task_time turn (ADR-112 §12.2) her task tool acts only on the task the program asks about."""
         if task is not None and turn_kind(ep) == TASK_TIME and task['_id'] != ep.get('task_id'):
             from .coordinator import TIME_UP_OTHER
-            raise Refused(TIME_UP_OTHER % ep.get('task_id'))
+            raise Refused(TIME_UP_OTHER % ep.get('task_id'), ['TIME_UP_OTHER'])
         return task
 
     def tool_task_message(self, ep, call_id, args):
@@ -2414,7 +2438,7 @@ class RoleTools:
     def tool_task_settle(self, ep, call_id, args):
         task = self._own_task(ep, args.get('task'))
         if args.get('as') not in SETTLED_AS:
-            raise Refused('as 选一样：%s。' % '、'.join(SETTLED_AS))
+            raise Refused('as 选一样：%s。' % '、'.join(SETTLED_AS), ['ARGS_ENUM'])
         self.checkpoint()
         words = self.coordinator.tasks.settle(task['_id'], SETTLED_AS[args['as']], ep['_id'])
         return {'task': task['_id'], 'note': words}, False
@@ -2471,7 +2495,7 @@ class RoleTools:
         if artifact not in {row.get('artifact_id') for row in offered.get('items') or [] if isinstance(row, dict)}:
             outbound_media.refuse_erased_named(self.store, artifact, scopes, produced_only=mine_only, here=here,
                                                scene_id=scene_id)
-            raise Denied('ATTACH_ARTIFACT_NOT_IN_CONTEXT: ' + artifact)
+            raise Denied('ATTACH_ARTIFACT_NOT_IN_CONTEXT: ' + echoed(artifact))
         meta = outbound_media.accept_artifact(self.store, BlobStore(self.store), artifact, scopes,
                                               produced_only=mine_only, here=here, scene_id=scene_id)
         self.coordinator._update(self._fresh(ep), attachment=dict(meta))
@@ -2509,7 +2533,7 @@ class RoleTools:
             self.coordinator._update(fresh, pool_listed=[*dict.fromkeys([*(fresh.get('pool_listed') or []),
                                                                          *(item['ref'] for item in listed['items'] if item.get('ref'))])])
             return listed, False
-        raise Refused('do 是 keep、drop、rename、remember、pool 或 shelf%s。' % _given(args, 'op'))
+        raise Refused('do 是 keep、drop、rename、remember、pool 或 shelf%s。' % _given(args, 'op'), ['ARGS_ENUM'])
 
     # ── her own records ─────────────────────────────────────────────
     def tool_write_document(self, ep, call_id, args):
@@ -2526,15 +2550,15 @@ class RoleTools:
             scene = scene_records.get(self.store, ep['scene_id'], fields=['kind'])
             if (scene or {}).get('kind') != 'group' or item.get('op') not in group_note_ops():
                 raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: ' + ('这里不是群' if (scene or {}).get('kind') != 'group'
-                                                                  else 'do「%s」不行' % item.get('op')))
+                                                                  else 'do「%s」不行' % echoed(item.get('op'))))
             item = {**item, 'doc': notes_slug(ep['scene_id'])}
         elif cls != visibility.OWNER_PRIVATE:
-            raise Denied('DOC_WRITE_REQUIRES_OWNER_PRIVATE: doc「%s」；在群里能写的只有 doc=group_notes，别的回家里再改' % item['doc'])
+            raise Denied('DOC_WRITE_REQUIRES_OWNER_PRIVATE: doc「%s」；在群里能写的只有 doc=group_notes，别的回家里再改' % echoed(item['doc']))
         if item['doc'].startswith('group:'):
             # A group's notes are read in that group: always public. She may tuck a section away (on_demand), and
             # tidy them by name from her nightly settlement (context_budget.review_block).
             if item.get('op') not in group_note_ops():
-                raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: do「%s」不行' % item.get('op'))
+                raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: do「%s」不行' % echoed(item.get('op')))
             item = {k: v for k, v in item.items() if k != 'kind'}    # a group's notes are notes, whatever kind says
             item = {**item, 'visibility': 'public'}
             if item['op'] == 'append_section' or 'inject' in item:
@@ -2608,7 +2632,7 @@ class RoleTools:
             if text is None:
                 seeds = [seed.get('slug') for seed in (self.store.config.get('persona_contribution') or {}).get('seeds', [])]
                 raise DocumentError('DOC_SEED_NOT_FOUND', '「%s」没有种子；有种子的文档：%s'
-                                    % (slug, '、'.join(filter(None, seeds)) or '（人格包没带种子）'))
+                                    % (echoed(slug), '、'.join(filter(None, seeds)) or '（人格包没带种子）'))
             # Adopting a seed is her act, though its text is the package's: a place it leaves over waits for her choice.
             gate = budget_gate(self.store, ep['persona'], refuse=False)
             outcome = docs.adopt_seed(slug, kind, text, base_revision_id=base, author='character',
@@ -2808,23 +2832,24 @@ class RoleTools:
         short = self._text(args, 'short', 20000)      # a guard only: a long short is kept and the result says so
         layer = args.get('layer')
         if layer not in ('person', 'here'):
-            raise Refused('UNDERSTANDING_LAYER_REQUIRED: layer 要写 person（人那层，哪儿都看得到）或 here（这里那层，只在这个对话里）；'
-                          '给的是 %r。拿不准就问自己：这条换个群还成立吗，成立是 person，不成立是 here' % (layer,))
+            raise Refused('layer 要写 person（人那层，哪儿都看得到）或 here（这里那层，只在这个对话里）%s。'
+                          '拿不准就问自己：这条换个群还成立吗，成立是 person，不成立是 here' % _given(args, 'layer'),
+                          ['UNDERSTANDING_LAYER_REQUIRED'])
         scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         group = scene.get('kind') == 'group'
         if group and turn_kind(ep) == 'visit' and not args.get('person'):
-            raise Refused('串门时要写 person：照抄你要写的那个人的标签。')
+            raise Refused('串门时要写 person：照抄你要写的那个人的标签。', ['ARGS_MISSING'])
         try:
             person_id = _understanding.resolve(self.store, ep, scene, args.get('person'), ep['persona'])
         except _understanding.Unknown as exc:
-            raise Refused(str(exc))
+            raise Refused(str(exc), ['PERSON_UNKNOWN'])
         own = person_id == ep['person_id']
         # Once per person and layer a turn, said before anything asks her to read again.
         field = ('understanding_update' if layer == 'here' else 'person_understanding_update') if own else None
         words = '这里那层' if layer == 'here' else '人那层'
         done = (ep.get(field) or {}) if own else ((ep.get('understanding_writes') or {}).get(layer + '|' + person_id) or {})
         if done.get('state') == 'COMMITTED':
-            raise Refused('这回合已经写过一次他的%s了，每人每层一回合只写一次；还有要补的，下回合再写。' % words)
+            raise Refused('这回合已经写过一次他的%s了，每人每层一回合只写一次；还有要补的，下回合再写。' % words, ['UNDERSTANDING_ONCE_A_TURN'])
         seen = (ep.get('understanding_seen') or {}).get(person_id)
         if group or not own:
             # ADR-082: in a group the layers are not in the turn; a write is against what a recall showed this turn.
@@ -2839,7 +2864,8 @@ class RoleTools:
                     current = view['person'] if layer == 'person' else view['here']
                     raise Refused('这回合还没读过他现在的%s，不能直接改写（content 要写完整的新正文，或者写「不更新」只换 short）。'
                                   '他现在的这一层：%s　照这份改，再写一次。'
-                                  % ('人那层' if layer == 'person' else '这里那层', json.dumps(current, ensure_ascii=False)))
+                                  % ('人那层' if layer == 'person' else '这里那层', json.dumps(current, ensure_ascii=False)),
+                                  ['UNDERSTANDING_NOT_READ'])
                 seen = _understanding.pins(person, here)
             base = seen
         else:
@@ -2881,9 +2907,9 @@ class RoleTools:
         from . import focus, switches
         from .people import People
         if scene.get('kind') != 'group':
-            raise Refused('只有群能静音。')
+            raise Refused('只有群能静音。', ['MUTE_NOT_GROUP'])
         if on and focus.admin_here(self.store, scene, ep.get('persona')):
-            raise Refused('你在这个群是管理员，它一直常驻（管理员要看得见群里的事），静音不了。')
+            raise Refused('你在这个群是管理员，它一直常驻（管理员要看得见群里的事），静音不了。', ['GROUP_ADMIN_ALWAYS_ON'])
         label = People(self.store, ep.get('persona')).scene_title(scene)
         if on:
             row = switches.set_switch(self.store, ep, 'mute', label=label, scene_id=scene['_id'], hours=hours)
@@ -2910,7 +2936,7 @@ class RoleTools:
         from .config import refs_usable
         from .people import People
         if self._place(ep) == visibility.OWNER_PRIVATE:
-            raise Refused('家里的人屏蔽不了：watch 的 block 只在家外的对话里用。')
+            raise Refused('家里的人屏蔽不了：watch 的 block 只在家外的对话里用。', ['BLOCK_HOME'])
         scene = scene_records.get(self.store, ep['scene_id']) or {'_id': ep['scene_id']}
         people = People(self.store, ep.get('persona'))
         if person:
@@ -2919,16 +2945,17 @@ class RoleTools:
                 usable = [people.copyable(scene, doc) for doc in sorted(people.ensure_roster(scene).values(),
                                                               key=lambda doc: str(doc.get('seen_at') or ''), reverse=True)
                           if doc.get('person') != people.self_id and people.person(doc.get('person')) != people.owner]
-                raise Refused(('「%s」对得上不止一个人：%s。' % (person, '、'.join(people.label(d) for d in found[:5])) if found
-                               else '这个对话里没有「%s」。' % person) + refs_usable(usable))
+                raise Refused(('「%s」对得上不止一个人：%s。' % (echoed(person), '、'.join(people.label(d) for d in found[:5])) if found
+                               else '这个对话里没有「%s」。' % echoed(person)) + refs_usable(usable),
+                               ['PERSON_AMBIGUOUS' if found else 'PERSON_UNKNOWN'])
             target, label = found[0]['person'], people.label(found[0])
         else:
             if turn_kind(ep) != 'external':
                 # A visit, a plan or a task's report has no speaker: its person only authorizes the turn (places.visitor).
-                raise Refused('这一回合没有人在跟你说话：block 不写 person 屏蔽的是正在跟你说话的人；要屏蔽这里的谁，person 写他。')
+                raise Refused('这一回合没有人在跟你说话：block 不写 person 屏蔽的是正在跟你说话的人；要屏蔽这里的谁，person 写他。', ['BLOCK_NO_SPEAKER'])
             target, label = ep['person_id'], people.speaker(scene, ep['person_id'])
         if people.person(target) == people.owner:
-            raise Refused('家里的人屏蔽不了：主人在哪个对话里都不屏蔽。')
+            raise Refused('家里的人屏蔽不了：主人在哪个对话里都不屏蔽。', ['BLOCK_HOME'])
         row = switches.set_switch(self.store, ep, 'block', label=label, person_id=target, hours=hours)
         return {'done': '屏蔽了%s：他的话照存，但哪儿都不叫你' % label, 'until_at': row['until'], 'id': row['_id']}
 
@@ -2941,13 +2968,16 @@ class RoleTools:
         place = self._text(args, 'place', 40)
         found = places.find(self.store.config, place)
         if not found:
-            raise Refused('没有「%s」这个地方；place 照抄 places_from_program 或 group_focus 的 list 里的 place。' % place)
+            raise Refused('没有「%s」这个地方；place 照抄 places_from_program 或 group_focus 的 list 里的 place。' % echoed(place),
+                          ['PLACE_UNKNOWN'])
         tools = args.get('value')
         if not isinstance(tools, list) or not all(isinstance(t, str) for t in tools):
-            raise Refused('tools_off 的 value 是工具名的列表（比如 ["sticker", "delegate"]）；空列表就是全部恢复。')
+            raise Refused('tools_off 的 value 是工具名的列表（比如 ["sticker", "delegate"]）；空列表就是全部恢复。', ['ARGS_TYPE'])
         unknown = [t for t in tools if t not in TOOLS or t in switches.KEEP]
         if unknown:
-            raise Refused('这些关不了：%s（不是工具，或是一回合离不了的 think、recall、stay_silent）。' % '、'.join(unknown))
+            raise Refused('这些关不了：%s（不是工具，或是一回合离不了的 think、recall、stay_silent）。'
+                          % '、'.join(echoed(name) for name in unknown),
+                          ['SWITCH_NOT_A_TOOL'])
         scene = scene_records.get(self.store, found[0]) or {'_id': found[0]}
         from .people import People
         label = People(self.store, ep.get('persona')).scene_title(scene)
@@ -2975,9 +3005,9 @@ class RoleTools:
             try:
                 table = dice.words(dice.parse(args.get('value')))
             except ValueError as exc:
-                raise Refused(str(exc)) from None
+                raise Refused(str(exc), ['POLICY_VALUE_INVALID']) from None
         if 'value' not in args:
-            raise Refused('要写 value：这个参数的新值（类型照它的声明，比如整数、true/false）。')
+            raise Refused('要写 value：这个参数的新值（类型照它的声明，比如整数、true/false）。', ['ARGS_MISSING'])
         model, _ = model_and_policy(self.store, ep['persona'])
         policy = PolicyStore(self.store, ep['persona'], model)
         spec_what = policy.validate([{'key': key, 'value': args['value'], 'what': cut(reason, 300)}])
@@ -3005,7 +3035,7 @@ class RoleTools:
         from .render import model_and_policy
         ledger = AffectLedger(self.store, ep['persona'], *model_and_policy(self.store, ep['persona']))
         if not ledger.enabled:
-            raise Refused('你没有情感账（affect 没开），feel 用不了；重试也一样。')
+            raise Refused('你没有情感账（affect 没开），feel 用不了；重试也一样。', ['AFFECT_OFF'])
         op, cls, key = args.get('op') or ('record' if args.get('kind') else None), self._cls(ep), 'feel:' + call_id
         fields = {k: v for k, v in args.items() if k in AFFECT_FIELDS and v is not None}
         # A feeling is recorded, settled or adopted as the place the turn acts for would: its people, its scope.
@@ -3058,7 +3088,7 @@ class RoleTools:
             found = people.resolve(scene, fields['who'])
             if len(found) != 1 or not found[0].get('person'):
                 self._found('who「%s」%s；照抄这回合里对方的标签（如 [名字 #4]），或者不写。'
-                            % (str(fields['who'])[:40], '对得上不止一个人' if len(found) > 1 else '不是这个对话里的人'), 'FEEL_WHO_UNKNOWN')
+                            % (echoed(fields['who']), '对得上不止一个人' if len(found) > 1 else '不是这个对话里的人'), 'FEEL_WHO_UNKNOWN')
                 return fields, ''
             return {**fields, 'who': found[0]['person']}, '记在了对%s的心情里' % people.label(found[0])
         if scene.get('kind') != 'group' and ep.get('person_id') and ep['person_id'] != people.self_id:
@@ -3071,7 +3101,7 @@ class RoleTools:
         from .tasks import require_current_feedback
         c = self.coordinator
         if not c.scheduler:
-            raise Refused('现在没有定时服务，安排不了（不是你的错）；重试也一样，要记着的事写进回话或文档。')
+            raise Refused('现在没有定时服务，安排不了（不是你的错）；重试也一样，要记着的事写进回话或文档。', ['SCHEDULER_UNAVAILABLE'])
         timing = {k: args[k] for k in ('after_seconds', 'every_seconds', 'at', 'clock') if args.get(k) is not None}
         op = args.get('op') or ('create' if args.get('intent') and timing and not args.get('plan_id') else None)
         inferred = not args.get('op') and op == 'create'
@@ -3107,7 +3137,7 @@ class RoleTools:
                 where = None
                 if outside is not None:
                     if args.get('line'):
-                        raise Refused(PLAN_OUTSIDE_LINE)
+                        raise Refused(PLAN_OUTSIDE_LINE, ['PLAN_OUTSIDE_LINE'])
                     # It is made as in the turn that wrote the note, with that turn's person (who spoke there).
                     origin = self._as_place(ep)
                     where = {'scene_id': origin['scene_id'], 'person_id': origin['person_id']}
@@ -3115,12 +3145,13 @@ class RoleTools:
                     # From home, a plan may fire in one of her peer lines (owner 2026-10-06): both ends are home.
                     from . import lines
                     if self._cls(ep) != visibility.OWNER_PRIVATE:
-                        raise Refused('只有在家里才能把安排挂到一条线上：去掉 place，就安排在这里。')
+                        raise Refused('只有在家里才能把安排挂到一条线上：去掉 place，就安排在这里。', ['PLAN_LINE_HOME_ONLY'])
                     wanted = self._text(args, 'line', 80)
                     where = next((item for item in lines.peer_lines(self.store) if item['label'] == wanted), None)
                     if not where:
                         raise Refused('没有这条线；照抄 lines_from_program 里的 place。'
-                                      + refs_usable(item['label'] for item in lines.peer_lines(self.store)))
+                                      + refs_usable(item['label'] for item in lines.peer_lines(self.store)),
+                                      ['PEER_LINE_UNKNOWN'])
                 plan = run(lambda: c.scheduler.create(ep, spec, plan_id='plan-' + sha(canonical([ep['_id'], call_id]))[:32],
                                                       where=where))
             elif op in ('update', 'cancel'):
@@ -3129,7 +3160,7 @@ class RoleTools:
                 made = {(call.get('result') or {}).get('plan_id') for call in (ep.get('tool_calls') or {}).values()
                         if call.get('tool') == 'plan'}
                 if outside is not None and plan_id not in made:
-                    raise Refused(PLAN_OUTSIDE_ONLY_MADE % plan_id)
+                    raise Refused(PLAN_OUTSIDE_ONLY_MADE % echoed(plan_id), ['PLAN_OUTSIDE_ONLY_MADE'])
                 # Hers when listed or made this turn; the list shows a plan in words, so its state is read from the plan.
                 row = (plan_id in made or plan_id in planned and outside is None) and plan_records.get(
                     self.store, plan_id)
@@ -3140,16 +3171,16 @@ class RoleTools:
                         row = kept
                     elif kept:
                         raise Refused('「%s」已经%s了，改不了；要再安排就新建一条（do=create）。'
-                                      % (plan_id, PLAN_ENDED.get(kept.get('status'), '跑完')))
+                                      % (echoed(plan_id), PLAN_ENDED.get(kept.get('status'), '跑完')), ['PLAN_ENDED'])
                     else:
                         usable = [*planned, *(made - {None})]
                         raise Refused('「%s」不在 plans_from_program 里，也不是这回合刚建的；照列表原样抄 plan_id，'
-                                      '或抄这回合 plan 工具返回的 plan_id。%s' % (plan_id, refs_usable(usable)))
+                                      '或抄这回合 plan 工具返回的 plan_id。%s' % (echoed(plan_id), refs_usable(usable)), ['PLAN_UNKNOWN'])
                 from .schedule import RHYTHM_KINDS
                 if row.get('kind') in RHYTHM_KINDS:
                     # Her rhythms belong to the program (ADR-012 §4.3): she tunes them, never cancels or retimes them here.
                     raise Refused('「%s」是你的节律（心跳、夜间沉淀、自我改进或整理安静的群），归程序排，plan 改不了也停不了；'
-                                  '要调快慢、时间或开关，在家里用 set_policy。' % plan_id)
+                                  '要调快慢、时间或开关，在家里用 set_policy。' % echoed(plan_id), ['PLAN_RHYTHM'])
                 # A plan this turn made where the note came from is changed there, as that place's.
                 there = ({**ep, 'scene_id': row['scene_id'], 'person_id': row['person_id'],
                           'policy_epoch': row['policy_epoch']} if outside is not None else ep)
@@ -3165,14 +3196,14 @@ class RoleTools:
                 else:
                     if row.get('status') not in ('CREATING', 'ACTIVE'):
                         raise Refused('「%s」已经%s了，改期只对着还生效的；要再安排就新建一条（do=create）。'
-                                      % (plan_id, PLAN_ENDED.get(row.get('status'), '跑完')))
+                                      % (echoed(plan_id), PLAN_ENDED.get(row.get('status'), '跑完')), ['PLAN_ENDED'])
                     # The same length rule as create: refused with the cut offer, never by the scheduler's code.
                     spec = {**({'intent': self._text(args, 'intent', 1000, offer=False)} if args.get('intent') else {}),
                             **({'schedule': timing} if timing else {})}
                     plan = run(lambda: c.scheduler.update(there, plan_id, spec))
             else:
                 raise Refused('do 是 create、update 或 cancel%s；新建要写 intent 和一种计时，改或取消要写 plan_id。'
-                              % _given(args, 'op'))
+                              % _given(args, 'op'), ['PLAN_OP'])
         except ValueError as exc:
             # 换算/校验类失败（时间已过、钟点不存在、形状不对）回给她自己改，带上现在的钟面。
             raise Refused(self._plan_not_made(ep, exc), [code_of(exc)]) from None
@@ -3221,24 +3252,24 @@ class RoleTools:
     def tool_visit(self, ep, call_id, args):
         from . import places
         if turn_kind(ep) not in VISIT_FROM or self._cls(ep) != visibility.OWNER_PRIVATE:
-            raise Refused('只有在家里的心跳或你自己定的计划到期时才能出门：想去就用 plan 定个时间。')
+            raise Refused('只有在家里的心跳或你自己定的计划到期时才能出门：想去就用 plan 定个时间。', ['VISIT_NOT_FROM_HERE'])
         from .persona_model import effective
         from .render import model_and_policy
         model, policy = model_and_policy(self.store, ep['persona'])
         per_beat = int(effective(model, 'heartbeat.visits_per_beat', policy) or 1)
         went = sum(1 for call in (ep.get('tool_calls') or {}).values() if call.get('tool') == 'visit' and 'result' in call)
         if went >= per_beat:
-            raise Refused('这一拍已经出过 %d 次门了（heartbeat.visits_per_beat）；下一拍再去别处。' % went)
+            raise Refused('这一拍已经出过 %d 次门了（heartbeat.visits_per_beat）；下一拍再去别处。' % went, ['VISITS_PER_BEAT'])
         place = self._text(args, 'place', 40)
         intent = args.get('intent')
         if intent not in places.VISIT_INTENTS:
-            raise Refused('intent 是 %s 之一%s。' % ('、'.join(places.VISIT_INTENTS), _given(args, 'intent')))
+            raise Refused('intent 是 %s 之一%s。' % ('、'.join(places.VISIT_INTENTS), _given(args, 'intent')), ['ARGS_ENUM'])
         topic = self._text(args, 'topic', places.TOPIC_CHARS, required=False)
         artifact = self._text(args, 'artifact_id', 200, required=False)
         if artifact and intent != 'share_picture':
-            raise Refused('只有 intent=share_picture 才带 artifact_id。')
+            raise Refused('只有 intent=share_picture 才带 artifact_id。', ['VISIT_ARTIFACT_NOT_NEEDED'])
         if not self.coordinator.scheduler:
-            raise Refused('现在没有定时服务，出不了门（不是你的错）；重试也一样。')
+            raise Refused('现在没有定时服务，出不了门（不是你的错）；重试也一样。', ['SCHEDULER_UNAVAILABLE'])
         return self.coordinator.scheduler.visit(ep, place, intent, topic, artifact), False
 
     def tool_errand(self, ep, call_id, args):
@@ -3251,21 +3282,21 @@ class RoleTools:
         request = self._text(args, 'request', ERRAND_CHARS, offer=False)
         artifact = self._text(args, 'artifact_id', 200, required=False)
         if not self.coordinator.scheduler:
-            raise Refused('现在没有定时服务，办不了（不是你的错）；重试也一样，跟托你的人说一声。')
+            raise Refused('现在没有定时服务，办不了（不是你的错）；重试也一样，跟托你的人说一声。', ['SCHEDULER_UNAVAILABLE'])
         return self.coordinator.scheduler.errand(ep, call_id, place, request, bool(args.get('exactly')), artifact), False
 
     # ── notes between her conversations (ADR-018) ───────────────────
     def _note(self, ep, call_id, args, cls):
         from . import credentials, notes
         if not self.coordinator.scheduler:
-            raise Refused('现在没有定时服务，便条送不出去（不是你的错）；重试也一样。')
+            raise Refused('现在没有定时服务，便条送不出去（不是你的错）；重试也一样。', ['SCHEDULER_UNAVAILABLE'])
         args = {**args, 'text': credentials.scrub(str(args.get('text') or ''))}     # never a credential value
         try:
             return self.coordinator.scheduler.note(ep, cls, args, call_id), False
         except notes.NoteRefused as exc:
             self.store.audit(ep['_id'], 'note.refused', {'code': exc.code, 'to': str(args.get('to') or '')[:40]},
                              ep['scope_key'])
-            raise Refused(str(exc)) from None
+            raise Refused(str(exc), [exc.code]) from None
 
     def tool_note(self, ep, call_id, args):
         # Trust is the program's: from the conversation the note is written in (notes.trust_of), never from the call;
@@ -3273,14 +3304,14 @@ class RoleTools:
         qid = args.get('question')
         if self._place(ep) == visibility.OWNER_PRIVATE and self._outside(ep) is None:
             if qid is not None:
-                raise Refused('question 是在群里把问到的回答带回家用的；家里的便条不写它。')
+                raise Refused('question 是在群里把问到的回答带回家用的；家里的便条不写它。', ['NOTE_QUESTION_AT_HOME'])
             return self._note(ep, call_id, args, visibility.OWNER_PRIVATE)
         if qid is not None:
             # ADR-061 step 2 (her answer a): a group's answer goes home in her words; the program adds who and where.
             from . import questions
             row = questions.get(self.store, str(qid), persona=ep['persona'])
             if not row or not any(s.get('kind') == 'group' and s.get('scene_id') == ep['scene_id'] for s in row['sources']):
-                raise Refused('question「%s」不是你在这里问的问题：照抄 questions_from_program 里的 q-…' % qid)
+                raise Refused('question 对不上你在这里问的问题：照抄 questions_from_program 里的 q-…', ['NOTE_QUESTION_UNKNOWN'])
             args = {**args, 'answers': row['_id']}
         return self._note(ep, call_id, {k: v for k, v in args.items() if k != 'question'}, visibility.PUBLIC)
 
@@ -3290,13 +3321,13 @@ class RoleTools:
         from .schedule_rules import her_zone
         desk = restarts.DESK
         if desk is None:
-            raise Refused('这个宿主没有接重启请求的地方（不是正常起来的宿主）；要重启跟主人说。')
+            raise Refused('这个宿主没有接重启请求的地方（不是正常起来的宿主）；要重启跟主人说。', ['RESTART_UNAVAILABLE'])
         # A restart is consequential: an argument it does not know is refused, never dropped (2026-10-10 her `at`
         # was silently ignored and the request fell back to an immediate quiet restart).
         unknown = sorted(set(args) - {'op', 'why', 'when'})
         if unknown:
             raise Refused('restart 不认识参数 %s：只收 do、why、when（时刻写在 when 里，如 when=23:55）；这次什么都没做。'
-                          % '、'.join(unknown))
+                          % '、'.join(unknown), ['ARGS_UNDECLARED'])
         desk.zone = her_zone(self.store.config)['name']
         op = args.get('op')
         if op == 'preview':
@@ -3305,16 +3336,16 @@ class RoleTools:
             had = desk.cancel()
             return {'cancelled': bool(had), 'note': '撤回了。' if had else '没有在等的重启请求。'}, False
         if op not in ('request', 'drill'):
-            raise Refused('do 是 preview、request、drill 或 cancel%s。' % _given(args, 'op'))
+            raise Refused('do 是 preview、request、drill 或 cancel%s。' % _given(args, 'op'), ['ARGS_ENUM'])
         why = self._text(args, 'why', 200)
         from .people import People
         where = People(self.store, ep['persona']).scene_title(scene_records.get(self.store, ep['scene_id']))
         try:
             pending = desk.request(why, args.get('when') or 'quiet', drill=op == 'drill', where=where)
         except PermissionError as exc:
-            raise Refused(str(exc))
+            raise Refused(words(exc), [code_of(exc)])
         except ValueError as exc:
-            raise Refused(str(exc))
+            raise Refused(words(exc), [code_of(exc)])
         when = {'now': '下一刻就停', 'quiet': '等没有在跑的回合、任务和排队消息（最多 30 分钟）'}.get(
             pending['when'], '到 %s 后再等安静' % pending['when'])
         replaced = pending.get('replaced')
@@ -3330,12 +3361,13 @@ class RoleTools:
         line = next((item for item in lines.peer_lines(self.store) if item['label'] == wanted), None)
         if not line:
             raise Refused('没有这条线；照抄 lines_from_program 里的 place。'
-                          + refs_usable(item['label'] for item in lines.peer_lines(self.store)))
+                          + refs_usable(item['label'] for item in lines.peer_lines(self.store)), ['PEER_LINE_UNKNOWN'])
         op = args.get('op')
         if op not in ('open', 'close'):
-            raise Refused('do 是 open 或 close%s。' % _given(args, 'op'))
+            raise Refused('do 是 open 或 close%s。' % _given(args, 'op'), ['ARGS_ENUM'])
         if op == 'close' and args.get('close_for') not in lines.CLOSE_FOR:
-            raise Refused('关的时候要选 close_for：%s%s。' % ('、'.join(lines.CLOSE_FOR), _given(args, 'close_for')))
+            raise Refused('关的时候要选 close_for：%s%s。' % ('、'.join(lines.CLOSE_FOR), _given(args, 'close_for')),
+                          ['ARGS_ENUM'])
         zone = her_zone(self.store.config)['name']
         lines.set_line(self.store, line['scene_id'], closed=op == 'close', choice=args.get('close_for'), zone=zone,
                        by='character:' + ep['_id'])
@@ -3361,18 +3393,18 @@ class RoleTools:
         try:
             return private_words.run(args, home=self._cls(ep) == visibility.OWNER_PRIVATE), False
         except private_words.PrivateWordsError as exc:
-            raise Refused(str(exc)) from exc
+            raise Refused(str(exc), ['PRIVATE_WORDS_REFUSED']) from exc
 
     def tool_group_focus(self, ep, call_id, args):
         from . import focus, places
         op = args.get('op')
         if op not in ('list', 'active', 'rest', 'condense', 'keep', 'mute', 'unmute'):
-            raise Refused('do 是 list、active、rest、condense、keep、mute 或 unmute%s。' % _given(args, 'op'))
+            raise Refused('do 是 list、active、rest、condense、keep、mute 或 unmute%s。' % _given(args, 'op'), ['ARGS_ENUM'])
         if op in ('mute', 'unmute') and self._cls(ep) != visibility.OWNER_PRIVATE:
-            raise Refused('静音在家里定（家里的对话里用 group_focus，place 写那个群）；在群里只能让它常驻或歇着。')
+            raise Refused('静音在家里定（家里的对话里用 group_focus，place 写那个群）；在群里只能让它常驻或歇着。', ['MUTE_HOME_ONLY'])
         if op in ('condense', 'keep') and not (turn_kind(ep) in CONDENSE_TURNS or (
                 turn_kind(ep) in CONDENSE_AT_HOME and self._cls(ep) == visibility.OWNER_PRIVATE)):
-            raise Refused(CONDENSE_REFUSED)
+            raise Refused(CONDENSE_REFUSED, ['CONDENSE_REFUSED'])
         if op == 'list':
             return {'groups': focus.listing(self.store, ep['persona']), 'usual': '平常常驻 %d 个以内' %
                     focus.soft_limit(self.store.config)}, False
@@ -3381,18 +3413,19 @@ class RoleTools:
         if place:
             found = places.find(self.store.config, place)
             if not found:
-                raise Refused('没有「%s」这个群；place 照抄 group_focus 的 list 或 places_from_program 里的 place。' % place)
+                raise Refused('没有「%s」这个群；place 照抄 group_focus 的 list 或 places_from_program 里的 place。' % echoed(place),
+                              ['PLACE_UNKNOWN'])
             scene = scene_records.get(self.store, found[0])
         elif (here or {}).get('kind') == 'group':
             scene = here
         else:
-            raise Refused('在家里要写 place：照抄 group_focus 的 list 或 places_from_program 里的 place。')
+            raise Refused('在家里要写 place：照抄 group_focus 的 list 或 places_from_program 里的 place。', ['ARGS_MISSING'])
         if not scene:
-            raise Refused('这个群还没有记录（还没人在那儿说过话）；等有人说话以后再改。')
+            raise Refused('这个群还没有记录（还没人在那儿说过话）；等有人说话以后再改。', ['GROUP_NOT_RECORDED'])
         if op in ('condense', 'keep'):
             from . import condense
             if scene.get('kind') != 'group':
-                raise Refused('只有群的对话能这样压。')
+                raise Refused('只有群的对话能这样压。', ['CONDENSE_NOT_GROUP'])
             if op == 'keep':
                 return condense.unmark(self.store, scene, ep), False
             answer = condense.mark(self.store, scene, ep)
@@ -3405,7 +3438,7 @@ class RoleTools:
         try:
             return focus.set_focus(self.store, ep, scene, op == 'active', ep['persona']), False
         except ValueError as exc:
-            raise Refused(str(exc)) from None
+            raise Refused(words(exc), [code_of(exc)]) from None
 
     def tool_find_member(self, ep, call_id, args):
         from . import group_members
@@ -3434,9 +3467,9 @@ class RoleTools:
         names = '、'.join('%s（%s）' % (people.scene_title(scene_records.get(self.store, sid)), p)
                          for p, sid in homes.items())
         if place:
-            raise Refused('ASK_PLACE_NOT_HOME: 「%s」不是家里的对话：ask 问的是家里的几处（%s）、这里和行动脑；'
-                          '在群里或别人的私聊里问，用 note 送过去，到那边自己问。' % (wanted, names or '没有别处'))
-        raise Refused('ASK_PLACE_UNKNOWN: 问不到「%s」：to 写 %s这里，或 行动脑。' % (wanted, names + '、' if names else ''))
+            raise Refused('「%s」不是家里的对话：ask 问的是家里的几处（%s）、这里和行动脑；'
+                          '在群里或别人的私聊里问，用 note 送过去，到那边自己问。' % (echoed(wanted), names or '没有别处'), ['ASK_PLACE_NOT_HOME'])
+        raise Refused('问不到「%s」：to 写 %s这里，或 行动脑。' % (echoed(wanted), names + '、' if names else ''), ['ASK_PLACE_UNKNOWN'])
 
     def tool_ask_ask(self, ep, call_id, args):
         from . import credentials, ingress, notes, questions
@@ -3444,19 +3477,20 @@ class RoleTools:
         text = credentials.scrub(self._text(args, 'question', QUESTION_CHARS))
         patience = args.get('patience') or questions.DEFAULT_PATIENCE
         if patience not in questions.PATIENCE:
-            raise Refused('ASK_PATIENCE_UNKNOWN: patience 是 %s 之一%s；不写就是 %s。'
-                          % ('、'.join(questions.PATIENCE), _given(args, 'patience'), questions.DEFAULT_PATIENCE))
+            raise Refused('patience 是 %s 之一%s；不写就是 %s。'
+                          % ('、'.join(questions.PATIENCE), _given(args, 'patience'), questions.DEFAULT_PATIENCE),
+                          ['ASK_PATIENCE_UNKNOWN'])
         wanted = args.get('to')
         wanted = [wanted] if isinstance(wanted, str) else wanted
         if not isinstance(wanted, list) or not wanted or not all(isinstance(w, str) and w.strip() for w in wanted):
-            raise Refused('ASK_TO_REQUIRED: to 写问谁（一到 %d 处）：note_places_from_program 里家里的 place、这里，或 行动脑。'
-                          % questions.PLACES_MAX)
+            raise Refused('to 写问谁（一到 %d 处）：note_places_from_program 里家里的 place、这里，或 行动脑。'
+                          % questions.PLACES_MAX, ['ASK_TO_REQUIRED'])
         wanted = list(dict.fromkeys(' '.join(w.split()) for w in wanted))
         if len(wanted) > questions.PLACES_MAX:
-            raise Refused('ASK_TOO_MANY: 一个问题最多问 %d 处，写了 %d 处：挑最想问的。' % (questions.PLACES_MAX, len(wanted)))
+            raise Refused('一个问题最多问 %d 处，写了 %d 处：挑最想问的。' % (questions.PLACES_MAX, len(wanted)), ['ASK_TOO_MANY'])
         sources = [self._ask_place(ep, w) for w in wanted]
         if any(source['kind'] == 'action' for source in sources) and 'delegate' not in (ep.get('turn_tools') or ()):
-            raise Refused('ASK_NO_ACTION_BRAIN: 这一回合不能交给行动脑，问不了它；问别处，或者等能交事的回合。')
+            raise Refused('这一回合不能交给行动脑，问不了它；问别处，或者等能交事的回合。', ['ASK_NO_ACTION_BRAIN'])
         # ADR-098: the action brain's copy is checked and expanded before anything is sent; hers stays contracted.
         from . import local_roots
         toward = self._toward_action(ep, text) if any(s['kind'] == 'action' for s in sources) else None
@@ -3469,14 +3503,14 @@ class RoleTools:
                     source['episode'] = ep['_id']
                 elif source['kind'] == 'home':
                     if not self.coordinator.scheduler:
-                        raise Refused('ASK_NOT_SENT: 现在没有定时服务，问不过去（不是你的错）；重试也一样，先问这里。')
+                        raise Refused('现在没有定时服务，问不过去（不是你的错）；重试也一样，先问这里。', ['ASK_NOT_SENT'])
                     try:
                         sent = self.coordinator.scheduler.note(
                             ep, visibility.OWNER_PRIVATE, {'to': source['to'], 'mode': 'wake',
                                                            'text': questions.NOTE_TEXT % (qid, text)},
                             '%s:ask:%s' % (call_id, source['to']), question=qid)
                     except notes.NoteRefused as exc:
-                        raise Refused('ASK_NOT_SENT: 问不到「%s」：%s' % (source['name'], exc)) from None
+                        raise Refused('问不到「%s」：%s' % (source['name'], exc), ['ASK_NOT_SENT', exc.code]) from None
                     note = notes.get(self.store, sent['note'])
                     source['note'] = note['_id']
                     source['episode'] = ingress.episode_id({'scene_id': note['to_scene'], 'event_id': note.get('event_id'),
@@ -3498,12 +3532,12 @@ class RoleTools:
             found = questions.read(self.store, ep['persona'], qid, outside=visibility.OWNER_PRIVATE not in (
                 self._cls(ep), self._place(ep)))
             if not found:
-                raise Refused(ASK_UNKNOWN % qid + refs_usable(self._listed_questions(ep)))
+                raise Refused(ASK_UNKNOWN % echoed(qid) + refs_usable(self._listed_questions(ep)), ['ASK_QUESTION_UNKNOWN'])
             return found, False
         wanted = args.get('to')
         wanted = wanted[0] if isinstance(wanted, list) and len(wanted) == 1 else wanted
         if not isinstance(wanted, str) or not wanted.strip():
-            raise Refused('ASK_READ_WHAT: read 写 id（读一个问题的回答），或只写一处 to（看以前问那处怎样）。')
+            raise Refused('read 写 id（读一个问题的回答），或只写一处 to（看以前问那处怎样）。', ['ASK_READ_WHAT'])
         source = self._ask_place(ep, wanted, homes_only=False)
         return questions.history(self.store, ep['persona'], None if source['kind'] == 'action' else source['scene_id'],
                                  source['name']), False
@@ -3515,7 +3549,7 @@ class RoleTools:
         took = self._text(args, 'took', TOOK_CHARS)
         row, words = questions.close(self.store, ep['persona'], qid, took)
         if not row:
-            raise Refused(ASK_UNKNOWN % qid + refs_usable(self._listed_questions(ep)))
+            raise Refused(ASK_UNKNOWN % echoed(qid) + refs_usable(self._listed_questions(ep)), ['ASK_QUESTION_UNKNOWN'])
         return {'id': qid, 'closed': words}, False
 
     def _listed_questions(self, ep):
@@ -3528,12 +3562,12 @@ class RoleTools:
         try:
             page = int(args.get('page') or 1)
         except (TypeError, ValueError):
-            raise Refused('page 是从 1 开始的整数%s。' % _given(args, 'page')) from None
+            raise Refused('page 是从 1 开始的整数%s。' % _given(args, 'page'), ['ARGS_TYPE']) from None
         search = self._text(args, 'search', 40, required=False)
         total = len(idea_rows(self.store, ep['persona'], search))
         pages = max(1, -(-total // IDEAS_PAGE))
         if page < 1 or page > pages:
-            raise Refused('只有 %d 页（%d 条）：page 写 1–%d。' % (pages, total, pages))
+            raise Refused('只有 %d 页（%d 条）：page 写 1–%d。' % (pages, total, pages), ['PAGE_OUT_OF_RANGE'])
         items = ideas_block(self.store, ep['persona'], schedule_rules.now_utc(), page=page, search=search)
         after = total - (page - 1) * IDEAS_PAGE - len(items)
         if not items:
@@ -3549,12 +3583,12 @@ class RoleTools:
         from .tasks import page_title, task_pages
         unknown = sorted(set(args) - {'op', 'task', 'page'})
         if unknown:
-            raise Refused('task 的 page 不认识参数 %s：只收 task 和 page。' % '、'.join(unknown))
+            raise Refused('task 的 page 不认识参数 %s：只收 task 和 page。' % '、'.join(unknown), ['ARGS_UNDECLARED'])
         task_id = self._text(args, 'task', 80)
         try:
             page = int(args.get('page'))
         except (TypeError, ValueError):
-            raise Refused('page 是从 1 开始的整数%s。' % _given(args, 'page')) from None
+            raise Refused('page 是从 1 开始的整数%s。' % _given(args, 'page'), ['ARGS_TYPE']) from None
         # At home every task of hers; anywhere else only the tasks this conversation sent (as reading a file by path).
         home = self._cls(ep) == visibility.OWNER_PRIVATE
         place = self._as_place(ep)          # a turn a note from outside opened reads the tasks of where it came from
@@ -3563,15 +3597,16 @@ class RoleTools:
         task = task_records.get(self.store, task_id, ['result.text', 'title', 'goal', 'intent_revision'], **fence)
         if not task:
             raise Refused('「%s」不是%s的任务；task 照抄交回来的结果里的 task，或 task_state_from_program 里的 id。%s'
-                          % (task_id, '你' if home else '这个对话里', refs_usable([ep.get('task_id'), *self._listed_tasks(ep)])))
+                          % (echoed(task_id), '你' if home else '这个对话里', refs_usable([ep.get('task_id'), *self._listed_tasks(ep)])),
+                          ['TASK_UNKNOWN'])
         text = (task.get('result') or {}).get('text')
         if not isinstance(text, str) or not text:
-            raise Refused('这个任务还没有报告：它还在跑，或者没交回文字。')
+            raise Refused('这个任务还没有报告：它还在跑，或者没交回文字。', ['TASK_NO_REPORT'])
         from . import machine_words
         # The report's pages, then its tool records; outside home nothing of the machine (ADR-050), page by page.
         pages = task_pages(self.store, task, (lambda value: value) if home else machine_words.clean)
         if not 1 <= page <= len(pages):
-            raise Refused('这份报告共 %d 页：page 写 1–%d。' % (len(pages), len(pages)))
+            raise Refused('这份报告共 %d 页：page 写 1–%d。' % (len(pages), len(pages)), ['PAGE_OUT_OF_RANGE'])
         return {'task': task_id, 'title': task.get('title') or task.get('goal'),
                 'page': '第 %d/%d 页（原文 %d 字）' % (page, len(pages), len(text)),
                 'text': pages[page - 1] if home else machine_words.text(pages[page - 1]),
@@ -3583,11 +3618,12 @@ class RoleTools:
         decision = args.get('decision')
         why = self._text(args, 'why', IDEA_CHARS)
         if decision not in ('adopt', 'defer', 'drop'):
-            raise Refused('decision 是 adopt、defer 或 drop%s。' % _given(args, 'decision'))
+            raise Refused('decision 是 adopt、defer 或 drop%s。' % _given(args, 'decision'), ['ARGS_ENUM'])
         row = idea_records.get(self.store, idea_id, persona=ep['persona'])
         if not row or row.get('state') not in ('open', 'deferred'):
             raise Refused('「%s」不是想法本里还没处理完的一条；照 ideas_from_program 或 ideas 的 read 里的原样抄 _id。%s'
-                          % (idea_id, refs_usable(row['_id'] for row in idea_rows(self.store, ep['persona'], None))))
+                          % (echoed(idea_id), refs_usable(row['_id'] for row in idea_rows(self.store, ep['persona'], None))),
+                          ['IDEA_UNKNOWN'])
         state = {'adopt': 'adopted', 'defer': 'deferred', 'drop': 'dropped'}[decision]
         from .state import now
         idea_records.save(self.store, {**row, 'state': state, 'decisions': [*(row.get('decisions') or []),
@@ -3602,12 +3638,12 @@ class RoleTools:
                 if args.get(k) is not None}
         from . import memory_tiers
         if item.get('about') is not None and (not memory_tiers.ENABLED or item['about'] not in memory_tiers.ABOUT):
-            raise Refused('about 写 %s 之一%s。' % ('、'.join(memory_tiers.ABOUT), _given(item, 'about')))
+            raise Refused('about 写 %s 之一%s。' % ('、'.join(memory_tiers.ABOUT), _given(item, 'about')), ['ARGS_ENUM'])
         for field in ('fact', 'appraisal', 'signal', 'why'):
             self._text(item, field, 2000)
         if not isinstance(item.get('source_ids'), list) or not item['source_ids'] or not all(
                 isinstance(x, str) for x in item['source_ids']):
-            raise Refused('source_ids 是来源 id 的列表（至少一条，都是文字）：照抄 promotion_candidates 里的 id。')
+            raise Refused('source_ids 是来源 id 的列表（至少一条，都是文字）：照抄 promotion_candidates 里的 id。', ['ARGS_TYPE'])
         return promote(self.store, ep, item, key='promote:' + call_id), False
 
 

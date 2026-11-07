@@ -20,6 +20,7 @@ from .evidence import sha
 from .records.view import ANY, View, fenced, is_text, pinned
 from .state import Denied, now
 from .store.words import And, Or, Range
+from .config import echoed
 
 DEFAULT_HOURS = 24
 MAX_HOURS = 168
@@ -80,9 +81,9 @@ def hours_of(value):
     try:
         hours = int(value)
     except (TypeError, ValueError):
-        raise Denied('SWITCH_HOURS_INVALID: hours 给的是「%s」' % value) from None
+        raise Denied('SWITCH_HOURS_INVALID: hours 给的是「%s」' % echoed(value)) from None
     if not 1 <= hours <= MAX_HOURS or str(value).strip() not in (str(hours), str(float(hours))):
-        raise Denied('SWITCH_HOURS_INVALID: hours 给的是「%s」' % value)
+        raise Denied('SWITCH_HOURS_INVALID: hours 给的是「%s」' % echoed(value))
     return hours
 
 
@@ -106,7 +107,7 @@ def set_switch(store, ep, kind, *, label, scene_id=None, person_id=None, tools=N
 def clear(store, ep, switch_id):
     row = get(store, str(switch_id or '').strip(), persona=ep['persona'], state='on')
     if not row:
-        raise Denied('SWITCH_NOT_FOUND: ' + ('没写是哪个开关' if not switch_id else '「%s」不是开着的开关（可能已经到期了）' % switch_id))
+        raise Denied('SWITCH_NOT_FOUND: ' + ('没写是哪个开关' if not switch_id else '「%s」不是开着的开关（可能已经到期了）' % echoed(switch_id)))
     save(store, {**row, 'state': 'cleared', 'cleared_at': now()}, expected=row['revision'],
          stream='switches:' + ep['persona'])
     store.audit(ep['_id'], 'switch.cleared', {'switch': row['_id'], 'kind': row['kind']}, ep['scope_key'])

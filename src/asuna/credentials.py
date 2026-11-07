@@ -24,6 +24,7 @@ from urllib.parse import quote, quote_plus
 
 from .state import Denied
 from .records import scenes as scene_records
+from .config import echoed
 
 NAME = re.compile(r'[a-z][a-z0-9-]{1,31}')
 ENV_NAME = re.compile(r'[A-Z][A-Z0-9_]{1,47}')
@@ -102,10 +103,10 @@ def keep(name, note, env):
     for key, value in env.items():
         key = str(key).strip()
         if not ENV_NAME.fullmatch(key) or key in RESERVED or key.startswith('PYTHON'):
-            raise Denied('CREDENTIAL_ENV_INVALID: 变量名「%s」%s' % (key[:48], '是系统要用的，换一个名字'
+            raise Denied('CREDENTIAL_ENV_INVALID: 变量名「%s」%s' % (echoed(key), '是系统要用的，换一个名字'
                          if key in RESERVED or key.startswith('PYTHON') else '要大写字母开头，只含大写字母、数字、下划线，2–48 个'))
         if not isinstance(value, str) or not value or len(value) > VALUE_CHARS:
-            raise Denied('CREDENTIAL_ENV_INVALID: %s 的值要是 1–%d 字的字符串' % (key, VALUE_CHARS))
+            raise Denied('CREDENTIAL_ENV_INVALID: %s 的值要是 1–%d 字的字符串' % (echoed(key), VALUE_CHARS))
         clean[key] = value
     _call(op='write', name=name, note=note, env=clean)
     _refresh(force=True)
@@ -121,7 +122,7 @@ def drop(name):
     name = str(name or '').strip()
     names = sorted(item['name'] for item in listing())
     if name not in names:
-        raise Denied('CREDENTIAL_NOT_FOUND: 保险箱里没有「%s」；%s' % (name[:40], _names_hint(names)))
+        raise Denied('CREDENTIAL_NOT_FOUND: 保险箱里没有「%s」；%s' % (echoed(name), _names_hint(names)))
     _call(op='delete', name=name)
     _refresh(force=True)
     return {'dropped': name}
@@ -138,7 +139,7 @@ def environment(names):
         payload = _call(op='read', name=str(name)) if NAME.fullmatch(str(name)) else None
         if not payload or not payload.get('env'):
             raise Denied('CREDENTIAL_NOT_FOUND: 保险箱里没有「%s」；%s'
-                         % (str(name)[:40], _names_hint(sorted(item['name'] for item in listing()))))
+                         % (echoed(name), _names_hint(sorted(item['name'] for item in listing()))))
         env.update({str(k): str(v) for k, v in payload['env'].items()})
         with _lock:
             _cache['values'].update(str(v) for v in payload['env'].values() if len(str(v)) >= 4)

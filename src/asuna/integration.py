@@ -11,7 +11,7 @@ import subprocess
 import threading
 import uuid
 
-from .config import DATA, ROOT, redact_text
+from .config import DATA, ROOT, redact_text, echoed
 from .evidence import canonical, sha
 from .state import Denied
 from .queue import RuntimeLease
@@ -487,7 +487,7 @@ class IntegrationRunner:
                 timeout = args.get('timeout', 30)
                 if type(timeout) is not int or not 1 <= timeout <= 60:
                     raise ValueError('INTEGRATION_TEST_TIMEOUT_RANGE_1_60: timeout 只能是 1..60 的整数（秒），给的是 %s；'
-                                     '不写就是 30' % str(timeout)[:40])
+                                     '不写就是 30' % echoed(timeout))
                 try:
                     process = self._launch(self._snapshot(), args['argv'], 'test')
                     expired = not process.finished.wait(timeout)

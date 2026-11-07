@@ -29,3 +29,30 @@ In her words: Closed 2026-10-30 as 1850b590582d. Xiaoman's signature bdbac55c952
 答应过那格——版本常量：页上那句「each table is one file, with a version constant that is raised with the text」（L528-529）现场不成立。`LIMIT_WHY` 与 `WORDS` 在同一份 `src/asuna/role_tools.py`（3814 行，blob `4c8c6b04586e`，sha256 前缀 `0c3115422550`），全文 `git grep -nE "VERSION|_V = |version"` 只 3 行命中且都不是版本常量（`:1839` 注释、`:2018` conversion、`:3186` `plan_version`）；`git grep -nE "WORDS_VERSION|LIMIT_WHY_VERSION" src/asuna/` 零命中（`notices.py:31` 那个 `WORDS_VERSION = 1` 是适配器通知词表，另一回事）。同页另外两张有，可当参照：`packages/cognition-core/src/marks.js:8` `export const MARKS_VERSION = 1;`、`src/asuna/wake_words.py:9` `WAKE_VERSION = 2`（L7 注释 Bump WAKE_VERSION with any change to them.）。这句页上写的是设计意图还是已成立的事实归她一句话；要留就标未落地。那两行 L528-529 出自哪份文档，随本次回执报我；若不在 108 README，我另补一段更正这句的归属。
 
 判这张表交齐了，同时留一句给下一个人：我签的 D5 只有 6 处落点（py 5 条＋js 标题 1 条），`WORDS`／`LIMIT_WHY` 那两张表只有 1 条落字面、其余是形状——别拿"108 的测试全绿"当"我签的规则被测过"。页 L393 那句 `Not tested: wording, the words of the tables, the counts of section 5.` 与上面一致，我照旧不要补措辞测试。
+
+The one acceptance (§8.4 item 5, design.md §8), read 2026-11-07 by a Claude subagent for the 7 days after the install
+(10-29 23:59Z to 11-05 23:59Z, 5,644 character-brain calls; the 7 days before, 9,211 calls, where a row compares).
+Counts only, from her character sessions (one per id) and audit rows.
+
+| Row | Count | Criterion | Verdict |
+|---|---|---|---|
+| B1 channel lines between a step's mark and its assistant message | 0 (one flagged step is a session's first, its lines queued before it) | 0 | pass |
+| B1 hold time | 353 held lines and 40 held over a compaction, each written within 1 s of a step boundary | its step + 1 s | pass |
+| B1 receipts written twice / lines absorbed into a turn without `speak` | 0 / 0 of 521 | no rise / 0 | pass |
+| B2 notices with their mark / checkpoints with theirs / program-woken notices with `speaker` | 1,728 of 1,728 / 133 of 133 / 0 of 876 | all / all / 0 | pass |
+| B2 checkpoint items with a 〔n〕 | 4,988 of 12,522 (39.8%) | reported | – |
+| B3 a second refusal of another class on the same tool | 35 of 694 failures (5.0%; 5.7% before) | below 2% | **fail** |
+| B3 refusals holding 20+ characters of the call's prose | 6 (understand_person 4, note 1, delegate 1) | 0 | **fail** |
+| B3 refusals past layer 0 with no codes in their audit row | 223 of 671 | 0 | **fail** |
+| B3 DSH's English refusal on her character brain | 0 | 0 | pass |
+| B4 the guard's schema refusals | 12, 2.13 per 1,000, every one a missing field the program cannot infer | at most 1.5 (floor 1.0) | **fail** |
+| B4 chains | 1, 0.18 per 1,000 | at most 0.4 | pass |
+| B4 length refusals per field against the week before | think 31 (30); note text 31 (40); plan intent 14 (52); others 2 or fewer | no higher | **fail** (think, by 1) |
+| B4 cold first step per conversation | 19 of 30 cold, 11 partly cached, then warm (94.1% of character steps cached; 95.0% before) | one each | pass |
+| §10.8 items from someone's word resolve to a line by that person | 20 of 20 | all | pass |
+| B5 checkpoint items whose one cited line's speaker differs from the label | 5 of 32 (16%, an upper bound) | built or dropped on the rate | – |
+
+Across the owner's DSH 0.2.2 switch (11-04 21:10 NZDT) the rows measure the same things (DSH's English refusal 0 on both
+sides); after it the relevance gate failed every question, so the last 1.5 days hold no group turns. Of the 35 second
+refusals, 21 are write_document, mostly a missing name followed by the persona render budget, a refusal ADR-117 L3
+removed (11-06).

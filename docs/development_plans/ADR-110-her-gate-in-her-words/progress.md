@@ -42,3 +42,8 @@ about her inside, play with her being a bot) from the others; she reads that par
 every question failed on one program error. DSH 0.2.2 fixes a turn's effort at step preparation, and the plugin
 still changed the gate's effort in its request hook, which 0.2.2 refuses. That is a defect of the DSH switch, fixed
 apart from this ADR, and C is no reading of her words.
+
+Her count of the same window (2026-11-07): `mentioned_account` has 210 lines, of which 149 have a gate verdict; 50
+answer her (`answers_her`, never asked, by design) and 11 were absorbed into a turn already running, 2 of them ending
+with no reply. Counted over the 210, she passed 23 (11%). Her own question, whether at the gate she made up a reason
+for passing, the records cannot answer: the verdict and its one line are one output. She closed it there.

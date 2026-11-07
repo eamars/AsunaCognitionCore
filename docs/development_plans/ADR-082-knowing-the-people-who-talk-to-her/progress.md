@@ -21,3 +21,11 @@ finds nothing is not a read (her correction, 11-07). Corrections made before a w
 common, so the read was not widened. Each corrected write, with person, layer, date and line, and the borderline
 cases, is in `.runtime/private/adr082/corrections.md` (4,704 bytes, private). A lower bound on wrong writes, not an
 accuracy.
+
+Her check of 格三, 2026-11-07 13:00: the 17 writes the private list names are all in her records (layer and person
+right, +7 to +57 seconds), and the 6 lines cited are the person's own, after the write. Two limits of the read, kept
+as limits (the page's rule: not widened when not common): a write's window closes at her next write about the same
+person in any layer, so 3 of the 5 not judged had the person speaking in that conversation; and the list gives a row
+with its line only for the 6 corrected, the 10 searched and the 5 not judged are one paragraph each. Her lesson, in
+her words of the same message: without the person's own line, 「你认可／这是你的属性／这是你发的」 are written as a
+guess. Closed 2026-11-07: every cell read, her verdicts in, nothing left.

@@ -203,7 +203,7 @@ Her mind's tools: what the character brain may do in one native turn (ADR-011 §
 - def `offered_pictures` — The artifact ids her turn may send (image_artifacts_from_program): she may also look at them.
 - def `her_pictures` — Whether she can look at a picture this turn: her own route takes images and the conversation's recent pictures (the same window read_image reads) include one that can be pulled.
 - def `turn_pictures` — ([(ref, payload)] to attach to her group turn, pictures_from_program or None).
-- def `code_of` — The machine code of a refusal, kept in the record (ADR-060), never in her words.
+- def `code_of` — The machine code of a refusal, kept in the record (ADR-060), never in her words; an exception that names none is recorded by its class.
 - def `words` — A refusal in words for her (ADR-060): what is wrong and what to do.
 - def `called` — Whether this turn is someone calling her: an addressed group line, or a person's line in a one-to-one conversation (home, a private chat, a line); never a heartbeat, a visit, a note or a task's hand-back.
 - def `spoken` — (lines, texts) of this turn's text parts that left or may still leave, read from its outbox each time: a failure the platform reports after the call gives its lines back too.

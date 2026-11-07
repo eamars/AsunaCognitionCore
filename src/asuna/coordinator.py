@@ -711,7 +711,7 @@ class Coordinator:
         from .grants import workspace_grant
         whose=whose or whose_of.of(self.store,ep)
         if not whose:
-            raise role_tools.Refused(role_tools.NOT_NOW['delegate'])      # a note from outside whose origin is gone
+            raise role_tools.Refused(role_tools.NOT_NOW['delegate'], ['NOT_NOW'])      # a note from outside whose origin is gone
         # A task begun on an errand is home's, and one begun in a reflection runs under home's own session: both turns
         # run in a session retired when they end, which a task would outlive (owner and her, 2026-10-20). Its grants
         # and its input are the home turn's that sent the errand (errands.home_turn).
@@ -788,7 +788,7 @@ class Coordinator:
             side=session_records.get(self.store, session, fields=['reflection']) if session else None
             found=((side or {}).get('reflection') or {}).get('home_session_id')
         if not found and session:
-            raise role_tools.Refused('家里的会话这会儿找不到（不是你的错）：这件回家再交，或者记一个 plan 到时候交。')
+            raise role_tools.Refused('家里的会话这会儿找不到（不是你的错）：这件回家再交，或者记一个 plan 到时候交。', ['HOME_SESSION_MISSING'])
         return found or session
 
     def _zone(self):
@@ -819,21 +819,21 @@ class Coordinator:
             # The program asking her about this running task (ADR-112 §12.2): her words steer it within its own
             # grants; continuing it once it is back belongs to the turn its result opens.
             if task['state'] not in ('READY','RUNNING'):
-                raise role_tools.Refused(TIME_UP_BACK)
+                raise role_tools.Refused(TIME_UP_BACK, ['TASK_ALREADY_BACK'])
             return self._steer(ep,call_id,task,message)
         development,integration,names,network=self._grants(ep,whose)
         if (task.get('integration_profile')!=integration   # 比值，不是 truthy：owner 回合不能给窄授权任务补话，反过来也不行
                 or bool(task.get('development_grant')) and not for_whose(self.store,whose_of.of(self.store,ep))):
             # Work under the owner's grants takes words only from a turn with the same grants (ADR-011 §6.2).
-            raise role_tools.Refused('这一回合的授权和原来那件事不一样，不能给它补话或接着做；要做就用 delegate 交一件新的。')
+            raise role_tools.Refused('这一回合的授权和原来那件事不一样，不能给它补话或接着做；要做就用 delegate 交一件新的。', ['TASK_OTHER_GRANT'])
         if task['state'] in ('READY','RUNNING'):
             return self._steer(ep,call_id,task,message)
         local=(ep['scene_id'],ep['person_id'])==(self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])
         source=(message_records.get(self.store, 'in-'+ep['_id']) or {}).get('event',{})
         if task['state']=='STALE':
-            raise role_tools.Refused('这件事正在被改（不是你的错）：等它的新版本回来再补话，结果回来会再叫你。')
+            raise role_tools.Refused('这件事正在被改（不是你的错）：等它的新版本回来再补话，结果回来会再叫你。', ['TASK_BEING_REVISED'])
         if task['state']=='CANCELLED' and task.get('cancel_reason')!='host_stop':
-            raise role_tools.Refused('这件事已经叫停了，不能接着做；要再做就用 delegate 交一件新的。')
+            raise role_tools.Refused('这件事已经叫停了，不能接着做；要再做就用 delegate 交一件新的。', ['TASK_STOPPED'])
         task_id='task-'+sha(canonical([ep['_id'],call_id]))[:32]
         continued=task_records.get(self.store, task_id)
         said=None

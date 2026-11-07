@@ -84,10 +84,10 @@ def listing(store, persona, moment=None):
 
 
 def set_focus(store, ep, scene, on, persona):
-    """She makes a group active or lets it rest. Returns what she reads; raises ValueError(words) to refuse."""
+    """She makes a group active or lets it rest. Returns what she reads; raises ValueError('CODE: words') to refuse."""
     from .state import Conflict
     if not on and admin_here(store, scene, persona):
-        raise ValueError('你在这个群是管理员，它一直常驻（管理员要看得见群里的事）；要少花在这里的心思，可以少说话，不必让它歇。')
+        raise ValueError('GROUP_ADMIN_ALWAYS_ON: 你在这个群是管理员，它一直常驻（管理员要看得见群里的事）；要少花在这里的心思，可以少说话，不必让它歇。')
     if bool(scene.get('focus_active')) == on:
         state = '常驻' if active(store, scene, persona) else '歇着'
         return {'unchanged': '这个群本来就是%s。' % state, 'groups': listing(store, persona)}
@@ -98,7 +98,7 @@ def set_focus(store, ep, scene, on, persona):
     try:
         scene_records.save(store, changed, expected=scene['revision'], stream=scene['_id'])
     except Conflict:
-        raise ValueError('这个群的记录刚被别处改过，没改成；再来一次就行。') from None
+        raise ValueError('GROUP_RECORD_CHANGED: 这个群的记录刚被别处改过，没改成；再来一次就行。') from None
     if _changed:
         try:
             _changed(scene['_id'])

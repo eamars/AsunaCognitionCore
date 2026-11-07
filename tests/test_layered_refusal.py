@@ -90,7 +90,7 @@ def test_a_field_the_schema_named_is_not_named_twice_and_a_wrong_type_is_a_probl
 def test_a_permission_refusal_stops_alone(world):
     ep = turn(world, thought=False, tools=['think'])
     outcome, said, codes = call(world, ep, 'write_document', {'doc': 'x', 'why': 1})
-    assert outcome == 'refused' and '这一回合用不了' in said and '处要改' not in said and not codes, said
+    assert outcome == 'refused' and '这一回合用不了' in said and '处要改' not in said and codes == ('NOT_NOW',), said
 
 
 def test_a_call_with_problems_does_none_of_its_effect(world):

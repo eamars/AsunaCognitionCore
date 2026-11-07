@@ -37,3 +37,35 @@ def test_a_plan_length_refusal_names_its_cause_not_the_schedule_code():
     # The scheduler's own guard carries a code that names the cause; role_tools shows words() of it.
     text = role_tools.words(ValueError('PLAN_INTENT_INVALID: ' + problem))
     assert 'PLAN_INTENT_INVALID' not in text and text.startswith('intent 太长了：1200 字')
+
+
+def test_every_refusal_names_its_code_and_her_words_start_with_none():
+    """Each `Refused` and each problem a handler finds (`_found`) names its codes (ADR-108 D4b), which the record keeps,
+    so every refusal can be counted by code; a message written out never starts with a code, which is not her words."""
+    import ast
+    problems = []
+    for path in sorted(SRC.glob('*.py')):
+        tree = ast.parse(path.read_text(encoding='utf-8'))
+        other = any(isinstance(node, ast.ClassDef) and node.name == 'Refused' for node in ast.walk(tree)) \
+            or any(isinstance(node, ast.ImportFrom) and node.module == 'vision' and any(a.name == 'Refused' for a in node.names)
+                   for node in ast.walk(tree))
+        if other and path.name != 'role_tools.py':
+            continue                                  # a module's own Refused (vision.py: a fetch refused)
+        for node in ast.walk(tree):
+            name = isinstance(node, ast.Call) and (getattr(node.func, 'id', None) or getattr(node.func, 'attr', None))
+            if name not in ('Refused', '_found'):
+                continue
+            where = '%s:%d' % (path.name, node.lineno)
+            codes = node.args[1] if len(node.args) > 1 else next(
+                (k.value for k in node.keywords if k.arg in ('codes', 'code')), None)
+            empty = codes is None or (isinstance(codes, ast.Constant) and not codes.value) or (
+                isinstance(codes, (ast.List, ast.Tuple))
+                and (not codes.elts or any(isinstance(e, ast.Constant) and not e.value for e in codes.elts)))
+            if empty:
+                problems.append(where + ' names no code')
+            head = node.args[0] if node.args else None
+            while isinstance(head, ast.BinOp):
+                head = head.left
+            if isinstance(head, ast.Constant) and isinstance(head.value, str) and re.match(r'[A-Z][A-Z0-9_]+:', head.value):
+                problems.append(where + ' starts her words with a code')
+    assert not problems, problems

@@ -56,3 +56,9 @@ Across the owner's DSH 0.2.2 switch (11-04 21:10 NZDT) the rows measure the same
 sides); after it the relevance gate failed every question, so the last 1.5 days hold no group turns. Of the 35 second
 refusals, 21 are write_document, mostly a missing name followed by the persona render budget, a refusal ADR-117 L3
 removed (11-06).
+
+The owner's calls on the acceptance, 2026-11-07, his recommended options: the two real defects are fixed (a code on
+every refusal past layer 0; no refusal holds her prose), and three fails stand as stated residuals: the second
+refusals of another class (5.0%, most of them a refusal ADR-117 L3 removed), the schema refusals above the gate (all
+of the floor's kind, a missing field the program cannot infer), and think's length refusals (31 against 30). B5 is
+dropped: its rate is an upper bound on 5 cases, revisited only if a wrong attribution causes a real failure.

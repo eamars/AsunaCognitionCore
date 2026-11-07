@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import clock
 from . import visibility
-from .config import excerpt
+from .config import excerpt, echoed
 from .evidence import sha
 from .state import Denied, now
 from .records import scenes as scene_records
@@ -131,20 +131,20 @@ def add(store, ep, persona, cls, args):
     try:
         hours = int(given)
     except (TypeError, ValueError):
-        raise Denied('WATCH_HOURS_INVALID: ' + ('没写 hours' if given is None else 'hours 给的是「%s」' % given)) from None
+        raise Denied('WATCH_HOURS_INVALID: ' + ('没写 hours' if given is None else 'hours 给的是「%s」' % echoed(given))) from None
     if not 1 <= hours <= WATCH_MAX_HOURS:
         raise Denied('WATCH_HOURS_INVALID: hours 给的是 %d' % hours)
     mode = args.get('mode') or 'once'
     if mode not in MODES:
-        raise Denied('WATCH_MODE_INVALID: how_often 给的是「%s」' % mode)
+        raise Denied('WATCH_MODE_INVALID: how_often 给的是「%s」' % echoed(mode))
     why = excerpt(' '.join(str(args.get('why') or '').split()), 100) or None
     scene = scene_records.get(store, ep['scene_id'])
     people = People(store)
     found = people.resolve(scene, args.get('person'))
     if len(found) != 1:
-        raise Denied('WATCH_PERSON_UNCLEAR: 「%s」对得上 %s' % (args.get('person'), '、'.join(people.label(d) for d in found[:5]))
+        raise Denied('WATCH_PERSON_UNCLEAR: 「%s」对得上 %s' % (echoed(args.get('person')), '、'.join(people.label(d) for d in found[:5]))
                      if found else 'WATCH_PERSON_NOT_HERE: ' + ('没写 person' if not args.get('person')
-                                                               else '这里没有「%s」' % args.get('person')))
+                                                               else '这里没有「%s」' % echoed(args.get('person'))))
     person = found[0]['person']
     _id = 'watch-' + sha((persona + '|' + person).encode())[:12]
     current = get(store, _id)
@@ -164,7 +164,7 @@ def add(store, ep, persona, cls, args):
 def stop(store, persona, watch_id):
     row = get(store, str(watch_id or '').strip(), persona=persona, state='on')
     if not row:
-        raise Denied('WATCH_NOT_FOUND: ' + ('没写 id' if not watch_id else 'id「%s」不在名单上（可能已经到期停了）' % watch_id))
+        raise Denied('WATCH_NOT_FOUND: ' + ('没写 id' if not watch_id else 'id「%s」不在名单上（可能已经到期停了）' % echoed(watch_id)))
     save(store, {**row, 'state': 'ended', 'ended_at': now()}, expected=row['revision'], stream='watches:' + persona)
     return {'stopped': row['name']}
 

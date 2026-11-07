@@ -34,6 +34,7 @@ Scene and person ids start with their kind (`<kind>:…`), and a configured chan
 import importlib
 from pathlib import Path
 import sys
+from .config import echoed
 
 _KINDS = {}
 _LOADED = []
@@ -74,7 +75,7 @@ def of(identifier):
 def of_channel(channel_id):
     kind = _KINDS.get(channel_id)
     if kind is None:
-        raise ValueError('CHANNEL_KIND_NOT_INSTALLED: ' + str(channel_id))
+        raise ValueError('CHANNEL_KIND_NOT_INSTALLED: ' + echoed(channel_id))
     return kind
 
 

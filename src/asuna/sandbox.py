@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
-from .config import DATA
+from .config import DATA, echoed
 from . import sandbox_backend
 
 OUTPUT_LIMIT = 262144
@@ -23,7 +23,7 @@ def run_seconds(value, default=RUN_SECONDS):
         return default
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= RUN_SECONDS_MOST:
         raise ValueError('INVALID_TIMEOUT: timeout 是 1 到 %d 的整数秒（给的是 %r）；不写就是 %d 秒'
-                         % (RUN_SECONDS_MOST, value, default))
+                         % (RUN_SECONDS_MOST, echoed(value), default))
     return value
 PYTHONS = ('python3', 'python', 'python3.exe', 'python.exe')
 ARGV_ITEMS = 40

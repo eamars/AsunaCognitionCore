@@ -20,6 +20,7 @@ from .records import memories as memory_records
 from .records.view import ANY, View, fenced, is_text
 from .store.errors import DuplicateKey
 from .store.words import AnyOf, NoneOf, Range, StartsWith
+from .config import echoed
 
 SHORT_ID = 12                 # event ids as she reads and quotes them; a unique prefix resolves to the event
 
@@ -50,7 +51,7 @@ def parse_ts(value):
     """ISO-8601 → aware UTC; a timestamp without an offset is refused."""
     moment = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace('Z', '+00:00'))
     if moment.tzinfo is None:
-        raise ValueError(f'TIMESTAMP_REQUIRES_OFFSET: {value}')
+        raise ValueError(f'TIMESTAMP_REQUIRES_OFFSET: {echoed(value)}')
     return moment.astimezone(timezone.utc)
 
 
@@ -238,14 +239,14 @@ def from_words(model, item):
     kind = kind_key(model, item.get('kind'))
     if item.get('intensity') not in scale['val']:
         raise AffectError('AFFECT_INTENSITY_UNKNOWN', '%s；intensity 只能是 %s（how_to_record_from_program.intensity）'
-                          % ('没写 intensity' if item.get('intensity') is None else '「%s」不在词表里' % item['intensity'],
+                          % ('没写 intensity' if item.get('intensity') is None else '「%s」不在词表里' % echoed(item['intensity']),
                              '、'.join(scale['val'])))
     spec = model.get('kinds', {}).get(kind) or {}
     # ADR-086 D3: the kind's own arousal word when she writes none; the scale's lowest word when the kind has none.
     arousal = item.get('arousal') or spec.get('arousal') or min(scale['arl'], key=scale['arl'].get)
     if arousal not in scale['arl']:
         raise AffectError('AFFECT_AROUSAL_UNKNOWN', '「%s」不在词表里；arousal 只能是 %s（how_to_record_from_program.arousal），'
-                          '也可以不写' % (arousal, '、'.join(scale['arl'])))
+                          '也可以不写' % (echoed(arousal), '、'.join(scale['arl'])))
     valence = spec.get('valence')
     direction = item.get('direction') or {'positive': '好', 'negative': '坏'}.get(valence)
     if direction not in ('好', '坏'):
@@ -556,7 +557,7 @@ class AffectLedger:
         if item.get('ref') not in refs:
             from .config import refs_usable
             raise AffectError('AFFECT_REF_NOT_IN_INDEX', '%s不在%s里；ref 照抄%s里触动你的那条（消息或记忆）的 id。%s'
-                              % ('没写 ref，' if not item.get('ref') else 'ref「%s」' % item['ref'], where, where,
+                              % ('没写 ref，' if not item.get('ref') else 'ref「%s」' % echoed(item['ref']), where, where,
                                  refs_usable(refs)))
         if self.model.get('require_cost') and not str(item.get('cost') or '').strip():
             raise AffectError('AFFECT_COST_REQUIRED', '这份情感账每一笔都要写 cost：这件事让你付出了什么')
@@ -568,7 +569,7 @@ class AffectLedger:
         kind = item.get('kind') or ''
         if kind and kind not in self.model.get('kinds', {}):
             raise AffectError('AFFECT_KIND_UNKNOWN', 'kind「%s」不在种类表里；照抄 how_to_record_from_program.kinds 里的一个：%s%s'
-                              % (kind, self._kinds(), '，或者不写 kind、写 direction' if self.model.get('allow_untyped', True) else ''))
+                              % (echoed(kind), self._kinds(), '，或者不写 kind、写 direction' if self.model.get('allow_untyped', True) else ''))
         if not kind and not self.model.get('allow_untyped', True):
             raise AffectError('AFFECT_KIND_REQUIRED', '这份情感账要写 kind：how_to_record_from_program.kinds 里的一个：%s'
                               % self._kinds())
@@ -638,10 +639,10 @@ class AffectLedger:
             target = found[0] if len(found) == 1 else None
         if not target:
             raise AffectError('AFFECT_EVENT_UNKNOWN', 'event_id「%s」%s；照抄 affect_from_program.reasons 里那一笔的 event_id'
-                              % (item['event_id'], '对得上不止一笔' if len(found) > 1 else '不是你记过的一笔'))
+                              % (echoed(item['event_id']), '对得上不止一笔' if len(found) > 1 else '不是你记过的一笔'))
         if not self.readable(target.get('source_scope'), ep['scope_key'], cls):
             raise AffectError('AFFECT_EVENT_NOT_READABLE', '「%s」是在别的对话里记的，这里改不了；回到记它的地方或家里再 %s'
-                              % (item['event_id'], item['op']))
+                              % (echoed(item['event_id']), echoed(item['op'])))
         if item['op'] == 'void' and not str(item.get('why') or '').strip():
             raise AffectError('VOID_REQUIRES_WHY', 'void 要写 why：为什么这一笔的前提不成立')
         key = [ep['_id'], 'affect_ops', key if key is not None else index]
@@ -651,9 +652,9 @@ class AffectLedger:
         if item['op'] == 'close':
             if not target.get('open'):
                 raise AffectError('CLOSE_REQUIRES_OPEN', '「%s」记的时候没挂着（unresolved 不是 yes），没有可了结的；'
-                                  '它会自己淡下去，不用管；前提不成立就用 void' % item['event_id'])
+                                  '它会自己淡下去，不用管；前提不成立就用 void' % echoed(item['event_id']))
             if amendments_of(self.store, target=target['_id'], ops=['close']).first(fields=['_id']):
-                raise AffectError('ALREADY_CLOSED', '「%s」已经了结过了，不用再 close' % item['event_id'])
+                raise AffectError('ALREADY_CLOSED', '「%s」已经了结过了，不用再 close' % echoed(item['event_id']))
         return self.amendment(target['_id'], item['op'], why=item.get('why', ''), by='character',
                               key=key, scope=target.get('source_scope'))
 
@@ -716,7 +717,7 @@ class AffectLedger:
         proposal = ledger_row(self.store, PROPOSALS, item['proposal_id'], persona=self.persona, kind_row='proposal')
         if not proposal or not self.readable(proposal['source_scope'], ep['scope_key'], cls):
             raise AffectError('AFFECT_PROPOSAL_UNKNOWN', '没有 proposal_id「%s」；照抄 affect_proposals_from_program 里的 '
-                              'proposal_id' % item['proposal_id'])
+                              'proposal_id' % echoed(item['proposal_id']))
         word = 'accepted_edited' if item['decision'] == 'edit' else item['decision']
         decided = ledger_row(self.store, PROPOSALS, 'decision:' + proposal['_id'])
         if decided and decided.get('episode_id') == ep['_id'] and decided.get('decision') == word:

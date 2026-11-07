@@ -23,6 +23,7 @@ from .records import scenes as scene_records
 from .records import messages as message_records
 from .records import heads as head_records
 from . import clock
+from .config import echoed
 
 PERSON_SCOPE = 'person'
 LAYERS = ('person', 'here')
@@ -273,7 +274,7 @@ def resolve(store, ep, scene, value, persona, home=False, for_read=False):
         if len(found) == 1:
             return found[0].get('author') or found[0]['person']
         labels = [people.copyable_author(scene, i) for i in here if i != people.self_id]     # what resolve takes back
-        raise Unknown(('「%s」指的不止一个人' % text if len(found) > 1 else '这一回合里没有「%s」' % text if text else '要写 person')
+        raise Unknown(('「%s」指的不止一个人' % echoed(text) if len(found) > 1 else '这一回合里没有「%s」' % echoed(text) if text else '要写 person')
                       + '：照抄标签，这一回合能写的是 %s。' % ('、'.join(labels) or '（没有）'))
     if not text or text in (people.speaker(scene, ep['person_id']),) or people.person(text) == people.person(ep['person_id']):
         return ep['person_id']
@@ -282,5 +283,5 @@ def resolve(store, ep, scene, value, persona, home=False, for_read=False):
         if len(rows) == 1:
             return rows[0]['person']
         raise Unknown('「%s」%s：照抄「名单」里的名字（recall 的 person 写「名单」看）。'
-                      % (text, '指的不止一个人' if rows else '不在名单上'))
+                      % (echoed(text), '指的不止一个人' if rows else '不在名单上'))
     raise Unknown('这里只有跟你说话的这个人，person 不写就是他。')

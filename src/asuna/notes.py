@@ -24,7 +24,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from . import clock
-from .config import ago, character_id, excerpt, over, soft
+from .config import ago, character_id, excerpt, over, soft, echoed
 from .evidence import canonical, sha
 from .state import now
 from . import scene_links, visibility
@@ -375,7 +375,7 @@ def prepare(store, ep, cls, args, call_id, moment=None, question=None):
         people = People(store, persona)
         names = '、'.join('%s（%s）' % (people.scene_title(scene_records.get(store, sid)), p)
                          for p, (sid, _) in found.items())
-        raise NoteRefused('NOTE_TARGET_UNKNOWN', ('送不到「%s」。能送到的：%s。照抄 place。' % (args.get('to'), names))
+        raise NoteRefused('NOTE_TARGET_UNKNOWN', ('送不到「%s」。能送到的：%s。照抄 place。' % (echoed(args.get('to')), names))
                           if names else '这一回合没有能送便条的地方。')
     to_scene, kind = found[place]
     text = str(args.get('text') or '').strip()

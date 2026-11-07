@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+from .config import echoed
 from .evidence import canonical, sha
 from .persona_model import check_value, key_spec, value_words, writable_keys
 from .state import Conflict, Denied, now
@@ -44,22 +45,22 @@ class PolicyStore:
             if not isinstance(item, dict) or not isinstance(item.get('key'), str):
                 raise ValueError(f'POLICY_ITEM_INVALID: {index}')
             if item.get('class', 'param') in REFUSED_CLASSES:
-                raise Denied(f"POLICY_CLASS_REFUSED: {item['key']}")
+                raise Denied(f"POLICY_CLASS_REFUSED: {echoed(item['key'])}")
             if item.get('class', 'param') != 'param':
-                raise ValueError(f"POLICY_CLASS_UNKNOWN: {item['key']}")
+                raise ValueError(f"POLICY_CLASS_UNKNOWN: {echoed(item['key'])}")
             what = item.get('what')
             if not isinstance(what, str) or not 1 <= len(what) <= 300:
-                raise ValueError(f"POLICY_WHAT_REQUIRED: {item['key']}")
+                raise ValueError(f"POLICY_WHAT_REQUIRED: {echoed(item['key'])}")
             spec = key_spec(self.model, item['key'])
             if spec is None:
                 raise Denied("POLICY_KEY_UNDECLARED: 没有可以改的参数「%s」；能改的是：%s，照抄一个"
-                             % (item['key'], '、'.join(writable_keys(self.model))))
+                             % (echoed(item['key']), '、'.join(writable_keys(self.model))))
             try:
                 check_value(spec, item.get('value'))
             except ValueError as exc:
                 code = str(exc).split(':', 1)[0]
                 raise ValueError('%s: %s 给的是 %s，要的是%s；改成合适的值再写' % (
-                    code, item['key'], json.dumps(item.get('value'), ensure_ascii=False)[:80],
+                    code, item['key'], echoed(json.dumps(item.get('value'), ensure_ascii=False)),
                     value_words(spec))) from None
             out[item['key']] = {'value': item['value'], 'what': what, 'class': 'param'}
         return out

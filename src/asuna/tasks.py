@@ -17,7 +17,7 @@ import uuid
 from contextlib import contextmanager,nullcontext
 import jsonschema
 from . import clock
-from .config import DATA,prompt_path,redact_text,excerpt
+from .config import DATA,prompt_path,redact_text,excerpt,echoed
 from .render import action_values
 from . import answers, handover, machine_words, sandbox_backend, visibility
 from .evidence import canonical,sha
@@ -298,7 +298,7 @@ def workspace_file(root, protected, op, args):
         target = (root / str(name)).resolve()
         if not target.is_relative_to(root):
             raise PermissionError('PATH_DENIED: path %r 在任务文件夹外；写 /task 里的相对路径，例如 notes.txt 或 '
-                                  'out/result.json（不带 /task/ 前缀，不用 ..）' % given)
+                                  'out/result.json（不带 /task/ 前缀，不用 ..）' % echoed(given))
         return target
     try:
         if op == 'list_files':
@@ -308,7 +308,7 @@ def workspace_file(root, protected, op, args):
             if target.stat().st_size > 32768:
                 raise ValueError('READ_LIMIT: %s 有 %d 字节，read_file 一次最多 32768 字节（32 KiB）；用 sandbox_run 跑 '
                                  'python3 脚本只打印要的那一段（文件路径作为单独的参数 /task/… 传入）'
-                                 % (given, target.stat().st_size))
+                                 % (echoed(given), target.stat().st_size))
             return {'path': target.relative_to(root).as_posix(), 'text': target.read_text(encoding='utf-8')}
         if any(target == p or target.is_relative_to(p) for p in protected):
             raise PermissionError('PROTECTED_PATH: %s 是只读的原始资料，不能写；写到别的路径，例如 out/%s'

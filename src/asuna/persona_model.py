@@ -12,7 +12,7 @@ from pathlib import Path
 
 import jsonschema
 
-from .config import schema
+from .config import schema, echoed
 
 SCHEMA = schema('persona-model.schema.json')
 # Values that belong to the deployer or the persona herself: a package may not
@@ -113,7 +113,7 @@ def validate(model: dict, persona_id: str) -> dict:
         path = '/'.join(str(p) for p in exc.absolute_path) or '<root>'
         raise PersonaModelError(f'PERSONA_MODEL_INVALID: {path}: {exc.message}') from None
     if model['persona']['id'] != persona_id:
-        raise PersonaModelError(f"PERSONA_ID_MISMATCH: model {model['persona']['id']!r} != registered {persona_id!r}")
+        raise PersonaModelError(f"PERSONA_ID_MISMATCH: model {model['persona']['id']!r} != registered {echoed(persona_id)!r}")
     declared = set(model.get('policy_keys', {}))
     reserved = declared & (set(PRIVATE_KEYS) | set(CORE_WRITABLE_KEYS) | OWNER_KEYS)
     if reserved:

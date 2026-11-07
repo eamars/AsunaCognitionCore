@@ -162,6 +162,21 @@ def soft(limit):
     return limit * 4 // 5
 
 
+ECHO_CHARS = 16                       # a value of hers a refusal shows back: a name or a choice whole, never her prose
+_ID_SHAPE = __import__('re').compile(r'[A-Za-z0-9_.:#/-]{1,64}')
+ECHO_CUT = '…'
+
+
+def echoed(value):
+    """A value from her call as a refusal shows it back: whole when short or one id, else its head and a mark.
+
+    At most ECHO_CHARS characters, or one token of letters, digits and _.:#/- up to 64 (a task or plan id), comes back
+    whole; anything else as its first ECHO_CHARS characters and ECHO_CUT. Every refusal that shows what she wrote uses
+    it, so a long value never comes back in full."""
+    text = ' '.join(str(value).split())
+    return text if len(text) <= ECHO_CHARS or _ID_SHAPE.fullmatch(text) else text[:ECHO_CHARS] + ECHO_CUT
+
+
 def refs_usable(refs, cap=12):
     """What a refusal that named a wrong reference adds (ADR-087 §4.5): the ones that can be used there, a few."""
     refs = [str(ref) for ref in dict.fromkeys(refs) if ref]

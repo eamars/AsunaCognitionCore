@@ -34,6 +34,7 @@ from .state import Denied, now
 from .records import artifacts as artifact_records
 from .records import scenes as scene_records
 from .records import messages as message_records
+from .config import echoed
 
 KEY = 'asuna_notice'
 GATES = ('poked', 'reacted')
@@ -325,7 +326,7 @@ def answer(store, ep, item, key):
     request = found.get(number)
     if not request:
         raise Denied('GROUP_ACTION_REQUEST_NOT_FOUND: 「%s」不是等你回的请求；%s' % (
-            item.get('who'), '现在等你回的是 ' + '、'.join(sorted(found)) if found else '现在没有等你回的请求，重试也一样'))
+            echoed(item.get('who')), '现在等你回的是 ' + '、'.join(sorted(found)) if found else '现在没有等你回的请求，重试也一样'))
     scene = scene_records.get(store, ep['scene_id']) or {}
     row_id = 'ga-' + sha(canonical([ep['_id'], 'group_action', key]))[:24]
     if not artifact_records.get(store, row_id):

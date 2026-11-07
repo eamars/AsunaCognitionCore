@@ -22,6 +22,7 @@ from .evidence import canonical, sha
 from .state import Denied, now
 from .records import artifacts as artifact_records
 from .records import scenes as scene_records
+from .config import echoed
 
 KINDS = ('mute', 'unmute', 'recall', 'kick')
 KIND_WORDS = {'mute': '禁言', 'unmute': '解除禁言', 'recall': '撤回', 'kick': '移出群', 'accept': '接受请求',
@@ -89,7 +90,7 @@ def queue(store, ep, index, item, key=None):
                      else '平台还没报过你在这里的身份'))
     kind = item.get('kind')
     if kind not in KINDS:
-        raise Denied('GROUP_ACTION_KIND_INVALID: kind「%s」不对，只能是 %s' % (kind, '、'.join(KINDS)))
+        raise Denied('GROUP_ACTION_KIND_INVALID: kind「%s」不对，只能是 %s' % (echoed(kind), '、'.join(KINDS)))
     line = None
     if kind == 'recall':
         # ADR-079 §9.4: a recall names its line, as every pointer does; whose it is follows from the line.
@@ -101,8 +102,8 @@ def queue(store, ep, index, item, key=None):
     found = [people.entry(scene, line['author'], line)] if line else people.resolve(scene, item.get('who'))
     if len(found) != 1:
         raise Denied('GROUP_ACTION_TARGET_UNCLEAR: 「%s」对得上 %s；who 用标签里的 #编号' % (
-            item.get('who'), '、'.join(people.label(d) for d in found[:5])) if found else
-            'GROUP_ACTION_TARGET_NOT_FOUND: 这个群里找不到「%s」；who 照抄他的标签，如 [名字 #4] 或 #4' % item.get('who'))
+            echoed(item.get('who')), '、'.join(people.label(d) for d in found[:5])) if found else
+            'GROUP_ACTION_TARGET_NOT_FOUND: 这个群里找不到「%s」；who 照抄他的标签，如 [名字 #4] 或 #4' % echoed(item.get('who')))
     doc = found[0]
     if doc.get('person') == people.self_id or people.is_owner(doc):
         raise Denied('GROUP_ACTION_TARGET_PROTECTED: %s 是主人或你自己，管理动作不能对他用；重试也一样' % people.label(doc))
@@ -126,7 +127,7 @@ def queue(store, ep, index, item, key=None):
             if _mute_seconds(item.get('duration')) is None:
                 raise Denied('GROUP_ACTION_DURATION_REQUIRED: 禁言要写 duration 多少分钟（%d 到 %d 的整数）%s；换个分钟数再试' % (
                     MUTE_MINUTES[0], MUTE_MINUTES[1],
-                    '，给的是「%s」' % item['duration'] if item.get('duration') is not None else ''))
+                    '，给的是「%s」' % echoed(item['duration']) if item.get('duration') is not None else ''))
             mute_minutes = item['duration']
             admin['seconds'] = _mute_seconds(mute_minutes)
     route = _route(store.config, scene)

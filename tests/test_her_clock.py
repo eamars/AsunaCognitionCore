@@ -94,19 +94,3 @@ def test_the_block_she_reads_when_a_plan_comes_due_gives_the_plan_in_words(world
     context = prepared(world, monkeypatch, 'dm-a', {'episode_kind': 'scheduled', 'scheduled_plan_id': 'plan-2'})
     block = context['scheduled_plan_from_program']
     assert 'rule' not in block and block['description'] == '一次性：9/25 20:00' and block['intent'] == 'x', block
-
-
-def test_clear_timezones_takes_the_field_off_every_scene_once(world):
-    carrying = [row['_id'] for row in scene_records.of_kind(world, 'group')]
-    for scene_id in carrying:
-        world.collection('scenes').update({'_id': scene_id}, Set({'timezone': ROOM_ZONE}))
-    before = {row['_id']: {k: v for k, v in row.items() if k != 'timezone'} for row in
-              (scene_records.get(world, scene_id) for scene_id in carrying)}
-    assert scene_records.timezones(world) == len(carrying) > 0
-    assert scene_records.clear_timezones(world) == len(carrying) and scene_records.timezones(world) == 0
-    assert scene_records.clear_timezones(world) == 0, 'a second run changes none'
-    for scene_id in carrying:
-        after = scene_records.get(world, scene_id)
-        assert 'timezone' not in after
-        assert {k: v for k, v in after.items() if k not in ('revision', '_last_op')} == \
-            {k: v for k, v in before[scene_id].items() if k not in ('revision', '_last_op')}

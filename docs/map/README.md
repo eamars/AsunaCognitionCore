@@ -507,7 +507,6 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`check_prepared_start.py`](../../tools/check_prepared_start.py) — Run the launcher's start preparation (rung 0) for one commit in a scratch folder and check what it installed.
 - [`check_staged_secrets.py`](../../tools/check_staged_secrets.py) — Report paths only; never print configured secret values or matching bytes.
 - [`cleanup_test_databases.py`](../../tools/cleanup_test_databases.py) — Inventory or remove only explicitly inventoried Asuna test databases.
-- [`clear_scene_zones.py`](../../tools/clear_scene_zones.py) — ADR-106's one-off: take the time zone off every conversation that still carries one.
 - [`import_native_credentials.mjs`](../../tools/import_native_credentials.mjs) — One-time private migration through DSH's credential provider; never logs values.
 - [`integration_import_offline_check.py`](../../tools/integration_import_offline_check.py) — 集成产物导入的离线自检：不需要 Mongo、不需要 pytest、不需要 WSL，直接跑同一套用例。
 - [`make_demo_config.py`](../../tools/make_demo_config.py) — Create the ignored demo config (ADR-009 §0.3) from config/demo.example.json.

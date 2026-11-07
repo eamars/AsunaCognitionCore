@@ -635,8 +635,6 @@ The owner of `scenes`: a conversation's record (its kind, members, scope and epo
 - def `note_size`
 - def `note_tokens`
 - def `set_character_context`
-- def `timezones` — How many conversations still carry a `timezone` (ADR-106).
-- def `clear_timezones` — ADR-106's one-off: take `timezone` off every conversation that has one.
 - def `forget_name` — An erasure of the conversation's lines takes the name they carried with them.
 - def `note_fault`
 - def `clear_fault` — The fault mark goes, if it is still the one shown (`fault.at`).

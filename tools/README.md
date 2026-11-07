@@ -33,7 +33,6 @@ Windows, `.venv/bin/python` elsewhere).
 
 | Script | Does |
 |---|---|
-| `clear_scene_zones.py` | Counts the conversations that still carry a time zone; with `--apply`, clears it. Prints counts only, never a zone. |
 
 ## Offline self-checks
 

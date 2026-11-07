@@ -89,11 +89,12 @@ def test_the_list_fields_are_the_ones_that_name_the_line_not_the_cut():
 def test_a_text_past_what_she_was_asked_for_but_within_the_line_is_kept_and_the_result_says_the_fact():
     """Owner 2026-10-20: she is asked for four fifths of the line; the line itself does not move (ADR-108 D4a)."""
     maker = tools()
-    maker.over = []
+    maker.over = {}
     assert soft(role_tools.IDEA_CHARS) == 400
-    assert maker._text({'idea': 'x' * 400}, 'idea', role_tools.IDEA_CHARS) and maker.over == []
+    assert maker._text({'idea': 'x' * 400}, 'idea', role_tools.IDEA_CHARS) and not maker.over
     assert maker._text({'idea': 'x' * 450}, 'idea', role_tools.IDEA_CHARS)
-    assert maker.over == ['idea 450 字，要求 400 字以内，多了 50 字；过了 500 字不收'], 'no 照收了: it is a fact'
+    assert maker._text({'idea': 'x' * 450}, 'idea', role_tools.IDEA_CHARS)    # checked twice (plan's D4b pass, 11-07)
+    assert list(maker.over.values()) == ['idea 450 字，要求 400 字以内，多了 50 字；过了 500 字不收'], 'no 照收了: it is a fact'
     assert over(501, 500) is None and over(400, 500) is None
 
 

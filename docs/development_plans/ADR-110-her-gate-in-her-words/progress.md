@@ -47,3 +47,9 @@ Her count of the same window (2026-11-07): `mentioned_account` has 210 lines, of
 answer her (`answers_her`, never asked, by design) and 11 were absorbed into a turn already running, 2 of them ending
 with no reply. Counted over the 210, she passed 23 (11%). Her own question, whether at the gate she made up a reason
 for passing, the records cannot answer: the verdict and its one line are one output. She closed it there.
+
+The DSH 0.2.2 defect, fixed 2026-11-07 (`8f25d171`, installed 13:07:40 NZDT): each stage's route is selected before
+DSH prepares the step. The fault window for her readings: from the switch (11-04 21:10) to the restart (11-07
+13:07:40); 84 failed looks in all, the last at 10:49:11. After it, the first two gate questions (13:46:57 and
+14:09:19) were answered, with no failed look and no repair. Closed 2026-11-07: §9.4's checks 1 to 5 read, her check
+answered, no branch or worktree left, `.runtime/private/adr110/` deleted.

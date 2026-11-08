@@ -538,14 +538,16 @@ class _Past:
                     self.changes[sid][-1][4].add(here[sid].get('visibility'))
 
     def _sections(self, revision_id):
-        if revision_id not in self.bodies:
-            content = (head_records.revision(self.store, revision_id, ['content.sections']) or {}).get('content') or {}
-            self.bodies[revision_id] = [{'sid': s['sid'], 'body': s.get('body') or '', 'visibility': s.get('visibility')}
-                                        for s in content.get('sections') or []]
-        return self.bodies[revision_id]
+        content = (head_records.revision(self.store, revision_id, ['content.sections']) or {}).get('content') or {}
+        return [{'sid': s['sid'], 'body': s.get('body') or '', 'visibility': s.get('visibility')}
+                for s in content.get('sections') or []]
 
     def body(self, revision_id, sid):
-        return next((s['body'] for s in self._sections(revision_id) if s['sid'] == sid), None)
+        # Only the text asked for is kept, never the revision around it: a record's revision can be 400 KB.
+        if (revision_id, sid) not in self.bodies:
+            self.bodies[(revision_id, sid)] = next((s['body'] for s in self._sections(revision_id) if s['sid'] == sid),
+                                                   None)
+        return self.bodies[(revision_id, sid)]
 
 
 def _kept(seen):

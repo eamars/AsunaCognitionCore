@@ -652,3 +652,13 @@ one-time command while she is quiet), with its gate item "the import's rows equa
 **L4 → Built (7 days after install, §19's rule):** a settlement night with no night list; her two corrected items
 retrieved through both paths (§14 gap 2); 0 writes of hers refused for `correction` or a gist; a gisted item she
 rewrites shows no old verbatim.
+
+### The recall-history fix as built (2026-11-09, lands before L4)
+
+A past text is shown only where its section now and every visibility the text itself had are readable
+(`crossing._kept`); a running record's row revision now stores the visibility its text had. **Known narrowing:** row
+revisions written before this fix have none, so their past texts read as `owner_private` and stop coming back in
+groups, where before they were judged by the section's visibility now. It fails closed, which is the side to fail on.
+The history is read by hashes and kept per process; only the texts asked for are kept, never whole revisions (one of
+her record's revisions is up to 432 KB). `Pilot.sync` builds its item list aside and assigns it once. Reviewed by the
+L4 reviewer: ready after the revision cache was narrowed.

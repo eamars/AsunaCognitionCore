@@ -324,16 +324,16 @@ TOOLS = {
     },
     'write_document': {
         'description': ('写你自己的文档（人格、口吻、活账、工作文档；群笔记只在那个群里）。do 选一样：replace_section 写修订后的整节；'
-                         'append_section 加新的一节；correction 给活账写更正（原条目不改）；set_tags 只改 visibility、when_shown、tags；'
+                         'append_section 加新的一节；set_tags 只改 visibility、when_shown、tags；'
                          'adopt_seed 接收人格包里更新的种子。正文写在 content。visibility：public 你所有回合读得到，'
                          'owner_private（默认）只在家里。每回合随身带的（程序的开头说明、persona、voice、self、core）'
                          '每处合起来有上限：不常用的改成 on_demand（recall 还读得到）；只在某类回合用的，tags 加 place:group、place:home、place:peer 或 place:dm，'
                          '就只在那里带上。工作文档和人格用 replace_section。只写发生过的事，不写对人说的台词。'),
         'parameters': {
             'doc': _s('文档，如 persona、voice、group_notes', required=True),
-            'op': _s('操作', required=True, enum=['replace_section', 'append_section', 'correction', 'set_tags', 'adopt_seed']),
+            'op': _s('操作', required=True, enum=['replace_section', 'append_section', 'set_tags', 'adopt_seed']),
             'reason': _s('为什么改', required=True),
-            'sid': _s('目标节，照抄它的 section（replace_section、correction、set_tags 用）'),
+            'sid': _s('目标节，照抄它的 section（replace_section、set_tags 用）'),
             'heading': _s('新节的标题（append_section 用）'),
             'body': _s('这一节的正文（markdown，不要标题行）'),
             'tags': {'type': 'array', 'items': {'type': 'string'}, 'description': '标签'},
@@ -1224,7 +1224,7 @@ def turn_pictures(store, ep):
 WORDS = {
     'DOC_WRITE_REQUIRES_OWNER_PRIVATE': '这份文档只能在家里（家里·私聊、主人私聊这类可信的对话）改。',
     'GROUP_NOTES_ONLY_IN_ITS_GROUP': ('群笔记是那个群自己的，在那个群的回合里读，所以在那个群里用 doc=group_notes 写；家里没有「这个群」。'
-                                      '从家里写，等夜间整理那一回合用它列出的 doc 名写；此刻要记，先用 ideas 的 note 记下。'
+                                      '此刻要记，先用 ideas 的 note 记下，回那个群再写。'
                                       '只能 append_section、replace_section 或 set_tags。'),
     'NOTE_OVER_LIMIT': '这份笔记已经超出每回合上限很多了，先整理（改短、合并，或用 set_tags 把不常用的节收起来）再加新的。',
     'DOC_SECTION_NOT_FOUND': '没有这一节。',
@@ -2555,8 +2555,8 @@ class RoleTools:
         elif cls != visibility.OWNER_PRIVATE:
             raise Denied('DOC_WRITE_REQUIRES_OWNER_PRIVATE: doc「%s」；在群里能写的只有 doc=group_notes，别的回家里再改' % echoed(item['doc']))
         if item['doc'].startswith('group:'):
-            # A group's notes are read in that group: always public. She may tuck a section away (on_demand), and
-            # tidy them by name from her nightly settlement (context_budget.review_block).
+            # A group's notes are read in that group: always public. She may tuck a section away (on_demand); a home
+            # turn may write them by their name.
             if item.get('op') not in group_note_ops():
                 raise Denied('GROUP_NOTES_ONLY_IN_ITS_GROUP: do「%s」不行' % echoed(item.get('op')))
             item = {k: v for k, v in item.items() if k != 'kind'}    # a group's notes are notes, whatever kind says
@@ -2588,12 +2588,6 @@ class RoleTools:
         if item.get('op') == 'let_go' and memory_tiers.ENABLED:
             self.checkpoint()
             return self._let_go(ep, slug, item.get('sid'), before), False
-        if memory_tiers.ENABLED and item.get('op') == 'replace_section' and item.get('sid'):
-            verbatim = next((s.get('body') for s in (before or {}).get('sections') or [] if s['sid'] == item['sid']), None)
-            dropped = memory_tiers.gist_refusal(memory_tiers.Tiers(self.store, ep['persona']).item(slug, item['sid']),
-                                                verbatim, args.get('body'))
-            if dropped:
-                self._found(dropped, 'GIST_NO_BASIS')
         if memory_tiers.ENABLED and (item.get('nature') or item.get('from')):
             unsigned = memory_tiers.signing(memory_tiers.Tiers(self.store, ep['persona']).item(slug, item.get('sid'))
                                             if item.get('sid') else None, item, args.get('body'))
@@ -2672,7 +2666,7 @@ class RoleTools:
             pilot = getattr(self.coordinator.context, 'pilot', None)
             if pilot is not None:
                 pilot.synced_at = 0.0            # her item index reads the new heading and tags at its next turn
-        if item['op'] in ('append_section', 'correction') and sections:
+        if item['op'] == 'append_section' and sections:
             result['sid'] = sections[-1]['sid']          # the new section's sid, for a later replace or set_tags
         written = next((s for s in sections if s['sid'] == result['sid']), None) if result['sid'] else None
         if written:
@@ -3755,11 +3749,11 @@ def read_sections(store, ep, items, cls):
             if tier:
                 out[-1]['tier'] = tier                  # ADR-096: what she wrote and where it is, when they differ
             if memory_tiers.ENABLED:
-                # A gist reads with the verbatim it stands for.
+                # A section once shortened reads with the earlier full version, said for what it is.
                 verbatim = memory_tiers.detail(store, ep['persona'], memory_tiers.Tiers(store, ep['persona']).item(
                     item['doc'], section['sid']))
                 if verbatim:
-                    out[-1]['detail'] = verbatim
+                    out[-1]['detail'] = {'what': memory_tiers.DETAIL_WHAT, 'text': verbatim}
                 # What a claim that someone said something rests on (ADR-108 D2), as this conversation reads it.
                 source = memory_tiers.sources(store, ep['persona'], item['doc'],
                                               scene_records.get(store, ep['scene_id']) or {'_id': ep['scene_id']}

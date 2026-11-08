@@ -551,7 +551,7 @@ CATALOG = Catalog([
     Collection('memory_tiers', 'memory_tiers', (
         *_text('row', 'persona', 'doc', 'sid', 'store', 'place', 'item', 'from', 'to', 'reason', 'by', 'at', 'what',
                'day', 'scene_id', 'heading', 'visibility', 'nature', 'added', 'memorable_at', 'stay_from',
-               'last_use_at', 'moved_at', 'superseded_at', 'rewritten_at', 'recalled_at', 'confirmed', 'since', 'night',
+               'last_use_at', 'moved_at', 'rewritten_at', 'recalled_at', 'confirmed', 'since', 'night',
                'last_moment', 'body_sha256', 'keep', 'shown_at', 'shown_plan', 'lapse_line'),
         *(Field(path, 'number', nullable=True) for path in ('stay_days', 'stays', 'uses', 'chars', 'tiers_version',
                                                              'lines', 'limit', 'version', 'over', 'days', 'score',

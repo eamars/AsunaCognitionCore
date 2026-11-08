@@ -128,11 +128,11 @@ def keys(item, table):
 
 
 def tag_keys(tags):
-    """Her tags that are keys: free tags of two characters or more (a `place:` tag and the correction mark are not)."""
+    """Her tags that are keys: free tags of two characters or more (a `place:` tag is not)."""
     out = []
     for tag in tags or ():
         tag = str(tag).strip()
-        if len(tag) >= 2 and ':' not in tag and tag != 'correction':
+        if len(tag) >= 2 and ':' not in tag:
             out.append(tag)
     return list(dict.fromkeys(out))
 

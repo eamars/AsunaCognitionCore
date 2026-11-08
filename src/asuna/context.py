@@ -1422,10 +1422,6 @@ class ContextBuilder:
                 _crossing.build(self.store,moment)
                 _crossing.prune(self.store,moment)
                 _folds.rerate_all(moment)
-                # ADR-062: the night list replaces the notes review (no tidy-three framing, no keep or drop).
-                listed=memory_tiers.night_list(self.store,persona,moment)
-                if listed:
-                    context['night_list_from_program']=listed
             else:
                 from .context_budget import review_block
                 review=review_block(self.store,persona,moment)

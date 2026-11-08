@@ -5,15 +5,15 @@ item. The program never rewrites an item's text; beside it, in the collection `m
 the item's place (随身 carried in every turn where it is readable, 手边 at hand: found by a turn about it or by
 `recall`, 收着 put away: found by `recall` only), when it was last memorable and its stay. A 随身 item lapses to 手边
 when its stay runs out; each memorable moment (recall returned it, a rewrite that changed it, its `doc:` ref cited, a
-second conversation it came up in, a near-duplicate met from another conversation) starts the stay again and, once per stay, doubles the
-next. A ledger or a group's notes over its count cap lapses its least recently memorable item. Her identity layer
+second conversation it came up in) starts the stay again and, once per stay, doubles the next. Nothing imitates
+forgetting on the stored side (ADR-117 L4): no gist replaces an item's text, no correction or merge supersedes one;
+what she held before stays in the revision ledger. A ledger or a group's notes over its count cap lapses its least recently memorable item. Her identity layer
 (persona, voice, self, core) has no count cap: a write of hers that takes a place over its token ceiling (carried.py)
 lands, her next home turn that can write lists that place's carried sections for her to choose (`identity_over`), and
 after that turn the program lets go, in order, until the place fits (`lapse_over`). Nothing at hand moves down by disuse: a
 memory at hand (an item that is not a fact) comes up by itself only while its last use or memorable moment is within
 its age bound (`within_age`: JOURNAL_AGE_DAYS for a running record's row, the forgetting half-life's step-back for the
-rest), and `recall` reaches it whatever its age; facts have no age bound, and a correction or a merge supersedes
-them. Every move is one row `move` and one audit line `memory.moved`, saying who made it (`by`: `her` for her let_go
+rest), and `recall` reaches it whatever its age; facts have no age bound. Every move is one row `move` and one audit line `memory.moved`, saying who made it (`by`: `her` for her let_go
 and her own `inject` writes, `program` for the rest), and is told once in each conversation that can read the item
 (`things_from_program`). Where a write leaves each section is one rule, `Tiers.placement_after`, which the identity
 gate (carried.py) measures before the write lands. A group's notes over their per-turn limit fold by last surfacing
@@ -40,7 +40,7 @@ from .records import messages as message_records
 from .records import episodes as episode_records
 from .records import memories as memory_records
 from .records.view import View, fenced, is_text
-from .store.words import AddToSet, AnyOf, HoldsNone, Increase, NoneOf, OnCreate, Range, Set, Unset
+from .store.words import AddToSet, AnyOf, Exists, HoldsNone, Increase, NoneOf, OnCreate, Range, Set, Unset
 
 TIERS_VERSION = 1
 ENABLED = True                     # the switch (ADR-062 phase 2): hers and the owner's to turn on
@@ -55,8 +55,7 @@ SELF_DOC, CORE_DOC = 'self', 'core'
 SELF_DOCS = (SELF_DOC, CORE_DOC)
 STORE_WORDS = {'persona': '人设', 'voice': '口吻', 'ledger': '活账', 'group_notes': '群笔记', 'core': 'core',
                'self': '自我', 'journal': '流水'}
-# Each item is a fact (what is: no age bound, replaced only by correction) or a memory (what happened, or her own
-# judgment: follows the cycle). Her answer (2026-10-13): per item, not per store. The store gives the default;
+# Each item is a fact (what is: no age bound) or a memory (what happened, or her own judgment: follows the cycle). Her answer (2026-10-13): per item, not per store. The store gives the default;
 # she may say it, or say where the item came from, when she writes it.
 FACTS = ('persona', 'ledger', 'group_notes', 'core')       # stores whose items are facts unless she says
 MEMORIES = ('self', 'journal', 'voice')                    # her voice is something she keeps changing (her answer)
@@ -71,7 +70,7 @@ OTHERS_SAID = ('别人说的', '主人定的')
 FACT_AUTHORS = (*OTHERS_SAID, CHECKED)
 # Considered and dropped (owner's call, 2026-10-13): a correction thread that upholds it. No honest signal for it
 # exists without the program judging what was said, which would grade her text.
-JUDGMENT_NOT_FACT = ('你自己的判断不能由你自己签成事实：要有人确认（另一处又碰到同样的说法），或者你查过了：'
+JUDGMENT_NOT_FACT = ('你自己的判断不能由你自己签成事实，除非你查过了：'
                      '用 replace_section 把它改写成带依据的一条（依据：谁、何时、从哪来），from 写 查过的。')
 CAPS = {'ledger': 10, 'group_notes': 10}           # her identity has a token ceiling per place instead (carried.py)
 FIRST_STAY_DAYS = {'group_notes': 28, 'core': 56, 'voice': 56}
@@ -108,32 +107,13 @@ FOLDED = CARRIED + '（折叠了）'
 def moved_by(move):
     """Who made a move: its `by`, or for a row written before moves said it, the same rule from its reason."""
     return move.get('by') or BY.get(move.get('reason'), 'program')
-HER_OPS = ('replace_section', 'append_section', 'correction', 'set_tags')     # her writes (placement_after)
+HER_OPS = ('replace_section', 'append_section', 'set_tags')     # her writes (placement_after)
 MOVED_SHOWN = 5
 HEADINGS_SHOWN = 8
-# The night list (settlement): at most a few items, chosen by rule, told why; no keep or drop choice among them.
-NIGHT_ITEMS = 5
-GIST_CHARS, GIST_LIST_ABOVE, GIST_NIGHTS = 160, 240, 2
-DATED = re.compile(r'\d{1,4}[年/.-]\d{1,2}|\d{1,2}月\d{1,2}|\d{1,2}:\d{2}')
-# What a basis looks like (her answer 2026-10-13: an item is a claim with its basis; a gist keeps the basis line).
+# What a basis looks like (her answer 2026-10-13: an item is a claim with its basis): signing a fact checks for one.
 BASIS = ('依据', '来源', '据', '样本', '证据', '查过', '测过', '主人说', '主人定', '因为', '出处')
-DUPLICATE_SCORE = 0.95
-REPEATED_PLACES, REPEATED_STAYS = 2, 3
 LOOK_BACK_DAYS = 7
 WORLD_LEDGER = 'world'
-NIGHT_WHAT = {'gist': '写一句意思', 'repeated': '几处都提到', 'merge': '合并'}
-NIGHT_HOW = {
-    'gist': ('用 replace_section 把它写成一两句意思（%d 字以内）；有依据的，意思后面留一行依据（谁、何时、从哪来）。'
-             '原文留在后面，recall 读得到；两晚都没写，原文就自己收着。' % GIST_CHARS),
-    'repeated': ('它是什么由你定：进 core（append_section 到 doc=core）、记到那个人（understand_person）、'
-                 '记到那个群（那个群的笔记）、记进账（append_section 到一份活账）%s，或者还在变（不用做什么）。'),
-    'merge': '两条说的是一件事：改写成一条（replace_section 其中一条），另一条 let_go。',
-    'merge_fact': '两条说的是一件事，都是事实，要合并：改写成一条（replace_section 其中一条），另一条 let_go。',
-}
-NIGHT_WHY = {'gist': '刚放到手边，还是原样的长段',
-             'repeated': '不同的对话里都碰到它', 'merge': '两条很像'}
-GIST_NO_BASIS = ('这句意思没带依据，没写进去：原文有依据（%s），意思后面留一行依据（谁、何时、从哪来，不算在 %d 字里）'
-                 '再写一次。' % ('%s', GIST_CHARS))
 # ADR-117 L3: a place's identity layer over its ceiling (`Tiers.identity_over`, `lapse_over`). Her line and the lapse's
 # are the persona's words (persona_model `memory.over_line`, `memory.lapse_line`). A section listed under the line, in
 # the order the program would let them go (its days since last thought of, its 30-day score there, what it frees); a
@@ -180,7 +160,6 @@ def _things_note():
 
 
 THINGS_NOTE = _things_note()
-NIGHT_NOTE = '夜里的清单：每条写着为什么在这、可以怎么做，都不是留或删的选择；没做的，程序也不替你做。'
 SELF_OFFER = ('current_self 现在是一整段。想好了就把它拆成一条一条，用 write_document 写进 doc=self（append_section）：'
               '一条是一个说法连同它的依据（样本、来源、证据），不按行拆；原来那段留作历史，程序不替你拆。')
 
@@ -276,6 +255,32 @@ def tell_room(store, key, persona, scene_id, words, version, at):
                                                            'at': at}), create=True)
 
 
+# ADR-117 L4: what the night list and supersession left in the rows, removed at each start (0 once it has run): the
+# night list's offers (the weekly reading's `week` offers stay) and the mark a correction or a merge put on the item it
+# put away (`superseded_at`, read by nothing now), and the shortened-from mark of an item she rewrote after its gist
+# (the gist step never set `rewritten_at`, so a later one is hers). The item rows, their moves and her documents stay.
+RETIRED_OFFERS = ('gist', 'merge', 'repeated')
+
+
+def retire_night_list(store):
+    """{offers_deleted, superseded_unset, detail_unset}: the counts of rows the step changed (all 0 when nothing was
+    left)."""
+    rows = store.collection(COLLECTION)
+    offers = rows.delete({'row': 'offer', 'what': AnyOf(list(RETIRED_OFFERS))}, many=True)
+    unset = 0
+    for move in rows.find({'row': 'move', 'reason': AnyOf(['superseded', 'merged'])}, fields=['item']):
+        item = rows.get(move['item']) if is_text(move.get('item')) else None
+        if item and 'superseded_at' in item:
+            rows.update({'_id': item['_id']}, Unset('superseded_at'))
+            unset += 1
+    detail = 0
+    for item in rows.find({'row': 'item', 'detail_of': Exists(True)}, fields=['gist', 'rewritten_at']):
+        if str(item.get('rewritten_at') or '') > str(((item.get('gist') or {}).get('done')) or '~'):
+            rows.update({'_id': item['_id']}, [Unset('detail_of'), Unset('gist')])
+            detail += 1
+    return {'offers_deleted': offers, 'superseded_unset': unset, 'detail_unset': detail}
+
+
 class Tiers:
     def __init__(self, store, persona):
         self.store, self.persona = store, persona
@@ -302,12 +307,15 @@ class Tiers:
         """The latest move of an item, or None."""
         return self._first({'row': 'move', 'item': item}, by='at')
 
-    def _new(self, doc, sid, kind, section, place, moment, *, scene_id=None, felt=False):
+    def _new(self, doc, sid, kind, section, place, moment, *, scene_id=None, felt=False, dated=None):
+        """A new item's row, written and last memorable at `moment`, or at `dated` (first written, last changed: an
+        imported entry's own times)."""
+        added, last = dated if dated and all(dated) else (_iso(moment), _iso(moment))
         row = {'_id': item_id(self.persona, doc, sid), 'row': 'item', 'tiers_version': TIERS_VERSION,
                'persona': self.persona, 'doc': doc, 'sid': sid, 'store': kind, 'fact': kind in FACTS,
                'nature': FACT if kind in FACTS else MEMORY,
                'heading': section.get('heading') or sid, 'visibility': section.get('visibility') or 'public',
-               'place': place, 'added': _iso(moment), 'memorable_at': _iso(moment), 'stay_from': _iso(moment),
+               'place': place, 'added': added, 'memorable_at': last, 'stay_from': last,
                'stay_days': FIRST_STAY_DAYS.get(kind, STAY_DAYS), 'doubled': False, 'stays': 0, 'uses': 0,
                'body_sha256': section.get('body_sha256') or sha((section.get('body') or '').encode()),
                'chars': len(section.get('body') or ''), 'surfaced_in': [], 'recalled_in': [],
@@ -365,8 +373,6 @@ class Tiers:
         fields = {'place': to, 'moved_at': _iso(moment)}
         if to == CARRIED:                         # a new stay from now
             fields.update(stay_from=_iso(moment), memorable_at=_iso(moment), doubled=False)
-        if reason in ('superseded', 'merged'):
-            fields['superseded_at'] = _iso(moment)
         if reason == 'stay':
             fields['stays'] = int(row.get('stays') or 0) + 1
         self.rows.update({'_id': row['_id']}, Set(fields))
@@ -693,26 +699,12 @@ class Tiers:
         return [move for move in moves if move]
 
     # ── her writes ─────────────────────────────────────────────────
-    def _gist_rewrite(self, slug, intent, old, new):
-        """The row, when this write is the gist step: a short rewrite of an item listed for its gist (its basis lines
-        not counted; one that dropped the basis was refused before it was written, gist_refusal). It keeps the
-        verbatim behind it and stays where it is."""
-        sid = intent.get('sid')
-        if intent.get('op') != 'replace_section' or sid not in old or sid not in new:
-            return None
-        row = self.item(slug, sid)
-        gist = (row or {}).get('gist') or {}
-        if (row and old[sid].get('body_sha256') != new[sid].get('body_sha256') and gist.get('listed')
-                and not gist.get('done') and claim_chars(new[sid].get('body') or '') <= GIST_CHARS):
-            return row
-        return None
-
     def placement_after(self, slug, intent, before, after):
         """Where a write leaves each section it moves, {sid: [(place, reason), ...]} in order, the last one the place it
         ends in: the one rule for the write (written) and for the gate that measures it first (carried.gate). Her
-        write: a new section starts carried (a running record's at hand) unless she wrote it tucked away; a correction
-        puts away what it corrects; a rewrite that changed an item brings it back to carried (not the gist step); a
-        tag that tucks a section away is her let_go, and a tag never lifts one. Anything else (a seed adopted, an
+        write: a new section starts carried (a running record's at hand) unless she wrote it tucked away; a rewrite
+        that changed an item brings it back to carried; a tag that tucks a section away is her let_go, and a tag never
+        lifts one. Anything else (a seed adopted, an
         import): a section new to the program takes its place from its `inject`, as sync would."""
         kind = store_of(slug, (after or {}).get('kind'))
         if not kind:
@@ -728,10 +720,6 @@ class Tiers:
             elif not self.item(slug, sid):
                 place = FROM_INJECT.get(new[sid].get('inject'), AT_HAND)
                 plan[sid] = [(AT_HAND if kind == 'journal' and place == CARRIED else place, 'new')]
-            if op == 'correction' and new[sid].get('corrects') in old:
-                plan[new[sid]['corrects']] = [(PUT_AWAY, 'superseded')]
-        if self._gist_rewrite(slug, intent, old, new):
-            return plan
         sid = intent.get('sid')
         row = self.item(slug, sid) if sid in old and sid in new else None
         if (op == 'replace_section' and row and start == CARRIED and row['place'] != CARRIED
@@ -744,21 +732,22 @@ class Tiers:
         return plan
 
     def written(self, slug, intent, before, after, *, scene_id=None, felt=False, moment=None, before_revision=None,
-                over=None):
+                over=None, dated=None):
         """After a document write (hers; or a seed adopted, an import: `intent` of another op), the moves
         placement_after gives, made: every new section gets its row (her new item starts carried, a running record's
         at hand; another write's takes its place from its `inject`, as sync would, and takes no store over its cap), a
-        rewrite that changed an item starts its stay again from carried, a correction supersedes the item it corrects.
-        A group's notes refold. `over`: what the gate measured of her own write (gate.planned): each pair it took over
-        its ceiling waits for her choice (over_pairs); only her write paths pass it. Returns the moves a reader should
-        be told of (an overflow names what it lapsed)."""
+        rewrite that changed an item starts its stay again from carried. A group's notes refold. `over`: what the gate measured of her own write (gate.planned): each pair it took over
+        its ceiling waits for her choice (over_pairs); only her write paths pass it. `dated` ({sid: (first written,
+        last changed)}): the times an import's new rows keep, so an old entry does not read as just written. Returns
+        the moves a reader should be told of (an overflow names what it lapsed)."""
         moves = self._written(slug, intent, before, after, scene_id=scene_id, felt=felt, moment=moment,
-                              before_revision=before_revision)
+                              before_revision=before_revision, dated=dated)
         if over:
             self.over_pairs(over, moment, scene_id=scene_id)
         return moves
 
-    def _written(self, slug, intent, before, after, *, scene_id=None, felt=False, moment=None, before_revision=None):
+    def _written(self, slug, intent, before, after, *, scene_id=None, felt=False, moment=None, before_revision=None,
+                 dated=None):
         moment = moment or clock.now()
         kind = store_of(slug, (after or {}).get('kind'))
         if not kind:
@@ -770,7 +759,8 @@ class Tiers:
         plan = self.placement_after(slug, intent, before, after)
         for sid in [sid for sid in new if sid not in old]:
             # Encoding: what she just wrote is fresh in mind, unless she wrote it tucked away herself.
-            row = self.item(slug, sid) or self._new(slug, sid, kind, new[sid], start, moment)
+            row = self.item(slug, sid) or self._new(slug, sid, kind, new[sid], start, moment,
+                                                    dated=(dated or {}).get(sid))
             self.rows.update({'_id': row['_id']}, Set({
                 'place': (plan.get(sid) or [(row['place'], None)])[-1][0], 'heading': new[sid].get('heading') or sid,
                 'visibility': new[sid].get('visibility'),
@@ -778,10 +768,6 @@ class Tiers:
             # Only her write takes a store over its cap here; another write's rows are made as sync made them.
             if op in HER_OPS and self.item(slug, sid)['place'] == CARRIED:
                 moves += self._overflow(slug, kind, row['_id'], moment)
-            if op == 'correction' and new[sid].get('corrects') in old:
-                corrected = self.item(slug, new[sid]['corrects'])
-                if corrected:
-                    moves.append(self.move(corrected, PUT_AWAY, 'superseded', moment, scene_id=scene_id))
         declared = declared_nature(intent)
         if declared:
             # What she says an item is, or where it came from, when she writes or tags it. The line it rests on goes
@@ -789,28 +775,24 @@ class Tiers:
             words = [Set({**declared, **anchor_field(declared, intent)})]
             if declared.get('from') and declared['from'] not in OTHERS_SAID:
                 words.append(Unset('line'))
-            for sid in ([sid for sid in new if sid not in old] if op in ('append_section', 'correction')
+            for sid in ([sid for sid in new if sid not in old] if op == 'append_section'
                         else [intent.get('sid')] if intent.get('sid') in new else []):
                 self.rows.update({'_id': item_id(self.persona, slug, sid)}, words)
         sid = intent.get('sid')
         if op == 'replace_section' and sid in old and sid in new:
             row = self.item(slug, sid)
             changed = old[sid].get('body_sha256') != new[sid].get('body_sha256')
-            if self._gist_rewrite(slug, intent, old, new):
-                body = new[sid].get('body') or ''
-                self.rows.update({'_id': row['_id']}, Set({
-                    'gist.done': _iso(moment), 'detail_of': {'revision_id': before_revision,
-                                                             'body_sha256': old[sid].get('body_sha256')},
-                    'body_sha256': new[sid].get('body_sha256'), 'chars': len(body)}))
-                self._refold(slug, kind, after)
-                return [move for move in moves if move]
             if row:
                 self.rows.update({'_id': row['_id']}, Set({
                     'heading': new[sid].get('heading') or sid, 'visibility': new[sid].get('visibility'),
                     'body_sha256': new[sid].get('body_sha256'), 'chars': len(new[sid].get('body') or '')}))
             if row and changed:
                 self.memorable(row, 'rewritten', moment, scene_id=scene_id)
-                self.rows.update({'_id': row['_id']}, Set({'rewritten_at': _iso(moment)}))
+                # A shortened item rewritten anew no longer stands for the full text it was shortened from: that text
+                # stays in the revision ledger, and read_sections stops showing it under the new one (ADR-117 §20).
+                self.rows.update({'_id': row['_id']}, [Set({'rewritten_at': _iso(moment)}),
+                                                       *([Unset('detail_of'), Unset('gist')]
+                                                         if row.get('detail_of') or row.get('gist') else [])])
         if op in ('replace_section', 'set_tags') and sid in old and sid in new:
             for place, reason in plan.get(sid) or []:
                 # The lift a changed rewrite brings, then the let_go a tag that tucks it away is.
@@ -1064,23 +1046,6 @@ def signing(row, intent, body=None):
     return None
 
 
-def gist_refusal(row, verbatim, body):
-    """Why her rewrite may not be taken as the gist of a listed item, or None: it keeps the claim and drops the basis
-    its verbatim had (her rule: a claim without its basis is loss, not fading)."""
-    gist = (row or {}).get('gist') or {}
-    if not gist.get('listed') or gist.get('done') or claim_chars(body or '') > GIST_CHARS:
-        return None
-    had = has_basis(verbatim or '') or (row or {}).get('from')
-    if had and not has_basis(body or '') and len((body or '').splitlines()) < 2:
-        return GIST_NO_BASIS % ((row or {}).get('from') or '原文里写着')
-    return None
-
-
-def claim_chars(text):
-    """A gist's length without its basis lines: the basis is never what the 160 characters squeeze out."""
-    return len('\n'.join(line for line in text.splitlines() if not has_basis(line)).strip())
-
-
 def has_basis(text):
     return any(word in text for word in BASIS)
 
@@ -1124,111 +1089,6 @@ def told(move):
     return '「%s」%s→%s（%s）' % (move.get('heading') or move['sid'], move['from'], move['to'],
                                REASONS.get(move['reason'], move['reason']))
 
-
-def night_list(store, persona, moment=None, *, excerpt_chars=600):
-    """The night list (settlement, ADR-062 §4.2 step 8): at most NIGHT_ITEMS, chosen by rule and each told why, none of
-    them a keep or drop choice: lapsed long or dated items waiting for their gist (写一句意思), items met in different
-    conversations (几处都提到: what it is is hers to say), near-duplicate pairs in one store (合并, mandatory for facts),
-    and once a week one put-away item with past uses (回头看). An item listed for its gist twice and not rewritten goes
-    put away as it is. Returns None when nothing is due."""
-    from .config import excerpt
-    from .documents import DocumentStore
-    moment = moment or clock.now()
-    tiers = Tiers(store, persona)
-    docs = DocumentStore(store, persona)
-    night = moment.date().isoformat()
-    bodies = {}
-
-    def body(row):
-        key = (row['doc'], row['sid'])
-        if key not in bodies:
-            content = docs.read(row['doc'])[1] or {}
-            for section in content.get('sections') or []:
-                bodies[(row['doc'], section['sid'])] = section.get('body') or ''
-        return bodies.get(key, '')
-
-    def entry(kind, row, why):
-        text = body(row)
-        source = (sources(store, persona, row['doc'], None).get(row['sid']) if row.get('line') else None)    # ADR-108 D2
-        return {'what': NIGHT_WHAT[kind], 'ref': ref(row['doc'], row['sid']), 'heading': row.get('heading'),
-                'store': STORE_WORDS[row['store']], 'nature': row.get('nature') or (FACT if row.get('fact') else MEMORY),
-                'why': why, 'body': excerpt(text, excerpt_chars), **({'source': source} if source else {})}
-    items, offered = [], []
-    # 写一句意思: lapsed down from carried, long or dated, no gist yet.
-    for row in tiers.items(place=AT_HAND):
-        gist = row.get('gist') or {}
-        if gist.get('done'):
-            continue
-        lapsed = tiers._first({'row': 'move', 'item': row['_id'], 'from': CARRIED, 'to': AT_HAND,
-                               'reason': AnyOf(['stay', 'overflow'])})
-        text = body(row) if lapsed else ''
-        # Her answer: an item of 160 characters or fewer is already short and never appears on the list.
-        if not lapsed or len(text) <= GIST_CHARS or not (len(text) > GIST_LIST_ABOVE or DATED.search(text)):
-            continue
-        if gist.get('skipped'):
-            continue
-        if len(gist.get('nights') or []) >= GIST_NIGHTS and night not in gist['nights']:
-            if row.get('fact'):
-                # A fact never goes put away by disuse: its verbatim stays at hand, no longer listed.
-                tiers.rows.update({'_id': row['_id']}, Set({'gist.skipped': _iso(moment)}))
-            else:
-                tiers.move(row, PUT_AWAY, 'gist_skipped', moment)
-            continue
-        items.append(('gist', entry('gist', row, NIGHT_WHY['gist']), [row]))
-    # 合并: near-duplicate pairs in one store (the item index's pairs), facts first.
-    from . import memory_pilot
-    rows = {(row['doc'], row['sid']): row for row in tiers.items(place=AnyOf([CARRIED, AT_HAND]))}
-    shadow = {row['_id']: (row.get('doc'), row.get('sid')) for row in memory_pilot.rows(
-        store, 'item', status='active').each(fields=['doc', 'sid'])}
-    pairs = []
-    for pair in memory_pilot.rows(store, 'pair', min_score=DUPLICATE_SCORE).each():
-        a, b = (rows.get(shadow.get(key)) for key in pair['items'])
-        if a and b and a['store'] == b['store'] and a['doc'] == b['doc']:
-            pairs.append((not a.get('fact'), a, b))
-            elsewhere = a.get('scene_id') and b.get('scene_id') and a['scene_id'] != b['scene_id']
-            for row, other in ((a, b), (b, a)):
-                if elsewhere and (row.get('last_moment') != 'duplicate_elsewhere'
-                                  or (row.get('memorable_at') or '')[:10] != night):
-                    tiers.memorable(row, 'duplicate_elsewhere', moment)       # met again from another conversation
-                if elsewhere or other.get('from') in OTHERS_SAID:
-                    # The same from someone else confirms a judgment of hers: it may now be made a fact.
-                    tiers.rows.update({'_id': row['_id']}, Set({'confirmed': _iso(moment)}))
-    for _, a, b in sorted(pairs, key=lambda p: (p[0], p[1]['_id'])):
-        merged = entry('merge', a, NIGHT_WHY['merge'])
-        merged['what'] = NIGHT_WHAT['merge']
-        merged['with'] = {k: v for k, v in entry('merge', b, '').items() if k in ('ref', 'heading', 'body')}
-        items.append(('merge_fact' if a.get('fact') else 'merge', merged, [a, b]))
-    # 几处都提到: a memory met in different conversations, or carried unchanged through several stays.
-    week = (moment - timedelta(days=LOOK_BACK_DAYS)).isoformat()
-    for row in tiers.items():
-        if row.get('fact') or row['store'] == 'core' or row.get('superseded_at'):
-            continue
-        places = set(row.get('surfaced_in') or []) | set(row.get('recalled_in') or [])
-        if len(places) < REPEATED_PLACES and int(row.get('stays') or 0) < REPEATED_STAYS:
-            continue
-        if tiers._first({'row': 'offer', 'item': row['_id'], 'what': 'repeated', 'at': Range(gte=week)}):
-            continue
-        items.append(('repeated', entry('repeated', row, NIGHT_WHY['repeated']), [row]))
-    order = {'gist': 0, 'merge_fact': 1, 'merge': 2, 'repeated': 3}
-    items = sorted(items, key=lambda item: order[item[0]])[:NIGHT_ITEMS]
-    if not items:
-        return None
-    for kind, _, rows_ in items:
-        for row in rows_:
-            what = 'gist' if kind == 'gist' else 'merge' if kind.startswith('merge') else kind
-            tiers.rows.update({'_id': 'offer:' + sha(canonical([row['_id'], what, night]))[:32]}, OnCreate({
-                'row': 'offer', 'persona': persona, 'item': row['_id'], 'what': what, 'night': night,
-                'at': _iso(moment)}), create=True)
-            if kind == 'gist':
-                tiers.rows.update({'_id': row['_id']}, [Set({'gist.listed': True}), AddToSet('gist.nights', night)])
-    def how(kind, rows_):
-        if kind != 'repeated':
-            return NIGHT_HOW[kind]
-        # 记成事实 only for what someone else decided or she checked, or a judgment someone confirmed.
-        row = rows_[0]
-        signed = row.get('from') in FACT_AUTHORS or (row.get('from') == OWN_JUDGMENT and row.get('confirmed'))
-        return NIGHT_HOW['repeated'] % ('、记成事实（set_tags nature=事实）' if signed else '')
-    return {'items': [dict(value, how=how(kind, rows_)) for kind, value, rows_ in items]}
 
 
 ABOUT = ('self', 'person', 'place', 'world')
@@ -1341,6 +1201,11 @@ def week(store, persona, zone, moment=None):
     tiers.rows.update({'_id': 'offer:week:%s:%d-%d' % (persona, *week_id)}, OnCreate({
         'row': 'offer', 'persona': persona, 'what': 'week', 'at': _iso(moment)}), create=True)
     return block
+
+
+# What `read_sections` says its `detail` is: the earlier full version a section was once shortened from, which stays
+# readable beside it whatever the section says now (ADR-117 L4).
+DETAIL_WHAT = '这一节以前从下面这段全文缩短过；这是缩短之前那一版的原文。'
 
 
 def detail(store, persona, row):

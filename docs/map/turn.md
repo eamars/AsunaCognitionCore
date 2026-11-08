@@ -78,7 +78,7 @@ What a turn may carry on its own, and how her own notes stay short (owner 2026-1
 - def `fullness`
 - def `rough_ago`
 - def `size`
-- def `shown` — The sections a note puts in front of her every turn: inject=always, not superseded by a correction.
+- def `shown` — The sections a note puts in front of her every turn: inject=always.
 - def `note_chars`
 - def `note_view` — (sections to show, words about the note).
 - def `note_limit`

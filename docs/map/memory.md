@@ -67,6 +67,7 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 - def `moves` — View: a persona's moves (rows `move`).
 - def `room_told` — The identity room last told in a conversation (carried.room_block's row), or None.
 - def `tell_room` — The identity room told in a conversation, kept to say it again only when its words change.
+- def `retire_night_list` — {offers_deleted, superseded_unset, detail_unset}: the counts of rows the step changed (all 0 when nothing was left).
 - class `Tiers`
   - `items` — Her items' rows meeting `query`; `fields`: only these of each (and `_id`), as a turn's readers read them.
   - `item`
@@ -100,14 +101,11 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 - def `tick_due` — A turn's `tick`: run when this process has not run it for this persona within TICK_SECONDS (a memo of this process; nothing is written for it).
 - def `lapse_due` — A turn's lapses over a place's identity ceiling (Tiers.lapse_over), before the turn reads anything: one indexed read when no place is over.
 - def `signing` — Why this write may not make the item a fact (her own judgment signed by herself), or None.
-- def `gist_refusal` — Why her rewrite may not be taken as the gist of a listed item, or None: it keeps the claim and drops the basis its verbatim had (her rule: a claim without its basis is loss, not fading).
-- def `claim_chars` — A gist's length without its basis lines: the basis is never what the 160 characters squeeze out.
 - def `has_basis`
 - def `declared_nature` — The nature and source she gave a write ({} when neither): her word for the nature wins over the source's.
 - def `anchor_field` — {'line': anchor} when the write names a source that is someone's word and the program resolved the line it rests on (`intent['anchor']`, set by the handler and never by her), else {}.
 - def `sources` — {section id: where its claim rests} for a document's items that rest on a line, as `scene` reads them (ADR-108 D2: People.source_of).
 - def `told` — A move as her result or the moved line says it, in words: the line it was made with (`lapse_line`, a lapse over a place's ceiling), else its heading, places and reason.
-- def `night_list` — The night list (settlement, ADR-062 §4.2 step 8): at most NIGHT_ITEMS, chosen by rule and each told why, none of them a keep or drop choice: lapsed long or dated items waiting for their gist (写一句意思), items met in different conversations (几处
 - def `recalled` — {memory id: [episode ids]} for memories she recalled herself (`recall.read`) in at least two different conversations within the window: promotion's candidates come from her acts, not from what she was shown.
 - def `candidates` — promotion_candidates with tiered memory on: what she recalled in different conversations.
 - def `land` — promote_memory with `about`: the fact store of its subject.
@@ -136,7 +134,7 @@ The words that bring her items back by themselves (ADR-097): keys, a place's com
 - def `learned`
 - def `vocabulary` — The words to learn from {cross word: lines}: Chinese ones in LEARNED_LINES lines or more, without the glued pieces: one that contains a shorter candidate said in at least as many lines (破甲来 holds 破甲).
 - def `keys` — An item's keys in a place whose common atoms are `table`: its rare tags, then its rare, not everyday heading words.
-- def `tag_keys` — Her tags that are keys: free tags of two characters or more (a `place:` tag and the correction mark are not).
+- def `tag_keys` — Her tags that are keys: free tags of two characters or more (a `place:` tag is not).
 - def `atoms` — What a line is counted by: its ASCII runs and its Chinese substrings of GRAMS lengths.
 - def `limit` — How many of the lines a rare word may be in.
 - def `common` — The atoms more of these lines contain than a rare word may be in, sorted: the place's table.
@@ -170,7 +168,7 @@ What she learned elsewhere comes back when she asks (ADR-097 D3, D4): lines from
 - def `fetch` — recall sections {doc: elsewhere, section: ref}: the lines around one line of another group, the place rule checked again now, speakers as 你 or 别人.
 - def `versions` — `history` of one document, kept while neither its ledger nor its rows have a newer revision (one small read each).
 - def `history` — Every past text of each section of one of her documents, oldest first: {sid: [(body, written_at, replaced_at, reason of the change that replaced it, its own visibility (`_kept`))]}; the current text is not among them.
-- def `before` — recall: past versions of her notes readable here (this group's notes and her running records) that have a word of the query that may cross, which their section no longer has; one per section, newest change first, at most SHOWN.
+- def `before` — recall: past versions of her notes readable here (this group's notes, her running records and her ledgers) that have a word of the query that may cross, which their section no longer has; one per section, newest change first, at most SHOWN.
 - def `cue` — A group turn's one line of presence, or None.
 - def `fired` — One count row: what came back (FIRE_KINDS), in which conversation and turn (`episode`, else the event's), at which line (the turn's line's scene_seq) and when.
 - def `recalled` — A recall's count rows: each line from elsewhere and past version it returned, and W6 when it brought back something the turn's own memories had not (`returned`: the ids of its memories).

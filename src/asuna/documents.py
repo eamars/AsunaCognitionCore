@@ -30,8 +30,8 @@ ALWAYS_KINDS = ('persona', 'voice', 'ledger', 'self')
 PREAMBLE = '_preamble'
 MAX_REVISION_BYTES = 1024 * 1024
 FRONT_MATTER = re.compile(r'\A\s*<!--\s*asuna-seed\s+(\{.*?\})\s*-->\s*\n?', re.S)
-OPS = ('replace_section', 'append_section', 'correction', 'set_tags', 'adopt_seed')
-WRITE_STAGE_OPS = ('replace_section', 'append_section', 'correction')
+OPS = ('replace_section', 'append_section', 'set_tags', 'adopt_seed')
+WRITE_STAGE_OPS = ('replace_section', 'append_section')
 # Running records: one row per entry. As one document, work_log neared the 1 MiB revision limit within a week (about
 # 100 KB a day, 45 MB of whole-record copies).
 JOURNALS = ('work_log',)
@@ -372,7 +372,7 @@ class DocumentStore:
         if not written:
             if revision_id != base_revision_id:
                 raise Conflict(stale(slug))
-            if op in ('correction', 'adopt_seed'):
+            if op == 'adopt_seed':
                 raise DocumentError('DOC_OP_NOT_ALLOWED', '「%s」是流水记录：补一节用 append_section，改一节用 replace_section'
                                     % slug)
             if op in WRITE_STAGE_OPS and (not isinstance(body, str) or not body.strip()):
@@ -490,7 +490,7 @@ class DocumentStore:
         op = intent.get('op')
         if op not in OPS or op == 'adopt_seed':
             return [DocumentError('DOC_OP_UNKNOWN', ('没写 do' if op is None else 'do「%s」不认识' % echoed(op))
-                                  + '；do 是 replace_section、append_section、correction、set_tags 或 adopt_seed')]
+                                  + '；do 是 replace_section、append_section、set_tags 或 adopt_seed')]
         found, kind = [], intent.get('kind')
         if kind is not None and kind not in NEW_KINDS:
             found.append(DocumentError('DOC_KIND_INVALID', _bad_tag('kind', kind, NEW_KINDS)))
@@ -508,7 +508,7 @@ class DocumentStore:
                 found.append(error)
         journal = self.is_journal(slug)
         revision_id, content = self.read(slug)
-        if journal and op in ('correction', 'adopt_seed'):
+        if journal and op == 'adopt_seed':
             found.append(DocumentError('DOC_OP_NOT_ALLOWED', '「%s」是流水记录：补一节用 append_section，改一节用 replace_section' % slug))
             return found
         sections = []
@@ -523,12 +523,9 @@ class DocumentStore:
                 return [*found, DocumentError('DOC_OP_NOT_ALLOWED', '「%s」是只读的约定文档，哪种操作都改不了；重试也一样' % slug)]
             if kind is not None and kind != content['kind'] and not journal:
                 found.append(DocumentError('DOC_KIND_FIXED', '「%s」已经是 %s；kind 只在新建文档时选，建好就不改' % (slug, content['kind'])))
-        if op in ('replace_section', 'set_tags', 'correction') and (content is not None or journal):
+        if op in ('replace_section', 'set_tags') and (content is not None or journal):
             if not named_section(sections, intent.get('sid')):
                 found.append(DocumentError('DOC_SECTION_NOT_FOUND', missing_section(slug, intent.get('sid'), sections)))
-            elif op == 'correction' and content is not None and content['kind'] != 'ledger':
-                found.append(DocumentError('DOC_OP_NOT_ALLOWED', 'correction 只用于活账（ledger），「%s」是 %s；'
-                                           '这份用 replace_section 改那一节，或 append_section 补一节' % (slug, content['kind'])))
         if not found and budget and not journal:
             try:
                 # The reason is the caller's to judge; the budget measures what the write will carry, whatever it says.
@@ -545,7 +542,7 @@ class DocumentStore:
         op = intent.get('op')
         if op not in OPS or op == 'adopt_seed':
             raise DocumentError('DOC_OP_UNKNOWN', ('没写 do' if op is None else 'do「%s」不认识' % echoed(op))
-                                + '；do 是 replace_section、append_section、correction、set_tags 或 adopt_seed')
+                                + '；do 是 replace_section、append_section、set_tags 或 adopt_seed')
         reason = intent.get('reason')
         if not isinstance(reason, str) or not 1 <= len(reason) <= 2000:
             raise DocumentError('DOC_REASON_REQUIRED', 'why %d 字，上限 2000 字' % len(reason)
@@ -601,21 +598,11 @@ class DocumentStore:
             if intent.get('tags') is not None:
                 target['tags'] = _checked_tags(intent['tags'])
             _pin(target, intent)
-        elif op in ('append_section', 'correction'):
+        elif op == 'append_section':
             heading = intent.get('heading') or ''
-            if op == 'correction':
-                if kind != 'ledger':
-                    raise DocumentError('DOC_OP_NOT_ALLOWED', 'correction 只用于活账（ledger），「%s」是 %s；'
-                                        '这份用 replace_section 改那一节，或 append_section 补一节' % (slug, kind))
-                original = named_section(sections, intent.get('sid'))
-                if not original:
-                    raise DocumentError('DOC_SECTION_NOT_FOUND', missing_section(slug, intent.get('sid'), sections))
-                heading = heading or '更正：' + (original['heading'] or original['sid'])
             if not heading.strip():
                 raise DocumentError('DOC_HEADING_REQUIRED', 'append_section 要写 heading（新节的标题）')
             tags = _checked_tags(intent.get('tags') or [])
-            if op == 'correction':
-                tags = [*dict.fromkeys([*tags, 'correction'])]
             # Her self descriptions are read wherever she is, as current_self was.
             visibility = intent.get('visibility') or ('public' if kind == 'self' else 'owner_private')
             inject = intent.get('inject') or ('always' if kind in ALWAYS_KINDS else 'on_demand')
@@ -625,8 +612,6 @@ class DocumentStore:
                 raise DocumentError('DOC_TAGS_INVALID', _bad_tag('inject', inject, INJECTS))
             section = _section(unique_sid(slugify(heading), by_sid), heading, body, visibility=visibility,
                                inject=inject, tags=tags, entry_date=intent.get('entry_date'))
-            if op == 'correction':
-                section['corrects'] = original['sid']
             _pin(section, intent)
             sections.append(section)
         elif op == 'set_tags':

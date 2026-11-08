@@ -587,7 +587,7 @@ def history(store, persona, slug, past=None):
 
 
 def before(store, persona, here, cls, query, zone):
-    """recall: past versions of her notes readable here (this group's notes and her running records)
+    """recall: past versions of her notes readable here (this group's notes, her running records and her ledgers)
     that have a word of the query that may cross, which their section no longer has; one per section, newest change
     first, at most SHOWN. A past text is readable here when both its section now and the text itself, with every
     visibility it had, are."""
@@ -603,6 +603,8 @@ def before(store, persona, here, cls, query, zone):
     slugs = [notes_slug(here['_id'])] if here.get('kind') == 'group' else []
     from .documents import slugs as journals
     slugs += sorted({*JOURNALS, *journals(store, persona)})
+    # Her ledgers too: a fact she rewrote keeps its old wording there, read under the same rule as the rest.
+    slugs += [slug for slug, _, _ in docs.of_kind('ledger')]
     judged = {(row['doc'], row['sid']) for row in Tiers(store, persona).items(**{'from': OWN_JUDGMENT})}
     ranges = settings()['history_excluded']
     found = []

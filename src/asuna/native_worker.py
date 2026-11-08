@@ -824,8 +824,14 @@ class BusinessWorker:
     def audit_retention(self):
         """ADR-074: the audit, bounded by time and by size, is pruned once at start and then daily; stored pictures
         are swept by their life cycle (media_life) on the same beat, the days she carried are counted
-        (carried.count_days) and the shadow pilot's old turn rows go (memory_pilot.prune)."""
+        (carried.count_days) and the shadow pilot's old turn rows go (memory_pilot.prune). Once at start, what the
+        night list left in her tiered memory's rows goes (memory_tiers.retire_night_list)."""
         from .audit import prune
+        try:
+            from . import memory_tiers
+            self.app.evidence.record('memory.night_list_retired', memory_tiers.retire_night_list(self.app.store))
+        except Exception as exc:
+            self.app.evidence.record('memory.night_list_retire_failed', {'error': redact_text(str(exc), self.app.config)[:300]})
         while True:
             try:
                 self.app.evidence.record('audit.pruned', {'deleted': prune(self.app.store)})     # 0 too: it ran

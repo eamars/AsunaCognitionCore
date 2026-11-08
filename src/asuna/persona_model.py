@@ -59,7 +59,7 @@ TIERS_TOLD = ('你的东西分三个地方：随身，每一回合都带着；�
               '收着，默认不出现，recall 用字或标题才找得回来。'
               '被用到会让一条在随身多留一阵，改写出变化会把它带回随身，一阵子没用到就往下放；放手（let_go）是你自己的动作。'
               '群笔记的节可以置顶：笔记超长时置顶的节不折成标题，但它照样会因为一阵子没用到离开随身，也照样占随身的名额。'
-              '往下放不是删掉，原话一直都在。事实只会被更正替换，不会因为没人用而退；记忆会淡。'
+              '往下放不是删掉，原话一直都在。事实不会因为没人用而退；记忆会淡。'
               '要说「没有、没答应过、没说过」之前，先 recall 一下，它会告诉你找了哪几层。')
 # ADR-117 L3: a place's identity layer over its ceiling. The choice line her next home turn shows for it (the
 # sections listed under it), and the line that tells one section the program put down.

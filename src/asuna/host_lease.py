@@ -112,6 +112,19 @@ class DatabaseLease:
             self.adapter.close()
 
 
+def holder(config):
+    """Who holds the database lease, read only: None when no lease is stored (a clean stop deletes it), else
+    {persona, host, expires_at (UTC, no zone; the database server's clock set it)}."""
+    adapter, leases = _leases(config)
+    try:
+        held = leases.get('host')
+    finally:
+        adapter.close()
+    if not held:
+        return None
+    return {'persona': held.get('persona'), 'host': held.get('host'), 'expires_at': _utc(held.get('expires_at'))}
+
+
 def mark_planned(config, by):
     """Before stopping a running Host on purpose where a clean stop is not possible (a killed process tree): the
     next start then records a planned restart, not an external termination. False when no Host holds the lease."""

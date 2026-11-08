@@ -169,7 +169,7 @@ python3 -m compileall -q src/asuna tests tools               # 语法面
 - 要推什么一律问 `git log --oneline <远端号>..HEAD`（“我要推出去什么”，写反成 `HEAD..<远端号>` 会得空），逐笔读 `--stat`；多一笔少一笔就停。快进判：`git merge-base --is-ancestor <远端号> HEAD` 退出码 0。
 
 **2. 推前闸：`python tools/check_staged_secrets.py --personal`**
-- 名单经环境变量 `ASUNA_PERSONAL_DENYLIST` 指向本机私有名单文件（路径现读，不抄）；现在这把工具自己能读 `category|word|why` 的形状，不用再派生一行一词的版本。名单文件不在或是空的会写 `denylist UNCHECKED`，那不叫过闸。
+- 这把工具自己读私密词名单（`ASUNA_PRIVATE_WORDS`，不设就是 `<data>/private/personal-words.txt`），命中记成 `private_word`，在 `docs/development_plans/` 里也算数，和套件里 `tests/test_personal_words.py` 拦的是同一份、同一种匹配；临时 clone 里 `<data>` 是那个 clone 的 `.runtime`，要把 `ASUNA_PRIVATE_WORDS` 指到本机名单（路径现读，不抄）。另一份 `ASUNA_PERSONAL_DENYLIST` 照旧能加。名单不在会写 `private words UNCHECKED` 或 `denylist UNCHECKED`，那不叫过闸。
 - **0 命中要分清扫了什么**：发布已经把改动提交掉、暂存区是空的时候，默认口径扫的是暂存区，那个 0 是“没东西可扫”，不是干净。要真扫内容用 `--paths <要推的文件>`（或 `--all`；`--all` 带有既有基线命中，只看要推的文件有没有新增命中）。
 - **临时 clone／临时提交点（pinrepo 一类）绕开仓里的推送闸，走它就当没过闸**，先手跑这一步（实例：三笔提交走临时 clone，把名单上的一个主机词推进了公开仓）。
 - **纯数字形状规则**：孤立站着的 7–11 位纯数字＝账号形状，一律不进仓；前面紧贴 `-` 或字母的（如 `restart-` 前缀的台账号）、`call_` 前缀的调用号、40 位十六进制号内部算出的数字段，单列成“非账号形状”，照旧列出来给说话那一半过目再放行（护住它的是前缀不是位数）。

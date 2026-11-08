@@ -147,3 +147,25 @@ def test_the_denylist_reads_the_private_words_form_and_says_when_it_has_no_list(
     monkeypatch.setenv('ASUNA_PERSONAL_DENYLIST', str(tmp_path / 'absent.txt'))
     check_staged_secrets.main(['--personal', '--paths', str(probe)])
     assert 'denylist UNCHECKED' in capsys.readouterr().out
+
+
+def test_a_private_word_counts_in_the_adrs_too_and_matches_as_the_suite_test_matches(tmp_path, monkeypatch, capsys):
+    """11-08: her ADR-114 entry held a listed word; the scan printed it report-only (docs/development_plans/), the push
+    passed, and tests/test_personal_words.py stopped the next landing. The scan now reads the same list and counts it."""
+    from asuna import private_words
+    listed = tmp_path / 'personal-words.txt'
+    listed.write_text('host|demo-host-zz|a placeholder\nplace|示例地名|a placeholder\n', encoding='utf-8')
+    monkeypatch.setenv('ASUNA_PRIVATE_WORDS', str(listed))
+    line = b'see DEMO-HOST-ZZ and \xe7\xa4\xba\xe4\xbe\x8b\xe5\x9c\xb0\xe5\x90\x8d; not demo-host-zzz\n'
+    monkeypatch.setattr(check_staged_secrets, 'personal_sources',
+                        lambda args: iter([(key, key, line) for key in ('docs/development_plans/ADR-900-x/progress.md',)]))
+    assert check_staged_secrets.personal_scan(['--personal', '--strict', '--all']) == 1
+    assert 'docs/development_plans/ADR-900-x/progress.md:1:private_word' in capsys.readouterr().out.splitlines()
+    text = line.decode('utf-8')
+    for _, _, word, _ in private_words.load(listed):
+        ours = [p for p in check_staged_secrets.private_words() if p.pattern.find(re.escape(word)) >= 0]
+        assert ours and bool(ours[0].search(text)) == bool(private_words.pattern(word).search(text)), word
+    assert not check_staged_secrets.private_words()[0].search('demo-host-zzz')
+    monkeypatch.setenv('ASUNA_PRIVATE_WORDS', str(tmp_path / 'absent.txt'))
+    check_staged_secrets.personal_scan(['--personal', '--all'])
+    assert 'private words UNCHECKED' in capsys.readouterr().out

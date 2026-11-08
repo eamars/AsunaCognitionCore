@@ -20,7 +20,7 @@ Windows, `.venv/bin/python` elsewhere).
 
 | Script | Does |
 |---|---|
-| `check_staged_secrets.py` | Scans staged files (or `--all`) for secrets, and with `--personal` for personal data from `<data>/private/personal-denylist.txt`. Prints only `file:line:category`. Allowed literals: `personal_scan_allow.txt`. |
+| `check_staged_secrets.py` | Scans staged files (or `--all`) for secrets, and with `--personal` for personal data: the private-words list (`<data>/private/personal-words.txt`, counted everywhere as `tests/test_personal_words.py` counts it) and `<data>/private/personal-denylist.txt`. Prints only `file:line:category`. Allowed literals: `personal_scan_allow.txt`. |
 | `publication_scan.py` | The checks that guard main (the private list and private addresses everywhere; in what the release ships, `check_staged_secrets.py --personal` and the persona names), on a candidate's changed files; her publication runs it before anything is published. Prints only path, line and category. |
 | `cleanup_test_databases.py` | `--inventory <file>` lists leftover `asuna_v2_test_*` databases into a file; with `--apply`, drops exactly the inventoried ones. |
 | `check_dsh_release.py` | Compares the installed DSH version with the public registry's tags. |

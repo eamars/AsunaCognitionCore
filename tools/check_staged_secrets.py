@@ -20,6 +20,12 @@ Categories:
                    case-insensitive literal per line, ``re:`` prefix for a regex, ``#`` comments; a line in the
                    private-words form ``category|word|why`` gives its word. Absent file: the category is skipped and
                    the scan says ``denylist UNCHECKED``. Invalid regex entries are skipped (never echoed).
+  private_word     the deployment's private-words list, the one tests/test_personal_words.py refuses in committed
+                   files: ASUNA_PRIVATE_WORDS, else <data>/private/personal-words.txt (`category|word|why` lines). A
+                   word of ASCII letters and digits matches as a whole word ignoring case, other text where it
+                   appears, as asuna.private_words.pattern does. Counted everywhere, docs/development_plans/ too, and
+                   no marker exempts it. Absent file: the category is skipped and the scan says
+                   ``private words UNCHECKED``.
   timezone         concrete IANA Region/City literals; UTC and Etc/* never hit.
   persona_name     the bundled persona's id or display name, only under src/asuna/, packages/cognition-core/,
                    config/, tools/ (persona packages and tests/fixtures/ are exempt).
@@ -37,7 +43,8 @@ Exclusions:
   - content of lockfiles package-lock.json and uv.lock is skipped (integrity blobs); the name is still checked;
   - paths under node_modules/, .venv/ and vendored third-party code packages/channels/*/integration/vendor/ are skipped.
 Report-only scope: hits under docs/development_plans/ outside ADR-009-persona_residency/ print as
-``report-only:path:line:category`` and are not counted in n (any mode).
+``report-only:path:line:category`` and are not counted in n (any mode); a private_word hit there is counted, as the
+test counts it.
 """
 import argparse,base64,json,os,re,subprocess,sys
 from pathlib import Path
@@ -117,6 +124,21 @@ LOCKFILES={'package-lock.json','uv.lock'}
 
 def report_only(key):return key.startswith('docs/development_plans/') and not key.startswith('docs/development_plans/ADR-009-persona_residency/')
 
+def private_words():
+    """The private-words list's patterns, matched as asuna.private_words.pattern matches them, or None when there is
+    no list. This scan is stdlib-only, so the rule is repeated here; tests/test_release_scan.py holds the two equal."""
+    data=Path(os.environ.get('ASUNA_DATA_ROOT') or ROOT/'.runtime')
+    where=Path(os.environ.get('ASUNA_PRIVATE_WORDS') or data/'private'/'personal-words.txt')
+    if not where.is_file():return None
+    out=[]
+    for entry in load_list('ASUNA_PRIVATE_WORDS',where):
+        parts=entry.split('|',2)
+        word=parts[1].strip() if len(parts)==3 else ''
+        if not word:continue
+        escaped=re.escape(word)
+        out.append(re.compile(r'(?<![A-Za-z0-9_])'+escaped+r'(?![A-Za-z0-9_])',re.I) if word.isascii() else re.compile(escaped))
+    return out
+
 def load_list(env,default):
     try:lines=Path(os.environ.get(env) or default).read_text(encoding='utf-8').splitlines()
     except FileNotFoundError:return []
@@ -150,9 +172,10 @@ def private_address(line,allow):
     """A private address in this line (the marker and the allow list exempt it): checked in every committed file."""
     return not OK_MARK.search(line) and any(m.group() not in allow for m in PRIVATE.finditer(line))
 
-def scan_lines(text,key,allow,deny):
+def scan_lines(text,key,allow,deny,words=()):
     persona=key.startswith(CORE)
     for no,line in enumerate(text.split('\n'),1):
+        if any(p.search(line) for p in words):yield no,'private_word'   # no marker exempts it: the test has none
         if OK_MARK.search(line):continue
         if account_id(line,allow):yield no,'account_id'
         if private_address(line,allow):yield no,'private_address'
@@ -187,14 +210,18 @@ def personal_scan(argv):
     if deny is None:
         print('personal-scan: denylist UNCHECKED: no list (ASUNA_PERSONAL_DENYLIST, else <data>/private/personal-denylist.txt)')
         deny=[]
+    words=private_words()
+    if words is None:
+        print('personal-scan: private words UNCHECKED: no list (ASUNA_PRIVATE_WORDS, else <data>/private/personal-words.txt)')
+        words=[]
     for shown,key,raw in personal_sources(args):
         if SKIP.search(key):continue
-        found={(0,c) for _,c in scan_lines(key,key,allow,deny)}
+        found={(0,c) for _,c in scan_lines(key,key,allow,deny,words)}
         if key.rsplit('/',1)[-1] not in LOCKFILES and b'\0' not in raw:
-            try:found|=set(scan_lines(raw.decode('utf-8'),key,allow,deny))
+            try:found|=set(scan_lines(raw.decode('utf-8'),key,allow,deny,words))
             except UnicodeDecodeError:pass
-        prefix='report-only:' if report_only(key) else ''
         for no,c in sorted(found):
+            prefix='report-only:' if report_only(key) and c!='private_word' else ''
             print(f'{prefix}{shown}:{no}:{c}')
             n+=not prefix
     print(f'personal-scan: {n} hit(s)')

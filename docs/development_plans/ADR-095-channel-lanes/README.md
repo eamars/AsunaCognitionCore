@@ -365,3 +365,11 @@ line is in the adapter's journal meanwhile, so nothing waits on step 1).
 - Memory: the voice child holds about 310 MB while voice is on (measured 2026-10-23).
 - Her context: one block in her night stage, only on nights with a persistent signature; no new tool.
 - Risk: the adapter's loops are its most tested code. Every guarantee in §3 gets a test before the change.
+
+## Closed (2026-11-09)
+
+Steps 1 to 5 are installed and carry the lanes: one slow message never holds another conversation (step 4's one
+unbuilt detail, a video's stage times, stays as step 4 records it). Step 6, persistent
+faults as a night digest, was never designed past §5.6's outline and its 2026-10-24 refinement; it is dropped, not
+deferred. A fault that keeps coming back still reaches the developer inbox through `faults.py`; the digest comes back
+as its own ADR if a real fault goes unseen without it (the owner, 2026-11-09).

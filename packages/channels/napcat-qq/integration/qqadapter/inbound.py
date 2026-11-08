@@ -78,6 +78,9 @@ MEDIA_TYPES = {
     "node": ("转发消息", False),
     "location": ("位置", True),
     "poke": ("戳一戳", True),
+    # ADR-103 D5: one rps thrown in 30 days (2026-11-09 census). Which number is which hand is not known yet,
+    # so the placeholder says only that a hand was thrown.
+    "rps": ("猜拳", True),
     "contact": ("名片", True),
     "qrheat": ("二维码", False),
     "album": ("相册", False),
@@ -230,8 +233,9 @@ def _media_item(stype, data):
         val = _clean(data.get("sub_type"), 12)
         if val:
             item["sub_type"] = val
-    if stype == "face" or known is None:
-        # what the platform sent for a face, or for a type nobody here has a word for: its fields, not its words
+    if stype in ("face", "rps") or known is None:
+        # what the platform sent for a face, a hand thrown (which number is which hand is still open, ADR-103 D5),
+        # or a type nobody here has a word for: its fields, not its words
         item["shape"] = shape_of(data)
     if sticker:
         item["sticker"] = sticker

@@ -101,13 +101,15 @@ def test_only_the_exact_marker_exempts_a_line_and_a_number_without_it_is_reporte
         assert scan('member %s joined  # %s' % (number, wrong)) == ['account_id'], wrong
 
 
-def test_strict_exits_1_on_a_counted_hit_and_the_default_stays_report_only(tmp_path):
+def test_strict_exits_1_on_a_counted_hit_and_the_default_stays_report_only(tmp_path, monkeypatch):
     """`--strict` is the form a push gate uses: exit 1 when anything counted was found, 0 when nothing was; without it
     the scan only reports (exit 0). A file outside the repository is checked by its name."""
     flagged = tmp_path / ('n' + '1' + '2' * 8 + '.txt')
     clean = tmp_path / 'clean.txt'
     flagged.write_text('x\n', encoding='utf-8')
     clean.write_text('x\n', encoding='utf-8')
+    (tmp_path / 'words.txt').write_text('host|demo-host-zz|a placeholder\n', encoding='utf-8')
+    monkeypatch.setenv('ASUNA_PRIVATE_WORDS', str(tmp_path / 'words.txt'))
     run = lambda *args: subprocess.run([sys.executable, str(ROOT / 'tools/check_staged_secrets.py'), '--personal', *args],
                                        cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=60)
     assert run('--strict', '--paths', str(flagged)).returncode == 1
@@ -115,9 +117,11 @@ def test_strict_exits_1_on_a_counted_hit_and_the_default_stays_report_only(tmp_p
     assert run('--strict', '--paths', str(clean)).returncode == 0
 
 
-def test_strict_counts_only_counted_hits_never_report_only_ones(monkeypatch, capsys):
+def test_strict_counts_only_counted_hits_never_report_only_ones(tmp_path, monkeypatch, capsys):
     """`--strict` exits 1 on a counted hit only: a hit printed as report-only (docs/development_plans/) leaves it at 0,
     so the gate does not stop a push for what the scan itself does not count (Xiaoman's review of --strict)."""
+    (tmp_path / 'words.txt').write_text('host|demo-host-zz|a placeholder\n', encoding='utf-8')
+    monkeypatch.setenv('ASUNA_PRIVATE_WORDS', str(tmp_path / 'words.txt'))
     number = ('1' + '2' * 8).encode()
     def sources(key):
         return lambda args: iter([(key, key, b'member ' + number + b' joined\n')])
@@ -167,5 +171,8 @@ def test_a_private_word_counts_in_the_adrs_too_and_matches_as_the_suite_test_mat
         assert ours and bool(ours[0].search(text)) == bool(private_words.pattern(word).search(text)), word
     assert not check_staged_secrets.private_words()[0].search('demo-host-zzz')
     monkeypatch.setenv('ASUNA_PRIVATE_WORDS', str(tmp_path / 'absent.txt'))
-    check_staged_secrets.personal_scan(['--personal', '--all'])
+    assert check_staged_secrets.personal_scan(['--personal', '--all']) == 0
     assert 'private words UNCHECKED' in capsys.readouterr().out
+    # 11-08, her finding: with no list --strict still exited 0, so a gate that goes by the code passed on nothing.
+    monkeypatch.setattr(check_staged_secrets, 'personal_sources', lambda args: iter([('x.txt', 'x.txt', b'x\n')]))
+    assert check_staged_secrets.personal_scan(['--personal', '--strict', '--all']) == 1

@@ -662,3 +662,10 @@ groups, where before they were judged by the section's visibility now. It fails 
 The history is read by hashes and kept per process; only the texts asked for are kept, never whole revisions (one of
 her record's revisions is up to 432 KB). `Pilot.sync` builds its item list aside and assigns it once. Reviewed by the
 L4 reviewer: ready after the revision cache was narrowed.
+
+**L4 → Built, her two corrected items (her choice, 2026-11-09).** Two `work_log` sections she corrected by
+`replace_section`, each with a query word only the old version holds; named in her line message of 11-09 11:35, kept
+at `.runtime/private/adr117/l4-built-samples-0129.txt` (private: the names are her words). Her limits for that reading:
+these sections are `owner_private`, so only a home turn brings them back; the query word must be one recall can cross
+(outside the dictionary, or a whole ASCII word or number); `history_excluded` days are skipped. She makes the reading
+with a real `recall` at home on the seventh day.

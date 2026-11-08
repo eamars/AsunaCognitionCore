@@ -30,8 +30,8 @@ def test_over_its_limit_a_note_shows_its_newest_sections_whole_and_names_the_res
     assert len(huge) == 1 and '截断' in huge[0]['body'] and about['not_shown'] == []
 
 
-def test_tucked_and_corrected_sections_do_not_count_or_show():
-    sections = [section('a', '错的'), section('fix', '对的', corrects='a'), section('tucked', '细节' * 500, inject='on_demand')]
+def test_tucked_sections_do_not_count_or_show():
+    sections = [section('fix', '对的'), section('tucked', '细节' * 500, inject='on_demand')]
     kept, about = budget.note_view(sections, 1000)
     assert [s['sid'] for s in kept] == ['fix'] and '1 节收起了' in about['tucked_away']
     assert budget.note_chars(sections) == len('fix') + len('对的')

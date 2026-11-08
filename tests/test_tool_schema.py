@@ -16,7 +16,7 @@ def said(tool, parameters, args):
 def test_a_missing_field_a_wrong_type_and_a_value_outside_the_list_are_each_one_problem():
     found = said('write_document', WRITE, {'do': 'rewrite', 'why': 5, 'section': ['x']})
     assert [code for code, _ in found] == ['ARGS_ENUM', 'ARGS_TYPE', 'ARGS_TYPE']
-    assert found[0][1].startswith('do 只能是 replace_section、append_section、correction、set_tags、adopt_seed、let_go 之一（给的是「rewrite」）')
+    assert found[0][1].startswith('do 只能是 replace_section、append_section、set_tags、adopt_seed、let_go 之一（给的是「rewrite」）')
     assert said('think', role_tools.tools()['think']['parameters'], {}) == [('ARGS_MISSING', '缺 thought（心里话）')]
     assert said('think', role_tools.tools()['think']['parameters'], {'thought': None}) == [('ARGS_TYPE', 'thought 要是一段文字')], \
         'a required field written as null is a value of the wrong type, not an absent one'

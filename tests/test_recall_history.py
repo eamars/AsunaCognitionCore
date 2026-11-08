@@ -11,7 +11,7 @@ PERSONA = 'P1'
 
 def test_a_past_text_is_shown_only_where_its_own_visibility_is_readable_too(world, monkeypatch):
     """The reviewer's case: a private section rewritten to public in the same write; its old private text never reaches
-    a group's recall from a running record, and still comes back at home (ledgers are not read by this recall)."""
+    a group's recall, in a ledger or in a running record, and still comes back at home."""
     monkeypatch.setattr(crossing, 'SHOWN', 10)                   # every one found, not only the newest three
     docs = DocumentStore(world, PERSONA)
     docs.apply('facts', {'op': 'append_section', 'heading': 'kept', 'reason': 'r', 'kind': 'ledger',
@@ -41,7 +41,8 @@ def test_a_past_text_is_shown_only_where_its_own_visibility_is_readable_too(worl
     in_group = crossing.before(world, PERSONA, group, visibility.PUBLIC, 'zephyrine', None)
     assert [entry['now'] for entry in in_group] == ['doc:work_log#open']
     at_home = crossing.before(world, PERSONA, home, visibility.OWNER_PRIVATE, 'zephyrine', None)
-    assert {entry['now'] for entry in at_home} == {'doc:work_log#entry', 'doc:work_log#open'}   # ledgers: not read
+    assert {entry['now'] for entry in at_home} == {'doc:facts#kept', 'doc:facts#flip', 'doc:work_log#entry',
+                                                   'doc:work_log#open'}
 
 
 def test_her_records_past_reads_only_the_texts_it_shows_and_a_new_row_does_not_read_the_document_again(world,

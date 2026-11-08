@@ -73,9 +73,8 @@ def size(value):
 
 # ---- her notes ---------------------------------------------------------------
 def shown(sections):
-    """The sections a note puts in front of her every turn: inject=always, not superseded by a correction."""
-    corrected = {s['corrects'] for s in sections if s.get('corrects')}
-    return [s for s in sections if s.get('inject', 'always') == 'always' and s['sid'] not in corrected]
+    """The sections a note puts in front of her every turn: inject=always."""
+    return [s for s in sections if s.get('inject', 'always') == 'always']
 
 
 def note_chars(sections):

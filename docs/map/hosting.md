@@ -331,6 +331,7 @@ One running Host per database, across machines (ADR-020 M1).
 - def `host_id` — This deployment's identity, created once in its data folder.
 - class `DatabaseLease`
   - `acquire`
+- def `holder` — Who holds the database lease, read only: None when no lease is stored (a clean stop deletes it), else {persona, host, expires_at (UTC, no zone; the database server's clock set it)}.
 - def `mark_planned` — Before stopping a running Host on purpose where a clean stop is not possible (a killed process tree): the next start then records a planned restart, not an external termination.
 
 ## `local_time`

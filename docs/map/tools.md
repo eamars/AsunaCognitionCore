@@ -151,6 +151,16 @@ One-time private migration through DSH's credential provider; never logs values.
 集成产物导入的离线自检：不需要 Mongo、不需要 pytest、不需要 WSL，直接跑同一套用例。
 
 
+## `journal_import.py`
+
+[tools/journal_import.py](../../tools/journal_import.py)
+
+ADR-117 L4's one-off: one of her working documents becomes a running record, one row per section.
+
+- def `counts` — What the document holds now: its head's sections, the rows already made, its revisions.
+- def `host_stopped` — (the lock her Host holds while it runs, now held here, None) when no Host for this database runs; else (None, why).
+- def `main`
+
 ## `make_demo_config.py`
 
 [tools/make_demo_config.py](../../tools/make_demo_config.py)

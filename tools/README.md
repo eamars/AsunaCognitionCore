@@ -33,6 +33,7 @@ Windows, `.venv/bin/python` elsewhere).
 
 | Script | Does |
 |---|---|
+| `journal_import.py <doc>` | Turns one of her working documents into a running record, one row per section (`documents.DocumentStore._journal_import`): each row with the times its revisions give, its tier rows at hand dated by them, the head dropped last and its revisions kept; until the head goes the document reads as before. A one-time import, run with her Host stopped: `--dry-run` first (it reads only), then the import, which refuses (`JOURNAL_IMPORT_HOST_UP`) while the Host's lock file for this database is held on this machine, and waits up to 120 s for any database lease that has not expired (a Host stopped a moment ago leaves one for up to 90 s), refusing if it is renewed or still there; it holds that lock while it runs, and refuses any document that is not a working one. A write of the document during the import keeps the head and exits 1; run again, it brings the rows to that revision. A second run makes no row twice and resumes one stopped halfway. `--dry-run` reads only: sections, rows it would make, sections per visibility, revisions. Prints counts only. |
 
 ## Offline self-checks
 

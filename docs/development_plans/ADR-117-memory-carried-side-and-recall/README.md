@@ -669,3 +669,18 @@ at `.runtime/private/adr117/l4-built-samples-0129.txt` (private: the names are h
 these sections are `owner_private`, so only a home turn brings them back; the query word must be one recall can cross
 (outside the dictionary, or a whole ASCII word or number); `history_excluded` days are skipped. She makes the reading
 with a real `recall` at home on the seventh day.
+
+### L4 as installed (2026-11-09)
+
+Three landings, one after another with no wait between (the owner):
+
+| landing | commit | installed | what it did on her data |
+|---|---|---|---|
+| recall-history fix | `98386281` | 11:54:56 | – |
+| L4 | `5ad67069` | 12:16:46 | at start: 152 night-list offer rows removed, the 4 weekly-reading rows kept; `detail_of`/`gist` cleared on the 1 item she had rewritten after its gist (8 → 7); her package `eda787f7be4e` (her told text, no `correction`, no 活账) loaded |
+| log import | `ff9e8cfc` | 12:31:37 | `tools/journal_import.py 流水` between stop and start: 184 sections → 184 rows, all `owner_private`, the head dropped, its 205 revisions kept |
+
+The reviewer read L4 against main before the install: ready after four fixes (a stale tag test, the `like:` build's test
+scaffolding, the history cache keeping whole revisions, the narrowing recorded above); one more stale test (a note
+budget expecting a corrected section to be hidden) was caught by the landing's suite. **L4 → Built is judged on
+2026-11-16** (her reading at 14:00, §19's rule), on her two `work_log` items and the other §20 items.

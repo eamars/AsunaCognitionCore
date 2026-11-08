@@ -119,6 +119,7 @@ Report paths only; never print configured secret values or matching bytes.
 - def `staged_blobs`
 - def `secret_scan`
 - def `report_only`
+- def `private_words` — The private-words list's patterns, matched as asuna.private_words.pattern matches them, or None when there is no list.
 - def `load_list`
 - def `denylist` — The denylist's patterns, or None when there is no list (the category is then unchecked, and said so).
 - def `account_id`

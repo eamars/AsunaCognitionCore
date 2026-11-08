@@ -590,3 +590,20 @@ reviewer read the build three times; what changed because of it is marked (revie
   one persona are not handled; `Coordinator.lock` serializes prepare and tools in the one worker.
 - **Tests:** `tests/test_adr117_l3.py`, 11 cases on the in-memory adapter; 20 one-line mutations of its rules were
   each caught.
+
+## 19. Gates R → L4 and L3 → L4, and the owner's boundary (2026-11-09)
+
+Read on her data on 2026-11-09 09:40 NZDT.
+
+- **R → L4: passed.** 31 recalls of hers since R's install (11-06 11:30), every one with `parts` in `tool.time`;
+  her first five took 1.49, 1.20, 2.02, 0.09 and 5.33 s, median 1.49 s (all 31: median 1.14 s; 2 failed). The other
+  half, `recall()` equal to `prepare(recall=True)`, was checked at the install (§18).
+- **L3 → L4: the countable half passed; the rare event has not happened.** 197 writes of hers since L3's install
+  (11-06 13:13), 0 refused for length on the identity side (the 4 `NOTE_OVER_LIMIT` are the note documents' cap, which
+  L3 keeps). No over-ceiling row exists: she trims at her 23:00 check and keeps room (556 tokens at home on 11-08).
+- **The owner's boundary.** An event she avoids by her own care may never come, and the ADR is not held open for it.
+  L3 passes on its tests (`tests/test_adr117_l3.py`, 11 cases, 20 one-line mutations caught) and the 197 real writes.
+  Her first real over-ceiling write becomes a standing watch, read end to end when it happens (landed, the choice
+  line in a home turn, then her `let_go` or a lapse), not a gate. L4 starts now. **L4 → Built is judged 7 days after
+  L4's install:** an item of its gate with a real occurrence by then is checked on it; an item with none is recorded
+  as unobserved and closed on its tests.

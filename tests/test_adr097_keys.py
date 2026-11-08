@@ -33,10 +33,9 @@ def test_a_word_is_a_key_only_when_rare_here_and_not_everyday():
     note = {'store': 'group_notes', 'heading': '破甲注意大家'}
     assert key_words.keys(note, table) == ['破甲'], '大家 is common here; 注意 is an everyday word'
     assert key_words.keys({'store': 'persona', 'heading': '破甲'}, table) == [], 'only a group note gives heading keys'
-    tagged = {'store': 'persona', 'heading': '破甲', 'tags': ['什么', '大家', 'place:g1', 'correction', '大家-v3']}
+    tagged = {'store': 'persona', 'heading': '破甲', 'tags': ['什么', '大家', 'place:g1', '大家-v3']}
     assert key_words.keys(tagged, table) == ['什么', '大家-v3'], 'a tag is a key on any item when rare here, everyday ' \
-        'or not (a tag of several runs when one of its pieces is); a tag common here is not, nor a place tag or the ' \
-        'correction mark'
+        'or not (a tag of several runs when one of its pieces is); a tag common here is not, nor a place tag'
     assert key_words.tag_here('大家', lines) == key_words.TAG_HERE['common'] % ('大家', '没几句就有一句说到它')
     assert key_words.tag_here('注意', lines) == key_words.TAG_HERE['common'] % ('注意', '大约几十句里有一句说到它')
     assert key_words.tag_here('破甲', lines) == key_words.TAG_HERE['rare'] % '破甲'

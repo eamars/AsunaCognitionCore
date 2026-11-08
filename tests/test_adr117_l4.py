@@ -2,54 +2,17 @@
 offers are gone; the weekly reading stays. A shortened item she rewrites anew no longer shows the full text it was
 shortened from. Her ledgers' rewritten facts keep their old wording for recall where the ledger is readable. At start,
 what the night list left in the rows goes. On the fixture world (in memory); dm-a is the owner's DM, g1 a group."""
-import importlib.util
-import json
-import math
-import threading
-import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from datetime import datetime, timedelta, timezone
-
-from asuna import clock, crossing, documents, host_lease, memory_pilot, memory_tiers, visibility
-from asuna.config import database_lock
-from asuna.documents import DocumentError, DocumentStore
-from asuna.evidence import Evidence
-from asuna.group_admin import notes_slug
-from asuna.persona_data import PersonaDataAPI
-from asuna.queue import RuntimeLease
-from asuna.records import heads
+from asuna import crossing, memory_tiers, visibility
+from asuna.documents import DocumentStore
 from asuna.records import scenes as scene_records
-from asuna.retrieval import Retrieval
 from asuna.role_tools import RoleTools, read_sections
 from asuna.store.words import Set
 
 PERSONA = 'P1'
-AXIS = [1.0, 0.0]
-
-
-def at(score):
-    """A unit vector whose score against AXIS is `score` on the pilot's (1 + cosine) / 2 scale."""
-    cos = 2 * score - 1
-    return [cos, math.sqrt(max(0.0, 1 - cos * cos))]
-
-
-class Route:
-    """The item index's embedding route as the like line uses it."""
-    revision = 'route-test'
-
-    def __init__(self, fail=None):
-        self.fail, self.calls = fail, []
-
-    def embed(self, texts, purpose, timeout=None):
-        self.calls.append((list(texts), purpose, timeout))
-        if self.fail:
-            raise self.fail
-        return [AXIS for _ in texts]
 
 
 @pytest.fixture(autouse=True)
@@ -64,7 +27,7 @@ def locks(monkeypatch, tmp_path):
 @pytest.fixture
 def home(world):
     world.config['chat'] = {**(world.config.get('chat') or {}), 'person_id': 'A', 'persona': PERSONA}
-    pilot = SimpleNamespace(retrieval=Route(), items=[], synced_at=0.0)
+    pilot = SimpleNamespace(items=[], synced_at=0.0)
     coordinator = SimpleNamespace(store=world, scheduler=None, context=SimpleNamespace(pilot=pilot),
                                   _update=lambda ep, **changes: world.put('episodes', {**ep, **changes},
                                                                          expected=ep['revision'], stream=ep['_id']))
@@ -89,16 +52,8 @@ def write(home, heading, doc='self', body=None, visibility_='public', **args):
                        **args})
 
 
-def indexed(home, doc, sid, score, scope_key='global-safe', heading=None):
-    """An item the index holds, at `score` from what the next write embeds to."""
-    home.pilot.items.append({'key': 'shadow:' + doc + sid, 'store': 'self', 'doc': doc, 'sid': sid,
-                             'scope_key': scope_key, 'heading': heading or sid, 'unit': at(score)})
-
-
 def sections(home, doc='self'):
     return [s['sid'] for s in (DocumentStore(home.store, PERSONA).read(doc)[1] or {}).get('sections') or []]
-
-
 
 
 def test_a_ledger_fact_she_rewrote_keeps_its_old_wording_for_recall_where_the_ledger_is_readable(world):
@@ -118,8 +73,6 @@ def test_a_ledger_fact_she_rewrote_keeps_its_old_wording_for_recall_where_the_le
                               None)
     assert [entry['now'] for entry in in_group] == ['doc:facts#open'] and 'opens at nine' in in_group[0]['line']
     assert {entry['now'] for entry in at_home} == {'doc:facts#open', 'doc:facts#kept'}
-
-
 
 
 def test_a_shortened_section_she_rewrites_anew_no_longer_shows_the_text_it_was_shortened_from(home):

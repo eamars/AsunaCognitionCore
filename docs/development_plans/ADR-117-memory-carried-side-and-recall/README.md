@@ -607,3 +607,48 @@ Read on her data on 2026-11-09 09:40 NZDT.
   line in a home turn, then her `let_go` or a lapse), not a gate. L4 starts now. **L4 → Built is judged 7 days after
   L4's install:** an item of its gate with a real occurrence by then is checked on it; an item with none is recorded
   as unobserved and closed on its tests.
+
+## 20. L4 as agreed (2026-11-09): scope, evidence, the review, the owner's two calls
+
+Measured on her data (counts only), then reviewed by an independent reviewer (system view: lifecycle and failure
+modes), then decided by the owner. Where this differs from §5, this section wins.
+
+**Evidence.**
+- `write_document` since 10-19: `correction` 36 calls, 0 accepted (27 refused `DOC_OP_NOT_ALLOWED`: it exists only
+  for ledgers). 0 current sections carry `corrects` or the `correction` tag; 0 `superseded` moves.
+- The night list's offers, per item, first offer, her own acts only (a successful write to the section or a `let_go`
+  move), 72 h after against 72 h before: merge 14 items, 6 vs 5; repeated (几处都提到) 43 items, 5 vs 2 (40 of them
+  running-log rows, none ever graduated); gist 9 items, 8 vs 1. A first count per offer (22 vs 11 for merge) was
+  inflated by repeated offers and by program moves in the baseline; the reviewer caught it.
+- `confirmed`: set only in the night list's merge pass; 4 items carry it, none her own judgment.
+
+**L4 builds.**
+1. `correction` goes: the op, its apply and check paths, its placement branches, the schema enum and description, the
+   tag's exemption in `key_words`, the `corrected` handling it fed. The chat-line 「已被更正」 mark in recall is a
+   different mechanism and stays. She rewords the one sentence of her told text that names the op, before install.
+2. The gist step goes: the gist refusal, `_gist_rewrite`, the night list's gist kind and its two-night skip. Gisted
+   items keep their verbatim read-only, and **a changed rewrite of a gisted item clears its `detail_of` and `gist`**
+   (the verbatim stays in the revision ledger), so `read_sections` never shows an old verbatim under new text; the
+   one row already rewritten after its gist is cleared at install.
+3. The night list goes: its gist, merge and repeated offers, `night_list_from_program`, its note and guide entry, and
+   the `duplicate_elsewhere` moment. **The weekly reading (`week()`, `memory_week_from_program`) stays**, with its
+   `what='week'` offer rows, which are its once-a-week guard.
+4. **No write-time `like:` (the owner, 2026-11-09; changes D4).** The cue it replaced showed no effect, and it would
+   put a network call under the worker's lock into her most frequent write. The pilot keeps writing its pair rows,
+   so the question can be measured again; the 39 same-document pairs at 0.93 or above can be handed to her once as
+   refs if she wants them.
+5. **`confirmed` is no longer written (the owner, 2026-11-09; changes §5's Kept).** `signing` still reads it, so the 4
+   existing marks stay valid; the judgment-not-fact wording names only "you checked it". At write time the old
+   condition would have let her confirm her own repetition.
+6. `NOT_BACK` needs nothing: L1 already made it true.
+7. At install: delete only the offer rows with `what` in gist, merge, repeated; clear the rewritten gist row (item 2).
+
+**Moved out of L4:** the running log's conversion to rows (her visibility check of every section, then the owner's
+one-time command while she is quiet), with its gate item "the import's rows equal its sections".
+
+**Fixed on its own, not inside L4:** `Pilot.sync` rebuilds `self.items` in place, so a reader on another thread
+(`deliver`) can see a partial list; it is built aside and assigned once.
+
+**L4 → Built (7 days after install, §19's rule):** a settlement night with no night list; her two corrected items
+retrieved through both paths (§14 gap 2); 0 writes of hers refused for `correction` or a gist; a gisted item she
+rewrites shows no old verbatim.

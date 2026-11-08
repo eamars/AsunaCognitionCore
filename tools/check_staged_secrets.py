@@ -7,7 +7,8 @@ needs neither config/local.json, Mongo nor the asuna package. Source: staged blo
 of every tracked file with ``--all``, the given files with ``--paths``. Each hit prints ``path:line:category`` (line 0
 means the file name; for --paths files outside the repo only the base name is checked) and never the matched value.
 Hits are deduplicated per path, line and category. The last line is ``personal-scan: <n> hit(s)``; exit code is 0,
-or 1 with ``--strict`` when n is not 0 (the form a push gate uses; the default stays report-only). ``--strict``
+or 1 with ``--strict`` when n is not 0 or when there is no private-words list (a gate that checked nothing is not
+a pass; the denylist stays optional) (the form a push gate uses; the default stays report-only). ``--strict``
 without ``--personal`` is refused (exit 2): the secret scan takes no options and would pass on nothing.
 
 Categories:
@@ -210,7 +211,7 @@ def personal_scan(argv):
     if deny is None:
         print('personal-scan: denylist UNCHECKED: no list (ASUNA_PERSONAL_DENYLIST, else <data>/private/personal-denylist.txt)')
         deny=[]
-    words=private_words()
+    words=private_words();unchecked=words is None
     if words is None:
         print('personal-scan: private words UNCHECKED: no list (ASUNA_PRIVATE_WORDS, else <data>/private/personal-words.txt)')
         words=[]
@@ -225,6 +226,9 @@ def personal_scan(argv):
             print(f'{prefix}{shown}:{no}:{c}')
             n+=not prefix
     print(f'personal-scan: {n} hit(s)')
+    if args.strict and unchecked:
+        print('personal-scan: FAIL: --strict with no private-words list checked nothing it is asked to check')
+        return 1
     return 1 if args.strict and n else 0
 
 def main(argv=None):

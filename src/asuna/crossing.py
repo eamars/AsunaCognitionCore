@@ -485,11 +485,14 @@ def _local_date(value, zone):
     return moment.astimezone(zone['tz'] if zone else timezone.utc).date().isoformat()
 
 
-_versions = {}
+_versions = {}      # (database, persona, slug) -> (the newest revision ids, the history)
+_pasts = {}         # (database, persona, slug) -> (the document's newest revision id, its _Past)
 
 
 def versions(store, persona, slug):
-    """`history` of one document, kept while its ledger has no newer revision (one small read to check)."""
+    """`history` of one document, kept while neither its ledger nor its rows have a newer revision (one small read
+    each). The document's own part is kept while its ledger has no newer revision: a running record's new row reads
+    only the rows again."""
     from . import documents
     newest = [head_records.history(store, documents.DocumentStore(store, persona).key(slug), by=('created_at', '_id'))
               .first(newest_first=True, fields=['created_at']),
@@ -499,41 +502,95 @@ def versions(store, persona, slug):
     kept = _versions.get(mark)
     if kept and kept[0] == seal:
         return kept[1]
-    value = history(store, persona, slug)
+    past = _pasts.get(mark)
+    if not past or past[0] != seal[0]:
+        past = _pasts[mark] = (seal[0], _Past(store, persona, slug))
+    value = history(store, persona, slug, past[1])
     _versions[mark] = (seal, value)
     return value
 
 
-def history(store, persona, slug):
+class _Past:
+    """A document's own revisions, read by their sections' hashes: `changes` {sid: [[hash, or None once it went;
+    revision id, written at, reason, every visibility the text had while it was the section's]]}, one each time a
+    section's text changed or it went, oldest first. A text is read (`body`) only when it is needed, one revision's
+    sections at a time: an appended record's past is mostly hashes."""
+
+    def __init__(self, store, persona, slug):
+        from .documents import DocumentStore
+        from .evidence import sha
+        self.store, self.bodies, self.changes = store, {}, {}
+        for revision in head_records.history(store, DocumentStore(store, persona).key(slug)).rows(
+                fields=['content.sections.sid', 'content.sections.body_sha256', 'content.sections.visibility',
+                        'created_at', 'reason']):
+            listed = (revision.get('content') or {}).get('sections') or []
+            if any(not s.get('body_sha256') for s in listed):
+                # Sections kept without their hash: this revision's texts are read whole.
+                listed = [{**s, 'body_sha256': sha((s.get('body') or '').encode())}
+                          for s in self._sections(revision['_id'])]
+            here = {s['sid']: s for s in listed}
+            for sid in set(self.changes) | set(here):
+                value = (here.get(sid) or {}).get('body_sha256')
+                if not self.changes.get(sid) or self.changes[sid][-1][0] != value:
+                    self.changes.setdefault(sid, []).append([value, revision['_id'], revision.get('created_at'),
+                                                             revision.get('reason'), set()])
+                if sid in here:
+                    self.changes[sid][-1][4].add(here[sid].get('visibility'))
+
+    def _sections(self, revision_id):
+        content = (head_records.revision(self.store, revision_id, ['content.sections']) or {}).get('content') or {}
+        return [{'sid': s['sid'], 'body': s.get('body') or '', 'visibility': s.get('visibility')}
+                for s in content.get('sections') or []]
+
+    def body(self, revision_id, sid):
+        # Only the text asked for is kept, never the revision around it: a record's revision can be 400 KB.
+        if (revision_id, sid) not in self.bodies:
+            self.bodies[(revision_id, sid)] = next((s['body'] for s in self._sections(revision_id) if s['sid'] == sid),
+                                                   None)
+        return self.bodies[(revision_id, sid)]
+
+
+def _kept(seen):
+    """A past text's own visibility, from every one it had: public only when it was always public; owner_private
+    when it ever was; None when one is not known (a row's revision written before revisions kept it)."""
+    if None in seen or not seen:
+        return None
+    return 'public' if seen == {'public'} else 'owner_private'
+
+
+def history(store, persona, slug, past=None):
     """Every past text of each section of one of her documents, oldest first: {sid: [(body, written_at, replaced_at,
-    reason of the change that replaced it)]}; the current text is not among them. A record kept as rows reads its
-    rows' revisions after the revisions of the document it was before."""
-    from .documents import DocumentStore
-    docs = DocumentStore(store, persona)
-    texts = {}                       # sid -> [(body, at, reason)] each time the text changed (or the section went)
-    for revision in head_records.history(store, docs.key(slug)).rows(fields=['content.sections', 'created_at',
-                                                                              'reason']):
-        sections = {s['sid']: s.get('body') or '' for s in (revision.get('content') or {}).get('sections') or []}
-        for sid in set(texts) | set(sections):
-            body = sections.get(sid)
-            if not texts.get(sid) or texts[sid][-1][0] != body:
-                texts.setdefault(sid, []).append((body, revision.get('created_at'), revision.get('reason')))
+    reason of the change that replaced it, its own visibility (`_kept`))]}; the current text is not among them. A
+    record kept as rows reads its rows' revisions after the revisions of the document it was before. `past`: the
+    document's own part, read already."""
     from . import documents
+    from .evidence import sha
+    past = past or _Past(store, persona, slug)
+    texts = {sid: [[value, revision_id, at, reason, None, set(seen)] for value, revision_id, at, reason, seen in changes]
+             for sid, changes in past.changes.items()}
     for row in documents.revisions(store, persona, slug, sectioned=True).rows(fields=['sid', 'body', 'created_at',
-                                                                                    'reason']):
-        if not texts.get(row['sid']) or texts[row['sid']][-1][0] != row.get('body'):
-            texts.setdefault(row['sid'], []).append((row.get('body'), row.get('created_at'), row.get('reason')))
+                                                                                    'reason', 'visibility']):
+        value = None if row.get('body') is None else sha(row['body'].encode())
+        if not texts.get(row['sid']) or texts[row['sid']][-1][0] != value:
+            texts.setdefault(row['sid'], []).append([value, None, row.get('created_at'), row.get('reason'),
+                                                     row.get('body'), set()])
+        texts[row['sid']][-1][5].add(row.get('visibility'))
     out = {}
     for sid, changes in texts.items():
-        for (body, written, _), (_, replaced, reason) in zip(changes, changes[1:]):
+        for (value, revision_id, written, _, body, seen), (_, _, replaced, reason, _, _) in zip(changes, changes[1:]):
+            if value is None:
+                continue
+            body = body if revision_id is None else past.body(revision_id, sid)
             if body:
-                out.setdefault(sid, []).append((body, written, replaced, reason))
+                out.setdefault(sid, []).append((body, written, replaced, reason, _kept(seen)))
     return out
 
 
 def before(store, persona, here, cls, query, zone):
-    """recall: past versions of her notes readable here that have a word of the query that may cross, which their
-    section no longer has; one per section, newest change first, at most SHOWN."""
+    """recall: past versions of her notes readable here (this group's notes and her running records)
+    that have a word of the query that may cross, which their section no longer has; one per section, newest change
+    first, at most SHOWN. A past text is readable here when both its section now and the text itself, with every
+    visibility it had, are."""
     from . import visibility
     from .documents import DocumentStore
     from .group_admin import notes_slug
@@ -552,16 +609,19 @@ def before(store, persona, here, cls, query, zone):
     for slug in slugs:
         current = {s['sid']: s for s in (docs.read(slug)[1] or {}).get('sections') or []}
         corrected = {s.get('corrects') for s in current.values() if s.get('corrects')}
+        # A group's notes are public; anything else whose visibility is not known is read as owner_private.
+        unknown = 'public' if slug.startswith('group:') else 'owner_private'
         for sid, past in versions(store, persona, slug).items():
             section = current.get(sid)
-            seen = visibility.readable((section or {}).get('visibility') or
-                                       ('public' if slug.startswith('group:') else 'owner_private'), cls)
+            seen = visibility.readable((section or {}).get('visibility') or unknown, cls)
             if not seen or (slug, sid) in judged:
                 continue
             now_text = ((section or {}).get('heading') or '') + '\n' + ((section or {}).get('body') or '')
             lost = [word for word in words if not key_words.found(word, now_text)]
-            for body, written, replaced, reason in reversed(past):
-                if _excluded(written, zone, ranges) or not any(key_words.found(word, body) for word in lost):
+            for body, written, replaced, reason, own in reversed(past):
+                # A past text is shown only where its own visibility is readable too, not only the section's now.
+                if (not visibility.readable(own or unknown, cls) or _excluded(written, zone, ranges)
+                        or not any(key_words.found(word, body) for word in lost)):
                     continue
                 text = excerpt(body, EXCERPT)
                 why = excerpt((reason or '').strip() or '没写', REASON_CHARS)

@@ -278,11 +278,9 @@ class Pilot:
         if gone:
             self.collection.update({'_id': AnyOf(gone)}, Set({'status': 'gone', 'synced_at': now()}), many=True)
         active = {row['_id']: row for row in rows(self.store, 'item', status='active').each()}
-        self.items = []
-        for item in current:
-            row = active.get(item['key'])
-            if row and row.get('embedding'):
-                self.items.append({**item, 'unit': _unit(row['embedding']), 'terms': terms(item['lexical'])})
+        # Built aside and assigned once: a turn on another thread (deliver) reads the list while a write syncs it.
+        self.items = [{**item, 'unit': _unit(active[item['key']]['embedding']), 'terms': terms(item['lexical'])}
+                      for item in current if (active.get(item['key']) or {}).get('embedding')]
         self._pairs({item['key'] for item in changed})
         self.synced_at = time.monotonic()
 

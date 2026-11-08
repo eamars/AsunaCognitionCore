@@ -168,9 +168,9 @@ What she learned elsewhere comes back when she asks (ADR-097 D3, D4): lines from
 - def `seen_for` — {word: [(scope, lines in the window, latest)]} from the index, topped up first.
 - def `lines_for` — [(unit id, scope, hers)] of the lines that have one of the words, the index topped up first.
 - def `fetch` — recall sections {doc: elsewhere, section: ref}: the lines around one line of another group, the place rule checked again now, speakers as 你 or 别人.
-- def `versions` — `history` of one document, kept while its ledger has no newer revision (one small read to check).
-- def `history` — Every past text of each section of one of her documents, oldest first: {sid: [(body, written_at, replaced_at, reason of the change that replaced it)]}; the current text is not among them.
-- def `before` — recall: past versions of her notes readable here that have a word of the query that may cross, which their section no longer has; one per section, newest change first, at most SHOWN.
+- def `versions` — `history` of one document, kept while neither its ledger nor its rows have a newer revision (one small read each).
+- def `history` — Every past text of each section of one of her documents, oldest first: {sid: [(body, written_at, replaced_at, reason of the change that replaced it, its own visibility (`_kept`))]}; the current text is not among them.
+- def `before` — recall: past versions of her notes readable here (this group's notes and her running records) that have a word of the query that may cross, which their section no longer has; one per section, newest change first, at most SHOWN.
 - def `cue` — A group turn's one line of presence, or None.
 - def `fired` — One count row: what came back (FIRE_KINDS), in which conversation and turn (`episode`, else the event's), at which line (the turn's line's scene_seq) and when.
 - def `recalled` — A recall's count rows: each line from elsewhere and past version it returned, and W6 when it brought back something the turn's own memories had not (`returned`: the ids of its memories).

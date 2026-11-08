@@ -422,7 +422,8 @@ class DocumentStore:
         return save_revision(self.store, {
             '_id': sha(canonical({'mutation_id': mutation_id, 'entity': self.entity(slug)})), 'mutation_id': mutation_id,
             'persona': self.persona, 'slug': slug, 'entry_id': written['_id'], 'sid': written['sid'], 'op': op,
-            'body': written.get('body'), 'reason': intent.get('reason'), 'author': author, 'parent_revision_id': revision_id,
+            'body': written.get('body'), 'visibility': written.get('visibility'),     # who may read this text later
+            'reason': intent.get('reason'), 'author': author, 'parent_revision_id': revision_id,
             'scope_key': SCOPE, 'created_at': now()}, stream='doc:' + mutation_id)
 
     def _own_slugs(self):

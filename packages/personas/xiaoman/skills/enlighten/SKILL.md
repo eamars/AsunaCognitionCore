@@ -35,7 +35,7 @@ form: user[email]=<env ENLIGHTEN_EMAIL>   user[password]=<env ENLIGHTEN_PASSWORD
 ```
 
 - **两条判据一起看**：`message=success`（实测长度 7）**并且** `session_id` 在（实测 32 位）。只有前者、没有后者＝按登录失败停手。
-- 响应体的键字面（实测两趟一致）：`is_consumer,manager_token,message,redirect_url,session_id,system_id`；正文 575 字节。
+- 响应体的键字面（11-08 我这一趟三次登录一致；探路那趟按口径登录正文整段不进日志，所以那趟没记下这些键）：`is_consumer,manager_token,message,redirect_url,session_id,system_id`；正文 575 字节。
 - **登录正文整段不进日志**：只打 HTTP 码、判据两条的读数、message 长度、body 字节数、cookie 名。密码不回显。
 - 客户端形状：`follow_redirects=False`，UA 自定（实测用的是 `Mozilla/5.0 (read-only data pull)`）。
 - 预算：POST ≤ 2，第二次只在第一次是传输错时花；`message` 不是 success 就**停**，不换登录形态、不撞第三次。见 302 立即停并报 location（11-08 两趟 0 次 302、0 次 401）。
@@ -52,7 +52,7 @@ form: user[email]=<env ENLIGHTEN_EMAIL>   user[password]=<env ENLIGHTEN_PASSWORD
 - 参数写法照抄：`start_date`／`end_date` 是 `YYYY-MM-DD`；`interval=day`；`tz=Pacific/Auckland` 的**斜杠不转义**（实测这样 200）。
 - GET 请求头形状（打中用的就是这套）：`Accept: application/json, text/javascript, */*;q=0.9`、`X-Requested-With: XMLHttpRequest`、`Referer: https://enlighten.enphaseenergy.com/systems/{SITE}`；rollup 只要 `Accept: text/html`。
 - 逐台那一枚还支持 `&inverter_id=<序列号>`（JS 里的形状，只在一发预算内核过一台）。
-- **响应体只有那四个键：没有单位字段、没有时区字段**。`tz` 不回显；「每行是站点本地日」是推断（依据：页面配置 `timezone` 字面＋逐日值与 rollup 逐日表逐字一致），不是响应体自己声明的。
+- **`energy` 那枚响应体只有四个键（`production`／`start_date`／`end_date`／`inverter_count`），逐台那枚只有三个（没有 `inverter_count`）——两枚都没有单位字段、都没有时区字段**。`tz` 不回显；「每行是站点本地日」是推断（依据：页面配置 `timezone` 字面＋逐日值与 rollup 逐日表逐字一致），不是响应体自己声明的。
 - 跨读稳定性：11-08 同一晚相隔约两小时读同一天两次（19:5x 与 21:4x，本机钟面），11/06 与 11/07 的单日正文**字节级一致**（sha256 前 16 `e107e4d77c80849d`／`cd03ede5cf97d7a1`）——这两天算有两读了；更早的日期还是只有单读。
 
 ## 死路清单（全 404，别再试）

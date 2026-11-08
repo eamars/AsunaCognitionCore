@@ -53,7 +53,7 @@ MUST = [
     ('measure_point', '测量点'),
     ('no_redirect_chain', '见 302 立即停'),
     ('session_not_persisted', '登录态不写盘'),
-    ('no_unit_field', '没有单位字段、没有时区字段'),
+    ('no_unit_field', '都没有单位字段、都没有时区字段'),
     ('provenance_task', 'task-190ecdf76e64f641a1455b410c130a9e'),
 ]
 SCRIPTS = ['enlighten_read.py']

@@ -20,7 +20,7 @@ scene_kinds: [home]
 - **凭据**：保险箱名字 `enlighten`（`sandbox_run` 带 `credentials: ["enlighten"]`），环境变量只有两个：`ENLIGHTEN_EMAIL`、`ENLIGHTEN_PASSWORD`。正文、脚本、报告里只出现这两个 env 名；值不落盘、不打印、不进命令行、不进 URL 查询串。员工号凭据三个月一换（金主 2026-10-07 给的）。
 - **站点 id = `{SITE}`，表计 id = `{METER}`**（两把表各一枚；rollup 与 `generate_rpt` 的 `report[pmu_id]` 用表计 id）。这两个数**命中本机私密词名单**（站点 id 实测命中名单第 22 行，category=site），所以不进正文、不进脚本、不进报告。值从 persona 光伏那一节读；脚本 `enlighten_read.py` 从环境变量 `ASUNA_ENLIGHTEN_SITE`／`ASUNA_ENLIGHTEN_METER` 拿，读不到就报 `MISSING_ENV` 退出，不硬编。
 - 逆变器序列号（响应体的键）也是 9 位号，同样不落进仓里的文件；要引用就现取现用。
-- **时区字面**：`Pacific/Auckland`（页面配置里的 `timezone: 'Pacific/Auckland'`）。这是参数不是账号事实，可以照抄。
+- **时区**：用**本机配置的时区**（部署配置 `config/local.json` 的 `timezone`，也就是我这口钟；页面配置里的 `timezone` 与它一致）。这一枚是参数不是账号事实，但按 AGENTS 时区算个人数据，所以正文不写区名：`enlighten_read.py` 运行时现取（顺序＝环境变量 `ASUNA_TIMEZONE` → `config/local.json` 的 `timezone`），两处都取不到就报 `CLOCK_NOT_CONFIGURED` 退出，**不退回写死值**。
 - **登录态不写盘**：会话 cookie 只活在单条命令的内存里（实测 jar 里是 `_enlighten_4_session`、`enlighten_manager_token_production`、`locale`）。所以每条只读命令自己登录一次，别指望跨命令复用会话。
 - 工作目录：本机 work/local-user（相对说法，不抄绝对路径）。脚本找它的顺序：env `ASUNA_ENLIGHTEN_DIR` → 当前目录 → 往上找 `.runtime/work/local-user`。落盘产物只写这里。
 - 脚本：`enlighten_read.py`（零业务依赖，只用 `httpx`；沙箱 python 里有）。自检：`check_skill.py`。
@@ -45,11 +45,11 @@ form: user[email]=<env ENLIGHTEN_EMAIL>   user[password]=<env ENLIGHTEN_PASSWORD
 | 用途 | 字面 GET | 回什么 |
 |---|---|---|
 | 表计 rollup 逐日表（`rollup`） | `/admin/sites/{SITE}/devices/{METER}/rollup?page=1`，头 `Accept: text/html` | 一页 HTML 表，表头字面 `Start Date / Energy Produced ( Wh ) / Average Real Power ( W ) / Channel`；日期字面 `MM/DD/YYYY`，新→旧，实测一页 50 行，翻页改 `page` |
-| 站点级（表计口径）合计（`day`／`range`） | `/systems/{SITE}/energy?start_date=D&end_date=D&interval=day&tz=Pacific/Auckland` | `{"production":<整数>,"start_date":…,"end_date":…,"inverter_count":20}`，正文 90 字节 |
-| 逆变器级逐台合计（`inverters`） | `/systems/{SITE}/inverter_data_x/energy.json?start_date=D1&end_date=D2&interval=day&tz=Pacific/Auckland` | `{"production":{"<序列号>":<整数>,…共 20 台…},"start_date":…,"end_date":…}`，正文 406 字节 |
+| 站点级（表计口径）合计（`day`／`range`） | `/systems/{SITE}/energy?start_date=D&end_date=D&interval=day&tz=<本机配置的时区>` | `{"production":<整数>,"start_date":…,"end_date":…,"inverter_count":20}`，正文 90 字节 |
+| 逆变器级逐台合计（`inverters`） | `/systems/{SITE}/inverter_data_x/energy.json?start_date=D1&end_date=D2&interval=day&tz=<本机配置的时区>` | `{"production":{"<序列号>":<整数>,…共 20 台…},"start_date":…,"end_date":…}`，正文 406 字节 |
 
 - **前两枚 energy 口只回整段区间的合计，不逐日**。要逐日就**一天一发**（前端 JS 自己也是这么发的：`requestData(url,{startDate,endDate})` → `paramsToUnderscores`）；8 天区间同样只回一个数，实测过。
-- 参数写法照抄：`start_date`／`end_date` 是 `YYYY-MM-DD`；`interval=day`；`tz=Pacific/Auckland` 的**斜杠不转义**（实测这样 200）。
+- 参数写法照抄：`start_date`／`end_date` 是 `YYYY-MM-DD`；`interval=day`；`tz=<本机配置的时区>` 的**斜杠不转义**（实测这样 200）。
 - GET 请求头形状（打中用的就是这套）：`Accept: application/json, text/javascript, */*;q=0.9`、`X-Requested-With: XMLHttpRequest`、`Referer: https://enlighten.enphaseenergy.com/systems/{SITE}`；rollup 只要 `Accept: text/html`。
 - 逐台那一枚还支持 `&inverter_id=<序列号>`（JS 里的形状，只在一发预算内核过一台）。
 - **`energy` 那枚响应体只有四个键（`production`／`start_date`／`end_date`／`inverter_count`），逐台那枚只有三个（没有 `inverter_count`）——两枚都没有单位字段、都没有时区字段**。`tz` 不回显；「每行是站点本地日」是推断（依据：页面配置 `timezone` 字面＋逐日值与 rollup 逐日表逐字一致），不是响应体自己声明的。

@@ -8,6 +8,9 @@
   ASUNA_ENLIGHTEN_METER  表计 id（只有 rollup 用）
 凭据从保险箱名字 enlighten 的环境变量读：ENLIGHTEN_EMAIL / ENLIGHTEN_PASSWORD（值不落盘、不打印）。
 
+日界按哪一区算＝本机配置的时区，运行时现取（顺序照 RUN_ASUNA.md 的 Her clock：环境变量 ASUNA_TIMEZONE →
+config/local.json 的 timezone）。两处都取不到就报 CLOCK_NOT_CONFIGURED 退出，不退回写死值、也不猜 UTC。
+
 用法：
   python3 enlighten_read.py login                      # 只登录，回报判据读数
   python3 enlighten_read.py day 2026-11-07 [更多日…]   # 站点级合计，一天一发
@@ -16,7 +19,7 @@
   python3 enlighten_read.py rollup [--page 1]          # 表计 rollup 逐日表（HTML 表格）
 可选：--out 目录   把原始正文写进那个目录（默认不写盘）
 
-退出码：0 成功；2 缺环境变量；3 登录没成；4 某发 GET 非 200；5 正文形状不是记载的那样。
+退出码：0 成功；2 缺环境变量或本机时钟没配上；3 登录没成；4 某发 GET 非 200；5 正文形状不是记载的那样。
 """
 import argparse
 import hashlib
@@ -28,7 +31,7 @@ import datetime
 import httpx
 
 BASE = "https://enlighten.enphaseenergy.com"
-TZ = "Pacific/Auckland"          # 页面配置字面 timezone，不是账号事实
+TZ_ENV = "ASUNA_TIMEZONE"        # 日界用哪一区＝本机部署配置，见 configured_zone()；不写死区名
 UA = "Mozilla/5.0 (read-only data pull)"
 XHR = {"Accept": "application/json, text/javascript, */*;q=0.9",
        "X-Requested-With": "XMLHttpRequest"}
@@ -38,6 +41,35 @@ def now():
     loc = datetime.datetime.now().astimezone()
     return "local=%s utc=%s" % (loc.isoformat(timespec="seconds"),
                                 loc.astimezone(datetime.timezone.utc).isoformat(timespec="seconds"))
+
+
+def configured_zone():
+    """日界按哪一区算：本机部署配置里那枚时钟（区名是个人数据，不写进这个文件）。
+
+    顺序照 RUN_ASUNA.md 的 Her clock：环境变量 ASUNA_TIMEZONE → config/local.json 的 timezone。
+    取不到返回 (None, 为什么)，由调用方报错退出——不退回写死值。
+    """
+    zone = os.environ.get(TZ_ENV)
+    if zone:
+        return zone.strip(), "环境变量 " + TZ_ENV
+    try:
+        from asuna import config as asuna_config
+        zone = asuna_config.load(os.path.join(str(asuna_config.ROOT), "config", "local.json")).get("timezone")
+    except Exception:                                        # noqa: BLE001 拿不到就是没配上，不猜
+        return None, "拿不到 config/local.json（asuna.config 用不了）"
+    if zone:
+        return str(zone).strip(), "config/local.json 的 timezone"
+    return None, "config/local.json 里 timezone 没值"
+
+def need_zone():
+    """要发带 tz 的 GET 之前的闸门：没配上就明确报错退出，不拿写死值顶。"""
+    zone, src = configured_zone()
+    if not zone:
+        print("CLOCK_NOT_CONFIGURED 本机时钟没配上（%s；不退回写死值）——日界算不了，"
+              "配好 config/local.json 的 timezone 或给 %s 再跑" % (src, TZ_ENV))
+        sys.exit(2)
+    print("本机时钟=%s（来源：%s）；日界按这一区算" % (zone, src))
+    return zone
 
 
 def need_site():
@@ -132,6 +164,7 @@ def main():
     if a.what == "login":
         return 0
 
+    tz = None if a.what == "rollup" else need_zone()   # rollup 那一枚不带 tz 参数
     rc = 0
     if a.what in ("day", "range"):
         if a.what == "day":
@@ -140,7 +173,7 @@ def main():
         else:
             pairs = [(a.args[0], a.args[1])]
         for s, e in pairs:
-            url = "%s/systems/%s/energy?start_date=%s&end_date=%s&interval=day&tz=%s" % (BASE, site, s, e, TZ)
+            url = "%s/systems/%s/energy?start_date=%s&end_date=%s&interval=day&tz=%s" % (BASE, site, s, e, tz)
             _, body, bad = get(client, url, xhr, a.out or None, "energy_%s_%s" % (s, e))
             if bad:
                 rc = bad
@@ -152,7 +185,7 @@ def main():
     elif a.what == "inverters":
         s, e = a.args[0], a.args[1]
         url = ("%s/systems/%s/inverter_data_x/energy.json?start_date=%s&end_date=%s&interval=day&tz=%s"
-               % (BASE, site, s, e, TZ))
+               % (BASE, site, s, e, tz))
         _, body, bad = get(client, url, xhr, a.out or None, "inv_energy_%s_%s" % (s, e))
         if bad:
             return bad

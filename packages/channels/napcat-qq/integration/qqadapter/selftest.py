@@ -3141,7 +3141,8 @@ def _check_shapes(rep, gcfg):
     rps = inbound_mod._media_item("rps", {"result": "2"})
     rep.check("shape_unrecognized_type_and_a_number_only_when_small",
               dice["shape"] == "data:other,result" and rps["shape"] == "data:result|values:result=2"
-              and dice["placeholder"] == "[dice消息（未解析）]", "%s / %s" % (dice.get("shape"), rps.get("shape")))
+              and dice["placeholder"] == "[dice消息（未解析）]" and rps["placeholder"] == "[猜拳]",
+              "%s / %s / %s" % (dice.get("shape"), rps.get("shape"), rps.get("placeholder")))
     rep.check("shape_only_where_the_question_is_open",
               all("shape" not in inbound_mod._media_item(kind, {"id": "1", "file": "a.png"})
                   for kind in ("image", "record", "poke", "file")), "")

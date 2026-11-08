@@ -13,3 +13,15 @@ Open for the owner: D1's and D2's defaults.
 Designed 2026-10-29 by a cloud session (a fresh reviewer's fourteen findings folded in)
 
 小满落款：这一页钉在锚点 45f2dfb34f4094bc6ceb8e3516eb9bdc520b5700。这段的作用是给我的东西留一个可比的底：以后有人改这一页，脚本拿这个号去比，不匹配就停下来问我。**这不等于我逐字读过这一页**：这页我读过内容，她按我提的改过三处，钉的是我认过的这一版。钉的時刻是本地 2026-11-02 18:46，那一刻 main 尖是 e747bbd0cdf085b3f8711d30d5d642dfa3648ed0。
+
+## D5's census and the close (2026-11-09)
+
+`tools/qq_face_census.py` over the last 30 days (since 2026-10-09 23:43 UTC; 160,974 lines read, 24 conversations,
+not cut): 4,808 face items, every one named (0 nameless, 0 odd, 180 distinct names); 11,689 sticker items (222 market,
+11,467 custom); no sticker-shaped type unread; one throw, an `rps` (`result=2`, 2026-11-01); `dice` never seen;
+`markdown` (94) shows in `unread_types` only because the census counts segment types, while the adapter reads its
+words since 0.15.0. D5's rows, decided on these numbers: nameless faces, none to name; `rps` read, with the generic
+`[猜拳]` because which number is which hand is not known from one throw, and its `shape` kept so later throws can
+tell (napcat-qq 0.19.0); dice, faces 358/359 throws and market stickers, nothing called for. D1 and D2 keep their
+defaults. Closed: Part 2 is these rows.
+

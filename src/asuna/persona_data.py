@@ -103,8 +103,9 @@ class PersonaDataAPI:
 
     # ── documents ───────────────────────────────────────────────────
     def documents_upsert(self, args):
-        """Whole-document import by sections; cohabiting conflict rules (MEMORY §6.2)."""
+        """Whole-document import by sections; cohabiting conflict rules (MEMORY §6.2). Never into a running record."""
         slug, kind, origin = args['slug'], args['kind'], args['origin']
+        self.docs.not_running_record(slug)
         defaulted, taken, sections = [], set(), []
         for index, item in enumerate(args.get('sections') or []):
             heading = item.get('heading') or ''
@@ -154,8 +155,9 @@ class PersonaDataAPI:
             memory_tiers.Tiers(self.store, self.persona).written(slug, {'op': 'import'}, before, after)
 
     def documents_append(self, args):
-        """Append-only union by origin + source_identity (logs, imported notes)."""
+        """Append-only union by origin + source_identity (logs, imported notes). Never into a running record."""
         slug, origin, item = args['slug'], args['origin'], args['section']
+        self.docs.not_running_record(slug)
         revision_id, current = self.docs.read(slug)
         defaulted = []
         if current and any(s.get('source_identity') == args['source_identity'] and s.get('origin') == origin

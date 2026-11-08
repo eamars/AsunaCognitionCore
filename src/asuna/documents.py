@@ -66,9 +66,15 @@ def entry(store, entry_id, fields=None):
 
 
 def slugs(store, persona):
-    """The names of a persona's running records (the values of their entries' `slug`), ascending."""
+    """The names of a persona's running records (the values of their entries' `slug`), ascending. A document whose
+    rows an import is still making is not one yet: while its head is there it reads as the document
+    (DocumentStore._journal_import drops the head last)."""
     where = fenced({}, {'persona': (persona, is_text)})
-    return [] if where is None else store.collection(ENTRIES).group(where, ['slug'], None)
+    names = [] if where is None else store.collection(ENTRIES).group(where, ['slug'], None)
+    if not names:
+        return names
+    held = {row['_id'] for row in head_records.with_prefix(store, f'doc:{persona}:').rows(fields=['_id'])}
+    return [name for name in names if name in JOURNALS or f'doc:{persona}:{name}|{SCOPE}' not in held]
 
 
 def entries(store, persona, slug):
@@ -261,7 +267,9 @@ class DocumentStore:
             return True
         if self._journals is not None:
             return slug in self._journals
-        return bool(entry_of(self.store, self.persona, slug, fields=['_id']))
+        # A document an import is making rows of stays the document until its head goes (`slugs`).
+        return bool(entry_of(self.store, self.persona, slug, fields=['_id'])) and not head_records.head(
+            self.store, self.key(slug), ['_id'])
 
     def head(self, slug):
         if self.is_journal(slug):
@@ -302,37 +310,53 @@ class DocumentStore:
 
     # ── running records (JOURNALS): one row per entry ───────────────
     def _journal_import(self, slug):
-        """A record kept as one document before it became rows moves into rows once; its old revisions stay. Its
-        entries get their tier rows as it lands (memory_tiers.Tiers.written), placed as sync places them."""
+        """A record kept as one document before it became rows moves into rows once; its old revisions stay. Until its
+        head goes, last, every reader still reads the document (`slugs`, `is_journal`), so a stopped import leaves the
+        document whole. The head is dropped only while it still names the revision the rows were made from: a write of
+        the document during the import keeps the head, and the next import brings the rows an earlier import made to
+        the head's revision (rows written since through the record are left as they are). Its entries then get their
+        tier rows (memory_tiers.Tiers.written), placed as sync places them and dated by each entry's own times. True
+        when the head went, False when it was kept, None when there was none."""
         head = head_records.head(self.store, self.key(slug))
         if not head:
-            return
+            return None
+        mutation = 'import:' + head['revision_id']
         last = head_records.revision(self.store, head['revision_id']) or {}
         at = last.get('created_at') or now()
         times = self._section_times(slug)
         for seq, section in enumerate((last.get('content') or {}).get('sections') or [], 1):
             entry_id = self._journal_entry_id(slug, section['sid'])
             created, updated = times.get(section['sid'], (at, at))
-            if not entry(self.store, entry_id, ['_id']):
+            fields = {k: section[k] for k in SECTION_KEYS if k in section}
+            stored = entry(self.store, entry_id)
+            if not stored:
                 save_entry(self.store, {
                     '_id': entry_id, 'persona': self.persona, 'slug': slug, 'seq': seq, 'scope_key': SCOPE,
-                    **{k: section[k] for k in SECTION_KEYS if k in section}, 'created_at': created,
-                    'updated_at': updated, 'last_mutation': 'import:' + head['revision_id']},
+                    **fields, 'created_at': created, 'updated_at': updated, 'last_mutation': mutation},
                     stream='doc:import:' + slug)
+            elif (str(stored.get('last_mutation') or '').startswith('import:') and stored['last_mutation'] != mutation
+                  and any(stored.get(k) != section.get(k) for k in SECTION_KEYS)):
+                save_entry(self.store, {**{k: v for k, v in stored.items() if k not in SECTION_KEYS}, **fields,
+                                        'updated_at': updated, 'last_mutation': mutation},
+                           expected=stored['revision'], stream='doc:import:' + slug)
         if not revision(self.store, head['revision_id']):
             save_revision(self.store, {
                 '_id': head['revision_id'], 'mutation_id': 'import:' + head['revision_id'], 'persona': self.persona,
                 'slug': slug, 'op': 'import', 'reason': 'one document became one row per entry', 'author': 'program',
                 'scope_key': SCOPE, 'created_at': now()}, stream='doc:import:' + slug)
         # The document's head goes; its revisions stay as they were (the record before rows).
-        head_records.drop_head(self.store, head['_id'], revision_id=head['revision_id'])
+        if not head_records.drop_head(self.store, head['_id'], revision_id=head['revision_id']):
+            return False
         self.store.audit('doc:import:' + slug, 'journal.imported', {'entity': self.entity(slug),
                          'from_revision': head['revision_id']}, SCOPE)
         from . import memory_tiers
         if memory_tiers.ENABLED:
             # ADR-117 B3: its entries have their tier rows without a turn's sync (a running record's: at hand).
+            dated = {row['sid']: (row.get('created_at'), row.get('updated_at')) for row in
+                     entries(self.store, self.persona, slug).rows(fields=['sid', 'created_at', 'updated_at'])}
             memory_tiers.Tiers(self.store, self.persona).written(slug, {'op': 'import'}, None,
-                                                                 self._journal_read(slug)[1])
+                                                                 self._journal_read(slug)[1], dated=dated)
+        return True
 
     def _section_times(self, slug):
         """When each section of a record kept as one document first appeared and when its text last changed, from the
@@ -432,6 +456,14 @@ class DocumentStore:
         return '、'.join(names[:30]) + ('…' if len(names) > 30 else '') if names else '还没有'
 
     # ── writes ─────────────────────────────────────────────────────
+    def not_running_record(self, slug, head=ANY):
+        """Refuse a whole-document write to a running record (DOC_IS_RUNNING_RECORD): its rows are what every reader
+        reads, and a head written for it would hide them. A document whose rows an import is still making has its
+        head and is still a document."""
+        head = head_records.head(self.store, self.key(slug), ['_id']) if head is ANY else head
+        if not head and (slug in JOURNALS or entry_of(self.store, self.persona, slug, fields=['_id'])):
+            raise DocumentError('DOC_IS_RUNNING_RECORD', '「%s」是流水记录，一条一行；不再写成一整份文档' % slug)
+
     def _commit(self, slug, content, *, base_revision_id, reason, author, mutation_id, sources=(), extra=None):
         size = len(json.dumps(content, ensure_ascii=False).encode())
         if size > MAX_REVISION_BYTES:
@@ -443,6 +475,7 @@ class DocumentStore:
                 raise Conflict('MUTATION_ID_CONTENT_CHANGED')
             return existing
         head = head_records.head(self.store, self.key(slug))
+        self.not_running_record(slug, head)
         current = head['revision_id'] if head else None
         if current != base_revision_id:
             self.store.audit('doc:' + mutation_id, 'state.conflict', {'entity': self.entity(slug),

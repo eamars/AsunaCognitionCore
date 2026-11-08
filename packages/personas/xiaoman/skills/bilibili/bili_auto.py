@@ -323,8 +323,8 @@ def wbi_keys(cookie):
 
 
 # ---------------------------------------------------------------- 任务
-def bj(ts):
-    return datetime.fromtimestamp(ts, timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S 北京")
+def site_ts(ts):
+    return datetime.fromtimestamp(ts, timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S UTC+8 站点侧")
 
 
 def task_view(bvid, cookie):
@@ -334,7 +334,7 @@ def task_view(bvid, cookie):
         return None
     d = j["data"]
     print("VIEW bvid=%s aid=%s cid=%s title=%r" % (d.get("bvid"), d.get("aid"), d.get("cid"), d.get("title")))
-    print("  pubdate=%s（%s；本机钟面会跨日，对人说北京时间）" % (d.get("pubdate"), bj(d.get("pubdate") or 0)))
+    print("  pubdate=%s（%s；站点侧口径，本机钟面会跨日）" % (d.get("pubdate"), site_ts(d.get("pubdate") or 0)))
     print("  stat=%s" % json.dumps(d.get("stat"), ensure_ascii=False))
     return d
 
@@ -365,7 +365,7 @@ def task_hotcomment(bvid):
     reps = (j.get("data") or {}).get("replies") or []
     print("HOTCOMMENT count_in_page=%d" % len(reps))
     for r in reps[:5]:
-        print("  - like=%s %s %r" % (r.get("like"), bj(r.get("ctime") or 0),
+        print("  - like=%s %s %r" % (r.get("like"), site_ts(r.get("ctime") or 0),
                                      ((r.get("content") or {}).get("message") or "")[:80]))
     return 0
 
@@ -393,7 +393,7 @@ def task_arcs(cookie, doc, mid):
     vl = (dd.get("list") or {}).get("vlist") or []
     print("ARCS page=%s vlist_len=%d is_risk=%s" % (json.dumps(dd.get("page")), len(vl), dd.get("is_risk")))
     for v in vl[:10]:
-        print("  - %s %r created=%s" % (v.get("bvid"), v.get("title"), bj(v.get("created") or 0)))
+        print("  - %s %r created=%s" % (v.get("bvid"), v.get("title"), site_ts(v.get("created") or 0)))
     return 0
 
 

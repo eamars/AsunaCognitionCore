@@ -1,6 +1,6 @@
 ---
 name: bilibili
-description: 账号自治站点技能：B 站。脚本 bili_auto.py 自己读 cookie 文件 → 用 nav 的 code 探活 → 失效就按本技能记载的扫码流程自动重登（网页码真 TTL 约 180 秒、前台轮询、出码与轮询同一趟、PNG 落盘绝对路径是唯一送达形状）→ 成功回写 cookie 文件 → 再执行取数（view、wbi 签名的投稿列表、弹幕、整段下载、免登录热评链）。扫码要人来扫这一步不能自动化，正文写死「什么时候喊人、喊人给什么形状」。附实测坑（cookie 头分隔符是 `; ` 不是 `&`、playurl 要 Referer、主镜像 567 走 backup_url、弹幕 XML 是 raw deflate、pubdate 说北京时间）与错误码表。要读 B 站数据、判登录态死活、或要重登 B 站时读这一份。账号事实（uid、cookie 值）不进正文，只写从哪读。
+description: 账号自治站点技能：B 站。脚本 bili_auto.py 自己读 cookie 文件 → 用 nav 的 code 探活 → 失效就按本技能记载的扫码流程自动重登（网页码真 TTL 约 180 秒、前台轮询、出码与轮询同一趟、PNG 落盘绝对路径是唯一送达形状）→ 成功回写 cookie 文件 → 再执行取数（view、wbi 签名的投稿列表、弹幕、整段下载、免登录热评链）。扫码要人来扫这一步不能自动化，正文写死「什么时候喊人、喊人给什么形状」。附实测坑（cookie 头分隔符是 `; ` 不是 `&`、playurl 要 Referer、主镜像 567 走 backup_url、弹幕 XML 是 raw deflate、pubdate 用站点侧时钟 UTC+8）与错误码表。要读 B 站数据、判登录态死活、或要重登 B 站时读这一份。账号事实（uid、cookie 值）不进正文，只写从哪读。
 scene_kinds: [home]
 ---
 
@@ -81,7 +81,7 @@ python3 bili_auto.py hotcomment BVxxxx # 免登录热评链，不读 cookie
 - **主镜像可能回 HTTP 567**（urllib 报 `Unknown Status`）：改走 `durl.backup_url`，一次成功；主镜像一次、备用一次，**不硬试第三次**。下载后字节数应与接口 `size` 完全一致。
 - **抽帧用 PyAV 单遍解码**：`container.decode(video=0)` 顺序走一遍（6600 帧约 2 秒）；PyAV 18 里 `seek()` 之后 `stream.decode()` 是 0 帧。黑帧用平均亮度＋标准差门槛跳过。机器 PATH 上没有 ffmpeg。
 - **弹幕 XML 是 raw deflate**：`comment.bilibili.com/<cid>.xml` 回 `Content-Encoding: deflate`，urllib 不解压，要 `zlib.decompress(raw, -15)`。
-- **pubdate 说北京时间**：接口给的是 UTC 秒；本机在新西兰，本机钟面会跨日（同一刻本机已是次日）。对人说「北京时间」，脚本输出带「北京」字样。
+- **pubdate 用站点侧时钟 UTC+8**：接口给的是 UTC 秒，这枚偏移是**站点那侧的公历时钟**，不是这台部署的位置；本机钟面会跨日（同一刻本机已是次日）。对人说「站点侧 UTC+8」，脚本输出带「UTC+8」字样。
 - **cookie 值不落进别的文件**：下载/抓取产物里会带设备 id（`buvid3` 前缀）和公开 uid；落盘前自查一遍 SESSDATA／bili_jct／sid 有没有混进去。
 
 ## 错误码表（实测；没见过的码字面报，不替它解释）

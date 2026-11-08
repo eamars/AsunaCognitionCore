@@ -15,7 +15,7 @@ for _s in (sys.stdout, sys.stderr):
 HERE = os.path.dirname(os.path.abspath(__file__))
 NAME = os.path.basename(HERE)
 SECTIONS = ['## 什么时候读这一份', '## 文件约定', '## 自动化的最低形状', '## 扫码重登', '## 登录后的读侧与写侧', '## 免登录调用链', '## 实测坑', '## 错误码表', '## 未核实', '## 停手规矩']
-MUST = [('nav_probe', 'code=0` 且 `data.isLogin=true'), ('dead_only_101', '`code=-101` 才判死'), ('ttl_180', '约 180 秒'), ('foreground_poll', '前台、带 timeout'), ('same_trip', '出码与轮询在同一趟'), ('png_path_only', 'PNG 落盘的绝对路径'), ('ask_before_issue', '先确认人在场'), ('no_second_card', '不自己再发第二张'), ('cookie_sep', 'cookie 头分隔符是 `; `，不是 `&`'), ('wbi', '投稿族要 wbi 签名'), ('hot_chain', 'x/v2/reply?type=1&oid=<aid>&sort=2'), ('avoid_main', '/x/v2/reply/main'), ('backup_url', 'backup_url'), ('raw_deflate', 'raw deflate'), ('beijing', '北京时间'), ('unverified_list', '写侧（评论、动态、专栏投稿）全部没发过')]
+MUST = [('nav_probe', 'code=0` 且 `data.isLogin=true'), ('dead_only_101', '`code=-101` 才判死'), ('ttl_180', '约 180 秒'), ('foreground_poll', '前台、带 timeout'), ('same_trip', '出码与轮询在同一趟'), ('png_path_only', 'PNG 落盘的绝对路径'), ('ask_before_issue', '先确认人在场'), ('no_second_card', '不自己再发第二张'), ('cookie_sep', 'cookie 头分隔符是 `; `，不是 `&`'), ('wbi', '投稿族要 wbi 签名'), ('hot_chain', 'x/v2/reply?type=1&oid=<aid>&sort=2'), ('avoid_main', '/x/v2/reply/main'), ('backup_url', 'backup_url'), ('raw_deflate', 'raw deflate'), ('site_clock_is_site_side', '站点侧'), ('unverified_list', '写侧（评论、动态、专栏投稿）全部没发过')]
 SCRIPTS = ['bili_auto.py']
 
 checks = []

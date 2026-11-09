@@ -178,7 +178,6 @@ Built-in placeholder fixtures for the offline self checks.
   - `post_departure`
 - def `load_config` — The same document through the real parser, so fixtures are validated exactly like a deployment config.
 - def `raw_of` — A deep copy of a loaded config's raw document, for mutation cases.
-- def `members_of`
 - def `first_member`
 - def `describe` — One line saying what the fixture deployment looks like (no secrets).
 
@@ -257,7 +256,6 @@ Disk-backed spool, journals and counters.
   - `spool_remove`
   - `spool_move` — Remove a spool item after recording it (with reason) in a journal.
   - `write_health`
-  - `read_health`
   - `acquire_lock` — Refuse to run twice against the same data dir.
   - `release_lock` — Unlock and close.
 

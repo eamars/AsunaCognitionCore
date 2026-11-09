@@ -15,3 +15,15 @@ selftest, the greps for removed names, her skills' checks, and for a restart the
   `--baseline`, `--hooks`: 0 each.
 - A first run stopped on one failing test: its label had a space, which went into the suite's worktree path, and the
   sandbox test splits its output on spaces. The re-run with `ADR-118-L1` was green. Nothing landed from the first run.
+
+## L2, 2026-11-09: the digest cases on a real Store, gates that do not pass on nothing (`436f25fc`)
+
+- Landed `436f25fc6abf` with `land.py`, no restart. Suite: 962 passed, 13 skipped; node 307 passed, 0 failed;
+  prepared start 153 modules, 0 problems; `docs/map` current; pushed.
+- `pytest integration`: 133 passed. Adapter `--selftest --offline`: pass 423, fail 0, skip 5. Her 14 `check_skill.py`:
+  rc 0. `tools/p1c_offline_check.py` on main: 20/20; a direct run of `tests/discussion_digest_cases.py`: 20/20; with
+  `asuna.people` blocked it fails at import (ImportError), not green.
+- Removed: `sys.modules["asuna.people"] = None` is gone from the tree, except the line in her own
+  `asuna-offline-selfchecks/SKILL.md:42`, which she changes herself (told on her line at the landing).
+  `_lookup`/`_match`/`_project`/`FakeCollection` are gone from `tests/discussion_digest_cases.py`; the copies in
+  `outbound_image_cases.py` and `p2_summary_loop_cases.py` are their own fakes (§6, one fake for the offline checks).

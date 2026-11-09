@@ -42,8 +42,7 @@ MENTION_LOOKUPS = 3                       # lookups one message may spend on the
 FIELD_DENIED = "CHANNEL_ENVELOPE_FIELD_DENIED"
 ROLES = ("owner", "admin", "member")
 NAME_LIMIT = 60
-MAX_NICKNAME_HISTORY = 12
-MAX_CARD_HISTORY = 12
+MAX_HISTORY = 12                 # each of the nickname, card and role histories keeps at most this many runs
 MAX_ALIASES = 8
 MAX_CHANGES = 20
 DEFAULT_TTL_SECONDS = 6 * 3600
@@ -183,7 +182,7 @@ def _push(history, value, now):
         history[-1]["last_seen"] = now
         return
     history.append({"value": value, "first_seen": now, "last_seen": now})
-    while len(history) > MAX_NICKNAME_HISTORY:
+    while len(history) > MAX_HISTORY:
         history.pop(0)
 
 

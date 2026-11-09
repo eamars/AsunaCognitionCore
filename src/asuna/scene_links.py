@@ -97,19 +97,6 @@ def read_scope(config, scene_doc):
             "linked_scope_keys": ["scene:" + scene for scene in linked]}
 
 
-def scene_id_filter(parts_or_scene):
-    """场景过滤条件：没联动时保持原来的单值形状（查询条件一行都不多写），联动了才换成 $in。"""
-    source = parts_or_scene if isinstance(parts_or_scene, dict) else {}
-    ids = [scene for scene in (source.get("scene_ids") or []) if _clean(scene)]
-    if not ids:
-        own = _clean(source.get("scene_id") or source.get("_id"))
-        ids = [own] if own else []
-    ids = list(dict.fromkeys(ids))
-    if not ids:
-        return {}
-    return {"scene_id": ids[0]} if len(ids) == 1 else {"scene_id": {"$in": ids}}
-
-
 def sync_scene_docs(store, config, scene_ids=None):
     """把派生出来的 readable_scenes 写进 scenes 文档（只为可观察；读路径现算自配置）。"""
     links = context_links(config)

@@ -67,7 +67,7 @@ Channel kinds registered by channel plugins (e.g. @asuna/napcat-qq). The core na
 - def `answers_requests` — Whether a configured channel's kind brings requests her home answers (notices.py).
 - def `sends_images`
 - def `sends_stickers`
-- def `reply_parts` — The parts her `reply` takes in a conversation of this kind; empty where her words are speech.
+- def `reply_parts` — The parts her `speak` takes in a conversation of this kind; empty where her words are speech.
 - def `sticker_of` — 'custom', 'market' or None for a stored media item the adapter did not mark (asks each kind).
 - def `sticker_md5` — The md5 of a stored media item's bytes when its platform names the file by it, else None (asks each kind).
 - def `image_hosts` — The media hosts the installed platforms deliver images from (vision's default allowlist).

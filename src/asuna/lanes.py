@@ -6,8 +6,7 @@ The live lane is `NativeLane` in native_worker.py, which runs each turn in a nat
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
-from .state import Store, Conflict
-from .evidence import sha, canonical
+from .state import Store
 from .records import receipts as receipt_records
 
 

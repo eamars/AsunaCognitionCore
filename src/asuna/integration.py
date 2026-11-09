@@ -15,7 +15,7 @@ from .config import DATA, ROOT, redact_text, echoed
 from .evidence import canonical, sha
 from .state import Denied
 from .queue import RuntimeLease
-from .integration_import import IMPORT_TOOL, IMPORT_TOOL_NAME
+from .integration_import import IMPORT_TOOL
 
 # The channel kind whose scenes carry the narrow grant (ADR-033): named here, never read off an event.
 AGENT_HOME_KIND = 'agent'

@@ -315,7 +315,7 @@ What she remembers, how it is recalled, her documents, mood and blobs.
 
 - [`memory`](../../src/asuna/memory.py) — Her written memory: `commit_understanding` saves the understanding of a person she writes in a turn, `chunk` cuts chat lines into memory units for recall, in each conversation up to its mark (`chunk_marks`, before which every line is settle
 - [`memory_indexer`](../../src/asuna/memory_indexer.py) — Index persisted local dialogue off the generation thread; restart scans pending work.
-- [`memory_pilot`](../../src/asuna/memory_pilot.py) — The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
+- [`memory_pilot`](../../src/asuna/memory_pilot.py) — The item index of tiered memory.
 - [`memory_tiers`](../../src/asuna/memory_tiers.py) — Tiered memory (ADR-062): where each of her items lives, kept up by what is memorable, moved down by the program.
 - [`key_words`](../../src/asuna/key_words.py) — The words that bring her items back by themselves (ADR-097): keys, a place's common words, and the segmenter.
 - [`crossing`](../../src/asuna/crossing.py) — What she learned elsewhere comes back when she asks (ADR-097 D3, D4): lines from her other groups, past versions of her notes, and the place rules that decide what may leave a group.
@@ -512,7 +512,6 @@ Commands for setup, packing, launching, probes and maintenance.
 - [`journal_import.py`](../../tools/journal_import.py) — ADR-117 L4's one-off: one of her working documents becomes a running record, one row per section.
 - [`make_demo_config.py`](../../tools/make_demo_config.py) — Create the ignored demo config (ADR-009 §0.3) from config/demo.example.json.
 - [`memory_fires_report.py`](../../tools/memory_fires_report.py) — ADR-097: the reading of what came back, from the count rows (memory_fires), in counts only (no text, word, heading, query, id or place name).
-- [`memory_pilot_report.py`](../../tools/memory_pilot_report.py) — ADR-062 phase 1: the shadow pilot's daily reading, in counts only (no text, no headings, no queries).
 - [`mood_probe.py`](../../tools/mood_probe.py) — Mood probe (ADR-086 §9): does the pull sentence of her mood paragraph steer whether she speaks in a group, and how long? Staged, on synthetic group lines, with her real persona package.
 - [`outbound_image_offline_check.py`](../../tools/outbound_image_offline_check.py) — 出站图片附件（QQ 私聊 B 阶段第一步）的离线自检：不需要 Mongo、不需要 pytest、不联网、不发 QQ。
 - [`p1c_offline_check.py`](../../tools/p1c_offline_check.py) — ADR-005 P1-c 离线自检：不需要 Mongo、不需要 pytest，直接跑同一套整理用例。

@@ -57,8 +57,9 @@ STORE_WORDS = {'persona': '人设', 'voice': '口吻', 'ledger': '活账', 'grou
                'self': '自我', 'journal': '流水'}
 # Each item is a fact (what is: no age bound) or a memory (what happened, or her own judgment: follows the cycle). Her answer (2026-10-13): per item, not per store. The store gives the default;
 # she may say it, or say where the item came from, when she writes it.
-FACTS = ('persona', 'ledger', 'group_notes', 'core')       # stores whose items are facts unless she says
-MEMORIES = ('self', 'journal', 'voice')                    # her voice is something she keeps changing (her answer)
+# Stores whose items are facts unless she says; every other store's (self, journal, voice) are memories: her voice is
+# something she keeps changing (her answer).
+FACTS = ('persona', 'ledger', 'group_notes', 'core')
 FACT, MEMORY = '事实', '记忆'
 NATURES = (FACT, MEMORY)
 FROM_NATURE = {'主人定的': FACT, '查过的': FACT, '别人说的': MEMORY, '我自己的判断': MEMORY}
@@ -67,7 +68,6 @@ SOURCES = tuple(FROM_NATURE)
 # else confirms it (met again from another conversation) or when she has checked it (rewritten with 查过的 and a basis).
 OWN_JUDGMENT, CHECKED = '我自己的判断', '查过的'
 OTHERS_SAID = ('别人说的', '主人定的')
-FACT_AUTHORS = (*OTHERS_SAID, CHECKED)
 # Considered and dropped (owner's call, 2026-10-13): a correction thread that upholds it. No honest signal for it
 # exists without the program judging what was said, which would grade her text.
 JUDGMENT_NOT_FACT = ('你自己的判断不能由你自己签成事实，除非你查过了：'

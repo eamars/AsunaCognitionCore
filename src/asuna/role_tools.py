@@ -1469,7 +1469,6 @@ class RoleTools:
     def call(self, ep_id, call_id, name, args, thinking=None):
         """(result, concludes_turn). Raises Refused for a call she can correct herself. `thinking`: the model's own
         thinking in the response that made her first call of a stage (ADR-099), recorded before the call runs."""
-        c = self.coordinator
         ep = episode_records.get(self.store, ep_id)
         if thinking is not None:
             ep = self.take_thought(ep, call_id, thinking)
@@ -2012,7 +2011,7 @@ class RoleTools:
     def tool_speak(self, ep, call_id, args):
         """ADR-064 phase 2: her speech here, in parts. Every part is checked before any is queued: one wrong part
         means none of this call leaves, and the result says which and why."""
-        from . import channel_kinds, local_roots, stickers
+        from . import local_roots, stickers
         from .persona_model import effective
         from .render import model_and_policy
         ep = self._fresh(ep)
@@ -2750,7 +2749,6 @@ class RoleTools:
         from . import scene_links
         item = {key: value for key, value in item.items() if key != 'anchor'}
         line, given = item.pop('line', None), item.get('from')
-        hers = memory_tiers.OWN_JUDGMENT
         if given is not None and given not in memory_tiers.OTHERS_SAID:
             return item, (self.SOURCE_NOT_USED % given if line is not None else None)
         if line is None:
@@ -3663,7 +3661,6 @@ def idea_rows(store, persona, search=None):
 def ideas_block(store, persona, moment, limit=None, page=1, search=None):
     """Her notebook in words, one page (ideas_left counts what the first page leaves out)."""
     from datetime import datetime
-    from .config import ago
     from .people import People
     people = People(store, persona)
     limit = limit or IDEAS_PAGE

@@ -330,7 +330,7 @@ All mature designs carry a version in the write's condition:
 
 Port: every record carries a store-managed integer `_rev`, incremented by every write the port
 performs. `replace`/`update`/`delete` accept `expected_rev`. The backend adds `_rev == n` to the
-filter, and zero matches with the record present raises `StaleRevision`. This works identically on
+filter, and zero matches with the record present raises `StaleRevision` (deleted, ADR-118 L3). This works identically on
 all backends: it is just a filter and an `$inc`.
 
 ### 4.5 Vector similarity search with filters and ties
@@ -439,7 +439,7 @@ count(coll, filter) -> int
 aggregate(coll, filter, *, group_by: list[field], metrics: {name: Count|Sum|Min|Max|Avg(field)},
           sort=(), limit=None) -> list[dict]
 insert(coll, record) -> Record                        # DuplicateKey
-replace(coll, record, *, expected_rev=None, upsert=False) -> Record   # StaleRevision, DuplicateKey
+replace(coll, record, *, expected_rev=None, upsert=False) -> Record   # StaleRevision (deleted, ADR-118 L3), DuplicateKey
 update(coll, filter, update, *, many=False, upsert=False, expected_rev=None) -> UpdateResult
 find_one_and_update(coll, filter, update, *, sort=(), upsert=False, return_new=True) -> Record | None
 delete(coll, filter, *, many=False, expected_rev=None) -> int

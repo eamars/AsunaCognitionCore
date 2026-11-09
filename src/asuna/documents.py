@@ -21,7 +21,7 @@ from .config import echoed
 from .evidence import canonical, sha
 from .records import heads as head_records
 from .records.view import ANY, View, fenced, is_text, pinned
-from .state import Conflict, Denied, now
+from .state import Conflict, now
 
 SCOPE = 'global-safe'
 VISIBILITIES = ('public', 'owner_private')

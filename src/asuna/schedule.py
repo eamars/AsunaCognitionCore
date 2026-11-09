@@ -6,7 +6,6 @@ ADR-005 P3 起，这里同时是"自然语言安排"的落点：角色在 DECIDE
 """
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime
 import threading
@@ -178,7 +177,7 @@ class ScheduleService:
                                            'native_scheduler_session') if k in plan}
             plan_records.save(self.store, {**plan, 'legacy_schedule_binding': legacy,
                 'schedule_id': native['id'], 'native_scheduler_session': self.lane.scheduler_session, 'scheduled_at': native['scheduledAt'],
-                'native_scheduler_session': self.lane.scheduler_session, 'last_dispatch_seq': -1,
+                'last_dispatch_seq': -1,
                 'migration_note': 'Native Host owns future occurrences; legacy history remains read-only.'},
                 expected=plan['revision'], stream=plan['_id'])
             self.store.audit(plan['_id'], 'schedule.native_migrated', {

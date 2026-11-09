@@ -20,7 +20,7 @@ def sources():
 
 def test_the_room_and_rhythm_resolvers_are_gone_and_nothing_reads_a_zone_but_her_zone():
     listed = sources()
-    assert {'src/asuna/schedule_rules.py', 'src/asuna/context.py', 'tools/memory_pilot_report.py'} <= set(listed), \
+    assert {'src/asuna/schedule_rules.py', 'src/asuna/context.py', 'tools/memory_fires_report.py'} <= set(listed), \
         'the scan reached the core and the tools'
     found = []
     for path in listed:

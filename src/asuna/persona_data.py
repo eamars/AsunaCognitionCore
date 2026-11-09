@@ -14,7 +14,7 @@ import copy
 import json
 from pathlib import Path
 
-from .documents import (DocumentError, DocumentStore, PREAMBLE, _section, slugify, unique_sid, SCOPE as DOC_SCOPE)
+from .documents import DocumentStore, PREAMBLE, _section, slugify, unique_sid
 from .evidence import canonical, sha
 from .state import Conflict, Denied, now
 from . import visibility

@@ -111,7 +111,6 @@ PRIVATE_IMAGE_SEGMENTS = ("reply", "image", "text", "face")
 # 0.6: a sticker goes out alone -- her own or one she kept, as a picture QQ shows as a sticker
 # (image + sub_type 1), or a store sticker as itself (mface, no bytes)
 STICKER_KEY = "sticker"
-STICKER_SEGMENTS = ("image", "mface")
 CUSTOM_STICKER_SUMMARY = "[动画表情]"
 # get_msg reads a store sticker back as an `image` segment (that is how NapCat delivers one inbound)
 STORED_AS = {"mface": "image"}

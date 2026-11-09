@@ -173,10 +173,6 @@ def raw_of(cfg):
     return json.loads(json.dumps(cfg.raw))
 
 
-def members_of(group_id):
-    return set(MEMBERS[group_id])
-
-
 def first_member(group_id):
     return sorted(MEMBERS[group_id])[0]
 

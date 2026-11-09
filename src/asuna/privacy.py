@@ -1,10 +1,9 @@
 """Explicit operator erasure, with scope invalidation and auditable redaction roots."""
-import copy
 from pathlib import Path
 import uuid
 from .config import DATA, ROOT
 from .evidence import write_json
-from .state import Denied,now
+from .state import Denied
 from . import audit as audit_trail
 from .records import scenes as scene_records
 from .records import episodes as episode_records

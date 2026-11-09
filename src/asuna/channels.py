@@ -687,7 +687,7 @@ class Channels:
                     return {'items': [action], 'lane': lane}
                 # ADR-095: files on the bulk lane, everything else on the chat lane. An adapter that declares no
                 # files has no bulk lane: its chat claims meet the file rows and fail them, as before; one that names
-                # no lane (from before ADR-095) gets everything on its one lane.
+                # no lane (dsh-peer and qq-bot claim so) gets everything on its one lane.
                 files = True if lane == 'bulk' else (
                     False if lane == 'chat' and outbound_files.CAPABILITY in (supports or ()) else None)
                 # a route key claims only its own line's words (ADR-033)
@@ -991,7 +991,7 @@ class ChannelServer:
                             value = {'items': [], 'line': 'closed'}    # her words wait while she keeps it closed
                         else:
                             owner = channels.owner_lines(channel_id, scoped) if scoped else []
-                            # no lane named: an adapter from before ADR-095, one lane for everything
+                            # no lane named (dsh-peer, qq-bot): one lane for everything
                             lane = query.get('lane', ['one'])[0]
                             if lane not in ('chat', 'bulk', 'one'):
                                 raise ValueError('OUTBOX_LANE_INVALID: lane 是 chat 或 bulk')

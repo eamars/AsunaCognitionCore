@@ -179,14 +179,6 @@ ADR-097: the reading of what came back, from the count rows (memory_fires), in c
 - def `compactions` — {DSH session id: [the end times (ms) of its compactions]}, from the profile's session logs.
 - def `main`
 
-## `memory_pilot_report.py`
-
-[tools/memory_pilot_report.py](../../tools/memory_pilot_report.py)
-
-ADR-062 phase 1: the shadow pilot's daily reading, in counts only (no text, no headings, no queries).
-
-- def `main`
-
 ## `mood_probe.py`
 
 [tools/mood_probe.py](../../tools/mood_probe.py)

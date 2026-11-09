@@ -134,7 +134,7 @@ anything reaches the database; retrieval already treats a failed vector search a
 caller requires vectors (`retrieval.py:237-239`), and the memory indexer does not run. Everything else is required.
 
 **Errors** (`asuna.store.errors`), each with what raises it: `DuplicateKey` (insert, replace, update, claim with create:
-a unique key repeated; names the index and, for insert, the position); `StaleRevision` (the shared layer's `put` when
+a unique key repeated; names the index and, for insert, the position); `StaleRevision` (deleted, ADR-118 L3) (the shared layer's `put` when
 `replace` returned `False` for a record that exists; mapped to today's `Conflict('STALE_REVISION: ...')` and its audit
 row); `QueryInvalid` (the shared layer, before dispatch: an undeclared field, a form section 3 refuses, a kind mismatch
 in a condition, a naive datetime in a condition, `QUERY_NAIVE_TIME`); `RecordInvalid` (the shared layer on write: a
@@ -1323,7 +1323,7 @@ and `last_read_at`; a put and `records.artifacts.replace` keep them; `records.ar
 
 **The static check** (`tests/test_store_boundary.py`, by AST over `src/asuna` and `tools`, imports resolved, relative
 ones included): the driver only in the adapter, the registry and `dbread` (and two tools with their own client, each
-with why: `cleanup_test_databases.py`, and `memory_pilot_report.py`'s `--drop`); `Store` defines no `db` or `client`;
+with why: `cleanup_test_databases.py`, and `memory_pilot_report.py` (deleted, ADR-118 L3)'s `--drop`); `Store` defines no `db` or `client`;
 no `db` or `client` read on a store, by attribute or `getattr`/`hasattr`; `adapter` and `checked` only in `store/`
 and `state.py`; `maintenance` only in `audit.py`; a collection named to a store's `collection` or `put` only in its
 owner, an unresolved name passing only as a parameter or the module's own constant in the four modules that choose

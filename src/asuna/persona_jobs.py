@@ -50,22 +50,6 @@ class SandboxLauncher:
         return process, {root_id: str(path) for root_id, path in sources.items()}, str(out)
 
 
-class DirectLauncher:
-    """Protocol tests only: no isolation at all, real host paths."""
-    name = 'direct-unsandboxed'
-
-    @staticmethod
-    def available():
-        return True
-
-    def spawn(self, entry: Path, sources: dict, out: Path):
-        import os
-        env = {**os.environ, 'PYTHONIOENCODING': 'utf-8', 'PYTHONUTF8': '1'}   # the protocol is UTF-8 JSONL
-        process = subprocess.Popen([sys.executable, '-u', str(entry)], cwd=str(entry.parent), stdin=subprocess.PIPE,
-                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-        return process, {root_id: str(path) for root_id, path in sources.items()}, str(out)
-
-
 class JobRunner:
     def __init__(self, store, persona, *, retrieval=None, launcher=None):
         self.store, self.persona, self.retrieval = store, persona, retrieval

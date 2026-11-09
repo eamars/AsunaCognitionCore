@@ -559,7 +559,6 @@ def answers_tail(store, persona, row):
         return None
     from . import questions
     from .schedule_rules import her_zone
-    scene = scene_records.get(store, row['from_scene']) or {'_id': row['from_scene']}
     return questions.answer_tail(store, persona, row['answers'], her_zone(store.config))
 
 

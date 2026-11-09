@@ -134,16 +134,6 @@ def redact_streams(store, scope, deletion, streams_of, session_ids):
     return previous_roots, new_roots
 
 
-def reconcile_calls(observed_body_hashes,events):
-    from collections import Counter
-    requests=[e['payload'] for e in events if e['type']=='provider.request']
-    responses=[e['payload'] for e in events if e['type'] in ('provider.response','provider.error')]
-    if Counter(observed_body_hashes)!=Counter(r['body_sha256'] for r in requests):raise ValueError('PROVIDER_AUDIT_COUNT_MISMATCH')
-    response_ids={r['call_id'] for r in responses}
-    if any(not r.get('purpose') or r['call_id'] not in response_ids for r in requests):raise ValueError('PROVIDER_AUDIT_JOIN_INCOMPLETE')
-    return {'requests':len(requests),'responses_or_errors':len(response_ids),'matched':True}
-
-
 # Retention (ADR-067, ADR-074): the audit is bounded by time and by size. Past RETENTION_DAYS a record goes, except her
 # own tool calls, kept KEPT_DAYS so an old thought still says what she did next (reasons.then), and the latest showing
 # of each review, kept whatever its age so the next one counts from it. Above CAP_BYTES of data the oldest go first,

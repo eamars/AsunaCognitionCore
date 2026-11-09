@@ -85,11 +85,6 @@ def readable(visibility: str, cls: str) -> bool:
     return visibility == 'public' or cls == OWNER_PRIVATE
 
 
-def readable_scope(scope_key: str, cls: str) -> bool:
-    """owner-private scopes depend only on the session class, never on links."""
-    return not is_owner_private_scope(scope_key) or cls == OWNER_PRIVATE
-
-
 def owner_private_scenes(config) -> set:
     """Scenes that are owner-private by configuration alone (used before any DB read)."""
     local = config.get('chat') or {}

@@ -52,7 +52,6 @@ OWNER = fixtures.OWNER_DM                    # the peer the DM route binds
 OUTSIDER = fixtures.OUTSIDER                 # on no member snapshot
 UNKNOWN_SENDER = fixtures.UNKNOWN_SENDER     # a DM peer with no route
 UNKNOWN_GROUP = fixtures.UNKNOWN_GROUP       # neither allowlisted nor routed
-LOOSE_GROUP = fixtures.UNROUTED_GROUP        # allowlisted, route removed by _loose_cfg
 # Another process taking the adapter's own lock (flock, or the byte lock on Windows) on the same file.
 HELPER_LOCK_CHILD = (
     "import os,sys,time\n"
@@ -3378,7 +3377,6 @@ def _check_media(rep, gcfg, root):
               inbound_mod.parse_message([{"type": "reply", "data": {"id": 1}},
                                          {"type": "text", "data": {"text": "正文"}}])["text_with_media"]
               == "正文", "")
-    long_card = json.loads(json.dumps(gcfg.raw))
     parsed = inbound_mod.parse_message([{"type": "mystery", "data": {}}])
     rep.check("media_unknown_segment_labelled",
               parsed["text_with_media"] == "[mystery消息（未解析）]" and parsed["other_segments"] == 1,

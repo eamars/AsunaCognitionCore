@@ -117,7 +117,6 @@ Role system prompt rendering (ADR-009 §8.1).
 - def `render_status` — Each pair's identity layer against its limit, for the settings card and memory tab: the largest one's estimate, whether any pair is over, and every pair's size.
 - def `report_budget` — Audit, once for each state of it, a pair whose identity layer is over its limit.
 - def `budget_gate` — For DocumentStore.apply, adopt_seed and promote_memory: growth of a note already far over its own limit is refused; growth of her identity layer in a pair over its limit is planned for her writes (`refuse` False) and refused for a persona j
-- def `over_budget_words` — How far a pair is over (or a write would take it), the way out, and the largest sections it carries now (carried.over_words).
 - def `system_for` — Re-render the system prompt an episode fixed at preparation time: the sections its ref recorded as carried, from the revisions it names.
 - def `episode_system` — Stage system prompt, re-rendered from the episode's system_ref (drift is audited).
 - def `action_values` — Action-brain system suffix (ADR-009 §8.3, revised by the owner 2026-10-04).

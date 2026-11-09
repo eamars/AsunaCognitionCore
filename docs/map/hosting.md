@@ -228,7 +228,6 @@ The owner of the audit trail (`audit_events`), and its checks and replays: `veri
 - def `prepared_for` — The newest `context.prepared` records (stream and time only) of turns in this scope with this person at this policy epoch, at most `limit`, newest first (ties by id).
 - def `streams` — Every stream of the audit trail, ascending.
 - def `redact_streams` — An erasure's declared rebase of the audit chain (ADR-105): in every stream, each record of the scope, of a stream of one of `streams_of` (a turn's or a task's id, or one of their sub-streams), or whose payload names one of `session_ids` has
-- def `reconcile_calls`
 - def `prune` — Delete the audit records past retention, then the oldest while the audit is over its cap.
 - def `verify` — Each event's own hash, and each stream's chain.
 - def `verify_documents` — Compare each document's latest audited commit with the collection (ADR-009 D-4).
@@ -502,7 +501,6 @@ The store's errors: what the shared layer and an adapter raise, each a message t
 - class `RecordInvalid` — A record, or a value written into one, that its collection's declared fields cannot hold.
 - class `RecordTooLarge` — A record over the store's limit by its adapter's measure.
 - class `DuplicateKey` — A write repeated a unique key: `index` names the index, `at` the position in an insert of several.
-- class `StaleRevision` — A revisioned write found the record at another revision than the one it was read at.
 - class `NotSupported` — The adapter lacks a capability the call needs; raised before the database is reached.
 - class `SchemaConflict` — The database holds an index of a declared name with other keys or options.
 - class `Unavailable` — The database cannot be reached.

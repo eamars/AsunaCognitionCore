@@ -159,12 +159,6 @@ class Journal:
     def write_health(self, obj):
         self.write_json(os.path.join(self.root, "health.json"), obj)
 
-    def read_health(self):
-        try:
-            return self.read_json(os.path.join(self.root, "health.json"))
-        except Exception:
-            return None
-
     def acquire_lock(self):
         """Refuse to run twice against the same data dir.
 

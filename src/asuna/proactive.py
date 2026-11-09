@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 import statistics
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from . import clock
 
 try:                                  # 宿主按包加载

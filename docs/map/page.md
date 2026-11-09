@@ -20,7 +20,6 @@ Bounded, read-only projections for native DSH's Asuna memory tab.
 - def `event_line`
 - def `mood_body`
 - def `event_body`
-- def `document_title`
 - def `searchable` — The content text of a row (titles and excerpts may be labels: their content parameters count).
 - def `plain` — One line of readable text: markdown markers and emphasis removed.
 - class `NativeMemory`

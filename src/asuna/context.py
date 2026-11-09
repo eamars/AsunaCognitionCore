@@ -5,7 +5,6 @@ The coordinator calls it for every turn. `order_context` puts the blocks in the 
 and long text is cut to the per-turn budget with a marker.
 """
 from __future__ import annotations
-import json
 import traceback
 from . import clock
 from .config import character_id, excerpt, redact_text
@@ -260,7 +259,7 @@ def _errand_from_here(store, event):
 class ContextBuilder:
     def __init__(self, store: Store, retrieval=None):
         self.store,self.retrieval=store,retrieval
-        self.pilot=None    # ADR-062 phase 1: the shadow pilot the Host attaches (memory_pilot.py); measures, delivers nothing
+        self.pilot=None    # the item index the Host attaches (memory_pilot.py); tiered memory reads its items
 
     def _reply_context(self, rows, scene, *, keep_event=False):
         """Keep transport reply attribution when projecting scoped history."""
@@ -274,7 +273,6 @@ class ContextBuilder:
                 continue
             row['reply_to'] = reply
             from .channels import reply_parent
-            from .people import People
             source = scene_records.get(self.store, row.get('scene_id', scene['_id']))
             parent = reply_parent(self.store, source or scene, reply,
                                   row.get('occurred_at') or row.get('receipt_at') or row.get('received_at'))
@@ -479,16 +477,7 @@ class ContextBuilder:
                 retrieval_manifest={'path':'scoped_history_without_rag','vector_verified':False,
                                     'error':redact_text(traceback.format_exc(),self.store.config)}
             if self.pilot is not None and isinstance(event.get('text'),str):
-                try:
-                    # Queued only: scored off the reply path, written apart, never part of this context.
-                    self.pilot.submit(query=event['text'],vector=self.retrieval.query_vector(event['text']),scope=scope,
-                                      private_scope=visibility.owner_private_scope(persona)
-                                          if session_class==visibility.OWNER_PRIVATE else None,
-                                      scene=scene,session_class=session_class,
-                                      turn_kind=turn_kind or event.get('episode_kind') or 'external',event_id=event['event_id'],
-                                      recall=recall)
-                except Exception:
-                    pass
+                self.pilot.submit()    # wakes the item index off the reply path (memory_pilot.Pilot)
             if memory_tiers.ENABLED and self.pilot is not None and isinstance(event.get('text'),str):
                 # ADR-062: two of the six slots for her own items at hand (a recall reaches put-away ones too).
                 try:

@@ -433,7 +433,6 @@ Her questions (ADR-061): one question, or a problem report, to one or more of he
 - def `context_links` — {场景: [可只读的场景]}。顶层 context_links 与路由级 read_scenes 都算，两处都不做通配。
 - def `readable_scenes` — 这个场景可以额外只读哪些场景（有序、不含自己）。
 - def `read_scope` — 这一轮能读哪些场景／scope_key：本场景永远排第一，联动场景按配置顺序跟在后面。
-- def `scene_id_filter` — 场景过滤条件：没联动时保持原来的单值形状（查询条件一行都不多写），联动了才换成 $in。
 - def `sync_scene_docs` — 把派生出来的 readable_scenes 写进 scenes 文档（只为可观察；读路径现算自配置）。
 - def `canonical_map` — {别名 person_id: canonical person_id}；自指与非字符串条目照实丢掉。
 - def `canonical_person_id` — 别名 → canonical，只看配置；没配映射就是本人 id。store 参数保留给调用方签名，不读。
@@ -457,7 +456,6 @@ Session class and data visibility (ADR-009 §2).
 - def `owner_id`
 - def `session_class` — owner_private ⇔ the owner's local scene, a DM whose canonical person is the owner, a trusted home line, or a group the owner configured as home.
 - def `readable`
-- def `readable_scope` — owner-private scopes depend only on the session class, never on links.
 - def `owner_private_scenes` — Scenes that are owner-private by configuration alone (used before any DB read).
 - def `without_link_downgrades` — Return (config, rejected): links from a public reader to an owner-private scene removed.
 

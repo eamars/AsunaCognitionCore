@@ -379,7 +379,6 @@ window.__ModuleLoader__.load({ id: '@asuna/cognition-core', factory: require => 
   };
   const ago = (t, hours) => hours * 60 < 5 ? t('memory.ago.now') : hours < 1 ? t('memory.ago.minutes', { n: Math.round(hours * 60) })
     : hours < 48 ? t('memory.ago.hours', { n: Math.round(hours) }) : t('memory.ago.days', { n: Math.round(hours / 24) });
-  const signed = value => (value >= 0 ? '+' : '') + Math.round(Number(value) || 0);
   // A platform person id (qq:<account>) reads as `QQ · <account>`; local ids read as themselves.
   const memoryAuthor = value => typeof value === 'string'
     ? value.replace(/^([a-z][a-z0-9_]{0,15}):/, (_, kind) => kind.toUpperCase() + ' · ') : '';

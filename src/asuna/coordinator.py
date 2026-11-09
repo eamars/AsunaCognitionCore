@@ -828,8 +828,6 @@ class Coordinator:
             raise role_tools.Refused('这一回合的授权和原来那件事不一样，不能给它补话或接着做；要做就用 delegate 交一件新的。', ['TASK_OTHER_GRANT'])
         if task['state'] in ('READY','RUNNING'):
             return self._steer(ep,call_id,task,message)
-        local=(ep['scene_id'],ep['person_id'])==(self.store.config['chat']['scene_id'],self.store.config['chat']['person_id'])
-        source=(message_records.get(self.store, 'in-'+ep['_id']) or {}).get('event',{})
         if task['state']=='STALE':
             raise role_tools.Refused('这件事正在被改（不是你的错）：等它的新版本回来再补话，结果回来会再叫你。', ['TASK_BEING_REVISED'])
         if task['state']=='CANCELLED' and task.get('cancel_reason')!='host_stop':

@@ -6,7 +6,6 @@ Every write goes through the store's revision check. role_tools.py, memory_index
 """
 from __future__ import annotations
 import copy
-import json
 from datetime import datetime,timedelta,timezone
 from . import clock
 from .config import character_id

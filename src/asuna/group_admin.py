@@ -146,7 +146,6 @@ def queue(store, ep, index, item, key=None):
 
 
 # ---- her notes about a group ------------------------------------------------
-NOTES_DOC = 'group_notes'            # what she writes as `doc`; the program maps it to this group's document
 
 
 def notes_slug(scene_id):

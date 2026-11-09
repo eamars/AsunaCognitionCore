@@ -489,9 +489,9 @@ journal rows, group notes) into the memory index with a `shadow` flag that retri
 Measure per item: would-be surfacings per day by turn kind, the floor that keeps crowding at or under one own item
 per turn on average and none in heartbeats, near-duplicate pairs found, and `recall` hits by heading. Decide the
 floor and the two reserved slots from this; the ADR is amended with the numbers.
-**Built 2026-10-13 (d4374fbd), live with her restart that night; the switch is `memory_pilot.SHADOW_PILOT`.**
+**Built 2026-10-13 (d4374fbd), live with her restart that night; the switch is `memory_pilot.SHADOW_PILOT` (deleted, ADR-118 L3).**
 Not a flag in the memory index: her items go to a collection of their own, `memory_shadow`, which retrieval never
-reads, so the pilot cannot reach a turn by mistake, and one drop removes it (`tools/memory_pilot_report.py --drop`).
+reads, so the pilot cannot reach a turn by mistake, and one drop removes it (`tools/memory_pilot_report.py --drop` (deleted, ADR-118 L3)).
 Items: persona sections, `current_self` list lines of 30 characters or more (as split in §1.1), running-record rows
 and each group's notes sections, each in the scope of its visibility (a group's notes in that group's scope);
 re-read at most every ten minutes, only new or changed ones embedded, on the memory route. Each character turn is
@@ -500,7 +500,7 @@ lexical ranks fused, the index's (1 + cosine) / 2 score, the turn's own query ve
 the floor 0.83 (`FLOOR`, `OWN_SLOTS` of `SLOTS`), and writes ids, stores, scores, the best six above 0.75, the turn's
 kind, the conversation and its kind; a `recall` query writes a row of its own, and `recall.read`'s sections give the
 reads by heading. `surfaced_in` marks which conversations surfaced an item; pairs in one store at 0.93 or more are
-written as found. `tools/memory_pilot_report.py` gives the daily counts (per day by turn kind, the floor table from
+written as found. `tools/memory_pilot_report.py` (deleted, ADR-118 L3) gives the daily counts (per day by turn kind, the floor table from
 0.80 to 0.90 and the lowest floor that fits, items surfaced in two or more conversations, pairs at 0.93 / 0.95 / 0.97,
 recall hits, the cost). Measured before going live, on her real item set (317 items: persona 45, `current_self` 16,
 journal 205, group notes 51) with synthetic vectors, read-only: the reply path pays one queue put (median 0.003 ms);
@@ -614,7 +614,7 @@ Answered by her on the agent line, 2026-10-13 about 20:45 (her answers are at th
 3. `promote_memory`'s quota (2 a night) with its new candidates.
 4. Retiring `update_self` (one less tool) against keeping her habit.
 5. Whether the pilot's shadow index may run on the live profile (it writes index rows, no delivery) or should wait for
-   a copy of her database. Built to run live, in a collection of its own (§7); `SHADOW_PILOT` off keeps it out.
+   a copy of her database. Built to run live, in a collection of its own (§7); `SHADOW_PILOT` (deleted, ADR-118 L3) off keeps it out.
 
 ## 10. References
 
@@ -696,11 +696,11 @@ on the coder's proposal (B15). Test: `tests/test_memory_tiers_delivery.py`.
 ## Phase 1 pilot closed (2026-10-25, ADR-096 decision 8)
 
 The shadow pilot ran from 2026-10-13 to 2026-10-25 (4,583 turn and recall rows; read with
-`tools/memory_pilot_report.py`, counts only). Items indexed: persona 51, self 55, core 12, group notes 160, journal
+`tools/memory_pilot_report.py` (deleted, ADR-118 L3), counts only). Items indexed: persona 51, self 55, core 12, group notes 160, journal
 671 (voice 0 until ADR-096 indexed it). Own items per turn by floor: 0.80 → 0.854, 0.83 (in use) → 0.525, 0.85 →
 0.278, 0.88 → 0.049, 0.90 → 0.005; in 105 heartbeat turns 185 items at 0.83, none from 0.88. The pilot's own test (at
 most one own item per turn, none in heartbeats) is first met at 0.88; the floor stays 0.83, since tiers now decide
 what is carried and the floor only ranks what is at hand. Her own items still take at most 2 of the 6 memory slots.
 Surfaced in two or more conversations: journal 67, persona 8, self 3. Recall: 93, 6 with a hit at the floor; 47 reads
-by heading. Cost: a job 24 ms median (875 ms p90), the reply path 0.028 ms median. `SHADOW_PILOT` is off; the item
+by heading. Cost: a job 24 ms median (875 ms p90), the reply path 0.028 ms median. `SHADOW_PILOT` (deleted, ADR-118 L3) is off; the item
 index stays (the tiers need it); turn rows past 30 days are deleted by the retention thread.

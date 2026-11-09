@@ -32,21 +32,18 @@ Index persisted local dialogue off the generation thread; restart scans pending 
 
 [src/asuna/memory_pilot.py](../../src/asuna/memory_pilot.py)
 
-The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
+The item index of tiered memory.
 
 - def `own_items` — Her items as the pilot indexes them: [{key, store, doc, sid, scope_key, visibility, inject, text, heading, tags, lexical}].
 - def `rows` — View: the rows of a kind (at or after `since`, ISO text; of this status; scored at least `min_score`).
 - def `prune` — Delete the pilot's turn rows (and recall and failure rows) older than `days`; items and pairs stay.
 - def `attach` — Start the item index for a context builder that retrieves: the Pilot, else None.
 - def `rank` — Her items the way retrieval ranks memories: vector and lexical ranks fused (terms common to over half of the items say nothing).
-- def `admitted` — Of candidates in fused order [(key, score)], the ones a turn would surface: at most `slots`, each at the floor.
-- class `Pilot` — One background thread: turns are queued by `submit` and scored off the reply path.
+- class `Pilot` — One background thread: each turn wakes it (`submit`), and it re-reads her items off the reply path.
   - `start`
   - `close`
-  - `submit`
-  - `run_job`
+  - `submit` — A character turn happened: wake the index (a full queue drops the wake; one already waits).
   - `sync` — Embed new and changed items, mark the ones gone, and write the near-duplicate pairs the changes made.
-- def `report` — ADR-062 §7 phase 1, in counts: would-be surfacings per day by turn kind, the floor that keeps her own items at or under one a turn on average and none in heartbeats, near-duplicate pairs, recall hits, and what it cost.
 
 ## `memory_tiers`
 

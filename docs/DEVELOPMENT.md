@@ -102,7 +102,7 @@ Data-sized work that stays in the worker, each with its bound:
 
 | Work | Bound | Timed as |
 |---|---|---|
-| `memory_pilot.rank` (recall's surfacing, context building, the pilot thread) | Python dot products over her readable items, linear in their count (50 ms at 1,243 items of 768 dimensions) | `recall` |
+| `memory_pilot.rank` (recall's surfacing, context building) | Python dot products over her readable items, linear in their count (50 ms at 1,243 items of 768 dimensions) | `recall` |
 | pictures in `read_image` | a still picture is only base64-encoded; an animated one's frames are walked in Pillow (`animated.py`) within the 8 MiB cap | `read_image` |
 | the `task` page and a task's feedback observations (`tasks.py` `observations_of`, `records_pages`) | every artifact result of the task; `records_pages` is quadratic in the record count | `task` |
 | credential scrubbing of results (`credentials.scrub`) | the result's size | every action call |
@@ -219,11 +219,9 @@ resolved) or `packages/channels/napcat-qq` (managed adapter in the sandbox, whic
 1. `src/index.js` calls `registerChannel({kind, title, project, resource_root, python, module,
    integration_directory, skill_directories})`.
 2. `python/<module>/__init__.py` is the kind module: the names listed in `src/asuna/channel_kinds.py`'s docstring
-   (id formats, mentions, media hosts, derived adapter settings; optional faces, stickers, home or text-only, and
-   `SERVICE_ARGV`, the managed adapter's resident command, which an enabled integration starts by itself), and the
-   optional names the core reads beyond that docstring: `MARKS_ANSWERS` with `answerer`, `sticker_of`, `sticker_md5`,
-   `media_key_name`, `MEDIA_KEYS` (`src/asuna/channel_kinds.py`), `PEER_LINE` (`src/asuna/lines.py`) and `ROUTE_KEYS`
-   (`src/asuna/channels.py`).
+   (id formats, mentions, media hosts, derived adapter settings; optional faces, stickers and their marks, media-link
+   keys, home or text-only, line and route rules, and `SERVICE_ARGV`, the managed adapter's resident command, which an
+   enabled integration starts by itself).
 3. The adapter speaks the channel API in [RUNTIME_API.md](../RUNTIME_API.md#channel-api) with the channel's token.
 4. The README says what a deployment configures (see the QQ package's "Setting up QQ").
 5. `npm install`, `npm run test:native`, then add it to a profile

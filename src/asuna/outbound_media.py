@@ -293,7 +293,6 @@ OWN_PICTURES_NOTE = ('这些是你自己画的图（新的在前）。这里发�
 
 def own_pictures(store, moment, *, limit=5):
     """Her own newest pictures, to look at where none can be sent (her local chat): ids and when, in words."""
-    from datetime import datetime
     out = []
     for item in produced_images(store, limit=limit):
         row = {'artifact_id': item['artifact_id']}

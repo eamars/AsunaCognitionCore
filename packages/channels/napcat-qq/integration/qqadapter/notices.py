@@ -81,9 +81,6 @@ WORDS = {
     'request_invite': '邀请你进群{g}',
     'offline': '你的账号被挤下线了',
 }
-# Words that differ from their kind's own (a kind with variants in WORDS).
-VARIANT_OF = {'recall_other': 'recall', 'recall_yours': 'recall', 'join_invited': 'join', 'unadmin_you': 'admin_you',
-              'unadmin': 'admin', 'unmute': 'mute', 'mute_all': 'mute', 'unmute_all': 'mute'}
 
 
 def _id(value):

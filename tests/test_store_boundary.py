@@ -30,7 +30,6 @@ ADAPTER_MODULES = {'src/asuna/store/mongodb.py', 'src/asuna/store/adapters.py', 
 TOOL_CLIENTS = {
     'tools/cleanup_test_databases.py': "lists the server's leftover asuna_v2_test_* databases and drops the "
                                        'inventoried ones; no store is opened on them',
-    'tools/memory_pilot_report.py': "--drop removes the pilot's whole collection, which the store has no verb for",
 }
 # Modules that choose among their own collections at run time (design 5.12).
 CHOOSERS = {'affect', 'carried', 'memory_tiers', 'memory_pilot'}

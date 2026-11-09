@@ -106,7 +106,6 @@ def _group_token_local(value):
 
 
 TEXT_FIELD = "text"
-FORWARD_TEXT_FIELD = "event.raw.asuna_forward.nodes.text"     # forwards.NODE_TEXT
 EPOCH_FIELD = "policy_epoch"
 DIRECTION_FIELD = "direction"        # ingress.py / coordinator.py 都写这个，取值如下
 INBOUND = "inbound"
@@ -530,7 +529,7 @@ def _hit(doc, parts, text_field, time_field, at=None, time_ref=""):
         who = labeler(doc) if callable(labeler) else doc.get('historical_display_name') or author
         return dict(base, archived=True, who=who, speaker=who, person_id='', names=[])
     if doc.get("errand"):
-        base["errand"] = "差事：家里托你来说的"          # ADR-066: her line sent on an errand from home
+        base["errand"] = LINE_MARK                     # ADR-066: her line sent on an errand from home
     if outbound_media is not None:
         # 附件位只在这条真的带过图时出现；没带图的命中与改动前逐字一致。
         slot = outbound_media.history_slot(doc)
@@ -948,6 +947,7 @@ from .records import receipts as receipt_records
 from .records import people as people_records
 from . import clock
 from .config import echoed
+from .errands import LINE_MARK
 
 
 try:                                  # 宿主内：复用已有的 Denied 语义（409 失败回执走原路径）

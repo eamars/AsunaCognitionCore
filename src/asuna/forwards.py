@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 
 from .people import safe_name
-from .records import scenes as scene_records
 from .records import messages as message_records
 
 KEY = 'asuna_forward'
@@ -68,7 +67,6 @@ def read(store, scene_id, sid):
     block = next((b for b in ((row or {}).get('event', {}).get('raw', {}).get(KEY) or []) if b.get('ref') == ref), None)
     if not block:
         return None, 'forward#%s：这里没有这条合并转发（只能在它发来的那个对话里读）' % sid
-    scene = scene_records.get(store, scene_id) or {'_id': scene_id}
     pages, current = [], []
     for line in lines(block, her_zone(store.config)):
         if current and sum(len(x) + 1 for x in current) + len(line) > PAGE_CHARS:

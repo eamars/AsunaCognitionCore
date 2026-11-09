@@ -204,7 +204,7 @@ Removals (59 occurrences in `memory_tiers.py`, 6 outside):
 | the age bound kept as a filter | `deliver:1083` (`pool`) | a 手边 memory item (not a fact) is in the pool only while its last use or memorable moment is within the bound (30 days for journal rows, the forgetting half-life's step-back for the rest), computed from the row's fields; no row written | – |
 | supersession: the `superseded`/`merged` branch of `move:321-322`, `superseded_at`, the correction branches of `placement_after:466-467` and `written:505-508`, reasons `superseded`, `merged`, `gist_skipped` | `memory_tiers.py` | `documents.py`: `OPS:31`, `WRITE_STAGE_OPS:32`, `problems:476,491-495`, `apply:345,569-594` (the `correction` op and `corrects`); `role_tools.py` write_document text (3 mentions); `crossing.before:553` (the `corrected` set from `corrects`: dead once no section can carry one; the line-level correction in `crossing._correction:178` stays); `context_budget.py:77` (off path) |
 | the night list: `night_list:813-916`, `NIGHT_ITEMS`, `NIGHT_WHAT`, `NIGHT_HOW`, `NIGHT_WHY`, `NIGHT_NOTE`, `DUPLICATE_SCORE`, `REPEATED_PLACES`, `REPEATED_STAYS`, the `offer` rows of kinds gist, merge, repeated (`week` offers stay) | `memory_tiers.py` | `context.py:1357-1359`, `block_guide.py:62` |
-| what stays | `signing`, `has_basis`, `BASIS`, `FACT_AUTHORS`, `JUDGMENT_NOT_FACT`, `confirmed`, `nature`/`from`, `let_go` 手边→收着, `week`, `LOOK_BACK_DAYS` | | |
+| what stays | `signing`, `has_basis`, `BASIS`, `FACT_AUTHORS` (deleted, ADR-118 L3), `JUDGMENT_NOT_FACT`, `confirmed`, `nature`/`from`, `let_go` 手边→收着, `week`, `LOOK_BACK_DAYS` | | |
 
 Additions:
 

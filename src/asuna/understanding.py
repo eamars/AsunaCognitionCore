@@ -26,7 +26,6 @@ from . import clock
 from .config import echoed
 
 PERSON_SCOPE = 'person'
-LAYERS = ('person', 'here')
 NO_PERSON = '你还没写过这个人在哪儿都成立的那一层。'
 NO_HERE = '你还没写过他在这里是什么样。'
 PART = '这只是他的一部分，不是他的全部'

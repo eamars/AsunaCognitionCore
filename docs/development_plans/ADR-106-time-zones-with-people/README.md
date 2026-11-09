@@ -41,7 +41,7 @@ re-read before building (`Before building`).
 |---|---|---|
 | a group's zone | `scenes.timezone`, written only by her `place_timezone` tool (`places.set_zone`) | `schedule_rules.scene_timezone` (every conversation's clock), `places.group_zone` (the "their clock" line) |
 | a route's zone | `routes.<id>.schedule.timezone`, `routes.<id>.timezone`, `routes.<id>.schedule.utc_offset_minutes` in the deployment's settings; nothing in the program writes them | `scene_timezone` |
-| the deployment's zone | top-level setting `timezone` (the Web settings card's "Time zone"; no check on the value) | `scene_timezone` (4th), `persona_model.timezone` (2nd), `tools/memory_pilot_report.py` |
+| the deployment's zone | top-level setting `timezone` (the Web settings card's "Time zone"; no check on the value) | `scene_timezone` (4th), `persona_model.timezone` (2nd), `tools/memory_pilot_report.py` (deleted, ADR-118 L3) |
 | her rhythm's zone | policy key `rhythm.timezone` (a "private" key: a package may not default it; she can still write it with `set_policy`) | `persona_model.timezone`: rhythm block, nightly settlement, night stage, visit counts, heartbeat pause, her home tasks' `ASUNA_TIMEZONE` |
 | a plan's zone | `plans.timezone` and `plans.tz_source`, written at create and update **for every kind of plan**; a daily or weekly plan's zone is also held by DSH's own scheduler (`time_zone`) | `scene_timezone` (1st) |
 
@@ -173,7 +173,7 @@ Removed: the `place_timezone` tool (spec, `tool_place_timezone`, the name lists 
 Host's labels, icon and key map in `client.js`); `places.group_zone`, `their_time`, `clock_gap`, `set_zone`, `zones`
 and the `their_clock` row; `records/scenes.py:set_timezone`. The scene row's `timezone` is cleared by §8 and nothing
 reads it. The route keys (`schedule.timezone`, `timezone`, `schedule.utc_offset_minutes`) are no longer read; the
-deployment reading (`Before building`) says whether any route sets them. `tools/memory_pilot_report.py` reads
+deployment reading (`Before building`) says whether any route sets them. `tools/memory_pilot_report.py` (deleted, ADR-118 L3) reads
 `her_zone(config)['name']` instead of `config.get('timezone')`.
 
 ### 5. Her rhythm key
@@ -391,7 +391,7 @@ on the code before it was taken; the numbers are its own.
 | 5 | the start record would be pruned; a typo fails open | §9: pinned, and `setting_unreadable`; the residual (no owner card) is stated |
 | 6 | the note and the update line must depend on the rule kind; only wall-zone rules store a zone | §3 |
 | 7 | missing guards: a sentinel sweep, a static guard; test 1 as first worded compared nothing | tests 1, 3, 4 |
-| 8, 9, 10 | existing tests, docs and the landing gap omitted | the lists above; reading 1; `tools/memory_pilot_report.py` |
+| 8, 9, 10 | existing tests, docs and the landing gap omitted | the lists above; reading 1; `tools/memory_pilot_report.py` (deleted, ADR-118 L3) |
 | 11 | the scene-clearing detour removes only an inert field | kept for the owner's word; §8 says why |
 
 ## What the "real person" test answered (the questions of 2026-10-27)

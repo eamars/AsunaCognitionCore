@@ -11,7 +11,7 @@ from datetime import datetime
 import re
 
 from . import clock
-from .config import ago, character_id
+from .config import character_id
 from .state import Denied
 from . import carried, channel_kinds, scene_links
 from .records import messages as message_records
@@ -105,12 +105,6 @@ def event_body(model, event, amendments):
         *[label('amendment.' + item['op'], why=item.get('why') or label('event.noReason'))
           if item['op'] in ('close', 'void', 'fix_ts', 'fix_kind') else item['op'] + ' ' + (item.get('why') or '')
           for item in amendments])
-
-
-def document_title(content, slug):
-    kind = label('doc.' + (content['kind'] if content['kind'] in DOCUMENT_KINDS else 'other'))
-    title = content.get('title') or slug
-    return label('title.document', kind=kind) if title in (slug, content['kind']) else label('title.documentNamed', kind=kind, name=title)
 
 
 def searchable(row):
@@ -588,7 +582,6 @@ class NativeMemory:
                           'source_ids': row.get('source_ids', [])}
             else:
                 row = {'missing': True}
-                title = self.heads[key][1]
                 result = {'id': identifier, 'body': label('hint.' + self.heads[key][0]),
                           'category': self.heads[key][0], 'status': 'empty', 'source_ids': []}
         elif kind == 'unit':

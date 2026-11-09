@@ -764,7 +764,6 @@ class People:
         Rows keep their ids (the program needs them); who wrote a row reads as `speaker`. A recalled
         summary says in words who is in it and whether the current speaker is, instead of listing ids.
         """
-        current = self.person(author)
         for key in ('person_id', 'scene_id', 'scope_key', 'policy_epoch'):
             context.pop(key, None)
         context['scene'] = self.scene_title(scene)

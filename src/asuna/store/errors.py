@@ -40,15 +40,6 @@ class DuplicateKey(StoreError):
                          % (collection, index, where))
 
 
-class StaleRevision(StoreError):
-    """A revisioned write found the record at another revision than the one it was read at."""
-
-    def __init__(self, collection, record_id, expected):
-        self.collection, self.record_id, self.expected = collection, record_id, expected
-        super().__init__('STALE_REVISION: %s 的 %s 已经不是第 %s 版了，这次没有写进去；读一次最新的再做'
-                         % (collection, record_id, expected))
-
-
 class NotSupported(StoreError):
     """The adapter lacks a capability the call needs; raised before the database is reached."""
 

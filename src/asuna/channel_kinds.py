@@ -24,6 +24,11 @@ A kind module knows one platform's id formats and adapter conventions:
   ROUTE_KEYS (optional)                        each route has a key of its own that opens only that line
   MARKS_ANSWERS, answerer(scene) (optional)    who on a line marks the lines that answer her questions
   MEDIA_KEYS (optional)                        the media-link key names its adapter posts (media_keys.py)
+  media_key_name(url), media_key_in(url), sign_media(url, key), media_refusal(status, detail) (optional, together)
+                                               the key a media link of its hosts is signed with, a fresh link's key,
+                                               the link signed again, and what its host's refusal means
+  sticker_of(item), sticker_md5(item) (optional) whether a stored media item is a custom or a market sticker, and the
+                                               md5 its platform names the file by
   OPEN_ADMISSION (optional)                    its senders are strangers the deployment may admit (channelAdmission
                                                `automatic`); without it the channel is always closed, whatever the
                                                deployment says (channel_admission.mode)
@@ -132,7 +137,7 @@ def sends_stickers(identifier):
 
 
 def reply_parts(identifier):
-    """The parts her `reply` takes in a conversation of this kind; empty where her words are speech."""
+    """The parts her `speak` takes in a conversation of this kind; empty where her words are speech."""
     return tuple(getattr(of(identifier), 'REPLY_PARTS', None) or ())
 
 

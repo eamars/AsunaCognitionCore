@@ -1,4 +1,4 @@
-"""The item index of tiered memory, and its closed shadow pilot (ADR-062 phase 1).
+"""The item index of tiered memory.
 
 Her own items (persona and voice sections, the lines of `current_self` until `self` has sections, journal rows,
 ledgers, `self` and `core`, each group's notes sections) are embedded on the memory route into one collection of their
@@ -7,10 +7,9 @@ they are found (rows `pair`). Tiered memory reads both: `memory_tiers.deliver` a
 these vectors, and the night list takes its merge pairs from them, so dropping the collection takes that away until
 the index is rebuilt.
 
-The pilot measured, after each character turn, which items the turn would have surfaced (rows `turn`, and `recall`
-for a recall); its readings set the floor and the slots (ADR-062) and `tools/memory_pilot_report.py` still reads them.
-`SHADOW_PILOT` is off: the index runs while tiered memory is on, and no turn rows are written. The audit retention
-thread deletes turn rows older than `TURN_ROWS_DAYS` (`prune`).
+The index runs while tiered memory is on; each character turn wakes it, and it re-reads her items at most every
+`SYNC_SECONDS`. The closed shadow pilot of ADR-062 phase 1 left rows `turn`, `recall` and `failure` here; each start
+deletes those older than `TURN_ROWS_DAYS` (`prune`), and a failed sync still writes a `failure` row.
 """
 from __future__ import annotations
 
@@ -28,16 +27,13 @@ from .retrieval import EMBED_OPENING_CHARS, refused, terms
 from .state import now
 from .records import scenes as scene_records
 from .records.view import ANY, View, is_text
-from .store.words import AddToSet, AnyOf, Increase, Range, Set, Without
+from .store.words import AnyOf, Range, Set
 
-TIERS_VERSION = 1
-SHADOW_PILOT = False              # the pilot's turn rows (ADR-062 phase 1, closed); the index runs without it
-TURN_ROWS_DAYS = 30               # turn rows older than this go (prune)
+TURN_ROWS_DAYS = 30               # the old pilot's turn rows older than this go (prune)
 COLLECTION = 'memory_shadow'
 # Every score below is on the (1 + cosine) / 2 scale (`_score`); tiered memory reads FLOOR and the slots from here.
 FLOOR = 0.83                      # absolute floor on the vector score, from ADR-062 §1.1 (cosine 0.66)
 OWN_SLOTS, SLOTS = 2, 6           # her own items may take at most two of a turn's six memory slots
-RECORD_ABOVE = 0.75               # candidates written per turn (the best SLOTS above this), so a report can try floors
 DUPLICATE_ABOVE = 0.93            # pairs within a store written from this score up
 SYNC_SECONDS = 600                # her items are re-read at most this often
 QUEUE_SIZE = 32
@@ -131,17 +127,17 @@ def _score(a, b):
 
 
 def attach(context, store, persona, retrieval):
-    """Start the item index for a context builder that retrieves: the Pilot, else None. It runs when the pilot's
-    switch is on (it then also writes its rows) or when tiered memory is on (memory_tiers.ENABLED: its items come up
-    in her turns from these vectors, whatever the pilot's switch says). `retrieval` makes its own embedding client.
+    """Start the item index for a context builder that retrieves: the Pilot, else None. It runs when tiered memory is
+    on (memory_tiers.ENABLED: its items come up in her turns from these vectors). `retrieval` makes its own embedding
+    client.
     With tiered memory on, the process's one full tier sync runs first (memory_tiers.Tiers.sync): rows for what was
     written while the worker was down; every write makes its own."""
     from . import memory_tiers
     if memory_tiers.ENABLED and persona:
         memory_tiers.Tiers(store, persona).sync()
-    if not (SHADOW_PILOT or memory_tiers.ENABLED) or not persona or getattr(context, 'retrieval', None) is None:
+    if not memory_tiers.ENABLED or not persona or getattr(context, 'retrieval', None) is None:
         return None
-    context.pilot = Pilot(store, persona, retrieval(), logging=SHADOW_PILOT).start()
+    context.pilot = Pilot(store, persona, retrieval()).start()
     return context.pilot
 
 
@@ -164,18 +160,13 @@ def rank(items, query, vector):
     return sorted(fused, key=lambda key: (-fused[key], key)), scores, by_vector
 
 
-def admitted(ranked, floor=FLOOR, slots=OWN_SLOTS):
-    """Of candidates in fused order [(key, score)], the ones a turn would surface: at most `slots`, each at the floor."""
-    return [key for key, score in ranked if score >= floor][:slots]
-
-
 class Pilot:
-    """One background thread: turns are queued by `submit` and scored off the reply path."""
+    """One background thread: each turn wakes it (`submit`), and it re-reads her items off the reply path."""
 
-    def __init__(self, store, persona, retrieval, *, logging=True):
-        self.store, self.persona, self.retrieval, self.logging = store, persona, retrieval, logging
-        self.items, self.synced_at, self.dropped, self.submit_ms = [], 0.0, 0, None
-        self.jobs = queue.Queue(QUEUE_SIZE)
+    def __init__(self, store, persona, retrieval):
+        self.store, self.persona, self.retrieval = store, persona, retrieval
+        self.items, self.synced_at = [], 0.0
+        self.wakes = queue.Queue(QUEUE_SIZE)
         self.stopping = threading.Event()
         self.worker = threading.Thread(target=self._run, name='asuna-memory-pilot', daemon=True)
         self.collection = store.collection(COLLECTION)
@@ -192,28 +183,23 @@ class Pilot:
             self.retrieval.close()
 
     # ── the reply path: one queue put ──────────────────────────────
-    def submit(self, *, query, vector, scope, private_scope, scene, session_class, turn_kind, event_id, recall):
-        started = time.perf_counter()
-        job = {'query': query, 'vector': vector, 'scope': scope, 'private_scope': private_scope,
-               'scene_id': scene['_id'], 'scene_kind': scene.get('kind'), 'session_class': session_class,
-               'turn_kind': turn_kind, 'event_id': event_id, 'recall': recall, 'at': now(),
-               'previous_submit_ms': self.submit_ms}
+    def submit(self):
+        """A character turn happened: wake the index (a full queue drops the wake; one already waits)."""
         try:
-            self.jobs.put_nowait(job)
+            self.wakes.put_nowait(None)
         except queue.Full:
-            self.dropped += 1
-        # What the reply path paid, written with the next row (this one may already be running).
-        self.submit_ms = round((time.perf_counter() - started) * 1000, 3)
+            pass
 
     def _run(self):
         while not self.stopping.is_set():
             try:
-                job = self.jobs.get(timeout=1)
+                self.wakes.get(timeout=1)
             except queue.Empty:
                 continue
             try:
-                self.run_job(job)
-            except Exception as exc:          # a measurement never disturbs her turns; its failure stays with its rows
+                if time.monotonic() - self.synced_at > SYNC_SECONDS or not self.items:
+                    self.sync()
+            except Exception as exc:          # a sync never disturbs her turns; its failure stays with its rows
                 try:
                     self.collection.insert({'_id': 'failure:' + uuid.uuid4().hex, 'row': 'failure', 'at': now(),
                                             'error_type': type(exc).__name__})
@@ -221,37 +207,6 @@ class Pilot:
                     pass
 
     # ── the background ─────────────────────────────────────────────
-    def run_job(self, job):
-        started = time.perf_counter()
-        if time.monotonic() - self.synced_at > SYNC_SECONDS or not self.items:
-            self.sync()
-        if not self.logging:
-            return None                      # the index only: tiered memory reads its items, nothing is logged
-        vector = job['vector']
-        reused = vector is not None
-        if vector is None:
-            vector = self.retrieval.embed([job['query']], 'query')[0]
-        readable = {'global-safe', job['scope'], *([job['private_scope']] if job['private_scope'] else [])}
-        items = [item for item in self.items if item['scope_key'] in readable]
-        order, scores, by_vector = rank(items, job['query'], vector)
-        surfaced = admitted([(key, scores[key]) for key in order])
-        stores = {item['key']: item['store'] for item in items}
-        top = [{'item': item['key'], 'store': item['store'], 'score': round(scores[item['key']], 4)}
-               for item in by_vector[:SLOTS] if scores[item['key']] >= RECORD_ABOVE]
-        row = {'_id': ('recall:' if job['recall'] else 'turn:') + uuid.uuid4().hex, 'row': 'recall' if job['recall'] else 'turn',
-               'at': job['at'], 'tiers_version': TIERS_VERSION, 'floor': FLOOR, 'event_id': job['event_id'],
-               'turn_kind': job['turn_kind'], 'scene_id': job['scene_id'], 'scene_kind': job['scene_kind'],
-               'session_class': job['session_class'], 'query_sha256': sha(job['query'].encode()), 'readable_items': len(items),
-               'top': top, 'surfaced': [{'item': key, 'store': stores[key], 'score': round(scores[key], 4)} for key in surfaced],
-               'vector_reused': reused, 'previous_submit_ms': job.get('previous_submit_ms'), 'dropped_before': self.dropped}
-        row['job_ms'] = round((time.perf_counter() - started) * 1000, 1)
-        self.collection.insert(row)
-        if surfaced and not job['recall']:
-            # Which conversation surfaced what: an item counts as memorable only from two different ones (ADR-062).
-            self.collection.update({'_id': AnyOf(surfaced)}, [AddToSet('surfaced_in', job['scene_id']),
-                                                              Increase('surfaced')], many=True)
-        return row
-
     def sync(self):
         """Embed new and changed items, mark the ones gone, and write the near-duplicate pairs the changes made."""
         current = own_items(self.store, self.persona)
@@ -308,86 +263,3 @@ class Pilot:
                     self.collection.update({'_id': 'pair:' + sha(canonical([first, second]))[:32]}, Set({
                         'row': 'pair', 'store': a['store'], 'items': [first, second], 'score': round(score, 4),
                         'at': now()}), create=True)
-
-
-# ── the daily report (counts only; tools/memory_pilot_report.py) ──────
-HEARTBEAT = 'presence'            # the episode kind of a heartbeat
-FLOORS = tuple(round(0.80 + i / 100, 2) for i in range(11))
-PAIR_LEVELS = (0.93, 0.95, 0.97)
-
-
-def _quantile(values, q):
-    values = sorted(values)
-    return values[min(len(values) - 1, int(q * len(values)))] if values else None
-
-
-def report(store, zone, since=None):
-    """ADR-062 §7 phase 1, in counts: would-be surfacings per day by turn kind, the floor that keeps her own items at
-    or under one a turn on average and none in heartbeats, near-duplicate pairs, recall hits, and what it cost."""
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-    tz = ZoneInfo(zone)
-    when = {'since': since} if since else {}
-    items = rows(store, 'item').rows(fields=Without('embedding'))
-    turns = rows(store, 'turn', **when).rows()
-    recalls = rows(store, 'recall', **when).rows()
-
-    def day(row):
-        return datetime.fromisoformat(str(row['at']).replace('Z', '+00:00')).astimezone(tz).date().isoformat()
-    days = {}
-    for row in turns:
-        entry = days.setdefault(day(row), {'turns': Counter(), 'surfaced': Counter(), 'turns_with_any': Counter()})
-        entry['turns'][row['turn_kind']] += 1
-        entry['surfaced'][row['turn_kind']] += len(row['surfaced'])
-        entry['turns_with_any'][row['turn_kind']] += bool(row['surfaced'])
-
-    def admitted_at(row, floor):
-        return min(OWN_SLOTS, sum(1 for top in row['top'] if top['score'] >= floor))
-    floors = []
-    for floor in FLOORS:
-        counts = [admitted_at(row, floor) for row in turns]
-        beats = [admitted_at(row, floor) for row in turns if row['turn_kind'] == HEARTBEAT]
-        floors.append({'floor': floor, 'per_turn': round(sum(counts) / len(counts), 3) if counts else None,
-                       'heartbeat_items': sum(beats), 'heartbeat_turns': len(beats)})
-    fitting = [f['floor'] for f in floors if f['per_turn'] is not None and f['per_turn'] <= 1 and f['heartbeat_items'] == 0]
-    store_of = {row['_id']: row.get('store') for row in items}
-    places = {}
-    for row in turns:
-        for hit in row['surfaced']:
-            places.setdefault(hit['item'], set()).add(row['scene_id'])
-    memorable = Counter(store_of.get(key) for key, scenes in places.items() if len(scenes) >= 2)
-    once = Counter(store_of.get(key) for key, scenes in places.items() if len(scenes) == 1)
-    active = {row['_id'] for row in items if row.get('status') == 'active'}
-    pairs = [row for row in rows(store, 'pair').each() if set(row['items']) <= active]
-    by_ref = {(row.get('doc'), row.get('sid')): row for row in items}
-    read = Counter()
-    from . import audit as audit_trail
-    recalls_read = audit_trail.events(store, 'recall.read', **({'since': since} if since else {}), by=None)
-    for event in recalls_read.each(fields=['payload.sections_read']):
-        for section in (event.get('payload') or {}).get('sections_read') or []:
-            row = by_ref.get((section.get('doc'), section.get('sid')))
-            if row:
-                read[row['_id']] += 1
-    query_hits = Counter(hit['item'] for row in recalls for hit in row['top'] if hit['score'] >= FLOOR)
-    logged = turns + recalls
-    jobs = [row['job_ms'] for row in logged if row.get('job_ms') is not None]
-    submits = [row['previous_submit_ms'] for row in logged if row.get('previous_submit_ms') is not None]
-    return {
-        'items': {kind: dict(Counter(row.get('status') for row in items if row.get('store') == kind))
-                  for kind in sorted({row.get('store') for row in items})},
-        'days': {key: {name: dict(value) for name, value in entry.items()} for key, entry in sorted(days.items())},
-        'floors': floors, 'floor_that_fits': min(fitting) if fitting else None, 'floor_in_use': FLOOR,
-        'surfaced_in_two_or_more_conversations': dict(memorable), 'surfaced_in_one_conversation': dict(once),
-        'near_duplicate_pairs': {str(level): dict(Counter(row['store'] for row in pairs if row['score'] >= level))
-                                 for level in PAIR_LEVELS},
-        'recall': {'recalls': len(recalls),
-                   'with_a_hit_at_the_floor': sum(1 for row in recalls if any(h['score'] >= FLOOR for h in row['top'])),
-                   'items_hit_by_query': dict(Counter(store_of.get(key) for key in query_hits)),
-                   'items_read_by_heading': dict(Counter(store_of.get(key) for key in read)),
-                   'reads_by_heading': sum(read.values())},
-        'cost': {'job_ms_median': _quantile(jobs, .5), 'job_ms_p90': _quantile(jobs, .9), 'job_ms_max': max(jobs, default=None),
-                 'reply_path_ms_median': _quantile(submits, .5), 'reply_path_ms_max': max(submits, default=None),
-                 'query_vector_reused': sum(1 for row in logged if row.get('vector_reused')), 'rows': len(logged),
-                 'dropped': max((row.get('dropped_before') or 0 for row in logged), default=0),
-                 'failures': rows(store, 'failure', **when).count()},
-    }

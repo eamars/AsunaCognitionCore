@@ -58,12 +58,6 @@ class Result:
         return "Result(kind=%r, code=%r, error=%r)" % (self.kind, self.code, self.error)
 
 
-def _summarise(obj, keys):
-    if not isinstance(obj, dict):
-        return None
-    return {k: obj.get(k) for k in keys if k in obj}
-
-
 class HostApi:
     def __init__(self, host_cfg, timeout=10):
         self.base = host_cfg["base_url"]

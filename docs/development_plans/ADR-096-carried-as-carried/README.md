@@ -14,7 +14,7 @@ A limit, and any reader that says what is carried, must read the text that is ca
 
 | Reader | Reads | What is carried |
 |---|---|---|
-| the persona budget (`render.render_status`, `report_budget`, `budget_gate`, `over_budget_words`, via `largest`) | persona and voice with each document's own `inject` | `render_system` composes `memory_tiers.placed(...)` |
+| the persona budget (`render.render_status`, `report_budget`, `budget_gate`, `over_budget_words` (deleted, ADR-118 L3), via `largest`) | persona and voice with each document's own `inject` | `render_system` composes `memory_tiers.placed(...)` |
 | `render.system_for`, on a miss of its 32-entry cache (every turn passes through it, `coordinator.py`) | the raw revisions, no `placed` | what `render_system` sent: after a restart a turn can be sent a different prompt than was measured (three `system.render_drift` audits fit this) |
 | `SINGLE_BODY_CHARS` 4,000 (`self_state.py`) | the legacy `current_self` body | `context.py` replaces it with the carried sections of `doc:self` / `doc:core`, bounded by nothing; these ignore `place:` tags (class only) |
 | group notes and ledgers (`note_gate`, `review_block`) | `shown(sections)` of the raw document | `group_admin.notes_block` shows `placed(...)` then `note_view` |

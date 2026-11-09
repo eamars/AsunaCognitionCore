@@ -9,13 +9,10 @@ import json
 import os
 import re
 from pathlib import Path
-import secrets
-import shutil
 import threading
 import traceback
 import uuid
 from contextlib import contextmanager,nullcontext
-import jsonschema
 from . import clock
 from .config import DATA,prompt_path,redact_text,excerpt,echoed
 from .render import action_values
@@ -33,7 +30,7 @@ from .history_query import HISTORY_TOOL, HISTORY_TOOL_NAME
 from .discussion_digest import DIGEST_TOOL, DIGEST_TOOL_NAME
 from .development import DEVELOPMENT_TOOLS, DEVELOPMENT_NAMES, PERSONA_JOB_TOOLS
 from .vision import (READ_IMAGE_TOOL, READ_IMAGE_TOOL_NAME, inline_summary as read_image_receipt,
-                     route_filtered_tool_names, task_attachment_context)
+                     task_attachment_context)
 from .records import episodes as episode_records
 from .records import tasks as task_records
 from .records import artifacts as artifact_records
@@ -777,8 +774,6 @@ def capability_refusal(store, task, tool):
             '要用它就在报告里写明，让说话的那一半在给它的地方另交一件。' % (str(tool)[:60], given, place_words(store, task['scene_id'])))
 
 
-DEVELOPMENT_GRANT=('DEVELOPMENT_GRANT_REQUIRED: 这个任务没有自我开发授权，development_* 和 persona_job_run 用不了；'
-                   '重试也一样，需要改代码就在报告里说明')
 UNAVAILABLE='不是参数的问题，重试也一样：不用它能做的先做，没做成的写进报告'
 
 

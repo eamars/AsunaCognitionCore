@@ -58,9 +58,6 @@ Persona jobs: run-to-completion programs a persona package declares (ADR-009 PER
 - class `SandboxLauncher` — The Host's sandbox (sandbox_backend.py): job code and sources are read where they are; it writes only to out.
   - `available`
   - `spawn`
-- class `DirectLauncher` — Protocol tests only: no isolation at all, real host paths.
-  - `available`
-  - `spawn`
 - class `JobRunner`
   - `job`
   - `run` — Returns status, exit code, counts and the report artifact id — never an excerpt.

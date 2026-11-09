@@ -22,7 +22,6 @@ import uuid
 
 from . import clock
 from . import sandbox_backend, channel_kinds, errands, tool_watch
-from .application import Application
 from .host import RuntimeHost
 from .config import DATA, ROOT, database_lock, redact_text, echoed
 from .evidence import Evidence, sha
@@ -1496,13 +1495,6 @@ class BusinessWorker:
             persona = self.app.config['chat']['persona']
             return JobRunner(self.app.store, persona, retrieval=self.app.retrieval).run(
                 args['job'], dry_run=bool(args.get('dry_run', True)), args=args.get('args') or {})
-        if method == 'affect.import':
-            # Persona-job import path (exposed through the persona data API in P4).
-            from .affect import AffectLedger
-            from .render import model_and_policy
-            persona = self.app.config['chat']['persona']
-            return AffectLedger(self.app.store, persona, *model_and_policy(self.app.store, persona)).import_batch(
-                args['origin'], args.get('events', []), args.get('amendments', []), dry_run=bool(args.get('dry_run')))
         if method == 'schedule.deliver':
             if not self.host.schedule:
                 raise RuntimeError('SCHEDULE_NOT_MOUNTED')

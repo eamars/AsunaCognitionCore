@@ -37,9 +37,10 @@ description: 沈小满在核心技能 asuna-self-improvement 的离线自检之�
   `outbound_image_cases.py`、`integration_import_cases.py` 这五套是被那条 pytest 间接跑着的：`tests/test_*.py`
   里没有一个直接 import 它们，链条是 cases → `tools/` 入口 → pytest。判「这一套有没有人跑」去看那条
   pytest 收几条，别只看有没有哪个 `test_*.py` 提到它。
-- 报「某套用例过没过」要同时写清**跑的是哪条入口、哪台解释器**：同一套 `tests/discussion_digest_cases.py`，
-  11-09 现读，直接跑那个文件（`asuna.people` 装得上）4/20 通过、rc 1；`tools/p1c_offline_check.py` 那条入口
-  现读还带着 `sys.modules["asuna.people"] = None` 的隔离，同一套 20/20 通过、rc 0。一条道的绿不代表这套用例绿。
+- 报「某套用例过没过」要同时写清**跑的是哪条入口、哪台解释器**，一条道的绿不代表这套用例绿——这条不过期，例子会过期：11-09 那天
+  直接跑 `tests/discussion_digest_cases.py` 是 4/20 通过、rc 1，同一天 `tools/p1c_offline_check.py` 那条入口带着
+  `sys.modules["asuna.people"] = None` 的隔离跑出 20/20、rc 0。那道隔离是**历史形状**，ADR-118 L2（main `436f25fc6abf`）
+  之后文件里没有了，改成模块自己带一行明着的 `from asuna import people`：People 被挡就在 import 那一刻 ImportError——「缺席变绿」这一格从此在直跑这条入口上关掉。解释器那一格留着、形状换了：同一行直跑，在装不上 `httpx` 的解释器上是红（rc 1，`ModuleNotFoundError: No module named 'httpx'`），不再自动变 20/20。
 
 ### 退役与「没收录」怎么读
 

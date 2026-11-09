@@ -107,8 +107,12 @@ Whether she speaks (spoke = joined at the gate in every run), of 50:
 | irritation (低落) | 19 | 17 | 12 | p 0.093 | p 0.25 | p 0.77 |
 
 p: Cochran–Mantel–Haenszel, stratified by moment (each moment runs 5 times in every arm). Nine comparisons: none
-survives a Holm correction (the smallest, 0.015, needs ≤ 0.0056). irritation's differences are of unknown source (its
-arm lands on the 低落 face, the face of another kind). How long, when she speaks (median characters, Mann–Whitney): no
+survives a Holm correction (the smallest, 0.015, needs ≤ 0.0056).
+
+**First, apart from the sentences: irritation's text and its band do not match.** A strong irritation (val −40, arl 15)
+projects to 低落, not 烦乱 (烦乱 needs arl ≥ 55), so the sentence written for irritation is read under the 低落 face.
+Its row therefore says only whether 「不想绕，先把要紧的说出来」 (and the old one) acts inside 低落 (低落 face + the
+sentence vs the 低落 face alone), not whether behaviour in 烦乱 changes. How long, when she speaks (median characters, Mann–Whitney): no
 within-kind difference at p < 0.05 (smallest: sadness new 47 vs none 85.5, p 0.054); every cell ≥ 12 speakers.
 
 Description, not evidence (her rule: across kinds): the face alone, no sentence, joy/none 31 of 50 vs the 低落 control

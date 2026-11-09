@@ -354,6 +354,7 @@ Quiet-time upkeep of a group (ADR-049): what she learns there and condensing its
 
 Notes between her own conversations (ADR-018, owner 2026-10-07).
 
+- def `modes` — (default, choices) for a note written with class `cls` to a place of this kind; `reply`: it answers a note.
 - class `NoteRefused` — A note the program did not send: the message says why, in words for her.
 - def `get` — The note with this id, or None.
 - def `first_reply` — A note that replies to this one (its id only), or None.

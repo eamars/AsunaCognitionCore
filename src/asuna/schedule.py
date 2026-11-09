@@ -641,19 +641,22 @@ class ScheduleService:
             return notes.result(self.store, existing)
         scene = scene_records.get(self.store, draft['to_scene'])
         counted = deferred = None
-        if draft['mode'] == notes.WAKE and draft['kind'] == 'group' and draft['trust'] == notes.TRUSTED:
+        if draft['mode'] == notes.WAKE and draft['kind'] == 'group':
+            # A group muted or with its day used up is woken by no note, from wherever it was written.
             persona, model, policy = self._persona()
             plan = plan_records.get(self.store, PRESENCE_PLAN) or {}
             date = places.local_date(self.app.config, moment)
             can, why = places.eligibility(self.store, scene, plan, places.settings(model, policy), moment, date)
+            if not can and notes.NEXT_TIME not in notes.modes(draft['from_class'], 'group', draft['reply_to'])[1]:
+                raise notes.NoteRefused('NOTE_VISIT_NOT_NOW', notes.WAKE_ONLY_NOT_NOW % why)
             if not can and args.get('mode'):
                 raise notes.NoteRefused('NOTE_VISIT_NOT_NOW', ('现在叫不醒那个群：%s。想晚点叫醒就用 plan 定个时间，到时再递；'
                                                         '或者改成 next_time，下次在那边有回合时看到（那个群歇着的话可能要等很久，三天没读就过期）。') % why)
             if not can:
                 # No deliver given (ADR-087 §4.4): the note waits for that group's next turn, and the result says so.
                 draft, deferred = {**draft, 'mode': notes.NEXT_TIME}, notes.NEXT_TIME_INSTEAD % why
-            else:
-                counted = (plan, date)
+            elif draft['trust'] == notes.TRUSTED:
+                counted = (plan, date)          # a note from home that wakes a group is one of her visits
         person = notes.receiver(self.app.config, draft['to_scene'])
         if draft['mode'] == notes.WAKE and not person:
             raise notes.NoteRefused('NOTE_TARGET_UNKNOWN', '那边没有可以接待你的成员授权，叫不醒；可以改成 next_time。')

@@ -1,8 +1,8 @@
 """ADR-087 step 4 (§4.4, §4.5), on the fixture world in memory: a note from home to a group that cannot be woken now
-waits for its next turn there unless she chose `deliver`; a one-shot plan moved in the turn it fired stays fired and
+waits for its next turn there unless she chose `deliver`, and one from a group is refused; a one-shot plan moved in the turn it fired stays fired and
 a new plan takes the timing; a note from outside that copies someone's recent line is refused with where the copy is
 and whose line it is, never the line; a refusal naming a wrong reference lists the usable ones. dm-a is home (the
-owner A's chat); g1 is a group with A and B. The native scheduler is a recording stand-in (test_plan_zone_service)."""
+owner A's chat); g1 is a group with A and B, g2 one with A and C. The native scheduler is a recording stand-in (test_plan_zone_service)."""
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -36,7 +36,9 @@ def her(world):
                             'persona': PERSONA}
     world.config['channels']['qq'] = {'account_id': 'acct', 'routes': {
         'r1': {'scene_id': 'g1', 'target': {'type': 'group', 'id': 'G1'},
-               'members': {'s-a': {'person_id': 'A'}, 's-b': {'person_id': 'B'}}, 'proactive': {'enabled': True}}}}
+               'members': {'s-a': {'person_id': 'A'}, 's-b': {'person_id': 'B'}}, 'proactive': {'enabled': True}},
+        'r2': {'scene_id': 'g2', 'target': {'type': 'group', 'id': 'G2'},
+               'members': {'s-a': {'person_id': 'A'}, 's-c': {'person_id': 'C'}}, 'proactive': {'enabled': True}}}}
     service = ScheduleService.__new__(ScheduleService)
     service.app, service.store, service.lane = SimpleNamespace(config=world.config, store=world), world, NativeStandIn()
     service.controller = Controller()
@@ -92,12 +94,17 @@ def test_a_note_to_a_group_that_cannot_be_woken_goes_next_time_unless_she_chose_
     assert notes.count_sent(her.store, ep_id) == 1 and her.service.controller.offers == []
 
 
+def presence_plan(her):
+    """Her heartbeat's plan, which holds the day's visits."""
+    her.store.put('plans', {'_id': PRESENCE_PLAN, 'kind': 'presence', 'scene_id': 'dm-a', 'person_id': 'A',
+                            'scope_key': 'scene:dm-a', 'policy_epoch': 1, 'status': 'ACTIVE', 'visits': []},
+                  stream=PRESENCE_PLAN)
+
+
 def test_a_note_to_a_group_whose_day_is_used_up_goes_next_time_and_a_free_group_is_woken(her):
     her.store.config['persona_model'] = {**(her.store.config.get('persona_model') or {}),
                                          'heartbeat': {'visits': True, 'visits_per_day': 1}}
-    her.store.put('plans', {'_id': PRESENCE_PLAN, 'kind': 'presence', 'scene_id': 'dm-a', 'person_id': 'A',
-                            'scope_key': 'scene:dm-a', 'policy_epoch': 1, 'status': 'ACTIVE', 'visits': []},
-                  stream=PRESENCE_PLAN)            # her heartbeat's plan holds the day's visits
+    presence_plan(her)
     ep_id = turn(her, ['note'])
     woken = call(her, ep_id, 'note', {'to': G1, 'text': '在一群里问问大家周末去哪儿玩。'})
     assert woken['arrives'] == notes.MODE_WORDS[notes.WAKE]
@@ -107,6 +114,23 @@ def test_a_note_to_a_group_whose_day_is_used_up_goes_next_time_and_a_free_group_
     sent = call(her, later, 'note', {'to': G1, 'text': '再问一句：周日下午行不行？'})
     assert sent['arrives'] == notes.NEXT_TIME_INSTEAD % '今天出门的次数用完了'
     assert notes.get(her.store, sent['note'])['mode'] == notes.NEXT_TIME and len(her.service.controller.offers) == 1
+
+
+def test_a_note_from_another_group_never_wakes_a_muted_group_and_is_refused_saying_a_plan_can_take_it(her):
+    presence_plan(her)
+    ep_id = turn(her, ['note'], scene='g2', person='C', cls=visibility.PUBLIC)
+    mute = switches.set_switch(her.store, {'_id': ep_id, 'persona': PERSONA, 'scope_key': 'scene:g2'}, 'mute',
+                               label='一群', scene_id='g1')
+    why = places.eligibility(her.store, {'_id': 'g1'}, {}, {'per_day': 9}, clock.now(), None)[1]
+    no = refused(her, ep_id, 'note', {'to': G1, 'text': '二群这边说周末去爬山，一群要不要一起？'})
+    assert no.codes[0] == 'NOTE_VISIT_NOT_NOW' and why in str(no)
+    assert 'plan' in str(no) and 'next_time' not in str(no), 'from a group she cannot choose next_time'
+    assert her.service.controller.offers == [] and notes.count_sent(her.store, ep_id) == 0
+    # Not muted, the same note wakes it as before, and a note from outside is not counted as one of her visits.
+    switches.clear(her.store, {'_id': ep_id, 'persona': PERSONA, 'scope_key': 'scene:g2'}, mute['_id'])
+    woken = call(her, ep_id, 'note', {'to': G1, 'text': '二群这边说周末去爬山，一群要不要一起？'}, 1)
+    assert woken['arrives'] == notes.MODE_WORDS[notes.WAKE] and [o[2] for o in her.service.controller.offers] == ['g1']
+    assert plan_records.get(her.store, PRESENCE_PLAN)['visits'] == []
 
 
 # ── 2. a one-shot plan moved in the turn it fired ───────────────────

@@ -13,9 +13,10 @@ from asuna.privacy import PrivacyService
 from asuna.evidence import Evidence,write_json,sha
 from asuna.testing import dispose_test_store
 
-name='blob-probe-'+uuid.uuid4().hex[:12];ev=Evidence(ROOT/'reports'/name);store=Store(load(),'asuna_v2_test_'+name.replace('-','_'));store.migrate();store.seed(ROOT/'tests/fixtures/world.json')
+name='blob-probe-'+uuid.uuid4().hex[:12];ev=Evidence(ROOT/'reports'/name);store=Store(load(),'asuna_v2_test_'+name.replace('-','_'))
 status='FAIL'
 try:
+    store.migrate();store.seed(ROOT/'tests/fixtures/world.json')   # inside the try: a failed setup still drops it
     blob=BlobStore(store);data=('large synthetic PRIVATE_SCOPE_BODY '+uuid.uuid4().hex+'\n').encode()*32768
     ref=blob.put(data,'scene:dm-a','oversize_probe',source_ids=['M09'])
     assert len(data)>1024*1024 and blob.get(ref['artifact_id'],'scene:dm-a',operator=True)==data

@@ -133,7 +133,7 @@ Report paths only; never print configured secret values or matching bytes.
 
 [tools/cleanup_test_databases.py](../../tools/cleanup_test_databases.py)
 
-Inventory or remove only explicitly inventoried Asuna test databases.
+Inventory or remove only explicitly inventoried Asuna test databases. With --apply, exit 1 when an inventoried database is still there or another database changed.
 
 - def `main`
 

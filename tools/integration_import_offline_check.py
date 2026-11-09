@@ -19,4 +19,4 @@ failed = [name for name, ok, _why in results if not ok]
 print("集成导入离线自检：%d/%d 通过" % (len(results) - len(failed), len(results)))
 if failed:
     print("失败：" + ", ".join(failed))
-sys.exit(1 if failed else 0)
+sys.exit(1 if failed or not results else 0)          # no case run is not a pass

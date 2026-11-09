@@ -4,6 +4,7 @@ Does not call a model or contact a platform. Browser evidence is separate.
 """
 import argparse
 import json
+import shutil
 import uuid
 from types import SimpleNamespace
 
@@ -25,29 +26,31 @@ from asuna.records import receipts as receipt_records
 
 def probe():
     run = uuid.uuid4().hex[:12]
+    workspace = ROOT / '.runtime/channels' / run
     config = load()
     config['channels'] = {'replay': {'token': uuid.uuid4().hex, 'account_id': 'replay-bot', 'routes': {
         'peer': {'scene_id': 'replay-dm', 'person_id': 'replay-person', 'sender_id': 'replay-peer',
                  'target': {'type': 'dm', 'id': 'replay-peer'},
-                 'workspace': str(ROOT / '.runtime/channels' / run)}}}}
+                 'workspace': str(workspace)}}}}
     store = Store(config, 'asuna_v2_test_host_' + run)
-    store.migrate()
-    store.seed(ROOT/'tests/fixtures/world.json')  # Only the isolated test database; never the configured live database.
-    prepare_channels(store)
-    evidence = Evidence(ROOT / 'reports' / ('host-probe-' + run))
-    lane = FakeLane(store, [LaneResult('REPLAY_PRIVATE'), LaneResult(json.dumps({
-        'next': 'speak', 'goal': 'replay', 'constraints': [], 'recall_query': '', 'speak_before_action': False})),
-        LaneResult('REPLAY_PUBLIC')])
-    coordinator = Coordinator(store, lane)
-    app = SimpleNamespace(store=store, config=config, evidence=evidence, character=lane,
-                          router=Router(store, coordinator))
-    settings = {**config['chat'], 'persona': 'P1'}
-    chat = Chat(app, settings, emit=lambda _: None)
-    channel = Channels(chat)
-    server = ChannelServer(channel)
-    client = httpx.Client(base_url=f'http://127.0.0.1:{server.server.server_port}', trust_env=False,
-                         headers={'Authorization': 'Bearer ' + config['channels']['replay']['token']})
-    try:
+    server = client = None
+    try:                        # the whole probe: a failed setup still drops its database and its workspace
+        store.migrate()
+        store.seed(ROOT/'tests/fixtures/world.json')  # Only the isolated test database; never the configured live database.
+        prepare_channels(store)
+        evidence = Evidence(ROOT / 'reports' / ('host-probe-' + run))
+        lane = FakeLane(store, [LaneResult('REPLAY_PRIVATE'), LaneResult(json.dumps({
+            'next': 'speak', 'goal': 'replay', 'constraints': [], 'recall_query': '', 'speak_before_action': False})),
+            LaneResult('REPLAY_PUBLIC')])
+        coordinator = Coordinator(store, lane)
+        app = SimpleNamespace(store=store, config=config, evidence=evidence, character=lane,
+                              router=Router(store, coordinator))
+        settings = {**config['chat'], 'persona': 'P1'}
+        chat = Chat(app, settings, emit=lambda _: None)
+        channel = Channels(chat)
+        server = ChannelServer(channel)
+        client = httpx.Client(base_url=f'http://127.0.0.1:{server.server.server_port}', trust_env=False,
+                             headers={'Authorization': 'Bearer ' + config['channels']['replay']['token']})
         event = {'route_id': 'peer', 'account_id': 'replay-bot', 'sender_id': 'replay-peer',
                  'event_id': 'replay-event', 'text': 'LOCAL_HOST_REPLAY_INPUT', 'raw': {'fixture': True}}
         response = client.post('/v1/channels/replay/events', json=event)
@@ -90,9 +93,12 @@ def probe():
         print(json.dumps(result, ensure_ascii=False))
         recovered.stop()
     finally:
-        server.close()
-        client.close()
+        if server is not None:
+            server.close()
+        if client is not None:
+            client.close()
         dispose_test_store(store)
+        shutil.rmtree(workspace, ignore_errors=True)
 
 
 if __name__ == '__main__':

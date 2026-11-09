@@ -1,23 +1,22 @@
-"""ADR-005 P1-c 离线用例：整理逻辑用假集合真算一遍。
+"""ADR-005 P1-c 离线用例：整理逻辑在真 Store 上真算一遍。
 
-这里不依赖 Mongo 也不依赖 pytest：假集合真实现 $in/$gte/$lte/$lt/$ne/$regex/$and/$or、
-点号键、projection、多键排序与 count_documents，所以过滤、分页、整理结果都是算出来的，
-不是断言出来的。python3 tools/p1c_offline_check.py 直接跑这一套（tests/test_offline_checks.py 也在 pytest 里跑它）。
+这里不依赖 Mongo 也不依赖 pytest：Store 建在内存适配器上（tests/fake_collections.py），读的是每条用例自己的行，
+过滤、排序、分页和人名标签（people.py）都是仓库里那份真代码算出来的，不是断言出来的。
+python3 tools/p1c_offline_check.py 和直接跑本文件是同一个结果（tests/test_offline_checks.py 在 pytest 里跑前者）。
 """
 import os
 import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(os.path.dirname(HERE), "src", "asuna")
-# The flat modules (src/asuna) plus the package itself (src): a few of them import `asuna.channel_kinds`.
-for _path in (os.path.dirname(SRC), SRC, HERE):
+for _path in (os.path.join(os.path.dirname(HERE), "src"), HERE):     # the package, and fake_collections beside us
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
 from asuna import discussion_digest as dd           # noqa: E402
 from asuna import history_query as hq                # noqa: E402
 from asuna import channel_kinds                      # noqa: E402
+from asuna import people  # noqa: E402,F401  the labels come from People: without it these cases fail here
 import fake_collections                              # noqa: E402
 from asuna.store.words import AnyOf                  # noqa: E402
 
@@ -95,91 +94,30 @@ def task_row(scene_id=SCENE_ID, scope=None, epoch=EPOCH):
             "policy_epoch": epoch, "requester_id": A_ID}
 
 
-# ── 假集合：真算过滤与排序 ────────────────────────────────────────
-def _lookup(doc, key):
-    value = doc
-    for part in key.split("."):
-        if isinstance(value, dict) and part in value:
-            value = value[part]
-        else:
-            return False, None
-    return True, value
+# ── 用例自己的行，经内存适配器读给真 Store ───────────────────────────
+class Rows:
+    """One collection's rows as a case wrote them: read through fake_collections, read-only."""
+
+    def __init__(self, rows):
+        self.rows = rows
 
 
-def _match(doc, flt):
-    for key, cond in flt.items():
-        if key == "$or":
-            if not any(_match(doc, sub) for sub in cond):
-                return False
-        elif key == "$and":
-            if not all(_match(doc, sub) for sub in cond):
-                return False
-        elif isinstance(cond, dict) and not cond:
-            found, value = _lookup(doc, key)
-            if not (found and value == {}):
-                return False
-        elif isinstance(cond, dict):
-            found, value = _lookup(doc, key)
-            for op, arg in cond.items():
-                if op == "$in" and value not in arg:
-                    return False
-                elif op == "$exists" and found is not bool(arg):
-                    return False
-                elif op == "$ne" and found and value == arg:
-                    return False
-                elif op == "$gte" and (value is None or value < arg):
-                    return False
-                elif op == "$lte" and (value is None or value > arg):
-                    return False
-                elif op == "$lt" and (value is None or value >= arg):
-                    return False
-                elif op == "$regex" and not (isinstance(value, str) and re.search(
-                        arg, value, re.IGNORECASE if cond.get("$options") == "i" else 0)):
-                    return False
-        else:
-            found, value = _lookup(doc, key)
-            if not found or not (value == cond or (isinstance(value, list) and cond in value)):
-                return False
-    return True
+class FakeDB:
+    """The case's collections; one the program writes during a case (People's labels) starts empty and takes writes."""
 
+    def __init__(self, rows, scenes, sink):
+        self.messages = Rows(rows)
+        self.scenes = Rows(scenes)
+        if sink is not None:
+            self.sink_receipts = Rows(sink)
 
-def _project(doc, projection):
-    if not projection:
-        return dict(doc)
-    out = {"_id": doc.get("_id")}
-    for key in projection:
-        if key == "_id":
-            continue
-        found, value = _lookup(doc, key)
-        if not found:
-            continue
-        cursor = out
-        parts = key.split(".")
-        for part in parts[:-1]:
-            cursor = cursor.setdefault(part, {})
-        cursor[parts[-1]] = value
-    return out
-
-
-class FakeCollection:
-    def __init__(self, rows, boom=False):
-        self.rows, self.boom, self.finds = rows, boom, []
-
-    def find(self, flt=None, projection=None, sort=None, limit=0):
-        self.finds.append((flt, projection, sort, limit))
-        if self.boom:
-            raise RuntimeError("mongo down")
-        out = [_project(doc, projection) for doc in self.rows if _match(doc, flt or {})]
-        for key, direction in reversed(list(sort or [])):
-            out.sort(key=lambda d: (d.get(key) is None, d.get(key)), reverse=direction < 0)
-        return out[:limit] if limit else out
-
-    def find_one(self, flt, projection=None):
-        rows = self.find(flt, projection)
-        return rows[0] if rows else None
-
-    def count_documents(self, flt):
-        return len([doc for doc in self.rows if _match(doc, flt or {})])
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        written = type("Written", (), {})()
+        written.docs = {}
+        setattr(self, name, written)
+        return written
 
 
 class _Recorded:
@@ -205,18 +143,29 @@ class _Recorded:
 
 
 class FakeStore:
+    """A real Store over the case's rows (fake_collections' in-memory adapter); its `messages` keeps each condition it
+    is asked to find (the fence cases read them) and fails every read when the database is down (`boom`)."""
+
     def __init__(self, rows, sink=None, scenes=None, boom=False):
-        class DB:
-            pass
-        self.config = {}                     # read for her clock (local_time.her_zone)
-        self.db = DB()
-        self.db.messages = FakeCollection(rows, boom=boom)
-        self.db.scenes = FakeCollection(scenes if scenes is not None else [scene_row()])
-        if sink is not None:
-            self.db.sink_receipts = FakeCollection(sink)
-        handles = fake_collections.collections(self.db)            # the record owners' way to the same rows
-        self.messages = _Recorded(handles('messages'), boom=boom)
-        self.collection = lambda name: self.messages if name == 'messages' else handles(name)
+        from asuna.state import Store
+        self.db = FakeDB(rows, scenes if scenes is not None else [scene_row()], sink)
+        self.store = Store.over(fake_collections.checked(self.db), {"character_id": "demo", "database": "fake"}, "fake")
+        self.messages = _Recorded(self.store.collection("messages"), boom=boom)
+
+    def collection(self, name):
+        return self.messages if name == "messages" else self.store.collection(name)
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(self.store, name)
+
+
+def by_name(value):
+    """Participants by the name inside the label People gives them (`[雾灯修理工 #1]（管理员）`): the numbers follow the
+    order People first met each person, so a case names people, not numbers."""
+    return dict((re.match(r"\[(.*?) #\d+\]", person["display"]).group(1) if person["display"].startswith("[")
+                 else person["display"], person) for person in value["participants"])
 
 
 def digest_of(rows, args=None, **kwargs):
@@ -246,10 +195,11 @@ def discussion_rows():
 def case_participants_and_coverage():
     value, _store = digest_of(discussion_rows())
     assert value["degraded"] is False, value
-    people = dict((person["display"], person) for person in value["participants"])
+    people = by_name(value)
     assert sorted(people) == sorted([A_CARD, B_CARD, "demo"]), people
     assert people[A_CARD]["identity"] == "peer" and people[A_CARD]["role"] == "管理员"
-    assert people[A_CARD]["messages"] == 4 and people[A_CARD]["person_id"] == A_ID
+    assert people[A_CARD]["display"].endswith("（管理员）"), people[A_CARD]["display"]
+    assert people[A_CARD]["messages"] == 4
     assert people[B_CARD]["messages"] == 2 and people[B_CARD]["role"] == "成员"
     assert people["demo"]["identity"] == "author" and people["demo"]["side"] == "我说"
     cov = value["coverage"]
@@ -271,7 +221,7 @@ def case_correction_opinion_open_are_separate():
     correction = value["corrections"][0]
     assert len(value["corrections"]) == 1 and correction["message_id"] == "i4"
     assert correction["basis"] == "reply_link" and correction["confidence"] == "high"
-    assert correction["corrects"] == "i1" and correction["target_author"] == A_CARD
+    assert correction["corrects"] == "i1" and correction["target_author"] == by_name(value)[A_CARD]["display"]
     assert correction["self_correction"] is True and correction["later_than_target"] is True
     assert correction["cue"] == "更正"
     opinions = dict((item["message_id"], item) for item in value["opinions"])
@@ -406,7 +356,7 @@ def case_identity_fallback_is_labelled_not_hidden():
     rows = [inbound("i1", 1, "2026-09-22T12:00:00Z", "雾灯坏了", peer=None)]
     value, _store = digest_of(rows)
     person = value["participants"][0]
-    assert person["identity"] == "author" and person["display"] == A_ID
+    assert person["identity"] == "author" and person["display"].startswith("[还不知道名字 #"), person
     assert value["coverage"]["identity_fallback"] == 1
     assert any("身份块" in note for note in value["notes"]), value["notes"]
 
@@ -478,10 +428,9 @@ def case_topic_filter_keeps_thread_continuations():
     args = value["readback"]["example_args"]
     assert value["readback"]["topic_omitted"] is True and "query" not in args, value["readback"]
     assert value["readback"]["thread_source_ids"] == ["c2", "c3"], value["readback"]
-    scene = {"scene_id": SCENE_ID, "scope_key": "scene:" + SCENE_ID, "policy_epoch": EPOCH}
-    back = hq.query_history(None, store, scene, args.get("query", ""), person=args["person"],
-                            since=args["since"], until=args["until"], limit=50)
-    assert "c2" in [hit["message_id"] for hit in back["hits"]], back["hits"]
+    # 回读走她的工具那条路（HistoryQueryService：person 先按 People 的标签和编号解析）
+    back = hq.HistoryQueryService(store, None).query_for_task(task_row(), dict(args, include_semantic=False))
+    assert "c2" in [hit["message_id"] for hit in back["hits"]], back
     # 不带 topic 时本来就会读到全部六条：补齐逻辑不改变无筛选那条路径
     plain, _store = digest_of(thread_rows())
     assert plain["coverage"]["read"] == 6 and plain["coverage"]["thread_extra"] == 0
@@ -597,7 +546,7 @@ def case_person_scope_labels_thread_context():
     assert value["coverage"]["person_context_rows"] == 1, value["coverage"]
     item = next(x for x in value["corrections"] if x["message_id"] == "b1")
     assert item["thread"] is True and item["person_match"] is False, item
-    marks = dict((person["display"], person) for person in value["participants"])
+    marks = by_name(value)
     assert marks[A_CARD]["outside_person"] == 0 and marks[B_CARD]["outside_person"] == 1
     assert any("person 只限定主题命中项" in note for note in value["notes"]), value["notes"]
     assert "非 person 指定" in value["text"] and "thread_context" in value["text"]

@@ -1,7 +1,9 @@
-"""Inventory or remove only explicitly inventoried Asuna test databases."""
+"""Inventory or remove only explicitly inventoried Asuna test databases. With --apply, exit 1 when an inventoried
+database is still there or another database changed."""
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 
 from pymongo import MongoClient
@@ -51,9 +53,10 @@ def main():
                       'database_count_after': len(after)}
             args.inventory.with_name('result.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
             print(json.dumps({key: len(value) if key == 'dropped' else value for key, value in result.items()}))
+        return 1 if result['remaining_targets'] or not result['other_databases_preserved'] else 0
     finally:
         client.close()
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

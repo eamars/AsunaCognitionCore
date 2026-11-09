@@ -589,7 +589,6 @@ def history(store, persona, scene_id, name, moment=None):
 
 def close(store, persona, qid, took, moment=None):
     """She closes a question with what she took from it. Returns (row, words)."""
-    from . import memory_tiers
     row = get(store, qid, persona=persona)
     if not row:
         return None, None
@@ -610,6 +609,6 @@ def close(store, persona, qid, took, moment=None):
     store.audit(row['_id'], 'question.closed', {'question': row['_id'], 'by': 'her', 'chars': len(took)}, row['scope_key'])
     who = [answer.get('by') for source in row['sources'] for answer in source.get('answers') or [] if answer.get('by')]
     words = THANKS % '、'.join(dict.fromkeys(who)) if who else NOBODY
-    if memory_tiers.ENABLED and who:
+    if who:
         words += KEEP_HINT
     return row, words

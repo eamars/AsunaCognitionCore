@@ -69,9 +69,8 @@ GROUP_NOTE_OPS = ('append_section', 'replace_section', 'set_tags')
 
 
 def group_note_ops():
-    """What she may do to a group's notes; with tiered memory on (ADR-062) she may let one go too."""
-    from . import memory_tiers
-    return GROUP_NOTE_OPS + (('let_go',) if memory_tiers.ENABLED else ())
+    """What she may do to a group's notes, letting one go among them (ADR-062)."""
+    return GROUP_NOTE_OPS + ('let_go',)
 VISIT_FROM = ('presence', 'scheduled')            # turns at home that may send her out (owner-private only)
 # Home turns that may send her on an errand (ADR-066): someone speaking at home, her own plan due there, a note of hers
 # from home -- and a note from outside only when it carries the owner's own line (notes.owner_line).
@@ -530,7 +529,7 @@ TOOL_NAMES = tuple(TOOLS)
 
 
 def _tiered(tools):
-    """Her tools with tiered memory on (ADR-062): write_document lets an item go and says what an item is or where it came from; recall says it lists a document's
+    """Her tools as she is shown them (tiered memory, ADR-062): write_document lets an item go and says what an item is or where it came from; recall says it lists a document's
     headings; promote_memory says what a fact is about. The texts are the smallest that say it."""
     import copy
     out = copy.deepcopy(tools)
@@ -550,10 +549,10 @@ TIERED = _tiered(TOOLS)
 
 
 def tools():
-    """The tool specs her brain is shown: tiered memory's when its switch is on, else as they are; `delegate` takes a
-    tier when the owner configured the action brain's 高 (ADR-075)."""
-    from . import action_tiers, memory_tiers
-    base = TIERED if memory_tiers.ENABLED else TOOLS
+    """The tool specs her brain is shown (tiered memory's, ADR-062); `delegate` takes a tier when the owner
+    configured the action brain's 高 (ADR-075)."""
+    from . import action_tiers
+    base = TIERED
     return {**base, 'delegate': tiered_delegate(base['delegate'])} if action_tiers.offered() else base
 
 
@@ -1575,7 +1574,7 @@ class RoleTools:
         if ep.get('errand') and isinstance(result, dict):
             result = {**result, 'turn': ERRAND_MARK}         # ADR-066: which layer of her acted, on every result
         from . import memory_tiers
-        if memory_tiers.ENABLED and name != 'recall':
+        if name != 'recall':
             # ADR-062: an item she cites by its doc: ref in a call is used, a memorable moment.
             cited = memory_tiers.refs_in(args)
             if cited:
@@ -1814,7 +1813,7 @@ class RoleTools:
             return result, False
         from . import memory_tiers
         sections = args.get('sections') or []
-        listing = [item for item in sections if memory_tiers.ENABLED and isinstance(item, dict)
+        listing = [item for item in sections if isinstance(item, dict)
                    and isinstance(item.get('doc'), str) and item.get('sid') is None]
         if not isinstance(sections, list) or len(sections) > 3 or any(
                 not isinstance(item, dict) or not isinstance(item.get('doc'), str)
@@ -1859,9 +1858,8 @@ class RoleTools:
             zone = schedule_rules.her_zone(self.store.config)
             with part('elsewhere'):
                 crossed = crossing.elsewhere(self.store, ep['persona'], here, query, zone)
-            if memory_tiers.ENABLED:
-                with part('before'):
-                    before = crossing.before(self.store, ep['persona'], here, self._cls(ep), query, zone)
+            with part('before'):
+                before = crossing.before(self.store, ep['persona'], here, self._cls(ep), query, zone)
         ep = self._fresh(ep)
         c._update(ep, recall_count=count + 1,
                   recalled=[*(ep.get('recalled') or []), *[m.get('_id') for m in recalled.get('memories') or []],
@@ -1894,39 +1892,38 @@ class RoleTools:
             result['elsewhere'], result['elsewhere_how'] = crossed, crossing.HOW
         if before:
             result['before'] = before
-        if query and memory_tiers.ENABLED:
+        if query:
             # ADR-097 D5: what this recall brought back, and whether it found what the turn itself had not (W6).
             from . import crossing
             with part('recalled'):
                 crossing.recalled(self.store, ep['persona'], ep, here, [m.get('_id') for m in result['memories']],
                                   crossed, before)
-        if memory_tiers.ENABLED:
-            # ADR-062: what she reads back is used; she sees which places were searched, and what else exists there.
-            tiers = memory_tiers.Tiers(self.store, ep['persona'])
-            tiers.used([(d['doc'], d['sid']) for d in documents or [] if d.get('doc') and d.get('sid')], 'recalled',
-                       ep['scene_id'])
-            docs = DocumentStore(self.store, ep['persona'])
-            for item in listing:
-                with part('headings'):
-                    content = docs.read(item['doc'])[1]
-                    if content:
-                        result.setdefault('documents', []).append({'doc': item['doc'], 'headings':
-                            memory_tiers.doc_headings(self.store, ep['persona'], item['doc'], content, self._cls(ep))})
-                    else:
-                        result.setdefault('not_read', []).append('%s：没有这份文档' % item['doc'])
-            readable = {'global-safe', where['scope_key'], *([visibility.owner_private_scope(ep['persona'])]
-                                                             if self._cls(ep) == visibility.OWNER_PRIVATE else [])}
-            shown = {m.get('_id') for m in result['memories']}
-            found = []
-            if query:
-                with part('headings'):
-                    found = memory_tiers.headings(self.store, ep['persona'], c.context.pilot, query, readable,
-                                                  self._cls(ep), where['scene_id'], shown)
-            if found:
-                result['headings'] = found
-            result['searched'] = memory_tiers.SEARCHED
-            if not (result['memories'] or result.get('documents') or found or elsewhere or crossed or before):
-                result['found'] = memory_tiers.NOTHING
+        # ADR-062: what she reads back is used; she sees which places were searched, and what else exists there.
+        tiers = memory_tiers.Tiers(self.store, ep['persona'])
+        tiers.used([(d['doc'], d['sid']) for d in documents or [] if d.get('doc') and d.get('sid')], 'recalled',
+                   ep['scene_id'])
+        docs = DocumentStore(self.store, ep['persona'])
+        for item in listing:
+            with part('headings'):
+                content = docs.read(item['doc'])[1]
+                if content:
+                    result.setdefault('documents', []).append({'doc': item['doc'], 'headings':
+                        memory_tiers.doc_headings(self.store, ep['persona'], item['doc'], content, self._cls(ep))})
+                else:
+                    result.setdefault('not_read', []).append('%s：没有这份文档' % item['doc'])
+        readable = {'global-safe', where['scope_key'], *([visibility.owner_private_scope(ep['persona'])]
+                                                         if self._cls(ep) == visibility.OWNER_PRIVATE else [])}
+        shown = {m.get('_id') for m in result['memories']}
+        found = []
+        if query:
+            with part('headings'):
+                found = memory_tiers.headings(self.store, ep['persona'], c.context.pilot, query, readable,
+                                              self._cls(ep), where['scene_id'], shown)
+        if found:
+            result['headings'] = found
+        result['searched'] = memory_tiers.SEARCHED
+        if not (result['memories'] or result.get('documents') or found or elsewhere or crossed or before):
+            result['found'] = memory_tiers.NOTHING
         return result, False
 
     def tool_stay_silent(self, ep, call_id, args):
@@ -2578,22 +2575,20 @@ class RoleTools:
         mutation_id = f"{ep['_id']}:write:{call_id}"
         from . import memory_tiers
         item.pop('anchor', None)                 # the line an item rests on is set by the program and never by her
-        source = None
-        if memory_tiers.ENABLED:
-            for field, allowed in (('nature', memory_tiers.NATURES), ('from', memory_tiers.SOURCES)):
-                if item.get(field) is not None and item[field] not in allowed and field not in self.flagged:
-                    self._found('%s 写 %s 之一%s。' % (field, '、'.join(allowed), _given(item, field)), 'ENUM_' + field.upper())
-            item, source = self._anchored(ep, item)
-        if item.get('op') == 'let_go' and memory_tiers.ENABLED:
+        for field, allowed in (('nature', memory_tiers.NATURES), ('from', memory_tiers.SOURCES)):
+            if item.get(field) is not None and item[field] not in allowed and field not in self.flagged:
+                self._found('%s 写 %s 之一%s。' % (field, '、'.join(allowed), _given(item, field)), 'ENUM_' + field.upper())
+        item, source = self._anchored(ep, item)
+        if item.get('op') == 'let_go':
             self.checkpoint()
             return self._let_go(ep, slug, item.get('sid'), before), False
-        if memory_tiers.ENABLED and (item.get('nature') or item.get('from')):
+        if item.get('nature') or item.get('from'):
             unsigned = memory_tiers.signing(memory_tiers.Tiers(self.store, ep['persona']).item(slug, item.get('sid'))
                                             if item.get('sid') else None, item, args.get('body'))
             if unsigned:
                 self._found(unsigned, 'JUDGMENT_NOT_FACT')
         kept_away = None
-        if memory_tiers.ENABLED and item.get('op') == 'set_tags' and item.get('inject') == 'always' and item.get('sid'):
+        if item.get('op') == 'set_tags' and item.get('inject') == 'always' and item.get('sid'):
             # A tag never carries an item back (no pin, owner 2026-10-13), so the tag is not written either: the
             # document never says always while the item sits at hand or put away (her finding, 2026-10-21).
             row = memory_tiers.Tiers(self.store, ep['persona']).item(slug, item['sid'])
@@ -2602,7 +2597,7 @@ class RoleTools:
                 kept_away = 'when_shown 没改。' + memory_tiers.NOT_BACK % row['place']
                 if not any(field in item for field in ('visibility', 'tags', 'pin')) and not memory_tiers.declared_nature(item):
                     return {'doc': slug, 'op': 'set_tags', 'sid': item['sid'], 'note': kept_away}, False
-        if (memory_tiers.ENABLED and item.get('op') == 'set_tags' and memory_tiers.declared_nature(item)
+        if (item.get('op') == 'set_tags' and memory_tiers.declared_nature(item)
                 and not any(field in item for field in ('visibility', 'inject', 'tags', 'pin'))):
             # Only what an item is, or where it came from: kept beside it; the document is not written.
             from .documents import missing_section, named_section
@@ -2631,7 +2626,7 @@ class RoleTools:
             outcome = docs.adopt_seed(slug, kind, text, base_revision_id=base, author='character',
                                       mutation_id=mutation_id, reason=item.get('reason') or 'adopt package seed',
                                       budget=gate)
-            if memory_tiers.ENABLED and outcome['state'] != 'unchanged':
+            if outcome['state'] != 'unchanged':
                 # ADR-117 B3: the seed's new sections have their tier rows now, placed from their inject.
                 memory_tiers.Tiers(self.store, ep['persona']).written(slug, {'op': 'adopt_seed'}, before,
                                                                       docs.read(slug)[1], over=gate.planned)
@@ -2649,22 +2644,21 @@ class RoleTools:
                   **({'doc_note': said} if said else {})}
         after = docs.read(slug)[1]
         sections = (after or {}).get('sections', [])
-        if memory_tiers.ENABLED:
-            felt = any(call.get('tool') == 'feel' for call in (self._fresh(ep).get('tool_calls') or {}).values())
-            tiers = memory_tiers.Tiers(self.store, ep['persona'])
-            moves = tiers.written(slug, item, before, after, scene_id=ep['scene_id'], felt=felt, before_revision=base,
-                                  over=gate.planned)
+        felt = any(call.get('tool') == 'feel' for call in (self._fresh(ep).get('tool_calls') or {}).values())
+        tiers = memory_tiers.Tiers(self.store, ep['persona'])
+        moves = tiers.written(slug, item, before, after, scene_id=ep['scene_id'], felt=felt, before_revision=base,
+                              over=gate.planned)
 
-            if moves:
-                result['moved'] = [memory_tiers.told(move) for move in moves]
-            placed = memory_tiers.Tiers(self.store, ep['persona']).item(slug, result['sid']) if result['sid'] else None
-            if item.get('inject') == 'always' and placed and placed['place'] != memory_tiers.CARRIED:
-                result['place'] = memory_tiers.NOT_BACK % placed['place']
-            if kept_away:
-                result['place'] = kept_away
-            pilot = getattr(self.coordinator.context, 'pilot', None)
-            if pilot is not None:
-                pilot.synced_at = 0.0            # her item index reads the new heading and tags at its next turn
+        if moves:
+            result['moved'] = [memory_tiers.told(move) for move in moves]
+        placed = memory_tiers.Tiers(self.store, ep['persona']).item(slug, result['sid']) if result['sid'] else None
+        if item.get('inject') == 'always' and placed and placed['place'] != memory_tiers.CARRIED:
+            result['place'] = memory_tiers.NOT_BACK % placed['place']
+        if kept_away:
+            result['place'] = kept_away
+        pilot = getattr(self.coordinator.context, 'pilot', None)
+        if pilot is not None:
+            pilot.synced_at = 0.0            # her item index reads the new heading and tags at its next turn
         if item['op'] == 'append_section' and sections:
             result['sid'] = sections[-1]['sid']          # the new section's sid, for a later replace or set_tags
         written = next((s for s in sections if s['sid'] == result['sid']), None) if result['sid'] else None
@@ -2674,7 +2668,7 @@ class RoleTools:
                              'places': visibility.section_places(written) or '到处都带'}
             self._carried_lines(ep, slug, written, result)
             from . import key_words
-            tags = key_words.tag_keys(item.get('tags')) if memory_tiers.ENABLED else []
+            tags = key_words.tag_keys(item.get('tags'))
             if tags:
                 # ADR-097: a tag brings the section back where it is said; how often it is said here.
                 lines = memory_tiers.Tiers(self.store, ep['persona']).place_lines(ep['scene_id'])
@@ -3629,7 +3623,7 @@ class RoleTools:
         item = {k: args[k] for k in ('fact', 'appraisal', 'signal', 'why', 'source_ids', 'visibility', 'about')
                 if args.get(k) is not None}
         from . import memory_tiers
-        if item.get('about') is not None and (not memory_tiers.ENABLED or item['about'] not in memory_tiers.ABOUT):
+        if item.get('about') is not None and item['about'] not in memory_tiers.ABOUT:
             raise Refused('about 写 %s 之一%s。' % ('、'.join(memory_tiers.ABOUT), _given(item, 'about')), ['ARGS_ENUM'])
         for field in ('fact', 'appraisal', 'signal', 'why'):
             self._text(item, field, 2000)
@@ -3745,18 +3739,17 @@ def read_sections(store, ep, items, cls):
             tier = carried.tier_line(store, ep['persona'], item['doc'], section)
             if tier:
                 out[-1]['tier'] = tier                  # ADR-096: what she wrote and where it is, when they differ
-            if memory_tiers.ENABLED:
-                # A section once shortened reads with the earlier full version, said for what it is.
-                verbatim = memory_tiers.detail(store, ep['persona'], memory_tiers.Tiers(store, ep['persona']).item(
-                    item['doc'], section['sid']))
-                if verbatim:
-                    out[-1]['detail'] = {'what': memory_tiers.DETAIL_WHAT, 'text': verbatim}
-                # What a claim that someone said something rests on (ADR-108 D2), as this conversation reads it.
-                source = memory_tiers.sources(store, ep['persona'], item['doc'],
-                                              scene_records.get(store, ep['scene_id']) or {'_id': ep['scene_id']}
-                                              ).get(section['sid'])
-                if source:
-                    out[-1]['source'] = source
+            # A section once shortened reads with the earlier full version, said for what it is.
+            verbatim = memory_tiers.detail(store, ep['persona'], memory_tiers.Tiers(store, ep['persona']).item(
+                item['doc'], section['sid']))
+            if verbatim:
+                out[-1]['detail'] = {'what': memory_tiers.DETAIL_WHAT, 'text': verbatim}
+            # What a claim that someone said something rests on (ADR-108 D2), as this conversation reads it.
+            source = memory_tiers.sources(store, ep['persona'], item['doc'],
+                                          scene_records.get(store, ep['scene_id']) or {'_id': ep['scene_id']}
+                                          ).get(section['sid'])
+            if source:
+                out[-1]['source'] = source
     return out, missing
 
 
@@ -3782,7 +3775,7 @@ def promote(store, ep, item, *, key):
     from .config import character_id
     from .persona_model import effective
     from .render import model_and_policy
-    from .rhythm import episode_dates, selections
+    from .rhythm import episode_dates
     from .schedule_rules import her_zone
     if ep.get('episode_kind') != 'settlement':
         raise Denied('PROMOTE_ONLY_IN_SETTLEMENT')
@@ -3795,8 +3788,8 @@ def promote(store, ep, item, *, key):
                                            else '配额是 0（没开记忆提升）；重试也一样'))
     from . import memory_tiers
     window = effective(model, 'memory.promotion.window_days', policy) or 7
-    # With tiered memory on, its candidates are what she recalled in different conversations (her acts).
-    picked = memory_tiers.recalled(store, window) if memory_tiers.ENABLED else selections(store, window)
+    # Its candidates are what she recalled in different conversations (her acts).
+    picked = memory_tiers.recalled(store, window)
     episodes = set()
     for source in item['source_ids']:
         unit = memory_records.get(store, source, ['episode_id'])
@@ -3818,7 +3811,7 @@ def promote(store, ep, item, *, key):
         raise Denied('PROMOTION_NOT_PUBLIC: 这条的来源里有家里的对话，置公开会把家里的话带到每个群和私聊里；'
                      '要提升就把 visibility 写成 owner_private，留在家里')
     landed_note = None
-    if memory_tiers.ENABLED and item.get('about'):
+    if item.get('about'):
         landed, landed_note = memory_tiers.land(store, ep, item, episodes)
         if landed:
             store.audit(ep['_id'], 'memory.promoted', {'landed': landed, 'about': item['about'], 'why': item['why'],

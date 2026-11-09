@@ -174,8 +174,6 @@ class NativeMemory:
         `self` and `core` she has written; an empty one leaves its old head in the list."""
         from . import memory_tiers
         from .documents import DocumentStore
-        if not memory_tiers.ENABLED:
-            return {}
         if hasattr(self, '_self_documents'):
             return self._self_documents
         docs, found = DocumentStore(self.store, self.persona), {}

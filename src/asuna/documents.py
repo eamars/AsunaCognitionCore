@@ -350,12 +350,11 @@ class DocumentStore:
         self.store.audit('doc:import:' + slug, 'journal.imported', {'entity': self.entity(slug),
                          'from_revision': head['revision_id']}, SCOPE)
         from . import memory_tiers
-        if memory_tiers.ENABLED:
-            # ADR-117 B3: its entries have their tier rows without a turn's sync (a running record's: at hand).
-            dated = {row['sid']: (row.get('created_at'), row.get('updated_at')) for row in
-                     entries(self.store, self.persona, slug).rows(fields=['sid', 'created_at', 'updated_at'])}
-            memory_tiers.Tiers(self.store, self.persona).written(slug, {'op': 'import'}, None,
-                                                                 self._journal_read(slug)[1], dated=dated)
+        # ADR-117 B3: its entries have their tier rows without a turn's sync (a running record's: at hand).
+        dated = {row['sid']: (row.get('created_at'), row.get('updated_at')) for row in
+                 entries(self.store, self.persona, slug).rows(fields=['sid', 'created_at', 'updated_at'])}
+        memory_tiers.Tiers(self.store, self.persona).written(slug, {'op': 'import'}, None,
+                                                             self._journal_read(slug)[1], dated=dated)
         return True
 
     def _section_times(self, slug):
@@ -601,7 +600,7 @@ class DocumentStore:
                 # Person files are retired: what she knows about someone lives with that person (understand_person).
                 raise DocumentError('DOC_OP_NOT_ALLOWED', '人物档案不再使用；对一个人的理解用 understand_person 写')
             from . import memory_tiers
-            if memory_tiers.ENABLED and slug in memory_tiers.SELF_DOCS:
+            if slug in memory_tiers.SELF_DOCS:
                 kind = 'self'                    # ADR-062: her self descriptions as documents of items
             content = {'kind': kind or 'working', 'title': slug, 'sections': [], 'source': {'origin': 'asuna'}}
         elif kind is not None and kind != content['kind']:

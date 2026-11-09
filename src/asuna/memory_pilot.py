@@ -127,15 +127,14 @@ def _score(a, b):
 
 
 def attach(context, store, persona, retrieval):
-    """Start the item index for a context builder that retrieves: the Pilot, else None. It runs when tiered memory is
-    on (memory_tiers.ENABLED: its items come up in her turns from these vectors). `retrieval` makes its own embedding
-    client.
-    With tiered memory on, the process's one full tier sync runs first (memory_tiers.Tiers.sync): rows for what was
+    """Start the item index for a context builder that retrieves: the Pilot, else None. Its items come up in her turns from these
+    vectors. `retrieval` makes its own embedding client.
+    The process's one full tier sync runs first (memory_tiers.Tiers.sync): rows for what was
     written while the worker was down; every write makes its own."""
     from . import memory_tiers
-    if memory_tiers.ENABLED and persona:
+    if persona:
         memory_tiers.Tiers(store, persona).sync()
-    if not memory_tiers.ENABLED or not persona or getattr(context, 'retrieval', None) is None:
+    if not persona or getattr(context, 'retrieval', None) is None:
         return None
     context.pilot = Pilot(store, persona, retrieval()).start()
     return context.pilot

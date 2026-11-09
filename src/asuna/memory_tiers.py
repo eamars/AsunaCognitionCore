@@ -23,8 +23,6 @@ words), or when it is close enough in meaning; each place's common words, which 
 beside the fold order (rows `rarity`, recomputed at settlement and made when missing). A turn whose message is program
 text (`PROGRAM_TEXT_KINDS`) still brings items up, but marks nothing (`deliver`'s `counts`). The program never writes
 her `inject`: the tier is the record of what is carried. She reads all of it as words from the tables below.
-
-`ENABLED` is the switch; off, nothing here is read or written and her turns are as before.
 """
 from __future__ import annotations
 
@@ -43,7 +41,6 @@ from .records.view import View, fenced, is_text
 from .store.words import AddToSet, AnyOf, Exists, HoldsNone, Increase, NoneOf, OnCreate, Range, Set, Unset
 
 TIERS_VERSION = 1
-ENABLED = True                     # the switch (ADR-062 phase 2): hers and the owner's to turn on
 COLLECTION = 'memory_tiers'
 
 CARRIED, AT_HAND, PUT_AWAY = '随身', '手边', '收着'
@@ -1071,8 +1068,6 @@ def anchor_field(declared, intent):
 def sources(store, persona, slug, scene):
     """{section id: where its claim rests} for a document's items that rest on a line, as `scene` reads them (ADR-108
     D2: People.source_of). An item shows its source only while it is someone's word."""
-    if not ENABLED:
-        return {}
     from .people import People
     people, found = People(store, persona), {}
     for row in items(store, persona, doc=slug).rows():
@@ -1112,7 +1107,7 @@ def recalled(store, window_days, moment=None):
 
 
 def candidates(store, window_days, limit=20):
-    """promotion_candidates with tiered memory on: what she recalled in different conversations."""
+    """promotion_candidates: what she recalled in different conversations."""
     picked = recalled(store, window_days)
     rows = {row['_id']: row for row in memory_records.many(store, list(picked), status='active').each(
         fields=['body_markdown', 'kind'])}
@@ -1230,8 +1225,8 @@ def detail(store, persona, row):
 
 
 def placed(store, persona, slug, content, override=None):
-    """A document's sections as the turn reads them when the switch is on; unchanged when it is off."""
-    return Tiers(store, persona).placed(slug, content, override) if ENABLED else content
+    """A document's sections as the turn reads them."""
+    return Tiers(store, persona).placed(slug, content, override)
 
 
 def within_age(row, moment, *, half_life_days=30.0, step_back_below=0.1):

@@ -16,7 +16,6 @@ from .persona_model import effective
 from .schedule_rules import her_zone
 from . import visibility
 from .local_time import face
-from .records import memories as memory_records
 
 
 def in_window(local: datetime, window: str | None) -> bool:
@@ -66,32 +65,6 @@ def episode_dates(store, episode_ids, zone):
         moment = datetime.fromisoformat(row['occurred_at'].replace('Z', '+00:00')).astimezone(ZoneInfo(zone))
         out[row['stream_id']] = moment.date().isoformat()
     return out
-
-
-def selections(store, window_days, *, moment=None):
-    """{memory id: [episode ids]} for memories actually selected into turns within the window."""
-    from datetime import timedelta
-    moment = moment or clock.now()
-    since = (moment - timedelta(days=float(window_days or 7))).isoformat()
-    out = {}
-    from . import audit as audit_trail
-    for row in audit_trail.events(store, 'context.prepared', since=since, by=None).each(
-            fields=['stream_id', 'payload.manifest.selected']):
-        for memory_id in ((row.get('payload') or {}).get('manifest') or {}).get('selected') or []:
-            out.setdefault(memory_id, [])
-            if row['stream_id'] not in out[memory_id]:
-                out[memory_id].append(row['stream_id'])
-    return out
-
-
-def promotion_candidates(store, model, policy, *, limit=20):
-    """Deterministic: units or monologues referenced by ≥ 2 different turns within memory.promotion.window_days."""
-    window = effective(model, 'memory.promotion.window_days', policy) or 7
-    picked = [(memory_id, episodes) for memory_id, episodes in selections(store, window).items() if len(episodes) >= 2]
-    rows = {row['_id']: row for row in memory_records.many(store, [m for m, _ in picked], status='active').each(
-        fields=['body_markdown', 'kind', 'scope_key'])}
-    return [{'memory_id': m, 'kind': rows[m].get('kind'), 'excerpt': rows[m].get('body_markdown', '')[:300], 'episodes': e}
-            for m, e in sorted(picked, key=lambda item: (-len(item[1]), item[0])) if m in rows][:limit]
 
 
 def pacing(segments, start, chars_per_second=12, min_gap_s=1, max_gap_s=5):

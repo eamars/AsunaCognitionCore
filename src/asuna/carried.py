@@ -211,8 +211,6 @@ def limit(store, persona):
 def placements_after(store, persona, slug, intent, before, after):
     """{sid: tier} where this write leaves the sections it moves (memory_tiers.Tiers.placement_after)."""
     from . import memory_tiers
-    if not memory_tiers.ENABLED:
-        return {}
     plan = memory_tiers.Tiers(store, persona).placement_after(slug, intent or {}, before, after)
     return {sid: steps[-1][0] for sid, steps in plan.items() if steps}
 
@@ -299,9 +297,9 @@ def _local(store, persona, moment):
 
 def tier_line(store, persona, slug, section):
     """When a section's `inject` and its tier differ: both, and its last move (when, who, why) on the next line; None
-    when they agree or tiers are off."""
+    when they agree."""
     from . import memory_tiers
-    if not memory_tiers.ENABLED or not section:
+    if not section:
         return None
     tiers = memory_tiers.Tiers(store, persona)
     row = tiers.item(slug, section['sid'])

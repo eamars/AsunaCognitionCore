@@ -55,10 +55,8 @@ def notes(faces=True):
 
 
 def _tiered_notes():
-    """The blocks tiered memory adds (ADR-062), only when its switch is on."""
+    """The blocks tiered memory adds (ADR-062)."""
     from . import memory_tiers
-    if not memory_tiers.ENABLED:
-        return {}
     return {'things_from_program': (memory_tiers.THINGS_NOTE,), 'memory_week_from_program': (memory_tiers.WEEK_NOTE,)}
 
 
@@ -112,6 +110,5 @@ def guide(config, speaks=False, faces=True):
         lines.append('- %s：%s' % (key, '／'.join(texts)))
     lines += ['', '# 记忆的来源', MEMORY_SOURCE_RULES]
     from . import memory_tiers
-    if memory_tiers.ENABLED:
-        lines += ['', '# 记忆放在哪', memory_tiers.told_text(config)]      # ADR-062 §4.3: once per conversation
+    lines += ['', '# 记忆放在哪', memory_tiers.told_text(config)]      # ADR-062 §4.3: once per conversation
     return turn + '\n\n' + '\n'.join(lines)

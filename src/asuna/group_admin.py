@@ -160,7 +160,7 @@ def notes_view(store, persona, slug, content):
     from .carried import note_sections
     from .context_budget import NOTE_CHARS, note_view
     sections = note_sections(store, persona, slug, content)
-    order = memory_tiers.Tiers(store, persona).folding(slug, content) if memory_tiers.ENABLED and sections else None
+    order = memory_tiers.Tiers(store, persona).folding(slug, content) if sections else None
     return note_view(sections, NOTE_CHARS['group_notes'], order=order)
 
 

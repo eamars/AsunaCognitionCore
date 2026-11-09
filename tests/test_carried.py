@@ -7,11 +7,6 @@ import pytest
 from asuna import context_budget, memory_tiers
 
 
-@pytest.fixture(autouse=True)
-def tiers_on(monkeypatch):
-    monkeypatch.setattr(memory_tiers, 'ENABLED', True)
-
-
 # ---- a group's notes fold -----------------------------------------------------------
 def note(sid, chars, **extra):
     return {'sid': sid, 'heading': sid, 'body': '字' * chars, 'inject': 'always', **extra}

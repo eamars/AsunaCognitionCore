@@ -215,8 +215,6 @@ class FakeDB:
 
 def bind_store(rows_by_collection=None, workspace=True):
     '''真 Store 建在假库之上（Store.over，内存适配器读写假库自己的行）：put／audit／head／mutate／authorize 全走仓库实现。'''
-    from asuna import memory_tiers
-    memory_tiers.ENABLED = False      # the fake DB has no tier rows
     config = {'character_id': 'demo', 'mongo_uri': 'mongodb://stub', 'database': 'fake', 'legacy_database': 'legacy',
               'allowed_databases': ['fake']}
     if workspace:

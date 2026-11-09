@@ -104,11 +104,11 @@ Tiered memory (ADR-062): where each of her items lives, kept up by what is memor
 - def `sources` — {section id: where its claim rests} for a document's items that rest on a line, as `scene` reads them (ADR-108 D2: People.source_of).
 - def `told` — A move as her result or the moved line says it, in words: the line it was made with (`lapse_line`, a lapse over a place's ceiling), else its heading, places and reason.
 - def `recalled` — {memory id: [episode ids]} for memories she recalled herself (`recall.read`) in at least two different conversations within the window: promotion's candidates come from her acts, not from what she was shown.
-- def `candidates` — promotion_candidates with tiered memory on: what she recalled in different conversations.
+- def `candidates` — promotion_candidates: what she recalled in different conversations.
 - def `land` — promote_memory with `about`: the fact store of its subject.
 - def `week` — Her weekly reading of her memory (her answer, 2026-10-13), in a self-evaluation turn, at most once a week: what left 随身 this week and whether she recalled it afterwards, one put-away item's own text (chosen by the week), and one line of wha
 - def `detail` — The verbatim a gist stands for (its revision before the gist), or None.
-- def `placed` — A document's sections as the turn reads them when the switch is on; unchanged when it is off.
+- def `placed` — A document's sections as the turn reads them.
 - def `within_age` — Whether an item at hand may come up by itself (deliver, outside recall): a fact always; a memory while its last use or memorable moment is within JOURNAL_AGE_DAYS (a running record's row) or before its freshness, 0.5 ** (days / half_life_da
 - def `deliver` — Her own items a turn brings up by itself (手边 within its age bound, `within_age`; a recall also reaches 收着 and every age): an item whose key the message has (key_words.py), or one scored above FLOOR as memories are; at most OWN_SLOTS in fuse
 - def `key_said` — The first of an item's keys the text has, as the text spells it, or None.

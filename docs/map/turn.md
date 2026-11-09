@@ -86,7 +86,6 @@ What a turn may carry on its own, and how her own notes stay short (owner 2026-1
 - def `trim_turn` — Drop the oldest list rows (TRIM_ORDER) until the turn fits; say what was left out.
 - def `ceiling` — The ceiling as the Host applies it to the notice it composes (context-delivery.js trimTurn): what is sent, not what is prepared, so a block she still sees never pushes another one's text under the knife.
 - def `carried_block` — What the first notice of a session that replaced one that no longer fit the model's window says (ADR-028), or one replaced for another reason (`why`, CARRIED_WHY).
-- def `review_block` — Her notes that show every turn and are due for tidying tonight: over or near their limit, or changed and left untidied for a week.
 
 ## `block_guide`
 
@@ -152,7 +151,7 @@ What she carries: one function says it for every reader (ADR-096).
 - def `room_line` — What a write to her identity, or a let_go, returns: the section's weight and, for each pair that carries it, the room left (or how far over), from the number the gate uses; None when nothing bounds it.
 - def `room_word` — The coarse word for a pair's share of its limit (ROOM_WORDS; the limit itself is still 快满了).
 - def `room_ranges` — ROOM_WORDS as the ranges the program uses, for the note that explains them.
-- def `tier_line` — When a section's `inject` and its tier differ: both, and its last move (when, who, why) on the next line; None when they agree or tiers are off.
+- def `tier_line` — When a section's `inject` and its tier differ: both, and its last move (when, who, why) on the next line; None when they agree.
 - def `over_words` — An import's refusal: the pair, how far over it is (or would be), the way out, and the three largest sections it carries now; every number is that pair's own (laid_out, as carried counts it).
 - def `over_plan` — The pairs a write of `slug` takes over their ceiling, or grows while over it, each on its own, measured as the write will carry it: {pair: {'over': tokens over the ceiling after it, 'before': the pair's size before it, 'after': after it}}; 
 - def `gate` — For DocumentStore.apply and adopt_seed: growth of a note far over its own limit is refused (note_gate).
@@ -169,11 +168,11 @@ What she carries: one function says it for every reader (ADR-096).
 
 Her mind's tools: what the character brain may do in one native turn (ADR-011 §3, §5.1).
 
-- def `group_note_ops` — What she may do to a group's notes; with tiered memory on (ADR-062) she may let one go too.
+- def `group_note_ops` — What she may do to a group's notes, letting one go among them (ADR-062).
 - def `thinking_mode` — ADR-099: her 心里话 come from the model's own thinking (`thoughts: thinking`), not from her think call; nothing then asks her to write her thoughts out.
 - def `asks_thought` — Whether this turn asks for her thought before anything else (ADR-099): `think` is in the turn's tools.
 - class `Refused` — A call she can correct herself: the message says, in words for her, what to do instead.
-- def `tools` — The tool specs her brain is shown: tiered memory's when its switch is on, else as they are; `delegate` takes a tier when the owner configured the action brain's 高 (ADR-075).
+- def `tools` — The tool specs her brain is shown (tiered memory's, ADR-062); `delegate` takes a tier when the owner configured the action brain's 高 (ADR-075).
 - def `tiered_delegate`
 - def `developer_ask` — message_developer's arguments as ask's: a question to the developer's line, a wake as an hour's patience and a note as until it is answered (ADR-061).
 - def `infer_doc_op` — The do a write_document without one plainly is, by its fields (ADR-108 D4d): a heading and no section is a new section; a section and content is its rewrite; a section with only tag fields is a tag change.

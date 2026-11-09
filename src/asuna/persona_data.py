@@ -151,8 +151,7 @@ class PersonaDataAPI:
     def _tier_rows(self, slug, before, after):
         """ADR-117 B3: what an import adds has its tier rows without a turn's sync, placed from its inject."""
         from . import memory_tiers
-        if memory_tiers.ENABLED:
-            memory_tiers.Tiers(self.store, self.persona).written(slug, {'op': 'import'}, before, after)
+        memory_tiers.Tiers(self.store, self.persona).written(slug, {'op': 'import'}, before, after)
 
     def documents_append(self, args):
         """Append-only union by origin + source_identity (logs, imported notes). Never into a running record."""

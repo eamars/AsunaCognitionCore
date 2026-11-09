@@ -11,10 +11,6 @@ takes no new text until she tidies it. Her nightly settlement lists the notes du
 from __future__ import annotations
 
 import json
-from datetime import datetime
-from .records import scenes as scene_records
-from .records import episodes as episode_records
-from .records import heads as head_records
 
 BUDGET_VERSION = 1
 
@@ -24,8 +20,6 @@ NOTE_HARD_FACTOR = 2                # this many times its limit, a note takes no
 SINGLE_BODY_CHARS = 4000            # her understanding of a person; her character core; her current self
 TURN_CHARS = 48000                  # the whole turn context, as JSON characters
 FOLDED_HEADINGS = 20                # headings named for the sections a note does not show
-REVIEW_EVERY_DAYS = 7               # a changed note is due for tidying this long after the last time
-REVIEW_PER_NIGHT = 3                # notes listed in one settlement
 STICKER_SHELF = 60                  # stickers she keeps (ADR-016); her turn lists their names only
 STICKER_REVIEW = 6                  # stickers listed for her weekly look at the shelf
 MEMBER_LINES = 80                   # group members a turn names (group_members.py); find_member reaches the rest
@@ -265,64 +259,3 @@ def carried_block(summary, why=None):
 
 
 # ---- nightly tidying ----------------------------------------------------------
-def _last_tidied(store, docs, slug, tidy_episodes):
-    """(when she last wrote this note in a settlement turn or else when it began, whether it changed since then,
-    whether she has tidied it at all)."""
-    rows = head_records.history(store, docs.key(slug)).rows(fields=['mutation_id', 'created_at'])
-    if not rows:
-        return None, False, False
-    mark, tidied = rows[0], False
-    for row in rows:
-        if str(row.get('mutation_id') or '').split(':write:')[0] in tidy_episodes:
-            mark, tidied = row, True
-    return mark.get('created_at'), any(row['created_at'] > mark['created_at'] for row in rows), tidied
-
-
-def review_block(store, persona, moment):
-    """Her notes that show every turn and are due for tidying tonight: over or near their limit, or changed and
-    left untidied for a week. At most REVIEW_PER_NIGHT, most pressing first, with their sections."""
-    from .config import ago
-    from .documents import DocumentStore
-    from .group_admin import notes_slug
-    from .people import People
-    docs = DocumentStore(store, persona)
-    people = People(store, persona)
-    tidy = {row['_id'] for row in episode_records.of_kind(store, 'settlement').rows(fields=['_id'])}
-    names = {notes_slug(scene['_id']): people.scene_title(scene) + '的笔记'
-             for scene in scene_records.of_kind(store, 'group', fields=['_id', 'kind'])}
-    from .carried import placed
-    due = []
-    for slug in docs.slugs():
-        content = placed(store, persona, slug, docs.read(slug)[1])         # as her turns carry it (ADR-096)
-        limit = note_limit(slug, content)
-        if not limit or not content:
-            continue
-        sections = content.get('sections') or []
-        chars = note_chars(sections)
-        when, changed, tidied = _last_tidied(store, docs, slug, tidy)
-        try:
-            days = (moment - datetime.fromisoformat(when)).total_seconds() / 86400 if when else 0
-        except (TypeError, ValueError):
-            days = 0
-        if chars > limit:
-            rank, why = 0, '超过了每回合的上限，较早的节现在只露标题'
-        elif chars >= limit * 0.8:
-            rank, why = 1, '快到上限了'
-        elif changed and days >= REVIEW_EVERY_DAYS:
-            rank, why = 2, '一周多没整理，之后又改过'
-        else:
-            continue
-        due.append((rank, -days, {
-            'doc': slug, 'what': names.get(slug) or content.get('title') or slug, 'why_now': why,
-            'fullness': fullness(chars, limit), 'last_tidied': ago(days * 24) if tidied else '还没整理过',
-            'sections': [{k: s[k] for k in ('sid', 'heading', 'body', 'inject') if k in s} for s in sections]}))
-    due.sort(key=lambda item: item[:2])
-    items = [item for _, _, item in due[:REVIEW_PER_NIGHT]]
-    if not items:
-        return None
-    return {'items': items, **({'more': '还有 %d 份也该整理，下次再列' % (len(due) - len(items))}
-                                if len(due) > len(items) else {}),
-            'note': ('这几份是你每回合都会自动带上的笔记，今晚该整理了。整理就是：过时的、重复的、已经不对的，'
-                     '用 replace_section 改写成现在成立的样子；不常用但想留着的节用 set_tags 把 when_shown 改成 '
-                     'on_demand 收起来（还在，recall 能读）；细节多的可以挪进不自动带上的文档，这里留一句指路。'
-                     'doc 照抄这里的 doc。笔记短了，你每回合要读的就少，留什么由你定，今晚不整理也可以。')}

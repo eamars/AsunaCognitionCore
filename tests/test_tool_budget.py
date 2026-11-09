@@ -17,29 +17,8 @@ from asuna.tasks import ACTION_DSH_CAPABILITIES, INTEGRATION_TOOLS, WORKSPACE_TO
 # dropped for its values in the field's description, speak's parts one description. Declared, the character brain's tools are
 # 20,990 characters (tiered memory on: 21,426), against 21,915 (22,211) measured on the definitions before: the aim and the line
 # stated for her prose (D4a) and the new `line` field (D2) cost, the enum arrays and the nested part schema they replace save more.
-CHARACTER = (30, 20656)       # ADR-117 L4: write_document loses correction -47; ADR-112 §12.10: task's settle and its as +103; §12.2: task's more (and stop no longer says 暂停着) +34; ADR-103: react's line text says 表情包 for the sticker, not 贴纸 +1, and its face is 小黄脸名 +1; ADR-106: place_timezone removed, 31 -> 30 tools, -426 declared (20,990 -> 20,564); ADR-102: received_file, 30 -> 31 tools, +499; ADR-097: recall says the bare word is enough +19, and reaches other groups and past notes +19; ADR-096: write_document's pin, and what each place carries (visibility no longer restates it) +49; ADR-092 D1: speak's file part (its name and where its artifact_id is copied from) +49; ADR-091 D2: note's deliver names a reply's default +20; soft limits (owner 2026-10-22): a stated length names only what she is asked for -182; watch block takes person (ADR-052 addendum 2026-10-21) +29; ADR-087 §4.1: think asks 120, refused past 360 (both numbers) +10; §4.5: note's matching advice (naming the source does not pass) +32; ADR-086 D1/D5: feel's who field and the recording words, +264;       # ADR-060: new names and the wording audit, 21,490 -> 19,717 (rules the program does not enforce kept, her review);
-                              # ADR-064 phase 2: reply +1,334 (QQ group lists +451 net, QQ private +1,028), stay_silent -16, leave_note question +88;
-                              # reply force (a #number that is someone here is sent back unless force=yes; owner 2026-10-14) +90; stay_silent why optional (said: nothing to explain) -10;
-                              # ADR-060 leftovers: recall query optional with sections, feel yes/no and its decisions named, recall section +25
-                              # second wording audit (her yes 2026-10-14): 回合 for her turn, 家里·私聊 for the home chat, 叫到你才会醒 +2
-                              # ADR-066: errand says it carries home and drops "only when the one talking asks" -6
-                              # ADR-069: update_self retired (-396); pass_note and leave_note one note tool (1,028 -> 642;
-                              # each conversation listed one of them: at home +75, elsewhere +181)
-                              # sticker do=shelf +20: the home shelf (5,700 characters a home turn) comes on asking
-                              # ADR-079 step 2: the quote tool removed (no channel that lists it can quote), quote and react
-                              # take a line by its number, recall's which becomes line: 31 -> 30 tools, 20,452 -> 20,247
-                              # her own line taken back (her ask, the owner's yes 2026-10-18): speak's recall part +153
-                              # ADR-081: read_image reads a video as a contact sheet, its 32 MB cap stated +45
-                              # ADR-076 R10: speak no longer restates where words leave (the guide says it once) -40;
-                              # stay_silent is not listed where only speak speaks (one tool fewer there)
-                              # ADR-082: recall reads a person and 「名单」 at home +114; understand_person writes anyone present
-                              # with its short, 「不更新」, the three questions and speak-first +351 (block_hours leaves it);
-                              # watch does block +85: 20,405 -> 20,955
-                              # no night hours on her visits: place_timezone no longer says it decides night -3
-                              # soft text budget (owner 2026-10-20): each stated length gives what she is asked for and
-                              # where the program refuses, 「N 字以内，最多 M 字」 (her ask: both numbers) +155
-# With tiered memory on (ADR-062 phase 2, memory_tiers.ENABLED): let_go, nature, from, about and the recall sentence (+294).
-CHARACTER_TIERED = (30, 21092)                  # ADR-117 L4: correction -47; ADR-112 §12.10: task's settle +103; §12.2: task's more +34; ADR-103: 贴纸 -> 表情包 +1, 表情名 -> 小黄脸名 +1; ADR-106: place_timezone removed, 31 -> 30 tools, -426 declared (21,426 -> 21,000); ADR-102: received_file +499; ADR-097: recall's bare word +19, elsewhere and past notes +19; ADR-096: pin and what each place carries +49; ADR-092 D1: speak's file part +49
+# Her tools as she is sent them, tiered memory's (ADR-062 phase 2: let_go, nature, from, about, the recall sentence).
+CHARACTER = (30, 21092)                  # ADR-117 L4: correction -47; ADR-112 §12.10: task's settle +103; §12.2: task's more +34; ADR-103: 贴纸 -> 表情包 +1, 表情名 -> 小黄脸名 +1; ADR-106: place_timezone removed, 31 -> 30 tools, -426 declared (21,426 -> 21,000); ADR-102: received_file +499; ADR-097: recall's bare word +19, elsewhere and past notes +19; ADR-096: pin and what each place carries +49; ADR-092 D1: speak's file part +49
 ACTION = (27 + len(ACTION_DSH_CAPABILITIES), 16490)        # the worker's tools, plus DSH's own (skill, todo, web);
                                                            # ADR-102: received_file, 26 -> 27 tools, +291; its copy (part 3) +58;
                                                            # ADR-092 D2: offer_file, 25 -> 26 tools, +441 (15,467 -> 15,908 measured)
@@ -65,21 +44,11 @@ def check(name, specs, count, budget, extra=0):
 
 
 def test_the_character_brain_stays_within_its_tool_budget():
-    check('character', sent(role_tools.TOOLS), *CHARACTER)
-
-
-def test_with_tiered_memory_on_the_character_brain_stays_within_its_budget():
-    check('character (tiered memory on)', sent(role_tools.TIERED), *CHARACTER_TIERED)
-
-
-def test_with_tiered_memory_off_her_tools_are_exactly_as_before(monkeypatch):
-    """The switch off changes nothing she is shown: the same tools, byte for byte (her prompt cache holds)."""
-    from asuna import memory_tiers
-    monkeypatch.setattr(memory_tiers, 'ENABLED', False)
-    assert role_tools.tools() is role_tools.TOOLS and size(sent(role_tools.TOOLS)) == CHARACTER[1]
-    assert 'let_go' not in str(role_tools.TOOLS['write_document'])
-    monkeypatch.setattr(memory_tiers, 'ENABLED', True)
     assert role_tools.tools() is role_tools.TIERED
+    check('character', sent(role_tools.TIERED), *CHARACTER)
+
+
+def test_retired_tools_never_come_back():
     retired = {'update_self', 'pass_note', 'leave_note'}                    # ADR-069: retired, never back
     assert not retired & set(role_tools.aliases()) and not retired & {spec['name'] for spec in role_tools.all_specs()}
 

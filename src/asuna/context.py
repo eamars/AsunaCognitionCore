@@ -469,7 +469,7 @@ class ContextBuilder:
                                     'error':redact_text(traceback.format_exc(),self.store.config)}
             if self.pilot is not None and isinstance(event.get('text'),str):
                 self.pilot.submit()    # wakes the item index off the reply path (memory_pilot.Pilot)
-            if memory_tiers.ENABLED and self.pilot is not None and isinstance(event.get('text'),str):
+            if self.pilot is not None and isinstance(event.get('text'),str):
                 # ADR-062: two of the six slots for her own items at hand (a recall reaches put-away ones too).
                 try:
                     _private=visibility.owner_private_scope(persona) if session_class==visibility.OWNER_PRIVATE else None
@@ -564,7 +564,7 @@ class ContextBuilder:
         from . import memory_tiers
         age_bound={}                    # what may come up by itself outside recall (memory_tiers.within_age)
         over_left=False                 # a place still over its identity ceiling, its choice for a home turn to show
-        if memory_tiers.ENABLED and not recall:
+        if not recall:
             # ADR-062: the lapses due, before anything is read for the turn (at most every TICK_SECONDS in this
             # process). Every item already has its row: a write makes it (ADR-117 B3), the process start syncs.
             from .persona_model import effective as _tier_effective
@@ -608,11 +608,10 @@ class ContextBuilder:
         carried_here.update({slug:[s for sid in system_ref['carried'][slug]
                                    for s in (identity.get(slug) or {}).get('sections') or [] if s['sid']==sid]
                              for slug in system_ref['carried']})     # persona and voice exactly as the system rendered
-        if memory_tiers.ENABLED:
-            # ADR-062: once she has written herself as items, the carried ones are what she reads of herself.
-            for name,slug in _carried.SELF_BLOCKS:
-                if (identity.get(slug) or {}).get('sections'):
-                    self_state[name]=_carried.self_block(slug,carried_here[slug],memory_tiers.sources(self.store,persona,slug,scene))
+        # ADR-062: once she has written herself as items, the carried ones are what she reads of herself.
+        for name,slug in _carried.SELF_BLOCKS:
+            if (identity.get(slug) or {}).get('sections'):
+                self_state[name]=_carried.self_block(slug,carried_here[slug],memory_tiers.sources(self.store,persona,slug,scene))
         read,source,history,tail_sources=self._in_view(scene,event)
         self._reply_context(history, scene, keep_event=True)
         zone=schedule_rules.her_zone(self.store.config)
@@ -964,11 +963,10 @@ class ContextBuilder:
             # ADR-073: a map of what she has, what she changed and why, and her attention as counts.
             from . import reflection_map as _map
             context['map_from_program']=_map.block(self.store,persona,moment,tag=_tag)
-            if memory_tiers.ENABLED:
-                # ADR-062 (her answer): once a week, her memory in three readings, no scores and no counts.
-                weekly=memory_tiers.week(self.store,persona,schedule_rules.her_zone(self.store.config),moment)
-                if weekly:
-                    context['memory_week_from_program']=weekly
+            # ADR-062 (her answer): once a week, her memory in three readings, no scores and no counts.
+            weekly=memory_tiers.week(self.store,persona,schedule_rules.her_zone(self.store.config),moment)
+            if weekly:
+                context['memory_week_from_program']=weekly
         # ADR-058: a heartbeat that rolled review brings every roll since her last review (home only).
         if (event.get('dice')=='review_dice' and event.get('episode_kind')=='presence'
                 and session_class==visibility.OWNER_PRIVATE):
@@ -1116,7 +1114,7 @@ class ContextBuilder:
         model,policy=model_and_policy(self.store,persona)
         documents={'persona':system_ref['persona_doc_revision'],'voice':system_ref['voice_doc_revision']}
         ledgers=ledger_block(docs,session_class,scene)
-        if memory_tiers.ENABLED and not recall:
+        if not recall:
             # ADR-062: where her things are, in words, and what the program moved since this conversation was told.
             from .group_admin import notes_slug as _notes_slug
             # ADR-117 L3: a home turn that can write shows each place over its identity ceiling, for her to choose first.
@@ -1375,34 +1373,25 @@ class ContextBuilder:
                 context['unsent_from_program']='没发出去：「%s」'%unsent['text']
                 manifest.setdefault('told',{})['unsent']=unsent.get('episode_id')
         if event.get('episode_kind')=='settlement':
-            from .rhythm import promotion_candidates
             from .affect import kind_label
             from .affect import SHORT_ID, amendments_of
             open_events=[{'event_id':e['_id'][:SHORT_ID],'feeling':kind_label(ledger.model,e.get('kind')),'why':e.get('why'),'ts':e.get('ts')}
                          for e in ledger.events() if e.get('open')
                          and not amendments_of(self.store,target=e['_id'],ops=['close','void']).first(fields=['_id'])] if ledger.enabled else []
             context['settlement_from_program']={'open_affect_events':open_events,
-                'promotion_candidates':(memory_tiers.candidates(self.store,effective(model,'memory.promotion.window_days',policy) or 7)
-                                        if memory_tiers.ENABLED else promotion_candidates(self.store,model,policy)),
+                'promotion_candidates':memory_tiers.candidates(self.store,effective(model,'memory.promotion.window_days',policy) or 7),
                 'promotion_quota':effective(model,'memory.promotion.daily_quota',policy) or 0,
                 'note':'夜间沉淀：挂着的事可以 close / void（写理由）或保留；值得长期记住的可以 promote（fact/appraisal/signal + source_ids），配额与来源要求由程序检查。'}
-            # Her notes that show every turn and are due for tidying (owner 2026-10-06, context_budget.py).
-            if memory_tiers.ENABLED:
-                # ADR-096: each group's notes refold at settlement (and on her writes), not every turn.
-                _folds=memory_tiers.Tiers(self.store,persona)
-                for _slug in docs.slugs('group:'):
-                    _folds.refold(_slug,docs.read(_slug)[1],moment)
-                # ADR-097: the word index of her groups' lines (a new generation, its learned words), its fire rows
-                # past their keeping, then each place's common words counted again with the same cuts.
-                from . import crossing as _crossing
-                _crossing.build(self.store,moment)
-                _crossing.prune(self.store,moment)
-                _folds.rerate_all(moment)
-            else:
-                from .context_budget import review_block
-                review=review_block(self.store,persona,moment)
-                if review:
-                    context['notes_review_from_program']=review
+            # ADR-096: each group's notes refold at settlement (and on her writes), not every turn.
+            _folds=memory_tiers.Tiers(self.store,persona)
+            for _slug in docs.slugs('group:'):
+                _folds.refold(_slug,docs.read(_slug)[1],moment)
+            # ADR-097: the word index of her groups' lines (a new generation, its learned words), its fire rows
+            # past their keeping, then each place's common words counted again with the same cuts.
+            from . import crossing as _crossing
+            _crossing.build(self.store,moment)
+            _crossing.prune(self.store,moment)
+            _folds.rerate_all(moment)
             # ADR-016: once a week, the stickers she kept and has not been sending; dropping is hers.
             from .stickers import review_block as _sticker_review
             shelf_review=_sticker_review(self.store,persona,moment)

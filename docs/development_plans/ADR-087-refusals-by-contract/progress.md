@@ -36,3 +36,23 @@ rows already had a code.
 **记我自己一条**：一步的验收如果靠"话术被认出来"，而改动本身正是改话术，那把尺会被改动本身挪走。页上这类步骤的判据以后该配一句"靠码数；码普及前不下涨跌结论"。
 
 **Left**：第 4 步判于 2026-11-07；①可签，②③④待按码重判（等 `NOTE_NOT_OWN_WORDS`／`PLAN_ENDED` 两类样本长出，钟挂在我这侧）。
+
+## Closed on evidence (2026-11-09)
+
+- **Step 3 (§4.3, specs by place):** her breakdown of 11-09 13:05, read the way `host_refusals.py` reads: argument-check
+  refusals before 13 in 7,295 calls (1.8 per 1,000), after 84 in 9,289 (9.0), then 35 in 9,250 to 11-09 (3.8). The
+  three options the step removed account for **0** of them: a field the step takes out of a conversation's spec cannot
+  reach the host's argument check (`tool-args.js` checks against that spec only). The rise is `write_document` missing
+  `do` or `doc` (29), `speak` narrowed by ADR-079 §9.7 (15) and `delegate` without `title` (7). Harmless; her two other
+  failure lines keep the two samples of 11-05.
+- **Step 4 (§4.4, §4.5), staged instead of a rate:** by code, the three targeted refusals occurred once since codes
+  became universal (11-07 15:06), too few for a rate. The mechanisms are proven on the in-memory adapter by
+  `tests/test_adr087_step4.py` (each test failed when its mechanism was broken on purpose): a note to a group that cannot
+  be woken goes `next_time` with the reason unless she chose `deliver`, for a mute and for a used-up day; a plan moved in
+  the turn it fired stays fired and a new plan takes the timing; a copied line is refused with the stretch, the label
+  and the time, never the line; a wrong `plan_id` lists the usable ones. These had had no test since ADR-104 removed
+  `tests/test_notes.py` without porting it.
+- **A defect the staging found, fixed:** the wake check ran only for notes written at home, so a note written in one
+  group woke a muted group (or one whose day was used up). It now runs for every note that would wake a group; where she
+  may not choose `next_time` (a note from a group) it refuses with `NOTE_VISIT_NOT_NOW`, saying a plan can take it later.
+  The refusal for a group with no one to receive her offers `next_time` only where she may choose it.

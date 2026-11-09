@@ -1,6 +1,6 @@
 # ADR-099: Her thoughts can come from the model's own thinking
 
-Status: **Built 2026-10-27** (steps 1–3, §5); designed 2026-10-26 by the owner and Claude, failure modes reviewed the
+Status: **Built 2026-10-27** (steps 1–3, §5); **closed 2026-11-09** without step 4 (below); designed 2026-10-26 by the owner and Claude, failure modes reviewed the
 same evening (§4). The default deployment is unchanged (§3.2). The first persona on a Claude model runs `tool` mode
 (§6, owner); `thinking` mode is built as the backup for a model that stops the stage. Step 4 (a soak on a live DSH
 profile) waits for that deployment.
@@ -161,3 +161,9 @@ that is acceptable is the owner's call when a persona is switched; it does not t
 
 Found on the way: with `--repeat` above 1 the probe's home conversation reused its message ids in her one local chat
 and the run stopped on a duplicate key; the ids now carry the run.
+
+## Closed (2026-11-09)
+
+Closed on steps 1 to 3 and the 2026-10-26 probe, without step 4's soak (the owner, 2026-11-09): no persona runs
+`thinking` mode, and nothing calls for one now; he reports it if a persona ever needs it and it does not work. The
+soak is not run and is not owed.

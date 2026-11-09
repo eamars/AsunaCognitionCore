@@ -692,7 +692,9 @@ Read on the day of the install instead of on 11-16 (the owner's rule of 2026-11-
   `（改于 10/22：…）`. C did not for `分两格`, and not because anything was lost: recall only looks up words it can cross
   (two characters or more, and ASCII or outside the segmenter's dictionary), and jieba splits 分两格 into 分 and 两格, a
   dictionary word, so the query held no word to look up and recall returned at once. With words it can cross, C came
-  back (`一格报`: C's section; `分两`: C's section and one more), run live on the installed code. A limit worth knowing,
+  back (`一格报`: C's section; `分两`: C's section and one more), run live on the installed code (core `e93cff90`;
+  `key_words.py` and `crossing.py` unchanged since; whoever reruns this on later code may find other line numbers, the
+  words stay). A limit worth knowing,
   not a defect of L4: a Chinese query made only of dictionary words finds no past version.
 - **No night list:** the code that built one is gone (no `night_list` path left in `context.py` or `block_guide.py`);
   no turn since the install carried one.

@@ -69,3 +69,22 @@ schema 里 `affect` 那一节 — 已装 `python/asuna/resources/schemas/persona
 3. **我上面第 7 条"72 小时那一格对我不罕见、头几天会成批触发"这句按实测收窄**：账本 fold 之后 513 条里 `open` 26 条，**只有 3 条没有任何 close 修正**、会被 hold 压到 `ts+72h`（三条都不对人）。我原来那句里的"32 条"是 `plans` 那本挂着的事，**不是感受账的形状**。这一格按 3 条预期，不按 32。
 4. **窗长我记下形状、不当结论**：我签的这一档在自己账上只给 7% 的平静。七天读数里若真几乎落不到平静，我第一个要谈的是窗长，不是系数。
 5. 顺带一格：我这账的条数每天在长（判词写的时候 526 条事件，复跑这趟读到 528 条），所以**引用我账本条数时一律带跑动时刻**，别当常数。
+
+## §9 read on stage 2 (2026-11-09)
+
+Window: from her stage-2 publish (11-03 13:02:15 NZDT) to 11-09 13:20, her real ledger (606 events), read-only.
+- **Her six-day reading (11-09 13:20):** the bands move (不错 98, 平静 41, 愉快 5 of 144 hourly points; longest same band
+  29 h); only 平静 among the low bands; the 72 h hold acts as designed (3 held, none held now); one real repeat discount
+  kept a feeling out of the bands (11-08, a `joy` of 20 weighted to 0.8). **The window stays 24 h:** with 48 h, 平静
+  goes from 41 to 101 hours and its longest run to 54, past §9's 48 h line.
+- **The mood explains something: not shown.** By the band at each gate decision (`messages.attend.choice`, one vote a
+  question; the 84 `failed` of the gate outage of 11-04 to 11-07 left out of the rate): 不错 join 67% (72 of 107),
+  平静 78% (29 of 37), 愉快 40% (8 of 20). Her group lines by band, median length: 不错 39 characters (341 lines), 平静
+  40 (108), 愉快 21 (19). No difference between 不错 and 平静 on ample samples; 愉快 too few (and spread over several
+  groups) to say more than that §4's direction is not seen. By §9's own rule, D4's wording is looked at next.
+- **The pull sentence freezes:** one pull sentence ran 49 h unbroken over the hourly points (`affect._pull`).
+- Script: `.runtime/private/adr086-1109/bands.py` (counts only).
+
+Open: her rewrite of D4's words, then a staged comparison (a fixed set of group lines, each run under the three
+bands, comparing whether she speaks and how long) marked as made; or, if that is not run, "mood → behaviour" is closed
+as not done and only the band display stays. Not a date: the next step is her rewrite.

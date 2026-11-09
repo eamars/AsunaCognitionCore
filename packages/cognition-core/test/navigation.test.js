@@ -31,6 +31,7 @@ test('native continuation preserves history and task children retain their actua
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-navigation-'));
   const ctx = new Context();
   t.after(() => ctx.fiber.dispose());
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
   new SessionStore(ctx); new SessionProjectionRegistry(ctx); new Storage(ctx);
   ctx.sessionProjections.register(titleProjectionDefinition);
   new LlmRuntime(ctx); await start(new AgentRegistry(ctx)); new SystemPrompt(ctx, {}); new Tools(ctx);

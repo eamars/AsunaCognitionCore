@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import http from 'node:http';
@@ -6,6 +6,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { PeerBridge } from '../src/bridge.js';
+
+// Every temporary folder a test here makes is removed when the file's tests end.
+const made = [];
+after(() => Promise.all(made.map(dir => fs.rm(dir, { recursive: true, force: true }))));
 
 const SESSION = 'session-peer';
 
@@ -101,7 +105,9 @@ const turn = (seq, number, source, said, reason = 'completed') => [
 
 async function setup() {
   const peer = await fakePeer(), host = await fakeHost();
-  const statePath = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-peer-')), 'state.json');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-peer-'));
+  made.push(dir);
+  const statePath = path.join(dir, 'state.json');
   const bridge = new PeerBridge({ peer: { url: peer.url, sessionId: SESSION, routeId: 'peer-dm', senderId: 'peer',
     label: '[from home]', ownerNote: '(not to you)', replyNote: '(answer me in a few lines)' },
     endpoint: host.endpoint, statePath, retryMs: 50 });

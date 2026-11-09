@@ -46,6 +46,7 @@ test('a turn the model refuses for its window reports it, and the Host prepares 
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-carry-'));
   const ctx = new Context();
   t.after(() => ctx.fiber.dispose());
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
   new SessionStore(ctx); new SessionProjectionRegistry(ctx); new Storage(ctx);
   ctx.sessionProjections.register(titleProjectionDefinition);
   new LlmRuntime(ctx); await start(new AgentRegistry(ctx)); new SystemPrompt(ctx, {}); new Tools(ctx);

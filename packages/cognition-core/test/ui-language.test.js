@@ -1,9 +1,15 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp as made_ } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { applyLanguage, languageWords, savedLanguage } from '../src/ui-language.js';
+
+// Every temporary folder a test here makes is removed when the file's tests end.
+const made = [];
+after(() => Promise.all(made.map(dir => rm(dir, { recursive: true, force: true }))));
+const mkdtemp = async prefix => { const dir = await made_(prefix); made.push(dir); return dir; };
 
 test('names follow a supported language; anything else is English', async () => {
   assert.equal((await languageWords('zh')).titles.presence, '心跳');

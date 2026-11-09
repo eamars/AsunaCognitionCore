@@ -35,6 +35,7 @@ test('an errand runs in a copy of the conversation and leaves the list when its 
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'asuna-errand-'));
   const ctx = new Context();
   t.after(() => ctx.fiber.dispose());
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
   new SessionStore(ctx); new SessionProjectionRegistry(ctx); new Storage(ctx);
   ctx.sessionProjections.register(titleProjectionDefinition);
   new LlmRuntime(ctx); await start(new AgentRegistry(ctx)); new SystemPrompt(ctx, {}); new Tools(ctx);

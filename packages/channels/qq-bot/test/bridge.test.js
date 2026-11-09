@@ -1,11 +1,15 @@
 // The QQ Bot bridge (ADR-046) against a fake platform (gateway + OpenAPI) and a fake channel API.
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { QQBotBridge, INTENTS, inboundText, outboundBody, plainText } from '../src/bridge.js';
+
+// Every temporary folder a test here makes is removed when the file's tests end.
+const made = [];
+after(() => Promise.all(made.map(dir => fs.rm(dir, { recursive: true, force: true }))));
 
 const APP = '1000000001';
 const USER = 'A'.repeat(32), GROUP = 'B'.repeat(32), MEMBER = 'C'.repeat(32), OTHER = 'D'.repeat(32);
@@ -63,6 +67,7 @@ class FakeSocket {
 
 async function bridge(w) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'qqbot-'));
+  made.push(dir);
   const b = new QQBotBridge({ endpoint: w.endpoint, statePath: path.join(dir, 'qqbot.json'), fetch: w.fetch,
     WebSocket: FakeSocket, now: w.clock.now });
   await b.host();

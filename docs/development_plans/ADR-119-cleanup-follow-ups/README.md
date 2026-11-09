@@ -30,4 +30,31 @@ Left as is by the owner: the four channel API clients (ADR-118 §7.2).
 | F9 | Paths that need a reading of her data first (revisions without `sections`, old scheduler links, `every_seconds`) | Her data read; each path removed or kept with the count that justifies it |
 | F10 | A plan whose dispatch fails is silent on her side (her line 0018, 2026-11-04); her plan view shows `next_fire_at` and `fire_count` empty for the two self-development plans though they fire | Same class as F1: a failed dispatch reaches her as a line in her wording, shown by a staged failure; the two plans show their real values |
 
+## 3. F1 design (her wording, agent line 0222, 2026-11-10)
+
+The broken invariant: a reader that fails returns what "nothing there" returns, so she cannot tell an error from an
+empty answer. Each reader below stops swallowing; where she reads, the failure is said in its own words, never in the
+words of an empty answer.
+
+| Where | Today | After |
+|---|---|---|
+| A forward inside a forward (`qqadapter/forward.py`) | skipped when it cannot be read; not read at all past two levels | a line in its place: 「↳（这里还套着一条合并转发，没读出来：<一句原因>；没有可取的把手）」. The reason is one line from a fixed table (取不到、这条消息里要取的转发超过了一次能取的条数、QQ 拒绝了这次读取、返回里没有消息、套得太深，只读两层), never the exception text. A nested forward is never stored on its own, so it never has a ref `recall` could read |
+| A forward that cannot be read at all (same file) | keeps `[合并转发（未解析）]`, no reason | 「[合并转发：没读出来（<一句原因>）；没有可取的把手]」 |
+| The pictures a message may send (`outbound_media`: `edits_back_to`, `produced_images`, `image_artifacts`, `_linked_scene_ids`) | any error returns `[]`; the block disappears and reads as "no picture" | the readers raise; `context.py` keeps the block with `items: []` and the note 「能发的图这次没读出来（读库出错）——这里既不是「没有图」，也不代表有图能发；下一回合会再读。」, and records `outbound.offer_unread` (the error's type). `your_pictures_from_program` the same way. The plan tool's "is this her picture" check fails the call instead of answering no |
+| The vault's names (`credentials.listing`) | any error returns `[]`; `credentials_from_program` disappears and reads as "no credentials" | the same shape: the block stays, `items: []`, note 「保险箱这次读不到——这里既不是「没有凭据」，也不代表有哪一份能用；下一回合会再读。」 |
+| `scene_links._scenes` | any error returns `[]`: `relationship_target` then takes this conversation's own relationship record, and a write can land in that forked record | raises: the step fails like any other store read in it (her turn's preparation fails and is recorded; `understand_person` fails as a tool error she reads). No block disappears |
+| `credentials.scrub` | a failed refresh is ignored; a first refresh that fails passes values unscrubbed, with no record | scrubs with the last list read only while it is at most `SCRUB_LIST_STALE_SECONDS` (600) old, and records `credentials.scrub_stale` with the time that list was read; with no list, or one older than that, it refuses, and the caller says what was lost (below) |
+
+What a refused scrub says, by what a second call does:
+
+- a sandbox command's result (`tasks.py`, the action brain): the command has run; calling again runs it again:
+  「保险箱这次读不到，没法先遮住结果里的凭据，结果先没给你；命令已经跑过了，要结果得再跑一次。」
+- the action brain's report (`tasks.py`): 「保险箱这次读不到，没法先遮住报告里的凭据，这份报告先没交出去。」 (the task fails with
+  that line; its report is not kept)
+- her own text to the action brain, a note or a question (`role_tools.py`): nothing was sent; sending again sends it:
+  「保险箱这次读不到，没法先遮住这段话里的凭据，这次没交出去；过一会儿再调一次就行，不用改。」
+
+Tests: a nested forward that cannot be read and one past the depth limit (the line and its reason); a reader error
+under `offer` (the block and its note); a scrub with no list and with a stale one (refused) and a fresh one (scrubbed).
+
 One landing at a time; tests only where a failure would be silent and costly.

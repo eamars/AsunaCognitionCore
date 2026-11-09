@@ -244,13 +244,13 @@ class Checked:
             want = 1 if sentence == run['pull'] else 0
             if program.count(sentence) != want:
                 raise ProbeFault('pull sentence 「%s」 occurs %d times, expected %d' % (sentence, program.count(sentence), want))
+        first = messages[0]['content'][0]['text'] if len(messages) == 1 else None
+        if first is None:      # a later request of the same lane resends the first message; her own feelings
+            return             # recorded meanwhile change the store, not the condition she entered with
         now = mood_now(run['store'], run['persona'], run['scope'])
         for key in ('band', 'strongest', 'text'):
             if now[key] != run['expected'][key]:
                 raise ProbeFault('the mood now has %s %r, the condition %r' % (key, now[key], run['expected'][key]))
-        first = messages[0]['content'][0]['text'] if len(messages) == 1 else None
-        if first is None:
-            return
         if self.where == 'gate':
             material = json.loads(first.rstrip().rsplit('\n', 1)[-1])
             carried = material.get('your_mood')
